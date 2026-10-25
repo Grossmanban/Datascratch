@@ -38,8 +38,20 @@ final class ServerConnection: CoreLibraryRemote {
     /// Starts syncing for a signed-in account.
     func start(session: AuthSession, isNewAccount: Bool) async {
         do {
-            try core.adoptAccount(docId: session.accountDocId, isNew: isNewAccount)
+            let carried = try core.adoptAccount(docId: session.accountDocId, isNew: isNewAccount)
             let api = self.api
+            // Notebooks made on this device before signing in exist on the server before any of
+            // their documents is registered (otherwise POST /docs answers 404).
+            for notebook in carried {
+                do {
+                    _ = try await api.createNotebook(id: notebook.id, mode: notebook.mode, wrappedKey: notebook.wrappedKey,
+                                                     notebookKey: notebook.mode == .agent ? notebook.key : nil)
+                } catch APIError.server(409, _, _) {
+                    // Already there (an earlier attempt).
+                } catch {
+                    Self.log.error("carrying notebook \(notebook.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
             let client = SyncClient(
                 configuration: .init(url: SyncClient.Configuration.url(forServer: serverURL),
                                      deviceId: try core.store.deviceId(),

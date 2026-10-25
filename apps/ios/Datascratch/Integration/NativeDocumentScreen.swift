@@ -321,8 +321,10 @@ struct PenPalette: View {
                     Image(systemName: mode.symbolName)
                         .font(.system(size: 17, weight: .medium))
                         .frame(width: 36, height: 36)
-                        .foregroundStyle(tools.mode == mode ? Theme.Palette.onAccent : Theme.Palette.textPrimary)
-                        .background(tools.mode == mode ? Theme.Palette.accent : .clear, in: Circle())
+                        // Selected: a quiet ink fill (bg.selected), as in DSPenToolbar — not a filled accent.
+                        .foregroundStyle(tools.mode == mode ? Theme.Palette.textPrimary : Theme.Palette.textSecondary)
+                        .background(Theme.Palette.textPrimary.opacity(tools.mode == mode ? 0.08 : 0),
+                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .frame(width: Self.target, height: Self.target)
                         .contentShape(Rectangle())
                 }

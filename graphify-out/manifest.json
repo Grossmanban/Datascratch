@@ -1045,15 +1045,15 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792932059.0039732,
-    "seen": 1792938187.8683248,
+    "seen": 1792939048.891579,
     "ast_hash": "24098989e922515ff0fa0aac07aa956f",
-    "semantic_hash": ""
+    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792932059.0039732,
-    "seen": 1792938187.8683288,
+    "seen": 1792939048.891584,
     "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
-    "semantic_hash": ""
+    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1792932059.0039732,
@@ -2754,10 +2754,10 @@
     "semantic_hash": "b1736e46e3195b6d5f35e3a2ee20a121"
   },
   "apps/ios/Packages/DSCore/README.md": {
-    "mtime": 1792933740.8469672,
-    "seen": 1792938139.4684494,
-    "ast_hash": "49e50a91c7308e95f9ae064654b6692c",
-    "semantic_hash": "49e50a91c7308e95f9ae064654b6692c"
+    "mtime": 1792939024.4356017,
+    "seen": 1792939048.8923569,
+    "ast_hash": "cad71f18ca92bd12350f701ec3c319ab",
+    "semantic_hash": "cad71f18ca92bd12350f701ec3c319ab"
   },
   "docs/decisions/0042-yrs-uniffi-binding.md": {
     "mtime": 1792932059.0171757,

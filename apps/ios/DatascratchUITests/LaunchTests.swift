@@ -254,25 +254,41 @@ final class LibraryUITests: XCTestCase {
         let before = palette.frame
         let text = app.buttons["tool.text"].firstMatch
         text.tap()
-        settle()
-        XCTAssertTrue(text.isSelected, "Text is not selected after one tap")
+        XCTAssertTrue(becomesSelected(text), "Text is not selected after one tap; \(paletteState(app))")
         XCTAssertEqual(palette.frame.minY, before.minY, accuracy: 1, "palette moved on Text")
 
         // Leaving text mode hides the keyboard once; after that the palette stays put.
         let pen = app.buttons["tool.pen"].firstMatch
         pen.tap()
-        settle(1.5)
-        XCTAssertTrue(pen.isSelected, "Pen is not selected after one tap")
+        XCTAssertTrue(becomesSelected(pen), "Pen is not selected after one tap; \(paletteState(app))")
+        settle(1)  // the keyboard finishes leaving
         let resting = palette.frame
         for id in ["tool.pencil", "tool.marker", "tool.highlighter", "tool.strokeEraser", "tool.pen"] {
             let button = app.buttons[id].firstMatch
             XCTAssertTrue(button.isHittable, "\(id) is not hittable")
             button.tap()
-            settle()
-            XCTAssertTrue(button.isSelected, "\(id) is not selected after one tap")
+            XCTAssertTrue(becomesSelected(button), "\(id) is not selected after one tap; \(paletteState(app))")
             XCTAssertEqual(palette.frame.minY, resting.minY, accuracy: 1, "palette moved on \(id)")
         }
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2))
+    }
+
+    /// The tool switches on the next run-loop turn and the palette redraws with the keyboard
+    /// animation: wait for the selected state instead of a fixed pause.
+    private func becomesSelected(_ button: XCUIElement, timeout: TimeInterval = 4) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if button.isSelected { return true }
+            settle(0.25)
+        }
+        return button.isSelected
+    }
+
+    private func paletteState(_ app: XCUIApplication) -> String {
+        ["tool.text", "tool.pen", "tool.pencil", "tool.marker", "tool.highlighter", "tool.strokeEraser"].map { id in
+            let b = app.buttons[id].firstMatch
+            return "\(id)=\(b.exists ? (b.isSelected ? "on" : "off") : "missing")"
+        }.joined(separator: " ") + " keyboard=\(app.keyboards.firstMatch.exists)"
     }
 
     private func settle(_ seconds: TimeInterval = 0.6) {

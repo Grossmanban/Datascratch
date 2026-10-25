@@ -21,7 +21,7 @@ const authLayout = createRoute({
   component: AuthLayout,
   beforeLoad: () => {
     const st = useAuth.getState();
-    if (st.status === "ready" && !st.pendingRecoveryKey) throw redirect({ to: "/all" });
+    if (st.status === "ready" && !st.recoveryStep) throw redirect({ to: "/all" });
   },
 });
 const loginRoute = createRoute({ getParentRoute: () => authLayout, path: "/login", component: LoginPage });
@@ -35,7 +35,7 @@ const appLayout = createRoute({
   beforeLoad: ({ location }) => {
     const st = useAuth.getState();
     if (st.status !== "ready") throw redirect({ to: "/login", search: { next: location.href } as never });
-    if (st.pendingRecoveryKey) throw redirect({ to: "/signup" });
+    if (st.recoveryStep) throw redirect({ to: "/signup" });
   },
 });
 

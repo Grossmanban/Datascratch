@@ -5,11 +5,12 @@ import { useTranslation } from "react-i18next";
 import { ApiError } from "@/api/client";
 import { accountApi } from "@/api/endpoints";
 import { changePassword, loginKeyFor } from "@/auth/flows";
-import { signOut, useAuth } from "@/auth/session";
+import { confirmRecoveryKeySaved, getRecoveryKey, signOut, useAuth } from "@/auth/session";
+import { RecoveryKeyPanel } from "@/features/auth/RecoveryKeyPanel";
 import { MIN_PASSWORD } from "@/features/auth/SignupPage";
 import { formatRelative } from "@/lib/dates";
 import { useSyncStatus } from "@/sync/engine";
-import { Button, confirmDialog, Dialog, DialogActions, Field, Input, Spinner, toast } from "@/ui";
+import { Button, cn, confirmDialog, Dialog, DialogActions, Field, Input, Spinner, toast } from "@/ui";
 import { Card, Row } from "./SettingsPage";
 
 export function AccountSection() {
@@ -53,6 +54,8 @@ export function AccountSection() {
         </Row>
       </Card>
 
+      <RecoveryKeyCard />
+
       <DevicesCard />
 
       <Card title={t("settings.storage")} description={t("settings.storageText")} action={<HardDrive className="size-5 text-ink-3" />} />
@@ -65,6 +68,54 @@ export function AccountSection() {
 
       <ChangePasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
       <DeleteAccountDialog open={delOpen} onOpenChange={setDelOpen} />
+    </>
+  );
+}
+
+/** spec/07: the key can be shown again; until confirmed, a gentle reminder stays here. */
+function RecoveryKeyCard() {
+  const { t } = useTranslation();
+  const recovery = useAuth((s) => s.recovery);
+  const [key, setKey] = useState<string | null>(null);
+  const unconfirmed = recovery === "unconfirmed";
+  return (
+    <>
+      <section
+        className={cn(
+          "rounded-xl border p-5 shadow-[0_1px_2px_rgb(40_30_10/0.04)]",
+          unconfirmed ? "border-[color-mix(in_srgb,var(--ds-warning)_35%,transparent)] bg-[var(--ds-tint-yellow-bg)]" : "border-line bg-surface",
+        )}
+        data-testid="recovery-card"
+        data-state={recovery}
+      >
+        <div className="flex items-start gap-3">
+          <KeyRound className={cn("mt-0.5 size-5 shrink-0", unconfirmed ? "text-[var(--ds-tint-yellow-fg)]" : "text-ink-2")} />
+          <div className="flex-1">
+            <h2 className="text-[15px] font-semibold text-ink">{t("settings.recoveryTitle")}</h2>
+            <p className="mt-1 text-[13.5px] leading-relaxed text-ink-2">
+              {recovery === "none" ? t("settings.recoveryElsewhere") : unconfirmed ? t("settings.recoveryUnconfirmed") : t("settings.recoveryConfirmed")}
+            </p>
+          </div>
+          {recovery !== "none" && (
+            <Button size="sm" variant={unconfirmed ? "primary" : "secondary"} onClick={() => void getRecoveryKey().then(setKey)} data-testid="recovery-show">
+              {t("settings.recoveryShow")}
+            </Button>
+          )}
+        </div>
+      </section>
+      <Dialog open={!!key} onOpenChange={(o) => !o && setKey(null)} title={t("settings.recoveryTitle")}>
+        {key && (
+          <RecoveryKeyPanel
+            recoveryKey={key}
+            showTitle={false}
+            onConfirmed={async () => {
+              await confirmRecoveryKeySaved();
+              setKey(null);
+              toast(t("settings.recoveryDone"));
+            }}
+          />
+        )}
+      </Dialog>
     </>
   );
 }

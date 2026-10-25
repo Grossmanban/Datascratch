@@ -50,6 +50,7 @@ import {
   useWorkspace,
   type FolderEntry,
 } from "@/domain/workspace";
+import { useAuth } from "@/auth/session";
 import { folderMenuItems, newNoteAndOpen, noteMenuItems } from "@/features/docs/menus";
 import { useUi } from "@/hooks/useUi";
 import { DND_FOLDER, DND_NOTE, dragFolder, dragNote, dropKind } from "@/lib/dnd";
@@ -90,6 +91,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   const notebooks = useWorkspace((s) => s.account.notebooks);
   const spaceId = useWorkspace((s) => s.activeSpaceId);
   const nbs = useMemo(() => notebooks.filter((n) => n.spaceId === spaceId), [notebooks, spaceId]);
+  const recoveryUnconfirmed = useAuth((s) => s.recovery === "unconfirmed");
   const todayCount = useLiveQuery(
     async () => {
       const d = today();
@@ -181,7 +183,21 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
 
       <div className="flex items-center gap-1 border-t border-line px-2 py-2">
         <NavLink to="/trash" icon={<Trash2 className="size-4" />} label={t("nav.trash")} compact />
-        <NavLink to="/settings/account" match="/settings" icon={<Settings className="size-4" />} label={t("nav.settings")} compact />
+        <NavLink
+          to="/settings/account"
+          match="/settings"
+          icon={
+            <span className="relative">
+              <Settings className="size-4" />
+              {/* Gentle reminder while the recovery key is not confirmed (spec/07). */}
+              {recoveryUnconfirmed && (
+                <span className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-[var(--ds-warning)]" data-testid="recovery-dot" />
+              )}
+            </span>
+          }
+          label={recoveryUnconfirmed ? `${t("nav.settings")} · ${t("settings.recoveryTitle")}` : t("nav.settings")}
+          compact
+        />
         <div className="flex-1" />
         <SyncIndicator compact />
       </div>

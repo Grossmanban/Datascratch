@@ -313,9 +313,9 @@
   },
   "docs/spec/06-data-server.md": {
     "mtime": 1792933125.2485256,
-    "seen": 1792933135.6000814,
+    "seen": 1792933232.393756,
     "ast_hash": "15e6415b718e61f91d6babc407a99483",
-    "semantic_hash": ""
+    "semantic_hash": "15e6415b718e61f91d6babc407a99483"
   },
   "docs/spec/07-encryption.md": {
     "mtime": 1792927481.6495483,
@@ -1045,15 +1045,15 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792930021.2139332,
-    "seen": 1792933143.454776,
+    "seen": 1792933232.393256,
     "ast_hash": "24098989e922515ff0fa0aac07aa956f",
-    "semantic_hash": ""
+    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792930021.2139332,
-    "seen": 1792933143.4547813,
+    "seen": 1792933232.393258,
     "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
-    "semantic_hash": ""
+    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1792930021.2197683,
@@ -1225,9 +1225,9 @@
   },
   "apps/server/src/services/documents.ts": {
     "mtime": 1792933055.13238,
-    "seen": 1792933135.5900207,
+    "seen": 1792933232.3933258,
     "ast_hash": "eb2669a737b3edb584e877582b019f61",
-    "semantic_hash": ""
+    "semantic_hash": "eb2669a737b3edb584e877582b019f61"
   },
   "apps/server/src/services/keys.ts": {
     "mtime": 1792927961.5337846,
@@ -1273,9 +1273,9 @@
   },
   "apps/server/src/sync/connection.ts": {
     "mtime": 1792933055.133003,
-    "seen": 1792933135.5902643,
+    "seen": 1792933232.3933394,
     "ast_hash": "c173b234e7f20b4eb22071fd45448812",
-    "semantic_hash": ""
+    "semantic_hash": "c173b234e7f20b4eb22071fd45448812"
   },
   "apps/server/src/sync/hub.ts": {
     "mtime": 1792928138.3458824,
@@ -2437,9 +2437,9 @@
   },
   "apps/server/bench/first-sync.test.ts": {
     "mtime": 1792933108.8495214,
-    "seen": 1792933135.5888731,
+    "seen": 1792933232.393248,
     "ast_hash": "bb76664a81c4d20fdd9b058bbd47b243",
-    "semantic_hash": ""
+    "semantic_hash": "bb76664a81c4d20fdd9b058bbd47b243"
   },
   "apps/server/bench/vitest.config.ts": {
     "mtime": 1792931885.5758283,

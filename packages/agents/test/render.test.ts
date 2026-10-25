@@ -29,7 +29,7 @@ function compare(name: string, png: Buffer): void {
   const a = PNG.sync.read(readFileSync(file));
   const b = PNG.sync.read(png);
   expect([b.width, b.height]).toEqual([a.width, a.height]);
-  const diff = pixelmatch(a.data, b.data, null, a.width, a.height, { threshold: 0.2 });
+  const diff = pixelmatch(a.data, b.data, undefined, a.width, a.height, { threshold: 0.2 });
   expect(diff / (a.width * a.height)).toBeLessThan(0.005);
 }
 
@@ -83,7 +83,7 @@ describe("handwriting PNG", () => {
       const root = doc.getXmlFragment("content");
       root.insert(root.length, [el]);
       el.setAttribute("blockId", "0192f3c4-0000-7000-8000-00000000d0d0");
-      el.setAttribute("height", 160);
+      el.setAttribute("height", 160 as never);
     });
     const spiral: [number, number][] = Array.from({ length: 60 }, (_, i) => [0.5 + 0.004 * i * Math.cos(i / 4), 0.13 + 0.004 * i * Math.sin(i / 4)]);
     addBlockStroke(doc, "0192f3c4-0000-7000-8000-00000000d0d0", "drawing", spiral, "d1");

@@ -1,0 +1,3216 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%lld d": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld дн."
+          }
+        }
+      }
+    },
+    "%lld days left": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Осталось дней: %lld"
+          }
+        }
+      }
+    },
+    "%lld of 4": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld из 4"
+          }
+        }
+      }
+    },
+    "(copy)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(копия)"
+          }
+        }
+      }
+    },
+    "AI agents with a token can read and edit it. The key is kept on the server, so the server can technically read these notes.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ИИ-агенты с токеном могут читать и править его. Ключ хранится на сервере, поэтому сервер технически может прочитать эти заметки."
+          }
+        }
+      }
+    },
+    "About": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "О приложении"
+          }
+        }
+      }
+    },
+    "About Datascratch": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "О Datascratch"
+          }
+        }
+      }
+    },
+    "Access": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступ"
+          }
+        }
+      }
+    },
+    "Account": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Аккаунт"
+          }
+        }
+      }
+    },
+    "Active links": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Действующие ссылки"
+          }
+        }
+      }
+    },
+    "Add a task for this day": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задача на этот день"
+          }
+        }
+      }
+    },
+    "Add block": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить блок"
+          }
+        }
+      }
+    },
+    "Add to Starred": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В избранное"
+          }
+        }
+      }
+    },
+    "Agent Access": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступ агентов"
+          }
+        }
+      }
+    },
+    "Agents such as Claude or ChatGPT connect through MCP with a token. They see only the notebooks you allow, and only notebooks open to agents. Every action is logged.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Агенты вроде Claude или ChatGPT подключаются через MCP с токеном. Они видят только разрешённые блокноты и только те, что открыты агентам. Каждое действие записывается в журнал."
+          }
+        }
+      }
+    },
+    "All": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все"
+          }
+        }
+      }
+    },
+    "All Documents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все документы"
+          }
+        }
+      }
+    },
+    "All notebooks in this space and their notes will be deleted.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все блокноты этого пространства и их заметки будут удалены."
+          }
+        }
+      }
+    },
+    "An account with this email already exists on this device.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Аккаунт с этим адресом уже есть на этом устройстве."
+          }
+        }
+      }
+    },
+    "Anyone with the link can open it in a browser without an account. The encryption key is part of the link after “#” and is never sent to the server. Links work until you revoke them.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Любой, у кого есть ссылка, откроет её в браузере без аккаунта. Ключ шифрования — часть ссылки после «#», он никогда не отправляется на сервер. Ссылка действует, пока вы её не отзовёте."
+          }
+        }
+      }
+    },
+    "Appearance": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оформление"
+          }
+        }
+      }
+    },
+    "At least 10 characters. A long phrase is easier to remember and harder to guess.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не меньше 10 символов. Длинную фразу легче запомнить и труднее подобрать."
+          }
+        }
+      }
+    },
+    "At least 10 characters. Only the key wrapper is re-encrypted; your notes stay as they are.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не меньше 10 символов. Перешифровывается только обёртка ключа, заметки остаются как есть."
+          }
+        }
+      }
+    },
+    "Backdrop": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подложка"
+          }
+        }
+      }
+    },
+    "Blue": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Синий"
+          }
+        }
+      }
+    },
+    "Bulleted List": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маркированный список"
+          }
+        }
+      }
+    },
+    "Calendar": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Календарь"
+          }
+        }
+      }
+    },
+    "Can edit and draw": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Может править и рисовать"
+          }
+        }
+      }
+    },
+    "Can view": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только просмотр"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмена"
+          }
+        }
+      }
+    },
+    "Cancel Task": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить задачу"
+          }
+        }
+      }
+    },
+    "Cancelled": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменена"
+          }
+        }
+      }
+    },
+    "Cards": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карточки"
+          }
+        }
+      }
+    },
+    "Change Password": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сменить пароль"
+          }
+        }
+      }
+    },
+    "Check your key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверьте ключ"
+          }
+        }
+      }
+    },
+    "Close": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закрыть"
+          }
+        }
+      }
+    },
+    "Close Document": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закрыть документ"
+          }
+        }
+      }
+    },
+    "Close Tab": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закрыть вкладку"
+          }
+        }
+      }
+    },
+    "Color": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цвет"
+          }
+        }
+      }
+    },
+    "Command Palette": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Палитра команд"
+          }
+        }
+      }
+    },
+    "Commands": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Команды"
+          }
+        }
+      }
+    },
+    "Complete": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выполнить"
+          }
+        }
+      }
+    },
+    "Completed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выполнена"
+          }
+        }
+      }
+    },
+    "Connecting…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключение…"
+          }
+        }
+      }
+    },
+    "Continue": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Продолжить"
+          }
+        }
+      }
+    },
+    "Copied": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скопировано"
+          }
+        }
+      }
+    },
+    "Copy": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Копировать"
+          }
+        }
+      }
+    },
+    "Copy Link": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Копировать ссылку"
+          }
+        }
+      }
+    },
+    "Copy Token": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Копировать токен"
+          }
+        }
+      }
+    },
+    "Copy it now — it is shown only once. Paste it into the agent's MCP settings.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скопируйте сейчас — токен показывается один раз. Вставьте его в настройки MCP агента."
+          }
+        }
+      }
+    },
+    "Cover": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обложка"
+          }
+        }
+      }
+    },
+    "Create": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создать"
+          }
+        }
+      }
+    },
+    "Create Account": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создать аккаунт"
+          }
+        }
+      }
+    },
+    "Create Link": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создать ссылку"
+          }
+        }
+      }
+    },
+    "Create a notebook for work": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создать блокнот для работы"
+          }
+        }
+      }
+    },
+    "Create account": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый аккаунт"
+          }
+        }
+      }
+    },
+    "Current password": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текущий пароль"
+          }
+        }
+      }
+    },
+    "Daily note": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заметка дня"
+          }
+        }
+      }
+    },
+    "Dark": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тёмная"
+          }
+        }
+      }
+    },
+    "Deadline": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дедлайн"
+          }
+        }
+      }
+    },
+    "Delete": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить"
+          }
+        }
+      }
+    },
+    "Delete Block": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить блок"
+          }
+        }
+      }
+    },
+    "Delete Folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить папку"
+          }
+        }
+      }
+    },
+    "Delete Forever": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить навсегда"
+          }
+        }
+      }
+    },
+    "Delete Notebook": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить блокнот"
+          }
+        }
+      }
+    },
+    "Delete Space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить пространство"
+          }
+        }
+      }
+    },
+    "Delete Space and Its Notebooks": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить пространство и его блокноты"
+          }
+        }
+      }
+    },
+    "Delete Task": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить задачу"
+          }
+        }
+      }
+    },
+    "Delete all documents in the trash?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить все документы из корзины?"
+          }
+        }
+      }
+    },
+    "Delete this space?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить это пространство?"
+          }
+        }
+      }
+    },
+    "Deleted documents stay here for 30 days.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалённые документы хранятся здесь 30 дней."
+          }
+        }
+      }
+    },
+    "Devices": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Устройства"
+          }
+        }
+      }
+    },
+    "Document Style": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стиль документа"
+          }
+        }
+      }
+    },
+    "Document not found": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Документ не найден"
+          }
+        }
+      }
+    },
+    "Documents are deleted automatically after 30 days in the trash.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Документы удаляются автоматически через 30 дней в корзине."
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово"
+          }
+        }
+      }
+    },
+    "Dots": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Точки"
+          }
+        }
+      }
+    },
+    "Draw with Finger": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рисовать пальцем"
+          }
+        }
+      }
+    },
+    "Duplicate": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дублировать"
+          }
+        }
+      }
+    },
+    "Dusk": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сумерки"
+          }
+        }
+      }
+    },
+    "Edit Folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка"
+          }
+        }
+      }
+    },
+    "Edit Folder…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменить папку…"
+          }
+        }
+      }
+    },
+    "Edit Notebook": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Блокнот"
+          }
+        }
+      }
+    },
+    "Edit Notebook…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменить блокнот…"
+          }
+        }
+      }
+    },
+    "Edit Space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пространство"
+          }
+        }
+      }
+    },
+    "Edit Space…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменить пространство…"
+          }
+        }
+      }
+    },
+    "Email": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Email"
+          }
+        }
+      }
+    },
+    "Ember": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Угли"
+          }
+        }
+      }
+    },
+    "Emoji": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Эмодзи"
+          }
+        }
+      }
+    },
+    "Empty": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пусто"
+          }
+        }
+      }
+    },
+    "Empty Trash": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистить корзину"
+          }
+        }
+      }
+    },
+    "Encryption": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Шифрование"
+          }
+        }
+      }
+    },
+    "Encryption Mode": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Режим шифрования"
+          }
+        }
+      }
+    },
+    "End-to-end encrypted. Only you hold the keys.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сквозное шифрование. Ключи — только у вас."
+          }
+        }
+      }
+    },
+    "End-to-end encrypted. Only your devices can read it; agents have no access.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сквозное шифрование. Читать могут только ваши устройства; у агентов доступа нет."
+          }
+        }
+      }
+    },
+    "Enter a valid email address.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Введите правильный адрес почты."
+          }
+        }
+      }
+    },
+    "Enter the recovery key you saved when you created the account, then choose a new password. Your notes stay intact.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Введите ключ восстановления, сохранённый при регистрации, и задайте новый пароль. Заметки останутся в целости."
+          }
+        }
+      }
+    },
+    "Expires": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ограничить срок"
+          }
+        }
+      }
+    },
+    "Expires %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Действует до %@"
+          }
+        }
+      }
+    },
+    "Expires on": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Действует до"
+          }
+        }
+      }
+    },
+    "Feedback": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отклик"
+          }
+        }
+      }
+    },
+    "Finish": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово"
+          }
+        }
+      }
+    },
+    "Folder name": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Название папки"
+          }
+        }
+      }
+    },
+    "Font": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Шрифт"
+          }
+        }
+      }
+    },
+    "For example, Claude on my Mac": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Например, Claude на моём Mac"
+          }
+        }
+      }
+    },
+    "Forgot password? Use your recovery key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Забыли пароль? Используйте ключ восстановления"
+          }
+        }
+      }
+    },
+    "Full": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Во всю ширину"
+          }
+        }
+      }
+    },
+    "Give a task a date to see it here.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Назначьте задаче дату, чтобы увидеть её здесь."
+          }
+        }
+      }
+    },
+    "Go": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переход"
+          }
+        }
+      }
+    },
+    "Go to Calendar": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перейти в календарь"
+          }
+        }
+      }
+    },
+    "Go to Tasks": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перейти к задачам"
+          }
+        }
+      }
+    },
+    "Gray": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Серый"
+          }
+        }
+      }
+    },
+    "Green": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зелёный"
+          }
+        }
+      }
+    },
+    "Grid": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Клетка"
+          }
+        }
+      }
+    },
+    "Group %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Группа %lld"
+          }
+        }
+      }
+    },
+    "Haptics": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тактильный отклик"
+          }
+        }
+      }
+    },
+    "Heading": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заголовок"
+          }
+        }
+      }
+    },
+    "Heading 1": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заголовок 1"
+          }
+        }
+      }
+    },
+    "Heading 2": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заголовок 2"
+          }
+        }
+      }
+    },
+    "Heading 3": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заголовок 3"
+          }
+        }
+      }
+    },
+    "I saved the key somewhere safe — in a password manager or on paper.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Я сохранил ключ в надёжном месте — в менеджере паролей или на бумаге."
+          }
+        }
+      }
+    },
+    "Icon": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Значок"
+          }
+        }
+      }
+    },
+    "If you forget your password, this key is the only way back to your notes. We can't reset it for you — nobody but you can read your notes.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Если вы забудете пароль, только этот ключ вернёт доступ к заметкам. Мы не сможем сбросить его за вас — никто, кроме вас, не может прочитать ваши заметки."
+          }
+        }
+      }
+    },
+    "Inbox": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Входящие"
+          }
+        }
+      }
+    },
+    "Inbox is clear": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Входящие пусты"
+          }
+        }
+      }
+    },
+    "Indigo": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Индиго"
+          }
+        }
+      }
+    },
+    "Layout": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вид"
+          }
+        }
+      }
+    },
+    "Light": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Светлая"
+          }
+        }
+      }
+    },
+    "Lines": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Линейка"
+          }
+        }
+      }
+    },
+    "Linked from": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылаются сюда"
+          }
+        }
+      }
+    },
+    "List": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Список"
+          }
+        }
+      }
+    },
+    "Make Private": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сделать приватным"
+          }
+        }
+      }
+    },
+    "Make this notebook private?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сделать блокнот приватным?"
+          }
+        }
+      }
+    },
+    "Meadow": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Луг"
+          }
+        }
+      }
+    },
+    "Member since": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С нами с"
+          }
+        }
+      }
+    },
+    "Mist": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Туман"
+          }
+        }
+      }
+    },
+    "Mono": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Моно"
+          }
+        }
+      }
+    },
+    "More": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ещё"
+          }
+        }
+      }
+    },
+    "Move To": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переместить"
+          }
+        }
+      }
+    },
+    "Move To…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переместить…"
+          }
+        }
+      }
+    },
+    "Move to Trash": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В корзину"
+          }
+        }
+      }
+    },
+    "Name": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Название"
+          }
+        }
+      }
+    },
+    "New Folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая папка"
+          }
+        }
+      }
+    },
+    "New Note": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая заметка"
+          }
+        }
+      }
+    },
+    "New Notebook": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый блокнот"
+          }
+        }
+      }
+    },
+    "New Space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новое пространство"
+          }
+        }
+      }
+    },
+    "New Space…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новое пространство…"
+          }
+        }
+      }
+    },
+    "New Subfolder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая вложенная папка"
+          }
+        }
+      }
+    },
+    "New Token": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый токен"
+          }
+        }
+      }
+    },
+    "New documents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новые документы"
+          }
+        }
+      }
+    },
+    "New password": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый пароль"
+          }
+        }
+      }
+    },
+    "New task": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая задача"
+          }
+        }
+      }
+    },
+    "New task for today": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая задача на сегодня"
+          }
+        }
+      }
+    },
+    "Next Week": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На следующей неделе"
+          }
+        }
+      }
+    },
+    "No documents yet": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Документов пока нет"
+          }
+        }
+      }
+    },
+    "No notebooks are open to agents. Change a notebook's encryption mode first.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет блокнотов, открытых агентам. Сначала смените режим шифрования блокнота."
+          }
+        }
+      }
+    },
+    "No open tasks": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открытых задач нет"
+          }
+        }
+      }
+    },
+    "No results": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ничего не найдено"
+          }
+        }
+      }
+    },
+    "No tasks on this day.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задач на этот день нет."
+          }
+        }
+      }
+    },
+    "No text": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет текста"
+          }
+        }
+      }
+    },
+    "No tokens yet.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Токенов пока нет."
+          }
+        }
+      }
+    },
+    "No versions yet": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Версий пока нет"
+          }
+        }
+      }
+    },
+    "None": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет"
+          }
+        }
+      }
+    },
+    "Normal": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычная"
+          }
+        }
+      }
+    },
+    "Not completed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не выполнена"
+          }
+        }
+      }
+    },
+    "Not connected": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не подключён"
+          }
+        }
+      }
+    },
+    "Notebook name": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Название блокнота"
+          }
+        }
+      }
+    },
+    "Notebooks": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Блокноты"
+          }
+        }
+      }
+    },
+    "Notes": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заметки"
+          }
+        }
+      }
+    },
+    "Notes are stored only on this device until the Datascratch server is connected.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пока сервер Datascratch не подключён, заметки хранятся только на этом устройстве."
+          }
+        }
+      }
+    },
+    "Notes where the pen lives in the text.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заметки, где перо живёт прямо в тексте."
+          }
+        }
+      }
+    },
+    "Notes where the pen lives in the text.\nMark up words with Apple Pencil — the ink moves with them.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заметки, где перо живёт прямо в тексте.\nПомечайте слова Apple Pencil — чернила едут вместе с ними."
+          }
+        }
+      }
+    },
+    "Nothing for today": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На сегодня ничего"
+          }
+        }
+      }
+    },
+    "Nothing open": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ничего не открыто"
+          }
+        }
+      }
+    },
+    "Nothing scheduled": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ничего не запланировано"
+          }
+        }
+      }
+    },
+    "Nothing starred": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В избранном пусто"
+          }
+        }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ОК"
+          }
+        }
+      }
+    },
+    "Offline": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Офлайн"
+          }
+        }
+      }
+    },
+    "Offline · %lld waiting": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Офлайн · ждут отправки: %lld"
+          }
+        }
+      }
+    },
+    "On this device": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На этом устройстве"
+          }
+        }
+      }
+    },
+    "One page per day for thoughts, plans and sketches.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Одна страница в день — для мыслей, планов и набросков."
+          }
+        }
+      }
+    },
+    "Open Document": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть документ"
+          }
+        }
+      }
+    },
+    "Open Note in New Window": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть заметку в новом окне"
+          }
+        }
+      }
+    },
+    "Open Trash": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть корзину"
+          }
+        }
+      }
+    },
+    "Open in Browser": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть в браузере"
+          }
+        }
+      }
+    },
+    "Open in New Window": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть в новом окне"
+          }
+        }
+      }
+    },
+    "Open this notebook to agents?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть блокнот агентам?"
+          }
+        }
+      }
+    },
+    "Open to Agents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть агентам"
+          }
+        }
+      }
+    },
+    "Open to agents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыт агентам"
+          }
+        }
+      }
+    },
+    "Opening shared documents needs a connection to the Datascratch server. You can open the link in the browser meanwhile.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чтобы открыть общий документ, нужно подключение к серверу Datascratch. Пока можно открыть ссылку в браузере."
+          }
+        }
+      }
+    },
+    "Orange": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оранжевый"
+          }
+        }
+      }
+    },
+    "Overdue": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Просрочено"
+          }
+        }
+      }
+    },
+    "Paper": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Бумага"
+          }
+        }
+      }
+    },
+    "Password": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пароль"
+          }
+        }
+      }
+    },
+    "Password changed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пароль изменён"
+          }
+        }
+      }
+    },
+    "Password strength": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Надёжность пароля"
+          }
+        }
+      }
+    },
+    "Passwords do not match.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пароли не совпадают."
+          }
+        }
+      }
+    },
+    "Pencil & Drawing": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перо и рисование"
+          }
+        }
+      }
+    },
+    "Permission": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Права"
+          }
+        }
+      }
+    },
+    "Personal": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Личное"
+          }
+        }
+      }
+    },
+    "Pick a Date…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбрать дату…"
+          }
+        }
+      }
+    },
+    "Pick a document or start a new one.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выберите документ или начните новый."
+          }
+        }
+      }
+    },
+    "Pink": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Розовый"
+          }
+        }
+      }
+    },
+    "Plain": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Гладкая"
+          }
+        }
+      }
+    },
+    "Press ⌘K to open the command palette": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нажмите ⌘K, чтобы открыть палитру команд"
+          }
+        }
+      }
+    },
+    "Private": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приватный"
+          }
+        }
+      }
+    },
+    "Purple": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фиолетовый"
+          }
+        }
+      }
+    },
+    "Quick tasks that don't belong to a document land here.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сюда попадают быстрые задачи, не относящиеся к документу."
+          }
+        }
+      }
+    },
+    "Quiet paper, deep ink. #welcome": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тихая бумага, глубокие чернила. #welcome"
+          }
+        }
+      }
+    },
+    "Quote": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цитата"
+          }
+        }
+      }
+    },
+    "Read & write": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чтение и запись"
+          }
+        }
+      }
+    },
+    "Read only": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только чтение"
+          }
+        }
+      }
+    },
+    "Recover access": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Восстановление доступа"
+          }
+        }
+      }
+    },
+    "Red": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Красный"
+          }
+        }
+      }
+    },
+    "Remove": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Убрать"
+          }
+        }
+      }
+    },
+    "Remove Cover": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Убрать обложку"
+          }
+        }
+      }
+    },
+    "Remove Date": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Убрать дату"
+          }
+        }
+      }
+    },
+    "Remove Deadline": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Убрать дедлайн"
+          }
+        }
+      }
+    },
+    "Remove from Starred": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Убрать из избранного"
+          }
+        }
+      }
+    },
+    "Reopen": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вернуть в работу"
+          }
+        }
+      }
+    },
+    "Repeat new password": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторите новый пароль"
+          }
+        }
+      }
+    },
+    "Repeat password": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторите пароль"
+          }
+        }
+      }
+    },
+    "Restore": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Восстановить"
+          }
+        }
+      }
+    },
+    "Restore This Version": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Восстановить эту версию"
+          }
+        }
+      }
+    },
+    "Revoke": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отозвать"
+          }
+        }
+      }
+    },
+    "Sand": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Песок"
+          }
+        }
+      }
+    },
+    "Sans": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без засечек"
+          }
+        }
+      }
+    },
+    "Save…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить…"
+          }
+        }
+      }
+    },
+    "Schedule": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запланировать"
+          }
+        }
+      }
+    },
+    "Scheduled": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запланировано"
+          }
+        }
+      }
+    },
+    "Search and Commands": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск и команды"
+          }
+        }
+      }
+    },
+    "Search documents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск документов"
+          }
+        }
+      }
+    },
+    "Search documents or type a command": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Найдите документ или введите команду"
+          }
+        }
+      }
+    },
+    "Select a version": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выберите версию"
+          }
+        }
+      }
+    },
+    "Send": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправить"
+          }
+        }
+      }
+    },
+    "Serif": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С засечками"
+          }
+        }
+      }
+    },
+    "Server": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер"
+          }
+        }
+      }
+    },
+    "Set New Password": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задать новый пароль"
+          }
+        }
+      }
+    },
+    "Settings": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки"
+          }
+        }
+      }
+    },
+    "Settings…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки…"
+          }
+        }
+      }
+    },
+    "Share": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поделиться"
+          }
+        }
+      }
+    },
+    "Share this document": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поделиться документом"
+          }
+        }
+      }
+    },
+    "Share this notebook": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поделиться блокнотом"
+          }
+        }
+      }
+    },
+    "Shared document": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общий документ"
+          }
+        }
+      }
+    },
+    "Share…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поделиться…"
+          }
+        }
+      }
+    },
+    "Sign In": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войти"
+          }
+        }
+      }
+    },
+    "Sign Out": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выйти"
+          }
+        }
+      }
+    },
+    "Sign in with your email and password.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войдите с помощью почты и пароля."
+          }
+        }
+      }
+    },
+    "Sign out of Datascratch?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выйти из Datascratch?"
+          }
+        }
+      }
+    },
+    "Signing a device out removes its access immediately.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выход на устройстве сразу отключает его доступ."
+          }
+        }
+      }
+    },
+    "Space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пространство"
+          }
+        }
+      }
+    },
+    "Space name": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Название пространства"
+          }
+        }
+      }
+    },
+    "Spaces keep contexts apart — for example Personal, Work and Study.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пространства разделяют контексты — например, Личное, Работа и Учёба."
+          }
+        }
+      }
+    },
+    "Star": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В избранное"
+          }
+        }
+      }
+    },
+    "Star documents to keep them at hand.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавляйте документы в избранное, чтобы держать их под рукой."
+          }
+        }
+      }
+    },
+    "Starred": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Избранное"
+          }
+        }
+      }
+    },
+    "Start the daily note": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начать заметку дня"
+          }
+        }
+      }
+    },
+    "Start writing — then mark it up with Apple Pencil.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начните писать — а потом размечайте Apple Pencil."
+          }
+        }
+      }
+    },
+    "Status": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Состояние"
+          }
+        }
+      }
+    },
+    "Style": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стиль"
+          }
+        }
+      }
+    },
+    "Style…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стиль…"
+          }
+        }
+      }
+    },
+    "Switch Space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сменить пространство"
+          }
+        }
+      }
+    },
+    "Switch to %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перейти в «%@»"
+          }
+        }
+      }
+    },
+    "Sync": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Синхронизация"
+          }
+        }
+      }
+    },
+    "Sync problem": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибка синхронизации"
+          }
+        }
+      }
+    },
+    "Syncing…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Синхронизация…"
+          }
+        }
+      }
+    },
+    "System": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как в системе"
+          }
+        }
+      }
+    },
+    "Tabs": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вкладки"
+          }
+        }
+      }
+    },
+    "Tags": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Теги"
+          }
+        }
+      }
+    },
+    "Task": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задача"
+          }
+        }
+      }
+    },
+    "Tasks": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задачи"
+          }
+        }
+      }
+    },
+    "Tasks scheduled for today and overdue ones appear here.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь задачи на сегодня и просроченные."
+          }
+        }
+      }
+    },
+    "Teal": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Бирюзовый"
+          }
+        }
+      }
+    },
+    "Text": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текст"
+          }
+        }
+      }
+    },
+    "The notebook key will be stored on the server so agents with a token can read and edit it. The server will technically be able to read these notes.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ключ блокнота будет храниться на сервере, чтобы агенты с токеном могли читать и править его. Сервер технически сможет прочитать эти заметки."
+          }
+        }
+      }
+    },
+    "The server copy of the key will be deleted. Agents will lose access, and only your devices will be able to read these notes.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Копия ключа на сервере будет удалена. Агенты потеряют доступ, читать заметки смогут только ваши устройства."
+          }
+        }
+      }
+    },
+    "Theme": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тема"
+          }
+        }
+      }
+    },
+    "These groups don't match. Check the key you saved.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Группы не совпадают. Проверьте сохранённый ключ."
+          }
+        }
+      }
+    },
+    "This cannot be undone.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это нельзя отменить."
+          }
+        }
+      }
+    },
+    "This device": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это устройство"
+          }
+        }
+      }
+    },
+    "This document is in the trash.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Этот документ в корзине."
+          }
+        }
+      }
+    },
+    "This link is incomplete: the part after “#” with the key is missing. Ask for the full link.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка неполная: нет части после «#» с ключом. Попросите полную ссылку."
+          }
+        }
+      }
+    },
+    "This recovery key is not valid.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неверный ключ восстановления."
+          }
+        }
+      }
+    },
+    "To-do": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задача"
+          }
+        }
+      }
+    },
+    "Today": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сегодня"
+          }
+        }
+      }
+    },
+    "Today's Note": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заметка дня"
+          }
+        }
+      }
+    },
+    "Toggle Sidebar": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Боковая панель"
+          }
+        }
+      }
+    },
+    "Tomorrow": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завтра"
+          }
+        }
+      }
+    },
+    "Trash": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Корзина"
+          }
+        }
+      }
+    },
+    "Trash is empty": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Корзина пуста"
+          }
+        }
+      }
+    },
+    "Try it": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попробуйте"
+          }
+        }
+      }
+    },
+    "Turn Into": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Превратить в"
+          }
+        }
+      }
+    },
+    "Type [] in any document to add a task.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Введите [] в любом документе, чтобы добавить задачу."
+          }
+        }
+      }
+    },
+    "Type two groups from your recovery key to make sure it's saved correctly.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Введите две группы из ключа восстановления, чтобы убедиться, что он сохранён верно."
+          }
+        }
+      }
+    },
+    "Untitled": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без названия"
+          }
+        }
+      }
+    },
+    "Up to date": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Всё синхронизировано"
+          }
+        }
+      }
+    },
+    "Upcoming": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скоро"
+          }
+        }
+      }
+    },
+    "Use at least 10 characters.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Используйте не меньше 10 символов."
+          }
+        }
+      }
+    },
+    "Version": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Версия"
+          }
+        }
+      }
+    },
+    "Version History": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "История версий"
+          }
+        }
+      }
+    },
+    "Versions are saved as you edit.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Версии сохраняются по мере правки."
+          }
+        }
+      }
+    },
+    "View": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вид"
+          }
+        }
+      }
+    },
+    "Welcome back": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С возвращением"
+          }
+        }
+      }
+    },
+    "Welcome to Datascratch": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добро пожаловать в Datascratch"
+          }
+        }
+      }
+    },
+    "When off, a finger scrolls and selects text and only Apple Pencil draws. Turn it on to draw with a finger, for example on iPhone.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Когда выключено, палец прокручивает и выделяет текст, а рисует только Apple Pencil. Включите, чтобы рисовать пальцем, например на iPhone."
+          }
+        }
+      }
+    },
+    "Wide": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Широкая"
+          }
+        }
+      }
+    },
+    "Width": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ширина"
+          }
+        }
+      }
+    },
+    "Work": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Работа"
+          }
+        }
+      }
+    },
+    "Write with the keyboard, then mark it up with Apple Pencil — strokes stay attached to the words.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пишите на клавиатуре и размечайте Apple Pencil — штрихи остаются привязаны к словам."
+          }
+        }
+      }
+    },
+    "Write…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пишите…"
+          }
+        }
+      }
+    },
+    "Wrong email or password.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неверная почта или пароль."
+          }
+        }
+      }
+    },
+    "Yellow": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Жёлтый"
+          }
+        }
+      }
+    },
+    "Yesterday": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вчера"
+          }
+        }
+      }
+    },
+    "You can change this later in the notebook menu.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это можно изменить позже в меню блокнота."
+          }
+        }
+      }
+    },
+    "You will need your password to sign in again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для повторного входа понадобится пароль."
+          }
+        }
+      }
+    },
+    "Your password also protects the encryption key. Your recovery key keeps working after a password change.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пароль также защищает ключ шифрования. Ключ восстановления продолжит работать после смены пароля."
+          }
+        }
+      }
+    },
+    "Your password signs you in and encrypts your notes. It never leaves this device.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пароль служит и для входа, и для шифрования заметок. Он никогда не покидает устройство."
+          }
+        }
+      }
+    },
+    "Your recovery key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваш ключ восстановления"
+          }
+        }
+      }
+    },
+    "Your token": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваш токен"
+          }
+        }
+      }
+    },
+    "until %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "до %@"
+          }
+        }
+      }
+    },
+    "until revoked": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "до отзыва"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

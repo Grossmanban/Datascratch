@@ -44,7 +44,7 @@ final class LocalAccessService: AccessService {
     private(set) var agentTokens: [AgentToken] = []
 
     init() {
-        devices = [Device(id: ID.make(), name: UIDevice.current.name,
+        devices = [Device(id: UUIDv7.make(), name: UIDevice.current.name,
                           platform: UIDevice.current.userInterfaceIdiom == .pad ? "iPadOS" : "iOS",
                           lastSeenAt: Date(), isCurrent: true)]
     }
@@ -57,7 +57,7 @@ final class LocalAccessService: AccessService {
 
     func createAgentToken(name: String, notebookIds: [String], permission: AgentPermission,
                           expiresAt: Date?) async throws -> String {
-        let token = AgentToken(id: ID.make(), name: name, notebookIds: notebookIds,
+        let token = AgentToken(id: UUIDv7.make(), name: name, notebookIds: notebookIds,
                                permission: permission, createdAt: Date(), expiresAt: expiresAt)
         agentTokens.append(token)
         return "dsa_" + Base64URL.encode(Data((0..<32).map { _ in UInt8.random(in: 0...255) }))

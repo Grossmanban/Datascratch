@@ -5,7 +5,7 @@ import Testing
 struct ModelTests {
     @Test func uuidV7HasVersionVariantAndTime() throws {
         let date = Date(timeIntervalSince1970: 1_761_393_600) // 2025-10-25
-        let id = ID.make(date: date)
+        let id = UUIDv7.make(date: date)
         #expect(id == id.lowercased())
         let uuid = try #require(UUID(uuidString: id))
         let b = uuid.uuid
@@ -16,8 +16,8 @@ struct ModelTests {
     }
 
     @Test func uuidV7IsTimeOrdered() {
-        let a = ID.make(date: Date(timeIntervalSince1970: 1000))
-        let b = ID.make(date: Date(timeIntervalSince1970: 2000))
+        let a = UUIDv7.make(date: Date(timeIntervalSince1970: 1000))
+        let b = UUIDv7.make(date: Date(timeIntervalSince1970: 2000))
         #expect(a < b)
     }
 

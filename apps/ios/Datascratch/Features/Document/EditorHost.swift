@@ -75,7 +75,7 @@ struct StandInBlockEditor: View {
             var next = NoteBlock.paragraph(rest)
             if continues {
                 next.kind = block.kind
-                if block.kind == .task { next.task = TaskAttributes(taskId: ID.make()) }
+                if block.kind == .task { next.task = TaskAttributes(taskId: UUIDv7.make()) }
             }
             body.blocks.insert(next, at: index + 1)
             library.setBody(body, ofNote: noteId)
@@ -88,7 +88,7 @@ struct StandInBlockEditor: View {
             let kind = match.0
             block.kind = kind
             block.text = match.1
-            if kind == .task { block.task = TaskAttributes(taskId: ID.make()) }
+            if kind == .task { block.task = TaskAttributes(taskId: UUIDv7.make()) }
             if kind == .divider {
                 body.blocks[index] = block
                 let next = NoteBlock.paragraph()
@@ -119,7 +119,7 @@ struct StandInBlockEditor: View {
             guard let index = body.blocks.firstIndex(where: { $0.id == blockId }) else { return }
             body.blocks[index].kind = kind
             if kind == .task, body.blocks[index].task == nil {
-                body.blocks[index].task = TaskAttributes(taskId: ID.make())
+                body.blocks[index].task = TaskAttributes(taskId: UUIDv7.make())
             } else if kind != .task {
                 body.blocks[index].task = nil
             }

@@ -107,7 +107,7 @@ final class LocalAccountService: AccountService {
         }
         let key = RecoveryKey.random()
         let salt = Self.randomSalt()
-        let record = Record(account: Account(userId: ID.make(), email: email, createdAt: Date()),
+        let record = Record(account: Account(userId: UUIDv7.make(), email: email, createdAt: Date()),
                             salt: salt,
                             passwordVerifier: Self.verifier(password, salt: salt),
                             recoveryVerifier: Self.verifier(key.base32, salt: salt))

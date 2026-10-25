@@ -1,0 +1,101 @@
+name: crash-bisect
+
+# Experiment branch only: finds which part of the editor makes UIKit throw in
+# -[UIGestureRecognizer _delayTouchesForEvent:inPhase:] when a tap goes into the text.
+# Each variant switches parts off via DS_DISABLE and taps/types several times.
+
+on:
+  push:
+    branches: [claude/crash-bisect]
+  workflow_dispatch:
+
+jobs:
+  bisect:
+    runs-on: macos-26
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [iPad, iPhone]
+        group: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+
+      - name: Pick simulator
+        id: sim
+        run: |
+          ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          kind = sys.argv[1]
+          data = json.load(sys.stdin)["devices"]
+          best = None
+          for runtime, devices in data.items():
+              if "iOS-26" not in runtime:
+                  continue
+              for d in devices:
+                  n = d["name"]
+                  if kind == "iPad" and (n.startswith("iPad Pro") or (best is None and n.startswith("iPad"))):
+                      best = d["udid"]
+                  if kind == "iPhone" and (n.startswith("iPhone") and n.endswith("Pro") or (best is None and n.startswith("iPhone"))):
+                      best = d["udid"]
+          print(best or "")
+          ' ${{ matrix.device }})
+          echo "Simulator: $ID"
+          test -n "$ID"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          # Software keyboard on screen (as on a device without a hardware keyboard).
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false || true
+          xcrun simctl boot "$ID" || true
+
+      - name: Generate demo project
+        working-directory: apps/ios/Packages/DSEditor/Demo
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build for testing
+        working-directory: apps/ios/Packages/DSEditor/Demo
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project EditorDemo.xcodeproj -scheme EditorDemo \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -derivedDataPath "$RUNNER_TEMP/dd" 2>&1 | tail -5
+
+      - name: Bisect
+        working-directory: apps/ios/Packages/DSEditor/Demo
+        run: |
+          EDITOR_ALL="ink,hover,tap,scribble,pencil,editmenu,inkviews,mermaid,keyboard,fragments,statechange,selection"
+          case "${{ matrix.group }}" in
+            1) VARIANTS=("" "all" "$EDITOR_ALL" "ink" "hover" "tap" "scribble") ;;
+            2) VARIANTS=("pencil" "editmenu" "inkviews" "reorder" "mermaid" "keyboard" "fragments") ;;
+            3) VARIANTS=("statechange" "selection" "palette" "toolbar" "revision" "palette,toolbar,revision" "") ;;
+          esac
+          for v in "${VARIANTS[@]}"; do
+            echo "::group::variant '${v:-none}'"
+            TEST_RUNNER_DS_DISABLE="$v" xcodebuild test-without-building -project EditorDemo.xcodeproj -scheme EditorDemo \
+              -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
+              -derivedDataPath "$RUNNER_TEMP/dd" \
+              -only-testing:EditorDemoUITests/CrashBisectTests \
+              -test-timeouts-enabled YES -default-test-execution-time-allowance 400 -maximum-test-execution-time-allowance 600 \
+              2>&1 | tee -a "$RUNNER_TEMP/bisect.log" | grep --line-buffered -E "BISECT|error:|\*\* " || true
+            echo "::endgroup::"
+          done
+          echo "## ${{ matrix.device }} group ${{ matrix.group }}" >> "$GITHUB_STEP_SUMMARY"
+          grep -h "BISECT variant" "$RUNNER_TEMP/bisect.log" | sed 's/^.*BISECT/- BISECT/' >> "$GITHUB_STEP_SUMMARY" || true
+          grep -h "BISECT variant" "$RUNNER_TEMP/bisect.log" | sed 's/^.*BISECT/BISECT/'
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bisect-${{ matrix.device }}-${{ matrix.group }}
+          path: |
+            ${{ runner.temp }}/bisect.log
+            ~/Library/Logs/DiagnosticReports/EditorDemo*
+          if-no-files-found: ignore

@@ -15,6 +15,9 @@ final class DemoModel {
     var revision = 0
 
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
+    /// Crash bisection (experiment branch): demo parts switched off via `DS_DISABLE`.
+    static let disabled: Set<String> = Set((ProcessInfo.processInfo.environment["DS_DISABLE"] ?? "").split(separator: ",").map(String.init))
+    static func off(_ name: String) -> Bool { disabled.contains(name) || disabled.contains("all") }
     private let images = DemoImages()
 
     static var fileURL: URL {
@@ -39,9 +42,10 @@ final class DemoModel {
             editor.tools.allowsFingerDrawing = true
         }
         if args.contains("-hud") { showHUD = true }
+        if Self.off("palette") { editor.tools.mode = .text }
         editor.onStateChange = { [weak self] in
             guard let self else { return }
-            self.revision &+= 1
+            if !Self.off("revision") { self.revision &+= 1 }
             if self.isUITesting { NSLog("DIAG state mode=%@", self.editor.tools.mode.rawValue) }
         }
         if args.contains("-uiTesting") {

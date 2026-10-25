@@ -31,6 +31,7 @@ public final class EditorView: UIView {
     /// touch dispatch: a host that re-renders its interface synchronously (SwiftUI state) while a
     /// touch is still being delivered crashed UIKit's gesture environment.
     private func notifyStateChange() {
+        if EditorDiagnostics.off("statechange") { return }
         guard !stateChangePending else { return }
         stateChangePending = true
         DispatchQueue.main.async { [weak self] in
@@ -125,13 +126,15 @@ public final class EditorView: UIView {
         textView.textContainer.lineFragmentPadding = 0
         textView.smartInsertDeleteType = .no
         textView.linkTextAttributes = [.foregroundColor: EditorTheme.accent, .underlineStyle: NSUnderlineStyle.single.rawValue]
-        textView.textLayoutManager?.delegate = fragmentProvider
+        if !EditorDiagnostics.off("fragments") { textView.textLayoutManager?.delegate = fragmentProvider }
         textView.accessibilityIdentifier = "editor.text"
         addSubview(textView)
 
-        textView.insertSubview(paper, at: 0)
-        textView.insertSubview(inkUnder, aboveSubview: paper)
-        textView.addSubview(inkOver)
+        if !EditorDiagnostics.off("inkviews") {
+            textView.insertSubview(paper, at: 0)
+            textView.insertSubview(inkUnder, aboveSubview: paper)
+            textView.addSubview(inkOver)
+        }
         inkOver.accessibilityIdentifier = "editor.ink"
         hoverLayer.fillColor = nil
         hoverLayer.lineWidth = 1.2
@@ -174,22 +177,22 @@ public final class EditorView: UIView {
         // recognizers must not hold events that other views are still dispatching.
         inkInput.delaysTouchesBegan = false
         inkInput.delaysTouchesEnded = false
-        textView.addGestureRecognizer(inkInput)
+        if !EditorDiagnostics.off("ink") { textView.addGestureRecognizer(inkInput) }
 
         let hover = UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:)))
         hover.delaysTouchesEnded = false
-        textView.addGestureRecognizer(hover)
+        if !EditorDiagnostics.off("hover") { textView.addGestureRecognizer(hover) }
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
         tap.delegate = self
         tap.delaysTouchesBegan = false
         tap.delaysTouchesEnded = false
-        textView.addGestureRecognizer(tap)
+        if !EditorDiagnostics.off("tap") { textView.addGestureRecognizer(tap) }
 
-        textView.addInteraction(UIScribbleInteraction(delegate: self))
-        addInteraction(UIPencilInteraction(delegate: self))
+        if !EditorDiagnostics.off("scribble") { textView.addInteraction(UIScribbleInteraction(delegate: self)) }
+        if !EditorDiagnostics.off("pencil") { addInteraction(UIPencilInteraction(delegate: self)) }
         editMenu = UIEditMenuInteraction(delegate: self)
-        textView.addInteraction(editMenu)
+        if !EditorDiagnostics.off("editmenu") { textView.addInteraction(editMenu) }
 
         // Tool changes usually come from a button whose touch UIKit is still dispatching; reacting
         // synchronously (gesture recognizer changes, SwiftUI updates) made the gesture environment
@@ -218,12 +221,14 @@ public final class EditorView: UIView {
             self.dynamicTypeChanged()
         }
 
+        if !EditorDiagnostics.off("keyboard") {
         NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
             let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
             MainActor.assumeIsolated { self?.keyboardFrameChanged(frame) }
         }
         NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.keyboardFrameChanged(nil) }
+        }
         }
 
         NotificationCenter.default.addObserver(forName: MermaidRenderer.didRender, object: nil, queue: .main) { [weak self] _ in
@@ -361,13 +366,17 @@ public final class EditorView: UIView {
         }
         // Reorder only when needed: changing subview order marks the text view for layout again.
         let subs = textView.subviews
-        if subs.first !== paper || (subs.count > 1 && subs[1] !== inkUnder) {
+        if EditorDiagnostics.off("inkviews") || EditorDiagnostics.off("reorder") {
+            // bisection: no ink layers / no reordering
+        } else if subs.first !== paper || (subs.count > 1 && subs[1] !== inkUnder) {
             EditorDiagnostics.log("reorder ink layers")
             textView.sendSubviewToBack(inkUnder)
             textView.sendSubviewToBack(paper)
         }
-        if textView.subviews.last !== inkOver { textView.bringSubviewToFront(inkOver) }
-        MermaidRenderer.shared.host = self
+        if !(EditorDiagnostics.off("inkviews") || EditorDiagnostics.off("reorder")), textView.subviews.last !== inkOver {
+            textView.bringSubviewToFront(inkOver)
+        }
+        if !EditorDiagnostics.off("mermaid") { MermaidRenderer.shared.host = self }
         let width = textView.textContainer.size.width
         if width != lastContainerWidth || textView.contentSize.height != lastContentHeight {
             lastContainerWidth = width
@@ -762,7 +771,7 @@ extension EditorView: UITextViewDelegate {
     }
 
     public func textViewDidChangeSelection(_ tv: UITextView) {
-        if suppressDelegate { return }
+        if suppressDelegate || EditorDiagnostics.off("selection") { return }
         pendingMarks = nil
         updateTypingAttributes()
         notifyStateChange()

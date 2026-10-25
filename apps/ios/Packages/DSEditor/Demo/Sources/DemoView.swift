@@ -12,8 +12,10 @@ struct DemoView: View {
                 EditorRepresentable(editor: model.editor)
                     .ignoresSafeArea(.all, edges: .bottom)
                     .accessibilityIdentifier("editor")
-                ToolPalette(model: model)
-                    .padding(.bottom, 12)
+                if !DemoModel.off("palette") {
+                    ToolPalette(model: model)
+                        .padding(.bottom, 12)
+                }
                 if model.showHUD {
                     HUDView(model: model)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
@@ -24,6 +26,7 @@ struct DemoView: View {
             .navigationTitle("Живой штрих")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            .toolbar(DemoModel.off("toolbar") ? .hidden : .automatic, for: .navigationBar)
             .sheet(isPresented: Binding(get: { model.showPalette }, set: { model.showPalette = $0 })) {
                 PaletteSheet(model: model)
                     .presentationDetents([.height(300)])

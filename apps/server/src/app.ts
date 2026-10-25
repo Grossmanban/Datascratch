@@ -16,7 +16,6 @@ import type { AppContext } from './context.js';
 import { ApiError, type ApiErrorCode } from './lib/errors.js';
 import { loadPlugins, type LoadedPlugin } from './plugins/loader.js';
 import { accountRoutes } from './routes/account.js';
-import { agentTokenRoutes } from './routes/agent-tokens.js';
 import { attachmentRoutes } from './routes/attachments.js';
 import { authRoutes } from './routes/auth.js';
 import { notebookRoutes } from './routes/notebooks.js';
@@ -88,7 +87,8 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
     await app.register(cors, {
       origin: origins,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-      allowedHeaders: ['authorization', 'content-type'],
+      allowedHeaders: ['authorization', 'content-type', 'mcp-session-id', 'mcp-protocol-version'],
+      credentials: true,
       maxAge: 86_400,
     });
   }
@@ -134,7 +134,6 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
       await v1.register(notebookRoutes(ctx));
       await v1.register(attachmentRoutes(ctx));
       await v1.register(shareRoutes(ctx));
-      await v1.register(agentTokenRoutes(ctx));
       await registerSync(v1, ctx);
     },
     { prefix: '/v1' },

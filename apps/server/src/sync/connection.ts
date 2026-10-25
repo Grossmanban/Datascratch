@@ -70,7 +70,7 @@ export class SyncConnection {
     this.#helloTimer = setTimeout(() => this.#fail('unauthorized', 'hello timeout', CloseCode.unauthorized), HELLO_TIMEOUT_MS);
     socket.on('message', (data, isBinary) => {
       if (isBinary) {
-        this.#send({ type: 'error', code: 'protocol_mismatch', message: 'binary frames are not supported' });
+        this.#send({ type: 'error', code: 'bad_request', message: 'binary frames are not supported' });
         return;
       }
       const text = Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.concat(data as Buffer[]).toString('utf8');
@@ -145,7 +145,7 @@ export class SyncConnection {
     try {
       raw = JSON.parse(text);
     } catch {
-      this.#send({ type: 'error', code: 'protocol_mismatch', message: 'invalid JSON' });
+      this.#send({ type: 'error', code: 'bad_request', message: 'invalid JSON' });
       return;
     }
     const parsed = ClientMessage.safeParse(raw);
@@ -153,7 +153,7 @@ export class SyncConnection {
       const ref = typeof raw === 'object' && raw ? ((raw as { clientMsgId?: unknown }).clientMsgId as string) : undefined;
       this.#send({
         type: 'error',
-        code: 'protocol_mismatch',
+        code: 'bad_request',
         message: `invalid message: ${parsed.error.issues[0]?.path.join('.') ?? ''} ${parsed.error.issues[0]?.message ?? ''}`.trim(),
         ...(typeof ref === 'string' ? { ref } : {}),
       });
@@ -165,7 +165,7 @@ export class SyncConnection {
       return this.#hello(msg);
     }
     if (msg.type === 'hello') {
-      this.#send({ type: 'error', code: 'protocol_mismatch', message: 'already authenticated' });
+      this.#send({ type: 'error', code: 'bad_request', message: 'already authenticated' });
       return;
     }
     if (!this.#takeToken()) {
@@ -200,7 +200,7 @@ export class SyncConnection {
       }
       if (err instanceof ApiError && err.code === 'bad_request') {
         const ref = 'clientMsgId' in msg ? msg.clientMsgId : undefined;
-        this.#send({ type: 'error', code: 'protocol_mismatch', message: err.message, ...(ref ? { ref } : {}) });
+        this.#send({ type: 'error', code: 'bad_request', message: err.message, ...(ref ? { ref } : {}) });
         return;
       }
       throw err;
@@ -429,7 +429,7 @@ export class SyncConnection {
       if (r.newest) await this.ctx.jobs.enqueue(COMPACT_JOB, { docId }, { singletonKey: docId, startAfterSec: 30 });
     } catch (err) {
       if (err instanceof ApiError && err.code === 'bad_request') {
-        throw new SyncError('protocol_mismatch', err.message, clientMsgId);
+        throw new SyncError('bad_request', err.message, clientMsgId);
       }
       throw err;
     }

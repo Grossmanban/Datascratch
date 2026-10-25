@@ -9,7 +9,6 @@ import { createStorage } from './storage/index.js';
 import { VERSION } from './version.js';
 
 export { buildApp } from './app.js';
-export type { ServerPlugin, PluginHost } from './plugins/api.js';
 
 async function main() {
   const config = loadConfig();

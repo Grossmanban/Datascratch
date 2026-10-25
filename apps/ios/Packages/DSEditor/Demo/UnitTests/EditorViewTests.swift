@@ -1,4 +1,3 @@
-#if canImport(UIKit)
 @testable import DSEditor
 import DSEditorModel
 import DSInk
@@ -9,9 +8,20 @@ import XCTest
 final class EditorViewTests: XCTestCase {
     var window: UIWindow!
 
+    override func tearDown() {
+        window?.isHidden = true
+        window = nil
+        super.tearDown()
+    }
+
     func host(_ doc: EditorDocument, width: CGFloat = 700, height: CGFloat = 900) -> EditorView {
         let editor = EditorView(document: doc)
-        window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
+        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
+            window = UIWindow(windowScene: scene)
+        } else {
+            window = UIWindow()
+        }
+        window.frame = CGRect(x: 0, y: 0, width: width, height: height)
         let vc = UIViewController()
         vc.view = editor
         window.rootViewController = vc
@@ -148,4 +158,3 @@ final class EditorViewTests: XCTestCase {
         XCTAssertLessThan(elapsed, 2.0)
     }
 }
-#endif

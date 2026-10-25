@@ -36,6 +36,17 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UIFileSharingEnabled: YES
         INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
+  EditorDemoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [UnitTests]
+    dependencies:
+      - target: EditorDemo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.datascratch.app.editordemo.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
   EditorDemoUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -55,4 +66,5 @@ schemes:
         EditorDemo: all
     test:
       targets:
+        - EditorDemoTests
         - EditorDemoUITests

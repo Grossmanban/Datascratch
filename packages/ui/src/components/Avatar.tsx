@@ -28,13 +28,25 @@ export function Avatar({ name, src, size = 28, presence, ring, className }: Avat
   const tint = tintFor(name);
   const dot = Math.max(8, Math.round(size * 0.3));
   return (
-    <span className={cn("relative inline-flex shrink-0", className)} style={{ width: size, height: size }}>
+    <span
+      className={cn("relative inline-flex shrink-0", className)}
+      style={{ width: size, height: size }}
+    >
       <A.Root
-        className={cn("inline-flex size-full select-none items-center justify-center overflow-hidden rounded-full", ring && "ring-2 ring-surface")}
+        className={cn(
+          "inline-flex size-full select-none items-center justify-center overflow-hidden rounded-full",
+          ring && "ring-2 ring-surface",
+        )}
         style={{ backgroundColor: tintBg(tint), color: tintFg(tint) }}
       >
         {src && <A.Image src={src} alt={name} className="size-full object-cover" />}
-        <A.Fallback delayMs={src ? 400 : 0} className="font-medium leading-none" style={{ fontSize: Math.round(size * 0.4) }} aria-label={name} role="img">
+        <A.Fallback
+          delayMs={src ? 400 : 0}
+          className="font-medium leading-none"
+          style={{ fontSize: Math.round(size * 0.4) }}
+          aria-label={name}
+          role="img"
+        >
           {initials(name)}
         </A.Fallback>
       </A.Root>
@@ -69,7 +81,14 @@ export function AvatarStack({ people, max = 4, size = 26, className }: AvatarSta
   return (
     <div className={cn("flex items-center", className)}>
       {shown.map((p, i) => (
-        <Avatar key={`${p.name}-${i}`} name={p.name} src={p.src ?? null} size={size} ring className={i ? "-ml-1.5" : ""} />
+        <Avatar
+          key={`${p.name}-${i}`}
+          name={p.name}
+          src={p.src ?? null}
+          size={size}
+          ring
+          className={i ? "-ml-1.5" : ""}
+        />
       ))}
       {rest > 0 && (
         <span

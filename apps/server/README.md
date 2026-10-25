@@ -50,7 +50,7 @@ drizzle/              SQL-миграции; 0001 — Row-Level Security и тр�
 
 ## Агенты (`@datascratch/agents`)
 
-Пакет агентов (MCP, OAuth 2.1, REST для агентов, токены, журнал, рендер PNG) — Fastify-плагин потока agents. Интерфейс между ним и сервером — `AgentsContext` из `packages/agents/src/context.ts` (контракт — `docs/architecture/contracts/agents-api.md`). Сервер держит его структурную копию в `src/plugins/agents-context.ts`, чтобы не зависеть от пакета при сборке, и реализует:
+Пакет агентов (MCP, OAuth 2.1, REST для агентов, токены, журнал, рендер PNG) — Fastify-плагин потока agents. Интерфейс между ним и сервером — `AgentsContext` из `packages/agents/src/context.ts` (контракт — `docs/architecture/contracts/agents-api.md`). Сервер зависит от пакета (`workspace:*`), берёт типы из него (`src/plugins/agents-context.ts`) и реализует:
 
 | Часть | Файл | Что делает |
 | --- | --- | --- |
@@ -60,7 +60,7 @@ drizzle/              SQL-миграции; 0001 — Row-Level Security и тр�
 
 **Row-Level Security (D-30).** Каждый вызов `data` идёт в транзакции под ролью `ds_agent` (`withAgentScope`): видны только блокноты пользователя в режиме «для агентов», а если передан `grantId` (необязательный последний параметр методов `data`, в `applyUpdate` — `origin.grantId`) — только блокноты этого гранта, и запись — только при `read_write`, неотозванном и неистёкшем гранте.
 
-**Подключение.** При старте сервер импортирует `@datascratch/agents`; если пакета нет — работает без MCP (в логе предупреждение). Регистрация без префикса:
+**Подключение** (`src/plugins/loader.ts`), без префикса:
 
 ```ts
 app.register(agentsPlugin, { context, publicUrl: PUBLIC_URL, secret /* HKDF от DS_JWT_SECRET */, appUrl: APP_URL, allowedOrigins: CORS_ORIGINS })

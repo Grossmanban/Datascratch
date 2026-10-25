@@ -39,11 +39,13 @@ public struct DSEmptyState: View {
                 .dsFont(.h2)
                 .foregroundStyle(.ds(.textPrimary))
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             if let message {
                 Text(message)
                     .dsFont(.callout)
                     .foregroundStyle(.ds(.textSecondary))
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 360)
             }
             if let actionTitle, let action {
@@ -52,7 +54,8 @@ public struct DSEmptyState: View {
                     .padding(.top, DSSpace.s2)
             }
         }
-        .padding(DSSpace.s8)
+        .padding(.vertical, DSSpace.s8)
+        .padding(.horizontal, DSSpace.s4)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
     }

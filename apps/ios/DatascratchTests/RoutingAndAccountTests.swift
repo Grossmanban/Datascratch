@@ -84,3 +84,25 @@ struct AccountServiceTests {
         #expect(sharing.links.isEmpty)
     }
 }
+
+@MainActor
+struct RecoveryKeyFlowTests {
+    @Test func skippingTheCheckKeepsTheKeyUnconfirmed() {
+        let app = AppModel(options: .init(uiTesting: true))
+        let key = RecoveryKey.random()
+        app.pendingRecoveryKey = key
+        app.finishOnboarding(keyConfirmed: false)
+        #expect(app.pendingRecoveryKey == nil)
+        #expect(app.savedRecoveryKey == key)
+        #expect(app.isRecoveryKeyConfirmed == false)
+    }
+
+    @Test func confirmingTheCheckKeepsTheKeyForSettings() {
+        let app = AppModel(options: .init(uiTesting: true))
+        let key = RecoveryKey.random()
+        app.pendingRecoveryKey = key
+        app.finishOnboarding()
+        #expect(app.savedRecoveryKey == key)
+        #expect(app.isRecoveryKeyConfirmed)
+    }
+}

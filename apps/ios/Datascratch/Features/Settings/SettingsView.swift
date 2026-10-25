@@ -26,6 +26,22 @@ struct SettingsView: View {
                         }
                     }
                     .accessibilityIdentifier("settings.account")
+                    if !app.isRecoveryKeyConfirmed, app.savedRecoveryKey != nil {
+                        NavigationLink { RecoveryKeySettings() } label: {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Check your recovery key")
+                                    Text("You skipped this during sign-up.")
+                                        .font(Theme.Typography.footnote)
+                                        .foregroundStyle(Theme.Palette.textSecondary)
+                                }
+                            } icon: {
+                                Image(systemName: "key.horizontal")
+                                    .foregroundStyle(Theme.Palette.warning)
+                            }
+                        }
+                        .accessibilityIdentifier("settings.recoveryKeyReminder")
+                    }
                 }
                 Section {
                     NavigationLink { DevicesSettings() } label: {
@@ -76,6 +92,18 @@ struct AccountSettings: View {
                     LabeledContent("Member since", value: created.formatted(date: .long, time: .omitted))
                 }
             }
+            if app.savedRecoveryKey != nil {
+                Section {
+                    NavigationLink { RecoveryKeySettings() } label: {
+                        LabeledContent("Recovery Key") {
+                            if !app.isRecoveryKeyConfirmed {
+                                Text("Not checked").foregroundStyle(Theme.Palette.warning)
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("settings.recoveryKey")
+                }
+            }
             Section {
                 NavigationLink("Change Password") { ChangePasswordView() }
             } footer: {
@@ -106,6 +134,63 @@ struct AccountSettings: View {
             }
         }
         .navigationTitle("Account")
+    }
+}
+
+/// Shows the recovery key issued on this device and lets the user check it later.
+struct RecoveryKeySettings: View {
+    @Environment(AppModel.self) private var app
+    @State private var isRevealed = false
+    @State private var isChecking = false
+
+    var body: some View {
+        Form {
+            if let key = app.savedRecoveryKey {
+                Section {
+                    if isRevealed {
+                        RecoveryKeyGrid(key: key)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+                        HStack {
+                            Button("Copy", systemImage: "doc.on.doc") {
+                                UIPasteboard.general.string = key.formatted
+                                Haptics.success()
+                            }
+                            Spacer()
+                            SwiftUI.ShareLink(item: key.formatted) {
+                                Label("Save…", systemImage: "square.and.arrow.down")
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                    } else {
+                        Button("Show Key", systemImage: "eye") { withAnimation { isRevealed = true } }
+                            .accessibilityIdentifier("recoveryKey.show")
+                    }
+                } footer: {
+                    Text("If you forget your password, this key is the only way back to your notes. Keep it in a password manager or on paper.")
+                }
+                Section {
+                    if app.isRecoveryKeyConfirmed {
+                        Label("Key checked", systemImage: "checkmark.seal.fill")
+                            .foregroundStyle(Theme.Palette.success)
+                    } else if isChecking {
+                        RecoveryKeyCheck(key: key) {
+                            withAnimation {
+                                app.isRecoveryKeyConfirmed = true
+                                isChecking = false
+                            }
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                    } else {
+                        Button("Check Key") { withAnimation { isChecking = true } }
+                            .accessibilityIdentifier("recoveryKey.check")
+                    }
+                }
+            }
+        }
+        .navigationTitle("Recovery Key")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

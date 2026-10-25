@@ -35,8 +35,10 @@ function json(res, status, body) {
   res.writeHead(status, { "content-type": "application/json", ...cors });
   res.end(JSON.stringify(body));
 }
+// Mutated per request: credentialed CORS needs the exact origin, not "*".
 const cors = {
   "access-control-allow-origin": "*",
+  "access-control-allow-credentials": "true",
   "access-control-allow-headers": "authorization, content-type",
   "access-control-allow-methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
 };
@@ -315,9 +317,11 @@ route("POST", "/v1/shares/:id/guest", (_q, res, { params }) => {
 route("POST", "/v1/agent-tokens", (_q, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const id = randomUUID();
-  const t = { id, userId: auth.userId, name: body.name, notebookIds: body.notebookIds, permission: body.permission, expiresAt: body.expiresAt ?? null, createdAt: nowIso(), lastUsedAt: null };
+  const t = { id, kind: "static", clientId: null, userId: auth.userId, name: body.name, notebookIds: body.notebookIds, permission: body.permission, expiresAt: body.expiresAt ?? null, createdAt: nowIso(), lastUsedAt: null };
+  for (const nb of body.notebookIds ?? []) if (db.notebooks.get(nb)?.mode !== "agent") return err(res, 400, "bad_request", "notebook is not in agent mode");
   db.agentTokens.set(id, t);
-  json(res, 200, { id, token: `dsa_${b64u(randomBytes(24))}` });
+  const { userId: _u, ...pub } = t;
+  json(res, 201, { ...pub, token: `dsa_${b64u(randomBytes(24))}` });
 });
 route("GET", "/v1/agent-tokens", (_q, res, { auth }) => {
   if (!auth) return err(res, 401, "unauthorized");
@@ -330,7 +334,26 @@ route("DELETE", "/v1/agent-tokens/:id", (_q, res, { auth, params }) => {
 });
 route("GET", "/v1/agent-tokens/:id/audit", (_q, res, { auth }) => {
   if (!auth) return err(res, 401, "unauthorized");
-  json(res, 200, []);
+  json(res, 200, [{ at: nowIso(), via: "mcp", action: "list_notebooks", notebookId: null, noteId: null, ok: true, errorCode: null, durationMs: 12 }]);
+});
+
+// Browser session for the agents' OAuth consent screen (agents-api.md §10).
+const webSessions = new Set();
+route("POST", "/v1/auth/web-session", (_q, res, { auth }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const sid = b64u(randomBytes(18));
+  webSessions.add(sid);
+  res.writeHead(204, { ...cors, "set-cookie": `ds_web=${sid}; HttpOnly; Path=/; Max-Age=3600; SameSite=Lax` });
+  res.end();
+});
+route("DELETE", "/v1/auth/web-session", (_q, res) => {
+  res.writeHead(204, { ...cors, "set-cookie": "ds_web=; Path=/; Max-Age=0" });
+  res.end();
+});
+route("GET", "/oauth/authorize", (req, res) => {
+  const sid = /(?:^|;\s*)ds_web=([^;]+)/.exec(req.headers.cookie ?? "")?.[1];
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  res.end(`<!doctype html><title>consent</title><p id="consent">${sid && webSessions.has(sid) ? "signed-in" : "anonymous"}</p>`);
 });
 
 // Test helper: wipe state between e2e specs.
@@ -344,6 +367,7 @@ route("POST", "/__mock/kill-sockets", (_q, res) => {
 });
 
 const server = http.createServer(async (req, res) => {
+  cors["access-control-allow-origin"] = req.headers.origin ?? "*";
   if (req.method === "OPTIONS") {
     res.writeHead(204, cors);
     return res.end();

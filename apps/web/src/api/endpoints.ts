@@ -1,7 +1,7 @@
 import type {
   AgentAuditEntry,
   AgentPermission,
-  AgentToken,
+  AgentGrant,
   Device,
   DocKind,
   DocVersion,
@@ -91,8 +91,8 @@ export const sharesApi = {
 
 export const agentTokensApi = {
   create: (body: { name: string; notebookIds: string[]; permission: AgentPermission; expiresAt?: string | null }) =>
-    api.post<{ id: string; token: string }>("/agent-tokens", body),
-  list: () => api.get<AgentToken[]>("/agent-tokens"),
+    api.post<AgentGrant & { token: string }>("/agent-tokens", body),
+  list: () => api.get<AgentGrant[]>("/agent-tokens"),
   revoke: (id: string) => api.del<void>(`/agent-tokens/${id}`),
-  audit: (id: string) => api.get<AgentAuditEntry[]>(`/agent-tokens/${id}/audit`),
+  audit: (id: string) => api.get<AgentAuditEntry[]>(`/agent-tokens/${id}/audit?limit=100`),
 };

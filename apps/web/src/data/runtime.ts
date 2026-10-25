@@ -2,7 +2,7 @@ import type * as Y from "yjs";
 import { deviceId } from "@/auth/deviceKey";
 import { getSession, refreshSession } from "@/auth/session";
 import { initAccountDoc } from "@/domain/account";
-import { notebookMaps } from "@/domain/notebook";
+import { notebookMaps, syncNotebookMetaCopy } from "@/domain/notebook";
 import { refreshAccount, refreshNotebook, resetWorkspace, useWorkspace } from "@/domain/workspace";
 import type { HelloAuth } from "@/lib/shared";
 import { SyncEngine, useSyncStatus, type OutgoingMessage, type SyncHost } from "@/sync/engine";
@@ -47,12 +47,13 @@ export class AccountRuntime {
     }
     const onAccount = () => {
       refreshAccount(this.account);
-      void this.syncNotebookDocs();
+      void this.syncNotebookDocs().then(() => this.copyNotebookNames());
     };
     this.account.on("afterTransaction", onAccount);
     this.cleanups.push(() => this.account.off("afterTransaction", onAccount));
     refreshAccount(this.account);
     await this.syncNotebookDocs();
+    this.copyNotebookNames();
 
     this.cleanups.push(
       this.store.onChange((docId, origin) => {
@@ -128,6 +129,17 @@ export class AccountRuntime {
     });
   }
 
+  /** Keep name/icon/space copies in each notebook doc's meta up to date (for agents). */
+  private copyNotebookNames() {
+    const { account } = useWorkspace.getState();
+    for (const ref of account.notebooks) {
+      const doc = this.store.get(ref.id);
+      if (!doc) continue;
+      const space = account.spaces.find((s) => s.id === ref.spaceId) ?? null;
+      syncNotebookMetaCopy(doc, ref, space);
+    }
+  }
+
   private async syncNotebookDocs() {
     const refs = useWorkspace.getState().account.notebooks;
     const ids = new Set(refs.map((r) => r.id));
@@ -181,7 +193,8 @@ export class AccountRuntime {
 
   private host(): SyncHost {
     return {
-      deviceId: () => deviceId(),
+      // The server issues a deviceId with the session (api.md); fall back to the local one.
+      deviceId: async () => getSession()?.deviceId ?? (await deviceId()),
       auth: async (): Promise<HelloAuth | null> => {
         let s = getSession();
         if (s && Date.parse(s.accessExpiresAt) - Date.now() < 60_000) s = await refreshSession();

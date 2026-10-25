@@ -7,6 +7,7 @@ import { SignupPage } from "@/features/auth/SignupPage";
 import { CalendarPage } from "@/features/calendar/CalendarPage";
 import { DocPage } from "@/features/doc/DocPage";
 import { AllDocsPage, FolderPage, NotebookPage, StarredPage, TagPage, TrashPage } from "@/features/docs/ListPages";
+import { ConnectPage } from "@/features/connect/ConnectPage";
 import { GuestPage } from "@/features/guest/GuestPage";
 import { SettingsPage, type SettingsSection } from "@/features/settings/SettingsPage";
 import { AppShell } from "@/features/shell/AppShell";
@@ -112,6 +113,7 @@ const settingsIndex = createRoute({
 });
 
 const guestRoute = createRoute({ getParentRoute: () => rootRoute, path: "/s/$shareId", component: GuestPage });
+const connectRoute = createRoute({ getParentRoute: () => rootRoute, path: "/connect", component: ConnectPage });
 
 const routeTree = rootRoute.addChildren([
   authLayout.addChildren([loginRoute, signupRoute, recoverRoute]),
@@ -131,6 +133,7 @@ const routeTree = rootRoute.addChildren([
     settingsRoute,
   ]),
   guestRoute,
+  connectRoute,
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: false, scrollRestoration: true });

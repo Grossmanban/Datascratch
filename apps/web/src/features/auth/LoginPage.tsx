@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { signIn } from "@/auth/flows";
@@ -8,6 +8,7 @@ import { authErrorMessage } from "./errors";
 export function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const router = useRouter();
   const search = useSearch({ strict: false }) as { next?: string };
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,7 +22,9 @@ export function LoginPage() {
     try {
       await signIn(email, password);
       const next = search.next && search.next.startsWith("/") && !search.next.startsWith("/login") ? search.next : "/all";
-      await navigate({ to: next });
+      // `next` may carry a query string (e.g. /connect?returnTo=…): push it as a full href.
+      if (next.includes("?")) router.history.push(next);
+      else await navigate({ to: next });
     } catch (err) {
       setError(authErrorMessage(err, "auth.wrongCredentials"));
     } finally {

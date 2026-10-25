@@ -85,6 +85,7 @@ jobs:
       LOG_LEVEL: warn
       PUBLIC_URL: http://localhost:8080
       CORS_ORIGINS: http://localhost:4173
+      APP_URL: http://localhost:4173
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds
       DB_MIGRATE_ON_START: "true"
       STORAGE_DRIVER: disk
@@ -98,7 +99,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @datascratch/shared build
+      - name: Build server dependencies (shared, agents plugin)
+        run: pnpm --filter "@datascratch/server^..." run build
       - name: Start server
         run: |
           mkdir -p /tmp/ds-files

@@ -612,9 +612,9 @@
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Storage/LocalStore.swift": {
-    "mtime": 1792929761.725538,
-    "seen": 1792929793.221961,
-    "ast_hash": "a163bef5746878110d2b2930fe837682",
+    "mtime": 1792930090.3335643,
+    "seen": 1792930213.8882124,
+    "ast_hash": "dbc452eb8fd5cf0b883ca23a1973ddeb",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Util/Base64URL.swift": {
@@ -762,9 +762,45 @@
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSCore/README.md": {
-    "mtime": 1792928859.1187668,
-    "seen": 1792929682.0490108,
-    "ast_hash": "88491570d04fa8aca5e2743077237ff0",
+    "mtime": 1792929842.7278416,
+    "seen": 1792930213.888272,
+    "ast_hash": "90baf76d4ac2f4d2ecb05b68cd32117b",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSCore/Sources/DSCore/Network/APIClient.swift": {
+    "mtime": 1792929924.0641387,
+    "seen": 1792930213.888206,
+    "ast_hash": "61461b68963bbbadaca6958c018c1605",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSCore/Sources/DSCore/Network/APITypes.swift": {
+    "mtime": 1792929866.471843,
+    "seen": 1792930213.8882089,
+    "ast_hash": "b5504930cc07e9eb74bacc7e880d3c42",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSCore/Sources/DSCore/Sync/SyncClient.swift": {
+    "mtime": 1792930019.3318522,
+    "seen": 1792930213.8882139,
+    "ast_hash": "de339a1ceace58697c74ed74b63140dd",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSCore/Sources/DSCore/Sync/SyncEngine.swift": {
+    "mtime": 1792930153.7691262,
+    "seen": 1792930213.8882153,
+    "ast_hash": "a1bd9ae49e5fc0621091bf33f6247f7b",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSCore/Sources/DSCore/Sync/SyncMessages.swift": {
+    "mtime": 1792929975.4358494,
+    "seen": 1792930213.8882163,
+    "ast_hash": "2f34f0e693265b882f88ec9819f81887",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSCore/Tests/DSCoreTests/SyncTests.swift": {
+    "mtime": 1792930173.7487757,
+    "seen": 1792930213.8882315,
+    "ast_hash": "e36dcb612cfb16baa7ee3d51d29146a7",
     "semantic_hash": ""
   }
 }

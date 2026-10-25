@@ -194,6 +194,21 @@ export function updateTask(doc: Y.Doc, taskId: string, patch: TaskPatch): boolea
   return true;
 }
 
+export function setTaskText(doc: Y.Doc, taskId: string, value: string): boolean {
+  const item = findTask(noteMaps(doc).content, taskId);
+  if (!item) return false;
+  doc.transact(() => {
+    let para = item.toArray().find((c): c is Y.XmlElement => c instanceof Y.XmlElement && c.nodeName === "paragraph");
+    if (!para) {
+      para = el("paragraph", {}, []);
+      item.insert(0, [para]);
+    }
+    para.delete(0, para.length);
+    para.insert(0, [text(value)]);
+  });
+  return true;
+}
+
 export function removeTask(doc: Y.Doc, taskId: string): { text: string; attrs: Record<string, unknown> } | null {
   const item = findTask(noteMaps(doc).content, taskId);
   if (!item) return null;

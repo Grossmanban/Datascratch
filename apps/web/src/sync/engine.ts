@@ -33,6 +33,7 @@ type SyncState = { status: SyncStatus; pending: number; lastSyncedAt: number | n
 export function createSyncStatusStore() {
   return create<SyncState>(() => ({ status: "offline", pending: 0, lastSyncedAt: null, error: null }));
 }
+export type SyncStatusStore = ReturnType<typeof createSyncStatusStore>;
 
 export const useSyncStatus = createSyncStatusStore();
 

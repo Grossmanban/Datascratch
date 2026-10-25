@@ -257,7 +257,15 @@ final class AppearanceUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-ui-testing-signed-in"] + extra
         app.launch()
-        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            XCUIDevice.shared.orientation = .landscapeLeft
+            // Wait for the app to finish rotating, or the screenshot shows the old layout.
+            let window = app.windows.firstMatch
+            for _ in 0..<12 where window.frame.width <= window.frame.height {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(1))
+        }
         return app
     }
 

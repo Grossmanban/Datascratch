@@ -287,7 +287,7 @@ struct DocumentVectorTests {
         #expect(derived.tags == d["tags"] as! [String])
         let tasks = derived.tasks.map { t -> [String: Any] in
             ["noteId": t.noteId, "taskId": t.taskId, "blockId": t.blockId ?? NSNull(), "text": t.text, "state": t.state.rawValue,
-             "scheduled": t.scheduled ?? NSNull(), "deadline": t.deadline ?? NSNull()]
+             "scheduled": t.scheduled ?? NSNull(), "deadline": t.deadline ?? NSNull(), "completedAt": t.completedAt ?? NSNull(), "order": t.order]
         }
         #expect(jsonEqual(tasks, d["tasks"]))
         let links = derived.links.map { l -> [String: Any] in

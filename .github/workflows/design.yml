@@ -1,0 +1,82 @@
+name: design
+
+on:
+  push:
+    branches: [main, "claude/design-system"]
+    paths:
+      - "packages/design-tokens/**"
+      - "packages/ui/**"
+      - "apps/ios/Packages/DSDesign/**"
+      - ".github/workflows/design.yml"
+      - "pnpm-lock.yaml"
+  pull_request:
+    paths:
+      - "packages/design-tokens/**"
+      - "packages/ui/**"
+      - "apps/ios/Packages/DSDesign/**"
+      - ".github/workflows/design.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: design-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Tokens + web components
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generated tokens are up to date
+        run: pnpm --filter @datascratch/design-tokens check
+      - name: Token tests
+        run: pnpm --filter @datascratch/design-tokens test
+      - name: Typecheck UI
+        run: pnpm --filter @datascratch/ui typecheck
+      - name: UI tests
+        run: pnpm --filter @datascratch/ui test
+      - name: Build showcase
+        run: pnpm --filter @datascratch/ui showcase:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-showcase
+          path: packages/ui/showcase-dist
+          retention-days: 14
+
+  ios:
+    name: DSDesign (iOS)
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: apps/ios/Packages/DSDesign
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
+          xcodebuild -version
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build -scheme DSDesign -destination 'generic/platform=iOS Simulator' | xcbeautify || \
+          xcodebuild build -scheme DSDesign -destination 'generic/platform=iOS Simulator' -quiet
+      - name: Test on simulator
+        run: |
+          set -o pipefail
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k,v in d.items() if 'iOS-26' in k for x in v if x['name'].startswith('iPhone')]; print(c[-1]['udid'] if c else '')")
+          echo "Simulator: $UDID"
+          export TEST_RUNNER_DS_SNAPSHOT_DIR="$RUNNER_TEMP/ds-snapshots"
+          xcodebuild test -scheme DSDesign -destination "id=$UDID" | xcbeautify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dsdesign-snapshots
+          path: ${{ runner.temp }}/ds-snapshots
+          retention-days: 14

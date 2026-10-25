@@ -1,0 +1,93 @@
+name: server
+
+on:
+  push:
+    branches: [main, claude/server]
+    paths:
+      - apps/server/**
+      - packages/shared/**
+      - packages/agents/**
+      - infra/**
+      - pnpm-lock.yaml
+      - .github/workflows/server.yml
+  pull_request:
+    paths:
+      - apps/server/**
+      - packages/shared/**
+      - packages/agents/**
+      - infra/**
+      - pnpm-lock.yaml
+      - .github/workflows/server.yml
+
+concurrency:
+  group: server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ds
+          POSTGRES_PASSWORD: ds
+          POSTGRES_DB: ds_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ds -d ds_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://ds:ds@localhost:5432/ds_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build (server and its workspace dependencies)
+        run: pnpm --filter "@datascratch/server..." run build
+      - name: Typecheck
+        run: pnpm --filter @datascratch/server run typecheck
+      - name: Lint
+        run: pnpm --filter @datascratch/server run lint
+      - name: Migrations match the schema
+        working-directory: apps/server
+        run: |
+          pnpm exec drizzle-kit generate --name ci-check
+          if [ -n "$(git status --porcelain drizzle)" ]; then
+            echo "::error::src/db/schema.ts changed without a migration (run pnpm db:generate)"; git status --porcelain drizzle; exit 1
+          fi
+      - name: Test (vitest + PostgreSQL)
+        run: pnpm --filter @datascratch/server run test
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile
+          tags: datascratch-server:latest
+          load: true
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Compose smoke test (start, backup, wipe, restore)
+        working-directory: infra
+        run: |
+          cp .env.example .env
+          secret() { openssl rand -base64 32 | tr '+/' '-_' | tr -d '='; }
+          sed -i "s/^DS_JWT_SECRET=.*/DS_JWT_SECRET=$(secret)/; s/^DS_KMS_KEY=.*/DS_KMS_KEY=$(secret)/; s/^NODE_ENV=.*/NODE_ENV=production/" .env
+          ./smoke-test.sh
+      - name: Logs on failure
+        if: failure()
+        working-directory: infra
+        run: docker compose logs --tail 200

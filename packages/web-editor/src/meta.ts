@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import * as Y from "yjs";
 import { META_ORIGIN } from "./collab/collaboration";
-import { DEFAULT_NOTE_STYLE, type NoteBackdrop, type NoteCover, type NoteStyle } from "./shared/document";
+import { DEFAULT_NOTE_STYLE, type NoteBackdrop, type NoteCover, type NoteStyle } from "@datascratch/shared/contracts";
 
 /** formatVersion this client understands (document-model.md §6). */
 export const SUPPORTED_FORMAT_VERSION = 1;

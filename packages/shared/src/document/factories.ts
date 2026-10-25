@@ -7,6 +7,8 @@ import {
   NOTEBOOK_ROOTS,
   NOTE_ROOTS,
   type NoteDocMeta,
+  type NotebookMeta,
+  type NotebookMetaFields,
   type PMNode,
 } from "../contracts/document.js";
 import type { DocKind } from "../contracts/common.js";
@@ -78,14 +80,45 @@ export function createAccountDoc(options: DocOptions = {}): Y.Doc {
   return doc;
 }
 
-export function createNotebookDoc(notebookId: string, options: DocOptions = {}): Y.Doc {
+export interface NotebookDocOptions extends DocOptions, Partial<NotebookMetaFields> {}
+
+export function createNotebookDoc(notebookId: string, options: NotebookDocOptions = {}): Y.Doc {
   const doc = options.doc ?? new Y.Doc();
   doc.transact(() => {
     const meta = notebookRoots(doc).meta;
     meta.set("formatVersion", FORMAT_VERSION);
     meta.set("notebookId", notebookId);
+    meta.set("name", options.name ?? "");
+    meta.set("icon", options.icon ?? null);
+    meta.set("space", options.space ?? null);
   });
   return doc;
+}
+
+/** Read the notebook document's `meta` (missing fields read as empty/null). */
+export function getNotebookMeta(doc: Y.Doc): NotebookMeta {
+  const m = notebookRoots(doc).meta;
+  return {
+    formatVersion: (m.get("formatVersion") as number | undefined) ?? FORMAT_VERSION,
+    notebookId: String(m.get("notebookId") ?? ""),
+    name: String(m.get("name") ?? ""),
+    icon: (m.get("icon") as string | null | undefined) ?? null,
+    space: (m.get("space") as NotebookMeta["space"] | undefined) ?? null,
+  };
+}
+
+/**
+ * Update the copies of name/icon/space in the notebook's `meta`. Clients call
+ * it whenever the NotebookRef or its Space changes in the account document.
+ */
+export function setNotebookMeta(doc: Y.Doc, fields: Partial<NotebookMetaFields>): void {
+  const m = notebookRoots(doc).meta;
+  doc.transact(() => {
+    for (const [k, v] of Object.entries(fields)) {
+      if (v === undefined) continue;
+      if (JSON.stringify(m.get(k)) !== JSON.stringify(v)) m.set(k, v);
+    }
+  });
 }
 
 export interface NoteDocOptions extends DocOptions {

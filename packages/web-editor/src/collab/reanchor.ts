@@ -10,8 +10,7 @@ import { Extension } from "@tiptap/core";
 import { Mapping, ReplaceAroundStep, ReplaceStep, type Step } from "@tiptap/pm/transform";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
-import { uuidv7 } from "@datascratch/shared/ids";
-import { putStroke, readStroke, resolveAnchor, type Stroke } from "@datascratch/shared/strokes";
+import { readStroke, replaceStrokeWithReanchored, resolveAnchor, type Stroke } from "@datascratch/shared/strokes";
 import { ySyncPluginKey } from "y-prosemirror";
 import * as Y from "yjs";
 import { decodeAnchor, encodeCharAnchor, resolveCharAnchor, type ProsemirrorMapping } from "../pen/anchors";
@@ -124,14 +123,12 @@ export function reanchorAfterEdit(doc: Y.Doc, state: EditorState, pending: Pendi
     if (changed) replaced.push([snap.id, { ...snap.stroke, anchors }]);
   }
   if (!replaced.length) return [];
-  const strokes = doc.getMap("strokes");
   const ids: string[] = [];
+  // One transaction for all copies; nested replaceStrokeWithReanchored calls join it.
   doc.transact(() => {
     for (const [oldId, stroke] of replaced) {
-      strokes.delete(oldId);
-      const id = uuidv7();
-      putStroke(doc, id, stroke);
-      ids.push(id);
+      const id = replaceStrokeWithReanchored(doc, oldId, stroke.anchors, { origin: PEN_ORIGIN });
+      if (id) ids.push(id);
     }
   }, PEN_ORIGIN);
   return ids;

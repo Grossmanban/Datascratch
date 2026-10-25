@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "description": "Share links https://<web-host>/s/<shareId>#k=<base64url key> (crypto.md §7); `reject` inputs must fail to parse.",
+  "build": [
+    {
+      "origin": "https://app.example",
+      "shareId": "0192f3c4-0000-7000-8000-000000000005",
+      "key": "jpZ53vFXKh1lEbUehHLEvz4AHbJvs_IiZHL0WBv-iBA",
+      "url": "https://app.example/s/0192f3c4-0000-7000-8000-000000000005#k=jpZ53vFXKh1lEbUehHLEvz4AHbJvs_IiZHL0WBv-iBA"
+    }
+  ],
+  "reject": [
+    {
+      "url": "https://app.example/notes/0192f3c4-0000-7000-8000-000000000005#k=jpZ53vFXKh1lEbUehHLEvz4AHbJvs_IiZHL0WBv-iBA",
+      "reason": "not a /s/ path"
+    },
+    {
+      "url": "https://app.example/s/0192f3c4-0000-7000-8000-000000000005",
+      "reason": "no key"
+    },
+    {
+      "url": "https://app.example/s/0192f3c4-0000-7000-8000-000000000005#k=AAAA",
+      "reason": "key is not 32 bytes"
+    }
+  ]
+}

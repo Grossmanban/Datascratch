@@ -32,12 +32,12 @@ import { UIProvider } from "@datascratch/ui";
 | Поверхности | `Card`, `DocCard` (обложка или подложка, заголовок с засечками), `GlassPanel`, `Backdrop` (градиент + зерно) |
 | Навигация | `Sidebar`, `SidebarSection` (сворачивается, действие при наведении), `SidebarItem` (иконка, цвет, счётчик, вложенность, ←/→ раскрывают) |
 | Списки | `TaskRow` (задача целиком: чек-бокс, заметка, даты, теги, «из «документа»»), `DocRow` + `DocList` (вид «список»), `DocGrid` (вид «галерея» для `DocCard`) |
-| Редактор | `PenToolbar` (стеклянная палитра пера: перо / маркер / ластик / лассо, чернила и маркеры из токенов, 3 толщины — `penWidthPx`, те же числа, что `DSPenWidth` на iOS), `FormatToolbar` (стеклянная панель форматирования; не забирает фокус у текста) |
+| Редактор | `PenToolbar` (стеклянная палитра пера: режим «текст» (`tool: null`), ручка, карандаш, маркер, текстовыделитель, ластик (повторное нажатие — штрих ↔ пиксель), лассо; перья окрашены текущими чернилами; цвета `ink.*` / `highlight.*`; толщина 1–3 — множитель базовой толщины инструмента; «рисовать мышью и пальцем»; отменить/повторить), `FormatToolbar` (кнопки через props, `panel` для раскрывающихся панелей, `anchorRect` — парит над выделением), `ColorPanel` (цвет текста `tint.*`, выделение `highlight.*`), `LinkPanel`, `SuggestionMenu` (меню «/» и `[[ ]]`: группы, иконки, подсказки сокращений; клавиатуру и фокус ведёт редактор, `suggestionOptionId` для `aria-activedescendant`) |
 | Состояния | `EmptyState`, `Skeleton`, `Spinner` |
 
 Утилиты Tailwind сверх токенов: `text-on-accent` (токен `text.onAccent`), `bg-hover`, `bg-pressed`, `bg-selected`, `bg-accent-soft`, `bg-danger-soft`, `border-hairline`, `focus-ring`, `glass`, `paper-noise`, `animate-pop`, `animate-overlay`, `animate-sheet-*`, `animate-shimmer`.
 
-Типографика документа — класс `.ds-prose` (заголовки с засечками, списки, цитата, код, `mark[data-color]`, выноска `[data-callout][data-tint]`, `[data-wikilink]`, `[data-tag]`, таблицы; `data-font="serif|mono"` — стиль документа). Бумага — `data-paper="dots|grid|lines"` на поверхности документа.
+Чек-бокс задачи без React (узлы ProseMirror): `<button role="checkbox" class="ds-task-check" data-state="open|done|cancelled">` — тот же вид и анимация, что у `TaskCheckbox`. Типографику документа (`.ds-prose`) ведёт `packages/web-editor` на токенах этого пакета.
 
 Правила дат (`dateLabel`) совпадают с iOS (`DSDateChipModel`) — общие тестовые случаи.
 

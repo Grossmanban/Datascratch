@@ -29,12 +29,21 @@ enum DSStrings {
     static var online: String { tr("в сети", "online") }
     static var away: String { tr("отошёл", "away") }
 
-    static func width(_ width: DSPenWidth) -> String {
+    static func width(_ width: DSPenWidth, _ language: DSLanguage = .current) -> String {
         switch width {
-        case .fine: tr("Толщина: тонкая", "Fine")
-        case .medium: tr("Толщина: средняя", "Medium")
-        case .bold: tr("Толщина: толстая", "Bold")
+        case .fine: tr("Толщина: тонкая", "Width: fine", language)
+        case .medium: tr("Толщина: средняя", "Width: medium", language)
+        case .bold: tr("Толщина: толстая", "Width: bold", language)
         }
+    }
+
+    /// Spoken name of an ink / highlight token.
+    static func colorName(_ token: String, _ language: DSLanguage = .current) -> String {
+        let ru: [String: String] = [
+            "black": "Чёрный", "blue": "Синий", "red": "Красный", "green": "Зелёный",
+            "purple": "Фиолетовый", "brown": "Коричневый", "yellow": "Жёлтый", "pink": "Розовый",
+        ]
+        return language == .ru ? (ru[token] ?? token) : token.capitalized
     }
 
     static func tr(_ ru: String, _ en: String, _ language: DSLanguage = .current) -> String {

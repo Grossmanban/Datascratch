@@ -184,3 +184,12 @@ describe("lasso and gestures", () => {
     expect(text.slice(...expandToWords(text, 0, 1))).toBe("one ");
   });
 });
+
+describe("glyphForX boundaries", () => {
+  it("a point on the boundary of two characters belongs to the right one", async () => {
+    const { glyphForX, groupLines } = await import("../src/pen/geometry");
+    const glyphs = [0, 1].map((i) => ({ pos: i + 1, left: i * 10, right: i * 10 + 10, top: 0, bottom: 20, baseline: 16, fontSize: 17, block: 1 }));
+    expect(glyphForX(groupLines(glyphs)[0]!, 10).pos).toBe(2);
+    expect(glyphForX(groupLines(glyphs)[0]!, 25).pos).toBe(2);
+  });
+});

@@ -193,7 +193,7 @@ export const TaskItem = Node.create({
       control.className = "ds-task-control";
       const box = document.createElement("button");
       box.type = "button";
-      box.className = "ds-task-box";
+      box.className = "ds-task-check";
       box.setAttribute("role", "checkbox");
       control.append(box);
       const body = document.createElement("div");
@@ -239,6 +239,7 @@ export const TaskItem = Node.create({
         const a = taskAttrsFrom(current);
         li.dataset.state = a.state;
         if (a.blockId) li.dataset.blockId = a.blockId;
+        box.dataset.state = a.state;
         box.setAttribute("aria-checked", a.state === "done" ? "true" : a.state === "cancelled" ? "mixed" : "false");
         box.title = a.state === "cancelled" ? "Отменено" : a.state === "done" ? "Выполнено" : "Отметить выполненной";
         chips.replaceChildren();

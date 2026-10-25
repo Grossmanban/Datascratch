@@ -1,3 +1,4 @@
+import { TooltipProvider } from "@datascratch/ui";
 import { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -228,6 +229,8 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
   } as CSSProperties;
 
   return (
+    // Design-system popovers use Radix tooltips; a local provider keeps the editor usable without UIProvider.
+    <TooltipProvider delayDuration={500} skipDelayDuration={200}>
     <div className={`ds-editor ${className}`} data-paper={style.paper} data-font={style.font} data-width={style.width} data-readonly={readOnly || undefined} style={cssVars}>
       {showCover && meta.cover && <Cover doc={doc} host={host.current} editable={!readOnly} onRequestCover={props.onRequestCover} />}
       {meta.formatVersion > SUPPORTED_FORMAT_VERSION && (
@@ -249,6 +252,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
         </div>
       )}
     </div>
+    </TooltipProvider>
   );
 }
 

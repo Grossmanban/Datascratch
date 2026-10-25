@@ -4,6 +4,7 @@ import sodium from "libsodium-wrappers-sumo";
 
 /** Deterministic pseudo-random bytes: BLAKE2b(n, message = "ds-vectors|" + label). */
 export function det(label: string, n: number): Uint8Array {
+  if (n === 0) return new Uint8Array(0);
   if (n <= 64) return sodium.crypto_generichash(n, `ds-vectors|${label}`, null);
   const out = new Uint8Array(n);
   for (let i = 0; i < n; i += 64)

@@ -75,6 +75,8 @@ interface Entry {
   segments: RenderPoint[][] | null;
   bounds: Bounds | null;
   clip: Bounds | null;
+  /** Layout may have changed since `segments` were computed. */
+  stale: boolean;
 }
 
 type Surface = { kind: "image" | "drawing" | "block"; blockId: string; el: HTMLElement };
@@ -292,6 +294,7 @@ export class PenLayer {
       segments: null,
       bounds: null,
       clip: null,
+      stale: true,
     });
   }
 
@@ -303,6 +306,7 @@ export class PenLayer {
 
   /** Number of drawn segments per stroke id (diagnostics and tests). */
   debugSegments(): Record<string, RenderPoint[][]> {
+    this.resolveAll();
     this.flush();
     const out: Record<string, RenderPoint[][]> = {};
     for (const [id, e] of this.entries) out[id] = e.segments ?? [];
@@ -377,14 +381,58 @@ export class PenLayer {
 
   /** Resolves every stroke (after relayout) or, when `onlyNew`, just strokes never resolved yet. */
   private resolveAll(onlyNew = false): void {
+    if (!onlyNew) this.markAllStale();
+    this.resolveStale(() => true, Infinity);
+  }
+
+  private markAllStale(): void {
+    if (!this.needsResolve) return;
+    for (const e of this.entries.values()) e.stale = true;
+    this.needsResolve = false;
+  }
+
+  /** Resolves stale strokes matching `filter`, within a time budget (ms). Returns true if some remain. */
+  private resolveStale(filter: (e: Entry) => boolean, budget: number): boolean {
     let pass: LayoutPass | null = null;
     const mapping = this.mapping();
+    const start = performance.now();
+    let remaining = false;
     for (const e of this.entries.values()) {
-      if (onlyNew && e.segments) continue;
+      if (!e.stale && e.segments) continue;
+      if (!filter(e) || performance.now() - start > budget) {
+        remaining = true;
+        continue;
+      }
       pass ??= new LayoutPass(this.editor.view, this.origin());
       this.resolveEntry(e, pass, mapping, this.skipFor(e.id));
+      e.stale = false;
     }
-    if (!onlyNew) this.needsResolve = false;
+    return remaining;
+  }
+
+  /**
+   * Long notes: after an edit only strokes near the viewport are re-measured before the frame;
+   * the rest follow in idle time, so typing never waits for off-screen ink.
+   */
+  private resolveForFrame(vp: { top: number; height: number }): void {
+    this.markAllStale();
+    const near = (e: Entry) => !e.bounds || (e.bounds.bottom >= vp.top - vp.height && e.bounds.top <= vp.top + 2 * vp.height);
+    this.resolveStale(near, Infinity);
+    if (this.resolveStale(() => false, 0)) this.scheduleIdle();
+  }
+
+  private idleHandle = 0;
+  private scheduleIdle(): void {
+    if (this.idleHandle || this.destroyed) return;
+    const run = () => {
+      this.idleHandle = 0;
+      if (this.destroyed) return;
+      const more = this.resolveStale(() => true, 8);
+      this.schedule();
+      if (more) this.scheduleIdle();
+    };
+    const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    this.idleHandle = ric ? ric(run, { timeout: 200 }) : window.setTimeout(run, 16);
   }
 
   private skipFor(id: string): ReadonlySet<number> | undefined {
@@ -415,8 +463,8 @@ export class PenLayer {
   /** Resolves (if needed) and redraws synchronously. */
   flush(): void {
     if (this.destroyed) return;
-    this.resolveAll(!this.needsResolve);
     const vp = this.viewport();
+    this.resolveForFrame(vp);
     const dpr = window.devicePixelRatio || 1;
     const under = prepareCanvas(this.under, vp, dpr);
     const over = prepareCanvas(this.over, vp, dpr);
@@ -994,6 +1042,11 @@ export class PenLayer {
   destroy(): void {
     this.destroyed = true;
     if (this.frame) cancelAnimationFrame(this.frame);
+    if (this.idleHandle) {
+      const cic = (window as Window & { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback;
+      if (cic) cic(this.idleHandle);
+      else clearTimeout(this.idleHandle);
+    }
     for (const c of this.cleanups) c();
     this.under.remove();
     this.over.remove();

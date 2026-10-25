@@ -82,7 +82,7 @@ function DevicesCard() {
       {devices.isLoading ? (
         <Spinner className="size-4 text-ink-3" />
       ) : devices.isError ? (
-        <p className="text-[13.5px] text-ink-3">{t("common.requiresOnline")}</p>
+        <p className="text-[13.5px] text-ink-2">{t("common.requiresOnline")}</p>
       ) : (
         (devices.data ?? []).map((d) => (
           <Row

@@ -168,7 +168,7 @@ function DocScreen({ noteId }: { noteId: string }) {
 
       {/* Mount the editor once presence exists: changing `awareness` later recreates the editor. */}
       {!doc || !meta || !awareness ? (
-        <div className="flex h-64 items-center justify-center text-ink-3">
+        <div className="flex h-64 items-center justify-center text-ink-2">
           <Spinner className="size-5" />
         </div>
       ) : (
@@ -204,7 +204,7 @@ function DocScreen({ noteId }: { noteId: string }) {
                 <button
                   onClick={chooseCover}
                   className={cn(
-                    "mb-1 flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-3 opacity-0 transition hover:bg-ink/5 hover:text-ink-2 focus:opacity-100 group-hover/hdr:opacity-100",
+                    "mb-1 flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-2 opacity-0 transition hover:bg-ink/5 hover:text-ink focus:opacity-100 group-hover/hdr:opacity-100",
                   )}
                   data-testid="add-cover"
                 >
@@ -232,7 +232,7 @@ function IconPicker({ icon, onPick, disabled }: { icon: string | null; onPick: (
               {icon}
             </button>
           ) : (
-            <button className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-3 opacity-0 transition hover:bg-ink/5 hover:text-ink-2 group-hover/hdr:opacity-100 focus:opacity-100">
+            <button className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-2 opacity-0 transition hover:bg-ink/5 hover:text-ink group-hover/hdr:opacity-100 focus:opacity-100">
               <Smile className="size-4" /> {t("style.addIcon")}
             </button>
           )

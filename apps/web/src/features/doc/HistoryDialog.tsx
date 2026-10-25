@@ -74,7 +74,7 @@ export function HistoryDialog() {
       {versions.isLoading ? (
         <Spinner className="size-5 text-ink-3" />
       ) : versions.isError ? (
-        <p className="text-[14px] text-ink-3">{t("common.requiresOnline")}</p>
+        <p className="text-[14px] text-ink-2">{t("common.requiresOnline")}</p>
       ) : !list.length ? (
         <EmptyState icon={<History className="size-7" />} title={t("history.title")} description={t("history.empty")} />
       ) : (
@@ -100,7 +100,7 @@ export function HistoryDialog() {
                 <Spinner className="size-5 text-ink-3" />
               </div>
             ) : failed ? (
-              <p className="p-6 text-[14px] text-ink-3">{t("history.loadFailed")}</p>
+              <p className="p-6 text-[14px] text-ink-2">{t("history.loadFailed")}</p>
             ) : preview ? (
               <>
                 <div className="pointer-events-none origin-top scale-[0.9]">
@@ -113,7 +113,7 @@ export function HistoryDialog() {
                 </div>
               </>
             ) : (
-              <p className="p-6 text-[14px] text-ink-3">{t("history.preview")}</p>
+              <p className="p-6 text-[14px] text-ink-2">{t("history.preview")}</p>
             )}
           </div>
         </div>

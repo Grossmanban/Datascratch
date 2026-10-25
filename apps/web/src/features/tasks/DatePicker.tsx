@@ -36,7 +36,7 @@ export function MonthCalendar({
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center">
         {weekdayNames().map((w) => (
-          <span key={w} className="pb-1 text-[11px] font-medium uppercase text-ink-3">
+          <span key={w} className="pb-1 text-[11px] font-medium uppercase text-ink-2">
             {w.slice(0, 2)}
           </span>
         ))}

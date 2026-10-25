@@ -84,7 +84,7 @@ export function TasksPage() {
           key={date}
           title={
             <Link to="/calendar" search={{ date }} className="hover:text-ink">
-              <span className="text-ink">{formatDay(date)}</span> <span className="font-normal capitalize text-ink-3">· {formatWeekday(date)}</span>
+              <span className="text-ink">{formatDay(date)}</span> <span className="font-normal capitalize text-ink-2">· {formatWeekday(date)}</span>
             </Link>
           }
         >
@@ -140,10 +140,11 @@ export function TasksPage() {
                 "flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13.5px] transition-colors",
                 v.id === view ? "bg-ink/[0.07] font-medium text-ink" : "text-ink-2 hover:bg-ink/[0.04] hover:text-ink",
               )}
+              aria-current={v.id === view ? "page" : undefined}
               data-testid={`tasks-tab-${v.id}`}
             >
               {v.icon}
-              <span className={cn(v.id !== view && "hidden sm:inline")}>{t(`tasks.${v.id}`)}</span>
+              <span className={cn(v.id !== view && "sr-only sm:not-sr-only")}>{t(`tasks.${v.id}`)}</span>
             </Link>
           ))}
         </nav>

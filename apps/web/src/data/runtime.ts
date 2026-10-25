@@ -32,6 +32,7 @@ export class AccountRuntime {
   private knownNotes = new Map<string, Set<string>>();
   private notebookPass: Promise<void> = Promise.resolve();
   private attached = new Set<string>();
+  private attaching = new Map<string, Promise<void>>();
   private touchTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingTimer: ReturnType<typeof setInterval> | null = null;
@@ -152,15 +153,26 @@ export class AccountRuntime {
     const fresh = docIds.filter((id) => !this.attached.has(id));
     if (!fresh.length) return;
     for (const id of fresh) this.attached.add(id);
-    const docs = await Promise.all(fresh.map(async (docId) => ({ docId, doc: await this.store.pin(docId) })));
-    await this.client.addDocs(docs);
+    const done = (async () => {
+      const docs = await Promise.all(fresh.map(async (docId) => ({ docId, doc: await this.store.pin(docId) })));
+      await this.client.addDocs(docs);
+    })();
+    for (const id of fresh) this.attaching.set(id, done);
+    try {
+      await done;
+    } finally {
+      for (const id of fresh) if (this.attaching.get(id) === done) this.attaching.delete(id);
+    }
     this.updateStatus();
   }
 
   private async reattach(docId: string) {
     await this.store.patchRow(docId, { registered: 1 });
+    // Registration may finish while the doc is still being added to the client.
+    await this.attaching.get(docId)?.catch(() => undefined);
     if (!this.attached.has(docId)) return;
-    await this.client.resubscribe(docId);
+    // Detached meanwhile (the client throws for unknown docs): nothing to resubscribe.
+    await this.client.resubscribe(docId).catch(() => undefined);
   }
 
   private updateStatus() {

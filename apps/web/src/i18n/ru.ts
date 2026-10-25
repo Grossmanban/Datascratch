@@ -10,6 +10,8 @@ const ru = {
     welcomeBody2: "Нажмите ⌘K, чтобы найти что угодно или выполнить команду.",
   },
   common: {
+    expand: "Развернуть",
+    collapse: "Свернуть",
     cancel: "Отмена",
     save: "Сохранить",
     create: "Создать",
@@ -84,6 +86,7 @@ const ru = {
     newNotebook: "Новый блокнот",
     newSpace: "Новое пространство",
     spaces: "Пространства",
+    addToNotebook: "Добавить в блокнот",
     collapseSidebar: "Скрыть панель",
     expandSidebar: "Показать панель",
     today: "Сегодня",

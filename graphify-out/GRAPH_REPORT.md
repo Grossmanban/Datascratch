@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-10-25)
 
 ## Corpus Check
-- 517 files · ~327,976 words
+- 517 files · ~328,021 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 24 file(s) not represented in the graph (top: (none) 15, .css 5, .example 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `07922977`
+- Built from commit: `51aa4185`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1237,7 +1237,7 @@ Cohesion: 0.67
 Nodes (3): cve(), JB(), lve()
 
 ## Knowledge Gaps
-- **747 isolated node(s):** `.isEmpty`, `.blocks`, `.canRedo`, `.canUndo`, `.strokes` (+742 more)
+- **747 isolated node(s):** `local`, `redo`, `remote`, `textInput`, `undo` (+742 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 3107 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **52 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -1245,15 +1245,15 @@ Nodes (3): cve(), JB(), lve()
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `@datascratch/ui README`, `Foundation`, `decisions/README.md (3)`, `scripts/generate.mjs`, `DatePicker.tsx`, `12-craft-features.md`?**
-  _High betweenness centrality (0.222) - this node is a cross-community bridge._
+  _High betweenness centrality (0.201) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `.isEmpty`, `.blocks`, `.canRedo` to the rest of the system?**
+- **What connects `local`, `redo`, `remote` to the rest of the system?**
   _747 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
   _Cohesion score 0.003515544478383899 - nodes in this community are weakly interconnected._
 - **Why does `t` connect `n` to `mermaid.min.js`, `Wt`, `scripts/generate.mjs`?**
-  _High betweenness centrality (0.221) - this node is a cross-community bridge._
+  _High betweenness centrality (0.191) - this node is a cross-community bridge._
 - **Are the 115 inferred relationships involving `r()` (e.g. with `mermaid.min.js` and `_4()`) actually correct?**
   _`r()` has 115 INFERRED edges - model-reasoned connections that need verification._
 - **Should `n` be split into smaller, more focused modules?**

@@ -40,6 +40,8 @@ final class InkController {
     }
 
     private var session: Session?
+    /// 120 Hz while the pen is down (ProMotion), released when it lifts.
+    let frameRate = FrameRateBoost()
     private var eraserPath: [CGPoint] = []
     private var erased: Set<String> = []
     private var pixelRuns: [String: [Range<Int>]] = [:]
@@ -154,6 +156,7 @@ final class InkController {
     // MARK: - Pen input
 
     func penBegan(_ s: PenSample) {
+        if tools.mode != .text { frameRate.begin() }
         switch tools.mode {
         case .text:
             return
@@ -226,6 +229,7 @@ final class InkController {
 
     func penEnded(cancelled: Bool) {
         holdTimer?.invalidate()
+        frameRate.end()
         switch tools.mode {
         case .strokeEraser, .pixelEraser:
             if !cancelled { commitEraser() } else { erased = []; over.setHidden([]); under.setHidden([]) }

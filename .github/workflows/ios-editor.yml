@@ -156,6 +156,9 @@ jobs:
             > "$RUNNER_TEMP/device-build.log" 2>&1 || status=$?
           grep -E "error:|\*\* " "$RUNNER_TEMP/device-build.log" | head -200 || true
           test $status -eq 0
+          # ProMotion on iPhone: without this key the system caps the app at 60 Hz.
+          plutil -extract CADisableMinimumFrameDurationOnPhone raw \
+            "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/EditorDemo.app/Info.plist" | grep -qx true
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/EditorDemo.app" "$RUNNER_TEMP/ipa/Payload/"
           (cd "$RUNNER_TEMP/ipa" && zip -qr EditorDemo-unsigned.ipa Payload)

@@ -1,7 +1,15 @@
-# Production front door: HTTPS for DS_DOMAIN, the web app, and the API.
-# Caddy obtains and renews a Let's Encrypt certificate itself (for "localhost"
-# it uses its own local CA — used by the end-to-end test).
-{$DS_DOMAIN} {
+# Production front door: the web app and the API on one address.
+# DS_SITE is the domain in direct mode (Caddy obtains and renews a Let's Encrypt
+# certificate; for "localhost" its own CA — used by the end-to-end test), or
+# "http://:8480" behind an existing reverse proxy that terminates TLS.
+{
+	servers {
+		# Requests forwarded by a proxy on this host keep the client's address.
+		trusted_proxies static private_ranges
+	}
+}
+
+{$DS_SITE} {
 	encode zstd gzip
 
 	# Internal only: never exposed to the internet.

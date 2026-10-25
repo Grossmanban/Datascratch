@@ -5,16 +5,17 @@ name: datascratch
 
 services:
   # Every image comes from GHCR: the server never pulls from Docker Hub.
-  # Memory is sized for a 2-core / 4 GB VPS.
+  # Memory limits come from deploy.sh (smaller on a server shared with other apps).
+  # Everything (containers, volumes, network) is prefixed by the project name.
   postgres:
     image: ${DS_POSTGRES_IMAGE:-ghcr.io/grossmanban/datascratch-postgres:16-alpine}
     restart: unless-stopped
     command:
       - postgres
       - -c
-      - shared_buffers=256MB
+      - shared_buffers=${DS_PG_SHARED_BUFFERS:-256MB}
       - -c
-      - effective_cache_size=1GB
+      - effective_cache_size=${DS_PG_CACHE_SIZE:-1GB}
       - -c
       - work_mem=8MB
       - -c
@@ -49,11 +50,11 @@ services:
       PUBLIC_URL: https://${DS_DOMAIN:-localhost}
       APP_URL: https://${DS_DOMAIN:-localhost}
       DS_VERSION: ${DS_TAG:-latest}
-      NODE_OPTIONS: --max-old-space-size=768
+      NODE_OPTIONS: --max-old-space-size=${DS_NODE_HEAP_MB:-768}
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: ${DS_MEM_SERVER:-1g}
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,14 +66,17 @@ services:
     restart: unless-stopped
     environment:
       DS_DOMAIN: ${DS_DOMAIN:-localhost}
+      # Direct mode: the domain (Caddy gets the certificate). Behind an existing proxy:
+      # plain HTTP on 127.0.0.1 only; the existing proxy terminates TLS.
+      DS_SITE: ${DS_SITE:-localhost}
     deploy:
       resources:
         limits:
-          memory: 256m
+          memory: ${DS_MEM_CADDY:-256m}
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "${DS_PORT_HTTP:-80:80}"
+      - "${DS_PORT_HTTPS:-443:443}"
+      - "${DS_PORT_HTTPS_UDP:-443:443/udp}"
     volumes:
       - caddy_data:/data
       - caddy_config:/config

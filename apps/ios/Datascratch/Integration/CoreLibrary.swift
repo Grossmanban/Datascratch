@@ -281,6 +281,15 @@ final class CoreLibrary: LibraryBackend {
         return carried
     }
 
+    /// What `POST /notebooks` needs for a notebook of the account whose key this device holds
+    /// (one carried in while offline never reached the server).
+    func serverNotebook(_ id: String) -> CarriedNotebook? {
+        guard let ref = account.notebook(id: id), let master = try? keys.masterKey(),
+              let key = try? keys.notebookKey(id),
+              let wrapped = try? DSCrypto.wrapKey(key, with: master, ad: CryptoAD.notebookKey(id)) else { return nil }
+        return CarriedNotebook(id: id, mode: ref.mode, wrappedKey: wrapped, key: key)
+    }
+
     /// The key a share link carries: the note key or the notebook key (crypto.md §7).
     func shareKey(for target: ShareTarget) throws -> Data? {
         switch target.kind {

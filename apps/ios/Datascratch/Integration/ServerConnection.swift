@@ -66,8 +66,22 @@ final class ServerConnection: CoreLibraryRemote {
             let keys = KeyRingDocumentKeys(keyRing: core.keys) { noteId, notebookId in
                 wrappedKeys.wrapped(noteId: noteId, notebookId: notebookId)
             }
-            let engine = SyncEngine(store: core.store, client: client, keyFor: keys.key(for:)) { record in
-                try await api.registerDoc(docId: record.docId, kind: record.kind, notebookId: record.notebookId)
+            let engine = SyncEngine(store: core.store, client: client, keyFor: keys.key(for:)) { [core] record in
+                do {
+                    try await api.registerDoc(docId: record.docId, kind: record.kind, notebookId: record.notebookId)
+                } catch {
+                    // The notebook is not on the server (carried in while its creation failed,
+                    // e.g. offline at the first start): create it, then register again.
+                    guard case APIError.server(404, _, _) = error, let notebookId = record.notebookId,
+                          let notebook = await core.serverNotebook(notebookId) else { throw error }
+                    do {
+                        _ = try await api.createNotebook(id: notebook.id, mode: notebook.mode, wrappedKey: notebook.wrappedKey,
+                                                         notebookKey: notebook.mode == .agent ? notebook.key : nil)
+                    } catch APIError.server(409, _, _) {
+                        // Created meanwhile.
+                    }
+                    try await api.registerDoc(docId: record.docId, kind: record.kind, notebookId: record.notebookId)
+                }
             }
             self.engine = engine
             core.remote = self

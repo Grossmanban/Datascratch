@@ -23,6 +23,8 @@ struct MainSplitView: View {
                     EmptyDetailView()
                 }
             }
+            // Warm paper behind the document column too (not the system white / blue-black).
+            .background(Theme.Palette.canvas.ignoresSafeArea())
         }
         .navigationSplitViewStyle(.balanced)
         // Craft-like chrome: toolbar and sidebar icons in neutral ink; the accent is
@@ -68,7 +70,7 @@ struct EmptyDetailView: View {
 
     var body: some View {
         ZStack {
-            Backdrop.mist.gradient.opacity(0.35).ignoresSafeArea()
+            Theme.Palette.canvas.ignoresSafeArea()
             VStack(spacing: Theme.Space.s4) {
                 Image(systemName: "pencil.and.scribble")
                     .font(.system(size: 44, weight: .light))

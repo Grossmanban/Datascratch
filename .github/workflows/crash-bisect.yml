@@ -6,7 +6,7 @@ name: crash-bisect
 
 on:
   push:
-    branches: [claude/crash-bisect]
+    branches: [claude/crash-bisect, claude/crash-bisect2]
   workflow_dispatch:
 
 jobs:
@@ -71,11 +71,16 @@ jobs:
         working-directory: apps/ios/Packages/DSEditor/Demo
         run: |
           EDITOR_ALL="ink,hover,tap,scribble,pencil,editmenu,inkviews,mermaid,keyboard,fragments,statechange,selection"
+          if [ "${GITHUB_REF_NAME}" = "claude/crash-bisect2" ]; then
+            # With the text view hit-test fix (398f9b4) vs. without it.
+            VARIANTS=("" "hitfix" "" "hitfix")
+          else
           case "${{ matrix.group }}" in
             1) VARIANTS=("" "all" "$EDITOR_ALL" "ink" "hover" "tap" "scribble") ;;
             2) VARIANTS=("pencil" "editmenu" "inkviews" "reorder" "mermaid" "keyboard" "fragments") ;;
             3) VARIANTS=("statechange" "selection" "palette" "toolbar" "revision" "palette,toolbar,revision" "") ;;
           esac
+          fi
           for v in "${VARIANTS[@]}"; do
             echo "::group::variant '${v:-none}'"
             TEST_RUNNER_DS_DISABLE="$v" xcodebuild test-without-building -project EditorDemo.xcodeproj -scheme EditorDemo \

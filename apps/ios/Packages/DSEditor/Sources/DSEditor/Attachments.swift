@@ -22,6 +22,10 @@ final class AttachmentFactory {
     weak var resolver: EditorAttachmentResolver?
     var theme: EditorTheme
     private var cache: [BlockID: BlockAttachment] = [:]
+    /// Table cell text edited: table id, row, column, new text.
+    var onTableCellEdit: ((BlockID, Int, Int, String) -> Void)?
+    /// Add a row (true) or a column (false) to a table.
+    var onTableStructure: ((BlockID, Bool) -> Void)?
 
     init(theme: EditorTheme) { self.theme = theme }
 
@@ -96,7 +100,10 @@ final class AttachmentFactory {
         case NodeType.mermaid: v = MermaidBlockView()
         case NodeType.file: v = FileBlockView()
         case NodeType.pageCard: v = PageCardView()
-        case NodeType.table: v = TableBlockView()
+        case NodeType.table:
+            let t = TableBlockView()
+            t.factory = self
+            v = t
         default: v = UnsupportedBlockView()
         }
         v.configure(node: node, resolver: resolver, theme: theme)
@@ -341,51 +348,99 @@ final class PageCardView: BlockContentView {
     }
 }
 
-final class TableBlockView: BlockContentView {
+/// Table with editable cells (plain text per cell) and buttons to add a row or a column.
+final class TableBlockView: BlockContentView, UITextFieldDelegate {
     static let rowHeight: CGFloat = 38
+    static let controlsHeight: CGFloat = 28
 
     static func rows(_ node: BlockNode) -> [[(text: String, header: Bool)]] {
         node.children.map { row in row.children.map { cell in (cell.plainText, cell.type == NodeType.tableHeader) } }
     }
 
-    static func height(for node: BlockNode) -> CGFloat { CGFloat(max(1, node.children.count)) * rowHeight + 2 }
+    static func height(for node: BlockNode) -> CGFloat {
+        CGFloat(max(1, node.children.count)) * rowHeight + 2 + controlsHeight
+    }
 
-    private var labels: [UILabel] = []
+    private var fields: [[UITextField]] = []
+    private let grid = UIView()
+    private let addRow = UIButton(type: .system)
+    private let addColumn = UIButton(type: .system)
+    weak var factory: AttachmentFactory?
 
     override func configure(node: BlockNode, resolver: EditorAttachmentResolver?, theme: EditorTheme) {
         super.configure(node: node, resolver: resolver, theme: theme)
-        labels.forEach { $0.removeFromSuperview() }
-        labels = []
-        layer.cornerRadius = 8
-        layer.borderWidth = 1
-        layer.borderColor = EditorTheme.quoteBar.cgColor
-        clipsToBounds = true
-        for row in Self.rows(node) {
-            for cell in row {
-                let l = PaddedLabel()
-                l.text = cell.text
-                l.font = theme.font(size: 15, weight: cell.header ? .semibold : .regular)
-                l.textColor = EditorTheme.text
-                l.backgroundColor = cell.header ? EditorTheme.codeBackground : .clear
-                l.layer.borderWidth = 0.5
-                l.layer.borderColor = EditorTheme.quoteBar.cgColor
-                addSubview(l)
-                labels.append(l)
+        fields.flatMap { $0 }.forEach { $0.removeFromSuperview() }
+        fields = []
+        grid.layer.cornerRadius = 8
+        grid.layer.borderWidth = 1
+        grid.layer.borderColor = EditorTheme.quoteBar.cgColor
+        grid.clipsToBounds = true
+        if grid.superview == nil {
+            addSubview(grid)
+            addRow.setTitle("+ строка", for: .normal)
+            addColumn.setTitle("+ столбец", for: .normal)
+            for b in [addRow, addColumn] {
+                b.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
+                b.tintColor = EditorTheme.secondaryText
+                addSubview(b)
             }
+            addRow.addAction(UIAction { [weak self] _ in self?.structure(addRow: true) }, for: .touchUpInside)
+            addColumn.addAction(UIAction { [weak self] _ in self?.structure(addRow: false) }, for: .touchUpInside)
         }
+        for (r, row) in Self.rows(node).enumerated() {
+            var line: [UITextField] = []
+            for (c, cell) in row.enumerated() {
+                let f = UITextField()
+                f.text = cell.text
+                f.font = theme.font(size: 15, weight: cell.header ? .semibold : .regular)
+                f.textColor = EditorTheme.text
+                f.backgroundColor = cell.header ? EditorTheme.codeBackground : .clear
+                f.layer.borderWidth = 0.5
+                f.layer.borderColor = EditorTheme.quoteBar.cgColor
+                f.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+                f.leftViewMode = .always
+                f.delegate = self
+                f.tag = r * 1000 + c
+                f.returnKeyType = .next
+                f.accessibilityIdentifier = "table.cell.\(r).\(c)"
+                grid.addSubview(f)
+                line.append(f)
+            }
+            fields.append(line)
+        }
+        setNeedsLayout()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        guard let node else { return }
-        var i = 0
-        for (r, row) in Self.rows(node).enumerated() {
-            let w = bounds.width / CGFloat(max(1, row.count))
-            for c in row.indices where i < labels.count {
-                labels[i].frame = CGRect(x: CGFloat(c) * w, y: CGFloat(r) * Self.rowHeight, width: w, height: Self.rowHeight)
-                i += 1
+        let gridHeight = bounds.height - Self.controlsHeight
+        grid.frame = CGRect(x: 0, y: 0, width: bounds.width, height: gridHeight)
+        for (r, line) in fields.enumerated() {
+            let w = bounds.width / CGFloat(max(1, line.count))
+            for (c, f) in line.enumerated() {
+                f.frame = CGRect(x: CGFloat(c) * w, y: CGFloat(r) * Self.rowHeight, width: w, height: Self.rowHeight)
             }
         }
+        addRow.frame = CGRect(x: 0, y: gridHeight, width: 90, height: Self.controlsHeight)
+        addColumn.frame = CGRect(x: 96, y: gridHeight, width: 100, height: Self.controlsHeight)
+    }
+
+    func textFieldDidEndEditing(_ textField: UITextField) {
+        guard let node else { return }
+        factory?.onTableCellEdit?(node.id, textField.tag / 1000, textField.tag % 1000, textField.text ?? "")
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        let r = textField.tag / 1000, c = textField.tag % 1000
+        if c + 1 < fields[r].count { fields[r][c + 1].becomeFirstResponder() }
+        else if r + 1 < fields.count { fields[r + 1][0].becomeFirstResponder() }
+        else { textField.resignFirstResponder() }
+        return false
+    }
+
+    private func structure(addRow: Bool) {
+        guard let node else { return }
+        factory?.onTableStructure?(node.id, addRow)
     }
 }
 

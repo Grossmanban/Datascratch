@@ -73,6 +73,7 @@ struct DemoView: View {
                 Button("Картинка", systemImage: "photo") {
                     model.editor.insertBlock(BlockNode(type: NodeType.image, attrs: ["attachmentId": "demo-1", "width": 1, "alt": "Пример", "caption": "Нарисуйте на картинке"]))
                 }
+                Button("Таблица", systemImage: "tablecells") { model.editor.insertBlock(EditorCommands.table(rows: 3, columns: 3, header: ["Что", "Где", "Когда"])) }
                 Button("Разделитель", systemImage: "minus") { model.editor.insertBlock(.rule("wave")) }
             } label: { Image(systemName: "plus.circle") }
                 .accessibilityIdentifier("insert")

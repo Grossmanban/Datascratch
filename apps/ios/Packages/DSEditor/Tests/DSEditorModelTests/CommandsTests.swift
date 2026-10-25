@@ -165,6 +165,21 @@ func resolved(_ doc: EditorDocument, _ s: Stroke) -> [TextPosition?] { s.anchors
         #expect(!cmd.marks(at: 2..<6).contains(MarkName.bold))
     }
 
+    @Test func tableEditing() {
+        let table = EditorCommands.table(rows: 2, columns: 2, header: ["A", "B"])
+        let doc = InMemoryEditorDocument(blocks: [.title(""), table])
+        let cmd = EditorCommands(document: doc)
+        cmd.setTableCell(table.id, row: 1, column: 0, text: "x")
+        cmd.addTableRow(table.id)
+        cmd.addTableColumn(table.id)
+        let t = doc.block(table.id)!
+        #expect(t.children.count == 3)
+        #expect(t.children.allSatisfy { $0.children.count == 3 })
+        #expect(t.children[0].children[2].type == NodeType.tableHeader)
+        #expect(t.children[1].children[0].plainText == "x")
+        #expect(Projection.build(doc.blocks).paragraphs[1].kind == .atom(NodeType.table))
+    }
+
     @Test func insertBlockAddsTrailingParagraph() {
         let (doc, b) = makeDoc("x")
         let caret = EditorCommands(document: doc).insertBlock(.math("a^2"), after: TextPosition(block: b, offset: 1))!

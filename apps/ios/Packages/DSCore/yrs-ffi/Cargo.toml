@@ -32,3 +32,8 @@ strip = "debuginfo"
 [dev-dependencies]
 base64 = "0.22"
 serde_json = "1"
+
+# Vendored yrs 0.25.0 with a fix for StickyIndex resolution through redone items
+# (see vendor/PATCHES.md). Remove once fixed upstream.
+[patch.crates-io]
+yrs = { path = "vendor/yrs" }

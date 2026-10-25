@@ -243,3 +243,21 @@ fn merge_and_diff_updates() {
     assert_eq!(state_vector_from_update(merged.clone()).unwrap(), a.state_vector());
     assert_eq!(diff_update(merged, a.state_vector()).unwrap().len() <= 2, true);
 }
+
+#[test]
+fn relative_positions_survive_undo_mid_item() {
+    let doc = YDocument::new(Some(1), note_roots());
+    doc.enable_undo(vec!["content".into()], 0).unwrap();
+    doc.apply(vec![YOp::XmlInsert { root: "content".into(), parent: vec![], index: 0, nodes: vec![paragraph("b1", "")] }], local()).unwrap();
+    doc.stop_capturing();
+    doc.apply(vec![YOp::TextInsert { root: "content".into(), path: vec![0, 0], index: 0, chunks: vec![chunk("abcdef")] }], local()).unwrap();
+    let positions: Vec<Vec<u8>> = (0..6).map(|i| doc.encode_relative_position("content".into(), vec![0, 0], i, 0).unwrap()).collect();
+    doc.stop_capturing();
+    doc.apply(vec![YOp::TextDelete { root: "content".into(), path: vec![0, 0], index: 0, len: 6 }], local()).unwrap();
+    assert!(doc.resolve_relative_positions("content".into(), positions.clone()).unwrap().iter().all(|r| r.as_ref().unwrap().deleted));
+    assert!(doc.undo());
+    let r = doc.resolve_relative_positions("content".into(), positions).unwrap();
+    for (i, r) in r.iter().enumerate() {
+        assert_eq!(r, &Some(ResolvedIndex { path: vec![0, 0], index: i as u32, deleted: false }));
+    }
+}

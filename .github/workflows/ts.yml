@@ -1,0 +1,40 @@
+name: ts
+
+# Build, typecheck, lint and test every TypeScript package (apps/* and packages/*).
+# Turbo discovers packages from pnpm-workspace.yaml, so new packages are picked up automatically.
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths-ignore:
+      - "docs/**"
+      - "graphify-out/**"
+      - "apps/ios/**"
+      - "**/*.md"
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "graphify-out/**"
+      - "apps/ios/**"
+      - "**/*.md"
+  workflow_dispatch:
+
+concurrency:
+  group: ts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Format
+        run: pnpm format:check
+      - name: Build, typecheck, lint, test
+        run: pnpm turbo run build typecheck lint test --continue

@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "description": "Packed points: records of 8 Float32 LE [a, x, y, pressure, altitude, azimuth, roll, t]. Values are given after Float32 rounding.",
+  "points": [
+    {
+      "a": 0,
+      "x": 0,
+      "y": 0.10000000149011612,
+      "pressure": 1,
+      "altitude": 1.5707963705062866,
+      "azimuth": 0,
+      "roll": 0,
+      "t": 0
+    },
+    {
+      "a": 1,
+      "x": 0.25,
+      "y": -0.5,
+      "pressure": 0.5,
+      "altitude": 0.7853981852531433,
+      "azimuth": 3.1415927410125732,
+      "roll": 0.10000000149011612,
+      "t": 8
+    },
+    {
+      "a": -1,
+      "x": 1.5,
+      "y": 2.75,
+      "pressure": 0,
+      "altitude": 0,
+      "azimuth": 6.2831854820251465,
+      "roll": -1,
+      "t": 1234.5
+    }
+  ],
+  "packedHex": "0000000000000000cdcccc3d0000803fdb0fc93f0000000000000000000000000000803f0000803e000000bf0000003fdb0f493fdb0f4940cdcccc3d00000041000080bf0000c03f000030400000000000000000db0fc940000080bf00509a44"
+}

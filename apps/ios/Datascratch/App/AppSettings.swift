@@ -22,7 +22,12 @@ final class AppSettings {
     /// on iPhone, which has no Pencil.
     var fingerDrawing: Bool { didSet { defaults.set(fingerDrawing, forKey: "fingerDrawing") } }
     var fingerDrawingEffective: Bool { fingerDrawing }
-    var appearance: Appearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
+    var appearance: Appearance {
+        didSet {
+            defaults.set(appearance.rawValue, forKey: "appearance")
+            applyAppearanceToWindows()
+        }
+    }
     var defaultFont: NoteStyle.Font { didSet { defaults.set(defaultFont.rawValue, forKey: "defaultFont") } }
     var defaultPaper: NoteStyle.Paper { didSet { defaults.set(defaultPaper.rawValue, forKey: "defaultPaper") } }
     var libraryLayout: LibraryLayout { didSet { defaults.set(libraryLayout.rawValue, forKey: "libraryLayout") } }
@@ -37,6 +42,25 @@ final class AppSettings {
         defaultPaper = NoteStyle.Paper(rawValue: defaults.string(forKey: "defaultPaper") ?? "") ?? .plain
         libraryLayout = LibraryLayout(rawValue: defaults.string(forKey: "libraryLayout") ?? "") ?? .grid
         hapticsEnabled = defaults.object(forKey: "haptics") as? Bool ?? true
+    }
+
+    var interfaceStyle: UIUserInterfaceStyle {
+        switch appearance {
+        case .system: .unspecified
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+
+    /// Applies the theme to every window of every scene at once — sheets, UIKit
+    /// hosts (the editor) and secondary windows included, without a relaunch.
+    func applyAppearanceToWindows() {
+        let style = interfaceStyle
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for window in scene.windows where window.overrideUserInterfaceStyle != style {
+                window.overrideUserInterfaceStyle = style
+            }
+        }
     }
 
     var colorScheme: ColorScheme? {

@@ -1,29 +1,40 @@
+import { SyncClient } from "@datascratch/shared";
 import type * as Y from "yjs";
 import { deviceId } from "@/auth/deviceKey";
 import { getSession, refreshSession } from "@/auth/session";
-import { initAccountDoc } from "@/domain/account";
+import { APP_VERSION, syncUrl } from "@/config";
 import { notebookMaps, syncNotebookMetaCopy } from "@/domain/notebook";
+import { sodiumReady } from "@/lib/shared";
 import { refreshAccount, refreshNotebook, resetWorkspace, useWorkspace } from "@/domain/workspace";
-import type { HelloAuth } from "@/lib/shared";
-import { SyncEngine, useSyncStatus, type OutgoingMessage, type SyncHost } from "@/sync/engine";
+import { uiStatus, useSyncStatus } from "@/sync/engine";
 import { uploadPending } from "./attachments";
 import { accountDb } from "./db";
 import { DocStore, ORIGIN_REMOTE } from "./docStore";
 import { Indexer } from "./indexer";
-import { clearKeys, notebookKey, prefetchNotebookKeys } from "./keys";
-import { flushOps, onOpsChanged } from "./ops";
+import { clearKeys, prefetchNotebookKeys } from "./keys";
+import { flushOps, onDocRegistered, onOpsChanged } from "./ops";
 import { receivePresence } from "./presence";
+import { DexieSyncStorage } from "./syncStorage";
 
+/**
+ * Everything that runs while an account is signed in: the local doc store, SyncClient
+ * (@datascratch/shared/sync) with IndexedDB storage, the REST op queue, the indexer and the
+ * observers that mirror Y.Docs into the workspace store.
+ */
 export class AccountRuntime {
   readonly store = new DocStore();
   readonly indexer: Indexer;
-  readonly engine: SyncEngine;
+  readonly storage = new DexieSyncStorage(accountDb());
+  client!: SyncClient;
+  account!: Y.Doc;
   private cleanups: (() => void)[] = [];
   private observedNotebooks = new Map<string, () => void>();
   private knownNotes = new Map<string, Set<string>>();
+  private notebookPass: Promise<void> = Promise.resolve();
+  private attached = new Set<string>();
   private touchTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
-  account!: Y.Doc;
+  private pendingTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(readonly accountDocId: string) {
     this.indexer = new Indexer(
@@ -34,17 +45,44 @@ export class AccountRuntime {
       },
       (noteId, title, tags) => this.syncNoteMetaFromContent(noteId, title, tags),
     );
-    this.engine = new SyncEngine(this.host(), useSyncStatus);
   }
 
-  async start(opts: { bootstrap?: (rt: AccountRuntime) => Promise<void> } = {}) {
+  async start() {
+    // SyncClient encrypts synchronously with libsodium: it must be ready first.
+    await sodiumReady();
+    this.client = new SyncClient({
+      url: syncUrl(),
+      deviceId: getSession()?.deviceId ?? (await deviceId()),
+      client: { platform: "web", version: APP_VERSION },
+      storage: this.storage,
+      auth: async () => {
+        let s = getSession();
+        if (s && Date.parse(s.accessExpiresAt) - Date.now() < 60_000) s = await refreshSession();
+        if (!s) throw new Error("signed out");
+        return { kind: "user", accessToken: s.accessToken };
+      },
+      keyFor: async (docId) => {
+        const key = await this.store.keyFor(docId);
+        if (!key) throw new Error(`no key for ${docId}`);
+        return key;
+      },
+    });
+    this.cleanups.push(
+      this.client.on("status", () => this.updateStatus()),
+      this.client.on("synced", (docId) => {
+        if (docId === this.accountDocId) useWorkspace.setState({ accountSynced: true });
+        this.updateStatus();
+      }),
+      this.client.on("awareness", (docId, payload) => receivePresence(docId, payload)),
+      this.client.on("error", (e) => {
+        if (e.code === "unauthorized") void refreshSession().then((s) => s && this.client.reconnect());
+        useSyncStatus.setState({ error: `${e.code}: ${e.message}` });
+      }),
+    );
+
     await this.store.ensureRow(this.accountDocId, "account", null, 1);
-    this.account = await this.store.acquire(this.accountDocId);
-    if (opts.bootstrap) {
-      this.account.transact(() => initAccountDoc(this.account));
-      await opts.bootstrap(this);
-      useWorkspace.setState({ accountSynced: true });
-    }
+    this.account = await this.store.pin(this.accountDocId);
+    await this.attach([this.accountDocId]);
     const onAccount = () => {
       refreshAccount(this.account);
       void this.syncNotebookDocs().then(() => this.copyNotebookNames());
@@ -56,47 +94,97 @@ export class AccountRuntime {
     this.copyNotebookNames();
 
     this.cleanups.push(
+      this.store.onCreated((docId) => this.attach([docId])),
+      // A doc created offline got registered: re-attach so SyncClient subscribes and resends.
+      onDocRegistered((docId) => void this.reattach(docId)),
       this.store.onChange((docId, origin) => {
-        const row = useWorkspace.getState().notes[docId];
-        if (!row) return;
+        if (!useWorkspace.getState().notes[docId]) return;
         this.indexer.schedule(docId);
         if (origin !== ORIGIN_REMOTE) this.touch(docId);
       }),
-      this.store.onOutbox(() => this.scheduleFlush()),
       onOpsChanged(() => this.scheduleFlush()),
     );
+    const onOnline = () => {
+      this.client.reconnect();
+      this.scheduleFlush();
+    };
+    // Browsers keep an open WebSocket alive across "offline"; reconnecting surfaces the real state.
+    const onOffline = () => this.client.reconnect();
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    this.cleanups.push(() => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    });
 
     await this.indexer.loadFromDisk();
     void this.indexer.reconcile(Object.keys(useWorkspace.getState().notes));
-    void prefetchNotebookKeys().then(() => this.engine.reconnectNow());
-    this.engine.start();
+    void prefetchNotebookKeys();
+    this.client.start();
+    this.scheduleFlush();
+    this.pendingTimer = setInterval(() => void this.updatePending(), 2000);
   }
 
-  stop() {
-    this.engine.stop();
+  async stop() {
     for (const c of this.cleanups) c();
     for (const c of this.observedNotebooks.values()) c();
     for (const t of this.touchTimers.values()) clearTimeout(t);
+    if (this.pendingTimer) clearInterval(this.pendingTimer);
     this.cleanups = [];
     this.observedNotebooks.clear();
+    await this.client?.stop().catch(() => undefined);
+    useSyncStatus.setState({ status: "offline", pending: 0 });
     this.store.destroyAll();
     clearKeys();
     resetWorkspace();
   }
 
+  /** Version snapshot (history) when leaving a document after many own edits (sync-protocol.md §5). */
+  requestSnapshot(docId: string) {
+    if (this.attached.has(docId)) void this.client.requestSnapshot(docId).catch(() => false);
+  }
+
+  sendAwareness(docId: string, update: Uint8Array) {
+    void this.client.sendAwareness(docId, update);
+  }
+
+  private async attach(docIds: string[]) {
+    const fresh = docIds.filter((id) => !this.attached.has(id));
+    if (!fresh.length) return;
+    for (const id of fresh) this.attached.add(id);
+    const docs = await Promise.all(fresh.map(async (docId) => ({ docId, doc: await this.store.pin(docId) })));
+    await this.client.addDocs(docs);
+    this.updateStatus();
+  }
+
+  private async reattach(docId: string) {
+    await this.store.patchRow(docId, { registered: 1 });
+    if (!this.attached.has(docId)) return;
+    await this.client.resubscribe(docId);
+  }
+
+  private updateStatus() {
+    const allSynced = [...this.attached].every((id) => this.client.isSynced(id));
+    const status = uiStatus(this.client.status, allSynced);
+    useSyncStatus.setState({ status, ...(status === "online" ? { lastSyncedAt: Date.now(), error: null } : {}) });
+  }
+
   private scheduleFlush() {
     if (this.flushTimer) return;
-    this.flushTimer = setTimeout(() => {
+    this.flushTimer = setTimeout(async () => {
       this.flushTimer = null;
-      void this.engine.flush();
+      const ok = await flushOps().catch(() => false);
+      // Attachments upload in the background and never hold back document sync.
+      if (ok) void uploadPending();
       void this.updatePending();
     }, 40);
   }
 
   private async updatePending() {
     const db = accountDb();
-    const [o, p] = await Promise.all([db.outbox.count(), db.ops.count()]);
+    const [o, p] = await Promise.all([this.storage.count(), db.ops.count()]);
     useSyncStatus.setState({ pending: o + p });
+    this.updateStatus();
   }
 
   /** Bump NoteMeta.updatedAt after local edits (throttled). */
@@ -140,14 +228,21 @@ export class AccountRuntime {
     }
   }
 
-  private async syncNotebookDocs() {
+  /** Serialised: an older pass must not detach a notebook a newer pass has just added. */
+  private syncNotebookDocs(): Promise<void> {
+    this.notebookPass = this.notebookPass
+      .then(() => this.syncNotebookDocsNow())
+      .catch((e) => console.warn("notebook sync failed", e));
+    return this.notebookPass;
+  }
+
+  private async syncNotebookDocsNow() {
     const refs = useWorkspace.getState().account.notebooks;
-    const ids = new Set(refs.map((r) => r.id));
     for (const ref of refs) {
       if (this.observedNotebooks.has(ref.id)) continue;
       this.observedNotebooks.set(ref.id, () => undefined);
-      const row = await this.store.ensureRow(ref.id, "notebook", null, 1);
-      const doc = await this.store.acquire(ref.id);
+      await this.store.ensureRow(ref.id, "notebook", null, 1);
+      const doc = await this.store.pin(ref.id);
       const handler = () => {
         refreshNotebook(ref.id, doc);
         void this.syncNoteRows(ref.id, doc);
@@ -155,8 +250,9 @@ export class AccountRuntime {
       doc.on("afterTransaction", handler);
       this.observedNotebooks.set(ref.id, () => doc.off("afterTransaction", handler));
       handler();
-      if (row.registered) this.engine.subscribe([{ docId: ref.id, since: row.lastSeq }]);
+      await this.attach([ref.id]);
     }
+    const ids = new Set(useWorkspace.getState().account.notebooks.map((r) => r.id));
     for (const [id, off] of [...this.observedNotebooks]) {
       if (ids.has(id)) continue;
       off();
@@ -164,8 +260,15 @@ export class AccountRuntime {
       refreshNotebook(id, null);
       const notes = this.knownNotes.get(id) ?? new Set();
       for (const n of notes) void this.indexer.remove(n);
-      this.engine.unsubscribe([id, ...notes]);
+      await this.detach([id, ...notes]);
       this.knownNotes.delete(id);
+    }
+  }
+
+  private async detach(docIds: string[]) {
+    for (const id of docIds) {
+      if (!this.attached.delete(id)) continue;
+      await this.client.removeDoc(id);
     }
   }
 
@@ -173,84 +276,30 @@ export class AccountRuntime {
     const known = this.knownNotes.get(notebookId) ?? new Set<string>();
     this.knownNotes.set(notebookId, known);
     const current = new Set<string>();
-    const fresh: { docId: string; since: number }[] = [];
+    const fresh: string[] = [];
     for (const noteId of notebookMaps(doc).notes.keys()) {
       current.add(noteId);
       if (known.has(noteId)) continue;
       known.add(noteId);
       const row = await this.store.ensureRow(noteId, "note", notebookId, 1);
-      if (row.registered) fresh.push({ docId: noteId, since: row.lastSeq });
+      // Moved here from another notebook: its key is now wrapped by this one.
+      if (row.notebookId !== notebookId) await this.store.patchRow(noteId, { notebookId });
+      fresh.push(noteId);
       this.indexer.schedule(noteId, 300);
     }
     for (const noteId of [...known]) {
       if (current.has(noteId)) continue;
       known.delete(noteId);
+      // Moved to another notebook (its index already lists it): keep it attached.
+      const movedTo = [...this.knownNotes].find(([, set]) => set.has(noteId))?.[0];
+      if (movedTo) {
+        await this.store.patchRow(noteId, { notebookId: movedTo });
+        continue;
+      }
       void this.indexer.remove(noteId);
-      this.engine.unsubscribe([noteId]);
+      await this.detach([noteId]);
     }
-    if (fresh.length) this.engine.subscribe(fresh);
-  }
-
-  private host(): SyncHost {
-    return {
-      // The server issues a deviceId with the session (api.md); fall back to the local one.
-      deviceId: async () => getSession()?.deviceId ?? (await deviceId()),
-      auth: async (): Promise<HelloAuth | null> => {
-        let s = getSession();
-        if (s && Date.parse(s.accessExpiresAt) - Date.now() < 60_000) s = await refreshSession();
-        return s ? { kind: "user", accessToken: s.accessToken } : null;
-      },
-      refreshAuth: async () => !!(await refreshSession()),
-      subscriptions: async () => {
-        const rows = await this.store.allRows();
-        const ws = useWorkspace.getState();
-        const out: { docId: string; since: number }[] = [];
-        for (const r of rows) {
-          if (!r.registered) continue;
-          if (r.kind === "account") out.push({ docId: r.docId, since: r.lastSeq });
-          else if (r.kind === "notebook") {
-            if (ws.account.notebooks.some((n) => n.id === r.docId) && (await notebookKey(r.docId)))
-              out.push({ docId: r.docId, since: r.lastSeq });
-          } else if (ws.notes[r.docId]) out.push({ docId: r.docId, since: r.lastSeq });
-        }
-        // Account first, then notebooks, then notes: keys flow downwards.
-        const rank = (id: string) => (id === this.accountDocId ? 0 : rows.find((r) => r.docId === id)?.kind === "notebook" ? 1 : 2);
-        return out.sort((a, b) => rank(a.docId) - rank(b.docId));
-      },
-      beforeFlush: async () => {
-        const ok = await flushOps();
-        // Attachments upload in the background and never hold back document pushes.
-        if (ok) void uploadPending();
-        return ok;
-      },
-      outgoing: async () => {
-        const db = accountDb();
-        const rows = await db.outbox.orderBy("id").toArray();
-        const registered = new Set((await this.store.allRows()).filter((r) => r.registered).map((r) => r.docId));
-        return rows
-          .filter((r) => registered.has(r.docId))
-          .map(
-            (r): OutgoingMessage =>
-              r.type === "snapshot"
-                ? { type: "snapshot", docId: r.docId, clientMsgId: r.clientMsgId, baseSeq: r.baseSeq ?? 0, payload: r.payload }
-                : { type: "push", docId: r.docId, clientMsgId: r.clientMsgId, payload: r.payload },
-          );
-      },
-      onUpdates: async (msg) => {
-        await this.store.applyRemote(msg.docId, msg.items, msg.snapshot);
-        if (msg.upToDate && msg.docId === this.accountDocId) useWorkspace.setState({ accountSynced: true });
-      },
-      onUpdate: (msg) => this.store.applyRemote(msg.docId, [msg], null),
-      onAck: async (msg) => {
-        await this.store.acked(msg.docId, msg.clientMsgId, msg.seq);
-        void this.store.maybeSnapshot(msg.docId);
-        void this.updatePending();
-      },
-      onAwareness: (msg) => void receivePresence(msg.docId, msg.payload),
-      onError: (msg) => {
-        if (msg.code === "doc_not_found" && msg.ref) console.warn("Server does not know doc", msg.ref);
-      },
-    };
+    if (fresh.length) await this.attach(fresh);
   }
 }
 
@@ -265,16 +314,16 @@ export function hasRuntime() {
   return current !== null;
 }
 
-export async function startRuntime(accountDocId: string, opts: { bootstrap?: (rt: AccountRuntime) => Promise<void> } = {}) {
+export async function startRuntime(accountDocId: string) {
   if (current?.accountDocId === accountDocId) return current;
-  current?.stop();
+  void current?.stop();
   current = new AccountRuntime(accountDocId);
   if (import.meta.env.DEV) (window as unknown as { __ds?: unknown }).__ds = current;
-  await current.start(opts);
+  await current.start();
   return current;
 }
 
 export function stopRuntime() {
-  current?.stop();
+  void current?.stop();
   current = null;
 }

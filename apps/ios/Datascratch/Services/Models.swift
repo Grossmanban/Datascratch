@@ -17,6 +17,13 @@ nonisolated enum Backdrop: String, Codable, CaseIterable, Sendable {
     case none, sand, dusk, mist, meadow, ember
 }
 
+/// `cover: { attachmentId, offsetY: 0..1 }` (contracts/document-model.md).
+nonisolated struct NoteCover: Codable, Hashable, Sendable {
+    var attachmentId: String
+    /// Which part of the image the compact header shows: 0 top … 1 bottom.
+    var offsetY: Double = 0.5
+}
+
 nonisolated struct Space: Codable, Identifiable, Hashable, Sendable {
     var id: String
     var name: String
@@ -73,8 +80,13 @@ nonisolated struct NoteMeta: Codable, Identifiable, Hashable, Sendable {
     var dailyDate: String?
     var tags: [String]
     var icon: String?
-    /// Stand-in for `coverThumb` (an attachment) until attachments sync: a gradient cover.
+    /// Gradient cover from build 1. No longer offered (spec/12 §12.7); still shown
+    /// until the user replaces or removes it.
     var cover: Backdrop?
+    /// The user's own image (`meta.cover` of the note document).
+    var coverImage: NoteCover?
+    /// Attachment id of the cover thumbnail shown on cards (`NoteMeta.coverThumb`).
+    var coverThumb: String?
     var backdrop: Backdrop
     var style: NoteStyle
     var snippet: String

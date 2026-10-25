@@ -168,7 +168,7 @@ struct SharedLinkView: View {
                         Link(destination: url) {
                             Label("Open in Browser", systemImage: "safari")
                         }
-                        .buttonStyle(.glassProminent)
+                        .prominentGlass()
                     }
                 } else {
                     ProgressView("Connecting…")

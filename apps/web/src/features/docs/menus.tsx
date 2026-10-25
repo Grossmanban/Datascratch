@@ -5,6 +5,7 @@ import {
   FileText,
   FolderInput,
   FolderPlus,
+  BookCopy,
   History,
   Palette,
   Pencil,
@@ -21,6 +22,7 @@ import {
   deleteNoteForever,
   duplicateNote,
   moveNote,
+  moveNoteToOtherNotebook,
   openTab,
   restoreNote,
   toggleStar,
@@ -70,6 +72,53 @@ function folderTargets(notebookId: string, onPick: (folderId: string | null) => 
       onSelect: () => onPick(f.id),
     })),
   ];
+}
+
+/** Other notebooks (grouped by space), each with its folders as move targets. */
+function notebookTargets(noteId: string, fromNotebookId: string, t: TFunction): MenuItem[] {
+  const { account } = useWorkspace.getState();
+  const items: MenuItem[] = [];
+  for (const space of [...account.spaces].sort((a, b) => a.order - b.order)) {
+    const nbs = account.notebooks.filter((nb) => nb.spaceId === space.id && nb.id !== fromNotebookId).sort((a, b) => a.order - b.order);
+    if (!nbs.length) continue;
+    if (account.spaces.length > 1) items.push({ kind: "label", label: space.name });
+    for (const nb of nbs) {
+      items.push({
+        kind: "sub",
+        label: nb.name,
+        icon: nb.icon ? <span className="text-[12px] leading-none">{nb.icon}</span> : <BookCopy className="size-3.5" />,
+        items: folderTargets(nb.id, (folderId) => void moveToNotebook(noteId, fromNotebookId, nb.id, folderId, t), t),
+      });
+    }
+  }
+  return items;
+}
+
+async function moveToNotebook(noteId: string, fromNotebookId: string, toNotebookId: string, folderId: string | null, t: TFunction) {
+  const { account } = useWorkspace.getState();
+  const from = account.notebooks.find((nb) => nb.id === fromNotebookId);
+  const to = account.notebooks.find((nb) => nb.id === toNotebookId);
+  if (!to) return;
+  // Honest warning: in an agent notebook the server can read the note (crypto.md §8).
+  if (to.mode === "agent" && from?.mode !== "agent") {
+    const ok = await confirmDialog({
+      title: t("docs.moveToAgentTitle", { name: to.name }),
+      description: t("docs.moveToAgentWarning"),
+      confirmLabel: t("docs.moveConfirm"),
+      cancelLabel: t("common.cancel"),
+    });
+    if (!ok) return;
+  }
+  if (!navigator.onLine) {
+    toast(t("docs.moveNeedsNetwork"));
+    return;
+  }
+  try {
+    await moveNoteToOtherNotebook(noteId, toNotebookId, folderId);
+    toast(t("docs.movedTo", { name: to.name }));
+  } catch {
+    toast(t("docs.moveFailed"));
+  }
 }
 
 export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { inDoc?: boolean } = {}): MenuItem[] {
@@ -131,6 +180,16 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
         t,
       ),
     },
+    ...(st.account.notebooks.length > 1
+      ? [
+          {
+            kind: "sub" as const,
+            label: t("docs.moveToNotebook"),
+            icon: <BookCopy className="size-3.5" />,
+            items: notebookTargets(noteId, n.notebookId, t),
+          },
+        ]
+      : []),
     {
       label: t("docs.duplicate"),
       icon: <Copy className="size-3.5" />,

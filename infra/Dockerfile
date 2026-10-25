@@ -9,7 +9,9 @@ WORKDIR /repo
 COPY . .
 RUN pnpm install --frozen-lockfile --filter "@datascratch/server..."
 RUN pnpm --filter "@datascratch/server..." run build
-RUN pnpm --filter @datascratch/server deploy --prod /out
+RUN pnpm --filter @datascratch/server deploy --prod /out \
+  # The runtime image is glibc: drop musl builds of native modules (~35 MB).
+  && find /out/node_modules/.pnpm -maxdepth 1 -name "*linux-*-musl*" -exec rm -rf {} +
 
 FROM ${NODE_IMAGE}
 ENV NODE_ENV=production PORT=8080 STORAGE_DIR=/data/files

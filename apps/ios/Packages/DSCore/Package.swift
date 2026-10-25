@@ -24,10 +24,18 @@ let yrsTarget: Target = .target(
     ]
 )
 #else
-let yrsTarget: Target = .binaryTarget(
-    name: "yrs_ffiFFI",
-    path: "build/yrs_ffiFFI.xcframework"
-)
+/// Prebuilt xcframework published by the ios-core workflow (release `yrs-ffi-<hash>`, hash from
+/// scripts/yrs-ffi-hash.sh). A local build in build/ (scripts/build-xcframework.sh) wins, so
+/// that changes to yrs-ffi can be tested before a release exists.
+let yrsRelease: (url: String, checksum: String)? = nil
+
+let localXCFramework = "\(packageDir)/build/yrs_ffiFFI.xcframework"
+let yrsTarget: Target = {
+    if let release = yrsRelease, !FileManager.default.fileExists(atPath: localXCFramework) {
+        return .binaryTarget(name: "yrs_ffiFFI", url: release.url, checksum: release.checksum)
+    }
+    return .binaryTarget(name: "yrs_ffiFFI", path: "build/yrs_ffiFFI.xcframework")
+}()
 #endif
 
 let strict: [SwiftSetting] = [

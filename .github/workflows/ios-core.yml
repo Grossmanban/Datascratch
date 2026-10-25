@@ -52,6 +52,8 @@ jobs:
     name: DSCore tests (iPad simulator, iOS 26)
     runs-on: macos-26
     timeout-minutes: 60
+    permissions:
+      contents: write # publishes the yrs_ffiFFI.xcframework release
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -95,6 +97,30 @@ jobs:
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee xcodebuild.log | grep -E "error:|warning:|Test Suite|Test Case|✔|✘|passed|failed|\*\* " || true
           grep -q "\*\* TEST SUCCEEDED \*\*" xcodebuild.log
+      - name: Publish yrs_ffiFFI.xcframework release
+        # Consumers (DSEditor, the app) download the binary instead of building Rust.
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/ios-core')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="yrs-ffi-$(./scripts/yrs-ffi-hash.sh)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+          else
+            (cd build && ditto -c -k --sequesterRsrc --keepParent yrs_ffiFFI.xcframework yrs_ffiFFI.xcframework.zip)
+            CHECKSUM=$(swift package compute-checksum build/yrs_ffiFFI.xcframework.zip)
+            gh release create "$TAG" build/yrs_ffiFFI.xcframework.zip --target "$GITHUB_SHA" --prerelease \
+              --title "$TAG" --notes "yrs_ffiFFI.xcframework for DSCore (yrs-ffi sources hash ${TAG#yrs-ffi-}). SwiftPM checksum: $CHECKSUM"
+          fi
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/yrs_ffiFFI.xcframework.zip"
+          CHECKSUM=$(gh release view "$TAG" --json body -q .body | sed -n 's/.*SwiftPM checksum: \([0-9a-f]*\).*/\1/p')
+          echo "### yrs_ffiFFI.xcframework" >> "$GITHUB_STEP_SUMMARY"
+          echo "url: $URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "checksum: $CHECKSUM" >> "$GITHUB_STEP_SUMMARY"
+          echo "url=$URL checksum=$CHECKSUM"
+          if ! grep -q "$TAG" Package.swift; then
+            echo "::warning::Package.swift does not pin $TAG yet (update yrsRelease url/checksum)"
+          fi
       - name: Upload xcodebuild log
         if: failure()
         uses: actions/upload-artifact@v4

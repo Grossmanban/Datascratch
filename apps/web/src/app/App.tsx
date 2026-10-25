@@ -5,7 +5,8 @@ import { onSignedOut, restore, useAuth } from "@/auth/session";
 import { stopRuntime } from "@/data/runtime";
 import { Splash } from "@/features/shell/Splash";
 import { PwaPrompt } from "@/features/shell/PwaPrompt";
-import { ConfirmHost, Toaster, TooltipProvider } from "@/ui";
+import { useTranslation } from "react-i18next";
+import { ConfirmHost, Toaster, UIProvider } from "@/ui";
 import { router } from "./router";
 
 export const queryClient = new QueryClient({
@@ -14,6 +15,7 @@ export const queryClient = new QueryClient({
 
 export function App() {
   const status = useAuth((s) => s.status);
+  const { i18n } = useTranslation();
 
   useEffect(() => {
     // Guest links don't need (and shouldn't touch) the signed-in account.
@@ -33,12 +35,12 @@ export function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider delayDuration={500}>
+      <UIProvider locale={i18n.language === "en" ? "en" : "ru"}>
         <RouterProvider router={router} />
         <Toaster />
         <ConfirmHost />
         <PwaPrompt />
-      </TooltipProvider>
+      </UIProvider>
     </QueryClientProvider>
   );
 }

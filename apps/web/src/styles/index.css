@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "@datascratch/design-tokens/tokens.css";
+@import "@datascratch/ui/styles.css";
+@source "../";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
@@ -25,6 +25,7 @@
   --radius-md: var(--ds-radius-md);
   --radius-lg: var(--ds-radius-lg);
   --radius-xl: var(--ds-radius-xl);
+  --radius-2xl: 24px;
 
   --shadow-card: var(--ds-shadow-card);
   --shadow-popover: var(--ds-shadow-popover);
@@ -68,11 +69,6 @@
 }
 
 @layer components {
-  .glass {
-    background: var(--ds-bg-elevated);
-    backdrop-filter: saturate(1.6) blur(18px);
-    -webkit-backdrop-filter: saturate(1.6) blur(18px);
-  }
   .paper-dots {
     background-image: radial-gradient(color-mix(in srgb, var(--ds-text-tertiary) 45%, transparent) 1px, transparent 1.2px);
     background-size: 22px 22px;

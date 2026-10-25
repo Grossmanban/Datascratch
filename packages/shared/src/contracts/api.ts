@@ -56,6 +56,8 @@ export const wrappedKeySchema = base64UrlSchema.min(1);
 
 export const sessionSchema = z.object({
   userId: uuidSchema,
+  /** The session's device (refresh-token family); also the sync `deviceId`. */
+  deviceId: z.string().min(1),
   accessToken: z.string().min(1),
   refreshToken: z.string().min(1),
   accessExpiresAt: isoDateTimeSchema,
@@ -83,6 +85,7 @@ export const signupRequestSchema = z.object({
   wrappedMasterKeyRecovery: wrappedKeySchema,
   userId: uuidSchema,
   accountDocId: uuidSchema,
+  deviceName: z.string().min(1).max(200).optional(),
 });
 export type SignupRequest = z.infer<typeof signupRequestSchema>;
 
@@ -117,6 +120,7 @@ export const recoveryFinishRequestSchema = z.object({
   kdf: kdfParamsSchema,
   loginKey: key32Schema,
   wrappedMasterKeyPassword: wrappedKeySchema,
+  deviceName: z.string().min(1).max(200).optional(),
 });
 export type RecoveryFinishRequest = z.infer<typeof recoveryFinishRequestSchema>;
 
@@ -234,6 +238,7 @@ export type CreateAttachmentRequest = z.infer<typeof createAttachmentRequestSche
 export const attachmentStatusSchema = z.object({
   size: z.number().int().nonnegative(),
   chunkCount: z.number().int().positive(),
+  mime: z.string(),
   uploadedChunks: z.array(z.number().int().nonnegative()),
 });
 export type AttachmentStatus = z.infer<typeof attachmentStatusSchema>;

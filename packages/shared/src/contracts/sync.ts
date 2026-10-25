@@ -144,6 +144,7 @@ export const serverAwarenessMessageSchema = z.object({
 });
 
 export const SYNC_ERROR_CODES = [
+  "bad_request",
   "unauthorized",
   "forbidden",
   "doc_not_found",

@@ -100,6 +100,8 @@ export class InMemoryDataSource implements AgentDataSource {
   readonly docs = new Map<string, StoredDoc>();
   readonly notebooks = new Map<string, StoredNotebook>();
   loads = 0;
+  /** grantId of every agent call, as the server would use it for RLS. */
+  readonly grantCalls: (string | undefined)[] = [];
 
   addNotebook(userId: string, nb: Partial<AgentNotebook> & { id: string; mode?: "private" | "agent" }, doc: Y.Doc): void {
     this.notebooks.set(nb.id, {
@@ -151,7 +153,8 @@ export class InMemoryDataSource implements AgentDataSource {
       .map(({ userId: _u, mode: _m, ...rest }) => rest);
   }
 
-  async loadDoc(userId: string, docId: string): Promise<LoadedDoc | null> {
+  async loadDoc(userId: string, docId: string, grantId?: string): Promise<LoadedDoc | null> {
+    this.grantCalls.push(grantId);
     const d = this.readable(userId, docId);
     if (!d) return null;
     this.loads++;

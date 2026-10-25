@@ -31,6 +31,13 @@ describe("access", () => {
     expect(s.results.map((r) => r.id).sort()).toEqual([NOTE_PLAN, NOTE_IDEAS].sort());
   });
 
+  it("passes the grant to the data source for row-level security", async () => {
+    const { ctx, svc } = setup();
+    await svc.readNote(principal(), { noteId: NOTE_PLAN, includeImages: false });
+    expect(ctx.data.grantCalls.length).toBeGreaterThan(0);
+    expect(new Set(ctx.data.grantCalls)).toEqual(new Set([principal().grant.id]));
+  });
+
   it("stops access when a notebook is switched to private", async () => {
     const { ctx, svc } = setup();
     ctx.data.setMode(NB_WORK, "private");

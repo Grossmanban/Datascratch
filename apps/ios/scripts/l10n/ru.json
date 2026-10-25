@@ -288,6 +288,7 @@
   "Tasks scheduled for today and overdue ones appear here.": "Здесь задачи на сегодня и просроченные.",
   "Teal": "Бирюзовый",
   "Text": "Текст",
+  "The encryption key of this document is not on this device.": "Ключа шифрования этого документа нет на этом устройстве.",
   "The notebook key will be stored on the server so agents with a token can read and edit it. The server will technically be able to read these notes.": "Ключ блокнота будет храниться на сервере, чтобы агенты с токеном могли читать и править его. Сервер технически сможет прочитать эти заметки.",
   "The server copy of the key will be deleted. Agents will lose access, and only your devices will be able to read these notes.": "Копия ключа на сервере будет удалена. Агенты потеряют доступ, читать заметки смогут только ваши устройства.",
   "Theme": "Тема",

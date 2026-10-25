@@ -230,3 +230,7 @@ createRoot(document.getElementById("root")!).render(
     </UIProvider>
   </StrictMode>,
 );
+
+// Performance probes for scripted measurements (scratch scripts, not part of the app).
+import { createHeadlessEditor } from "../src";
+(window as unknown as { __dsPerf: unknown }).__dsPerf = { Y, createHeadlessEditor };

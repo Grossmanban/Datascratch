@@ -44,9 +44,9 @@ struct CoverHeader: View {
         .modifier(CoverHeight(height: height))
         .frame(maxWidth: .infinity)
         .clipped()
+        // The image itself with a clean edge (spec/12 §12.7), a hairline under it as on cards.
         .overlay(alignment: .bottom) {
-            LinearGradient(colors: [.clear, Theme.Palette.canvas.opacity(0.35)], startPoint: .top, endPoint: .bottom)
-                .frame(height: 40)
+            Rectangle().fill(Theme.Palette.separator).frame(height: 1 / 3)
         }
         .accessibilityHidden(true)
         .accessibilityIdentifier("document.cover")

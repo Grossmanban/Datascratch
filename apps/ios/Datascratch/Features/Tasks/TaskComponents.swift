@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(DSDesign)
+import DSDesign
+#endif
 
 struct TaskCheckbox: View {
     let state: TaskState
@@ -39,6 +42,15 @@ struct TaskDateChips: View {
     var body: some View {
         let today = DayKey.from(Date())
         HStack(spacing: Theme.Space.s1) {
+            #if canImport(DSDesign)
+            // Shared chip rules with the web (design-tokens.md): labels, overdue/soon tones.
+            if let scheduled = scheduledOverride ?? task.scheduled, let date = DayKey.date(scheduled) {
+                DSDateChip(date: date, isCompleted: task.state != .open)
+            }
+            if let deadline = task.deadline, let date = DayKey.date(deadline) {
+                DSDateChip(date: date, isDeadline: true, isCompleted: task.state != .open)
+            }
+            #else
             if let scheduled = scheduledOverride ?? task.scheduled {
                 chip(Self.label(for: scheduled, today: today), systemImage: "calendar",
                      color: scheduled < today ? Theme.Palette.warning : Theme.Palette.accent)
@@ -48,6 +60,7 @@ struct TaskDateChips: View {
                      color: deadline < today ? Theme.Palette.danger
                          : deadline == today ? Theme.Palette.warning : Theme.Palette.textSecondary)
             }
+            #endif
         }
         .opacity(task.state == .open ? 1 : 0.5)
     }

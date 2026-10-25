@@ -269,7 +269,7 @@
     height: var(--ds-task-size);
     flex-shrink: 0;
     border-radius: 9999px;
-    border: 1.5px solid color-mix(in oklab, var(--ds-text-tertiary) 85%, transparent);
+    border: 1.5px solid color-mix(in oklab, var(--ds-text-tertiary) 55%, transparent);
     background: transparent;
     cursor: pointer;
     outline: none;

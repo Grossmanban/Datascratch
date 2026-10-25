@@ -50,7 +50,7 @@ export function Kbd({ shortcut, className, ...rest }: KbdProps) {
   return (
     <kbd
       className={cn(
-        "inline-flex items-center gap-0.5 font-text text-caption text-fg-tertiary",
+        "inline-flex items-center gap-0.5 font-text text-caption text-fg-secondary",
         className,
       )}
       {...rest}

@@ -6,12 +6,12 @@
 - Unclassified: 31 file(s) not represented in the graph (top: (none) 15, .css 6, .example 4)
 
 ## Summary
-- 9946 nodes · 24815 edges · 337 communities (284 shown, 53 thin omitted)
-- Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 1879 edges (avg confidence: 0.86)
+- 9946 nodes · 24816 edges · 337 communities (284 shown, 53 thin omitted)
+- Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 1880 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `29e6e67d`
+- Built from commit: `f466fcea`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -356,19 +356,19 @@
 7. `AppModel` - 62 edges
 8. `CoreLibrary` - 61 edges
 9. `uuidv7()` - 56 edges
-10. `CRDTDocument` - 53 edges
+10. `PenLayer` - 53 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `DSGlassPanel (Liquid Glass)` --semantically_similar_to--> `Card / DocCard / GlassPanel / Backdrop`  [INFERRED] [semantically similar]
-  apps/ios/Packages/DSDesign/README.md → packages/ui/README.md
 - `iOS pen palette model (text mode, pen/pencil/marker/highlighter/eraser/lasso, width steps 0.6/1/1.6, stroke/pixel eraser, finger drawing, undo/redo)` --semantically_similar_to--> `PenToolbar (penWidthPx)`  [INFERRED] [semantically similar]
   apps/ios/Packages/DSDesign/README.md → packages/ui/README.md
 - `DSTaskRow task row` --semantically_similar_to--> `TaskRow`  [INFERRED] [semantically similar]
   apps/ios/Packages/DSDesign/README.md → packages/ui/README.md
 - `Slash menu and format toolbar` --semantically_similar_to--> `DSSuggestionList («/» and [[ ]] menu)`  [INFERRED] [semantically similar]
   docs/spec/04-editor.md → apps/ios/Packages/DSDesign/README.md
-- `Vendored yrs 0.25 with minimal follow_redone patch (yrs-ffi/vendor/PATCHES.md)` --references--> `relative_positions_survive_undo_mid_item()`  [INFERRED]
-  docs/decisions/0042-yrs-uniffi-binding.md → apps/ios/Packages/DSCore/yrs-ffi/src/tests.rs
+- `DSGlassPanel (Liquid Glass)` --semantically_similar_to--> `Card / DocCard / GlassPanel / Backdrop`  [INFERRED] [semantically similar]
+  apps/ios/Packages/DSDesign/README.md → packages/ui/README.md
+- `Вложения во внешнем S3 (STORAGE_DRIVER=s3, D-26)` --references--> `S3Storage`  [INFERRED]
+  infra/README.md → apps/server/src/storage/s3.ts
 
 ## Import Cycles
 - 2-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs`
@@ -1526,7 +1526,7 @@ Nodes (4): packages/web-editor — веб-редактор, Использова
   docs/spec/12-craft-features.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **969 isolated node(s):** `.body`, `onboarding`, `ready`, `.phase`, `system` (+964 more)
+- **969 isolated node(s):** `.yValue`, `.fields`, `.value`, `color`, `gradient` (+964 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 3053 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **53 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -1534,15 +1534,15 @@ Nodes (4): packages/web-editor — веб-редактор, Использова
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `lib.rs` to `@datascratch/ui web components (React 19, Radix, Tailwind v4, Motion, Lucide)`, `scripts/generate.mjs`, `.from`, `DbOrTx`, `AgentAuditView`, `12.1. Задачи`?**
-  _High betweenness centrality (0.140) - this node is a cross-community bridge._
+  _High betweenness centrality (0.132) - this node is a cross-community bridge._
 - **Are the 9 inferred relationships involving `LibraryStore` (e.g. with `.header()` and `.editsDoNotTouchForeignBlocks()`) actually correct?**
   _`LibraryStore` has 9 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `.body`, `onboarding`, `ready` to the rest of the system?**
+- **What connects `.yValue`, `.fields`, `.value` to the rest of the system?**
   _969 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `0024-product-name.md` be split into smaller, more focused modules?**
   _Cohesion score 0.02464825981169999 - nodes in this community are weakly interconnected._
 - **Why does `DSDateChipModel` connect `DbOrTx` to `DateChipTests`, `Equatable`, `lib.rs`, `APIClient`?**
-  _High betweenness centrality (0.108) - this node is a cross-community bridge._
+  _High betweenness centrality (0.101) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._

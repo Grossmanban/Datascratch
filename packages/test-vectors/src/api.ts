@@ -90,8 +90,28 @@ export function apiVectors() {
             body: { recoveryLoginKey: KEY, wrappedMasterKeyRecovery: "AQ" },
           },
           {
-            reason: "recoveryLoginKey is not 32 bytes",
-            body: { currentLoginKey: KEY, recoveryLoginKey: "AA", wrappedMasterKeyRecovery: "AQ" },
+            reason: "recoveryLoginKey is 31 bytes",
+            body: {
+              currentLoginKey: KEY,
+              recoveryLoginKey: "A".repeat(42),
+              wrappedMasterKeyRecovery: "AQ",
+            },
+          },
+          {
+            reason: "empty wrappedMasterKeyRecovery",
+            body: { currentLoginKey: KEY, recoveryLoginKey: KEY, wrappedMasterKeyRecovery: "" },
+          },
+        ],
+      },
+      securityEvent: {
+        valid: [
+          { kind: "recovery_key_rotated", at: T, deviceId: "dev-1", deviceName: "iPad" },
+          { kind: "recovery_used", at: T, deviceId: null, deviceName: null },
+        ],
+        invalid: [
+          {
+            reason: "unknown kind",
+            body: { kind: "login", at: T, deviceId: null, deviceName: null },
           },
         ],
       },

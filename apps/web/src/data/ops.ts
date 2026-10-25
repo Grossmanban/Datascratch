@@ -8,6 +8,12 @@ export async function enqueueOp(op: Omit<OpRow, "id" | "createdAt">): Promise<vo
 }
 
 const listeners = new Set<() => void>();
+const registeredListeners = new Set<(docId: string) => void>();
+/** A document became known to the server (POST /v1/docs succeeded). */
+export function onDocRegistered(fn: (docId: string) => void) {
+  registeredListeners.add(fn);
+  return () => registeredListeners.delete(fn);
+}
 export function onOpsChanged(fn: () => void) {
   listeners.add(fn);
   return () => listeners.delete(fn);
@@ -46,5 +52,6 @@ async function runOps(): Promise<boolean> {
       await db.ops.delete(op.id!);
       if (op.registersDoc) await db.docs.update(op.registersDoc, { registered: 1 });
     });
+    if (op.registersDoc) for (const fn of registeredListeners) fn(op.registersDoc);
   }
 }

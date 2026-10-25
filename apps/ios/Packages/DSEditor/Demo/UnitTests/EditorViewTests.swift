@@ -80,6 +80,9 @@ final class EditorViewTests: XCTestCase {
         let pl = g.placement(at: r.lowerBound)!
         let hit = g.characterHit(at: CGPoint(x: pl.origin.x + 2, y: pl.origin.y - 4))
         XCTAssertEqual(hit?.offset, r.lowerBound)
+        // A point exactly on the boundary between the space and "b" belongs to "b" (the right character).
+        let boundary = g.characterHit(at: CGPoint(x: pl.origin.x + 0.01, y: pl.origin.y - 4))
+        XCTAssertEqual(boundary?.offset, r.lowerBound)
         // Leading edges increase along the word.
         let xs = r.map { g.placement(at: $0)!.origin.x }
         XCTAssertEqual(xs, xs.sorted())

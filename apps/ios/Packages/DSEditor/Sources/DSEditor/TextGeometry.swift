@@ -125,12 +125,15 @@ final class TextGeometry {
         var bestDistance = CGFloat.greatestFiniteMagnitude
         // Binary search the insertion index, then compare the two neighbours.
         let guess = line.characterIndex(for: CGPoint(x: localX, y: line.typographicBounds.height / 2))
-        for i in Set([guess - 1, guess, guess + 1]) where chars.contains(i) {
+        // Ascending order and `<=`: a point exactly on the boundary of two characters goes to the
+        // right one (`strokes.md` §4), so a stroke started at a word's first letter is not anchored to
+        // the space before it.
+        for i in [guess - 1, guess, guess + 1] where chars.contains(i) {
             let lead = line.locationForCharacter(at: i).x
             let trail = line.locationForCharacter(at: i + 1).x
             let lo = min(lead, trail), hi = max(lead, trail)
             let d: CGFloat = localX < lo ? lo - localX : (localX > hi ? localX - hi : 0)
-            if d < bestDistance {
+            if d <= bestDistance {
                 bestDistance = d
                 bestIndex = i
             }

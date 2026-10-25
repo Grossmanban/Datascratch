@@ -37,7 +37,13 @@ public struct TaskQuery: Sendable {
 extension LocalStore {
     /// Replaces everything indexed for a note with `derived`.
     public func index(_ derived: NoteDerivedData, notebookId: String?, updatedAt: Date = Date()) throws {
+        try index([(derived, notebookId)], updatedAt: updatedAt)
+    }
+
+    /// Indexes many notes in one transaction (first sync, rebuilds).
+    public func index(_ batch: [(derived: NoteDerivedData, notebookId: String?)], updatedAt: Date = Date()) throws {
         try db.write { db in
+          for (derived, notebookId) in batch {
             try db.execute(sql: """
                 INSERT INTO noteIndex(noteId, notebookId, title, plainText, updatedAt) VALUES(?, ?, ?, ?, ?)
                 ON CONFLICT(noteId) DO UPDATE SET notebookId = excluded.notebookId, title = excluded.title,
@@ -59,6 +65,7 @@ extension LocalStore {
             for tag in derived.tags {
                 try db.execute(sql: "INSERT OR IGNORE INTO noteTags(noteId, tag) VALUES(?, ?)", arguments: [derived.noteId, tag])
             }
+          }
         }
     }
 

@@ -16,6 +16,11 @@ public final class LocalStore: Sendable {
     public convenience init(url: URL) throws {
         var config = Configuration()
         config.foreignKeysEnabled = true
+        config.prepareDatabase { db in
+            // WAL (DatabasePool) + NORMAL: durable across app crashes, one fsync per checkpoint
+            // instead of per commit — first sync writes thousands of small transactions.
+            try db.execute(sql: "PRAGMA synchronous = NORMAL")
+        }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try self.init(writer: DatabasePool(path: url.path, configuration: config))
         #if os(iOS)
@@ -255,10 +260,14 @@ extension LocalStore {
 
     /// Stores updates received from the server and advances `lastSeq`. `seq`s at or below
     /// `lastSeq` are ignored (duplicates after reconnect).
-    public func appendRemoteUpdates(docId: String, items: [(seq: Int64, data: Data)], now: Date = Date()) throws {
+    /// Returns the items actually stored (new ones), in order.
+    @discardableResult
+    public func appendRemoteUpdates(docId: String, items: [(seq: Int64, data: Data)], now: Date = Date()) throws -> [(seq: Int64, data: Data)] {
         try db.write { db in
-            guard var doc = try DocumentRecord.fetchOne(db, key: docId) else { return }
+            guard var doc = try DocumentRecord.fetchOne(db, key: docId) else { return [] }
+            var added: [(seq: Int64, data: Data)] = []
             for item in items where item.seq > doc.lastSeq {
+                added.append(item)
                 var stored = StoredUpdate(id: nil, docId: docId, data: item.data, seq: item.seq, clientMsgId: nil, origin: "remote", createdAt: now)
                 try stored.insert(db)
                 doc.lastSeq = item.seq
@@ -267,13 +276,16 @@ extension LocalStore {
             }
             doc.updatedAt = now
             try doc.update(db)
+            return added
         }
     }
 
     /// Replaces the stored history by a server snapshot (`updates` with `snapshot`).
-    public func applyRemoteSnapshot(docId: String, seq: Int64, state: Data, now: Date = Date()) throws {
+    /// Returns false when the snapshot is not newer than what is stored.
+    @discardableResult
+    public func applyRemoteSnapshot(docId: String, seq: Int64, state: Data, now: Date = Date()) throws -> Bool {
         try db.write { db in
-            guard var doc = try DocumentRecord.fetchOne(db, key: docId) else { return }
+            guard var doc = try DocumentRecord.fetchOne(db, key: docId), seq > doc.lastSeq else { return false }
             // The snapshot contains everything up to `seq`; unacknowledged local updates and
             // later ones stay.
             try db.execute(sql: "DELETE FROM docUpdates WHERE docId = ? AND seq IS NOT NULL AND seq <= ?", arguments: [docId, seq])
@@ -285,6 +297,7 @@ extension LocalStore {
             doc.bytesSinceSnapshot = 0
             doc.updatedAt = now
             try doc.update(db)
+            return true
         }
     }
 

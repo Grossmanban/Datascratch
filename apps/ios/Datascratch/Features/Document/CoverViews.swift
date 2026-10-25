@@ -28,6 +28,8 @@ nonisolated enum CoverAction: Hashable, Sendable {
 /// Compact document header: at most ~⅕ of the screen height (spec/12 §12.7).
 struct CoverHeader: View {
     let note: NoteMeta
+    /// Fixed height (the native editor's header has no container to measure).
+    var height: CGFloat?
 
     static func height(for container: CGFloat) -> CGFloat { min(max(container * 0.2, 120), 200) }
 
@@ -39,18 +41,30 @@ struct CoverHeader: View {
                 legacy.gradient
             }
         }
-        .containerRelativeFrame(.vertical) { length, _ in Self.height(for: length) }
+        .modifier(CoverHeight(height: height))
         .frame(maxWidth: .infinity)
         .clipped()
+        // The image itself with a clean edge (spec/12 §12.7), a hairline under it as on cards.
         .overlay(alignment: .bottom) {
-            LinearGradient(colors: [.clear, Theme.Palette.canvas.opacity(0.35)], startPoint: .top, endPoint: .bottom)
-                .frame(height: 40)
+            Rectangle().fill(Theme.Palette.separator).frame(height: 1 / 3)
         }
         .accessibilityHidden(true)
         .accessibilityIdentifier("document.cover")
     }
 
     static func hasCover(_ note: NoteMeta) -> Bool { note.coverImage != nil || note.cover != nil }
+}
+
+private struct CoverHeight: ViewModifier {
+    let height: CGFloat?
+
+    func body(content: Content) -> some View {
+        if let height {
+            content.frame(height: height)
+        } else {
+            content.containerRelativeFrame(.vertical) { length, _ in CoverHeader.height(for: length) }
+        }
+    }
 }
 
 /// The cover image filling its frame, shifted vertically by `offsetY` (0 top … 1 bottom).

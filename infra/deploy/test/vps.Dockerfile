@@ -4,7 +4,7 @@
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -qq \
-  && apt-get install -y -qq --no-install-recommends openssh-server docker.io docker-compose-v2 sudo ca-certificates \
+  && apt-get install -y -qq --no-install-recommends openssh-server docker.io docker-compose-v2 sudo ca-certificates iproute2 nginx curl \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
   && sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/; s/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config

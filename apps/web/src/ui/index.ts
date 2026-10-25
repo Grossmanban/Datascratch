@@ -2,3 +2,4 @@
 export * from "./primitives";
 export * from "./Input";
 export * from "./confirm";
+export { DocCard as UIDocCard, SpaceTile } from "@datascratch/ui";

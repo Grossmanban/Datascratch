@@ -54,6 +54,19 @@ final class SceneModel {
     var pendingModeChange: (notebookId: String, mode: NotebookMode)?
     /// A cover picker or the reposition sheet requested from a document menu.
     var coverAction: CoverAction?
+    /// Open native editors by note id (`NativeEditorModel`), so a document screen that SwiftUI
+    /// rebuilds keeps its editor, tool and undo history instead of starting over in Text mode.
+    @ObservationIgnored private var editors: [(noteId: String, model: AnyObject)] = []
+
+    func editor(for noteId: String) -> AnyObject? {
+        editors.first { $0.noteId == noteId }?.model
+    }
+
+    func keepEditor(_ model: AnyObject, for noteId: String) {
+        editors.removeAll { $0.noteId == noteId }
+        editors.insert((noteId, model), at: 0)
+        if editors.count > 3 { editors.removeLast(editors.count - 3) }
+    }
 
     init(app: AppModel) {
         self.app = app

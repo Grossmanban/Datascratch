@@ -2,7 +2,7 @@ import type { WebSocket } from 'ws';
 import { verifyGuestToken, verifyUserToken } from '../auth/guard.js';
 import type { AppContext } from '../context.js';
 import { COMPACT_JOB } from '../jobs/index.js';
-import { fromB64, toB64, uuidv7 } from '../lib/encoding.js';
+import { fromB64, sha256, toB64, uuidv7 } from '../lib/encoding.js';
 import { ApiError } from '../lib/errors.js';
 import { docAccess } from '../services/access.js';
 import type { GuestPrincipal, UserPrincipal } from '../services/principal.js';
@@ -70,7 +70,7 @@ export class SyncConnection {
     this.#helloTimer = setTimeout(() => this.#fail('unauthorized', 'hello timeout', CloseCode.unauthorized), HELLO_TIMEOUT_MS);
     socket.on('message', (data, isBinary) => {
       if (isBinary) {
-        this.#send({ type: 'error', code: 'protocol_mismatch', message: 'binary frames are not supported' });
+        this.#send({ type: 'error', code: 'bad_request', message: 'binary frames are not supported' });
         return;
       }
       const text = Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.concat(data as Buffer[]).toString('utf8');
@@ -145,15 +145,20 @@ export class SyncConnection {
     try {
       raw = JSON.parse(text);
     } catch {
-      this.#send({ type: 'error', code: 'protocol_mismatch', message: 'invalid JSON' });
+      this.#send({ type: 'error', code: 'bad_request', message: 'invalid JSON' });
       return;
+    }
+    const r = raw as { type?: unknown; protocol?: unknown } | null;
+    if (r && typeof r === 'object' && r.type === 'hello' && r.protocol !== PROTOCOL_VERSION) {
+      clearTimeout(this.#helloTimer);
+      return this.#fail('protocol_mismatch', `protocol ${PROTOCOL_VERSION} required`, CloseCode.protocol);
     }
     const parsed = ClientMessage.safeParse(raw);
     if (!parsed.success) {
       const ref = typeof raw === 'object' && raw ? ((raw as { clientMsgId?: unknown }).clientMsgId as string) : undefined;
       this.#send({
         type: 'error',
-        code: 'protocol_mismatch',
+        code: 'bad_request',
         message: `invalid message: ${parsed.error.issues[0]?.path.join('.') ?? ''} ${parsed.error.issues[0]?.message ?? ''}`.trim(),
         ...(typeof ref === 'string' ? { ref } : {}),
       });
@@ -165,7 +170,7 @@ export class SyncConnection {
       return this.#hello(msg);
     }
     if (msg.type === 'hello') {
-      this.#send({ type: 'error', code: 'protocol_mismatch', message: 'already authenticated' });
+      this.#send({ type: 'error', code: 'bad_request', message: 'already authenticated' });
       return;
     }
     if (!this.#takeToken()) {
@@ -200,7 +205,7 @@ export class SyncConnection {
       }
       if (err instanceof ApiError && err.code === 'bad_request') {
         const ref = 'clientMsgId' in msg ? msg.clientMsgId : undefined;
-        this.#send({ type: 'error', code: 'protocol_mismatch', message: err.message, ...(ref ? { ref } : {}) });
+        this.#send({ type: 'error', code: 'bad_request', message: err.message, ...(ref ? { ref } : {}) });
         return;
       }
       throw err;
@@ -209,15 +214,14 @@ export class SyncConnection {
 
   async #hello(msg: Extract<ClientMessage, { type: 'hello' }>) {
     clearTimeout(this.#helloTimer);
-    if (msg.protocol !== PROTOCOL_VERSION) {
-      return this.#fail('protocol_mismatch', `protocol ${PROTOCOL_VERSION} required`, CloseCode.protocol);
-    }
     let p: SyncPrincipal | null;
     if (msg.auth.kind === 'user') {
       p = await verifyUserToken(this.ctx, msg.auth.accessToken);
     } else {
-      // Guest device ids are namespaced so they can never collide with a user's devices.
-      p = await verifyGuestToken(this.ctx, msg.auth.guestToken, `guest:${msg.auth.shareId}:${msg.deviceId}`);
+      // Guest device ids are namespaced so they can never collide with a user's devices
+      // (and stay within the 64 characters of the contract's deviceId).
+      const tag = sha256(`${msg.auth.shareId}|${msg.deviceId}`).subarray(0, 16).toString('base64url');
+      p = await verifyGuestToken(this.ctx, msg.auth.guestToken, `guest:${tag}`);
       if (p && p.shareId !== msg.auth.shareId) p = null;
     }
     if (!p) return this.#fail('unauthorized', 'invalid credentials', CloseCode.unauthorized);
@@ -418,6 +422,11 @@ export class SyncConnection {
     if (!(await this.#canWriteRef(docId, clientMsgId))) {
       throw new SyncError('forbidden', 'read-only access', clientMsgId);
     }
+    if (baseSeq === 0) {
+      // A snapshot of an empty history covers nothing: acknowledge, keep nothing.
+      this.#send({ type: 'ack', docId, clientMsgId, seq: 0 });
+      return;
+    }
     try {
       const r = await this.ctx.documents.storeSnapshot(this.ctx.database.db, {
         docId,
@@ -429,7 +438,7 @@ export class SyncConnection {
       if (r.newest) await this.ctx.jobs.enqueue(COMPACT_JOB, { docId }, { singletonKey: docId, startAfterSec: 30 });
     } catch (err) {
       if (err instanceof ApiError && err.code === 'bad_request') {
-        throw new SyncError('protocol_mismatch', err.message, clientMsgId);
+        throw new SyncError('bad_request', err.message, clientMsgId);
       }
       throw err;
     }

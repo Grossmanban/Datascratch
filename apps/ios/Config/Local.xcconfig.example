@@ -1,0 +1,3 @@
+// Copy to Local.xcconfig (ignored by git) and fill in.
+DS_TEAM_ID = ABCDE12345
+// DS_SERVER_URL = https:/$()/api.example.com

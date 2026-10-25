@@ -2,6 +2,7 @@
 // Monotonic within a process: ids created in the same millisecond keep sorting
 // in creation order (12-bit counter in rand_a, RFC 9562 §6.2 method 1).
 import { UUID_V7_REGEX } from "./contracts/common.js";
+import { toBase64Url } from "./crypto/base64url.js";
 
 let lastMs = -1;
 let counter = 0;
@@ -66,4 +67,12 @@ export function isUuidV7(value: unknown): value is string {
 export function uuidv7Timestamp(id: string): number {
   if (!isUuidV7(id)) throw new TypeError("not a UUIDv7");
   return parseInt(id.slice(0, 8) + id.slice(9, 13), 16);
+}
+
+/**
+ * Sync `deviceId` of a guest session: `guest:` + 22 base64url characters
+ * (16 random bytes), sync-protocol.md.
+ */
+export function guestDeviceId(): string {
+  return `guest:${toBase64Url(random(16))}`;
 }

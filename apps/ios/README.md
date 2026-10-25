@@ -31,16 +31,20 @@ open Datascratch.xcodeproj
 | `DatascratchTests`, `DatascratchUITests` | Юнит-тесты (Swift Testing) и UI-тесты (XCUITest) |
 | `scripts/` | `generate.sh`, выбор симулятора для CI, сборка каталога строк (`l10n/`), рисование иконки-заглушки |
 
-## Временные замены (до пакетов других потоков)
+## Пакеты и временные замены
 
-| Что | Сейчас | Будет |
+`scripts/generate.sh` подключает пакеты, которые есть в `Packages/`; код приложения использует их через `#if canImport(...)`, иначе — встроенные замены.
+
+| Что | С пакетом | Без пакета |
 | --- | --- | --- |
-| Данные, шифрование, синхронизация | `LibraryStore` — JSON в Application Support; `LocalAccountService` — учётная запись на устройстве (SHA-256 вместо Argon2id); `SyncCenter` — только статус сети | `DSCore`: Yrs-документы, GRDB, libsodium, клиент API и синхронизации |
-| Редактор | `StandInBlockEditor` — простой блочный редактор (Markdown-сокращения, задачи) | `DSEditor`: TextKit 2 + Yrs + слой пера |
-| Дизайн-токены | `Theme` (значения из контракта) | `DSDesign` |
-| Шеринг, токены агентов, устройства | Локальные заглушки с тем же интерфейсом (`SharingService`, `AccessService`) | Реализация через REST (`contracts/api.md`) в `DSCore` |
+| Данные | `Integration/CoreLibrary.swift` поверх **DSCore**: документы `account` / `notebook` / `note` на Yrs, каждое обновление — в `LocalStore` (GRDB) вместе с очередью отправки; ключи блокнотов и заметок — `KeyRing` (crypto.md); в `meta` блокнота — `name`, `icon`, `space` для агентов. Тело заметки записывается точечными правками по `blockId` — блоки, которых не знает временный редактор (код, формулы, разметка с других устройств), не перезаписываются. Старый JSON переносится один раз | `LibraryStore` с JSON-файлом |
+| Редактор | `Integration/NativeDocumentScreen.swift`: **DSEditor** (`EditorView`, TextKit 2 + живой штрих) над `CoreEditorDocument` (DSEditorCore) — отмена/повтор, вставка блоков, стеклянная панель пера, рисование пальцем | `StandInBlockEditor` — простой блочный редактор |
+| Дизайн-токены | **DSDesign**: цвета, оттенки, `DSDateChip`, `DSTaskCheckbox`, `DSShowcase` в отладке | `Theme` с литералами из контракта |
+| Аккаунт, синхронизация, шеринг, токены агентов | пока локальные реализации (`LocalAccountService`, `LocalSharingService`, `LocalAccessService`); подключение к серверу через DSCore (`AccountService`, `SyncEngine`, `APIClient`) — следующий шаг | то же |
 
-Интерфейс приложения обращается только к протоколам и `LibraryStore`, поэтому замена — это новые реализации сервисов, а не переписывание экранов.
+Рисование пальцем (D-06): в режиме «Текст» палец всегда прокручивает и выделяет; рисует, когда выбран инструмент пера и включён флаг. На iPhone флаг включён по умолчанию (Pencil нет), на iPad — выключен.
+
+Экраны обращаются только к `LibraryStore` и протоколам сервисов, поэтому подключение пакета — это новая реализация за тем же интерфейсом.
 
 ## Строки интерфейса
 

@@ -122,6 +122,11 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
         let note = try await device1.createNote(in: notebook, title: "First")
         let meta = try #require(notebook.note(id: note.noteId))
         #expect(meta.title == "First")
+        let daily = try await device1.dailyNote(for: "2026-10-25", in: notebook)
+        #expect(daily.created != nil && daily.meta.kind == .daily)
+        #expect(try await device1.dailyNote(for: "2026-10-25", in: notebook).created == nil)
+        let inbox = try await device1.inbox(in: notebook)
+        #expect(try await device1.inbox(in: notebook).meta.id == inbox.meta.id)
 
         // A second device signs in with the password and gets the same keys.
         let device2 = try makeService(server)

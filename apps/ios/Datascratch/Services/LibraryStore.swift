@@ -536,6 +536,14 @@ final class LibraryStore {
         mutate { $0.activeSpaceId = space.id }
     }
 
+    /// Takes a note's values as they are in the documents (written by the native
+    /// editor), without writing them back.
+    func applyExternal(note meta: NoteMeta, body: NoteBody) {
+        guard let index = data.notes.firstIndex(where: { $0.id == meta.id }) else { return }
+        data.notes[index] = meta
+        data.bodies[meta.id] = body
+    }
+
     func reset() {
         saveTask?.cancel()
         data = LibrarySnapshot()

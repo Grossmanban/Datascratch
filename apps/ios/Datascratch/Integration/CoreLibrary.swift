@@ -64,7 +64,25 @@ final class CoreLibrary: LibraryBackend {
     static func open(directory: URL) throws -> CoreLibrary {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let store = try LocalStore(url: directory.appendingPathComponent("library.sqlite"))
-        return try CoreLibrary(store: store, keys: KeyRing(store: KeychainSecretStore(service: "com.datascratch.app.keys")))
+        return try CoreLibrary(store: store, keys: KeyRing(store: secretStore()))
+    }
+
+    /// The Keychain; on an unsigned simulator build (CI) the Keychain is unavailable
+    /// (errSecMissingEntitlement), so keys stay in memory there. Local documents do not
+    /// depend on them — keys only encrypt what goes to the server.
+    private static func secretStore() throws -> any SecretStore {
+        let keychain = KeychainSecretStore(service: "com.datascratch.app.keys")
+        do {
+            _ = try keychain.data(for: "probe")
+            return keychain
+        } catch {
+            #if targetEnvironment(simulator)
+            log.notice("Keychain unavailable on this simulator build; keys kept in memory")
+            return InMemorySecretStore()
+            #else
+            throw error
+            #endif
+        }
     }
 
     static func inMemory() throws -> CoreLibrary {
@@ -142,19 +160,9 @@ final class CoreLibrary: LibraryBackend {
                        order: folder.order, createdAt: DSCore.DSDate.parseISO(folder.createdAt) ?? Date())
             }
             for meta in doc.notes(includeTrashed: true) {
-                guard let note = try? noteDocument(meta.id, notebookId: ref.id) else { continue }
-                let body = NoteBodyCodec.body(from: (try? note.blocks()) ?? [])
-                var item = NoteMeta(id: meta.id, notebookId: ref.id, folderId: meta.folderId, parentNoteId: meta.parentNoteId,
-                                    title: meta.title, kind: NoteKind(rawValue: meta.kind.rawValue) ?? .note,
-                                    dailyDate: meta.dailyDate, tags: meta.tags, icon: meta.icon,
-                                    cover: overlay.covers[meta.id], backdrop: Self.backdrop(note.meta().backdrop),
-                                    style: Self.style(note.meta().style), snippet: "",
-                                    createdAt: DSCore.DSDate.parseISO(meta.createdAt) ?? Date(),
-                                    updatedAt: DSCore.DSDate.parseISO(meta.updatedAt) ?? Date(),
-                                    trashedAt: meta.trashedAt.flatMap(DSCore.DSDate.parseISO), order: meta.order)
-                LibraryStore.refreshDerived(&item, body: body)
-                snapshot.notes.append(item)
-                snapshot.bodies[meta.id] = body
+                guard let pair = snapshotNote(meta, notebookId: ref.id) else { continue }
+                snapshot.notes.append(pair.0)
+                snapshot.bodies[meta.id] = pair.1
             }
             for props in doc.tagProperties() {
                 if let color = props.color.flatMap(Tint.init(rawValue:)) { snapshot.tagColors[props.id] = color }
@@ -166,6 +174,34 @@ final class CoreLibrary: LibraryBackend {
         snapshot.activeSpaceId = overlay.activeSpaceId
         snapshot.versions = overlay.versions
         return snapshot
+    }
+
+    private func snapshotNote(_ meta: DSCore.NoteMeta, notebookId: String) -> (NoteMeta, NoteBody)? {
+        guard let note = try? noteDocument(meta.id, notebookId: notebookId) else { return nil }
+        let body = NoteBodyCodec.body(from: (try? note.blocks()) ?? [])
+        var item = NoteMeta(id: meta.id, notebookId: notebookId, folderId: meta.folderId, parentNoteId: meta.parentNoteId,
+                            title: meta.title, kind: NoteKind(rawValue: meta.kind.rawValue) ?? .note,
+                            dailyDate: meta.dailyDate, tags: meta.tags, icon: meta.icon,
+                            cover: overlay.covers[meta.id], backdrop: Self.backdrop(note.meta().backdrop),
+                            style: Self.style(note.meta().style), snippet: "",
+                            createdAt: DSCore.DSDate.parseISO(meta.createdAt) ?? Date(),
+                            updatedAt: DSCore.DSDate.parseISO(meta.updatedAt) ?? Date(),
+                            trashedAt: meta.trashedAt.flatMap(DSCore.DSDate.parseISO), order: meta.order)
+        LibraryStore.refreshDerived(&item, body: body)
+        return (item, body)
+    }
+
+    /// After the native editor changed a note: copies title/tags into the notebook
+    /// document (`syncDerived`), updates the local index and returns the fresh values.
+    func refreshNote(_ noteId: String, notebookId: String) -> (NoteMeta, NoteBody)? {
+        guard let notebook = try? notebookDocument(notebookId), let note = try? noteDocument(noteId, notebookId: notebookId)
+        else { return nil }
+        if let derived = try? note.derived() {
+            try? notebook.syncDerived(derived)
+            try? store.index(derived, notebookId: notebookId)
+        }
+        guard let meta = notebook.note(id: noteId) else { return nil }
+        return snapshotNote(meta, notebookId: notebookId)
     }
 
     // MARK: - Writing

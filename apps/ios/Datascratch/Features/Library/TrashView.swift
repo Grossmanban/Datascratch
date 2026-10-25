@@ -1,0 +1,60 @@
+import SwiftUI
+
+/// Trash: notes stay 30 days, then are deleted for good (spec/10).
+struct TrashView: View {
+    @Environment(AppModel.self) private var app
+    @State private var confirmEmpty = false
+
+    var body: some View {
+        let library = app.library
+        Group {
+            if library.trashed.isEmpty {
+                ContentUnavailableView("Trash is empty", systemImage: "trash",
+                                       description: Text("Deleted documents stay here for 30 days."))
+            } else {
+                List {
+                    Section {
+                        ForEach(library.trashed) { note in
+                            HStack {
+                                DocumentRow(note: note)
+                                Text("\(library.daysLeftInTrash(note)) d")
+                                    .font(Theme.Typography.caption.monospacedDigit())
+                                    .foregroundStyle(Theme.Palette.textTertiary)
+                                    .accessibilityLabel(Text("\(library.daysLeftInTrash(note)) days left"))
+                            }
+                            .contextMenu {
+                                Button("Restore", systemImage: "arrow.uturn.backward") { library.restoreFromTrash(note.id) }
+                                Button("Delete Forever", systemImage: "trash", role: .destructive) {
+                                    library.deleteForever(note.id)
+                                }
+                            }
+                            .swipeActions(edge: .leading) {
+                                Button("Restore", systemImage: "arrow.uturn.backward") { library.restoreFromTrash(note.id) }
+                                    .tint(Theme.Palette.success)
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button("Delete", systemImage: "trash", role: .destructive) { library.deleteForever(note.id) }
+                            }
+                        }
+                    } footer: {
+                        Text("Documents are deleted automatically after 30 days in the trash.")
+                    }
+                }
+                .scrollContentBackground(.hidden)
+            }
+        }
+        .background(Theme.Palette.canvas)
+        .navigationTitle("Trash")
+        .toolbar {
+            if !library.trashed.isEmpty {
+                Button("Empty", role: .destructive) { confirmEmpty = true }
+                    .confirmationDialog("Delete all documents in the trash?", isPresented: $confirmEmpty,
+                                        titleVisibility: .visible) {
+                        Button("Empty Trash", role: .destructive) { library.emptyTrash() }
+                    } message: {
+                        Text("This cannot be undone.")
+                    }
+            }
+        }
+    }
+}

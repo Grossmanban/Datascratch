@@ -9,24 +9,39 @@ public enum EntityID {
     }
 
     static func make(milliseconds ms: UInt64) -> String {
-        var bytes = [UInt8](repeating: 0, count: 16)
-        for i in 0..<6 {
-            bytes[i] = UInt8(truncatingIfNeeded: ms >> (8 * (5 - UInt64(i))))
-        }
         var random = SystemRandomNumberGenerator()
-        for i in 6..<16 {
-            bytes[i] = UInt8.random(in: 0...255, using: &random)
-        }
-        bytes[6] = (bytes[6] & 0x0F) | 0x70 // version 7
-        bytes[8] = (bytes[8] & 0x3F) | 0x80 // RFC 4122 variant
-        let uuid = UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-                               bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
-        return uuid.uuidString.lowercased()
+        return make(milliseconds: ms, random: (0..<10).map { _ in UInt8.random(in: 0...255, using: &random) })
     }
 
-    /// Whether `string` is a canonical lowercase UUID.
+    /// Layout of `packages/test-vectors/vectors/ids/uuidv7.json`: bytes 0–5 = ms big-endian,
+    /// 6 = 0x70 | (r[0] & 0x0f), 7 = r[1], 8 = 0x80 | (r[2] & 0x3f), 9–15 = r[3…9].
+    static func make(milliseconds ms: UInt64, random r: [UInt8]) -> String {
+        precondition(r.count >= 10)
+        var b = [UInt8](repeating: 0, count: 16)
+        for i in 0..<6 { b[i] = UInt8(truncatingIfNeeded: ms >> (8 * (5 - UInt64(i)))) }
+        b[6] = 0x70 | (r[0] & 0x0F)
+        b[7] = r[1]
+        b[8] = 0x80 | (r[2] & 0x3F)
+        for i in 9..<16 { b[i] = r[i - 6] }
+        let hex = b.map { String(format: "%02x", $0) }.joined()
+        let parts = [hex.prefix(8), hex.dropFirst(8).prefix(4), hex.dropFirst(12).prefix(4), hex.dropFirst(16).prefix(4), hex.dropFirst(20)]
+        return parts.joined(separator: "-")
+    }
+
+    /// Whether `string` is a lowercase UUIDv7 (`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).
     public static func isValid(_ string: String) -> Bool {
-        string.count == 36 && string == string.lowercased() && UUID(uuidString: string) != nil
+        let u = Array(string.utf8)
+        guard u.count == 36 else { return false }
+        func hex(_ c: UInt8) -> Bool { (c >= 48 && c <= 57) || (c >= 97 && c <= 102) }
+        for (i, c) in u.enumerated() {
+            switch i {
+            case 8, 13, 18, 23: if c != 45 { return false }
+            case 14: if c != 55 { return false } // '7'
+            case 19: if !(c == 56 || c == 57 || c == 97 || c == 98) { return false } // 8 9 a b
+            default: if !hex(c) { return false }
+            }
+        }
+        return true
     }
 }
 

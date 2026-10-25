@@ -10,10 +10,12 @@ public enum Base64URL {
             .replacingOccurrences(of: "=", with: "")
     }
 
+    /// Strict: only `A–Z a–z 0–9 - _`, no padding (like the TS `base64UrlSchema`).
     public static func decode(_ string: String) -> Data? {
-        guard !string.contains("+"), !string.contains("/") else { return nil }
+        guard string.utf8.allSatisfy({ ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122) || ($0 >= 48 && $0 <= 57) || $0 == 45 || $0 == 95 }) else {
+            return nil
+        }
         var s = string
-            .replacingOccurrences(of: "=", with: "")
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
         let remainder = s.count % 4

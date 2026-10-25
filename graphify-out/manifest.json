@@ -1044,15 +1044,15 @@
     "semantic_hash": "b6fbc14b557b993ed9e884d8574ac5e0"
   },
   "apps/server/drizzle/0000_init.sql": {
-    "mtime": 1792931941.0087183,
-    "seen": 1792939424.5358005,
-    "ast_hash": "",
+    "mtime": 1792930021.2139332,
+    "seen": 1792942665.9369514,
+    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
-    "mtime": 1792931941.0087183,
-    "seen": 1792939424.5358033,
-    "ast_hash": "",
+    "mtime": 1792930021.2139332,
+    "seen": 1792942665.9369566,
+    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {

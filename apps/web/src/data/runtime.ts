@@ -108,8 +108,12 @@ export class AccountRuntime {
 
     this.cleanups.push(
       this.store.onCreated((docId) => this.attach([docId])),
-      // A doc created offline got registered: re-attach so SyncClient subscribes and resends.
-      onDocRegistered((docId) => void this.reattach(docId)),
+      // A doc created offline got registered: re-attach so SyncClient subscribes and resends;
+      // attachments of a new note wait for this too.
+      onDocRegistered((docId) => {
+        void this.reattach(docId);
+        void uploadPending();
+      }),
       this.store.onChange((docId, origin) => {
         if (!useWorkspace.getState().notes[docId]) return;
         this.indexer.schedule(docId);

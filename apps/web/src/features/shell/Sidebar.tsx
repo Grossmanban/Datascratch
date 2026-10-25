@@ -43,6 +43,7 @@ import {
 import {
   activeSpace,
   allTags,
+  folderCounts,
   noteTitle,
   setActiveSpace,
   spaceNotebooks,
@@ -579,7 +580,7 @@ function FolderNode({ folder, depth }: { folder: FolderEntry; depth: number }) {
   const [renaming, setRenaming] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const folders = useWorkspace((s) => s.folders);
-  const count = useWorkspace((s) => Object.values(s.notes).filter((n) => n.folderId === folder.id && !n.trashedAt).length);
+  const count = useWorkspace((s) => folderCounts(s.notes).get(folder.id) ?? 0);
   const children = useMemo(
     () => Object.values(folders).filter((f) => f.parentId === folder.id).sort((a, b) => a.order - b.order),
     [folders, folder.id],

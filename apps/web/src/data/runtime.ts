@@ -318,7 +318,8 @@ export async function startRuntime(accountDocId: string) {
   if (current?.accountDocId === accountDocId) return current;
   void current?.stop();
   current = new AccountRuntime(accountDocId);
-  if (import.meta.env.DEV) (window as unknown as { __ds?: unknown }).__ds = current;
+  // Dev tools and e2e performance tests (a build with VITE_DS_TEST_HOOKS=1) reach the runtime here.
+  if (import.meta.env.DEV || import.meta.env.VITE_DS_TEST_HOOKS) (window as unknown as { __ds?: unknown }).__ds = current;
   await current.start();
   return current;
 }

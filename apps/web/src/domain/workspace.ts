@@ -77,12 +77,47 @@ export function refreshNotebook(notebookId: string, doc: Y.Doc | null) {
   const notes: Record<string, NoteEntry> = {};
   const folders: Record<string, FolderEntry> = {};
   const tagProps: Record<string, TagProps> = {};
+  // Structural sharing: unchanged entries keep their identity so memoised rows skip
+  // re-rendering, and an unchanged map keeps its identity so its subscribers do too.
+  let notesChanged = false;
+  let foldersChanged = false;
   for (const [nbId, data] of Object.entries(notebooksData)) {
-    for (const n of data.notes) notes[n.id] = { ...n, tags: n.tags ?? [], notebookId: nbId };
-    for (const f of data.folders) folders[f.id] = { ...f, notebookId: nbId };
+    for (const n of data.notes) {
+      const next: NoteEntry = { ...n, tags: n.tags ?? [], notebookId: nbId };
+      const prev = st.notes[n.id];
+      notes[n.id] = prev && sameEntry(prev, next) ? prev : next;
+      if (notes[n.id] !== prev) notesChanged = true;
+    }
+    for (const f of data.folders) {
+      const next: FolderEntry = { ...f, notebookId: nbId };
+      const prev = st.folders[f.id];
+      folders[f.id] = prev && sameEntry(prev, next) ? prev : next;
+      if (folders[f.id] !== prev) foldersChanged = true;
+    }
     Object.assign(tagProps, data.tags);
   }
-  useWorkspace.setState({ notebooksData, notes, folders, tagProps });
+  if (Object.keys(notes).length !== Object.keys(st.notes).length) notesChanged = true;
+  if (Object.keys(folders).length !== Object.keys(st.folders).length) foldersChanged = true;
+  useWorkspace.setState({
+    notebooksData,
+    notes: notesChanged ? notes : st.notes,
+    folders: foldersChanged ? folders : st.folders,
+    tagProps,
+  });
+}
+
+/** Shallow equality of two records whose values are JSON (arrays/objects compared by content). */
+function sameEntry(a: object, b: object): boolean {
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) {
+    const x = (a as Record<string, unknown>)[k];
+    const y = (b as Record<string, unknown>)[k];
+    if (x === y) continue;
+    if (typeof x !== "object" || typeof y !== "object" || x === null || y === null) return false;
+    if (JSON.stringify(x) !== JSON.stringify(y)) return false;
+  }
+  return true;
 }
 
 // ---------- selectors ----------
@@ -102,6 +137,18 @@ export function notesInSpace(st: WorkspaceState, spaceId: string | null): NoteEn
 
 export function visibleNotes(notes: NoteEntry[]): NoteEntry[] {
   return notes.filter((n) => !n.trashedAt && n.kind !== "inbox");
+}
+
+const countsCache = new WeakMap<Record<string, NoteEntry>, Map<string, number>>();
+/** Live documents per folder, computed once per `notes` snapshot. */
+export function folderCounts(notes: Record<string, NoteEntry>): Map<string, number> {
+  let counts = countsCache.get(notes);
+  if (!counts) {
+    counts = new Map();
+    for (const n of Object.values(notes)) if (n.folderId && !n.trashedAt) counts.set(n.folderId, (counts.get(n.folderId) ?? 0) + 1);
+    countsCache.set(notes, counts);
+  }
+  return counts;
 }
 
 export function isStarred(st: WorkspaceState, ref: StarredRef): boolean {

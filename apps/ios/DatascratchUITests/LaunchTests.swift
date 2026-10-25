@@ -289,6 +289,7 @@ final class LibraryUITests: XCTestCase {
             let b = app.buttons[id].firstMatch
             return "\(id)=\(b.exists ? (b.isSelected ? "on" : "off") : "missing")"
         }.joined(separator: " ") + " keyboard=\(app.keyboards.firstMatch.exists)"
+            + " palette=\(app.descendants(matching: .any)["penPalette"].firstMatch.value as? String ?? "?")"
     }
 
     private func settle(_ seconds: TimeInterval = 0.6) {

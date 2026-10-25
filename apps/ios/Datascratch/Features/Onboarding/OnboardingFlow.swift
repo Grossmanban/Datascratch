@@ -464,6 +464,7 @@ struct ConfirmRecoveryKeyView: View {
 
     private func finishSkipIfDismissed() {
         guard skipChosen, !confirmSkip else { return }
+        skipChosen = false
         Task {
             try? await Task.sleep(for: .milliseconds(350))
             app.finishOnboarding(keyConfirmed: false)

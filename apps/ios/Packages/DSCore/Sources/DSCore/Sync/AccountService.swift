@@ -122,6 +122,21 @@ public actor AccountService {
         try store.ensureDocument(docId: id, kind: .note, notebookId: notebook.notebookId)
         return note
     }
+
+    /// The daily note for `day` (`YYYY-MM-DD`) in the daily-notes notebook
+    /// (`settings.dailyNotebookId`), created with the day as title if missing.
+    public func dailyNote(for day: String, in notebook: NotebookDocument) throws -> (meta: NoteMeta, created: NoteDocument?) {
+        if let meta = notebook.dailyNote(for: day) { return (meta, nil) }
+        let note = try createNote(in: notebook, title: day, kind: .daily, dailyDate: day)
+        return (notebook.note(id: note.noteId)!, note)
+    }
+
+    /// The notebook's «Входящие» (inbox) note, created if missing.
+    public func inbox(in notebook: NotebookDocument, title: String = "Входящие") throws -> (meta: NoteMeta, created: NoteDocument?) {
+        if let meta = notebook.inbox { return (meta, nil) }
+        let note = try createNote(in: notebook, title: title, kind: .inbox)
+        return (notebook.note(id: note.noteId)!, note)
+    }
 }
 
 /// Share links `https://<web-host>/s/<shareId>#k=<base64url key>` (crypto.md §7).

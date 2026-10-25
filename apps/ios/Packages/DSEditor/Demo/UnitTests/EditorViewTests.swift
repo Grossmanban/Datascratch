@@ -270,6 +270,36 @@ final class EditorViewTests: XCTestCase {
         XCTAssertFalse(editor.ink.renderedPath(of: moving.id) === movingPath, "the moved stroke is outlined again")
     }
 
+    func testTextToolLeavesFingerTouchesAlone() {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello")]))
+        editor.tools.allowsFingerDrawing = true
+        editor.tools.mode = .text
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertTrue(editor.inkInput.isEnabled, "stays enabled (disabling it crashed UIKit), but never begins")
+        XCTAssertEqual(editor.inkInput.state, .possible)
+        XCTAssertEqual(editor.textView.panGestureRecognizer.minimumNumberOfTouches, 1, "one finger scrolls in the text tool")
+        editor.tools.mode = .pen
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertEqual(editor.textView.panGestureRecognizer.minimumNumberOfTouches, 2)
+    }
+
+    func testButtonOverTheEditorGetsItsTouchAndNothingScrolls() {
+        let editor = host(SampleDocument.make())
+        let button = UIButton(type: .system)
+        button.frame = CGRect(x: 40, y: editor.bounds.maxY - 60, width: 44, height: 44)
+        window.addSubview(button)
+        var tapped = false
+        button.addAction(UIAction { _ in tapped = true }, for: .touchUpInside)
+        let center = button.convert(CGPoint(x: 22, y: 22), to: window)
+        XCTAssertTrue(window.hitTest(center, with: nil) === button, "the overlay, not the editor, receives the touch")
+        let offset = editor.textView.contentOffset
+        button.sendActions(for: .touchUpInside)
+        editor.tools.mode = .text
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertTrue(tapped)
+        XCTAssertEqual(editor.textView.contentOffset, offset, "switching tools does not scroll")
+    }
+
     func testOpenLargeNote() {
         let doc = SampleDocument.large()
         let start = CACurrentMediaTime()

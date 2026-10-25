@@ -4,7 +4,7 @@ import type { AppContext } from '../context.js';
 import { COMPACT_JOB } from '../jobs/index.js';
 import { fromB64, sha256, toB64, uuidv7 } from '../lib/encoding.js';
 import { ApiError } from '../lib/errors.js';
-import { docAccess } from '../services/access.js';
+import { accessFor, docAccess, loadDocs } from '../services/access.js';
 import type { GuestPrincipal, UserPrincipal } from '../services/principal.js';
 import { topics, type HubMessage } from './hub.js';
 import {
@@ -36,6 +36,9 @@ interface Subscription {
 }
 
 const HELLO_TIMEOUT_MS = 10_000;
+/** Subscribe fast path: documents per batched query, and max updates per document in it. */
+const FAST_PATH_BATCH = 200;
+const FAST_PATH_MAX_UPDATES = 100;
 const MAX_BUFFERED_BYTES = 64 * 1024 * 1024;
 
 class SyncError extends Error {
@@ -257,32 +260,83 @@ export class SyncConnection {
     return this.#principal!.deviceId;
   }
 
+  #newSub(docId: string, since: number): Subscription {
+    this.#unsubscribe(docId);
+    const sub: Subscription = {
+      unsubscribe: () => {},
+      live: false,
+      buffer: [],
+      sent: since,
+      pending: new Map(),
+      filling: false,
+    };
+    // Registered before reading the history: live events meanwhile are buffered.
+    sub.unsubscribe = this.ctx.hub.subscribe(topics.doc(docId), (m) => this.#onDocEvent(docId, sub, m));
+    this.#subs.set(docId, sub);
+    return sub;
+  }
+
+  #goLive(docId: string, sub: Subscription) {
+    sub.live = true;
+    for (const e of sub.buffer) this.#enqueue(docId, sub, e);
+    sub.buffer = [];
+  }
+
   async #subscribe(list: { docId: string; since: number }[]) {
+    const db = this.ctx.database.db;
+    const rows = await loadDocs(db, [...new Set(list.map((d) => d.docId))]);
+    type Item = { docId: string; since: number; sub: Subscription; lastSeq: number };
+    const fast: Item[] = [];
+    const slow: Item[] = [];
     for (const { docId, since } of list) {
+      const row = rows.get(docId);
+      const a = row ? accessFor(this.#principal!, row) : null;
+      if (!row || !a) {
+        this.#access.delete(docId);
+        this.#send({ type: 'error', code: 'doc_not_found', message: 'document not found', ref: docId });
+        continue;
+      }
+      this.#access.set(docId, a.write);
+      // A client ahead of the server (e.g. restored from another backup) starts over.
+      const from = since > row.lastSeq ? 0 : since;
+      const item = { docId, since: from, sub: this.#newSub(docId, from), lastSeq: row.lastSeq };
+      // Fast path: every update after `from` is still stored (no newer snapshot) and there are few.
+      if (from >= row.snapshotSeq && row.lastSeq - from <= FAST_PATH_MAX_UPDATES) fast.push(item);
+      else slow.push(item);
+    }
+
+    for (let i = 0; i < fast.length; i += FAST_PATH_BATCH) {
       if (this.#closed) return;
-      this.#access.delete(docId);
-      try {
-        await this.#canWrite(docId);
-      } catch (err) {
-        if (err instanceof SyncError) {
-          this.#send({ type: 'error', code: err.code, message: err.message, ref: docId });
+      const batch = fast.slice(i, i + FAST_PATH_BATCH);
+      const toFetch = batch.filter((b) => b.lastSeq > b.since);
+      const found = await this.ctx.documents.updatesForMany(db, toFetch);
+      for (const b of batch) {
+        if (this.#closed) return;
+        if (this.#subs.get(b.docId) !== b.sub) continue;
+        const items = found.get(b.docId) ?? [];
+        // Compacted in the meantime: fall back to the general path.
+        if (b.lastSeq > b.since && items[0]?.seq !== b.since + 1) {
+          slow.push(b);
           continue;
         }
-        throw err;
+        const last = items[items.length - 1];
+        if (last) b.sub.sent = last.seq;
+        this.#send({
+          type: 'updates',
+          docId: b.docId,
+          snapshot: null,
+          items: items.map((x) => ({ seq: x.seq, payload: toB64(x.payload), deviceId: x.deviceId })),
+          upToDate: true,
+        });
+        this.#goLive(b.docId, b.sub);
       }
-      this.#unsubscribe(docId);
-      const sub: Subscription = {
-        unsubscribe: () => {},
-        live: false,
-        buffer: [],
-        sent: since,
-        pending: new Map(),
-        filling: false,
-      };
-      sub.unsubscribe = this.ctx.hub.subscribe(topics.doc(docId), (m) => this.#onDocEvent(docId, sub, m));
-      this.#subs.set(docId, sub);
+    }
+
+    for (const { docId, since, sub } of slow) {
+      if (this.#closed) return;
+      if (this.#subs.get(docId) !== sub) continue;
       try {
-        for await (const page of this.ctx.documents.catchUp(this.ctx.database.db, docId, since)) {
+        for await (const page of this.ctx.documents.catchUp(db, docId, since)) {
           if (this.#closed || this.#subs.get(docId) !== sub) return;
           if (page.snapshot) sub.sent = page.snapshot.seq;
           const last = page.items[page.items.length - 1];
@@ -291,7 +345,7 @@ export class SyncConnection {
             type: 'updates',
             docId,
             snapshot: page.snapshot ? { seq: page.snapshot.seq, payload: toB64(page.snapshot.payload) } : null,
-            items: page.items.map((i) => ({ seq: i.seq, payload: toB64(i.payload), deviceId: i.deviceId })),
+            items: page.items.map((x) => ({ seq: x.seq, payload: toB64(x.payload), deviceId: x.deviceId })),
             upToDate: page.upToDate,
           });
         }
@@ -303,9 +357,7 @@ export class SyncConnection {
         }
         throw err;
       }
-      sub.live = true;
-      for (const e of sub.buffer) this.#enqueue(docId, sub, e);
-      sub.buffer = [];
+      this.#goLive(docId, sub);
     }
   }
 

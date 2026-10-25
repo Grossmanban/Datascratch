@@ -20,8 +20,15 @@ public extension EditorAttachmentResolver {
 @MainActor
 final class AttachmentFactory {
     weak var resolver: EditorAttachmentResolver?
-    var theme: EditorTheme
+    var theme: EditorTheme {
+        didSet { viewCache.removeAll() }
+    }
     private var cache: [BlockID: BlockAttachment] = [:]
+    /// Live views of atom blocks, one per block. TextKit 2 asks for a new view whenever it lays a
+    /// fragment out again (keyboard, scrolling, edits nearby); handing back the same instance
+    /// keeps a table cell's editing state and, above all, keeps a touched view in the window —
+    /// a view replaced while UIKit still held its touch crashed the gesture environment.
+    private var viewCache: [BlockID: BlockContentView] = [:]
     /// Table cell text edited: table id, row, column, new text.
     var onTableCellEdit: ((BlockID, Int, Int, String) -> Void)?
     /// Add a row (true) or a column (false) to a table.
@@ -90,6 +97,23 @@ final class AttachmentFactory {
         }
     }
 
+    /// The block's live view: the cached one when its content is unchanged (or can be updated in
+    /// place), a new one otherwise.
+    func view(for node: BlockNode) -> BlockContentView {
+        if let cached = viewCache[node.id], cached.node?.type == node.type {
+            if cached.node != node { cached.configure(node: node, resolver: resolver, theme: theme) }
+            return cached
+        }
+        let v = makeView(for: node)
+        viewCache[node.id] = v
+        return v
+    }
+
+    /// Drops cached views of blocks that are gone.
+    func pruneViews(keeping ids: Set<BlockID>) {
+        viewCache = viewCache.filter { ids.contains($0.key) }
+    }
+
     func makeView(for node: BlockNode) -> BlockContentView {
         let v: BlockContentView
         switch node.type {
@@ -143,7 +167,7 @@ final class BlockAttachmentViewProvider: NSTextAttachmentViewProvider {
         guard let attachment = textAttachment as? BlockAttachment else { return }
         let node = attachment.node
         let factory = attachment.factory
-        let made: UIView? = MainActor.assumeIsolated { factory?.makeView(for: node) }
+        let made: UIView? = MainActor.assumeIsolated { factory?.view(for: node) }
         view = made
     }
 
@@ -167,6 +191,9 @@ class BlockContentView: UIView {
         self.node = node
         backgroundColor = .clear
         isOpaque = false
+        // Views are reused across layouts (`AttachmentFactory.view(for:)`): redraw for new content.
+        setNeedsLayout()
+        setNeedsDisplay()
     }
 }
 

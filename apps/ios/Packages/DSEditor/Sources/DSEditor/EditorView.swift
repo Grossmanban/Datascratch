@@ -81,7 +81,7 @@ public final class EditorView: UIView {
     private let inkOver = InkCanvas()
     private let hoverLayer = CAShapeLayer()
     private let fragmentProvider = FragmentProvider()
-    private let factory: AttachmentFactory
+    let factory: AttachmentFactory
     private var renderer: AttributedRenderer
     private(set) var projection: Projection
     var geometry: TextGeometry!
@@ -430,6 +430,7 @@ public final class EditorView: UIView {
               oldP[oldP.count - 1 - suffix] == newP[newP.count - 1 - suffix] { suffix += 1 }
         if prefix == oldP.count, prefix == newP.count {
             projection = new
+        factory.pruneViews(keeping: Set(new.paragraphs.map(\.blockId)))
             return nil
         }
         // Neighbours can change decoration (callout edges, numbering): widen by one.

@@ -3,7 +3,15 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import { SERVER_PATHS } from "./src/lib/serverPaths";
+import { securityHeaders } from "./src/lib/securityHeaders";
 import { VitePWA } from "vite-plugin-pwa";
+
+function previewSecurityHeaders(): Record<string, string> {
+  const server = process.env.VITE_DS_SERVER_URL;
+  if (!server) return securityHeaders([]);
+  const origin = new URL(server).origin;
+  return securityHeaders([origin, origin.replace(/^http/, "ws")], { hsts: false });
+}
 
 // The server address is injected at build/run time via VITE_DS_SERVER_URL;
 // the build itself never contacts the server.
@@ -37,6 +45,7 @@ export default defineConfig({
           "assets/{index,editor,react,sodium,kdf.worker,katex,workbox-window}*.{js,css}",
           "assets/*.woff2",
           "*.{svg,png}",
+          "theme-init.js",
           "icons/*.png",
         ],
         runtimeCaching: [
@@ -56,6 +65,9 @@ export default defineConfig({
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
   server: { port: 5173 },
+  // The production headers (infra/deploy/Caddyfile) on the preview server, so the e2e suite
+  // runs under the same CSP; the separate test server is allowed for API and sync.
+  preview: { headers: previewSecurityHeaders() },
   build: {
     target: "es2022",
     sourcemap: true,

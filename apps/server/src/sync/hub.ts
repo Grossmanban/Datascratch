@@ -4,7 +4,7 @@
  * PostgreSQL LISTEN/NOTIFY or Redis/Valkey without touching the callers.
  *
  * Topics:
- *   doc:<docId>        live updates, awareness and deletion of a document
+ *   doc:<docId>        live updates, awareness, deletion and moves of a document
  *   device:<deviceId>  control: the device was revoked
  *   share:<shareId>    control: the share was revoked
  *   user:<userId>      control: the account was deleted / all sessions revoked
@@ -13,7 +13,8 @@ export type HubMessage =
   | { type: 'update'; docId: string; seq: number; payload: string; deviceId: string; origin: string | null }
   | { type: 'awareness'; docId: string; payload: string; deviceId: string; origin: string | null }
   | { type: 'revoked'; reason: string }
-  | { type: 'doc_deleted'; docId: string };
+  | { type: 'doc_deleted'; docId: string }
+  | { type: 'doc_moved'; docId: string };
 
 export type HubListener = (msg: HubMessage) => void;
 

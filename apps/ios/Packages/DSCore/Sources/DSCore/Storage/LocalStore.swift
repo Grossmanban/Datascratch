@@ -236,8 +236,8 @@ extension LocalStore {
         }
     }
 
-    public func setRegistered(_ docId: String) throws {
-        try db.write { try $0.execute(sql: "UPDATE documents SET registered = 1 WHERE docId = ?", arguments: [docId]) }
+    public func setRegistered(_ docId: String, _ registered: Bool = true) throws {
+        try db.write { try $0.execute(sql: "UPDATE documents SET registered = ? WHERE docId = ?", arguments: [registered, docId]) }
     }
 
     /// Stores a local update and queues it for sending, atomically.

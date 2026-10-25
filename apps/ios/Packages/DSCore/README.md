@@ -1,15 +1,151 @@
 # DSCore
 
 Ядро данных iOS-приложения Datascratch (поток ios-core, D-39): модель документа на Yrs,
-криптография, локальное хранилище, REST- и sync-клиенты. На нём строятся `DSEditor` и приложение.
+криптография, локальное хранилище, REST- и sync-клиенты. На нём строятся `DSEditor`
+(редактор) и приложение (`apps/ios`).
 
-Статус: в работе. Полное описание публичного API — ниже по мере готовности.
+Swift 6 (строгая конкурентность), iOS/iPadOS 26+ (D-32). Контракты, которые реализует пакет:
+`docs/architecture/contracts/` — `document-model.md`, `strokes.md`, `crypto.md`,
+`sync-protocol.md`, `api.md`.
 
-## Сборка
+## Подключение
 
-- **macOS (Xcode 26+, rustup):** `scripts/build-xcframework.sh` собирает `build/yrs_ffiFFI.xcframework`
-  (Rust-библиотека Yrs для iOS-устройства, симулятора и macOS). После этого пакет открывается в
-  Xcode / `xcodebuild test -scheme DSCore`.
-- **Linux (облачные сессии):** `scripts/build-linux.sh`, затем `swift build` / `swift test`
-  (Swift 6.2+, `libsodium-dev`, `libsqlite3-dev`).
-- `scripts/generate-bindings.sh` — перегенерировать Swift-привязки после правки `yrs-ffi/src`.
+```swift
+// Package.swift пакета-потребителя
+.package(path: "../DSCore"),
+// ...
+.product(name: "DSCore", package: "DSCore")
+```
+
+Перед сборкой нужен `build/yrs_ffiFFI.xcframework` (Rust-библиотека Yrs):
+
+| Где | Команда |
+| --- | --- |
+| Mac (Xcode 26+, `rustup`) | `apps/ios/Packages/DSCore/scripts/build-xcframework.sh` (~2 мин, один раз и после правок `yrs-ffi`) |
+| CI потребителя | тот же скрипт; кэшировать `~/.cargo` и `yrs-ffi/target` (см. `.github/workflows/ios-core.yml`) |
+| Linux (облачные сессии) | `scripts/build-linux.sh`, затем `swift build` / `swift test` (Swift 6.2+, `libsodium-dev`, `libsqlite3-dev`) |
+
+`scripts/generate-bindings.sh` — перегенерировать Swift-привязки после правки `yrs-ffi/src`
+(CI проверяет, что закоммиченные привязки свежие).
+
+## Устройство
+
+```
+DSCore
+├─ yrs-ffi/            Rust-крейт: UniFFI-обёртка над yrs 0.25 (вендорена с патчем, vendor/PATCHES.md)
+│  └─ compat/          генератор эталонов Yjs/y-prosemirror и проверка «Yjs читает документ Yrs»
+├─ Sources/YrsFFI      сгенерированные привязки (не править руками)
+└─ Sources/DSCore
+   ├─ CRDT/            CRDTDocument, CRDTTransaction, YValue — низкий уровень
+   ├─ Model/           NoteDocument, NotebookDocument, AccountDocument, Block, Stroke, производные данные
+   ├─ Crypto/          DSCrypto, KeyRing, SecretStore (Keychain)
+   ├─ Storage/         LocalStore (GRDB): обновления, очередь, индексы, поиск, вложения
+   ├─ Network/         APIClient (REST)
+   └─ Sync/            SyncClient (WebSocket), SyncEngine (документы ↔ хранилище ↔ сервер)
+```
+
+## Документы (CRDT)
+
+`CRDTDocument(kind:docId:)` — документ Yjs на Yrs. Корневые типы задаются видом
+(`DocKind.account/.notebook/.note`, document-model.md §2–4). Все текстовые смещения —
+**UTF-16** (как `NSString`/`NSRange` и Yjs).
+
+- Чтение — снимки: `mapValue(root, path)`, `mapKeys`, `arrayValues`, `xmlChildren(root, at:)`,
+  `xmlNode(root, at:)`. Значения — `YValue` (`.string`, `.number`, `.bytes`, `.object`,
+  `.sharedMap`, …; удобные `stringValue`, `entries`, литералы `"x"`, `1`, `true`, `nil`).
+- Запись — пакетом в одной транзакции:
+  ```swift
+  try doc.transact(origin: .local) { txn in
+      txn.insertText("Hi", marks: ["bold": .emptyObject], at: 0, in: [1, 0])
+      txn.setAttribute("level", 2, at: [3])
+  }
+  ```
+  Пути в XML — индексы детей от корня `content` (`[1, 0]` — первый ребёнок второго блока);
+  пути в картах — ключи вложенных `Y.Map`.
+- Происхождение (`TransactionOrigin`): `.local` — правка пользователя (попадает в отмену и
+  на сервер), `.system` — программная правка (на сервер, без отмены), `.undo`, `.remote`
+  (с сервера), `.storage` (загрузка с диска). `isOutgoing` — нужно ли отправлять.
+- Наблюдение: `observeUpdates { update, origin in }` (каждое обновление — для хранилища и
+  синхронизации), `observeDeep("content") { events, origin in }` (пути + дельты текста /
+  детей / ключей — для инкрементальной перерисовки). Колбэк вызывается **внутри транзакции**:
+  не обращаться из него к документу, скопировать данные и уйти в другую задачу.
+- Отмена: `enableUndo(roots:captureTimeout:)`, `undo()`, `redo()`, `canUndo`, `stopCapturing()`.
+  Запоминаются только `.local`-транзакции. Для заметок вызывать `NoteDocument.undo()/redo()`:
+  они ещё и перепривязывают якоря штрихов (strokes.md §4.1).
+- Относительные позиции (якоря штрихов, комментарии):
+  `relativePosition(at: path, index:, assoc:)` → `Data` (байты `Y.encodeRelativePosition`),
+  `resolve(relativePositions:)` → `[ResolvedIndex?]` (`path`, `index`, `deleted` — символ
+  удалён, D-35). Разрешение учитывает восстановленные отменой элементы.
+- `CRDTUpdates.merge/diff/stateVector(of:)` — операции над закодированными обновлениями.
+
+## Модель заметки
+
+`NoteDocument(noteId:)` (или `NoteDocument(crdt)`), `initialize(title:)` для новой заметки.
+
+- Блоки: `blocks() -> [Block]`, `block(at:)`, `title()`, `path(ofBlock: blockId)`,
+  `insertBlocks(_:into:at:)`, `appendBlocks`, `deleteBlock(at:)`, `replaceBlock`, `moveBlock`,
+  `setBlockAttributes(_:at:)` (`.null` удаляет атрибут).
+- `Block`: `type`, `attrs`, `blockId`, `inline: [Inline]` (текстовые блоки), `children`
+  (контейнеры), `raw` (неизвестный узел, пишется обратно как есть). Фабрики:
+  `.paragraph`, `.title`, `.heading`, `.taskItem`, `.container`, `.atom`. Имена — `BlockType`.
+- `Inline`: `.text(String, marks: [Mark])` или `.node(name:attrs:)` (`noteLink`, `tag`,
+  `hardBreak`). `Mark`: `.bold`, `.italic`, `.link(href)`, `.highlight(color)`, … Метки
+  пишутся объектом (`{}` без атрибутов), читаются и `{}`, и `true`, и `имя--хэш`.
+- Правка текста внутри блока по смещению уровня блока (inline-узел = 1 символ):
+  `insertText(_:marks:at:inBlock:)`, `deleteText(range:inBlock:)`,
+  `format(range:set:remove:inBlock:)`, `insertInlineNode(name:attrs:at:inBlock:)`,
+  `locate(offset:inBlock:)` → путь `XmlText` и смещение в нём (для якорей штрихов).
+- Задачи: `updateTask(taskId:state:scheduled:deadline:)` (`.done` ставит `completedAt`).
+- `meta()`, `setStyle`, `setCover`, `setBackdrop`; `isReadOnly`, если `formatVersion` новее.
+- Штрихи: `strokes()`, `stroke(id:)`, `addStrokes`, `removeStrokes(ids:)` (ластик по
+  штриху), `replaceStroke(id:with:)` (ластик по пикселю), `setStrokeHidden`.
+  `Stroke` — поля strokes.md §2; `StrokeCodec.pack/unpack` — упаковка точек §3;
+  `StrokeMetrics.width(...)` — толщина §5; `stroke.segments(resolved:line:)` — разбиение на
+  рисуемые сегменты (удалённые якоря, разрыв по строкам, сегменты < 2 точек — §4).
+- Осиротевшие штрихи (§4.2): `orphanedStrokeIds()`, `LocalStore.updateOrphans`,
+  `purgeOrphanedStrokes(orphanedAt:)` перед сборкой снимка.
+- Комментарии: `comments()`, `addComment`, `resolveComment`, `deleteComment`.
+- Производные данные: `derived() -> NoteDerivedData` (заголовок, plain text, задачи,
+  ссылки `[[ ]]`, теги).
+
+## Блокнот и аккаунт
+
+- `NotebookDocument`: `folders()`, `putFolder`, `updateFolder(id:_:)` (по полям — правки
+  разных полей с разных устройств сливаются), `deleteFolder` (содержимое — родителю),
+  `notes(inFolder:)`, `note(id:)`, `putNote`, `updateNote`, `syncDerived(_:)` (копия
+  заголовка и тегов в `NoteMeta`), `trashNote/restoreNote/purgeNote`, `expiredTrash()`,
+  `dailyNote(for:)`, `inbox`, `tagCounts()`, `setTagProperties`.
+- `AccountDocument`: `spaces()`, `putSpace`, `notebooks(inSpace:)`, `putNotebook`,
+  `setting/setSetting`, `dailyNotebookId`, `starred/star/unstar`, `tabs/openTab/closeTab`.
+- Записи: `Space`, `NotebookRef`, `Folder`, `NoteMeta`, `TagProperties`, `StarredItem`.
+
+## Криптография (crypto.md)
+
+- `DSCrypto.deriveKeys(password:salt:params:)` → `loginKey`, `passwordKey` (Argon2id,
+  ~0.5 с — не на главном потоке); `seal/open` (конверт `0x01 || nonce || XChaCha20-Poly1305`
+  с `ad` из `CryptoAD`); `wrapKey/unwrapKey`; `sealAttachment/openAttachment` (куски по 1 MiB);
+  `recoveryLoginKey`. `RecoveryKeyFormat.format/parse` — `DS1-XXXX-…` (Crockford Base32).
+- `SignupMaterial.make(password:userId:)`, `PasswordChangeMaterial.make(...)` — всё для
+  `/auth/signup`, `/auth/password`, `/auth/recovery/finish`.
+- `KeyRing(store:)` — иерархия ключей: мастер-ключ, ключи блокнотов (в `SecretStore`),
+  ключи заметок (в памяти). `KeychainSecretStore` (Keychain, только это устройство, после
+  первой разблокировки) и `InMemorySecretStore` (тесты).
+
+## Локальное хранилище
+
+`LocalStore(url:)` / `LocalStore.inMemory()` (GRDB, SQLite):
+
+- документы и синхронизация: `ensureDocument`, `appendLocalUpdate` (атомарно с очередью
+  отправки), `appendRemoteUpdates`, `applyRemoteSnapshot`, `updates(docId:)`, `compact`,
+  `needsSnapshot` (> 500 обновлений или > 1 MiB), `pendingOutbox`, `acknowledge`, `deviceId()`;
+- индексы (document-model.md §5): `index(_ derived:notebookId:)`, `search(_:)` (FTS5,
+  префиксы, без учёта диакритики), `tasks(TaskQuery)`, `backlinks(to:)`, `tags()`,
+  `notes(withTag:)` (с вложенными `тег/…`);
+- вложения: `saveAttachment`, `markChunkUploaded` (докачка по кускам), `attachments(state:)`.
+
+## Тесты
+
+`swift test` (Linux) или `xcodebuild test -scheme DSCore` на симуляторе iPad. Совместимость
+с Yjs: `yrs-ffi/tests/yjs_compat.rs` и `compat/verify.mjs` (в CI), эталон —
+`yrs-ffi/compat/fixtures/yjs-note.json` (генерируется `node compat/generate.mjs`).
+Векторы `packages/test-vectors` подключаются по мере публикации потоком core.

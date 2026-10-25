@@ -24,6 +24,10 @@ final class AppModel {
 
     let settings: AppSettings
     let library: LibraryStore
+    #if canImport(DSCore)
+    /// The document store behind `library` (nil when DSCore could not open).
+    let core: CoreLibrary?
+    #endif
     let accounts: any AccountService
     let sync: SyncCenter
     let sharing: any SharingService
@@ -43,6 +47,7 @@ final class AppModel {
     var pendingRoute: AppRoute?
 
     init(options: LaunchOptions = .fromProcess(), bundle: Bundle = .main) {
+        let coreLibrary: AnyObject?
         let info = bundle.infoDictionary ?? [:]
         let host = (info["DSWebHost"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "datascratch.app"
         let server = (info["DSServerURL"] as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) }
@@ -51,14 +56,21 @@ final class AppModel {
         if options.uiTesting {
             secureStore = SecureStore(inMemory: true)
             settings = AppSettings(defaults: UserDefaults(suiteName: "ui-testing-\(UUID().uuidString)") ?? .standard)
-            library = Self.makeLibrary(inMemory: true)
+            let made = Self.makeLibrary(inMemory: true)
+            library = made.0
+            coreLibrary = made.1
             sync = SyncCenter(serverURL: nil, monitorNetwork: false)
         } else {
             secureStore = SecureStore()
             settings = AppSettings()
-            library = Self.makeLibrary(inMemory: false)
+            let made = Self.makeLibrary(inMemory: false)
+            library = made.0
+            coreLibrary = made.1
             sync = SyncCenter(serverURL: server)
         }
+        #if canImport(DSCore)
+        core = coreLibrary as? CoreLibrary
+        #endif
         accounts = LocalAccountService(store: secureStore)
         sharing = LocalSharingService(webHost: host)
         access = LocalAccessService()
@@ -76,21 +88,25 @@ final class AppModel {
     private var signedInForTesting = false
 
     /// The library on DSCore documents when the package is linked, else the JSON stand-in.
-    private static func makeLibrary(inMemory: Bool) -> LibraryStore {
+    private static func makeLibrary(inMemory: Bool) -> (LibraryStore, AnyObject?) {
         #if canImport(DSCore)
         do {
-            if inMemory { return LibraryStore(backend: try CoreLibrary.inMemory()) }
+            if inMemory {
+                let core = try CoreLibrary.inMemory()
+                return (LibraryStore(backend: core), core)
+            }
             let base = (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                      appropriateFor: nil, create: true))
                 ?? FileManager.default.temporaryDirectory
             let core = try CoreLibrary.open(directory: base.appendingPathComponent("Library", isDirectory: true))
             CoreLibrary.importLegacy(from: .appSupport(), into: core)
-            return LibraryStore(backend: core)
+            return (LibraryStore(backend: core), core)
         } catch {
-            assertionFailure("DSCore library unavailable: \(error)")
+            // Keep working on the JSON stand-in rather than failing to launch.
+            print("DSCore library unavailable, using the local JSON library: \(error)")
         }
         #endif
-        return LibraryStore(persistence: inMemory ? .inMemory : .appSupport())
+        return (LibraryStore(persistence: inMemory ? .inMemory : .appSupport()), nil)
     }
 
     var phase: Phase {

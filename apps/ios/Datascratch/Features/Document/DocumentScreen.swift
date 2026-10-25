@@ -6,6 +6,8 @@ struct DocumentScreen: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.horizontalSizeClass) private var sizeClass
     let noteId: String
+    /// Use the stand-in editor even when the native one is available.
+    var forceStandIn = false
 
     @FocusState private var titleFocused: Bool
 
@@ -13,7 +15,15 @@ struct DocumentScreen: View {
 
     var body: some View {
         if let note = library.note(noteId) {
+            #if canImport(DSEditor) && canImport(DSEditorCore) && canImport(DSCore)
+            if !forceStandIn, app.core != nil {
+                NativeDocumentScreen(noteId: noteId)
+            } else {
+                content(note)
+            }
+            #else
             content(note)
+            #endif
         } else {
             ContentUnavailableView("Document not found", systemImage: "doc.questionmark")
         }

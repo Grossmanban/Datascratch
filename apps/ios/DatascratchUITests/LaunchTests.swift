@@ -114,6 +114,55 @@ final class LibraryUITests: XCTestCase {
         return app
     }
 
+    /// The one «New» button: the toolbar on iPad, the floating button on iPhone (D-38).
+    private func newNoteButton(_ app: XCUIApplication) -> XCUIElement {
+        let toolbar = app.buttons["library.newNote"].firstMatch
+        let floating = app.buttons["library.newNote.floating"].firstMatch
+        for _ in 0..<2 {
+            for _ in 0..<10 {
+                if toolbar.exists { return toolbar }
+                if floating.exists { return floating }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+            }
+            // Not on a document list yet: start from the sidebar.
+            let all = app.buttons["sidebar.allDocuments"].firstMatch
+            if all.exists, all.isHittable { all.tap() }
+        }
+        return toolbar.exists ? toolbar : floating
+    }
+
+    /// Opens a new note in the native editor, or skips with the stand-in editor.
+    private func openNewNoteInNativeEditor(_ app: XCUIApplication) throws {
+        let button = newNoteButton(app)
+        XCTAssertTrue(button.exists, "new note button not found; buttons: \(Self.buttons(app))")
+        button.tap()
+        guard app.buttons["tool.pen"].firstMatch.waitForExistence(timeout: 5) else {
+            throw XCTSkip("Stand-in editor: no pen palette")
+        }
+    }
+
+    /// Finger drawing sits in «More» on iPhone and in the palette row on iPad.
+    private func toggleFingerDrawing(_ app: XCUIApplication) {
+        let more = app.buttons["tool.more"].firstMatch
+        if more.exists {
+            more.tap()
+            let item = app.descendants(matching: .any)["tool.fingerDrawing"].firstMatch
+            if item.waitForExistence(timeout: 3) {
+                item.tap()
+            } else {
+                app.buttons["Draw with Finger"].firstMatch.tap()
+            }
+        } else {
+            app.buttons["tool.fingerDrawing"].firstMatch.tap()
+        }
+    }
+
+    private func fingerDrawingIsOff(_ app: XCUIApplication) -> Bool {
+        let more = app.buttons["tool.more"].firstMatch
+        if more.exists { return (more.value as? String)?.hasSuffix("Off") == true }
+        return app.buttons["tool.fingerDrawing"].firstMatch.value as? String == "Off"
+    }
+
     static func buttons(_ app: XCUIApplication) -> String {
         app.buttons.allElementsBoundByIndex.prefix(60).map { "\($0.identifier)|\($0.label)" }.joined(separator: ", ")
     }
@@ -132,16 +181,8 @@ final class LibraryUITests: XCTestCase {
 
     func testCreateNoteAndWriteTitle() throws {
         let app = launchSignedIn()
-        // One New button (D-38): the toolbar on iPad, the floating button on iPhone.
-        let newNote = app.buttons["library.newNote"].firstMatch
-        let floating = app.buttons["library.newNote.floating"].firstMatch
-        if !newNote.waitForExistence(timeout: 5), !floating.exists {
-            // Start from the sidebar.
-            app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch.tap()
-        }
-        let button = app.buttons["library.newNote"].exists ? app.buttons["library.newNote"].firstMatch
-            : app.buttons["library.newNote.floating"].firstMatch
-        XCTAssertTrue(button.waitForExistence(timeout: 5))
+        let button = newNoteButton(app)
+        XCTAssertTrue(button.exists, "new note button not found; buttons: \(Self.buttons(app))")
         button.tap()
 
         // Stand-in editor: a title field. Native editor (DSEditor): one text view with the title block.
@@ -165,48 +206,73 @@ final class LibraryUITests: XCTestCase {
     /// Native editor only (DSEditor): switching Text ↔ Pen repeatedly must not crash.
     func testSwitchingPenToolsInEditor() throws {
         let app = launchSignedIn()
-        let newNote = app.buttons["library.newNote"].exists ? app.buttons["library.newNote"].firstMatch
-            : app.buttons["library.newNote.floating"].firstMatch
-        if !newNote.waitForExistence(timeout: 5) {
-            app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch.tap()
-        }
-        let button = app.buttons["library.newNote"].exists ? app.buttons["library.newNote"].firstMatch
-            : app.buttons["library.newNote.floating"].firstMatch
-        XCTAssertTrue(button.waitForExistence(timeout: 5))
-        button.tap()
+        try openNewNoteInNativeEditor(app)
         let pen = app.buttons["tool.pen"].firstMatch
-        guard pen.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Stand-in editor: no pen palette")
-        }
         let text = app.buttons["tool.text"].firstMatch
         for _ in 0..<5 {
             pen.tap()
             text.tap()
         }
         app.buttons["tool.pencil"].firstMatch.tap()
-        app.buttons["tool.fingerDrawing"].firstMatch.tap()
+        toggleFingerDrawing(app)
         text.tap()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2))
-        XCTAssertTrue(text.exists)
+        XCTAssertTrue(text.waitForExistence(timeout: 2))
     }
 
     /// Finger drawing off (the iPad default): switching tools in the palette must not crash.
     func testPenPaletteWithoutFingerDrawing() throws {
         let app = launchSignedIn(["-ui-testing-no-finger"])
-        let floating = app.buttons["library.newNote.floating"].firstMatch
-        let newNote = app.buttons["library.newNote"].exists ? app.buttons["library.newNote"].firstMatch : floating
-        XCTAssertTrue(newNote.waitForExistence(timeout: 5), "new note button not found; buttons: \(Self.buttons(app))")
-        newNote.tap()
-        let pen = app.buttons["tool.pen"].firstMatch
-        guard pen.waitForExistence(timeout: 5) else {
-            throw XCTSkip("Stand-in editor: no pen palette")
-        }
-        XCTAssertEqual(app.buttons["tool.fingerDrawing"].firstMatch.value as? String, "Off")
+        try openNewNoteInNativeEditor(app)
+        XCTAssertTrue(fingerDrawingIsOff(app), "finger drawing should start off")
         for tool in ["tool.pen", "tool.marker", "tool.pencil", "tool.text", "tool.pen"] {
             app.buttons[tool].firstMatch.tap()
             XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone after tapping \(tool)")
         }
         XCTAssertTrue(app.buttons["tool.text"].firstMatch.waitForExistence(timeout: 2), "palette is gone")
+    }
+
+    /// Build 4 feedback: with the keyboard open, every palette button works on the first tap
+    /// and the palette does not jump (it moves only once, with the keyboard, when leaving text).
+    func testPaletteWorksWithKeyboardOpen() throws {
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        let textView = editor.textViews.firstMatch.exists ? editor.textViews.firstMatch : editor
+        textView.tap()
+        textView.typeText("Keyboard")
+        // A simulator with a hardware keyboard shows none; the palette checks still apply.
+        _ = app.keyboards.firstMatch.waitForExistence(timeout: 5)
+        let palette = app.descendants(matching: .any)["penPalette"].firstMatch
+        XCTAssertTrue(palette.waitForExistence(timeout: 3), "palette not found")
+
+        // Text again: nothing moves.
+        let before = palette.frame
+        let text = app.buttons["tool.text"].firstMatch
+        text.tap()
+        settle()
+        XCTAssertTrue(text.isSelected, "Text is not selected after one tap")
+        XCTAssertEqual(palette.frame.minY, before.minY, accuracy: 1, "palette moved on Text")
+
+        // Leaving text mode hides the keyboard once; after that the palette stays put.
+        let pen = app.buttons["tool.pen"].firstMatch
+        pen.tap()
+        settle(1.5)
+        XCTAssertTrue(pen.isSelected, "Pen is not selected after one tap")
+        let resting = palette.frame
+        for id in ["tool.pencil", "tool.marker", "tool.highlighter", "tool.strokeEraser", "tool.pen"] {
+            let button = app.buttons[id].firstMatch
+            XCTAssertTrue(button.isHittable, "\(id) is not hittable")
+            button.tap()
+            settle()
+            XCTAssertTrue(button.isSelected, "\(id) is not selected after one tap")
+            XCTAssertEqual(palette.frame.minY, resting.minY, accuracy: 1, "palette moved on \(id)")
+        }
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2))
+    }
+
+    private func settle(_ seconds: TimeInterval = 0.6) {
+        RunLoop.current.run(until: Date().addingTimeInterval(seconds))
     }
 
     func testCommandPaletteOpensTasks() throws {
@@ -296,6 +362,31 @@ final class AppearanceUITests: XCTestCase {
         if card.waitForExistence(timeout: 5) {
             card.tap()
             snapshot(app, "dark-document")
+        }
+    }
+
+    /// A note with a cover: the compact header scrolls with the text and the title starts
+    /// below it (build 4 feedback: the cover hid the title).
+    func testDocumentWithCover() throws {
+        let app = launch(["-ui-testing-cover"])
+        let card = app.descendants(matching: .any)["document.card"].firstMatch
+        if !card.waitForExistence(timeout: 10), app.navigationBars.buttons.firstMatch.exists {
+            app.navigationBars.buttons.firstMatch.tap()
+            app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch.tap()
+        }
+        XCTAssertTrue(card.waitForExistence(timeout: 5), "no document card; buttons: \(LibraryUITests.buttons(app))")
+        snapshot(app, "documents-with-cover")
+        card.tap()
+        RunLoop.current.run(until: Date().addingTimeInterval(2))
+        snapshot(app, "document-with-cover")
+        let window = app.windows.firstMatch.frame
+        let cover = app.descendants(matching: .any)["document.cover"].firstMatch
+        let meta = app.descendants(matching: .any)["document.meta"].firstMatch
+        if cover.exists {
+            XCTAssertLessThanOrEqual(cover.frame.height, window.height * 0.22, "cover is taller than a fifth of the screen")
+            if meta.exists {
+                XCTAssertGreaterThanOrEqual(meta.frame.minY, cover.frame.maxY - 1, "metadata is under the cover")
+            }
         }
     }
 

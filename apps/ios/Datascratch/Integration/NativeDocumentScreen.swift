@@ -14,6 +14,9 @@ final class NativeEditorModel {
     let notebookId: String
     /// Bumped on every editor change so toolbars refresh.
     var revision = 0
+    /// Cover and metadata scrolled with the text (`EditorView.headerView`).
+    let header = NativeHeaderState()
+    @ObservationIgnored private var headerHost: UIHostingController<AnyView>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private weak var app: AppModel?
 
@@ -42,6 +45,32 @@ final class NativeEditorModel {
         }
     }
 
+    /// Puts the cover and the note's place (notebook, folder, tags) above the first block,
+    /// so they scroll with the text and the title starts below the cover.
+    func installHeader(app: AppModel, scene: SceneModel) {
+        let editor = self.editor
+        let root = NativeDocumentHeader(state: header) { editor.headerLayoutDidChange() }
+            .environment(app)
+            .environment(scene)
+        let host = UIHostingController(rootView: AnyView(root))
+        host.sizingOptions = .intrinsicContentSize
+        host.view.backgroundColor = .clear
+        headerHost = host
+        editor.headerView = host.view
+    }
+
+    /// Switches the pen tool; leaving text mode hides the keyboard once, with its own animation.
+    func select(_ mode: PenMode) {
+        if mode != .text, editor.tools.mode == .text { editor.endEditing(true) }
+        // Change the tool on the next run-loop turn: switching it while the tap is still being
+        // delivered reconfigures gesture recognizers mid-event (crash).
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.editor.tools.mode = mode
+            self.revision &+= 1
+        }
+    }
+
     func apply(style: NoteStyle) {
         editor.setStyle(DocumentStyle(font: DocumentStyle.Font(rawValue: style.font.rawValue) ?? .serif,
                                       width: DocumentStyle.Width(rawValue: style.width.rawValue) ?? .normal,
@@ -67,22 +96,25 @@ struct NativeDocumentScreen: View {
     var body: some View {
         Group {
             if let model, let note = app.library.note(noteId) {
-                ZStack(alignment: .bottom) {
-                    DocumentBackground(note: note)
-                    VStack(spacing: 0) {
-                        // Compact header above the text (the editor has no scrolling header yet).
-                        if CoverHeader.hasCover(note) {
-                            CoverHeader(note: note)
-                                .contextMenu { CoverMenuItems(note: note) }
-                        }
+                GeometryReader { proxy in
+                    ZStack {
+                        DocumentBackground(note: note)
                         NativeEditorRepresentable(editor: model.editor)
                             .ignoresSafeArea(.container, edges: .bottom)
                             .accessibilityIdentifier("editor")
                     }
-                    PenPalette(model: model)
-                        .padding(.bottom, Theme.Space.s3)
+                    // The palette sits in the bottom safe area: the text scrolls clear of it, and it
+                    // rides up with the keyboard in one animation (no second layout pass).
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        PenPalette(model: model)
+                            .padding(.top, Theme.Space.s2)
+                            .padding(.bottom, Theme.Space.s3)
+                    }
+                    .onAppear { model.header.containerHeight = proxy.size.height }
+                    .onChange(of: proxy.size.height) { _, height in model.header.containerHeight = height }
                 }
                 .onChange(of: note.style, initial: true) { _, style in model.apply(style: style) }
+                .onChange(of: note, initial: true) { _, note in model.header.note = note }
                 .onChange(of: app.settings.fingerDrawing) { _, _ in
                     model.editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
                 }
@@ -108,7 +140,9 @@ struct NativeDocumentScreen: View {
             return
         }
         do {
-            model = try NativeEditorModel(app: app, core: core, noteId: noteId, notebookId: note.notebookId)
+            let model = try NativeEditorModel(app: app, core: core, noteId: noteId, notebookId: note.notebookId)
+            model.installHeader(app: app, scene: scene)
+            self.model = model
         } catch {
             failed = true
         }
@@ -192,78 +226,218 @@ struct NativeEditorToolbar: ToolbarContent {
 
 /// Floating glass palette: text / pen / pencil / marker / highlighter / erasers / lasso,
 /// ink colours and the finger-drawing switch (D-06).
+/// What the scrolling header shows.
+@Observable
+final class NativeHeaderState {
+    var note: NoteMeta?
+    /// Height of the document area: the cover takes at most a fifth of it (spec/12 §12.7).
+    var containerHeight: CGFloat = 800
+}
+
+/// Cover, then notebook › folder and tags, above the first block of the native editor.
+struct NativeDocumentHeader: View {
+    @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
+    let state: NativeHeaderState
+    let onResize: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s3) {
+            if let note = state.note {
+                if CoverHeader.hasCover(note) {
+                    CoverHeader(note: note, height: CoverHeader.height(for: state.containerHeight))
+                        .contextMenu { CoverMenuItems(note: note) }
+                }
+                meta(note)
+                    .frame(maxWidth: Theme.columnWidth(note.style.width), alignment: .leading)
+                    .padding(.horizontal, Theme.Space.s5)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, CoverHeader.hasCover(note) ? 0 : Theme.Space.s3)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in onResize() }
+        .onChange(of: state.note.map(CoverHeader.hasCover)) { onResize() }
+    }
+
+    private func meta(_ note: NoteMeta) -> some View {
+        let library = app.library
+        return HStack(spacing: Theme.Space.s2) {
+            if let notebook = library.notebook(note.notebookId) {
+                Label(notebook.name, systemImage: notebook.icon)
+            }
+            if let folder = note.folderId.flatMap({ library.folder($0) }) {
+                Image(systemName: "chevron.right").font(.caption2)
+                Text(folder.name)
+            }
+            ForEach(note.tags, id: \.self) { tag in
+                Button("#" + tag) { scene.show(.tag(tag)) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle((library.data.tagColors[tag] ?? .gray).foreground)
+            }
+        }
+        .font(Theme.Typography.footnote)
+        .foregroundStyle(Theme.Palette.textTertiary)
+        .lineLimit(1)
+        .accessibilityIdentifier("document.meta")
+    }
+}
+
 struct PenPalette: View {
     @Environment(AppModel.self) private var app
     let model: NativeEditorModel
-    private let modes: [PenMode] = [.text, .pen, .pencil, .marker, .highlighter, .pixelEraser, .strokeEraser, .lasso]
+    /// iPhone: the main tools in one row of 44 pt targets, the rest in «More» (colours, lasso,
+    /// pixel eraser, finger drawing). iPad: everything inline.
+    private var isCompact: Bool { UIDevice.current.userInterfaceIdiom == .phone }
+    private var modes: [PenMode] {
+        isCompact ? [.text, .pen, .pencil, .marker, .highlighter, .strokeEraser]
+            : [.text, .pen, .pencil, .marker, .highlighter, .pixelEraser, .strokeEraser, .lasso]
+    }
     private let inks = ["ink.black", "ink.blue", "ink.red", "ink.green", "ink.purple", "ink.brown"]
+    private static let target: CGFloat = 44
 
     var body: some View {
         let _ = model.revision
         let tools = model.editor.tools
-        HStack(spacing: Theme.Space.s1) {
+        HStack(spacing: 0) {
             ForEach(modes, id: \.self) { mode in
                 Button {
-                    // Change the tool on the next run-loop turn: switching it while the tap is
-                    // still being delivered reconfigures gesture recognizers mid-event (crash).
-                    DispatchQueue.main.async {
-                        tools.mode = mode
-                        model.revision &+= 1
-                    }
+                    model.select(mode)
                     Haptics.selection()
                 } label: {
                     Image(systemName: mode.symbolName)
                         .font(.system(size: 17, weight: .medium))
-                        .frame(width: 38, height: 38)
+                        .frame(width: 36, height: 36)
                         .foregroundStyle(tools.mode == mode ? Theme.Palette.onAccent : Theme.Palette.textPrimary)
                         .background(tools.mode == mode ? Theme.Palette.accent : .clear, in: Circle())
+                        .frame(width: Self.target, height: Self.target)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(mode.title)
+                .accessibilityAddTraits(tools.mode == mode ? .isSelected : [])
                 .accessibilityIdentifier("tool.\(mode.rawValue)")
             }
-            if tools.mode.inkTool != nil {
-                Divider().frame(height: 24)
-                ForEach(inks, id: \.self) { token in
-                    Button {
-                        tools.setColor(token)
-                        model.revision &+= 1
-                    } label: {
-                        Circle()
-                            .fill(Self.color(token))
-                            .frame(width: 22, height: 22)
-                            .overlay {
-                                if tools.currentPaint?.color == token {
-                                    Circle().strokeBorder(Theme.Palette.surface, lineWidth: 2).padding(2)
-                                }
-                            }
+            if isCompact {
+                more(tools)
+            } else {
+                if tools.mode.inkTool != nil {
+                    Divider().frame(height: 24).padding(.horizontal, Theme.Space.s1)
+                    ForEach(inks, id: \.self) { token in
+                        Button {
+                            tools.setColor(token)
+                            model.revision &+= 1
+                        } label: {
+                            swatch(token, isOn: tools.currentPaint?.color == token)
+                                .frame(width: Self.target, height: Self.target)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(token)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(token)
                 }
-            }
-            Divider().frame(height: 24)
-            Button {
-                DispatchQueue.main.async {
-                    tools.allowsFingerDrawing.toggle()
-                    model.revision &+= 1
+                Divider().frame(height: 24).padding(.horizontal, Theme.Space.s1)
+                Button {
+                    DispatchQueue.main.async {
+                        tools.allowsFingerDrawing.toggle()
+                        model.revision &+= 1
+                    }
+                } label: {
+                    Image(systemName: tools.allowsFingerDrawing ? "hand.draw.fill" : "hand.draw")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(tools.allowsFingerDrawing ? Theme.Palette.accent : Theme.Palette.textSecondary)
+                        .frame(width: Self.target, height: Self.target)
+                        .contentShape(Rectangle())
                 }
-            } label: {
-                Image(systemName: tools.allowsFingerDrawing ? "hand.draw.fill" : "hand.draw")
-                    .font(.system(size: 17, weight: .medium))
-                    .frame(width: 38, height: 38)
-                    .foregroundStyle(tools.allowsFingerDrawing ? Theme.Palette.accent : Theme.Palette.textSecondary)
+                .buttonStyle(.plain)
+                .accessibilityLabel("Draw with Finger")
+                .accessibilityValue(tools.allowsFingerDrawing ? Text("On") : Text("Off"))
+                .accessibilityIdentifier("tool.fingerDrawing")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Draw with Finger")
-            .accessibilityValue(tools.allowsFingerDrawing ? Text("On") : Text("Off"))
-            .accessibilityIdentifier("tool.fingerDrawing")
         }
-        .padding(.horizontal, Theme.Space.s2)
-        .padding(.vertical, Theme.Space.s1)
+        .padding(.horizontal, Theme.Space.s1)
+        // The whole capsule takes the touches: none fall through the gaps into the editor
+        // (where a finger would draw or scroll).
+        .contentShape(Capsule())
+        .onTapGesture {}
         .glassEffect(.regular, in: .capsule)
         .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
         .padding(.horizontal, Theme.Space.s3)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("penPalette")
+    }
+
+    /// iPhone «More»: colours of the current ink tool, lasso, pixel eraser, finger drawing.
+    private func more(_ tools: InkToolState) -> some View {
+        Menu {
+            if tools.mode.inkTool != nil {
+                Section("Color") {
+                    ForEach(inks, id: \.self) { token in
+                        Button {
+                            tools.setColor(token)
+                            model.revision &+= 1
+                        } label: {
+                            if tools.currentPaint?.color == token {
+                                Label(Self.colorName(token), systemImage: "checkmark")
+                            } else {
+                                Text(Self.colorName(token))
+                            }
+                        }
+                    }
+                }
+            }
+            Section {
+                Button(PenMode.lasso.title, systemImage: PenMode.lasso.symbolName) { model.select(.lasso) }
+                Button(PenMode.pixelEraser.title, systemImage: PenMode.pixelEraser.symbolName) { model.select(.pixelEraser) }
+            }
+            Section {
+                Toggle(isOn: Binding(get: { tools.allowsFingerDrawing }, set: { value in
+                    DispatchQueue.main.async {
+                        tools.allowsFingerDrawing = value
+                        model.revision &+= 1
+                    }
+                })) {
+                    Label("Draw with Finger", systemImage: "hand.draw")
+                }
+                .accessibilityIdentifier("tool.fingerDrawing")
+            }
+        } label: {
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                if tools.mode.inkTool != nil, let token = tools.currentPaint?.color {
+                    Circle().fill(Self.color(token)).frame(width: 9, height: 9)
+                        .overlay { Circle().strokeBorder(Theme.Palette.surface, lineWidth: 1.5) }
+                        .offset(x: 6, y: 6)
+                }
+            }
+            .frame(width: Self.target, height: Self.target)
+            .contentShape(Rectangle())
+        }
+        .accessibilityLabel("More Pen Options")
+        .accessibilityValue(tools.allowsFingerDrawing ? Text("Draw with Finger: On") : Text("Draw with Finger: Off"))
+        .accessibilityIdentifier("tool.more")
+    }
+
+    private func swatch(_ token: String, isOn: Bool) -> some View {
+        Circle()
+            .fill(Self.color(token))
+            .frame(width: 22, height: 22)
+            .overlay {
+                if isOn { Circle().strokeBorder(Theme.Palette.surface, lineWidth: 2).padding(2) }
+            }
+    }
+
+    private static func colorName(_ token: String) -> LocalizedStringKey {
+        switch token {
+        case "ink.blue": "Blue"
+        case "ink.red": "Red"
+        case "ink.green": "Green"
+        case "ink.purple": "Purple"
+        case "ink.brown": "Brown"
+        default: "Black"
+        }
     }
 
     private static func color(_ token: String) -> Color {

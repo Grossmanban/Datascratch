@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(DSDesign)
+import DSDesign
+#endif
 
 /// Grid of cover cards (Craft-style) or a compact list, for any sidebar source.
 struct DocumentCollectionView: View {
@@ -64,6 +67,7 @@ struct DocumentCollectionView: View {
         .searchable(text: $scene.searchText, prompt: Text("Search documents"))
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
+                ContentFullScreenButton()
                 Menu {
                     Picker("Layout", selection: $settings.libraryLayout) {
                         Label("Cards", systemImage: "square.grid.2x2").tag(AppSettings.LibraryLayout.grid)
@@ -184,6 +188,43 @@ struct DocumentCard: View {
     var isSelected = false
 
     var body: some View {
+        #if canImport(DSDesign)
+        designSystemCard
+        #else
+        standInCard
+        #endif
+    }
+
+    #if canImport(DSDesign)
+    /// `DSDocCard`: without a cover a compact card (emoji tile, serif title); with one, the
+    /// thumbnail (spec/12 §12.7). A build-1 gradient cover still shows as its backdrop.
+    private var designSystemCard: some View {
+        let _ = app.covers.revision
+        let thumbId = note.coverThumb ?? note.coverImage?.attachmentId
+        let image = thumbId.flatMap { app.covers.image($0, noteId: note.id) }.map { Image(uiImage: $0) }
+        var detail = note.updatedAt.formatted(.relative(presentation: .named))
+        if let notebook = app.library.notebook(note.notebookId) { detail += " · " + notebook.name }
+        return DSDocCard(title: note.title.isEmpty ? String(localized: "Untitled") : note.title,
+                         subtitle: note.snippet.isEmpty ? String(localized: "No text") : note.snippet,
+                         detail: detail,
+                         icon: note.icon,
+                         cover: image,
+                         coverOffsetY: note.coverImage?.offsetY ?? 0.5,
+                         backdrop: image == nil ? note.cover.flatMap { DSBackdropToken(rawValue: $0.rawValue) } : nil)
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous)
+                        .strokeBorder(Theme.Palette.accent.opacity(0.6), lineWidth: 1.5)
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.lg))
+            .draggable(note.id)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("document.card")
+    }
+    #endif
+
+    private var standInCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             // With a cover: its thumbnail makes the document recognisable (spec/12 §12.7).
             // Without one: no band at all — a compact card, the emoji on top.
@@ -258,16 +299,21 @@ struct DocumentRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Space.s3) {
-            RoundedRectangle(cornerRadius: Theme.Radius.sm)
-                .fill(note.cover.map { AnyShapeStyle($0.gradient) } ?? AnyShapeStyle(Theme.Palette.sidebar))
-                .overlay {
-                    if let thumb = note.coverThumb ?? note.coverImage?.attachmentId {
-                        CoverImageView(noteId: note.id, attachmentId: thumb, offsetY: note.coverImage?.offsetY ?? 0.5)
+            // A thumbnail only for a cover the user chose (spec/12 §12.7); otherwise just the emoji.
+            if CoverHeader.hasCover(note) {
+                RoundedRectangle(cornerRadius: Theme.Radius.sm)
+                    .fill(note.cover.map { AnyShapeStyle($0.gradient) } ?? AnyShapeStyle(Theme.Palette.sidebar))
+                    .overlay {
+                        if let thumb = note.coverThumb ?? note.coverImage?.attachmentId {
+                            CoverImageView(noteId: note.id, attachmentId: thumb, offsetY: note.coverImage?.offsetY ?? 0.5)
+                        }
                     }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
-                .frame(width: 40, height: 40)
-                .overlay { if let icon = note.icon { Text(icon) } }
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+                    .frame(width: 40, height: 40)
+                    .overlay { if let icon = note.icon { Text(icon) } }
+            } else if let icon = note.icon {
+                Text(icon).font(.system(size: 22)).frame(width: 32)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(note.title.isEmpty ? String(localized: "Untitled") : note.title)
                     .font(.headline)

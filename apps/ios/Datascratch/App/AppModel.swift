@@ -70,6 +70,8 @@ final class AppModel {
     var isSigningUp = false
     /// A route that arrived before the main UI could show it.
     var pendingRoute: AppRoute?
+    /// Main (library) windows on screen; a note window that closes itself reopens one when none is.
+    @ObservationIgnored var mainWindowCount = 0
 
     init(options: LaunchOptions = .fromProcess(), bundle: Bundle = .main) {
         let coreLibrary: AnyObject?

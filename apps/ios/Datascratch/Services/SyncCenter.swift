@@ -13,6 +13,8 @@ final class SyncCenter {
         case syncing
         case upToDate(Date)
         case failed(String)
+        /// Idle, but changes of `documents` documents could not be delivered.
+        case notSent(documents: Int, reason: String)
     }
 
     private(set) var isOnline = true
@@ -54,6 +56,34 @@ final class SyncCenter {
         }
     }
 
+    /// Summary reported by the sync engine (`SyncStatus.summary`).
+    func apply(summary: Summary, pending: Int) {
+        pendingChanges = pending
+        switch summary {
+        case .offline: phase = .offline(pending: pending)
+        case .syncing: phase = .syncing
+        case .synced:
+            if case .upToDate = phase { break }
+            phase = .upToDate(Date())
+        case .failed(let documents, let reason): phase = .notSent(documents: documents, reason: reason)
+        }
+    }
+
+    /// Mirror of DSCore's `SyncStatus.Summary`, so the UI does not depend on DSCore.
+    enum Summary: Equatable {
+        case offline, syncing, synced
+        case failed(documents: Int, reason: String)
+    }
+
+    /// Sends the undelivered changes again (`SyncEngine.retryFailed`).
+    @ObservationIgnored var onRetry: (() -> Void)?
+
+    func retryFailed() {
+        guard case .notSent = phase else { return }
+        phase = .syncing
+        onRetry?()
+    }
+
     /// Called when connectivity returns (the sync engine reconnects at once).
     @ObservationIgnored var onBackOnline: (() -> Void)?
 
@@ -79,6 +109,8 @@ final class SyncCenter {
             phase = .syncing
         } else if case .upToDate = phase {
             // keep the timestamp
+        } else if case .notSent = phase {
+            // only the engine clears it
         } else {
             phase = .upToDate(Date())
         }

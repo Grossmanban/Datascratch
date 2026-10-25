@@ -9,6 +9,8 @@ protocol CoreLibraryRemote: AnyObject {
     func notebookCreated(id: String, mode: NotebookMode, wrappedKey: Data, key: Data)
     func notebookModeChanged(id: String, mode: NotebookMode, key: Data?)
     func notebookDeleted(id: String)
+    /// A document was deleted locally; the sync engine forgets it and stops sending it.
+    func documentDeleted(_ docId: String)
     /// A document was opened; from now on the sync engine persists and sends its updates.
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?)
 }
@@ -208,19 +210,66 @@ final class CoreLibrary: LibraryBackend {
     }
 
     /// Switches to the account document of a server account (after sign-in / sign-up).
-    func adoptAccount(docId: String, isNew: Bool) throws {
-        guard docId != account.accountDocId else { return }
-        notebookDocs.removeAll()
-        noteDocs.removeAll()
-        subscriptions.removeAll()
-        remoteSubscriptions.removeAll()
-        account = AccountDocument(try Self.open(.account, docId: docId, notebookId: nil, store: store))
-        attach(account.crdt, notebookId: nil)
-        if isNew, account.crdt.stateVector().count <= 1 { try account.initialize() }
-        try store.setString(docId, for: Self.accountDocKey)
+    /// A notebook made on this device before signing in: its key wrapped by the account's master
+    /// key, for `POST /notebooks` before its documents are registered (crypto.md §3).
+    nonisolated struct CarriedNotebook: Sendable {
+        var id: String
+        var mode: DSCore.NotebookMode
+        var wrappedKey: Data
+        var key: Data
+    }
+
+    /// Switches to the signed-in account's document and carries in the library made on this
+    /// device before signing in (`carryDeviceLibraries`). Returns the notebooks to create on the
+    /// server before their documents are registered.
+    @discardableResult
+    func adoptAccount(docId: String, isNew: Bool) throws -> [CarriedNotebook] {
+        if docId != account.accountDocId {
+            notebookDocs.removeAll()
+            noteDocs.removeAll()
+            subscriptions.removeAll()
+            remoteSubscriptions.removeAll()
+            account = AccountDocument(try Self.open(.account, docId: docId, notebookId: nil, store: store))
+            attach(account.crdt, notebookId: nil)
+            if isNew, account.crdt.stateVector().count <= 1 { try account.initialize() }
+            try store.setString(docId, for: Self.accountDocKey)
+        }
+        let carried = try carryDeviceLibraries()
         remote?.documentOpened(account.crdt, notebookId: nil)
         for ref in account.notebooks() { _ = try? notebookDocument(ref.id) }
         onExternalChange?(loadSnapshot())
+        return carried
+    }
+
+    /// Account documents of this device that never reached the server (the «On this device»
+    /// library, also one left behind by an earlier sign-in): their spaces, notebooks, starred and
+    /// daily notebook move into the current account so nothing vanishes; the notebooks' keys are
+    /// re-wrapped by the account's master key. Merges by id, so running it again is harmless.
+    /// The device-only account documents are removed afterwards (they never go to the server).
+    func carryDeviceLibraries() throws -> [CarriedNotebook] {
+        let orphans = try store.documents(kind: .account).filter { !$0.registered && $0.docId != account.accountDocId }
+        guard !orphans.isEmpty else { return [] }
+        let master = try keys.masterKey()
+        var carried: [CarriedNotebook] = []
+        for record in orphans {
+            let local = AccountDocument(try Self.open(.account, docId: record.docId, notebookId: nil, store: store))
+            let haveSpaces = Set(account.spaces().map(\.id))
+            for space in local.spaces() where !haveSpaces.contains(space.id) { try account.putSpace(space) }
+            let haveNotebooks = Set(account.notebooks().map(\.id))
+            for ref in local.notebooks() where !haveNotebooks.contains(ref.id) {
+                try account.putNotebook(ref)
+                guard let master, let key = try keys.notebookKey(ref.id) else { continue }
+                let wrapped = try DSCrypto.wrapKey(key, with: master, ad: CryptoAD.notebookKey(ref.id))
+                carried.append(CarriedNotebook(id: ref.id, mode: ref.mode, wrappedKey: wrapped, key: key))
+            }
+            let haveStarred = Set(account.starred())
+            for item in local.starred() where !haveStarred.contains(item) { try account.star(item) }
+            if account.dailyNotebookId == nil, let daily = local.dailyNotebookId {
+                try account.setSetting("dailyNotebookId", .string(value: daily))
+            }
+            try store.deleteDocument(record.docId)
+        }
+        return carried
     }
 
     /// The key a share link carries: the note key or the notebook key (crypto.md §7).
@@ -364,10 +413,12 @@ final class CoreLibrary: LibraryBackend {
                 noteDocs[note.id] = nil
                 subscriptions[note.id] = nil
                 try store.deleteDocument(note.id)
+                remote?.documentDeleted(note.id)
             }
             notebookDocs[notebook.id] = nil
             subscriptions[notebook.id] = nil
             try store.deleteDocument(notebook.id)
+            remote?.documentDeleted(notebook.id)
         }
     }
 
@@ -435,6 +486,7 @@ final class CoreLibrary: LibraryBackend {
             noteDocs[meta.id] = nil
             subscriptions[meta.id] = nil
             try store.deleteDocument(meta.id)
+            remote?.documentDeleted(meta.id)
         }
     }
 

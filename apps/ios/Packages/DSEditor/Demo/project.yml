@@ -17,6 +17,10 @@ targets:
     type: application
     platform: iOS
     sources: [Sources]
+    info:
+      path: Generated/Info.plist
+      properties:
+        CADisableMinimumFrameDurationOnPhone: true
     dependencies:
       - package: DSEditor
         product: DSEditor

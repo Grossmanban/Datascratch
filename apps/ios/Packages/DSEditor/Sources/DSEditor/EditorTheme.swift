@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import DSDesign
 import DSEditorModel
 import UIKit
 
@@ -10,58 +11,48 @@ public struct EditorTheme: Sendable {
 
     public init(style: DocumentStyle = DocumentStyle()) { self.style = style }
 
-    // MARK: Colors
+    // MARK: Colors (design tokens "Quiet paper" from DSDesign, D-38)
 
     static func dynamic(_ light: UInt32, _ dark: UInt32) -> UIColor {
         UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light) }
     }
 
-    public static let paper = dynamic(0xFBF8F3, 0x1E1C1A)
-    public static let paperPattern = dynamic(0xE6DFD3, 0x34312D)
-    public static let text = dynamic(0x1F1D1A, 0xECE7DF)
-    public static let secondaryText = dynamic(0x6F685E, 0xA49D92)
-    public static let accent = dynamic(0x2F5D8A, 0x8DB4DD)
-    public static let quoteBar = dynamic(0xCFC5B5, 0x5A544C)
-    public static let codeBackground = dynamic(0xF2EDE4, 0x2A2724)
-    public static let chipBackground = dynamic(0xECE5D8, 0x37332E)
-    public static let agentEdit = dynamic(0xE8F0E0, 0x2E3A2A)
-    public static let selectionTint = dynamic(0x2F5D8A, 0x8DB4DD)
+    public static let paper = DSColorToken.bgCanvas.value.uiColor
+    public static let paperPattern = DSColorToken.lineSeparator.value.uiColor
+    public static let text = DSColorToken.textPrimary.value.uiColor
+    public static let secondaryText = DSColorToken.textSecondary.value.uiColor
+    public static let accent = DSColorToken.accent.value.uiColor
+    public static let quoteBar = DSColorToken.lineSeparator.value.uiColor
+    public static let codeBackground = DSTintToken.gray.value.bg.uiColor
+    public static let chipBackground = DSTintToken.gray.value.bg.uiColor
+    public static let agentEdit = DSTintToken.green.value.bg.uiColor
+    public static let selectionTint = DSColorToken.accent.value.uiColor
 
     public static func callout(_ tone: String) -> UIColor {
         switch tone {
-        case "info": dynamic(0xE7EFF7, 0x23303C)
-        case "success": dynamic(0xE7F2E6, 0x243325)
-        case "warning": dynamic(0xFAF0DA, 0x3A3222)
-        case "danger": dynamic(0xF8E3E0, 0x3C2624)
-        default: dynamic(0xF1ECE3, 0x2C2926)
+        case "info": DSTintToken.blue.value.bg.uiColor
+        case "success": DSTintToken.green.value.bg.uiColor
+        case "warning": DSTintToken.yellow.value.bg.uiColor
+        case "danger": DSTintToken.red.value.bg.uiColor
+        default: DSTintToken.gray.value.bg.uiColor
         }
     }
 
-    /// Ink and highlight color tokens (`strokes.md` §2: token or `#RRGGBB`).
+    /// Ink and highlight color tokens (`strokes.md` §2: token or `#RRGGBB`; `design-tokens.md`).
     public static func color(token: String) -> UIColor {
         if token.hasPrefix("#"), let v = UInt32(token.dropFirst(), radix: 16) { return UIColor(hex: v) }
-        switch token {
-        case "ink.black": return dynamic(0x1F1D1A, 0xECE7DF)
-        case "ink.blue": return dynamic(0x2F5D8A, 0x7FA9D6)
-        case "ink.red": return dynamic(0xB0413E, 0xE07B76)
-        case "ink.green": return dynamic(0x3E7A4F, 0x7DBB8C)
-        case "ink.purple": return dynamic(0x6B4C9A, 0xA98BD6)
-        case "ink.brown": return dynamic(0x7A5A3A, 0xC09A72)
-        case "highlight.yellow": return UIColor(hex: 0xF7D774)
-        case "highlight.green": return UIColor(hex: 0xA8DCA0)
-        case "highlight.blue": return UIColor(hex: 0x9CC8EE)
-        case "highlight.pink": return UIColor(hex: 0xF2A7C3)
-        case "highlight.orange": return UIColor(hex: 0xF5B97A)
-        case "text.red": return dynamic(0xB0413E, 0xE07B76)
-        case "text.blue": return dynamic(0x2F5D8A, 0x7FA9D6)
-        case "text.green": return dynamic(0x3E7A4F, 0x7DBB8C)
-        case "text.gray": return dynamic(0x6F685E, 0xA49D92)
+        let parts = token.split(separator: ".", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return text }
+        switch parts[0] {
+        case "ink": return DSInkToken(rawValue: parts[1])?.value.uiColor ?? text
+        case "highlight": return DSHighlightToken(rawValue: parts[1])?.value.uiColor ?? DSHighlightToken.yellow.value.uiColor
+        case "text", "tint": return DSTintToken(rawValue: parts[1])?.value.fg.uiColor ?? text
         default: return text
         }
     }
 
-    public static let inkTokens = ["ink.black", "ink.blue", "ink.red", "ink.green", "ink.purple", "ink.brown"]
-    public static let highlightTokens = ["highlight.yellow", "highlight.green", "highlight.blue", "highlight.pink", "highlight.orange"]
+    public static let inkTokens = DSInkToken.allCases.map { "ink." + $0.rawValue }
+    public static let highlightTokens = DSHighlightToken.allCases.map { "highlight." + $0.rawValue }
 
     // MARK: Layout
 

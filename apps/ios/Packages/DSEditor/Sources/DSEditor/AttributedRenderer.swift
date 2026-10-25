@@ -210,7 +210,7 @@ struct AttributedRenderer {
         }
         if let hl = marks[MarkName.highlight] {
             let token = hl.objectValue?["color"]?.stringValue ?? "highlight.yellow"
-            a[.backgroundColor] = EditorTheme.color(token: token).withAlphaComponent(0.55)
+            a[.backgroundColor] = EditorTheme.color(token: token)
         }
         if let tc = marks[MarkName.textColor]?.objectValue?["color"]?.stringValue {
             a[.foregroundColor] = EditorTheme.color(token: tc)

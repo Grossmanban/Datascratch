@@ -5,11 +5,13 @@ on:
     branches: [main, claude/ios-editor]
     paths:
       - "apps/ios/Packages/DSEditor/**"
+      - "apps/ios/Packages/DSDesign/**"
       - "packages/test-vectors/**"
       - ".github/workflows/ios-editor.yml"
   pull_request:
     paths:
       - "apps/ios/Packages/DSEditor/**"
+      - "apps/ios/Packages/DSDesign/**"
       - "packages/test-vectors/**"
       - ".github/workflows/ios-editor.yml"
   workflow_dispatch:

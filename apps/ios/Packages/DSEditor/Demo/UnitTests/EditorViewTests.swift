@@ -170,6 +170,20 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(doc.blocks.count, 2)
     }
 
+    func testPenRequestsProMotionOnlyWhileDrawing() {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello")]))
+        editor.tools.mode = .pen
+        XCTAssertFalse(editor.ink.frameRate.isActive, "idle editor does not hold 120 Hz")
+        let sample = PenSample(location: CGPoint(x: 40, y: 80), pressure: 0.5, altitude: 1, azimuth: 0, roll: 0,
+                               timestamp: CACurrentMediaTime(), estimationIndex: nil)
+        editor.ink.penBegan(sample)
+        XCTAssertTrue(editor.ink.frameRate.isActive)
+        XCTAssertEqual(FrameRateBoost.drawingRange.preferred, 120)
+        XCTAssertEqual(FrameRateBoost.drawingRange.minimum, 80)
+        editor.ink.penEnded(cancelled: true)
+        XCTAssertFalse(editor.ink.frameRate.isActive)
+    }
+
     func testOpenLargeNote() {
         let doc = SampleDocument.large()
         let start = CACurrentMediaTime()

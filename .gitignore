@@ -1,0 +1,30 @@
+# OS / editors
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Node / TS
+node_modules/
+dist/
+build/
+.turbo/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+
+# Xcode / Swift
+DerivedData/
+xcuserdata/
+*.xcuserstate
+.build/
+.swiftpm/
+
+# Graphify: machine-specific paths and transient build files
+graphify-out/.graphify_python
+graphify-out/.graphify_root
+graphify-out/.graphify_*.json
+graphify-out/.graphify_*.txt
+graphify-out/.needs_update

@@ -1,0 +1,6 @@
+# Graph reflects only the current state of the project (D-29).
+# History is an archive: superseded wording there would mislead the graph.
+docs/history/
+docs/decisions/0000-template.md
+.claude/
+graphify-out/

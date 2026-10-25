@@ -73,6 +73,7 @@ final class AppModel {
             secureStore = SecureStore(inMemory: true)
             settings = AppSettings(defaults: UserDefaults(suiteName: "ui-testing-\(UUID().uuidString)") ?? .standard)
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-dark") { settings.appearance = .dark }
+            if ProcessInfo.processInfo.arguments.contains("-ui-testing-no-finger") { settings.fingerDrawing = false }
             let made = Self.makeLibrary(inMemory: true)
             library = made.0
             coreLibrary = made.1

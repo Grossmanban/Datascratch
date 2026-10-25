@@ -91,11 +91,22 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(button.waitForExistence(timeout: 5))
         button.tap()
 
+        // Stand-in editor: a title field. Native editor (DSEditor): one text view with the title block.
         let title = app.descendants(matching: .any)["document.title"].firstMatch
-        XCTAssertTrue(title.waitForExistence(timeout: 5))
-        title.tap()
-        title.typeText("Pencil test")
-        XCTAssertEqual(title.value as? String, "Pencil test")
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 5) || editor.waitForExistence(timeout: 5),
+                      "neither the title field nor the editor appeared")
+        if title.exists {
+            title.tap()
+            title.typeText("Pencil test")
+            XCTAssertEqual(title.value as? String, "Pencil test")
+        } else {
+            let textView = editor.textViews.firstMatch.exists ? editor.textViews.firstMatch : editor
+            textView.tap()
+            textView.typeText("Pencil test")
+            XCTAssertTrue(app.staticTexts["Pencil test"].firstMatch.waitForExistence(timeout: 5)
+                          || (textView.value as? String)?.contains("Pencil test") == true)
+        }
     }
 
     func testCommandPaletteOpensTasks() throws {

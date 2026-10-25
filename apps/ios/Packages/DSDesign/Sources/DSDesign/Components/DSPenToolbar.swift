@@ -1,8 +1,11 @@
 import SwiftUI
 
-/// Pen tools of the handwriting layer.
+/// Pen tools: the stroke tools of `contracts/strokes.md` plus eraser and lasso.
+/// Text mode (the Pencil types and selects) is `DSPenSelection.tool == nil`.
 public enum DSPenTool: String, CaseIterable, Sendable, Hashable {
     case pen
+    case pencil
+    case marker
     case highlighter
     case eraser
     case lasso
@@ -10,77 +13,167 @@ public enum DSPenTool: String, CaseIterable, Sendable, Hashable {
     public var systemImage: String {
         switch self {
         case .pen: "pencil.tip"
+        case .pencil: "pencil"
+        case .marker: "paintbrush.pointed"
         case .highlighter: "highlighter"
         case .eraser: "eraser"
         case .lasso: "lasso"
         }
     }
 
-    public var title: String {
-        let ru = DSLanguage.current == .ru
+    public func title(_ language: DSLanguage = .current) -> String {
+        let ru = language == .ru
         switch self {
-        case .pen: return ru ? "Перо" : "Pen"
-        case .highlighter: return ru ? "Маркер" : "Highlighter"
+        case .pen: return ru ? "Ручка" : "Pen"
+        case .pencil: return ru ? "Карандаш" : "Pencil"
+        case .marker: return ru ? "Маркер" : "Marker"
+        case .highlighter: return ru ? "Текстовыделитель" : "Highlighter"
         case .eraser: return ru ? "Ластик" : "Eraser"
         case .lasso: return ru ? "Лассо" : "Lasso"
         }
     }
 
-    /// Whether the tool draws with a colour (pen / highlighter).
-    public var hasColor: Bool { self == .pen || self == .highlighter }
+    /// Whether the tool draws with a colour.
+    public var hasColor: Bool {
+        switch self {
+        case .pen, .pencil, .marker, .highlighter: true
+        case .eraser, .lasso: false
+        }
+    }
+
+    /// Ink tools take `ink.*`, the highlighter takes `highlight.*`.
+    public var usesInk: Bool { hasColor && self != .highlighter }
 }
 
-/// Stroke width presets.
+/// Stroke colour: an ink for pen / pencil / marker, a highlight for the highlighter.
+public enum DSPenColor: Hashable, Sendable {
+    case ink(DSInkToken)
+    case highlight(DSHighlightToken)
+
+    public var pair: DSColorPair {
+        switch self {
+        case let .ink(token): token.value
+        case let .highlight(token): token.value
+        }
+    }
+
+    public var color: Color { pair.color }
+
+    public var name: String {
+        switch self {
+        case let .ink(token): token.rawValue
+        case let .highlight(token): token.rawValue
+        }
+    }
+}
+
+/// Width step. The editor owns the base width of each tool and multiplies it
+/// (same steps as the web `PenToolbar`: 1 / 2 / 3).
 public enum DSPenWidth: String, CaseIterable, Sendable, Hashable {
     case fine
     case medium
     case bold
 
-    /// Nominal stroke width in points for a tool (pressure modulates around it).
-    public func points(for tool: DSPenTool) -> CGFloat {
-        switch (tool, self) {
-        case (.highlighter, .fine): 10
-        case (.highlighter, .medium): 16
-        case (.highlighter, .bold): 24
-        case (.eraser, .fine): 8
-        case (.eraser, .medium): 16
-        case (.eraser, .bold): 32
-        case (_, .fine): 1.5
-        case (_, .medium): 2.5
-        case (_, .bold): 4
+    /// 1, 2 or 3 — the web `PenWidth`.
+    public var step: Int {
+        switch self {
+        case .fine: 1
+        case .medium: 2
+        case .bold: 3
+        }
+    }
+
+    /// Multiplier of the tool's base width.
+    public var multiplier: CGFloat {
+        switch self {
+        case .fine: 0.6
+        case .medium: 1.0
+        case .bold: 1.6
+        }
+    }
+
+    /// Fallback nominal width in points when the editor has no base width of its own.
+    public func defaultPoints(for tool: DSPenTool) -> CGFloat {
+        let base: CGFloat = switch tool {
+        case .pen: 2.5
+        case .pencil: 2
+        case .marker: 5
+        case .highlighter: 16
+        case .eraser: 16
+        case .lasso: 1
+        }
+        return base * multiplier
+    }
+}
+
+/// Eraser removes whole strokes or erases under the tip.
+public enum DSEraserMode: String, CaseIterable, Sendable, Hashable {
+    case stroke
+    case pixel
+
+    public func title(_ language: DSLanguage = .current) -> String {
+        switch self {
+        case .stroke: language == .ru ? "штрих" : "stroke"
+        case .pixel: language == .ru ? "пиксель" : "pixel"
         }
     }
 }
 
-/// Current pen tool, colours and width. Ink colours come from tokens, so dark
-/// theme variants are handled by `DSInkToken` / `DSHighlightToken`.
+/// Current pen tool, colour, width and modes. Colours come from tokens, so the
+/// dark-theme variants are handled by `DSInkToken` / `DSHighlightToken`.
 public struct DSPenSelection: Hashable, Sendable {
-    public var tool: DSPenTool
-    public var ink: DSInkToken
-    public var highlight: DSHighlightToken
+    /// `nil` = text mode.
+    public var tool: DSPenTool?
+    public var color: DSPenColor
     public var width: DSPenWidth
+    public var eraserMode: DSEraserMode
+    /// Draw with a finger too (otherwise Pencil only).
+    public var drawWithFinger: Bool
 
-    public init(tool: DSPenTool = .pen, ink: DSInkToken = .black, highlight: DSHighlightToken = .yellow, width: DSPenWidth = .medium) {
+    public init(
+        tool: DSPenTool? = .pen,
+        color: DSPenColor = .ink(.black),
+        width: DSPenWidth = .medium,
+        eraserMode: DSEraserMode = .stroke,
+        drawWithFinger: Bool = false
+    ) {
         self.tool = tool
-        self.ink = ink
-        self.highlight = highlight
+        self.color = color
         self.width = width
+        self.eraserMode = eraserMode
+        self.drawWithFinger = drawWithFinger
     }
 
-    /// Stroke width in points for the current tool.
-    public var points: CGFloat { width.points(for: tool) }
+    /// Whether colour and width controls apply (a drawing tool is active).
+    public var isDrawing: Bool { tool?.hasColor ?? false }
 
-    /// Stroke colour for the current tool (`nil` for eraser and lasso).
-    public var color: DSColorPair? {
-        switch tool {
-        case .pen: ink.value
-        case .highlighter: highlight.value
-        case .eraser, .lasso: nil
+    /// New selection after tapping `tool` (same rules as the web `PenToolbar`):
+    /// tapping the active eraser toggles its mode; switching to the highlighter
+    /// restores the last highlight, switching from it to an ink tool restores the last ink.
+    public static func selecting(
+        _ tool: DSPenTool?,
+        from current: DSPenSelection,
+        lastInk: DSInkToken,
+        lastHighlight: DSHighlightToken
+    ) -> DSPenSelection {
+        var next = current
+        if tool == .eraser, current.tool == .eraser {
+            next.eraserMode = current.eraserMode == .stroke ? .pixel : .stroke
+            return next
         }
+        next.tool = tool
+        if tool == .highlighter, current.tool != .highlighter {
+            next.color = .highlight(lastHighlight)
+        } else if let tool, tool.usesInk {
+            if case .highlight = current.color { next.color = .ink(lastInk) }
+        }
+        return next
     }
 }
 
-/// Floating Liquid Glass palette: tools, colours (inks or highlights) and widths.
+/// Floating Liquid Glass pen palette: text mode, nibs coloured by ink, inks or
+/// highlights, widths, eraser mode, finger drawing, undo / redo.
+/// The editor positions it; this is only the capsule.
 public struct DSPenToolbar: View {
     public enum Axis: Sendable {
         case horizontal
@@ -89,103 +182,197 @@ public struct DSPenToolbar: View {
 
     @Binding private var selection: DSPenSelection
     private let axis: Axis
+    private let tools: [DSPenTool]
+    private let showsTextMode: Bool
+    private let canUndo: Bool
+    private let canRedo: Bool
+    private let onUndo: (() -> Void)?
+    private let onRedo: (() -> Void)?
+    @State private var lastInk: DSInkToken = .black
+    @State private var lastHighlight: DSHighlightToken = .yellow
     @Namespace private var namespace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.locale) private var locale
 
-    public init(selection: Binding<DSPenSelection>, axis: Axis = .horizontal) {
+    public init(
+        selection: Binding<DSPenSelection>,
+        axis: Axis = .horizontal,
+        tools: [DSPenTool] = [.pen, .pencil, .marker, .highlighter, .eraser],
+        showsTextMode: Bool = true,
+        canUndo: Bool = false,
+        canRedo: Bool = false,
+        onUndo: (() -> Void)? = nil,
+        onRedo: (() -> Void)? = nil
+    ) {
         _selection = selection
         self.axis = axis
+        self.tools = tools
+        self.showsTextMode = showsTextMode
+        self.canUndo = canUndo
+        self.canRedo = canRedo
+        self.onUndo = onUndo
+        self.onRedo = onRedo
     }
 
+    private var language: DSLanguage { DSLanguage(locale: locale) }
+
     private var stack: AnyLayout {
-        axis == .horizontal ? AnyLayout(HStackLayout(spacing: DSSpace.s1)) : AnyLayout(VStackLayout(spacing: DSSpace.s1))
+        axis == .horizontal ? AnyLayout(HStackLayout(spacing: 2)) : AnyLayout(VStackLayout(spacing: 2))
     }
 
     private func update(_ change: (inout DSPenSelection) -> Void) {
         withAnimation(DSMotionToken.snappy.animation(reduceMotion: reduceMotion)) {
             change(&selection)
         }
+        switch selection.color {
+        case let .ink(token): lastInk = token
+        case let .highlight(token): lastHighlight = token
+        }
     }
 
     public var body: some View {
         GlassEffectContainer(spacing: DSSpace.s2) {
             stack {
-                ForEach(DSPenTool.allCases, id: \.self) { tool in
+                if showsTextMode {
+                    textButton
+                }
+                ForEach(tools, id: \.self) { tool in
                     toolButton(tool)
                 }
-                if selection.tool.hasColor {
+                if selection.isDrawing {
                     separator
                     swatches
+                    separator
+                    ForEach(DSPenWidth.allCases, id: \.self) { width in
+                        widthButton(width)
+                    }
                 }
                 separator
-                ForEach(DSPenWidth.allCases, id: \.self) { width in
-                    widthButton(width)
+                fingerButton
+                if onUndo != nil || onRedo != nil {
+                    iconButton("arrow.uturn.backward", label: DSStrings.tr("Отменить", "Undo", language), enabled: canUndo) { onUndo?() }
+                    iconButton("arrow.uturn.forward", label: DSStrings.tr("Повторить", "Redo", language), enabled: canRedo) { onRedo?() }
                 }
             }
             .padding(DSSpace.s1)
-            .glassEffect(.regular, in: Capsule())
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: DSRadius.xl, style: .continuous))
         }
         .sensoryFeedback(.selection, trigger: selection)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(DSStrings.tr("Перо", "Pen", language))
     }
 
     private var separator: some View {
         Rectangle()
             .fill(Color.dsSeparator)
-            .frame(width: axis == .horizontal ? 1 : 20, height: axis == .horizontal ? 20 : 1)
+            .frame(width: axis == .horizontal ? 1 : 22, height: axis == .horizontal ? 22 : 1)
             .padding(axis == .horizontal ? .horizontal : .vertical, DSSpace.s1)
             .accessibilityHidden(true)
+    }
+
+    private func selectedFill(_ isOn: Bool, id: String) -> some View {
+        ZStack {
+            if isOn {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.dsPrimary.opacity(0.08))
+                    .matchedGeometryEffect(id: id, in: namespace)
+            }
+        }
+    }
+
+    private var textButton: some View {
+        let isOn = selection.tool == nil
+        return Button {
+            update { $0 = DSPenSelection.selecting(nil, from: $0, lastInk: lastInk, lastHighlight: lastHighlight) }
+        } label: {
+            Image(systemName: "character.cursor.ibeam")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(isOn ? Color.dsPrimary : Color.dsSecondary)
+                .frame(width: 38, height: 46)
+                .background(selectedFill(isOn, id: "tool"))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(DSPressableStyle(scale: 0.9))
+        .accessibilityLabel(DSStrings.tr("Текст", "Text", language))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    private func nibColor(_ tool: DSPenTool) -> Color {
+        if selection.tool == tool { return selection.color.color }
+        return tool == .highlighter ? lastHighlight.color : lastInk.color
     }
 
     private func toolButton(_ tool: DSPenTool) -> some View {
         let isOn = selection.tool == tool
         return Button {
-            update { $0.tool = tool }
+            update { $0 = DSPenSelection.selecting(tool, from: $0, lastInk: lastInk, lastHighlight: lastHighlight) }
         } label: {
-            Image(systemName: tool.systemImage)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(isOn ? Color.dsAccent : Color.dsPrimary)
-                .frame(width: 38, height: 38)
-                .background {
-                    if isOn {
-                        Circle()
-                            .fill(Color.dsPrimary.opacity(0.08))
-                            .matchedGeometryEffect(id: "tool", in: namespace)
+            ZStack(alignment: .bottom) {
+                Group {
+                    if tool == .lasso {
+                        Image(systemName: "lasso")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(isOn ? Color.dsPrimary : Color.dsSecondary)
+                            .frame(maxHeight: .infinity)
+                    } else {
+                        DSNib(tool: tool, tip: tool == .eraser ? Color.dsTint(.pink) : nibColor(tool))
+                            .frame(width: 16, height: 32)
                     }
                 }
-                .contentShape(Circle())
+                .offset(y: isOn ? -2 : 0)
+                if tool == .eraser, isOn {
+                    Text(selection.eraserMode.title(language))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.dsCanvas)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.dsPrimary))
+                        .fixedSize()
+                        .offset(y: 6)
+                        .transition(.opacity)
+                }
+            }
+            .frame(width: 38, height: 46)
+            .background(selectedFill(isOn, id: "tool"))
+            .contentShape(Rectangle())
         }
         .buttonStyle(DSPressableStyle(scale: 0.9))
-        .accessibilityLabel(tool.title)
+        .accessibilityLabel(
+            tool == .eraser
+                ? "\(tool.title(language)): \(selection.eraserMode.title(language))"
+                : tool.title(language)
+        )
+        .accessibilityHint(tool == .eraser && isOn ? DSStrings.tr("Нажмите ещё раз, чтобы сменить режим", "Tap again to switch mode", language) : "")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     @ViewBuilder private var swatches: some View {
         if selection.tool == .highlighter {
             ForEach(DSHighlightToken.allCases, id: \.self) { token in
-                swatch(color: token.color, isOn: selection.highlight == token, label: token.rawValue) {
-                    update { $0.highlight = token }
-                }
+                swatch(.highlight(token))
             }
         } else {
             ForEach(DSInkToken.allCases, id: \.self) { token in
-                swatch(color: token.color, isOn: selection.ink == token, label: token.rawValue) {
-                    update { $0.ink = token }
-                }
+                swatch(.ink(token))
             }
         }
     }
 
-    private func swatch(color: Color, isOn: Bool, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func swatch(_ color: DSPenColor) -> some View {
+        let isOn = selection.color == color
+        return Button {
+            update { $0.color = color }
+        } label: {
             Circle()
-                .fill(color)
-                .frame(width: 20, height: 20)
-                .overlay(Circle().strokeBorder(Color.dsPrimary.opacity(0.12), lineWidth: 0.5))
-                .padding(3)
+                .fill(color.color)
+                .frame(width: isOn ? 16 : 20, height: isOn ? 16 : 20)
+                .overlay(Circle().strokeBorder(Color.dsPrimary.opacity(0.15), lineWidth: 0.5))
+                .frame(width: 26, height: 26)
                 .overlay {
                     if isOn {
                         Circle()
-                            .strokeBorder(Color.dsPrimary.opacity(0.85), lineWidth: 2)
+                            .strokeBorder(color.color, lineWidth: 2)
+                            .overlay(Circle().strokeBorder(Color.dsPrimary.opacity(0.2), lineWidth: 0.5))
                             .matchedGeometryEffect(id: "swatch", in: namespace)
                     }
                 }
@@ -193,29 +380,122 @@ public struct DSPenToolbar: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(DSPressableStyle(scale: 0.88))
-        .accessibilityLabel(label)
+        .accessibilityLabel(DSStrings.colorName(color.name, language))
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     private func widthButton(_ width: DSPenWidth) -> some View {
         let isOn = selection.width == width
-        let dot: CGFloat = switch width {
-        case .fine: 4
-        case .medium: 7
-        case .bold: 11
-        }
+        let dot = CGFloat(3 + width.step * 3)
         return Button {
             update { $0.width = width }
         } label: {
             Circle()
-                .fill(isOn ? Color.dsPrimary : Color.dsTertiary)
+                .fill(selection.color.color)
+                .overlay(Circle().strokeBorder(Color.dsPrimary.opacity(0.15), lineWidth: 0.5))
                 .frame(width: dot, height: dot)
+                .frame(width: 30, height: 30)
+                .background {
+                    if isOn {
+                        Circle()
+                            .fill(Color.dsPrimary.opacity(0.08))
+                            .matchedGeometryEffect(id: "width", in: namespace)
+                    }
+                }
                 .frame(width: 30, height: 38)
                 .contentShape(Rectangle())
         }
         .buttonStyle(DSPressableStyle(scale: 0.88))
-        .accessibilityLabel(DSStrings.width(width))
+        .accessibilityLabel(DSStrings.width(width, language))
         .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    private var fingerButton: some View {
+        let isOn = selection.drawWithFinger
+        return Button {
+            update { $0.drawWithFinger.toggle() }
+        } label: {
+            Image(systemName: "hand.point.up.left")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(isOn ? Color.dsAccent : Color.dsSecondary)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(isOn ? Color.dsAccent.opacity(0.12) : Color.clear))
+                .contentShape(Circle())
+        }
+        .buttonStyle(DSPressableStyle(scale: 0.9))
+        .accessibilityLabel(DSStrings.tr("Рисовать пальцем", "Draw with finger", language))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    private func iconButton(_ systemImage: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Color.dsSecondary)
+                .frame(width: 36, height: 36)
+                .contentShape(Circle())
+        }
+        .buttonStyle(DSPressableStyle(scale: 0.9))
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.35)
+        .accessibilityLabel(label)
+    }
+}
+
+/// Nib silhouette: a coloured tip over a paper-coloured body.
+struct DSNib: View {
+    let tool: DSPenTool
+    let tip: Color
+
+    var body: some View {
+        let wide = tool == .highlighter || tool == .eraser
+        VStack(spacing: 0) {
+            DSNibTip(tool: tool)
+                .fill(tip)
+                .frame(width: wide ? 12 : 9, height: 10)
+            RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                .fill(Color.dsSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                        .strokeBorder(Color.dsPrimary.opacity(0.28), lineWidth: 0.8)
+                )
+                .frame(width: wide ? 12 : 9)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Tip shape per tool, drawn in a unit rect.
+struct DSNibTip: Shape {
+    let tool: DSPenTool
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let w = rect.width, h = rect.height, x = rect.minX, y = rect.minY
+        switch tool {
+        case .pen:
+            p.move(to: CGPoint(x: x + w * 0.2, y: y + h))
+            p.addLine(to: CGPoint(x: x + w * 0.5, y: y))
+            p.addLine(to: CGPoint(x: x + w * 0.8, y: y + h))
+        case .pencil:
+            p.move(to: CGPoint(x: x, y: y + h))
+            p.addLine(to: CGPoint(x: x + w * 0.5, y: y - h * 0.1))
+            p.addLine(to: CGPoint(x: x + w, y: y + h))
+        case .marker:
+            p.move(to: CGPoint(x: x + w * 0.05, y: y + h))
+            p.addLine(to: CGPoint(x: x + w * 0.15, y: y + h * 0.35))
+            p.addLine(to: CGPoint(x: x + w * 0.85, y: y + h * 0.35))
+            p.addLine(to: CGPoint(x: x + w * 0.95, y: y + h))
+        case .highlighter:
+            p.move(to: CGPoint(x: x, y: y + h))
+            p.addLine(to: CGPoint(x: x, y: y + h * 0.45))
+            p.addLine(to: CGPoint(x: x + w, y: y))
+            p.addLine(to: CGPoint(x: x + w, y: y + h))
+        case .eraser, .lasso:
+            p.addRoundedRect(in: CGRect(x: x, y: y + h * 0.3, width: w, height: h * 0.9), cornerSize: CGSize(width: w * 0.35, height: w * 0.35))
+        }
+        p.closeSubpath()
+        return p
     }
 }
 
@@ -230,14 +510,14 @@ public struct DSPenToolbar: View {
 
 private struct PenToolbarPreview: View {
     @State private var selection = DSPenSelection()
-    @State private var vertical = DSPenSelection(tool: .highlighter)
+    @State private var vertical = DSPenSelection(tool: .highlighter, color: .highlight(.yellow))
 
     var body: some View {
         ZStack {
             DSBackdrop(.sand).ignoresSafeArea()
-            HStack(spacing: DSSpace.s8) {
-                DSPenToolbar(selection: $selection)
-                DSPenToolbar(selection: $vertical, axis: .vertical)
+            VStack(spacing: DSSpace.s8) {
+                DSPenToolbar(selection: $selection, canUndo: true, onUndo: {}, onRedo: {})
+                DSPenToolbar(selection: $vertical, axis: .vertical, tools: DSPenTool.allCases)
             }
         }
     }

@@ -23,6 +23,8 @@ pnpm --filter @datascratch/server dev            # http://localhost:8080/v1/heal
 
 OpenAPI: `GET /v1/openapi.json`.
 
+**Миграции только добавляются.** Уже влитый в `main` файл в `drizzle/` не правится и не удаляется: изменение схемы — новая миграция (`db:generate`, для RLS/триггеров — `drizzle-kit generate --custom`). Единственный раз миграции переписывались 2026-10-25, до первого развёртывания; локальную базу, созданную до этого, нужно пересоздать.
+
 ## Устройство
 
 ```
@@ -48,55 +50,24 @@ drizzle/              SQL-миграции; 0001 — Row-Level Security и тр�
 - **Права:** пользователь — свои документы; гость — документы шеринга (заметка или блокнот целиком, включая новые заметки), `push`/`snapshot` только с правом `edit`; агент — только блокноты своего токена в режиме «для агентов», дополнительно ограничено RLS в PostgreSQL.
 - **Отзыв** устройства, шеринга или удаление аккаунта сразу закрывают WebSocket-соединения (код 4401).
 
-## Плагины (интерфейс для `@datascratch/agents`)
+## Агенты (`@datascratch/agents`)
 
-Сервер при старте пытается загрузить пакет `@datascratch/agents`; если его нет — работает без него. Пакет экспортирует `plugin` (или `default`) вида `ServerPlugin` из `src/plugins/api.ts`:
+Пакет агентов (MCP, OAuth 2.1, REST для агентов, токены, журнал, рендер PNG) — Fastify-плагин потока agents. Интерфейс между ним и сервером — `AgentsContext` из `packages/agents/src/context.ts` (контракт — `docs/architecture/contracts/agents-api.md`). Сервер зависит от пакета (`workspace:*`), берёт типы из него (`src/plugins/agents-context.ts`) и реализует:
+
+| Часть | Файл | Что делает |
+| --- | --- | --- |
+| `store` | `plugins/agents-store.ts` | Таблицы `agent_grants`, `oauth_clients`, `oauth_codes`, `oauth_tokens`, `agent_audit` (секреты — только SHA-256; `takeCode` — атомарный `DELETE … RETURNING`) |
+| `data` | `plugins/agents-data.ts` | Расшифровка: notebookKey = open(`DS_KMS_KEY`), noteKey = open(notebookKey, `NoteMeta.wrappedKey`); `loadDoc` → расшифрованный `Y.Doc` + `seq`; `applyUpdate` шифрует, присваивает `seq`, рассылает (устройство `agent:<grantId>`), каждые 500 обновлений / 1 MiB сам делает снимок; `createNoteDoc` создаёт ключ заметки и возвращает его обёртку; `docSeqs`, `loadAttachmentImage` |
+| `users` | `plugins/agents-users.ts` | Bearer access-токен или cookie `ds_web` (экран согласия OAuth в браузере); `loginUrl` → `${APP_URL}/connect?returnTo=…` |
+
+**Row-Level Security (D-30).** Каждый вызов `data` идёт в транзакции под ролью `ds_agent` (`withAgentScope`): видны только блокноты пользователя в режиме «для агентов», а если передан `grantId` (необязательный последний параметр методов `data`, в `applyUpdate` — `origin.grantId`) — только блокноты этого гранта, и запись — только при `read_write`, неотозванном и неистёкшем гранте.
+
+**Подключение** (`src/plugins/loader.ts`), без префикса:
 
 ```ts
-export const plugin = {
-  name: 'agents',
-  async register(app, host) {
-    // app — корневой Fastify (пути без префикса: /v1/agent/..., /mcp, /.well-known/...)
-    app.post('/mcp', async (req) => {
-      const principal = await host.agents.authenticate(bearer(req));
-      if (!principal) throw …;
-      return host.agents.withScope(principal, async (scope) => {
-        const { state } = await scope.readDoc(noteId);        // расшифрованное состояние (Yjs-обновление)
-        // … изменить Y.Doc, получить дельту …
-        await scope.applyUpdate(noteId, delta);                // шифрует, сохраняет, рассылает клиентам
-        await scope.audit('edit_note', { docId: noteId });
-      });
-    });
-  },
-};
+app.register(agentsPlugin, { context, publicUrl: PUBLIC_URL, secret /* HKDF от DS_JWT_SECRET */, appUrl: APP_URL, allowedOrigins: CORS_ORIGINS })
 ```
 
-Чтобы не было циклической зависимости пакетов, `@datascratch/agents` **не зависит** от сервера: он повторяет нужные типы из `src/plugins/api.ts` структурно (или копирует файл). Изменения интерфейса — согласованно, с повышением `host.apiVersion`.
+Плагин владеет путями `/mcp`, `/oauth/*`, `/.well-known/oauth-*`, `/v1/agent/*`, `/v1/agent-tokens*` — сервер их не занимает.
 
-`PluginHost`:
-
-| Поле | Что даёт |
-| --- | --- |
-| `apiVersion` | `1` |
-| `log`, `config.publicUrl`, `config.nodeEnv` | Логгер pino и настройки |
-| `db`, `pool` | Drizzle и пул `pg` — для собственных таблиц плагина (свои миграции, своя схема или префикс таблиц) |
-| `jobs` | Очередь pg-boss: `register`, `enqueue`, `schedule` (например, рендер PNG) |
-| `crypto` | `seal`/`open` (конверт v1 из `crypto.md`), `randomKey()`, строки `ad` |
-| `agents.authenticate(token)` | Проверка токена `dsa_…` → `AgentPrincipal { tokenId, userId, permission, notebookIds }` или `null` (отозван, истёк, неизвестен). Обновляет `lastUsedAt` |
-| `agents.withScope(principal, fn)` | Одна транзакция под ролью `ds_agent` с RLS по токену; правки рассылаются клиентам после фиксации |
-
-`AgentScope` (внутри `withScope`):
-
-| Метод | Смысл |
-| --- | --- |
-| `listNotebooks()`, `listDocs(notebookId)`, `getDoc(docId)` | Что доступно токену |
-| `notebookKey(notebookId)` | Ключ блокнота, расшифрованный ключом сервера `DS_KMS_KEY` |
-| `docKey(docId)` | Ключ документа: для индекса блокнота — ключ блокнота; для заметки — ключ заметки из `NoteMeta.wrappedKey` индекса |
-| `readDoc(docId)` | `{ state, seq }` — всё состояние как одно Yjs-обновление (`Y.applyUpdate(new Y.Doc(), state)`) |
-| `applyUpdate(docId, update)` | Шифрует и добавляет обновление (устройство `agent:<tokenId>`), рассылает. Каждые 500 обновлений / 1 МБ сервер сам делает снимок (он знает ключ) |
-| `createNoteDoc(notebookId, noteId)` | Регистрирует новую заметку (метаданные `NoteMeta` с обёрнутым ключом агент пишет в индекс блокнота сам через `applyUpdate`) |
-| `readAttachment(id)`, `writeAttachment({ … })` | Вложения с шифрованием кусками по 1 MiB |
-| `audit(action, entry)` | Запись в журнал агента (`GET /v1/agent-tokens/:id/audit`) |
-| `tx` | Транзакция Drizzle с RLS — для собственных запросов плагина |
-
-Лимиты запросов агентов (D-25: счётчики в памяти процесса) и OAuth 2.1 для MCP — забота плагина.
+**Cookie для экрана согласия.** Веб-приложение (уже вошедшее) вызывает `POST /v1/auth/web-session` с Bearer-токеном и `credentials: "include"` — сервер ставит `ds_web` (HttpOnly, SameSite=Lax, Secure при https, 1 ч) — и переходит на `returnTo`. `DELETE /v1/auth/web-session` — выход.

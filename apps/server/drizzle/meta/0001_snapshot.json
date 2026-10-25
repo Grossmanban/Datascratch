@@ -1,6 +1,6 @@
 {
-  "id": "57a943ba-5ca7-4a3b-9376-a0be1e5de5b8",
-  "prevId": "417e2602-d3c4-4cdb-9346-9199b9d5d49d",
+  "id": "4008d19f-5038-47d5-805d-a160f01d8c28",
+  "prevId": "96652904-2b76-4b35-9b77-a75e8d2732b4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -10,19 +10,31 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "bigserial",
+          "type": "text",
           "primaryKey": true,
           "notNull": true
         },
-        "token_id": {
-          "name": "token_id",
-          "type": "uuid",
+        "grant_id": {
+          "name": "grant_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
         "user_id": {
           "name": "user_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "at": {
+          "name": "at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "via": {
+          "name": "via",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -38,8 +50,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "doc_id": {
-          "name": "doc_id",
+        "note_id": {
+          "name": "note_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -48,35 +60,33 @@
           "name": "ok",
           "type": "boolean",
           "primaryKey": false,
-          "notNull": true,
-          "default": true
+          "notNull": true
         },
-        "details": {
-          "name": "details",
-          "type": "jsonb",
+        "error_code": {
+          "name": "error_code",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": true
         }
       },
       "indexes": {
-        "agent_audit_token_idx": {
-          "name": "agent_audit_token_idx",
+        "agent_audit_grant_idx": {
+          "name": "agent_audit_grant_idx",
           "columns": [
             {
-              "expression": "token_id",
+              "expression": "grant_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
-              "expression": "id",
+              "expression": "at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -89,13 +99,13 @@
         }
       },
       "foreignKeys": {
-        "agent_audit_token_id_agent_tokens_id_fk": {
-          "name": "agent_audit_token_id_agent_tokens_id_fk",
+        "agent_audit_grant_id_agent_grants_id_fk": {
+          "name": "agent_audit_grant_id_agent_grants_id_fk",
           "tableFrom": "agent_audit",
           "columnsFrom": [
-            "token_id"
+            "grant_id"
           ],
-          "tableTo": "agent_tokens",
+          "tableTo": "agent_grants",
           "columnsTo": [
             "id"
           ],
@@ -122,73 +132,13 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.agent_token_notebooks": {
-      "name": "agent_token_notebooks",
-      "schema": "",
-      "columns": {
-        "token_id": {
-          "name": "token_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "notebook_id": {
-          "name": "notebook_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "agent_token_notebooks_token_id_agent_tokens_id_fk": {
-          "name": "agent_token_notebooks_token_id_agent_tokens_id_fk",
-          "tableFrom": "agent_token_notebooks",
-          "columnsFrom": [
-            "token_id"
-          ],
-          "tableTo": "agent_tokens",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
-        },
-        "agent_token_notebooks_notebook_id_notebooks_id_fk": {
-          "name": "agent_token_notebooks_notebook_id_notebooks_id_fk",
-          "tableFrom": "agent_token_notebooks",
-          "columnsFrom": [
-            "notebook_id"
-          ],
-          "tableTo": "notebooks",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
-        }
-      },
-      "compositePrimaryKeys": {
-        "agent_token_notebooks_token_id_notebook_id_pk": {
-          "name": "agent_token_notebooks_token_id_notebook_id_pk",
-          "columns": [
-            "token_id",
-            "notebook_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.agent_tokens": {
-      "name": "agent_tokens",
+    "public.agent_grants": {
+      "name": "agent_grants",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true
         },
@@ -198,15 +148,27 @@
           "primaryKey": false,
           "notNull": true
         },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "name": {
           "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "bytea",
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notebook_ids": {
+          "name": "notebook_ids",
+          "type": "uuid[]",
           "primaryKey": false,
           "notNull": true
         },
@@ -214,6 +176,12 @@
           "name": "permission",
           "type": "agent_permission",
           "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
@@ -235,17 +203,16 @@
           "primaryKey": false,
           "notNull": false
         },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
+        "secret_hash": {
+          "name": "secret_hash",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         }
       },
       "indexes": {
-        "agent_tokens_user_idx": {
-          "name": "agent_tokens_user_idx",
+        "agent_grants_user_idx": {
+          "name": "agent_grants_user_idx",
           "columns": [
             {
               "expression": "user_id",
@@ -261,9 +228,9 @@
         }
       },
       "foreignKeys": {
-        "agent_tokens_user_id_users_id_fk": {
-          "name": "agent_tokens_user_id_users_id_fk",
-          "tableFrom": "agent_tokens",
+        "agent_grants_user_id_users_id_fk": {
+          "name": "agent_grants_user_id_users_id_fk",
+          "tableFrom": "agent_grants",
           "columnsFrom": [
             "user_id"
           ],
@@ -277,10 +244,10 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "agent_tokens_token_hash_unique": {
-          "name": "agent_tokens_token_hash_unique",
+        "agent_grants_secret_hash_unique": {
+          "name": "agent_grants_secret_hash_unique",
           "columns": [
-            "token_hash"
+            "secret_hash"
           ],
           "nullsNotDistinct": false
         }
@@ -922,6 +889,246 @@
             "user_id"
           ],
           "tableTo": "users",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.oauth_clients": {
+      "name": "oauth_clients",
+      "schema": "",
+      "columns": {
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "client_secret_hash": {
+          "name": "client_secret_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_name": {
+          "name": "client_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "client_uri": {
+          "name": "client_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logo_uri": {
+          "name": "logo_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "redirect_uris": {
+          "name": "redirect_uris",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_endpoint_auth_method": {
+          "name": "token_endpoint_auth_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registration": {
+          "name": "registration",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.oauth_codes": {
+      "name": "oauth_codes",
+      "schema": "",
+      "columns": {
+        "code_hash": {
+          "name": "code_hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "redirect_uri": {
+          "name": "redirect_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code_challenge": {
+          "name": "code_challenge",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource": {
+          "name": "resource",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notebook_ids": {
+          "name": "notebook_ids",
+          "type": "uuid[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "permission": {
+          "name": "permission",
+          "type": "agent_permission",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "oauth_codes_user_id_users_id_fk": {
+          "name": "oauth_codes_user_id_users_id_fk",
+          "tableFrom": "oauth_codes",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "tableTo": "users",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.oauth_tokens": {
+      "name": "oauth_tokens",
+      "schema": "",
+      "columns": {
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "grant_id": {
+          "name": "grant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource": {
+          "name": "resource",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "oauth_tokens_grant_idx": {
+          "name": "oauth_tokens_grant_idx",
+          "columns": [
+            {
+              "expression": "grant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "oauth_tokens_grant_id_agent_grants_id_fk": {
+          "name": "oauth_tokens_grant_id_agent_grants_id_fk",
+          "tableFrom": "oauth_tokens",
+          "columnsFrom": [
+            "grant_id"
+          ],
+          "tableTo": "agent_grants",
           "columnsTo": [
             "id"
           ],

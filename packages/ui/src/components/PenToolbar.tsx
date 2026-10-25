@@ -1,64 +1,86 @@
-import { Eraser, Highlighter, Lasso, PenLine } from "lucide-react";
+import { Hand, Lasso, Redo2, Type, Undo2 } from "lucide-react";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
-import { ToggleGroup } from "radix-ui";
-import { useId, type ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { cn } from "../lib/cn";
 import { useLocale } from "../lib/i18n";
 import { spring, type InkName } from "../lib/tokens";
 import type { HighlightName } from "@datascratch/design-tokens";
 import { Tooltip } from "./Tooltip";
 
-export type PenTool = "pen" | "highlighter" | "eraser" | "lasso";
+/** Stroke tools of contracts/strokes.md plus eraser and lasso. `null` = text mode (the pen types and selects). */
+export type PenTool = "pen" | "pencil" | "marker" | "highlighter" | "eraser" | "lasso";
 export type PenWidth = 1 | 2 | 3;
+export type EraserMode = "stroke" | "pixel";
 
 export interface PenSelection {
-  tool: PenTool;
-  ink: InkName;
-  highlight: HighlightName;
+  tool: PenTool | null;
+  /** `highlight.*` for the highlighter, `ink.*` for every other tool. */
+  color: InkName | HighlightName;
+  /** Multiplier step of the tool's base width (the editor owns base widths). */
   width: PenWidth;
+  eraserMode: EraserMode;
+  /** Draw with mouse and finger too (otherwise stylus only). */
+  drawWithAnyPointer: boolean;
 }
 
 export const defaultPenSelection: PenSelection = {
   tool: "pen",
-  ink: "black",
-  highlight: "yellow",
+  color: "black",
   width: 2,
+  eraserMode: "stroke",
+  drawWithAnyPointer: false,
 };
 
-/** Stroke width in CSS px per tool and preset (same numbers as DSPenWidth on iOS). */
-export const penWidthPx: Record<"pen" | "highlighter" | "eraser", Record<PenWidth, number>> = {
-  pen: { 1: 1.5, 2: 2.5, 3: 4 },
-  highlighter: { 1: 10, 2: 16, 3: 24 },
-  eraser: { 1: 8, 2: 16, 3: 32 },
-};
+export const INK_NAMES: InkName[] = ["black", "blue", "red", "green", "purple", "brown"];
+export const HIGHLIGHT_NAMES: HighlightName[] = ["yellow", "green", "pink", "blue"];
 
-const INKS: InkName[] = ["black", "blue", "red", "green", "purple", "brown"];
-const HIGHLIGHTS: HighlightName[] = ["yellow", "green", "pink", "blue"];
+const isHighlight = (c: string): c is HighlightName => (HIGHLIGHT_NAMES as string[]).includes(c);
+const isInk = (c: string): c is InkName => (INK_NAMES as string[]).includes(c);
+const colorVar = (tool: PenTool | null, c: string) =>
+  tool === "highlighter" ? `var(--ds-highlight-${c})` : `var(--ds-ink-${c})`;
 
 const L = {
   ru: {
-    pen: "Перо",
-    highlighter: "Маркер",
+    toolbar: "Перо",
+    text: "Текст (перо печатает и выделяет)",
+    pen: "Ручка",
+    pencil: "Карандаш",
+    marker: "Маркер",
+    highlighter: "Текстовыделитель",
     eraser: "Ластик",
     lasso: "Лассо",
-    tools: "Инструмент",
+    stroke: "штрих",
+    pixel: "пиксель",
+    eraserHint: "нажмите ещё раз, чтобы сменить режим",
     color: "Цвет",
     width: "Толщина",
     widths: ["Тонкая", "Средняя", "Толстая"],
+    anyPointer: "Рисовать мышью и пальцем",
+    undo: "Отменить",
+    redo: "Повторить",
   },
   en: {
+    toolbar: "Pen",
+    text: "Text (the pen types and selects)",
     pen: "Pen",
+    pencil: "Pencil",
+    marker: "Marker",
     highlighter: "Highlighter",
     eraser: "Eraser",
     lasso: "Lasso",
-    tools: "Tool",
+    stroke: "stroke",
+    pixel: "pixel",
+    eraserHint: "press again to switch mode",
     color: "Color",
     width: "Width",
     widths: ["Fine", "Medium", "Bold"],
+    anyPointer: "Draw with mouse and finger",
+    undo: "Undo",
+    redo: "Redo",
   },
 } as const;
 
-const COLOR_NAMES = {
+export const penColorNames = {
   ru: {
     black: "Чёрный",
     blue: "Синий",
@@ -81,119 +103,212 @@ const COLOR_NAMES = {
   },
 } as const;
 
-const icons: Record<PenTool, ReactNode> = {
-  pen: <PenLine />,
-  highlighter: <Highlighter />,
-  eraser: <Eraser />,
-  lasso: <Lasso />,
-};
-
-const shortcuts: Record<PenTool, string> = { pen: "p", highlighter: "h", eraser: "e", lasso: "l" };
+/** Nib silhouettes: the tip takes the current colour (Goodnotes-like, quieter). */
+function Nib({ tool, color }: { tool: Exclude<PenTool, "lasso">; color: string }) {
+  const tips: Record<typeof tool, string> = {
+    pen: "M10.2 9 12 2.5 13.8 9Z",
+    pencil: "M9.6 9.5 12 1.8 14.4 9.5Z",
+    marker: "M9.2 9.5 9.6 4.5h4.8l.4 5Z",
+    highlighter: "M8.4 9.5V5.6l7.2-2.6v6.5Z",
+    eraser: "M8.4 9.5V6.2c0-1.7 7.2-1.7 7.2 0v3.3Z",
+  };
+  const wide = tool === "highlighter" || tool === "eraser";
+  return (
+    <svg viewBox="5 1 14 25" aria-hidden className="!h-8 !w-[18px] overflow-visible">
+      <path d={tips[tool]} fill={tool === "eraser" ? "var(--ds-tint-pink-fg)" : color} />
+      <rect
+        x={wide ? 8.4 : 9.2}
+        y="9.5"
+        width={wide ? 7.2 : 5.6}
+        height="16"
+        rx="1.6"
+        fill="var(--ds-bg-surface)"
+        stroke="color-mix(in oklab, var(--ds-text-primary) 28%, transparent)"
+        strokeWidth="0.9"
+      />
+    </svg>
+  );
+}
 
 export interface PenToolbarProps {
   value: PenSelection;
   onChange: (value: PenSelection) => void;
-  orientation?: "horizontal" | "vertical";
-  /** Tools to show (e.g. no lasso for guests). */
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  /** Tools to show, in order. */
   tools?: PenTool[];
+  /** Show the "text" (no ink) mode button. */
+  textMode?: boolean;
+  orientation?: "horizontal" | "vertical";
   className?: string;
 }
 
-/** Floating glass palette for handwriting: tools, inks from tokens, widths. */
+/**
+ * Glass pen palette (D-38): text mode, nibs coloured by ink, inks and
+ * highlighters from tokens, widths, eraser mode, finger drawing, undo/redo.
+ * The editor positions it; this is only the pill.
+ */
 export function PenToolbar({
   value,
   onChange,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
+  tools = ["pen", "pencil", "marker", "highlighter", "eraser"],
+  textMode = true,
   orientation = "horizontal",
-  tools = ["pen", "highlighter", "eraser", "lasso"],
   className,
 }: PenToolbarProps) {
-  const t = L[useLocale()];
-  const names = COLOR_NAMES[useLocale()];
+  const locale = useLocale();
+  const t = L[locale];
+  const names = penColorNames[locale];
   const reduce = useReducedMotion();
   const id = useId();
   const vertical = orientation === "vertical";
-  const showColors = value.tool === "pen" || value.tool === "highlighter";
-  const showWidth = value.tool !== "lasso";
+  // Remember the last ink and highlighter so switching tools restores them.
+  const last = useRef<{ ink: InkName; highlight: HighlightName }>({
+    ink: "black",
+    highlight: "yellow",
+  });
+  if (value.tool === "highlighter") {
+    if (isHighlight(value.color)) last.current.highlight = value.color;
+  } else if (isInk(value.color)) last.current.ink = value.color;
+
+  const drawing = value.tool !== null && value.tool !== "eraser" && value.tool !== "lasso";
+  const colors = value.tool === "highlighter" ? HIGHLIGHT_NAMES : INK_NAMES;
   const transition = reduce ? { duration: 0 } : spring("snappy");
+
+  const pick = (tool: PenTool | null) => {
+    if (tool === "eraser" && value.tool === "eraser") {
+      onChange({ ...value, eraserMode: value.eraserMode === "stroke" ? "pixel" : "stroke" });
+      return;
+    }
+    const inks = tool !== null && tool !== "eraser" && tool !== "lasso" && tool !== "highlighter";
+    let color = value.color;
+    if (tool === "highlighter" && value.tool !== "highlighter") color = last.current.highlight;
+    if (inks && (value.tool === "highlighter" || !isInk(color))) color = last.current.ink;
+    onChange({ ...value, tool, color });
+  };
+
   const sep = (
     <span
       aria-hidden
-      className={cn("shrink-0 bg-separator", vertical ? "mx-auto my-1 h-px w-6" : "mx-1 h-6 w-px")}
+      className={cn(
+        "shrink-0 bg-separator",
+        vertical ? "my-1 h-px w-6 self-center" : "mx-1 h-6 w-px",
+      )}
     />
   );
-  const group = cn("flex items-center gap-0.5", vertical && "flex-col");
+  const side = vertical ? "right" : "top";
+  const toolBtn = (
+    key: string,
+    label: string,
+    active: boolean,
+    onClick: () => void,
+    icon: ReactNode,
+    badge?: string,
+  ) => (
+    <Tooltip key={key} content={label} side={side}>
+      <button
+        type="button"
+        aria-pressed={active}
+        aria-label={label}
+        onClick={onClick}
+        className={cn(
+          "relative grid h-11 w-9 place-items-center rounded-[12px] text-fg-secondary outline-none transition-colors duration-fast",
+          "hover:text-fg focus-visible:focus-ring aria-pressed:text-fg [&_svg]:relative [&_svg]:size-[19px]",
+        )}
+      >
+        {active && (
+          <motion.span
+            layoutId="pen-tool"
+            transition={transition}
+            className="absolute inset-0 rounded-[12px] bg-selected"
+          />
+        )}
+        <motion.span
+          className="relative grid place-items-center"
+          animate={{ y: active && !reduce ? -2 : 0 }}
+          transition={transition}
+        >
+          {icon}
+        </motion.span>
+        {badge && (
+          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-fg px-1.5 text-[10px] font-medium leading-[14px] text-canvas">
+            {badge}
+          </span>
+        )}
+      </button>
+    </Tooltip>
+  );
 
   return (
     <LayoutGroup id={id}>
       <div
         role="toolbar"
+        aria-label={t.toolbar}
         aria-orientation={orientation}
+        onMouseDown={(e) => e.preventDefault()}
         className={cn(
-          "glass inline-flex items-center rounded-full p-1",
+          "glass inline-flex items-center gap-0.5 rounded-[20px] p-1",
           vertical && "flex-col",
           className,
         )}
       >
-        <ToggleGroup.Root
-          type="single"
-          aria-label={t.tools}
-          orientation={orientation}
-          value={value.tool}
-          onValueChange={(v) => v && onChange({ ...value, tool: v as PenTool })}
-          className={group}
-        >
-          {tools.map((tool) => (
-            <Tooltip
-              key={tool}
-              content={t[tool]}
-              shortcut={shortcuts[tool]}
-              side={vertical ? "right" : "top"}
-            >
-              <ToggleGroup.Item
-                value={tool}
-                aria-label={t[tool]}
-                className="relative grid size-9 place-items-center rounded-full text-fg-secondary outline-none transition-colors duration-fast hover:text-fg focus-visible:focus-ring aria-checked:text-fg [&_svg]:relative [&_svg]:size-[19px]"
-              >
-                {value.tool === tool && (
-                  <motion.span
-                    layoutId="pen-tool"
-                    transition={transition}
-                    className="absolute inset-0 rounded-full bg-selected"
-                  />
+        {textMode && toolBtn("text", t.text, value.tool === null, () => pick(null), <Type />)}
+        {tools.map((tool) =>
+          toolBtn(
+            tool,
+            tool === "eraser"
+              ? `${t.eraser}: ${value.eraserMode === "stroke" ? t.stroke : t.pixel} (${t.eraserHint})`
+              : t[tool],
+            value.tool === tool,
+            () => pick(tool),
+            tool === "lasso" ? (
+              <Lasso />
+            ) : (
+              <Nib
+                tool={tool}
+                color={colorVar(
+                  tool,
+                  value.tool === tool
+                    ? value.color
+                    : tool === "highlighter"
+                      ? last.current.highlight
+                      : last.current.ink,
                 )}
-                {icons[tool]}
-              </ToggleGroup.Item>
-            </Tooltip>
-          ))}
-        </ToggleGroup.Root>
+              />
+            ),
+            tool === "eraser" && value.tool === "eraser"
+              ? value.eraserMode === "stroke"
+                ? t.stroke
+                : t.pixel
+              : undefined,
+          ),
+        )}
 
-        {showColors && (
+        {drawing && (
           <>
             {sep}
-            <ToggleGroup.Root
-              type="single"
+            <div
+              role="radiogroup"
               aria-label={t.color}
-              orientation={orientation}
-              value={value.tool === "pen" ? value.ink : value.highlight}
-              onValueChange={(v) => {
-                if (!v) return;
-                onChange(
-                  value.tool === "pen"
-                    ? { ...value, ink: v as InkName }
-                    : { ...value, highlight: v as HighlightName },
-                );
-              }}
-              className={group}
+              className={cn("flex items-center", vertical && "flex-col")}
             >
-              {(value.tool === "pen" ? INKS : HIGHLIGHTS).map((c) => {
-                const selected = (value.tool === "pen" ? value.ink : value.highlight) === c;
-                const color =
-                  value.tool === "pen" ? `var(--ds-ink-${c})` : `var(--ds-highlight-${c})`;
+              {colors.map((c) => {
+                const selected = value.color === c;
+                const v = colorVar(value.tool, c);
                 return (
-                  <ToggleGroup.Item
+                  <button
                     key={c}
-                    value={c}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
                     aria-label={names[c]}
+                    onClick={() => onChange({ ...value, color: c })}
                     className="relative grid size-8 place-items-center rounded-full outline-none focus-visible:focus-ring"
                   >
                     {selected && (
@@ -203,47 +318,42 @@ export function PenToolbar({
                         className="absolute inset-[3px] rounded-full border-2"
                         style={{
                           borderColor:
-                            value.tool === "pen"
-                              ? color
-                              : `color-mix(in oklab, ${color}, var(--ds-text-primary) 25%)`,
+                            value.tool === "highlighter"
+                              ? `color-mix(in oklab, ${v}, var(--ds-text-primary) 30%)`
+                              : v,
                         }}
                       />
                     )}
                     <span
                       className={cn(
-                        "rounded-full transition-transform duration-fast ease-snappy",
-                        selected ? "size-4" : "size-5 hover:scale-110",
+                        "rounded-full transition-[width,height] duration-fast ease-snappy",
+                        selected ? "size-4" : "size-5",
                       )}
                       style={{
-                        backgroundColor: color,
+                        backgroundColor: v,
                         boxShadow:
-                          "inset 0 0 0 0.5px color-mix(in oklab, var(--ds-text-primary) 20%, transparent)",
+                          "inset 0 0 0 0.5px color-mix(in oklab, var(--ds-text-primary) 22%, transparent)",
                       }}
                     />
-                  </ToggleGroup.Item>
+                  </button>
                 );
               })}
-            </ToggleGroup.Root>
-          </>
-        )}
-
-        {showWidth && (
-          <>
+            </div>
             {sep}
-            <ToggleGroup.Root
-              type="single"
+            <div
+              role="radiogroup"
               aria-label={t.width}
-              orientation={orientation}
-              value={String(value.width)}
-              onValueChange={(v) => v && onChange({ ...value, width: Number(v) as PenWidth })}
-              className={group}
+              className={cn("flex items-center", vertical && "flex-col")}
             >
               {([1, 2, 3] as const).map((w, i) => (
-                <ToggleGroup.Item
+                <button
                   key={w}
-                  value={String(w)}
+                  type="button"
+                  role="radio"
+                  aria-checked={value.width === w}
                   aria-label={t.widths[i]}
-                  className="relative grid size-8 place-items-center rounded-full text-fg-tertiary outline-none hover:text-fg-secondary focus-visible:focus-ring data-[state=on]:text-fg"
+                  onClick={() => onChange({ ...value, width: w })}
+                  className="relative grid size-8 place-items-center rounded-full outline-none focus-visible:focus-ring"
                 >
                   {value.width === w && (
                     <motion.span
@@ -253,12 +363,55 @@ export function PenToolbar({
                     />
                   )}
                   <span
-                    className="relative rounded-full bg-current"
-                    style={{ width: 4 + w * 3, height: 4 + w * 3 }}
+                    className="relative rounded-full"
+                    style={{
+                      width: 3 + w * 3,
+                      height: 3 + w * 3,
+                      backgroundColor: colorVar(value.tool, value.color),
+                    }}
                   />
-                </ToggleGroup.Item>
+                </button>
               ))}
-            </ToggleGroup.Root>
+            </div>
+          </>
+        )}
+
+        {sep}
+        <Tooltip content={t.anyPointer} side={side}>
+          <button
+            type="button"
+            aria-pressed={value.drawWithAnyPointer}
+            aria-label={t.anyPointer}
+            onClick={() => onChange({ ...value, drawWithAnyPointer: !value.drawWithAnyPointer })}
+            className="grid size-9 place-items-center rounded-full text-fg-secondary outline-none transition-colors duration-fast hover:bg-hover hover:text-fg focus-visible:focus-ring aria-pressed:bg-accent-soft aria-pressed:text-accent [&_svg]:size-[18px]"
+          >
+            <Hand />
+          </button>
+        </Tooltip>
+        {(onUndo || onRedo) && (
+          <>
+            <Tooltip content={t.undo} shortcut="mod+z" side={side}>
+              <button
+                type="button"
+                aria-label={t.undo}
+                disabled={!canUndo}
+                onClick={onUndo}
+                className="grid size-9 place-items-center rounded-full text-fg-secondary outline-none hover:bg-hover hover:text-fg focus-visible:focus-ring disabled:opacity-35 disabled:hover:bg-transparent [&_svg]:size-[18px]"
+              >
+                <Undo2 />
+              </button>
+            </Tooltip>
+            <Tooltip content={t.redo} shortcut="mod+shift+z" side={side}>
+              <button
+                type="button"
+                aria-label={t.redo}
+                disabled={!canRedo}
+                onClick={onRedo}
+                className="grid size-9 place-items-center rounded-full text-fg-secondary outline-none hover:bg-hover hover:text-fg focus-visible:focus-ring disabled:opacity-35 disabled:hover:bg-transparent [&_svg]:size-[18px]"
+              >
+                <Redo2 />
+              </button>
+            </Tooltip>
           </>
         )}
       </div>

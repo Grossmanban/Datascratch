@@ -1,0 +1,209 @@
+import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
+import * as Y from 'yjs';
+import type { AppContext } from '../context.js';
+import { withAgentScope, type Tx } from '../db/client.js';
+import { attachmentChunks, attachments, docSnapshots, docUpdates, docs, notebooks } from '../db/schema.js';
+import { COMPACT_JOB } from '../jobs/index.js';
+import { fromB64, toB64 } from '../lib/encoding.js';
+import { ApiError, forbidden, notFound } from '../lib/errors.js';
+import { AD, getSodium, open, seal } from '../lib/sodium.js';
+import { chunkKey } from '../storage/index.js';
+import type { AgentDataSource, AgentEditOrigin, AgentNotebook } from './agents-context.js';
+
+/** Server-side snapshot of agent-mode documents (the server holds the key there). */
+const SNAPSHOT_AFTER_UPDATES = 500;
+const SNAPSHOT_AFTER_BYTES = 1024 * 1024;
+const KEY_CACHE_MAX = 10_000;
+
+function readWrappedKey(meta: unknown): string | null {
+  const v = meta instanceof Y.Map ? meta.get('wrappedKey') : (meta as { wrappedKey?: unknown } | null)?.wrappedKey;
+  return typeof v === 'string' ? v : null;
+}
+
+/** A small bounded map: oldest entries are evicted first. */
+class BoundedMap<K, V> extends Map<K, V> {
+  override set(k: K, v: V) {
+    if (!this.has(k) && this.size >= KEY_CACHE_MAX) this.delete(this.keys().next().value as K);
+    return super.set(k, v);
+  }
+}
+
+/**
+ * Decrypted access to agent-mode notebooks for @datascratch/agents.
+ * Every call runs inside a Row-Level-Security scope (D-30): the user's
+ * agent-mode notebooks, narrowed to the grant's notebooks when `grantId` is given.
+ * Keys: notebookKey = open(DS_KMS_KEY), noteKey = open(notebookKey, NoteMeta.wrappedKey) (crypto.md §1, §8).
+ */
+export class PgAgentDataSource implements AgentDataSource {
+  /** noteId → noteKey; keys never change for a document. Access is re-checked by RLS on every call. */
+  readonly #noteKeys = new BoundedMap<string, Uint8Array>();
+
+  constructor(private readonly ctx: AppContext) {}
+
+  #scope<T>(userId: string, grantId: string | undefined, fn: (tx: Tx, after: (() => unknown)[]) => Promise<T>) {
+    const after: (() => unknown)[] = [];
+    return withAgentScope(this.ctx.database.db, { userId, grantId }, (tx) => fn(tx, after)).then(async (r) => {
+      for (const cb of after) {
+        try {
+          await cb();
+        } catch (err) {
+          this.ctx.log.error({ err }, 'agent after-commit hook failed');
+        }
+      }
+      return r;
+    });
+  }
+
+  async #notebookKey(tx: Tx, notebookId: string): Promise<Uint8Array> {
+    const key = await this.ctx.keys.notebookKey(tx, notebookId);
+    if (!key) throw notFound('notebook not found');
+    return key;
+  }
+
+  async #state(tx: Tx, docId: string, key: Uint8Array): Promise<{ doc: Y.Doc; seq: number }> {
+    const [snap] = await tx
+      .select({ seq: docSnapshots.seq, payload: docSnapshots.payload })
+      .from(docSnapshots)
+      .where(eq(docSnapshots.docId, docId))
+      .orderBy(desc(docSnapshots.seq))
+      .limit(1);
+    const from = snap?.seq ?? 0;
+    const rows = await tx
+      .select({ seq: docUpdates.seq, payload: docUpdates.payload })
+      .from(docUpdates)
+      .where(and(eq(docUpdates.docId, docId), gt(docUpdates.seq, from)))
+      .orderBy(asc(docUpdates.seq));
+    const doc = new Y.Doc({ gc: false });
+    const ad = AD.doc(docId);
+    if (snap) Y.applyUpdate(doc, await open(key, snap.payload, ad));
+    for (const r of rows) Y.applyUpdate(doc, await open(key, r.payload, ad));
+    return { doc, seq: rows.length ? rows[rows.length - 1]!.seq : from };
+  }
+
+  /** The doc row (visible under RLS) and the key that encrypts it. */
+  async #docAndKey(tx: Tx, docId: string) {
+    const [d] = await tx.select().from(docs).where(eq(docs.id, docId));
+    if (!d || !d.notebookId || d.kind === 'account') return null;
+    const nbKey = await this.#notebookKey(tx, d.notebookId);
+    if (d.kind === 'notebook') return { doc: d, key: nbKey };
+    let key = this.#noteKeys.get(docId);
+    if (!key) {
+      const { doc: index } = await this.#state(tx, d.notebookId, nbKey);
+      const wrapped = readWrappedKey(index.getMap('notes').get(docId));
+      index.destroy();
+      if (!wrapped) return null;
+      key = await this.ctx.keys.noteKey(nbKey, docId, fromB64(wrapped));
+      this.#noteKeys.set(docId, key);
+    }
+    return { doc: d, key };
+  }
+
+  /** Explicit write check (clear error); RLS would reject the write anyway. */
+  async #requireWritable(tx: Tx, docId: string) {
+    const r = await tx.execute<{ ok: boolean }>(sql`SELECT ds_agent_doc_allowed(${docId}::uuid, true) AS ok`);
+    if (!r.rows[0]?.ok) throw forbidden('the grant does not allow writing to this notebook');
+  }
+
+  async listAgentNotebooks(userId: string, grantId?: string): Promise<AgentNotebook[]> {
+    return this.#scope(userId, grantId, async (tx) => {
+      const rows = await tx
+        .select({ id: notebooks.id, createdAt: notebooks.createdAt })
+        .from(notebooks)
+        .orderBy(asc(notebooks.createdAt));
+      // Names live in the account document (masterKey) — the server cannot read them.
+      return rows.map((r) => ({ id: r.id, name: null, icon: null, space: null, createdAt: r.createdAt.toISOString() }));
+    });
+  }
+
+  async loadDoc(userId: string, docId: string, grantId?: string) {
+    return this.#scope(userId, grantId, async (tx) => {
+      const dk = await this.#docAndKey(tx, docId);
+      if (!dk) return null;
+      try {
+        return await this.#state(tx, docId, dk.key);
+      } catch (err) {
+        this.ctx.log.warn({ err, docId }, 'agent: document could not be decrypted');
+        return null;
+      }
+    });
+  }
+
+  async docSeqs(userId: string, docIds: string[], grantId?: string) {
+    if (docIds.length === 0) return {};
+    return this.#scope(userId, grantId, async (tx) => {
+      const rows = await tx
+        .select({ id: docs.id, seq: docs.lastSeq })
+        .from(docs)
+        .where(inArray(docs.id, docIds));
+      return Object.fromEntries(rows.map((r) => [r.id, r.seq]));
+    });
+  }
+
+  async applyUpdate(userId: string, docId: string, update: Uint8Array, origin: AgentEditOrigin) {
+    if (origin.userId !== userId) throw forbidden('origin does not match user');
+    return this.#scope(userId, origin.grantId, async (tx, after) => {
+      const dk = await this.#docAndKey(tx, docId);
+      if (!dk) throw notFound('document not found');
+      await this.#requireWritable(tx, docId);
+      const deviceId = `agent:${origin.grantId}`;
+      const payload = await seal(dk.key, update, AD.doc(docId));
+      // RLS rejects the insert when the grant is read-only.
+      const r = await this.ctx.documents.append(tx, { docId, payload, deviceId });
+      after.push(() => this.ctx.documents.publishUpdate(docId, r.seq, payload, deviceId, null));
+      this.ctx.metrics.syncUpdates.inc({ source: 'agent' });
+      if (r.updatesSinceSnapshot >= SNAPSHOT_AFTER_UPDATES || r.bytesSinceSnapshot >= SNAPSHOT_AFTER_BYTES) {
+        const { doc, seq } = await this.#state(tx, docId, dk.key);
+        const state = Y.encodeStateAsUpdate(doc);
+        doc.destroy();
+        await this.ctx.documents.storeSnapshot(tx, {
+          docId,
+          baseSeq: seq,
+          payload: await seal(dk.key, state, AD.doc(docId)),
+          deviceId,
+        });
+        after.push(() => this.ctx.jobs.enqueue(COMPACT_JOB, { docId }, { singletonKey: docId, startAfterSec: 30 }));
+      }
+      return { seq: r.seq };
+    });
+  }
+
+  async createNoteDoc(userId: string, notebookId: string, noteId: string, grantId?: string) {
+    return this.#scope(userId, grantId, async (tx) => {
+      const nbKey = await this.#notebookKey(tx, notebookId);
+      const [existing] = await tx.select({ id: docs.id }).from(docs).where(eq(docs.id, noteId));
+      if (existing) throw new ApiError('conflict', 'document exists');
+      const w = await tx.execute<{ ok: boolean }>(
+        sql`SELECT ${notebookId}::uuid IN (SELECT ds_agent_notebooks(true)) AS ok`,
+      );
+      if (!w.rows[0]?.ok) throw forbidden('the grant does not allow writing to this notebook');
+      // RLS enforces the same on the insert itself.
+      await tx.insert(docs).values({ id: noteId, userId, kind: 'note', notebookId });
+      const noteKey = (await getSodium()).randombytes_buf(32);
+      const wrapped = await seal(nbKey, noteKey, AD.note(noteId));
+      this.#noteKeys.set(noteId, noteKey);
+      return { wrappedKey: toB64(wrapped) };
+    });
+  }
+
+  async loadAttachmentImage(userId: string, attachmentId: string, grantId?: string) {
+    return this.#scope(userId, grantId, async (tx) => {
+      const [a] = await tx.select().from(attachments).where(eq(attachments.id, attachmentId));
+      if (!a || !a.mime.startsWith('image/')) return null;
+      const dk = await this.#docAndKey(tx, a.noteId);
+      if (!dk) return null;
+      const chunks = await tx
+        .select()
+        .from(attachmentChunks)
+        .where(eq(attachmentChunks.attachmentId, a.id))
+        .orderBy(asc(attachmentChunks.index));
+      if (chunks.length !== a.chunkCount) return null;
+      const parts: Uint8Array[] = [];
+      for (const c of chunks) {
+        const blob = await this.ctx.storage.get(chunkKey(a.id, c.index));
+        if (!blob) return null;
+        parts.push(await open(dk.key, blob, AD.attachment(a.id, c.index, c.index === a.chunkCount - 1)));
+      }
+      return Buffer.concat(parts);
+    });
+  }
+}

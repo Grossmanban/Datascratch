@@ -17,12 +17,14 @@ Swift 6 (строгая конкурентность), iOS/iPadOS 26+ (D-32). К
 .product(name: "DSCore", package: "DSCore")
 ```
 
-Перед сборкой нужен `build/yrs_ffiFFI.xcframework` (Rust-библиотека Yrs):
+Rust-библиотека Yrs приходит готовой: `Package.swift` скачивает `yrs_ffiFFI.xcframework` из
+GitHub-релиза `yrs-ffi-<хэш>` (публикует CI `ios-core.yml` после зелёных тестов). Rust и
+скрипты потребителям **не нужны**.
 
-| Где | Команда |
+| Где | Что |
 | --- | --- |
-| Mac (Xcode 26+, `rustup`) | `apps/ios/Packages/DSCore/scripts/build-xcframework.sh` (~2 мин, один раз и после правок `yrs-ffi`) |
-| CI потребителя | тот же скрипт; кэшировать `~/.cargo` и `yrs-ffi/target` (см. `.github/workflows/ios-core.yml`) |
+| Потребитель (DSEditor, приложение, их CI) | ничего: SwiftPM сам скачает и проверит контрольную сумму |
+| Правка `yrs-ffi` на Mac | `scripts/build-xcframework.sh` (Xcode 26+, `rustup`) — локальная сборка в `build/` имеет приоритет над релизом; после зелёного CI вписать новый url/checksum из сводки задания в `yrsRelease` (`Package.swift`) |
 | Linux (облачные сессии) | `scripts/build-linux.sh`, затем `swift build` / `swift test` (Swift 6.2+, `libsodium-dev`, `libsqlite3-dev`) |
 
 `scripts/generate-bindings.sh` — перегенерировать Swift-привязки после правки `yrs-ffi/src`
@@ -140,9 +142,13 @@ DSCore
 
 - `AccountService(api:keys:store:)`: `signup(email:password:)` (возвращает текст ключа
   восстановления — показать один раз), `login`, `recover(email:recoveryKeyText:newPassword:)`,
-  `changePassword`, `logout`, `createNotebook(name:spaceId:mode:...in:)` (ключ, `POST /notebooks`,
-  `POST /docs`, документ блокнота, `NotebookRef`), `loadNotebookKeys()` (новое устройство),
-  `setMode` (режим «для агентов»), `createNote(in:...)` (ключ заметки, `NoteMeta`).
+  `changePassword`, `rotateRecoveryKey(email:currentPassword:account:)` (новый ключ восстановления,
+  подтверждение паролем; возвращает текст ключа — показать один раз; сбрасывает
+  `AccountDocument.recoveryKeyConfirmed`, подтверждение — `setRecoveryKeyConfirmed(true)`),
+  `securityEvents()` (журнал безопасности), `logout`, `createNotebook(name:spaceId:mode:...in:)`
+  (ключ, `POST /notebooks`, `POST /docs`, документ блокнота, `NotebookRef`), `loadNotebookKeys()`
+  (новое устройство), `setMode` (режим «для агентов»), `createNote(in:...)` (ключ заметки,
+  `NoteMeta`), `moveNote(id:from:to:)` (перенос в другой блокнот), `dailyNote(for:in:)`, `inbox(in:)`.
 - `AttachmentManager(api:store:directory:)`: `add(_:mime:noteId:)` → `attachmentId` (файл
   сохраняется локально и ставится в очередь), `uploadPending(noteKey:)` / `upload` (куски по
   1 MiB, докачка), `download(...)`, `localURL`, `delete`.
@@ -183,6 +189,24 @@ for await status in await engine.statusUpdates() { /* connection, pending, catch
   префиксы, без учёта диакритики), `tasks(TaskQuery)`, `backlinks(to:)`, `tags()`,
   `notes(withTag:)` (с вложенными `тег/…`);
 - вложения: `saveAttachment`, `markChunkUploaded` (докачка по кускам), `attachments(state:)`.
+
+## Производительность (spec/11)
+
+Бенчмарки `Tests/DSCoreTests/BenchmarkTests.swift` (включаются `DS_BENCH=1`; в CI — отдельный
+информационный шаг на симуляторе, итоги в сводке задания). Замеры 2026-10-25, release, база на диске;
+iOS — симулятор iPad (iOS 26) на раннере GitHub `macos-26`, Linux — x86-64, 4 ядра:
+
+| Цель spec/11 | iOS (симулятор) | Linux |
+| --- | --- | --- |
+| Первая синхронизация 10 000 заметок ≤ 1 мин | ≈ 10 с приём + ≈ 15 с индексация = ≈ 26 с | ≈ 17 с + ≈ 5 с |
+| Открытие заметки на 10 000 слов ≤ 300 мс | ≈ 12 мс | ≈ 10 мс |
+| Холодный старт ≤ 1 с | ≈ 0,37 с | ≈ 0,5 с |
+
+Приём включает фейковый сервер в тесте. Холодный старт = открыть базу, загрузить блокнот с 10 000
+заметок, получить список; записи читаются одним JSON (`map_json`) через `JSONDecoder` — путь
+через `NSDictionary` на iOS давал ≈ 1,8 с.
+
+Индексация после первой синхронизации — `LocalStore.index(_ batch:)` одной транзакцией.
 
 ## Тесты
 

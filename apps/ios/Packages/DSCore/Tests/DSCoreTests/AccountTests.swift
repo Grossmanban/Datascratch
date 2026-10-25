@@ -11,11 +11,12 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
         var wrappedPassword: String; var wrappedRecovery: String; var accountDocId: String }
 
     let state = Locked<(users: [String: User], notebooks: [String: [String: Any]], docs: Set<String>,
-                        attachments: [String: (chunkCount: Int, chunks: [Int: Data])], tokens: Int)>(([:], [:], [], [:], 0))
+                        attachments: [String: (chunkCount: Int, chunks: [Int: Data])], tokens: Int, moved: [String: String],
+                        events: [[String: Any]])>(([:], [:], [], [:], 0, [:], []))
 
     func session(_ u: User) -> [String: Any] {
         let n = state.withLock { $0.tokens += 1; return $0.tokens }
-        return ["userId": u.userId, "accessToken": "at\(n)", "refreshToken": "rt\(n)", "accessExpiresAt": DSDate.iso(Date().addingTimeInterval(900)),
+        return ["userId": u.userId, "deviceId": "dev-\(n)", "accessToken": "at\(n)", "refreshToken": "rt\(n)", "accessExpiresAt": DSDate.iso(Date().addingTimeInterval(900)),
                 "wrappedMasterKeyPassword": u.wrappedPassword, "accountDocId": u.accountDocId]
     }
 
@@ -58,6 +59,16 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
                 return s.users[email]!
             }
             return path.hasSuffix("finish") ? (200, session(u)) : (204, nil)
+        case ("POST", "/v1/auth/recovery-key"):
+            guard let email = state.withLock({ s in s.users.first { $0.value.loginKey == b["currentLoginKey"] as? String }?.key }) else { return error(401, "unauthorized") }
+            state.withLock { s in
+                s.users[email]!.recoveryLoginKey = b["recoveryLoginKey"] as! String
+                s.users[email]!.wrappedRecovery = b["wrappedMasterKeyRecovery"] as! String
+                s.events.insert(["kind": "recovery_key_rotated", "at": DSDate.iso(Date()), "deviceId": "dev-1", "deviceName": NSNull()], at: 0)
+            }
+            return (204, nil)
+        case ("GET", "/v1/me/security-events"):
+            return (200, state.withLock { $0.events })
         case ("POST", "/v1/auth/logout"):
             return (204, nil)
         case ("POST", "/v1/notebooks"):
@@ -66,6 +77,9 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
             return (200, nb)
         case ("GET", "/v1/notebooks"):
             return (200, state.withLock { Array($0.notebooks.values) })
+        case ("PATCH", _) where parts.count == 3 && parts[1] == "docs":
+            state.withLock { $0.moved[parts[2]] = b["notebookId"] as? String }
+            return (204, nil)
         case ("POST", "/v1/docs"):
             state.withLock { _ = $0.docs.insert(b["docId"] as! String) }
             return (204, nil)
@@ -84,7 +98,7 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
                 guard let att = state.withLock({ $0.attachments[id] }) else { return error(404, "not_found") }
                 if parts.count == 3, method == "GET" {
                     let size = att.chunks.values.reduce(0) { $0 + $1.count }
-                    return (200, ["size": size, "chunkCount": att.chunkCount, "uploadedChunks": att.chunks.keys.sorted()])
+                    return (200, ["size": size, "chunkCount": att.chunkCount, "mime": "image/png", "uploadedChunks": att.chunks.keys.sorted()])
                 }
                 if parts.count == 5, let index = Int(parts[4]) {
                     if method == "PUT" {
@@ -122,6 +136,16 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
         let note = try await device1.createNote(in: notebook, title: "First")
         let meta = try #require(notebook.note(id: note.noteId))
         #expect(meta.title == "First")
+        let noteKey1Before = try device1.keys.noteKey(noteId: note.noteId, wrappedKey: meta.wrappedKey, notebookId: notebook.notebookId)
+        // Move the note to another notebook: key rewrapped, meta moved, server told.
+        let other = try await device1.createNotebook(name: "Work", spaceId: space.id, order: 2, in: signup.account)
+        try await device1.moveNote(id: note.noteId, from: notebook, to: other)
+        #expect(notebook.note(id: note.noteId) == nil)
+        let movedMeta = try #require(other.note(id: note.noteId))
+        #expect(server.state.withLock { $0.moved[note.noteId] } == other.notebookId)
+        #expect(try device1.keys.noteKey(noteId: note.noteId, wrappedKey: movedMeta.wrappedKey, notebookId: other.notebookId) == noteKey1Before)
+        #expect(try device1.store.document(note.noteId)?.notebookId == other.notebookId)
+        try await device1.moveNote(id: note.noteId, from: other, to: notebook)
         let daily = try await device1.dailyNote(for: "2026-10-25", in: notebook)
         #expect(daily.created != nil && daily.meta.kind == .daily)
         #expect(try await device1.dailyNote(for: "2026-10-25", in: notebook).created == nil)
@@ -146,6 +170,22 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
         let device4 = try makeService(server)
         try await device4.login(email: "me@example.com", password: "new one", deviceName: "Mac")
         #expect(try device4.keys.masterKey() == master)
+
+        // Recovery key rotation: the old key stops working, the new one recovers the same master key.
+        try signup.account.setRecoveryKeyConfirmed(true)
+        await #expect(throws: (any Error).self) {
+            _ = try await device4.rotateRecoveryKey(email: "me@example.com", currentPassword: "wrong", account: signup.account)
+        }
+        let newRecovery = try await device4.rotateRecoveryKey(email: "me@example.com", currentPassword: "new one", account: signup.account)
+        #expect(newRecovery.hasPrefix("DS1-") && newRecovery != signup.recoveryKeyText)
+        #expect(signup.account.recoveryKeyConfirmed == false)
+        #expect(try await device4.securityEvents().map(\.kind) == [.recoveryKeyRotated])
+        await #expect(throws: APIError.self) {
+            try await makeService(server).recover(email: "me@example.com", recoveryKeyText: signup.recoveryKeyText, newPassword: "x")
+        }
+        let device5 = try makeService(server)
+        try await device5.recover(email: "me@example.com", recoveryKeyText: newRecovery, newPassword: "new one")
+        #expect(try device5.keys.masterKey() == master)
 
         // Attachments: encrypted chunk upload, resumable, downloaded by another device.
         let dir1 = FileManager.default.temporaryDirectory.appendingPathComponent(EntityID.make())

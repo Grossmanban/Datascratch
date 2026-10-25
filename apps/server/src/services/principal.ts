@@ -10,27 +10,9 @@ export interface GuestPrincipal {
   ownerId: string;
   permission: 'view' | 'edit';
   target: { kind: 'note' | 'notebook'; id: string };
-  /** Client-supplied device id (hello.deviceId); only used to tag updates. */
+  /** Namespaced device id (`guest:<base64url of SHA-256(shareId|hello.deviceId)[0..16]>`); only used to tag updates. */
   deviceId: string;
 }
 
-export interface AgentPrincipal {
-  kind: 'agent';
-  tokenId: string;
-  userId: string;
-  permission: 'read' | 'read_write';
-  notebookIds: string[];
-}
-
-export type Principal = UserPrincipal | GuestPrincipal | AgentPrincipal;
-
-/** The deviceId recorded for updates made by a principal. */
-export function principalDeviceId(p: Principal): string {
-  switch (p.kind) {
-    case 'user':
-    case 'guest':
-      return p.deviceId;
-    case 'agent':
-      return `agent:${p.tokenId}`;
-  }
-}
+/** Who talks to the REST/sync API. Agents go through the agents plugin (plugins/agents-data.ts). */
+export type Principal = UserPrincipal | GuestPrincipal;

@@ -372,3 +372,24 @@ describe("re-anchoring after block rewrites", () => {
     expect(reanchorStrokes(doc, snap)).toEqual([]);
   });
 });
+
+describe("replaceStrokeWithReanchored", () => {
+  it("replaces under the given origin so an UndoManager tracks it", async () => {
+    const { replaceStrokeWithReanchored } = await import("../src/index.js");
+    const { doc, text } = noteWithText("abcdef");
+    putStroke(doc, "s", base([encodeAnchor(text, 1)], [pt(0, 0), pt(0, 1)]));
+    const origin = { editor: true };
+    const undo = new Y.UndoManager(noteRoots(doc).strokes, { trackedOrigins: new Set([origin]) });
+    const to = replaceStrokeWithReanchored(doc, "s", [encodeAnchor(text, 4)], {
+      origin,
+      newId: () => "s2",
+    });
+    expect(to).toBe("s2");
+    expect(getStroke(doc, "s")).toBeNull();
+    expect(resolveAnchors(doc, getStroke(doc, "s2")!.anchors)[0]!.index).toBe(4);
+    expect(undo.undoStack.length).toBe(1);
+    undo.undo();
+    expect(getStroke(doc, "s")).not.toBeNull();
+    expect(replaceStrokeWithReanchored(doc, "missing", [])).toBeNull();
+  });
+});

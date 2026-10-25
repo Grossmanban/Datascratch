@@ -364,3 +364,106 @@ struct SyncVectorTests {
         }
     }
 }
+
+@Suite(.enabled(if: Vectors.available, "packages/test-vectors not present yet"))
+struct EncodingVectorTests {
+    @Test(.enabled(if: FileManager.default.fileExists(atPath: Vectors.root.appendingPathComponent("crypto/base64url.json").path)))
+    func base64url() throws {
+        let file = try Vectors.json("crypto/base64url.json")
+        for c in file["encode"] as! [[String: String]] {
+            let data = try Vectors.hex(c["hex"])
+            #expect(Base64URL.encode(data) == c["base64url"]!)
+            #expect(Base64URL.decode(c["base64url"]!) == data)
+        }
+        for r in file["rejectDecode"] as! [[String: String]] {
+            #expect(Base64URL.decode(r["input"]!) == nil, "\(r["reason"]!)")
+        }
+    }
+
+    /// REST bodies: valid ones decode, invalid ones are rejected (api/bodies.json).
+    @Test(.enabled(if: FileManager.default.fileExists(atPath: Vectors.root.appendingPathComponent("api/bodies.json").path)))
+    func restBodies() throws {
+        let cases = try Vectors.json("api/bodies.json")["cases"] as! [String: [String: Any]]
+        let decoders: [String: (Data) throws -> Void] = [
+            "preloginRequest": { _ = try JSONDecoder().decode(PreloginRequest.self, from: $0) },
+            "preloginResponse": { _ = try JSONDecoder().decode(PreloginResponse.self, from: $0) },
+            "signupRequest": { _ = try JSONDecoder().decode(SignupRequest.self, from: $0) },
+            "loginRequest": { _ = try JSONDecoder().decode(LoginRequest.self, from: $0) },
+            "session": { _ = try JSONDecoder().decode(AuthSession.self, from: $0) },
+            "recoveryFinishRequest": { _ = try JSONDecoder().decode(RecoveryFinishRequest.self, from: $0) },
+            "createNotebookRequest": { _ = try JSONDecoder().decode(CreateNotebookRequest.self, from: $0) },
+            "registerDocRequest": { _ = try JSONDecoder().decode(RegisterDocRequest.self, from: $0) },
+            "moveDocRequest": { _ = try JSONDecoder().decode(MoveDocRequest.self, from: $0) },
+            "rotateRecoveryKeyRequest": { _ = try JSONDecoder().decode(RotateRecoveryKeyRequest.self, from: $0) },
+            "securityEvent": { _ = try JSONDecoder().decode(SecurityEvent.self, from: $0) },
+            "attachmentStatus": { _ = try JSONDecoder().decode(AttachmentStatus.self, from: $0) },
+            "createShareRequest": { _ = try JSONDecoder().decode(CreateShareRequest.self, from: $0) },
+            "apiError": { _ = try JSONDecoder().decode(APIErrorBody.self, from: $0) },
+        ]
+        for (name, c) in cases {
+            guard let decode = decoders[name] else {
+                Issue.record("no Swift type for \(name)")
+                continue
+            }
+            for body in c["valid"] as! [Any] {
+                #expect(throws: Never.self, "\(name) valid") { try decode(try JSONSerialization.data(withJSONObject: body)) }
+            }
+            for inv in c["invalid"] as! [[String: Any]] {
+                #expect(throws: (any Error).self, "\(name): \(inv["reason"]!)") { try decode(try JSONSerialization.data(withJSONObject: inv["body"]!)) }
+            }
+        }
+    }
+}
+
+@Suite(.enabled(if: Vectors.available, "packages/test-vectors not present yet"))
+struct FlowVectorTests {
+    static func has(_ name: String) -> Bool { FileManager.default.fileExists(atPath: Vectors.root.appendingPathComponent(name).path) }
+
+    @Test(.enabled(if: has("crypto/share-link.json")))
+    func shareLinks() throws {
+        let file = try Vectors.json("crypto/share-link.json")
+        for c in file["build"] as! [[String: String]] {
+            let link = ShareLink(host: URL(string: c["origin"]!)!, shareId: c["shareId"]!, key: try Vectors.b64(c["key"]))
+            #expect(link.url.absoluteString == c["url"]!)
+            #expect(ShareLink(url: URL(string: c["url"]!)!) == link)
+        }
+        for r in file["reject"] as! [[String: String]] {
+            #expect(ShareLink(url: URL(string: r["url"]!)!) == nil, "\(r["reason"]!)")
+        }
+    }
+
+    @Test(.enabled(if: has("crypto/recovery-rotate.json")))
+    func recoveryRotate() throws {
+        let file = try Vectors.json("crypto/recovery-rotate.json")
+        let i = file["inputs"] as! [String: String]
+        let expected = file["expected"] as! [String: Any]
+        let r = try RecoveryKeyRotation.make(masterKey: try Vectors.b64(i["masterKey"]), currentLoginKey: try Vectors.b64(i["currentLoginKey"]),
+                                             userId: i["userId"]!, recoveryKey: try Vectors.b64(i["newRecoveryKey"]), nonce: try Vectors.b64(i["nonce"]))
+        #expect(r.recoveryKeyText == expected["recoveryKeyText"] as! String)
+        let json = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(r.body)) as? [String: Any])
+        let body = expected["body"] as! [String: Any]
+        #expect(Set(json.keys) == Set(body.keys))
+        for (k, v) in body {
+            #expect(jsonEqual(json[k], v), "\(k)")
+        }
+    }
+
+    @Test(.enabled(if: has("crypto/signup-flow.json")))
+    func signupFlow() throws {
+        let file = try Vectors.json("crypto/signup-flow.json")
+        let i = file["inputs"] as! [String: String]
+        let expected = file["expected"] as! [String: Any]
+        let m = try SignupMaterial.make(password: i["password"]!, userId: i["userId"]!, kdf: .v1, salt: try Vectors.b64(i["salt"]),
+                                        masterKey: try Vectors.b64(i["masterKey"]), recoveryKey: try Vectors.b64(i["recoveryKey"]),
+                                        nonceMasterPassword: try Vectors.b64(i["nonceMasterPassword"]),
+                                        nonceMasterRecovery: try Vectors.b64(i["nonceMasterRecovery"]))
+        #expect(m.recoveryKeyText == expected["recoveryKeyText"] as! String)
+        let body = SignupRequest(email: "a@b.co", salt: .init(m.salt), kdf: m.kdf, loginKey: .init(m.loginKey), recoveryLoginKey: .init(m.recoveryLoginKey),
+                                 wrappedMasterKeyPassword: .init(m.wrappedMasterKeyPassword), wrappedMasterKeyRecovery: .init(m.wrappedMasterKeyRecovery),
+                                 userId: i["userId"]!, accountDocId: "0192f3c4-0000-7000-8000-00000000000b", deviceName: nil)
+        let json = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(body)) as? [String: Any])
+        for (k, v) in expected["body"] as! [String: Any] {
+            #expect(jsonEqual(json[k], v), "\(k)")
+        }
+    }
+}

@@ -11,7 +11,8 @@ interface ThemeState {
 const ThemeContext = createContext<ThemeState | null>(null);
 
 const query = "(prefers-color-scheme: dark)";
-const systemDark = () => typeof window !== "undefined" && window.matchMedia?.(query).matches === true;
+const systemDark = () =>
+  typeof window !== "undefined" && window.matchMedia?.(query).matches === true;
 
 /**
  * Applies `data-theme` on <html>. "system" removes it, so tokens.css follows
@@ -52,7 +53,11 @@ export function ThemeProvider({
   );
 
   const resolved = preference === "system" ? (dark ? "dark" : "light") : preference;
-  return <ThemeContext.Provider value={{ preference, resolved, setPreference }}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={{ preference, resolved, setPreference }}>
+      {children}
+    </ThemeContext.Provider>
+  );
 }
 
 export function useTheme(): ThemeState {

@@ -1045,14 +1045,14 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792930104.298869,
-    "seen": 1792933940.5097818,
-    "ast_hash": "",
+    "seen": 1792935082.0984976,
+    "ast_hash": "a5de2feab812287bedd5a0f8cb793b6a",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792930104.299103,
-    "seen": 1792933940.5097854,
-    "ast_hash": "",
+    "seen": 1792935082.0985029,
+    "ast_hash": "4203dbf78c0e858320c15f29875ac97d",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2886,10 +2886,10 @@
     "semantic_hash": "f9bde461281b5b51c32328f5928ddc5f"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/InkInput.swift": {
-    "mtime": 1792931169.0476892,
-    "seen": 1792931877.4388254,
-    "ast_hash": "dabfdb4746e23b1635fa82ddf4faa34e",
-    "semantic_hash": "dabfdb4746e23b1635fa82ddf4faa34e"
+    "mtime": 1792935122.5064566,
+    "seen": 1792935137.6844182,
+    "ast_hash": "22a0cda92c15ca7503a9e6447e0ff574",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/InkTools.swift": {
     "mtime": 1792931319.712435,

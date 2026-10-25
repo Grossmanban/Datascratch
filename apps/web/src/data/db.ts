@@ -85,6 +85,27 @@ export type NoteIndexRow = {
   updatedAt: number;
 };
 
+export type AttachmentRow = {
+  id: string;
+  noteId: string;
+  mime: string;
+  /** Plaintext size in bytes. */
+  plainSize: number;
+  /** Ciphertext size in bytes (sum of envelopes), as registered on the server. */
+  size: number;
+  chunkCount: number;
+  /** Server has the metadata (POST /attachments done). */
+  registered: 0 | 1;
+  /** Indexes of chunks already uploaded. */
+  uploaded: number[];
+  /** All chunks are stored locally (encrypted). */
+  local: 0 | 1;
+  createdAt: number;
+};
+
+/** Encrypted chunk envelope as uploaded (crypto.md §6). */
+export type ChunkRow = { key: string; attachmentId: string; index: number; data: Uint8Array };
+
 export class AccountDB extends Dexie {
   docs!: Table<DocRow, string>;
   updates!: Table<UpdateRow, number>;
@@ -93,6 +114,8 @@ export class AccountDB extends Dexie {
   tasks!: Table<TaskRow, string>;
   noteIndex!: Table<NoteIndexRow, string>;
   kv!: Table<KvRow, string>;
+  attachments!: Table<AttachmentRow, string>;
+  chunks!: Table<ChunkRow, string>;
 
   constructor(userId: string) {
     super(`ds-account-${userId}`);
@@ -104,6 +127,10 @@ export class AccountDB extends Dexie {
       tasks: "key, noteId, notebookId, state, scheduled, deadline",
       noteIndex: "noteId, notebookId, *tags, *links",
       kv: "key",
+    });
+    this.version(2).stores({
+      attachments: "id, noteId, registered, local",
+      chunks: "key, attachmentId",
     });
   }
 }

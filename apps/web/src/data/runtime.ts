@@ -6,6 +6,7 @@ import { notebookMaps } from "@/domain/notebook";
 import { refreshAccount, refreshNotebook, resetWorkspace, useWorkspace } from "@/domain/workspace";
 import type { HelloAuth } from "@/lib/shared";
 import { SyncEngine, useSyncStatus, type OutgoingMessage, type SyncHost } from "@/sync/engine";
+import { uploadPending } from "./attachments";
 import { accountDb } from "./db";
 import { DocStore, ORIGIN_REMOTE } from "./docStore";
 import { Indexer } from "./indexer";
@@ -203,7 +204,12 @@ export class AccountRuntime {
         const rank = (id: string) => (id === this.accountDocId ? 0 : rows.find((r) => r.docId === id)?.kind === "notebook" ? 1 : 2);
         return out.sort((a, b) => rank(a.docId) - rank(b.docId));
       },
-      beforeFlush: () => flushOps(),
+      beforeFlush: async () => {
+        const ok = await flushOps();
+        // Attachments upload in the background and never hold back document pushes.
+        if (ok) void uploadPending();
+        return ok;
+      },
       outgoing: async () => {
         const db = accountDb();
         const rows = await db.outbox.orderBy("id").toArray();

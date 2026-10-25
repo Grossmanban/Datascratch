@@ -1,6 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ChevronRight, FileQuestion, MoreHorizontal, Share2, Smile, Star, Undo2 } from "lucide-react";
+import { ChevronRight, FileQuestion, ImagePlus, MoreHorizontal, Share2, Smile, Star, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/session";
@@ -15,7 +15,9 @@ import { useUi } from "@/hooks/useUi";
 import { FORMAT_VERSION } from "@/lib/shared";
 import { EMOJI_CHOICES } from "@/lib/tokens";
 import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner } from "@/ui";
+import { setNoteMeta } from "@/domain/note";
 import { Backlinks } from "./Backlinks";
+import { CoverImage, coverError, pickImage, uploadCover } from "./Cover";
 import { DocView } from "./DocView";
 import { PresenceStack } from "./PresenceStack";
 import { StylePopover } from "./StylePopover";
@@ -85,6 +87,20 @@ function DocScreen({ noteId }: { noteId: string }) {
   const readOnlyNewer = (meta?.formatVersion ?? 1) > FORMAT_VERSION;
   const trashed = !!note.trashedAt;
   const editable = !readOnlyNewer && !trashed;
+
+  const keyFor = () => runtime().store.keyFor(noteId);
+  const chooseCover = async () => {
+    const file = await pickImage();
+    const key = await keyFor();
+    if (!file || !key || !doc) return;
+    try {
+      const { cover, thumb } = await uploadCover(noteId, key, file);
+      setNoteMeta(doc, { cover: { attachmentId: cover, offsetY: 0.5 } });
+      updateNote(noteId, { coverThumb: thumb });
+    } catch (e) {
+      coverError(e, t);
+    }
+  };
 
   const resolveNoteLink = async (label: string) => {
     const st = useWorkspace.getState();
@@ -177,7 +193,37 @@ function DocScreen({ noteId }: { noteId: string }) {
           onOpenTag={(tag) => void navigate({ to: "/tag/$", params: { _splat: tag } })}
           noteTitle={(id) => useWorkspace.getState().notes[id]?.title || null}
           resolveNoteLink={resolveNoteLink}
-          header={<IconPicker icon={note.icon} disabled={!editable} onPick={(icon) => updateNote(noteId, { icon })} />}
+          cover={
+            meta.cover ? (
+              <CoverImage
+                cover={meta.cover}
+                keyFor={keyFor}
+                editable={editable}
+                onChange={chooseCover}
+                onReposition={(offsetY) => setNoteMeta(doc, { cover: { ...meta.cover!, offsetY } })}
+                onRemove={() => {
+                  setNoteMeta(doc, { cover: null });
+                  updateNote(noteId, { coverThumb: null });
+                }}
+              />
+            ) : null
+          }
+          header={
+            <div className="group/hdr flex items-end gap-1">
+              <IconPicker icon={note.icon} disabled={!editable} onPick={(icon) => updateNote(noteId, { icon })} />
+              {editable && !meta.cover && (
+                <button
+                  onClick={chooseCover}
+                  className={cn(
+                    "mb-1 flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-3 opacity-0 transition hover:bg-ink/5 hover:text-ink-2 focus:opacity-100 group-hover/hdr:opacity-100",
+                  )}
+                  data-testid="add-cover"
+                >
+                  <ImagePlus className="size-4" /> {t("style.addCover")}
+                </button>
+              )}
+            </div>
+          }
           footer={<Backlinks noteId={noteId} />}
         />
       )}
@@ -197,7 +243,7 @@ function IconPicker({ icon, onPick, disabled }: { icon: string | null; onPick: (
               {icon}
             </button>
           ) : (
-            <button className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-3 opacity-0 transition hover:bg-ink/5 hover:text-ink-2 group-hover/icon:opacity-100 focus:opacity-100">
+            <button className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-3 opacity-0 transition hover:bg-ink/5 hover:text-ink-2 group-hover/hdr:opacity-100 focus:opacity-100">
               <Smile className="size-4" /> {t("style.addIcon")}
             </button>
           )

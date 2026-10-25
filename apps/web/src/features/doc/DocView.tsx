@@ -14,6 +14,7 @@ export function DocView({
   editable,
   header,
   footer,
+  cover,
   placeholder,
   titlePlaceholder,
   awareness,
@@ -31,6 +32,8 @@ export function DocView({
   editable: boolean;
   header?: ReactNode;
   footer?: ReactNode;
+  /** Full-width banner above the text column (document cover). */
+  cover?: ReactNode;
   placeholder: string;
   titlePlaceholder: string;
   awareness?: Awareness | null;
@@ -55,6 +58,7 @@ export function DocView({
       className="relative min-h-full"
       style={hasBackdrop ? { background: backdrop!.kind === "gradient" ? backdropCss(backdrop!.value) : `var(--ds-${backdrop!.value.replace(/\./g, "-")})` } : undefined}
     >
+      {cover && !hasBackdrop && <div className="px-3 pt-1 sm:px-6">{cover}</div>}
       <div className={cn("mx-auto w-full px-4 pb-10 sm:px-8", hasBackdrop ? "pt-10 sm:pt-16" : "pt-2")}>
         <article
           className={cn(
@@ -66,6 +70,7 @@ export function DocView({
           data-font={style.font}
           style={style.textColor ? { color: `var(--ds-${style.textColor.replace(/\./g, "-")})` } : undefined}
         >
+          {cover && hasBackdrop && <div className="-mx-6 -mt-10 mb-2 sm:-mx-14 sm:-mt-14">{cover}</div>}
           {header}
           <NoteEditor
             doc={doc}

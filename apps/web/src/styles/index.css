@@ -130,13 +130,3 @@
     scroll-behavior: auto !important;
   }
 }
-
-/* Host fallback for the pen palette (PenToolbar compact): on the narrowest phones it can still be
-   a little wider than the screen, so it scrolls sideways inside it instead of being cut off. */
-@media (max-width: 640px) {
-  .ds-palette {
-    max-width: calc(100vw - 16px);
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-}

@@ -210,6 +210,8 @@ public final class EditorView: UIView {
     }
 
     private func load() {
+        let signpost = EditorSignpost.log.beginInterval("OpenNote", id: EditorSignpost.log.makeSignpostID())
+        defer { EditorSignpost.log.endInterval("OpenNote", signpost) }
         let start = CACurrentMediaTime()
         observation = document.observe { [weak self] change in self?.documentChanged(change) }
         projection = Projection.build(document.blocks)
@@ -360,6 +362,8 @@ public final class EditorView: UIView {
     /// - Returns: flattened range of the new text that was re-rendered.
     @discardableResult
     private func reproject() -> Range<Int>? {
+        let signpost = EditorSignpost.log.beginInterval("Reproject", id: EditorSignpost.log.makeSignpostID())
+        defer { EditorSignpost.log.endInterval("Reproject", signpost) }
         let new = Projection.build(document.blocks)
         let old = projection
         let oldP = old.paragraphs, newP = new.paragraphs

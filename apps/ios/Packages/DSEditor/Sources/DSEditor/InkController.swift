@@ -94,6 +94,8 @@ final class InkController {
     }
 
     func refresh(window: Range<Int>? = nil) {
+        let signpost = EditorSignpost.log.beginInterval("InkRefresh", id: EditorSignpost.log.makeSignpostID())
+        defer { EditorSignpost.log.endInterval("InkRefresh", signpost) }
         let start = CACurrentMediaTime()
         let p = projection()
         let window = window ?? renderWindow()
@@ -158,6 +160,7 @@ final class InkController {
     // MARK: - Pen input
 
     func penBegan(_ s: PenSample) {
+        EditorSignpost.event("PenDown")
         if tools.mode != .text { frameRate.begin() }
         switch tools.mode {
         case .text:
@@ -230,6 +233,7 @@ final class InkController {
     }
 
     func penEnded(cancelled: Bool) {
+        EditorSignpost.event("PenUp")
         holdTimer?.invalidate()
         frameRate.end()
         switch tools.mode {
@@ -320,6 +324,8 @@ final class InkController {
     }
 
     private func commitStroke(_ s: Session) {
+        let signpost = EditorSignpost.log.beginInterval("StrokeCommit", id: EditorSignpost.log.makeSignpostID())
+        defer { EditorSignpost.log.endInterval("StrokeCommit", signpost) }
         let samples = smoothed(s.samples)
         let p = projection()
         var stroke: Stroke?

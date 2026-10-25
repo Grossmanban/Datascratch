@@ -263,12 +263,11 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(editor.ink.outlinesBuilt, built, "nothing moved: both outlines come from the cache")
         // Typing at the start of the first paragraph moves the stroke on "brave"; the one in the
         // second paragraph stays where it is and keeps its outline.
-        EditorCommands(document: doc).typeText("Oh ", marks: .empty, at: TextPosition(block: p.id, offset: 0), replacing: 0)
+        // (Not `EditorCommands.typeText`: it reports keyboard input the text view already shows.)
+        doc.insertText("Oh ", marks: .empty, block: p.id, at: 0)
         settle(editor)
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        let stillAfter = editor.ink.renderedPath(of: still.id)
-        print("OUTLINE_CACHE still reused=\(stillAfter === stillPath) before=\(stillPath!.boundingBox) after=\(stillAfter!.boundingBox)")
-        XCTAssertEqual(stillAfter!.boundingBox.minY, stillPath!.boundingBox.minY, accuracy: 0.5, "the stroke below did not move")
+        XCTAssertTrue(editor.ink.renderedPath(of: still.id) === stillPath, "the unmoved stroke reuses its outline")
         XCTAssertFalse(editor.ink.renderedPath(of: moving.id) === movingPath, "the moved stroke is outlined again")
     }
 

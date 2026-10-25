@@ -1,0 +1,29 @@
+# Production front door: HTTPS for DS_DOMAIN, the web app, and the API.
+# Caddy obtains and renews a Let's Encrypt certificate itself (for "localhost"
+# it uses its own local CA — used by the end-to-end test).
+{$DS_DOMAIN} {
+	encode zstd gzip
+
+	# Internal only: never exposed to the internet.
+	@internal path /metrics /metrics/*
+	handle @internal {
+		respond 404
+	}
+
+	# API, sync WebSocket, MCP and OAuth for AI agents.
+	@api path /v1/* /mcp /mcp/* /oauth/* /.well-known/oauth-*
+	handle @api {
+		reverse_proxy server:8080
+	}
+
+	# The web app (single-page app: unknown paths fall back to index.html).
+	handle {
+		root * /srv
+		@immutable path /assets/*
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+		@fresh path /index.html /sw.js /manifest.webmanifest
+		header @fresh Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

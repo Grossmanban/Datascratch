@@ -78,14 +78,8 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/package-build.log" | grep --line-buffered -E "error:|warning: .*DSEditor/Sources|\*\* "
           exit ${PIPESTATUS[0]}
 
-      - name: Boot simulator
-        timeout-minutes: 10
-        run: |
-          xcrun simctl boot "${{ steps.sim.outputs.id }}" || true
-          xcrun simctl bootstatus "${{ steps.sim.outputs.id }}" -b
-
       - name: Run package tests on iPad simulator
-        timeout-minutes: 15
+        timeout-minutes: 20
         working-directory: apps/ios/Packages/DSEditor
         run: |
           set +e

@@ -102,10 +102,10 @@ final class OnboardingUITests: XCTestCase {
 
 @MainActor
 final class LibraryUITests: XCTestCase {
-    private func launchSignedIn() -> XCUIApplication {
+    private func launchSignedIn(_ extra: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing", "-ui-testing-signed-in"]
+        app.launchArguments = ["-ui-testing", "-ui-testing-signed-in"] + extra
         app.launch()
         if UIDevice.current.userInterfaceIdiom == .pad {
             // Landscape shows all three columns of the split view.
@@ -186,6 +186,25 @@ final class LibraryUITests: XCTestCase {
         text.tap()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2))
         XCTAssertTrue(text.exists)
+    }
+
+    /// Finger drawing off (the iPad default): switching tools in the palette must not crash.
+    func testPenPaletteWithoutFingerDrawing() throws {
+        let app = launchSignedIn(["-ui-testing-no-finger"])
+        let floating = app.buttons["library.newNote.floating"].firstMatch
+        let newNote = app.buttons["library.newNote"].exists ? app.buttons["library.newNote"].firstMatch : floating
+        XCTAssertTrue(newNote.waitForExistence(timeout: 5), "new note button not found; buttons: \(Self.buttons(app))")
+        newNote.tap()
+        let pen = app.buttons["tool.pen"].firstMatch
+        guard pen.waitForExistence(timeout: 5) else {
+            throw XCTSkip("Stand-in editor: no pen palette")
+        }
+        XCTAssertEqual(app.buttons["tool.fingerDrawing"].firstMatch.value as? String, "Off")
+        for tool in ["tool.pen", "tool.marker", "tool.pencil", "tool.text", "tool.pen"] {
+            app.buttons[tool].firstMatch.tap()
+            XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone after tapping \(tool)")
+        }
+        XCTAssertTrue(app.buttons["tool.text"].firstMatch.waitForExistence(timeout: 2), "palette is gone")
     }
 
     func testCommandPaletteOpensTasks() throws {

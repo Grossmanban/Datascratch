@@ -137,7 +137,10 @@ struct ToolPalette: View {
         HStack(spacing: 6) {
             ForEach(modes, id: \.self) { mode in
                 Button {
-                    tools.mode = mode
+                    // Applied after the button's touch has been fully delivered: changing the tool
+                    // (and re-rendering this palette) inside the action crashed UIKit's gesture
+                    // environment while it delayed the ending touch.
+                    DispatchQueue.main.async { tools.mode = mode }
                 } label: {
                     Image(systemName: mode.symbolName)
                         .font(.system(size: 18, weight: .medium))
@@ -158,14 +161,16 @@ struct ToolPalette: View {
             Divider().frame(height: 28)
             ForEach(0..<4, id: \.self) { slot in
                 let token = tokens[min(slot, tokens.count - 1)]
-                Button { tools.setColor(token) } label: {
+                Button {
+                    guard inkTool != nil else { return }
+                    DispatchQueue.main.async { tools.setColor(token) }
+                } label: {
                     Circle()
                         .fill(Color(EditorTheme.color(token: token)))
                         .frame(width: 24, height: 24)
                         .overlay(Circle().stroke(Color.primary.opacity(inkTool != nil && tools.paints[tool]?.color == token ? 0.8 : 0), lineWidth: 2).padding(-3))
                 }
                 .buttonStyle(.plain)
-                .disabled(inkTool == nil)
                 .opacity(inkTool == nil ? 0.3 : 1)
                 .accessibilityIdentifier("color.slot\(slot)")
                 .accessibilityLabel(token)

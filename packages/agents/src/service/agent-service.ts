@@ -80,6 +80,12 @@ function readNotebookDoc(doc: Y.Doc): { name: string | null; notes: Map<string, 
   return { name: str(doc.getMap("meta").get("name")), notes, folders };
 }
 
+/** Null attributes are not stored (y-prosemirror convention, document-model.md §4.1). */
+function setOrRemove(el: Y.XmlElement, name: string, value: string | null): void {
+  if (value === null) el.removeAttribute(name);
+  else el.setAttribute(name, value);
+}
+
 function folderPath(nb: NotebookView, folderId: string | null): string[] {
   const out: string[] = [];
   let cur = folderId ? nb.folders.get(folderId) : undefined;
@@ -517,10 +523,10 @@ export class AgentService {
       doc.transact(() => {
         if (input.state !== undefined && input.state !== task.getAttribute("state")) {
           task.setAttribute("state", input.state);
-          task.setAttribute("completedAt", (input.state === "done" ? this.now().toISOString() : null) as never);
+          setOrRemove(task, "completedAt", input.state === "done" ? this.now().toISOString() : null);
         }
-        if (input.scheduled !== undefined) task.setAttribute("scheduled", input.scheduled as never);
-        if (input.deadline !== undefined) task.setAttribute("deadline", input.deadline as never);
+        if (input.scheduled !== undefined) setOrRemove(task, "scheduled", input.scheduled);
+        if (input.deadline !== undefined) setOrRemove(task, "deadline", input.deadline);
       });
       return buildNoteIndex(noteId!, 0, doc).tasks.find((t) => t.taskId === input.taskId)!;
     });

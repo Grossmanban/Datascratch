@@ -275,3 +275,45 @@ import Testing
         #expect(try store.orphanedAt(noteId: "n", strokeId: stroke.id) == nil)
     }
 }
+
+@Suite struct VersionRestoreTests {
+    @Test func restoresContentAndRemapsAnchors() throws {
+        let note = NoteDocument(noteId: "n")
+        try note.initialize(title: "v1")
+        try note.insertText("Hello world", at: 0, inBlock: [1])
+        let anchors = try (6..<11).map { try note.crdt.relativePosition(at: [1, 0], index: UInt32($0)) }
+        let stroke = Stroke(tool: .pen, color: "ink.black", width: 2, anchorKind: .text, anchors: anchors,
+                            points: (0..<5).map { StrokePoint(anchor: $0, x: 0, y: 0, t: Float($0)) }, author: Author(kind: .user, id: "u"))
+        try note.addStrokes([stroke])
+        let version = try note.crdt.encodeStateAsUpdate()
+
+        // Later edits: text replaced, stroke erased.
+        try note.deleteText(range: 0..<11, inBlock: [1])
+        try note.insertText("Something else", at: 0, inBlock: [1])
+        try note.removeStrokes(ids: [stroke.id])
+
+        try note.restoreVersion(state: version)
+        #expect(try note.block(at: [1])?.text == "Hello world")
+        let restored = try #require(note.stroke(id: stroke.id))
+        let resolved = try note.crdt.resolve(relativePositions: restored.anchors)
+        #expect(resolved.map { $0?.index } == [6, 7, 8, 9, 10])
+        #expect(resolved.allSatisfy { $0?.deleted == false })
+
+        // Another device sees the same.
+        let other = NoteDocument(noteId: "n")
+        try other.crdt.applyUpdate(try note.crdt.encodeStateAsUpdate())
+        let r2 = try other.crdt.resolve(relativePositions: try #require(other.stroke(id: stroke.id)).anchors)
+        #expect(r2.map { $0?.index } == [6, 7, 8, 9, 10])
+    }
+}
+
+@Suite struct ShareLinkTests {
+    @Test func roundTrip() throws {
+        let key = DSCrypto.newKey()
+        let id = EntityID.make()
+        let link = ShareLink(host: URL(string: "https://notes.example.com")!, shareId: id, key: key)
+        #expect(link.url.absoluteString == "https://notes.example.com/s/\(id)#k=\(Base64URL.encode(key))")
+        #expect(ShareLink(url: link.url) == link)
+        #expect(ShareLink(url: URL(string: "https://notes.example.com/s/\(id)")!) == nil)
+    }
+}

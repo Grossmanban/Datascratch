@@ -361,6 +361,16 @@
         }
       }
     },
+    "Claude and ChatGPT connect by this address and ask for consent in the browser.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude и ChatGPT подключаются по этому адресу и запрашивают согласие в браузере."
+          }
+        }
+      }
+    },
     "Close": {
       "localizations": {
         "ru": {
@@ -1281,6 +1291,16 @@
         }
       }
     },
+    "Last used %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Использовался %@"
+          }
+        }
+      }
+    },
     "Layout": {
       "localizations": {
         "ru": {
@@ -1327,6 +1347,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Список"
+          }
+        }
+      }
+    },
+    "MCP server address": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Адрес сервера MCP"
           }
         }
       }

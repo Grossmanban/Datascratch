@@ -1363,14 +1363,14 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792930072.604497,
-    "seen": 1792930962.6524088,
-    "ast_hash": "",
+    "seen": 1792931000.490192,
+    "ast_hash": "a5de2feab812287bedd5a0f8cb793b6a",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792930072.6051345,
-    "seen": 1792930962.6524112,
-    "ast_hash": "",
+    "seen": 1792931000.4901958,
+    "ast_hash": "4203dbf78c0e858320c15f29875ac97d",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {

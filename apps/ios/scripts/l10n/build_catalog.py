@@ -30,6 +30,7 @@ INTERPOLATIONS = {
     r"Group \(indices.0 + 1)": "Group %lld",
     r"Group \(indices.1 + 1)": "Group %lld",
     r"\(strength) of 4": "%lld of 4",
+    r"Last used \(lastUsed.formatted(.relative(presentation: .named)))": "Last used %@",
 }
 
 # Literals that look like text but are not translated (names, formats, prefixes).

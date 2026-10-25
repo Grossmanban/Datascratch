@@ -15,24 +15,35 @@ nonisolated enum AgentPermission: String, Codable, CaseIterable, Sendable {
     case readWrite = "read_write"
 }
 
-/// Agent access token (contracts/api.md §agent-tokens, spec/09).
+/// Agent access: a static token or an OAuth connection (Claude, ChatGPT) —
+/// one list (contracts/agents-api.md §8, `GET /v1/agent-tokens`).
 nonisolated struct AgentToken: Codable, Identifiable, Hashable, Sendable {
+    nonisolated enum Kind: String, Codable, Sendable { case `static`, oauth }
+
     var id: String
+    var kind: Kind = .static
     var name: String
+    var clientId: String?
     var notebookIds: [String]
     var permission: AgentPermission
     var createdAt: Date
     var expiresAt: Date?
+    var lastUsedAt: Date?
 }
 
 /// One entry of an agent's action log (`GET /v1/agent-tokens/:id/audit`).
 nonisolated struct AgentAuditEntry: Codable, Identifiable, Hashable, Sendable {
-    var id: String
+    var id: String { "\(at.timeIntervalSince1970)-\(action)-\(noteId ?? "")" }
     var at: Date
+    /// `mcp` or `rest`.
+    var via: String
     /// MCP tool or REST action, e.g. `read_note`, `update_note`.
     var action: String
+    var notebookId: String?
     var noteId: String?
-    var noteTitle: String?
+    var ok: Bool
+    var errorCode: String?
+    var durationMs: Int?
 }
 
 /// Devices and agent tokens. DSCore talks to `/v1/devices` and `/v1/agent-tokens`;

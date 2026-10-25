@@ -12,7 +12,7 @@ import { dragNote } from "@/lib/dnd";
 import { formatRelative } from "@/lib/dates";
 import { runtime } from "@/data/runtime";
 import { useAttachmentUrl } from "@/features/doc/Cover";
-import { cn, ContextMenu } from "@/ui";
+import { cn, ContextMenu, UIDocCard } from "@/ui";
 import { noteMenuItems } from "./menus";
 
 // Snippets are read from the index only for rows on screen; results are kept so that
@@ -141,6 +141,7 @@ const DocCard = memo(function DocCard({ note, snippet, delay }: { note: NoteEntr
   const navigate = useNavigate();
   const starred = useWorkspace((s) => isStarred(s, { kind: "note", id: note.id }));
   const open = useOpen(note.id);
+  const coverUrl = useCardThumb(note.id, note.coverThumb);
   return (
     <ContextMenu items={() => noteMenuItems(note.id, t, navigate)}>
       <motion.div
@@ -154,45 +155,31 @@ const DocCard = memo(function DocCard({ note, snippet, delay }: { note: NoteEntr
           onClick={open}
           draggable
           onDragStart={(e) => dragNote(e, note.id)}
-          className="group block overflow-hidden rounded-xl bg-surface shadow-card ring-1 ring-line/70 transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgb(40_30_10/0.05),0_16px_36px_rgb(40_30_10/0.1)]"
+          className="block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+          // The card is an <article> inside the link, which hides its text from the link's name.
+          aria-label={noteTitle(note, t("app.untitled"))}
           data-testid="doc-card"
         >
-          {/* spec/12 §12.7: the cover's thumbnail makes a document recognisable; no cover, no header. */}
-          {note.coverThumb ? (
-            <div className="relative">
-              <div className="relative h-24 overflow-hidden bg-ink/[0.04]">
-                <CardThumb noteId={note.id} attachmentId={note.coverThumb} />
-                {starred && <Star className="absolute right-3 top-3 size-3.5 fill-white/90 text-white/90 drop-shadow" />}
-              </div>
-              {note.icon && (
-                <span className="absolute -bottom-4 left-4 flex size-10 items-center justify-center rounded-lg bg-surface text-[20px] shadow-card ring-1 ring-line/70">
-                  {note.icon}
-                </span>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-start justify-between px-4 pt-4">
-              <span className="flex size-9 items-center justify-center rounded-lg bg-ink/[0.045] text-[19px]">
-                {note.icon ?? <FileText className="size-[17px] text-ink-3" />}
+          {/* spec/12 §12.7: the cover's thumbnail makes a document recognisable; no cover — a compact card. */}
+          <UIDocCard
+            title={noteTitle(note, t("app.untitled"))}
+            subtitle={<span className="line-clamp-3 min-h-[3.6em] block">{snippet ?? ""}</span>}
+            cover={coverUrl}
+            icon={note.icon ?? null}
+            meta={
+              <span className="flex min-w-0 items-center gap-2 text-ink-2">
+                <span className="truncate">{formatRelative(note.updatedAt)}</span>
+                {note.tags.slice(0, 2).map((tag) => (
+                  <span key={tag} className="inline-flex items-center gap-0.5 truncate rounded-full bg-ink/[0.05] px-1.5 py-px">
+                    <Hash className="size-2.5" />
+                    {tag}
+                  </span>
+                ))}
               </span>
-              {starred && <Star className="size-3.5 fill-[var(--ds-tint-yellow-fg)] text-[var(--ds-tint-yellow-fg)]" />}
-            </div>
-          )}
-          <div className={cn("px-4 pb-4", note.coverThumb ? (note.icon ? "pt-6" : "pt-3.5") : "pt-3")}>
-            <h3 className="line-clamp-2 font-display text-[17px] font-semibold leading-snug tracking-[-0.005em] text-ink">
-              {noteTitle(note, t("app.untitled"))}
-            </h3>
-            <p className="mt-1.5 line-clamp-3 min-h-[3.6em] text-[13px] leading-[1.45] text-ink-2">{snippet ?? ""}</p>
-            <div className="mt-3 flex items-center gap-2 text-[11.5px] text-ink-2">
-              <span className="truncate">{formatRelative(note.updatedAt)}</span>
-              {note.tags.slice(0, 2).map((tag) => (
-                <span key={tag} className="inline-flex items-center gap-0.5 truncate rounded-full bg-ink/[0.05] px-1.5 py-px">
-                  <Hash className="size-2.5" />
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
+            }
+            footer={starred ? <Star className="size-3.5 fill-[var(--ds-tint-yellow-fg)] text-[var(--ds-tint-yellow-fg)]" aria-label={t("nav.starred")} /> : undefined}
+            className="h-full"
+          />
         </Link>
       </motion.div>
     </ContextMenu>
@@ -226,6 +213,14 @@ const DocRow = memo(function DocRow({ note, snippet, first }: { note: NoteEntry;
     </ContextMenu>
   );
 });
+
+// Keeps the cover strip's place while the encrypted thumbnail is decrypted (no layout jump).
+const PLACEHOLDER = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+function useCardThumb(noteId: string, attachmentId: string | null | undefined): string | null {
+  const { url } = useAttachmentUrl(attachmentId, () => runtime().store.keyFor(noteId));
+  return attachmentId ? (url ?? PLACEHOLDER) : null;
+}
 
 function CardThumb({ noteId, attachmentId }: { noteId: string; attachmentId: string }) {
   const { url } = useAttachmentUrl(attachmentId, () => runtime().store.keyFor(noteId));

@@ -38,6 +38,10 @@ public actor SyncEngine: SyncClientDelegate {
 
     private var open: [String: OpenDoc] = [:]
     private var inFlight: Set<String> = []
+    /// A flush is running; calls made meanwhile only ask it for another pass. Bulk edits
+    /// (hundreds of updates in a row) then cost a few outbox scans instead of one per update.
+    private var flushing = false
+    private var flushAgain = false
     private var catchingUp: Set<String> = []
     /// Documents subscribed on the current connection whose catch-up finished (`upToDate`).
     /// Pushes go only to these: otherwise `lastSeq = max(ack)` could skip others' updates.
@@ -150,6 +154,19 @@ public actor SyncEngine: SyncClientDelegate {
 
     /// Sends queued messages that are not in flight on the current connection.
     public func flush() async {
+        if flushing {
+            flushAgain = true
+            return
+        }
+        flushing = true
+        defer { flushing = false }
+        repeat {
+            flushAgain = false
+            await flushPass()
+        } while flushAgain
+    }
+
+    private func flushPass() async {
         guard await client.isConnected else {
             publish()
             return

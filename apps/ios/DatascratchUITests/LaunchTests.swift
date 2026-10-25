@@ -322,7 +322,22 @@ final class LibraryUITests: XCTestCase {
     /// iPad (build 4 feedback): in a narrow editor column the text and the palette stay inside
     /// the column, «Full Screen» gives the document the whole width and back.
     func testEditorColumnOnIPad() throws {
+        try checkEditorColumn(.portrait)
+    }
+
+    func testEditorColumnOnIPadLandscape() throws {
+        try checkEditorColumn(.landscapeLeft)
+    }
+
+    /// Turns the iPad before launch; the next test starts in portrait again.
+    private func rotate(_ orientation: UIDeviceOrientation) {
+        XCUIDevice.shared.orientation = orientation
+        addTeardownBlock { XCUIDevice.shared.orientation = .portrait }
+    }
+
+    private func checkEditorColumn(_ orientation: UIDeviceOrientation) throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
+        rotate(orientation)
         let app = launchSignedIn()
         try openNewNoteInNativeEditor(app)
         let editor = app.descendants(matching: .any)["editor"].firstMatch
@@ -366,7 +381,16 @@ final class LibraryUITests: XCTestCase {
     /// iPad: Tasks get the whole width when chosen, come back to the columns and go full
     /// screen again; the segment labels are never cut off (a menu replaces them when narrow).
     func testContentFullScreenOnIPad() throws {
+        try checkContentFullScreen(.portrait)
+    }
+
+    func testContentFullScreenOnIPadLandscape() throws {
+        try checkContentFullScreen(.landscapeLeft)
+    }
+
+    private func checkContentFullScreen(_ orientation: UIDeviceOrientation) throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
+        rotate(orientation)
         let app = launchSignedIn()
         let tasks = sidebarElement(app, "sidebar.tasks")
         XCTAssertTrue(tasks.exists, "no Tasks in the sidebar; buttons: \(Self.buttons(app))")

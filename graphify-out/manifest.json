@@ -420,20 +420,20 @@
     "semantic_hash": "a8a4f3c9ba1256373560b3fbe6dd3908"
   },
   "docs/architecture/contracts/document-model.md": {
-    "mtime": 1792929106.6850579,
-    "seen": 1792929299.728556,
+    "mtime": 1792929301.2245612,
+    "seen": 1792929302.7724636,
     "ast_hash": "b9c08efadd28ad25f319d46694d0f689",
     "semantic_hash": "b9c08efadd28ad25f319d46694d0f689"
   },
   "docs/architecture/contracts/strokes.md": {
-    "mtime": 1792929106.6839468,
-    "seen": 1792929299.728559,
+    "mtime": 1792929301.2245612,
+    "seen": 1792929302.7724657,
     "ast_hash": "ad4fe9e9049648f6b7c12128366e74b9",
     "semantic_hash": "ad4fe9e9049648f6b7c12128366e74b9"
   },
   "docs/architecture/contracts/sync-protocol.md": {
-    "mtime": 1792929106.6846726,
-    "seen": 1792929299.7285612,
+    "mtime": 1792929301.2284603,
+    "seen": 1792929302.7724676,
     "ast_hash": "a1d6a42e272179781dd0517e3c22a8da",
     "semantic_hash": "a1d6a42e272179781dd0517e3c22a8da"
   },

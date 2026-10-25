@@ -37,7 +37,8 @@ struct CoreLibraryTests {
         let store = try LocalStore.inMemory()
         let library = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
         library.seedIfEmpty()
-        let notebook = try #require(library.notebooks(in: library.activeSpace?.id).first)
+        let notebooks = library.notebooks(in: library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
         let folder = library.createFolder(in: notebook.id, parent: nil, name: "Projects", color: .green)
         let note = library.createNote(in: notebook.id, folder: folder.id, title: "Spec")
         var body = NoteBody(blocks: [.paragraph("First #draft"), .task("Ship it", scheduled: "2026-10-27")])
@@ -78,7 +79,8 @@ struct CoreLibraryTests {
         let core = try CoreLibrary.inMemory()
         let library = LibraryStore(backend: core)
         library.seedIfEmpty()
-        let notebook = try #require(library.notebooks(in: library.activeSpace?.id).first)
+        let notebooks = library.notebooks(in: library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
         let note = library.createNote(in: notebook.id, title: "Temp")
         library.trash(note: note.id)
         #expect(try core.notebookDocument(notebook.id).note(id: note.id)?.isTrashed == true)
@@ -99,6 +101,44 @@ struct CoreLibraryTests {
         #expect(try core.notebookDocument(a.id).note(id: note.id) == nil)
         // A fresh key ring (no cache) unwraps the note key with the new notebook's key.
         _ = try KeyRing(store: secrets).noteKey(noteId: note.id, wrappedKey: meta.wrappedKey, notebookId: b.id)
+    }
+}
+#endif
+
+#if canImport(DSCore)
+@MainActor
+struct CoreLibrarySafetyTests {
+    /// Blocks the stand-in editor cannot show (here a code block and bold text) survive
+    /// task toggles and text edits made through the library.
+    @Test func editsDoNotTouchForeignBlocks() throws {
+        let core = try CoreLibrary.inMemory()
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "N", mode: .private)
+        let task = NoteBlock.task("Ship")
+        let para = NoteBlock.paragraph("Plain")
+        let note = library.createNote(in: notebook.id, title: "Mixed", body: NoteBody(blocks: [para, task]))
+
+        // Another client adds a code block and a bold paragraph.
+        let doc = try core.noteDocument(note.id, notebookId: notebook.id)
+        try doc.appendBlocks([
+            DSCore.Block(type: BlockType.codeBlock, attrs: ["blockId": .string(value: DSCore.EntityID.make()),
+                                                           "language": .string(value: "swift")],
+                         inline: [.text("let x = 1", marks: [])]),
+            .paragraph([.text("Bold", marks: [.bold])]),
+        ])
+
+        library.updateTask(noteId: note.id, blockId: task.id) { $0.state = .done }
+        var body = library.body(note.id)
+        body.blocks[0].text = "Plain, edited"
+        library.setBody(body, ofNote: note.id)
+
+        let blocks = try doc.blocks()
+        #expect(blocks.contains { $0.type == BlockType.codeBlock && $0.text == "let x = 1" })
+        #expect(blocks.contains { $0.inline.contains(.text("Bold", marks: [.bold])) })
+        #expect(blocks.contains { $0.text == "Plain, edited" })
+        let taskBlock = blocks.first { $0.type == BlockType.taskList }?.children.first
+        #expect(taskBlock?.attrs["state"]?.stringValue == "done")
     }
 }
 #endif

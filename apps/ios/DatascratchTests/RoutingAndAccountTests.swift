@@ -61,6 +61,24 @@ struct AccountServiceTests {
         try await service.signIn(email: "me@example.com", password: "brand new password")
     }
 
+    @Test func rotatingTheRecoveryKeyRetiresTheOldOne() async throws {
+        let service = LocalAccountService(store: SecureStore(inMemory: true))
+        let old = try await service.signUp(email: "me@example.com", password: "correct horse battery")
+        await #expect(throws: AccountError.wrongCredentials) {
+            _ = try await service.rotateRecoveryKey(currentPassword: "not my password")
+        }
+        let new = try await service.rotateRecoveryKey(currentPassword: "correct horse battery")
+        #expect(new != old)
+        await service.signOut()
+        await #expect(throws: AccountError.invalidRecoveryKey) {
+            try await service.recover(email: "me@example.com", recoveryKey: old, newPassword: "brand new password")
+        }
+        try await service.recover(email: "me@example.com", recoveryKey: new, newPassword: "brand new password")
+        try await service.changePassword(current: "brand new password", new: "another long passphrase")
+        let kinds = try await service.securityEvents().map(\.kind)
+        #expect(kinds == [.passwordChanged, .recoveryUsed, .recoveryKeyRotated])
+    }
+
     @Test func rejectsWeakPasswordAndBadEmail() async {
         let service = LocalAccountService(store: SecureStore(inMemory: true))
         await #expect(throws: AccountError.weakPassword) {
@@ -93,6 +111,14 @@ struct RecoveryKeyFlowTests {
         app.pendingRecoveryKey = key
         app.finishOnboarding(keyConfirmed: false)
         #expect(app.pendingRecoveryKey == nil)
+        #expect(app.savedRecoveryKey == key)
+        #expect(app.isRecoveryKeyConfirmed == false)
+    }
+
+    @Test func aRotatedKeyIsKeptAndUnchecked() {
+        let app = AppModel(options: .init(uiTesting: true))
+        let key = RecoveryKey.random()
+        app.adoptRotatedRecoveryKey(key)
         #expect(app.savedRecoveryKey == key)
         #expect(app.isRecoveryKeyConfirmed == false)
     }

@@ -1,0 +1,15 @@
+# Mode "edge": Datascratch behind another app's Caddy (e.g. Sinhron's sinhron-caddy).
+# The web container publishes no ports; it joins the external `edge` network where the
+# other Caddy reaches it as datascratch-web:80. Enabled by deploy.sh through
+# COMPOSE_FILE=docker-compose.yml:docker-compose.edge.yml in .env.
+services:
+  web:
+    ports: !reset []
+    networks:
+      - default
+      - edge
+
+networks:
+  edge:
+    name: ${DS_EDGE_NETWORK:-edge}
+    external: true

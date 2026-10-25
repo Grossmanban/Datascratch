@@ -241,12 +241,32 @@
         }
       }
     },
+    "Black": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чёрный"
+          }
+        }
+      }
+    },
     "Blue": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Синий"
+          }
+        }
+      }
+    },
+    "Brown": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Коричневый"
           }
         }
       }
@@ -887,6 +907,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Рисовать пальцем"
+          }
+        }
+      }
+    },
+    "Draw with Finger: Off": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рисование пальцем выключено"
+          }
+        }
+      }
+    },
+    "Draw with Finger: On": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рисование пальцем включено"
           }
         }
       }
@@ -1537,6 +1577,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ещё"
+          }
+        }
+      }
+    },
+    "More Pen Options": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ещё инструменты пера"
           }
         }
       }

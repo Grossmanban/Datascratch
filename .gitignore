@@ -23,8 +23,9 @@ xcuserdata/
 .swiftpm/
 
 # Graphify: machine-specific paths and transient build files
-graphify-out/.graphify_python
-graphify-out/.graphify_root
-graphify-out/.graphify_*.json
-graphify-out/.graphify_*.txt
+graphify-out/.graphify_*
+!graphify-out/.graphify_labels.json
+!graphify-out/.graphify_labels.json.sig
 graphify-out/.needs_update
+graphify-out/cache/stat-index.json
+graphify-out/cache/hook_sessions/

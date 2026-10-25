@@ -528,9 +528,9 @@
     "semantic_hash": ""
   },
   "packages/shared/src/sync/index.ts": {
-    "mtime": 1792928001.0070958,
-    "seen": 1792928161.876775,
-    "ast_hash": "e2ebd7ddedcadeeadbf819c35985c768",
+    "mtime": 1792928920.1329863,
+    "seen": 1792929023.9110742,
+    "ast_hash": "1c2f980b74b19090e0d587e168044c1d",
     "semantic_hash": ""
   },
   "packages/shared/test/contracts.test.ts": {
@@ -807,6 +807,30 @@
     "mtime": 1792928730.3194718,
     "seen": 1792928746.0654933,
     "ast_hash": "1ce5c5b7921f7d89cbdb4e8d5b05caf6",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/sync/client.ts": {
+    "mtime": 1792929001.2994618,
+    "seen": 1792929023.9110708,
+    "ast_hash": "bb0d44b5ce6b7abba1866de394d36cca",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/sync/memory-hub.ts": {
+    "mtime": 1792929001.351462,
+    "seen": 1792929023.9110758,
+    "ast_hash": "00884a3cb42ae60f3c9ee17f419fa4c4",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/sync/storage.ts": {
+    "mtime": 1792928799.7354693,
+    "seen": 1792929023.9110777,
+    "ast_hash": "c99782cb99ee3df5e1f0d836b7c28f19",
+    "semantic_hash": ""
+  },
+  "packages/shared/test/sync.test.ts": {
+    "mtime": 1792929001.7514617,
+    "seen": 1792929023.9110892,
+    "ast_hash": "e11db82cf022785a0091a5661fbe71cf",
     "semantic_hash": ""
   }
 }

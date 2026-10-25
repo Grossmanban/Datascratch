@@ -126,7 +126,12 @@ public actor SyncEngine: SyncClientDelegate {
     }
 
     /// Stops applying remote updates to `docId` in memory (it stays tracked in the store).
-    public func close(docId: String) {
+    /// Uploads a snapshot first when ≥ 30 local edits were made since the last one: snapshots
+    /// are the versions of the history (sync-protocol.md §5, spec/06).
+    public func close(docId: String, now: Date = Date()) async {
+        if let record = try? store.document(docId), record.localEditsSinceSnapshot >= LocalStore.snapshotOnCloseEdits {
+            await snapshot(docId: docId, now: now)
+        }
         open[docId]?.subscription.cancel()
         open[docId] = nil
     }
@@ -212,8 +217,13 @@ public actor SyncEngine: SyncClientDelegate {
 
     /// Uploads a snapshot when the thresholds are exceeded (sync-protocol.md §5).
     public func snapshotIfNeeded(docId: String, now: Date = Date()) async {
-        guard (try? store.needsSnapshot(docId: docId)) == true,
-              let record = try? store.document(docId),
+        guard (try? store.needsSnapshot(docId: docId)) == true else { return }
+        await snapshot(docId: docId, now: now)
+    }
+
+    /// Builds, stores and sends a snapshot of `docId` (unless one is already queued).
+    private func snapshot(docId: String, now: Date) async {
+        guard let record = try? store.document(docId),
               (try? store.pendingOutbox(docId: docId))?.contains(where: { $0.kind == .snapshot }) != true else { return }
         do {
             let doc: CRDTDocument

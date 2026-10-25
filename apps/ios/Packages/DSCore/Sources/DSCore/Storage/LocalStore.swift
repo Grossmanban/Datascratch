@@ -139,6 +139,12 @@ public final class LocalStore: Sendable {
                 t.primaryKey(["noteId", "strokeId"])
             }
         }
+        m.registerMigration("v3-local-edits") { db in
+            // Snapshot on close after ≥ 30 local edits (sync-protocol.md §5, spec/06).
+            try db.alter(table: "documents") { t in
+                t.add(column: "localEditsSinceSnapshot", .integer).notNull().defaults(to: 0)
+            }
+        }
         return m
     }
 }
@@ -157,6 +163,8 @@ public struct DocumentRecord: Codable, FetchableRecord, PersistableRecord, Hasha
     public var snapshotSeq: Int64
     public var updatesSinceSnapshot: Int
     public var bytesSinceSnapshot: Int
+    /// Local edits (outgoing updates) since the last snapshot this device made.
+    public var localEditsSinceSnapshot: Int
     /// Registered on the server (`POST /v1/docs`).
     public var registered: Bool
     public var createdAt: Date
@@ -170,6 +178,7 @@ public struct DocumentRecord: Codable, FetchableRecord, PersistableRecord, Hasha
         snapshotSeq = 0
         updatesSinceSnapshot = 0
         bytesSinceSnapshot = 0
+        localEditsSinceSnapshot = 0
         registered = false
         createdAt = now
         updatedAt = now
@@ -254,7 +263,8 @@ extension LocalStore {
             var item = OutboxItem(id: nil, docId: docId, clientMsgId: clientMsgId, kind: .push, payload: update,
                                   baseSeq: nil, attempts: 0, lastError: nil, createdAt: now)
             try item.insert(db)
-            try db.execute(sql: "UPDATE documents SET updatedAt = ? WHERE docId = ?", arguments: [now, docId])
+            try db.execute(sql: "UPDATE documents SET updatedAt = ?, localEditsSinceSnapshot = localEditsSinceSnapshot + 1 WHERE docId = ?",
+                           arguments: [now, docId])
         }
     }
 
@@ -325,6 +335,9 @@ extension LocalStore {
         }
     }
 
+    /// Local edits needed to snapshot a document when it is closed (sync-protocol.md §5).
+    public static let snapshotOnCloseEdits = 30
+
     /// Whether a snapshot should be uploaded (sync-protocol.md §5).
     public func needsSnapshot(docId: String) throws -> Bool {
         guard let doc = try document(docId) else { return false }
@@ -335,6 +348,7 @@ extension LocalStore {
 
     public func enqueueSnapshot(docId: String, state: Data, baseSeq: Int64, now: Date = Date()) throws -> OutboxItem {
         try db.write { db in
+            try db.execute(sql: "UPDATE documents SET localEditsSinceSnapshot = 0 WHERE docId = ?", arguments: [docId])
             var item = OutboxItem(id: nil, docId: docId, clientMsgId: EntityID.make(now: now), kind: .snapshot, payload: state,
                                   baseSeq: baseSeq, attempts: 0, lastError: nil, createdAt: now)
             try item.insert(db)

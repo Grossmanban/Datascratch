@@ -13,13 +13,21 @@ out=project.packages.yml
   for pkg in DSCore DSEditor DSDesign; do
     if [ -f "Packages/$pkg/Package.swift" ]; then found+=("$pkg"); fi
   done
+  # The DSEditor ↔ DSCore adapter is a separate package inside DSEditor.
+  if [ -f "Packages/DSEditor/CoreAdapter/Package.swift" ] && [ -f "Packages/DSCore/Package.swift" ]; then
+    found+=("DSEditorCore")
+  fi
   if [ ${#found[@]} -eq 0 ]; then
     echo "packages: {}"
   else
     echo "packages:"
     for pkg in "${found[@]}"; do
       echo "  $pkg:"
-      echo "    path: Packages/$pkg"
+      if [ "$pkg" = "DSEditorCore" ]; then
+        echo "    path: Packages/DSEditor/CoreAdapter"
+      else
+        echo "    path: Packages/$pkg"
+      fi
     done
     echo "targets:"
     echo "  Datascratch:"

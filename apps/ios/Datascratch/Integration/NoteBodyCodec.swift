@@ -98,6 +98,39 @@ nonisolated enum NoteBodyCodec {
         return out.isEmpty ? .empty : NoteBody(blocks: out)
     }
 
+    /// The block for one `NoteBlock` at its own level: a `listItem`/`taskItem` for list
+    /// entries, a top-level block otherwise.
+    static func item(for block: NoteBlock, resolveLink: LinkResolver = { _ in nil }) -> DSCore.Block {
+        switch block.kind {
+        case .bullet:
+            return .container(BlockType.listItem, [paragraph(block, id: childId(block.id), resolveLink)], blockId: block.id)
+        case .task:
+            return taskItem(block, resolveLink)
+        default:
+            return blocks(from: NoteBody(blocks: [block]), resolveLink: resolveLink)[0]
+        }
+    }
+
+    /// Whether `body(from:)` → `blocks(from:)` reproduces the block without loss
+    /// (known types, plain text plus tag/noteLink nodes, no marks).
+    static func isRepresentable(_ block: DSCore.Block) -> Bool {
+        let simpleTypes: Set<String> = [BlockType.paragraph, BlockType.heading, BlockType.horizontalRule]
+        let containers: Set<String> = [BlockType.bulletList, BlockType.taskList, BlockType.listItem,
+                                       BlockType.taskItem, BlockType.blockquote]
+        guard simpleTypes.contains(block.type) || containers.contains(block.type) else { return false }
+        let inlineOK = block.inline.allSatisfy { item in
+            switch item {
+            case .text(_, let marks): return marks.isEmpty
+            case .node(let name, _): return name == "tag" || name == "noteLink"
+            }
+        }
+        if block.type == BlockType.blockquote, block.children.count != 1 { return false }
+        if block.type == BlockType.listItem || block.type == BlockType.taskItem {
+            guard block.children.count == 1, block.children[0].type == BlockType.paragraph else { return false }
+        }
+        return inlineOK && block.children.allSatisfy(isRepresentable)
+    }
+
     // MARK: - Pieces
 
     private static func paragraph(_ item: NoteBlock, id: String, _ resolve: LinkResolver) -> DSCore.Block {

@@ -55,9 +55,13 @@ final class SceneModel {
         }
     }
     var selectedNoteId: String?
-    /// Which columns show; remembered between launches (iPad).
+    /// Which columns show; remembered between launches (iPad). Full-screen content (tasks,
+    /// the calendar, a list) is a passing state and is not remembered.
     var columnVisibility: NavigationSplitViewVisibility = .all {
-        didSet { app.settings.columnLayout = Self.name(of: columnVisibility) }
+        didSet {
+            guard !isContentFullScreen else { return }
+            app.settings.columnLayout = Self.name(of: columnVisibility)
+        }
     }
     /// The middle screen (tasks, calendar, a list) shown on the whole width in place of the document.
     var isContentFullScreen = false
@@ -87,7 +91,10 @@ final class SceneModel {
     init(app: AppModel) {
         self.app = app
         if UIDevice.current.userInterfaceIdiom == .pad {
-            columnVisibility = Self.visibility(named: app.settings.columnLayout)
+            // No document is open at launch: a remembered "document alone" would show an empty
+            // screen without the sidebar, so the columns come back instead.
+            let remembered = Self.visibility(named: app.settings.columnLayout)
+            columnVisibility = remembered == .detailOnly ? .all : remembered
         }
     }
 

@@ -1044,15 +1044,15 @@
     "semantic_hash": "b6fbc14b557b993ed9e884d8574ac5e0"
   },
   "apps/server/drizzle/0000_init.sql": {
-    "mtime": 1792931941.0087183,
-    "seen": 1792935871.6858747,
-    "ast_hash": "",
+    "mtime": 1792932377.575155,
+    "seen": 1792938404.0280714,
+    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
-    "mtime": 1792931941.0087183,
-    "seen": 1792935871.6858768,
-    "ast_hash": "",
+    "mtime": 1792932377.575155,
+    "seen": 1792938404.028073,
+    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2808,9 +2808,9 @@
     "semantic_hash": ""
   },
   ".github/workflows/ios-release.yml": {
-    "mtime": 1792938339.0050726,
-    "seen": 1792938371.848563,
-    "ast_hash": "c0311024ee256f26fc12861053047449",
+    "mtime": 1792938378.9009078,
+    "seen": 1792938404.0277832,
+    "ast_hash": "014847f5589b7cab02152853db2547c1",
     "semantic_hash": ""
   },
   "apps/ios/Datascratch/App/AppCommands.swift": {
@@ -3921,6 +3921,12 @@
     "mtime": 1792938237.0319474,
     "seen": 1792938371.848684,
     "ast_hash": "b0fbb4a93f837102bc15f6e9e3e981cb",
+    "semantic_hash": ""
+  },
+  "apps/ios/scripts/asc.py": {
+    "mtime": 1792938361.569072,
+    "seen": 1792938404.0280557,
+    "ast_hash": "678cc36e5f73eabc897fee590b481baa",
     "semantic_hash": ""
   }
 }

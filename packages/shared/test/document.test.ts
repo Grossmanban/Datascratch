@@ -255,7 +255,7 @@ describe("records", () => {
   });
 });
 
-function richNote(): { doc: Y.Doc; ids: Record<string, string> } {
+function richNote() {
   const ids = {
     p: seqId(),
     task: seqId(),

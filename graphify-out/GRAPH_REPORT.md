@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-10-25)
 
 ## Corpus Check
-- 6 files · ~463,420 words
+- 1 files · ~463,420 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -56,7 +56,7 @@
 - String
 - DocPage.tsx
 - schema/index.ts
-- stack.md (2)
+- stack.md (2) (2)
 - Remote MCP server (Streamable HTTP, OAuth 2.1)
 - store.ts (2)
 - InkController
@@ -157,7 +157,7 @@
 - sync-protocol.md (2)
 - with
 - @datascratch/design-tokens README (2)
-- CodingKeys (2)
+- CodingKeys (2) (2)
 - testflight
 - test-vectors/package.json
 - TextGeometry
@@ -220,7 +220,7 @@
 - factories.ts
 - shares.ts (2)
 - DatascratchEditor component
-- devDependencies (2)
+- devDependencies (2) (2)
 - AgentAuditView
 - @datascratch/ui package
 - scripts/generate.mjs
@@ -284,7 +284,7 @@
 - Web pen layer (packages/web-editor/src/pen)
 - sync-protocol.md (3)
 - ui/test/setup.ts
-- document/blocks.ts (2)
+- document/blocks.ts (2) (2)
 - EditorDemoTests
 - ObservationToken
 - options
@@ -325,7 +325,7 @@
 - steps (5)
 - yjs
 - .prettierrc.json
-- scripts (2)
+- scripts (2) (2)
 - options (2)
 - compilerOptions (2) (2) (2) (2)
 - C1e
@@ -593,7 +593,7 @@ Nodes (65): resizeImage(), channels, colorFor(), COLORS, joinPresence(), Presenc
 Cohesion: 0.05
 Nodes (67): Блок drawing (высота в pt; штрихи — в strokes), Отображаемая высота drawing = height × ширинаБлока / 600 (опорная ширина 600, как в формуле толщины штриха), CalloutTone, REFERENCE_BLOCK_WIDTH, Collaboration, createNoteUndoManager(), Reanchor, buildExtensions() (+59 more)
 
-### Community 46 - "stack.md (2)"
+### Community 46 - "stack.md (2) (2)"
 Cohesion: 0.03
 Nodes (79): all(), allElements(), computeExports(), computeExportsForNode(), computeIsSubtype(), computeLocalScopes(), createDehyrationContext(), createDescription() (+71 more)
 
@@ -993,7 +993,7 @@ Nodes (33): concurrency, cancel-in-progress, group, run, defaults, name, runs-on
 Cohesion: 0.06
 Nodes (33): env, runs-on, services, steps, timeout-minutes, concurrency, cancel-in-progress, group (+25 more)
 
-### Community 147 - "CodingKeys (2)"
+### Community 147 - "CodingKeys (2) (2)"
 Cohesion: 0.06
 Nodes (33): CodingKeys, accessExpiresAt, accessToken, accountDocId, alg, at, chunkCount, code (+25 more)
 
@@ -1233,7 +1233,7 @@ Nodes (18): compilerOptions, declaration, esModuleInterop, exactOptionalProperty
 Cohesion: 0.15
 Nodes (17): DSDateChipModel, DSSuggestionList («/» and [[ ]] menu), SuggestionMenu (веб), @datascratch/agents Fastify plugin (MCP, OAuth 2.1), Agent edits (agentEdit mark, D-10), Collaborator cursors via awareness (y-protocols), DatascratchEditor component, EditorHost callbacks (+9 more)
 
-### Community 210 - "devDependencies (2)"
+### Community 210 - "devDependencies (2) (2)"
 Cohesion: 0.11
 Nodes (18): devDependencies, jsdom@^30.1.3, @ladle/react@^5.1.1, @tailwindcss/vite@^4.3.3, @testing-library/react@^16.3.3, @testing-library/user-event@^14.6.8, typescript@^5.9.3, vite@^8.3.5 (+10 more)
 
@@ -1461,7 +1461,7 @@ Nodes (9): Draw-and-hold gestures (PROPOSED), iOS tools (pen, pencil, marker, hi
 Cohesion: 0.22
 Nodes (8): concurrency, cancel-in-progress, group, runs-on, timeout-minutes, jobs, docker, name
 
-### Community 274 - "document/blocks.ts (2)"
+### Community 274 - "document/blocks.ts (2) (2)"
 Cohesion: 0.22
 Nodes (8): compilerOptions, jsx, lib, noEmit, types, extends, include, ../../tsconfig.base.json
 
@@ -1617,7 +1617,7 @@ Nodes (4): apt_install(), DEBIAN_FRONTEND, log(), bootstrap.sh script
 Cohesion: 0.33
 Nodes (6): deploy, resources, memory, deploy, limits, deploy
 
-### Community 315 - "scripts (2)"
+### Community 315 - "scripts (2) (2)"
 Cohesion: 0.33
 Nodes (6): scripts, dev, lint, showcase:build, test, typecheck
 
@@ -1718,7 +1718,7 @@ Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main
   docs/spec/12-craft-features.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **1137 isolated node(s):** `onboarding`, `ready`, `.isServerBacked`, `.body`, `.color` (+1132 more)
+- **1137 isolated node(s):** `.canRedo`, `.canUndo`, `.groupingLevel`, `.isUndoRegistrationEnabled`, `.redoActionName` (+1132 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 4112 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **49 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -1726,15 +1726,15 @@ Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `L` connect `stack.md` to `Data`, `e`, `YValue (2)`, `PenToolbar.tsx`, `outputs`?**
-  _High betweenness centrality (0.180) - this node is a cross-community bridge._
+  _High betweenness centrality (0.194) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `onboarding`, `ready`, `.isServerBacked` to the rest of the system?**
+- **What connects `.canRedo`, `.canUndo`, `.groupingLevel` to the rest of the system?**
   _1137 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Data` be split into smaller, more focused modules?**
   _Cohesion score 0.0034932506719911162 - nodes in this community are weakly interconnected._
 - **Why does `DSPenToolbar / DSPenWidth` connect `DSDesign/README.md` to `06-data-server.md`, `strokes.md`, `DSDesign Swift package (iOS 26, Swift 6)`, `DatascratchEditor component`, `@datascratch/ui package`, `DSPenToolbar`?**
-  _High betweenness centrality (0.149) - this node is a cross-community bridge._
+  _High betweenness centrality (0.158) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._

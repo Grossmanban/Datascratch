@@ -21,6 +21,10 @@ pnpm --filter @datascratch/design-tokens check      # CI: сгенерирова
 pnpm --filter @datascratch/design-tokens test       # имена по контракту, контраст WCAG, детерминизм
 ```
 
+## Контраст (WCAG AA)
+
+Тест `test/tokens.test.mjs` проверяет матрицу «цвет текста × фон» в обеих темах: фоны — `bg.canvas`, `bg.surface`, `bg.sidebar`, `bg.elevated` (как сплошной), мягкие подложки чипов (цвет 14 % на canvas/surface) и `tint.*.bg`. Требования: `text.primary` ≥ 12:1, `text.secondary` ≥ 6:1, `text.tertiary`, `accent`, `danger`, `success`, `warning`, `tint.*.fg` ≥ 4.5:1; иерархия primary > secondary > tertiary сохраняется. `text.tertiary` — для значимого текста (даты, подписи, счётчики); декоративные линии и обводки берут его с прозрачностью (`color-mix`, `.opacity`). Меняешь цвет — CI скажет, если пара перестала читаться.
+
 ## Правила генерации
 
 - **Чернила в тёмной теме** получаются из светлых автоматически: та же тональность, светлее (почти чёрные — цвет основного текста тёмной темы). Тест проверяет контраст ≥ 4.5 на графите.

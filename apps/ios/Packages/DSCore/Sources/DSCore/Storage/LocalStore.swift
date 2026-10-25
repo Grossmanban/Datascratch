@@ -145,6 +145,16 @@ public final class LocalStore: Sendable {
                 t.add(column: "localEditsSinceSnapshot", .integer).notNull().defaults(to: 0)
             }
         }
+        m.registerMigration("v4-task-order") { db in
+            // Position among the note's tasks (document-model.md §5). Rows were inserted in
+            // document order, so rowid order gives it until the note is indexed again.
+            try db.alter(table: "tasks") { t in
+                t.add(column: "order", .integer).notNull().defaults(to: 0)
+            }
+            try db.execute(sql: """
+                UPDATE tasks SET "order" = (SELECT COUNT(*) FROM tasks AS t2 WHERE t2.noteId = tasks.noteId AND t2.rowid < tasks.rowid)
+                """)
+        }
         return m
     }
 }

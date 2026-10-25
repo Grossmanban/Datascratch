@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GRDB
 @testable import DSCore
 
 @Suite struct StorageTests {
@@ -79,6 +80,7 @@ import Testing
         #expect(try store.search("   ").isEmpty)
 
         #expect(try store.tasks().map(\.taskId) == ["t1", "t2"])
+        #expect(try store.tasks(TaskQuery(noteId: "n1")).map(\.order) == [0, 1])
         #expect(try store.tasks(TaskQuery(dueOnOrBefore: "2026-10-26")).map(\.taskId) == ["t1"])
         #expect(try store.tasks(TaskQuery(unscheduledOnly: true)).map(\.taskId) == ["t2"])
         #expect(try store.tasks(TaskQuery(states: [.done])).isEmpty)
@@ -93,6 +95,20 @@ import Testing
         #expect(try store.search("билеты").isEmpty)
         try store.unindex(noteId: "n2")
         #expect(try store.tags().isEmpty)
+    }
+
+    /// Tasks indexed before the `order` column existed get their document order from rowid.
+    @Test func taskOrderMigrationBackfills() throws {
+        let queue = try DatabaseQueue()
+        try LocalStore.migrator.migrate(queue, upTo: "v3-local-edits")
+        try queue.write { db in
+            for (task, note) in [("a", "n1"), ("x", "n2"), ("b", "n1"), ("c", "n1")] {
+                try db.execute(sql: "INSERT INTO tasks(taskId, noteId, text, state) VALUES(?, ?, '', 'open')", arguments: [task, note])
+            }
+        }
+        try LocalStore.migrator.migrate(queue)
+        let orders = try queue.read { try Row.fetchAll($0, sql: "SELECT taskId, \"order\" FROM tasks ORDER BY taskId").map { "\($0["taskId"] as String)\($0["order"] as Int)" } }
+        #expect(orders == ["a0", "b1", "c2", "x0"])
     }
 
     @Test func attachmentsAndKV() throws {

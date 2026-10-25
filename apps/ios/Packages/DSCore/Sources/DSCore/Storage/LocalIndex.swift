@@ -52,9 +52,9 @@ extension LocalStore {
             try db.execute(sql: "DELETE FROM tasks WHERE noteId = ?", arguments: [derived.noteId])
             for t in derived.tasks {
                 try db.execute(sql: """
-                    INSERT OR REPLACE INTO tasks(taskId, noteId, notebookId, blockId, text, state, scheduled, deadline, completedAt)
-                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, arguments: [t.taskId, t.noteId, notebookId, t.blockId, t.text, t.state.rawValue, t.scheduled, t.deadline, t.completedAt])
+                    INSERT OR REPLACE INTO tasks(taskId, noteId, notebookId, blockId, text, state, scheduled, deadline, completedAt, "order")
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, arguments: [t.taskId, t.noteId, notebookId, t.blockId, t.text, t.state.rawValue, t.scheduled, t.deadline, t.completedAt, t.order])
             }
             try db.execute(sql: "DELETE FROM noteLinks WHERE sourceNoteId = ?", arguments: [derived.noteId])
             for l in derived.links {
@@ -131,11 +131,11 @@ extension LocalStore {
             }
             if query.unscheduledOnly { conditions.append("scheduled IS NULL AND deadline IS NULL") }
             let whereClause = conditions.isEmpty ? "" : "WHERE " + conditions.joined(separator: " AND ")
-            let sql = "SELECT * FROM tasks \(whereClause) ORDER BY COALESCE(scheduled, deadline, '9999') , noteId, rowid"
+            let sql = "SELECT * FROM tasks \(whereClause) ORDER BY COALESCE(scheduled, deadline, '9999'), noteId, \"order\""
             return try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)).map { row in
                 TaskEntry(noteId: row["noteId"], taskId: row["taskId"], blockId: row["blockId"], text: row["text"],
                           state: TaskState(rawValue: row["state"]) ?? .open, scheduled: row["scheduled"], deadline: row["deadline"],
-                          completedAt: row["completedAt"])
+                          completedAt: row["completedAt"], order: row["order"])
             }
         }
     }

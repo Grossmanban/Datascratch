@@ -196,7 +196,7 @@ for await status in await engine.statusUpdates() { /* connection, pending, catch
   отправки), `appendRemoteUpdates`, `applyRemoteSnapshot`, `updates(docId:)`, `compact`,
   `needsSnapshot` (> 500 обновлений или > 1 MiB), `pendingOutbox`, `acknowledge`, `deviceId()`;
 - индексы (document-model.md §5): `index(_ derived:notebookId:)`, `search(_:)` (FTS5,
-  префиксы, без учёта диакритики), `tasks(TaskQuery)`, `backlinks(to:)`, `tags()`,
+  префиксы, без учёта диакритики), `tasks(TaskQuery)` (`TaskEntry` с `completedAt` и `order` — позицией среди задач заметки), `backlinks(to:)`, `tags()`,
   `notes(withTag:)` (с вложенными `тег/…`);
 - вложения: `saveAttachment`, `markChunkUploaded` (докачка по кускам), `attachments(state:)`.
 

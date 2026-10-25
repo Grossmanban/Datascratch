@@ -1,0 +1,57 @@
+name: web-editor
+
+on:
+  push:
+    branches: [main, "claude/web-editor"]
+    paths:
+      - "packages/web-editor/**"
+      - ".github/workflows/web-editor.yml"
+      - "pnpm-lock.yaml"
+  pull_request:
+    paths:
+      - "packages/web-editor/**"
+      - ".github/workflows/web-editor.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: web-editor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/web-editor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The root lockfile is owned by the core stream; until it covers this package, resolve freshly.
+      - name: Install
+        run: pnpm install --filter "@datascratch/web-editor..." --no-frozen-lockfile
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Unit tests (schema, anchors, D-35, codec, geometry)
+        run: pnpm run test
+      - name: Build showcase
+        run: pnpm run build
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Component tests (pen over text, reflow)
+        run: pnpm run test:ct
+        env:
+          CI: "true"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: web-editor-playwright
+          path: |
+            packages/web-editor/test-results
+            packages/web-editor/playwright-report
+          retention-days: 7

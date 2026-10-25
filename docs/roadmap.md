@@ -13,7 +13,7 @@
 | Поток | Ветка | Владеет | Главное | Статус |
 | --- | --- | --- | --- | --- |
 | core | `claude/core` | `packages/shared`, `packages/test-vectors`, корневые `package.json`/`turbo.json`/`tsconfig.base.json`, `.github/workflows/ts.yml` | Типы контрактов, криптография, кодек штрихов, схема документа, клиент синхронизации, тестовые векторы | Запущен |
-| design-system | `claude/design-system` | `packages/design-tokens`, `packages/ui`, `apps/ios/Packages/DSDesign`, `.github/workflows/design.yml` | Токены «Тихая бумага», веб-компоненты, SwiftUI-компоненты | Запущен |
+| design-system | `claude/design-system` | `packages/design-tokens`, `packages/ui`, `apps/ios/Packages/DSDesign`, `.github/workflows/design.yml` | Токены «Тихая бумага», веб-компоненты, SwiftUI-компоненты | v1 влит в main (токены, веб-компоненты, DSDesign) — доводка |
 | server | `claude/server` | `apps/server`, `infra/`, `.github/workflows/server.yml` | Fastify, PostgreSQL, авторизация, синхронизация, вложения, шеринг, docker compose, инструкция развёртывания | Запущен |
 | agents | `claude/agents` | `packages/agents`, `docs/architecture/contracts/agents-api.md` (черновик), `.github/workflows/agents.yml` | MCP, REST для агентов, токены, журнал, рендер PNG | Запущен |
 | web-app | `claude/web-app` | `apps/web`, `.github/workflows/web.yml` | Оболочка веба: вход, боковая панель, пространства/блокноты/папки, списки, задачи, календарь, шеринг, офлайн, PWA | Запущен |

@@ -63,6 +63,8 @@ final class LibraryStore {
     @ObservationIgnored private let persistence: LibraryPersistence
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored var now: () -> Date = { Date() }
+    /// Called after every local mutation (the sync engine queues an update).
+    @ObservationIgnored var onLocalChange: (() -> Void)?
 
     init(persistence: LibraryPersistence) {
         self.persistence = persistence
@@ -529,6 +531,7 @@ final class LibraryStore {
 
     private func mutate(_ change: (inout LibrarySnapshot) -> Void) {
         change(&data)
+        onLocalChange?()
         scheduleSave()
     }
 

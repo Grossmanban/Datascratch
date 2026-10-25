@@ -840,9 +840,9 @@
     "semantic_hash": ""
   },
   "apps/ios/DatascratchTests/TaskIndexTests.swift": {
-    "mtime": 1792928817.0532904,
-    "seen": 1792928869.9442663,
-    "ast_hash": "2c6f0e68eb7aee4729e43e54d3128741",
+    "mtime": 1792929103.7204857,
+    "seen": 1792929106.5963256,
+    "ast_hash": "b66d46572afc1c5f4366e8e23697c21c",
     "semantic_hash": ""
   },
   "apps/ios/scripts/l10n/build_catalog.py": {
@@ -852,9 +852,21 @@
     "semantic_hash": ""
   },
   "apps/ios/scripts/l10n/ru.json": {
-    "mtime": 1792928970.9423997,
-    "seen": 1792928999.1183875,
-    "ast_hash": "ba76c9df2eae1ba1e55cf98575056fa6",
+    "mtime": 1792929091.625723,
+    "seen": 1792929106.5963356,
+    "ast_hash": "0354a6a766a0e83c0ab2416becf7c362",
+    "semantic_hash": ""
+  },
+  ".github/workflows/ios-release.yml": {
+    "mtime": 1792929051.246246,
+    "seen": 1792929106.5962489,
+    "ast_hash": "a5e6c28d271446fd6d3c13644f487837",
+    "semantic_hash": ""
+  },
+  "apps/ios/RELEASE.md": {
+    "mtime": 1792929082.0076573,
+    "seen": 1792929106.5963535,
+    "ast_hash": "804d296c2bc7cb40a075f8503ce973b1",
     "semantic_hash": ""
   }
 }

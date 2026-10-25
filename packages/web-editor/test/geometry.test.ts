@@ -193,3 +193,14 @@ describe("glyphForX boundaries", () => {
     expect(glyphForX(groupLines(glyphs)[0]!, 25).pos).toBe(2);
   });
 });
+
+describe("free drawings far from text (strokes.md §4)", () => {
+  it("a stroke with one point farther than 3 em from any line is a free drawing", async () => {
+    const { isFreeDrawing, groupLines } = await import("../src/pen/geometry");
+    const glyphs = [0, 1, 2].map((i) => ({ pos: i + 1, left: i * 10, right: i * 10 + 10, top: 0, bottom: 20, baseline: 16, fontSize: 17, block: 1 }));
+    const lines = groupLines(glyphs);
+    expect(isFreeDrawing([{ y: 22 }, { y: 24 }], lines)).toBe(false); // an underline
+    expect(isFreeDrawing([{ y: 22 }, { y: 20 + 3 * 17 + 1 }], lines)).toBe(true); // runs far below
+    expect(isFreeDrawing([{ y: 10 }], [])).toBe(true); // no text at all
+  });
+});

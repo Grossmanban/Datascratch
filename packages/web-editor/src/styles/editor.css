@@ -69,7 +69,8 @@
   box-sizing: border-box;
   max-width: var(--ds-doc-width, 720px);
   margin: 0 auto;
-  padding: 24px 56px var(--ds-doc-bottom, 160px);
+  /* strokes.md §4: free room to draw below the last paragraph — at least the visible height. */
+  padding: 24px 56px max(var(--ds-doc-bottom, 160px), 100vh);
   outline: none;
   font-size: 17px;
   line-height: 1.5;

@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.turbo
+**/.env
+**/.env.*
+!**/.env.example
+.git
+graphify-out
+docs
+apps/ios
+infra/backups

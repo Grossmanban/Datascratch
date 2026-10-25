@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "description": "UUIDv7: bytes 0..5 = unix ms big-endian; byte 6 = 0x70 | (rand[0] & 0x0f); byte 7 = rand[1]; byte 8 = 0x80 | (rand[2] & 0x3f); bytes 9..15 = rand[3..10]; lowercase hyphenated.",
+  "cases": [
+    {
+      "unixMs": 0,
+      "rand": "0f5544963a66204c0aa6",
+      "uuid": "00000000-0000-7f55-8496-3a66204c0aa6"
+    },
+    {
+      "unixMs": 1,
+      "rand": "8f68e3d9a7d06e305d70",
+      "uuid": "00000000-0001-7f68-a3d9-a7d06e305d70"
+    },
+    {
+      "unixMs": 1730666602930,
+      "rand": "d6f4f4bd300e6209528f",
+      "uuid": "0192f3c4-a1b2-76f4-b4bd-300e6209528f"
+    },
+    {
+      "unixMs": 281474976710655,
+      "rand": "6fe6603e65036b9b3e53",
+      "uuid": "ffffffff-ffff-7fe6-a03e-65036b9b3e53"
+    }
+  ]
+}

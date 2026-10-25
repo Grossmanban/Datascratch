@@ -1,0 +1,56 @@
+name: ts
+
+# Build, typecheck, lint and test every TypeScript package (apps/* and packages/*).
+# Turbo discovers packages from pnpm-workspace.yaml, so new packages are picked up automatically.
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths-ignore:
+      - "docs/**"
+      - "graphify-out/**"
+      - "apps/ios/**"
+      - "**/*.md"
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "graphify-out/**"
+      - "apps/ios/**"
+      - "**/*.md"
+  workflow_dispatch:
+
+concurrency:
+  group: ts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # apps/server tests need PostgreSQL (same service as server.yml).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ds
+          POSTGRES_PASSWORD: ds
+          POSTGRES_DB: ds_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ds -d ds_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://ds:ds@localhost:5432/ds_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      # --frozen-lockfile fails when pnpm-lock.yaml is out of date with any package.json.
+      - name: Install (lockfile must be up to date)
+        run: pnpm install --frozen-lockfile
+      - name: Format (packages that adopted the root Prettier config)
+        run: pnpm format:check
+      - name: Build, typecheck, lint, test
+        run: pnpm turbo run build typecheck lint test --continue

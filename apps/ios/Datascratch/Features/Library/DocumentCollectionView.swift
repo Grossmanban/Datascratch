@@ -4,7 +4,6 @@ import SwiftUI
 struct DocumentCollectionView: View {
     @Environment(AppModel.self) private var app
     @Environment(SceneModel.self) private var scene
-    @Environment(\.horizontalSizeClass) private var sizeClass
     let source: SidebarItem
 
     private var library: LibraryStore { app.library }
@@ -75,7 +74,8 @@ struct DocumentCollectionView: View {
                 }
                 .accessibilityLabel("Layout")
                 // One «New» button (D-38): the toolbar on iPad, the floating button on iPhone.
-                if canCreate, sizeClass != .compact {
+                // (By idiom: the iPad split-view columns report a compact size class.)
+                if canCreate, !isPhone {
                     Button {
                         scene.newNote()
                     } label: {
@@ -87,7 +87,7 @@ struct DocumentCollectionView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if sizeClass == .compact, canCreate {
+            if isPhone, canCreate {
                 // One-handed use on iPhone: the main action sits under the thumb.
                 HStack {
                     Spacer()
@@ -118,6 +118,8 @@ struct DocumentCollectionView: View {
             .padding(.top, Theme.Space.s2)
             .accessibilityAddTraits(.isHeader)
     }
+
+    private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
 
     private var canCreate: Bool {
         switch source {

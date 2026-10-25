@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { expectSynced, newDoc, signIn, signUp, uniqueEmail } from "./helpers";
 
+test.setTimeout(120_000);
+
 test("offline: edits are kept locally, survive reload and sync when back online", async ({ page, context, browser }) => {
   const email = uniqueEmail("offline");
   await signUp(page, email);

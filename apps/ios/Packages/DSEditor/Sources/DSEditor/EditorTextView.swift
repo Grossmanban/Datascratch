@@ -45,8 +45,40 @@ final class EditorTextView: UITextView {
         onLayout?()
     }
 
+    /// Touches that land on TextKit's internal drawing views (layout fragment and canvas views)
+    /// are addressed to the text view itself. TextKit 2 recycles those views on any relayout or
+    /// scroll (the keyboard appearing, a paragraph re-rendered); when the touched view left the
+    /// window while a system recognizer still held the touch, UIKit's gesture environment crashed
+    /// (`_delayTouchesForEvent`, nil insert). The text view never leaves, and it is where all
+    /// text interactions are attached anyway.
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard let hit = super.hitTest(point, with: event) else { return nil }
+        if hit === self { return hit }
+        if Self.isTextKitInternal(hit) { return self }
+        // Attachment views are recycled by TextKit on relayout too: only views that really handle
+        // touches themselves (controls, text fields, their own recognizers) keep them.
+        return Self.handlesTouches(hit, below: self) ? hit : self
+    }
+
+    /// Whether `view`, or one of its ancestors up to `root`, handles touches on its own.
+    static func handlesTouches(_ view: UIView, below root: UIView) -> Bool {
+        var v: UIView? = view
+        while let current = v, current !== root {
+            if current is UIControl || current is UITextInput || !(current.gestureRecognizers ?? []).isEmpty {
+                return true
+            }
+            v = current.superview
+        }
+        return false
+    }
+
+    static func isTextKitInternal(_ view: UIView) -> Bool {
+        let name = NSStringFromClass(type(of: view))
+        return name.hasPrefix("_UITextLayout") || name.hasPrefix("_UITextCanvas") || name.contains("TextLayoutFragmentView")
+    }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        EditorDiagnostics.log("text view touchesBegan \(touches.map { "\($0.type.rawValue)@\(String(describing: type(of: $0.view as Any)))" })")
+        EditorDiagnostics.log("text view touchesBegan \(touches.map { t in "\(t.type.rawValue)@\(t.view.map { NSStringFromClass(type(of: $0)) } ?? "nil")" })")
         super.touchesBegan(touches, with: event)
     }
 

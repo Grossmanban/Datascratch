@@ -23,12 +23,20 @@ export const DocRow = forwardRef<HTMLButtonElement, DocRowProps>(function DocRow
   ref,
 ) {
   return (
-    <div className={cn("group/doc relative flex items-center rounded-md transition-colors duration-fast", selected ? "bg-selected" : "hover:bg-hover")}>
+    <div
+      className={cn(
+        "group/doc relative flex items-center rounded-md transition-colors duration-fast",
+        selected ? "bg-selected" : "hover:bg-hover",
+      )}
+    >
       <button
         ref={ref}
         type="button"
         aria-current={selected ? "page" : undefined}
-        className={cn("flex min-w-0 flex-1 items-center gap-3 rounded-md px-3 py-2.5 text-left outline-none focus-visible:focus-ring", className)}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-3 rounded-md px-3 py-2.5 text-left outline-none focus-visible:focus-ring",
+          className,
+        )}
         {...rest}
       >
         <span
@@ -39,14 +47,35 @@ export const DocRow = forwardRef<HTMLButtonElement, DocRowProps>(function DocRow
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
-            {tint && <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ backgroundColor: tintFg(tint) }} />}
+            {tint && (
+              <span
+                aria-hidden
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: tintFg(tint) }}
+              />
+            )}
             <span className="truncate font-display text-h3 leading-[1.25] text-fg">{title}</span>
           </span>
-          {excerpt && <span className="mt-0.5 block truncate text-footnote text-fg-secondary">{excerpt}</span>}
+          {excerpt && (
+            <span className="mt-0.5 block truncate text-footnote text-fg-secondary">{excerpt}</span>
+          )}
         </span>
-        {detail && <span className={cn("shrink-0 text-footnote tabular-nums text-fg-tertiary", accessory && "group-hover/doc:invisible")}>{detail}</span>}
+        {detail && (
+          <span
+            className={cn(
+              "shrink-0 text-footnote tabular-nums text-fg-tertiary",
+              accessory && "group-hover/doc:invisible",
+            )}
+          >
+            {detail}
+          </span>
+        )}
       </button>
-      {accessory && <span className="absolute right-2 hidden group-hover/doc:flex group-focus-within/doc:flex">{accessory}</span>}
+      {accessory && (
+        <span className="absolute right-2 hidden group-hover/doc:flex group-focus-within/doc:flex">
+          {accessory}
+        </span>
+      )}
     </div>
   );
 });
@@ -60,7 +89,11 @@ export function DocList({ dividers = true, className, children, ...rest }: DocLi
   return (
     <ul
       role="list"
-      className={cn("flex flex-col", dividers && "[&>li+li]:border-t [&>li+li]:border-hairline", className)}
+      className={cn(
+        "flex flex-col",
+        dividers && "[&>li+li]:border-t [&>li+li]:border-hairline",
+        className,
+      )}
       {...rest}
     >
       {children}
@@ -79,7 +112,10 @@ export function DocGrid({ minWidth = 210, className, style, ...rest }: DocGridPr
     <ul
       role="list"
       className={cn("grid gap-4", className)}
-      style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${minWidth}px, 100%), 1fr))`, ...style }}
+      style={{
+        gridTemplateColumns: `repeat(auto-fill, minmax(min(${minWidth}px, 100%), 1fr))`,
+        ...style,
+      }}
       {...rest}
     />
   );

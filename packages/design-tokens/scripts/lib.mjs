@@ -13,7 +13,11 @@ export function parseHex(hex) {
   };
 }
 
-const h2 = (n) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0").toUpperCase();
+const h2 = (n) =>
+  Math.round(Math.max(0, Math.min(255, n)))
+    .toString(16)
+    .padStart(2, "0")
+    .toUpperCase();
 
 export function toHex({ r, g, b, a = 1 }) {
   const base = `#${h2(r)}${h2(g)}${h2(b)}`;
@@ -21,10 +25,14 @@ export function toHex({ r, g, b, a = 1 }) {
 }
 
 export function rgbToHsl({ r, g, b }) {
-  const rn = r / 255, gn = g / 255, bn = b / 255;
-  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+  const rn = r / 255,
+    gn = g / 255,
+    bn = b / 255;
+  const max = Math.max(rn, gn, bn),
+    min = Math.min(rn, gn, bn);
   const l = (max + min) / 2;
-  let h = 0, s = 0;
+  let h = 0,
+    s = 0;
   if (max !== min) {
     const d = max - min;
     s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
@@ -62,7 +70,8 @@ export function luminance(hex) {
 }
 
 export function contrast(a, b) {
-  const la = luminance(a), lb = luminance(b);
+  const la = luminance(a),
+    lb = luminance(b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
@@ -98,14 +107,24 @@ export function springToCss({ response, damping }, samples = 48) {
   const x = (t) => {
     if (zeta >= 1) return 1 - (1 + omega * t) * Math.exp(-omega * t);
     const wd = omega * Math.sqrt(1 - zeta * zeta);
-    return 1 - Math.exp(-zeta * omega * t) * (Math.cos(wd * t) + ((zeta * omega) / wd) * Math.sin(wd * t));
+    return (
+      1 -
+      Math.exp(-zeta * omega * t) * (Math.cos(wd * t) + ((zeta * omega) / wd) * Math.sin(wd * t))
+    );
   };
   // Settle when the remaining distance stays below 0.1 %.
   let settle = response;
   for (let t = 0; t < 10; t += 0.001) {
     let ok = true;
-    for (let u = t; u < t + 0.2; u += 0.01) if (Math.abs(1 - x(u)) > 0.001) { ok = false; break; }
-    if (ok) { settle = t; break; }
+    for (let u = t; u < t + 0.2; u += 0.01)
+      if (Math.abs(1 - x(u)) > 0.001) {
+        ok = false;
+        break;
+      }
+    if (ok) {
+      settle = t;
+      break;
+    }
   }
   const pts = [];
   for (let i = 0; i <= samples; i++) {
@@ -117,8 +136,16 @@ export function springToCss({ response, damping }, samples = 48) {
 
 /** Motion (motion.dev) spring parameters equivalent to a SwiftUI spring. */
 export function springToMotion({ response, damping }) {
-  return { type: "spring", visualDuration: response, bounce: Number(Math.max(0, 1 - damping).toFixed(3)) };
+  return {
+    type: "spring",
+    visualDuration: response,
+    bounce: Number(Math.max(0, 1 - damping).toFixed(3)),
+  };
 }
 
-export const kebab = (name) => name.replace(/\./g, "-").replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
+export const kebab = (name) =>
+  name
+    .replace(/\./g, "-")
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .toLowerCase();
 export const camel = (name) => name.replace(/[.-](\w)/g, (_, c) => c.toUpperCase());

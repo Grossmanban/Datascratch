@@ -12,7 +12,21 @@ const t = resolve(raw);
 
 // Names from docs/architecture/contracts/design-tokens.md (v1). Renaming = contract change.
 const CONTRACT = {
-  color: ["bg.canvas", "bg.surface", "bg.sidebar", "bg.elevated", "text.primary", "text.secondary", "text.tertiary", "text.onAccent", "line.separator", "accent", "danger", "success", "warning"],
+  color: [
+    "bg.canvas",
+    "bg.surface",
+    "bg.sidebar",
+    "bg.elevated",
+    "text.primary",
+    "text.secondary",
+    "text.tertiary",
+    "text.onAccent",
+    "line.separator",
+    "accent",
+    "danger",
+    "success",
+    "warning",
+  ],
   ink: ["black", "blue", "red", "green", "purple", "brown"],
   highlight: ["yellow", "green", "pink", "blue"],
   tint: ["red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple", "pink", "gray"],
@@ -35,8 +49,18 @@ test("token names match the contract", () => {
 
 test("contract values that are fixed by the type scale", () => {
   const sizes = Object.fromEntries(Object.entries(t.type).map(([k, v]) => [k, v.size]));
-  assert.deepEqual(sizes, { title: 34, h1: 28, h2: 22, h3: 19, body: 17, callout: 16, footnote: 13, caption: 12 });
-  for (const v of Object.values(t.type)) assert.equal(v.lineHeight, v.font === "display" ? 1.2 : 1.5);
+  assert.deepEqual(sizes, {
+    title: 34,
+    h1: 28,
+    h2: 22,
+    h3: 19,
+    body: 17,
+    callout: 16,
+    footnote: 13,
+    caption: 12,
+  });
+  for (const v of Object.values(t.type))
+    assert.equal(v.lineHeight, v.font === "display" ? 1.2 : 1.5);
 });
 
 test("text is legible on paper in both themes (WCAG)", () => {
@@ -57,7 +81,10 @@ test("labels on filled accent read in both themes", () => {
   for (const theme of ["light", "dark"]) {
     const on = t.color["text.onAccent"][theme];
     assert.ok(contrast(on, t.color.accent[theme]) >= 4.5, `accent ${theme}`);
-    assert.ok(contrast(on, t.color.danger[theme]) >= (theme === "light" ? 3 : 4.5), `danger ${theme}`);
+    assert.ok(
+      contrast(on, t.color.danger[theme]) >= (theme === "light" ? 3 : 4.5),
+      `danger ${theme}`,
+    );
   }
 });
 
@@ -69,7 +96,8 @@ test("dark inks are lighter and readable on graphite", () => {
 });
 
 test("hex round-trip", () => {
-  for (const h of ["#FAF8F4", "#FFFFFFCC", "#00000000"]) assert.equal(toHex(parseHex(h)), h === "#00000000" ? "#00000000" : h);
+  for (const h of ["#FAF8F4", "#FFFFFFCC", "#00000000"])
+    assert.equal(toHex(parseHex(h)), h === "#00000000" ? "#00000000" : h);
 });
 
 test("spring easing ends at 1 and starts at 0", () => {
@@ -81,7 +109,16 @@ test("spring easing ends at 1 and starts at 0", () => {
 test("renderers are deterministic and cover every token", () => {
   const css = renderCss(t);
   assert.equal(css, renderCss(t));
-  for (const k of CONTRACT.color) assert.ok(css.includes(`--ds-${k.replace(".", "-").replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase()}:`), k);
+  for (const k of CONTRACT.color)
+    assert.ok(
+      css.includes(
+        `--ds-${k
+          .replace(".", "-")
+          .replace(/([a-z])([A-Z])/g, "$1-$2")
+          .toLowerCase()}:`,
+      ),
+      k,
+    );
   const swift = renderSwift(t);
   for (const k of CONTRACT.tint) assert.ok(swift.includes(`case ${k} = "${k}"`), k);
 });

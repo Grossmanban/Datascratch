@@ -26,7 +26,9 @@ export interface FormatToolbarProps {
  * Toggle state comes from the editor (`active`); the bar only renders it.
  */
 export function FormatToolbar({ items, className, ...aria }: FormatToolbarProps) {
-  const active = items.filter((i): i is FormatItem => typeof i === "object" && "onClick" in i && !!i.active).map((i) => i.id);
+  const active = items
+    .filter((i): i is FormatItem => typeof i === "object" && "onClick" in i && !!i.active)
+    .map((i) => i.id);
   return (
     <ToggleGroup.Root
       type="multiple"
@@ -38,10 +40,15 @@ export function FormatToolbar({ items, className, ...aria }: FormatToolbarProps)
       className={cn("glass inline-flex items-center gap-0.5 rounded-full p-1", className)}
     >
       {items.map((it, i) => {
-        if (it === "separator") return <span key={`sep-${i}`} aria-hidden className="mx-1 h-5 w-px bg-separator" />;
+        if (it === "separator")
+          return <span key={`sep-${i}`} aria-hidden className="mx-1 h-5 w-px bg-separator" />;
         if ("render" in it) return <Fragment key={it.id}>{it.render}</Fragment>;
         return (
-          <Tooltip key={it.id} content={it.label} {...(it.shortcut ? { shortcut: it.shortcut } : {})}>
+          <Tooltip
+            key={it.id}
+            content={it.label}
+            {...(it.shortcut ? { shortcut: it.shortcut } : {})}
+          >
             <ToggleGroup.Item
               value={it.id}
               aria-label={it.label}

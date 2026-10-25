@@ -7,7 +7,10 @@ export const PopoverTrigger = P.Trigger;
 export const PopoverAnchor = P.Anchor;
 export const PopoverClose = P.Close;
 
-export const PopoverContent = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<typeof P.Content>>(function PopoverContent(
+export const PopoverContent = forwardRef<
+  HTMLDivElement,
+  ComponentPropsWithoutRef<typeof P.Content>
+>(function PopoverContent(
   { className, sideOffset = 8, collisionPadding = 12, align = "start", ...rest },
   ref,
 ) {
@@ -18,7 +21,10 @@ export const PopoverContent = forwardRef<HTMLDivElement, ComponentPropsWithoutRe
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}
         align={align}
-        className={cn("glass animate-pop z-50 rounded-lg p-3 text-callout text-fg outline-none", className)}
+        className={cn(
+          "glass animate-pop z-50 rounded-lg p-3 text-callout text-fg outline-none",
+          className,
+        )}
         {...rest}
       />
     </P.Portal>

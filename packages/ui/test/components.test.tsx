@@ -60,7 +60,10 @@ describe("Button", () => {
         <a href="/x">Открыть</a>
       </Button>,
     );
-    expect(screen.getByRole("link", { name: "Открыть" })).toHaveAttribute("data-variant", "primary");
+    expect(screen.getByRole("link", { name: "Открыть" })).toHaveAttribute(
+      "data-variant",
+      "primary",
+    );
   });
 });
 
@@ -111,7 +114,10 @@ describe("TaskCheckbox", () => {
   });
   it("describes cancelled tasks", () => {
     renderUI(<TaskCheckbox state="cancelled" aria-label="Старое" />);
-    expect(screen.getByRole("checkbox", { name: "Старое" })).toHaveAttribute("aria-description", "Отменено");
+    expect(screen.getByRole("checkbox", { name: "Старое" })).toHaveAttribute(
+      "aria-description",
+      "Отменено",
+    );
   });
 });
 
@@ -221,7 +227,15 @@ describe("Toast", () => {
     const undo = vi.fn();
     function T() {
       const { toast } = useToast();
-      return <Button onClick={() => toast({ title: "Документ удалён", action: { label: "Отменить", onClick: undo } })}>Удалить</Button>;
+      return (
+        <Button
+          onClick={() =>
+            toast({ title: "Документ удалён", action: { label: "Отменить", onClick: undo } })
+          }
+        >
+          Удалить
+        </Button>
+      );
     }
     renderUI(<T />);
     await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
@@ -234,11 +248,17 @@ describe("Toast", () => {
 describe("Chips", () => {
   it("DateChip shows overdue in red tone", () => {
     renderUI(<DateChip date={new Date(2026, 9, 20)} now={now} />);
-    expect(screen.getByText("20 окт").closest("[data-tone]")).toHaveAttribute("data-tone", "overdue");
+    expect(screen.getByText("20 окт").closest("[data-tone]")).toHaveAttribute(
+      "data-tone",
+      "overdue",
+    );
   });
   it("DateChip respects locale", () => {
     renderUI(<DateChip date={new Date(2026, 9, 26)} now={now} kind="deadline" />, { locale: "en" });
-    expect(screen.getByText("Tomorrow").closest("[data-tone]")).toHaveAttribute("data-tone", "soon");
+    expect(screen.getByText("Tomorrow").closest("[data-tone]")).toHaveAttribute(
+      "data-tone",
+      "soon",
+    );
   });
   it("TagChip can be removed", async () => {
     const on = vi.fn();
@@ -293,7 +313,10 @@ describe("Sidebar", () => {
     work.focus();
     await userEvent.keyboard("{ArrowRight}");
     expect(work).toHaveAttribute("aria-expanded", "true");
-    expect(await screen.findByRole("button", { name: "Клиенты" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("button", { name: "Клиенты" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
   it("collapses a section", async () => {
     renderUI(
@@ -330,13 +353,26 @@ describe("Editor & lists v2", () => {
     const { TaskRow } = await import("../src");
     function T() {
       const [s, setS] = useState<TaskState>("open");
-      return <TaskRow title="Сдать курсовую" state={s} onStateChange={setS} deadline={new Date(2026, 9, 26)} now={now} source="Учёба" tags={[{ name: "срочно", tint: "red" }]} />;
+      return (
+        <TaskRow
+          title="Сдать курсовую"
+          state={s}
+          onStateChange={setS}
+          deadline={new Date(2026, 9, 26)}
+          now={now}
+          source="Учёба"
+          tags={[{ name: "срочно", tint: "red" }]}
+        />
+      );
     }
     renderUI(<T />);
     expect(screen.getByText("из «Учёба»")).toBeInTheDocument();
     expect(screen.getByText("Завтра").closest("[data-tone]")).toHaveAttribute("data-tone", "soon");
     await userEvent.click(screen.getByRole("checkbox", { name: "Сдать курсовую" }));
-    expect(screen.getByText("Сдать курсовую").closest("[data-task-state]")).toHaveAttribute("data-task-state", "done");
+    expect(screen.getByText("Сдать курсовую").closest("[data-task-state]")).toHaveAttribute(
+      "data-task-state",
+      "done",
+    );
     expect(screen.getByText("Завтра").closest("[data-tone]")).toHaveAttribute("data-tone", "done");
   });
   it("DocRow is a button with current state", async () => {

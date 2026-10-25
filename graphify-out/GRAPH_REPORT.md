@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-10-25)
 
 ## Corpus Check
-- 518 files · ~329,705 words
+- 518 files · ~329,752 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 24 file(s) not represented in the graph (top: (none) 15, .css 5, .example 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c39b6321`
+- Built from commit: `bd89013a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -300,14 +300,14 @@
 ## Surprising Connections (you probably didn't know these)
 - `Перестройка блоков (§4.1a): при разделении, слиянии, смене типа и перемещении блока клиент в той же транзакции заменяет затронутый штрих копией (новый strokeId, те же точки, якоря по соответствию символов)` --semantically_similar_to--> `rebaseRedoneAnchors()`  [INFERRED] [semantically similar]
   docs/architecture/contracts/strokes.md → packages/shared/src/strokes/store.ts
-- `deviceName при регистрации устройства: обязательно в /auth/login, необязательно в signup и recovery/finish (уточнение потока server)` --references--> `LoginRequest`  [INFERRED]
-  docs/architecture/contracts/api.md → packages/shared/src/contracts/api.ts
-- `Правило ref в error: для ошибок push/snapshot ref = их clientMsgId, иначе — docId при наличии` --references--> `ErrorMessage`  [INFERRED]
-  docs/architecture/contracts/sync-protocol.md → packages/shared/src/contracts/sync.ts
 - `Server update (git pull + rebuild, auto migrations)` --references--> `runMigrations()`  [INFERRED]
   infra/README.md → apps/server/src/db/client.ts
 - `2. Поля штриха` --references--> `block()`  [INFERRED]
   docs/architecture/contracts/strokes.md → packages/design-tokens/scripts/generate.mjs
+- `deviceName при регистрации устройства: обязательно в /auth/login, необязательно в signup и recovery/finish (уточнение потока server)` --references--> `LoginRequest`  [INFERRED]
+  docs/architecture/contracts/api.md → packages/shared/src/contracts/api.ts
+- `Правило ref в error: для ошибок push/snapshot ref = их clientMsgId, иначе — docId при наличии` --references--> `ErrorMessage`  [INFERRED]
+  docs/architecture/contracts/sync-protocol.md → packages/shared/src/contracts/sync.ts
 
 ## Import Cycles
 - 2-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs`
@@ -1298,7 +1298,7 @@ Cohesion: 0.33
 Nodes (6): scripts, build, dev, test, test:ct, typecheck
 
 ## Knowledge Gaps
-- **747 isolated node(s):** `block`, `drawing`, `image`, `text`, `agent` (+742 more)
+- **747 isolated node(s):** `YrsFFI`, `account`, `notebook`, `note`, `.roots` (+742 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 3092 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **30 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -1306,15 +1306,15 @@ Nodes (6): scripts, build, dev, test, test:ct, typecheck
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md (2)` to `scripts/generate.mjs`, `12-craft-features.md`, `DSDesign Swift package`, `DatePicker.tsx`, `decisions/README.md (3)`, `Foundation`?**
-  _High betweenness centrality (0.205) - this node is a cross-community bridge._
+  _High betweenness centrality (0.230) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `block`, `drawing`, `image` to the rest of the system?**
+- **What connects `YrsFFI`, `account`, `notebook` to the rest of the system?**
   _747 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
   _Cohesion score 0.0035038281185933995 - nodes in this community are weakly interconnected._
 - **Why does `t` connect `n` to `mermaid.min.js`, `scripts/generate.mjs`, `Wt`?**
-  _High betweenness centrality (0.204) - this node is a cross-community bridge._
+  _High betweenness centrality (0.220) - this node is a cross-community bridge._
 - **Are the 115 inferred relationships involving `r()` (e.g. with `mermaid.min.js` and `_4()`) actually correct?**
   _`r()` has 115 INFERRED edges - model-reasoned connections that need verification._
 - **Should `n` be split into smaller, more focused modules?**

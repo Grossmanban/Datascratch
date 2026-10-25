@@ -175,7 +175,8 @@ jobs:
       DS_WEB_IMAGE: ${{ needs.images.outputs.web }}
       DS_POSTGRES_IMAGE: ${{ needs.images.outputs.postgres }}
       # Coexistence with other software on the server (infra/DEPLOY.md):
-      DS_PROXY_MODE: ${{ vars.DS_PROXY_MODE || 'auto' }}
+      # auto | standalone | behind-proxy (Sinhron's Caddy if present, else any proxy).
+      DS_DEPLOY_MODE: ${{ vars.DEPLOY_MODE || 'auto' }}
       DS_PROXY_PORT: ${{ vars.DS_PROXY_PORT || '8480' }}
       DS_NGINX_AUTO: ${{ vars.DS_NGINX_AUTO || 'false' }}
       DS_NGINX_CERTBOT: ${{ vars.DS_NGINX_CERTBOT || 'false' }}
@@ -226,6 +227,14 @@ jobs:
             # Behind the server's own proxy: check Datascratch itself through an SSH tunnel;
             # the public address works once the proxy is connected (see the summary).
             infra/deploy/remote.sh smoke-local
+          elif [ "$DS_MODE" = edge ]; then
+            # Behind the other app's Caddy: first Datascratch itself, then the public address.
+            infra/deploy/remote.sh check
+            node infra/deploy/smoke.mjs "https://$DS_DOMAIN" 300 || {
+              echo "::error title=Public address::Datascratch runs, but https://$DS_DOMAIN does not answer through the other app's Caddy (certificate or DNS?). It is not rolled back."
+              echo "public_failed=true" >> "$GITHUB_OUTPUT"
+              exit 1
+            }
           else
             node infra/deploy/smoke.mjs "https://$DS_DOMAIN" 300
           fi
@@ -237,7 +246,7 @@ jobs:
         run: node infra/deploy/smoke.mjs "https://$DS_DOMAIN" 30
 
       - name: Roll back on failure
-        if: failure() && steps.smoke.outcome == 'failure'
+        if: failure() && steps.smoke.outcome == 'failure' && steps.smoke.outputs.public_failed != 'true'
         run: infra/deploy/remote.sh rollback
 
       - name: Summary
@@ -258,7 +267,7 @@ jobs:
             echo "| --- | --- |"
             echo "| Address | https://${DS_DOMAIN:-?} |"
             echo "| Version | \`${DS_TAG}\` |"
-            echo "| Mode | ${DS_MODE:-?} |"
+            echo "| Mode | ${DS_MODE:-?} (direct — own Caddy on 80/443; edge — behind Sinhron's Caddy; proxy — behind your web server) |"
             echo "| iOS server (variable DS_SERVER_URL) | ${IOS_URL:-not set — set it to https://${DS_DOMAIN:-…}} |"
             if [ "${DS_MODE:-}" = proxy ]; then
               echo

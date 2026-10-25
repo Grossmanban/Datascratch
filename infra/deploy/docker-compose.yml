@@ -61,8 +61,11 @@ services:
     volumes:
       - files:/data/files
 
-  caddy:
+  # The web app + Caddy. Fixed name: an existing reverse proxy on the shared `edge`
+  # network reaches it as datascratch-web:80 (mode "edge", docker-compose.edge.yml).
+  web:
     image: ${DS_WEB_IMAGE:-ghcr.io/grossmanban/datascratch-web}:${DS_TAG:-latest}
+    container_name: datascratch-web
     restart: unless-stopped
     environment:
       DS_DOMAIN: ${DS_DOMAIN:-localhost}

@@ -64,7 +64,7 @@ for svc in nginx apache2 httpd caddy traefik haproxy; do
   systemctl is-active --quiet "$svc" 2> /dev/null && web_services="$web_services $svc"
 done
 port_busy() { ss -H -ltn "sport = :$1" 2> /dev/null | grep -q .; }
-ours_on_443() { docker ps --filter name='^datascratch-caddy-' --format '{{.Ports}}' 2> /dev/null | grep -q ':443->'; }
+ours_on_443() { docker ps --filter name='^datascratch-web$' --format '{{.Ports}}' 2> /dev/null | grep -q ':443->'; }
 web_ports_free=1
 if { port_busy 80 || port_busy 443; } && ! ours_on_443; then web_ports_free=0; fi
 case "${DS_HOST_MODE:-auto}" in
@@ -80,6 +80,12 @@ fi
 
 # 3. Directory and secrets (generated once, kept only on this server).
 install -d -m 0750 "$DS_DIR" "$DS_DIR/backups"
+if [ ! -f "$DS_DIR/.env" ] && docker volume inspect datascratch_pgdata > /dev/null 2>&1; then
+  # New secrets would not open the existing database (and would lose DS_KMS_KEY).
+  echo "$DS_DIR/.env is missing but the Datascratch database volume exists." >&2
+  echo "Restore .env from your copy (it holds the database password and DS_KMS_KEY) and deploy again." >&2
+  exit 1
+fi
 if [ ! -f "$DS_DIR/.env" ]; then
   log "generating $DS_DIR/.env with new secrets"
   secret() { openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n'; }

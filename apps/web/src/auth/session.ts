@@ -53,12 +53,11 @@ export function onSignedOut(fn: () => void): () => void {
   return () => signedOutListeners.delete(fn);
 }
 
-async function persist() {
-  const st = useAuth.getState();
-  if (!session || !masterKey || !st.userId || !st.email) return;
+async function persist(who: { userId: string | null; email: string | null } = useAuth.getState()) {
+  if (!session || !masterKey || !who.userId || !who.email) return;
   const stored: StoredAccount = {
-    userId: st.userId,
-    email: st.email,
+    userId: who.userId,
+    email: who.email,
     session,
     masterKey: await sealLocal(masterKey),
   };
@@ -124,6 +123,9 @@ export async function establish(params: {
     await kvSet("recoveryStep", true);
     await kvSet("freshAccount", params.userId);
   }
+  // Stored before the state flips: "ready" navigates into the app, and a reload right after
+  // must find the session (otherwise the device is back on the login screen).
+  await persist(params);
   useAuth.setState({
     status: "ready",
     userId: params.userId,
@@ -132,7 +134,6 @@ export async function establish(params: {
     recoveryStep: !!params.pendingRecoveryKey,
     recoveryOnDevice: !!params.pendingRecoveryKey,
   });
-  await persist();
 }
 
 /** The recovery key, if it is stored on this device. */

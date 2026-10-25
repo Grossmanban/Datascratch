@@ -237,6 +237,7 @@ struct NativeEditorToolbar: ToolbarContent {
                 }
                 Button("Move To…", systemImage: "folder") { scene.sheet = .move(noteId: note.id) }
                 Button("Open in New Window", systemImage: "macwindow.badge.plus") { openWindow(id: "note", value: note.id) }
+                Button("Close Tab", systemImage: "xmark") { scene.closeTab() }
                 Divider()
                 Button("Move to Trash", systemImage: "trash", role: .destructive) {
                     scene.closeDocument()

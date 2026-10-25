@@ -16,7 +16,9 @@ struct MainSplitView: View {
                 .navigationSplitViewColumnWidth(min: 320, ideal: 400, max: 560)
         } detail: {
             NavigationStack {
-                if let noteId = scene.selectedNoteId, app.library.note(noteId) != nil {
+                if scene.isContentFullScreen {
+                    ContentColumn()
+                } else if let noteId = scene.selectedNoteId, app.library.note(noteId) != nil {
                     DocumentScreen(noteId: noteId)
                         .id(noteId)
                 } else {

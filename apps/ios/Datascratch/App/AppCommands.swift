@@ -39,6 +39,8 @@ struct AppCommands: Commands {
                 .keyboardShortcut("t", modifiers: [.command, .shift])
             Button("Toggle Sidebar") { scene?.toggleSidebar() }
                 .keyboardShortcut("s", modifiers: [.command, .control])
+            Button("Close Tab") { scene?.closeTab() }
+                .keyboardShortcut("w", modifiers: .command)
             Button("Close Document") { scene?.closeDocument() }
                 .keyboardShortcut("w", modifiers: [.command, .shift])
                 .disabled(scene?.selectedNoteId == nil)

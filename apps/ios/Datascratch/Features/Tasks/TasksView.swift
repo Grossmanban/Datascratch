@@ -65,6 +65,7 @@ struct TasksView: View {
         .background(Theme.Palette.canvas)
         .safeAreaInset(edge: .top, spacing: 0) { bucketPicker }
         .navigationTitle("Tasks")
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { ContentFullScreenButton() } }
         .animation(Theme.Motion.smooth, value: visible.map(\.id))
     }
 

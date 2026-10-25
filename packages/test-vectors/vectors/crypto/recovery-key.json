@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "description": "Recovery key text: 'DS1-' + Crockford Base32 (MSB first, 52 chars, last 4 bits zero) in groups of 4; recoveryLoginKey = BLAKE2b-256(key=recoveryKey, msg='ds1|recovery-login').",
+  "cases": [
+    {
+      "recoveryKey": "0000000000000000000000000000000000000000000000000000000000000000",
+      "text": "DS1-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000",
+      "recoveryLoginKey": "624hqqwF-AIdyrQkJdruBRVzfwIC7IPGgWy7X0K5joY"
+    },
+    {
+      "recoveryKey": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "text": "DS1-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZG",
+      "recoveryLoginKey": "6L71W-OtUREPTui7Q4RJ1KfUDAiMK67MhSmZe1Jv5QI"
+    },
+    {
+      "recoveryKey": "fc9d70ee32baf76babf7cffb56eb030cb611fef7e2adbe85e0adbd3882c99bfa",
+      "text": "DS1-ZJEQ-1VHJ-QBVP-QAZQ-SZXN-DTR3-1JV1-3ZQQ-WAPV-X1F0-NPYK-H0P9-KFX0",
+      "recoveryLoginKey": "RgBqJ1E33cWOmQHVM0tWzBTmV8vRlRXDJf3yxsHR8ck"
+    }
+  ],
+  "parse": [
+    {
+      "input": "ds1-zjeq-1vhj-qbvp-qazq-szxn-dtr3-1jv1-3zqq-wapv-x1f0-npyk-h0p9-kfx0",
+      "recoveryKey": "fc9d70ee32baf76babf7cffb56eb030cb611fef7e2adbe85e0adbd3882c99bfa"
+    },
+    {
+      "input": "ZJEQ 1VHJ QBVP QAZQ SZXN DTR3 1JV1 3ZQQ WAPV X1F0 NPYK H0P9 KFX0",
+      "recoveryKey": "fc9d70ee32baf76babf7cffb56eb030cb611fef7e2adbe85e0adbd3882c99bfa"
+    },
+    {
+      "input": "DS1-OOOO-OOOO-OOOO-OOOO-OOOO-OOOO-OOOO-OOOO-OOOO-OOOO-OOOO-OOOO-OOOO",
+      "recoveryKey": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "input": "DS1-ABCD",
+      "error": "invalid_recovery_key"
+    },
+    {
+      "input": "DS1-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0001",
+      "error": "invalid_recovery_key"
+    },
+    {
+      "input": "DS1-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-000U",
+      "error": "invalid_recovery_key"
+    }
+  ]
+}

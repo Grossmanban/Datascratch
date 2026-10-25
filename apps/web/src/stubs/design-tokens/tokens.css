@@ -1,0 +1,126 @@
+/* Stub of @datascratch/design-tokens CSS output ("Тихая бумага", design-tokens.md v1).
+   Variable names: --ds-<token with dots replaced by dashes>. */
+:root {
+  --ds-bg-canvas: #faf8f4;
+  --ds-bg-surface: #ffffff;
+  --ds-bg-sidebar: #f3efe7;
+  --ds-bg-elevated: #ffffffcc;
+  --ds-text-primary: #1d1c1a;
+  --ds-text-secondary: #6b6862;
+  --ds-text-tertiary: #9c978e;
+  --ds-line-separator: #e6e1d8;
+  --ds-accent: #2e5bdb;
+  --ds-danger: #d2453b;
+  --ds-success: #3e8e5a;
+  --ds-warning: #c98a1b;
+
+  --ds-ink-black: #1d1c1a;
+  --ds-ink-blue: #2e5bdb;
+  --ds-ink-red: #d2453b;
+  --ds-ink-green: #3e8e5a;
+  --ds-ink-purple: #7a4fd6;
+  --ds-ink-brown: #8a5a32;
+  --ds-highlight-yellow: #ffe36e80;
+  --ds-highlight-green: #9be3a880;
+  --ds-highlight-pink: #ffb3c780;
+  --ds-highlight-blue: #a9ccff80;
+
+  --ds-tint-red-fg: #c2412f;
+  --ds-tint-red-bg: #fbe4df;
+  --ds-tint-orange-fg: #c46a12;
+  --ds-tint-orange-bg: #fcebd9;
+  --ds-tint-yellow-fg: #a57a05;
+  --ds-tint-yellow-bg: #fbf1cf;
+  --ds-tint-green-fg: #3a8452;
+  --ds-tint-green-bg: #dff0e3;
+  --ds-tint-teal-fg: #1f7f80;
+  --ds-tint-teal-bg: #d9efee;
+  --ds-tint-blue-fg: #2e5bdb;
+  --ds-tint-blue-bg: #e1e8fb;
+  --ds-tint-indigo-fg: #4b4bc6;
+  --ds-tint-indigo-bg: #e5e4f8;
+  --ds-tint-purple-fg: #7a4fd6;
+  --ds-tint-purple-bg: #ece3fa;
+  --ds-tint-pink-fg: #c23f7a;
+  --ds-tint-pink-bg: #f9e1ec;
+  --ds-tint-gray-fg: #6b6862;
+  --ds-tint-gray-bg: #ece8e1;
+
+  --ds-backdrop-sand: linear-gradient(135deg, #f6e7cf 0%, #f3d9c4 45%, #e9d6e6 100%);
+  --ds-backdrop-dusk: linear-gradient(135deg, #d9d4f2 0%, #e9c8d8 50%, #f6d9c2 100%);
+  --ds-backdrop-mist: linear-gradient(135deg, #dbe8f0 0%, #e6eef0 50%, #eee7f3 100%);
+  --ds-backdrop-meadow: linear-gradient(135deg, #dcefd9 0%, #eaf1d2 50%, #f5ead0 100%);
+  --ds-backdrop-ember: linear-gradient(135deg, #f8d6c4 0%, #f2b8a6 50%, #e7c1d8 100%);
+
+  --ds-font-display: "Newsreader Variable", "Newsreader", "New York", ui-serif, Georgia, serif;
+  --ds-font-text: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --ds-font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --ds-radius-sm: 6px;
+  --ds-radius-md: 10px;
+  --ds-radius-lg: 14px;
+  --ds-radius-xl: 20px;
+
+  --ds-shadow-card: 0 1px 2px rgb(40 30 10 / 0.04), 0 8px 24px rgb(40 30 10 / 0.06);
+  --ds-shadow-popover: 0 2px 6px rgb(40 30 10 / 0.06), 0 18px 48px rgb(40 30 10 / 0.14);
+
+  --ds-duration-fast: 120ms;
+  --ds-duration-base: 200ms;
+  --ds-duration-slow: 320ms;
+  --ds-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --ds-width-normal: 720px;
+  --ds-width-wide: 960px;
+}
+
+:root[data-theme="dark"] {
+  --ds-bg-canvas: #1a1917;
+  --ds-bg-surface: #22211e;
+  --ds-bg-sidebar: #1f1e1b;
+  --ds-bg-elevated: #2a2926cc;
+  --ds-text-primary: #ece9e3;
+  --ds-text-secondary: #a19d95;
+  --ds-text-tertiary: #77736c;
+  --ds-line-separator: #34322e;
+  --ds-accent: #7b9bff;
+  --ds-danger: #ff6b5e;
+  --ds-success: #6bc48a;
+  --ds-warning: #f2b54b;
+
+  --ds-ink-black: #ece9e3;
+  --ds-ink-blue: #7b9bff;
+  --ds-ink-red: #ff6b5e;
+  --ds-ink-green: #6bc48a;
+  --ds-ink-purple: #b195f0;
+  --ds-ink-brown: #c99a6e;
+
+  --ds-tint-red-fg: #ff8a7a;
+  --ds-tint-red-bg: #3a2522;
+  --ds-tint-orange-fg: #f5a55a;
+  --ds-tint-orange-bg: #3a2c1d;
+  --ds-tint-yellow-fg: #e9c45a;
+  --ds-tint-yellow-bg: #36301b;
+  --ds-tint-green-fg: #7ccc96;
+  --ds-tint-green-bg: #1f3326;
+  --ds-tint-teal-fg: #6cc8c6;
+  --ds-tint-teal-bg: #1b3232;
+  --ds-tint-blue-fg: #7b9bff;
+  --ds-tint-blue-bg: #212b45;
+  --ds-tint-indigo-fg: #9d9bf2;
+  --ds-tint-indigo-bg: #28283f;
+  --ds-tint-purple-fg: #b195f0;
+  --ds-tint-purple-bg: #2e2540;
+  --ds-tint-pink-fg: #f08cb8;
+  --ds-tint-pink-bg: #3a2330;
+  --ds-tint-gray-fg: #a19d95;
+  --ds-tint-gray-bg: #2c2b28;
+
+  --ds-backdrop-sand: linear-gradient(135deg, #3a3024 0%, #3a2b26 45%, #33293a 100%);
+  --ds-backdrop-dusk: linear-gradient(135deg, #2a2840 0%, #3a2733 50%, #3d3026 100%);
+  --ds-backdrop-mist: linear-gradient(135deg, #222d35 0%, #262e31 50%, #2e2936 100%);
+  --ds-backdrop-meadow: linear-gradient(135deg, #22301f 0%, #2d3222 50%, #352f22 100%);
+  --ds-backdrop-ember: linear-gradient(135deg, #3d2a22 0%, #3d2420 50%, #36263a 100%);
+
+  --ds-shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
+  --ds-shadow-popover: 0 2px 6px rgb(0 0 0 / 0.3), 0 18px 48px rgb(0 0 0 / 0.45);
+}

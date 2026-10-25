@@ -151,6 +151,7 @@ struct ToolPalette: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("tool.\(mode.rawValue)")
                 .accessibilityLabel(mode.title)
+                .accessibilityAddTraits(tools.mode == mode ? .isSelected : [])
             }
             // The swatch row is always present (dimmed when the tool has no ink) so the palette never
             // changes its structure under the finger: removing buttons while a tool button's touch
@@ -219,6 +220,8 @@ struct HUDView: View {
             Text("штрихов: \(model.document.strokes.count)")
                 .accessibilityIdentifier("hud.strokes")
             Text("кадров/с: \(fps.fps)")
+            Text("прокрутка: \(Int(model.scrollOffset.rounded()))")
+                .accessibilityIdentifier("hud.offset")
         }
         .font(.caption.monospacedDigit())
         .padding(8)

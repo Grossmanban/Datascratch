@@ -13,6 +13,8 @@ final class DemoModel {
     var showPalette = false
     /// Bumped whenever the editor reports a change, so SwiftUI refreshes toolbar state.
     var revision = 0
+    /// Editor scroll position (for the HUD and UI tests).
+    var scrollOffset: CGFloat = 0
 
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
     private let images = DemoImages()
@@ -47,6 +49,7 @@ final class DemoModel {
         if args.contains("-uiTesting") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { Self.dumpGestureRecognizers() }
         }
+        editor.onScroll = { [weak self] y in self?.scrollOffset = y }
         editor.onPaletteRequest = { [weak self] _ in self?.showPalette = true }
     }
 

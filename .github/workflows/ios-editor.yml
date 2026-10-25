@@ -143,6 +143,45 @@ jobs:
           status=${PIPESTATUS[0]}
           exit $status
 
+      - name: Pick iPhone simulator
+        id: phone
+        if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
+        run: |
+          ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)["devices"]
+          best = None
+          for runtime, devices in data.items():
+              if "iOS-26" not in runtime:
+                  continue
+              for d in devices:
+                  if d["name"].endswith("Pro") and d["name"].startswith("iPhone") or (best is None and d["name"].startswith("iPhone")):
+                      best = d["udid"]
+          print(best or "")
+          ')
+          echo "Simulator: $ID"
+          test -n "$ID"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      # iPhone: finger drawing is on by default there and the palette sits over the keyboard.
+      - name: UI-test demo on iPhone simulator
+        timeout-minutes: 20
+        if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
+        working-directory: apps/ios/Packages/DSEditor/Demo
+        run: |
+          set +e
+          xcodebuild test \
+            -project EditorDemo.xcodeproj -scheme EditorDemo \
+            -destination "platform=iOS Simulator,id=${{ steps.phone.outputs.id }}" \
+            -only-testing:EditorDemoUITests/EditorDemoUITests/testPaletteTapsWithKeyboardOpenDoNotScroll \
+            -only-testing:EditorDemoUITests/EditorDemoUITests/testTypingGoesToDocument \
+            -only-testing:EditorDemoUITests/EditorDemoUITests/testSwitchToTextWithFingerDrawing \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 300 -maximum-test-execution-time-allowance 600 \
+            -resultBundlePath "$RUNNER_TEMP/demo-iphone-tests.xcresult" \
+            2>&1 | tee "$RUNNER_TEMP/demo-iphone-tests.log" \
+            | grep --line-buffered -E "error:|Test (Suite|Case|case)|\*\* "
+          exit ${PIPESTATUS[0]}
+
       - name: Build unsigned device IPA
         timeout-minutes: 15
         if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''

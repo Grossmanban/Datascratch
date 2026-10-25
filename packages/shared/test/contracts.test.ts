@@ -80,8 +80,8 @@ describe("api bodies", () => {
       kdf: { alg: "argon2id13", ops: 3, mem: 67108864 },
       loginKey: KEY,
       recoveryLoginKey: KEY,
-      wrappedMasterKeyPassword: "xx",
-      wrappedMasterKeyRecovery: "yy",
+      wrappedMasterKeyPassword: "AQ",
+      wrappedMasterKeyRecovery: "AQ",
       userId: ID,
       accountDocId: ID,
     };
@@ -89,7 +89,7 @@ describe("api bodies", () => {
     expect(signupRequestSchema.safeParse({ ...body, loginKey: "short" }).success).toBe(false);
   });
   it("requires notebookKey exactly for agent mode", () => {
-    const base = { notebookId: ID, wrappedKey: "w" };
+    const base = { notebookId: ID, wrappedKey: "AQ" };
     expect(createNotebookRequestSchema.safeParse({ ...base, mode: "private" }).success).toBe(true);
     expect(createNotebookRequestSchema.safeParse({ ...base, mode: "agent" }).success).toBe(false);
     expect(
@@ -109,5 +109,18 @@ describe("api bodies", () => {
     expect(
       registerDocRequestSchema.safeParse({ docId: ID, kind: "notebook", notebookId: ID }).success,
     ).toBe(true);
+  });
+});
+
+describe("canonical base64url", () => {
+  it("rejects non-zero trailing bits and impossible lengths", async () => {
+    const { base64UrlSchema, saltSchema } = await import("../src/contracts/index.js");
+    expect(base64UrlSchema.safeParse("AA").success).toBe(true);
+    expect(base64UrlSchema.safeParse("AB").success).toBe(false);
+    expect(base64UrlSchema.safeParse("AAA").success).toBe(true);
+    expect(base64UrlSchema.safeParse("AAB").success).toBe(false);
+    expect(base64UrlSchema.safeParse("A").success).toBe(false);
+    expect(saltSchema.safeParse("B".repeat(22)).success).toBe(false);
+    expect(saltSchema.safeParse("B".repeat(21) + "A").success).toBe(true);
   });
 });

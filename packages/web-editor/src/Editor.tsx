@@ -1,8 +1,10 @@
+import { TooltipProvider } from "@datascratch/ui";
 import { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
+import { setEditorAwareness } from "./collab/collaboration";
 import { buildExtensions } from "./editorCore";
 import type { EditorHost, HostRef } from "./host";
 import { readNoteMeta, readTitle, setNoteCover, SUPPORTED_FORMAT_VERSION, useNoteMeta } from "./meta";
@@ -86,6 +88,9 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
   const [taskMenu, setTaskMenu] = useState<TaskMenuRequest | null>(null);
   const slashStore = useMemo(() => createSuggestionStore<BlockItem>(), []);
   const linkStore = useMemo(() => createSuggestionStore<LinkItem>(), []);
+  const awarenessRef = useRef(awareness);
+  /** Which awareness each editor instance was built or last updated with. */
+  const attachedAwareness = useRef(new WeakMap<Editor, Awareness | null>());
   const callbacks = useRef(props);
   callbacks.current = props;
 
@@ -131,7 +136,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
     const { extensions, undoManager } = buildExtensions({
       doc,
       host,
-      awareness,
+      awareness: awarenessRef.current,
       user: user ? { name: user.name, color: user.color } : null,
       extensions: [slash, links],
     });
@@ -189,6 +194,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
     });
     const onTaskMenu = (e: Event) => setTaskMenu((e as CustomEvent<TaskMenuRequest>).detail);
     editor.view.dom.addEventListener(TASK_MENU_EVENT, onTaskMenu);
+    attachedAwareness.current.set(editor, awarenessRef.current);
     const next = { editor, pen, undoManager };
     setApi(next);
     callbacks.current.onReady?.(next);
@@ -199,7 +205,16 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       setApi(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, awareness, schemaGen]);
+    // `awareness` is applied to the live editor below; it must not remount it.
+  }, [doc, schemaGen]);
+
+  // Presence source changed (new provider, reconnect): swap the cursor plugin on the live editor.
+  useEffect(() => {
+    awarenessRef.current = awareness;
+    if (!api || attachedAwareness.current.get(api.editor) === awareness) return;
+    setEditorAwareness(api.editor, awareness, user ? { name: user.name, color: user.color } : null);
+    attachedAwareness.current.set(api.editor, awareness);
+  }, [api, awareness]);
 
   useEffect(() => {
     api?.editor.setEditable(!readOnly);
@@ -228,6 +243,8 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
   } as CSSProperties;
 
   return (
+    // Design-system popovers use Radix tooltips; a local provider keeps the editor usable without UIProvider.
+    <TooltipProvider delayDuration={500} skipDelayDuration={200}>
     <div className={`ds-editor ${className}`} data-paper={style.paper} data-font={style.font} data-width={style.width} data-readonly={readOnly || undefined} style={cssVars}>
       {showCover && meta.cover && <Cover doc={doc} host={host.current} editable={!readOnly} onRequestCover={props.onRequestCover} />}
       {meta.formatVersion > SUPPORTED_FORMAT_VERSION && (
@@ -249,6 +266,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
         </div>
       )}
     </div>
+    </TooltipProvider>
   );
 }
 

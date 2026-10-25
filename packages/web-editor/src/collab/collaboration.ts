@@ -1,10 +1,11 @@
-import { Extension } from "@tiptap/core";
+import { Extension, type Editor } from "@tiptap/core";
 import {
   defaultDeleteFilter,
   defaultProtectedNodes,
   redoCommand,
   undoCommand,
   yCursorPlugin,
+  yCursorPluginKey,
   ySyncPlugin,
   ySyncPluginKey,
   yUndoPlugin,
@@ -65,16 +66,31 @@ export const Collaboration = Extension.create<CollaborationOptions>({
     const plugins = [ySyncPlugin(doc.getXmlFragment("content")), yUndoPlugin({ undoManager })];
     if (awareness) {
       if (user) awareness.setLocalStateField("user", user);
-      plugins.push(
-        yCursorPlugin(awareness, {
-          cursorBuilder: (u: { name?: string; color?: string }) => cursorBuilder(u),
-          selectionBuilder: (u: { color?: string }) => ({
-            style: `background-color: color-mix(in srgb, ${u.color ?? "#2E5BDB"} 22%, transparent)`,
-            class: "ds-collab-selection",
-          }),
-        }),
-      );
+      plugins.push(createCursorPlugin(awareness));
     }
     return plugins;
   },
 });
+
+/** Collaborators' carets and selections from an awareness instance. */
+export function createCursorPlugin(awareness: Awareness) {
+  return yCursorPlugin(awareness, {
+    cursorBuilder: (u: { name?: string; color?: string }) => cursorBuilder(u),
+    selectionBuilder: (u: { color?: string }) => ({
+      style: `background-color: color-mix(in srgb, ${u.color ?? "#2E5BDB"} 22%, transparent)`,
+      class: "ds-collab-selection",
+    }),
+  });
+}
+
+/**
+ * Swaps the presence source of a live editor (no remount: the document binding, undo history and
+ * pen layer stay as they are). Passing null removes collaborators' cursors.
+ */
+export function setEditorAwareness(editor: Editor, awareness: Awareness | null, user: { name: string; color: string } | null): void {
+  if (editor.isDestroyed) return;
+  editor.unregisterPlugin(yCursorPluginKey);
+  if (!awareness) return;
+  if (user) awareness.setLocalStateField("user", user);
+  editor.registerPlugin(createCursorPlugin(awareness));
+}

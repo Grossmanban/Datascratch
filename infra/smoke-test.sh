@@ -4,6 +4,7 @@
 # Used by CI; safe to run locally (it destroys the compose volumes!).
 set -euo pipefail
 cd "$(dirname "$0")"
+[ -f .env ] && set -a && . ./.env && set +a
 
 PORT="${SERVER_PORT:-8080}"
 BASE="http://127.0.0.1:$PORT/v1"

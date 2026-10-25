@@ -33,6 +33,10 @@ export interface SyncStorage {
   /** All pending items in insertion order. */
   listOutbox(): Promise<OutboxItem[]>;
   removeOutbox(clientMsgId: string): Promise<void>;
+  /** Optional batch read (one transaction); the client falls back to getDocState. */
+  getDocStates?(docIds: string[]): Promise<Map<string, DocSyncState>>;
+  /** Optional batch write (one transaction); the client falls back to setDocState. */
+  setDocStates?(entries: [string, DocSyncState][]): Promise<void>;
 }
 
 export const EMPTY_DOC_STATE: DocSyncState = Object.freeze({
@@ -52,6 +56,17 @@ export class MemorySyncStorage implements SyncStorage {
   }
   async setDocState(docId: string, state: DocSyncState): Promise<void> {
     this.docs.set(docId, { ...state });
+  }
+  async getDocStates(docIds: string[]): Promise<Map<string, DocSyncState>> {
+    const out = new Map<string, DocSyncState>();
+    for (const id of docIds) {
+      const s = this.docs.get(id);
+      if (s) out.set(id, { ...s });
+    }
+    return out;
+  }
+  async setDocStates(entries: [string, DocSyncState][]): Promise<void> {
+    for (const [id, state] of entries) this.docs.set(id, { ...state });
   }
   async enqueue(item: OutboxItem): Promise<void> {
     this.outbox.push({ ...item });

@@ -255,6 +255,34 @@ final class ServerAccountService: AccountService {
         }
     }
 
+    func rotateRecoveryKey(currentPassword: String) async throws -> RecoveryKey {
+        guard let email = account?.email else { throw AccountError.wrongCredentials }
+        do {
+            let text = try await connection.accounts.rotateRecoveryKey(email: email, currentPassword: currentPassword,
+                                                                       account: connection.core.account)
+            guard let key = RecoveryKey(text) else { throw AccountError.invalidRecoveryKey }
+            return key
+        } catch let error as APIError {
+            throw Self.map(error)
+        }
+    }
+
+    func securityEvents() async throws -> [SecurityEvent] {
+        do {
+            return try await connection.accounts.securityEvents().compactMap { event in
+                guard let date = event.date else { return nil }
+                let kind: SecurityEvent.Kind = switch event.kind {
+                case .passwordChanged: .passwordChanged
+                case .recoveryUsed: .recoveryUsed
+                case .recoveryKeyRotated: .recoveryKeyRotated
+                }
+                return SecurityEvent(kind: kind, date: date, deviceName: event.deviceName)
+            }
+        } catch let error as APIError {
+            throw Self.map(error)
+        }
+    }
+
     func signOut() async {
         await connection.stop()
         try? await connection.accounts.logout()

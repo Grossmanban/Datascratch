@@ -1,0 +1,131 @@
+name: ios-editor
+
+on:
+  push:
+    branches: [main, claude/ios-editor]
+    paths:
+      - "apps/ios/Packages/DSEditor/**"
+      - "packages/test-vectors/**"
+      - ".github/workflows/ios-editor.yml"
+  pull_request:
+    paths:
+      - "apps/ios/Packages/DSEditor/**"
+      - "packages/test-vectors/**"
+      - ".github/workflows/ios-editor.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-editor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Pure-Swift logic (stroke format, living-stroke geometry, document model) on Linux: fast feedback.
+  logic-linux:
+    runs-on: ubuntu-latest
+    container: swift:6.2-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test DSInk and DSEditorModel
+        working-directory: apps/ios/Packages/DSEditor
+        run: swift test --parallel
+
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          ls -d /Applications/Xcode*.app
+          XC=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          echo "Using $XC"
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - name: Pick iPad simulator
+        id: sim
+        run: |
+          ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)["devices"]
+          best = None
+          for runtime, devices in data.items():
+              if "iOS-26" not in runtime:
+                  continue
+              for d in devices:
+                  if d["name"].startswith("iPad Pro") or (best is None and d["name"].startswith("iPad")):
+                      best = d["udid"]
+          print(best or "")
+          ')
+          echo "Simulator: $ID"
+          test -n "$ID"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Build and test package on iPad simulator
+        working-directory: apps/ios/Packages/DSEditor
+        run: |
+          status=0
+          xcodebuild test \
+            -scheme DSEditor-Package \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -skipPackagePluginValidation \
+            -resultBundlePath "$RUNNER_TEMP/package-tests.xcresult" \
+            > "$RUNNER_TEMP/package-tests.log" 2>&1 || status=$?
+          grep -E "error:|warning: .*DSEditor|Test (Suite|Case|run)|✔|✘|\*\* " "$RUNNER_TEMP/package-tests.log" | head -400 || true
+          exit $status
+
+      - name: Generate demo project
+        if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
+        working-directory: apps/ios/Packages/DSEditor/Demo
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build and UI-test demo on iPad simulator
+        if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
+        working-directory: apps/ios/Packages/DSEditor/Demo
+        run: |
+          status=0
+          xcodebuild test \
+            -project EditorDemo.xcodeproj -scheme EditorDemo \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -resultBundlePath "$RUNNER_TEMP/demo-tests.xcresult" \
+            > "$RUNNER_TEMP/demo-tests.log" 2>&1 || status=$?
+          grep -E "error:|Test (Suite|Case)|measured|\*\* " "$RUNNER_TEMP/demo-tests.log" | head -400 || true
+          exit $status
+
+      - name: Build unsigned device IPA
+        if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
+        working-directory: apps/ios/Packages/DSEditor/Demo
+        run: |
+          status=0
+          xcodebuild build \
+            -project EditorDemo.xcodeproj -scheme EditorDemo -configuration Release \
+            -destination "generic/platform=iOS" -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            > "$RUNNER_TEMP/device-build.log" 2>&1 || status=$?
+          grep -E "error:|\*\* " "$RUNNER_TEMP/device-build.log" | head -200 || true
+          test $status -eq 0
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/EditorDemo.app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qr EditorDemo-unsigned.ipa Payload)
+
+      - name: Upload IPA
+        if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: EditorDemo-unsigned-ipa
+          path: ${{ runner.temp }}/ipa/EditorDemo-unsigned.ipa
+          if-no-files-found: ignore
+
+      - name: Upload logs and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-editor-results
+          path: |
+            ${{ runner.temp }}/*.log
+            ${{ runner.temp }}/*.xcresult
+          if-no-files-found: ignore

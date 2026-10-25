@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 /// Process-wide state and services, shared by every window.
 @Observable
@@ -124,6 +125,7 @@ final class AppModel {
         if options.uiTesting, options.signedIn {
             library.seedIfEmpty()
             signedInForTesting = true
+            if ProcessInfo.processInfo.arguments.contains("-ui-testing-cover") { seedCoverForTesting() }
         }
         library.purgeExpiredTrash()
         pendingRecoveryKey = secureStore.data(for: Self.pendingKeyItem).flatMap { RecoveryKey(bytes: [UInt8]($0)) }
@@ -134,6 +136,25 @@ final class AppModel {
     }
 
     private var signedInForTesting = false
+
+    /// `-ui-testing-cover`: the first document gets an image cover (screenshots, layout tests).
+    private func seedCoverForTesting() {
+        guard let note = library.documents.first else { return }
+        let size = CGSize(width: 1200, height: 800)
+        let image = UIGraphicsImageRenderer(size: size).image { context in
+            let colors = [UIColor.systemTeal.cgColor, UIColor.systemIndigo.cgColor] as CFArray
+            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
+                context.cgContext.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: size.width, y: size.height), options: [])
+            }
+        }
+        guard let data = image.pngData() else { return }
+        let library = self.library, covers = self.covers
+        Task {
+            if let added = try? await covers.add(data, noteId: note.id) {
+                library.setCover(added, ofNote: note.id, images: covers)
+            }
+        }
+    }
 
     /// The library on DSCore documents when the package is linked, else the JSON stand-in.
     private static func makeLibrary(inMemory: Bool) -> (LibraryStore, AnyObject?) {

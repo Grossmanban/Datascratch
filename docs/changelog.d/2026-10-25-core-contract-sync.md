@@ -1,0 +1,2 @@
+- 2026-10-25 · core · Перенос заметки между блокнотами: `moveDocRequestSchema` (`PATCH /docs/:id`), `rewrapNoteKey`, вектор в `api/bodies.json`.
+- 2026-10-25 · core · Схемы base64url в `shared` требуют каноническую форму (как строгий декодер); исправлена неканоническая соль в `api/bodies.json` (замечание ios-core).

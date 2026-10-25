@@ -84,6 +84,17 @@ export const wrapNoteKey = (noteKey: Uint8Array, notebookKey: Uint8Array, noteId
 export const unwrapNoteKey = (wrapped: string, notebookKey: Uint8Array, noteId: string) =>
   unwrapKey(notebookKey, wrapped, AD.noteKey(noteId));
 
+/**
+ * Move a note to another notebook: its noteKey re-wrapped by the new
+ * notebookKey (the note content itself is not re-encrypted).
+ */
+export const rewrapNoteKey = (
+  wrapped: string,
+  fromNotebookKey: Uint8Array,
+  toNotebookKey: Uint8Array,
+  noteId: string,
+) => wrapNoteKey(unwrapNoteKey(wrapped, fromNotebookKey, noteId), toNotebookKey, noteId);
+
 /** Encrypt a Yjs update or snapshot of `docId` (ad `ds1|doc|<docId>`). */
 export const encryptDocUpdate = (
   key: Uint8Array,

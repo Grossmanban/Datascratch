@@ -239,10 +239,12 @@ final class RecordingRemote: CoreLibraryRemote {
     var modeChanges: [(id: String, mode: Datascratch.NotebookMode, hasKey: Bool)] = []
     var deleted: [String] = []
     var opened: [String] = []
+    var deletedDocs: [String] = []
 
     func notebookCreated(id: String, mode: Datascratch.NotebookMode, wrappedKey: Data, key: Data) { created.append((id, mode)) }
     func notebookModeChanged(id: String, mode: Datascratch.NotebookMode, key: Data?) { modeChanges.append((id, mode, key != nil)) }
     func notebookDeleted(id: String) { deleted.append(id) }
+    func documentDeleted(_ docId: String) { deletedDocs.append(docId) }
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?) { opened.append(crdt.docId) }
 }
 

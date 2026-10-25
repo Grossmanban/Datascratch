@@ -22,6 +22,7 @@ RU = pathlib.Path(__file__).with_name("ru.json")
 # Swift literal with interpolation -> catalog key
 INTERPOLATIONS = {
     r"Offline · \(pending) waiting": "Offline · %lld waiting",
+    r"Not sent: \(documents)": "Not sent: %lld",
     r"\(library.daysLeftInTrash(note)) d": "%lld d",
     r"\(library.daysLeftInTrash(note)) days left": "%lld days left",
     r"until \(expiresAt.formatted(date: .abbreviated, time: .omitted))": "until %@",

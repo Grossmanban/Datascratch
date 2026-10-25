@@ -9,6 +9,8 @@ protocol CoreLibraryRemote: AnyObject {
     func notebookCreated(id: String, mode: NotebookMode, wrappedKey: Data, key: Data)
     func notebookModeChanged(id: String, mode: NotebookMode, key: Data?)
     func notebookDeleted(id: String)
+    /// A document was deleted locally; the sync engine forgets it and stops sending it.
+    func documentDeleted(_ docId: String)
     /// A document was opened; from now on the sync engine persists and sends its updates.
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?)
 }
@@ -411,10 +413,12 @@ final class CoreLibrary: LibraryBackend {
                 noteDocs[note.id] = nil
                 subscriptions[note.id] = nil
                 try store.deleteDocument(note.id)
+                remote?.documentDeleted(note.id)
             }
             notebookDocs[notebook.id] = nil
             subscriptions[notebook.id] = nil
             try store.deleteDocument(notebook.id)
+            remote?.documentDeleted(notebook.id)
         }
     }
 
@@ -482,6 +486,7 @@ final class CoreLibrary: LibraryBackend {
             noteDocs[meta.id] = nil
             subscriptions[meta.id] = nil
             try store.deleteDocument(meta.id)
+            remote?.documentDeleted(meta.id)
         }
     }
 

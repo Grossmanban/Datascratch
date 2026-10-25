@@ -337,7 +337,17 @@ struct SyncStatusBadge: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        let (icon, text, color) = describe(app.sync.phase)
+        if case .notSent(let documents, let reason) = app.sync.phase {
+            notSent(documents: documents, reason: reason)
+        } else {
+            let (icon, text, color) = describe(app.sync.phase)
+            label(icon: icon, text: text, color: color)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("sync.status")
+        }
+    }
+
+    private func label(icon: String, text: LocalizedStringKey, color: Color) -> some View {
         Label {
             Text(text)
                 .font(Theme.Typography.footnote)
@@ -347,7 +357,27 @@ struct SyncStatusBadge: View {
                 .foregroundStyle(color)
                 .symbolEffect(.pulse, isActive: app.sync.phase == .syncing)
         }
-        .accessibilityElement(children: .combine)
+    }
+
+    /// Changes the server refused: how many documents, why, and a way to send them again.
+    private func notSent(documents: Int, reason: String) -> some View {
+        HStack(spacing: Theme.Space.s2) {
+            VStack(alignment: .leading, spacing: 2) {
+                let (icon, text, color) = describe(app.sync.phase)
+                label(icon: icon, text: text, color: color)
+                Text(reason)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+                    .lineLimit(2)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("sync.status")
+            Button("Retry") { app.sync.retryFailed() }
+                .font(Theme.Typography.footnote.weight(.semibold))
+                .buttonStyle(.borderless)
+                .tint(Theme.Palette.accent)
+                .accessibilityIdentifier("sync.retry")
+        }
     }
 
     private func describe(_ phase: SyncCenter.Phase) -> (String, LocalizedStringKey, Color) {
@@ -363,6 +393,9 @@ struct SyncStatusBadge: View {
             return ("checkmark.icloud", "Up to date", Theme.Palette.success)
         case .failed:
             return ("exclamationmark.icloud", "Sync problem", Theme.Palette.danger)
+        case .notSent(let documents, _):
+            let text: LocalizedStringKey = "Not sent: \(documents)"
+            return ("exclamationmark.icloud", text, Theme.Palette.danger)
         }
     }
 }

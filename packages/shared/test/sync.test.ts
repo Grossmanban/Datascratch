@@ -78,6 +78,7 @@ describe("sync client", () => {
       .join("");
     expect(stored).not.toContain("hello");
     await until(async () => (await a.storage.listOutbox()).length === 0);
+    await a.client.flush(); // cursors are persisted in batches
     expect((await a.storage.getDocState(DOC))!.lastSeq).toBe(2);
   });
 
@@ -179,6 +180,7 @@ describe("sync client", () => {
     }
     await until(() => hub.docs.get(DOC)!.snapshot !== null);
     expect(hub.docs.get(DOC)!.items.length).toBeLessThan(5);
+    await a.client.flush();
     expect((await a.storage.getDocState(DOC))!.updatesSinceSnapshot).toBeLessThanOrEqual(1);
 
     const b = makeClient(hub, "dev-b", { beforeSnapshot: () => hooked++ });

@@ -137,13 +137,13 @@ export class AgentService {
 
   /** Agent-mode notebooks the grant may use, loaded. Private or unlisted notebooks never appear. */
   private async notebooks(p: Principal, only?: string): Promise<NotebookView[]> {
-    const all = await this.ctx.data.listAgentNotebooks(p.grant.userId);
+    const all = await this.ctx.data.listAgentNotebooks(p.grant.userId, p.grant.id);
     const allowed = all.filter((n) => p.grant.notebookIds.includes(n.id) && (!only || n.id === only));
     if (only && allowed.length === 0)
       throw new AgentError("not_found", `Notebook ${only} is not available to this agent. Call list_notebooks to see the notebooks you can access.`);
     const views: NotebookView[] = [];
     for (const info of allowed) {
-      const loaded = await this.ctx.data.loadDoc(p.grant.userId, info.id);
+      const loaded = await this.ctx.data.loadDoc(p.grant.userId, info.id, p.grant.id);
       if (!loaded) continue;
       const parsed = readNotebookDoc(loaded.doc);
       views.push({ info, name: info.name ?? parsed.name ?? "Без названия", doc: loaded.doc, notes: parsed.notes, folders: parsed.folders });
@@ -160,14 +160,14 @@ export class AgentService {
   }
 
   private async loadNote(p: Principal, noteId: string): Promise<{ doc: Y.Doc; seq: number }> {
-    const loaded = await this.ctx.data.loadDoc(p.grant.userId, noteId);
+    const loaded = await this.ctx.data.loadDoc(p.grant.userId, noteId, p.grant.id);
     if (!loaded) throw new AgentError("not_found", `Note ${noteId} content is not available.`);
     return loaded;
   }
 
   private async noteIndex(p: Principal, noteIds: string[]): Promise<Map<string, NoteIndex>> {
     const out = new Map<string, NoteIndex>();
-    const seqs = this.ctx.data.docSeqs ? await this.ctx.data.docSeqs(p.grant.userId, noteIds) : null;
+    const seqs = this.ctx.data.docSeqs ? await this.ctx.data.docSeqs(p.grant.userId, noteIds, p.grant.id) : null;
     for (const id of noteIds) {
       const known = seqs?.[id];
       if (known !== undefined) {
@@ -177,7 +177,7 @@ export class AgentService {
           continue;
         }
       }
-      const loaded = await this.ctx.data.loadDoc(p.grant.userId, id);
+      const loaded = await this.ctx.data.loadDoc(p.grant.userId, id, p.grant.id);
       if (!loaded) continue;
       const cached = this.index.get(`${p.grant.userId}:${id}`, loaded.seq);
       const idx = cached ?? buildNoteIndex(id, loaded.seq, loaded.doc);
@@ -337,7 +337,7 @@ export class AgentService {
     if (item.kind === "image" && item.blockId && this.ctx.data.loadAttachmentImage) {
       const loc = findBlock(doc, item.blockId);
       const attId = loc?.el.getAttribute("attachmentId");
-      if (typeof attId === "string") attachment = await this.ctx.data.loadAttachmentImage(p.grant.userId, attId);
+      if (typeof attId === "string") attachment = await this.ctx.data.loadAttachmentImage(p.grant.userId, attId, p.grant.id);
     }
     const img = await renderHandwriting(doc, item, { scale, image: attachment });
     this.images.set(key, img);
@@ -404,7 +404,7 @@ export class AgentService {
     if (!nb) throw new AgentError("not_found", `Notebook ${input.notebookId} is not available to this agent. Call list_notebooks.`);
     if (input.folderId && !nb.folders.has(input.folderId)) throw new AgentError("not_found", `Folder ${input.folderId} not found in the notebook.`);
     const noteId = uuidv7(this.now().getTime());
-    const { wrappedKey } = await this.ctx.data.createNoteDoc(p.grant.userId, nb.info.id, noteId);
+    const { wrappedKey } = await this.ctx.data.createNoteDoc(p.grant.userId, nb.info.id, noteId, p.grant.id);
     const doc = new Y.Doc();
     initNoteContent(doc, input.title, input.markdown, { agentEdit: this.mark(p), resolveNoteLink: this.resolver(views) });
     await this.ctx.data.applyUpdate(p.grant.userId, noteId, Y.encodeStateAsUpdate(doc), this.origin(p, "create_note"));

@@ -330,10 +330,10 @@
     "semantic_hash": ""
   },
   "docs/spec/09-agents-api.md": {
-    "mtime": 1792927481.4072206,
-    "seen": 1792928435.1168935,
-    "ast_hash": "14f7f2dac7dc5f4374acf64b0b8c76c2",
-    "semantic_hash": "14f7f2dac7dc5f4374acf64b0b8c76c2"
+    "mtime": 1792929318.6605315,
+    "seen": 1792929468.6816843,
+    "ast_hash": "e9de86d14e5c4bfe68106ec723a57773",
+    "semantic_hash": ""
   },
   "docs/spec/10-sync.md": {
     "mtime": 1792927481.4072206,
@@ -390,15 +390,15 @@
     "semantic_hash": ""
   },
   "packages/agents/src/doc/build.ts": {
-    "mtime": 1792928109.9242897,
-    "seen": 1792928435.1167426,
-    "ast_hash": "33f82316f21bf902da03515535c16804",
+    "mtime": 1792929417.6031306,
+    "seen": 1792929468.6814005,
+    "ast_hash": "9437f2817384655b62dec212c81fc2e1",
     "semantic_hash": ""
   },
   "packages/agents/src/doc/edits.ts": {
-    "mtime": 1792928187.4722943,
-    "seen": 1792928435.116744,
-    "ast_hash": "7909751e4f631913d59baf9bb2e251b4",
+    "mtime": 1792929435.7678826,
+    "seen": 1792929468.681404,
+    "ast_hash": "d61ae5abb27052aedae9f3938fbd4e9c",
     "semantic_hash": ""
   },
   "packages/agents/src/doc/handwriting.ts": {
@@ -414,9 +414,9 @@
     "semantic_hash": ""
   },
   "packages/agents/src/doc/markdown-import.ts": {
-    "mtime": 1792928251.804436,
-    "seen": 1792928435.1167486,
-    "ast_hash": "ee6c7d936f6c4ba4566a86a2fb3158fd",
+    "mtime": 1792929417.5739737,
+    "seen": 1792929468.6814106,
+    "ast_hash": "5eca48957537bc7410cde9604b2b7fc6",
     "semantic_hash": ""
   },
   "packages/agents/src/doc/model.ts": {
@@ -462,9 +462,9 @@
     "semantic_hash": ""
   },
   "packages/agents/test/doc.test.ts": {
-    "mtime": 1792928259.6122985,
-    "seen": 1792928435.1167588,
-    "ast_hash": "b075cd8ddc045ad079fb08fc2669d1bf",
+    "mtime": 1792929448.4163692,
+    "seen": 1792929468.681463,
+    "ast_hash": "d7c4bfb36708373b51bb3b9175ed7a08",
     "semantic_hash": ""
   },
   "packages/agents/tsconfig.build.json": {
@@ -618,9 +618,9 @@
     "semantic_hash": ""
   },
   "packages/agents/README.md": {
-    "mtime": 1792927481.4788496,
-    "seen": 1792928435.1169019,
-    "ast_hash": "2993ca49ec7597063890ebd6cdb9203d",
+    "mtime": 1792929318.6699116,
+    "seen": 1792929468.681695,
+    "ast_hash": "87acc668258994bcc2e78815801cbe31",
     "semantic_hash": ""
   },
   "packages/design-tokens/README.md": {
@@ -648,9 +648,9 @@
     "semantic_hash": ""
   },
   "packages/agents/src/service/agent-service.ts": {
-    "mtime": 1792928579.8659325,
-    "seen": 1792928690.6599097,
-    "ast_hash": "6af46a24f791169eba3f4a77b8870665",
+    "mtime": 1792929417.6040547,
+    "seen": 1792929468.6814451,
+    "ast_hash": "a3b2690a3f62d483422dd4762c988c72",
     "semantic_hash": ""
   },
   "packages/agents/src/service/note-index.ts": {
@@ -785,40 +785,28 @@
     "ast_hash": "a27957f082e5b41ac7800f0a5f81c7b2",
     "semantic_hash": ""
   },
-  "packages/agents/test/__images__/drawing.png": {
-    "mtime": 1792929124.1963499,
-    "seen": 1792929138.8143737,
-    "ast_hash": "5941ce20531b6e35b5e8d4a981be0532",
-    "semantic_hash": ""
-  },
-  "packages/agents/test/__images__/margin-note.png": {
-    "mtime": 1792929124.16835,
-    "seen": 1792929138.814375,
-    "ast_hash": "58f6120b038fcc5271ec6d2de7598b19",
-    "semantic_hash": ""
-  },
-  "packages/agents/test/__images__/text-deleted-anchors.png": {
-    "mtime": 1792929124.14835,
-    "seen": 1792929138.814376,
-    "ast_hash": "d2106f44e0492ffb10fc7bc4fbaaa48b",
-    "semantic_hash": ""
-  },
-  "packages/agents/test/__images__/text-highlight-multiline.png": {
-    "mtime": 1792929124.13635,
-    "seen": 1792929138.8143773,
-    "ast_hash": "0c2f099c28b3dd15e9dbe103d8c336b6",
-    "semantic_hash": ""
-  },
-  "packages/agents/test/__images__/text-underline-circle.png": {
-    "mtime": 1792929124.11235,
-    "seen": 1792929138.8143783,
-    "ast_hash": "c3101ebef2f9bfff6f6f5e3785888bc1",
-    "semantic_hash": ""
-  },
   ".github/workflows/agents.yml": {
     "mtime": 1792929192.2416732,
     "seen": 1792929200.124946,
     "ast_hash": "cf48c60dcd5f08842b0bce0f54d7650f",
+    "semantic_hash": ""
+  },
+  "docs/architecture/contracts/agents-api.md": {
+    "mtime": 1792929275.104359,
+    "seen": 1792929468.6815631,
+    "ast_hash": "364bc488a753dce8a9b60d2d348672dc",
+    "semantic_hash": ""
+  },
+  "docs/changelog.d/2026-10-25-agents-plugin.md": {
+    "mtime": 1792929318.6716428,
+    "seen": 1792929468.6815827,
+    "ast_hash": "48b1764f007a15f76848a3dae7288276",
+    "semantic_hash": ""
+  },
+  "docs/guides/connect-ai-agents.md": {
+    "mtime": 1792929318.6677887,
+    "seen": 1792929468.6816607,
+    "ast_hash": "659133bc5cc8833587a740116ceb6bc1",
     "semantic_hash": ""
   }
 }

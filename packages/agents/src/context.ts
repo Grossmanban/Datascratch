@@ -43,21 +43,28 @@ export interface LoadedDoc {
   seq: number;
 }
 
-/** Access to decrypted documents of agent-mode notebooks (server side: KMS + document service). */
+/**
+ * Access to decrypted documents of agent-mode notebooks (server side: KMS + document service).
+ *
+ * `grantId` is passed for every call made on behalf of an agent: the server
+ * then runs the query under Row-Level Security limited to the grant's
+ * notebooks (D-30, R-10). Calls without it (consent page, token settings)
+ * are limited to the user's agent-mode notebooks.
+ */
 export interface AgentDataSource {
   /** Agent-mode notebooks of the user. */
-  listAgentNotebooks(userId: string): Promise<AgentNotebook[]>;
+  listAgentNotebooks(userId: string, grantId?: string): Promise<AgentNotebook[]>;
   /**
    * Loads a `notebook` or `note` document of an agent-mode notebook, decrypted.
    * Returns null when the doc does not exist or is not readable by the server.
    */
-  loadDoc(userId: string, docId: string): Promise<LoadedDoc | null>;
+  loadDoc(userId: string, docId: string, grantId?: string): Promise<LoadedDoc | null>;
   /**
    * Optional: current seq of several docs without decrypting them. Lets the
    * plugin reuse its search/task index for unchanged notes instead of loading
    * every note on each search.
    */
-  docSeqs?(userId: string, docIds: string[]): Promise<Record<string, number>>;
+  docSeqs?(userId: string, docIds: string[], grantId?: string): Promise<Record<string, number>>;
   /**
    * Applies a plain Yjs update as a regular document update: the server
    * encrypts it with the doc key, assigns a seq, stores it (version history)
@@ -69,12 +76,12 @@ export interface AgentDataSource {
    * note key. Returns the note key wrapped with the notebook key (base64url),
    * which the plugin writes to `NoteMeta.wrappedKey` in the notebook index.
    */
-  createNoteDoc(userId: string, notebookId: string, noteId: string): Promise<{ wrappedKey: string }>;
+  createNoteDoc(userId: string, notebookId: string, noteId: string, grantId?: string): Promise<{ wrappedKey: string }>;
   /**
    * Optional: decrypted bytes of an image attachment (PNG/JPEG), used to draw
    * handwriting made on top of pictures. When absent a placeholder is drawn.
    */
-  loadAttachmentImage?(userId: string, attachmentId: string): Promise<Uint8Array | null>;
+  loadAttachmentImage?(userId: string, attachmentId: string, grantId?: string): Promise<Uint8Array | null>;
 }
 
 /** A logged-in user of the web/iOS apps, as recognised by the server. */
@@ -195,7 +202,7 @@ export interface AgentsStore {
   deleteTokensOfGrant(grantId: string): Promise<void>;
 
   appendAudit(entry: AuditEntry): Promise<void>;
-  /** Newest first. */
+  /** Newest first; `before` is an ISO timestamp — only entries with `at` strictly earlier. */
   listAudit(grantId: string, options: { limit: number; before?: string }): Promise<AuditEntry[]>;
 }
 

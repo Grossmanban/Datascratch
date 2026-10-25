@@ -1524,10 +1524,10 @@
     "semantic_hash": "d5ab8f30c071ff970cd7b9f57e537a24"
   },
   "packages/shared/src/document/index.ts": {
-    "mtime": 1792929262.1554523,
-    "seen": 1792934638.136287,
-    "ast_hash": "8a60d4f767508113f5dac6d9bb4e6554",
-    "semantic_hash": "8a60d4f767508113f5dac6d9bb4e6554"
+    "mtime": 1792934718.3559968,
+    "seen": 1792934815.7790155,
+    "ast_hash": "75e8519a20222c0f5cc4ff9d10f72174",
+    "semantic_hash": ""
   },
   "packages/shared/src/document/markdown.ts": {
     "mtime": 1792928523.9754796,
@@ -1632,10 +1632,10 @@
     "semantic_hash": "9ddbf4e63b7da27132d6ad2e715e5b6f"
   },
   "packages/shared/test/document.test.ts": {
-    "mtime": 1792928550.0188177,
-    "seen": 1792934638.13642,
-    "ast_hash": "131ce63e7d3bc5a2a658441f50cd60d8",
-    "semantic_hash": "131ce63e7d3bc5a2a658441f50cd60d8"
+    "mtime": 1792934738.9675515,
+    "seen": 1792934815.779864,
+    "ast_hash": "834de5f644a0897e5a068e4d893a40b6",
+    "semantic_hash": ""
   },
   "packages/shared/test/ids.test.ts": {
     "mtime": 1792932071.5337374,
@@ -3208,5 +3208,11 @@
     "seen": 1792934638.1364913,
     "ast_hash": "a073d8582cc9a794a737c7e1982d8b23",
     "semantic_hash": "a073d8582cc9a794a737c7e1982d8b23"
+  },
+  "packages/shared/src/document/move.ts": {
+    "mtime": 1792934738.1355515,
+    "seen": 1792934815.7790854,
+    "ast_hash": "156ddebecd1ff5ba1f202d2393414143",
+    "semantic_hash": ""
   }
 }

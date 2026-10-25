@@ -60,6 +60,8 @@ const ConfigSchema = z
     COVERED_UPDATES_KEEP_DAYS: z.coerce.number().int().nonnegative().default(7),
 
     JOBS_ENABLED: bool.default(true),
+    /** Enables GET /metrics (Prometheus) for requests with `Authorization: Bearer <METRICS_TOKEN>`. */
+    METRICS_TOKEN: z.string().min(16).optional(),
   })
   .superRefine((c, ctx) => {
     if (c.STORAGE_DRIVER === 's3' && !c.S3_BUCKET) {
@@ -70,7 +72,9 @@ const ConfigSchema = z
 export type Config = z.infer<typeof ConfigSchema>;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const parsed = ConfigSchema.safeParse(env);
+  // `KEY=` in an .env file means "not set".
+  const cleaned = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== ''));
+  const parsed = ConfigSchema.safeParse(cleaned);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Invalid server configuration:\n${issues}`);

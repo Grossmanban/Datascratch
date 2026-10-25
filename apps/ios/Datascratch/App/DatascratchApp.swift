@@ -89,6 +89,7 @@ struct MainWindow: View {
 /// A secondary window showing one document.
 struct NoteWindow: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.dismissWindow) private var dismissWindow
     let noteId: String
     @State private var scene: SceneModel?
 
@@ -113,6 +114,12 @@ struct NoteWindow: View {
         .background(Theme.Palette.canvas.ignoresSafeArea())
         .tint(Theme.Palette.accent)
         .onAppear {
+            // A window the system restored for a note that is gone (deleted, or a fresh UI-test
+            // library) closes instead of staying empty.
+            guard app.library.note(noteId) != nil else {
+                dismissWindow()
+                return
+            }
             if scene == nil {
                 let model = SceneModel(app: app)
                 model.selectedNoteId = noteId

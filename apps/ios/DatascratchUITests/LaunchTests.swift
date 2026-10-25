@@ -165,14 +165,18 @@ final class LibraryUITests: XCTestCase {
 
     /// Returns a sidebar element, revealing the sidebar first when it is collapsed.
     private func sidebarElement(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
-        let element = app.descendants(matching: .any)[identifier].firstMatch
-        if element.waitForExistence(timeout: 3), element.isHittable { return element }
+        // The identifier lands on the row's icon and text, not on the row: tap the cell holding
+        // them (the icon alone is not hittable on iPad).
+        let cell = app.cells.containing(.any, identifier: identifier).firstMatch
+        let any = app.descendants(matching: .any)[identifier].firstMatch
+        func best() -> XCUIElement { cell.exists ? cell : any }
+        if any.waitForExistence(timeout: 3), best().isHittable { return best() }
         let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar'")).firstMatch
         if toggle.exists { toggle.tap() }
         let back = app.navigationBars.buttons.firstMatch
-        if !element.waitForExistence(timeout: 3), back.exists { back.tap() }
-        _ = element.waitForExistence(timeout: 5)
-        return element
+        if !any.waitForExistence(timeout: 3), back.exists { back.tap() }
+        _ = any.waitForExistence(timeout: 5)
+        return best()
     }
 
     func testCreateNoteAndWriteTitle() throws {

@@ -248,7 +248,7 @@ function Section({ id, title, action, children }: { id: string; title: string; a
         <button
           onClick={toggle}
           aria-expanded={!collapsed}
-          className="flex flex-1 items-center gap-1 text-[12.5px] font-semibold text-ink-2 hover:text-ink"
+          className="flex flex-1 items-center gap-1 text-[12.5px] font-semibold text-ink-3 hover:text-ink-2"
         >
           {title}
           {/* The chevron shows on hover (and while collapsed, so the section can be found again). */}

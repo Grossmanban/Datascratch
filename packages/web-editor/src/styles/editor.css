@@ -1070,9 +1070,13 @@ span.ds-unsupported {
   transform: translateY(10px);
   transition: transform 220ms var(--ds-ease);
 }
-.ds-pal-tool:first-child {
+.ds-pal-tool:first-child,
+.ds-pal-lasso {
   align-items: center;
   transform: none;
+}
+.ds-pal-lasso.is-active {
+  color: var(--ds-accent-c);
 }
 .ds-pal-tool.is-active {
   transform: translateY(0);

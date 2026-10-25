@@ -160,3 +160,27 @@ describe("outlineShapes", () => {
     }
   });
 });
+
+import { expandToWords, fractionInside, pointInPolygon } from "../src/pen/geometry";
+
+describe("lasso and gestures", () => {
+  const square = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 10 },
+    { x: 0, y: 10 },
+  ];
+  it("point in polygon", () => {
+    expect(pointInPolygon(5, 5, square)).toBe(true);
+    expect(pointInPolygon(15, 5, square)).toBe(false);
+  });
+  it("fraction of a stroke inside the lasso", () => {
+    const seg = [0, 4, 8, 12].map((x, i) => ({ x, y: 5, w: 1, i }));
+    expect(fractionInside([seg], square)).toBe(0.75);
+  });
+  it("scribble deletion expands to whole words", () => {
+    const text = "one two three";
+    expect(expandToWords(text, 5, 6)).toEqual([4, 8]);
+    expect(text.slice(...expandToWords(text, 0, 1))).toBe("one ");
+  });
+});

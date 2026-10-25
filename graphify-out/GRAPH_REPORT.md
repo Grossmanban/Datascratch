@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-10-25)
 
 ## Corpus Check
-- 1 files · ~469,901 words
+- 1 files · ~469,917 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -86,7 +86,7 @@
 - oauth.ts (2)
 - 2026-10-25 (вторая половина дня)
 - DSTaskState
-- stack.md (2)
+- stack.md (2) (2)
 - Spec 3: Apple Pencil in text
 - KDFParams (2)
 - server
@@ -263,7 +263,7 @@
 - ClientMessage (2)
 - ServerMessage
 - compat/package.json
-- .content (2)
+- .content (2) (2)
 - Обзор архитектуры: разделы
 - Color
 - DSFeedback (2)
@@ -358,7 +358,7 @@
 - bootstrap.sh
 - resources
 - scripts
-- scripts (2)
+- scripts (2) (2)
 - SyncClientError
 - options
 - compilerOptions (2) (2) (2) (2)
@@ -746,7 +746,7 @@ Nodes (57): 2026-10-25 (вторая половина дня), server: AgentsCon
 Cohesion: 0.05
 Nodes (28): .body, TaskCheckbox, .body, .fallback, .content, DSCheckmark, DSTaskCheckbox, .body (+20 more)
 
-### Community 76 - "stack.md (2)"
+### Community 76 - "stack.md (2) (2)"
 Cohesion: 0.04
 Nodes (60): all(), allElements(), computeExports(), computeExportsForNode(), computeLocalScopes(), createDescription(), createDescriptions(), createLinkingError() (+52 more)
 
@@ -1426,7 +1426,7 @@ Nodes (9): Item, ServerMessage, ack, awareness, error, update, updates, welcome 
 Cohesion: 0.18
 Nodes (13): dependencies, prosemirror-model@1.25.1, y-prosemirror@1.3.7, yjs@13.6.27, description, prosemirror-model, y-prosemirror, yjs (+5 more)
 
-### Community 253 - ".content (2)"
+### Community 253 - ".content (2) (2)"
 Cohesion: 0.25
 Nodes (5): BackdropGallery, .body, DSBackdrop, .body, DSGrain
 
@@ -1782,7 +1782,7 @@ Nodes (6): deploy, resources, memory, deploy, limits, deploy
 Cohesion: 0.33
 Nodes (6): scripts, dev, lint, showcase:build, test, typecheck
 
-### Community 349 - "scripts (2)"
+### Community 349 - "scripts (2) (2)"
 Cohesion: 0.33
 Nodes (6): scripts, build, dev, test, test:ct, typecheck
 
@@ -1871,23 +1871,23 @@ Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main
   docs/spec/12-craft-features.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **1229 isolated node(s):** `file`, `photo`, `reposition`, `mono`, `sans` (+1224 more)
+- **1229 isolated node(s):** `.body`, `onboarding`, `ready`, `invalidLength`, `display` (+1224 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 4208 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **55 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `packages/design-tokens/tokens.json — источник значений; генерирует CSS-переменные и Swift` connect `design-tokens.md (2)` to `02-platforms.md`, `Tokens.generated.swift`, `scripts/generate.mjs`?**
-  _High betweenness centrality (0.118) - this node is a cross-community bridge._
+- **Why does `L` connect `stack.md` to `Data`, `PenToolbar.tsx`, `scripts/generate.mjs`, `YValue (2)`, `t`?**
+  _High betweenness centrality (0.099) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `file`, `photo`, `reposition` to the rest of the system?**
+- **What connects `.body`, `onboarding`, `ready` to the rest of the system?**
   _1229 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Data` be split into smaller, more focused modules?**
   _Cohesion score 0.0034853527411037558 - nodes in this community are weakly interconnected._
-- **Why does `L` connect `stack.md` to `Data`, `PenToolbar.tsx`, `scripts/generate.mjs`, `YValue (2)`, `t`?**
-  _High betweenness centrality (0.115) - this node is a cross-community bridge._
+- **Why does `packages/design-tokens/tokens.json — источник значений; генерирует CSS-переменные и Swift` connect `design-tokens.md (2)` to `02-platforms.md`, `Tokens.generated.swift`, `scripts/generate.mjs`?**
+  _High betweenness centrality (0.098) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._

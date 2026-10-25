@@ -221,6 +221,9 @@ BGTaskScheduler.shared.register(forTaskWithIdentifier: "app.datascratch.refresh"
 }
 ```
 
+В `Info.plist` приложения: `BGTaskSchedulerPermittedIdentifiers` с идентификатором задачи и
+`UIBackgroundModes` → `fetch` (для `BGProcessingTask` — ещё `processing`).
+
 База открывается с защитой `completeUntilFirstUserAuthentication`, ключи в Keychain —
 `AfterFirstUnlockThisDeviceOnly`: после первой разблокировки всё доступно в фоне. Тяжёлую
 работу (полная переиндексация, уплотнение) — в `BGProcessingTask` (сеть и питание).

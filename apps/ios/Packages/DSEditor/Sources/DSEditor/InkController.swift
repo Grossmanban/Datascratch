@@ -21,6 +21,9 @@ final class InkController {
     /// Performance counters for the demo HUD.
     private(set) var lastRefreshDuration: TimeInterval = 0
     private(set) var renderedStrokeCount = 0
+    /// Lowest point of the drawn ink (content coordinates), so free drawings below the text can
+    /// be scrolled to.
+    private(set) var inkExtentMaxY: CGFloat = 0
 
     private enum Target {
         case text(scale: CGFloat)
@@ -112,6 +115,7 @@ final class InkController {
         renderedGeneration = generation
         renderedWindow = window
         renderedStrokeCount = overStrokes.count + underStrokes.count
+        inkExtentMaxY = (overStrokes + underStrokes).reduce(0) { max($0, $1.bounds.maxY) }
         if !erased.isEmpty { applyEraserPreview() }
         over.setHighlighted(selectedStrokes, color: EditorTheme.selectionTint)
         lastRefreshDuration = CACurrentMediaTime() - start
@@ -318,12 +322,18 @@ final class InkController {
         switch s.target {
         case .text:
             var builder = TextAnchorBuilder()
+            var nearText = true
             for sample in samples {
-                guard let hit = geometry.characterHit(at: sample.location) else { continue }
+                // `strokes.md` §4, free drawing: a point more than 3 em (vertically) from the
+                // nearest line with characters makes the whole stroke a free drawing.
+                guard let hit = geometry.characterHit(at: sample.location), Self.isNearLine(sample.location, hit: hit) else {
+                    nearText = false
+                    break
+                }
                 builder.append(sample.inkSample(start: s.startTime), hit: hit)
             }
             var anchors: [Data] = []
-            var ok = !builder.anchorOffsets.isEmpty
+            var ok = nearText && !builder.anchorOffsets.isEmpty
             for off in builder.anchorOffsets {
                 guard let pos = p.textPosition(at: off), let a = document.anchor(block: pos.block, offset: pos.offset) else {
                     ok = false
@@ -336,14 +346,13 @@ final class InkController {
                 let hint = StrokeShapeClassifier.classify(samples.map(\.location), tool: s.tool, line: line)
                 stroke = Stroke(tool: s.tool, color: s.paint.color, width: s.paint.width, opacity: s.paint.opacity,
                                 anchorKind: .text, anchors: anchors, points: builder.points, hint: hint)
-            } else if let off = geometry.paragraphOffset(at: samples[0].location) {
-                // No text to hold on to (empty note): fall back to a margin note of the paragraph.
-                let (i, _) = p.position(at: off)
+            } else if let i = nearestParagraph(to: samples[0].location, in: p), let frame = geometry.paragraphFrame(at: p.starts[i]) {
+                // Far from text (below the end of the note, between paragraphs, a big sketch) or
+                // no text at all: a free drawing of the nearest paragraph, in margin-note
+                // coordinates. Ink is never dropped.
                 let column = geometry.columnFrame
-                if p.paragraphs.indices.contains(i), let frame = geometry.paragraphFrame(at: p.starts[i]) {
-                    stroke = blockStroke(s, samples: samples, blockId: p.paragraphs[i].blockId,
-                                         origin: CGPoint(x: column.minX, y: frame.minY), width: column.width, kind: .block)
-                }
+                stroke = blockStroke(s, samples: samples, blockId: p.paragraphs[i].blockId,
+                                     origin: CGPoint(x: column.minX, y: frame.minY), width: column.width, kind: .block)
             }
         case .block(let blockId, let origin, let width, let kind):
             stroke = blockStroke(s, samples: samples, blockId: blockId, origin: origin, width: width, kind: kind)
@@ -354,6 +363,27 @@ final class InkController {
         document.stopCapturing()
         // Draw immediately so there is no flicker between the live and the committed layer.
         refresh()
+    }
+
+    /// Whether a point is within 3 em (vertically) of the line its nearest character is on.
+    static func isNearLine(_ point: CGPoint, hit: CharacterHit) -> Bool {
+        let em = hit.placement.fontSize
+        let lineMid = hit.placement.origin.y - em * 0.35
+        // Half a line above and below the middle belongs to the line itself.
+        return abs(point.y - lineMid) <= em * 0.6 + em * 3
+    }
+
+    /// The paragraph nearest to a point vertically: the one under it, else the last one when the
+    /// point is below the text, else the first one.
+    private func nearestParagraph(to point: CGPoint, in p: Projection) -> Int? {
+        guard !p.paragraphs.isEmpty else { return nil }
+        if let off = geometry.paragraphOffset(at: point) {
+            let (i, _) = p.position(at: off)
+            if p.paragraphs.indices.contains(i) { return i }
+        }
+        let last = p.paragraphs.count - 1
+        if let frame = geometry.paragraphFrame(at: p.starts[last]), point.y >= frame.minY { return last }
+        return 0
     }
 
     private func blockStroke(_ s: Session, samples: [PenSample], blockId: BlockID, origin: CGPoint, width: CGFloat, kind: AnchorKind) -> Stroke {

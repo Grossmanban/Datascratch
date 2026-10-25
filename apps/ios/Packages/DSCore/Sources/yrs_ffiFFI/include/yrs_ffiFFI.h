@@ -365,6 +365,11 @@ uint64_t uniffi_yrs_ffi_fn_method_ydocument_observe_deep(uint64_t ptr, RustBuffe
 uint64_t uniffi_yrs_ffi_fn_method_ydocument_observe_updates(uint64_t ptr, uint64_t observer, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_YRS_FFI_FN_METHOD_YDOCUMENT_REBASE_RELATIVE_POSITIONS
+#define UNIFFI_FFIDEF_UNIFFI_YRS_FFI_FN_METHOD_YDOCUMENT_REBASE_RELATIVE_POSITIONS
+RustBuffer uniffi_yrs_ffi_fn_method_ydocument_rebase_relative_positions(uint64_t ptr, RustBuffer root, RustBuffer positions, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_YRS_FFI_FN_METHOD_YDOCUMENT_REDO
 #define UNIFFI_FFIDEF_UNIFFI_YRS_FFI_FN_METHOD_YDOCUMENT_REDO
 int8_t uniffi_yrs_ffi_fn_method_ydocument_redo(uint64_t ptr, RustCallStatus *_Nonnull out_status
@@ -815,6 +820,12 @@ uint16_t uniffi_yrs_ffi_checksum_method_ydocument_observe_deep(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_YRS_FFI_CHECKSUM_METHOD_YDOCUMENT_OBSERVE_UPDATES
 #define UNIFFI_FFIDEF_UNIFFI_YRS_FFI_CHECKSUM_METHOD_YDOCUMENT_OBSERVE_UPDATES
 uint16_t uniffi_yrs_ffi_checksum_method_ydocument_observe_updates(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_YRS_FFI_CHECKSUM_METHOD_YDOCUMENT_REBASE_RELATIVE_POSITIONS
+#define UNIFFI_FFIDEF_UNIFFI_YRS_FFI_CHECKSUM_METHOD_YDOCUMENT_REBASE_RELATIVE_POSITIONS
+uint16_t uniffi_yrs_ffi_checksum_method_ydocument_rebase_relative_positions(void
     
 );
 #endif

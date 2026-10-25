@@ -179,6 +179,12 @@ public final class CRDTDocument: Sendable {
         try raw.resolveRelativePositions(root: root, positions: relativePositions)
     }
 
+    /// New encodings for positions whose characters were restored by undo/redo on this
+    /// instance (strokes.md §4.1); nil where nothing changes.
+    public func rebase(_ root: String = "content", relativePositions: [Data]) throws -> [Data?] {
+        try raw.rebaseRelativePositions(root: root, positions: relativePositions)
+    }
+
     // MARK: Observation
 
     /// Every update produced by a transaction, with its origin (`doc.on('update')`).

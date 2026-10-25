@@ -345,6 +345,33 @@ impl YDocument {
             .collect())
     }
 
+    /// Rebases positions that point at deleted items which were restored by undo/redo
+    /// (strokes.md §4.1): for each such position returns a new encoding pointing at the
+    /// restored item; `None` for positions that need no change (live, deleted for good, or
+    /// undecodable). The `redone` link is local to this document instance, so this must run on
+    /// the device that performed the undo/redo.
+    pub fn rebase_relative_positions(&self, root: String, positions: Vec<Vec<u8>>) -> Result<Vec<Option<Vec<u8>>>, YrsError> {
+        let fragment = self.xml_root(&root)?;
+        let txn = self.doc.transact();
+        Ok(positions
+            .iter()
+            .map(|bytes| {
+                let sticky = StickyIndex::decode_v1(bytes).ok()?;
+                if !sticky.is_relative() {
+                    return None;
+                }
+                let offset = sticky.get_offset(&txn)?;
+                let after = StickyIndex::new(sticky.scope().clone(), Assoc::After).get_offset(&txn)?;
+                let before = StickyIndex::new(sticky.scope().clone(), Assoc::Before).get_offset(&txn)?;
+                if after.index == before.index || !is_inside(&offset.branch, &fragment) {
+                    return None; // deleted for good (or outside the content tree)
+                }
+                let rebased = StickyIndex::at(&txn, offset.branch, offset.index, sticky.assoc)?.encode_v1();
+                (rebased != *bytes).then_some(rebased)
+            })
+            .collect())
+    }
+
     // MARK: observation
 
     /// Calls `observer` with every update produced by a transaction (`doc.on('update')`).

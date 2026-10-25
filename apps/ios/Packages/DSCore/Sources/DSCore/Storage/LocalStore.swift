@@ -125,6 +125,15 @@ public final class LocalStore: Sendable {
                 t.column("createdAt", .datetime).notNull()
             }
         }
+        m.registerMigration("v2-stroke-orphans") { db in
+            // strokes.md §4.2: when this device first saw all anchors of a stroke deleted.
+            try db.create(table: "strokeOrphans") { t in
+                t.column("noteId", .text).notNull()
+                t.column("strokeId", .text).notNull()
+                t.column("orphanedAt", .datetime).notNull()
+                t.primaryKey(["noteId", "strokeId"])
+            }
+        }
         return m
     }
 }
@@ -341,6 +350,8 @@ extension LocalStore {
             try item.delete(db)
             try db.execute(sql: "UPDATE docUpdates SET seq = ? WHERE clientMsgId = ?", arguments: [seq, clientMsgId])
             guard var doc = try DocumentRecord.fetchOne(db, key: item.docId) else { return }
+            // lastSeq = max(seq) over updates/update/ack (sync-protocol.md §4).
+            doc.lastSeq = max(doc.lastSeq, seq)
             switch item.kind {
             case .push:
                 // Own updates count towards the snapshot threshold too.
@@ -389,6 +400,26 @@ extension LocalStore {
         return id
     }
 
+    // MARK: Orphaned strokes (strokes.md §4.2)
+
+    /// Records the current set of orphaned strokes of a note: new ones get `now` as
+    /// `orphanedAt`, strokes no longer orphaned lose their mark.
+    public func updateOrphans(noteId: String, orphaned: Set<String>, now: Date = Date()) throws {
+        try db.write { db in
+            let known = Set(try String.fetchAll(db, sql: "SELECT strokeId FROM strokeOrphans WHERE noteId = ?", arguments: [noteId]))
+            for id in known.subtracting(orphaned) {
+                try db.execute(sql: "DELETE FROM strokeOrphans WHERE noteId = ? AND strokeId = ?", arguments: [noteId, id])
+            }
+            for id in orphaned.subtracting(known) {
+                try db.execute(sql: "INSERT INTO strokeOrphans(noteId, strokeId, orphanedAt) VALUES(?, ?, ?)", arguments: [noteId, id, now])
+            }
+        }
+    }
+
+    public func orphanedAt(noteId: String, strokeId: String) throws -> Date? {
+        try db.read { try Date.fetchOne($0, sql: "SELECT orphanedAt FROM strokeOrphans WHERE noteId = ? AND strokeId = ?", arguments: [noteId, strokeId]) }
+    }
+
     /// Removes a document and everything derived from it.
     public func deleteDocument(_ docId: String) throws {
         try db.write { db in
@@ -397,6 +428,7 @@ extension LocalStore {
             try db.execute(sql: "DELETE FROM tasks WHERE noteId = ?", arguments: [docId])
             try db.execute(sql: "DELETE FROM noteLinks WHERE sourceNoteId = ?", arguments: [docId])
             try db.execute(sql: "DELETE FROM noteTags WHERE noteId = ?", arguments: [docId])
+            try db.execute(sql: "DELETE FROM strokeOrphans WHERE noteId = ?", arguments: [docId])
         }
     }
 }

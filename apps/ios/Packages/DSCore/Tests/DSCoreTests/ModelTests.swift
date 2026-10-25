@@ -227,3 +227,51 @@ import Testing
         #expect(DSDate.parseDay("2026-1-25") == nil)
     }
 }
+
+@Suite struct StrokeMaintenanceTests {
+    @Test func undoRebasesAnchorsForOtherDevices() throws {
+        let a = NoteDocument(noteId: "n", clientId: 1)
+        try a.initialize(title: "")
+        try a.crdt.enableUndo(captureTimeout: .zero)
+        try a.insertText("abcdef", at: 0, inBlock: [1])
+        let anchors = try (1..<4).map { try a.crdt.relativePosition(at: [1, 0], index: UInt32($0)) }
+        let stroke = Stroke(tool: .pen, color: "ink.black", width: 2, anchorKind: .text, anchors: anchors,
+                            points: (0..<3).map { StrokePoint(anchor: $0, x: 0, y: 0, t: Float($0)) }, author: Author(kind: .user, id: "u"))
+        try a.addStrokes([stroke])
+        a.crdt.stopCapturing()
+        try a.deleteText(range: 0..<6, inBlock: [1])
+        #expect(try a.orphanedStrokeIds() == [stroke.id])
+        #expect(try a.undo())
+        #expect(try a.orphanedStrokeIds().isEmpty)
+
+        let b = NoteDocument(noteId: "n", clientId: 2)
+        try b.crdt.applyUpdate(a.crdt.encodeStateAsUpdate())
+        let s = try #require(b.stroke(id: stroke.id))
+        let resolved = try b.crdt.resolve(relativePositions: s.anchors)
+        #expect(resolved.map { $0?.index } == [1, 2, 3])
+        #expect(resolved.allSatisfy { $0?.deleted == false })
+        // The rebase did not become an undo step: redo still works.
+        #expect(a.crdt.canRedo)
+    }
+
+    @Test func purgesOldOrphans() throws {
+        let store = try LocalStore.inMemory()
+        let note = NoteDocument(noteId: "n")
+        try note.initialize(title: "")
+        try note.insertText("ab", at: 0, inBlock: [1])
+        let anchor = try note.crdt.relativePosition(at: [1, 0], index: 0)
+        let stroke = Stroke(tool: .pen, color: "ink.black", width: 2, anchorKind: .text, anchors: [anchor],
+                            points: [StrokePoint(anchor: 0, x: 0, y: 0, t: 0)], author: Author(kind: .user, id: "u"), createdAt: 0)
+        try note.addStrokes([stroke])
+        try note.deleteText(range: 0..<2, inBlock: [1])
+        let now = Date(timeIntervalSince1970: 100 * 86_400)
+        try store.updateOrphans(noteId: "n", orphaned: try note.orphanedStrokeIds(), now: now)
+        #expect(try store.orphanedAt(noteId: "n", strokeId: stroke.id) == now)
+        // Orphaned "now" → kept; 31 days later → purged.
+        #expect(try note.purgeOrphanedStrokes(orphanedAt: { try? store.orphanedAt(noteId: "n", strokeId: $0) }, now: now).isEmpty)
+        let later = now.addingTimeInterval(31 * 86_400)
+        #expect(try note.purgeOrphanedStrokes(orphanedAt: { try? store.orphanedAt(noteId: "n", strokeId: $0) }, now: later) == [stroke.id])
+        try store.updateOrphans(noteId: "n", orphaned: [])
+        #expect(try store.orphanedAt(noteId: "n", strokeId: stroke.id) == nil)
+    }
+}

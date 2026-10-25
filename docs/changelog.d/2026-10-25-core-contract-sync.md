@@ -1,0 +1,1 @@
+- 2026-10-25 · core · Схемы `shared` догнали контракты: `Session.deviceId`, `deviceName` в signup/recovery, `mime` в статусе вложения, код `bad_request` в синхронизации; клиент синхронизации шлёт push только по подписанным документам; `guestDeviceId()`; хелпер `replaceStrokeWithReanchored` и `origin` у `reanchorStrokes`.

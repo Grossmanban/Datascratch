@@ -206,16 +206,19 @@ public struct SignupMaterial: Sendable {
 
     /// Generates keys for a new account. Slow (Argon2id) — call off the main thread.
     public static func make(password: String, userId: String, kdf: KDFParams = .v1) throws -> SignupMaterial {
-        let salt = DSCrypto.newSalt()
+        try make(password: password, userId: userId, kdf: kdf, salt: DSCrypto.newSalt(), masterKey: DSCrypto.newKey(), recoveryKey: DSCrypto.newKey())
+    }
+
+    /// Deterministic variant (vector `crypto/signup-flow.json`).
+    static func make(password: String, userId: String, kdf: KDFParams, salt: Data, masterKey master: Data, recoveryKey recovery: Data,
+                     nonceMasterPassword: Data? = nil, nonceMasterRecovery: Data? = nil) throws -> SignupMaterial {
         let keys = try DSCrypto.deriveKeys(password: password, salt: salt, params: kdf)
-        let master = DSCrypto.newKey()
-        let recovery = DSCrypto.newKey()
         return SignupMaterial(
             salt: salt, kdf: kdf, loginKey: keys.loginKey, passwordKey: keys.passwordKey, masterKey: master,
             recoveryKey: recovery, recoveryKeyText: try RecoveryKeyFormat.format(recovery),
             recoveryLoginKey: try DSCrypto.recoveryLoginKey(recovery),
-            wrappedMasterKeyPassword: try DSCrypto.wrapKey(master, with: keys.passwordKey, ad: CryptoAD.masterByPassword(userId: userId)),
-            wrappedMasterKeyRecovery: try DSCrypto.wrapKey(master, with: recovery, ad: CryptoAD.masterByRecovery(userId: userId)))
+            wrappedMasterKeyPassword: try DSCrypto.wrapKey(master, with: keys.passwordKey, ad: CryptoAD.masterByPassword(userId: userId), nonce: nonceMasterPassword),
+            wrappedMasterKeyRecovery: try DSCrypto.wrapKey(master, with: recovery, ad: CryptoAD.masterByRecovery(userId: userId), nonce: nonceMasterRecovery))
     }
 }
 

@@ -16,6 +16,11 @@ public final class LocalStore: Sendable {
     public convenience init(url: URL) throws {
         var config = Configuration()
         config.foreignKeysEnabled = true
+        config.prepareDatabase { db in
+            // WAL (DatabasePool) + NORMAL: durable across app crashes, one fsync per checkpoint
+            // instead of per commit — first sync writes thousands of small transactions.
+            try db.execute(sql: "PRAGMA synchronous = NORMAL")
+        }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try self.init(writer: DatabasePool(path: url.path, configuration: config))
         #if os(iOS)
@@ -134,6 +139,12 @@ public final class LocalStore: Sendable {
                 t.primaryKey(["noteId", "strokeId"])
             }
         }
+        m.registerMigration("v3-local-edits") { db in
+            // Snapshot on close after ≥ 30 local edits (sync-protocol.md §5, spec/06).
+            try db.alter(table: "documents") { t in
+                t.add(column: "localEditsSinceSnapshot", .integer).notNull().defaults(to: 0)
+            }
+        }
         return m
     }
 }
@@ -152,6 +163,8 @@ public struct DocumentRecord: Codable, FetchableRecord, PersistableRecord, Hasha
     public var snapshotSeq: Int64
     public var updatesSinceSnapshot: Int
     public var bytesSinceSnapshot: Int
+    /// Local edits (outgoing updates) since the last snapshot this device made.
+    public var localEditsSinceSnapshot: Int
     /// Registered on the server (`POST /v1/docs`).
     public var registered: Bool
     public var createdAt: Date
@@ -165,6 +178,7 @@ public struct DocumentRecord: Codable, FetchableRecord, PersistableRecord, Hasha
         snapshotSeq = 0
         updatesSinceSnapshot = 0
         bytesSinceSnapshot = 0
+        localEditsSinceSnapshot = 0
         registered = false
         createdAt = now
         updatedAt = now
@@ -236,6 +250,15 @@ extension LocalStore {
         }
     }
 
+    /// Updates the notebook of a document (after a move).
+    public func setNotebook(_ docId: String, notebookId: String) throws {
+        try db.write {
+            try $0.execute(sql: "UPDATE documents SET notebookId = ? WHERE docId = ?", arguments: [notebookId, docId])
+            try $0.execute(sql: "UPDATE noteIndex SET notebookId = ? WHERE noteId = ?", arguments: [notebookId, docId])
+            try $0.execute(sql: "UPDATE tasks SET notebookId = ? WHERE noteId = ?", arguments: [notebookId, docId])
+        }
+    }
+
     public func setRegistered(_ docId: String, _ registered: Bool = true) throws {
         try db.write { try $0.execute(sql: "UPDATE documents SET registered = ? WHERE docId = ?", arguments: [registered, docId]) }
     }
@@ -249,16 +272,21 @@ extension LocalStore {
             var item = OutboxItem(id: nil, docId: docId, clientMsgId: clientMsgId, kind: .push, payload: update,
                                   baseSeq: nil, attempts: 0, lastError: nil, createdAt: now)
             try item.insert(db)
-            try db.execute(sql: "UPDATE documents SET updatedAt = ? WHERE docId = ?", arguments: [now, docId])
+            try db.execute(sql: "UPDATE documents SET updatedAt = ?, localEditsSinceSnapshot = localEditsSinceSnapshot + 1 WHERE docId = ?",
+                           arguments: [now, docId])
         }
     }
 
     /// Stores updates received from the server and advances `lastSeq`. `seq`s at or below
     /// `lastSeq` are ignored (duplicates after reconnect).
-    public func appendRemoteUpdates(docId: String, items: [(seq: Int64, data: Data)], now: Date = Date()) throws {
+    /// Returns the items actually stored (new ones), in order.
+    @discardableResult
+    public func appendRemoteUpdates(docId: String, items: [(seq: Int64, data: Data)], now: Date = Date()) throws -> [(seq: Int64, data: Data)] {
         try db.write { db in
-            guard var doc = try DocumentRecord.fetchOne(db, key: docId) else { return }
+            guard var doc = try DocumentRecord.fetchOne(db, key: docId) else { return [] }
+            var added: [(seq: Int64, data: Data)] = []
             for item in items where item.seq > doc.lastSeq {
+                added.append(item)
                 var stored = StoredUpdate(id: nil, docId: docId, data: item.data, seq: item.seq, clientMsgId: nil, origin: "remote", createdAt: now)
                 try stored.insert(db)
                 doc.lastSeq = item.seq
@@ -267,13 +295,16 @@ extension LocalStore {
             }
             doc.updatedAt = now
             try doc.update(db)
+            return added
         }
     }
 
     /// Replaces the stored history by a server snapshot (`updates` with `snapshot`).
-    public func applyRemoteSnapshot(docId: String, seq: Int64, state: Data, now: Date = Date()) throws {
+    /// Returns false when the snapshot is not newer than what is stored.
+    @discardableResult
+    public func applyRemoteSnapshot(docId: String, seq: Int64, state: Data, now: Date = Date()) throws -> Bool {
         try db.write { db in
-            guard var doc = try DocumentRecord.fetchOne(db, key: docId) else { return }
+            guard var doc = try DocumentRecord.fetchOne(db, key: docId), seq > doc.lastSeq else { return false }
             // The snapshot contains everything up to `seq`; unacknowledged local updates and
             // later ones stay.
             try db.execute(sql: "DELETE FROM docUpdates WHERE docId = ? AND seq IS NOT NULL AND seq <= ?", arguments: [docId, seq])
@@ -285,6 +316,7 @@ extension LocalStore {
             doc.bytesSinceSnapshot = 0
             doc.updatedAt = now
             try doc.update(db)
+            return true
         }
     }
 
@@ -312,6 +344,9 @@ extension LocalStore {
         }
     }
 
+    /// Local edits needed to snapshot a document when it is closed (sync-protocol.md §5).
+    public static let snapshotOnCloseEdits = 30
+
     /// Whether a snapshot should be uploaded (sync-protocol.md §5).
     public func needsSnapshot(docId: String) throws -> Bool {
         guard let doc = try document(docId) else { return false }
@@ -322,6 +357,7 @@ extension LocalStore {
 
     public func enqueueSnapshot(docId: String, state: Data, baseSeq: Int64, now: Date = Date()) throws -> OutboxItem {
         try db.write { db in
+            try db.execute(sql: "UPDATE documents SET localEditsSinceSnapshot = 0 WHERE docId = ?", arguments: [docId])
             var item = OutboxItem(id: nil, docId: docId, clientMsgId: EntityID.make(now: now), kind: .snapshot, payload: state,
                                   baseSeq: baseSeq, attempts: 0, lastError: nil, createdAt: now)
             try item.insert(db)

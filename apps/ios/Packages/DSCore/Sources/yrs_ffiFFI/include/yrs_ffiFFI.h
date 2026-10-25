@@ -350,6 +350,11 @@ RustBuffer uniffi_yrs_ffi_fn_method_ydocument_encode_state_as_update(uint64_t pt
 RustBuffer uniffi_yrs_ffi_fn_method_ydocument_map_get(uint64_t ptr, RustBuffer root, RustBuffer path, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_YRS_FFI_FN_METHOD_YDOCUMENT_MAP_JSON
+#define UNIFFI_FFIDEF_UNIFFI_YRS_FFI_FN_METHOD_YDOCUMENT_MAP_JSON
+RustBuffer uniffi_yrs_ffi_fn_method_ydocument_map_json(uint64_t ptr, RustBuffer root, RustBuffer path, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_YRS_FFI_FN_METHOD_YDOCUMENT_MAP_KEYS
 #define UNIFFI_FFIDEF_UNIFFI_YRS_FFI_FN_METHOD_YDOCUMENT_MAP_KEYS
 RustBuffer uniffi_yrs_ffi_fn_method_ydocument_map_keys(uint64_t ptr, RustBuffer root, RustBuffer path, RustCallStatus *_Nonnull out_status
@@ -802,6 +807,12 @@ uint16_t uniffi_yrs_ffi_checksum_method_ydocument_encode_state_as_update(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_YRS_FFI_CHECKSUM_METHOD_YDOCUMENT_MAP_GET
 #define UNIFFI_FFIDEF_UNIFFI_YRS_FFI_CHECKSUM_METHOD_YDOCUMENT_MAP_GET
 uint16_t uniffi_yrs_ffi_checksum_method_ydocument_map_get(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_YRS_FFI_CHECKSUM_METHOD_YDOCUMENT_MAP_JSON
+#define UNIFFI_FFIDEF_UNIFFI_YRS_FFI_CHECKSUM_METHOD_YDOCUMENT_MAP_JSON
+uint16_t uniffi_yrs_ffi_checksum_method_ydocument_map_json(void
     
 );
 #endif

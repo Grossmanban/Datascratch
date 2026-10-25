@@ -10,7 +10,8 @@ public enum Base64URL {
             .replacingOccurrences(of: "=", with: "")
     }
 
-    /// Strict: only `A–Z a–z 0–9 - _`, no padding (like the TS `base64UrlSchema`).
+    /// Strict, like the TS decoder and schemas: only `A–Z a–z 0–9 - _`, no padding, length
+    /// mod 4 ≠ 1, zero trailing bits (canonical).
     public static func decode(_ string: String) -> Data? {
         guard string.utf8.allSatisfy({ ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122) || ($0 >= 48 && $0 <= 57) || $0 == 45 || $0 == 95 }) else {
             return nil
@@ -21,11 +22,13 @@ public enum Base64URL {
         let remainder = s.count % 4
         if remainder == 1 { return nil }
         if remainder > 0 { s += String(repeating: "=", count: 4 - remainder) }
-        return Data(base64Encoded: s)
+        // Canonical only: unused trailing bits must be zero (re-encoding gives the input back).
+        guard let data = Data(base64Encoded: s), encode(data) == string else { return nil }
+        return data
     }
 }
 
-/// `Data` that encodes to/from base64url (no padding) in JSON.
+/// `Data` that encodes to/from base64url (no padding, canonical) in JSON.
 public struct Base64URLData: Codable, Hashable, Sendable {
     public var data: Data
 

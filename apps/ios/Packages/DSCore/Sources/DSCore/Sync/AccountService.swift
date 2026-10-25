@@ -123,6 +123,22 @@ public actor AccountService {
         return note
     }
 
+    /// Moves a note to another notebook (api.md «Перенос заметки»): (1) wraps the note key with
+    /// the target notebook key and writes `NoteMeta` there, (2) `PATCH /docs/:id`, (3) removes
+    /// `NoteMeta` from the source notebook. Content, history, attachments and the note key stay.
+    public func moveNote(id noteId: String, from source: NotebookDocument, to target: NotebookDocument, folderId: String? = nil) async throws {
+        guard var meta = source.note(id: noteId) else { throw DocumentError.notFound("note \(noteId)") }
+        let noteKey = try keys.noteKey(noteId: noteId, wrappedKey: meta.wrappedKey, notebookId: source.notebookId)
+        guard let targetKey = try keys.notebookKey(target.notebookId) else { throw AccountError.missingKey(target.notebookId) }
+        meta.wrappedKey = Base64URL.encode(try DSCrypto.wrapKey(noteKey, with: targetKey, ad: CryptoAD.noteKey(noteId)))
+        meta.folderId = folderId
+        meta.parentNoteId = nil
+        try target.putNote(meta)
+        try await api.moveDoc(id: noteId, toNotebook: target.notebookId)
+        try store.setNotebook(noteId, notebookId: target.notebookId)
+        try source.purgeNote(id: noteId)
+    }
+
     /// The daily note for `day` (`YYYY-MM-DD`) in the daily-notes notebook
     /// (`settings.dailyNotebookId`), created with the day as title if missing.
     public func dailyNote(for day: String, in notebook: NotebookDocument) throws -> (meta: NoteMeta, created: NoteDocument?) {

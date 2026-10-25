@@ -14,10 +14,20 @@ export function Skeleton({ shape = "block", lines = 1, className, ...rest }: Ske
     return (
       <div aria-hidden className={cn("flex flex-col gap-2", className)} {...rest}>
         {Array.from({ length: lines }, (_, i) => (
-          <div key={i} className={cn(base, "h-3 rounded-full")} style={{ width: i === lines - 1 && lines > 1 ? "62%" : "100%" }} />
+          <div
+            key={i}
+            className={cn(base, "h-3 rounded-full")}
+            style={{ width: i === lines - 1 && lines > 1 ? "62%" : "100%" }}
+          />
         ))}
       </div>
     );
   }
-  return <div aria-hidden className={cn(base, shape === "circle" ? "rounded-full" : "rounded-md", className)} {...rest} />;
+  return (
+    <div
+      aria-hidden
+      className={cn(base, shape === "circle" ? "rounded-full" : "rounded-md", className)}
+      {...rest}
+    />
+  );
 }

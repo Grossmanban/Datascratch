@@ -12,13 +12,19 @@ export function addMonths(d: Date, n: number): Date {
   return new Date(d.getFullYear(), d.getMonth() + n, 1);
 }
 export function isSameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
 /** Whole calendar days from `from` to `to` (DST-safe). */
 export function dayDiff(from: Date, to: Date): number {
   const a = startOfDay(from);
   const b = startOfDay(to);
-  return Math.round((b.getTime() - a.getTime() + (a.getTimezoneOffset() - b.getTimezoneOffset()) * 60_000) / DAY);
+  return Math.round(
+    (b.getTime() - a.getTime() + (a.getTimezoneOffset() - b.getTimezoneOffset()) * 60_000) / DAY,
+  );
 }
 
 export type DateTone = "normal" | "today" | "soon" | "overdue" | "done";
@@ -57,7 +63,12 @@ export interface DateLabelOptions {
  * if past, soon for a deadline today or tomorrow, today for a date scheduled today.
  * Strings are fixed (not Intl) so iOS and web render identically.
  */
-export function dateLabel(date: Date, now: Date, locale: Locale, opts: DateLabelOptions = {}): DateLabel {
+export function dateLabel(
+  date: Date,
+  now: Date,
+  locale: Locale,
+  opts: DateLabelOptions = {},
+): DateLabel {
   const offset = dayDiff(now, date);
   const w = WORDS[locale];
   const tone: DateTone = opts.completed
@@ -78,7 +89,8 @@ export function dateLabel(date: Date, now: Date, locale: Locale, opts: DateLabel
     const day = date.getDate();
     const month = w.months[date.getMonth()]!;
     const sameYear = date.getFullYear() === now.getFullYear();
-    if (locale === "ru") label = sameYear ? `${day} ${month}` : `${day} ${month} ${date.getFullYear()}`;
+    if (locale === "ru")
+      label = sameYear ? `${day} ${month}` : `${day} ${month} ${date.getFullYear()}`;
     else label = sameYear ? `${month} ${day}` : `${month} ${day}, ${date.getFullYear()}`;
   }
   return { label, tone };

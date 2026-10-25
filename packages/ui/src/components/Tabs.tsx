@@ -1,12 +1,21 @@
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { Tabs as T } from "radix-ui";
-import { createContext, useContext, useId, type ComponentPropsWithoutRef, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useId,
+  type ComponentPropsWithoutRef,
+  type ReactNode,
+} from "react";
 import { cn } from "../lib/cn";
 import { spring } from "../lib/tokens";
 
 const ActiveContext = createContext<string | undefined>(undefined);
 
-export interface TabsProps extends Omit<ComponentPropsWithoutRef<typeof T.Root>, "value" | "onValueChange"> {
+export interface TabsProps extends Omit<
+  ComponentPropsWithoutRef<typeof T.Root>,
+  "value" | "onValueChange"
+> {
   value: string;
   onValueChange: (value: string) => void;
 }
@@ -16,7 +25,12 @@ export function Tabs({ value, onValueChange, className, children, ...rest }: Tab
   return (
     <ActiveContext.Provider value={value}>
       <LayoutGroup id={id}>
-        <T.Root value={value} onValueChange={onValueChange} className={cn("flex flex-col", className)} {...rest}>
+        <T.Root
+          value={value}
+          onValueChange={onValueChange}
+          className={cn("flex flex-col", className)}
+          {...rest}
+        >
           {children}
         </T.Root>
       </LayoutGroup>
@@ -25,7 +39,12 @@ export function Tabs({ value, onValueChange, className, children, ...rest }: Tab
 }
 
 export function TabsList({ className, ...rest }: ComponentPropsWithoutRef<typeof T.List>) {
-  return <T.List className={cn("relative flex items-center gap-1 border-b border-hairline", className)} {...rest} />;
+  return (
+    <T.List
+      className={cn("relative flex items-center gap-1 border-b border-hairline", className)}
+      {...rest}
+    />
+  );
 }
 
 export interface TabProps extends ComponentPropsWithoutRef<typeof T.Trigger> {
@@ -49,7 +68,9 @@ export function Tab({ value, icon, count, className, children, ...rest }: TabPro
     >
       {icon}
       {children}
-      {count !== undefined && <span className="text-footnote tabular-nums text-fg-tertiary">{count}</span>}
+      {count !== undefined && (
+        <span className="text-footnote tabular-nums text-fg-tertiary">{count}</span>
+      )}
       {active && (
         <motion.span
           layoutId="tab-underline"

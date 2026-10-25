@@ -1,4 +1,12 @@
-import { forwardRef, useCallback, useLayoutEffect, useRef, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type TextareaHTMLAttributes,
+} from "react";
 import { cn } from "../lib/cn";
 
 const field =
@@ -27,9 +35,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       ref={ref}
       aria-invalid={invalid || undefined}
       className={cn(
-        bare
-          ? "w-full bg-transparent text-fg outline-none placeholder:text-fg-tertiary"
-          : field,
+        bare ? "w-full bg-transparent text-fg outline-none placeholder:text-fg-tertiary" : field,
         !bare && (size === "lg" ? "h-11 px-3.5 text-body" : "h-9 px-3"),
         !bare && leading && (size === "lg" ? "pl-10" : "pl-9"),
         !bare && trailing && "pr-9",
@@ -42,10 +48,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   return (
     <div className={cn("relative flex items-center", className)}>
       {leading && (
-        <span className="pointer-events-none absolute left-3 flex text-fg-tertiary [&_svg]:size-4">{leading}</span>
+        <span className="pointer-events-none absolute left-3 flex text-fg-tertiary [&_svg]:size-4">
+          {leading}
+        </span>
       )}
       {input}
-      {trailing && <span className="absolute right-2.5 flex text-fg-tertiary [&_svg]:size-4">{trailing}</span>}
+      {trailing && (
+        <span className="absolute right-2.5 flex text-fg-tertiary [&_svg]:size-4">{trailing}</span>
+      )}
     </div>
   );
 });

@@ -159,7 +159,9 @@ export const Pickers: Story = () => {
   return (
     <div className="flex items-start gap-10">
       <DatePicker value={date} onChange={setDate}>
-        <Button leading={<CalendarDays />}>{date ? date.toLocaleDateString("ru-RU") : "Без даты"}</Button>
+        <Button leading={<CalendarDays />}>
+          {date ? date.toLocaleDateString("ru-RU") : "Без даты"}
+        </Button>
       </DatePicker>
       {date && <DateChip date={date} />}
       <Popover>
@@ -168,7 +170,9 @@ export const Pickers: Story = () => {
         </PopoverTrigger>
         <PopoverContent className="w-64">
           <p className="font-display text-h3">Стеклянная панель</p>
-          <p className="mt-1 text-footnote text-fg-secondary">Размытие, тонкая рамка, мягкая тень.</p>
+          <p className="mt-1 text-footnote text-fg-secondary">
+            Размытие, тонкая рамка, мягкая тень.
+          </p>
         </PopoverContent>
       </Popover>
       <div className="rounded-xl border border-hairline bg-surface p-3 shadow-card">
@@ -218,12 +222,28 @@ export const Toasts: Story = () => {
   const { toast } = useToast();
   return (
     <div className="flex gap-3">
-      <Button onClick={() => toast({ title: "Документ удалён", action: { label: "Отменить", onClick: () => {} } })}>С отменой</Button>
+      <Button
+        onClick={() =>
+          toast({ title: "Документ удалён", action: { label: "Отменить", onClick: () => {} } })
+        }
+      >
+        С отменой
+      </Button>
       <Button onClick={() => toast({ title: "Синхронизировано", tone: "success" })}>Успех</Button>
-      <Button onClick={() => toast({ title: "Нет связи с сервером", description: "Изменения сохранены на устройстве", tone: "warning" })}>
+      <Button
+        onClick={() =>
+          toast({
+            title: "Нет связи с сервером",
+            description: "Изменения сохранены на устройстве",
+            tone: "warning",
+          })
+        }
+      >
         Предупреждение
       </Button>
-      <Button onClick={() => toast({ title: "Не удалось расшифровать", tone: "danger" })}>Ошибка</Button>
+      <Button onClick={() => toast({ title: "Не удалось расшифровать", tone: "danger" })}>
+        Ошибка
+      </Button>
     </div>
   );
 };

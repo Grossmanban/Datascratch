@@ -80,7 +80,11 @@ export const Fields: Story = () => {
       <Input placeholder="Поиск" leading={<Search />} trailing={<Kbd shortcut="mod+k" />} />
       <Input placeholder="Почта" leading={<Mail />} size="lg" type="email" />
       <Input placeholder="Ошибка" invalid defaultValue="не почта" />
-      <TextArea placeholder="Описание растёт вместе с текстом…" value={text} onChange={(e) => setText(e.target.value)} />
+      <TextArea
+        placeholder="Описание растёт вместе с текстом…"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
       <Input bare placeholder="Без рамки — для заголовков" className="font-display text-h1" />
     </div>
   );
@@ -93,7 +97,12 @@ export const Toggles: Story = () => {
     <>
       <Row title="Чек-бокс задачи (круглый, анимированный)">
         {tasks.map((s, i) => (
-          <TaskCheckbox key={i} state={s} aria-label={`Задача ${i + 1}`} onStateChange={(n) => setTasks((xs) => xs.map((x, j) => (j === i ? n : x)))} />
+          <TaskCheckbox
+            key={i}
+            state={s}
+            aria-label={`Задача ${i + 1}`}
+            onStateChange={(n) => setTasks((xs) => xs.map((x, j) => (j === i ? n : x)))}
+          />
         ))}
         <TaskCheckbox state="open" size={24} aria-label="Крупная" />
       </Row>
@@ -101,7 +110,11 @@ export const Toggles: Story = () => {
         <Checkbox label="Показывать выполненные" defaultChecked />
         <Checkbox checked="indeterminate" aria-label="Частично" />
         <div className="w-[320px]">
-          <Switch label="Синхронизация" description="Через ваш сервер, сквозное шифрование" defaultChecked />
+          <Switch
+            label="Синхронизация"
+            description="Через ваш сервер, сквозное шифрование"
+            defaultChecked
+          />
         </div>
         <Switch size="sm" aria-label="Маленький" />
       </Row>
@@ -167,7 +180,9 @@ export const Chips: Story = () => {
         <Avatar name="Анна Петрова" presence="online" size={36} />
         <Avatar name="Иван Смирнов" presence="away" size={36} />
         <Avatar name="Claude" presence="offline" size={36} />
-        <AvatarStack people={["Анна", "Иван", "Мария", "Олег", "Пётр", "Ли"].map((name) => ({ name }))} />
+        <AvatarStack
+          people={["Анна", "Иван", "Мария", "Олег", "Пётр", "Ли"].map((name) => ({ name }))}
+        />
       </Row>
     </>
   );

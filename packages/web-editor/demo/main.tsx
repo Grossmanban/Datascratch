@@ -3,6 +3,9 @@ import { createRoot } from "react-dom/client";
 import * as Y from "yjs";
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from "y-protocols/awareness";
 import { DatascratchEditor, initNoteMeta, setNoteCover, setNoteStyle, useNoteMeta, type EditorApi, type EditorHost, type NoteSummary } from "../src";
+import "@datascratch/ui/fonts.css";
+import "@datascratch/ui/styles.css";
+import { UIProvider } from "@datascratch/ui";
 import "../src/styles/editor.css";
 import "./demo.css";
 import { SAMPLE_CONTENT } from "./sample";
@@ -222,6 +225,8 @@ function Root() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <Root />
+    <UIProvider locale="ru" theme="system">
+      <Root />
+    </UIProvider>
   </StrictMode>,
 );

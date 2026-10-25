@@ -6,8 +6,9 @@
  * place of handwriting there is an image link plus a text note of what it is
  * attached to (D-11).
  *
- * TODO(core): reuse the @datascratch/shared Markdown exporter for the plain
- * parts once published; keep the agent-specific annotations here.
+ * The plain export (@datascratch/shared noteToMarkdown) has no block ids and
+ * no per-span handwriting notes, so the agent dialect is rendered here; the
+ * dialect stays compatible with it (Obsidian callouts, Tasks-style dates).
  */
 import * as Y from "yjs";
 import type { HandwritingItem } from "./handwriting.js";
@@ -197,8 +198,8 @@ class Writer {
     if (item.nodeName === "taskItem") {
       const scheduled = attr<string | null>(item, "scheduled");
       const deadline = attr<string | null>(item, "deadline");
-      if (scheduled) dates.push(`📅 ${scheduled}`);
-      if (deadline) dates.push(`⏰ ${deadline}`);
+      if (scheduled) dates.push(`⏳ ${scheduled}`);
+      if (deadline) dates.push(`📅 ${deadline}`);
     }
     const head = `${prefix} ${firstText}${dates.length ? " " + dates.join(" ") : ""}${this.idComment(item, extra)}`;
     const indent = " ".repeat(marker.length + 1);
@@ -228,7 +229,7 @@ class Writer {
   }
 }
 
-/** Markdown body of a note (title is not included; see `noteTitle`). */
+/** Markdown body of a note (title is not included; see `getTitle` in @datascratch/shared). */
 export function noteToMarkdown(doc: Y.Doc, options: MarkdownOptions = {}): string {
   const w = new Writer(options);
   const out: string[] = [];

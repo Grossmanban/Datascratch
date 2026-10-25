@@ -7,9 +7,9 @@ export const menuItem =
   "data-[highlighted]:bg-hover data-[disabled]:pointer-events-none data-[disabled]:opacity-40 " +
   "[&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-fg-secondary data-[highlighted]:[&>svg]:text-fg";
 
-export const menuItemDanger =
-  "text-danger [&>svg]:!text-danger data-[highlighted]:bg-danger-soft";
+export const menuItemDanger = "text-danger [&>svg]:!text-danger data-[highlighted]:bg-danger-soft";
 
-export const menuLabel = "px-2 pb-1 pt-2 text-caption font-medium uppercase tracking-[0.04em] text-fg-tertiary";
+export const menuLabel =
+  "px-2 pb-1 pt-2 text-caption font-medium uppercase tracking-[0.04em] text-fg-tertiary";
 export const menuSeparator = "-mx-1 my-1 h-px bg-separator";
 export const menuShortcut = "ml-auto pl-4 text-footnote text-fg-tertiary";

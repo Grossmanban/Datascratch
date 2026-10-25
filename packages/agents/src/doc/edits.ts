@@ -6,15 +6,15 @@
  *
  * Handwriting stays attached (D-10): text that is not touched keeps its Yjs
  * items, so relative-position anchors survive; moved blocks get their stroke
- * and comment anchors re-created on the copy.
+ * and comment anchors rewritten to the copy.
  */
 import * as Y from "yjs";
 import { AgentError } from "../errors.js";
-import { base64url, fromBase64url, uuidv7 } from "../util.js";
+import { base64url, fromBase64url } from "../util.js";
 import { cloneInto, insertBlocks, type BuildContext } from "./build.js";
 import { markdownToBlocks, type BlockSpec, type ImportOptions } from "./markdown-import.js";
 import { blockIdOf, childElements, contentOf, findBlock, TEXT_BLOCKS, type BlockLocation, type Marks } from "./model.js";
-import { readStroke, resolveAnchor, writeStroke } from "./strokes.js";
+import { readStroke, resolveAnchor } from "./strokes.js";
 
 export type Position = { after: string } | { before: string } | { at: "start" | "end" };
 
@@ -235,24 +235,18 @@ function moveBlock(doc: Y.Doc, op: Extract<EditOp, { op: "move" }>): void {
     return Y.encodeRelativePosition(Y.createRelativePositionFromTypeIndex(dst, r.index));
   };
 
-  // Strokes are immutable: replace an affected stroke by a copy with new anchors (as the pixel eraser does).
-  const strokes = doc.getMap("strokes");
-  const replacements: [string, ReturnType<typeof readStroke>, Uint8Array[]][] = [];
-  strokes.forEach((raw, id) => {
+  // `anchors` is mutable (strokes.md §1): rewrite the anchors of affected strokes in place.
+  doc.getMap("strokes").forEach((raw, id) => {
     const s = readStroke(id, raw);
-    if (!s || s.anchorKind !== "text") return;
+    if (!s || s.anchorKind !== "text" || !(raw instanceof Y.Map)) return;
     let touched = false;
     const anchors = s.anchors.map((a) => {
       const n = reanchor(a);
       if (n) touched = true;
       return n ?? a;
     });
-    if (touched) replacements.push([id, s, anchors]);
+    if (touched) raw.set("anchors", anchors);
   });
-  for (const [id, s, anchors] of replacements) {
-    strokes.delete(id);
-    writeStroke(doc, { ...s!, id: uuidv7(), anchors });
-  }
   doc.getMap("comments").forEach((raw) => {
     if (!(raw instanceof Y.Map)) return;
     const anchor = raw.get("anchor") as { start: string; end: string } | null;

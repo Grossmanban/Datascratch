@@ -28,7 +28,7 @@ function fillInline(el: Y.XmlElement, inline: InlineSpec[], ctx: BuildContext): 
     } else {
       const atom = new Y.XmlElement(it.atom);
       el.insert(el.length, [atom]);
-      for (const [k, v] of Object.entries(it.attrs)) atom.setAttribute(k, v as never);
+      for (const [k, v] of Object.entries(it.attrs)) if (v !== null && v !== undefined) atom.setAttribute(k, v as never);
       text = null;
     }
   }
@@ -55,7 +55,8 @@ export function insertBlock(parent: Y.XmlFragment | Y.XmlElement, index: number,
   el.setAttribute("blockId", ctx.keepBlockId ?? uuidv7());
   const attrs = { ...spec.attrs };
   if (spec.type === "taskItem" && !attrs.taskId) attrs.taskId = uuidv7();
-  for (const [k, v] of Object.entries(attrs)) if (v !== undefined) el.setAttribute(k, v as never);
+  // y-prosemirror never writes null attributes: a missing attribute means null (document-model.md §4.1).
+  for (const [k, v] of Object.entries(attrs)) if (v !== undefined && v !== null) el.setAttribute(k, v as never);
   fill(el, spec, ctx);
   return el;
 }

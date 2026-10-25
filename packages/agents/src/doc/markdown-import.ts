@@ -202,16 +202,16 @@ class Importer {
           out.push(...this.text(n.value, marks));
           break;
         case "strong":
-          out.push(...this.inline(n.children, { ...marks, bold: true }));
+          out.push(...this.inline(n.children, { ...marks, bold: {} }));
           break;
         case "emphasis":
-          out.push(...this.inline(n.children, { ...marks, italic: true }));
+          out.push(...this.inline(n.children, { ...marks, italic: {} }));
           break;
         case "delete":
-          out.push(...this.inline(n.children, { ...marks, strike: true }));
+          out.push(...this.inline(n.children, { ...marks, strike: {} }));
           break;
         case "inlineCode":
-          out.push({ text: n.value, marks: { ...marks, code: true } });
+          out.push({ text: n.value, marks: { ...marks, code: {} } });
           break;
         case "break":
           out.push({ atom: "hardBreak", attrs: {} });
@@ -281,7 +281,7 @@ function mergeUnderline(items: InlineSpec[]): InlineSpec[] {
       underline = false;
       continue;
     }
-    if (underline && "text" in it) out.push({ text: it.text, marks: { ...it.marks, underline: true } });
+    if (underline && "text" in it) out.push({ text: it.text, marks: { ...it.marks, underline: {} } });
     else out.push(it);
   }
   return out;

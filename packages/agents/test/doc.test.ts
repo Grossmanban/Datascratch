@@ -112,3 +112,15 @@ describe("edits", () => {
     expect(delta[0].attributes.agentEdit).toEqual(agentEdit);
   });
 });
+
+describe("y-prosemirror conventions (document-model.md §4.1)", () => {
+  it("writes marks as objects and omits null attributes", () => {
+    const doc = makeNoteDoc("Т", "**жирный** и `код`\n\n- [ ] задача");
+    const p = findBlock(doc, blockIdAt(doc, 0))!.el;
+    const delta = (p.toArray()[0] as Y.XmlText).toDelta();
+    expect(delta[0].attributes).toEqual({ bold: {} });
+    expect(delta[2].attributes).toEqual({ code: {} });
+    const task = (findBlock(doc, blockIdAt(doc, 1))!.el.toArray()[0] as Y.XmlElement).getAttributes();
+    expect(Object.keys(task).sort()).toEqual(["blockId", "state", "taskId"]);
+  });
+});

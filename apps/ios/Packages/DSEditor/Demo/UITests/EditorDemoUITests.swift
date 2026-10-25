@@ -77,6 +77,7 @@ final class EditorDemoUITests: XCTestCase {
         app.buttons["tool.marker"].tap()
         sleep(1)
         XCTAssertTrue(app.textViews["editor.text"].waitForExistence(timeout: 5), "app alive after switching to the marker")
+        XCTAssertTrue(app.buttons["tool.marker"].isSelected, "the palette button really switches the tool")
         app.buttons["tool.lasso"].tap()
         sleep(1)
         XCTAssertTrue(app.textViews["editor.text"].waitForExistence(timeout: 5), "app alive after switching to the lasso")

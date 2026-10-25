@@ -10,15 +10,17 @@ struct DemoView: View {
                 // The editor ends above the palette (as in the app): extended under it, the editor's
                 // recognizers saw the palette's touches. The palette sits in the bottom safe area,
                 // so it rides up with the keyboard in one layout pass.
-                // The palette floats over the editor and the editor ignores only the container's
-                // bottom safe area (it still shrinks for the keyboard). This is the arrangement the
-                // UI tests pass with; with the editor kept full height under the keyboard, a tap
-                // into the text crashed UIKit under XCUITest.
+                // As in the app: the palette sits in the bottom safe area and the editor shrinks for
+                // it and for the keyboard. Laid over the editor, the palette's taps reached the
+                // text view instead of its buttons; kept full height under the keyboard, the
+                // editor crashed UIKit on a tap into the text under XCUITest.
                 EditorRepresentable(editor: model.editor)
-                    .ignoresSafeArea(.container, edges: .bottom)
                     .accessibilityIdentifier("editor")
-                ToolPalette(model: model)
-                    .padding(.bottom, 12)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        ToolPalette(model: model)
+                            .padding(.top, 8)
+                            .padding(.bottom, 12)
+                    }
                 if model.showHUD {
                     HUDView(model: model)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)

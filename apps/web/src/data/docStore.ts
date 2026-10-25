@@ -173,9 +173,20 @@ export class DocStore {
     if (row.kind === "account") return getMasterKey();
     if (row.kind === "notebook") return notebookKey(docId);
     if (!row.notebookId) return null;
-    const nb = await this.load(row.notebookId);
-    const meta = nb.getMap<Y.Map<unknown>>("notes").get(docId);
-    return noteKey(docId, row.notebookId, meta?.get("wrappedKey") as string | undefined);
+    let notebookId = row.notebookId;
+    let meta = (await this.load(notebookId)).getMap<Y.Map<unknown>>("notes").get(docId);
+    if (!meta) {
+      // Moved to another notebook (api.md «Перенос заметки»): find the index that lists it now.
+      for (const [id, doc] of this.docs) {
+        const m = this.rows.get(id)?.kind === "notebook" ? doc.getMap<Y.Map<unknown>>("notes").get(docId) : undefined;
+        if (!m) continue;
+        notebookId = id;
+        meta = m;
+        await this.patchRow(docId, { notebookId });
+        break;
+      }
+    }
+    return noteKey(docId, notebookId, meta?.get("wrappedKey") as string | undefined);
   }
 
   /** Create a brand-new doc on this device: registers it (queued) and applies `init` as a local edit. */

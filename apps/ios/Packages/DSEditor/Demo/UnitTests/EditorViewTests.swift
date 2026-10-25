@@ -336,6 +336,21 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(doc.strokes[0].anchorKind, .text)
     }
 
+    func testDateChipStaysInsideTheColumn() {
+        let task = BlockNode.taskItem("Нажмите ⌘K, чтобы открыть палитру команд и найти всё что угодно", scheduled: "2026-11-14")
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .taskList([task])])
+        for width in [360, 420, 520, 760] as [CGFloat] {
+            let editor = host(doc, width: width)
+            let off = flatRange(editor, of: "Нажмите").lowerBound
+            guard let frag = editor.geometry.fragment(at: off) as? BlockLayoutFragment, let last = frag.textLineFragments.last,
+                  let d = frag.decoration else { return XCTFail("no task fragment") }
+            let chips = BlockLayoutFragment.dateChipsWidth(scheduled: "2026-11-14", deadline: nil, fontSize: d.fontSize)
+            let right = frag.layoutFragmentFrame.minX + editor.geometry.origin.x + last.typographicBounds.minX
+                + BlockLayoutFragment.usedWidth(of: last) + chips
+            XCTAssertLessThanOrEqual(right, editor.geometry.columnFrame.maxX + 0.5, "chip inside the column at width \(width)")
+        }
+    }
+
     func testOpenLargeNote() {
         let doc = SampleDocument.large()
         let start = CACurrentMediaTime()

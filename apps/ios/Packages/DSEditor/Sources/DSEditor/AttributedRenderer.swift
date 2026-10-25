@@ -178,6 +178,13 @@ struct AttributedRenderer {
             codeIsFirst: true, codeIsLast: true,
             markerFont: theme.font(size: size, weight: .regular, design: .default), fontSize: size)
 
+        if case .task(_, let scheduled, let deadline) = ctx.marker {
+            // Keep every line short of the column by the chips' width, so the date chips drawn
+            // after the last line never run past the column edge.
+            let chips = BlockLayoutFragment.dateChipsWidth(scheduled: scheduled, deadline: deadline, fontSize: size)
+            if chips > 0 { style.tailIndent = min(style.tailIndent, -chips) }
+        }
+
         var color = theme.style.textColor.map(EditorTheme.color(token:)) ?? EditorTheme.text
         if para.kind.type == NodeType.title || para.kind.type == NodeType.heading { color = EditorTheme.text }
         if deco.taskState == "done" || deco.taskState == "cancelled" { color = EditorTheme.secondaryText }

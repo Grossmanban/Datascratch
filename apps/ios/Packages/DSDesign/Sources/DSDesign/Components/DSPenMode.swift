@@ -79,7 +79,8 @@ extension DSPenToolbar {
         onRedo: (() -> Void)? = nil,
         tools: [DSPenTool] = [.pen, .pencil, .marker, .highlighter, .eraser],
         showsTextMode: Bool = true,
-        axis: Axis = .horizontal
+        axis: Axis = .horizontal,
+        compact: Bool = false
     ) {
         let selection = Binding<DSPenSelection>(
             get: {
@@ -106,7 +107,8 @@ extension DSPenToolbar {
             canUndo: canUndo,
             canRedo: canRedo,
             onUndo: onUndo,
-            onRedo: onRedo
+            onRedo: onRedo,
+            compact: compact
         )
     }
 }

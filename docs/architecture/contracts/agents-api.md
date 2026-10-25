@@ -1,6 +1,6 @@
-# Контракт: API для ИИ-агентов — MCP, REST, OAuth (v1, черновик)
+# Контракт: API для ИИ-агентов — MCP, REST, OAuth (v1)
 
-> Статус: **ЧЕРНОВИК потока agents (2026-10-25)** — ждёт утверждения координатором. Реализация: `packages/agents` (Fastify-плагин `@datascratch/agents`).
+> Статус: **v1 — предложен потоком agents и утверждён координатором 2026-10-25.** Реализация: `packages/agents` (Fastify-плагин `@datascratch/agents`).
 >
 > Связано: D-04, D-09, D-10, D-11, R-10, R-13, `spec/09-agents-api.md`, `api.md` (токены агентов), `document-model.md`, `strokes.md`, `crypto.md` §8.
 

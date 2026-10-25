@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { initCrypto } from "@datascratch/shared/crypto";
 import sodium from "libsodium-wrappers-sumo";
-import { cryptoVectors } from "./crypto.js";
+import { apiVectors } from "./api.js";
+import { cryptoExtraVectors, cryptoVectors } from "./crypto.js";
 import { documentVectors } from "./document.js";
 import { idVectors } from "./ids.js";
 import { strokeVectors } from "./strokes.js";
@@ -19,6 +20,8 @@ await sodium.ready;
 
 const files: Record<string, unknown> = {
   ...cryptoVectors(),
+  ...cryptoExtraVectors(),
+  ...apiVectors(),
   ...idVectors(),
   ...strokeVectors(),
   ...documentVectors(),

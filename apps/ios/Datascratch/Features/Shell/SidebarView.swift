@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(DSDesign)
+import DSDesign
+#endif
 
 struct SidebarView: View {
     @Environment(AppModel.self) private var app
@@ -246,13 +249,8 @@ struct SpaceSwitcher: View {
         } label: {
             HStack(spacing: Theme.Space.s2) {
                 if let space = library.activeSpace {
-                    // A 26 pt tile in the space colour, then its name (Craft).
-                    Image(systemName: space.icon)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(space.color.foreground)
-                        .frame(width: 26, height: 26)
-                        .background(space.color.background,
-                                    in: RoundedRectangle(cornerRadius: Theme.Radius.sm, style: .continuous))
+                    // A 26 pt tile in the space colour (its emoji or first letter), then its name.
+                    SpaceTile(space: space)
                     Text(space.name)
                         .font(.system(.callout, design: .serif).weight(.semibold))
                         .foregroundStyle(Theme.Palette.textPrimary)
@@ -265,6 +263,31 @@ struct SpaceSwitcher: View {
         }
         .accessibilityLabel("Switch Space")
         .accessibilityIdentifier("sidebar.spaceSwitcher")
+    }
+}
+
+/// `DSSpaceTile`: the space's emoji, or the first letter of its name when the icon is an
+/// SF Symbol, on the space colour.
+struct SpaceTile: View {
+    let space: Space
+    var size: CGFloat = 26
+
+    private var glyph: String {
+        // SF Symbol names are ASCII words with dots ("square.stack"); emoji are not.
+        let isSymbol = space.icon.allSatisfy { $0.isASCII }
+        return isSymbol ? (space.name.first.map(String.init) ?? "·") : space.icon
+    }
+
+    var body: some View {
+        #if canImport(DSDesign)
+        DSSpaceTile(glyph, tint: DSTintToken(rawValue: space.color.rawValue) ?? .gray, size: size)
+        #else
+        Text(glyph)
+            .font(.system(size: size * 0.56, weight: .semibold, design: .serif))
+            .foregroundStyle(space.color.foreground)
+            .frame(width: size, height: size)
+            .background(space.color.background, in: RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+        #endif
     }
 }
 

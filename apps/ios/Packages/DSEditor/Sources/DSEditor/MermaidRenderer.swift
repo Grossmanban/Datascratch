@@ -96,7 +96,7 @@ final class MermaidRenderer: NSObject {
     }
 }
 
-extension MermaidRenderer: WKNavigationDelegate {
+extension MermaidRenderer: @preconcurrency WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         ready = true
         pump()

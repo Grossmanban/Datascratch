@@ -4,8 +4,7 @@ import UIKit
 
 /// Visual tokens of the editor ("Quiet paper", D-38). Local until DSDesign exposes its tokens;
 /// names follow `design-tokens.md` so swapping to DSDesign is mechanical.
-@MainActor
-public struct EditorTheme {
+public struct EditorTheme: Sendable {
     public var style: DocumentStyle
     public var baseFontSize: CGFloat = 17
 

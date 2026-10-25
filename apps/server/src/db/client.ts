@@ -30,6 +30,12 @@ export async function runMigrations(pool: pg.Pool): Promise<void> {
   try {
     await client.query('SELECT pg_advisory_lock(724100001)');
     await migrate(drizzle(client, { schema }), { migrationsFolder });
+    // Roles are cluster-wide and not part of a dump: make sure the agent role and
+    // our membership exist even after restoring a backup into a fresh cluster.
+    await client.query(`DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ds_agent') THEN CREATE ROLE ds_agent NOLOGIN; END IF;
+    END $$`);
+    await client.query('GRANT ds_agent TO CURRENT_USER');
   } finally {
     await client.query('SELECT pg_advisory_unlock(724100001)').catch(() => undefined);
     client.release();

@@ -122,7 +122,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
     async (v1) => {
       v1.get(
         '/health',
-        { schema: { tags: ['service'], response: { 200: z.object({ ok: z.literal(true), version: z.string() }) } } },
+        { logLevel: 'warn', schema: { tags: ['service'], response: { 200: z.object({ ok: z.literal(true), version: z.string() }) } } },
         async () => ({ ok: true as const, version: VERSION }),
       );
       v1.get('/openapi.json', { schema: { hide: true } }, async () => {

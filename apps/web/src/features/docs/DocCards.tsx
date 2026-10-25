@@ -149,38 +149,37 @@ const DocCard = memo(function DocCard({ note, snippet, delay }: { note: NoteEntr
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.28, delay: delay ?? 0, ease: [0.2, 0.8, 0.2, 1] }}
       >
-        <Link
-          to="/doc/$noteId"
-          params={{ noteId: note.id }}
-          onClick={open}
-          draggable
-          onDragStart={(e) => dragNote(e, note.id)}
-          className="block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-          data-testid="doc-card"
+        {/* spec/12 §12.7: the cover's thumbnail makes a document recognisable; no cover — a compact card.
+            asChild: the router link is the card root, so its accessible name is the title and excerpt. */}
+        <UIDocCard
+          asChild
+          title={noteTitle(note, t("app.untitled"))}
+          subtitle={<span className="line-clamp-3 min-h-[3.6em] block">{snippet ?? ""}</span>}
+          cover={coverUrl}
+          icon={note.icon ?? null}
+          meta={
+            <span className="flex min-w-0 items-center gap-2 text-ink-2">
+              <span className="truncate">{formatRelative(note.updatedAt)}</span>
+              {note.tags.slice(0, 2).map((tag) => (
+                <span key={tag} className="inline-flex items-center gap-0.5 truncate rounded-full bg-ink/[0.05] px-1.5 py-px">
+                  <Hash className="size-2.5" />
+                  {tag}
+                </span>
+              ))}
+            </span>
+          }
+          footer={starred ? <Star className="size-3.5 fill-[var(--ds-tint-yellow-fg)] text-[var(--ds-tint-yellow-fg)]" aria-label={t("nav.starred")} /> : undefined}
+          className="h-full"
         >
-          {/* spec/12 §12.7: the cover's thumbnail makes a document recognisable; no cover — a compact card. */}
-          <UIDocCard
-            title={noteTitle(note, t("app.untitled"))}
-            subtitle={<span className="line-clamp-3 min-h-[3.6em] block">{snippet ?? ""}</span>}
-            cover={coverUrl}
-            icon={note.icon ?? null}
-            meta={
-              <span className="flex min-w-0 items-center gap-2 text-ink-2">
-                <span className="truncate">{formatRelative(note.updatedAt)}</span>
-                {note.tags.slice(0, 2).map((tag) => (
-                  <span key={tag} className="inline-flex items-center gap-0.5 truncate rounded-full bg-ink/[0.05] px-1.5 py-px">
-                    <Hash className="size-2.5" />
-                    {tag}
-                  </span>
-                ))}
-              </span>
-            }
-            footer={starred ? <Star className="size-3.5 fill-[var(--ds-tint-yellow-fg)] text-[var(--ds-tint-yellow-fg)]" aria-label={t("nav.starred")} /> : undefined}
-            className="h-full"
-            // Inside the link the card's <article> role would hide its text from the link's name.
-            role="none"
+          <Link
+            to="/doc/$noteId"
+            params={{ noteId: note.id }}
+            onClick={open}
+            draggable
+            onDragStart={(e) => dragNote(e, note.id)}
+            data-testid="doc-card"
           />
-        </Link>
+        </UIDocCard>
       </motion.div>
     </ContextMenu>
   );

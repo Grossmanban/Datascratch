@@ -2,7 +2,7 @@ import { vid } from "./util.js";
 
 const ID = vid(1);
 const KEY = "A".repeat(43);
-const SALT = "B".repeat(22);
+const SALT = "B".repeat(21) + "A";
 const T = "2026-10-25T12:00:00.000Z";
 const KDF = { alg: "argon2id13", ops: 3, mem: 67108864 };
 
@@ -18,6 +18,10 @@ export function apiVectors() {
         valid: [{ salt: SALT, kdf: KDF }],
         invalid: [
           { reason: "salt is not 16 bytes", body: { salt: "AAAA", kdf: KDF } },
+          {
+            reason: "non-canonical salt (trailing bits set)",
+            body: { salt: "B".repeat(22), kdf: KDF },
+          },
           { reason: "unknown KDF", body: { salt: SALT, kdf: { ...KDF, alg: "scrypt" } } },
         ],
       },

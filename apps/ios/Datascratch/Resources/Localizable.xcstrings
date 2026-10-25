@@ -591,6 +591,16 @@
         }
       }
     },
+    "Create New Key…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создать новый ключ…"
+          }
+        }
+      }
+    },
     "Create a notebook for work": {
       "localizations": {
         "ru": {
@@ -607,6 +617,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Новый аккаунт"
+          }
+        }
+      }
+    },
+    "Current Password": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текущий пароль"
           }
         }
       }
@@ -1381,6 +1401,16 @@
         }
       }
     },
+    "It's the only way back to your notes if you forget the password.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только он вернёт доступ к заметкам, если вы забудете пароль."
+          }
+        }
+      }
+    },
     "Key checked": {
       "localizations": {
         "ru": {
@@ -1581,6 +1611,16 @@
         }
       }
     },
+    "New Recovery Key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый ключ восстановления"
+          }
+        }
+      }
+    },
     "New Space": {
       "localizations": {
         "ru": {
@@ -1637,6 +1677,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Новый пароль"
+          }
+        }
+      }
+    },
+    "New recovery key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый ключ восстановления"
           }
         }
       }
@@ -1717,6 +1767,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ничего не найдено"
+          }
+        }
+      }
+    },
+    "No security events": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Событий нет"
           }
         }
       }
@@ -2107,6 +2167,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пароль изменён"
+          }
+        }
+      }
+    },
+    "Password changes, recoveries and new recovery keys appear here.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь появятся смены пароля, восстановления доступа и новые ключи восстановления."
           }
         }
       }
@@ -2531,6 +2601,16 @@
         }
       }
     },
+    "Security Log": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Журнал безопасности"
+          }
+        }
+      }
+    },
     "Select a version": {
       "localizations": {
         "ru": {
@@ -2697,6 +2777,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Выйти из Datascratch?"
+          }
+        }
+      }
+    },
+    "Signed in with the recovery key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вход по ключу восстановления"
           }
         }
       }
@@ -2981,6 +3071,16 @@
         }
       }
     },
+    "The current key stops working at once. Your notes are not re-encrypted and your devices stay signed in.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текущий ключ сразу перестанет работать. Заметки не перешифровываются, устройства остаются в аккаунте."
+          }
+        }
+      }
+    },
     "The encryption key of this document is not on this device.": {
       "localizations": {
         "ru": {
@@ -2991,12 +3091,32 @@
         }
       }
     },
+    "The key was shown on the device where you created the account. If you no longer have it, create a new one.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ключ показывался на устройстве, где вы создали аккаунт. Если его у вас больше нет, создайте новый."
+          }
+        }
+      }
+    },
     "The notebook key will be stored on the server so agents with a token can read and edit it. The server will technically be able to read these notes.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Ключ блокнота будет храниться на сервере, чтобы агенты с токеном могли читать и править его. Сервер технически сможет прочитать эти заметки."
+          }
+        }
+      }
+    },
+    "The old key no longer works. Save this one in a password manager or on paper.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Старый ключ больше не работает. Сохраните новый в менеджере паролей или на бумаге."
           }
         }
       }
@@ -3341,6 +3461,16 @@
         }
       }
     },
+    "Without a signed-in device": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без входа с устройства"
+          }
+        }
+      }
+    },
     "Without the key you can't get your notes back if you forget the password. You can show the key and check it later in Settings → Account.": {
       "localizations": {
         "ru": {
@@ -3421,22 +3551,22 @@
         }
       }
     },
-    "You skipped this during sign-up.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вы пропустили это при регистрации."
-          }
-        }
-      }
-    },
     "You will need your password to sign in again.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Для повторного входа понадобится пароль."
+          }
+        }
+      }
+    },
+    "Your new recovery key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваш новый ключ восстановления"
           }
         }
       }

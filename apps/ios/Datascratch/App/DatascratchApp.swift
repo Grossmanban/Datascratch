@@ -13,7 +13,10 @@ struct DatascratchApp: App {
         .commands { AppCommands() }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { app.library.flush() }
-            if phase == .active { app.settings.applyAppearanceToWindows() }
+            if phase == .active {
+                app.settings.applyAppearanceToWindows()
+                app.refreshRecoveryKeyState()
+            }
         }
 
         // A single document in its own window (Stage Manager, split view).

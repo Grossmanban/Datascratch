@@ -349,11 +349,13 @@ final class CoreLibrary: LibraryBackend {
                         trashedAt: meta.trashedAt.map(DSCore.DSDate.iso), order: meta.order)
     }
 
-    /// Writes title and blocks. Same block sequence → only changed blocks are replaced
-    /// (keeps CRDT merges fine-grained); otherwise all body blocks are rewritten.
+    /// Writes the title and the body as targeted edits by `blockId`, so blocks the
+    /// stand-in editor does not understand (code, formulas, marks from other clients)
+    /// are never rewritten. Only a document made purely of representable blocks may be
+    /// rewritten as a whole (reordering in the stand-in editor).
     private func write(body: NoteBody, title: String, previous: NoteBody?, to doc: NoteDocument,
                        resolve: NoteBodyCodec.LinkResolver) throws {
-        var current = try doc.blocks()
+        let current = try doc.blocks()
         if let titleIndex = current.firstIndex(where: { $0.type == BlockType.title }) {
             if current[titleIndex].text != title {
                 var block = current[titleIndex]
@@ -362,32 +364,85 @@ final class CoreLibrary: LibraryBackend {
             }
         } else {
             try doc.insertBlocks([.title(title)], at: 0)
-            current = try doc.blocks()
         }
 
-        let target = NoteBodyCodec.blocks(from: body, resolveLink: resolve)
-        var existing: [(index: Int, block: DSCore.Block)] = []
-        for (index, block) in current.enumerated() where block.type != BlockType.title && block.isKnown {
-            existing.append((index, block))
+        let old = previous ?? NoteBodyCodec.body(from: current)
+        guard old != body else { return }
+        let oldIds = old.blocks.map(\.id)
+        let newIds = body.blocks.map(\.id)
+        let oldById = Dictionary(old.blocks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+
+        // 1. Removed blocks.
+        for id in oldIds where !newIds.contains(id) {
+            if let path = try doc.path(ofBlock: id) { try doc.deleteBlock(at: path) }
         }
-        let unknownCount = current.filter { !$0.isKnown }.count
-        var sameShape = unknownCount == 0 && existing.count == target.count
-        if sameShape {
-            for (pair, wanted) in zip(existing, target) where pair.block.blockId != wanted.blockId || pair.block.type != wanted.type {
-                sameShape = false
+        try removeEmptyContainers(doc)
+
+        let kept = newIds.filter { oldById[$0] != nil }
+        let keptOrderUnchanged = kept == oldIds.filter { newIds.contains($0) }
+        let kindsUnchanged = kept.allSatisfy { id in body.blocks.first { $0.id == id }?.kind == oldById[id]?.kind }
+        guard keptOrderUnchanged, kindsUnchanged else {
+            try rewriteIfRepresentable(doc, body: body, resolve: resolve)
+            return
+        }
+
+        // 2. Changed blocks in place.
+        for block in body.blocks {
+            guard let before = oldById[block.id], before != block, let path = try doc.path(ofBlock: block.id) else { continue }
+            if before.text == block.text, let task = block.task, before.task != nil {
+                try doc.updateTask(taskId: task.taskId, state: DSCore.TaskState(rawValue: task.state.rawValue),
+                                   scheduled: .some(task.scheduled), deadline: .some(task.deadline))
+            } else {
+                try doc.replaceBlock(at: path, with: NoteBodyCodec.item(for: block, resolveLink: resolve))
             }
         }
-        if sameShape {
-            for (pair, wanted) in zip(existing, target) where pair.block != wanted {
-                try doc.replaceBlock(at: [UInt32(pair.index)], with: wanted)
-            }
-        } else {
-            // Remove known body blocks back to front (unknown blocks from newer clients stay).
-            for pair in existing.reversed() {
-                try doc.deleteBlock(at: [UInt32(pair.index)])
-            }
-            try doc.appendBlocks(target)
+
+        // 3. New blocks: inserted after their predecessor (into the same list when possible).
+        for (index, block) in body.blocks.enumerated() where oldById[block.id] == nil {
+            try insert(block, after: index > 0 ? body.blocks[index - 1] : nil, in: doc, resolve: resolve)
         }
+    }
+
+    private func insert(_ block: NoteBlock, after previous: NoteBlock?, in doc: NoteDocument,
+                        resolve: NoteBodyCodec.LinkResolver) throws {
+        let isItem = block.kind == .bullet || block.kind == .task
+        if let previous, let path = try doc.path(ofBlock: previous.id), let last = path.last {
+            if isItem, previous.kind == block.kind, path.count >= 2 {
+                // Next item of the same list.
+                try doc.insertBlocks([NoteBodyCodec.item(for: block, resolveLink: resolve)],
+                                     into: Array(path.dropLast()), at: last + 1)
+                return
+            }
+            let topIndex = path[0]
+            try doc.insertBlocks(NoteBodyCodec.blocks(from: NoteBody(blocks: [block]), resolveLink: resolve),
+                                 at: topIndex + 1)
+            return
+        }
+        // First block: right after the title.
+        let titleOffset: UInt32 = (try doc.blocks().first?.type == BlockType.title) ? 1 : 0
+        try doc.insertBlocks(NoteBodyCodec.blocks(from: NoteBody(blocks: [block]), resolveLink: resolve), at: titleOffset)
+    }
+
+    /// Lists left without items after deletions are removed.
+    private func removeEmptyContainers(_ doc: NoteDocument) throws {
+        let containers: Set<String> = [BlockType.bulletList, BlockType.taskList, BlockType.orderedList]
+        for (index, block) in try doc.blocks().enumerated().reversed()
+        where containers.contains(block.type) && block.children.isEmpty {
+            try doc.deleteBlock(at: [UInt32(index)])
+        }
+    }
+
+    /// Full rewrite, only when every body block is one the stand-in editor represents.
+    private func rewriteIfRepresentable(_ doc: NoteDocument, body: NoteBody, resolve: NoteBodyCodec.LinkResolver) throws {
+        let current = try doc.blocks()
+        guard current.allSatisfy({ $0.type == BlockType.title || NoteBodyCodec.isRepresentable($0) }) else {
+            Self.log.notice("skipped rewriting \(doc.noteId, privacy: .public): it has blocks the stand-in editor cannot show")
+            return
+        }
+        for (index, block) in current.enumerated().reversed() where block.type != BlockType.title {
+            try doc.deleteBlock(at: [UInt32(index)])
+        }
+        try doc.appendBlocks(NoteBodyCodec.blocks(from: body, resolveLink: resolve))
     }
 
     private func persistAccountLists(_ old: LibrarySnapshot, _ new: LibrarySnapshot) throws {

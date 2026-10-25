@@ -222,6 +222,28 @@ public struct SignupMaterial: Sendable {
     }
 }
 
+/// New recovery key for a signed-in account (crypto.md §4, `POST /auth/recovery-key`). The master
+/// key is rewrapped with the new key; data is not re-encrypted.
+public struct RecoveryKeyRotation: Sendable {
+    public var recoveryKey: Data
+    /// Shown to the user once (`DS1-XXXX-...`).
+    public var recoveryKeyText: String
+    public var body: RotateRecoveryKeyRequest
+
+    public static func make(masterKey: Data, currentLoginKey: Data, userId: String) throws -> RecoveryKeyRotation {
+        try make(masterKey: masterKey, currentLoginKey: currentLoginKey, userId: userId, recoveryKey: DSCrypto.newKey())
+    }
+
+    /// Deterministic variant (vector `crypto/recovery-rotate.json`).
+    static func make(masterKey: Data, currentLoginKey: Data, userId: String, recoveryKey: Data, nonce: Data? = nil) throws -> RecoveryKeyRotation {
+        RecoveryKeyRotation(
+            recoveryKey: recoveryKey, recoveryKeyText: try RecoveryKeyFormat.format(recoveryKey),
+            body: RotateRecoveryKeyRequest(
+                currentLoginKey: currentLoginKey, recoveryLoginKey: try DSCrypto.recoveryLoginKey(recoveryKey),
+                wrappedMasterKeyRecovery: try DSCrypto.wrapKey(masterKey, with: recoveryKey, ad: CryptoAD.masterByRecovery(userId: userId), nonce: nonce)))
+    }
+}
+
 /// New password material (password change, recovery finish — crypto.md §4–5).
 public struct PasswordChangeMaterial: Sendable {
     public var salt: Data

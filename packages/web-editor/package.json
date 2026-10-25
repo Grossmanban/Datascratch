@@ -17,6 +17,9 @@
     "test:ct": "playwright test -c playwright-ct.config.ts"
   },
   "dependencies": {
+    "@datascratch/design-tokens": "workspace:*",
+    "@datascratch/shared": "workspace:*",
+    "@datascratch/ui": "workspace:*",
     "@tiptap/core": "^3.32.0",
     "@tiptap/extension-code-block-lowlight": "^3.32.0",
     "@tiptap/extension-horizontal-rule": "^3.32.0",
@@ -38,6 +41,7 @@
   "devDependencies": {
     "@playwright/experimental-ct-react": "1.62.1",
     "@playwright/test": "1.62.1",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/katex": "^0.16.8",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -45,8 +49,13 @@
     "happy-dom": "^21.0.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.6.0",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }

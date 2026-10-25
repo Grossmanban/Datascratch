@@ -8,10 +8,12 @@ import XCTest
 final class EditorViewTests: XCTestCase {
     var window: UIWindow!
 
-    override func tearDown() {
-        window?.isHidden = true
-        window = nil
-        super.tearDown()
+    override func tearDown() async throws {
+        await MainActor.run {
+            window?.isHidden = true
+            window = nil
+        }
+        try await super.tearDown()
     }
 
     func host(_ doc: EditorDocument, width: CGFloat = 700, height: CGFloat = 900) -> EditorView {

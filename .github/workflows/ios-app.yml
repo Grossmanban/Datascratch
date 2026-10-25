@@ -47,21 +47,6 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen xcbeautify || brew install xcodegen
 
-      - name: Rust cache (DSCore yrs-ffi)
-        if: hashFiles('apps/ios/Packages/DSCore/Package.swift') != ''
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/ios/Packages/DSCore/yrs-ffi
-
-      - name: Build yrs_ffiFFI.xcframework (until DSCore pins a binary release)
-        if: hashFiles('apps/ios/Packages/DSCore/Package.swift') != ''
-        run: |
-          if grep -qE "yrsRelease: .*= nil" Packages/DSCore/Package.swift; then
-            Packages/DSCore/scripts/build-xcframework.sh
-          else
-            echo "DSCore uses a published xcframework release"
-          fi
-
       - name: Generate project
         run: scripts/generate.sh
 

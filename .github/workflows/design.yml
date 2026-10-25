@@ -35,7 +35,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Generated tokens are up to date
         run: pnpm --filter @datascratch/design-tokens check
-      - name: Token tests
+      - name: Token tests (contract names, WCAG AA contrast matrix)
         run: pnpm --filter @datascratch/design-tokens test
       - name: Typecheck UI
         run: pnpm --filter @datascratch/ui typecheck

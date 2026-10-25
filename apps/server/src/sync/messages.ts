@@ -1,41 +1,15 @@
-import { z } from 'zod';
-import { b64, id } from '../lib/encoding.js';
+import {
+  SYNC_PROTOCOL_VERSION,
+  clientMessageSchema,
+  type ClientMessage as SharedClientMessage,
+  type ServerMessage as SharedServerMessage,
+} from '@datascratch/shared/contracts';
 
-/** Client → server messages (sync-protocol.md §3). */
-export const Hello = z.object({
-  type: z.literal('hello'),
-  protocol: z.number().int(),
-  auth: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('user'), accessToken: z.string().min(1).max(4096) }),
-    z.object({ kind: z.literal('guest'), shareId: id(), guestToken: z.string().min(1).max(4096) }),
-  ]),
-  deviceId: z.string().min(1).max(100),
-  client: z.object({ platform: z.enum(['ios', 'web']), version: z.string().max(50) }),
-});
+/** Client → server messages (sync-protocol.md §3): the shared zod schemas. */
+export const ClientMessage = clientMessageSchema;
+export type ClientMessage = SharedClientMessage;
 
-export const ClientMessage = z.discriminatedUnion('type', [
-  Hello,
-  z.object({
-    type: z.literal('subscribe'),
-    docs: z
-      .array(z.object({ docId: id(), since: z.number().int().nonnegative() }))
-      .min(1)
-      .max(10_000),
-  }),
-  z.object({ type: z.literal('unsubscribe'), docIds: z.array(id()).max(10_000) }),
-  z.object({ type: z.literal('push'), docId: id(), clientMsgId: z.string().min(1).max(100), payload: b64() }),
-  z.object({
-    type: z.literal('snapshot'),
-    docId: id(),
-    clientMsgId: z.string().min(1).max(100),
-    baseSeq: z.number().int().positive(),
-    payload: b64(),
-  }),
-  z.object({ type: z.literal('awareness'), docId: id(), payload: b64() }),
-]);
-
-export type ClientMessage = z.infer<typeof ClientMessage>;
-
+/** Error codes; `bad_request` was added to the contract on 2026-10-25 (may lag in @datascratch/shared). */
 export type SyncErrorCode =
   | 'unauthorized'
   | 'forbidden'
@@ -48,20 +22,10 @@ export type SyncErrorCode =
 
 /** Server → client messages (sync-protocol.md §4). */
 export type ServerMessage =
-  | { type: 'welcome'; userId: string | null; serverTime: string; protocol: 1 }
-  | {
-      type: 'updates';
-      docId: string;
-      snapshot: { seq: number; payload: string } | null;
-      items: { seq: number; payload: string; deviceId: string }[];
-      upToDate: boolean;
-    }
-  | { type: 'update'; docId: string; seq: number; payload: string; deviceId: string }
-  | { type: 'ack'; docId: string; clientMsgId: string; seq: number }
-  | { type: 'awareness'; docId: string; payload: string; deviceId: string }
+  | Exclude<SharedServerMessage, { type: 'error' }>
   | { type: 'error'; code: SyncErrorCode; message: string; ref?: string };
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = SYNC_PROTOCOL_VERSION;
 
 /** WebSocket close codes used by the server. */
 export const CloseCode = {

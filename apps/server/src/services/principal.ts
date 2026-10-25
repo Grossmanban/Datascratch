@@ -10,7 +10,7 @@ export interface GuestPrincipal {
   ownerId: string;
   permission: 'view' | 'edit';
   target: { kind: 'note' | 'notebook'; id: string };
-  /** Namespaced device id (`guest:<shareId>:<hello.deviceId>`); only used to tag updates. */
+  /** Namespaced device id (`guest:<base64url of SHA-256(shareId|hello.deviceId)[0..16]>`); only used to tag updates. */
   deviceId: string;
 }
 

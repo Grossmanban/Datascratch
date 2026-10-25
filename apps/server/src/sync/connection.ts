@@ -2,7 +2,7 @@ import type { WebSocket } from 'ws';
 import { verifyGuestToken, verifyUserToken } from '../auth/guard.js';
 import type { AppContext } from '../context.js';
 import { COMPACT_JOB } from '../jobs/index.js';
-import { fromB64, toB64, uuidv7 } from '../lib/encoding.js';
+import { fromB64, sha256, toB64, uuidv7 } from '../lib/encoding.js';
 import { ApiError } from '../lib/errors.js';
 import { docAccess } from '../services/access.js';
 import type { GuestPrincipal, UserPrincipal } from '../services/principal.js';
@@ -148,6 +148,11 @@ export class SyncConnection {
       this.#send({ type: 'error', code: 'bad_request', message: 'invalid JSON' });
       return;
     }
+    const r = raw as { type?: unknown; protocol?: unknown } | null;
+    if (r && typeof r === 'object' && r.type === 'hello' && r.protocol !== PROTOCOL_VERSION) {
+      clearTimeout(this.#helloTimer);
+      return this.#fail('protocol_mismatch', `protocol ${PROTOCOL_VERSION} required`, CloseCode.protocol);
+    }
     const parsed = ClientMessage.safeParse(raw);
     if (!parsed.success) {
       const ref = typeof raw === 'object' && raw ? ((raw as { clientMsgId?: unknown }).clientMsgId as string) : undefined;
@@ -209,15 +214,14 @@ export class SyncConnection {
 
   async #hello(msg: Extract<ClientMessage, { type: 'hello' }>) {
     clearTimeout(this.#helloTimer);
-    if (msg.protocol !== PROTOCOL_VERSION) {
-      return this.#fail('protocol_mismatch', `protocol ${PROTOCOL_VERSION} required`, CloseCode.protocol);
-    }
     let p: SyncPrincipal | null;
     if (msg.auth.kind === 'user') {
       p = await verifyUserToken(this.ctx, msg.auth.accessToken);
     } else {
-      // Guest device ids are namespaced so they can never collide with a user's devices.
-      p = await verifyGuestToken(this.ctx, msg.auth.guestToken, `guest:${msg.auth.shareId}:${msg.deviceId}`);
+      // Guest device ids are namespaced so they can never collide with a user's devices
+      // (and stay within the 64 characters of the contract's deviceId).
+      const tag = sha256(`${msg.auth.shareId}|${msg.deviceId}`).subarray(0, 16).toString('base64url');
+      p = await verifyGuestToken(this.ctx, msg.auth.guestToken, `guest:${tag}`);
       if (p && p.shareId !== msg.auth.shareId) p = null;
     }
     if (!p) return this.#fail('unauthorized', 'invalid credentials', CloseCode.unauthorized);
@@ -417,6 +421,11 @@ export class SyncConnection {
     }
     if (!(await this.#canWriteRef(docId, clientMsgId))) {
       throw new SyncError('forbidden', 'read-only access', clientMsgId);
+    }
+    if (baseSeq === 0) {
+      // A snapshot of an empty history covers nothing: acknowledge, keep nothing.
+      this.#send({ type: 'ack', docId, clientMsgId, seq: 0 });
+      return;
     }
     try {
       const r = await this.ctx.documents.storeSnapshot(this.ctx.database.db, {

@@ -18,7 +18,6 @@ final class DemoModel {
 
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
     let selectedTraits = !ProcessInfo.processInfo.arguments.contains("-noSelectedTraits")
-    let overlayPalette = ProcessInfo.processInfo.arguments.contains("-overlayPalette")
     private let images = DemoImages()
 
     static var fileURL: URL {

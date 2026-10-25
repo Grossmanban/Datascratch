@@ -154,6 +154,9 @@ public final class EditorView: UIView {
         inkInput = InkInputRecognizer(target: nil, action: nil)
         inkInput.shouldTrack = { [weak self] touch in
             guard let self, self.tools.mode.capturesPen else { return false }
+            // Controls the host lays over the editor (a floating palette) keep their touches.
+            let p = touch.location(in: self)
+            if p.y > self.bounds.maxY - self.overlayInsets.bottom || p.y < self.bounds.minY + self.overlayInsets.top { return false }
             if let header = self.headerView, header.bounds.contains(touch.location(in: header)) { return false }
             return touch.type == .pencil || (self.tools.allowsFingerDrawing && touch.type == .direct)
         }
@@ -312,6 +315,12 @@ public final class EditorView: UIView {
     /// keyboard (the SwiftUI default) — then the overlap is zero and this does nothing. In the demo
     /// under XCUITest, a full-height editor under the keyboard crashed UIKit on a tap into the text.
     private var keyboardFrame: CGRect?
+    private var pendingBottomInset: (bottom: CGFloat, overlap: CGFloat)?
+    private var insetApplyScheduled = false
+    /// Bands along the editor's edges covered by the host's own controls (a floating tool palette):
+    /// the pen does not start strokes there, so taps on those controls are never taken for ink.
+    public var overlayInsets: UIEdgeInsets = .zero
+
     /// Whether the editor adds the keyboard overlap to its bottom scroll inset (see above).
     public var adjustsForKeyboard = true {
         didSet { applyKeyboardInset() }
@@ -333,13 +342,20 @@ public final class EditorView: UIView {
         // Free drawings may reach below the text: keep them reachable by scrolling.
         let inkBeyond = max(0, (ink?.inkExtentMaxY ?? 0) + 40 - textView.contentSize.height)
         let bottom = overlap + inkBeyond
-        guard textView.contentInset.bottom != bottom else { return }
-        // Applied on the next main-queue turn (never while a touch is being delivered), without
-        // forcing a scroll: the text view keeps the caret visible itself.
+        guard abs(textView.contentInset.bottom - bottom) > 1 else { return }
+        pendingBottomInset = (bottom, overlap)
+        guard !insetApplyScheduled else { return }
+        insetApplyScheduled = true
+        // Applied on the next main-queue turn (never while a touch is being delivered), coalesced,
+        // without forcing a scroll: the text view keeps the caret visible itself.
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.textView.contentInset.bottom != bottom else { return }
-            self.textView.contentInset.bottom = bottom
-            self.textView.verticalScrollIndicatorInsets.bottom = overlap
+            guard let self else { return }
+            self.insetApplyScheduled = false
+            guard let pending = self.pendingBottomInset else { return }
+            self.pendingBottomInset = nil
+            guard abs(self.textView.contentInset.bottom - pending.bottom) > 1 else { return }
+            self.textView.contentInset.bottom = pending.bottom
+            self.textView.verticalScrollIndicatorInsets.bottom = pending.overlap
         }
     }
 

@@ -273,7 +273,6 @@ final class EditorViewTests: XCTestCase {
         // (Not `EditorCommands.typeText`: it reports keyboard input the text view already shows.)
         doc.insertText("Oh ", marks: .empty, block: p.id, at: 0)
         settle(editor)
-        drainMainQueue()
         XCTAssertTrue(editor.ink.renderedPath(of: still.id) === stillPath, "the unmoved stroke reuses its outline")
         XCTAssertFalse(editor.ink.renderedPath(of: moving.id) === movingPath, "the moved stroke is outlined again")
     }

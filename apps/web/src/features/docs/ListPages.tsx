@@ -1,7 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { ArrowDownUp, ChevronRight, FilePlus2, Folder as FolderIcon, Hash, LayoutGrid, Layers, List, Star, Trash2 } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { folderPath, notesInSpace, useWorkspace, visibleNotes, type NoteEntry } from "@/domain/workspace";
 import { TopBar, PageTitle } from "@/features/shell/PageHeader";
@@ -44,8 +44,9 @@ function ListPage({
   const sort = useUi((s) => s.sort);
   const sorted = useMemo(() => (sortable ? sortNotes(notes, sort) : notes), [notes, sort, sortable]);
   const create = newIn ? () => void newNoteAndOpen(navigate, newIn.notebookId, newIn.folderId) : undefined;
+  const scrollRef = useRef<HTMLDivElement>(null);
   return (
-    <div className="scrollbar-thin h-full overflow-y-auto">
+    <div ref={scrollRef} className="scrollbar-thin h-full overflow-y-auto">
       <TopBar
         actions={
           <>
@@ -82,10 +83,10 @@ function ListPage({
       >
         {crumbs}
       </TopBar>
-      <PageTitle icon={icon} title={title} subtitle={t("docs.count", { count: notes.length })} />
+      <PageTitle icon={icon} title={title} subtitle={notes.length ? t("docs.count", { count: notes.length }) : undefined} />
       {extra}
       {sorted.length ? (
-        <DocCollection notes={sorted} view={view} />
+        <DocCollection notes={sorted} view={view} scrollRef={scrollRef} />
       ) : (
         <EmptyState
           icon={empty.icon}
@@ -270,7 +271,7 @@ export function TrashPage() {
       notes={list}
       sortable={false}
       empty={{ icon: <Trash2 className="size-7" />, title: t("docs.emptyTrash"), text: t("docs.trashHint") }}
-      extra={list.length ? <p className="-mt-3 px-5 pb-5 text-[13px] text-ink-3 sm:px-10">{t("docs.trashHint")}</p> : null}
+      extra={list.length ? <p className="-mt-3 px-5 pb-5 text-[13px] text-ink-2 sm:px-10">{t("docs.trashHint")}</p> : null}
     />
   );
 }

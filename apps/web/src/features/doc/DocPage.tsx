@@ -1,6 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ChevronRight, FileQuestion, ImagePlus, MoreHorizontal, Share2, Smile, Star, Undo2 } from "lucide-react";
+import { ChevronRight, FileQuestion, MoreHorizontal, Share2, Smile, Star, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/session";
@@ -17,7 +17,7 @@ import { EMOJI_CHOICES } from "@/lib/tokens";
 import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner } from "@/ui";
 import { setNoteMeta } from "@/domain/note";
 import { Backlinks } from "./Backlinks";
-import { CoverImage, coverError, pickImage, uploadCover } from "./Cover";
+import { CoverImage, coverError, removeCover, setCoverImage } from "./Cover";
 import { ownerEditorHost } from "@/editor/hosts";
 import { DocView } from "./DocView";
 import { PresenceStack } from "./PresenceStack";
@@ -89,18 +89,8 @@ function DocScreen({ noteId }: { noteId: string }) {
   const editable = !readOnlyNewer && !trashed;
 
   const keyFor = () => runtime().store.keyFor(noteId);
-  const chooseCover = async () => {
-    const file = await pickImage();
-    const key = await keyFor();
-    if (!file || !key || !doc) return;
-    try {
-      const { cover, thumb } = await uploadCover(noteId, key, file);
-      setNoteMeta(doc, { cover: { attachmentId: cover, offsetY: 0.5 } });
-      updateNote(noteId, { coverThumb: thumb });
-    } catch (e) {
-      coverError(e, t);
-    }
-  };
+  const openCoverDialog = () => useUi.setState({ coverFor: noteId });
+  const dropCover = (file: File) => void setCoverImage(noteId, file).catch((e) => coverError(e, t));
 
   const host = useMemo(() => ownerEditorHost(noteId, navigate), [noteId, navigate]);
   const userId = useAuth((s) => s.userId) ?? "";
@@ -120,7 +110,7 @@ function DocScreen({ noteId }: { noteId: string }) {
             >
               <Star className={cn("size-4", starred && "fill-current")} />
             </IconButton>
-            {doc && meta && <StylePopover doc={doc} style={meta.style} backdrop={meta.backdrop} disabled={!editable} />}
+            {doc && meta && <StylePopover doc={doc} style={meta.style} disabled={!editable} />}
             <IconButton label={t("docs.share")} onClick={() => useUi.setState({ shareFor: { kind: "note", id: noteId } })} data-testid="share-button">
               <Share2 className="size-4" />
             </IconButton>
@@ -168,7 +158,7 @@ function DocScreen({ noteId }: { noteId: string }) {
 
       {/* Mount the editor once presence exists: changing `awareness` later recreates the editor. */}
       {!doc || !meta || !awareness ? (
-        <div className="flex h-64 items-center justify-center text-ink-3">
+        <div className="flex h-64 items-center justify-center text-ink-2">
           <Spinner className="size-5" />
         </div>
       ) : (
@@ -188,29 +178,16 @@ function DocScreen({ noteId }: { noteId: string }) {
                 cover={meta.cover}
                 keyFor={keyFor}
                 editable={editable}
-                onChange={chooseCover}
+                onChange={openCoverDialog}
+                onDropImage={dropCover}
                 onReposition={(offsetY) => setNoteMeta(doc, { cover: { ...meta.cover!, offsetY } })}
-                onRemove={() => {
-                  setNoteMeta(doc, { cover: null });
-                  updateNote(noteId, { coverThumb: null });
-                }}
+                onRemove={() => void removeCover(noteId)}
               />
             ) : null
           }
           header={
             <div className="group/hdr flex items-end gap-1">
               <IconPicker icon={note.icon} disabled={!editable} onPick={(icon) => updateNote(noteId, { icon })} />
-              {editable && !meta.cover && (
-                <button
-                  onClick={chooseCover}
-                  className={cn(
-                    "mb-1 flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-3 opacity-0 transition hover:bg-ink/5 hover:text-ink-2 focus:opacity-100 group-hover/hdr:opacity-100",
-                  )}
-                  data-testid="add-cover"
-                >
-                  <ImagePlus className="size-4" /> {t("style.addCover")}
-                </button>
-              )}
             </div>
           }
           footer={<Backlinks noteId={noteId} />}
@@ -232,7 +209,7 @@ function IconPicker({ icon, onPick, disabled }: { icon: string | null; onPick: (
               {icon}
             </button>
           ) : (
-            <button className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-3 opacity-0 transition hover:bg-ink/5 hover:text-ink-2 group-hover/hdr:opacity-100 focus:opacity-100">
+            <button className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-2 opacity-0 transition hover:bg-ink/5 hover:text-ink group-hover/hdr:opacity-100 focus:opacity-100">
               <Smile className="size-4" /> {t("style.addIcon")}
             </button>
           )

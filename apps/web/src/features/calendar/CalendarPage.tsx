@@ -13,7 +13,7 @@ import { TopBar } from "@/features/shell/PageHeader";
 import { MonthCalendar } from "@/features/tasks/DatePicker";
 import { TaskItems } from "@/features/tasks/TaskList";
 import { useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
-import { addDays, formatLongDate, parseLocalDate, today } from "@/lib/dates";
+import { addDays, formatLongDate, parseLocalDate, today, dateFormat } from "@/lib/dates";
 import i18n from "@/i18n";
 import { Button, cn, IconButton, Popover, Spinner } from "@/ui";
 
@@ -59,7 +59,7 @@ export function CalendarPage() {
   }, [tasks, notes, date]);
 
   const locale = i18n.language === "en" ? "en-US" : "ru-RU";
-  const monthTitle = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(parseLocalDate(date));
+  const monthTitle = dateFormat({ month: "long", year: "numeric" }, locale).format(parseLocalDate(date));
 
   return (
     <div className="scrollbar-thin h-full overflow-y-auto">
@@ -99,16 +99,19 @@ export function CalendarPage() {
                 <button
                   key={d}
                   onClick={() => setDate(d)}
+                  aria-pressed={sel}
+                  aria-current={isToday ? "date" : undefined}
                   className={cn(
                     "relative flex flex-col items-center rounded-xl py-2 transition-colors",
-                    sel ? "bg-ink text-canvas shadow-card" : "hover:bg-ink/[0.04]",
+                    // Accent (not inverted ink): reads the same in both themes.
+                    sel ? "bg-accent text-[var(--ds-text-on-accent)] shadow-card" : "hover:bg-ink/[0.04]",
                   )}
                 >
-                  <span className={cn("text-[11px] font-medium uppercase", sel ? "text-canvas/70" : "text-ink-3")}>
-                    {new Intl.DateTimeFormat(locale, { weekday: "short" }).format(dd)}
+                  <span className={cn("text-[11px] font-medium uppercase", sel ? "text-[var(--ds-text-on-accent)]" : "text-ink-2")}>
+                    {dateFormat({ weekday: "short" }, locale).format(dd)}
                   </span>
                   <span className={cn("mt-0.5 text-[18px] font-semibold", !sel && isToday && "text-accent")}>{dd.getDate()}</span>
-                  <span className={cn("mt-1 size-1 rounded-full", marks[d] ? (sel ? "bg-canvas" : "bg-accent") : "bg-transparent")} />
+                  <span className={cn("mt-1 size-1 rounded-full", marks[d] ? (sel ? "bg-[var(--ds-text-on-accent)]" : "bg-accent") : "bg-transparent")} />
                 </button>
               );
             })}
@@ -179,7 +182,7 @@ function InlineDaily({ noteId }: { noteId: string }) {
   const meta = useNoteMeta(doc);
   if (!doc || !meta)
     return (
-      <div className="flex h-32 items-center justify-center text-ink-3">
+      <div className="flex h-32 items-center justify-center text-ink-2">
         <Spinner className="size-5" />
       </div>
     );

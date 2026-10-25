@@ -1,12 +1,11 @@
-import { Ban, Type } from "lucide-react";
+import { Type } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type * as Y from "yjs";
 import { DEFAULT_STYLE, setNoteMeta } from "@/domain/note";
-import type { NoteBackdrop, NoteStyle } from "@/lib/shared";
-import { BACKDROPS, backdropCss } from "@/lib/tokens";
+import type { NoteStyle } from "@/lib/shared";
 import { cn, IconButton, Popover, SegmentedControl } from "@/ui";
 
-export function StylePopover({ doc, style, backdrop, disabled }: { doc: Y.Doc; style: NoteStyle; backdrop: NoteBackdrop; disabled?: boolean }) {
+export function StylePopover({ doc, style, disabled }: { doc: Y.Doc; style: NoteStyle; disabled?: boolean }) {
   const { t } = useTranslation();
   const set = (patch: Partial<NoteStyle>) => setNoteMeta(doc, { style: { ...DEFAULT_STYLE, ...style, ...patch } });
   return (
@@ -67,32 +66,6 @@ export function StylePopover({ doc, style, backdrop, disabled }: { doc: Y.Doc; s
             ))}
           </div>
         </Row>
-        <Row label={t("style.backdrop")}>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => setNoteMeta(doc, { backdrop: null })}
-              className={cn(
-                "flex size-8 items-center justify-center rounded-full border text-ink-3",
-                !backdrop ? "border-accent/60 ring-2 ring-accent/15" : "border-line",
-              )}
-              aria-label={t("common.none")}
-            >
-              <Ban className="size-3.5" />
-            </button>
-            {BACKDROPS.map((b) => (
-              <button
-                key={b}
-                onClick={() => setNoteMeta(doc, { backdrop: { kind: "gradient", value: `backdrop.${b}` } })}
-                className={cn(
-                  "size-8 rounded-full border transition",
-                  backdrop?.value === `backdrop.${b}` ? "border-accent/60 ring-2 ring-accent/20" : "border-line hover:scale-105",
-                )}
-                style={{ background: backdropCss(b) }}
-                aria-label={b}
-              />
-            ))}
-          </div>
-        </Row>
       </div>
     </Popover>
   );
@@ -101,7 +74,7 @@ export function StylePopover({ doc, style, backdrop, disabled }: { doc: Y.Doc; s
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-3">{label}</div>
+      <div className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-2">{label}</div>
       {children}
     </div>
   );

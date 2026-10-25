@@ -63,6 +63,10 @@ function newTokens(user, deviceId) {
     accountDocId: user.accountDocId,
   };
 }
+function securityEvent(user, kind, deviceId) {
+  (user.securityEvents ??= []).push({ kind, at: nowIso(), deviceId: deviceId ?? null, deviceName: (deviceId && db.devices.get(deviceId)?.name) || null });
+}
+
 function userById(id) {
   for (const u of db.users.values()) if (u.userId === id) return u;
   return null;
@@ -150,13 +154,29 @@ route("POST", "/v1/auth/recovery/finish", (_q, res, { body }) => {
   db.recovery.delete(body.recoveryToken);
   const u = db.users.get(email);
   Object.assign(u, { salt: body.salt, kdf: body.kdf, loginKey: body.loginKey, wrappedMasterKeyPassword: body.wrappedMasterKeyPassword });
-  json(res, 200, issueSession(u, "Recovered device"));
+  const session = issueSession(u, "Recovered device");
+  securityEvent(u, "recovery_used", session.deviceId);
+  json(res, 200, session);
 });
 route("POST", "/v1/auth/password", (_q, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
   if (auth.user.loginKey !== body.currentLoginKey) return err(res, 403, "forbidden", "Wrong password");
   Object.assign(auth.user, { salt: body.salt, kdf: body.kdf, loginKey: body.loginKey, wrappedMasterKeyPassword: body.wrappedMasterKeyPassword });
+  securityEvent(auth.user, "password_changed", auth.deviceId);
   json(res, 204);
+});
+// api.md: a new recovery key; the old one stops working at once.
+route("POST", "/v1/auth/recovery-key", (_q, res, { auth, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  if (auth.user.loginKey !== body.currentLoginKey) return err(res, 403, "forbidden", "Wrong password");
+  Object.assign(auth.user, { recoveryLoginKey: body.recoveryLoginKey, wrappedMasterKeyRecovery: body.wrappedMasterKeyRecovery });
+  for (const [token, email] of db.recovery) if (email === auth.user.email) db.recovery.delete(token);
+  securityEvent(auth.user, "recovery_key_rotated", auth.deviceId);
+  json(res, 204);
+});
+route("GET", "/v1/me/security-events", (_q, res, { auth }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  json(res, 200, [...(auth.user.securityEvents ?? [])].reverse().slice(0, 100));
 });
 
 route("GET", "/v1/me", (_q, res, { auth }) => {

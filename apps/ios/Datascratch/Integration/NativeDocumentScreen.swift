@@ -99,8 +99,9 @@ struct NativeDocumentScreen: View {
                 GeometryReader { proxy in
                     ZStack {
                         DocumentBackground(note: note)
+                        // The editor ends above the palette: extended under it, the pen recognizer
+                        // (which takes every touch in pen mode) won taps meant for the palette.
                         NativeEditorRepresentable(editor: model.editor)
-                            .ignoresSafeArea(.container, edges: .bottom)
                             .accessibilityIdentifier("editor")
                     }
                     // The palette sits in the bottom safe area: the text scrolls clear of it, and it

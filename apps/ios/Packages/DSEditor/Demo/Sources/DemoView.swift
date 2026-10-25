@@ -7,8 +7,10 @@ struct DemoView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
+                // The editor keeps its size when the keyboard appears and insets its own scrolling:
+                // resizing it during a tap into the text crashed UIKit.
                 EditorRepresentable(editor: model.editor)
-                    .ignoresSafeArea(.container, edges: .bottom)
+                    .ignoresSafeArea(.all, edges: .bottom)
                     .accessibilityIdentifier("editor")
                 ToolPalette(model: model)
                     .padding(.bottom, 12)
@@ -130,6 +132,7 @@ struct EditorRepresentable: UIViewRepresentable {
 struct ToolPalette: View {
     let model: DemoModel
     private let modes: [PenMode] = [.text, .pen, .pencil, .marker, .highlighter, .pixelEraser, .strokeEraser, .lasso]
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         let _ = model.revision
@@ -155,25 +158,28 @@ struct ToolPalette: View {
             // The swatch row is always present (dimmed when the tool has no ink) so the palette never
             // changes its structure under the finger: removing buttons while a tool button's touch
             // was still being delivered made UIKit's gesture environment throw.
-            let inkTool = tools.mode.inkTool
-            let tool = inkTool ?? .pen
-            let tokens = tool == .highlighter ? EditorTheme.highlightTokens : EditorTheme.inkTokens
-            Divider().frame(height: 28)
-            ForEach(0..<4, id: \.self) { slot in
-                let token = tokens[min(slot, tokens.count - 1)]
-                Button {
-                    guard inkTool != nil else { return }
-                    DispatchQueue.main.async { tools.setColor(token) }
-                } label: {
-                    Circle()
-                        .fill(Color(EditorTheme.color(token: token)))
-                        .frame(width: 24, height: 24)
-                        .overlay(Circle().stroke(Color.primary.opacity(inkTool != nil && tools.paints[tool]?.color == token ? 0.8 : 0), lineWidth: 2).padding(-3))
+            // On iPhone the eight tools fill the width; colours are in the palette sheet.
+            if sizeClass != .compact {
+                let inkTool = tools.mode.inkTool
+                let tool = inkTool ?? .pen
+                let tokens = tool == .highlighter ? EditorTheme.highlightTokens : EditorTheme.inkTokens
+                Divider().frame(height: 28)
+                ForEach(0..<4, id: \.self) { slot in
+                    let token = tokens[min(slot, tokens.count - 1)]
+                    Button {
+                        guard inkTool != nil else { return }
+                        DispatchQueue.main.async { tools.setColor(token) }
+                    } label: {
+                        Circle()
+                            .fill(Color(EditorTheme.color(token: token)))
+                            .frame(width: 24, height: 24)
+                            .overlay(Circle().stroke(Color.primary.opacity(inkTool != nil && tools.paints[tool]?.color == token ? 0.8 : 0), lineWidth: 2).padding(-3))
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(inkTool == nil ? 0.3 : 1)
+                    .accessibilityIdentifier("color.slot\(slot)")
+                    .accessibilityLabel(token)
                 }
-                .buttonStyle(.plain)
-                .opacity(inkTool == nil ? 0.3 : 1)
-                .accessibilityIdentifier("color.slot\(slot)")
-                .accessibilityLabel(token)
             }
         }
         .padding(.horizontal, 12)

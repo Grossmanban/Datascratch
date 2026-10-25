@@ -498,8 +498,8 @@
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Tokens.generated.swift": {
-    "mtime": 1792928295.1393244,
-    "seen": 1792928465.1896384,
+    "mtime": 1792928541.8713188,
+    "seen": 1792928607.504163,
     "ast_hash": "cd6d4a1a0ad142c7903969b4e8fd35d5",
     "semantic_hash": ""
   },
@@ -522,15 +522,15 @@
     "semantic_hash": ""
   },
   "packages/design-tokens/generated/index.d.ts": {
-    "mtime": 1792928295.1393244,
-    "seen": 1792928465.189666,
+    "mtime": 1792928541.8713188,
+    "seen": 1792928607.5041716,
     "ast_hash": "3011e6cec1b1320aacd85af37531285b",
     "semantic_hash": ""
   },
   "packages/design-tokens/generated/index.js": {
-    "mtime": 1792928295.1393244,
-    "seen": 1792928465.1896694,
-    "ast_hash": "5c439d11248d77bec92cbe593f496327",
+    "mtime": 1792928541.8713188,
+    "seen": 1792928607.5041735,
+    "ast_hash": "7195ac0792b74b424723d22ecf2f2dfa",
     "semantic_hash": ""
   },
   "packages/design-tokens/package.json": {
@@ -576,9 +576,9 @@
     "semantic_hash": ""
   },
   "packages/ui/package.json": {
-    "mtime": 1792927888.3872557,
-    "seen": 1792928465.1896913,
-    "ast_hash": "184a2b4b717726771267ded132dfcb1f",
+    "mtime": 1792928530.239319,
+    "seen": 1792928607.5041893,
+    "ast_hash": "ec3b21e8d98a54b7e6ecec2025423358",
     "semantic_hash": ""
   },
   "packages/ui/src/components/Avatar.tsx": {
@@ -630,9 +630,9 @@
     "semantic_hash": ""
   },
   "packages/ui/src/components/DateChip.tsx": {
-    "mtime": 1792928326.411499,
-    "seen": 1792928465.1897268,
-    "ast_hash": "1e3454f667d37d44a2cb2fd1dd21036f",
+    "mtime": 1792928541.8989565,
+    "seen": 1792928607.5042062,
+    "ast_hash": "271d68cf293be7a0ec5d352d0ae7f7d6",
     "semantic_hash": ""
   },
   "packages/ui/src/components/DatePicker.tsx": {
@@ -786,9 +786,9 @@
     "semantic_hash": ""
   },
   "packages/ui/src/stories/Overview.stories.tsx": {
-    "mtime": 1792928428.6332896,
-    "seen": 1792928465.1898212,
-    "ast_hash": "0457a527d06972b93b2f2ec3cc80a8a0",
+    "mtime": 1792928541.8994546,
+    "seen": 1792928607.5042849,
+    "ast_hash": "d3e2a7d58bda80ec9fe50760e0310ef7",
     "semantic_hash": ""
   },
   "packages/ui/test/components.test.tsx": {

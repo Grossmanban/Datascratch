@@ -11,7 +11,10 @@ export const Provider: GlobalProvider = ({ children, globalState }) => {
   }, [globalState.theme]);
   return (
     <UIProvider>
-      <div className="min-h-screen bg-canvas p-8 font-text text-body text-fg">{children}</div>
+      {/* Inline styles: Tailwind only scans src/, not .ladle/. */}
+      <div style={{ minHeight: "100vh", padding: 32, background: "var(--ds-bg-canvas)", color: "var(--ds-text-primary)", fontSize: 17 }}>
+        {children}
+      </div>
     </UIProvider>
   );
 };

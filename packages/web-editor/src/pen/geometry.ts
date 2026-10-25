@@ -402,3 +402,29 @@ export function expandToWords(text: string, from: number, to: number): [number, 
   if (b < text.length && text[b] === " " && (a === 0 || text[a - 1] === " ")) b++;
   return [a, b];
 }
+
+/** strokes.md §4: a stroke with any point farther than this from text is a free drawing. */
+export const FREE_DRAWING_DISTANCE_EM = 3;
+
+/**
+ * Largest vertical distance (in em of the nearest line's font) from a point of the stroke to the
+ * nearest line with characters; Infinity without lines.
+ */
+export function maxDistanceToTextEm(points: readonly { y: number }[], lines: readonly Line[]): number {
+  if (!lines.length) return Infinity;
+  let worst = 0;
+  for (const p of points) {
+    let best = Infinity;
+    for (const l of lines) {
+      const d = intervalDistance(p.y, l.top, l.bottom) / (l.glyphs[0]?.fontSize ?? 17);
+      if (d < best) best = d;
+    }
+    if (best > worst) worst = best;
+  }
+  return worst;
+}
+
+/** Whether the whole stroke must be saved as a free drawing (`anchorKind: "block"`). */
+export function isFreeDrawing(points: readonly { y: number }[], lines: readonly Line[]): boolean {
+  return maxDistanceToTextEm(points, lines) > FREE_DRAWING_DISTANCE_EM;
+}

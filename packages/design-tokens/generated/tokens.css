@@ -75,6 +75,7 @@
   --ds-text-primary: #1D1C1A;
   --ds-text-secondary: #6B6862;
   --ds-text-tertiary: #9C978E;
+  --ds-text-on-accent: #FFFFFF;
   --ds-line-separator: #E6E1D8;
   --ds-accent: #2E5BDB;
   --ds-danger: #D2453B;
@@ -133,6 +134,7 @@
   --ds-text-primary: #ECE9E3;
   --ds-text-secondary: #A19D95;
   --ds-text-tertiary: #77736C;
+  --ds-text-on-accent: #1A1917;
   --ds-line-separator: #34322E;
   --ds-accent: #7B9BFF;
   --ds-danger: #FF6B5E;
@@ -192,6 +194,7 @@
     --ds-text-primary: #ECE9E3;
     --ds-text-secondary: #A19D95;
     --ds-text-tertiary: #77736C;
+    --ds-text-on-accent: #1A1917;
     --ds-line-separator: #34322E;
     --ds-accent: #7B9BFF;
     --ds-danger: #FF6B5E;

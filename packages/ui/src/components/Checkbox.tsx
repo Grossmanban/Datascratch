@@ -134,7 +134,7 @@ export const TaskCheckbox = forwardRef<HTMLButtonElement, TaskCheckboxProps>(fun
         ) : (
           <motion.path
             d="M6 10.3 8.7 13 14 7.3"
-            stroke="var(--ui-on-accent)"
+            stroke="var(--ds-text-on-accent)"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"

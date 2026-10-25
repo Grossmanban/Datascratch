@@ -195,6 +195,7 @@ public struct UpdateItem: Hashable, Sendable {
 }
 
 public enum SyncErrorCode: String, Codable, Sendable {
+    case badRequest = "bad_request"
     case unauthorized, forbidden, docNotFound = "doc_not_found", payloadTooLarge = "payload_too_large"
     case rateLimited = "rate_limited", protocolMismatch = "protocol_mismatch", `internal`
 }

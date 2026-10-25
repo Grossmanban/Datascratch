@@ -7,8 +7,10 @@ struct DemoView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
+                // The editor keeps its size when the keyboard appears and insets its own scrolling:
+                // resizing it during a tap into the text crashed UIKit.
                 EditorRepresentable(editor: model.editor)
-                    .ignoresSafeArea(.container, edges: .bottom)
+                    .ignoresSafeArea(.all, edges: .bottom)
                     .accessibilityIdentifier("editor")
                 ToolPalette(model: model)
                     .padding(.bottom, 12)

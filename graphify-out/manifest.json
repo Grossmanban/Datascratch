@@ -2862,9 +2862,9 @@
     "semantic_hash": "1fafa46b19b644ede18952afb85c6843"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1792936143.1909037,
-    "seen": 1792936159.4116504,
-    "ast_hash": "997d2db3039aa4858ffbcf7ea702b401",
+    "mtime": 1792937041.0535784,
+    "seen": 1792937060.6515183,
+    "ast_hash": "da84d2604e7937c0fda8e05dccc6aeca",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormulaViews.swift": {

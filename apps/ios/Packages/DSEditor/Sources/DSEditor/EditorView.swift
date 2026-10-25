@@ -78,7 +78,8 @@ public final class EditorView: UIView {
     private var pendingShortcut: (offset: Int, char: String)?
     private var lastContainerWidth: CGFloat = 0
     private var lastContentHeight: CGFloat = 0
-    private var inkInput: InkInputRecognizer!
+    private(set) var inkInput: InkInputRecognizer!
+    private var toolsChangePending = false
     private var editMenu: UIEditMenuInteraction!
     private var lassoTextRange: Range<Int>?
 
@@ -151,13 +152,19 @@ public final class EditorView: UIView {
         }
         inkInput.onEstimatedUpdate = { [weak self] s in self?.ink.penEstimatedUpdate(s) }
         inkInput.delegate = self
+        // No touch delays (UIGestureRecognizer delays ended touches by default): the editor's
+        // recognizers must not hold events that other views are still dispatching.
+        inkInput.delaysTouchesBegan = false
+        inkInput.delaysTouchesEnded = false
         textView.addGestureRecognizer(inkInput)
 
         let hover = UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:)))
+        hover.delaysTouchesEnded = false
         textView.addGestureRecognizer(hover)
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
         tap.delegate = self
+        tap.delaysTouchesBegan = false
         tap.delaysTouchesEnded = false
         textView.addGestureRecognizer(tap)
 
@@ -169,8 +176,16 @@ public final class EditorView: UIView {
         // Tool changes usually come from a button whose touch UIKit is still dispatching; reacting
         // synchronously (gesture recognizer changes, SwiftUI updates) made the gesture environment
         // throw. Apply them on the next run loop turn.
+        // This makes `tools` safe to change from anywhere, including a touch or key handler that
+        // UIKit is still dispatching. Several changes in one turn are applied once.
         tools.onChange = { [weak self] in
-            DispatchQueue.main.async { self?.toolsChanged() }
+            guard let self, !self.toolsChangePending else { return }
+            self.toolsChangePending = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.toolsChangePending = false
+                self.toolsChanged()
+            }
         }
         toolsChanged()
         factory.onTableCellEdit = { [weak self] table, row, column, text in

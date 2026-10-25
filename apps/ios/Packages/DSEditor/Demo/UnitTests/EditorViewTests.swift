@@ -228,6 +228,26 @@ final class EditorViewTests: XCTestCase {
         XCTAssertNil(header.superview)
     }
 
+    func testToolChangesNeverReconfigureRecognizersDuringDispatch() {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello")]))
+        let pan = editor.textView.panGestureRecognizer
+        for g in [editor.inkInput!] + (editor.textView.gestureRecognizers ?? []).filter({ $0.delegate === editor }) {
+            XCTAssertFalse(g.delaysTouchesBegan, "\(type(of: g)) must not delay touches")
+            XCTAssertFalse(g.delaysTouchesEnded, "\(type(of: g)) must not delay touches")
+        }
+        XCTAssertEqual(pan.minimumNumberOfTouches, 1)
+        // As if called from a button's or the pen's touch handler: nothing changes synchronously.
+        editor.tools.allowsFingerDrawing = true
+        editor.tools.mode = .marker
+        editor.tools.mode = .pen
+        XCTAssertEqual(pan.minimumNumberOfTouches, 1, "recognizers are reconfigured only after the event")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertEqual(pan.minimumNumberOfTouches, 2, "finger drawing: scrolling with two fingers")
+        editor.tools.mode = .text
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertEqual(pan.minimumNumberOfTouches, 1)
+    }
+
     func testOpenLargeNote() {
         let doc = SampleDocument.large()
         let start = CACurrentMediaTime()

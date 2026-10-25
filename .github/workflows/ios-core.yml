@@ -1,0 +1,103 @@
+name: ios-core
+
+# DSCore (apps/ios/Packages/DSCore): yrs-ffi (Rust/UniFFI) → xcframework → Swift package
+# tests on an iPad simulator (iOS 26), plus Yrs ↔ Yjs compatibility checks.
+
+on:
+  push:
+    branches: [main, claude/ios-core]
+    paths:
+      - apps/ios/Packages/DSCore/**
+      - packages/test-vectors/**
+      - .github/workflows/ios-core.yml
+  pull_request:
+    paths:
+      - apps/ios/Packages/DSCore/**
+      - packages/test-vectors/**
+      - .github/workflows/ios-core.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ios-core-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/ios/Packages/DSCore
+
+jobs:
+  rust:
+    name: yrs-ffi (Rust tests, Yjs compatibility)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/ios/Packages/DSCore/yrs-ffi
+      - name: cargo test
+        working-directory: apps/ios/Packages/DSCore/yrs-ffi
+        run: cargo test --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Yjs reads documents written by yrs-ffi
+        working-directory: apps/ios/Packages/DSCore/yrs-ffi/compat
+        run: npm ci --no-audit --no-fund && node verify.mjs
+      - name: Generated Swift bindings are up to date
+        run: |
+          ./scripts/generate-bindings.sh
+          git diff --exit-code -- Sources/YrsFFI Sources/yrs_ffiFFI
+
+  ios:
+    name: DSCore tests (iPad simulator, iOS 26)
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1); fi
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+          xcrun simctl list runtimes
+      - name: Rust targets
+        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios aarch64-apple-darwin x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/ios/Packages/DSCore/yrs-ffi
+      - name: Build yrs_ffiFFI.xcframework
+        run: ./scripts/build-xcframework.sh
+      - name: Pick an iPad simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)["devices"]
+          runtimes = sorted((r for r in data if "iOS-26" in r), reverse=True)
+          for r in runtimes:
+              for d in data[r]:
+                  if d["name"].startswith("iPad"):
+                      print(d["udid"]); sys.exit(0)
+          sys.exit("no iPad simulator with iOS 26")
+          ')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices | grep "$UDID"
+      - name: xcodebuild test
+        run: |
+          xcodebuild -list
+          set -o pipefail
+          xcodebuild test \
+            -scheme DSCore \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee xcodebuild.log | grep -E "error:|warning:|Test Suite|Test Case|✔|✘|passed|failed|\*\* " || true
+          grep -q "\*\* TEST SUCCEEDED \*\*" xcodebuild.log
+      - name: Upload xcodebuild log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: apps/ios/Packages/DSCore/xcodebuild.log

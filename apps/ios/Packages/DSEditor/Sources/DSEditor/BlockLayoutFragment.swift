@@ -153,7 +153,8 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
             ctx.addPath(check.cgPath)
             ctx.strokePath()
         } else {
-            ctx.setStrokeColor(d.markerColor.cgColor)
+            // Like `DSTaskCheckbox`: tertiary at 55 %, 1.5 pt.
+            ctx.setStrokeColor(DSColorToken.textTertiary.value.uiColor.withAlphaComponent(0.55).cgColor)
             ctx.setLineWidth(1.5)
             ctx.addPath(path.cgPath)
             ctx.strokePath()

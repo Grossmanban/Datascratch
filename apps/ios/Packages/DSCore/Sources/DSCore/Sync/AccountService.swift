@@ -72,6 +72,22 @@ public actor AccountService {
         try await api.changePassword(currentLoginKey: current.loginKey, material: material)
     }
 
+    /// Replaces the recovery key (confirmed by the current password) and returns the new key text
+    /// to show once. `settings.recoveryKeyConfirmed` goes back to `false` until the user confirms
+    /// they saved it.
+    public func rotateRecoveryKey(email: String, currentPassword: String, account: AccountDocument) async throws -> String {
+        guard let session = await api.currentSession, let master = try keys.masterKey() else { throw AccountError.notSignedIn }
+        let pre = try await api.prelogin(email: email)
+        let current = try await Task.detached { try DSCrypto.deriveKeys(password: currentPassword, salt: pre.salt.data, params: pre.kdf) }.value
+        let rotation = try RecoveryKeyRotation.make(masterKey: master, currentLoginKey: current.loginKey, userId: session.userId)
+        try await api.rotateRecoveryKey(rotation.body)
+        try account.setRecoveryKeyConfirmed(false)
+        return rotation.recoveryKeyText
+    }
+
+    /// Account security log (password changes, recoveries, recovery key rotations), newest first.
+    public func securityEvents() async throws -> [SecurityEvent] { try await api.securityEvents() }
+
     /// Signs out and forgets all keys on this device.
     public func logout() async throws {
         try await api.logout()

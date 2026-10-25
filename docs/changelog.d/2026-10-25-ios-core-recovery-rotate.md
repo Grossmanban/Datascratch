@@ -1,0 +1,1 @@
+- 2026-10-25 (ios-core) — DSCore: ротация ключа восстановления (`AccountService.rotateRecoveryKey`, `POST /v1/auth/recovery-key`, сброс `settings.recoveryKeyConfirmed`), журнал безопасности (`securityEvents`, `GET /v1/me/security-events`); проходят векторы `crypto/recovery-rotate.json` и новые случаи `api/bodies.json`.

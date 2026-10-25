@@ -153,6 +153,37 @@ final class EditorViewTests: XCTestCase {
         XCTAssertTrue(editor.textView.textStorage.string.contains("Hello brave \nnew world"))
     }
 
+    func testTypingThroughTextViewReachesDocument() {
+        let p = BlockNode.paragraph("Hello")
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), p])
+        let editor = host(doc)
+        editor.tools.mode = .text
+        window.makeKeyAndVisible()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        let end = editor.projection.offset(block: p.id, offset: 5)!
+        editor.textView.selectedRange = NSRange(location: end, length: 0)
+        editor.textView.insertText(" world")
+        XCTAssertEqual(doc.flatText(of: p.id), "Hello world")
+        editor.textView.insertText("\n")
+        XCTAssertEqual(doc.blocks.count, 3, "Return splits the paragraph in the document")
+        editor.undo()
+        XCTAssertEqual(doc.blocks.count, 2)
+    }
+
+    func testPenRequestsProMotionOnlyWhileDrawing() {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello")]))
+        editor.tools.mode = .pen
+        XCTAssertFalse(editor.ink.frameRate.isActive, "idle editor does not hold 120 Hz")
+        let sample = PenSample(location: CGPoint(x: 40, y: 80), pressure: 0.5, altitude: 1, azimuth: 0, roll: 0,
+                               timestamp: CACurrentMediaTime(), estimationIndex: nil)
+        editor.ink.penBegan(sample)
+        XCTAssertTrue(editor.ink.frameRate.isActive)
+        XCTAssertEqual(FrameRateBoost.drawingRange.preferred, 120)
+        XCTAssertEqual(FrameRateBoost.drawingRange.minimum, 80)
+        editor.ink.penEnded(cancelled: true)
+        XCTAssertFalse(editor.ink.frameRate.isActive)
+    }
+
     func testOpenLargeNote() {
         let doc = SampleDocument.large()
         let start = CACurrentMediaTime()

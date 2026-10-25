@@ -111,18 +111,18 @@ public final class EditorView: UIView {
         }
         inkInput.onBegan = { [weak self] s in
             guard let self else { return }
-            // Palm rejection: a resting hand must not scroll the page while the pen draws.
-            self.textView.panGestureRecognizer.isEnabled = false
+            // Palm rejection comes from the recognizer itself: it begins on touch down and
+            // prevents the scroll recognizer for that touch, so a resting hand does not draw.
             self.ink.penBegan(s)
         }
         inkInput.onMoved = { [weak self] c, p in self?.ink.penMoved(c, predicted: p) }
         inkInput.onEnded = { [weak self] cancelled in
             guard let self else { return }
             self.ink.penEnded(cancelled: cancelled)
-            self.textView.panGestureRecognizer.isEnabled = true
             self.onStateChange?()
         }
         inkInput.onEstimatedUpdate = { [weak self] s in self?.ink.penEstimatedUpdate(s) }
+        inkInput.delegate = self
         textView.addGestureRecognizer(inkInput)
 
         let hover = UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:)))
@@ -130,6 +130,7 @@ public final class EditorView: UIView {
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
         tap.delegate = self
+        tap.delaysTouchesEnded = false
         textView.addGestureRecognizer(tap)
 
         textView.addInteraction(UIScribbleInteraction(delegate: self))
@@ -137,7 +138,12 @@ public final class EditorView: UIView {
         editMenu = UIEditMenuInteraction(delegate: self)
         textView.addInteraction(editMenu)
 
-        tools.onChange = { [weak self] in self?.toolsChanged() }
+        // Tool changes usually come from a button whose touch UIKit is still dispatching; reacting
+        // synchronously (gesture recognizer changes, SwiftUI updates) made the gesture environment
+        // throw. Apply them on the next run loop turn.
+        tools.onChange = { [weak self] in
+            DispatchQueue.main.async { self?.toolsChanged() }
+        }
         toolsChanged()
         factory.onTableCellEdit = { [weak self] table, row, column, text in
             self?.commands.setTableCell(table, row: row, column: column, text: text)
@@ -487,18 +493,11 @@ public final class EditorView: UIView {
     // MARK: - Tools
 
     private func toolsChanged() {
-        let capturing = tools.mode.capturesPen
-        let pan = textView.panGestureRecognizer
-        if capturing {
-            pan.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue),
-                                     NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)]
-            pan.minimumNumberOfTouches = tools.allowsFingerDrawing ? 2 : 1
-        } else {
-            pan.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue),
-                                     NSNumber(value: UITouch.TouchType.pencil.rawValue),
-                                     NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)]
-            pan.minimumNumberOfTouches = 1
-        }
+        // The pen recognizer wins pen touches by itself (it begins on touch down and prevents
+        // scrolling), so the scroll recognizer's touch types are left alone: changing them while a
+        // tool button's touch is being dispatched made UIKit's gesture environment throw.
+        // Finger drawing (D-06) only changes how many fingers scroll, applied after this event.
+        textView.panGestureRecognizer.minimumNumberOfTouches = tools.mode.capturesPen && tools.allowsFingerDrawing ? 2 : 1
         if tools.mode != .lasso { ink.clearSelection() }
         hoverLayer.path = nil
         onStateChange?()
@@ -699,6 +698,13 @@ extension EditorView: UIGestureRecognizerDelegate {
 
     public func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         false
+    }
+
+    /// Touches the pen does not draw with never reach its recognizer, so selection and scrolling
+    /// get them untouched.
+    public func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        if g === inkInput { return inkInput.shouldTrack(touch) }
+        return true
     }
 }
 

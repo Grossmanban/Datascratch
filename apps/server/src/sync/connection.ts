@@ -40,6 +40,9 @@ const HELLO_TIMEOUT_MS = 10_000;
 const FAST_PATH_BATCH = 200;
 const FAST_PATH_MAX_UPDATES = 100;
 const MAX_BUFFERED_BYTES = 64 * 1024 * 1024;
+/** Catch-up pauses while this much is still queued on the socket (backpressure). */
+const CATCHUP_HIGH_WATER = 4 * 1024 * 1024;
+const CATCHUP_STALL_MS = 120_000;
 
 class SyncError extends Error {
   constructor(
@@ -121,6 +124,18 @@ export class SyncConnection {
       return;
     }
     this.socket.send(JSON.stringify(msg));
+  }
+
+  /** Wait until the client has read most of what was sent (catch-up backpressure). */
+  async #drained() {
+    const start = Date.now();
+    while (!this.#closed && this.socket.bufferedAmount > CATCHUP_HIGH_WATER) {
+      if (Date.now() - start > CATCHUP_STALL_MS) {
+        this.close(CloseCode.goingAway, 'client too slow');
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 5));
+    }
   }
 
   #fail(code: SyncErrorCode, message: string, closeCode: number) {
@@ -287,7 +302,7 @@ export class SyncConnection {
   async #subscribe(list: { docId: string; since: number }[]) {
     const db = this.ctx.database.db;
     const rows = await loadDocs(db, [...new Set(list.map((d) => d.docId))]);
-    type Item = { docId: string; since: number; sub: Subscription; lastSeq: number };
+    type Item = { docId: string; since: number; sub: Subscription; lastSeq: number; snapshotSeq: number };
     const fast: Item[] = [];
     const slow: Item[] = [];
     for (const { docId, since } of list) {
@@ -301,37 +316,51 @@ export class SyncConnection {
       this.#access.set(docId, a.write);
       // A client ahead of the server (e.g. restored from another backup) starts over.
       const from = since > row.lastSeq ? 0 : since;
-      const item = { docId, since: from, sub: this.#newSub(docId, from), lastSeq: row.lastSeq };
-      // Fast path: every update after `from` is still stored (no newer snapshot) and there are few.
+      const item = { docId, since: from, sub: this.#newSub(docId, from), lastSeq: row.lastSeq, snapshotSeq: 0 };
+      // Fast path: either every update after `from` is still stored (no newer snapshot) and
+      // there are few, or the newest snapshot plus a short tail after it.
       if (from >= row.snapshotSeq && row.lastSeq - from <= FAST_PATH_MAX_UPDATES) fast.push(item);
-      else slow.push(item);
+      else if (from < row.snapshotSeq && row.lastSeq - row.snapshotSeq <= FAST_PATH_MAX_UPDATES) {
+        fast.push({ ...item, snapshotSeq: row.snapshotSeq });
+      } else slow.push(item);
     }
 
     for (let i = 0; i < fast.length; i += FAST_PATH_BATCH) {
       if (this.#closed) return;
       const batch = fast.slice(i, i + FAST_PATH_BATCH);
-      const toFetch = batch.filter((b) => b.lastSeq > b.since);
+      const withSnap = batch.filter((b) => b.snapshotSeq > 0);
+      const snaps = await this.ctx.documents.latestSnapshots(
+        db,
+        withSnap.map((b) => b.docId),
+      );
+      // Updates are read after the snapshot (if any) or after `since`.
+      const base = (b: Item) => (b.snapshotSeq > 0 ? (snaps.get(b.docId)?.seq ?? b.since) : b.since);
+      const toFetch = batch.filter((b) => b.lastSeq > base(b)).map((b) => ({ docId: b.docId, since: base(b) }));
       const found = await this.ctx.documents.updatesForMany(db, toFetch);
       for (const b of batch) {
         if (this.#closed) return;
         if (this.#subs.get(b.docId) !== b.sub) continue;
+        const snap = b.snapshotSeq > 0 ? (snaps.get(b.docId) ?? null) : null;
+        const from = base(b);
         const items = found.get(b.docId) ?? [];
-        // Compacted in the meantime: fall back to the general path.
-        if (b.lastSeq > b.since && items[0]?.seq !== b.since + 1) {
+        // Snapshot missing or updates compacted in the meantime: fall back to the general path.
+        if ((b.snapshotSeq > 0 && !snap) || (b.lastSeq > from && items[0]?.seq !== from + 1)) {
           slow.push(b);
           continue;
         }
+        if (snap) b.sub.sent = snap.seq;
         const last = items[items.length - 1];
         if (last) b.sub.sent = last.seq;
         this.#send({
           type: 'updates',
           docId: b.docId,
-          snapshot: null,
+          snapshot: snap ? { seq: snap.seq, payload: toB64(snap.payload) } : null,
           items: items.map((x) => ({ seq: x.seq, payload: toB64(x.payload), deviceId: x.deviceId })),
           upToDate: true,
         });
         this.#goLive(b.docId, b.sub);
       }
+      await this.#drained();
     }
 
     for (const { docId, since, sub } of slow) {
@@ -350,6 +379,7 @@ export class SyncConnection {
             items: page.items.map((x) => ({ seq: x.seq, payload: toB64(x.payload), deviceId: x.deviceId })),
             upToDate: page.upToDate,
           });
+          await this.#drained();
         }
       } catch (err) {
         this.#unsubscribe(docId);

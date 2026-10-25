@@ -252,3 +252,25 @@ describe("store", () => {
     ).toThrow(/blockId/);
   });
 });
+
+describe("undo across replicas", () => {
+  it("rebaseRedoneStrokes makes restored anchors visible on other devices", async () => {
+    const { rebaseRedoneStrokes } = await import("../src/index.js");
+    const { doc, text } = noteWithText("hello world");
+    const undo = new Y.UndoManager(noteRoots(doc).content, { captureTimeout: 0 });
+    const anchors = [encodeAnchor(text, 6), encodeAnchor(text, 7)];
+    putStroke(doc, "s", base(anchors, [pt(0, 0), pt(1, 0)]));
+    text.delete(6, 5);
+    undo.undo();
+    const remote = new Y.Doc();
+    Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
+    // Without rebasing the remote replica cannot see the restored characters.
+    expect(findOrphanedStrokes(remote)).toEqual(["s"]);
+    expect(rebaseRedoneStrokes(doc)).toEqual(["s"]);
+    Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
+    expect(findOrphanedStrokes(remote)).toEqual([]);
+    const r = resolveAnchor(remote, getStroke(remote, "s")!.anchors[0]!)!;
+    expect(r.text.toString().charAt(r.index)).toBe("w");
+    expect(rebaseRedoneStrokes(doc)).toEqual([]);
+  });
+});

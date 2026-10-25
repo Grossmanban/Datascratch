@@ -9,7 +9,7 @@ import {
   STROKE_TOOLS,
   type Stroke,
 } from "../contracts/strokes.js";
-import { allAnchorsDeleted, resolveAnchors } from "./anchors.js";
+import { allAnchorsDeleted, rebaseRedoneAnchors, resolveAnchors } from "./anchors.js";
 import { pointCount } from "./codec.js";
 
 export function strokesMap(doc: Y.Doc): Y.Map<unknown> {
@@ -167,4 +167,26 @@ export function purgeStrokes(doc: Y.Doc, strokeIds: readonly string[]): void {
   doc.transact(() => {
     for (const id of strokeIds) deleteStroke(doc, id);
   });
+}
+
+/**
+ * Rewrite the anchors of text strokes whose characters were restored by undo
+ * in this replica (see rebaseRedoneAnchors). Call after UndoManager undo/redo.
+ * Returns the ids of rewritten strokes.
+ */
+export function rebaseRedoneStrokes(doc: Y.Doc): string[] {
+  const changed: string[] = [];
+  doc.transact(() => {
+    strokesMap(doc).forEach((value, id) => {
+      if (!(value instanceof Y.Map) || value.get("anchorKind") !== "text") return;
+      const stroke = readStroke(value);
+      if (!stroke) return;
+      const next = rebaseRedoneAnchors(doc, stroke.anchors);
+      if (next) {
+        value.set("anchors", next);
+        changed.push(id);
+      }
+    });
+  });
+  return changed;
 }

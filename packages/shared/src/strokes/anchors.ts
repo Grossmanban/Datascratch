@@ -72,3 +72,32 @@ export function resolveAnchors(
 export function allAnchorsDeleted(resolved: readonly (ResolvedAnchor | null)[]): boolean {
   return resolved.every((r) => r === null || r.deleted);
 }
+
+/**
+ * After an undo restores deleted text, Yjs links the old characters to the
+ * restored ones (`redone`) only in this replica's memory. Re-encode such
+ * anchors to the restored characters so every device sees the stroke again.
+ * Returns the new anchor list, or null when nothing changed.
+ */
+export function rebaseRedoneAnchors(
+  doc: Y.Doc,
+  anchors: readonly Uint8Array[],
+): Uint8Array[] | null {
+  let changed = false;
+  const out = anchors.map((encoded) => {
+    let rpos: Y.RelativePosition;
+    try {
+      rpos = Y.decodeRelativePosition(encoded);
+    } catch {
+      return encoded;
+    }
+    if (!rpos.item || Y.getState(doc.store, rpos.item.client) <= rpos.item.clock) return encoded;
+    const original = Y.getItem(doc.store, rpos.item);
+    if (!(original instanceof Y.Item) || original.redone === null) return encoded;
+    const resolved = resolveAnchor(doc, encoded);
+    if (!resolved || resolved.deleted) return encoded;
+    changed = true;
+    return encodeAnchor(resolved.text, resolved.index);
+  });
+  return changed ? out : null;
+}

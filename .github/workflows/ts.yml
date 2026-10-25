@@ -52,5 +52,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Format (packages that adopted the root Prettier config)
         run: pnpm format:check
-      - name: Build, typecheck, lint, test
-        run: pnpm turbo run build typecheck lint test --continue
+      - name: Build, typecheck, lint
+        run: pnpm turbo run build typecheck lint --continue
+      # Test suites run two packages at a time: jsdom/TipTap and Argon2id suites
+      # time out when every package's tests compete for the runner's CPUs.
+      - name: Test
+        run: pnpm turbo run test --continue --concurrency=2

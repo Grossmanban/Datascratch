@@ -185,7 +185,7 @@ final class LibraryStore {
 
     @discardableResult
     func createSpace(name: String, icon: String = "square.stack", color: Tint = .blue) -> Space {
-        let space = Space(id: ID.make(), name: name, icon: icon, color: color,
+        let space = Space(id: UUIDv7.make(), name: name, icon: icon, color: color,
                           order: (data.spaces.map(\.order).max() ?? 0) + 1, createdAt: now())
         mutate {
             $0.spaces.append(space)
@@ -220,7 +220,7 @@ final class LibraryStore {
     @discardableResult
     func createNotebook(in spaceId: String, name: String, icon: String = "book.closed",
                         color: Tint = .blue, mode: NotebookMode) -> Notebook {
-        let notebook = Notebook(id: ID.make(), spaceId: spaceId, name: name, icon: icon, color: color,
+        let notebook = Notebook(id: UUIDv7.make(), spaceId: spaceId, name: name, icon: icon, color: color,
                                 order: (data.notebooks.map(\.order).max() ?? 0) + 1,
                                 mode: mode, createdAt: now())
         mutate {
@@ -262,7 +262,7 @@ final class LibraryStore {
     @discardableResult
     func createFolder(in notebookId: String, parent: String?, name: String,
                       icon: String = "folder", color: Tint = .gray) -> Folder {
-        let folder = Folder(id: ID.make(), notebookId: notebookId, parentId: parent, name: name,
+        let folder = Folder(id: UUIDv7.make(), notebookId: notebookId, parentId: parent, name: name,
                             icon: icon, color: color,
                             order: (folders(in: notebookId, parent: parent).map(\.order).max() ?? 0) + 1,
                             createdAt: now())
@@ -298,7 +298,7 @@ final class LibraryStore {
                     kind: NoteKind = .note, dailyDate: String? = nil,
                     body: NoteBody = .empty, cover: Backdrop? = nil) -> NoteMeta {
         let date = now()
-        var meta = NoteMeta(id: ID.make(date: date), notebookId: notebookId, folderId: folder,
+        var meta = NoteMeta(id: UUIDv7.make(date: date), notebookId: notebookId, folderId: folder,
                             parentNoteId: nil, title: title, kind: kind, dailyDate: dailyDate,
                             tags: [], icon: nil, cover: cover, backdrop: .none, style: NoteStyle(),
                             snippet: "", createdAt: date, updatedAt: date, trashedAt: nil,
@@ -501,13 +501,13 @@ final class LibraryStore {
                                       icon: "book.closed", color: .blue, mode: .private)
         createSpace(name: String(localized: "Work"), icon: "briefcase", color: .orange)
         let body = NoteBody(blocks: [
-            NoteBlock(id: ID.make(), kind: .paragraph,
+            NoteBlock(id: UUIDv7.make(), kind: .paragraph,
                       text: String(localized: "Write with the keyboard, then mark it up with Apple Pencil — strokes stay attached to the words."),
                       task: nil),
-            NoteBlock(id: ID.make(), kind: .heading2, text: String(localized: "Try it"), task: nil),
+            NoteBlock(id: UUIDv7.make(), kind: .heading2, text: String(localized: "Try it"), task: nil),
             .task(String(localized: "Press ⌘K to open the command palette"), scheduled: DayKey.from(now())),
             .task(String(localized: "Create a notebook for work")),
-            NoteBlock(id: ID.make(), kind: .quote, text: String(localized: "Quiet paper, deep ink. #welcome"), task: nil),
+            NoteBlock(id: UUIDv7.make(), kind: .quote, text: String(localized: "Quiet paper, deep ink. #welcome"), task: nil),
         ])
         let welcome = createNote(in: notebook.id, title: String(localized: "Welcome to Datascratch"),
                                  body: body, cover: .dusk)

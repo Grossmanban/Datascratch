@@ -114,12 +114,12 @@ nonisolated struct NoteBlock: Codable, Identifiable, Hashable, Sendable {
     var task: TaskAttributes?
 
     static func paragraph(_ text: String = "") -> NoteBlock {
-        NoteBlock(id: ID.make(), kind: .paragraph, text: text, task: nil)
+        NoteBlock(id: UUIDv7.make(), kind: .paragraph, text: text, task: nil)
     }
 
     static func task(_ text: String, scheduled: String? = nil) -> NoteBlock {
-        NoteBlock(id: ID.make(), kind: .task, text: text,
-                  task: TaskAttributes(taskId: ID.make(), scheduled: scheduled))
+        NoteBlock(id: UUIDv7.make(), kind: .task, text: text,
+                  task: TaskAttributes(taskId: UUIDv7.make(), scheduled: scheduled))
     }
 }
 
@@ -231,13 +231,13 @@ nonisolated enum DayKey {
     }
 }
 
-nonisolated enum ID {
+nonisolated enum UUIDv7 {
     /// UUIDv7 in lowercase with dashes (contracts/document-model.md §1).
     static func make(date: Date = Date()) -> String {
-        uuidV7(date).uuidString.lowercased()
+        uuid(date).uuidString.lowercased()
     }
 
-    static func uuidV7(_ date: Date) -> UUID {
+    static func uuid(_ date: Date) -> UUID {
         var b = [UInt8](repeating: 0, count: 16)
         let ms = UInt64(max(0, date.timeIntervalSince1970 * 1000))
         for i in 0..<6 {

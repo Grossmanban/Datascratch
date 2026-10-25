@@ -82,7 +82,7 @@ final class LocalSharingService: SharingService {
     }
 
     func createLink(for target: ShareTarget, permission: SharePermission, expiresAt: Date?) async throws -> SharedLink {
-        let id = ID.make()
+        let id = UUIDv7.make()
         let key = Base64URL.encode(Data((0..<32).map { _ in UInt8.random(in: 0...255) }))
         var components = URLComponents()
         components.scheme = "https"

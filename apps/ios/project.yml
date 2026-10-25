@@ -48,7 +48,6 @@ targets:
           UIApplicationSupportsMultipleScenes: true
         UILaunchScreen:
           UIColorName: LaunchBackground
-        UIRequiresFullScreen: false
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UISupportedInterfaceOrientations~ipad:

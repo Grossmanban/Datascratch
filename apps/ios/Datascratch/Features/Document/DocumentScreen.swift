@@ -15,7 +15,7 @@ struct DocumentScreen: View {
 
     var body: some View {
         if let note = library.note(noteId) {
-            #if canImport(DSEditor) && canImport(DSEditorCore) && canImport(DSCore)
+            #if canImport(DSEditor) && canImport(DSEditorCore) && canImport(DSCore) && canImport(DSDesign)
             if !forceStandIn, app.core != nil {
                 NativeDocumentScreen(noteId: noteId)
             } else {

@@ -141,26 +141,22 @@ final class LibraryUITests: XCTestCase {
         }
     }
 
-    /// Finger drawing sits in «More» on iPhone and in the palette row on iPad.
+    /// Finger drawing sits in «More» in the compact palette and in the row when it is wide.
     private func toggleFingerDrawing(_ app: XCUIApplication) {
         let more = app.buttons["tool.more"].firstMatch
-        if more.exists {
-            more.tap()
-            let item = app.descendants(matching: .any)["tool.fingerDrawing"].firstMatch
-            if item.waitForExistence(timeout: 3) {
-                item.tap()
-            } else {
-                app.buttons["Draw with Finger"].firstMatch.tap()
-            }
-        } else {
-            app.buttons["tool.fingerDrawing"].firstMatch.tap()
+        if more.exists { more.tap() }
+        let finger = app.descendants(matching: .any)["tool.finger"].firstMatch
+        if finger.waitForExistence(timeout: 3) { finger.tap() }
+        // Close the popover.
+        if more.exists, app.descendants(matching: .any)["tool.finger"].firstMatch.exists {
+            app.descendants(matching: .any)["editor"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
         }
     }
 
+    /// The palette reports "editor N, mode X, finger on|off".
     private func fingerDrawingIsOff(_ app: XCUIApplication) -> Bool {
-        let more = app.buttons["tool.more"].firstMatch
-        if more.exists { return (more.value as? String)?.hasSuffix("Off") == true }
-        return app.buttons["tool.fingerDrawing"].firstMatch.value as? String == "Off"
+        let value = app.descendants(matching: .any)["penPalette"].firstMatch.value as? String
+        return value?.hasSuffix("finger off") == true
     }
 
     static func buttons(_ app: XCUIApplication) -> String {
@@ -263,7 +259,7 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(becomesSelected(pen), "Pen is not selected after one tap; \(paletteState(app))")
         settle(1)  // the keyboard finishes leaving
         let resting = palette.frame
-        for id in ["tool.pencil", "tool.marker", "tool.highlighter", "tool.strokeEraser", "tool.pen"] {
+        for id in ["tool.pencil", "tool.marker", "tool.highlighter", "tool.eraser", "tool.pen"] {
             let button = app.buttons[id].firstMatch
             XCTAssertTrue(button.isHittable, "\(id) is not hittable")
             button.tap()
@@ -276,18 +272,20 @@ final class LibraryUITests: XCTestCase {
     /// The tool switches on the next run-loop turn: wait for the palette to report it. The palette's
     /// accessibility value ("editor N, mode X") follows the editor's mode, not the highlight animation.
     private func becomesSelected(_ button: XCUIElement, timeout: TimeInterval = 4) -> Bool {
-        let mode = button.identifier.replacingOccurrences(of: "tool.", with: "")
+        var mode = button.identifier.replacingOccurrences(of: "tool.", with: "")
+        if mode == "eraser" { mode = "strokeEraser" }
         let palette = XCUIApplication().descendants(matching: .any)["penPalette"].firstMatch
+        let reports = { (palette.value as? String)?.contains("mode \(mode),") == true }
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if (palette.value as? String)?.hasSuffix("mode \(mode)") == true { return true }
+            if reports() { return true }
             settle(0.25)
         }
-        return (palette.value as? String)?.hasSuffix("mode \(mode)") == true
+        return reports()
     }
 
     private func paletteState(_ app: XCUIApplication) -> String {
-        ["tool.text", "tool.pen", "tool.pencil", "tool.marker", "tool.highlighter", "tool.strokeEraser"].map { id in
+        ["tool.text", "tool.pen", "tool.pencil", "tool.marker", "tool.highlighter", "tool.eraser"].map { id in
             let b = app.buttons[id].firstMatch
             return "\(id)=\(b.exists ? (b.isSelected ? "on" : "off") : "missing")"
         }.joined(separator: " ") + " keyboard=\(app.keyboards.firstMatch.exists)"

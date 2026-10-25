@@ -396,8 +396,9 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
     }
   }
   if (!contentH) contentH = Math.max(120, (box?.maxY ?? 0) - PAD + 12);
+  const top = Math.min(0, (box?.minY ?? 0) - 8);
   const bottom = Math.max(PAD * 2 + contentH, (box?.maxY ?? 0) + 8);
-  return paint(width, 0, bottom, scale, [
+  return paint(width, top, bottom, scale, [
     (c) => {
       if (item.kind !== "image") return;
       if (img) c.drawImage(img, PAD, PAD, COLUMN, contentH);

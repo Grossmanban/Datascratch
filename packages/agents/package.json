@@ -39,6 +39,7 @@
     "zod": "^4.2.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
     "@types/mdast": "^4.0.4",
     "@types/node": "^22",
     "@types/pngjs": "^6.0.5",

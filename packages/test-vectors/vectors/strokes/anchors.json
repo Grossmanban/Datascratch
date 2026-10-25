@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "description": "Relative-position anchors (Y.encodeRelativePosition, assoc 0) of characters in a Y.XmlText at content[0][0]. Apply `base`, then each step's update in order; resolve every anchor after each step. A deleted character resolves to {deleted: true} (D-35).",
+  "base": "AQMBAAcBB2NvbnRlbnQDCXBhcmFncmFwaAcAAQAGBAABARNUaGUgcXVpY2sgYnJvd24gZm94AA",
+  "textBefore": "The quick brown fox",
+  "anchorIndices": [
+    4,
+    5,
+    10,
+    14,
+    18
+  ],
+  "anchors": [
+    "AAEGAA",
+    "AAEHAA",
+    "AAEMAA",
+    "AAEQAA",
+    "AAEUAA"
+  ],
+  "steps": [
+    {
+      "description": "insert '>> ' at 0",
+      "update": "AQECAEQBAgM-PiAA",
+      "textAfter": ">> The quick brown fox",
+      "anchors": [
+        {
+          "deleted": false,
+          "index": 7
+        },
+        {
+          "deleted": false,
+          "index": 8
+        },
+        {
+          "deleted": false,
+          "index": 13
+        },
+        {
+          "deleted": false,
+          "index": 17
+        },
+        {
+          "deleted": false,
+          "index": 21
+        }
+      ]
+    },
+    {
+      "description": "delete 'quick ' (6 chars at 7)",
+      "update": "AAEBAQYG",
+      "textAfter": ">> The brown fox",
+      "anchors": [
+        {
+          "deleted": true
+        },
+        {
+          "deleted": true
+        },
+        {
+          "deleted": false,
+          "index": 7
+        },
+        {
+          "deleted": false,
+          "index": 11
+        },
+        {
+          "deleted": false,
+          "index": 15
+        }
+      ]
+    },
+    {
+      "description": "insert 'very ' at 7",
+      "update": "AQECA8QBCwEMBXZlcnkgAQEBBgY",
+      "textAfter": ">> The very brown fox",
+      "anchors": [
+        {
+          "deleted": true
+        },
+        {
+          "deleted": true
+        },
+        {
+          "deleted": false,
+          "index": 12
+        },
+        {
+          "deleted": false,
+          "index": 16
+        },
+        {
+          "deleted": false,
+          "index": 20
+        }
+      ]
+    },
+    {
+      "description": "delete everything",
+      "update": "AAICAQAIAQECEw",
+      "textAfter": "",
+      "anchors": [
+        {
+          "deleted": true
+        },
+        {
+          "deleted": true
+        },
+        {
+          "deleted": true
+        },
+        {
+          "deleted": true
+        },
+        {
+          "deleted": true
+        }
+      ]
+    }
+  ]
+}

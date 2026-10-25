@@ -31,9 +31,11 @@
 | `welcome` | `userId \| null`, `serverTime`, `protocol: 1` | Аутентификация успешна |
 | `updates` | `docId`, `snapshot: { seq, payload } \| null`, `items: [{ seq, payload, deviceId }]`, `upToDate: boolean` | Ответ на `subscribe` (может прийти несколькими частями; последняя — `upToDate: true`) |
 | `update` | `docId`, `seq`, `payload`, `deviceId` | Живое обновление от другого устройства |
-| `ack` | `docId`, `clientMsgId`, `seq` | Обновление/снимок принят и сохранён |
+| `ack` | `docId`, `clientMsgId`, `seq` | Обновление/снимок принят и сохранён (для снимка `seq` = его `baseSeq`) |
 | `awareness` | `docId`, `payload`, `deviceId` | |
 | `error` | `code`, `message`, `ref?` (clientMsgId/docId) | См. коды ниже |
+
+**Порядок (обязательно для сервера):** назначение `seq` и рассылка внутри одного документа сериализованы — подписчики получают обновления строго в порядке `seq`, и `ack` отправителю уходит не раньше, чем обновление записано. Клиент хранит `lastSeq = max(seq)` из `updates`/`update`/`ack`; при нарушении порядка обновление могло бы потеряться при обрыве. «Дыры» в `seq` допустимы.
 
 Сервер не присылает клиенту его собственные обновления (кроме как в `updates` при догоняющей подписке с другого устройства).
 

@@ -1,0 +1,257 @@
+{
+  "version": 1,
+  "description": "Sync protocol v1 frames (sync-protocol.md). Every `valid` message must parse; every `invalid` one must be rejected. Unknown extra fields are ignored by readers.",
+  "valid": {
+    "client": [
+      {
+        "type": "hello",
+        "protocol": 1,
+        "auth": {
+          "kind": "user",
+          "accessToken": "at-123"
+        },
+        "deviceId": "dev-1",
+        "client": {
+          "platform": "ios",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "type": "hello",
+        "protocol": 1,
+        "auth": {
+          "kind": "guest",
+          "shareId": "0192f3c4-0000-7000-8000-000000000005",
+          "guestToken": "gt-1"
+        },
+        "deviceId": "dev-2",
+        "client": {
+          "platform": "web",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "type": "subscribe",
+        "docs": [
+          {
+            "docId": "0192f3c4-0000-7000-8000-000000000001",
+            "since": 0
+          },
+          {
+            "docId": "0192f3c4-0000-7000-8000-000000000002",
+            "since": 42
+          }
+        ]
+      },
+      {
+        "type": "unsubscribe",
+        "docIds": [
+          "0192f3c4-0000-7000-8000-000000000001"
+        ]
+      },
+      {
+        "type": "push",
+        "docId": "0192f3c4-0000-7000-8000-000000000001",
+        "clientMsgId": "0192f3c4-0000-7000-8000-00000000001e",
+        "payload": "AQIDBA"
+      },
+      {
+        "type": "snapshot",
+        "docId": "0192f3c4-0000-7000-8000-000000000001",
+        "clientMsgId": "0192f3c4-0000-7000-8000-00000000001f",
+        "baseSeq": 42,
+        "payload": "AQIDBA"
+      },
+      {
+        "type": "awareness",
+        "docId": "0192f3c4-0000-7000-8000-000000000001",
+        "payload": "AQIDBA"
+      }
+    ],
+    "server": [
+      {
+        "type": "welcome",
+        "userId": "0192f3c4-0000-7000-8000-00000000000a",
+        "serverTime": "2026-10-25T12:00:00.000Z",
+        "protocol": 1
+      },
+      {
+        "type": "welcome",
+        "userId": null,
+        "serverTime": "2026-10-25T12:00:00.000Z",
+        "protocol": 1
+      },
+      {
+        "type": "updates",
+        "docId": "0192f3c4-0000-7000-8000-000000000001",
+        "snapshot": {
+          "seq": 40,
+          "payload": "AQIDBA"
+        },
+        "items": [
+          {
+            "seq": 41,
+            "payload": "AQIDBA",
+            "deviceId": "dev-1"
+          }
+        ],
+        "upToDate": false
+      },
+      {
+        "type": "updates",
+        "docId": "0192f3c4-0000-7000-8000-000000000001",
+        "snapshot": null,
+        "items": [],
+        "upToDate": true
+      },
+      {
+        "type": "update",
+        "docId": "0192f3c4-0000-7000-8000-000000000001",
+        "seq": 43,
+        "payload": "AQIDBA",
+        "deviceId": "dev-3"
+      },
+      {
+        "type": "ack",
+        "docId": "0192f3c4-0000-7000-8000-000000000001",
+        "clientMsgId": "0192f3c4-0000-7000-8000-00000000001e",
+        "seq": 44
+      },
+      {
+        "type": "awareness",
+        "docId": "0192f3c4-0000-7000-8000-000000000001",
+        "payload": "AQIDBA",
+        "deviceId": "dev-3"
+      },
+      {
+        "type": "error",
+        "code": "payload_too_large",
+        "message": "update exceeds 2 MiB",
+        "ref": "0192f3c4-0000-7000-8000-00000000001e"
+      },
+      {
+        "type": "error",
+        "code": "unauthorized",
+        "message": "token expired"
+      }
+    ]
+  },
+  "invalid": {
+    "client": [
+      {
+        "reason": "unknown type",
+        "message": {
+          "type": "bogus"
+        }
+      },
+      {
+        "reason": "wrong protocol",
+        "message": {
+          "type": "hello",
+          "protocol": 2,
+          "auth": {
+            "kind": "user",
+            "accessToken": "at-123"
+          },
+          "deviceId": "dev-1",
+          "client": {
+            "platform": "ios",
+            "version": "1.0.0"
+          }
+        }
+      },
+      {
+        "reason": "unknown platform",
+        "message": {
+          "type": "hello",
+          "protocol": 1,
+          "auth": {
+            "kind": "user",
+            "accessToken": "at-123"
+          },
+          "deviceId": "dev-1",
+          "client": {
+            "platform": "android",
+            "version": "1"
+          }
+        }
+      },
+      {
+        "reason": "payload is not base64url",
+        "message": {
+          "type": "push",
+          "docId": "0192f3c4-0000-7000-8000-000000000001",
+          "clientMsgId": "m",
+          "payload": "AQ=="
+        }
+      },
+      {
+        "reason": "docId is not a lowercase UUIDv7",
+        "message": {
+          "type": "push",
+          "docId": "0192F3C4-0000-7000-8000-000000000001",
+          "clientMsgId": "m",
+          "payload": "AQIDBA"
+        }
+      },
+      {
+        "reason": "negative since",
+        "message": {
+          "type": "subscribe",
+          "docs": [
+            {
+              "docId": "0192f3c4-0000-7000-8000-000000000001",
+              "since": -1
+            }
+          ]
+        }
+      },
+      {
+        "reason": "empty subscribe",
+        "message": {
+          "type": "subscribe",
+          "docs": []
+        }
+      },
+      {
+        "reason": "fractional baseSeq",
+        "message": {
+          "type": "snapshot",
+          "docId": "0192f3c4-0000-7000-8000-000000000001",
+          "clientMsgId": "m",
+          "baseSeq": 1.5,
+          "payload": "AQIDBA"
+        }
+      }
+    ],
+    "server": [
+      {
+        "reason": "seq must be positive",
+        "message": {
+          "type": "update",
+          "docId": "0192f3c4-0000-7000-8000-000000000001",
+          "seq": 0,
+          "payload": "AQIDBA",
+          "deviceId": "d"
+        }
+      },
+      {
+        "reason": "unknown error code",
+        "message": {
+          "type": "error",
+          "code": "teapot",
+          "message": ""
+        }
+      },
+      {
+        "reason": "missing upToDate",
+        "message": {
+          "type": "updates",
+          "docId": "0192f3c4-0000-7000-8000-000000000001",
+          "snapshot": null,
+          "items": []
+        }
+      }
+    ]
+  }
+}

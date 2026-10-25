@@ -246,13 +246,18 @@ final class AppearanceUITests: XCTestCase {
     func testDarkModeScreens() throws {
         let app = launch(["-ui-testing-dark"])
         let settings = app.descendants(matching: .any)["sidebar.settings"].firstMatch
-        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        let card = app.descendants(matching: .any)["document.card"].firstMatch
+        // On iPhone the app may open on the document list: go back to the sidebar.
+        if !settings.waitForExistence(timeout: 10), app.navigationBars.buttons.firstMatch.exists {
+            app.navigationBars.buttons.firstMatch.tap()
+        }
+        XCTAssertTrue(settings.waitForExistence(timeout: 5) || card.exists,
+                      "main window not shown; buttons: \(LibraryUITests.buttons(app))")
         snapshot(app, "dark-sidebar")
         // The identifier also reaches the row's image; tap the row itself when it is hittable.
         let allDocuments = app.buttons["sidebar.allDocuments"].firstMatch
         if allDocuments.waitForExistence(timeout: 3), allDocuments.isHittable { allDocuments.tap() }
         snapshot(app, "dark-documents")
-        let card = app.descendants(matching: .any)["document.card"].firstMatch
         if card.waitForExistence(timeout: 5) {
             card.tap()
             snapshot(app, "dark-document")

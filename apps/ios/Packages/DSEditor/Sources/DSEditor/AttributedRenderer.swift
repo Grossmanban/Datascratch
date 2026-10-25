@@ -135,7 +135,7 @@ struct AttributedRenderer {
         let ctx = para.context
         let size = theme.fontSize(for: para.kind, attrs: para.attrs)
         let isCode = para.kind.type == NodeType.codeBlock
-        let font = isCode ? theme.font(size: size, design: .monospaced) : theme.font(size: size, weight: theme.weight(for: para.kind))
+        let font = isCode ? theme.font(size: size, design: .monospaced) : theme.font(size: size, weight: theme.weight(for: para.kind, attrs: para.attrs))
 
         let quoteStep: CGFloat = 20
         var indent = CGFloat(ctx.listDepth) * ParagraphDecoration.markerWidth + CGFloat(ctx.quoteDepth) * quoteStep
@@ -200,7 +200,8 @@ struct AttributedRenderer {
             a[.font] = theme.font(size: size * 0.9, design: .monospaced)
             a[.backgroundColor] = EditorTheme.codeBackground
         } else if bold || italic {
-            let w: UIFont.Weight = bold ? (theme.weight(for: kind) == .regular ? .bold : .heavy) : theme.weight(for: kind)
+            let base = theme.weight(for: kind, attrs: attrs)
+            let w: UIFont.Weight = bold ? (base == .regular ? .bold : .heavy) : base
             a[.font] = theme.font(size: size, weight: w, italic: italic)
         }
         if marks.contains(MarkName.underline) { a[.underlineStyle] = NSUnderlineStyle.single.rawValue }

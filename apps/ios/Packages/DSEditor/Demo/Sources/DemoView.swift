@@ -149,8 +149,9 @@ struct ToolPalette: View {
                     Image(systemName: mode.symbolName)
                         .font(.system(size: 18, weight: .medium))
                         .frame(width: 40, height: 40)
-                        .foregroundStyle(tools.mode == mode ? Color.white : Color.primary)
-                        .background(tools.mode == mode ? Color.accentColor : Color.clear, in: Circle())
+                        // Selected like `bg.selected` in the design system: a quiet tint, not accent.
+                        .foregroundStyle(Color.primary)
+                        .background(tools.mode == mode ? Color.primary.opacity(0.08) : Color.clear, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("tool.\(mode.rawValue)")

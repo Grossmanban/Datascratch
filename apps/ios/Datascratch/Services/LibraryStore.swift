@@ -51,9 +51,18 @@ nonisolated struct LibraryPersistence: Sendable {
     }
 }
 
-/// Local stand-in for the account/notebook/note documents (DSCore will own
-/// storage, Yrs documents and sync). All mutations go through here so the
-/// UI does not care where data comes from.
+/// Where the library lives besides memory. With DSCore linked this is the Yrs
+/// documents + GRDB store (`CoreLibrary`); otherwise the JSON file.
+protocol LibraryBackend: AnyObject {
+    func loadSnapshot() -> LibrarySnapshot
+    /// Writes the difference between two snapshots (called after every mutation).
+    func persist(from old: LibrarySnapshot, to new: LibrarySnapshot)
+    /// Called with a fresh snapshot when documents change from outside (sync).
+    var onExternalChange: ((LibrarySnapshot) -> Void)? { get set }
+}
+
+/// The library as one observable value for the UI. All mutations go through
+/// here; a `LibraryBackend` (DSCore documents) or a JSON file persists them.
 @Observable
 final class LibraryStore {
     static let trashRetentionDays = 30
@@ -61,6 +70,7 @@ final class LibraryStore {
 
     private(set) var data: LibrarySnapshot
     @ObservationIgnored private let persistence: LibraryPersistence
+    @ObservationIgnored private let backend: (any LibraryBackend)?
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored var now: () -> Date = { Date() }
     /// Called after every local mutation (the sync engine queues an update).
@@ -68,7 +78,15 @@ final class LibraryStore {
 
     init(persistence: LibraryPersistence) {
         self.persistence = persistence
+        self.backend = nil
         self.data = persistence.load() ?? LibrarySnapshot()
+    }
+
+    init(backend: any LibraryBackend) {
+        self.persistence = .inMemory
+        self.backend = backend
+        self.data = backend.loadSnapshot()
+        backend.onExternalChange = { [weak self] snapshot in self?.data = snapshot }
     }
 
     // MARK: - Reading
@@ -530,7 +548,9 @@ final class LibraryStore {
     }
 
     private func mutate(_ change: (inout LibrarySnapshot) -> Void) {
+        let old = data
         change(&data)
+        backend?.persist(from: old, to: data)
         onLocalChange?()
         scheduleSave()
     }

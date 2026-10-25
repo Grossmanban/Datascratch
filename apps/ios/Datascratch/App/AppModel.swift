@@ -51,12 +51,12 @@ final class AppModel {
         if options.uiTesting {
             secureStore = SecureStore(inMemory: true)
             settings = AppSettings(defaults: UserDefaults(suiteName: "ui-testing-\(UUID().uuidString)") ?? .standard)
-            library = LibraryStore(persistence: .inMemory)
+            library = Self.makeLibrary(inMemory: true)
             sync = SyncCenter(serverURL: nil, monitorNetwork: false)
         } else {
             secureStore = SecureStore()
             settings = AppSettings()
-            library = LibraryStore(persistence: .appSupport())
+            library = Self.makeLibrary(inMemory: false)
             sync = SyncCenter(serverURL: server)
         }
         accounts = LocalAccountService(store: secureStore)
@@ -74,6 +74,24 @@ final class AppModel {
     }
 
     private var signedInForTesting = false
+
+    /// The library on DSCore documents when the package is linked, else the JSON stand-in.
+    private static func makeLibrary(inMemory: Bool) -> LibraryStore {
+        #if canImport(DSCore)
+        do {
+            if inMemory { return LibraryStore(backend: try CoreLibrary.inMemory()) }
+            let base = (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                                     appropriateFor: nil, create: true))
+                ?? FileManager.default.temporaryDirectory
+            let core = try CoreLibrary.open(directory: base.appendingPathComponent("Library", isDirectory: true))
+            CoreLibrary.importLegacy(from: .appSupport(), into: core)
+            return LibraryStore(backend: core)
+        } catch {
+            assertionFailure("DSCore library unavailable: \(error)")
+        }
+        #endif
+        return LibraryStore(persistence: inMemory ? .inMemory : .appSupport())
+    }
 
     var phase: Phase {
         if pendingRecoveryKey != nil || isSigningUp { return .onboarding }

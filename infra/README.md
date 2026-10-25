@@ -71,6 +71,7 @@ openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
 | `POSTGRES_PASSWORD=` | первый секрет |
 | `DOMAIN=` | `notes.ВАШ-ДОМЕН` |
 | `PUBLIC_URL=` | `https://notes.ВАШ-ДОМЕН` |
+| `APP_URL=` | адрес веб-приложения (если оно на том же домене — тот же `https://notes.ВАШ-ДОМЕН`); нужен для подключения ИИ-агентов |
 | `DS_JWT_SECRET=` | второй секрет |
 | `DS_KMS_KEY=` | третий секрет |
 

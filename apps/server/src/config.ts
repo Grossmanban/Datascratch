@@ -17,6 +17,8 @@ const ConfigSchema = z
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
     /** Public base URL of the server, used in OpenAPI and links. */
     PUBLIC_URL: z.string().url().default('http://localhost:8080'),
+    /** Web app URL (links from server pages, e.g. the agents consent screen). */
+    APP_URL: z.string().url().optional(),
     /** Comma-separated list of allowed CORS origins (web client). Empty = same origin only. */
     CORS_ORIGINS: z.string().default(''),
 

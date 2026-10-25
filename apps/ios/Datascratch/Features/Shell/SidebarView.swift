@@ -4,7 +4,8 @@ struct SidebarView: View {
     @Environment(AppModel.self) private var app
     @Environment(SceneModel.self) private var scene
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.horizontalSizeClass) private var sizeClass
+    /// By idiom: on iPad the sidebar column itself can report a compact size class.
+    private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
 
     private var library: LibraryStore { app.library }
 
@@ -114,9 +115,9 @@ struct SidebarView: View {
                         .accessibilityIdentifier("sidebar.trash")
                 }
             }
-            .modifier(SidebarRowStyle(isCompact: sizeClass == .compact))
+            .modifier(SidebarRowStyle(isCompact: isPhone))
         }
-        .modifier(SidebarListStyle(isCompact: sizeClass == .compact))
+        .modifier(SidebarListStyle(isCompact: isPhone))
         .scrollContentBackground(.hidden)
         .background(Theme.Palette.sidebar)
         .navigationTitle(library.activeSpace?.name ?? "Datascratch")

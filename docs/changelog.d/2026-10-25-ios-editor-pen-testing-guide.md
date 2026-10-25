@@ -1,2 +1,3 @@
 - 2026-10-25 — ios-editor: ручной чек-лист проверки пера на iPad и iPhone — `guides/pen-testing.md` (задержка, 120 Гц, нажим и наклон, перекладка, удаление и отмена, палитра без пальца, ладонь, ластик и лассо, iPhone пальцем).
 - 2026-10-25 — ios-editor: рисуемый штрих строится инкрементально (`LiveInkOutline`: замороженные куски + хвост) — кадр на длинной линии не дорожает; живая линия сглаживается как итоговая, без скачка при отрыве пера.
+- 2026-10-25 — ios-editor: метки для Instruments в редакторе (`os_signpost`, подсистема `com.datascratch.editor`: `OpenNote`, `Reproject`, `InkRefresh`, `StrokeCommit`, `PenDown`/`PenUp`); как снять трассу — `apps/ios/Packages/DSEditor/Demo/README.md`.

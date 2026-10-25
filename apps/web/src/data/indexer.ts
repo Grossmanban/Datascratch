@@ -1,4 +1,5 @@
 import MiniSearch from "minisearch";
+import * as Y from "yjs";
 import { create } from "zustand";
 import { extractNote } from "@/domain/note";
 import type { NoteKind } from "@/lib/shared";
@@ -90,10 +91,12 @@ export class Indexer {
       await this.remove(noteId);
       return;
     }
-    const hasData = (await accountDb().updates.where("docId").equals(noteId).count()) > 0;
-    if (!hasData && !this.store.isLoaded(noteId)) return;
-    const doc = await this.store.acquire(noteId);
+    // From the saved state on a transient Y.Doc: indexing never keeps notes in memory.
+    const state = await this.store.loadState(noteId);
+    if (!state) return;
+    const doc = new Y.Doc({ gc: true });
     try {
+      Y.applyUpdate(doc, state);
       const ex = extractNote(doc);
       const tasks: TaskRow[] = ex.tasks.map((t) => ({
         key: `${noteId}:${t.taskId}`,
@@ -128,7 +131,7 @@ export class Indexer {
       this.texts.set(noteId, ex.text);
       this.onExtracted(noteId, ex.title, ex.tags);
     } finally {
-      this.store.release(noteId);
+      doc.destroy();
     }
   }
 

@@ -164,6 +164,7 @@ extension View {
     /// accent fill in both themes (the dark-mode accent is light).
     func prominentGlass() -> some View {
         buttonStyle(.glassProminent)
+            .tint(Theme.Palette.accent)
             .foregroundStyle(Theme.Palette.onAccent)
     }
 }

@@ -3,10 +3,40 @@ import Foundation
 /// Overall sync state for the UI.
 public struct SyncStatus: Equatable, Sendable {
     public var connection: SyncConnectionState
-    /// Outgoing messages not yet acknowledged.
+    /// Outgoing messages not yet acknowledged (failed ones not included).
     public var pending: Int
     /// Documents still catching up after (re)connect.
     public var catchingUp: Int
+    /// Documents whose messages could not be delivered and are no longer retried on their own
+    /// (`retryFailed`, `discardFailed`). Everything else keeps syncing.
+    public var failed: [FailedSync] = []
+
+    public init(connection: SyncConnectionState, pending: Int, catchingUp: Int, failed: [FailedSync] = []) {
+        self.connection = connection
+        self.pending = pending
+        self.catchingUp = catchingUp
+        self.failed = failed
+    }
+
+    /// Nothing left to send or fetch (failed messages aside).
+    public var isIdle: Bool { pending == 0 && catchingUp == 0 }
+
+    /// One state for the sync indicator.
+    public enum Summary: Equatable, Sendable {
+        /// Not connected (`pending` changes wait for the connection).
+        case offline
+        case syncing
+        case synced
+        /// Idle, but messages of `documents` documents could not be delivered.
+        case failed(documents: Int, reason: String)
+    }
+
+    public var summary: Summary {
+        guard case .connected = connection else { return .offline }
+        if !isIdle { return .syncing }
+        if let first = failed.first { return .failed(documents: failed.count, reason: first.reason) }
+        return .synced
+    }
 }
 
 /// Ties documents, the local store, encryption and the WebSocket together
@@ -19,7 +49,11 @@ public struct SyncStatus: Equatable, Sendable {
 /// - remote updates/snapshots are decrypted, stored, and applied to open documents;
 /// - after > 500 updates or > 1 MiB since the last snapshot a snapshot is uploaded
 ///   (orphaned strokes older than 30 days are purged first, strokes.md §4.2);
-/// - awareness payloads are encrypted (`ds1|awareness|<docId>`) and only relayed.
+/// - awareness payloads are encrypted (`ds1|awareness|<docId>`) and only relayed, for open
+///   documents only;
+/// - only open documents have a live `CRDTDocument`. Everything else stays in the store as
+///   updates: remote ones are appended, snapshots merge them without a document
+///   (`CRDTUpdates.merge`), so memory does not grow with the number of notes.
 public actor SyncEngine: SyncClientDelegate {
     public typealias KeyLookup = @Sendable (DocumentRecord) throws -> Data?
     public typealias Registrar = @Sendable (DocumentRecord) async throws -> Void
@@ -42,6 +76,10 @@ public actor SyncEngine: SyncClientDelegate {
     /// (hundreds of updates in a row) then cost a few outbox scans instead of one per update.
     private var flushing = false
     private var flushAgain = false
+    /// At most this many messages wait for an ack; the next ones go out as acks arrive.
+    static let maxInFlight = 100
+    /// The last pass left queued messages unsent (in-flight cap); an ack starts another pass.
+    private var backlog = false
     private var catchingUp: Set<String> = []
     /// Documents subscribed on the current connection whose catch-up finished (`upToDate`).
     /// Pushes go only to these: otherwise `lastSeq = max(ack)` could skip others' updates.
@@ -49,6 +87,17 @@ public actor SyncEngine: SyncClientDelegate {
     /// Records of subscribed documents (kind/notebook for key lookup without a DB read).
     private var known: [String: DocumentRecord] = [:]
     private var connection: SyncConnectionState = .disconnected
+    /// `start()` was called and `stop()` was not.
+    private var running = false
+    /// Every known document was subscribed on the current connection.
+    private var subscribedAll = false
+    /// Documents whose registration was refused: not tried again until `retryFailed`.
+    private var refused: Set<String> = []
+    /// Retry of temporary failures (registration, server errors) with exponential backoff.
+    private var retryTask: Task<Void, Never>?
+    private var retryDelay: Duration?
+    var minRetryDelay: Duration = .seconds(1)
+    static let maxRetryDelay: Duration = .seconds(60)
     private var statusContinuations: [UUID: AsyncStream<SyncStatus>.Continuation] = [:]
 
     /// - Parameters:
@@ -65,12 +114,73 @@ public actor SyncEngine: SyncClientDelegate {
 
     /// Connects and starts syncing every document known to the store.
     public func start() async {
+        running = true
         await client.setDelegate(self)
         await client.start()
     }
 
     public func stop() async {
+        running = false
+        retryTask?.cancel()
+        retryTask = nil
         await client.stop()
+    }
+
+    func setMinRetryDelay(_ d: Duration) { minRetryDelay = d }
+
+    /// Schedules one retry pass (registration, subscription, sending) after a temporary
+    /// failure; the delay doubles up to a minute and resets once a pass has none.
+    private func scheduleRetry() {
+        guard retryTask == nil else { return }
+        let delay = retryDelay.map { min($0 * 2, Self.maxRetryDelay) } ?? minRetryDelay
+        retryDelay = delay
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            await self?.retryPass()
+        }
+    }
+
+    private func retryPass() async {
+        retryTask = nil
+        guard await client.isConnected else { return }
+        var temporary = false
+        if let records = try? store.documents() {
+            let waiting = records.filter { !live.contains($0.docId) && !catchingUp.contains($0.docId) && !refused.contains($0.docId) }
+            temporary = (try? await subscribe(waiting)) == false
+        }
+        await flush()
+        if !temporary, retryTask == nil { retryDelay = nil }
+    }
+
+    /// Result of `syncOnce`.
+    public struct SyncOnceResult: Sendable, Equatable {
+        /// Every document was caught up and every sendable message acknowledged.
+        public var completed: Bool
+        /// Messages still queued (unsendable ones included: no key yet, failed).
+        public var pending: Int
+    }
+
+    /// One sync pass for a background refresh (`BGAppRefreshTask`): connects, catches every
+    /// known document up from its `lastSeq`, sends the outbox, waits for the acks and
+    /// disconnects — or returns at `deadline` (or on task cancellation). Remote updates only go
+    /// to the store (no documents are loaded, nothing is indexed), and cutting it short loses
+    /// nothing: whatever was not stored or acknowledged is fetched or sent next time. If the
+    /// engine was already running (app in the foreground) it stays connected.
+    public func syncOnce(deadline: ContinuousClock.Instant) async -> SyncOnceResult {
+        let wasRunning = running
+        if !wasRunning { await start() }
+        var completed = false
+        while ContinuousClock.now < deadline, !Task.isCancelled {
+            if await client.isConnected, subscribedAll, catchingUp.isEmpty, inFlight.isEmpty,
+               (try? store.pendingOutbox(limit: Self.maxInFlight * 2))?.contains(where: { live.contains($0.docId) }) == false {
+                completed = true
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        if !wasRunning { await stop() }
+        return SyncOnceResult(completed: completed, pending: (try? store.outboxCount()) ?? 0)
     }
 
     public func setAwarenessHandler(_ handler: AwarenessHandler?) {
@@ -89,8 +199,12 @@ public actor SyncEngine: SyncClientDelegate {
 
     private func removeStatus(_ id: UUID) { statusContinuations[id] = nil }
 
+    /// Current status (the same value `statusUpdates()` yields).
+    public func status() -> SyncStatus { currentStatus() }
+
     private func currentStatus() -> SyncStatus {
-        SyncStatus(connection: connection, pending: (try? store.outboxCount()) ?? 0, catchingUp: catchingUp.count)
+        SyncStatus(connection: connection, pending: (try? store.outboxCount()) ?? 0, catchingUp: catchingUp.count,
+                   failed: (try? store.failedOutbox()) ?? [])
     }
 
     private func publish() {
@@ -132,20 +246,68 @@ public actor SyncEngine: SyncClientDelegate {
     /// Stops applying remote updates to `docId` in memory (it stays tracked in the store).
     /// Uploads a snapshot first when ≥ 30 local edits were made since the last one: snapshots
     /// are the versions of the history (sync-protocol.md §5, spec/06).
+    ///
+    /// The document is detached before anything is awaited, so an `open` of the same document
+    /// that runs meanwhile gets a fresh instance from the store, which already holds every edit
+    /// of the closed one (the observer stores them synchronously).
     public func close(docId: String, now: Date = Date()) async {
+        guard let closing = open.removeValue(forKey: docId) else { return }
+        closing.subscription.cancel()
         if let record = try? store.document(docId), record.localEditsSinceSnapshot >= LocalStore.snapshotOnCloseEdits {
-            await snapshot(docId: docId, now: now)
+            await snapshot(docId: docId, now: now, detached: closing.doc)
         }
-        open[docId]?.subscription.cancel()
-        open[docId] = nil
     }
 
     public func isOpen(_ docId: String) -> Bool { open[docId] != nil }
 
+    /// Deletes a document locally: stops syncing it and removes it, its queue and its index
+    /// entries from the store (e.g. a local document replaced at sign-in).
+    public func deleteDocument(_ docId: String) throws {
+        refused.remove(docId)
+        open.removeValue(forKey: docId)?.subscription.cancel()
+        known[docId] = nil
+        live.remove(docId)
+        catchingUp.remove(docId)
+        try store.deleteDocument(docId)
+        publish()
+    }
+
+    // MARK: Failed messages
+
+    /// Puts failed messages (of one document or all) back into the queue and tries again:
+    /// registration, subscription, sending.
+    public func retryFailed(docId: String? = nil) async {
+        try? store.retryFailed(docId: docId)
+        if let docId { refused.remove(docId) } else { refused.removeAll() }
+        if await client.isConnected, let records = try? store.documents() {
+            let waiting = records.filter { !live.contains($0.docId) && !catchingUp.contains($0.docId) && (docId == nil || $0.docId == docId) }
+            try? await subscribe(waiting)
+        }
+        await flush()
+    }
+
+    /// Gives up on a document's failed messages (its local content stays).
+    public func discardFailed(docId: String) {
+        try? store.discardOutbox(docId: docId, onlyFailed: true)
+        publish()
+    }
+
+    /// Errors that will not pass by retrying: the request was refused (4xx other than 401,
+    /// 408 and 429).
+    static func isPermanent(_ error: any Error) -> Bool {
+        if case APIError.server(let status, _, _) = error { return (400..<500).contains(status) && ![401, 408, 429].contains(status) }
+        return false
+    }
+
+    static func describe(_ error: any Error) -> String {
+        if case APIError.server(let status, let code, _) = error { return "\(code) (\(status))" }
+        return String(describing: error)
+    }
+
     // MARK: Awareness
 
     public func sendAwareness(docId: String, payload: Data) async throws {
-        guard let record = try store.document(docId), let key = try keyFor(record) else { return }
+        guard open[docId] != nil, let record = try store.document(docId), let key = try keyFor(record) else { return }
         let sealed = try DSCrypto.seal(payload, key: key, ad: CryptoAD.awareness(docId))
         try await client.send(.awareness(docId: docId, payload: sealed))
     }
@@ -171,19 +333,41 @@ public actor SyncEngine: SyncClientDelegate {
             publish()
             return
         }
-        guard let items = try? store.pendingOutbox(limit: 500) else { return }
-        for item in items where !inFlight.contains(item.clientMsgId) && live.contains(item.docId) {
-            guard let record = try? store.document(item.docId) else { continue }
+        guard let items = try? store.pendingOutbox(limit: Self.maxInFlight * 2) else { return }
+        backlog = items.count == Self.maxInFlight * 2
+        // Documents whose registration failed in this pass: their other messages wait.
+        var skip: Set<String> = []
+        for item in items where !inFlight.contains(item.clientMsgId) && live.contains(item.docId) && !skip.contains(item.docId) {
+            guard inFlight.count < Self.maxInFlight else {
+                backlog = true
+                break
+            }
+            guard let record = try? store.document(item.docId) else {
+                // The document is gone; its messages can never be sent.
+                try? store.discardOutbox(docId: item.docId)
+                continue
+            }
             do {
                 guard let key = try keyFor(record) else { continue }
                 if !record.registered {
-                    if let register { try await register(record) }
-                    try store.setRegistered(record.docId)
+                    do {
+                        if let register { try await register(record) }
+                        try store.setRegistered(record.docId)
+                    } catch {
+                        skip.insert(item.docId)
+                        if Self.isPermanent(error) {
+                            refused.insert(item.docId)
+                            try? store.failOutbox(docId: item.docId, reason: "register: \(Self.describe(error))")
+                        } else {
+                            scheduleRetry()
+                        }
+                        continue
+                    }
                 }
                 let sealed = try DSCrypto.seal(item.payload, key: key, ad: CryptoAD.doc(item.docId))
                 let limit = item.kind == .push ? SyncProtocol.maxUpdateBytes : SyncProtocol.maxSnapshotBytes
                 guard sealed.count <= limit else {
-                    try store.markFailed(clientMsgId: item.clientMsgId, error: "payload_too_large (local)")
+                    try store.markFailed(clientMsgId: item.clientMsgId, error: "payload_too_large (local)", permanent: true)
                     continue
                 }
                 inFlight.insert(item.clientMsgId)
@@ -198,36 +382,49 @@ public actor SyncEngine: SyncClientDelegate {
                 break
             } catch {
                 inFlight.remove(item.clientMsgId)
-                try? store.markFailed(clientMsgId: item.clientMsgId, error: String(describing: error))
+                try? store.markFailed(clientMsgId: item.clientMsgId, error: Self.describe(error))
             }
         }
         publish()
     }
 
     /// Registers (if needed) and subscribes documents whose key is known. A document must be
-    /// subscribed and caught up before the first push (sync-protocol.md §4).
-    private func subscribe(_ records: [DocumentRecord]) async throws {
+    /// subscribed and caught up before the first push (sync-protocol.md §4). Returns false
+    /// when a registration failed temporarily (a retry is scheduled).
+    @discardableResult
+    private func subscribe(_ records: [DocumentRecord]) async throws -> Bool {
         var ready: [DocumentRecord] = []
-        for record in records where (try? keyFor(record)) != nil {
+        var temporaryFailure = false
+        for record in records where !refused.contains(record.docId) && (try? keyFor(record)) != nil {
             if !record.registered {
                 do {
                     if let register { try await register(record) }
                     try store.setRegistered(record.docId)
                 } catch {
-                    continue // retried on the next connect
+                    // Refused: its messages show up as failed (retryFailed tries again).
+                    // Anything else is retried with backoff.
+                    if Self.isPermanent(error) {
+                        refused.insert(record.docId)
+                        try? store.failOutbox(docId: record.docId, reason: "register: \(Self.describe(error))")
+                    } else {
+                        temporaryFailure = true
+                        scheduleRetry()
+                    }
+                    continue
                 }
             }
             ready.append(record)
         }
         for r in ready { known[r.docId] = r }
         let entries = ready.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }
-        guard !entries.isEmpty else { return }
+        guard !entries.isEmpty else { return !temporaryFailure }
         for e in entries { catchingUp.insert(e.docId) }
         // Keep frames reasonably small.
         for chunk in stride(from: 0, to: entries.count, by: 100).map({ Array(entries[$0..<min($0 + 100, entries.count)]) }) {
             try await client.send(.subscribe(docs: chunk))
         }
         publish()
+        return !temporaryFailure
     }
 
     // MARK: Snapshots
@@ -239,16 +436,21 @@ public actor SyncEngine: SyncClientDelegate {
     }
 
     /// Builds, stores and sends a snapshot of `docId` (unless one is already queued).
-    private func snapshot(docId: String, now: Date) async {
+    ///
+    /// An open document (or one being closed, `detached`) is snapshotted from memory after the
+    /// orphaned-stroke pass. Any other document is never loaded: its stored updates are merged
+    /// as they are. Orphans only appear through edits, and the next open-and-close of the note
+    /// runs the pass (strokes.md §4.2 sets no deadline tighter than that).
+    private func snapshot(docId: String, now: Date, detached: CRDTDocument? = nil) async {
         guard let record = try? store.document(docId),
               (try? store.pendingOutbox(docId: docId))?.contains(where: { $0.kind == .snapshot }) != true else { return }
         do {
-            let doc: CRDTDocument
-            if let o = open[docId] {
-                doc = o.doc
-            } else {
-                doc = CRDTDocument(kind: record.kind, docId: docId)
-                try doc.applyUpdates(try store.updates(docId: docId), origin: .storage)
+            guard let doc = open[docId]?.doc ?? detached else {
+                let state = try CRDTUpdates.merge(try store.updates(docId: docId))
+                _ = try store.enqueueSnapshot(docId: docId, state: state, baseSeq: record.lastSeq, now: now)
+                try store.compact(docId: docId, now: now)
+                await flush()
+                return
             }
             if record.kind == .note {
                 let note = NoteDocument(doc)
@@ -276,9 +478,11 @@ public actor SyncEngine: SyncClientDelegate {
         inFlight.removeAll()
         catchingUp.removeAll()
         live.removeAll()
+        subscribedAll = false
         if let records = try? store.documents() {
             try? await subscribe(records)
         }
+        subscribedAll = true
         await flush()
     }
 
@@ -287,6 +491,7 @@ public actor SyncEngine: SyncClientDelegate {
         if case .connected = state {} else {
             inFlight.removeAll()
             live.removeAll()
+            subscribedAll = false
         }
         publish()
     }
@@ -311,16 +516,21 @@ public actor SyncEngine: SyncClientDelegate {
             inFlight.remove(clientMsgId)
             try? store.acknowledge(clientMsgId: clientMsgId, seq: seq)
             publish()
+            if backlog { await flush() }
             await snapshotIfNeeded(docId: docId)
         case .awareness(let docId, let payload, let deviceId):
-            guard let record = try? store.document(docId), let key = try? keyFor(record),
+            guard open[docId] != nil, let record = try? store.document(docId), let key = try? keyFor(record),
                   let plain = try? DSCrypto.open(payload, key: key, ad: CryptoAD.awareness(docId)) else { return }
             awarenessHandler?(docId, plain, deviceId)
         case .error(let code, _, let ref):
             guard let ref else { return }
             if inFlight.contains(ref) {
                 inFlight.remove(ref)
-                try? store.markFailed(clientMsgId: ref, error: code.rawValue)
+                // Refusals fail at once; doc_not_found (re-registered below) and server
+                // trouble are retried up to LocalStore.maxSendAttempts.
+                let permanent = [.forbidden, .payloadTooLarge, .badRequest, .protocolMismatch].contains(code)
+                if code != .rateLimited { try? store.markFailed(clientMsgId: ref, error: code.rawValue, permanent: permanent) }
+                if !permanent { scheduleRetry() }
                 if code == .docNotFound, let item = try? store.pendingOutbox().first(where: { $0.clientMsgId == ref }) {
                     // Registration was lost: register again on the next flush.
                     try? store.setRegistered(item.docId, false)

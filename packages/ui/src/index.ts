@@ -58,3 +58,4 @@ export * from "./components/FormatToolbar";
 export * from "./components/SuggestionMenu";
 export type { AnchorRect } from "./lib/floating";
 export type { HighlightName } from "@datascratch/design-tokens";
+export * from "./components/SpaceTile";

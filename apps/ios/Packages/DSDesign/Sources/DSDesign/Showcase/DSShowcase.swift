@@ -67,9 +67,9 @@ public struct DSShowcase: View {
             }
 
             HStack(alignment: .top, spacing: DSSpace.s4) {
-                DSDocCard(title: "Дневник поездки в Тбилиси", subtitle: "Старый город и серные бани", detail: "2 ч назад", backdrop: .ember)
-                DSDocCard(title: "Конспект: теория графов", subtitle: "Лекции 4–6", detail: "Вчера", icon: "📐", backdrop: .mist)
-                DSDocCard(title: "План квартала", subtitle: "Цели и метрики", detail: "12 окт", backdrop: .meadow)
+                DSDocCard(title: "Дневник поездки в Тбилиси", subtitle: "Старый город и серные бани", detail: "2 ч назад", cover: DSSampleCover.mountains.image)
+                DSDocCard(title: "Конспект: теория графов", subtitle: "Лекции 4–6", detail: "Вчера", icon: "📐")
+                DSDocCard(title: "План квартала", subtitle: "Цели и метрики", detail: "12 окт", cover: DSSampleCover.leaves.image)
             }
             .frame(height: 196)
 
@@ -152,11 +152,6 @@ public struct DSShowcase: View {
         }
         .padding(DSSpace.s10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(alignment: .top) {
-            DSBackdrop(.sand)
-                .frame(height: 220)
-                .mask(LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .center, endPoint: .bottom))
-        }
     }
 
     private func day(_ offset: Int) -> Date {

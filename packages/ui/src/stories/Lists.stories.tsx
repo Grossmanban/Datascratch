@@ -1,6 +1,9 @@
 import type { Story } from "@ladle/react";
 import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
+import leaves from "./assets/cover-leaves.jpg";
+import mountains from "./assets/cover-mountains.jpg";
+import sea from "./assets/cover-sea.jpg";
 import { DocCard, DocGrid, DocList, DocRow, IconButton, TaskRow, type TaskState } from "..";
 
 const day = (n: number) => {
@@ -85,13 +88,14 @@ export const Documents: Story = () => (
       ))}
     </DocList>
     <DocGrid>
-      {(["ember", "mist", "meadow", "dusk", "sand"] as const).map((b, i) => (
-        <li key={b}>
+      {[mountains, null, leaves, null, sea].map((cover, i) => (
+        <li key={i}>
           <DocCard
             className="h-full"
             title={["Путешествия", "Учёба", "Работа", "Идеи", "Рецепты"][i]!}
-            subtitle="Подзаголовок документа"
-            backdrop={b}
+            subtitle="Первая строка документа"
+            cover={cover}
+            {...(cover ? {} : { icon: ["", "📚", "", "💡", ""][i] })}
             meta="Сегодня"
           />
         </li>

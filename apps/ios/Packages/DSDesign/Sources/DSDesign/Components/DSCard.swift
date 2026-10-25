@@ -33,14 +33,17 @@ extension View {
     }
 }
 
-/// Document card (Craft-style): cover image or backdrop, emoji icon, serif title, subtitle.
+/// Document card (Craft-style): optional cover thumbnail, emoji icon, serif title, subtitle.
+/// Covers are the user's own images only (spec 12.7): without one the card has no
+/// cover strip. `backdrop` is an explicit opt-in (templates), never a default.
 public struct DSDocCard: View {
     private let title: String
     private let subtitle: String?
     private let detail: String?
     private let icon: String?
     private let cover: Image?
-    private let backdrop: DSBackdropToken
+    private let coverOffsetY: CGFloat
+    private let backdrop: DSBackdropToken?
     private let coverHeight: CGFloat
 
     public init(
@@ -49,7 +52,8 @@ public struct DSDocCard: View {
         detail: String? = nil,
         icon: String? = nil,
         cover: Image? = nil,
-        backdrop: DSBackdropToken = .sand,
+        coverOffsetY: CGFloat = 0.5,
+        backdrop: DSBackdropToken? = nil,
         coverHeight: CGFloat = 96
     ) {
         self.title = title
@@ -57,37 +61,45 @@ public struct DSDocCard: View {
         self.detail = detail
         self.icon = icon
         self.cover = cover
+        self.coverOffsetY = coverOffsetY
         self.backdrop = backdrop
         self.coverHeight = coverHeight
     }
 
+    private var hasStrip: Bool { cover != nil || backdrop != nil }
+
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Color.clear
-                .frame(height: coverHeight)
-                .overlay {
-                    if let cover {
-                        cover
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        DSBackdrop(backdrop)
+            if hasStrip {
+                Color.clear
+                    .frame(height: coverHeight)
+                    .overlay {
+                        if let cover {
+                            GeometryReader { proxy in
+                                cover
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: Alignment(horizontal: .center, vertical: coverOffsetY < 0.34 ? .top : (coverOffsetY > 0.66 ? .bottom : .center)))
+                                    .clipped()
+                            }
+                        } else if let backdrop {
+                            DSBackdrop(backdrop)
+                        }
                     }
-                }
-                .clipped()
-                .overlay(alignment: .bottomLeading) {
-                    if let icon {
-                        Text(icon)
-                            .font(.system(size: 26))
-                            .frame(width: 44, height: 44)
-                            .background(Circle().fill(Color.dsSurface))
-                            .overlay(Circle().strokeBorder(Color.dsSeparator, lineWidth: 0.5))
-                            .offset(x: DSSpace.s4, y: 22)
-                            .accessibilityHidden(true)
+                    .clipped()
+                    .overlay(alignment: .bottomLeading) {
+                        if let icon {
+                            iconBadge(icon)
+                                .offset(x: DSSpace.s4, y: 22)
+                        }
                     }
-                }
-                .zIndex(1)
+                    .zIndex(1)
+            }
             VStack(alignment: .leading, spacing: DSSpace.s1) {
+                if !hasStrip, let icon {
+                    iconBadge(icon)
+                        .padding(.bottom, DSSpace.s1)
+                }
                 Text(title)
                     .dsFont(.h3)
                     .foregroundStyle(.ds(.textPrimary))
@@ -106,7 +118,7 @@ public struct DSDocCard: View {
                 }
             }
             .padding(.horizontal, DSSpace.s4)
-            .padding(.top, icon == nil ? DSSpace.s3 : DSSpace.s8)
+            .padding(.top, hasStrip ? (icon == nil ? DSSpace.s3 : DSSpace.s8) : DSSpace.s4)
             .padding(.bottom, DSSpace.s4)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
@@ -114,6 +126,21 @@ public struct DSDocCard: View {
         .contentShape(.hoverEffect, RoundedRectangle(cornerRadius: DSRadius.lg, style: .continuous))
         .hoverEffect(.lift)
         .accessibilityElement(children: .combine)
+    }
+
+    private func iconBadge(_ icon: String) -> some View {
+        Text(icon)
+            .font(.system(size: 24))
+            .frame(width: 42, height: 42)
+            .background(
+                RoundedRectangle(cornerRadius: DSRadius.md, style: .continuous)
+                    .fill(hasStrip ? Color.dsSurface : Color.dsPrimary.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DSRadius.md, style: .continuous)
+                    .strokeBorder(Color.dsSeparator, lineWidth: 0.5)
+            )
+            .accessibilityHidden(true)
     }
 }
 
@@ -130,10 +157,10 @@ private struct CardsPreview: View {
     var body: some View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: DSSpace.s4)], spacing: DSSpace.s4) {
-                DSDocCard(title: "Заметки о пере", subtitle: "Штрихи едут вместе с текстом", detail: "Сегодня", icon: "✍️", backdrop: .dusk)
-                DSDocCard(title: "Путешествие в Тбилиси", subtitle: "План, бюджет, места", detail: "Вчера", backdrop: .ember)
-                DSDocCard(title: "Учёба", subtitle: "Конспекты лекций", icon: "📚", backdrop: .meadow)
-                DSDocCard(title: "Идеи", backdrop: .mist)
+                DSDocCard(title: "Заметки о пере", subtitle: "Штрихи едут вместе с текстом", detail: "Сегодня", icon: "✍️")
+                DSDocCard(title: "Путешествие в Тбилиси", subtitle: "План, бюджет, места", detail: "Вчера", cover: DSSampleCover.mountains.image)
+                DSDocCard(title: "Учёба", subtitle: "Конспекты лекций", icon: "📚")
+                DSDocCard(title: "Идеи")
             }
             .padding(DSSpace.s4)
             DSCard {

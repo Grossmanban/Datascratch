@@ -6,3 +6,4 @@ export * from "./extract.js";
 export * from "./markdown.js";
 export * from "../contracts/document.js";
 export * from "./move.js";
+export * from "./indexer.js";

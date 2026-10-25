@@ -262,3 +262,50 @@ test("underline survives pressing Enter right before the word", async ({ mount, 
   await expect.poll(() => page.evaluate(() => window.__ct!.api.editor.state.doc.child(1).textContent.includes("amet, consectetur"))).toBe(true);
   await expect.poll(async () => (await segments(page))[0]?.length ?? 0).toBe(1);
 });
+
+/** The single stroke in the document. */
+async function onlyStroke(page: Page) {
+  return page.evaluate(() => {
+    const m = [...window.__ct!.doc.getMap<any>("strokes").values()][0];
+    return { kind: m.get("anchorKind") as string, blockId: m.get("blockId") as string | null, anchors: (m.get("anchors") as unknown[]).length };
+  });
+}
+
+test("a drawing below the end of the note is kept as a free drawing of the last paragraph", async ({ mount, page }) => {
+  await mount(<TestEditor width={700} html={TEXT} />);
+  await ready(page);
+  const last = await page.locator(".ds-prose > p").last().boundingBox();
+  const y = last!.y + last!.height + 160;
+  await drawLine(page, last!.x + 40, y, last!.x + 300, y + 60);
+  await expect.poll(() => strokeCount(page)).toBe(1);
+  const s = await onlyStroke(page);
+  expect(s.kind).toBe("block");
+  expect(s.anchors).toBe(0);
+  const lastId = await page.evaluate(() => (document.querySelectorAll(".ds-prose > p")[document.querySelectorAll(".ds-prose > p").length - 1] as HTMLElement).dataset.blockId);
+  expect(s.blockId).toBe(lastId);
+  // Still drawn after release, where it was drawn.
+  const segs = await segments(page);
+  expect(segs[0]!.length).toBeGreaterThan(0);
+  expect(Math.abs(segs[0]![0]![0]!.y - y)).toBeLessThan(4);
+});
+
+test("a large sketch reaching far from the text is one free drawing, an underline stays on text", async ({ mount, page }) => {
+  await mount(<TestEditor width={700} html={TEXT} />);
+  await ready(page);
+  const first = await page.locator(".ds-prose > p").first().boundingBox();
+  const last = await page.locator(".ds-prose > p").last().boundingBox();
+  await drawLine(page, first!.x + 100, first!.y + 10, first!.x + 200, last!.y + last!.height + 120, 30);
+  await expect.poll(() => strokeCount(page)).toBe(1);
+  expect((await onlyStroke(page)).kind).toBe("block");
+  const segs = await segments(page);
+  expect(segs[0]!.reduce((n, s) => n + s.length, 0)).toBeGreaterThan(10); // nothing dropped
+});
+
+test("drawing in an empty note anchors to its only block", async ({ mount, page }) => {
+  await mount(<TestEditor width={700} html="<h1 data-type=title></h1><p></p>" />);
+  await ready(page);
+  const p = await page.locator(".ds-prose > p").first().boundingBox();
+  await drawLine(page, p!.x + 50, p!.y + 120, p!.x + 250, p!.y + 200);
+  await expect.poll(() => strokeCount(page)).toBe(1);
+  expect((await onlyStroke(page)).kind).toBe("block");
+});

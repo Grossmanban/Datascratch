@@ -25,6 +25,9 @@ struct MainSplitView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        // Craft-like chrome: toolbar and sidebar icons in neutral ink; the accent is
+        // kept for the main action (`prominentGlass`) and for sheets.
+        .tint(Theme.Palette.textPrimary)
         .overlay {
             if scene.isCommandPalettePresented {
                 CommandPaletteView()
@@ -35,6 +38,7 @@ struct MainSplitView: View {
         .sheet(item: $scene.sheet) { sheet in
             SceneSheetView(sheet: sheet)
                 .environment(scene)
+                .tint(Theme.Palette.accent)
         }
         .modifier(ModeChangeConfirmation())
         .background(Theme.Palette.canvas)

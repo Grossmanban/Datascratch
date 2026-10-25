@@ -112,6 +112,8 @@ export function extractTasks(doc: Y.Doc, noteId: string): TaskIndexEntry[] {
       state,
       scheduled: str(el.getAttribute("scheduled")),
       deadline: str(el.getAttribute("deadline")),
+      completedAt: str(el.getAttribute("completedAt")),
+      order: out.length,
     });
   });
   return out;

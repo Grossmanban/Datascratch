@@ -241,6 +241,40 @@ export class DocumentService {
     }
   }
 
+  /**
+   * Updates after `since` for many documents in one query (fast path of a first
+   * sync). Callers must only pass documents whose updates after `since` are all
+   * present (no snapshot newer than `since`) and few.
+   */
+  async updatesForMany(db: DbOrTx, docs: { docId: string; since: number }[]): Promise<Map<string, CatchUpItem[]>> {
+    const out = new Map<string, CatchUpItem[]>(docs.map((d) => [d.docId, []]));
+    if (docs.length === 0) return out;
+    const ids = `{${docs.map((d) => d.docId).join(',')}}`;
+    const sinces = `{${docs.map((d) => d.since).join(',')}}`;
+    const res = await db.execute<{ doc_id: string; seq: string | number; payload: Buffer; device_id: string }>(sql`
+      SELECT u.doc_id, u.seq, u.payload, u.device_id
+      FROM unnest(${ids}::uuid[], ${sinces}::bigint[]) AS q(doc_id, since)
+      JOIN doc_updates u ON u.doc_id = q.doc_id AND u.seq > q.since
+      ORDER BY u.doc_id, u.seq`);
+    for (const r of res.rows) {
+      out.get(r.doc_id)!.push({ seq: Number(r.seq), payload: r.payload, deviceId: r.device_id });
+    }
+    return out;
+  }
+
+  /** The newest snapshot of each document (fast path of a first sync). */
+  async latestSnapshots(db: DbOrTx, docIds: string[]): Promise<Map<string, { seq: number; payload: Buffer }>> {
+    const out = new Map<string, { seq: number; payload: Buffer }>();
+    if (docIds.length === 0) return out;
+    const res = await db.execute<{ doc_id: string; seq: string | number; payload: Buffer }>(sql`
+      SELECT DISTINCT ON (doc_id) doc_id, seq, payload
+      FROM doc_snapshots
+      WHERE doc_id = ANY(${`{${docIds.join(',')}}`}::uuid[])
+      ORDER BY doc_id, seq DESC`);
+    for (const r of res.rows) out.set(r.doc_id, { seq: Number(r.seq), payload: r.payload });
+    return out;
+  }
+
   /** Updates with after < seq < before, in order (gap filling for live delivery). */
   async range(db: DbOrTx, docId: string, after: number, before: number): Promise<CatchUpItem[]> {
     return db

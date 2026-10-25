@@ -73,6 +73,8 @@ export interface SyncClientOptions {
   backoff?: { initialMs?: number; maxMs?: number };
   /** Local updates within this window are merged into one push. Default 30 ms. */
   batchMs?: number;
+  /** Sync cursors are written to storage in batches at most this often. Default 200 ms. */
+  stateFlushMs?: number;
   snapshotThresholds?: { updates?: number; bytes?: number };
   /** Hook before a compaction snapshot (e.g. purge orphaned strokes, D-35). */
   beforeSnapshot?: (docId: string, doc: Y.Doc) => void;
@@ -122,10 +124,16 @@ export class SyncClient {
   private running = false;
   /** Serializes storage access and message handling. */
   private chain: Promise<unknown> = Promise.resolve();
+  /** In-memory mirror of the stored outbox (loaded once; this client is its only writer). */
+  private outbox: Map<string, OutboxItem> | null = null;
+  /** Doc states changed since the last batch write. */
+  private readonly dirty = new Set<string>();
+  private stateTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: SyncClientOptions) {
     this.opts = {
       batchMs: 30,
+      stateFlushMs: 200,
       maxAuthFailures: 3,
       random: Math.random,
       ...options,
@@ -164,6 +172,7 @@ export class SyncClient {
     }
     this.setStatus("stopped");
     await this.chain;
+    await this.flushStates();
   }
 
   /** Reconnect now (e.g. the OS reports the network is back, or after re-login). */
@@ -183,25 +192,56 @@ export class SyncClient {
 
   /** Start syncing a document. Local updates are pushed; remote ones applied with REMOTE_ORIGIN. */
   async addDoc(docId: string, doc: Y.Doc): Promise<void> {
-    if (this.docs.has(docId)) throw new Error(`document ${docId} is already synced`);
-    const state = (await this.opts.storage.getDocState(docId)) ?? { ...EMPTY_DOC_STATE };
-    const handler = (update: Uint8Array, origin: unknown) => {
-      if (origin === REMOTE_ORIGIN) return;
-      this.queueLocalUpdate(docId, update);
-    };
-    doc.on("update", handler);
-    const entry: DocEntry = {
-      doc,
-      state,
-      synced: false,
-      pending: [],
-      pendingBytes: 0,
-      timer: null,
-      snapshotInFlight: null,
-      detach: () => doc.off("update", handler),
-    };
-    this.docs.set(docId, entry);
-    if (this.welcomed) this.send({ type: "subscribe", docs: [{ docId, since: state.lastSeq }] });
+    await this.addDocs([{ docId, doc }]);
+  }
+
+  /**
+   * Start syncing many documents at once (first sync, app start): one batch
+   * read of their cursors and one `subscribe` message.
+   */
+  async addDocs(list: { docId: string; doc: Y.Doc }[]): Promise<void> {
+    for (const { docId } of list) {
+      if (this.docs.has(docId)) throw new Error(`document ${docId} is already synced`);
+    }
+    const ids = list.map((d) => d.docId);
+    const storage = this.opts.storage;
+    const states = storage.getDocStates
+      ? await storage.getDocStates(ids)
+      : new Map(
+          (
+            await Promise.all(ids.map(async (id) => [id, await storage.getDocState(id)] as const))
+          ).filter((e): e is readonly [string, DocSyncState] => e[1] !== null),
+        );
+    for (const { docId, doc } of list) {
+      const handler = (update: Uint8Array, origin: unknown) => {
+        if (origin === REMOTE_ORIGIN) return;
+        this.queueLocalUpdate(docId, update);
+      };
+      doc.on("update", handler);
+      this.docs.set(docId, {
+        doc,
+        state: states.get(docId) ?? { ...EMPTY_DOC_STATE },
+        synced: false,
+        pending: [],
+        pendingBytes: 0,
+        timer: null,
+        snapshotInFlight: null,
+        detach: () => doc.off("update", handler),
+      });
+    }
+    if (this.welcomed && list.length > 0) {
+      // Subscribe before pushing (sync-protocol.md §3), then send what was queued for these docs.
+      this.send({
+        type: "subscribe",
+        docs: ids.map((docId) => ({ docId, since: this.docs.get(docId)!.state.lastSeq })),
+      });
+      const added = new Set(ids);
+      await this.serial(async () => {
+        for (const item of (await this.outboxItems()).values()) {
+          if (added.has(item.docId)) this.sendItem(item);
+        }
+      });
+    }
   }
 
   /** Stop syncing a document (its pending local updates are still stored and sent). */
@@ -209,6 +249,8 @@ export class SyncClient {
     const entry = this.docs.get(docId);
     if (!entry) return;
     await this.flushPending(docId, entry);
+    await this.chain;
+    await this.flushStates();
     entry.detach();
     this.docs.delete(docId);
     if (this.welcomed) this.send({ type: "unsubscribe", docIds: [docId] });
@@ -233,13 +275,14 @@ export class SyncClient {
   async flush(): Promise<void> {
     for (const [docId, entry] of this.docs) await this.flushPending(docId, entry);
     await this.chain;
+    await this.flushStates();
   }
 
   /** Resend every outbox item (e.g. after registering a document that got `doc_not_found`). */
   async resendOutbox(): Promise<void> {
     await this.serial(async () => {
       if (!this.welcomed) return;
-      for (const item of await this.opts.storage.listOutbox()) this.sendItem(item);
+      for (const item of (await this.outboxItems()).values()) this.sendItem(item);
     });
   }
 
@@ -354,6 +397,8 @@ export class SyncClient {
   }
 
   private sendItem(item: OutboxItem): void {
+    // Items of documents not subscribed on this connection wait until addDoc().
+    if (!this.docs.has(item.docId)) return;
     if (item.kind === "push") {
       this.send({
         type: "push",
@@ -370,6 +415,48 @@ export class SyncClient {
         payload: item.payload,
       });
     }
+  }
+
+  private async outboxItems(): Promise<Map<string, OutboxItem>> {
+    if (!this.outbox) {
+      const items = await this.opts.storage.listOutbox();
+      this.outbox ??= new Map(items.map((i) => [i.clientMsgId, i]));
+    }
+    return this.outbox;
+  }
+
+  private async enqueue(item: OutboxItem): Promise<void> {
+    await this.opts.storage.enqueue(item);
+    (await this.outboxItems()).set(item.clientMsgId, item);
+  }
+
+  private async removeOutbox(clientMsgId: string): Promise<void> {
+    (await this.outboxItems()).delete(clientMsgId);
+    await this.opts.storage.removeOutbox(clientMsgId);
+  }
+
+  /** Persist cursors lazily: a lost write only means re-fetching a few updates. */
+  private markDirty(docId: string): void {
+    this.dirty.add(docId);
+    this.stateTimer ??= setTimeout(() => {
+      this.stateTimer = null;
+      void this.flushStates();
+    }, this.opts.stateFlushMs);
+  }
+
+  private async flushStates(): Promise<void> {
+    if (this.stateTimer) clearTimeout(this.stateTimer);
+    this.stateTimer = null;
+    if (this.dirty.size === 0) return;
+    const entries: [string, DocSyncState][] = [];
+    for (const id of this.dirty) {
+      const entry = this.docs.get(id);
+      if (entry) entries.push([id, { ...entry.state }]);
+    }
+    this.dirty.clear();
+    const storage = this.opts.storage;
+    if (storage.setDocStates) await storage.setDocStates(entries);
+    else for (const [id, state] of entries) await storage.setDocState(id, state);
   }
 
   private serial<T>(fn: () => Promise<T>): Promise<T> {
@@ -391,7 +478,7 @@ export class SyncClient {
         this.setStatus("online");
         const docs = [...this.docs].map(([docId, e]) => ({ docId, since: e.state.lastSeq }));
         if (docs.length > 0) this.send({ type: "subscribe", docs });
-        for (const item of await this.opts.storage.listOutbox()) this.sendItem(item);
+        for (const item of (await this.outboxItems()).values()) this.sendItem(item);
         return;
       }
       case "updates": {
@@ -409,7 +496,7 @@ export class SyncClient {
           this.count(entry, size);
           entry.state.lastSeq = Math.max(entry.state.lastSeq, item.seq);
         }
-        await this.opts.storage.setDocState(msg.docId, entry.state);
+        this.markDirty(msg.docId);
         if (msg.upToDate && !entry.synced) {
           entry.synced = true;
           for (const fn of this.listeners.synced) fn(msg.docId);
@@ -423,15 +510,13 @@ export class SyncClient {
         const size = await this.applyRemote(msg.docId, entry, msg.payload);
         this.count(entry, size);
         entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.seq);
-        await this.opts.storage.setDocState(msg.docId, entry.state);
+        this.markDirty(msg.docId);
         await this.maybeSnapshot(msg.docId, entry);
         return;
       }
       case "ack": {
-        const item = (await this.opts.storage.listOutbox()).find(
-          (o) => o.clientMsgId === msg.clientMsgId,
-        );
-        await this.opts.storage.removeOutbox(msg.clientMsgId);
+        const item = (await this.outboxItems()).get(msg.clientMsgId);
+        await this.removeOutbox(msg.clientMsgId);
         const entry = this.docs.get(msg.docId);
         if (!entry) return;
         entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.seq);
@@ -442,7 +527,7 @@ export class SyncClient {
         } else if (item) {
           this.count(entry, item.size);
         }
-        await this.opts.storage.setDocState(msg.docId, entry.state);
+        this.markDirty(msg.docId);
         await this.maybeSnapshot(msg.docId, entry);
         return;
       }
@@ -464,9 +549,7 @@ export class SyncClient {
   }
 
   private async handleError(code: SyncErrorCode, message: string, ref?: string): Promise<void> {
-    const item = ref
-      ? (await this.opts.storage.listOutbox()).find((o) => o.clientMsgId === ref)
-      : undefined;
+    const item = ref ? (await this.outboxItems()).get(ref) : undefined;
     const docId = item?.docId ?? (ref && this.docs.has(ref) ? ref : undefined);
     this.emitError({ code, message, ...(ref ? { ref } : {}), ...(docId ? { docId } : {}) });
     switch (code) {
@@ -488,7 +571,7 @@ export class SyncClient {
         return;
       case "payload_too_large":
         if (item) {
-          await this.opts.storage.removeOutbox(item.clientMsgId);
+          await this.removeOutbox(item.clientMsgId);
           const entry = this.docs.get(item.docId);
           // An oversized update is replaced by a snapshot (limit 50 MiB), which contains it.
           if (item.kind === "push" && entry) await this.enqueueSnapshot(item.docId, entry, true);
@@ -497,7 +580,7 @@ export class SyncClient {
         return;
       case "forbidden":
         // E.g. a view-only guest pushing: the update can never be accepted.
-        if (item) await this.opts.storage.removeOutbox(item.clientMsgId);
+        if (item) await this.removeOutbox(item.clientMsgId);
         return;
       default:
         return;
@@ -569,7 +652,7 @@ export class SyncClient {
         size: update.length,
         createdAt: Date.now(),
       };
-      await this.opts.storage.enqueue(item);
+      await this.enqueue(item);
       if (this.welcomed) this.sendItem(item);
     });
   }
@@ -606,7 +689,7 @@ export class SyncClient {
       createdAt: Date.now(),
     };
     entry.snapshotInFlight = item.clientMsgId;
-    await this.opts.storage.enqueue(item);
+    await this.enqueue(item);
     if (this.welcomed) this.sendItem(item);
   }
 }

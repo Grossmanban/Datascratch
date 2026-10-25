@@ -98,6 +98,7 @@ public struct DSShowcase: View {
             }
 
             HStack(spacing: DSSpace.s3) {
+                DSInlineChip(text: "Теория графов")
                 DSTagChip("работа", tint: .blue)
                 DSTagChip("идеи", tint: .purple)
                 DSBadge("Для агентов", style: .tint(.orange))

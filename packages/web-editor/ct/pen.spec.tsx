@@ -235,7 +235,8 @@ test("underline survives pressing Enter right before the word", async ({ mount, 
   await mount(<TestEditor width={700} html={TEXT} />);
   await ready(page);
   const { box } = await wordRect(page, "consectetur");
-  await drawLine(page, box.left, box.bottom + 2, box.right, box.bottom + 2);
+  // Start a pixel inside the word: mouse coordinates are rounded and could land on the space before it.
+  await drawLine(page, box.left + 1, box.bottom + 2, box.right, box.bottom + 2);
   await expect.poll(() => strokeCount(page)).toBe(1);
   await page.evaluate(() => {
     const { editor } = window.__ct!.api;
@@ -254,7 +255,7 @@ test("underline survives pressing Enter right before the word", async ({ mount, 
   const after = await wordRect(page, "consectetur");
   await expect.poll(async () => (await segments(page))[0]?.length ?? 0).toBe(1);
   const seg = (await segments(page))[0]![0]!;
-  expect(Math.abs(seg[0]!.x - after.box.left)).toBeLessThan(4);
+  expect(Math.abs(seg[0]!.x - (after.box.left + 1))).toBeLessThan(3);
   expect(Math.abs(seg[0]!.y - (after.box.bottom + 2))).toBeLessThan(5);
   // Undo restores the text and the original stroke.
   await page.keyboard.press("Control+z");

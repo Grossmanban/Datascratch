@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "description": "base64url without padding; decoders must reject every `rejectDecode` input.",
+  "encode": [
+    {
+      "hex": "",
+      "base64url": ""
+    },
+    {
+      "hex": "8e",
+      "base64url": "jg"
+    },
+    {
+      "hex": "2506",
+      "base64url": "JQY"
+    },
+    {
+      "hex": "d88460",
+      "base64url": "2IRg"
+    },
+    {
+      "hex": "a2e3b1fe",
+      "base64url": "ouOx_g"
+    },
+    {
+      "hex": "6d05189183",
+      "base64url": "bQUYkYM"
+    },
+    {
+      "hex": "8f8f92e7d6fa17075dcb9f77fcc1081215bce9983c9cc2d42063b6e61b16ed",
+      "base64url": "j4-S59b6Fwddy593_MEIEhW86Zg8nMLUIGO25hsW7Q"
+    },
+    {
+      "hex": "e0d900367c0f6c359dacaf83b3e1636b50e469cfef1b4afbac65a1c07ebff930",
+      "base64url": "4NkANnwPbDWdrK-Ds-Fja1Dkac_vG0r7rGWhwH6_-TA"
+    },
+    {
+      "hex": "c58f5646e8b3a72c9b6c800d70d509a784585984c4a9c93daaac8e5d20766b4cb0",
+      "base64url": "xY9WRuizpyybbIANcNUJp4RYWYTEqck9qqyOXSB2a0yw"
+    }
+  ],
+  "rejectDecode": [
+    {
+      "input": "AA==",
+      "reason": "padding"
+    },
+    {
+      "input": "A",
+      "reason": "length mod 4 = 1"
+    },
+    {
+      "input": "A+B/",
+      "reason": "standard base64 alphabet"
+    },
+    {
+      "input": "AB",
+      "reason": "non-zero trailing bits"
+    },
+    {
+      "input": "AAA ",
+      "reason": "whitespace"
+    }
+  ]
+}

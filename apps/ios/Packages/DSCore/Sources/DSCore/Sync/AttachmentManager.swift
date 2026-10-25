@@ -81,7 +81,7 @@ public actor AttachmentManager {
         let data = try DSCrypto.openAttachment(chunks, key: noteKey, attachmentId: attachmentId)
         let url = directory.appendingPathComponent(attachmentId)
         try data.write(to: url, options: .atomic)
-        var record = AttachmentRecord(attachmentId: attachmentId, noteId: noteId, mime: mime, size: status.size, chunkCount: status.chunkCount,
+        var record = AttachmentRecord(attachmentId: attachmentId, noteId: noteId, mime: status.mime ?? mime, size: status.size, chunkCount: status.chunkCount,
                                       state: .synced, localPath: attachmentId)
         record.uploaded = Set(0..<status.chunkCount)
         try store.saveAttachment(record)

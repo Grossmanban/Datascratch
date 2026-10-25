@@ -48,6 +48,8 @@ export function syncVectors() {
       { type: "awareness", docId: doc, payload: P, deviceId: "dev-3" },
       { type: "error", code: "payload_too_large", message: "update exceeds 2 MiB", ref: vid(30) },
       { type: "error", code: "unauthorized", message: "token expired" },
+      { type: "error", code: "bad_request", message: "invalid message" },
+      { type: "update", docId: doc, seq: 45, payload: P, deviceId: "guest:AAECAwQFBgcICQoLDA0ODw" },
     ],
   };
   const invalid = {

@@ -149,6 +149,14 @@ public final class CRDTDocument: Sendable {
         (try? raw.mapGet(root: root, path: path)) ?? nil
     }
 
+    /// The (nested) map at `path` as parsed JSON (`Y.Map.toJSON()`): fast for large maps of
+    /// records. Binary values appear as arrays of numbers.
+    public func mapJSON(_ root: String, _ path: [String] = []) -> [String: Any]? {
+        guard let json = (try? raw.mapJson(root: root, path: path)) ?? nil,
+              let obj = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return nil }
+        return obj
+    }
+
     public func mapKeys(_ root: String, _ path: [String] = []) -> [String] {
         (try? raw.mapKeys(root: root, path: path)) ?? []
     }

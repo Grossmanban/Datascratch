@@ -11,7 +11,7 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
         var wrappedPassword: String; var wrappedRecovery: String; var accountDocId: String }
 
     let state = Locked<(users: [String: User], notebooks: [String: [String: Any]], docs: Set<String>,
-                        attachments: [String: (chunkCount: Int, chunks: [Int: Data])], tokens: Int)>(([:], [:], [], [:], 0))
+                        attachments: [String: (chunkCount: Int, chunks: [Int: Data])], tokens: Int, moved: [String: String])>(([:], [:], [], [:], 0, [:]))
 
     func session(_ u: User) -> [String: Any] {
         let n = state.withLock { $0.tokens += 1; return $0.tokens }
@@ -66,6 +66,9 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
             return (200, nb)
         case ("GET", "/v1/notebooks"):
             return (200, state.withLock { Array($0.notebooks.values) })
+        case ("PATCH", _) where parts.count == 3 && parts[1] == "docs":
+            state.withLock { $0.moved[parts[2]] = b["notebookId"] as? String }
+            return (204, nil)
         case ("POST", "/v1/docs"):
             state.withLock { _ = $0.docs.insert(b["docId"] as! String) }
             return (204, nil)
@@ -122,6 +125,16 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
         let note = try await device1.createNote(in: notebook, title: "First")
         let meta = try #require(notebook.note(id: note.noteId))
         #expect(meta.title == "First")
+        let noteKey1Before = try device1.keys.noteKey(noteId: note.noteId, wrappedKey: meta.wrappedKey, notebookId: notebook.notebookId)
+        // Move the note to another notebook: key rewrapped, meta moved, server told.
+        let other = try await device1.createNotebook(name: "Work", spaceId: space.id, order: 2, in: signup.account)
+        try await device1.moveNote(id: note.noteId, from: notebook, to: other)
+        #expect(notebook.note(id: note.noteId) == nil)
+        let movedMeta = try #require(other.note(id: note.noteId))
+        #expect(server.state.withLock { $0.moved[note.noteId] } == other.notebookId)
+        #expect(try device1.keys.noteKey(noteId: note.noteId, wrappedKey: movedMeta.wrappedKey, notebookId: other.notebookId) == noteKey1Before)
+        #expect(try device1.store.document(note.noteId)?.notebookId == other.notebookId)
+        try await device1.moveNote(id: note.noteId, from: other, to: notebook)
         let daily = try await device1.dailyNote(for: "2026-10-25", in: notebook)
         #expect(daily.created != nil && daily.meta.kind == .daily)
         #expect(try await device1.dailyNote(for: "2026-10-25", in: notebook).created == nil)

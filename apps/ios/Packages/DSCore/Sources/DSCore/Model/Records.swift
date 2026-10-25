@@ -10,8 +10,12 @@ public protocol MapRecord: Hashable, Sendable {
 
 extension CRDTDocument {
     func records<R: MapRecord>(_ root: String, as type: R.Type = R.self) -> [R] {
-        guard let map = mapValue(root)?.entries else { return [] }
-        return map.compactMap { id, value in value.entries.flatMap { R(id: id, fields: $0) } }
+        // JSON fast path: one FFI call for the whole map (records hold no binary fields).
+        guard let map = mapJSON(root) else { return [] }
+        return map.compactMap { id, value in
+            guard let fields = value as? [String: Any] else { return nil }
+            return R(id: id, fields: fields.mapValues(YValue.fromJSONObject))
+        }
     }
 
     func record<R: MapRecord>(_ root: String, id: String, as type: R.Type = R.self) -> R? {

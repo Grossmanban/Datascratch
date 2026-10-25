@@ -330,6 +330,64 @@ final class EditorViewTests: XCTestCase {
         XCTAssertFalse(factory.view(for: math) === first, "views of removed blocks are dropped")
     }
 
+    /// Draws a pen stroke through the real input path (began/moved/ended) along `points`.
+    func penStroke(_ editor: EditorView, _ points: [CGPoint]) {
+        editor.tools.mode = .pen
+        drainMainQueue()
+        let t0 = CACurrentMediaTime()
+        func sample(_ p: CGPoint, _ i: Int) -> PenSample {
+            PenSample(location: p, pressure: 0.5, altitude: 1, azimuth: 0, roll: 0, timestamp: t0 + Double(i) * 0.008, estimationIndex: nil)
+        }
+        editor.ink.penBegan(sample(points[0], 0))
+        editor.ink.penMoved(points.dropFirst().enumerated().map { sample($0.element, $0.offset + 1) }, predicted: [])
+        editor.ink.penEnded(cancelled: false)
+        settle(editor)
+    }
+
+    func line(from a: CGPoint, to b: CGPoint, steps: Int = 30) -> [CGPoint] {
+        (0...steps).map { i in
+            let t = CGFloat(i) / CGFloat(steps)
+            return CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+        }
+    }
+
+    func testStrokeFarBelowTheTextIsKeptAsFreeDrawing() {
+        let last = BlockNode.paragraph("The end of the note")
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello"), last])
+        let editor = host(doc)
+        let end = editor.geometry.placement(at: flatRange(editor, of: "note").lowerBound)!
+        let y = end.origin.y + 400
+        penStroke(editor, line(from: CGPoint(x: 80, y: y), to: CGPoint(x: 300, y: y + 60)))
+        XCTAssertEqual(doc.strokes.count, 1, "the stroke is not dropped")
+        let s = doc.strokes[0]
+        XCTAssertEqual(s.anchorKind, .block)
+        XCTAssertEqual(s.blockId, last.id, "anchored to the last paragraph")
+        editor.ink.invalidateLayout()
+        editor.ink.refresh()
+        let drawn = editor.ink.resolved[s.id]?.first?.first?.location
+        XCTAssertNotNil(drawn, "drawn after relayout")
+        XCTAssertEqual(drawn?.y ?? 0, y, accuracy: 2, "where it was drawn")
+        XCTAssertGreaterThanOrEqual(editor.textView.textContainerInset.bottom, editor.bounds.height, "a screen of room below the text")
+    }
+
+    func testStrokePartlyFarFromTextIsWhollyFreeDrawing() {
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello brave new world")])
+        let editor = host(doc)
+        let w = editor.geometry.placement(at: flatRange(editor, of: "brave").lowerBound)!
+        penStroke(editor, line(from: CGPoint(x: w.origin.x, y: w.origin.y + 2), to: CGPoint(x: w.origin.x + 40, y: w.origin.y + 300)))
+        XCTAssertEqual(doc.strokes.count, 1)
+        XCTAssertEqual(doc.strokes[0].anchorKind, .block, "one far point makes the whole stroke a free drawing")
+    }
+
+    func testUnderlineNearAWordStaysAnchoredToText() {
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello brave new world")])
+        let editor = host(doc)
+        let a = editor.geometry.placement(at: flatRange(editor, of: "brave").lowerBound)!
+        penStroke(editor, line(from: CGPoint(x: a.origin.x + 1, y: a.origin.y + 3), to: CGPoint(x: a.origin.x + 40, y: a.origin.y + 3)))
+        XCTAssertEqual(doc.strokes.count, 1)
+        XCTAssertEqual(doc.strokes[0].anchorKind, .text)
+    }
+
     func testOpenLargeNote() {
         let doc = SampleDocument.large()
         let start = CACurrentMediaTime()

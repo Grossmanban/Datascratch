@@ -109,7 +109,7 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
       <Command.List className="scrollbar-thin max-h-[min(60vh,440px)] overflow-y-auto p-2">
         <Command.Empty className="px-3 py-8 text-center text-[14px] text-ink-2">{t("palette.noResults")}</Command.Empty>
         {results.length > 0 && (
-          <Command.Group heading={t("palette.docs")} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.06em] [&_[cmdk-group-heading]]:text-ink-2">
+          <Command.Group heading={t("palette.docs")} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[12.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-ink-2">
             {results.map((r) => (
               <Item key={r.noteId} value={`note-${r.noteId}`} onSelect={() => openNote(r.noteId)} icon={notes[r.noteId]?.icon ?? <FileText className="size-4" />}>
                 <span className="truncate font-medium">{r.title}</span>
@@ -118,7 +118,7 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
             ))}
           </Command.Group>
         )}
-        <Command.Group heading={t("palette.commands")} className="mt-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.06em] [&_[cmdk-group-heading]]:text-ink-2">
+        <Command.Group heading={t("palette.commands")} className="mt-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[12.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-ink-2">
           {nb && (
             <Item
               value="new-doc"

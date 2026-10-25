@@ -59,7 +59,7 @@ export function SettingsPage() {
 
 export function Card({ title, description, children, action }: { title?: ReactNode; description?: ReactNode; children?: ReactNode; action?: ReactNode }) {
   return (
-    <section className="rounded-xl border border-line bg-surface p-5 shadow-[0_1px_2px_rgb(40_30_10/0.04)]">
+    <section className="rounded-lg border border-line bg-surface p-5">
       {(title || action) && (
         <div className="flex items-start gap-3">
           <div className="flex-1">

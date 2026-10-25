@@ -127,7 +127,7 @@ function ShareDialogInner() {
         </p>
 
         <div className="border-t border-line pt-4">
-          <div className="mb-2 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-2">{t("share.active")}</div>
+          <div className="mb-2 text-[12.5px] font-semibold text-ink-2">{t("share.active")}</div>
           {shares.isLoading ? (
             <Spinner className="size-4 text-ink-3" />
           ) : shares.isError ? (

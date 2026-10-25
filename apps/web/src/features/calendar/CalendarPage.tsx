@@ -13,7 +13,7 @@ import { TopBar } from "@/features/shell/PageHeader";
 import { MonthCalendar } from "@/features/tasks/DatePicker";
 import { TaskItems } from "@/features/tasks/TaskList";
 import { useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
-import { addDays, formatLongDate, parseLocalDate, today, dateFormat } from "@/lib/dates";
+import { addDays, formatLongDate, formatMonthYear, parseLocalDate, today, dateFormat } from "@/lib/dates";
 import i18n from "@/i18n";
 import { Button, cn, IconButton, Popover, Spinner } from "@/ui";
 
@@ -59,7 +59,7 @@ export function CalendarPage() {
   }, [tasks, notes, date]);
 
   const locale = i18n.language === "en" ? "en-US" : "ru-RU";
-  const monthTitle = dateFormat({ month: "long", year: "numeric" }, locale).format(parseLocalDate(date));
+  const monthTitle = formatMonthYear(parseLocalDate(date), locale);
 
   return (
     <div className="scrollbar-thin h-full overflow-y-auto">
@@ -82,7 +82,7 @@ export function CalendarPage() {
           </>
         }
       >
-        <span className="font-medium capitalize text-ink">{monthTitle}</span>
+        <span className="font-medium text-ink">{monthTitle}</span>
       </TopBar>
 
       <div className="mx-auto max-w-[860px] px-3 pb-24 sm:px-8">
@@ -103,15 +103,15 @@ export function CalendarPage() {
                   aria-current={isToday ? "date" : undefined}
                   className={cn(
                     "relative flex flex-col items-center rounded-xl py-2 transition-colors",
-                    // Accent (not inverted ink): reads the same in both themes.
-                    sel ? "bg-accent text-[var(--ds-text-on-accent)] shadow-card" : "hover:bg-ink/[0.04]",
+                    // A quiet selection (design review): a soft ink wash, not a filled pill; today is the red digit.
+                    sel ? "bg-ink/[0.07]" : "hover:bg-ink/[0.04]",
                   )}
                 >
-                  <span className={cn("text-[11px] font-medium uppercase", sel ? "text-[var(--ds-text-on-accent)]" : "text-ink-2")}>
+                  <span className="text-[11px] font-medium uppercase text-ink-2">
                     {dateFormat({ weekday: "short" }, locale).format(dd)}
                   </span>
-                  <span className={cn("mt-0.5 text-[18px] font-semibold", !sel && isToday && "text-accent")}>{dd.getDate()}</span>
-                  <span className={cn("mt-1 size-1 rounded-full", marks[d] ? (sel ? "bg-[var(--ds-text-on-accent)]" : "bg-accent") : "bg-transparent")} />
+                  <span className={cn("mt-0.5 text-[19px] font-bold", isToday ? "text-danger" : "text-ink")}>{dd.getDate()}</span>
+                  <span className={cn("mt-1 size-1 rounded-full", marks[d] ? "bg-accent" : "bg-transparent")} />
                 </button>
               );
             })}
@@ -129,7 +129,7 @@ export function CalendarPage() {
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.18 }}
           >
-            <h1 className="mt-8 px-2 font-display text-[30px] font-semibold capitalize leading-tight tracking-[-0.02em] text-ink sm:text-[34px]">
+            <h1 className="mt-8 px-2 font-display text-[30px] font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-[34px]">
               {formatLongDate(date)}
             </h1>
 

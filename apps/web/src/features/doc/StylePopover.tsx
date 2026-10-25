@@ -74,7 +74,7 @@ export function StylePopover({ doc, style, disabled }: { doc: Y.Doc; style: Note
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-2">{label}</div>
+      <div className="mb-1.5 text-[12.5px] font-semibold text-ink-2">{label}</div>
       {children}
     </div>
   );

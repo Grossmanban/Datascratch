@@ -219,6 +219,14 @@ public final class EditorView: UIView {
             self.dynamicTypeChanged()
         }
 
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
+            let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
+            MainActor.assumeIsolated { self?.keyboardFrameChanged(frame) }
+        }
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.keyboardFrameChanged(nil) }
+        }
+
         NotificationCenter.default.addObserver(forName: MermaidRenderer.didRender, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 EditorDiagnostics.log("mermaid rendered: re-laying out diagrams")
@@ -293,6 +301,40 @@ public final class EditorView: UIView {
         layoutHeader()
         let inset = UIEdgeInsets(top: 32 + headerHeight, left: side, bottom: 160, right: side)
         if textView.textContainerInset != inset { textView.textContainerInset = inset }
+        applyKeyboardInset()
+    }
+
+    // MARK: - Keyboard
+
+    /// Keyboard overlap is handled inside the editor: the bottom scroll inset grows so the caret
+    /// stays visible, while the view keeps its size. Hosts should not shrink the editor for the
+    /// keyboard (SwiftUI: `.ignoresSafeArea(.keyboard)`): resizing it while a tap into the text was
+    /// still being delivered re-laid out the whole document and crashed UIKit's gesture environment.
+    /// If the host does shrink it anyway, the overlap is zero and nothing changes.
+    private var keyboardFrame: CGRect?
+
+    private func keyboardFrameChanged(_ frame: CGRect?) {
+        keyboardFrame = frame
+        applyKeyboardInset()
+    }
+
+    private func applyKeyboardInset() {
+        var overlap: CGFloat = 0
+        if let screenFrame = keyboardFrame, let window {
+            let frame = window.convert(screenFrame, from: window.screen.coordinateSpace)
+            let mine = convert(bounds, to: window)
+            overlap = max(0, mine.maxY - frame.minY)
+            if frame.minY >= window.bounds.maxY { overlap = 0 }
+        }
+        guard textView.contentInset.bottom != overlap else { return }
+        textView.contentInset.bottom = overlap
+        textView.verticalScrollIndicatorInsets.bottom = overlap
+        if overlap > 0, textView.isFirstResponder {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.textView.scrollRangeToVisible(self.textView.selectedRange)
+            }
+        }
     }
 
     private func layoutHeader() {

@@ -175,6 +175,14 @@ export function apiVectors() {
           },
         ],
       },
+      moveDocRequest: {
+        valid: [{ notebookId: ID }],
+        invalid: [
+          { reason: "missing notebookId", body: {} },
+          { reason: "not a UUIDv7", body: { notebookId: "nope" } },
+          { reason: "null notebookId", body: { notebookId: null } },
+        ],
+      },
       attachmentStatus: {
         valid: [{ size: 1048676, chunkCount: 2, mime: "image/png", uploadedChunks: [0] }],
         invalid: [{ reason: "missing mime", body: { size: 1, chunkCount: 1, uploadedChunks: [] } }],

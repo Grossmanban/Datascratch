@@ -273,15 +273,17 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2))
     }
 
-    /// The tool switches on the next run-loop turn and the palette redraws with the keyboard
-    /// animation: wait for the selected state instead of a fixed pause.
+    /// The tool switches on the next run-loop turn: wait for the palette to report it. The palette's
+    /// accessibility value ("editor N, mode X") follows the editor's mode, not the highlight animation.
     private func becomesSelected(_ button: XCUIElement, timeout: TimeInterval = 4) -> Bool {
+        let mode = button.identifier.replacingOccurrences(of: "tool.", with: "")
+        let palette = XCUIApplication().descendants(matching: .any)["penPalette"].firstMatch
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if button.isSelected { return true }
+            if (palette.value as? String)?.hasSuffix("mode \(mode)") == true { return true }
             settle(0.25)
         }
-        return button.isSelected
+        return (palette.value as? String)?.hasSuffix("mode \(mode)") == true
     }
 
     private func paletteState(_ app: XCUIApplication) -> String {

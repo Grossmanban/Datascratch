@@ -2,7 +2,7 @@ import { Check, ChevronRight } from "lucide-react";
 import { ContextMenu as M } from "radix-ui";
 import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { cn } from "../lib/cn";
-import { formatShortcut } from "./Kbd";
+import { shortcutLabel } from "./Kbd";
 import {
   menuContent,
   menuItem,
@@ -47,7 +47,7 @@ export const ContextMenuItem = forwardRef<HTMLDivElement, ContextMenuItemProps>(
       <M.Item ref={ref} className={cn(menuItem, danger && menuItemDanger, className)} {...rest}>
         {icon}
         <span className="flex-1 truncate">{children}</span>
-        {shortcut && <span className={menuShortcut}>{formatShortcut(shortcut).join("")}</span>}
+        {shortcut && <span className={menuShortcut}>{shortcutLabel(shortcut)}</span>}
       </M.Item>
     );
   },

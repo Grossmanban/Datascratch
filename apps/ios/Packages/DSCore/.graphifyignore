@@ -1,0 +1,7 @@
+yrs-ffi/vendor/
+yrs-ffi/target/
+yrs-ffi/compat/node_modules/
+Sources/YrsFFI/
+Sources/yrs_ffiFFI/
+build/
+.build/

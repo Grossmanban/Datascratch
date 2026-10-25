@@ -116,7 +116,8 @@ public struct DSShowcase: View {
                 ZStack {
                     DSBackdrop(.dusk)
                     VStack(spacing: DSSpace.s3) {
-                        DSPenToolbar(selection: $pen)
+                        DSPenToolbar(selection: $pen, tools: [.pen, .marker, .highlighter], showsTextMode: false)
+                            .fixedSize()
                         DSFormatBar(items: [
                             .item(DSFormatBarItem(id: "style", systemImage: "textformat.size", label: "Стиль") {}),
                             .separator(id: "1"),

@@ -265,6 +265,19 @@ final class EditorViewTests: XCTestCase {
         XCTAssertTrue(hit === editor.textView, "text is hit-tested to the text view (got \(hit.map { NSStringFromClass(type(of: $0)) } ?? "nil"))")
     }
 
+    func testAttachmentViewsAreReusedAcrossLayouts() {
+        let math = BlockNode.math("a^2 + b^2 = c^2")
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Before"), math, .paragraph("After")]))
+        let factory = editor.factory
+        let first = factory.view(for: math)
+        XCTAssertTrue(factory.view(for: math) === first, "the same block gets the same view on the next layout")
+        var changed = math
+        changed.attrs["latex"] = .string("e^{i\\pi} + 1 = 0")
+        XCTAssertTrue(factory.view(for: changed) === first, "changed content updates the view in place")
+        factory.pruneViews(keeping: [])
+        XCTAssertFalse(factory.view(for: math) === first, "views of removed blocks are dropped")
+    }
+
     func testOpenLargeNote() {
         let doc = SampleDocument.large()
         let start = CACurrentMediaTime()

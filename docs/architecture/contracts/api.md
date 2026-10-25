@@ -22,7 +22,7 @@
 | POST | `/auth/recovery/finish` | `{ recoveryToken, salt, kdf, loginKey, wrappedMasterKeyPassword }` → `Session` |
 | POST | `/auth/password` | (авторизован) `{ currentLoginKey, salt, kdf, loginKey, wrappedMasterKeyPassword }` → `204` |
 
-`Session = { userId, accessToken, refreshToken, accessExpiresAt, wrappedMasterKeyPassword, accountDocId }`.
+`Session = { userId, deviceId, accessToken, refreshToken, accessExpiresAt, wrappedMasterKeyPassword, accountDocId }`. В `signup` и `recovery/finish` можно передать необязательное `deviceName` (уточнение потока server).
 
 ## Аккаунт и устройства
 
@@ -60,7 +60,7 @@
 | --- | --- | --- |
 | POST | `/attachments` | `{ attachmentId, noteId, size (байт шифротекста), chunkCount, mime }` → `204` |
 | PUT | `/attachments/:id/chunks/:index` | тело — двоичный кусок (`application/octet-stream`) → `204` |
-| GET | `/attachments/:id` | `{ size, chunkCount, uploadedChunks: number[] }` (для докачки) |
+| GET | `/attachments/:id` | `{ size, chunkCount, mime, uploadedChunks: number[] }` (для докачки) |
 | GET | `/attachments/:id/chunks/:index` | двоичный кусок |
 | DELETE | `/attachments/:id` | |
 

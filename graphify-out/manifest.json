@@ -1098,10 +1098,10 @@
     "semantic_hash": "8291a070b604a5abb244a5c17f810a53"
   },
   "packages/web-editor/src/pen/PenLayer.ts": {
-    "mtime": 1792930214.9148262,
-    "seen": 1792930346.0134091,
-    "ast_hash": "e3dfc97c513adc970e6aa8b8591ac7d1",
-    "semantic_hash": "e3dfc97c513adc970e6aa8b8591ac7d1"
+    "mtime": 1792930394.1862295,
+    "seen": 1792930434.803754,
+    "ast_hash": "a2586a20f3c3b2f63c610dd1984c1005",
+    "semantic_hash": ""
   },
   "packages/web-editor/src/pen/anchors.ts": {
     "mtime": 1792929573.5327911,

@@ -82,16 +82,16 @@ public actor APIClient {
     // MARK: Auth
 
     public func prelogin(email: String) async throws -> PreloginResponse {
-        try await call("POST", "/auth/prelogin", body: ["email": normalizeEmail(email)], auth: false)
+        try await call("POST", "/auth/prelogin", body: PreloginRequest(email: email), auth: false)
     }
 
     /// Signs up and stores the session.
     @discardableResult
-    public func signup(email: String, material: SignupMaterial, userId: String, accountDocId: String) async throws -> AuthSession {
+    public func signup(email: String, material: SignupMaterial, userId: String, accountDocId: String, deviceName: String? = nil) async throws -> AuthSession {
         let body = SignupRequest(
             email: normalizeEmail(email), salt: .init(material.salt), kdf: material.kdf, loginKey: .init(material.loginKey),
             recoveryLoginKey: .init(material.recoveryLoginKey), wrappedMasterKeyPassword: .init(material.wrappedMasterKeyPassword),
-            wrappedMasterKeyRecovery: .init(material.wrappedMasterKeyRecovery), userId: userId, accountDocId: accountDocId)
+            wrappedMasterKeyRecovery: .init(material.wrappedMasterKeyRecovery), userId: userId, accountDocId: accountDocId, deviceName: deviceName)
         let s: AuthSession = try await call("POST", "/auth/signup", body: body, auth: false)
         try setSession(s)
         return s
@@ -99,8 +99,7 @@ public actor APIClient {
 
     @discardableResult
     public func login(email: String, loginKey: Data, deviceName: String) async throws -> AuthSession {
-        struct Body: Encodable { var email: String; var loginKey: Base64URLData; var deviceName: String }
-        let s: AuthSession = try await call("POST", "/auth/login", body: Body(email: normalizeEmail(email), loginKey: .init(loginKey), deviceName: deviceName), auth: false)
+        let s: AuthSession = try await call("POST", "/auth/login", body: LoginRequest(email: email, loginKey: loginKey, deviceName: deviceName), auth: false)
         try setSession(s)
         return s
     }
@@ -119,11 +118,9 @@ public actor APIClient {
     }
 
     @discardableResult
-    public func recoveryFinish(recoveryToken: String, material: PasswordChangeMaterial) async throws -> AuthSession {
-        struct Body: Encodable { var recoveryToken: String; var salt: Base64URLData; var kdf: KDFParams; var loginKey: Base64URLData; var wrappedMasterKeyPassword: Base64URLData }
-        let s: AuthSession = try await call("POST", "/auth/recovery/finish", body: Body(
-            recoveryToken: recoveryToken, salt: .init(material.salt), kdf: material.kdf, loginKey: .init(material.loginKey),
-            wrappedMasterKeyPassword: .init(material.wrappedMasterKeyPassword)), auth: false)
+    public func recoveryFinish(recoveryToken: String, material: PasswordChangeMaterial, deviceName: String? = nil) async throws -> AuthSession {
+        let s: AuthSession = try await call("POST", "/auth/recovery/finish",
+                                            body: RecoveryFinishRequest(recoveryToken: recoveryToken, material: material, deviceName: deviceName), auth: false)
         try setSession(s)
         return s
     }
@@ -152,8 +149,7 @@ public actor APIClient {
 
     /// `notebookKey` only for `mode = .agent` (crypto.md §8).
     public func createNotebook(id: String, mode: NotebookMode, wrappedKey: Data, notebookKey: Data? = nil) async throws -> NotebookInfo {
-        struct Body: Encodable { var notebookId: String; var mode: NotebookMode; var wrappedKey: Base64URLData; var notebookKey: Base64URLData? }
-        return try await call("POST", "/notebooks", body: Body(notebookId: id, mode: mode, wrappedKey: .init(wrappedKey), notebookKey: notebookKey.map(Base64URLData.init)))
+        try await call("POST", "/notebooks", body: CreateNotebookRequest(notebookId: id, mode: mode, wrappedKey: wrappedKey, notebookKey: notebookKey))
     }
 
     public func notebooks() async throws -> [NotebookInfo] { try await call("GET", "/notebooks") }
@@ -173,17 +169,7 @@ public actor APIClient {
 
     /// Registers a document before its first push (`notebookId` nil only for the account doc).
     public func registerDoc(docId: String, kind: DocKind, notebookId: String?) async throws {
-        struct Body: Encodable {
-            var docId: String; var kind: DocKind; var notebookId: String?
-            func encode(to encoder: any Encoder) throws {
-                var c = encoder.container(keyedBy: CodingKeys.self)
-                try c.encode(docId, forKey: .docId)
-                try c.encode(kind, forKey: .kind)
-                try c.encode(notebookId, forKey: .notebookId) // explicit null
-            }
-            enum CodingKeys: String, CodingKey { case docId, kind, notebookId }
-        }
-        try await send("POST", "/docs", body: Body(docId: docId, kind: kind, notebookId: notebookId))
+        try await send("POST", "/docs", body: RegisterDocRequest(docId: docId, kind: kind, notebookId: notebookId))
     }
 
     public func deleteDoc(id: String) async throws { try await send("DELETE", "/docs/\(id)") }
@@ -219,18 +205,7 @@ public actor APIClient {
     // MARK: Sharing
 
     public func createShare(id: String, target: ShareTarget, permission: SharePermission, expiresAt: Date? = nil) async throws -> Share {
-        struct Body: Encodable {
-            var shareId: String; var target: ShareTarget; var permission: SharePermission; var expiresAt: String?
-            func encode(to encoder: any Encoder) throws {
-                var c = encoder.container(keyedBy: CodingKeys.self)
-                try c.encode(shareId, forKey: .shareId)
-                try c.encode(target, forKey: .target)
-                try c.encode(permission, forKey: .permission)
-                try c.encode(expiresAt, forKey: .expiresAt)
-            }
-            enum CodingKeys: String, CodingKey { case shareId, target, permission, expiresAt }
-        }
-        return try await call("POST", "/shares", body: Body(shareId: id, target: target, permission: permission, expiresAt: expiresAt.map(DSDate.iso)))
+        try await call("POST", "/shares", body: CreateShareRequest(shareId: id, target: target, permission: permission, expiresAt: expiresAt))
     }
 
     public func shares() async throws -> [Share] { try await call("GET", "/shares") }

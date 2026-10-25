@@ -587,7 +587,7 @@ public struct Comment: Hashable, Sendable, Identifiable {
         guard let blockId = f["blockId"]?.stringValue, let author = f["author"].flatMap(Author.init(value:)) else { return nil }
         self.id = id
         self.blockId = blockId
-        if let a = f["anchor"], let s = a["start"]?.stringValue.flatMap(Base64URL.decode), let e = a["end"]?.stringValue.flatMap(Base64URL.decode) {
+        if let a = f["anchor"], let s = a["start"]?.stringValue.flatMap { Base64URL.decode($0) }, let e = a["end"]?.stringValue.flatMap { Base64URL.decode($0) } {
             anchor = (s, e)
         }
         self.author = author

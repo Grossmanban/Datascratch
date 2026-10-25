@@ -329,7 +329,7 @@ final class StubTransport: HTTPTransport, @unchecked Sendable {
 
 @Suite struct APIClientTests {
     func session(_ token: String, expires: Date) -> String {
-        #"{"userId":"u","accessToken":"\#(token)","refreshToken":"r-\#(token)","accessExpiresAt":"\#(DSDate.iso(expires))","wrappedMasterKeyPassword":"AQID","accountDocId":"a"}"#
+        #"{"userId":"0192f3c4-0000-7000-8000-00000000000a","deviceId":"dev","accessToken":"\#(token)","refreshToken":"r-\#(token)","accessExpiresAt":"\#(DSDate.iso(expires))","wrappedMasterKeyPassword":"AQID","accountDocId":"0192f3c4-0000-7000-8000-00000000000b"}"#
     }
 
     @Test func loginRefreshesOnExpiryAnd401() async throws {

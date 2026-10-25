@@ -1045,14 +1045,14 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792932377.575155,
-    "seen": 1792966048.3770385,
-    "ast_hash": "",
+    "seen": 1792966294.3040893,
+    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792932377.575155,
-    "seen": 1792966048.3770406,
-    "ast_hash": "",
+    "seen": 1792966294.3040922,
+    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2814,9 +2814,9 @@
     "semantic_hash": "014847f5589b7cab02152853db2547c1"
   },
   "apps/ios/Datascratch/App/AppCommands.swift": {
-    "mtime": 1792963936.980251,
-    "seen": 1792965895.0177906,
-    "ast_hash": "3e563cdb64e2a235c9724642720a1af4",
+    "mtime": 1792966261.414362,
+    "seen": 1792966294.3033648,
+    "ast_hash": "6286ebfc88082790d56b62546cd2c27a",
     "semantic_hash": ""
   },
   "apps/ios/Datascratch/App/AppModel.swift": {
@@ -3054,9 +3054,9 @@
     "semantic_hash": "b66d46572afc1c5f4366e8e23697c21c"
   },
   "apps/ios/DatascratchUITests/LaunchTests.swift": {
-    "mtime": 1792964620.9664462,
-    "seen": 1792965895.0179398,
-    "ast_hash": "5e945a83e84f43daa63594237be62aec",
+    "mtime": 1792966261.4150789,
+    "seen": 1792966294.3035796,
+    "ast_hash": "3af48a347349175b9d7a03834836090f",
     "semantic_hash": ""
   },
   "apps/ios/project.yml": {
@@ -4009,8 +4009,8 @@
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792946964.3743534,
-    "seen": 1792966048.377043,
-    "ast_hash": "",
+    "seen": 1792966294.304095,
+    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
@@ -4507,8 +4507,8 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792959668.5251646,
-    "seen": 1792966048.377364,
-    "ast_hash": "",
+    "seen": 1792966294.3047407,
+    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
     "semantic_hash": ""
   },
   "infra/deploy/inspect.sh": {

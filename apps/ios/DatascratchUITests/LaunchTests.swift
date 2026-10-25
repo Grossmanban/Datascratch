@@ -126,12 +126,14 @@ final class LibraryUITests: XCTestCase {
         drawing.tap()
         let toggle = app.switches["settings.fingerDrawing"].firstMatch
         XCTAssertTrue(toggle.waitForExistence(timeout: 5), "finger drawing toggle not found")
-        XCTAssertEqual(toggle.value as? String, "0")
+        // Off by default on iPad (Pencil), on by default on iPhone (D-06).
+        let initial = toggle.value as? String
+        XCTAssertEqual(initial, UIDevice.current.userInterfaceIdiom == .pad ? "0" : "1")
         if toggle.switches.firstMatch.exists {
             toggle.switches.firstMatch.tap()
         } else {
             toggle.tap()
         }
-        XCTAssertEqual(toggle.value as? String, "1")
+        XCTAssertNotEqual(toggle.value as? String, initial)
     }
 }

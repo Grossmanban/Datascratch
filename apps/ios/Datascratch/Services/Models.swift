@@ -126,7 +126,8 @@ nonisolated struct NoteBlock: Codable, Identifiable, Hashable, Sendable {
 nonisolated struct NoteBody: Codable, Hashable, Sendable {
     var blocks: [NoteBlock]
 
-    static let empty = NoteBody(blocks: [.paragraph()])
+    /// A body with one empty paragraph (a fresh blockId every time).
+    static var empty: NoteBody { NoteBody(blocks: [.paragraph()]) }
 
     /// Plain text of the first non-empty blocks, for cards and search.
     var plainText: String {

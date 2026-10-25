@@ -147,10 +147,9 @@ export function findOrphanedStrokes(doc: Y.Doc): string[] {
 }
 
 /**
- * Orphaned strokes eligible for removal during compaction (sync-protocol.md §5):
- * orphaned and created more than 30 days ago. Yjs does not record when text
- * was deleted, so `createdAt` is the age used; callers that track the moment a
- * stroke became orphaned can pass `orphanedAt`.
+ * Orphaned strokes eligible for removal during compaction (strokes.md §4.2):
+ * all anchors deleted and `orphanedAt` (or, if unknown, `createdAt`) older
+ * than 30 days. See updateOrphanedAt for the local bookkeeping.
  */
 export function findPurgeableStrokes(
   doc: Y.Doc,
@@ -269,4 +268,22 @@ export function restoreNoteVersion(doc: Y.Doc, versionState: Uint8Array, origin?
       putStroke(doc, id, stroke);
     }
   }, origin);
+}
+
+/**
+ * Local `orphanedAt` bookkeeping (strokes.md §4.2): records when a stroke was
+ * first seen with all anchors deleted and forgets it once an anchor is alive
+ * again. `orphanedAt` is device-local state (persist it next to the document).
+ * Returns the ids that are orphaned now.
+ */
+export function updateOrphanedAt(
+  doc: Y.Doc,
+  orphanedAt: Map<string, number>,
+  now: number,
+): string[] {
+  const orphaned = findOrphanedStrokes(doc);
+  const set = new Set(orphaned);
+  for (const id of [...orphanedAt.keys()]) if (!set.has(id)) orphanedAt.delete(id);
+  for (const id of orphaned) if (!orphanedAt.has(id)) orphanedAt.set(id, now);
+  return orphaned;
 }

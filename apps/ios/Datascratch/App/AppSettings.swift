@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftUI
+import UIKit
 
 /// Device-local preferences (account-wide settings will sync via the account document).
 @Observable
@@ -16,8 +17,11 @@ final class AppSettings {
 
     @ObservationIgnored private let defaults: UserDefaults
 
-    /// D-06: on iPhone a finger scrolls and selects by default; drawing is opt-in.
+    /// D-06: whether a finger draws when a pen tool is active (in text mode a finger
+    /// always scrolls and selects). Off by default on iPad (Apple Pencil); on by default
+    /// on iPhone, which has no Pencil.
     var fingerDrawing: Bool { didSet { defaults.set(fingerDrawing, forKey: "fingerDrawing") } }
+    var fingerDrawingEffective: Bool { fingerDrawing }
     var appearance: Appearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
     var defaultFont: NoteStyle.Font { didSet { defaults.set(defaultFont.rawValue, forKey: "defaultFont") } }
     var defaultPaper: NoteStyle.Paper { didSet { defaults.set(defaultPaper.rawValue, forKey: "defaultPaper") } }
@@ -26,7 +30,8 @@ final class AppSettings {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        fingerDrawing = defaults.bool(forKey: "fingerDrawing")
+        fingerDrawing = defaults.object(forKey: "fingerDrawing") as? Bool
+            ?? (UIDevice.current.userInterfaceIdiom == .phone)
         appearance = Appearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         defaultFont = NoteStyle.Font(rawValue: defaults.string(forKey: "defaultFont") ?? "") ?? .serif
         defaultPaper = NoteStyle.Paper(rawValue: defaults.string(forKey: "defaultPaper") ?? "") ?? .plain

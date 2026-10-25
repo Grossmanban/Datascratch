@@ -18,10 +18,10 @@
     "semantic_hash": "af0b1c8b4b5e47a6fd2cd4e0fa2a5b5b"
   },
   "apps/server/README.md": {
-    "mtime": 1792927481.6459987,
-    "seen": 1792928943.6232736,
-    "ast_hash": "7b536e33a12f9bedb32c0d44d04debdc",
-    "semantic_hash": "7b536e33a12f9bedb32c0d44d04debdc"
+    "mtime": 1792929264.6058884,
+    "seen": 1792929573.5082488,
+    "ast_hash": "517ffa9f4dea99e27a248208b8cfabcb",
+    "semantic_hash": ""
   },
   "apps/web/README.md": {
     "mtime": 1792927481.6459987,
@@ -42,10 +42,10 @@
     "semantic_hash": ""
   },
   "docs/architecture/data-model.md": {
-    "mtime": 1792927481.646325,
-    "seen": 1792928943.6232886,
-    "ast_hash": "2dec21dc8ddccc32c2e526f2c1918e52",
-    "semantic_hash": "2dec21dc8ddccc32c2e526f2c1918e52"
+    "mtime": 1792929337.792818,
+    "seen": 1792929573.5088258,
+    "ast_hash": "7ff00a499a4bae9fd21c49cfe3516f36",
+    "semantic_hash": ""
   },
   "docs/architecture/overview.md": {
     "mtime": 1792927481.646325,
@@ -312,10 +312,10 @@
     "semantic_hash": ""
   },
   "docs/spec/06-data-server.md": {
-    "mtime": 1792927481.6495483,
-    "seen": 1792928943.62337,
-    "ast_hash": "e53967a7298e8a0537a6577b76eddbf1",
-    "semantic_hash": "e53967a7298e8a0537a6577b76eddbf1"
+    "mtime": 1792929337.7738926,
+    "seen": 1792929573.5112514,
+    "ast_hash": "f5d91722b414c1b171a2df989e7e443a",
+    "semantic_hash": ""
   },
   "docs/spec/07-encryption.md": {
     "mtime": 1792927481.6495483,
@@ -348,10 +348,10 @@
     "semantic_hash": "b6306ed1231951bb03d976cbc1295e66"
   },
   "infra/README.md": {
-    "mtime": 1792927481.6817822,
-    "seen": 1792928943.62338,
-    "ast_hash": "503e786a9edf5573abff84f67ce659eb",
-    "semantic_hash": "503e786a9edf5573abff84f67ce659eb"
+    "mtime": 1792929296.2698903,
+    "seen": 1792929573.5115025,
+    "ast_hash": "ed21b6728ca678598cc7e72249735a91",
+    "semantic_hash": ""
   },
   "packages/shared/README.md": {
     "mtime": 1792927481.6874382,
@@ -618,9 +618,9 @@
     "semantic_hash": ""
   },
   "apps/server/src/sync/connection.ts": {
-    "mtime": 1792928817.4704552,
-    "seen": 1792928943.6232383,
-    "ast_hash": "34504af72ffeef293777bd978fa5f2b6",
+    "mtime": 1792929492.7060955,
+    "seen": 1792929573.5072834,
+    "ast_hash": "705cbaad37d83cb482ef1112e1156bf4",
     "semantic_hash": ""
   },
   "apps/server/src/sync/hub.ts": {
@@ -690,9 +690,9 @@
     "semantic_hash": ""
   },
   "apps/server/test/sync.test.ts": {
-    "mtime": 1792928759.2534847,
-    "seen": 1792928943.6232526,
-    "ast_hash": "ea19cca27b10b27a7b964cbd7ff2ed37",
+    "mtime": 1792929505.1300423,
+    "seen": 1792929573.507808,
+    "ast_hash": "0c4bf19b244a1bb38ab3214d05ad2eab",
     "semantic_hash": ""
   },
   "apps/server/tsconfig.build.json": {
@@ -903,6 +903,24 @@
     "mtime": 1792929181.025839,
     "seen": 1792929224.7128098,
     "ast_hash": "af3ff9bbecef99a31d770b4ad14479f2",
+    "semantic_hash": ""
+  },
+  "apps/server/drizzle/0000_init.sql": {
+    "mtime": 1792927737.4777975,
+    "seen": 1792929227.405126,
+    "ast_hash": "",
+    "semantic_hash": ""
+  },
+  "apps/server/drizzle/0001_rls_and_triggers.sql": {
+    "mtime": 1792927762.233799,
+    "seen": 1792929227.4051292,
+    "ast_hash": "",
+    "semantic_hash": ""
+  },
+  "docs/changelog.d/2026-10-25-server-initial.md": {
+    "mtime": 1792929363.1298943,
+    "seen": 1792929573.5089185,
+    "ast_hash": "bbdbab4c111535de855506d5567d70f5",
     "semantic_hash": ""
   }
 }

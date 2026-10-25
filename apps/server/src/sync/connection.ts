@@ -18,18 +18,21 @@ import {
 
 type SyncPrincipal = UserPrincipal | GuestPrincipal;
 
+/** Something to send for a given seq: another device's update, or the ack of our own push. */
+type Pending =
+  | { kind: 'update'; seq: number; payload: string; deviceId: string }
+  | { kind: 'ack'; seq: number; clientMsgId: string };
+
 interface Subscription {
   unsubscribe: () => void;
-  /** While catching up, live events are buffered and flushed afterwards. */
+  /** While catching up, live events and acks are buffered and flushed afterwards. */
   live: boolean;
-  buffer: HubMessage[];
-  /** Highest seq delivered to the client (or skipped as its own); delivery is gap-free from here. */
+  buffer: Pending[];
+  /** Highest seq delivered (as update or ack) to the client; delivery is gap-free up to here. */
   sent: number;
-  /** Live updates that arrived ahead of `sent + 1`, keyed by seq. */
-  pending: Map<number, Extract<HubMessage, { type: 'update' }>>;
+  /** Entries that arrived ahead of `sent + 1`, keyed by seq. */
+  pending: Map<number, Pending>;
   filling: boolean;
-  /** Seqs this connection pushed and that were not yet passed by `sent` (never echoed back). */
-  own: Set<number>;
 }
 
 const HELLO_TIMEOUT_MS = 10_000;
@@ -271,7 +274,6 @@ export class SyncConnection {
         sent: since,
         pending: new Map(),
         filling: false,
-        own: new Set(),
       };
       sub.unsubscribe = this.ctx.hub.subscribe(topics.doc(docId), (m) => this.#onDocEvent(docId, sub, m));
       this.#subs.set(docId, sub);
@@ -298,7 +300,7 @@ export class SyncConnection {
         throw err;
       }
       sub.live = true;
-      for (const m of sub.buffer) this.#deliver(docId, sub, m);
+      for (const e of sub.buffer) this.#enqueue(docId, sub, e);
       sub.buffer = [];
     }
   }
@@ -317,27 +319,42 @@ export class SyncConnection {
       this.#send({ type: 'error', code: 'doc_not_found', message: 'document deleted', ref: docId });
       return;
     }
-    if (!sub.live) {
-      if (m.type === 'update') sub.buffer.push(m);
+    if (m.type === 'awareness') {
+      if (sub.live && m.origin !== this.id) {
+        this.#send({ type: 'awareness', docId, payload: m.payload, deviceId: m.deviceId });
+      }
       return;
     }
-    this.#deliver(docId, sub, m);
+    // Our own pushes are represented by their ack entry (see #push), never echoed.
+    if (m.type !== 'update' || m.origin === this.id) return;
+    this.#enqueue(docId, sub, { kind: 'update', seq: m.seq, payload: m.payload, deviceId: m.deviceId });
   }
 
-  #deliver(docId: string, sub: Subscription, m: HubMessage) {
-    if (m.type === 'awareness') {
-      if (m.origin !== this.id) this.#send({ type: 'awareness', docId, payload: m.payload, deviceId: m.deviceId });
+  #enqueue(docId: string, sub: Subscription, e: Pending) {
+    if (!sub.live) {
+      sub.buffer.push(e);
       return;
     }
-    if (m.type !== 'update' || m.seq <= sub.sent) return;
-    sub.pending.set(m.seq, m);
+    if (e.seq <= sub.sent) {
+      // Already delivered (e.g. in a catch-up page); a late ack still has to reach the sender.
+      if (e.kind === 'ack') this.#send({ type: 'ack', docId, clientMsgId: e.clientMsgId, seq: e.seq });
+      return;
+    }
+    if (!sub.pending.has(e.seq) || e.kind === 'ack') sub.pending.set(e.seq, e);
     this.#drain(docId, sub);
   }
 
+  #emit(docId: string, e: Pending) {
+    if (e.kind === 'ack') this.#send({ type: 'ack', docId, clientMsgId: e.clientMsgId, seq: e.seq });
+    else this.#send({ type: 'update', docId, seq: e.seq, payload: e.payload, deviceId: e.deviceId });
+  }
+
   /**
-   * Deliver pending updates strictly in seq order. Concurrent writers may publish
-   * out of order (seq 6 before 5); a missing seq is always committed already
-   * (the doc row lock orders commits), so a gap is filled from the database.
+   * Deliver updates and acks strictly in seq order (sync-protocol.md §4, "Порядок"):
+   * the client keeps lastSeq = max(seq), so nothing may overtake an earlier seq.
+   * Concurrent writers may publish out of order (6 before 5); a missing seq is
+   * always committed already (the doc row lock orders commits), so the gap is
+   * filled from the database.
    */
   #drain(docId: string, sub: Subscription) {
     for (;;) {
@@ -345,10 +362,7 @@ export class SyncConnection {
       if (!next) break;
       sub.pending.delete(next.seq);
       sub.sent = next.seq;
-      sub.own.delete(next.seq);
-      if (next.origin !== this.id) {
-        this.#send({ type: 'update', docId, seq: next.seq, payload: next.payload, deviceId: next.deviceId });
-      }
+      this.#emit(docId, next);
     }
     if (sub.pending.size === 0 || sub.filling) return;
     sub.filling = true;
@@ -357,12 +371,12 @@ export class SyncConnection {
       .range(this.ctx.database.db, docId, sub.sent, upTo)
       .then((rows) => {
         for (const r of rows) {
-          if (r.seq !== sub.sent + 1) break;
+          if (r.seq !== sub.sent + 1 || sub.pending.has(r.seq)) break;
           sub.sent = r.seq;
-          if (!sub.own.delete(r.seq)) {
-            this.#send({ type: 'update', docId, seq: r.seq, payload: toB64(r.payload), deviceId: r.deviceId });
-          }
+          this.#send({ type: 'update', docId, seq: r.seq, payload: toB64(r.payload), deviceId: r.deviceId });
         }
+        // Gaps that are not in the database are allowed ("дыры" in seq): skip them.
+        if (sub.pending.size > 0 && rows.length === 0) sub.sent = Math.min(...sub.pending.keys()) - 1;
       })
       .catch((err) => this.#internal(err))
       .finally(() => {
@@ -382,8 +396,9 @@ export class SyncConnection {
     const deviceId = this.#deviceId();
     const r = await this.ctx.documents.append(this.ctx.database.db, { docId, payload: bytes, deviceId, clientMsgId });
     const sub = this.#subs.get(docId);
-    if (sub && r.seq > sub.sent) sub.own.add(r.seq);
-    this.#send({ type: 'ack', docId, clientMsgId, seq: r.seq });
+    // On a subscribed document the ack takes its place in seq order.
+    if (sub) this.#enqueue(docId, sub, { kind: 'ack', seq: r.seq, clientMsgId });
+    else this.#send({ type: 'ack', docId, clientMsgId, seq: r.seq });
     if (!r.duplicate) this.ctx.documents.publishUpdate(docId, r.seq, payload, deviceId, this.id);
   }
 

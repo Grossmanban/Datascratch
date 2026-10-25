@@ -402,15 +402,15 @@
     "semantic_hash": ""
   },
   "apps/server/package.json": {
-    "mtime": 1792927655.4353566,
-    "seen": 1792928943.6231859,
-    "ast_hash": "19196c7c4927b8d381cc1671d9398d30",
+    "mtime": 1792928998.8258767,
+    "seen": 1792929224.7107174,
+    "ast_hash": "55f301db16e106a11dd7e73b54ff58ab",
     "semantic_hash": ""
   },
   "apps/server/src/app.ts": {
-    "mtime": 1792928759.2512615,
-    "seen": 1792928943.6231875,
-    "ast_hash": "21760a29ec9d96d4f5a291a4419b16da",
+    "mtime": 1792929208.1158419,
+    "seen": 1792929224.7107198,
+    "ast_hash": "0f0b02f9fc9c5bb13ce116a53d3782b9",
     "semantic_hash": ""
   },
   "apps/server/src/auth/guard.ts": {
@@ -438,9 +438,9 @@
     "semantic_hash": ""
   },
   "apps/server/src/db/client.ts": {
-    "mtime": 1792927794.3496945,
-    "seen": 1792928943.623195,
-    "ast_hash": "ae5018c0a079e34e25544711382d52a4",
+    "mtime": 1792929027.7010133,
+    "seen": 1792929224.7109334,
+    "ast_hash": "78df94fcbcfeb4ebd442df623970385e",
     "semantic_hash": ""
   },
   "apps/server/src/db/migrate-cli.ts": {
@@ -873,6 +873,48 @@
     "mtime": 1792927481.6874382,
     "seen": 1792928943.6233878,
     "ast_hash": "d9cb3ec7a7aba30cc3422c5df9fc8aa6",
+    "semantic_hash": ""
+  },
+  ".github/workflows/server.yml": {
+    "mtime": 1792929208.1221325,
+    "seen": 1792929224.7104468,
+    "ast_hash": "b7001afee29a15f404044d6c9150bac9",
+    "semantic_hash": ""
+  },
+  "infra/backup.sh": {
+    "mtime": 1792929014.7901685,
+    "seen": 1792929224.712802,
+    "ast_hash": "ad2ccae5aaf29d48a1a79fbb23449979",
+    "semantic_hash": ""
+  },
+  "infra/docker-compose.yml": {
+    "mtime": 1792928998.8346734,
+    "seen": 1792929224.7128053,
+    "ast_hash": "782815c41af0453339e3e44cd997af78",
+    "semantic_hash": ""
+  },
+  "infra/restore.sh": {
+    "mtime": 1792929027.7005377,
+    "seen": 1792929224.7128074,
+    "ast_hash": "ab18ec3a0215132f99a2aa807f8c27ec",
+    "semantic_hash": ""
+  },
+  "infra/smoke-test.sh": {
+    "mtime": 1792929181.025839,
+    "seen": 1792929224.7128098,
+    "ast_hash": "af3ff9bbecef99a31d770b4ad14479f2",
+    "semantic_hash": ""
+  },
+  "apps/server/drizzle/0000_init.sql": {
+    "mtime": 1792927737.4777975,
+    "seen": 1792929227.405126,
+    "ast_hash": "a5de2feab812287bedd5a0f8cb793b6a",
+    "semantic_hash": ""
+  },
+  "apps/server/drizzle/0001_rls_and_triggers.sql": {
+    "mtime": 1792927762.233799,
+    "seen": 1792929227.4051292,
+    "ast_hash": "4203dbf78c0e858320c15f29875ac97d",
     "semantic_hash": ""
   }
 }

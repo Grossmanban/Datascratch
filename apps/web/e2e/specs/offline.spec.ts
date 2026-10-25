@@ -8,9 +8,20 @@ test("offline: edits are kept locally, survive reload and sync when back online"
   await signUp(page, email);
   await expectSynced(page);
   // Let the service worker take control so the app shell loads without network.
-  await page.evaluate(async () => {
-    await navigator.serviceWorker?.ready;
-  });
+  const logs: string[] = [];
+  page.on("console", (m) => logs.push(`${m.type()}: ${m.text()}`));
+  const swState = () =>
+    page.evaluate(async () => {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      return JSON.stringify(
+        regs.map((r) => ({ scope: r.scope, active: r.active?.state, waiting: r.waiting?.state, installing: r.installing?.state })),
+      );
+    });
+  try {
+    await expect.poll(swState, { timeout: 45_000 }).toContain('"active":"activated"');
+  } catch {
+    throw new Error(`Service worker never activated. Registrations: ${await swState()}\nConsole:\n${logs.join("\n")}`);
+  }
   await page.reload();
   await expect(page.getByTestId("sidebar")).toBeVisible();
   await page.waitForFunction(() => !!navigator.serviceWorker?.controller, null, { timeout: 15_000 });

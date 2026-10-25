@@ -1046,14 +1046,14 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792932836.5381606,
     "seen": 1792945483.079994,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
-    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
+    "ast_hash": "",
+    "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792932836.5381606,
     "seen": 1792945483.0799966,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
-    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
+    "ast_hash": "",
+    "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1792932836.5381606,
@@ -3966,10 +3966,10 @@
     "semantic_hash": "667fb125be088f7af3aa07ca5ff514ca"
   },
   "apps/web/e2e/specs/a11y.spec.ts": {
-    "mtime": 1792942227.9358165,
-    "seen": 1792942886.7639713,
-    "ast_hash": "db3dc855154a1d9cc7dbf5abcfb9c3f7",
-    "semantic_hash": "db3dc855154a1d9cc7dbf5abcfb9c3f7"
+    "mtime": 1792945764.7198274,
+    "seen": 1792945915.7459238,
+    "ast_hash": "6020be961d9b4d2dc0a4a106baac1a32",
+    "semantic_hash": ""
   },
   "apps/web/e2e/specs/keyboard.spec.ts": {
     "mtime": 1792942214.6450908,
@@ -3978,10 +3978,10 @@
     "semantic_hash": "13885357187a534b7600ca0ee3e683bf"
   },
   "apps/web/e2e/specs/theme.spec.ts": {
-    "mtime": 1792943762.217582,
-    "seen": 1792944497.6961124,
-    "ast_hash": "01a1ce54c2b6411d0938fd8265c7ab7c",
-    "semantic_hash": "01a1ce54c2b6411d0938fd8265c7ab7c"
+    "mtime": 1792945764.712969,
+    "seen": 1792945915.7462478,
+    "ast_hash": "aa8181ae3926932aaf67ec585c6152f4",
+    "semantic_hash": ""
   },
   "apps/web/src/features/doc/CoverDialog.tsx": {
     "mtime": 1792943449.9056194,

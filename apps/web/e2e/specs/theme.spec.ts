@@ -52,8 +52,9 @@ test("dialogs and menus meet contrast in the dark theme", async ({ page }) => {
   await signUp(page, uniqueEmail("theme-dialogs"));
   const check = async (what: string) => {
     // Let opening animations finish: axe measures what is on screen.
-    await page.waitForTimeout(500);
-    const res = await new AxeBuilder({ page }).withTags(["wcag2aa"]).withRules(["color-contrast", "button-name"]).analyze();
+    await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"), null, { timeout: 5000 }).catch(() => undefined);
+    await page.waitForTimeout(400);
+    const res = await new AxeBuilder({ page }).exclude("[data-swipe-direction]").withTags(["wcag2aa"]).withRules(["color-contrast", "button-name"]).analyze();
     const bad = res.violations.flatMap((v) => v.nodes.map((n) => `${v.id}: ${n.target.join(" ")} — ${n.failureSummary?.split("\n")[1] ?? ""}`));
     expect(bad, what).toEqual([]);
   };

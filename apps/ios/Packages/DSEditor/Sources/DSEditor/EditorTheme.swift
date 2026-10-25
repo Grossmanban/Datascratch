@@ -86,27 +86,41 @@ public struct EditorTheme: Sendable {
         }
     }
 
+    nonisolated(unsafe) private static let fontCache = NSCache<NSString, UIFont>()
+
     public func font(size: CGFloat, weight: UIFont.Weight = .regular, italic: Bool = false, design override: UIFontDescriptor.SystemDesign? = nil) -> UIFont {
+        let d = override ?? design()
+        let key = "\(size)|\(weight.rawValue)|\(italic)|\(d.rawValue)" as NSString
+        if let cached = Self.fontCache.object(forKey: key) { return cached }
         let base = UIFont.systemFont(ofSize: size, weight: weight)
-        var desc = base.fontDescriptor.withDesign(override ?? design()) ?? base.fontDescriptor
-        if italic, let d = desc.withSymbolicTraits(desc.symbolicTraits.union(.traitItalic)) { desc = d }
-        return UIFont(descriptor: desc, size: size)
+        var desc = base.fontDescriptor.withDesign(d) ?? base.fontDescriptor
+        if italic, let it = desc.withSymbolicTraits(desc.symbolicTraits.union(.traitItalic)) { desc = it }
+        let font = UIFont(descriptor: desc, size: size)
+        Self.fontCache.setObject(font, forKey: key)
+        return font
     }
 
     public var bodyFont: UIFont { font(size: baseFontSize) }
 
+    /// Sizes follow Dynamic Type through `baseFontSize`; ink scales with them because it is stored in em.
     public func fontSize(for kind: ParagraphKind, attrs: [String: JSONValue]) -> CGFloat {
+        let k = baseFontSize / 17
         switch kind.type {
-        case NodeType.title: 34
+        case NodeType.title: return (34 * k).rounded()
         case NodeType.heading:
             switch Int(attrs["level"]?.numberValue ?? 1) {
-            case 1: 28
-            case 2: 22
-            default: 19
+            case 1: return (28 * k).rounded()
+            case 2: return (22 * k).rounded()
+            default: return (19 * k).rounded()
             }
-        case NodeType.codeBlock: 15
-        default: baseFontSize
+        case NodeType.codeBlock: return (15 * k).rounded()
+        default: return baseFontSize
         }
+    }
+
+    /// Body size for the current Dynamic Type setting.
+    public static func dynamicBaseSize(for traits: UITraitCollection) -> CGFloat {
+        UIFontMetrics(forTextStyle: .body).scaledValue(for: 17, compatibleWith: traits).rounded()
     }
 
     public func weight(for kind: ParagraphKind) -> UIFont.Weight {

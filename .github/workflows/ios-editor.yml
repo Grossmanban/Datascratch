@@ -63,20 +63,39 @@ jobs:
           test -n "$ID"
           echo "id=$ID" >> "$GITHUB_OUTPUT"
 
-      - name: Build and test package on iPad simulator
+      - name: Build package tests
+        timeout-minutes: 15
         working-directory: apps/ios/Packages/DSEditor
         run: |
           set +e
-          xcodebuild test \
+          xcodebuild build-for-testing \
             -scheme DSEditor-Package \
             -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -derivedDataPath "$RUNNER_TEMP/pkg-dd" \
             -skipPackagePluginValidation \
+            2>&1 | tee "$RUNNER_TEMP/package-build.log" | grep --line-buffered -E "error:|warning: .*DSEditor/Sources|\*\* "
+          exit ${PIPESTATUS[0]}
+
+      - name: Boot simulator
+        timeout-minutes: 10
+        run: |
+          xcrun simctl boot "${{ steps.sim.outputs.id }}" || true
+          xcrun simctl bootstatus "${{ steps.sim.outputs.id }}" -b
+
+      - name: Run package tests on iPad simulator
+        timeout-minutes: 15
+        working-directory: apps/ios/Packages/DSEditor
+        run: |
+          set +e
+          xcodebuild test-without-building \
+            -scheme DSEditor-Package \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -derivedDataPath "$RUNNER_TEMP/pkg-dd" \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 300 \
             -resultBundlePath "$RUNNER_TEMP/package-tests.xcresult" \
             2>&1 | tee "$RUNNER_TEMP/package-tests.log" \
-            | grep --line-buffered -E "error:|warning: .*DSEditor|Test (Suite|Case|case|run)|✔|✘|OPEN_10K|\*\* "
-          status=${PIPESTATUS[0]}
-          exit $status
+            | grep --line-buffered -E "error|Test (Suite|Case|case|run)|✔|✘|OPEN_10K|passed|failed|\*\* "
+          exit ${PIPESTATUS[0]}
 
       - name: Generate demo project
         if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
@@ -86,6 +105,7 @@ jobs:
           xcodegen generate
 
       - name: Build and UI-test demo on iPad simulator
+        timeout-minutes: 25
         if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
         working-directory: apps/ios/Packages/DSEditor/Demo
         run: |
@@ -101,6 +121,7 @@ jobs:
           exit $status
 
       - name: Build unsigned device IPA
+        timeout-minutes: 15
         if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
         working-directory: apps/ios/Packages/DSEditor/Demo
         run: |

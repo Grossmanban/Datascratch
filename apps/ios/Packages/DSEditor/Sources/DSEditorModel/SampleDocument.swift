@@ -40,6 +40,7 @@ public enum SampleDocument {
             .code("func greet(_ name: String) -> String {\n    // Code blocks are highlighted\n    return \"Hello, \\(name)!\"\n}", language: "swift"),
             .math("E = mc^2 \\quad \\int_0^1 x^2\\,dx = \\frac{1}{3}"),
             .mermaid("graph LR\n  A[Перо] --> B[Якорь]\n  B --> C[Перекладка]\n  C --> A"),
+            EditorCommands.table(rows: 3, columns: 3, header: ["Инструмент", "Где", "Слой"]),
             .rule("dots"),
             .heading("Блок рисования", level: 3),
             .drawing(height: 220),

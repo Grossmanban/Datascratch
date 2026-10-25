@@ -163,8 +163,13 @@ final class InkController {
             pixelRuns = [:]
             eraserMoved()
         case .lasso:
-            clearSelection()
-            lassoPath = [s.location]
+            if !selectedStrokes.isEmpty, let poly = selectionPolygon, InkGeometry.contains(polygon: poly, point: s.location) {
+                dragStart = s.location
+                dragDelta = .zero
+            } else {
+                clearSelection()
+                lassoPath = [s.location]
+            }
         case .pen, .pencil, .marker, .highlighter:
             guard let tool = tools.mode.inkTool else { return }
             let paint = tools.paints[tool] ?? .defaults(for: tool)
@@ -181,6 +186,11 @@ final class InkController {
             eraserPath += committed.map(\.location)
             eraserMoved()
         case .lasso:
+            if let start = dragStart, let last = (committed + predicted).last?.location {
+                dragDelta = CGPoint(x: last.x - start.x, y: last.y - start.y)
+                previewDrag()
+                return
+            }
             lassoPath += committed.map(\.location)
             over.updateSelection(path: lassoCGPath(lassoPath + predicted.map(\.location), closed: false), color: EditorTheme.selectionTint)
         default:
@@ -221,6 +231,11 @@ final class InkController {
             if !cancelled { commitEraser() } else { erased = []; over.setHidden([]); under.setHidden([]) }
             eraserPath = []
         case .lasso:
+            if dragStart != nil {
+                if !cancelled { commitDrag() } else { refresh() }
+                dragStart = nil
+                return
+            }
             if !cancelled { finishLasso() } else { over.updateSelection(path: nil, color: .clear) }
             lassoPath = []
         default:
@@ -499,6 +514,76 @@ final class InkController {
         return p
     }
 
+    private var selectionPolygon: [CGPoint]?
+    private var dragStart: CGPoint?
+    private var dragDelta: CGPoint = .zero
+
+    /// Shows selected strokes and the loop moved by the drag (layers translated, nothing re-laid out).
+    private func previewDrag() {
+        guard let poly = selectionPolygon else { return }
+        let moved = poly.map { CGPoint(x: $0.x + dragDelta.x, y: $0.y + dragDelta.y) }
+        over.updateSelection(path: lassoCGPath(moved, closed: true), color: EditorTheme.selectionTint)
+        let t = CGAffineTransform(translationX: dragDelta.x, y: dragDelta.y)
+        var overStrokes: [RenderedStroke] = []
+        var underStrokes: [RenderedStroke] = []
+        for r in renderedById.values {
+            var copy = r
+            if selectedStrokes.contains(r.id), let p = r.path.copy(using: [t]) { copy.path = p }
+            if copy.underText { underStrokes.append(copy) } else { overStrokes.append(copy) }
+        }
+        over.apply(overStrokes)
+        under.apply(underStrokes)
+    }
+
+    /// Drops dragged strokes: each becomes a copy anchored where it now lies (points are immutable,
+    /// so a moved stroke is a new stroke; one undo step).
+    private func commitDrag() {
+        let delta = dragDelta
+        guard hypot(delta.x, delta.y) > 1 else { return refresh() }
+        let p = projection()
+        var newIds: Set<String> = []
+        document.stopCapturing()
+        document.transact {
+            for id in selectedStrokes {
+                guard let stroke = document.stroke(id), let segs = resolved[id] else { continue }
+                let pts = segs.flatMap { $0 }.sorted { $0.sourceIndex < $1.sourceIndex }
+                var copy = stroke
+                copy.id = UUIDv7.generate()
+                if stroke.anchorKind == .text {
+                    var b = TextAnchorBuilder()
+                    for rp in pts {
+                        let loc = CGPoint(x: rp.location.x + delta.x, y: rp.location.y + delta.y)
+                        guard let hit = geometry.characterHit(at: loc) else { continue }
+                        let src = stroke.points[rp.sourceIndex]
+                        b.append(InkSample(location: loc, pressure: rp.pressure, altitude: rp.altitude, azimuth: rp.azimuth,
+                                           roll: rp.roll, time: TimeInterval(src.t) / 1000), hit: hit)
+                    }
+                    let anchors = b.anchorOffsets.compactMap { off in p.textPosition(at: off).flatMap { document.anchor(block: $0.block, offset: $0.offset) } }
+                    guard anchors.count == b.anchorOffsets.count, !anchors.isEmpty else { continue }
+                    copy.anchors = anchors
+                    copy.points = b.points
+                } else {
+                    // Block, image and drawing strokes move inside their block (fractions of its width).
+                    let width = segs.first?.first.map { $0.scale * CGFloat(InkWidth.referenceBlockWidth) } ?? 600
+                    copy.points = stroke.points.map { pt in
+                        var q = pt
+                        q.x += Float(delta.x / width)
+                        q.y += Float(delta.y / width)
+                        return q
+                    }
+                }
+                document.removeStroke(id)
+                document.addStroke(copy)
+                newIds.insert(copy.id)
+            }
+        }
+        document.stopCapturing()
+        selectedStrokes = newIds
+        selectionPolygon = selectionPolygon?.map { CGPoint(x: $0.x + delta.x, y: $0.y + delta.y) }
+        refresh()
+        if let poly = selectionPolygon { over.updateSelection(path: lassoCGPath(poly, closed: true), color: EditorTheme.selectionTint) }
+    }
+
     private func finishLasso() {
         let poly = lassoPath
         guard poly.count > 3 else {
@@ -526,6 +611,7 @@ final class InkController {
         }
         let range: Range<Int>? = lo <= hi ? lo..<(hi + 1) : nil
         selectedStrokes = ids
+        selectionPolygon = ids.isEmpty ? nil : poly
         over.setHighlighted(ids, color: EditorTheme.selectionTint)
         over.updateSelection(path: lassoCGPath(poly, closed: true), color: EditorTheme.selectionTint)
         onLassoSelection?(ids, range, bounds)
@@ -533,6 +619,7 @@ final class InkController {
 
     func clearSelection() {
         selectedStrokes = []
+        selectionPolygon = nil
         over.setHighlighted([], color: .clear)
         over.updateSelection(path: nil, color: .clear)
     }

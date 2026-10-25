@@ -468,6 +468,57 @@ public struct EditorCommands {
         return TextPosition(block: pos.block, offset: pos.offset + 1)
     }
 
+    // MARK: - Tables
+
+    /// Replaces the text of one table cell (its first paragraph).
+    public func setTableCell(_ table: BlockID, row: Int, column: Int, text: String) {
+        guard let t = document.block(table), t.children.indices.contains(row),
+              t.children[row].children.indices.contains(column) else { return }
+        let cell = t.children[row].children[column]
+        guard let para = cell.children.first(where: \.isTextblock) else { return }
+        guard para.plainText != text else { return }
+        document.stopCapturing()
+        document.transact {
+            let len = document.textLength(of: para.id)
+            if len > 0 { document.deleteText(block: para.id, range: 0..<len) }
+            if !text.isEmpty { document.insertText(text, marks: .empty, block: para.id, at: 0) }
+        }
+        document.stopCapturing()
+    }
+
+    public func addTableRow(_ table: BlockID) {
+        guard let t = document.block(table) else { return }
+        let columns = max(1, t.children.last?.children.count ?? 1)
+        let row = BlockNode(type: NodeType.tableRow, children: (0..<columns).map { _ in Self.cell(header: false) })
+        document.stopCapturing()
+        document.insertBlock(row, parent: table, at: t.children.count)
+        document.stopCapturing()
+    }
+
+    public func addTableColumn(_ table: BlockID) {
+        guard let t = document.block(table) else { return }
+        document.stopCapturing()
+        document.transact {
+            for row in t.children {
+                let header = row.children.first?.type == NodeType.tableHeader
+                document.insertBlock(Self.cell(header: header), parent: row.id, at: row.children.count)
+            }
+        }
+        document.stopCapturing()
+    }
+
+    static func cell(header: Bool, text: String = "") -> BlockNode {
+        BlockNode(type: header ? NodeType.tableHeader : NodeType.tableCell,
+                  attrs: ["colspan": 1, "rowspan": 1], children: [.paragraph(text)])
+    }
+
+    /// A new table with a header row.
+    public static func table(rows: Int, columns: Int, header: [String] = []) -> BlockNode {
+        let head = BlockNode(type: NodeType.tableRow, children: (0..<columns).map { cell(header: true, text: $0 < header.count ? header[$0] : "") })
+        let body = (0..<max(0, rows - 1)).map { _ in BlockNode(type: NodeType.tableRow, children: (0..<columns).map { _ in cell(header: false) }) }
+        return BlockNode(type: NodeType.table, children: [head] + body)
+    }
+
     // MARK: - Helpers
 
     func textblockIds(_ node: BlockNode) -> Set<BlockID> {

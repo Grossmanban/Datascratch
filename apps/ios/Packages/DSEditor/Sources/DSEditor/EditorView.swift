@@ -130,6 +130,17 @@ public final class EditorView: UIView {
 
         tools.onChange = { [weak self] in self?.toolsChanged() }
         toolsChanged()
+        factory.onTableCellEdit = { [weak self] table, row, column, text in
+            self?.commands.setTableCell(table, row: row, column: column, text: text)
+        }
+        factory.onTableStructure = { [weak self] table, addRow in
+            guard let self else { return }
+            if addRow { self.commands.addTableRow(table) } else { self.commands.addTableColumn(table) }
+        }
+
+        registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (self: EditorView, _: UITraitCollection) in
+            self.dynamicTypeChanged()
+        }
 
         NotificationCenter.default.addObserver(forName: MermaidRenderer.didRender, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.rerenderAtoms(of: NodeType.mermaid) }
@@ -141,6 +152,7 @@ public final class EditorView: UIView {
         observation = document.observe { [weak self] change in self?.documentChanged(change) }
         projection = Projection.build(document.blocks)
         theme.style = document.style
+        theme.baseFontSize = EditorTheme.dynamicBaseSize(for: traitCollection)
         applyTheme()
         let text = renderer.render(projection, paragraphs: 0..<projection.paragraphs.count)
         suppressDelegate = true
@@ -171,6 +183,14 @@ public final class EditorView: UIView {
 
     public func setStyle(_ style: DocumentStyle) {
         document.setStyle(style)
+    }
+
+    private func dynamicTypeChanged() {
+        let size = EditorTheme.dynamicBaseSize(for: traitCollection)
+        guard size != theme.baseFontSize else { return }
+        theme.baseFontSize = size
+        applyTheme()
+        rerenderAll()
     }
 
     private func applyTheme() {

@@ -13,7 +13,7 @@ import { ShareDialog } from "@/features/share/ShareDialog";
 import { HistoryDialog } from "@/features/doc/HistoryDialog";
 import { NewNotebookDialog } from "@/features/shell/NewNotebookDialog";
 import { useIsMobile } from "@/hooks/useMedia";
-import { toggleSidebar, useUi } from "@/hooks/useUi";
+import { focusKindOf, toggleSidebar, useUi } from "@/hooks/useUi";
 import { cn } from "@/ui";
 import { Sidebar } from "./Sidebar";
 import { Splash } from "./Splash";
@@ -26,15 +26,20 @@ export function AppShell() {
   const ready = useWorkspace((s) => s.ready);
   const synced = useWorkspace((s) => s.accountSynced);
   const spaces = useWorkspace((s) => s.account.spaces.length);
-  const sidebarOpen = useUi((s) => s.sidebarOpen);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const focusKind = focusKindOf(pathname);
+  // Full screen on this kind of screen hides the sidebar without changing its own setting.
+  const sidebarOpen = useUi((s) => s.sidebarOpen && !(focusKind && s.focus[focusKind]));
   const mobileNavOpen = useUi((s) => s.mobileNavOpen);
   const isMobile = useIsMobile();
   const bootstrapping = useRef(false);
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   // One key per screen: a document, a notebook or folder, or a section (tasks tabs share one).
-  const segments = pathname.split("/");
-  const screenKey = ["doc", "notebook", "folder", "tag"].includes(segments[1] ?? "") ? pathname : segments[1];
+  // Keyed by the resolved location (what <Outlet> renders): keying by the pending location
+  // remounted the previous screen for a moment, e.g. re-running a document's open-tab effect.
+  const resolvedPath = useRouterState({ select: (s) => (s.resolvedLocation ?? s.location).pathname });
+  const segments = resolvedPath.split("/");
+  const screenKey = ["doc", "notebook", "folder", "tag"].includes(segments[1] ?? "") ? resolvedPath : segments[1];
 
   useEffect(() => {
     if (!accountDocId || !userId) return;
@@ -111,6 +116,10 @@ export function AppShell() {
           transition={{ type: "spring", stiffness: 400, damping: 42 }}
           className={cn("relative shrink-0 overflow-hidden", sidebarOpen && "border-r border-line")}
           aria-hidden={!sidebarOpen}
+          // A collapsed sidebar must not take keyboard focus either.
+          inert={!sidebarOpen}
+          data-testid="sidebar-panel"
+          data-open={sidebarOpen}
         >
           <div className="h-full w-[268px]">
             <Sidebar onCollapse={toggleSidebar} />

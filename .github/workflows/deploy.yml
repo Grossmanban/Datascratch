@@ -1,0 +1,208 @@
+name: deploy
+
+# Builds the server and web images, publishes them to GHCR and deploys them to
+# the user's VPS over SSH: idempotent bootstrap, database migrations,
+# `docker compose up`, HTTPS smoke test, automatic rollback on failure.
+# Setup: infra/DEPLOY.md. Without the secrets the run is skipped (green), so
+# forks and fresh clones are not affected.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - apps/server/**
+      - apps/web/**
+      - packages/**
+      - infra/**
+      - pnpm-lock.yaml
+      - .github/workflows/deploy.yml
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Check deploy secrets
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          missing=()
+          [ -n "$HOST" ] || missing+=(DEPLOY_HOST)
+          [ -n "$KEY" ] || missing+=(DEPLOY_SSH_KEY)
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Deploy skipped::Missing secrets: ${missing[*]}. See infra/DEPLOY.md."
+          fi
+
+  images:
+    name: Build and publish images
+    needs: secrets
+    if: needs.secrets.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      server: ${{ steps.names.outputs.server }}
+      web: ${{ steps.names.outputs.web }}
+      tag: ${{ steps.names.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: names
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          {
+            echo "server=ghcr.io/$owner/datascratch-server"
+            echo "web=ghcr.io/$owner/datascratch-web"
+            echo "tag=${GITHUB_SHA::12}"
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.names.outputs.server }}:${{ steps.names.outputs.tag }}
+            ${{ steps.names.outputs.server }}:latest
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,scope=server,mode=max
+      - name: Web image (web app + Caddy)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/deploy/web.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.names.outputs.web }}:${{ steps.names.outputs.tag }}
+            ${{ steps.names.outputs.web }}:latest
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+  deploy:
+    name: Deploy to the server
+    needs: [secrets, images]
+    if: needs.secrets.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'root' }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+      DS_TAG: ${{ needs.images.outputs.tag }}
+      DS_SERVER_IMAGE: ${{ needs.images.outputs.server }}
+      DS_WEB_IMAGE: ${{ needs.images.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: SSH key and host key
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          dir="$RUNNER_TEMP/ssh"
+          install -d -m 700 "$dir"
+          printf '%s\n' "$KEY" | tr -d '\r' > "$dir/key"
+          chmod 600 "$dir/key"
+          if ! ssh-keygen -y -f "$dir/key" > /dev/null 2>&1; then
+            echo "::error title=DEPLOY_SSH_KEY::The secret is not a valid private key (no passphrase). Copy the whole file including the BEGIN/END lines. See infra/DEPLOY.md."
+            exit 1
+          fi
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > "$dir/known_hosts"
+            echo "Host key pinned by the DEPLOY_KNOWN_HOSTS variable."
+          else
+            # Trust on first use: remember the key the server presents now and show its
+            # fingerprint, so it can be compared with the provider's console (infra/DEPLOY.md).
+            ssh-keyscan -p "$DEPLOY_PORT" -t ed25519,ecdsa,rsa "$DEPLOY_HOST" 2> /dev/null > "$dir/known_hosts" || true
+            if [ ! -s "$dir/known_hosts" ]; then
+              echo "::error title=Server unreachable::No SSH answer from $DEPLOY_HOST:$DEPLOY_PORT. Is the server running and port $DEPLOY_PORT open?"
+              exit 1
+            fi
+            echo "::notice title=Server host key (verify once)::$(ssh-keygen -lf "$dir/known_hosts" | head -1). To pin it, save the lines below as the repository variable DEPLOY_KNOWN_HOSTS."
+            cat "$dir/known_hosts"
+          fi
+          {
+            echo "DEPLOY_KEY_FILE=$dir/key"
+            echo "DEPLOY_KNOWN_HOSTS_FILE=$dir/known_hosts"
+          } >> "$GITHUB_ENV"
+
+      - name: Address
+        env:
+          DOMAIN: ${{ vars.DS_DOMAIN }}
+        run: |
+          if [ -n "$DOMAIN" ]; then
+            domain="$DOMAIN"
+          else
+            ip="$DEPLOY_HOST"
+            if ! [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              ip="$(getent ahostsv4 "$DEPLOY_HOST" | awk 'NR==1{print $1}')"
+            fi
+            [ -n "$ip" ] || { echo "::error::Cannot resolve $DEPLOY_HOST to an IPv4 address; set the DS_DOMAIN variable."; exit 1; }
+            # <ip-with-dashes>.sslip.io resolves to the IP itself; Caddy gets a real certificate for it.
+            domain="${ip//./-}.sslip.io"
+          fi
+          echo "DS_DOMAIN=$domain" >> "$GITHUB_ENV"
+          echo "Deploying to https://$domain"
+
+      - name: Bootstrap and deploy
+        env:
+          DS_REGISTRY_USER: ${{ github.actor }}
+          DS_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: infra/deploy/remote.sh deploy
+
+      - name: Smoke test over HTTPS
+        id: smoke
+        run: node infra/deploy/smoke.mjs "https://$DS_DOMAIN" 300
+
+      - name: Roll back on failure
+        if: failure() && steps.smoke.outcome == 'failure'
+        run: infra/deploy/remote.sh rollback
+
+      - name: Summary
+        if: always()
+        env:
+          IOS_URL: ${{ vars.DS_SERVER_URL }}
+        run: |
+          {
+            if [ "${{ job.status }}" = "success" ]; then
+              echo "## ✅ Datascratch is running"
+            else
+              echo "## ❌ Deploy failed"
+              echo "The previous version keeps running (automatic rollback). Logs: the steps above."
+            fi
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Address | https://${DS_DOMAIN:-?} |"
+            echo "| Version | \`${DS_TAG}\` |"
+            echo "| iOS server (variable DS_SERVER_URL) | ${IOS_URL:-not set — set it to https://${DS_DOMAIN:-…}} |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -205,7 +205,10 @@ public final class EditorView: UIView {
         }
 
         NotificationCenter.default.addObserver(forName: MermaidRenderer.didRender, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.rerenderAtoms(of: NodeType.mermaid) }
+            MainActor.assumeIsolated {
+                EditorDiagnostics.log("mermaid rendered: re-laying out diagrams")
+                self?.rerenderAtoms(of: NodeType.mermaid)
+            }
         }
     }
 
@@ -305,6 +308,7 @@ public final class EditorView: UIView {
         // Reorder only when needed: changing subview order marks the text view for layout again.
         let subs = textView.subviews
         if subs.first !== paper || (subs.count > 1 && subs[1] !== inkUnder) {
+            EditorDiagnostics.log("reorder ink layers")
             textView.sendSubviewToBack(inkUnder)
             textView.sendSubviewToBack(paper)
         }
@@ -561,6 +565,7 @@ public final class EditorView: UIView {
     // MARK: - Tools
 
     private func toolsChanged() {
+        EditorDiagnostics.log("tools changed: \(tools.mode.rawValue)")
         // The pen recognizer wins pen touches by itself (it begins on touch down and prevents
         // scrolling), so the scroll recognizer's touch types are left alone: changing them while a
         // tool button's touch is being dispatched made UIKit's gesture environment throw.

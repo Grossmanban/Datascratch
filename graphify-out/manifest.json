@@ -31,9 +31,9 @@
   },
   "docs/CHANGELOG.md": {
     "mtime": 1792949500.6848538,
-    "seen": 1792949559.308006,
+    "seen": 1792951257.5349245,
     "ast_hash": "4286aff087b727c81faebe62cbe86424",
-    "semantic_hash": ""
+    "semantic_hash": "4286aff087b727c81faebe62cbe86424"
   },
   "docs/README.md": {
     "mtime": 1792930851.1460934,
@@ -295,9 +295,9 @@
   },
   "docs/spec/03-pencil.md": {
     "mtime": 1792949500.6888537,
-    "seen": 1792949559.3081717,
+    "seen": 1792951257.5349286,
     "ast_hash": "40670d0eab4888b296b7b0584f747649",
-    "semantic_hash": ""
+    "semantic_hash": "40670d0eab4888b296b7b0584f747649"
   },
   "docs/spec/04-editor.md": {
     "mtime": 1792941192.3331687,
@@ -312,10 +312,10 @@
     "semantic_hash": "7ecd2d0da8a1580a9b1e50c09be274fe"
   },
   "docs/spec/06-data-server.md": {
-    "mtime": 1792950717.9574234,
-    "seen": 1792951080.5513313,
-    "ast_hash": "ea481f1eda72c8515df8d5995d9a03a2",
-    "semantic_hash": ""
+    "mtime": 1792951707.30423,
+    "seen": 1792952766.5961442,
+    "ast_hash": "6bc53bb3fc40415e97a6dbe6db8b483d",
+    "semantic_hash": "6bc53bb3fc40415e97a6dbe6db8b483d"
   },
   "docs/spec/07-encryption.md": {
     "mtime": 1792949500.6888537,
@@ -1045,14 +1045,14 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792930021.2139332,
-    "seen": 1792951089.5570378,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "seen": 1792951257.5336723,
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792930021.2139332,
-    "seen": 1792951089.557041,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "seen": 1792951257.5336754,
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -3954,34 +3954,34 @@
     "semantic_hash": "6b36d9b0059fd0495f07b58de1e675a0"
   },
   ".github/workflows/deploy.yml": {
-    "mtime": 1792950115.0368903,
-    "seen": 1792951080.5274143,
-    "ast_hash": "e09b23a9db2a2267437e91dae45a8edb",
-    "semantic_hash": ""
+    "mtime": 1792951306.6102016,
+    "seen": 1792952766.5943568,
+    "ast_hash": "6c40f6be5eb0adbcf854fa1c0d337466",
+    "semantic_hash": "6c40f6be5eb0adbcf854fa1c0d337466"
   },
   "infra/deploy/bootstrap.sh": {
-    "mtime": 1792949725.964867,
-    "seen": 1792951080.54139,
-    "ast_hash": "4d02d1615db8a90445884fa6e87db060",
-    "semantic_hash": ""
+    "mtime": 1792951737.4239955,
+    "seen": 1792952766.5955005,
+    "ast_hash": "33ae403fd68de3375d2a75af5e2f8c11",
+    "semantic_hash": "33ae403fd68de3375d2a75af5e2f8c11"
   },
   "infra/deploy/deploy.sh": {
-    "mtime": 1792950386.7641394,
-    "seen": 1792951080.5413928,
-    "ast_hash": "3720211128398dc755f1d47dc8fff5fb",
-    "semantic_hash": ""
+    "mtime": 1792951717.2716393,
+    "seen": 1792952766.5955033,
+    "ast_hash": "39b029ec81e890bb1a2997fda7955acd",
+    "semantic_hash": "39b029ec81e890bb1a2997fda7955acd"
   },
   "infra/deploy/docker-compose.yml": {
-    "mtime": 1792949745.8198295,
-    "seen": 1792951080.5413952,
-    "ast_hash": "9f971fa7c90a283da955478b7cdeb2f8",
-    "semantic_hash": ""
+    "mtime": 1792951191.6718996,
+    "seen": 1792951257.5341992,
+    "ast_hash": "5bffc8019d16a3eefea9f8c589221ce3",
+    "semantic_hash": "5bffc8019d16a3eefea9f8c589221ce3"
   },
   "infra/deploy/remote.sh": {
-    "mtime": 1792949829.5528734,
-    "seen": 1792951080.5414016,
-    "ast_hash": "8f2da2d73c1121d46ca1aa7018bfd9a7",
-    "semantic_hash": ""
+    "mtime": 1792951685.4425921,
+    "seen": 1792952766.5955143,
+    "ast_hash": "74aacb2de2c6e1f73de99b9d9f65d0df",
+    "semantic_hash": "74aacb2de2c6e1f73de99b9d9f65d0df"
   },
   "infra/deploy/smoke.mjs": {
     "mtime": 1792941468.2641473,
@@ -3990,16 +3990,16 @@
     "semantic_hash": "79c7e7228886c4b43c2e9e2984655024"
   },
   "infra/deploy/test/e2e.sh": {
-    "mtime": 1792950701.9901497,
-    "seen": 1792951080.5414362,
-    "ast_hash": "953bdc468ea666068528f81eea965640",
-    "semantic_hash": ""
+    "mtime": 1792952208.241501,
+    "seen": 1792952766.5955212,
+    "ast_hash": "8943b94490c2c5ebfa844c1d68d708c4",
+    "semantic_hash": "8943b94490c2c5ebfa844c1d68d708c4"
   },
   "infra/DEPLOY.md": {
-    "mtime": 1792950429.9329762,
-    "seen": 1792951080.5514972,
-    "ast_hash": "d4989600f2e089745cc898985a7e2f50",
-    "semantic_hash": ""
+    "mtime": 1792952575.278988,
+    "seen": 1792952766.5961463,
+    "ast_hash": "f34bd736c9136ec0d4fa5633503fcafd",
+    "semantic_hash": "f34bd736c9136ec0d4fa5633503fcafd"
   },
   "apps/server/drizzle/meta/0002_snapshot.json": {
     "mtime": 1792943412.7222087,
@@ -4009,8 +4009,8 @@
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792943412.7222087,
-    "seen": 1792951089.5570428,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "seen": 1792951257.5336785,
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
@@ -4453,14 +4453,32 @@
   },
   "infra/deploy/inspect.sh": {
     "mtime": 1792949661.0223513,
-    "seen": 1792951080.5413985,
+    "seen": 1792951257.5342023,
     "ast_hash": "6461bb7901e478d42aa283fcafe89cd2",
-    "semantic_hash": ""
+    "semantic_hash": "6461bb7901e478d42aa283fcafe89cd2"
   },
   "infra/deploy/ssh-setup.sh": {
     "mtime": 1792950079.3288882,
-    "seen": 1792951080.5414338,
+    "seen": 1792951257.5342102,
     "ast_hash": "2fa3b7b98c27233cea1d621cc1ab5c23",
+    "semantic_hash": "2fa3b7b98c27233cea1d621cc1ab5c23"
+  },
+  "infra/deploy/docker-compose.edge.yml": {
+    "mtime": 1792951191.6720402,
+    "seen": 1792952766.5955067,
+    "ast_hash": "",
     "semantic_hash": ""
+  },
+  "infra/deploy/test/memory-check.sh": {
+    "mtime": 1792951432.691884,
+    "seen": 1792952766.5955236,
+    "ast_hash": "152c2d4090a292c61c1c528db2f88bb4",
+    "semantic_hash": "152c2d4090a292c61c1c528db2f88bb4"
+  },
+  "infra/deploy/test/memory-load.mjs": {
+    "mtime": 1792951432.6922665,
+    "seen": 1792952766.5955257,
+    "ast_hash": "18aaef9dd6cdbf08e89099f98b02c643",
+    "semantic_hash": "18aaef9dd6cdbf08e89099f98b02c643"
   }
 }

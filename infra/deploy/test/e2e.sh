@@ -14,13 +14,19 @@ SRV="${DS_SERVER_IMAGE:-datascratch-server}"
 WEB="${DS_WEB_IMAGE:-datascratch-web}"
 VPS=ds-e2e-vps
 
+wipe_project() { # everything of the "datascratch" compose project on this (test) Docker host
+  docker ps -aq --filter label=com.docker.compose.project=datascratch | xargs -r docker rm -f > /dev/null 2>&1 || true
+  docker volume ls -q --filter label=com.docker.compose.project=datascratch | xargs -r docker volume rm > /dev/null 2>&1 || true
+}
 cleanup() {
-  docker exec "$VPS" sh -c 'cd /opt/datascratch && docker compose down -v --remove-orphans' > /dev/null 2>&1 || true
-  docker rm -f "$VPS" sinhron-demo > /dev/null 2>&1 || true
+  wipe_project
+  docker rm -f "$VPS" sinhron-demo sinhron-caddy > /dev/null 2>&1 || true
+  docker network rm edge > /dev/null 2>&1 || true
   rm -rf "$WORK"
 }
 trap cleanup EXIT
 step() { echo; echo "=== $*"; }
+wipe_project
 
 step "images: e2e1, e2e2 (same build) and a broken one that never becomes healthy"
 docker tag "$SRV:latest" "$SRV:e2e1"
@@ -35,7 +41,9 @@ step "simulated VPS"
 docker image inspect ds-e2e-vps > /dev/null 2>&1 || docker build -q -t ds-e2e-vps -f vps.Dockerfile . > /dev/null
 ssh-keygen -q -t ed25519 -N '' -f "$WORK/key" -C ds-deploy-e2e
 # Host network: the "VPS" publishes 80/443 exactly like a real server would.
+mkdir -p "$WORK/caddy-sites"
 docker run -d --name "$VPS" --network host -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$WORK/caddy-sites:/etc/sinhron/caddy-sites" \
   ds-e2e-vps /usr/sbin/sshd -D -e -p "$SSH_PORT" > /dev/null
 if [ -n "${E2E_APT_PROXY:-}" ]; then
   # Sandboxes without direct internet: let apt inside the "VPS" use a proxy.
@@ -122,6 +130,59 @@ if ! grep -q 'restoring the previous configuration' "$WORK/nginx-fail.log"; then
 fi
 vps sh -c 'rm /etc/nginx/sites-enabled/zz-broken && nginx -t' > /dev/null 2>&1
 [ "$(curl -fs -H 'Host: messenger.test' http://127.0.0.1/)" = "messenger ok" ]
+
+step "Sinhron on the server: its Caddy owns 80/443 and imports neighbour sites"
+vps sh -c 'nginx -s stop; cd /opt/datascratch && docker compose down' > /dev/null 2>&1 || true
+docker network inspect edge > /dev/null 2>&1 || docker network create edge > /dev/null
+sinhron_caddy() { # $1: Caddyfile
+  docker rm -f sinhron-caddy > /dev/null 2>&1 || true
+  printf '%s\n' "$1" > "$WORK/Caddyfile"
+  docker run -d --name sinhron-caddy --network edge -p 80:80 -p 443:443 \
+    -v "$WORK/Caddyfile:/etc/caddy/Caddyfile:ro" -v "$WORK/caddy-sites:/etc/caddy/sites:ro" caddy:2-alpine > /dev/null
+  for _ in $(seq 1 30); do docker exec sinhron-caddy wget -qO- http://127.0.0.1:2019/config/ > /dev/null 2>&1 && break; sleep 0.5; done
+}
+SINHRON_SITE='sinhron.test {
+	tls internal
+	respond "sinhron ok"
+}'
+
+# Not updated yet (no import): Datascratch refuses and explains, writes nothing.
+sinhron_caddy "$SINHRON_SITE"
+DS_TAG=e2e2 "$DEPLOY_DIR/remote.sh" deploy > "$WORK/edge-missing.log" 2>&1 && { echo "deploy must refuse a Sinhron without import" >&2; exit 1; }
+grep -q 'Update Sinhron first' "$WORK/edge-missing.log" || { cat "$WORK/edge-missing.log"; exit 1; }
+[ ! -e "$WORK/caddy-sites/datascratch.caddy" ]
+
+# Sinhron's own site still answers through its Caddy (not through any HTTP(S) proxy).
+sinhron_ok() {
+  for _ in $(seq 1 30); do
+    [ "$(curl -fsk --noproxy '*' --resolve sinhron.test:443:127.0.0.1 https://sinhron.test/)" = "sinhron ok" ] && return 0
+    sleep 1
+  done
+  echo "sinhron.test is not served by sinhron-caddy any more" >&2
+  return 1
+}
+# Updated Sinhron: our site is imported, served over HTTPS by its Caddy.
+sinhron_caddy "$SINHRON_SITE
+import /etc/caddy/sites/*.caddy"
+DS_TAG=e2e2 "$DEPLOY_DIR/remote.sh" deploy
+info="$("$DEPLOY_DIR/remote.sh" info)"
+grep -qx 'DS_MODE=edge' <<< "$info"
+grep -q 'reverse_proxy datascratch-web:80' "$WORK/caddy-sites/datascratch.caddy"
+[ -z "$(docker port datascratch-web)" ] || { echo "datascratch-web must not publish ports in edge mode" >&2; exit 1; }
+vps grep -qx 'DS_MEM_SERVER=512m' /opt/datascratch/.env
+"$DEPLOY_DIR/remote.sh" check | grep -q '"ok":true'
+node "$DEPLOY_DIR/smoke.mjs" https://localhost 120
+sinhron_ok
+
+# A broken neighbour file makes `caddy validate` fail: our site is restored as it was, nothing reloads.
+good="$(sha256sum < "$WORK/caddy-sites/datascratch.caddy")"
+echo 'this is { not caddy' > "$WORK/caddy-sites/zz-broken.caddy"
+DS_TAG=e2e1 "$DEPLOY_DIR/remote.sh" deploy > "$WORK/edge-broken.log" 2>&1 && { echo "expected a validation failure" >&2; exit 1; }
+grep -q 'rejected the Datascratch site' "$WORK/edge-broken.log" || { cat "$WORK/edge-broken.log"; exit 1; }
+[ "$(sha256sum < "$WORK/caddy-sites/datascratch.caddy")" = "$good" ]
+rm -f "$WORK/caddy-sites/zz-broken.caddy"
+sinhron_ok
+node "$DEPLOY_DIR/smoke.mjs" https://localhost 60
 
 echo
 echo "deploy end-to-end test passed"

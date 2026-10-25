@@ -35,6 +35,9 @@ final class ServerConnection: CoreLibraryRemote {
         attachments = try? AttachmentManager(api: api, store: core.store, directory: attachmentsDirectory)
     }
 
+    /// The device library was carried into the account: merge what doubled up.
+    var onLibraryCarried: (() -> Void)?
+
     /// Starts syncing for a signed-in account.
     func start(session: AuthSession, isNewAccount: Bool) async {
         do {
@@ -71,6 +74,11 @@ final class ServerConnection: CoreLibraryRemote {
             await engine.start()
             observeStatus(engine)
             sync.onRetry = { Task { await engine.retryFailed() } }
+            // With the engine running, removing duplicates reaches the server too.
+            if core.needsCarriedMerge {
+                onLibraryCarried?()
+                core.needsCarriedMerge = false
+            }
             uploadPendingAttachments()
         } catch {
             Self.log.error("starting sync failed: \(error.localizedDescription, privacy: .public)")

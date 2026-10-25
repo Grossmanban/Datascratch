@@ -520,7 +520,17 @@ final class LibraryStore {
         let notebook = createNotebook(in: space.id, name: String(localized: "Notes"),
                                       icon: "book.closed", color: .blue, mode: .private)
         createSpace(name: String(localized: "Work"), icon: "briefcase", color: .orange)
-        let body = NoteBody(blocks: [
+        // No cover by default: covers are something the user adds (… → Cover).
+        let welcome = createNote(in: notebook.id, title: Self.welcomeTitle, body: welcomeBody())
+        toggleStar(.note, welcome.id)
+        ensureInbox()
+        mutate { $0.activeSpaceId = space.id }
+    }
+
+    static var welcomeTitle: String { String(localized: "Welcome to Datascratch") }
+
+    private func welcomeBody() -> NoteBody {
+        NoteBody(blocks: [
             NoteBlock(id: UUIDv7.make(), kind: .paragraph,
                       text: String(localized: "Write with the keyboard, then mark it up with Apple Pencil — strokes stay attached to the words."),
                       task: nil),
@@ -529,11 +539,60 @@ final class LibraryStore {
             .task(String(localized: "Create a notebook for work")),
             NoteBlock(id: UUIDv7.make(), kind: .quote, text: String(localized: "Quiet paper, deep ink. #welcome"), task: nil),
         ])
-        // No cover by default: covers are something the user adds (… → Cover).
-        let welcome = createNote(in: notebook.id, title: String(localized: "Welcome to Datascratch"), body: body)
-        toggleStar(.note, welcome.id)
-        ensureInbox()
-        mutate { $0.activeSpaceId = space.id }
+    }
+
+    /// The welcome note exactly as `seedIfEmpty` wrote it (text and kinds; ids and dates differ).
+    private func isUntouchedWelcome(_ note: NoteMeta) -> Bool {
+        guard note.kind == .note, note.title == Self.welcomeTitle else { return false }
+        let shape = { (body: NoteBody) in body.blocks.map { "\($0.kind.rawValue):\($0.text):\($0.task?.state == .done)" } }
+        return shape(body(note.id)) == shape(welcomeBody())
+    }
+
+    /// Only first-run content: untouched welcome notes and an empty Inbox, nothing else.
+    private func holdsOnlyFirstRunContent(_ notebookId: String) -> Bool {
+        data.notes.filter { $0.notebookId == notebookId && !$0.isTrashed }.allSatisfy { note in
+            isUntouchedWelcome(note) || (note.kind == .inbox && body(note.id).blocks.isEmpty)
+        } && !data.folders.contains { $0.notebookId == notebookId }
+    }
+
+    /// After the library made on this device was carried into the account (D-43) on top of the
+    /// first-run content the account got at sign-up: one space per name (notebooks move into
+    /// it), no second notebook of a name that holds only first-run content, one welcome note.
+    func mergeCarriedDuplicates() {
+        let key = { (name: String) in name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        for (_, spaces) in Dictionary(grouping: data.spaces, by: { key($0.name) }) where spaces.count > 1 {
+            let ordered = spaces.sorted { ($0.order, $0.id) < ($1.order, $1.id) }
+            let kept = ordered[0]
+            for other in ordered.dropFirst() {
+                for notebook in notebooks(in: other.id) { updateNotebook(notebook.id) { $0.spaceId = kept.id } }
+                mutate { snapshot in
+                    snapshot.spaces.removeAll { $0.id == other.id }
+                    if snapshot.activeSpaceId == other.id { snapshot.activeSpaceId = kept.id }
+                }
+            }
+        }
+        for space in data.spaces {
+            for (_, group) in Dictionary(grouping: notebooks(in: space.id), by: { key($0.name) }) where group.count > 1 {
+                var disposable = group.filter { holdsOnlyFirstRunContent($0.id) }
+                // Keep one: the daily notebook if it is among them.
+                if disposable.count == group.count {
+                    let keep = disposable.first { $0.id == data.dailyNotebookId } ?? disposable[0]
+                    disposable.removeAll { $0.id == keep.id }
+                }
+                let kept = group.first { candidate in !disposable.contains { $0.id == candidate.id } }
+                for notebook in disposable {
+                    let wasDaily = data.dailyNotebookId == notebook.id
+                    deleteNotebook(notebook.id)
+                    if wasDaily, let kept { mutate { $0.dailyNotebookId = kept.id } }
+                }
+            }
+        }
+        let welcomes = data.notes.filter { !$0.isTrashed && isUntouchedWelcome($0) }
+        for extra in welcomes.dropFirst() { deleteForever(extra.id) }
+        if let daily = dailyNotebook,
+           data.notes.filter({ $0.kind == .inbox && $0.notebookId == daily.id && !$0.isTrashed }).isEmpty {
+            ensureInbox()
+        }
     }
 
     /// Takes a note's values as they are in the documents (written by the native

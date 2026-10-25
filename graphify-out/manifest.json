@@ -1044,15 +1044,15 @@
     "semantic_hash": "b6fbc14b557b993ed9e884d8574ac5e0"
   },
   "apps/server/drizzle/0000_init.sql": {
-    "mtime": 1792948578.3941054,
-    "seen": 1792949276.9567475,
-    "ast_hash": "",
+    "mtime": 1792932379.6981456,
+    "seen": 1792949908.7200565,
+    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
-    "mtime": 1792948578.3941054,
-    "seen": 1792949276.9567506,
-    "ast_hash": "",
+    "mtime": 1792932379.6981456,
+    "seen": 1792949908.7200594,
+    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -4008,9 +4008,9 @@
     "semantic_hash": "b2fbfd7a4df97f681d1a6f5c36ec9a53"
   },
   "apps/server/drizzle/0002_security_events.sql": {
-    "mtime": 1792948578.3941054,
-    "seen": 1792949276.9567535,
-    "ast_hash": "",
+    "mtime": 1792948026.52702,
+    "seen": 1792949908.7200613,
+    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {

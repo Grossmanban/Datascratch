@@ -8,6 +8,18 @@ struct TaskCheckbox: View {
     let action: () -> Void
 
     var body: some View {
+        #if canImport(DSDesign)
+        // The design-system checkbox toggles open ↔ done; we apply the change ourselves.
+        DSTaskCheckbox(state: Binding(get: { DSTaskState(rawValue: state.rawValue) ?? .open },
+                                      set: { _ in action() }),
+                       label: String(localized: "Task"), size: 20)
+            .accessibilityIdentifier("task.checkbox")
+        #else
+        fallback
+        #endif
+    }
+
+    private var fallback: some View {
         Button(action: action) {
             ZStack {
                 Circle()

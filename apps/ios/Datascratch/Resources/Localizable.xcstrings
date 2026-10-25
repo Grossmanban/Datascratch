@@ -711,6 +711,16 @@
         }
       }
     },
+    "Design System": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дизайн-система"
+          }
+        }
+      }
+    },
     "Devices": {
       "localizations": {
         "ru": {

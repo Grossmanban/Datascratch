@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(DSDesign)
+import DSDesign
+#endif
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
@@ -282,6 +285,11 @@ struct AboutView: View {
                 .padding(.vertical, Theme.Space.s4)
                 .listRowBackground(Color.clear)
             }
+            #if DEBUG && canImport(DSDesign)
+            Section {
+                NavigationLink("Design System") { DSShowcase() }
+            }
+            #endif
             Section {
                 LabeledContent("Version", value: "\(version) (\(build))")
                 LabeledContent("Encryption", value: "XChaCha20-Poly1305 · Argon2id")

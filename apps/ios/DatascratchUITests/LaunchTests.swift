@@ -74,8 +74,7 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(button.waitForExistence(timeout: 5))
         button.tap()
 
-        let title = app.textViews["document.title"].exists ? app.textViews["document.title"]
-            : app.textFields["document.title"]
+        let title = app.descendants(matching: .any)["document.title"].firstMatch
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         title.tap()
         title.typeText("Pencil test")

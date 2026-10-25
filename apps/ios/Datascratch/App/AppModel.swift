@@ -30,8 +30,13 @@ final class AppModel {
     let access: any AccessService
     let webHost: String
 
-    /// Recovery key waiting to be shown/confirmed after sign-up (never persisted).
-    var pendingRecoveryKey: RecoveryKey?
+    /// Recovery key waiting to be confirmed after sign-up. Kept in the Keychain
+    /// until confirmed, so quitting the app mid-onboarding does not lose it (R-02).
+    var pendingRecoveryKey: RecoveryKey? {
+        didSet { secureStore.set(pendingRecoveryKey.map { Data($0.bytes) }, for: Self.pendingKeyItem) }
+    }
+    @ObservationIgnored private let secureStore: SecureStore
+    private static let pendingKeyItem = "pending-recovery-key"
     /// Sign-up in progress: stay in onboarding until the recovery key is confirmed.
     var isSigningUp = false
     /// A route that arrived before the main UI could show it.
@@ -44,16 +49,17 @@ final class AppModel {
         webHost = host
 
         if options.uiTesting {
+            secureStore = SecureStore(inMemory: true)
             settings = AppSettings(defaults: UserDefaults(suiteName: "ui-testing-\(UUID().uuidString)") ?? .standard)
             library = LibraryStore(persistence: .inMemory)
-            accounts = LocalAccountService(store: SecureStore(inMemory: true))
             sync = SyncCenter(serverURL: nil, monitorNetwork: false)
         } else {
+            secureStore = SecureStore()
             settings = AppSettings()
             library = LibraryStore(persistence: .appSupport())
-            accounts = LocalAccountService(store: SecureStore())
             sync = SyncCenter(serverURL: server)
         }
+        accounts = LocalAccountService(store: secureStore)
         sharing = LocalSharingService(webHost: host)
         access = LocalAccessService()
 
@@ -62,6 +68,9 @@ final class AppModel {
             signedInForTesting = true
         }
         library.purgeExpiredTrash()
+        pendingRecoveryKey = secureStore.data(for: Self.pendingKeyItem).flatMap { RecoveryKey(bytes: [UInt8]($0)) }
+        let sync = self.sync
+        library.onLocalChange = { sync.noteLocalChange() }
     }
 
     private var signedInForTesting = false

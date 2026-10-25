@@ -4,9 +4,13 @@ import SwiftUI
 /// layer comes from the DSEditor package (ios-editor stream); until it is
 /// linked, a simple block editor over `NoteBody` keeps the app usable.
 struct EditorHost: View {
+    @Environment(AppModel.self) private var app
     let noteId: String
     let style: NoteStyle
     var readOnly = false
+
+    /// D-06: whether a finger draws (otherwise only Apple Pencil); passed to DSEditor.
+    var allowsFingerDrawing: Bool { app.settings.fingerDrawing }
 
     var body: some View {
         StandInBlockEditor(noteId: noteId, style: style, readOnly: readOnly)

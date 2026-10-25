@@ -38,6 +38,12 @@ jobs:
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
 
+      - name: Check string catalog
+        run: |
+          python3 scripts/l10n/build_catalog.py --check
+          python3 scripts/l10n/build_catalog.py
+          git diff --exit-code -- Datascratch/Resources/Localizable.xcstrings
+
       - name: Install XcodeGen
         run: brew install xcodegen xcbeautify || brew install xcodegen
 

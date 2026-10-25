@@ -42,12 +42,29 @@ final class SyncCenter {
         phase = .upToDate(date)
     }
 
+    /// State reported by the sync engine.
+    func apply(connected: Bool, pending: Int, catchingUp: Int) {
+        pendingChanges = pending
+        if !connected {
+            phase = .offline(pending: pending)
+        } else if pending > 0 || catchingUp > 0 {
+            phase = .syncing
+        } else {
+            phase = .upToDate(Date())
+        }
+    }
+
+    /// Called when connectivity returns (the sync engine reconnects at once).
+    @ObservationIgnored var onBackOnline: (() -> Void)?
+
     func markFailed(_ message: String) {
         phase = .failed(message)
     }
 
     func setOnline(_ online: Bool) {
+        let cameBack = online && !isOnline
         isOnline = online
+        if cameBack { onBackOnline?() }
         refreshPhase()
     }
 

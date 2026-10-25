@@ -46,16 +46,16 @@ final class CoreLibrary: LibraryBackend {
         decoder.dateDecodingStrategy = .iso8601
         overlay = (try? store.value(Self.overlayKey)).flatMap { $0 }.flatMap { try? decoder.decode(Overlay.self, from: $0) } ?? Overlay()
 
-        if let accountId = try store.string(Self.accountDocKey) {
-            account = AccountDocument(try Self.open(.account, docId: accountId, notebookId: nil, store: store))
-        } else {
-            let accountId = DSCore.EntityID.make()
-            let crdt = try Self.open(.account, docId: accountId, notebookId: nil, store: store)
-            account = AccountDocument(crdt)
+        // Subscribe before initializing: a Yjs update depends on the client's earlier ones,
+        // so the very first (initialization) update must be stored too.
+        let existingId = try store.string(Self.accountDocKey)
+        let accountId = existingId ?? DSCore.EntityID.make()
+        account = AccountDocument(try Self.open(.account, docId: accountId, notebookId: nil, store: store))
+        subscriptions[accountId] = observe(account.crdt, notebookId: nil)
+        if existingId == nil {
             try account.initialize()
             try store.setString(accountId, for: Self.accountDocKey)
         }
-        subscriptions[account.accountDocId] = observe(account.crdt, notebookId: nil)
         for ref in account.notebooks() {
             _ = try? notebookDocument(ref.id)
         }

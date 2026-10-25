@@ -55,14 +55,24 @@ export async function setCoverImage(noteId: string, file: File) {
   const store = runtime().store;
   const key = await store.keyFor(noteId);
   if (!key) throw new Error("no_key");
-  const doc = await store.load(noteId);
   const { cover, thumb } = await uploadCover(noteId, key, file);
-  setNoteMeta(doc, { cover: { attachmentId: cover, offsetY: 0.5 } });
+  const doc = await store.acquire(noteId);
+  try {
+    setNoteMeta(doc, { cover: { attachmentId: cover, offsetY: 0.5 } });
+  } finally {
+    store.release(noteId);
+  }
   updateNote(noteId, { coverThumb: thumb });
 }
 
 export async function removeCover(noteId: string) {
-  setNoteMeta(await runtime().store.load(noteId), { cover: null });
+  const store = runtime().store;
+  const doc = await store.acquire(noteId);
+  try {
+    setNoteMeta(doc, { cover: null });
+  } finally {
+    store.release(noteId);
+  }
   updateNote(noteId, { coverThumb: null });
 }
 

@@ -564,28 +564,28 @@
     "semantic_hash": "d11bbfbc754edddd24b7cc039dbcc8e3"
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSButton.swift": {
-    "mtime": 1792928146.8122306,
-    "seen": 1792929088.1652029,
-    "ast_hash": "6cfd17b9d13bd2662cd37165133ec75e",
-    "semantic_hash": "6cfd17b9d13bd2662cd37165133ec75e"
+    "mtime": 1792929154.0691373,
+    "seen": 1792929187.0979478,
+    "ast_hash": "f9c7309cb90bd9e7f4ac1215424cb7ba",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSCard.swift": {
-    "mtime": 1792928146.8041704,
-    "seen": 1792929088.1652062,
-    "ast_hash": "b14a1d782fdc0c9cbbe2508efe0c5c1d",
-    "semantic_hash": "b14a1d782fdc0c9cbbe2508efe0c5c1d"
+    "mtime": 1792929154.0711036,
+    "seen": 1792929187.0979517,
+    "ast_hash": "fc7162865d3dea2374111783beda0a3a",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSChips.swift": {
-    "mtime": 1792928095.2002337,
-    "seen": 1792929088.1652086,
-    "ast_hash": "6641455710ff7cce6a8cba4a2c65aba5",
-    "semantic_hash": "6641455710ff7cce6a8cba4a2c65aba5"
+    "mtime": 1792929154.068769,
+    "seen": 1792929187.0979538,
+    "ast_hash": "c0e78e33b5523ac063fc865229e37e78",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSDateChip.swift": {
-    "mtime": 1792928310.7858772,
-    "seen": 1792929088.1652105,
-    "ast_hash": "61afb6467162dace66ffdb5953edd6f1",
-    "semantic_hash": "61afb6467162dace66ffdb5953edd6f1"
+    "mtime": 1792929154.0705774,
+    "seen": 1792929187.0979562,
+    "ast_hash": "ae60c2e125d13e91e75db9e9b56dc8c9",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSEmptyState.swift": {
     "mtime": 1792928146.8073277,
@@ -618,22 +618,22 @@
     "semantic_hash": "fa82b60565135c14a1f87a7858d9f61a"
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSTaskCheckbox.swift": {
-    "mtime": 1792928119.944807,
-    "seen": 1792929088.1652234,
-    "ast_hash": "ec1b3fe9ca0c376db17784c8d6e27164",
-    "semantic_hash": "ec1b3fe9ca0c376db17784c8d6e27164"
+    "mtime": 1792929154.0696862,
+    "seen": 1792929187.0979688,
+    "ast_hash": "fba40faf5ac86b8af02339cf79b3f2f6",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Foundation/Color+DS.swift": {
-    "mtime": 1792927964.303488,
-    "seen": 1792929088.1652253,
-    "ast_hash": "cf7ac93a8f69915e6850177318b94a45",
-    "semantic_hash": "cf7ac93a8f69915e6850177318b94a45"
+    "mtime": 1792929154.0673137,
+    "seen": 1792929187.097971,
+    "ast_hash": "19b220ca3b18b39f3e7f26b49975a753",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Foundation/DSStrings.swift": {
-    "mtime": 1792928042.8762975,
-    "seen": 1792929088.1652272,
-    "ast_hash": "2c1f4629714c487cf2e6ffa80f60852f",
-    "semantic_hash": "2c1f4629714c487cf2e6ffa80f60852f"
+    "mtime": 1792929154.0700364,
+    "seen": 1792929187.0979726,
+    "ast_hash": "420228000a79a9562fc8d1f55fc7f663",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Foundation/Haptics.swift": {
     "mtime": 1792927964.3143256,
@@ -726,10 +726,10 @@
     "semantic_hash": "50803dc28037b4ee1c636ecb570542b7"
   },
   "packages/design-tokens/test/tokens.test.mjs": {
-    "mtime": 1792927755.277035,
-    "seen": 1792929088.1652632,
-    "ast_hash": "242a56c8ef0806e96a051820e63edc36",
-    "semantic_hash": "242a56c8ef0806e96a051820e63edc36"
+    "mtime": 1792929183.9704065,
+    "seen": 1792929187.0980015,
+    "ast_hash": "69e1f6ae683f84c70ef828048ea7d377",
+    "semantic_hash": ""
   },
   "packages/ui/.ladle/components.tsx": {
     "mtime": 1792928739.7192283,
@@ -774,10 +774,10 @@
     "semantic_hash": "d6755a5c3148480f08d9856c668622db"
   },
   "packages/ui/src/components/Button.tsx": {
-    "mtime": 1792927999.6199813,
-    "seen": 1792929088.1652796,
-    "ast_hash": "eade85d14622dd88f1710779d81551d0",
-    "semantic_hash": "eade85d14622dd88f1710779d81551d0"
+    "mtime": 1792929165.9051147,
+    "seen": 1792929187.0980158,
+    "ast_hash": "932c092c24d2840583c15f5aa052698d",
+    "semantic_hash": ""
   },
   "packages/ui/src/components/Card.tsx": {
     "mtime": 1792928262.6685145,
@@ -786,10 +786,10 @@
     "semantic_hash": "37811ad777af23b305b6b51f8326ac07"
   },
   "packages/ui/src/components/Checkbox.tsx": {
-    "mtime": 1792928048.1596913,
-    "seen": 1792929088.1652834,
-    "ast_hash": "13f3ffe7464058d0858dc5b99933767e",
-    "semantic_hash": "13f3ffe7464058d0858dc5b99933767e"
+    "mtime": 1792929165.9061768,
+    "seen": 1792929187.0980194,
+    "ast_hash": "a684f59ffd50a54a1b990abcdad05e3d",
+    "semantic_hash": ""
   },
   "packages/ui/src/components/CommandPalette.tsx": {
     "mtime": 1792928135.9236047,

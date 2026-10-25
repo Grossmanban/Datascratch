@@ -9,6 +9,11 @@ public enum DSLanguage: String, Sendable, CaseIterable {
     public static var current: DSLanguage {
         Locale.preferredLanguages.first?.hasPrefix("ru") == true ? .ru : .en
     }
+
+    /// Russian for a Russian locale, otherwise English.
+    public init(locale: Locale) {
+        self = locale.language.languageCode?.identifier == "ru" ? .ru : .en
+    }
 }
 
 /// Built-in strings of the design-system components.

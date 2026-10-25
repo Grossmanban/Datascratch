@@ -8,7 +8,7 @@ export type ButtonSize = "sm" | "md" | "lg";
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    "bg-accent text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.18),0_1px_2px_0_rgb(0_0_0/0.12)] hover:brightness-[1.06] active:brightness-95",
+    "bg-accent text-on-accent shadow-[inset_0_1px_0_0_rgb(255_255_255/0.18),0_1px_2px_0_rgb(0_0_0/0.12)] hover:brightness-[1.06] active:brightness-95",
   ink: "bg-fg text-canvas shadow-[inset_0_1px_0_0_rgb(255_255_255/0.12),0_1px_2px_0_rgb(0_0_0/0.16)] hover:opacity-90 active:opacity-85",
   secondary:
     "bg-surface text-fg border border-hairline shadow-[0_1px_2px_0_rgb(29_28_26/0.05)] hover:bg-[color-mix(in_oklab,var(--ds-bg-surface),var(--ds-text-primary)_4%)] active:bg-[color-mix(in_oklab,var(--ds-bg-surface),var(--ds-text-primary)_8%)]",

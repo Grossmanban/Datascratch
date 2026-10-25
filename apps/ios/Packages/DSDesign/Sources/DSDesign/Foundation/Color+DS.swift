@@ -77,4 +77,9 @@ extension Color {
     public static var dsDanger: Color { DSColorToken.danger.color }
     public static var dsSuccess: Color { DSColorToken.success.color }
     public static var dsWarning: Color { DSColorToken.warning.color }
+    /// Text and glyphs on filled accent / danger surfaces: white in light theme,
+    /// ink-dark in dark theme (the dark accents are light, white would not read).
+    public static var dsOnAccent: Color {
+        DSColorPair(light: DSRGBA(0xFFFF_FFFF), dark: DSColorToken.bgCanvas.value.dark).color
+    }
 }

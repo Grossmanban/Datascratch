@@ -51,7 +51,7 @@ private struct DSButtonBody: View {
 
     private var foreground: Color {
         switch variant {
-        case .primary, .destructive: Color.white
+        case .primary, .destructive: Color.dsOnAccent
         case .secondary, .ghost: Color.dsPrimary
         }
     }

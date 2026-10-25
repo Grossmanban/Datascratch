@@ -40,7 +40,7 @@ public struct DSTaskCheckbox: View {
                     .opacity(isDone ? 1 : 0)
                 DSCheckmark()
                     .trim(from: 0, to: isDone ? 1 : 0)
-                    .stroke(Color.white, style: StrokeStyle(lineWidth: max(1.5, size / 11), lineCap: .round, lineJoin: .round))
+                    .stroke(Color.dsOnAccent, style: StrokeStyle(lineWidth: max(1.5, size / 11), lineCap: .round, lineJoin: .round))
                     .padding(size * 0.27)
                     .animation(isDone ? DSMotionToken.smooth.animation(reduceMotion: reduceMotion).delay(0.06) : nil, value: isDone)
                 if state == .cancelled {

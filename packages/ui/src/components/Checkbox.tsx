@@ -40,7 +40,7 @@ export const Checkbox = forwardRef<HTMLButtonElement, CheckboxProps>(function Ch
         !label && className,
       )}
     >
-      <C.Indicator className="text-white" forceMount>
+      <C.Indicator className="text-on-accent" forceMount>
         <svg viewBox="0 0 14 14" className="size-3 opacity-0 transition-opacity duration-fast [[data-state=checked]_&]:opacity-100 [[data-state=indeterminate]_&]:opacity-100" fill="none">
           {checked === "indeterminate" ? (
             <path d="M3.5 7h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -134,7 +134,7 @@ export const TaskCheckbox = forwardRef<HTMLButtonElement, TaskCheckboxProps>(fun
         ) : (
           <motion.path
             d="M6 10.3 8.7 13 14 7.3"
-            stroke="white"
+            stroke="var(--ui-on-accent)"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"

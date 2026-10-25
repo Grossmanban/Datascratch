@@ -51,8 +51,8 @@ public struct DSBadge: View {
     private var colors: (fg: Color, bg: Color) {
         switch style {
         case .neutral: (Color.dsSecondary, Color.dsPrimary.opacity(0.07))
-        case .accent: (Color.white, Color.dsAccent)
-        case .danger: (Color.white, Color.dsDanger)
+        case .accent: (Color.dsOnAccent, Color.dsAccent)
+        case .danger: (Color.dsOnAccent, Color.dsDanger)
         case let .tint(token): (token.foreground, token.background)
         }
     }

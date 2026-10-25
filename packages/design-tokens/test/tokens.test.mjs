@@ -52,6 +52,13 @@ test("text is legible on paper in both themes (WCAG)", () => {
   }
 });
 
+test("labels on filled accent read in both themes", () => {
+  // UI uses white on light accent and canvas ink on the (light) dark-theme accent.
+  assert.ok(contrast("#FFFFFF", t.color.accent.light) >= 4.5);
+  assert.ok(contrast(t.color["bg.canvas"].dark, t.color.accent.dark) >= 4.5);
+  assert.ok(contrast(t.color["bg.canvas"].dark, t.color.danger.dark) >= 4.5);
+});
+
 test("dark inks are lighter and readable on graphite", () => {
   for (const [name, ink] of Object.entries(t.ink)) {
     assert.ok(contrast(ink.dark, t.color["bg.surface"].dark) >= 4.5, name);

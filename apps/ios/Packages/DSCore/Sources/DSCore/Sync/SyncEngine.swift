@@ -19,7 +19,11 @@ public struct SyncStatus: Equatable, Sendable {
 /// - remote updates/snapshots are decrypted, stored, and applied to open documents;
 /// - after > 500 updates or > 1 MiB since the last snapshot a snapshot is uploaded
 ///   (orphaned strokes older than 30 days are purged first, strokes.md §4.2);
-/// - awareness payloads are encrypted (`ds1|awareness|<docId>`) and only relayed.
+/// - awareness payloads are encrypted (`ds1|awareness|<docId>`) and only relayed, for open
+///   documents only;
+/// - only open documents have a live `CRDTDocument`. Everything else stays in the store as
+///   updates: remote ones are appended, snapshots merge them without a document
+///   (`CRDTUpdates.merge`), so memory does not grow with the number of notes.
 public actor SyncEngine: SyncClientDelegate {
     public typealias KeyLookup = @Sendable (DocumentRecord) throws -> Data?
     public typealias Registrar = @Sendable (DocumentRecord) async throws -> Void
@@ -42,6 +46,10 @@ public actor SyncEngine: SyncClientDelegate {
     /// (hundreds of updates in a row) then cost a few outbox scans instead of one per update.
     private var flushing = false
     private var flushAgain = false
+    /// At most this many messages wait for an ack; the next ones go out as acks arrive.
+    static let maxInFlight = 100
+    /// The last pass left queued messages unsent (in-flight cap); an ack starts another pass.
+    private var backlog = false
     private var catchingUp: Set<String> = []
     /// Documents subscribed on the current connection whose catch-up finished (`upToDate`).
     /// Pushes go only to these: otherwise `lastSeq = max(ack)` could skip others' updates.
@@ -132,12 +140,16 @@ public actor SyncEngine: SyncClientDelegate {
     /// Stops applying remote updates to `docId` in memory (it stays tracked in the store).
     /// Uploads a snapshot first when ≥ 30 local edits were made since the last one: snapshots
     /// are the versions of the history (sync-protocol.md §5, spec/06).
+    ///
+    /// The document is detached before anything is awaited, so an `open` of the same document
+    /// that runs meanwhile gets a fresh instance from the store, which already holds every edit
+    /// of the closed one (the observer stores them synchronously).
     public func close(docId: String, now: Date = Date()) async {
+        guard let closing = open.removeValue(forKey: docId) else { return }
+        closing.subscription.cancel()
         if let record = try? store.document(docId), record.localEditsSinceSnapshot >= LocalStore.snapshotOnCloseEdits {
-            await snapshot(docId: docId, now: now)
+            await snapshot(docId: docId, now: now, detached: closing.doc)
         }
-        open[docId]?.subscription.cancel()
-        open[docId] = nil
     }
 
     public func isOpen(_ docId: String) -> Bool { open[docId] != nil }
@@ -145,7 +157,7 @@ public actor SyncEngine: SyncClientDelegate {
     // MARK: Awareness
 
     public func sendAwareness(docId: String, payload: Data) async throws {
-        guard let record = try store.document(docId), let key = try keyFor(record) else { return }
+        guard open[docId] != nil, let record = try store.document(docId), let key = try keyFor(record) else { return }
         let sealed = try DSCrypto.seal(payload, key: key, ad: CryptoAD.awareness(docId))
         try await client.send(.awareness(docId: docId, payload: sealed))
     }
@@ -171,8 +183,13 @@ public actor SyncEngine: SyncClientDelegate {
             publish()
             return
         }
-        guard let items = try? store.pendingOutbox(limit: 500) else { return }
+        guard let items = try? store.pendingOutbox(limit: Self.maxInFlight * 2) else { return }
+        backlog = items.count == Self.maxInFlight * 2
         for item in items where !inFlight.contains(item.clientMsgId) && live.contains(item.docId) {
+            guard inFlight.count < Self.maxInFlight else {
+                backlog = true
+                break
+            }
             guard let record = try? store.document(item.docId) else { continue }
             do {
                 guard let key = try keyFor(record) else { continue }
@@ -239,16 +256,21 @@ public actor SyncEngine: SyncClientDelegate {
     }
 
     /// Builds, stores and sends a snapshot of `docId` (unless one is already queued).
-    private func snapshot(docId: String, now: Date) async {
+    ///
+    /// An open document (or one being closed, `detached`) is snapshotted from memory after the
+    /// orphaned-stroke pass. Any other document is never loaded: its stored updates are merged
+    /// as they are. Orphans only appear through edits, and the next open-and-close of the note
+    /// runs the pass (strokes.md §4.2 sets no deadline tighter than that).
+    private func snapshot(docId: String, now: Date, detached: CRDTDocument? = nil) async {
         guard let record = try? store.document(docId),
               (try? store.pendingOutbox(docId: docId))?.contains(where: { $0.kind == .snapshot }) != true else { return }
         do {
-            let doc: CRDTDocument
-            if let o = open[docId] {
-                doc = o.doc
-            } else {
-                doc = CRDTDocument(kind: record.kind, docId: docId)
-                try doc.applyUpdates(try store.updates(docId: docId), origin: .storage)
+            guard let doc = open[docId]?.doc ?? detached else {
+                let state = try CRDTUpdates.merge(try store.updates(docId: docId))
+                _ = try store.enqueueSnapshot(docId: docId, state: state, baseSeq: record.lastSeq, now: now)
+                try store.compact(docId: docId, now: now)
+                await flush()
+                return
             }
             if record.kind == .note {
                 let note = NoteDocument(doc)
@@ -311,9 +333,10 @@ public actor SyncEngine: SyncClientDelegate {
             inFlight.remove(clientMsgId)
             try? store.acknowledge(clientMsgId: clientMsgId, seq: seq)
             publish()
+            if backlog { await flush() }
             await snapshotIfNeeded(docId: docId)
         case .awareness(let docId, let payload, let deviceId):
-            guard let record = try? store.document(docId), let key = try? keyFor(record),
+            guard open[docId] != nil, let record = try? store.document(docId), let key = try? keyFor(record),
                   let plain = try? DSCrypto.open(payload, key: key, ad: CryptoAD.awareness(docId)) else { return }
             awarenessHandler?(docId, plain, deviceId)
         case .error(let code, _, let ref):

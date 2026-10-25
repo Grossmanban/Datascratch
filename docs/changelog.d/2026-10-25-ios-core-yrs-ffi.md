@@ -1,0 +1,1 @@
+- 2026-10-25 (ios-core) — Пакет `apps/ios/Packages/DSCore`: своя Swift-обёртка Yrs через UniFFI (`yrs-ffi`: XML-дерево y-prosemirror, Map/Array, относительные позиции, отмена, наблюдатели), совместимость Yrs ↔ Yjs проверена в обе стороны; CI `ios-core.yml` (Rust-тесты, сборка xcframework, тесты на симуляторе iPad iOS 26).

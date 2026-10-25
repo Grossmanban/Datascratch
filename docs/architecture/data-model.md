@@ -66,6 +66,7 @@ Anchor =
 | `users` | email, соль и параметры KDF, `Argon2id(loginKey)`, `Argon2id(recoveryLoginKey)`, обёрнутый masterKey (паролем и ключом восстановления), `accountDocId` |
 | `devices` | устройства = сессии (имя, последний вход, отзыв) |
 | `refresh_tokens` | SHA-256 refresh-токенов, срок, отметка использования (ротация) |
+| `security_events` | журнал безопасности: смена пароля, восстановление, замена ключа восстановления (устройство, время) |
 | `recovery_tokens` | одноразовые токены восстановления (15 мин) |
 | `notebooks` | режим `private`/`agent`, notebookKey под masterKey; в режиме «для агентов» — ещё под ключом сервера `DS_KMS_KEY` |
 | `docs` | документы `account`/`notebook`/`note`: владелец, блокнот, `last_seq`, `snapshot_seq`, счётчики с последнего снимка |

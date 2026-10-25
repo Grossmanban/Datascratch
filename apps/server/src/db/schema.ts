@@ -316,3 +316,26 @@ export const agentAudit = pgTable(
   },
   (t) => [index('agent_audit_grant_idx').on(t.grantId, t.at)],
 );
+
+export const securityEventKind = pgEnum('security_event_kind', [
+  'password_changed',
+  'recovery_used',
+  'recovery_key_rotated',
+]);
+
+/** Account security journal (what changed, when, from which device). */
+export const securityEvents = pgTable(
+  'security_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: securityEventKind('kind').notNull(),
+    /** Device the change was made from (null if it no longer exists or for recovery). */
+    deviceId: uuid('device_id'),
+    deviceName: text('device_name'),
+    at: ts('at').notNull().defaultNow(),
+  },
+  (t) => [index('security_events_user_idx').on(t.userId, t.id)],
+);

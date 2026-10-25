@@ -357,7 +357,7 @@ export async function startRuntime(accountDocId: string) {
   if (import.meta.env.DEV || import.meta.env.VITE_DS_TEST_HOOKS) {
     const w = window as unknown as { __ds?: unknown; __dsTest?: unknown };
     w.__ds = current;
-    w.__dsTest = { Y: await import("yjs"), db: accountDb };
+    w.__dsTest = { Y: await import("yjs"), db: accountDb, refresh: refreshSession };
   }
   await current.start();
   return current;

@@ -68,27 +68,39 @@ async function persist() {
 async function refresh(): Promise<Session | null> {
   if (!session) return null;
   if (!refreshing) {
-    const token = session.refreshToken;
-    refreshing = authApi
-      .refresh(token)
-      .then(async (next) => {
+    refreshing = withRefreshLock(async () => {
+      if (!session) return null;
+      // The server treats a reused refresh token as theft and revokes the device. Tabs of this
+      // app share one session: if another tab already rotated it, take its result instead.
+      const stored = await kvGet<StoredAccount>("account");
+      if (stored && stored.userId === useAuth.getState().userId && stored.session.refreshToken !== session.refreshToken) {
+        session = stored.session;
+        return session;
+      }
+      try {
+        const next = await authApi.refresh(session.refreshToken);
         session = { ...next, wrappedMasterKeyPassword: next.wrappedMasterKeyPassword ?? session?.wrappedMasterKeyPassword };
         await persist();
         return session;
-      })
-      .catch(async (e) => {
+      } catch (e) {
         if (e instanceof ApiError && (e.status === 401 || e.code === "unauthorized")) {
           // Refresh token revoked (device removed elsewhere) → sign out locally.
           await signOutLocal();
           return null;
         }
         return session;
-      })
-      .finally(() => {
-        refreshing = null;
-      });
+      }
+    }).finally(() => {
+      refreshing = null;
+    });
   }
   return refreshing;
+}
+
+/** One refresh at a time across this app's tabs (Web Locks; plain call where unsupported). */
+function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+  return locks ? (locks.request("ds-session-refresh", fn) as Promise<T>) : fn();
 }
 
 setTokenSource({ get: () => session, refresh });

@@ -13,6 +13,7 @@ const db = {
   users: new Map(), // email -> user
   sessions: new Map(), // accessToken -> { userId, deviceId, exp }
   refresh: new Map(), // refreshToken -> { userId, deviceId }
+  usedRefresh: new Map(), // rotated refreshToken -> deviceId (reuse = theft)
   devices: new Map(), // deviceId -> { id, userId, name, createdAt, lastSeenAt }
   notebooks: new Map(), // id -> { id, userId, mode, createdAt, wrappedKey, serverKey }
   docs: new Map(), // docId -> { docId, userId, kind, notebookId, items: [{seq,payload,deviceId,createdAt}], snapshot }
@@ -127,10 +128,18 @@ route("POST", "/v1/auth/login", (_q, res, { body }) => {
   if (!u || u.loginKey !== body.loginKey) return err(res, 401, "unauthorized", "Wrong email or password");
   json(res, 200, issueSession(u, body.deviceName));
 });
+// Like the real server: refresh tokens rotate, and presenting a used one revokes the device.
 route("POST", "/v1/auth/refresh", (_q, res, { body }) => {
+  const used = db.usedRefresh.get(body.refreshToken);
+  if (used) {
+    db.devices.delete(used);
+    for (const [t, r] of db.refresh) if (r.deviceId === used) db.refresh.delete(t);
+    return err(res, 401, "unauthorized", "refresh token reuse");
+  }
   const r = db.refresh.get(body.refreshToken);
   if (!r || !db.devices.has(r.deviceId)) return err(res, 401, "unauthorized");
   db.refresh.delete(body.refreshToken);
+  db.usedRefresh.set(body.refreshToken, r.deviceId);
   json(res, 200, newTokens(userById(r.userId), r.deviceId));
 });
 route("POST", "/v1/auth/logout", (_q, res, { body }) => {

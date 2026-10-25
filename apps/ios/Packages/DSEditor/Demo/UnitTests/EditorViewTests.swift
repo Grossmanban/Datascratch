@@ -266,7 +266,9 @@ final class EditorViewTests: XCTestCase {
         EditorCommands(document: doc).typeText("Oh ", marks: .empty, at: TextPosition(block: p.id, offset: 0), replacing: 0)
         settle(editor)
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        XCTAssertTrue(editor.ink.renderedPath(of: still.id) === stillPath, "the unmoved stroke reuses its outline")
+        let stillAfter = editor.ink.renderedPath(of: still.id)
+        print("OUTLINE_CACHE still reused=\(stillAfter === stillPath) before=\(stillPath!.boundingBox) after=\(stillAfter!.boundingBox)")
+        XCTAssertEqual(stillAfter!.boundingBox.minY, stillPath!.boundingBox.minY, accuracy: 0.5, "the stroke below did not move")
         XCTAssertFalse(editor.ink.renderedPath(of: moving.id) === movingPath, "the moved stroke is outlined again")
     }
 

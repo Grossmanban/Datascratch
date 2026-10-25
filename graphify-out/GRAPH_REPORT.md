@@ -1,13 +1,19 @@
 # Graph Report - Datascratch  (2026-10-25)
 
 ## Corpus Check
-- 9 files · ~463,988 words
+- 738 files · ~464,000 words
 - Verdict: corpus is large enough that graph structure adds value.
+- Unclassified: 37 file(s) not represented in the graph (top: (none) 18, .css 6, .example 4)
 
 ## Summary
 - 14347 nodes · 36248 edges · 387 communities (346 shown, 41 thin omitted)
 - Extraction: 90% EXTRACTED · 10% INFERRED · 0% AMBIGUOUS · INFERRED: 3695 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
+
+## Graph Freshness
+- Built from commit: `0a9ef7db`
+- Run `git rev-parse HEAD` and compare to check if the graph is stale.
+- Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - Data
@@ -39,10 +45,10 @@
 - contracts/document.ts
 - DSPenToolbar
 - SceneModel
-- ref_lucide_react
+- ref_react
 - stack.md (4)
 - crypto/keys.ts (2)
-- store.ts (2)
+- store.ts
 - decisions/README.md (2)
 - String
 - h0
@@ -53,7 +59,7 @@
 - store.ts
 - OAuth 2.1 для MCP (2)
 - cn
-- stack.md (2)
+- stack.md
 - records.ts
 - sync-protocol.md
 - CodingKeys (2)
@@ -106,12 +112,12 @@
 - CodingKeys (2)
 - ServerConnection
 - DocumentStyle
-- RecoveryKey
+- LocalAccountService
 - apps/web — веб-клиент Datascratch
 - Controls.stories.tsx
 - DSTypeToken
 - Equatable
-- Stroke (2)
+- .json
 - Пакеты и временные замены
 - EditorView
 - .make (2)
@@ -152,7 +158,7 @@
 - ui/README.md
 - YValue (2)
 - schema.ts
-- SwiftUI (2)
+- SwiftUI
 - AccountService
 - with
 - @datascratch/design-tokens README (2)
@@ -194,7 +200,7 @@
 - design-tokens.md (4)
 - packages/test-vectors (shared test vectors)
 - markdown.ts
-- devDependencies (2)
+- devDependencies
 - .start
 - Как развернуть сервер Datascratch на своём VPS без компьютера (GitHub Actions)
 - MCP tools / REST operations table
@@ -258,7 +264,7 @@
 - agents-api.md
 - compilerOptions
 - @datascratch/shared
-- MCP tools / REST operations set (2)
+- Agent Markdown dialect
 - memory-hub.ts
 - shared/package.json
 - web-editor/package.json
@@ -340,7 +346,7 @@
 - @datascratch/shared/strokes (point packing, anchors, layout, rebaseRedoneAnchors, restoreNoteVersion, reanchorStrokes)
 - pm-schema.ts
 - scripts (2)
-- scripts (3)
+- scripts
 - .launch
 - options (2)
 - compilerOptions (2) (2) (2) (2)
@@ -406,14 +412,14 @@
 ## Surprising Connections (you probably didn't know these)
 - `Перестройка блоков (§4.1a): при разделении, слиянии, смене типа и перемещении блока клиент в той же транзакции заменяет затронутый штрих копией (новый strokeId, те же точки, якоря по соответствию символов)` --semantically_similar_to--> `rebaseRedoneAnchors()`  [INFERRED] [semantically similar]
   docs/architecture/contracts/strokes.md → packages/shared/src/strokes/store.ts
+- `4.2. Схема блоков` --references--> `at()`  [INFERRED]
+  docs/architecture/contracts/document-model.md → apps/server/test/retention.test.ts
+- `2. Поля штриха` --references--> `block()`  [INFERRED]
+  docs/architecture/contracts/strokes.md → packages/design-tokens/scripts/generate.mjs
 - `Аутентификация (D-34, `crypto.md`)` --references--> `Session`  [INFERRED]
   docs/architecture/contracts/api.md → packages/shared/src/contracts/api.ts
 - `Шеринг (D-13, D-37)` --references--> `Share`  [INFERRED]
   docs/architecture/contracts/api.md → packages/shared/src/contracts/api.ts
-- `2. Поля штриха` --references--> `block()`  [INFERRED]
-  docs/architecture/contracts/strokes.md → packages/design-tokens/scripts/generate.mjs
-- `4.2. Схема блоков` --references--> `at()`  [INFERRED]
-  docs/architecture/contracts/document-model.md → apps/server/test/retention.test.ts
 
 ## Import Cycles
 - 2-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs`
@@ -550,7 +556,7 @@ Nodes (57): DSPenMode, .eraserMode, highlighter, lasso, marker, pen, pencil, pix
 Cohesion: 0.03
 Nodes (67): .body, NoteWindow, .body, FocusedValues, SceneModel, .library, .sidebar, SceneSheet (+59 more)
 
-### Community 29 - "ref_lucide_react"
+### Community 29 - "ref_react"
 Cohesion: 0.08
 Nodes (72): current(), confirmRecoveryKeySaved(), getRecoveryKey(), signOut(), skipRecoveryStep(), setNotebookMode(), authErrorMessage(), LoginPage() (+64 more)
 
@@ -562,7 +568,7 @@ Nodes (20): TransactionOrigin, .description, .isOutgoing, local, other, remote, 
 Cohesion: 0.03
 Nodes (95): add(), ase(), atLeastOneInternalRecord(), atLeastOneSepFirstInternalRecord(), cacheForContext(), calculate(), cancel(), chopInput() (+87 more)
 
-### Community 32 - "store.ts (2)"
+### Community 32 - "store.ts"
 Cohesion: 0.04
 Nodes (73): AuthorKind, ANCHOR_KINDS, AnchorKind, MIN_SEGMENT_POINTS, ORPHAN_STROKE_PURGE_DAYS, POINT_BYTES, POINT_FIELDS, REFERENCE_BLOCK_WIDTH (+65 more)
 
@@ -606,7 +612,7 @@ Nodes (83): dependencies, @aws-sdk/client-s3@^3.1156.0, @datascratch/agents@work
 Cohesion: 0.07
 Nodes (75): ButtonProps, Ctx, Drop, queue, Toaster(), Variant, @ladle/react@^5.1.1, ContextMenu (+67 more)
 
-### Community 43 - "stack.md (2)"
+### Community 43 - "stack.md"
 Cohesion: 0.05
 Nodes (75): Agent rate limits (in-memory counters, D-25) and OAuth 2.1 for MCP are the plugin's responsibility, Agent Edit Flow (agent notebook), Accounts, OAuth, Tokens Service, edit_note MCP Tool, External AI Agents, File Storage (disk or external S3), Handwriting-to-PNG Render (pg-boss queue), iOS / iPadOS Client (Swift, TextKit 2, Yrs, GRDB) (+67 more)
 
@@ -818,7 +824,7 @@ Nodes (5): LaunchOptions, ServerAccessService, ServerConnection, ServerSharingSe
 Cohesion: 0.07
 Nodes (18): DemoModel, .fileURL, .style, DemoView, .body, .toolbarContent, FPSCounter, HUDView (+10 more)
 
-### Community 96 - "RecoveryKey"
+### Community 96 - "LocalAccountService"
 Cohesion: 0.12
 Nodes (12): Account, AccountService, Credentials, LocalAccountService, .isServerBacked, Record, SecurityEvent, .id (+4 more)
 
@@ -838,7 +844,7 @@ Nodes (35): DSFontFamily, display, mono, text, DSFontWeight, bold, medium, regul
 Cohesion: 0.12
 Nodes (12): Phase, onboarding, ready, BlockAnchorBuilder, CharacterHit, GlyphPlacement, InkSample, LivingStrokeResolver (+4 more)
 
-### Community 101 - "Stroke (2)"
+### Community 101 - ".json"
 Cohesion: 0.09
 Nodes (15): .fields, StrokeCodec, StrokeMetrics, StrokeCodecTests, BadValue, CryptoVectorTests, DocumentVectorTests, EncodingVectorTests (+7 more)
 
@@ -1002,7 +1008,7 @@ Nodes (35): A7(), aA(), cy(), D7(), Dit(), E7(), Ent(), f7() (+27 more)
 Cohesion: 0.09
 Nodes (25): Drizzle schema and SQL migrations (drizzle-kit db:generate, DB_MIGRATE_ON_START; 0001 = Row-Level Security + file cleanup trigger), Db, agentAudit, agentPermission, attachmentChunks, attachments, bytea, docKind (+17 more)
 
-### Community 142 - "SwiftUI (2)"
+### Community 142 - "SwiftUI"
 Cohesion: 0.08
 Nodes (13): AppCommands, .body, TaskCheckbox, .body, .fallback, CoreLibraryRemoteTests, CoreLibrarySafetyTests, RecordingRemote (+5 more)
 
@@ -1166,7 +1172,7 @@ Nodes (17): createAccountKeys / rekeyPassword, crypto.md contract, @datascratch/
 Cohesion: 0.19
 Nodes (21): attr(), block(), blockBody(), CALLOUT_KIND, children(), close(), Ctx, escapeBlockStart() (+13 more)
 
-### Community 184 - "devDependencies (2)"
+### Community 184 - "devDependencies"
 Cohesion: 0.09
 Nodes (23): devDependencies, happy-dom@^21.0.4, @playwright/test@1.62.1, tailwindcss@^4.3.3, @tailwindcss/vite@^4.3.3, @types/katex@^0.16.8, @types/react@^19.0.0, @types/react-dom@^19.0.0 (+15 more)
 
@@ -1414,7 +1420,7 @@ Nodes (12): compilerOptions, baseUrl, declaration, jsx, lib, noEmit, paths, sour
 Cohesion: 0.23
 Nodes (10): DexieSyncStorage (IndexedDB), First Sync Performance (10k notes), Move Note Between Notebooks (PATCH /docs/:id), Server apps/server (Fastify + PostgreSQL), SyncClient (shared), @datascratch/ui, Automated VPS Deploy via GitHub Actions, Web Client (apps/web) (+2 more)
 
-### Community 248 - "MCP tools / REST operations set (2)"
+### Community 248 - "Agent Markdown dialect"
 Cohesion: 0.15
 Nodes (11): Agent Markdown dialect, Block markers <!-- block:<blockId> -->, Strokes with all anchors deleted hidden (D-35), Handwriting group (strokes within 24 chars, handwritingId = earliest stroke), Рукопись в Markdown (D-11): ![✍️ описание](handwriting:<id>), группы штрихов < 24 символов, Handwriting image references (D-11), Рендер рукописи в PNG: @napi-rs/canvas, Inter/Newsreader, колонка 600 pt, 2 px/pt, кэш 200, Handwriting PNG renderer (@napi-rs/canvas) (+3 more)
 
@@ -1718,7 +1724,7 @@ Nodes (4): src/generate.ts generator, cellAttrs, id, schema
 Cohesion: 0.33
 Nodes (6): scripts, dev, lint, showcase:build, test, typecheck
 
-### Community 330 - "scripts (3)"
+### Community 330 - "scripts"
 Cohesion: 0.33
 Nodes (6): scripts, build, dev, test, test:ct, typecheck
 
@@ -1827,7 +1833,7 @@ Nodes (3): katex@^0.16.0, loadKatex(), katex
   docs/spec/12-craft-features.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **1138 isolated node(s):** `display`, `mono`, `text`, `bold`, `medium` (+1133 more)
+- **1138 isolated node(s):** `.body`, `onboarding`, `ready`, `.phase`, `system` (+1133 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 4101 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **41 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -1835,15 +1841,15 @@ Nodes (3): katex@^0.16.0, loadKatex(), katex
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `L` connect `stack.md` to `Data`, `e`, `scripts/generate.mjs`, `YValue (2)`, `PenToolbar.tsx`?**
-  _High betweenness centrality (0.161) - this node is a cross-community bridge._
+  _High betweenness centrality (0.163) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `display`, `mono`, `text` to the rest of the system?**
+- **What connects `.body`, `onboarding`, `ready` to the rest of the system?**
   _1138 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Data` be split into smaller, more focused modules?**
   _Cohesion score 0.0034958942705147454 - nodes in this community are weakly interconnected._
 - **Why does `DSPenToolbar / DSPenWidth` connect `DSDesign/README.md` to `DSDesign Swift package (iOS 26, Swift 6)`, `strokes.md`, `DatascratchEditor component`, `DSPenToolbar`, `@datascratch/ui package`?**
-  _High betweenness centrality (0.137) - this node is a cross-community bridge._
+  _High betweenness centrality (0.150) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._

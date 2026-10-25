@@ -2,7 +2,9 @@
  * Read helpers over the note document format (contracts/document-model.md §4):
  * `content` is a y-prosemirror tree of Y.XmlElement blocks with Y.XmlText runs.
  *
- * TODO(core): switch to @datascratch/shared document helpers once published.
+ * These are Y-level helpers (offsets inside Y.XmlText runs) that the agent
+ * layer needs for handwriting and text edits; the PM-JSON level helpers live
+ * in @datascratch/shared/document.
  */
 import * as Y from "yjs";
 
@@ -149,12 +151,6 @@ export function walkAtoms(doc: Y.Doc, visit: (atom: Y.XmlElement, block: Y.XmlEl
     if (!TEXT_BLOCKS.has(el.nodeName)) return;
     for (const c of childElements(el)) if (INLINE_ATOMS.has(c.nodeName)) visit(c, el);
   });
-}
-
-export function noteTitle(doc: Y.Doc): string {
-  const first = childElements(contentOf(doc))[0];
-  if (first && first.nodeName === "title") return plainText(first).trim();
-  return "";
 }
 
 /** The nearest enclosing text block of a Y.XmlText run. */

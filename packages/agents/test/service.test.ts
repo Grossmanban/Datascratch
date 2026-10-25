@@ -20,6 +20,20 @@ describe("access", () => {
     expect(spaces.spaces).toEqual([{ id: "s1", name: "Основное", icon: "🏠", notebooks: [{ id: NB_WORK, name: "Работа" }] }]);
   });
 
+  it("takes name, icon and space from the notebook document when the server does not know them", async () => {
+    const { ctx, svc } = setup();
+    const nb = ctx.data.notebooks.get(NB_WORK)!;
+    nb.name = null;
+    nb.space = null;
+    const doc = ctx.data.current(NB_WORK);
+    doc.transact(() => {
+      doc.getMap("meta").set("icon", "💼");
+      doc.getMap("meta").set("space", { id: "s9", name: "Проекты", icon: null });
+    });
+    const r = await svc.listNotebooks(principal());
+    expect(r.notebooks[0]).toMatchObject({ name: "Работа", icon: "💼", space: { id: "s9", name: "Проекты" } });
+  });
+
   it("never exposes private or ungranted notebooks", async () => {
     const { svc } = setup();
     const p = principal();
@@ -60,7 +74,7 @@ describe("reading", () => {
     expect(r.note.notebookName).toBe("Работа");
     expect(r.markdown).toContain("<!-- block:");
     expect(r.markdown).toMatch(/!\[✍️ подчёркнуто от руки: «сроки запуска»\]\(handwriting:[0-9a-f-]+\)/);
-    expect(r.markdown).toMatch(/- \[ \] Подготовить макеты 📅 2026-10-27 <!-- block:[0-9a-f-]+ task:[0-9a-f-]+ -->/);
+    expect(r.markdown).toMatch(/- \[ \] Подготовить макеты ⏳ 2026-10-27 <!-- block:[0-9a-f-]+ task:[0-9a-f-]+ -->/);
     expect(r.images).toHaveLength(1);
     expect(r.images[0]!.png.subarray(1, 4).toString()).toBe("PNG");
     const img = await svc.getHandwritingImage(principal(), { noteId: NOTE_PLAN, handwritingId: r.handwriting[0]!.id, scale: 1 });

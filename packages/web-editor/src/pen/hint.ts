@@ -1,6 +1,6 @@
 // Shape hint recognition (strokes.md `hint`): a cheap geometric classifier. The hint does not change
 // how a stroke is drawn; it tells agents and exporters what the mark means (D-11).
-import type { StrokeHint, StrokeTool } from "../shared/strokes";
+import type { StrokeHint, StrokeTool } from "@datascratch/shared/strokes";
 import type { Line } from "./geometry";
 
 interface P {

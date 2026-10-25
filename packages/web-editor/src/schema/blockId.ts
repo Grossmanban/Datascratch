@@ -1,7 +1,7 @@
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
-import { uuidv7 } from "../shared/uuid";
+import { uuidv7 } from "@datascratch/shared/ids";
 
 export const blockIdPluginKey = new PluginKey("dsBlockId");
 

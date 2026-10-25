@@ -150,6 +150,7 @@ export class PgAgentDataSource implements AgentDataSource {
       // RLS rejects the insert when the grant is read-only.
       const r = await this.ctx.documents.append(tx, { docId, payload, deviceId });
       after.push(() => this.ctx.documents.publishUpdate(docId, r.seq, payload, deviceId, null));
+      this.ctx.metrics.syncUpdates.inc({ source: 'agent' });
       if (r.updatesSinceSnapshot >= SNAPSHOT_AFTER_UPDATES || r.bytesSinceSnapshot >= SNAPSHOT_AFTER_BYTES) {
         const { doc, seq } = await this.#state(tx, docId, dk.key);
         const state = Y.encodeStateAsUpdate(doc);

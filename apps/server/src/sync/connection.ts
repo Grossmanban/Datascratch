@@ -113,6 +113,7 @@ export class SyncConnection {
   }
 
   #send(msg: ServerMessage) {
+    if (msg.type === 'error') this.ctx.metrics.syncErrors.inc({ code: msg.code });
     if (this.#closed || this.socket.readyState !== this.socket.OPEN) return;
     if (this.socket.bufferedAmount > MAX_BUFFERED_BYTES) {
       // The client cannot keep up; it will catch up from lastSeq after reconnecting.
@@ -168,6 +169,7 @@ export class SyncConnection {
       return;
     }
     const msg = parsed.data;
+    this.ctx.metrics.syncMessages.inc({ type: msg.type });
     if (!this.#principal) {
       if (msg.type !== 'hello') return this.#fail('unauthorized', 'hello expected', CloseCode.unauthorized);
       return this.#hello(msg);
@@ -455,6 +457,7 @@ export class SyncConnection {
     // On a subscribed document the ack takes its place in seq order.
     if (sub) this.#enqueue(docId, sub, { kind: 'ack', seq: r.seq, clientMsgId });
     else this.#send({ type: 'ack', docId, clientMsgId, seq: r.seq });
+    if (!r.duplicate) this.ctx.metrics.syncUpdates.inc({ source: this.#principal!.kind });
     if (!r.duplicate) this.ctx.documents.publishUpdate(docId, r.seq, payload, deviceId, this.id);
   }
 

@@ -414,6 +414,44 @@ public final class NoteDocument: Sendable {
         return expired
     }
 
+    // MARK: Version restore (strokes.md §4.1)
+
+    /// Restores `content` and `strokes` of a version (decrypted state from
+    /// `GET /docs/:id/versions/:seq`) as a new local edit. Stroke anchors are remapped through
+    /// absolute positions: anchor in the version → same path/index in the restored text → new
+    /// relative position. Anchors deleted in the version stay as they are (orphans). Meta and
+    /// comments are kept.
+    public func restoreVersion(state: Data, origin: TransactionOrigin = .local) throws {
+        let old = NoteDocument(noteId: noteId)
+        try old.crdt.applyUpdate(state, origin: .storage)
+        let oldBlocks = try old.blocks()
+        let oldStrokes = old.strokes()
+        var resolvedAnchors: [String: [ResolvedIndex?]] = [:]
+        for s in oldStrokes where s.anchorKind == .text {
+            resolvedAnchors[s.id] = try old.crdt.resolve(relativePositions: s.anchors)
+        }
+
+        let count = UInt32(try crdt.xmlChildren().count)
+        let currentStrokeIds = crdt.mapKeys("strokes")
+        try crdt.transact(origin: origin) { txn in
+            if count > 0 { txn.deleteNodes(in: [], at: 0, count: count) }
+            txn.insertNodes(oldBlocks.map(\.xml), into: [], at: 0)
+            for id in currentStrokeIds { txn.delete("strokes", key: id) }
+        }
+        // Same tree shape as the version, so paths and indices carry over.
+        var restored: [Stroke] = []
+        for var s in oldStrokes {
+            if let resolved = resolvedAnchors[s.id] {
+                s.anchors = try zip(s.anchors, resolved).map { original, r in
+                    guard let r, !r.deleted else { return original }
+                    return try crdt.relativePosition(at: r.path, index: r.index)
+                }
+            }
+            restored.append(s)
+        }
+        try addStrokes(restored, origin: origin)
+    }
+
     // MARK: Comments
 
     public func comments() -> [Comment] {

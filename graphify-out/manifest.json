@@ -522,9 +522,9 @@
     "semantic_hash": ""
   },
   "packages/shared/src/strokes/index.ts": {
-    "mtime": 1792928001.0070958,
-    "seen": 1792928161.876772,
-    "ast_hash": "e2ebd7ddedcadeeadbf819c35985c768",
+    "mtime": 1792928679.5634737,
+    "seen": 1792928746.0654678,
+    "ast_hash": "4caa22768bd92614c6ef75c67e9c6bd4",
     "semantic_hash": ""
   },
   "packages/shared/src/sync/index.ts": {
@@ -771,6 +771,42 @@
     "mtime": 1792928550.0188177,
     "seen": 1792928567.3262694,
     "ast_hash": "131ce63e7d3bc5a2a658441f50cd60d8",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/strokes/anchors.ts": {
+    "mtime": 1792928729.8754718,
+    "seen": 1792928746.06546,
+    "ast_hash": "e07284864534eaf5c54631ba3f79416c",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/strokes/codec.ts": {
+    "mtime": 1792928729.8914719,
+    "seen": 1792928746.065464,
+    "ast_hash": "53bf695c6abba6332c896143cfee7a38",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/strokes/layout.ts": {
+    "mtime": 1792928729.939472,
+    "seen": 1792928746.0654705,
+    "ast_hash": "29d98402c6db9b2d9649f732fbaf9566",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/strokes/store.ts": {
+    "mtime": 1792928729.9834719,
+    "seen": 1792928746.0654733,
+    "ast_hash": "57c9b44d998fdf83d3691070205836cd",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/strokes/width.ts": {
+    "mtime": 1792928729.995472,
+    "seen": 1792928746.065476,
+    "ast_hash": "48c83cecc9bb79cd9a1aef9d5a6fc323",
+    "semantic_hash": ""
+  },
+  "packages/shared/test/strokes.test.ts": {
+    "mtime": 1792928730.3194718,
+    "seen": 1792928746.0654933,
+    "ast_hash": "1ce5c5b7921f7d89cbdb4e8d5b05caf6",
     "semantic_hash": ""
   }
 }

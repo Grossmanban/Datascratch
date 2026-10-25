@@ -768,9 +768,9 @@
     "semantic_hash": ""
   },
   "packages/shared/test/document.test.ts": {
-    "mtime": 1792928524.4314795,
-    "seen": 1792928535.5077562,
-    "ast_hash": "22ae4ee090d83acc001a8d5134edc60f",
+    "mtime": 1792928550.0188177,
+    "seen": 1792928567.3262694,
+    "ast_hash": "131ce63e7d3bc5a2a658441f50cd60d8",
     "semantic_hash": ""
   }
 }

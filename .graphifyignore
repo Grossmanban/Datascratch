@@ -5,3 +5,4 @@ docs/decisions/0000-template.md
 .claude/
 graphify-out/
 packages/agents/test/__images__/
+docs/changelog.d/

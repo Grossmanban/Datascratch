@@ -120,12 +120,12 @@ struct DayCell: View {
         VStack(spacing: Theme.Space.s1) {
             Text(date.formatted(.dateTime.weekday(.abbreviated)))
                 .font(Theme.Typography.caption)
-                .foregroundStyle(isSelected ? .white.opacity(0.85) : Theme.Palette.textTertiary)
+                .foregroundStyle(isSelected ? Theme.Palette.onAccent.opacity(0.85) : Theme.Palette.textTertiary)
             Text(date.formatted(.dateTime.day()))
                 .font(.system(.title3, design: .serif).weight(.semibold))
-                .foregroundStyle(isSelected ? .white : isToday ? Theme.Palette.accent : Theme.Palette.textPrimary)
+                .foregroundStyle(isSelected ? Theme.Palette.onAccent : isToday ? Theme.Palette.accent : Theme.Palette.textPrimary)
             Circle()
-                .fill(hasNote ? (isSelected ? Color.white : Theme.Palette.accent) : .clear)
+                .fill(hasNote ? (isSelected ? Theme.Palette.onAccent : Theme.Palette.accent) : .clear)
                 .frame(width: 5, height: 5)
         }
         .frame(width: 48, height: 68)

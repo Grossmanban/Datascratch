@@ -52,6 +52,8 @@ final class SceneModel {
     var taskBucket: TaskIndex.Bucket = .today
     var calendarDay: String = DayKey.from(Date())
     var pendingModeChange: (notebookId: String, mode: NotebookMode)?
+    /// A cover picker or the reposition sheet requested from a document menu.
+    var coverAction: CoverAction?
 
     init(app: AppModel) {
         self.app = app

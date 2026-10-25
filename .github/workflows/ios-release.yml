@@ -100,6 +100,13 @@ jobs:
           echo "API key OK; KEY_ID length ${#KEY_ID} (expected 10), ISSUER_ID length ${#ISSUER_ID} (expected 36)."
           echo "KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
 
+      - name: App Store Connect checks
+        run: |
+          # Idempotent insurance: the bundle ID with Associated Domains (RELEASE.md step 2),
+          # and a clear error if the app record (step 3, not possible via the API) is missing.
+          python3 scripts/asc.py ensure-bundle-id com.datascratch.app "Datascratch"
+          python3 scripts/asc.py check-app com.datascratch.app
+
       # Optional (plan B in RELEASE.md): a distribution certificate exported as .p12.
       - name: Import distribution certificate (optional)
         env:

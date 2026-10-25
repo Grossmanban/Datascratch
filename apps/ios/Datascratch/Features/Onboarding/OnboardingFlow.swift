@@ -63,7 +63,7 @@ struct WelcomeView: View {
                     } label: {
                         Text("Create Account").frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glassProminent)
+                    .prominentGlass()
                     .controlSize(.large)
                     .accessibilityIdentifier("welcome.signUp")
                     Button {
@@ -175,11 +175,11 @@ struct PrimaryButton: View {
         Button(action: action) {
             HStack {
                 Spacer()
-                if isWorking { ProgressView().tint(.white) } else { Text(title) }
+                if isWorking { ProgressView().tint(Theme.Palette.onAccent) } else { Text(title) }
                 Spacer()
             }
         }
-        .buttonStyle(.glassProminent)
+        .prominentGlass()
         .controlSize(.large)
         .disabled(isDisabled || isWorking)
     }
@@ -430,52 +430,76 @@ struct RecoveryKeyGrid: View {
     }
 }
 
-/// Asks for two groups of the key to make sure it was written down.
+/// Asks for two groups of the key to make sure it was written down. The check is
+/// optional (spec/07): «Skip» finishes sign-up and Settings keeps reminding.
 struct ConfirmRecoveryKeyView: View {
     @Environment(AppModel.self) private var app
+    @State private var confirmSkip = false
+
+    var body: some View {
+        AuthCard(title: "Check your key",
+                 subtitle: "Type two groups from your recovery key to make sure it's saved correctly.") {
+            if let key = app.pendingRecoveryKey {
+                RecoveryKeyCheck(key: key) { app.finishOnboarding() }
+                Button("Skip") { confirmSkip = true }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("confirmKey.skip")
+                    .confirmationDialog("Skip the check?", isPresented: $confirmSkip, titleVisibility: .visible) {
+                        Button("Skip") { app.finishOnboarding(keyConfirmed: false) }
+                            .accessibilityIdentifier("confirmKey.skipConfirm")
+                    } message: {
+                        Text("Without the key you can't get your notes back if you forget the password. You can show the key and check it later in Settings → Account.")
+                    }
+            }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Two random groups of the key typed back by the user.
+struct RecoveryKeyCheck: View {
+    let key: RecoveryKey
+    let onConfirmed: () -> Void
     @State private var first = ""
     @State private var second = ""
     @State private var error: String?
     @State private var indices: (Int, Int) = (0, 0)
 
     var body: some View {
-        AuthCard(title: "Check your key",
-                 subtitle: "Type two groups from your recovery key to make sure it's saved correctly.") {
-            if let key = app.pendingRecoveryKey {
-                FieldBox {
-                    TextField("Group \(indices.0 + 1)", text: $first)
-                        .font(.system(.body, design: .monospaced))
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                        .accessibilityIdentifier("confirmKey.first")
-                }
-                FieldBox {
-                    TextField("Group \(indices.1 + 1)", text: $second)
-                        .font(.system(.body, design: .monospaced))
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                        .accessibilityIdentifier("confirmKey.second")
-                }
-                ErrorText(message: error)
-                PrimaryButton(title: "Finish", isDisabled: first.isEmpty || second.isEmpty) {
-                    let groups = key.groups
-                    if normalize(first) == groups[indices.0], normalize(second) == groups[indices.1] {
-                        Haptics.success()
-                        app.finishOnboarding()
-                    } else {
-                        Haptics.warning()
-                        withAnimation { error = String(localized: "These groups don't match. Check the key you saved.") }
-                    }
-                }
-                .accessibilityIdentifier("confirmKey.finish")
+        VStack(alignment: .leading, spacing: Theme.Space.s3) {
+            FieldBox {
+                TextField("Group \(indices.0 + 1)", text: $first)
+                    .font(.system(.body, design: .monospaced))
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("confirmKey.first")
             }
+            FieldBox {
+                TextField("Group \(indices.1 + 1)", text: $second)
+                    .font(.system(.body, design: .monospaced))
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("confirmKey.second")
+            }
+            ErrorText(message: error)
+            PrimaryButton(title: "Finish", isDisabled: first.isEmpty || second.isEmpty) {
+                let groups = key.groups
+                if normalize(first) == groups[indices.0], normalize(second) == groups[indices.1] {
+                    Haptics.success()
+                    onConfirmed()
+                } else {
+                    Haptics.warning()
+                    withAnimation { error = String(localized: "These groups don't match. Check the key you saved.") }
+                }
+            }
+            .accessibilityIdentifier("confirmKey.finish")
         }
-        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            guard let count = app.pendingRecoveryKey?.groups.count, count > 2, indices == (0, 0) else { return }
-            let a = Int.random(in: 0..<(count / 2))
-            let b = Int.random(in: (count / 2)..<count)
-            indices = (a, b)
+            let count = key.groups.count
+            guard count > 2, indices == (0, 0) else { return }
+            indices = (Int.random(in: 0..<(count / 2)), Int.random(in: (count / 2)..<count))
         }
     }
 

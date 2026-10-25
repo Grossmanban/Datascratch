@@ -69,9 +69,16 @@ struct NativeDocumentScreen: View {
             if let model, let note = app.library.note(noteId) {
                 ZStack(alignment: .bottom) {
                     DocumentBackground(note: note)
-                    NativeEditorRepresentable(editor: model.editor)
-                        .ignoresSafeArea(.container, edges: .bottom)
-                        .accessibilityIdentifier("editor")
+                    VStack(spacing: 0) {
+                        // Compact header above the text (the editor has no scrolling header yet).
+                        if CoverHeader.hasCover(note) {
+                            CoverHeader(note: note)
+                                .contextMenu { CoverMenuItems(note: note) }
+                        }
+                        NativeEditorRepresentable(editor: model.editor)
+                            .ignoresSafeArea(.container, edges: .bottom)
+                            .accessibilityIdentifier("editor")
+                    }
                     PenPalette(model: model)
                         .padding(.bottom, Theme.Space.s3)
                 }
@@ -80,6 +87,7 @@ struct NativeDocumentScreen: View {
                     model.editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
                 }
                 .toolbar { NativeEditorToolbar(model: model, note: note) }
+                .coverPickers()
             } else if failed {
                 // Opening the document failed: fall back to the stand-in editor.
                 DocumentScreen(noteId: noteId, forceStandIn: true)
@@ -157,6 +165,7 @@ struct NativeEditorToolbar: ToolbarContent {
 
             Menu {
                 Button("Style…", systemImage: "textformat") { scene.sheet = .documentStyle(noteId: note.id) }
+                Menu("Cover", systemImage: "photo") { CoverMenuItems(note: note) }
                 Button("Version History", systemImage: "clock.arrow.circlepath") {
                     app.library.recordVersion(ofNote: note.id)
                     scene.sheet = .versions(noteId: note.id)
@@ -195,14 +204,18 @@ struct PenPalette: View {
         HStack(spacing: Theme.Space.s1) {
             ForEach(modes, id: \.self) { mode in
                 Button {
-                    tools.mode = mode
-                    model.revision &+= 1
+                    // Change the tool on the next run-loop turn: switching it while the tap is
+                    // still being delivered reconfigures gesture recognizers mid-event (crash).
+                    DispatchQueue.main.async {
+                        tools.mode = mode
+                        model.revision &+= 1
+                    }
                     Haptics.selection()
                 } label: {
                     Image(systemName: mode.symbolName)
                         .font(.system(size: 17, weight: .medium))
                         .frame(width: 38, height: 38)
-                        .foregroundStyle(tools.mode == mode ? Color.white : Theme.Palette.textPrimary)
+                        .foregroundStyle(tools.mode == mode ? Theme.Palette.onAccent : Theme.Palette.textPrimary)
                         .background(tools.mode == mode ? Theme.Palette.accent : .clear, in: Circle())
                 }
                 .buttonStyle(.plain)
@@ -231,8 +244,10 @@ struct PenPalette: View {
             }
             Divider().frame(height: 24)
             Button {
-                tools.allowsFingerDrawing.toggle()
-                model.revision &+= 1
+                DispatchQueue.main.async {
+                    tools.allowsFingerDrawing.toggle()
+                    model.revision &+= 1
+                }
             } label: {
                 Image(systemName: tools.allowsFingerDrawing ? "hand.draw.fill" : "hand.draw")
                     .font(.system(size: 17, weight: .medium))

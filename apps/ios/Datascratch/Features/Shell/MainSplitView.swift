@@ -81,7 +81,7 @@ struct EmptyDetailView: View {
                     } label: {
                         Label("New Note", systemImage: "square.and.pencil")
                     }
-                    .buttonStyle(.glassProminent)
+                    .prominentGlass()
                     Button {
                         scene.isCommandPalettePresented = true
                     } label: {

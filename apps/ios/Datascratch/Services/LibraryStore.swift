@@ -529,8 +529,8 @@ final class LibraryStore {
             .task(String(localized: "Create a notebook for work")),
             NoteBlock(id: UUIDv7.make(), kind: .quote, text: String(localized: "Quiet paper, deep ink. #welcome"), task: nil),
         ])
-        let welcome = createNote(in: notebook.id, title: String(localized: "Welcome to Datascratch"),
-                                 body: body, cover: .dusk)
+        // No cover by default: covers are something the user adds (… → Cover).
+        let welcome = createNote(in: notebook.id, title: String(localized: "Welcome to Datascratch"), body: body)
         toggleStar(.note, welcome.id)
         ensureInbox()
         mutate { $0.activeSpaceId = space.id }

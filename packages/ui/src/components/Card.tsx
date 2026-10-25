@@ -54,7 +54,21 @@ const titleSizes = { sm: "text-h3", md: "text-h2", lg: "text-h1" };
 
 /** Document card with cover, serif title and subtitle (Craft "card" pages). */
 export const DocCard = forwardRef<HTMLElement, DocCardProps>(function DocCard(
-  { title, subtitle, cover, coverOffsetY = 0.5, backdrop = "sand", icon, meta, footer, size = "md", href, className, children, ...rest },
+  {
+    title,
+    subtitle,
+    cover,
+    coverOffsetY = 0.5,
+    backdrop = "sand",
+    icon,
+    meta,
+    footer,
+    size = "md",
+    href,
+    className,
+    children,
+    ...rest
+  },
   ref,
 ) {
   const Comp = href ? "a" : "article";
@@ -81,7 +95,9 @@ export const DocCard = forwardRef<HTMLElement, DocCardProps>(function DocCard(
           </span>
         )}
         <h3 className={cn("line-clamp-2 font-display text-fg", titleSizes[size])}>{title}</h3>
-        {subtitle && <p className="mt-1 line-clamp-2 text-footnote text-fg-secondary">{subtitle}</p>}
+        {subtitle && (
+          <p className="mt-1 line-clamp-2 text-footnote text-fg-secondary">{subtitle}</p>
+        )}
         {children}
         {(meta || footer) && (
           <div className="mt-auto flex items-center gap-2 pt-3 text-caption text-fg-tertiary">

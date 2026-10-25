@@ -1,5 +1,17 @@
 import type { Story } from "@ladle/react";
-import { Bold, Code, Heading1, Highlighter, Italic, Link2, List, ListChecks, Quote, Strikethrough, Underline } from "lucide-react";
+import {
+  Bold,
+  Code,
+  Heading1,
+  Highlighter,
+  Italic,
+  Link2,
+  List,
+  ListChecks,
+  Quote,
+  Strikethrough,
+  Underline,
+} from "lucide-react";
 import { useState } from "react";
 import { Backdrop, FormatToolbar, PenToolbar, defaultPenSelection, type PenSelection } from "..";
 
@@ -20,16 +32,24 @@ export const Document: Story = () => {
       <div className="relative h-[220px]">
         <Backdrop name="dusk" />
       </div>
-      <article data-paper="dots" className="relative mx-auto -mt-16 max-w-doc-normal rounded-xl border border-hairline bg-surface px-14 pb-24 pt-12 shadow-card">
+      <article
+        data-paper="dots"
+        className="relative mx-auto -mt-16 max-w-doc-normal rounded-xl border border-hairline bg-surface px-14 pb-24 pt-12 shadow-card"
+      >
         <div className="ds-prose">
           <h1>Заметки о пере</h1>
           <p>
             Штрихи привязаны к словам и <mark>едут вместе с текстом</mark> при перекладке. Ссылка на{" "}
-            <a data-wikilink href="#">Теорию графов</a> и тег <span data-tag>#идеи</span>.
+            <a data-wikilink href="#">
+              Теорию графов
+            </a>{" "}
+            и тег <span data-tag>#идеи</span>.
           </p>
           <div data-callout data-tint="blue">
             <span data-callout-icon>💡</span>
-            <span>Выноска с оттенком из токенов <code>tint.blue</code>.</span>
+            <span>
+              Выноска с оттенком из токенов <code>tint.blue</code>.
+            </span>
           </div>
           <h2>Что проверить</h2>
           <ul>

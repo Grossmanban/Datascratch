@@ -32,7 +32,23 @@ export interface TaskRowProps extends Omit<HTMLAttributes<HTMLDivElement>, "titl
 
 /** Task line for lists (Inbox / Today / Upcoming): checkbox, title, note, dates, tags, source. */
 export const TaskRow = forwardRef<HTMLDivElement, TaskRowProps>(function TaskRow(
-  { title, state, onStateChange, note, scheduled, deadline, tags, source, onOpenSource, onDateClick, now, selected, label, className, ...rest },
+  {
+    title,
+    state,
+    onStateChange,
+    note,
+    scheduled,
+    deadline,
+    tags,
+    source,
+    onOpenSource,
+    onDateClick,
+    now,
+    selected,
+    label,
+    className,
+    ...rest
+  },
   ref,
 ) {
   const locale = useLocale();
@@ -61,13 +77,24 @@ export const TaskRow = forwardRef<HTMLDivElement, TaskRowProps>(function TaskRow
           <span
             className={cn(
               "min-w-0 text-body leading-[1.45] transition-colors duration-base",
-              muted ? "text-fg-tertiary line-through decoration-[color-mix(in_oklab,var(--ds-text-tertiary)_60%,transparent)]" : "text-fg",
+              muted
+                ? "text-fg-tertiary line-through decoration-[color-mix(in_oklab,var(--ds-text-tertiary)_60%,transparent)]"
+                : "text-fg",
             )}
           >
             {title}
           </span>
         </div>
-        {note && <p className={cn("mt-0.5 line-clamp-2 text-footnote", muted ? "text-fg-tertiary" : "text-fg-secondary")}>{note}</p>}
+        {note && (
+          <p
+            className={cn(
+              "mt-0.5 line-clamp-2 text-footnote",
+              muted ? "text-fg-tertiary" : "text-fg-secondary",
+            )}
+          >
+            {note}
+          </p>
+        )}
         {(scheduled || deadline || tags?.length || source) && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {scheduled && (
@@ -87,7 +114,9 @@ export const TaskRow = forwardRef<HTMLDivElement, TaskRowProps>(function TaskRow
                 {...(onDateClick ? { onClick: () => onDateClick("deadline") } : {})}
               />
             )}
-            {tags?.map((t) => <TagChip key={t.name} name={t.name} tint={t.tint ?? "gray"} size="sm" />)}
+            {tags?.map((t) => (
+              <TagChip key={t.name} name={t.name} tint={t.tint ?? "gray"} size="sm" />
+            ))}
             {source &&
               (onOpenSource ? (
                 <button

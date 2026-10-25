@@ -5,7 +5,7 @@
   --color-*: initial;
   --color-transparent: transparent;
   --color-current: currentColor;
-  --color-white: #FFFFFF;
+  --color-white: #ffffff;
   --color-black: #000000;
   --color-canvas: var(--ds-bg-canvas);
   --color-surface: var(--ds-bg-surface);

@@ -149,19 +149,26 @@ struct ToolPalette: View {
                 .accessibilityIdentifier("tool.\(mode.rawValue)")
                 .accessibilityLabel(mode.title)
             }
-            if let tool = tools.mode.inkTool {
-                Divider().frame(height: 28)
-                let tokens = tool == .highlighter ? EditorTheme.highlightTokens : Array(EditorTheme.inkTokens.prefix(4))
-                ForEach(tokens, id: \.self) { token in
-                    Button { tools.setColor(token) } label: {
-                        Circle()
-                            .fill(Color(EditorTheme.color(token: token)))
-                            .frame(width: 24, height: 24)
-                            .overlay(Circle().stroke(Color.primary.opacity(tools.paints[tool]?.color == token ? 0.8 : 0), lineWidth: 2).padding(-3))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("color.\(token)")
+            // The swatch row is always present (dimmed when the tool has no ink) so the palette never
+            // changes its structure under the finger: removing buttons while a tool button's touch
+            // was still being delivered made UIKit's gesture environment throw.
+            let inkTool = tools.mode.inkTool
+            let tool = inkTool ?? .pen
+            let tokens = tool == .highlighter ? EditorTheme.highlightTokens : EditorTheme.inkTokens
+            Divider().frame(height: 28)
+            ForEach(0..<4, id: \.self) { slot in
+                let token = tokens[min(slot, tokens.count - 1)]
+                Button { tools.setColor(token) } label: {
+                    Circle()
+                        .fill(Color(EditorTheme.color(token: token)))
+                        .frame(width: 24, height: 24)
+                        .overlay(Circle().stroke(Color.primary.opacity(inkTool != nil && tools.paints[tool]?.color == token ? 0.8 : 0), lineWidth: 2).padding(-3))
                 }
+                .buttonStyle(.plain)
+                .disabled(inkTool == nil)
+                .opacity(inkTool == nil ? 0.3 : 1)
+                .accessibilityIdentifier("color.slot\(slot)")
+                .accessibilityLabel(token)
             }
         }
         .padding(.horizontal, 12)

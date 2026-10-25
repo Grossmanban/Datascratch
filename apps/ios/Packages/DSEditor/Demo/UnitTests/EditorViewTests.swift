@@ -158,13 +158,22 @@ final class EditorViewTests: XCTestCase {
         let doc = InMemoryEditorDocument(blocks: [.title("T"), p])
         let editor = host(doc)
         editor.tools.mode = .text
-        window.makeKeyAndVisible()
-        XCTAssertTrue(editor.textView.becomeFirstResponder())
         let end = editor.projection.offset(block: p.id, offset: 5)!
         editor.textView.selectedRange = NSRange(location: end, length: 0)
-        editor.textView.insertText(" world")
+        // What the keyboard does: ask the delegate, apply the text if allowed, report the change.
+        // (Programmatic `insertText` does not consult the delegate in a hosted test.)
+        let tv = editor.textView
+        if editor.textView(tv, shouldChangeTextIn: NSRange(location: end, length: 0), replacementText: " world") {
+            tv.textStorage.replaceCharacters(in: NSRange(location: end, length: 0), with: " world")
+            tv.selectedRange = NSRange(location: end + 6, length: 0)
+            editor.textViewDidChange(tv)
+        }
+        settle(editor)
         XCTAssertEqual(doc.flatText(of: p.id), "Hello world")
-        editor.textView.insertText("\n")
+        XCTAssertTrue(tv.textStorage.string.contains("Hello world"))
+        let caret = tv.selectedRange
+        XCTAssertFalse(editor.textView(tv, shouldChangeTextIn: caret, replacementText: "\n"), "Return is a command")
+        settle(editor)
         XCTAssertEqual(doc.blocks.count, 3, "Return splits the paragraph in the document")
         editor.undo()
         XCTAssertEqual(doc.blocks.count, 2)

@@ -43,29 +43,83 @@ extension LocalStore {
     /// Indexes many notes in one transaction (first sync, rebuilds).
     public func index(_ batch: [(derived: NoteDerivedData, notebookId: String?)], updatedAt: Date = Date()) throws {
         try db.write { db in
-          for (derived, notebookId) in batch {
-            try db.execute(sql: """
-                INSERT INTO noteIndex(noteId, notebookId, title, plainText, updatedAt) VALUES(?, ?, ?, ?, ?)
-                ON CONFLICT(noteId) DO UPDATE SET notebookId = excluded.notebookId, title = excluded.title,
-                  plainText = excluded.plainText, updatedAt = excluded.updatedAt
-                """, arguments: [derived.noteId, notebookId, derived.title, derived.plainText, updatedAt])
-            try db.execute(sql: "DELETE FROM tasks WHERE noteId = ?", arguments: [derived.noteId])
-            for t in derived.tasks {
-                try db.execute(sql: """
-                    INSERT OR REPLACE INTO tasks(taskId, noteId, notebookId, blockId, text, state, scheduled, deadline, completedAt)
-                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, arguments: [t.taskId, t.noteId, notebookId, t.blockId, t.text, t.state.rawValue, t.scheduled, t.deadline, t.completedAt])
+            for (derived, notebookId) in batch {
+                try Self.writeIndex(db, derived, notebookId: notebookId, updatedAt: updatedAt)
             }
-            try db.execute(sql: "DELETE FROM noteLinks WHERE sourceNoteId = ?", arguments: [derived.noteId])
-            for l in derived.links {
-                try db.execute(sql: "INSERT INTO noteLinks(sourceNoteId, targetNoteId, blockId, label) VALUES(?, ?, ?, ?)",
-                               arguments: [l.sourceNoteId, l.targetNoteId, l.blockId, l.label])
+        }
+    }
+
+    // MARK: Incremental indexing
+
+    /// Notes whose content changed since they were last indexed (every stored update counts,
+    /// local or remote; local compaction does not).
+    public func pendingIndexCount() throws -> Int {
+        try db.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM documents WHERE kind = 'note' AND contentVersion > indexedVersion") ?? 0 }
+    }
+
+    /// Indexes up to `limit` changed notes, most recently changed first: loads and derives them
+    /// in parallel (one `NoteDocument` per note, on all cores), writes the batch in one
+    /// transaction. Returns how many were indexed; 0 means the indexes are up to date. A note
+    /// changed while it was being indexed stays pending.
+    ///
+    /// Call it in a loop after sync and debounced after edits; each call is a short, bounded
+    /// amount of work, so it can stop at any point (background task expiry).
+    @discardableResult
+    public func reindexChanged(limit: Int = 500, now: Date = Date()) async throws -> Int {
+        let work = try await db.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT docId, notebookId, contentVersion FROM documents
+                WHERE kind = 'note' AND contentVersion > indexedVersion ORDER BY updatedAt DESC LIMIT ?
+                """, arguments: [limit]).map { (docId: $0["docId"] as String, notebookId: $0["notebookId"] as String?, version: $0["contentVersion"] as Int64) }
+        }
+        guard !work.isEmpty else { return 0 }
+        let lanes = max(1, min(ProcessInfo.processInfo.activeProcessorCount, work.count))
+        let derived = try await withThrowingTaskGroup(of: [(index: Int, derived: NoteDerivedData?)].self) { group in
+            for lane in 0..<lanes {
+                group.addTask {
+                    stride(from: lane, to: work.count, by: lanes).map { i in
+                        let note = NoteDocument(noteId: work[i].docId)
+                        // A note that cannot be read is marked indexed (with nothing) instead of
+                        // being retried forever; its next change indexes it again.
+                        guard (try? note.crdt.applyUpdates(try self.updates(docId: work[i].docId), origin: .storage)) != nil else { return (i, nil) }
+                        return (i, try? note.derived())
+                    }
+                }
             }
-            try db.execute(sql: "DELETE FROM noteTags WHERE noteId = ?", arguments: [derived.noteId])
-            for tag in derived.tags {
-                try db.execute(sql: "INSERT OR IGNORE INTO noteTags(noteId, tag) VALUES(?, ?)", arguments: [derived.noteId, tag])
+            var all: [NoteDerivedData?] = Array(repeating: nil, count: work.count)
+            for try await part in group { for r in part { all[r.index] = r.derived } }
+            return all
+        }
+        try await db.write { db in
+            for (w, d) in zip(work, derived) {
+                if let d { try Self.writeIndex(db, d, notebookId: w.notebookId, updatedAt: now) }
+                try db.cachedStatement(sql: "UPDATE documents SET indexedVersion = ? WHERE docId = ?").execute(arguments: [w.version, w.docId])
             }
-          }
+        }
+        return work.count
+    }
+
+    static func writeIndex(_ db: Database, _ derived: NoteDerivedData, notebookId: String?, updatedAt: Date) throws {
+        try db.cachedStatement(sql: """
+            INSERT INTO noteIndex(noteId, notebookId, title, plainText, updatedAt) VALUES(?, ?, ?, ?, ?)
+            ON CONFLICT(noteId) DO UPDATE SET notebookId = excluded.notebookId, title = excluded.title,
+              plainText = excluded.plainText, updatedAt = excluded.updatedAt
+            """).execute(arguments: [derived.noteId, notebookId, derived.title, derived.plainText, updatedAt])
+        try db.cachedStatement(sql: "DELETE FROM tasks WHERE noteId = ?").execute(arguments: [derived.noteId])
+        for t in derived.tasks {
+            try db.cachedStatement(sql: """
+                INSERT OR REPLACE INTO tasks(taskId, noteId, notebookId, blockId, text, state, scheduled, deadline, completedAt, "order")
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """).execute(arguments: [t.taskId, t.noteId, notebookId, t.blockId, t.text, t.state.rawValue, t.scheduled, t.deadline, t.completedAt, t.order])
+        }
+        try db.cachedStatement(sql: "DELETE FROM noteLinks WHERE sourceNoteId = ?").execute(arguments: [derived.noteId])
+        for l in derived.links {
+            try db.cachedStatement(sql: "INSERT INTO noteLinks(sourceNoteId, targetNoteId, blockId, label) VALUES(?, ?, ?, ?)")
+                .execute(arguments: [l.sourceNoteId, l.targetNoteId, l.blockId, l.label])
+        }
+        try db.cachedStatement(sql: "DELETE FROM noteTags WHERE noteId = ?").execute(arguments: [derived.noteId])
+        for tag in derived.tags {
+            try db.cachedStatement(sql: "INSERT OR IGNORE INTO noteTags(noteId, tag) VALUES(?, ?)").execute(arguments: [derived.noteId, tag])
         }
     }
 
@@ -131,11 +185,11 @@ extension LocalStore {
             }
             if query.unscheduledOnly { conditions.append("scheduled IS NULL AND deadline IS NULL") }
             let whereClause = conditions.isEmpty ? "" : "WHERE " + conditions.joined(separator: " AND ")
-            let sql = "SELECT * FROM tasks \(whereClause) ORDER BY COALESCE(scheduled, deadline, '9999') , noteId, rowid"
+            let sql = "SELECT * FROM tasks \(whereClause) ORDER BY COALESCE(scheduled, deadline, '9999'), noteId, \"order\""
             return try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)).map { row in
                 TaskEntry(noteId: row["noteId"], taskId: row["taskId"], blockId: row["blockId"], text: row["text"],
                           state: TaskState(rawValue: row["state"]) ?? .open, scheduled: row["scheduled"], deadline: row["deadline"],
-                          completedAt: row["completedAt"])
+                          completedAt: row["completedAt"], order: row["order"])
             }
         }
     }

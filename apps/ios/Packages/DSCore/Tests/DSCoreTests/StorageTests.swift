@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GRDB
 @testable import DSCore
 
 @Suite struct StorageTests {
@@ -79,6 +80,7 @@ import Testing
         #expect(try store.search("   ").isEmpty)
 
         #expect(try store.tasks().map(\.taskId) == ["t1", "t2"])
+        #expect(try store.tasks(TaskQuery(noteId: "n1")).map(\.order) == [0, 1])
         #expect(try store.tasks(TaskQuery(dueOnOrBefore: "2026-10-26")).map(\.taskId) == ["t1"])
         #expect(try store.tasks(TaskQuery(unscheduledOnly: true)).map(\.taskId) == ["t2"])
         #expect(try store.tasks(TaskQuery(states: [.done])).isEmpty)
@@ -93,6 +95,76 @@ import Testing
         #expect(try store.search("билеты").isEmpty)
         try store.unindex(noteId: "n2")
         #expect(try store.tags().isEmpty)
+    }
+
+    /// Only notes changed since they were indexed are reindexed; local compaction is no change.
+    @Test func incrementalIndexing() async throws {
+        let store = try LocalStore.inMemory()
+        var ids: [String] = []
+        for i in 0..<7 {
+            let note = NoteDocument(noteId: EntityID.make())
+            ids.append(note.noteId)
+            try note.initialize(title: "Note \(i)")
+            try store.ensureDocument(docId: note.noteId, kind: .note, notebookId: "nb")
+            try store.appendRemoteUpdates(docId: note.noteId, items: [(1, try note.crdt.encodeStateAsUpdate())])
+        }
+        try store.ensureDocument(docId: "nb", kind: .notebook, notebookId: "nb")
+        #expect(try store.pendingIndexCount() == 7)
+        #expect(try await store.reindexChanged(limit: 5) == 5)
+        #expect(try await store.reindexChanged() == 2)
+        #expect(try await store.reindexChanged() == 0)
+        #expect(try store.search("note").count == 7)
+
+        // A local edit makes its note pending again.
+        let edited = NoteDocument(noteId: ids[3])
+        try edited.crdt.applyUpdates(try store.updates(docId: ids[3]), origin: .storage)
+        let captured = Locked<[Data]>([])
+        let sub = edited.crdt.observeUpdates { update, _ in captured.withLock { $0.append(update) } }
+        try edited.insertText("Renamed ", at: 0, inBlock: [0])
+        sub.cancel()
+        for update in captured.withLock({ $0 }) { try store.appendLocalUpdate(docId: ids[3], update: update, origin: .local) }
+        #expect(try store.pendingIndexCount() == 1)
+        #expect(try await store.reindexChanged() == 1)
+        #expect(try store.search("renamed").map(\.noteId) == [ids[3]])
+
+        try store.compact(docId: ids[3])
+        #expect(try store.pendingIndexCount() == 0)
+    }
+
+    /// Failed messages leave the pending queue after a refusal or too many attempts.
+    @Test func failedOutboxPolicy() throws {
+        let store = try LocalStore.inMemory()
+        try store.ensureDocument(docId: "d1", kind: .note, notebookId: "nb")
+        try store.ensureDocument(docId: "d2", kind: .note, notebookId: "nb")
+        try store.appendLocalUpdate(docId: "d1", update: Data([1]), origin: .local)
+        try store.appendLocalUpdate(docId: "d2", update: Data([2]), origin: .local)
+        let (m1, m2) = (try store.pendingOutbox()[0].clientMsgId, try store.pendingOutbox()[1].clientMsgId)
+        try store.markFailed(clientMsgId: m1, error: "forbidden", permanent: true)
+        for _ in 1..<LocalStore.maxSendAttempts { try store.markFailed(clientMsgId: m2, error: "internal") }
+        #expect(try store.outboxCount() == 1)
+        try store.markFailed(clientMsgId: m2, error: "internal")
+        #expect(try store.outboxCount() == 0)
+        #expect(try store.failedOutbox() == [FailedSync(docId: "d1", reason: "forbidden", count: 1), FailedSync(docId: "d2", reason: "internal", count: 1)])
+        try store.retryFailed(docId: "d2")
+        #expect(try store.pendingOutbox().map(\.clientMsgId) == [m2])
+        try store.discardOutbox(docId: "d1", onlyFailed: true)
+        #expect(try store.failedOutbox().isEmpty)
+        try store.deleteDocument("d2")
+        #expect(try store.outboxCount() == 0)
+    }
+
+    /// Tasks indexed before the `order` column existed get their document order from rowid.
+    @Test func taskOrderMigrationBackfills() throws {
+        let queue = try DatabaseQueue()
+        try LocalStore.migrator.migrate(queue, upTo: "v3-local-edits")
+        try queue.write { db in
+            for (task, note) in [("a", "n1"), ("x", "n2"), ("b", "n1"), ("c", "n1")] {
+                try db.execute(sql: "INSERT INTO tasks(taskId, noteId, text, state) VALUES(?, ?, '', 'open')", arguments: [task, note])
+            }
+        }
+        try LocalStore.migrator.migrate(queue)
+        let orders = try queue.read { try Row.fetchAll($0, sql: "SELECT taskId, \"order\" FROM tasks ORDER BY taskId").map { "\($0["taskId"] as String)\($0["order"] as Int)" } }
+        #expect(orders == ["a0", "b1", "c2", "x0"])
     }
 
     @Test func attachmentsAndKV() throws {

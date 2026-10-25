@@ -107,8 +107,23 @@ final class SceneModel {
         withAnimation(Theme.Motion.snappy) {
             selectedNoteId = noteId
             preferredCompactColumn = .detail
+            // iPad: opening a document hides the sidebar (list + document), as in Notes and Craft.
+            if UIDevice.current.userInterfaceIdiom == .pad, columnVisibility == .all {
+                columnVisibility = .doubleColumn
+            }
         }
         library.openTab(noteId)
+    }
+
+    var isDocumentFullScreen: Bool { columnVisibility == .detailOnly }
+    /// A window showing one document (no columns to hide).
+    var isNoteWindow = false
+
+    /// iPad: the document alone on screen, and back to list + document.
+    func toggleDocumentFullScreen() {
+        withAnimation(Theme.Motion.smooth) {
+            columnVisibility = isDocumentFullScreen ? .doubleColumn : .detailOnly
+        }
     }
 
     func closeDocument() {

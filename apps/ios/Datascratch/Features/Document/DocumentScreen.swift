@@ -116,6 +116,7 @@ struct DocumentScreen: View {
 
     @ToolbarContentBuilder
     private func toolbar(_ note: NoteMeta) -> some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) { FullScreenButton() }
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button {
                 library.toggleStar(.note, note.id)
@@ -207,6 +208,25 @@ struct BacklinksSection: View {
                     .buttonStyle(.plain)
                 }
             }
+        }
+    }
+}
+
+/// iPad: show the document alone, or the list next to it again.
+struct FullScreenButton: View {
+    @Environment(SceneModel.self) private var scene
+
+    var body: some View {
+        if UIDevice.current.userInterfaceIdiom == .pad, scene.selectedNoteId != nil, !scene.isNoteWindow {
+            Button {
+                scene.toggleDocumentFullScreen()
+            } label: {
+                Image(systemName: scene.isDocumentFullScreen
+                      ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+            }
+            .accessibilityLabel(scene.isDocumentFullScreen ? Text("Show Documents") : Text("Full Screen"))
+            .accessibilityIdentifier("document.fullScreen")
+            .keyboardShortcut("f", modifiers: [.command, .control])
         }
     }
 }

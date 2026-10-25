@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { create } from "zustand";
-import { Button } from "./Button";
-import { Dialog, DialogActions } from "./Dialog";
+import { Button, Dialog, DialogActions } from "./primitives";
 
 type Req = {
   title: ReactNode;

@@ -10,7 +10,8 @@ test("share link: guest without an account edits live; revoking cuts access", as
   await expect(item).toBeVisible();
   const url = (await item.getAttribute("data-url"))!;
   expect(url).toMatch(/\/s\/[0-9a-f-]+#k=[A-Za-z0-9_-]{43}$/);
-  await page.keyboard.press("Escape");
+  await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 
   const guestCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const guest = await guestCtx.newPage();

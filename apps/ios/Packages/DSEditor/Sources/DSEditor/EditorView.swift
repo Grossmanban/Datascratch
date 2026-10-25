@@ -103,6 +103,9 @@ public final class EditorView: UIView {
         backgroundColor = EditorTheme.paper
         textView.backgroundColor = .clear
         textView.delegate = self
+        // The scroll view must not hold touches back (its delayed-touches recognizer is the one
+        // UIKit was delaying when a tool switch crashed it; it also adds latency to the pen).
+        textView.delaysContentTouches = false
         textView.alwaysBounceVertical = true
         textView.keyboardDismissMode = .interactive
         textView.textContainer.lineFragmentPadding = 0

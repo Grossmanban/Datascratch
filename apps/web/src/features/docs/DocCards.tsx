@@ -156,8 +156,6 @@ const DocCard = memo(function DocCard({ note, snippet, delay }: { note: NoteEntr
           draggable
           onDragStart={(e) => dragNote(e, note.id)}
           className="block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-          // The card is an <article> inside the link, which hides its text from the link's name.
-          aria-label={noteTitle(note, t("app.untitled"))}
           data-testid="doc-card"
         >
           {/* spec/12 §12.7: the cover's thumbnail makes a document recognisable; no cover — a compact card. */}
@@ -179,6 +177,8 @@ const DocCard = memo(function DocCard({ note, snippet, delay }: { note: NoteEntr
             }
             footer={starred ? <Star className="size-3.5 fill-[var(--ds-tint-yellow-fg)] text-[var(--ds-tint-yellow-fg)]" aria-label={t("nav.starred")} /> : undefined}
             className="h-full"
+            // Inside the link the card's <article> role would hide its text from the link's name.
+            role="none"
           />
         </Link>
       </motion.div>

@@ -1,0 +1,68 @@
+import XCTest
+
+final class EditorDemoUITests: XCTestCase {
+    override func setUp() {
+        continueAfterFailure = false
+    }
+
+    @MainActor
+    func testDrawStrokeOverTextAndUndo() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-fingerDrawing", "-hud"]
+        app.launch()
+
+        let editor = app.textViews["editor.text"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        let strokes = app.staticTexts["hud.strokes"]
+        XCTAssertTrue(strokes.waitForExistence(timeout: 5))
+        XCTAssertEqual(strokes.label, "штрихов: 0")
+
+        app.buttons["tool.pen"].tap()
+        // Underline across the first paragraph with a finger (finger drawing enabled for the test).
+        let start = editor.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.18))
+        let end = editor.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.18))
+        start.press(forDuration: 0.05, thenDragTo: end)
+
+        let predicate = NSPredicate(format: "label == %@", "штрихов: 1")
+        expectation(for: predicate, evaluatedWith: strokes)
+        waitForExpectations(timeout: 5)
+
+        app.buttons["undo"].tap()
+        expectation(for: NSPredicate(format: "label == %@", "штрихов: 0"), evaluatedWith: strokes)
+        waitForExpectations(timeout: 5)
+
+        app.buttons["redo"].tap()
+        expectation(for: NSPredicate(format: "label == %@", "штрихов: 1"), evaluatedWith: strokes)
+        waitForExpectations(timeout: 5)
+
+        // Change the column width: the stroke stays in the document and is re-laid out.
+        app.buttons["style"].tap()
+        app.buttons["width.full"].tap()
+        XCTAssertEqual(strokes.label, "штрихов: 1")
+    }
+
+    @MainActor
+    func testTypingGoesToDocument() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting"]
+        app.launch()
+        app.buttons["tool.text"].tap()
+        let editor = app.textViews["editor.text"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        editor.tap()
+        editor.typeText("Привет")
+        XCTAssertTrue((editor.value as? String ?? "").contains("Привет"))
+        app.buttons["undo"].tap()
+    }
+
+    @MainActor
+    func testOpenLargeNotePerformance() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-large", "-hud"]
+        let options = XCTMeasureOptions()
+        options.iterationCount = 3
+        measure(metrics: [XCTApplicationLaunchMetric()], options: options) {
+            app.launch()
+        }
+    }
+}

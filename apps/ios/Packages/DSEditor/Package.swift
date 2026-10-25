@@ -23,7 +23,8 @@ let package = Package(
             dependencies: [
                 "DSInk", "DSEditorModel",
                 .product(name: "SwiftMath", package: "SwiftMath", condition: .when(platforms: [.iOS])),
-            ]
+            ],
+            resources: [.copy("Resources/mermaid.min.js"), .copy("Resources/mermaid-LICENSE.txt")]
         ),
         .testTarget(name: "DSInkTests", dependencies: ["DSInk"]),
         .testTarget(name: "DSEditorModelTests", dependencies: ["DSEditorModel", "DSInk"]),

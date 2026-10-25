@@ -1,0 +1,45 @@
+name: agents
+
+on:
+  push:
+    branches: [main, "claude/agents"]
+    paths:
+      - "packages/agents/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/agents.yml"
+  pull_request:
+    paths:
+      - "packages/agents/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/agents.yml"
+
+concurrency:
+  group: agents-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @datascratch/agents typecheck
+      - name: Test
+        run: pnpm --filter @datascratch/agents test
+      - name: Build
+        run: pnpm --filter @datascratch/agents build
+      - name: Upload rendered images on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agents-images
+          path: packages/agents/test/__images__/

@@ -42,6 +42,8 @@ public actor SyncEngine: SyncClientDelegate {
     /// Documents subscribed on the current connection whose catch-up finished (`upToDate`).
     /// Pushes go only to these: otherwise `lastSeq = max(ack)` could skip others' updates.
     private var live: Set<String> = []
+    /// Records of subscribed documents (kind/notebook for key lookup without a DB read).
+    private var known: [String: DocumentRecord] = [:]
     private var connection: SyncConnectionState = .disconnected
     private var statusContinuations: [UUID: AsyncStream<SyncStatus>.Continuation] = [:]
 
@@ -195,6 +197,7 @@ public actor SyncEngine: SyncClientDelegate {
             }
             ready.append(record)
         }
+        for r in ready { known[r.docId] = r }
         let entries = ready.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }
         guard !entries.isEmpty else { return }
         for e in entries { catchingUp.insert(e.docId) }
@@ -305,24 +308,22 @@ public actor SyncEngine: SyncClientDelegate {
     /// Decrypts, stores and applies remote data. Stops at the first item it cannot decrypt so
     /// that `lastSeq` never skips it.
     private func receive(docId: String, snapshot: (seq: Int64, payload: Data)?, items: [UpdateItem]) {
-        guard let record = try? store.document(docId), let key = try? keyFor(record) else { return }
+        guard let record = known[docId] ?? (try? store.document(docId)), let key = try? keyFor(record) else { return }
         let doc = open[docId]?.doc
         let ad = CryptoAD.doc(docId)
-        if let snapshot, snapshot.seq > record.lastSeq {
+        if let snapshot {
             guard let state = try? DSCrypto.open(snapshot.payload, key: key, ad: ad) else { return }
-            try? store.applyRemoteSnapshot(docId: docId, seq: snapshot.seq, state: state)
-            try? doc?.applyUpdate(state, origin: .remote)
+            if (try? store.applyRemoteSnapshot(docId: docId, seq: snapshot.seq, state: state)) == true {
+                try? doc?.applyUpdate(state, origin: .remote)
+            }
         }
         var decrypted: [(seq: Int64, data: Data)] = []
         for item in items.sorted(by: { $0.seq < $1.seq }) {
             guard let plain = try? DSCrypto.open(item.payload, key: key, ad: ad) else { break }
             decrypted.append((item.seq, plain))
         }
-        guard !decrypted.isEmpty else { return }
-        try? store.appendRemoteUpdates(docId: docId, items: decrypted)
-        if let doc {
-            try? doc.applyUpdates(decrypted.filter { $0.seq > record.lastSeq }.map(\.data), origin: .remote)
-        }
+        guard !decrypted.isEmpty, let added = try? store.appendRemoteUpdates(docId: docId, items: decrypted), !added.isEmpty else { return }
+        try? doc?.applyUpdates(added.map(\.data), origin: .remote)
     }
 }
 

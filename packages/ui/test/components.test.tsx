@@ -324,3 +324,67 @@ describe("Cards & misc", () => {
     expect(screen.getByRole("status", { name: "в сети" })).toBeInTheDocument();
   });
 });
+
+describe("Editor & lists v2", () => {
+  it("TaskRow toggles and shows source", async () => {
+    const { TaskRow } = await import("../src");
+    function T() {
+      const [s, setS] = useState<TaskState>("open");
+      return <TaskRow title="Сдать курсовую" state={s} onStateChange={setS} deadline={new Date(2026, 9, 26)} now={now} source="Учёба" tags={[{ name: "срочно", tint: "red" }]} />;
+    }
+    renderUI(<T />);
+    expect(screen.getByText("из «Учёба»")).toBeInTheDocument();
+    expect(screen.getByText("Завтра").closest("[data-tone]")).toHaveAttribute("data-tone", "soon");
+    await userEvent.click(screen.getByRole("checkbox", { name: "Сдать курсовую" }));
+    expect(screen.getByText("Сдать курсовую").closest("[data-task-state]")).toHaveAttribute("data-task-state", "done");
+    expect(screen.getByText("Завтра").closest("[data-tone]")).toHaveAttribute("data-tone", "done");
+  });
+  it("DocRow is a button with current state", async () => {
+    const { DocRow, DocList } = await import("../src");
+    const on = vi.fn();
+    renderUI(
+      <DocList>
+        <li>
+          <DocRow title="План квартала" excerpt="Цели" detail="12 окт" selected onClick={on} />
+        </li>
+      </DocList>,
+    );
+    const row = screen.getByRole("button", { name: /План квартала/ });
+    expect(row).toHaveAttribute("aria-current", "page");
+    await userEvent.click(row);
+    expect(on).toHaveBeenCalledOnce();
+  });
+  it("PenToolbar switches tool, colour and width", async () => {
+    const { PenToolbar, defaultPenSelection } = await import("../src");
+    const on = vi.fn();
+    const { rerender } = renderUI(<PenToolbar value={defaultPenSelection} onChange={on} />);
+    expect(screen.getByRole("toolbar")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "Синий" }));
+    expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, ink: "blue" });
+    await userEvent.click(screen.getByRole("radio", { name: "Маркер" }));
+    expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, tool: "highlighter" });
+    rerender(<PenToolbar value={{ ...defaultPenSelection, tool: "highlighter" }} onChange={on} />);
+    expect(screen.getByRole("radio", { name: "Жёлтый" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByRole("radio", { name: "Коричневый" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "Толстая" }));
+    expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, tool: "highlighter", width: 3 });
+  });
+  it("FormatToolbar reflects active marks and runs actions", async () => {
+    const { FormatToolbar } = await import("../src");
+    const bold = vi.fn();
+    renderUI(
+      <FormatToolbar
+        aria-label="Формат"
+        items={[
+          { id: "bold", label: "Жирный", icon: <Folder />, active: true, onClick: bold },
+          "separator",
+          { id: "italic", label: "Курсив", icon: <Folder />, onClick: () => {} },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Жирный" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Курсив" })).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(screen.getByRole("button", { name: "Жирный" }));
+    expect(bold).toHaveBeenCalledOnce();
+  });
+});

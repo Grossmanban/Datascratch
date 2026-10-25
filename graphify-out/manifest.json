@@ -522,10 +522,10 @@
     "semantic_hash": "b2515beb09769e3a0844540f91c69943"
   },
   "packages/ui/README.md": {
-    "mtime": 1792928949.3425133,
-    "seen": 1792929088.1654823,
-    "ast_hash": "459df825ce8309933a8e793383a552e8",
-    "semantic_hash": "459df825ce8309933a8e793383a552e8"
+    "mtime": 1792929791.3452687,
+    "seen": 1792929795.607291,
+    "ast_hash": "4db4b045d4e5080cebaa046b69b27c06",
+    "semantic_hash": ""
   },
   "packages/web-editor/README.md": {
     "mtime": 1792927481.09865,
@@ -630,9 +630,9 @@
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Foundation/DSStrings.swift": {
-    "mtime": 1792929154.0700364,
-    "seen": 1792929187.0979726,
-    "ast_hash": "420228000a79a9562fc8d1f55fc7f663",
+    "mtime": 1792929647.627391,
+    "seen": 1792929795.6066093,
+    "ast_hash": "d0cf0d0499403b45f2d870cec5e25e43",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Foundation/Haptics.swift": {
@@ -666,10 +666,10 @@
     "semantic_hash": "9f78e56aaf661d70adee7937effaae05"
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Showcase/DSShowcase.swift": {
-    "mtime": 1792928808.6291683,
-    "seen": 1792929088.1652386,
-    "ast_hash": "e2f905541d892011dd74e867f7119865",
-    "semantic_hash": "e2f905541d892011dd74e867f7119865"
+    "mtime": 1792929689.5608704,
+    "seen": 1792929795.606634,
+    "ast_hash": "24b41f06a2e8f4e23ab6ba59baa90f7f",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Tokens.generated.swift": {
     "mtime": 1792929497.183297,
@@ -918,10 +918,10 @@
     "semantic_hash": "cd757f46c83916a96496c1f28f14b220"
   },
   "packages/ui/src/index.ts": {
-    "mtime": 1792928326.4179022,
-    "seen": 1792929088.1654,
-    "ast_hash": "aed6938f06fed291e54f846b95bef3fe",
-    "semantic_hash": "aed6938f06fed291e54f846b95bef3fe"
+    "mtime": 1792929624.4803994,
+    "seen": 1792929795.6068773,
+    "ast_hash": "246c72893f2ccddb94a5398698312506",
+    "semantic_hash": ""
   },
   "packages/ui/src/lib/cn.ts": {
     "mtime": 1792927956.7717948,
@@ -984,10 +984,10 @@
     "semantic_hash": "d3e2a7d58bda80ec9fe50760e0310ef7"
   },
   "packages/ui/test/components.test.tsx": {
-    "mtime": 1792928392.8800523,
-    "seen": 1792929088.1654384,
-    "ast_hash": "70d447023fda0c187563a4b94df74ac3",
-    "semantic_hash": "70d447023fda0c187563a4b94df74ac3"
+    "mtime": 1792929671.892394,
+    "seen": 1792929795.606925,
+    "ast_hash": "6fa75f8cd99c106c964026bfb2f39491",
+    "semantic_hash": ""
   },
   "packages/ui/test/date.test.ts": {
     "mtime": 1792928382.28686,
@@ -1020,15 +1020,87 @@
     "semantic_hash": "fccab16de24f4fe52c4f6ffc09589734"
   },
   "apps/ios/Packages/DSDesign/README.md": {
-    "mtime": 1792928949.3113093,
-    "seen": 1792929088.1654716,
-    "ast_hash": "f83428c1a81f8f14319adb1e4af15a81",
-    "semantic_hash": "f83428c1a81f8f14319adb1e4af15a81"
+    "mtime": 1792929700.1083055,
+    "seen": 1792929795.6069717,
+    "ast_hash": "34f876781059ae9a7a8cda8a42a7ccca",
+    "semantic_hash": ""
   },
   "docs/changelog.d/2026-10-25-design-system-v1.md": {
     "mtime": 1792928885.9809752,
     "seen": 1792929088.1654766,
     "ast_hash": "769a72f329455d9474f7136e8d04ad39",
     "semantic_hash": "769a72f329455d9474f7136e8d04ad39"
+  },
+  "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSDocRow.swift": {
+    "mtime": 1792929599.1319003,
+    "seen": 1792929795.6065612,
+    "ast_hash": "0779a6308064eb320b05803f55756cc9",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSFormatBar.swift": {
+    "mtime": 1792929641.855589,
+    "seen": 1792929795.6065733,
+    "ast_hash": "959a885d9449499cbb7261c7f438d8f4",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSPenToolbar.swift": {
+    "mtime": 1792929647.6268342,
+    "seen": 1792929795.6065807,
+    "ast_hash": "23e0cfda34dcf0a6b5e11d8c87a463e3",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSTaskRow.swift": {
+    "mtime": 1792929700.0914288,
+    "seen": 1792929795.6066015,
+    "ast_hash": "51bc100f6c8b4b053a00f20bc854b540",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSDesign/Tests/DSDesignTests/EditorToolsTests.swift": {
+    "mtime": 1792929689.566919,
+    "seen": 1792929795.6066456,
+    "ast_hash": "b146a087073ee892375e94c6d8a1a41f",
+    "semantic_hash": ""
+  },
+  "packages/ui/src/components/DocList.tsx": {
+    "mtime": 1792929589.7117014,
+    "seen": 1792929795.606746,
+    "ast_hash": "c5aa4242d924df660e76f452c597f92f",
+    "semantic_hash": ""
+  },
+  "packages/ui/src/components/FormatToolbar.tsx": {
+    "mtime": 1792929745.0569713,
+    "seen": 1792929795.6068113,
+    "ast_hash": "879b22f4e29d60e078b23adf6465563a",
+    "semantic_hash": ""
+  },
+  "packages/ui/src/components/PenToolbar.tsx": {
+    "mtime": 1792929745.0592911,
+    "seen": 1792929795.6068313,
+    "ast_hash": "87cb84f502e99031a387032f4c8447a4",
+    "semantic_hash": ""
+  },
+  "packages/ui/src/components/TaskRow.tsx": {
+    "mtime": 1792929624.4722972,
+    "seen": 1792929795.6068623,
+    "ast_hash": "cbc717ac5704a09cff6ae0c621258906",
+    "semantic_hash": ""
+  },
+  "packages/ui/src/stories/Editor.stories.tsx": {
+    "mtime": 1792929707.899292,
+    "seen": 1792929795.6069062,
+    "ast_hash": "320d4cfc275ff66b8080de674b1febea",
+    "semantic_hash": ""
+  },
+  "packages/ui/src/stories/Lists.stories.tsx": {
+    "mtime": 1792929707.9032922,
+    "seen": 1792929795.6069133,
+    "ast_hash": "b4df2a097a6c9188c25ed0844d1c34f9",
+    "semantic_hash": ""
+  },
+  "docs/changelog.d/2026-10-25-design-system-v2.md": {
+    "mtime": 1792929791.3522913,
+    "seen": 1792929795.6070385,
+    "ast_hash": "16cdb875f980627dccbccc7830cfd0b4",
+    "semantic_hash": ""
   }
 }

@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import { addDays, localDate, monthGrid, parseLocalDate, today, weekdayNames } from "@/lib/dates";
+import { addDays, localDate, monthGrid, parseLocalDate, today, weekdayNames, dateFormat } from "@/lib/dates";
 import i18n from "@/i18n";
 import { cn, IconButton } from "@/ui";
 
@@ -19,7 +19,7 @@ export function MonthCalendar({
   const [cursor, setCursor] = useState({ y: base.getFullYear(), m: base.getMonth() });
   const days = monthGrid(cursor.y, cursor.m);
   const t = today();
-  const title = new Intl.DateTimeFormat(i18n.language === "en" ? "en-US" : "ru-RU", { month: "long", year: "numeric" }).format(
+  const title = dateFormat({ month: "long", year: "numeric" }, i18n.language === "en" ? "en-US" : "ru-RU").format(
     new Date(cursor.y, cursor.m, 1),
   );
   const shift = (d: number) => setCursor(({ y, m }) => ({ y: m + d < 0 ? y - 1 : m + d > 11 ? y + 1 : y, m: (m + d + 12) % 12 }));

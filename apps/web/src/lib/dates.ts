@@ -31,6 +31,21 @@ export function nextWeek(): string {
 
 const locale = () => (i18n.language === "en" ? "en-US" : "ru-RU");
 
+// Intl formatters are expensive to build (lists format thousands of dates): one per locale + options.
+const formatters = new Map<string, Intl.DateTimeFormat | Intl.RelativeTimeFormat>();
+export function dateFormat(opts: Intl.DateTimeFormatOptions, loc = locale()): Intl.DateTimeFormat {
+  const key = `d|${loc}|${JSON.stringify(opts)}`;
+  let f = formatters.get(key) as Intl.DateTimeFormat | undefined;
+  if (!f) formatters.set(key, (f = new Intl.DateTimeFormat(loc, opts)));
+  return f;
+}
+function relativeFormat(): Intl.RelativeTimeFormat {
+  const key = `r|${locale()}`;
+  let f = formatters.get(key) as Intl.RelativeTimeFormat | undefined;
+  if (!f) formatters.set(key, (f = new Intl.RelativeTimeFormat(locale(), { numeric: "auto" })));
+  return f;
+}
+
 export function formatDay(s: string, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "long" }): string {
   const t = today();
   if (s === t) return i18n.t("common.today");
@@ -38,31 +53,31 @@ export function formatDay(s: string, opts: Intl.DateTimeFormatOptions = { day: "
   if (s === addDays(t, -1)) return i18n.t("common.yesterday");
   const d = parseLocalDate(s);
   const sameYear = d.getFullYear() === new Date().getFullYear();
-  return new Intl.DateTimeFormat(locale(), { ...opts, ...(sameYear ? {} : { year: "numeric" }) }).format(d);
+  return dateFormat({ ...opts, ...(sameYear ? {} : { year: "numeric" }) }).format(d);
 }
 
 export function formatWeekday(s: string): string {
-  return new Intl.DateTimeFormat(locale(), { weekday: "long" }).format(parseLocalDate(s));
+  return dateFormat({ weekday: "long" }).format(parseLocalDate(s));
 }
 
 export function formatLongDate(s: string): string {
-  return new Intl.DateTimeFormat(locale(), { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(parseLocalDate(s));
+  return dateFormat({ weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(parseLocalDate(s));
 }
 
 export function formatRelative(iso: string | number): string {
   const ts = typeof iso === "number" ? iso : Date.parse(iso);
   const diff = ts - Date.now();
   const abs = Math.abs(diff);
-  const rtf = new Intl.RelativeTimeFormat(locale(), { numeric: "auto" });
+  const rtf = relativeFormat();
   if (abs < 60_000) return rtf.format(0, "second");
   if (abs < 3_600_000) return rtf.format(Math.round(diff / 60_000), "minute");
   if (abs < 86_400_000) return rtf.format(Math.round(diff / 3_600_000), "hour");
   if (abs < 7 * 86_400_000) return rtf.format(Math.round(diff / 86_400_000), "day");
-  return new Intl.DateTimeFormat(locale(), { day: "numeric", month: "short", year: "numeric" }).format(ts);
+  return dateFormat({ day: "numeric", month: "short", year: "numeric" }).format(ts);
 }
 
 export function formatDateTime(iso: string): string {
-  return new Intl.DateTimeFormat(locale(), { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(
+  return dateFormat({ day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(
     Date.parse(iso),
   );
 }
@@ -78,6 +93,6 @@ export function monthGrid(year: number, month: number): string[] {
 export function weekdayNames(): string[] {
   const base = new Date(2024, 0, 1); // Monday
   return Array.from({ length: 7 }, (_, i) =>
-    new Intl.DateTimeFormat(locale(), { weekday: "short" }).format(new Date(base.getFullYear(), 0, 1 + i)),
+    dateFormat({ weekday: "short" }).format(new Date(base.getFullYear(), 0, 1 + i)),
   );
 }

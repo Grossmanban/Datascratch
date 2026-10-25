@@ -1,7 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { ArrowDownUp, ChevronRight, FilePlus2, Folder as FolderIcon, Hash, LayoutGrid, Layers, List, Star, Trash2 } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { folderPath, notesInSpace, useWorkspace, visibleNotes, type NoteEntry } from "@/domain/workspace";
 import { TopBar, PageTitle } from "@/features/shell/PageHeader";
@@ -44,8 +44,9 @@ function ListPage({
   const sort = useUi((s) => s.sort);
   const sorted = useMemo(() => (sortable ? sortNotes(notes, sort) : notes), [notes, sort, sortable]);
   const create = newIn ? () => void newNoteAndOpen(navigate, newIn.notebookId, newIn.folderId) : undefined;
+  const scrollRef = useRef<HTMLDivElement>(null);
   return (
-    <div className="scrollbar-thin h-full overflow-y-auto">
+    <div ref={scrollRef} className="scrollbar-thin h-full overflow-y-auto">
       <TopBar
         actions={
           <>
@@ -85,7 +86,7 @@ function ListPage({
       <PageTitle icon={icon} title={title} subtitle={t("docs.count", { count: notes.length })} />
       {extra}
       {sorted.length ? (
-        <DocCollection notes={sorted} view={view} />
+        <DocCollection notes={sorted} view={view} scrollRef={scrollRef} />
       ) : (
         <EmptyState
           icon={empty.icon}

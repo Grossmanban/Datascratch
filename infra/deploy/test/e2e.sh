@@ -46,7 +46,7 @@ for _ in $(seq 1 30); do ssh-keyscan -p "$SSH_PORT" -t ed25519 127.0.0.1 > "$WOR
 ssh-keygen -lf "$WORK/known_hosts"
 
 export DEPLOY_HOST=127.0.0.1 DEPLOY_PORT="$SSH_PORT" DEPLOY_KEY_FILE="$WORK/key" DEPLOY_KNOWN_HOSTS_FILE="$WORK/known_hosts"
-export DS_DOMAIN=localhost DS_SERVER_IMAGE="$SRV" DS_WEB_IMAGE="$WEB" DS_SKIP_FIREWALL=1
+export DS_DOMAIN=localhost DS_SERVER_IMAGE="$SRV" DS_WEB_IMAGE="$WEB" DS_POSTGRES_IMAGE="${DS_POSTGRES_IMAGE:-postgres:16-alpine}" DS_SKIP_FIREWALL=1
 export NODE_TLS_REJECT_UNAUTHORIZED=0
 vps() { docker exec "$VPS" "$@"; }
 secrets_hash() { vps sh -c "grep -E '^(POSTGRES_PASSWORD|DS_KMS_KEY|DS_JWT_SECRET)=' /opt/datascratch/.env | sha256sum"; }

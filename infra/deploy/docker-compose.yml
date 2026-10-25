@@ -4,9 +4,27 @@
 name: datascratch
 
 services:
+  # Every image comes from GHCR: the server never pulls from Docker Hub.
+  # Memory is sized for a 2-core / 4 GB VPS.
   postgres:
-    image: postgres:16-alpine
+    image: ${DS_POSTGRES_IMAGE:-ghcr.io/grossmanban/datascratch-postgres:16-alpine}
     restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=50
+    deploy:
+      resources:
+        limits:
+          memory: 1g
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-datascratch}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing in .env}
@@ -31,6 +49,11 @@ services:
       PUBLIC_URL: https://${DS_DOMAIN:-localhost}
       APP_URL: https://${DS_DOMAIN:-localhost}
       DS_VERSION: ${DS_TAG:-latest}
+      NODE_OPTIONS: --max-old-space-size=768
+    deploy:
+      resources:
+        limits:
+          memory: 1g
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,6 +65,10 @@ services:
     restart: unless-stopped
     environment:
       DS_DOMAIN: ${DS_DOMAIN:-localhost}
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     ports:
       - "80:80"
       - "443:443"

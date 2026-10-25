@@ -13,6 +13,7 @@ import {
 } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { AppContext } from './context.js';
+import { safeEqual } from './lib/encoding.js';
 import { ApiError, type ApiErrorCode } from './lib/errors.js';
 import { loadPlugins, type LoadedPlugin } from './plugins/loader.js';
 import { accountRoutes } from './routes/account.js';
@@ -115,6 +116,24 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
     transform: jsonSchemaTransform,
     transformObject: jsonSchemaTransformObject,
   });
+
+  app.addHook('onResponse', async (req, reply) => {
+    ctx.metrics.httpRequests.inc({ method: req.method, status: `${Math.floor(reply.statusCode / 100)}xx` });
+  });
+  const { pool } = ctx.database;
+  ctx.metrics.gauge('ds_db_pool_total', 'PostgreSQL pool connections.', () => pool.totalCount);
+  ctx.metrics.gauge('ds_db_pool_idle', 'Idle PostgreSQL pool connections.', () => pool.idleCount);
+  ctx.metrics.gauge('ds_db_pool_waiting', 'Queries waiting for a pool connection.', () => pool.waitingCount);
+  if (ctx.config.METRICS_TOKEN) {
+    const expected = Buffer.from(`Bearer ${ctx.config.METRICS_TOKEN}`);
+    app.get('/metrics', { logLevel: 'warn', schema: { hide: true } }, async (req, reply) => {
+      const got = Buffer.from(req.headers.authorization ?? '');
+      if (!safeEqual(got, expected)) {
+        return reply.code(401).send({ error: { code: 'unauthorized', message: 'metrics token required' } });
+      }
+      return reply.header('content-type', 'text/plain; version=0.0.4').send(ctx.metrics.render());
+    });
+  }
 
   const plugins = opts.plugins ?? loadPlugins();
 

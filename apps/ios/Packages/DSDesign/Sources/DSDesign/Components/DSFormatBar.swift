@@ -94,7 +94,7 @@ private struct FormatBarPreview: View {
         ZStack {
             DSBackdrop(.mist).ignoresSafeArea()
             DSFormatBar(items: [
-                .item(DSFormatBarItem(id: "h", systemImage: "textformat.size", label: "Стиль")),
+                .item(DSFormatBarItem(id: "h", systemImage: "textformat.size", label: "Стиль") {}),
                 .separator(id: "1"),
                 .item(DSFormatBarItem(id: "b", systemImage: "bold", label: "Жирный", isActive: bold) { bold.toggle() }),
                 .item(DSFormatBarItem(id: "i", systemImage: "italic", label: "Курсив", isActive: italic) { italic.toggle() }),

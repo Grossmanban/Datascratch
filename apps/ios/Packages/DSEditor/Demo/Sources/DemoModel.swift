@@ -116,5 +116,14 @@ final class DemoImages: EditorAttachmentResolver {
         return img
     }
 
-    func noteTitle(for noteId: String) -> String? { "Идеи" }
+    private var notes: [String: String] = ["0192f3c4-0000-7000-8000-000000000001": "Идеи"]
+
+    func noteTitle(for noteId: String) -> String? { notes[noteId] }
+
+    func noteId(forLinkLabel label: String) -> String? {
+        if let existing = notes.first(where: { $0.value == label })?.key { return existing }
+        let id = UUIDv7.generate()
+        notes[id] = label
+        return id
+    }
 }

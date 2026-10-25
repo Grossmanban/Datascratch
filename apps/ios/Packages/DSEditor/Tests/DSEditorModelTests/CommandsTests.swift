@@ -231,4 +231,24 @@ func resolved(_ doc: EditorDocument, _ s: Stroke) -> [TextPosition?] { s.anchors
         #expect(md.handleReturn(at: TextPosition(block: b, offset: 3)) != nil)
         #expect(doc.allBlocks.contains { $0.type == NodeType.horizontalRule })
     }
+
+    @Test func noteLinkShortcut() {
+        let (doc, b, md) = typed("see [[Идеи]]")
+        let caret = md.handleNoteLink(at: TextPosition(block: b, offset: 12)) { $0 == "Идеи" ? "n1" : nil }
+        #expect(caret == TextPosition(block: b, offset: 5))
+        #expect(doc.inline(of: b, range: nil).last == .atom(.noteLink(noteId: "n1", label: "Идеи"), .empty))
+        let (_, b2, md2) = typed("[[x]]")
+        #expect(md2.handleNoteLink(at: TextPosition(block: b2, offset: 5)) { _ in nil } == nil)
+    }
+
+    @Test func tagShortcut() {
+        let (doc, b, md) = typed("idea #pen/proto ")
+        let caret = md.handleTag(at: TextPosition(block: b, offset: 16))
+        #expect(caret == TextPosition(block: b, offset: 7))
+        #expect(doc.inline(of: b, range: nil) == [.text("idea ", .empty), .atom(.tag("pen/proto"), .empty), .text(" ", .empty)])
+        let (_, b2, md2) = typed("issue #12 ")
+        #expect(md2.handleTag(at: TextPosition(block: b2, offset: 10)) == nil)
+        let (_, b3, md3) = typed("a#b ")
+        #expect(md3.handleTag(at: TextPosition(block: b3, offset: 4)) == nil)
+    }
 }

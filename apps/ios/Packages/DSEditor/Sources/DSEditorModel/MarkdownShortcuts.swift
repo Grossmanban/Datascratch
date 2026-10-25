@@ -128,4 +128,55 @@ public struct MarkdownShortcuts {
         }
         return nil
     }
+
+    /// `[[label]]` typed: replaces it with a `noteLink` atom. `resolve` maps a label to a note id
+    /// (the host looks it up or creates the note); nil leaves the text as typed.
+    public func handleNoteLink(at pos: TextPosition, resolve: (String) -> String?) -> TextPosition? {
+        guard let node = document.block(pos.block), node.type != NodeType.codeBlock else { return nil }
+        let units = Array(document.flatText(of: pos.block).utf16.prefix(pos.offset))
+        guard units.count >= 5, units.suffix(2) == [0x5D, 0x5D] else { return nil }
+        var i = units.count - 3
+        while i >= 1 {
+            if units[i] == 0x5B, units[i - 1] == 0x5B { break }
+            if units[i] == 0x5D || units[i] == 0xFFFC { return nil }
+            i -= 1
+        }
+        guard i >= 1 else { return nil }
+        let start = i - 1
+        let label = String(decoding: units[(i + 1)..<(units.count - 2)], as: UTF16.self).trimmingCharacters(in: .whitespaces)
+        guard !label.isEmpty, let noteId = resolve(label) else { return nil }
+        let marks = document.inline(of: pos.block, range: start..<(start + 1)).first?.marks ?? .empty
+        document.stopCapturing()
+        document.transact {
+            document.deleteText(block: pos.block, range: start..<units.count)
+            document.insertAtom(.noteLink(noteId: noteId, label: label), marks: marks, block: pos.block, at: start)
+        }
+        document.stopCapturing()
+        return TextPosition(block: pos.block, offset: start + 1)
+    }
+
+    /// `#tag` followed by a space: replaces `#tag` with a `tag` atom (nested tags with `/`).
+    public func handleTag(at pos: TextPosition) -> TextPosition? {
+        guard let node = document.block(pos.block), node.type != NodeType.codeBlock, node.type != NodeType.heading else { return nil }
+        let units = Array(document.flatText(of: pos.block).utf16.prefix(pos.offset))
+        guard units.count >= 3, units.last == 0x20 else { return nil }
+        var i = units.count - 2
+        func isTagChar(_ u: UInt16) -> Bool {
+            guard let scalar = Unicode.Scalar(u) else { return false }
+            return CharacterSet.alphanumerics.contains(scalar) || u == 0x2F || u == 0x2D || u == 0x5F
+        }
+        while i >= 0, isTagChar(units[i]) { i -= 1 }
+        guard i >= 0, units[i] == 0x23, i < units.count - 2 else { return nil }
+        if i > 0, units[i - 1] != 0x20, units[i - 1] != 0xA0 { return nil }
+        let name = String(decoding: units[(i + 1)..<(units.count - 1)], as: UTF16.self)
+        // A tag must contain a letter (so "#1" stays text) and not end with "/".
+        guard name.contains(where: \.isLetter), !name.hasSuffix("/") else { return nil }
+        document.stopCapturing()
+        document.transact {
+            document.deleteText(block: pos.block, range: i..<(units.count - 1))
+            document.insertAtom(.tag(name), marks: .empty, block: pos.block, at: i)
+        }
+        document.stopCapturing()
+        return TextPosition(block: pos.block, offset: i + 2)
+    }
 }

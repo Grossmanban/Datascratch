@@ -1,13 +1,19 @@
 # Graph Report - Datascratch  (2026-10-25)
 
 ## Corpus Check
-- 3 files · ~21,552 words
+- 90 files · ~21,578 words
 - Verdict: corpus is large enough that graph structure adds value.
+- Unclassified: 3 file(s) not represented in the graph (top: (none) 3)
 
 ## Summary
-- 1083 nodes · 2067 edges · 89 communities (87 shown, 2 thin omitted)
+- 1084 nodes · 2067 edges · 90 communities (87 shown, 3 thin omitted)
 - Extraction: 81% EXTRACTED · 19% INFERRED · 0% AMBIGUOUS · INFERRED: 395 edges (avg confidence: 0.88)
 - Token cost: 0 input · 0 output
+
+## Graph Freshness
+- Built from commit: `a49c7fcc`
+- Run `git rev-parse HEAD` and compare to check if the graph is stale.
+- Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - Модель данных и глоссарий
@@ -103,14 +109,14 @@
 ## God Nodes (most connected - your core abstractions)
 1. `compilerOptions` - 15 edges
 2. `D-29. Graphify: порядок работы, чтобы граф был всегда актуален` - 14 edges
-3. `Решения по анкетам пользователя: D-32…D-41 и PDF после MVP (D-08)` - 13 edges
-4. `packages/design-tokens/tokens.json — источник значений; генерирует CSS-переменные и Swift` - 13 edges
-5. `Datascratch — правила для ИИ (CLAUDE.md)` - 13 edges
-6. `Yrs (Rust Yjs) with Swift Wrapper` - 12 edges
-7. `Stage 1: pen-in-text prototype on iPad (TextKit 2 + Yrs + pen layer, living stroke)` - 12 edges
+3. `packages/design-tokens/tokens.json — источник значений; генерирует CSS-переменные и Swift` - 13 edges
+4. `Datascratch — правила для ИИ (CLAUDE.md)` - 13 edges
+5. `Решения по анкетам пользователя: D-32…D-41 и PDF после MVP (D-08)` - 13 edges
+6. `Stage 1: pen-in-text prototype on iPad (TextKit 2 + Yrs + pen layer, living stroke)` - 12 edges
+7. `Yrs (Rust Yjs) with Swift Wrapper` - 12 edges
 8. `Graphify` - 11 edges
-9. `Coordinator session (merges branches into main, owns roadmap.md, CHANGELOG.md and contracts)` - 11 edges
-10. `Stage 0: preparation (done) — stack approved, PostgreSQL/Yjs justified, repo and docs deployed, Graphify set up` - 11 edges
+9. `PostgreSQL` - 11 edges
+10. `Coordinator session (merges branches into main, owns roadmap.md, CHANGELOG.md and contracts)` - 11 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Web editor: TipTap + Yjs per document-model contract, all blocks, Canvas pen layer per strokes contract` --semantically_similar_to--> `Web editor: TipTap (ProseMirror) + Yjs`  [INFERRED] [semantically similar]
@@ -147,7 +153,7 @@
 - **Living-stroke anchoring pipeline (strokes anchored to CRDT text positions)** — docs_spec_03_pencil_living_stroke, docs_spec_03_pencil_stroke_anchor_hypothesis, docs_spec_03_pencil_crdt_relative_position_anchors, docs_spec_03_pencil_yrs_in_prototype, docs_spec_06_data_server_handwriting_layer, docs_spec_06_data_server_crdt_block_tree [INFERRED 0.85]
 - **Private Notebook Encrypted Sync Flow** — docs_architecture_overview_private_notebook_edit_flow, docs_architecture_overview_ios_client, docs_architecture_stack_yrs, docs_architecture_stack_grdb, docs_architecture_stack_libsodium, docs_architecture_overview_sync_realtime, docs_architecture_stack_postgresql [INFERRED 0.85]
 
-## Communities (89 total, 2 thin omitted)
+## Communities (90 total, 3 thin omitted)
 
 ### Community 0 - "Модель данных и глоссарий"
 Cohesion: 0.05
@@ -498,24 +504,24 @@ Cohesion: 0.67
 Nodes (3): D-36. Структура: пространство → блокноты → папки, Рассмотренные варианты, Решение
 
 ## Knowledge Gaps
-- **50 isolated node(s):** `Смена пароля перешифровывает только обёртку masterKey`, `Passkeys — сложно совместить со сквозным шифрованием сейчас; возможно позже`, `Sign in with Apple — отклонён: всё равно нужен отдельный пароль шифрования`, `Current status: stack approved, next is stage 1 pencil prototype`, `Вариант «пространство = блокнот» — отклонён: нельзя смешивать режимы в одном контексте` (+45 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 355 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **2 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **50 isolated node(s):** `Astro (landing page)`, `Drizzle ORM`, `ADR (Architecture Decision Record)`, `Current status: stack approved, next is stage 1 pencil prototype`, `Link graph view (not in MVP, stage 6)` (+45 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 356 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **3 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Порядок чтения для новичка: концепция → roadmap → стек → обзор → перо → решения → вопросы/риски → процесс → history` connect `0024-product-name.md` to `Модель данных и глоссарий`, `Монорепозиторий и CLAUDE.md`, `Модель данных и глоссарий (2)`, `Платформы и клиенты (2)`, `0005-living-stroke.md`, `Правила для ИИ и документации (2)`, `Правила для ИИ и документации (3)`, `Правила для ИИ и документации (2) (2)`?**
-  _High betweenness centrality (0.065) - this node is a cross-community bridge._
+  _High betweenness centrality (0.050) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `packages/design-tokens/tokens.json — источник значений; генерирует CSS-переменные и Swift` (e.g. with `Own unified design system for iOS and web` and `Design tokens (colors, spacing, typography, animation durations) as single source for both platforms`) actually correct?**
   _`packages/design-tokens/tokens.json — источник значений; генерирует CSS-переменные и Swift` has 2 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `Смена пароля перешифровывает только обёртку masterKey`, `Passkeys — сложно совместить со сквозным шифрованием сейчас; возможно позже`, `Sign in with Apple — отклонён: всё равно нужен отдельный пароль шифрования` to the rest of the system?**
+- **What connects `Astro (landing page)`, `Drizzle ORM`, `ADR (Architecture Decision Record)` to the rest of the system?**
   _50 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Модель данных и глоссарий` be split into smaller, more focused modules?**
   _Cohesion score 0.05263157894736842 - nodes in this community are weakly interconnected._
-- **Why does `Документация Datascratch` connect `Правила для ИИ и документации (4)` to `Правила для ИИ и документации (3)`?**
-  _High betweenness centrality (0.035) - this node is a cross-community bridge._
+- **Why does `Datascratch — правила для ИИ` connect `Монорепозиторий и CLAUDE.md (2)` to `Правила для ИИ и документации (2)`?**
+  _High betweenness centrality (0.034) - this node is a cross-community bridge._
 - **Should `Монорепозиторий и CLAUDE.md` be split into smaller, more focused modules?**
   _Cohesion score 0.05478750640040963 - nodes in this community are weakly interconnected._
-- **Why does `Контракт: шифрование (v1)` connect `Контракт: шифрование (v1)` to `0009-notebook-mode-choice.md`?**
-  _High betweenness centrality (0.027) - this node is a cross-community bridge._
+- **Why does `D-29. Graphify: порядок работы, чтобы граф был всегда актуален` connect `Правила для ИИ и документации` to `Правила для ИИ и документации (2) (2)`, `Правила для ИИ и документации (3)`, `Правила для ИИ и документации (2)`, `Монорепозиторий и CLAUDE.md (2)`?**
+  _High betweenness centrality (0.030) - this node is a cross-community bridge._

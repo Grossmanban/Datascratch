@@ -199,6 +199,14 @@ public final class AccountDocument: Sendable {
 
     public var activeTab: String? { setting("activeTab")?.stringValue }
 
+    /// The user confirmed they saved the current recovery key (`settings.recoveryKeyConfirmed`);
+    /// reset to `false` when the key is rotated.
+    public var recoveryKeyConfirmed: Bool { setting("recoveryKeyConfirmed")?.boolValue ?? false }
+
+    public func setRecoveryKeyConfirmed(_ confirmed: Bool, origin: TransactionOrigin = .local) throws {
+        try setSetting("recoveryKeyConfirmed", .bool(value: confirmed), origin: origin)
+    }
+
     // MARK: Starred
 
     public func starred() -> [StarredItem] { crdt.arrayValues("starred").compactMap(StarredItem.init(value:)) }

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "description": "Recovery key rotation (POST /auth/recovery-key) with fixed randomness: body = { currentLoginKey, recoveryLoginKey = BLAKE2b-256(key=newRecoveryKey, 'ds1|recovery-login'), wrappedMasterKeyRecovery = envelope(newRecoveryKey, masterKey, ad 'ds1|key|master|recovery|<userId>', nonce) }.",
+  "inputs": {
+    "userId": "0192f3c4-0000-7000-8000-00000000000a",
+    "masterKey": "figdsEzoA7Zi49Om4MmTE1rDGYVbT2HfPWXLdJ3JWu4",
+    "currentLoginKey": "4ozyZOvptnxp-Yivlc7Z_HP5I0o4l1ej0Z2P8nToNew",
+    "newRecoveryKey": "FiQvJ4uUyf0cjJ6Gj_gbXNX4AnZlh9ZhZF5cG11usLc",
+    "nonce": "e2tsUZeyOodTLMb33-nQL4UJ5NYKLd-_"
+  },
+  "expected": {
+    "recoveryKeyText": "DS1-2RJ2-Y9WB-JK4Z-T74C-KT38-ZY0V-BKAZ-G0KP-CP3X-CRB4-BSE1-PQBE-P2VG",
+    "body": {
+      "currentLoginKey": "4ozyZOvptnxp-Yivlc7Z_HP5I0o4l1ej0Z2P8nToNew",
+      "recoveryLoginKey": "DEP6NzDgiIghPIbxH38YiefNZYQtZM3jNg9iKZt284U",
+      "wrappedMasterKeyRecovery": "AXtrbFGXsjqHUyzG99_p0C-FCeTWCi3fv9s3gl3g5OnD1EWgaxwM_qPX3NpgdIDcVIsUTOnn92AtA6FlxkpmONzTZxil20o4pA"
+    }
+  }
+}

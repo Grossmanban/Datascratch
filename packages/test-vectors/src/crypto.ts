@@ -4,6 +4,7 @@ import {
   DEFAULT_KDF,
   attachmentChunkCount,
   buildShareLink,
+  rotateRecoveryKey,
   deriveRecoveryLoginKey,
   derivePasswordKeys,
   encryptAttachmentChunk,
@@ -270,7 +271,30 @@ export function cryptoExtraVectors() {
     },
   };
 
+  // Recovery key rotation with fixed randomness (POST /auth/recovery-key).
+  const rotRecovery = det("rotate-recovery", 32);
+  const rotNonce = det("rotate-nonce", 24);
+  const rotated = rotateRecoveryKey(masterKey, pk.loginKey, userId, {
+    recoveryKey: rotRecovery,
+    nonce: rotNonce,
+  });
+  const recoveryRotate = {
+    inputs: {
+      userId,
+      masterKey: b64(masterKey),
+      currentLoginKey: b64(pk.loginKey),
+      newRecoveryKey: b64(rotRecovery),
+      nonce: b64(rotNonce),
+    },
+    expected: { recoveryKeyText: rotated.recoveryKeyText, body: rotated.body },
+  };
+
   return {
+    "crypto/recovery-rotate.json": {
+      description:
+        "Recovery key rotation (POST /auth/recovery-key) with fixed randomness: body = { currentLoginKey, recoveryLoginKey = BLAKE2b-256(key=newRecoveryKey, 'ds1|recovery-login'), wrappedMasterKeyRecovery = envelope(newRecoveryKey, masterKey, ad 'ds1|key|master|recovery|<userId>', nonce) }.",
+      ...recoveryRotate,
+    },
     "crypto/base64url.json": {
       description: "base64url without padding; decoders must reject every `rejectDecode` input.",
       encode,

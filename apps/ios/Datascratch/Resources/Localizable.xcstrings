@@ -241,32 +241,12 @@
         }
       }
     },
-    "Black": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Чёрный"
-          }
-        }
-      }
-    },
     "Blue": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Синий"
-          }
-        }
-      }
-    },
-    "Brown": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Коричневый"
           }
         }
       }
@@ -911,26 +891,6 @@
         }
       }
     },
-    "Draw with Finger: Off": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Рисование пальцем выключено"
-          }
-        }
-      }
-    },
-    "Draw with Finger: On": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Рисование пальцем включено"
-          }
-        }
-      }
-    },
     "Drawing": {
       "localizations": {
         "ru": {
@@ -1217,6 +1177,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Во всю ширину"
+          }
+        }
+      }
+    },
+    "Full Screen": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На весь экран"
           }
         }
       }
@@ -1581,16 +1551,6 @@
         }
       }
     },
-    "More Pen Options": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ещё инструменты пера"
-          }
-        }
-      }
-    },
     "Move To": {
       "localizations": {
         "ru": {
@@ -1911,6 +1871,16 @@
         }
       }
     },
+    "Not sent: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не отправлено: %lld"
+          }
+        }
+      }
+    },
     "Notebook name": {
       "localizations": {
         "ru": {
@@ -2021,16 +1991,6 @@
         }
       }
     },
-    "Off": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Выкл."
-          }
-        }
-      }
-    },
     "Offline": {
       "localizations": {
         "ru": {
@@ -2047,16 +2007,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Офлайн · ждут отправки: %lld"
-          }
-        }
-      }
-    },
-    "On": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вкл."
           }
         }
       }
@@ -2571,6 +2521,16 @@
         }
       }
     },
+    "Retry": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторить"
+          }
+        }
+      }
+    },
     "Revoke": {
       "localizations": {
         "ru": {
@@ -2777,6 +2737,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Поделиться…"
+          }
+        }
+      }
+    },
+    "Show Columns": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать колонки"
+          }
+        }
+      }
+    },
+    "Show Documents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать документы"
           }
         }
       }
@@ -3396,7 +3376,7 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Всё синхронизировано"
+            "value": "Синхронизировано"
           }
         }
       }

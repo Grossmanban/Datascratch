@@ -65,6 +65,7 @@ struct TasksView: View {
         .background(Theme.Palette.canvas)
         .safeAreaInset(edge: .top, spacing: 0) { bucketPicker }
         .navigationTitle("Tasks")
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { ContentFullScreenButton() } }
         .animation(Theme.Motion.smooth, value: visible.map(\.id))
     }
 
@@ -73,9 +74,31 @@ struct TasksView: View {
         @Bindable var scene = scene
         return Group {
             #if canImport(DSDesign)
-            DSSegmentedControl(selection: $scene.taskBucket, segments: TaskIndex.Bucket.allCases.map {
-                DSSegment(String(localized: $0.title), value: $0, systemImage: $0.symbol)
-            })
+            // Labels are never cut off: in a narrow column the segments give way to a menu.
+            ViewThatFits(in: .horizontal) {
+                DSSegmentedControl(selection: $scene.taskBucket, segments: TaskIndex.Bucket.allCases.map {
+                    DSSegment(String(localized: $0.title), value: $0, systemImage: $0.symbol)
+                })
+                .fixedSize(horizontal: true, vertical: false)
+                Menu {
+                    Picker("View", selection: $scene.taskBucket) {
+                        ForEach(TaskIndex.Bucket.allCases) { bucket in
+                            Label { Text(bucket.title) } icon: { Image(systemName: bucket.symbol) }.tag(bucket)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: Theme.Space.s2) {
+                        Image(systemName: scene.taskBucket.symbol)
+                        Text(scene.taskBucket.title).lineLimit(1)
+                        Image(systemName: "chevron.up.chevron.down").font(.caption2.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                    }
+                    .font(Theme.Typography.callout.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                    .padding(.horizontal, Theme.Space.s3)
+                    .frame(maxWidth: .infinity, minHeight: 32)
+                }
+            }
             #else
             Picker("View", selection: $scene.taskBucket) {
                 ForEach(TaskIndex.Bucket.allCases) { bucket in

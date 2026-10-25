@@ -15,7 +15,7 @@ struct DocumentScreen: View {
 
     var body: some View {
         if let note = library.note(noteId) {
-            #if canImport(DSEditor) && canImport(DSEditorCore) && canImport(DSCore)
+            #if canImport(DSEditor) && canImport(DSEditorCore) && canImport(DSCore) && canImport(DSDesign)
             if !forceStandIn, app.core != nil {
                 NativeDocumentScreen(noteId: noteId)
             } else {
@@ -116,6 +116,8 @@ struct DocumentScreen: View {
 
     @ToolbarContentBuilder
     private func toolbar(_ note: NoteMeta) -> some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) { CloseDocumentButton() }
+        ToolbarItem(placement: .topBarLeading) { FullScreenButton() }
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button {
                 library.toggleStar(.note, note.id)
@@ -207,6 +209,56 @@ struct BacklinksSection: View {
                     .buttonStyle(.plain)
                 }
             }
+        }
+    }
+}
+
+/// iPad: closes the document; what was beside it takes the whole width.
+struct CloseDocumentButton: View {
+    @Environment(SceneModel.self) private var scene
+
+    var body: some View {
+        if UIDevice.current.userInterfaceIdiom == .pad, scene.selectedNoteId != nil, !scene.isNoteWindow {
+            Button { scene.closeDocument() } label: { Image(systemName: "xmark") }
+                .accessibilityLabel("Close Document")
+                .accessibilityIdentifier("document.close")
+        }
+    }
+}
+
+/// iPad: show the document alone, or the list next to it again.
+struct FullScreenButton: View {
+    @Environment(SceneModel.self) private var scene
+
+    var body: some View {
+        if UIDevice.current.userInterfaceIdiom == .pad, scene.selectedNoteId != nil, !scene.isNoteWindow {
+            Button {
+                scene.toggleDocumentFullScreen()
+            } label: {
+                Image(systemName: scene.isDocumentFullScreen
+                      ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+            }
+            .accessibilityLabel(scene.isDocumentFullScreen ? Text("Show Documents") : Text("Full Screen"))
+            .accessibilityIdentifier("document.fullScreen")
+            .keyboardShortcut("f", modifiers: [.command, .control])
+        }
+    }
+}
+
+/// iPad: tasks, the calendar or a list on the whole width, and back.
+struct ContentFullScreenButton: View {
+    @Environment(SceneModel.self) private var scene
+
+    var body: some View {
+        if UIDevice.current.userInterfaceIdiom == .pad, !scene.isNoteWindow {
+            Button {
+                scene.toggleContentFullScreen()
+            } label: {
+                Image(systemName: scene.isContentFullScreen
+                      ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+            }
+            .accessibilityLabel(scene.isContentFullScreen ? Text("Show Columns") : Text("Full Screen"))
+            .accessibilityIdentifier("content.fullScreen")
         }
     }
 }

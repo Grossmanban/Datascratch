@@ -141,26 +141,22 @@ final class LibraryUITests: XCTestCase {
         }
     }
 
-    /// Finger drawing sits in «More» on iPhone and in the palette row on iPad.
+    /// Finger drawing sits in «More» in the compact palette and in the row when it is wide.
     private func toggleFingerDrawing(_ app: XCUIApplication) {
         let more = app.buttons["tool.more"].firstMatch
-        if more.exists {
-            more.tap()
-            let item = app.descendants(matching: .any)["tool.fingerDrawing"].firstMatch
-            if item.waitForExistence(timeout: 3) {
-                item.tap()
-            } else {
-                app.buttons["Draw with Finger"].firstMatch.tap()
-            }
-        } else {
-            app.buttons["tool.fingerDrawing"].firstMatch.tap()
+        if more.exists { more.tap() }
+        let finger = app.descendants(matching: .any)["tool.finger"].firstMatch
+        if finger.waitForExistence(timeout: 3) { finger.tap() }
+        // Close the popover.
+        if more.exists, app.descendants(matching: .any)["tool.finger"].firstMatch.exists {
+            app.descendants(matching: .any)["editor"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
         }
     }
 
+    /// The palette reports "editor N, mode X, finger on|off".
     private func fingerDrawingIsOff(_ app: XCUIApplication) -> Bool {
-        let more = app.buttons["tool.more"].firstMatch
-        if more.exists { return (more.value as? String)?.hasSuffix("Off") == true }
-        return app.buttons["tool.fingerDrawing"].firstMatch.value as? String == "Off"
+        let value = app.descendants(matching: .any)["penPalette"].firstMatch.value as? String
+        return value?.hasSuffix("finger off") == true
     }
 
     static func buttons(_ app: XCUIApplication) -> String {
@@ -169,14 +165,18 @@ final class LibraryUITests: XCTestCase {
 
     /// Returns a sidebar element, revealing the sidebar first when it is collapsed.
     private func sidebarElement(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
-        let element = app.descendants(matching: .any)[identifier].firstMatch
-        if element.waitForExistence(timeout: 3), element.isHittable { return element }
+        // The identifier lands on the row's icon and text, not on the row: tap the cell holding
+        // them (the icon alone is not hittable on iPad).
+        let cell = app.cells.containing(.any, identifier: identifier).firstMatch
+        let any = app.descendants(matching: .any)[identifier].firstMatch
+        func best() -> XCUIElement { cell.exists ? cell : any }
+        if any.waitForExistence(timeout: 3), best().isHittable { return best() }
         let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar'")).firstMatch
         if toggle.exists { toggle.tap() }
         let back = app.navigationBars.buttons.firstMatch
-        if !element.waitForExistence(timeout: 3), back.exists { back.tap() }
-        _ = element.waitForExistence(timeout: 5)
-        return element
+        if !any.waitForExistence(timeout: 3), back.exists { back.tap() }
+        _ = any.waitForExistence(timeout: 5)
+        return best()
     }
 
     func testCreateNoteAndWriteTitle() throws {
@@ -263,31 +263,57 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(becomesSelected(pen), "Pen is not selected after one tap; \(paletteState(app))")
         settle(1)  // the keyboard finishes leaving
         let resting = palette.frame
-        for id in ["tool.pencil", "tool.marker", "tool.highlighter", "tool.strokeEraser", "tool.pen"] {
+        for id in ["tool.pencil", "tool.marker", "tool.highlighter", "tool.eraser", "tool.pen"] {
             let button = app.buttons[id].firstMatch
             XCTAssertTrue(button.isHittable, "\(id) is not hittable")
             button.tap()
             XCTAssertTrue(becomesSelected(button), "\(id) is not selected after one tap; \(paletteState(app))")
-            XCTAssertEqual(palette.frame.minY, resting.minY, accuracy: 1, "palette moved on \(id)")
+            // The highlight follows too (build 4 on iPad: «Text» stayed highlighted).
+            XCTAssertTrue(showsSelected(button), "\(id) works but is not shown as selected; \(paletteState(app))")
+            // Bottom edge: the toolbar may change its own height by a point or two per tool.
+            XCTAssertEqual(palette.frame.maxY, resting.maxY, accuracy: 1, "palette moved on \(id)")
         }
+
+        // A colour: the editor takes it and the palette shows it.
+        let more = app.buttons["tool.more"].firstMatch
+        if more.exists { more.tap() }
+        let red = app.descendants(matching: .any)["color.red"].firstMatch
+        XCTAssertTrue(red.waitForExistence(timeout: 3), "no red swatch; \(paletteState(app))")
+        red.tap()
+        let reportsRed = { (palette.value as? String)?.contains("color ink.red") == true }
+        let deadline = Date().addingTimeInterval(4)
+        while !reportsRed(), Date() < deadline { settle(0.25) }
+        XCTAssertTrue(reportsRed(), "red is not the pen colour; \(paletteState(app))")
+        if red.exists { XCTAssertTrue(showsSelected(red), "red is not shown as selected") }
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2))
     }
 
     /// The tool switches on the next run-loop turn: wait for the palette to report it. The palette's
     /// accessibility value ("editor N, mode X") follows the editor's mode, not the highlight animation.
     private func becomesSelected(_ button: XCUIElement, timeout: TimeInterval = 4) -> Bool {
-        let mode = button.identifier.replacingOccurrences(of: "tool.", with: "")
+        var mode = button.identifier.replacingOccurrences(of: "tool.", with: "")
+        if mode == "eraser" { mode = "strokeEraser" }
         let palette = XCUIApplication().descendants(matching: .any)["penPalette"].firstMatch
+        let reports = { (palette.value as? String)?.contains("mode \(mode),") == true }
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if (palette.value as? String)?.hasSuffix("mode \(mode)") == true { return true }
+            if reports() { return true }
             settle(0.25)
         }
-        return (palette.value as? String)?.hasSuffix("mode \(mode)") == true
+        return reports()
+    }
+
+    private func showsSelected(_ element: XCUIElement, timeout: TimeInterval = 3) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.isSelected { return true }
+            settle(0.25)
+        }
+        return element.isSelected
     }
 
     private func paletteState(_ app: XCUIApplication) -> String {
-        ["tool.text", "tool.pen", "tool.pencil", "tool.marker", "tool.highlighter", "tool.strokeEraser"].map { id in
+        ["tool.text", "tool.pen", "tool.pencil", "tool.marker", "tool.highlighter", "tool.eraser"].map { id in
             let b = app.buttons[id].firstMatch
             return "\(id)=\(b.exists ? (b.isSelected ? "on" : "off") : "missing")"
         }.joined(separator: " ") + " keyboard=\(app.keyboards.firstMatch.exists)"
@@ -296,6 +322,147 @@ final class LibraryUITests: XCTestCase {
 
     private func settle(_ seconds: TimeInterval = 0.6) {
         RunLoop.current.run(until: Date().addingTimeInterval(seconds))
+    }
+
+    /// iPad (build 4 feedback): in a narrow editor column the text and the palette stay inside
+    /// the column, «Full Screen» gives the document the whole width and back.
+    func testEditorColumnOnIPad() throws {
+        try checkEditorColumn(.portrait)
+    }
+
+    func testEditorColumnOnIPadLandscape() throws {
+        try checkEditorColumn(.landscapeLeft)
+    }
+
+    /// Turns the iPad before launch; the next test starts in portrait again.
+    private func rotate(_ orientation: UIDeviceOrientation) {
+        XCUIDevice.shared.orientation = orientation
+        addTeardownBlock { XCUIDevice.shared.orientation = .portrait }
+    }
+
+    private func checkEditorColumn(_ orientation: UIDeviceOrientation) throws {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
+        rotate(orientation)
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        let palette = app.descendants(matching: .any)["penPalette"].firstMatch
+        let window = app.windows.firstMatch.frame
+
+        func checkInside(_ label: String) {
+            let column = editor.frame
+            XCTAssertGreaterThanOrEqual(column.minX, window.minX - 1, "\(label): editor starts off screen")
+            XCTAssertLessThanOrEqual(column.maxX, window.maxX + 1, "\(label): editor ends off screen")
+            let text = editor.textViews.firstMatch
+            if text.exists {
+                XCTAssertGreaterThanOrEqual(text.frame.minX, column.minX - 1, "\(label): text shifted left of the column")
+            }
+            XCTAssertGreaterThanOrEqual(palette.frame.minX, column.minX - 1, "\(label): palette past the column's left edge")
+            XCTAssertLessThanOrEqual(palette.frame.maxX, column.maxX + 1, "\(label): palette past the column's right edge")
+        }
+
+        // All three columns: the narrowest editor.
+        let showSidebar = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar'")).firstMatch
+        if showSidebar.exists {
+            showSidebar.tap()
+            settle(1)
+        }
+        checkInside("three columns")
+        let narrow = editor.frame.width
+
+        let fullScreen = app.buttons["document.fullScreen"].firstMatch
+        XCTAssertTrue(fullScreen.waitForExistence(timeout: 3), "no Full Screen button; buttons: \(Self.buttons(app))")
+        fullScreen.tap()
+        settle(1.5)
+        XCTAssertGreaterThan(editor.frame.width, narrow + 100, "Full Screen did not widen the editor")
+        XCTAssertGreaterThan(editor.frame.width, window.width * 0.9, "the document is not alone on screen")
+        checkInside("full screen")
+        fullScreen.tap()
+        settle(1.5)
+        XCTAssertLessThan(editor.frame.width, window.width * 0.9, "Full Screen did not toggle back")
+        checkInside("back from full screen")
+    }
+
+    /// iPad: Tasks get the whole width when chosen, come back to the columns and go full
+    /// screen again; the segment labels are never cut off (a menu replaces them when narrow).
+    func testContentFullScreenOnIPad() throws {
+        try checkContentFullScreen(.portrait)
+    }
+
+    func testContentFullScreenOnIPadLandscape() throws {
+        try checkContentFullScreen(.landscapeLeft)
+    }
+
+    private func checkContentFullScreen(_ orientation: UIDeviceOrientation) throws {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
+        rotate(orientation)
+        let app = launchSignedIn()
+        let tasks = sidebarElement(app, "sidebar.tasks")
+        XCTAssertTrue(tasks.exists, "no Tasks in the sidebar; buttons: \(Self.buttons(app))")
+        tasks.tap()
+        settle(1.5)
+        let bucket = app.descendants(matching: .any)["tasks.bucket"].firstMatch
+        XCTAssertTrue(bucket.waitForExistence(timeout: 3))
+        let window = app.windows.firstMatch.frame
+        XCTAssertGreaterThan(bucket.frame.midX, window.width * 0.35, "Tasks did not take the whole width")
+        let toggle = app.buttons["content.fullScreen"].firstMatch
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3), "no Full Screen button on Tasks; buttons: \(Self.buttons(app))")
+        toggle.tap()
+        settle(1.5)
+        XCTAssertTrue(sidebarElement(app, "sidebar.tasks").exists, "the columns did not come back")
+        // In the narrow column the bucket labels must not be truncated ("С…").
+        let truncated = app.buttons.allElementsBoundByIndex.prefix(40).filter { $0.label.hasSuffix("…") && $0.label.count <= 3 }
+        XCTAssertTrue(truncated.isEmpty, "cut-off labels: \(truncated.map(\.label))")
+        app.buttons["content.fullScreen"].firstMatch.tap()
+        settle(1.5)
+        XCTAssertGreaterThan(bucket.frame.midX, window.width * 0.35, "Full Screen did not come back")
+    }
+
+    /// iPad: closing the document gives the screen beside it the whole width.
+    func testClosingTheDocumentOnIPad() throws {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let close = app.buttons["document.close"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 3), "no Close Document button; buttons: \(Self.buttons(app))")
+        close.tap()
+        settle(1.5)
+        XCTAssertFalse(app.descendants(matching: .any)["editor"].firstMatch.exists, "the document is still open")
+        let card = app.descendants(matching: .any)["document.card"].firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 3), "the document list is not shown")
+        XCTAssertTrue(app.buttons["content.fullScreen"].firstMatch.exists, "the list is not on the whole width")
+    }
+
+    /// Tabs close with their own button.
+    func testClosingATab() throws {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad: sidebar beside the document") }
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let showSidebar = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar'")).firstMatch
+        if showSidebar.exists { showSidebar.tap(); settle(1) }
+        let close = app.buttons["tab.close"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 5), "no tab close button; buttons: \(Self.buttons(app))")
+        let count = app.buttons.matching(identifier: "tab.close").count
+        close.tap()
+        settle(1)
+        XCTAssertEqual(app.buttons.matching(identifier: "tab.close").count, count - 1, "the tab did not close")
+    }
+
+    /// «Open in New Window» shows the document, not an empty (black) window.
+    func testOpenInNewWindowShowsTheDocument() throws {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("multiple windows: iPad") }
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let more = app.buttons["document.more"].firstMatch
+        XCTAssertTrue(more.waitForExistence(timeout: 3), "no document menu; buttons: \(Self.buttons(app))")
+        more.tap()
+        let item = app.buttons["Open in New Window"].firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 3), "no Open in New Window item")
+        item.tap()
+        settle(3)
+        guard app.windows.count >= 2 else { throw XCTSkip("the simulator did not open a second window") }
+        let editors = app.descendants(matching: .any).matching(identifier: "editor")
+        XCTAssertGreaterThanOrEqual(editors.count, 2, "the new window shows no document")
     }
 
     func testCommandPaletteOpensTasks() throws {

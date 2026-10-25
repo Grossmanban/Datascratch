@@ -41,10 +41,30 @@ final class SceneModel {
     let app: AppModel
 
     var sidebar: SidebarItem? = .allDocuments {
-        didSet { if oldValue != sidebar { searchText = "" } }
+        didSet {
+            guard oldValue != sidebar else { return }
+            searchText = ""
+            // iPad: Tasks and the calendar get the whole width; a document opens beside them
+            // only from a task or a day.
+            if UIDevice.current.userInterfaceIdiom == .pad, !isNoteWindow, sidebar == .tasks || sidebar == .calendar {
+                if let id = selectedNoteId { library.recordVersion(ofNote: id) }
+                selectedNoteId = nil
+                isContentFullScreen = true
+                columnVisibility = .detailOnly
+            }
+        }
     }
     var selectedNoteId: String?
-    var columnVisibility: NavigationSplitViewVisibility = .all
+    /// Which columns show; remembered between launches (iPad). Full-screen content (tasks,
+    /// the calendar, a list) is a passing state and is not remembered.
+    var columnVisibility: NavigationSplitViewVisibility = .all {
+        didSet {
+            guard !isContentFullScreen else { return }
+            app.settings.columnLayout = Self.name(of: columnVisibility)
+        }
+    }
+    /// The middle screen (tasks, calendar, a list) shown on the whole width in place of the document.
+    var isContentFullScreen = false
     var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
     var isCommandPalettePresented = false
     var sheet: SceneSheet?
@@ -70,6 +90,28 @@ final class SceneModel {
 
     init(app: AppModel) {
         self.app = app
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            // No document is open at launch: a remembered "document alone" would show an empty
+            // screen without the sidebar, so the columns come back instead.
+            let remembered = Self.visibility(named: app.settings.columnLayout)
+            columnVisibility = remembered == .detailOnly ? .all : remembered
+        }
+    }
+
+    private static func name(of visibility: NavigationSplitViewVisibility) -> String {
+        switch visibility {
+        case .detailOnly: "detailOnly"
+        case .doubleColumn: "doubleColumn"
+        default: "all"
+        }
+    }
+
+    private static func visibility(named name: String) -> NavigationSplitViewVisibility {
+        switch name {
+        case "detailOnly": .detailOnly
+        case "doubleColumn": .doubleColumn
+        default: .all
+        }
     }
 
     var library: LibraryStore { app.library }
@@ -107,18 +149,59 @@ final class SceneModel {
         withAnimation(Theme.Motion.snappy) {
             selectedNoteId = noteId
             preferredCompactColumn = .detail
+            // iPad: opening a document hides the sidebar (list + document), as in Notes and Craft;
+            // from full-screen tasks or calendar the document opens beside them.
+            if UIDevice.current.userInterfaceIdiom == .pad, !isNoteWindow,
+               columnVisibility == .all || isContentFullScreen {
+                columnVisibility = .doubleColumn
+            }
+            isContentFullScreen = false
         }
         library.openTab(noteId)
     }
 
+    var isDocumentFullScreen: Bool { columnVisibility == .detailOnly }
+    /// A window showing one document (no columns to hide).
+    var isNoteWindow = false
+
+    /// iPad: the document alone on screen, and back to list + document.
+    func toggleDocumentFullScreen() {
+        withAnimation(Theme.Motion.smooth) {
+            columnVisibility = isDocumentFullScreen ? .doubleColumn : .detailOnly
+        }
+    }
+
+    /// iPad: tasks, the calendar or a list on the whole width, and back to the columns.
+    func toggleContentFullScreen() {
+        withAnimation(Theme.Motion.smooth) {
+            isContentFullScreen.toggle()
+            columnVisibility = isContentFullScreen ? .detailOnly : .all
+        }
+    }
+
+    /// Closes the open document and its tab (⌘W).
+    func closeTab() {
+        guard let id = selectedNoteId else { return }
+        closeDocument()
+        library.closeTab(id)
+    }
+
     func closeDocument() {
         if let id = selectedNoteId { library.recordVersion(ofNote: id) }
-        selectedNoteId = nil
-        preferredCompactColumn = .content
+        withAnimation(Theme.Motion.smooth) {
+            selectedNoteId = nil
+            preferredCompactColumn = .content
+            // iPad: what was beside the document (tasks, calendar, a list) takes the whole width.
+            if UIDevice.current.userInterfaceIdiom == .pad, !isNoteWindow {
+                isContentFullScreen = true
+                columnVisibility = .detailOnly
+            }
+        }
     }
 
     func show(_ item: SidebarItem) {
         withAnimation(Theme.Motion.snappy) {
+            if isContentFullScreen { isContentFullScreen = false; columnVisibility = .all }
             sidebar = item
             preferredCompactColumn = .content
         }

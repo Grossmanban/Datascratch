@@ -38,8 +38,20 @@ final class ServerConnection: CoreLibraryRemote {
     /// Starts syncing for a signed-in account.
     func start(session: AuthSession, isNewAccount: Bool) async {
         do {
-            try core.adoptAccount(docId: session.accountDocId, isNew: isNewAccount)
+            let carried = try core.adoptAccount(docId: session.accountDocId, isNew: isNewAccount)
             let api = self.api
+            // Notebooks made on this device before signing in exist on the server before any of
+            // their documents is registered (otherwise POST /docs answers 404).
+            for notebook in carried {
+                do {
+                    _ = try await api.createNotebook(id: notebook.id, mode: notebook.mode, wrappedKey: notebook.wrappedKey,
+                                                     notebookKey: notebook.mode == .agent ? notebook.key : nil)
+                } catch APIError.server(409, _, _) {
+                    // Already there (an earlier attempt).
+                } catch {
+                    Self.log.error("carrying notebook \(notebook.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
             let client = SyncClient(
                 configuration: .init(url: SyncClient.Configuration.url(forServer: serverURL),
                                      deviceId: try core.store.deviceId(),
@@ -58,6 +70,7 @@ final class ServerConnection: CoreLibraryRemote {
             core.remote = self
             await engine.start()
             observeStatus(engine)
+            sync.onRetry = { Task { await engine.retryFailed() } }
             uploadPendingAttachments()
         } catch {
             Self.log.error("starting sync failed: \(error.localizedDescription, privacy: .public)")
@@ -67,6 +80,7 @@ final class ServerConnection: CoreLibraryRemote {
 
     func stop() async {
         statusTask?.cancel()
+        sync.onRetry = nil
         await engine?.stop()
         engine = nil
         core.remote = nil
@@ -94,9 +108,13 @@ final class ServerConnection: CoreLibraryRemote {
         statusTask?.cancel()
         statusTask = Task { [sync] in
             for await status in await engine.statusUpdates() {
-                var connected = false
-                if case .connected = status.connection { connected = true }
-                sync.apply(connected: connected, pending: status.pending, catchingUp: status.catchingUp)
+                let summary: SyncCenter.Summary = switch status.summary {
+                case .offline: .offline
+                case .syncing: .syncing
+                case .synced: .synced
+                case .failed(let documents, let reason): .failed(documents: documents, reason: reason)
+                }
+                sync.apply(summary: summary, pending: status.pending)
             }
         }
     }
@@ -123,6 +141,17 @@ final class ServerConnection: CoreLibraryRemote {
                 try await api.setNotebookMode(id: id, mode: mode == .agent ? .agent : .private, notebookKey: key)
             } catch {
                 ServerConnection.log.error("PATCH mode \(id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    func documentDeleted(_ docId: String) {
+        guard let engine else { return }
+        Task {
+            do {
+                try await engine.deleteDocument(docId)
+            } catch {
+                ServerConnection.log.error("sync delete \(docId, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

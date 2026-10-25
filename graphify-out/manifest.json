@@ -402,10 +402,10 @@
     "semantic_hash": "027c28a064aa0911df6d994df77fa2ee"
   },
   "docs/architecture/contracts/api.md": {
-    "mtime": 1792927372.4277925,
-    "seen": 1792928038.5086212,
-    "ast_hash": "9bdbd4e4671f312a7a910cdaf41a162f",
-    "semantic_hash": "9bdbd4e4671f312a7a910cdaf41a162f"
+    "mtime": 1792928210.65582,
+    "seen": 1792928357.481541,
+    "ast_hash": "6c7d890915b667c8dc445d142b1977a0",
+    "semantic_hash": "6c7d890915b667c8dc445d142b1977a0"
   },
   "docs/architecture/contracts/crypto.md": {
     "mtime": 1792927372.4277925,
@@ -420,10 +420,10 @@
     "semantic_hash": "a8a4f3c9ba1256373560b3fbe6dd3908"
   },
   "docs/architecture/contracts/document-model.md": {
-    "mtime": 1792927372.4277925,
-    "seen": 1792928038.5086277,
-    "ast_hash": "ec4803757c6573115e3c6bbd974ab748",
-    "semantic_hash": "ec4803757c6573115e3c6bbd974ab748"
+    "mtime": 1792928210.655435,
+    "seen": 1792928357.481544,
+    "ast_hash": "464b097f59d627aab58fd50c4f212d5b",
+    "semantic_hash": "464b097f59d627aab58fd50c4f212d5b"
   },
   "docs/architecture/contracts/strokes.md": {
     "mtime": 1792927372.4277925,
@@ -432,10 +432,10 @@
     "semantic_hash": "1ff1de10d90c09efd1d2c505ad124961"
   },
   "docs/architecture/contracts/sync-protocol.md": {
-    "mtime": 1792927372.4277925,
-    "seen": 1792928038.5086317,
-    "ast_hash": "44400caacbeb0a40e56e5e80d3b2049a",
-    "semantic_hash": "44400caacbeb0a40e56e5e80d3b2049a"
+    "mtime": 1792928210.6570647,
+    "seen": 1792928357.481546,
+    "ast_hash": "25f08e446e1cd4df3c9a07da0917a421",
+    "semantic_hash": "25f08e446e1cd4df3c9a07da0917a421"
   },
   "docs/changelog.d/README.md": {
     "mtime": 1792927372.4277925,

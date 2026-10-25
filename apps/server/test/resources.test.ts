@@ -183,7 +183,8 @@ describe('shares and guests', () => {
     expect((await guest.subscribe(notShared)).error.code).toBe('doc_not_found');
     await owner.subscribe(shared, 1);
     expect((await guest.push(shared, rnd(5))).type).toBe('ack');
-    expect((await owner.next((m) => m.type === 'update')).deviceId).toBe(`guest:${shareId}:browser-1`);
+    const gd = (await owner.next((m) => m.type === "update")).deviceId;
+    expect(gd).toMatch(/^guest:[A-Za-z0-9_-]{22}$/);
 
     // Guests can upload attachments to the shared note with their token.
     const att = newId();

@@ -4,34 +4,33 @@ CREATE TYPE "public"."notebook_mode" AS ENUM('private', 'agent');--> statement-b
 CREATE TYPE "public"."share_kind" AS ENUM('note', 'notebook');--> statement-breakpoint
 CREATE TYPE "public"."share_permission" AS ENUM('view', 'edit');--> statement-breakpoint
 CREATE TABLE "agent_audit" (
-	"id" bigserial PRIMARY KEY NOT NULL,
-	"token_id" uuid NOT NULL,
+	"id" text PRIMARY KEY NOT NULL,
+	"grant_id" text NOT NULL,
 	"user_id" uuid NOT NULL,
+	"at" timestamp with time zone NOT NULL,
+	"via" text NOT NULL,
 	"action" text NOT NULL,
 	"notebook_id" uuid,
-	"doc_id" uuid,
-	"ok" boolean DEFAULT true NOT NULL,
-	"details" jsonb,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"note_id" uuid,
+	"ok" boolean NOT NULL,
+	"error_code" text,
+	"duration_ms" integer NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "agent_token_notebooks" (
-	"token_id" uuid NOT NULL,
-	"notebook_id" uuid NOT NULL,
-	CONSTRAINT "agent_token_notebooks_token_id_notebook_id_pk" PRIMARY KEY("token_id","notebook_id")
-);
---> statement-breakpoint
-CREATE TABLE "agent_tokens" (
-	"id" uuid PRIMARY KEY NOT NULL,
+CREATE TABLE "agent_grants" (
+	"id" text PRIMARY KEY NOT NULL,
 	"user_id" uuid NOT NULL,
+	"kind" text NOT NULL,
 	"name" text NOT NULL,
-	"token_hash" "bytea" NOT NULL,
+	"client_id" text,
+	"notebook_ids" uuid[] NOT NULL,
 	"permission" "agent_permission" NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
 	"expires_at" timestamp with time zone,
 	"revoked_at" timestamp with time zone,
 	"last_used_at" timestamp with time zone,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "agent_tokens_token_hash_unique" UNIQUE("token_hash")
+	"secret_hash" text,
+	CONSTRAINT "agent_grants_secret_hash_unique" UNIQUE("secret_hash")
 );
 --> statement-breakpoint
 CREATE TABLE "attachment_chunks" (
@@ -103,6 +102,41 @@ CREATE TABLE "notebooks" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "oauth_clients" (
+	"client_id" text PRIMARY KEY NOT NULL,
+	"client_secret_hash" text,
+	"client_name" text NOT NULL,
+	"client_uri" text,
+	"logo_uri" text,
+	"redirect_uris" text[] NOT NULL,
+	"token_endpoint_auth_method" text NOT NULL,
+	"registration" text NOT NULL,
+	"created_at" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "oauth_codes" (
+	"code_hash" text PRIMARY KEY NOT NULL,
+	"client_id" text NOT NULL,
+	"user_id" uuid NOT NULL,
+	"redirect_uri" text NOT NULL,
+	"code_challenge" text NOT NULL,
+	"resource" text NOT NULL,
+	"scope" text NOT NULL,
+	"notebook_ids" uuid[] NOT NULL,
+	"permission" "agent_permission" NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "oauth_tokens" (
+	"token_hash" text PRIMARY KEY NOT NULL,
+	"kind" text NOT NULL,
+	"grant_id" text NOT NULL,
+	"client_id" text NOT NULL,
+	"scope" text NOT NULL,
+	"resource" text NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "recovery_tokens" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"user_id" uuid NOT NULL,
@@ -154,11 +188,9 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
-ALTER TABLE "agent_audit" ADD CONSTRAINT "agent_audit_token_id_agent_tokens_id_fk" FOREIGN KEY ("token_id") REFERENCES "public"."agent_tokens"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "agent_audit" ADD CONSTRAINT "agent_audit_grant_id_agent_grants_id_fk" FOREIGN KEY ("grant_id") REFERENCES "public"."agent_grants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "agent_audit" ADD CONSTRAINT "agent_audit_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "agent_token_notebooks" ADD CONSTRAINT "agent_token_notebooks_token_id_agent_tokens_id_fk" FOREIGN KEY ("token_id") REFERENCES "public"."agent_tokens"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "agent_token_notebooks" ADD CONSTRAINT "agent_token_notebooks_notebook_id_notebooks_id_fk" FOREIGN KEY ("notebook_id") REFERENCES "public"."notebooks"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "agent_tokens" ADD CONSTRAINT "agent_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "agent_grants" ADD CONSTRAINT "agent_grants_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "attachment_chunks" ADD CONSTRAINT "attachment_chunks_attachment_id_attachments_id_fk" FOREIGN KEY ("attachment_id") REFERENCES "public"."attachments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "attachments" ADD CONSTRAINT "attachments_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "attachments" ADD CONSTRAINT "attachments_note_id_docs_id_fk" FOREIGN KEY ("note_id") REFERENCES "public"."docs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -168,11 +200,13 @@ ALTER TABLE "doc_updates" ADD CONSTRAINT "doc_updates_doc_id_docs_id_fk" FOREIGN
 ALTER TABLE "docs" ADD CONSTRAINT "docs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "docs" ADD CONSTRAINT "docs_notebook_id_notebooks_id_fk" FOREIGN KEY ("notebook_id") REFERENCES "public"."notebooks"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notebooks" ADD CONSTRAINT "notebooks_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "oauth_codes" ADD CONSTRAINT "oauth_codes_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "oauth_tokens" ADD CONSTRAINT "oauth_tokens_grant_id_agent_grants_id_fk" FOREIGN KEY ("grant_id") REFERENCES "public"."agent_grants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "recovery_tokens" ADD CONSTRAINT "recovery_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_device_id_devices_id_fk" FOREIGN KEY ("device_id") REFERENCES "public"."devices"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shares" ADD CONSTRAINT "shares_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "agent_audit_token_idx" ON "agent_audit" USING btree ("token_id","id");--> statement-breakpoint
-CREATE INDEX "agent_tokens_user_idx" ON "agent_tokens" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "agent_audit_grant_idx" ON "agent_audit" USING btree ("grant_id","at");--> statement-breakpoint
+CREATE INDEX "agent_grants_user_idx" ON "agent_grants" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "attachments_user_idx" ON "attachments" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "attachments_note_idx" ON "attachments" USING btree ("note_id");--> statement-breakpoint
 CREATE INDEX "devices_user_idx" ON "devices" USING btree ("user_id");--> statement-breakpoint
@@ -180,6 +214,7 @@ CREATE UNIQUE INDEX "doc_updates_client_msg_idx" ON "doc_updates" USING btree ("
 CREATE INDEX "docs_user_idx" ON "docs" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "docs_notebook_idx" ON "docs" USING btree ("notebook_id");--> statement-breakpoint
 CREATE INDEX "notebooks_user_idx" ON "notebooks" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "oauth_tokens_grant_idx" ON "oauth_tokens" USING btree ("grant_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "refresh_tokens_hash_idx" ON "refresh_tokens" USING btree ("token_hash");--> statement-breakpoint
 CREATE INDEX "refresh_tokens_device_idx" ON "refresh_tokens" USING btree ("device_id");--> statement-breakpoint
 CREATE INDEX "shares_user_idx" ON "shares" USING btree ("user_id");

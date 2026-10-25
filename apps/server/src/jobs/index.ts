@@ -1,6 +1,15 @@
 import { and, asc, gt, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import type { AppContext } from '../context.js';
-import { attachments, devices, docs, recoveryTokens, refreshTokens, storageTrash } from '../db/schema.js';
+import {
+  attachments,
+  devices,
+  docs,
+  oauthCodes,
+  oauthTokens,
+  recoveryTokens,
+  refreshTokens,
+  storageTrash,
+} from '../db/schema.js';
 
 export const COMPACT_JOB = 'doc-compact';
 export const CLEANUP_JOB = 'cleanup';
@@ -19,6 +28,8 @@ export async function runCleanup(ctx: AppContext): Promise<{ blobs: number }> {
     .delete(attachments)
     .where(and(isNull(attachments.completedAt), lt(attachments.createdAt, new Date(now - STALE_UPLOAD_DAYS * DAY_MS))));
   await db.delete(refreshTokens).where(lt(refreshTokens.expiresAt, new Date(now)));
+  await db.delete(oauthCodes).where(lt(oauthCodes.expiresAt, new Date(now)));
+  await db.delete(oauthTokens).where(lt(oauthTokens.expiresAt, new Date(now)));
   await db
     .delete(recoveryTokens)
     .where(or(lt(recoveryTokens.expiresAt, new Date(now)), isNotNull(recoveryTokens.usedAt)));

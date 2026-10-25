@@ -1,1 +1,0 @@
-- 2026-10-25 · core · `meta` блокнота с копией имени, иконки и пространства (`setNotebookMeta`); перепривязка штрихов при перестройке блоков (`captureAnchorOffsets` → `reanchorStrokes`); `ts.yml` с PostgreSQL для тестов сервера и проверкой формата только для пакетов на корневом Prettier.

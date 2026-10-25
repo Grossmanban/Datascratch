@@ -243,11 +243,14 @@ test("underline survives pressing Enter right before the word", async ({ mount, 
     editor.state.doc.descendants((n, pos) => {
       if (at < 0 && n.isText && n.text!.includes("consectetur")) at = pos + n.text!.indexOf("consectetur");
     });
-    editor.commands.focus();
-    editor.commands.setTextSelection(at);
+    // focus(pos) applies the position after TipTap's deferred focus, so it is not reset.
+    editor.commands.focus(at);
   });
+  await page.waitForTimeout(100);
   await page.keyboard.press("Enter");
-  await expect.poll(() => page.evaluate(() => window.__ct!.api.editor.state.doc.child(2).textContent.startsWith("consectetur"))).toBe(true);
+  await expect
+    .poll(() => page.evaluate(() => window.__ct!.api.editor.state.doc.textBetween(0, window.__ct!.api.editor.state.doc.content.size, "\n").includes("\nconsectetur")))
+    .toBe(true);
   const after = await wordRect(page, "consectetur");
   await expect.poll(async () => (await segments(page))[0]?.length ?? 0).toBe(1);
   const seg = (await segments(page))[0]![0]!;

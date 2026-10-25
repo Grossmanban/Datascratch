@@ -18,8 +18,11 @@ struct DemoView: View {
                     ToolPalette(model: model)
                         .padding(.bottom, 12)
                 } else {
+                    // The editor keeps its size when the keyboard appears and insets its own
+                    // scrolling (resizing it during a tap into the text crashed UIKit).
                     EditorRepresentable(editor: model.editor)
                         .accessibilityIdentifier("editor")
+                        .ignoresSafeArea(.keyboard, edges: .bottom)
                         .safeAreaInset(edge: .bottom, spacing: 0) {
                             ToolPalette(model: model)
                                 .padding(.top, 8)

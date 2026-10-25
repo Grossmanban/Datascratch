@@ -201,7 +201,14 @@ export class SyncClient {
       detach: () => doc.off("update", handler),
     };
     this.docs.set(docId, entry);
-    if (this.welcomed) this.send({ type: "subscribe", docs: [{ docId, since: state.lastSeq }] });
+    if (this.welcomed) {
+      // Subscribe before pushing (sync-protocol.md §3), then send what was queued for this doc.
+      this.send({ type: "subscribe", docs: [{ docId, since: state.lastSeq }] });
+      await this.serial(async () => {
+        for (const item of await this.opts.storage.listOutbox())
+          if (item.docId === docId) this.sendItem(item);
+      });
+    }
   }
 
   /** Stop syncing a document (its pending local updates are still stored and sent). */
@@ -354,6 +361,8 @@ export class SyncClient {
   }
 
   private sendItem(item: OutboxItem): void {
+    // Items of documents not subscribed on this connection wait until addDoc().
+    if (!this.docs.has(item.docId)) return;
     if (item.kind === "push") {
       this.send({
         type: "push",

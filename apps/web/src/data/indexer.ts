@@ -115,7 +115,7 @@ export class Indexer {
         noteId: ix.noteId,
         notebookId: info.notebookId,
         title: ix.title,
-        text: ix.plainText,
+        text: withoutTitle(ix.plainText, ix.title),
         tags: ix.tags,
         links: [...new Set(ix.links.map((l) => l.toNoteId))],
         updatedAt: Date.now(),
@@ -154,6 +154,13 @@ export class Indexer {
         score: r.score,
       }));
   }
+}
+
+/** The shared plain text starts with the title; lists and snippets show it separately. */
+function withoutTitle(text: string, title: string): string {
+  const t = title.trim();
+  if (t && text.startsWith(t)) return text.slice(t.length).replace(/^\s+/, "");
+  return text;
 }
 
 function snippetAround(text: string, terms: string[]): string {

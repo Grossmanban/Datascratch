@@ -29,7 +29,22 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        // Precache the app shell only; heavy lazy editor modules (Mermaid diagrams, layout
+        // engines) are cached on first use so the service worker installs quickly.
+        globPatterns: [
+          "index.html",
+          "assets/{index,editor,react,sodium,kdf.worker,katex,workbox-window}*.{js,css}",
+          "assets/*.woff2",
+          "*.{svg,png}",
+          "icons/*.png",
+        ],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith("/assets/"),
+            handler: "CacheFirst",
+            options: { cacheName: "ds-assets", expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 60 } },
+          },
+        ],
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/v1\//],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,

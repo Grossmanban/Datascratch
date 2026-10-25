@@ -53,7 +53,7 @@ final class EditorTextView: UITextView {
     /// text interactions are attached anyway.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard let hit = super.hitTest(point, with: event) else { return nil }
-        if hit === self { return hit }
+        if hit === self || EditorDiagnostics.off("hitfix") { return hit }
         if Self.isTextKitInternal(hit) { return self }
         // Attachment views are recycled by TextKit on relayout too: only views that really handle
         // touches themselves (controls, text fields, their own recognizers) keep them.

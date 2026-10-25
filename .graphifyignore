@@ -7,3 +7,5 @@ graphify-out/
 packages/agents/test/__images__/
 docs/changelog.d/
 **/*.xcassets/
+apps/ios/Packages/DSDesign/Sources/DSDesign/Resources/SampleCovers/
+packages/ui/src/stories/assets/

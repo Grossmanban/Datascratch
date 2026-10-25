@@ -1,0 +1,200 @@
+/*
+ * @datascratch/ui stylesheet. Import once in the app entry (after fonts.css):
+ *   import "@datascratch/ui/fonts.css";
+ *   import "@datascratch/ui/styles.css";
+ * Apps that run their own Tailwind build add `@source` for their files.
+ */
+@import "tailwindcss";
+@import "@datascratch/design-tokens/tokens.css";
+@import "@datascratch/design-tokens/theme.css";
+
+@source "./";
+
+/* ---------- interaction surfaces (derived from ink, no extra tokens) ---------- */
+
+@utility bg-hover {
+  background-color: color-mix(in oklab, var(--ds-text-primary) 5%, transparent);
+}
+@utility bg-pressed {
+  background-color: color-mix(in oklab, var(--ds-text-primary) 9%, transparent);
+}
+@utility bg-selected {
+  background-color: color-mix(in oklab, var(--ds-text-primary) 7.5%, transparent);
+}
+@utility bg-accent-soft {
+  background-color: color-mix(in oklab, var(--ds-accent) 12%, transparent);
+}
+@utility bg-danger-soft {
+  background-color: color-mix(in oklab, var(--ds-danger) 12%, transparent);
+}
+@utility border-hairline {
+  border-color: color-mix(in oklab, var(--ds-line-separator) 100%, transparent);
+}
+@utility focus-ring {
+  outline: 2px solid color-mix(in oklab, var(--ds-accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+/* Floating glass: translucent surface, blur, hairline and an inner highlight. */
+@utility glass {
+  background-color: var(--ds-bg-elevated);
+  -webkit-backdrop-filter: blur(24px) saturate(1.7);
+  backdrop-filter: blur(24px) saturate(1.7);
+  border: 1px solid color-mix(in oklab, var(--ds-line-separator) 70%, transparent);
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, white var(--ui-glass-highlight, 55%), transparent),
+    var(--ds-shadow-popover);
+}
+
+@utility paper-noise {
+  background-image: var(--ds-noise);
+  background-size: 160px 160px;
+  mix-blend-mode: var(--ui-noise-blend, multiply);
+}
+
+@layer base {
+  html {
+    background-color: var(--ds-bg-canvas);
+    color: var(--ds-text-primary);
+    font-family: var(--ds-font-text);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background-color: color-mix(in oklab, var(--ds-accent) 24%, transparent);
+  }
+  :focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--ds-accent) 55%, transparent);
+    outline-offset: 2px;
+  }
+}
+
+/* Dark theme: grain blends softly, glass highlight is barely there. */
+[data-theme="dark"] {
+  --ui-glass-highlight: 7%;
+  --ui-noise-blend: soft-light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ui-glass-highlight: 7%;
+    --ui-noise-blend: soft-light;
+  }
+}
+
+/* ---------- popover / menu / dialog motion (Radix data-state) ---------- */
+
+@keyframes ds-pop-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--ds-pop-x, 0), var(--ds-pop-y, 4px)) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+@keyframes ds-pop-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+@keyframes ds-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ds-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes ds-sheet-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes ds-sheet-out-right {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+@keyframes ds-sheet-in-bottom {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes ds-sheet-out-bottom {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+@keyframes ds-shimmer {
+  from { background-position: 150% 0; }
+  to { background-position: -50% 0; }
+}
+@keyframes ds-spin {
+  to { transform: rotate(360deg); }
+}
+
+@utility animate-pop {
+  transform-origin: var(--radix-popper-transform-origin, var(--radix-dropdown-menu-content-transform-origin, center));
+  &[data-side="top"] { --ds-pop-y: -4px; }
+  &[data-side="bottom"] { --ds-pop-y: 4px; }
+  &[data-side="left"] { --ds-pop-x: -4px; --ds-pop-y: 0; }
+  &[data-side="right"] { --ds-pop-x: 4px; --ds-pop-y: 0; }
+  &[data-state="open"],
+  &[data-state="delayed-open"],
+  &[data-state="instant-open"] {
+    animation: ds-pop-in var(--ds-motion-snappy-duration) var(--ds-motion-snappy-easing);
+  }
+  &[data-state="closed"] {
+    animation: ds-pop-out var(--ds-duration-fast) ease-in forwards;
+  }
+}
+@utility animate-overlay {
+  &[data-state="open"] { animation: ds-fade-in var(--ds-duration-base) ease-out; }
+  &[data-state="closed"] { animation: ds-fade-out var(--ds-duration-fast) ease-in forwards; }
+}
+@utility animate-sheet-right {
+  &[data-state="open"] { animation: ds-sheet-in-right var(--ds-motion-smooth-duration) var(--ds-motion-smooth-easing); }
+  &[data-state="closed"] { animation: ds-sheet-out-right var(--ds-duration-slow) ease-in forwards; }
+}
+@utility animate-sheet-bottom {
+  &[data-state="open"] { animation: ds-sheet-in-bottom var(--ds-motion-smooth-duration) var(--ds-motion-smooth-easing); }
+  &[data-state="closed"] { animation: ds-sheet-out-bottom var(--ds-duration-slow) ease-in forwards; }
+}
+@utility animate-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    color-mix(in oklab, var(--ds-bg-surface) 70%, transparent) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: ds-shimmer 1.6s ease-in-out infinite;
+}
+@utility animate-spin-ds {
+  animation: ds-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pop[data-state],
+  .animate-sheet-right[data-state],
+  .animate-sheet-bottom[data-state] {
+    animation-name: ds-fade-in;
+    animation-duration: var(--ds-duration-fast);
+  }
+  .animate-pop[data-state="closed"],
+  .animate-sheet-right[data-state="closed"],
+  .animate-sheet-bottom[data-state="closed"] {
+    animation-name: ds-fade-out;
+  }
+  .animate-shimmer {
+    animation: none;
+  }
+  .animate-spin-ds {
+    animation-duration: 2.4s;
+  }
+}

@@ -153,6 +153,21 @@ final class EditorViewTests: XCTestCase {
         XCTAssertTrue(editor.textView.textStorage.string.contains("Hello brave \nnew world"))
     }
 
+    func testTypingThroughTextViewReachesDocument() {
+        let p = BlockNode.paragraph("Hello")
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), p])
+        let editor = host(doc)
+        editor.tools.mode = .text
+        let end = editor.projection.offset(block: p.id, offset: 5)!
+        editor.textView.selectedRange = NSRange(location: end, length: 0)
+        editor.textView.insertText(" world")
+        XCTAssertEqual(doc.flatText(of: p.id), "Hello world")
+        editor.textView.insertText("\n")
+        XCTAssertEqual(doc.blocks.count, 3, "Return splits the paragraph in the document")
+        editor.undo()
+        XCTAssertEqual(doc.blocks.count, 2)
+    }
+
     func testOpenLargeNote() {
         let doc = SampleDocument.large()
         let start = CACurrentMediaTime()

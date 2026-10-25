@@ -14,15 +14,32 @@ export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
   active?: boolean;
 }
 
-const sizes = { sm: "size-7 [&_svg]:size-4", md: "size-8 [&_svg]:size-[18px]", lg: "size-10 [&_svg]:size-5" };
+const sizes = {
+  sm: "size-7 [&_svg]:size-4",
+  md: "size-8 [&_svg]:size-[18px]",
+  lg: "size-10 [&_svg]:size-5",
+};
 const variants = {
   ghost: "text-fg-secondary hover:bg-hover hover:text-fg active:bg-pressed",
-  secondary: "border border-hairline bg-surface text-fg shadow-[0_1px_2px_0_rgb(29_28_26/0.05)] hover:bg-hover",
+  secondary:
+    "border border-hairline bg-surface text-fg shadow-[0_1px_2px_0_rgb(29_28_26/0.05)] hover:bg-hover",
   glass: "glass text-fg hover:brightness-[1.03]",
 };
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  { label, icon, size = "md", variant = "ghost", shape = "square", shortcut, tooltip = true, active, className, type, ...rest },
+  {
+    label,
+    icon,
+    size = "md",
+    variant = "ghost",
+    shape = "square",
+    shortcut,
+    tooltip = true,
+    active,
+    className,
+    type,
+    ...rest
+  },
   ref,
 ) {
   const button = (

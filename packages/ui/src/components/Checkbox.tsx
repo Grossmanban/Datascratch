@@ -41,11 +41,21 @@ export const Checkbox = forwardRef<HTMLButtonElement, CheckboxProps>(function Ch
       )}
     >
       <C.Indicator className="text-on-accent" forceMount>
-        <svg viewBox="0 0 14 14" className="size-3 opacity-0 transition-opacity duration-fast [[data-state=checked]_&]:opacity-100 [[data-state=indeterminate]_&]:opacity-100" fill="none">
+        <svg
+          viewBox="0 0 14 14"
+          className="size-3 opacity-0 transition-opacity duration-fast [[data-state=checked]_&]:opacity-100 [[data-state=indeterminate]_&]:opacity-100"
+          fill="none"
+        >
           {checked === "indeterminate" ? (
             <path d="M3.5 7h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           ) : (
-            <path d="M3 7.4 5.8 10 11 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d="M3 7.4 5.8 10 11 4"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           )}
         </svg>
       </C.Indicator>
@@ -55,7 +65,10 @@ export const Checkbox = forwardRef<HTMLButtonElement, CheckboxProps>(function Ch
   return (
     <div className={cn("flex items-center gap-2.5", className)}>
       {box}
-      <label htmlFor={cid} className="cursor-pointer select-none text-callout text-fg peer-disabled:cursor-default peer-disabled:opacity-50">
+      <label
+        htmlFor={cid}
+        className="cursor-pointer select-none text-callout text-fg peer-disabled:cursor-default peer-disabled:opacity-50"
+      >
         {label}
       </label>
     </div>
@@ -117,24 +130,50 @@ export const TaskCheckbox = forwardRef<HTMLButtonElement, TaskCheckboxProps>(fun
       {/* fill */}
       <motion.span
         aria-hidden
-        className={cn("absolute inset-0 rounded-full", cancelled ? "bg-fg-tertiary/25" : "bg-accent")}
+        className={cn(
+          "absolute inset-0 rounded-full",
+          cancelled ? "bg-fg-tertiary/25" : "bg-accent",
+        )}
         initial={false}
         animate={{ scale: done || cancelled ? 1 : 0, opacity: done || cancelled ? 1 : 0 }}
         transition={pop}
       />
       {/* hover hint */}
       {!done && !cancelled && (
-        <svg aria-hidden viewBox="0 0 20 20" className="absolute inset-0 opacity-0 transition-opacity duration-fast group-hover:opacity-40" fill="none">
-          <path d="M6 10.3 8.7 13 14 7.3" stroke="var(--ds-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <svg
+          aria-hidden
+          viewBox="0 0 20 20"
+          className="absolute inset-0 opacity-0 transition-opacity duration-fast group-hover:opacity-40"
+          fill="none"
+        >
+          <path
+            d="M6 10.3 8.7 13 14 7.3"
+            stroke="var(--ds-accent)"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       )}
-      <svg aria-hidden viewBox="0 0 20 20" className="relative" width={size} height={size} fill="none">
+      <svg
+        aria-hidden
+        viewBox="0 0 20 20"
+        className="relative"
+        width={size}
+        height={size}
+        fill="none"
+      >
         {cancelled ? (
-          <path d="M7 7l6 6M13 7l-6 6" stroke="var(--ds-text-secondary)" strokeWidth="1.8" strokeLinecap="round" />
+          <path
+            d="M7 7l6 6M13 7l-6 6"
+            stroke="var(--ds-text-secondary)"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
         ) : (
           <motion.path
             d="M6 10.3 8.7 13 14 7.3"
-            stroke="var(--ui-on-accent)"
+            stroke="var(--ds-text-on-accent)"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"

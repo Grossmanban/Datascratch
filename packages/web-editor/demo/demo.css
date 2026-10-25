@@ -14,16 +14,6 @@ body {
     background: var(--ds-bg-canvas, #1a1917);
     color: var(--ds-text-primary, #ece9e3);
   }
-  .ds-editor {
-    --ds-bg-surface: #22211e;
-    --ds-text-primary: #ece9e3;
-    --ds-text-secondary: #a19d95;
-    --ds-text-tertiary: #77736c;
-    --ds-line-separator: #34322e;
-    --ds-accent: #7b9bff;
-    --ds-ink-black: #ece9e3;
-    --ds-ink-blue: #7b9bff;
-  }
 }
 .demo-bar {
   position: sticky;

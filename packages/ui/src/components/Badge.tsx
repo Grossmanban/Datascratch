@@ -19,7 +19,15 @@ const tones = {
 };
 
 /** Small pill: counts, statuses ("Для агентов", "Общий"). */
-export function Badge({ tint, tone = "neutral", icon, className, style, children, ...rest }: BadgeProps) {
+export function Badge({
+  tint,
+  tone = "neutral",
+  icon,
+  className,
+  style,
+  children,
+  ...rest
+}: BadgeProps) {
   return (
     <span
       className={cn(
@@ -46,7 +54,14 @@ export interface TagChipProps {
 }
 
 /** `#tag` chip. Nested tags show their path ("work/clients"). */
-export function TagChip({ name, tint = "gray", onRemove, onClick, size = "md", className }: TagChipProps) {
+export function TagChip({
+  name,
+  tint = "gray",
+  onRemove,
+  onClick,
+  size = "md",
+  className,
+}: TagChipProps) {
   const t = useStrings();
   const Comp = onClick ? "button" : "span";
   return (
@@ -66,7 +81,10 @@ export function TagChip({ name, tint = "gray", onRemove, onClick, size = "md", c
           onRemove && "pr-1",
         )}
       >
-        <Hash className={cn("shrink-0 opacity-70", size === "md" ? "size-3" : "size-2.5")} aria-hidden />
+        <Hash
+          className={cn("shrink-0 opacity-70", size === "md" ? "size-3" : "size-2.5")}
+          aria-hidden
+        />
         <span className="truncate">{name}</span>
       </Comp>
       {onRemove && (

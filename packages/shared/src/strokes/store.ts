@@ -239,6 +239,27 @@ function atPath(root: Y.XmlFragment, path: number[]): Y.XmlText | null {
 }
 
 /**
+ * Re-encode anchors resolved in `oldDoc` onto the structurally identical
+ * `content` of `newDoc` (same element path and character index). Anchors that
+ * are deleted or cannot be mapped are returned unchanged.
+ */
+export function rebaseAnchorsByIndex(
+  oldDoc: Y.Doc,
+  newDoc: Y.Doc,
+  anchors: readonly Uint8Array[],
+): Uint8Array[] {
+  const fromRoot = oldDoc.getXmlFragment(NOTE_ROOTS.content);
+  const toRoot = newDoc.getXmlFragment(NOTE_ROOTS.content);
+  return anchors.map((encoded) => {
+    const r = resolveAnchors(oldDoc, [encoded])[0];
+    if (!r || r.deleted) return encoded;
+    const path = pathOf(r.text, fromRoot);
+    const target = path ? atPath(toRoot, path) : null;
+    return target ? encodeAnchor(target, r.index) : encoded;
+  });
+}
+
+/**
  * Restore `content` and `strokes` of a note from a historical state (e.g. the
  * decrypted payload of `GET /docs/:id/versions/:seq`). The content is rewritten
  * as new Yjs items, so text anchors are recomputed by absolute position: the
@@ -257,13 +278,7 @@ export function restoreNoteVersion(doc: Y.Doc, versionState: Uint8Array, origin?
     for (const key of [...strokes.keys()]) strokes.delete(key);
     for (const { id, stroke } of listStrokes(version)) {
       if (stroke.anchorKind === "text") {
-        stroke.anchors = stroke.anchors.map((encoded) => {
-          const r = resolveAnchors(version, [encoded])[0];
-          if (!r || r.deleted) return encoded;
-          const path = pathOf(r.text, fromRoot);
-          const target = path ? atPath(toRoot, path) : null;
-          return target ? encodeAnchor(target, r.index) : encoded;
-        });
+        stroke.anchors = rebaseAnchorsByIndex(version, doc, stroke.anchors);
       }
       putStroke(doc, id, stroke);
     }

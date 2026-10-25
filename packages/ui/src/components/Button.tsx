@@ -13,7 +13,8 @@ const variants: Record<ButtonVariant, string> = {
   secondary:
     "bg-surface text-fg border border-hairline shadow-[0_1px_2px_0_rgb(29_28_26/0.05)] hover:bg-[color-mix(in_oklab,var(--ds-bg-surface),var(--ds-text-primary)_4%)] active:bg-[color-mix(in_oklab,var(--ds-bg-surface),var(--ds-text-primary)_8%)]",
   ghost: "text-fg hover:bg-hover active:bg-pressed",
-  danger: "text-danger hover:bg-danger-soft active:bg-[color-mix(in_oklab,var(--ds-danger)_18%,transparent)]",
+  danger:
+    "text-danger hover:bg-danger-soft active:bg-[color-mix(in_oklab,var(--ds-danger)_18%,transparent)]",
 };
 
 const sizes: Record<ButtonSize, string> = {
@@ -32,7 +33,11 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   asChild?: boolean;
 }
 
-export const buttonClasses = (variant: ButtonVariant = "secondary", size: ButtonSize = "md", className?: string) =>
+export const buttonClasses = (
+  variant: ButtonVariant = "secondary",
+  size: ButtonSize = "md",
+  className?: string,
+) =>
   cn(
     "relative inline-flex select-none items-center justify-center whitespace-nowrap outline-none",
     "transition-[background-color,box-shadow,opacity,filter,transform] duration-fast ease-snappy",
@@ -43,7 +48,19 @@ export const buttonClasses = (variant: ButtonVariant = "secondary", size: Button
   );
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = "secondary", size = "md", loading = false, leading, trailing, asChild, className, children, disabled, type, ...rest },
+  {
+    variant = "secondary",
+    size = "md",
+    loading = false,
+    leading,
+    trailing,
+    asChild,
+    className,
+    children,
+    disabled,
+    type,
+    ...rest
+  },
   ref,
 ) {
   const Comp = asChild ? Slot.Root : "button";

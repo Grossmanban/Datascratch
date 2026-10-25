@@ -16,7 +16,18 @@ export interface SwitchProps {
 }
 
 export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(function Switch(
-  { checked, defaultChecked, onCheckedChange, disabled, label, description, size = "md", id, className, ...aria },
+  {
+    checked,
+    defaultChecked,
+    onCheckedChange,
+    disabled,
+    label,
+    description,
+    size = "md",
+    id,
+    className,
+    ...aria
+  },
   ref,
 ) {
   const auto = useId();
@@ -54,7 +65,9 @@ export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(function Switch
     <div className={cn("flex items-center justify-between gap-4", className)}>
       <label htmlFor={sid} className="min-w-0 cursor-pointer select-none">
         <span className="block text-callout text-fg">{label}</span>
-        {description && <span className="block text-footnote text-fg-secondary">{description}</span>}
+        {description && (
+          <span className="block text-footnote text-fg-secondary">{description}</span>
+        )}
       </label>
       {sw}
     </div>

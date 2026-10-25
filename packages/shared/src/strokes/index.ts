@@ -4,3 +4,4 @@ export * from "./width.js";
 export * from "./layout.js";
 export * from "./store.js";
 export * from "../contracts/strokes.js";
+export * from "./reanchor.js";

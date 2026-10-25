@@ -5,7 +5,7 @@
   --color-*: initial;
   --color-transparent: transparent;
   --color-current: currentColor;
-  --color-white: #FFFFFF;
+  --color-white: #ffffff;
   --color-black: #000000;
   --color-canvas: var(--ds-bg-canvas);
   --color-surface: var(--ds-bg-surface);
@@ -14,6 +14,7 @@
   --color-fg: var(--ds-text-primary);
   --color-fg-secondary: var(--ds-text-secondary);
   --color-fg-tertiary: var(--ds-text-tertiary);
+  --color-on-accent: var(--ds-text-on-accent);
   --color-separator: var(--ds-line-separator);
   --color-accent: var(--ds-accent);
   --color-danger: var(--ds-danger);

@@ -1,0 +1,165 @@
+{
+  "generator": "yjs 13.6.27 / y-prosemirror 1.3.7",
+  "update": "AS_gkdLWAwAHAQdjb250ZW50AwV0aXRsZQcA4JHS1gMABgQA4JHS1gMBE9CX0LDQvNC10YLQutCwIPCfmIAoAOCR0tYDAAdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAxh-CR0tYDAAMJcGFyYWdyYXBoBwDgkdLWAw0GBADgkdLWAw4GSGVsbG8ghuCR0tYDFARib2xkAnt9hOCR0tYDFQRib2xkhuCR0tYDGQRib2xkBG51bGyE4JHS1gMaBSBhbmQghuCR0tYDHwZpdGFsaWMCe32G4JHS1gMgBGxpbmseeyJocmVmIjoiaHR0cHM6Ly9leGFtcGxlLmNvbSJ9hOCR0tYDIQRsaW5rhuCR0tYDJQZpdGFsaWMEbnVsbIbgkdLWAyYEbGluawRudWxsh-CR0tYDDgMIbm90ZUxpbmsoAOCR0tYDKAZub3RlSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwYWEoAOCR0tYDKAVsYWJlbAF3BU90aGVyh-CR0tYDKAMJaGFyZEJyZWFrh-CR0tYDKwYGAOCR0tYDLAloaWdobGlnaHQSeyJjb2xvciI6InllbGxvdyJ9hOCR0tYDLQR0YWlshuCR0tYDMQloaWdobGlnaHQEbnVsbCgA4JHS1gMNB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDKH4JHS1gMNAwdoZWFkaW5nBwDgkdLWAzQGBADgkdLWAzUFVGFza3MoAOCR0tYDNAdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAzKADgkdLWAzQFbGV2ZWwBfQKH4JHS1gM0Awh0YXNrTGlzdAcA4JHS1gM9Awh0YXNrSXRlbQcA4JHS1gM-AwlwYXJhZ3JhcGgHAOCR0tYDPwYEAOCR0tYDQAhCdXkgbWlsaygA4JHS1gM_B2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDYoAOCR0tYDPgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1KADgkdLWAz4GdGFza0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMHQxKADgkdLWAz4Fc3RhdGUBdwRkb25lKADgkdLWAz4Jc2NoZWR1bGVkAXcKMjAyNi0xMC0yNSgA4JHS1gM-C2NvbXBsZXRlZEF0AXcYMjAyNi0xMC0yNVQxMjowMDowMC4wMDBaKADgkdLWAz0HYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNCgBBG1ldGENZm9ybWF0VmVyc2lvbgF9AScBB3N0cm9rZXMCczEBKADgkdLWA1EBdgF9ASMA4JHS1gNRBnBvaW50cwQAAIA_KADgkdLWA1EGYXV0aG9yAXYCBGtpbmR3BHVzZXICaWR3AnUxAA",
+  "prosemirror": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "title",
+        "attrs": {
+          "blockId": "0192f3c4-0000-7000-8000-000000000001"
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Заметка 😀"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "attrs": {
+          "blockId": "0192f3c4-0000-7000-8000-000000000002"
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello "
+          },
+          {
+            "type": "text",
+            "text": "bold",
+            "marks": [
+              {
+                "type": "bold",
+                "attrs": {}
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": " and "
+          },
+          {
+            "type": "text",
+            "text": "link",
+            "marks": [
+              {
+                "type": "italic",
+                "attrs": {}
+              },
+              {
+                "type": "link",
+                "attrs": {
+                  "href": "https://example.com"
+                }
+              }
+            ]
+          },
+          {
+            "type": "noteLink",
+            "attrs": {
+              "noteId": "0192f3c4-0000-7000-8000-0000000000aa",
+              "label": "Other"
+            }
+          },
+          {
+            "type": "hardBreak"
+          },
+          {
+            "type": "text",
+            "text": "tail",
+            "marks": [
+              {
+                "type": "highlight",
+                "attrs": {
+                  "color": "yellow"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "blockId": "0192f3c4-0000-7000-8000-000000000003",
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Tasks"
+          }
+        ]
+      },
+      {
+        "type": "taskList",
+        "attrs": {
+          "blockId": "0192f3c4-0000-7000-8000-000000000004"
+        },
+        "content": [
+          {
+            "type": "taskItem",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000000005",
+              "taskId": "0192f3c4-0000-7000-8000-0000000000t1",
+              "state": "done",
+              "scheduled": "2026-10-25",
+              "completedAt": "2026-10-25T12:00:00.000Z"
+            },
+            "content": [
+              {
+                "type": "paragraph",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000000006"
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Buy milk"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "relativePositions": [
+    {
+      "path": [
+        1,
+        0
+      ],
+      "index": 6,
+      "assoc": 0,
+      "encoded": "AOCR0tYDFgA"
+    },
+    {
+      "path": [
+        1,
+        0
+      ],
+      "index": 6,
+      "assoc": -1,
+      "encoded": "AOCR0tYDFEE"
+    },
+    {
+      "path": [
+        0,
+        0
+      ],
+      "index": 8,
+      "assoc": 0,
+      "encoded": "AOCR0tYDCgA"
+    },
+    {
+      "path": [],
+      "index": 2,
+      "assoc": 0,
+      "encoded": "AOCR0tYDNAA"
+    }
+  ]
+}

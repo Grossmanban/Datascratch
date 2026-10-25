@@ -12,7 +12,14 @@ export interface TooltipProps {
   className?: string;
 }
 
-export function Tooltip({ content, shortcut, side = "top", children, delayDuration, className }: TooltipProps) {
+export function Tooltip({
+  content,
+  shortcut,
+  side = "top",
+  children,
+  delayDuration,
+  className,
+}: TooltipProps) {
   return (
     <T.Root {...(delayDuration !== undefined ? { delayDuration } : {})}>
       <T.Trigger asChild>{children}</T.Trigger>
@@ -27,7 +34,12 @@ export function Tooltip({ content, shortcut, side = "top", children, delayDurati
           )}
         >
           {content}
-          {shortcut && <Kbd shortcut={shortcut} className="[&>span]:border-transparent [&>span]:bg-[color-mix(in_oklab,var(--ds-bg-canvas)_16%,transparent)] [&>span]:text-canvas" />}
+          {shortcut && (
+            <Kbd
+              shortcut={shortcut}
+              className="[&>span]:border-transparent [&>span]:bg-[color-mix(in_oklab,var(--ds-bg-canvas)_16%,transparent)] [&>span]:text-canvas"
+            />
+          )}
         </T.Content>
       </T.Portal>
     </T.Root>

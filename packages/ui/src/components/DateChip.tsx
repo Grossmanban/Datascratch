@@ -28,7 +28,10 @@ export const DateChip = forwardRef<HTMLButtonElement, DateChipProps>(function Da
   ref,
 ) {
   const locale = useLocale();
-  const { label, tone } = dateLabel(date, now ?? new Date(), locale, { deadline: kind === "deadline", completed: !!completed });
+  const { label, tone } = dateLabel(date, now ?? new Date(), locale, {
+    deadline: kind === "deadline",
+    completed: !!completed,
+  });
   const Icon = kind === "deadline" ? Flag : CalendarDays;
   const content = (
     <>
@@ -39,7 +42,8 @@ export const DateChip = forwardRef<HTMLButtonElement, DateChipProps>(function Da
   const cls = cn(
     "inline-flex h-5 max-w-full items-center gap-1 rounded-full px-2 text-caption font-medium tabular-nums outline-none",
     tones[tone],
-    onClick && "cursor-pointer transition-[filter] duration-fast hover:brightness-95 focus-visible:focus-ring",
+    onClick &&
+      "cursor-pointer transition-[filter] duration-fast hover:brightness-95 focus-visible:focus-ring",
     className,
   );
   const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;

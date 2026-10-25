@@ -42,7 +42,8 @@ func resolved(_ doc: EditorDocument, _ s: Stroke) -> [TextPosition?] { s.anchors
         let caret = cmd.splitParagraph(at: TextPosition(block: b, offset: 12))!
         #expect(doc.flatText(of: b) == "Hello brave ")
         #expect(doc.flatText(of: caret.block) == "new world")
-        let replaced = doc.stroke(s.id)!
+        #expect(doc.stroke(s.id) == nil)
+        let replaced = doc.strokes.last!
         #expect(resolved(doc, replaced) == [0, 1, 2].map { TextPosition(block: caret.block, offset: $0) })
         #expect(replaced.points == s.points)
         #expect(doc.strokes.count == 1)
@@ -74,7 +75,8 @@ func resolved(_ doc: EditorDocument, _ s: Stroke) -> [TextPosition?] { s.anchors
         #expect(caret == TextPosition(block: a.id, offset: 3))
         #expect(doc.flatText(of: a.id) == "abcdef")
         #expect(doc.block(b.id) == nil)
-        let moved = doc.stroke(s.id)!
+        let moved = doc.strokes.first { $0.anchorKind == .text }!
+        #expect(moved.id != s.id)
         #expect(resolved(doc, moved) == [TextPosition(block: a.id, offset: 4)])
         #expect(doc.strokes.first { $0.anchorKind == .block }?.blockId == a.id)
     }
@@ -121,7 +123,8 @@ func resolved(_ doc: EditorDocument, _ s: Stroke) -> [TextPosition?] { s.anchors
         #expect(cmd.indentItem(item))
         p = Projection.build(doc.blocks)
         #expect(p.paragraphs[2].context.listDepth == 2)
-        let moved = doc.stroke(s.id)!
+        let moved = doc.strokes.first!
+        #expect(moved.id != s.id)
         #expect(resolved(doc, moved) == [TextPosition(block: bText, offset: 0)])
         #expect(cmd.outdentItem(item))
         p = Projection.build(doc.blocks)

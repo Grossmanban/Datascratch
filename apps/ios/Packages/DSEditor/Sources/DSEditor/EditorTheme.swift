@@ -93,20 +93,26 @@ public struct EditorTheme: Sendable {
 
     public var bodyFont: UIFont { font(size: baseFontSize) }
 
+    /// Type token of a paragraph kind (`design-tokens.md`: title, h1–h3), nil for body text.
+    static func typeToken(for kind: ParagraphKind, attrs: [String: JSONValue]) -> DSTypeToken? {
+        switch kind.type {
+        case NodeType.title: return .title
+        case NodeType.heading:
+            switch Int(attrs["level"]?.numberValue ?? 1) {
+            case 1: return .h1
+            case 2: return .h2
+            default: return .h3
+            }
+        default: return nil
+        }
+    }
+
     /// Sizes follow Dynamic Type through `baseFontSize`; ink scales with them because it is stored in em.
     public func fontSize(for kind: ParagraphKind, attrs: [String: JSONValue]) -> CGFloat {
         let k = baseFontSize / 17
-        switch kind.type {
-        case NodeType.title: return (34 * k).rounded()
-        case NodeType.heading:
-            switch Int(attrs["level"]?.numberValue ?? 1) {
-            case 1: return (28 * k).rounded()
-            case 2: return (22 * k).rounded()
-            default: return (19 * k).rounded()
-            }
-        case NodeType.codeBlock: return (15 * k).rounded()
-        default: return baseFontSize
-        }
+        if let token = Self.typeToken(for: kind, attrs: attrs) { return (token.value.size * k).rounded() }
+        if kind.type == NodeType.codeBlock { return (15 * k).rounded() }
+        return baseFontSize
     }
 
     /// Body size for the current Dynamic Type setting.
@@ -114,11 +120,13 @@ public struct EditorTheme: Sendable {
         UIFontMetrics(forTextStyle: .body).scaledValue(for: 17, compatibleWith: traits).rounded()
     }
 
-    public func weight(for kind: ParagraphKind) -> UIFont.Weight {
-        switch kind.type {
-        case NodeType.title: .bold
-        case NodeType.heading: .semibold
-        default: .regular
+    public func weight(for kind: ParagraphKind, attrs: [String: JSONValue] = [:]) -> UIFont.Weight {
+        guard let token = Self.typeToken(for: kind, attrs: attrs) else { return .regular }
+        switch token.value.weight {
+        case .regular: return .regular
+        case .medium: return .medium
+        case .semibold: return .semibold
+        case .bold: return .bold
         }
     }
 }

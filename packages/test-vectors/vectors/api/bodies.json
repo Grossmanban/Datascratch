@@ -154,11 +154,46 @@
           }
         },
         {
-          "reason": "recoveryLoginKey is not 32 bytes",
+          "reason": "recoveryLoginKey is 31 bytes",
           "body": {
             "currentLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-            "recoveryLoginKey": "AA",
+            "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             "wrappedMasterKeyRecovery": "AQ"
+          }
+        },
+        {
+          "reason": "empty wrappedMasterKeyRecovery",
+          "body": {
+            "currentLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "wrappedMasterKeyRecovery": ""
+          }
+        }
+      ]
+    },
+    "securityEvent": {
+      "valid": [
+        {
+          "kind": "recovery_key_rotated",
+          "at": "2026-10-25T12:00:00.000Z",
+          "deviceId": "dev-1",
+          "deviceName": "iPad"
+        },
+        {
+          "kind": "recovery_used",
+          "at": "2026-10-25T12:00:00.000Z",
+          "deviceId": null,
+          "deviceName": null
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "unknown kind",
+          "body": {
+            "kind": "login",
+            "at": "2026-10-25T12:00:00.000Z",
+            "deviceId": null,
+            "deviceName": null
           }
         }
       ]

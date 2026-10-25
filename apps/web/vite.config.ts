@@ -2,6 +2,7 @@ import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
+import { SERVER_PATHS } from "./src/lib/serverPaths";
 import { VitePWA } from "vite-plugin-pwa";
 
 // The server address is injected at build/run time via VITE_DS_SERVER_URL;
@@ -46,7 +47,7 @@ export default defineConfig({
           },
         ],
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/v1\//],
+        navigateFallbackDenylist: SERVER_PATHS,
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },
     }),

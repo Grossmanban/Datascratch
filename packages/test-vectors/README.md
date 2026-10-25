@@ -13,6 +13,10 @@
 | `crypto/key-wraps.json` | Обёртки masterKey/notebookKey/noteKey со строками `ad` из `crypto.md` |
 | `crypto/recovery-key.json` | Ключ восстановления `DS1-…` (Crockford Base32), `recoveryLoginKey`; `parse` — разбор пользовательского ввода |
 | `crypto/attachment.json` | Куски вложения по 1 MiB; большие конверты даны длиной и SHA-256 |
+| `crypto/base64url.json` | base64url: граничные длины и строки, которые декодер обязан отвергнуть |
+| `crypto/share-link.json` | Ссылка шеринга `…/s/<shareId>#k=<ключ>`: сборка, разбор, отказы |
+| `crypto/signup-flow.json` | Сквозная регистрация с фиксированной случайностью: что должно уйти в `POST /auth/signup` |
+| `api/bodies.json` | Тела REST API: `valid` принимаются, `invalid` отвергаются схемой с тем же именем |
 | `ids/uuidv7.json` | Сборка UUIDv7 из времени и случайных байт |
 | `strokes/points.json` | Упаковка точек (8 × Float32 LE) |
 | `strokes/anchors.json` | Относительные позиции Yjs после вставок и удалений другим клиентом; D-35 |

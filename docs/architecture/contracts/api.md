@@ -48,6 +48,12 @@
 
 `Notebook = { id, mode, createdAt, wrappedKey }`.
 
+Прочие типы ответов (уточнение 2026-10-25, предложение потока core):
+
+- `Device = { id, name, createdAt, lastSeenAt, current: boolean }`;
+- `Share = { id, target: { kind, id }, permission, expiresAt, createdAt }`;
+- `AgentToken = { id, name, notebookIds, permission, expiresAt, createdAt, lastUsedAt }` (без секрета; секрет только в ответе на создание).
+
 ## Вложения (`crypto.md` §6)
 
 | Метод | Путь | Смысл |

@@ -40,7 +40,7 @@ describe("REST /v1/agent", () => {
     const tasks = await call(`/v1/agent/tasks?state=all`).then((x) => x.json());
     expect(tasks.total).toBe(3);
     const note = await call(`/v1/agent/notes/${NOTE_PLAN}`).then((x) => x.json());
-    const block = /<!-- block:([0-9a-f-]+) -->/.exec(note.markdown)[1];
+    const block = /<!-- block:([0-9a-f-]+) -->/.exec(note.markdown)![1];
     const edit = await call(`/v1/agent/notes/${NOTE_PLAN}/edit`, {
       method: "POST",
       body: JSON.stringify({ operations: [{ op: "insert", position: { after: block }, markdown: "Новый абзац" }] }),

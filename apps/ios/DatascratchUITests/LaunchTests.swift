@@ -116,6 +116,34 @@ final class LibraryUITests: XCTestCase {
         }
     }
 
+    /// Native editor only (DSEditor): switching Text ↔ Pen repeatedly must not crash.
+    func testSwitchingPenToolsInEditor() throws {
+        let app = launchSignedIn()
+        let newNote = app.buttons["library.newNote"].exists ? app.buttons["library.newNote"].firstMatch
+            : app.buttons["library.newNote.floating"].firstMatch
+        if !newNote.waitForExistence(timeout: 5) {
+            app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch.tap()
+        }
+        let button = app.buttons["library.newNote"].exists ? app.buttons["library.newNote"].firstMatch
+            : app.buttons["library.newNote.floating"].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 5))
+        button.tap()
+        let pen = app.buttons["tool.pen"].firstMatch
+        guard pen.waitForExistence(timeout: 5) else {
+            throw XCTSkip("Stand-in editor: no pen palette")
+        }
+        let text = app.buttons["tool.text"].firstMatch
+        for _ in 0..<5 {
+            pen.tap()
+            text.tap()
+        }
+        app.buttons["tool.pencil"].firstMatch.tap()
+        app.buttons["tool.fingerDrawing"].firstMatch.tap()
+        text.tap()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2))
+        XCTAssertTrue(text.exists)
+    }
+
     func testCommandPaletteOpensTasks() throws {
         let app = launchSignedIn()
         let paletteButton = sidebarElement(app, "sidebar.commandPalette")

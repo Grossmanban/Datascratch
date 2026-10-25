@@ -173,7 +173,7 @@ describe('push and live updates between two devices', () => {
     const push = await a.push(foreign, rnd(10));
     expect(push.code).toBe('doc_not_found');
     a.send({ type: 'push', docId: noteId, clientMsgId: 'm', payload: '***' });
-    expect((await a.next((m) => m.type === 'error' && m.ref === 'm')).code).toBe('protocol_mismatch');
+    expect((await a.next((m) => m.type === 'error' && m.ref === 'm')).code).toBe('bad_request');
     a.close();
   });
 
@@ -202,7 +202,7 @@ describe('snapshots, compaction and history', () => {
     a.send({ type: 'snapshot', docId: noteId, clientMsgId: 'snap-1', baseSeq: 4, payload: snap });
     expect(await a.next((m) => m.clientMsgId === 'snap-1')).toMatchObject({ type: 'ack', seq: 4 });
     a.send({ type: 'snapshot', docId: noteId, clientMsgId: 'snap-bad', baseSeq: 99, payload: snap });
-    expect((await a.next((m) => m.ref === 'snap-bad')).code).toBe('protocol_mismatch');
+    expect((await a.next((m) => m.ref === 'snap-bad')).code).toBe('bad_request');
     await s.jobs.drain();
 
     const versions = await api(s, 'GET', `/docs/${noteId}/versions`, { token: u.session.accessToken });

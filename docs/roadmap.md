@@ -18,7 +18,7 @@
 | agents | `claude/agents` | `packages/agents`, `docs/architecture/contracts/agents-api.md` (черновик), `.github/workflows/agents.yml` | MCP, REST для агентов, токены, журнал, рендер PNG | этап 1 влит в main (MCP, OAuth 2.1, REST для агентов, PNG рукописи; на shared) — доводка |
 | web-app | `claude/web-app` | `apps/web`, `.github/workflows/web.yml` | Оболочка веба: вход, боковая панель, пространства/блокноты/папки, списки, задачи, календарь, шеринг, офлайн, PWA | Запущен |
 | web-editor | `claude/web-editor` | `packages/web-editor`, `.github/workflows/web-editor.yml` | TipTap-редактор со всеми блоками, перо на Canvas | этап 3 влит в main (все блоки, перо, лассо, жесты, перепривязка при перестройке блоков; на shared/ui) — подключение компонентов design-system |
-| ios-core | `claude/ios-core` | `apps/ios/Packages/DSCore`, `.github/workflows/ios-core.yml` | Swift: криптография, Yrs-модель документа, GRDB, клиент синхронизации и API, векторы | Запущен |
+| ios-core | `claude/ios-core` | `apps/ios/Packages/DSCore`, `.github/workflows/ios-core.yml` | Swift: криптография, Yrs-модель документа, GRDB, клиент синхронизации и API, векторы | влит в main (DSCore: Yrs через UniFFI, крипто, GRDB, API и синхронизация) — поддержка ios-editor/ios-app |
 | ios-editor | `claude/ios-editor` | `apps/ios/Packages/DSEditor`, `.github/workflows/ios-editor.yml` | TextKit 2 + Yrs + слой пера (живой штрих), блоки, демо-приложение | Запущен |
 | ios-app | `claude/ios-app` | `apps/ios` (кроме `Packages/`), `.github/workflows/ios-app.yml` | XcodeGen-проект, оболочка SwiftUI в стиле Craft, навигация, задачи, календарь, настройки, интеграция пакетов | Запущен |
 

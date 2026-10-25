@@ -1,12 +1,10 @@
 import UIKit
 import XCTest
 
+@MainActor
 final class OnboardingUITests: XCTestCase {
-    override func setUp() {
-        continueAfterFailure = false
-    }
-
     func testSignUpShowsAndConfirmsRecoveryKey() throws {
+        continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing"]
         app.launch()
@@ -51,12 +49,10 @@ final class OnboardingUITests: XCTestCase {
     }
 }
 
+@MainActor
 final class LibraryUITests: XCTestCase {
-    override func setUp() {
-        continueAfterFailure = false
-    }
-
     private func launchSignedIn() -> XCUIApplication {
+        continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-ui-testing-signed-in"]
         app.launch()
@@ -108,7 +104,7 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(paletteButton.exists, "command palette button not found; buttons: \(Self.buttons(app))")
         paletteButton.tap()
         let field = app.textFields["palette.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found; fields: \(app.textFields.allElementsBoundByIndex.map(\.identifier))")
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found; fields: \(app.textFields.allElementsBoundByIndex.map { $0.identifier })")
         field.typeText("Go to Tasks\n")
         XCTAssertTrue(app.segmentedControls["tasks.bucket"].firstMatch.waitForExistence(timeout: 5)
                       || app.otherElements["tasks.bucket"].firstMatch.waitForExistence(timeout: 2))

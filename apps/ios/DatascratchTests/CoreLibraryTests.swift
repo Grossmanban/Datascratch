@@ -117,6 +117,39 @@ struct CoreLibraryTests {
         #expect(relaunched.starredNotes.map(\.id) == starred)
     }
 
+    /// Build 5 (iPad): signing in after working «On this device» switched to the server's account
+    /// document and left the device library behind; its notebooks were never created on the
+    /// server, so POST /docs answered 404 and sync hung. Now the library is carried in.
+    @Test func signingInCarriesTheDeviceLibrary() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        library.seedIfEmpty()
+        let test = library.createSpace(name: "Тест")
+        let notebook = library.createNotebook(in: test.id, name: "Заметки", mode: .private)
+        _ = library.createNote(in: notebook.id, folder: nil, title: "Начало пути")
+        let notes = Set(library.data.notes.map(\.id))
+        let notebooks = Set(library.data.notebooks.map(\.id))
+        let starred = library.starredNotes.map(\.id)
+        let localAccount = core.account.accountDocId
+
+        // Sign in: the account's master key replaces the device one.
+        try keys.setMasterKey(DSCrypto.newKey())
+        let carried = try core.adoptAccount(docId: DSCore.EntityID.make(), isNew: true)
+        #expect(Set(carried.map(\.id)) == notebooks)
+        #expect(Set(library.data.notebooks.map(\.id)) == notebooks)
+        #expect(Set(library.data.notes.map(\.id)) == notes)
+        #expect(library.starredNotes.map(\.id) == starred)
+        #expect(library.spaces.contains { $0.name == "Тест" })
+        // The device-only account document is gone and is not carried twice.
+        #expect(try store.document(localAccount) == nil)
+        #expect(try core.carryDeviceLibraries().isEmpty)
+        // No second welcome document after sign-up seeding.
+        library.seedIfEmpty()
+        #expect(Set(library.data.notes.map(\.id)) == notes)
+    }
+
     @Test func notebookMetaCarriesNamesForAgents() throws {
         let core = try CoreLibrary.inMemory()
         let library = LibraryStore(backend: core)

@@ -266,7 +266,9 @@ export class SyncConnection {
   /** Read access → `false` (read-only) / `true` (write); throws doc_not_found. */
   async #canWrite(docId: string): Promise<boolean> {
     const cached = this.#access.get(docId);
-    if (cached !== undefined) return cached;
+    // A guest's access can change when a note moves; only subscriptions hear about it,
+    // so for unsubscribed documents a guest's access is checked every time.
+    if (cached !== undefined && (this.#principal!.kind === 'user' || this.#subs.has(docId))) return cached;
     const a = await docAccess(this.ctx.database.db, this.#principal!, docId);
     if (!a) throw new SyncError('doc_not_found', 'document not found', docId);
     this.#access.set(docId, a.write);
@@ -405,6 +407,23 @@ export class SyncConnection {
       this.#unsubscribe(docId);
       this.#access.delete(docId);
       this.#send({ type: 'error', code: 'doc_not_found', message: 'document deleted', ref: docId });
+      return;
+    }
+    if (m.type === 'doc_moved') {
+      // Moved to another notebook: a guest of the old notebook's share may lose access.
+      this.#access.delete(docId);
+      this.#queue = this.#queue
+        .then(async () => {
+          if (this.#subs.get(docId) !== sub) return;
+          const a = await docAccess(this.ctx.database.db, this.#principal!, docId);
+          if (a) {
+            this.#access.set(docId, a.write);
+            return;
+          }
+          this.#unsubscribe(docId);
+          this.#send({ type: 'error', code: 'doc_not_found', message: 'document is no longer shared', ref: docId });
+        })
+        .catch((err) => this.#internal(err));
       return;
     }
     if (m.type === 'awareness') {

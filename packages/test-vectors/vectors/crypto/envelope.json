@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "description": "Envelope = 0x01 | nonce(24) | XChaCha20-Poly1305-IETF(plaintext, ad UTF-8, nonce, key). All binary values base64url.",
+  "cases": [
+    {
+      "key": "-AZtuCWEV2q8PGc_fRvrVfZ8Q7LpnMVSinNU2YEZdmk",
+      "nonce": "YESPAEQQUysux7f5DTzAR7dC9JlgyO57",
+      "ad": "ds1|doc|0192f3c4-0000-7000-8000-000000000001",
+      "plaintext": "aGVsbG8sIERhdGFzY3JhdGNo",
+      "envelope": "AWBEjwBEEFMrLse3-Q08wEe3QvSZYMjue962vqHtH8gdATUQLvQaEkRt8C78TB05l-2s3j3bAjF_Y_0"
+    },
+    {
+      "key": "-AZtuCWEV2q8PGc_fRvrVfZ8Q7LpnMVSinNU2YEZdmk",
+      "nonce": "r8SzCh94UMlHWJJW-hHpY3RMhJdxO8_u",
+      "ad": "ds1|doc|0192f3c4-0000-7000-8000-000000000001",
+      "plaintext": "",
+      "envelope": "Aa_EswofeFDJR1iSVvoR6WN0TISXcTvP7t8M9vl091GNUkPOshyhWYM"
+    },
+    {
+      "key": "-AZtuCWEV2q8PGc_fRvrVfZ8Q7LpnMVSinNU2YEZdmk",
+      "nonce": "LBihAnhdVJRfNlKrd1cD5QmWId_dC8KB",
+      "ad": "ds1|awareness|0192f3c4-0000-7000-8000-000000000001",
+      "plaintext": "3VfGgYVwNGLeKyX-hLwYQReTyOIiAG0vvk4KrwJZGIiG5GCUXnWFEnhgps9jxD-WEObEW1BDU2odQnEGDIj1lUr9guZXlIuE-rGnB1z2tnTJSYDec63GkaO6a1PIM_sOAuGNzw",
+      "envelope": "ASwYoQJ4XVSUXzZSq3dXA-UJliHf3QvCgT-is_eEqtJ6p_LDX_ZcLG1cImT6Lue9W-rq1lj63nd5R6xTni2xLLhGU-aVwToPjwWAtKWRmAJcXclx2wuKNKO5Oq175zGIPPYbR9S-gl7DKyhN-3DwnvhsXb8LWnqjoRgFEKLWmzD3z1qcwQBtOK8h-rKz"
+    },
+    {
+      "key": "-AZtuCWEV2q8PGc_fRvrVfZ8Q7LpnMVSinNU2YEZdmk",
+      "nonce": "74nMj68xPzynXD0NzGSdytcXu9ej2SnX",
+      "ad": "",
+      "plaintext": "ZW1wdHkgYWQ",
+      "envelope": "Ae-JzI-vMT88p1w9DcxkncrXF7vXo9kp150MtwmTzYSKtZhGY3zXey2ZHqwSLoBNNQ"
+    }
+  ],
+  "failures": [
+    {
+      "case": "wrong ad",
+      "key": "-AZtuCWEV2q8PGc_fRvrVfZ8Q7LpnMVSinNU2YEZdmk",
+      "ad": "ds1|doc|0192f3c4-0000-7000-8000-000000000002",
+      "envelope": "AWBEjwBEEFMrLse3-Q08wEe3QvSZYMjue962vqHtH8gdATUQLvQaEkRt8C78TB05l-2s3j3bAjF_Y_0",
+      "error": "decrypt_failed"
+    },
+    {
+      "case": "unsupported version",
+      "key": "-AZtuCWEV2q8PGc_fRvrVfZ8Q7LpnMVSinNU2YEZdmk",
+      "ad": "ds1|doc|0192f3c4-0000-7000-8000-000000000001",
+      "envelope": "AgBEjwBEEFMrLse3-Q08wEe3QvSZYMjue962vqHtH8gdATUQLvQaEkRt8C78TB05l-2s3j3bAjF_Y_0",
+      "error": "unsupported_version"
+    },
+    {
+      "case": "too short",
+      "key": "-AZtuCWEV2q8PGc_fRvrVfZ8Q7LpnMVSinNU2YEZdmk",
+      "ad": "",
+      "envelope": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "error": "malformed"
+    }
+  ]
+}

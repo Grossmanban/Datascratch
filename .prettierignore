@@ -1,0 +1,8 @@
+pnpm-lock.yaml
+graphify-out/
+docs/
+apps/ios/
+**/dist/
+**/coverage/
+packages/test-vectors/vectors/
+*.md

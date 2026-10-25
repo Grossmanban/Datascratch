@@ -1,5 +1,7 @@
 # Контракт: дизайн-токены «Тихая бумага» (v1)
 
+> Уточнение 2026-10-25 (поток design-system): шрифт заголовков в вебе — Source Serif 4, токен `text.onAccent`, правила чипа даты.
+
 Связано: D-15, D-38, D-41. Источник истины значений — `packages/design-tokens/tokens.json`; из него генерируются CSS-переменные (веб) и Swift (iOS). Значения ниже — ПРЕДЛОЖЕНО, их настраивает поток дизайн-системы, имена токенов — контракт.
 
 ## Цвета (светлая / тёмная тема)
@@ -18,6 +20,7 @@
 | `danger` | `#D2453B` | `#FF6B5E` | удаление, просрочено |
 | `success` | `#3E8E5A` | `#6BC48A` | выполнено |
 | `warning` | `#C98A1B` | `#F2B54B` | дедлайн скоро |
+| `text.onAccent` | `#FFFFFF` | = `bg.canvas` | текст и иконки на заливке `accent`/`danger` (в тёмной теме акцент светлый, белый на нём не читается) |
 
 **Чернила пера:** `ink.black #1D1C1A`, `ink.blue #2E5BDB`, `ink.red #D2453B`, `ink.green #3E8E5A`, `ink.purple #7A4FD6`, `ink.brown #8A5A32`; маркеры: `highlight.yellow #FFE36E80`, `highlight.green #9BE3A880`, `highlight.pink #FFB3C780`, `highlight.blue #A9CCFF80`. В тёмной теме чернила осветляются генератором (те же имена).
 
@@ -25,11 +28,17 @@
 
 **Подложки (backdrop):** `backdrop.sand`, `backdrop.dusk`, `backdrop.mist`, `backdrop.meadow`, `backdrop.ember` — мягкие градиенты в духе Craft (2–3 цвета + шум).
 
+## Чип даты (одинаково на iOS и в вебе)
+
+- Подпись: «Сегодня», «Завтра», «Вчера»; день недели — на 2–6 дней вперёд; иначе короткая дата по локали («12 ноя»).
+- Цвет: просрочено — `danger`; дедлайн сегодня или завтра — `warning`; запланировано на сегодня — `accent`; выполнено — `text.tertiary`.
+- Общие тестовые случаи — в `packages/design-tokens/test` и `DSDesign` (поток design-system).
+
 ## Типографика
 
 | Токен | iOS | Веб |
 | --- | --- | --- |
-| `font.display` (заголовки, с засечками) | New York | Newsreader (Google Fonts) |
+| `font.display` (заголовки, с засечками) | New York | Source Serif 4 (локально, `@datascratch/ui/fonts.css`; у Newsreader нет кириллицы) |
 | `font.text` | SF Pro Text | Inter |
 | `font.mono` | SF Mono | JetBrains Mono |
 | Шкала размеров | `title 34`, `h1 28`, `h2 22`, `h3 19`, `body 17`, `callout 16`, `footnote 13`, `caption 12` (pt/px, с поддержкой Dynamic Type на iOS) |

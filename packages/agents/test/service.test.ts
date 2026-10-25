@@ -60,7 +60,7 @@ describe("reading", () => {
     expect(r.note.notebookName).toBe("Работа");
     expect(r.markdown).toContain("<!-- block:");
     expect(r.markdown).toMatch(/!\[✍️ подчёркнуто от руки: «сроки запуска»\]\(handwriting:[0-9a-f-]+\)/);
-    expect(r.markdown).toMatch(/- \[ \] Подготовить макеты 📅 2026-10-27 <!-- block:[0-9a-f-]+ task:[0-9a-f-]+ -->/);
+    expect(r.markdown).toMatch(/- \[ \] Подготовить макеты ⏳ 2026-10-27 <!-- block:[0-9a-f-]+ task:[0-9a-f-]+ -->/);
     expect(r.images).toHaveLength(1);
     expect(r.images[0]!.png.subarray(1, 4).toString()).toBe("PNG");
     const img = await svc.getHandwritingImage(principal(), { noteId: NOTE_PLAN, handwritingId: r.handwriting[0]!.id, scale: 1 });

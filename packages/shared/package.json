@@ -46,7 +46,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "bench": "tsx bench/first-sync.bench.ts",
-    "bench:memory": "node --expose-gc --import tsx bench/memory.bench.ts"
+    "bench:memory": "node --expose-gc --import tsx bench/memory.bench.ts",
+    "test:memory": "node --expose-gc --import tsx bench/memory-check.ts"
   },
   "dependencies": {
     "libsodium-wrappers-sumo": "^0.8.2",

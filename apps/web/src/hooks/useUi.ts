@@ -20,7 +20,12 @@ type UiState = {
   newNotebookFor: string | null;
   docView: "grid" | "list";
   sort: "updated" | "created" | "title";
+  /** Full-screen ("focus") per kind of screen: no sidebar; remembered on this device. */
+  focus: Record<FocusKind, boolean>;
 };
+
+export type FocusKind = "doc" | "calendar" | "tasks";
+const FOCUS_KINDS: FocusKind[] = ["doc", "calendar", "tasks"];
 
 export const useUi = create<UiState>(() => ({
   sidebarOpen: readBool("ds.sidebar", true),
@@ -38,7 +43,26 @@ export const useUi = create<UiState>(() => ({
     }
   })(),
   sort: "updated",
+  focus: Object.fromEntries(FOCUS_KINDS.map((k) => [k, readBool(`ds.focus.${k}`, false)])) as Record<FocusKind, boolean>,
 }));
+
+/** Which full-screen-capable screen a path is, if any. */
+export function focusKindOf(pathname: string): FocusKind | null {
+  if (pathname.startsWith("/doc/")) return "doc";
+  if (pathname.startsWith("/calendar")) return "calendar";
+  if (pathname.startsWith("/tasks")) return "tasks";
+  return null;
+}
+
+export function toggleFocus(kind: FocusKind) {
+  const next = !useUi.getState().focus[kind];
+  try {
+    localStorage.setItem(`ds.focus.${kind}`, next ? "1" : "0");
+  } catch {
+    // ignore
+  }
+  useUi.setState((s) => ({ focus: { ...s.focus, [kind]: next } }));
+}
 
 export function toggleSidebar() {
   const next = !useUi.getState().sidebarOpen;

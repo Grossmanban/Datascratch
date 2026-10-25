@@ -158,6 +158,8 @@ final class EditorViewTests: XCTestCase {
         let doc = InMemoryEditorDocument(blocks: [.title("T"), p])
         let editor = host(doc)
         editor.tools.mode = .text
+        window.makeKeyAndVisible()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
         let end = editor.projection.offset(block: p.id, offset: 5)!
         editor.textView.selectedRange = NSRange(location: end, length: 0)
         editor.textView.insertText(" world")

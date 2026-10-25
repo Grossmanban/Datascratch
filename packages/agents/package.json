@@ -27,6 +27,8 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@datascratch/design-tokens": "workspace:^",
+    "@datascratch/shared": "workspace:^",
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/newsreader": "^0.4.1",
     "@modelcontextprotocol/server": "^2.4.0",

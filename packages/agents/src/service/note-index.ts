@@ -3,8 +3,9 @@
  * build locally (document-model.md §5). The plugin builds it on the fly from
  * decrypted agent-mode notes and caches it by (noteId, seq).
  */
-import * as Y from "yjs";
-import { attr, blockIdOf, childElements, contentOf, noteTitle, plainText, walkAtoms, walkBlocks } from "../doc/model.js";
+import { extractNoteLinks, extractTags, extractTasks, getTitle } from "@datascratch/shared/document";
+import type * as Y from "yjs";
+import { attr, childElements, contentOf, findBlock, plainText } from "../doc/model.js";
 
 export interface TaskInfo {
   taskId: string;
@@ -32,48 +33,33 @@ export interface NoteIndex {
 }
 
 export function buildNoteIndex(noteId: string, seq: number, doc: Y.Doc): NoteIndex {
-  const title = noteTitle(doc);
-  const bodyBlocks = childElements(contentOf(doc)).filter((e) => e.nodeName !== "title");
-  const text = bodyBlocks
+  const title = getTitle(doc);
+  const text = childElements(contentOf(doc))
+    .filter((e) => e.nodeName !== "title")
     .map((b) => plainText(b))
     .filter(Boolean)
     .join("\n");
-  const tags = new Set<string>();
-  const links: NoteIndex["links"] = [];
-  walkAtoms(doc, (atom, block) => {
-    if (atom.nodeName === "tag") {
-      const name = attr<string>(atom, "name");
-      if (name) tags.add(name);
-    } else if (atom.nodeName === "noteLink") {
-      const target = attr<string>(atom, "noteId");
-      if (target) links.push({ noteId: target, label: String(attr(atom, "label") ?? ""), context: plainText(block).slice(0, 240) });
-    }
+  const links = extractNoteLinks(doc, noteId).map((l) => {
+    const loc = l.blockId ? findBlock(doc, l.blockId) : null;
+    const isCard = loc?.el.nodeName === "pageCard";
+    return { noteId: l.toNoteId, label: l.label, context: isCard ? "(вложенный документ)" : loc ? plainText(loc.el).slice(0, 240) : "" };
   });
-  const tasks: TaskInfo[] = [];
-  walkBlocks(doc, (el) => {
-    if (el.nodeName === "pageCard") {
-      const target = attr<string>(el, "noteId");
-      if (target) links.push({ noteId: target, label: "", context: "(вложенный документ)" });
-    }
-    if (el.nodeName !== "taskItem") return;
-    const first = childElements(el)[0];
-    tasks.push({
-      taskId: String(attr(el, "taskId") ?? ""),
-      blockId: blockIdOf(el),
-      text: first ? plainText(first) : "",
-      state: (attr<TaskInfo["state"]>(el, "state") ?? "open") as TaskInfo["state"],
-      scheduled: attr<string | null>(el, "scheduled") ?? null,
-      deadline: attr<string | null>(el, "deadline") ?? null,
-      completedAt: attr<string | null>(el, "completedAt") ?? null,
-    });
-  });
+  const tasks: TaskInfo[] = extractTasks(doc, noteId).map((t) => ({
+    taskId: t.taskId,
+    blockId: t.blockId,
+    text: t.text,
+    state: t.state,
+    scheduled: t.scheduled,
+    deadline: t.deadline,
+    completedAt: attr<string | null>(findBlock(doc, t.blockId)!.el, "completedAt") ?? null,
+  }));
   return {
     noteId,
     seq,
     title,
     text,
     haystack: `${title}\n${text}`.toLowerCase(),
-    tags: [...tags],
+    tags: extractTags(doc),
     links,
     tasks,
     strokeCount: doc.getMap("strokes").size,

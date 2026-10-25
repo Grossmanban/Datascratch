@@ -9,7 +9,8 @@ import type { AgentEditOrigin, AgentNotebook, AgentsContext } from "../context.j
 import { applyEdits, initNoteContent } from "../doc/edits.js";
 import { collectHandwriting, findHandwriting, type HandwritingItem } from "../doc/handwriting.js";
 import { noteToMarkdown } from "../doc/markdown-export.js";
-import { blockIdOf, childElements, contentOf, findBlock, noteTitle, TEXT_BLOCKS, walkBlocks } from "../doc/model.js";
+import { getTitle } from "@datascratch/shared/document";
+import { blockIdOf, childElements, contentOf, findBlock, TEXT_BLOCKS, walkBlocks } from "../doc/model.js";
 import { AgentError } from "../errors.js";
 import { renderHandwriting, type RenderedImage } from "../render/handwriting-png.js";
 import { base64url, uuidv7 } from "../util.js";
@@ -321,7 +322,7 @@ export class AgentService {
       }
     }
     return {
-      note: { ...this.summary(nb, meta), title: noteTitle(doc) || meta.title, notebookName: nb.name, folderPath: folderPath(nb, meta.folderId) },
+      note: { ...this.summary(nb, meta), title: getTitle(doc) || meta.title, notebookName: nb.name, folderPath: folderPath(nb, meta.folderId) },
       markdown,
       handwriting: handwriting.map((h) => ({ id: h.id, kind: h.kind, blockId: h.blockId, description: h.description })),
       comments,

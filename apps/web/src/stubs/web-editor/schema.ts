@@ -82,11 +82,12 @@ export const BlockIds = Extension.create({
     ];
   },
   addProseMirrorPlugins() {
+    const editor = this.editor;
     return [
       new Plugin({
         key: new PluginKey("blockIds"),
         appendTransaction: (trs, _old, state) => {
-          if (!trs.some((t) => t.docChanged)) return null;
+          if (!editor.isEditable || !trs.some((t) => t.docChanged)) return null;
           const seen = new Set<string>();
           const tr = state.tr;
           let changed = false;

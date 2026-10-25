@@ -18,9 +18,10 @@ import {
   type Space,
   type StarredRef,
 } from "@/lib/shared";
+import { formatLongDate } from "@/lib/dates";
 import { accountMaps } from "./account";
 import { initNotebookDoc, notebookMaps } from "./notebook";
-import { appendTask, initNoteDoc, removeTask, setTitle, updateTask, type TaskPatch } from "./note";
+import { appendTask, initNoteDoc, removeTask, setTaskText, setTitle, updateTask, type TaskPatch } from "./note";
 import { useWorkspace } from "./workspace";
 import { orderBetween, patchYMap, toYMap } from "./ymap";
 
@@ -401,7 +402,8 @@ export async function getOrCreateDaily(date: string): Promise<string> {
   if (existing) return existing;
   const nb = dailyNotebookId();
   if (!nb) throw new Error("No notebook for daily notes");
-  return createNote({ notebookId: nb, kind: "daily", dailyDate: date, title: "" });
+  const title = formatLongDate(date);
+  return createNote({ notebookId: nb, kind: "daily", dailyDate: date, title: title.charAt(0).toUpperCase() + title.slice(1) });
 }
 
 export function findInbox(): string | null {
@@ -427,11 +429,17 @@ async function withNote<T>(noteId: string, fn: (doc: Y.Doc) => T): Promise<T> {
     return fn(doc);
   } finally {
     rt.store.release(noteId);
+    // Task screens read the index; refresh it right away instead of after the edit debounce.
+    rt.indexer.schedule(noteId, 20);
   }
 }
 
 export function patchTask(noteId: string, taskId: string, patch: TaskPatch) {
   return withNote(noteId, (doc) => updateTask(doc, taskId, patch));
+}
+
+export function editTaskText(noteId: string, taskId: string, text: string) {
+  return withNote(noteId, (doc) => setTaskText(doc, taskId, text));
 }
 
 export function deleteTask(noteId: string, taskId: string) {

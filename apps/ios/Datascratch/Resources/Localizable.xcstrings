@@ -241,16 +241,6 @@
         }
       }
     },
-    "Backdrop": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Подложка"
-          }
-        }
-      }
-    },
     "Blue": {
       "localizations": {
         "ru": {
@@ -377,6 +367,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Проверьте ключ восстановления"
+          }
+        }
+      }
+    },
+    "Choose File…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбрать файл…"
+          }
+        }
+      }
+    },
+    "Choose Photo…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбрать фото…"
           }
         }
       }
@@ -841,6 +851,16 @@
         }
       }
     },
+    "Drag the image to choose what the header shows.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перетащите изображение, чтобы выбрать, какая часть видна в шапке."
+          }
+        }
+      }
+    },
     "Draw with Finger": {
       "localizations": {
         "ru": {
@@ -867,16 +887,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Дублировать"
-          }
-        }
-      }
-    },
-    "Dusk": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Сумерки"
           }
         }
       }
@@ -947,16 +957,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Email"
-          }
-        }
-      }
-    },
-    "Ember": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Угли"
           }
         }
       }
@@ -1331,6 +1331,16 @@
         }
       }
     },
+    "Image position": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Положение изображения"
+          }
+        }
+      }
+    },
     "Inbox": {
       "localizations": {
         "ru": {
@@ -1471,32 +1481,12 @@
         }
       }
     },
-    "Meadow": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Луг"
-          }
-        }
-      }
-    },
     "Member since": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "С нами с"
-          }
-        }
-      }
-    },
-    "Mist": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Туман"
           }
         }
       }
@@ -1767,16 +1757,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Версий пока нет"
-          }
-        }
-      }
-    },
-    "None": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Нет"
           }
         }
       }
@@ -2151,6 +2131,16 @@
         }
       }
     },
+    "Paste Image": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вставить изображение"
+          }
+        }
+      }
+    },
     "Pencil & Drawing": {
       "localizations": {
         "ru": {
@@ -2421,6 +2411,26 @@
         }
       }
     },
+    "Reposition Cover": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Положение обложки"
+          }
+        }
+      }
+    },
+    "Reposition…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сдвинуть кадр…"
+          }
+        }
+      }
+    },
     "Restore": {
       "localizations": {
         "ru": {
@@ -2447,16 +2457,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Отозвать"
-          }
-        }
-      }
-    },
-    "Sand": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Песок"
           }
         }
       }
@@ -3057,6 +3057,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Этот документ в корзине."
+          }
+        }
+      }
+    },
+    "This file is not an image.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Этот файл — не изображение."
           }
         }
       }

@@ -35,6 +35,7 @@ final class AppModel {
     let sharing: any SharingService
     let access: any AccessService
     let webHost: String
+    let covers: CoverImages
 
     /// Recovery key waiting to be confirmed after sign-up. Kept in the Keychain
     /// until confirmed, so quitting the app mid-onboarding does not lose it (R-02).
@@ -65,6 +66,8 @@ final class AppModel {
         let host = (info["DSWebHost"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "datascratch.app"
         let server = (info["DSServerURL"] as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) }
         webHost = host
+        let coverImages: CoverImages = options.uiTesting ? .temporary() : .appSupport()
+        covers = coverImages
 
         if options.uiTesting {
             secureStore = SecureStore(inMemory: true)
@@ -87,12 +90,14 @@ final class AppModel {
         core = coreStack
         if let server, let coreStack, !options.uiTesting {
             // An account on the Datascratch server: DSCore does auth, keys and sync.
-            let connection = ServerConnection(serverURL: server, webHost: host, core: coreStack, sync: sync)
+            let connection = ServerConnection(serverURL: server, webHost: host, core: coreStack, sync: sync,
+                                              attachmentsDirectory: coverImages.directory)
             self.connection = connection
             accounts = ServerAccountService(connection: connection)
             sharing = ServerSharingService(connection: connection)
             access = ServerAccessService(connection: connection)
             sync.onBackOnline = { connection.reconnect() }
+            coverImages.remote = connection
         } else {
             connection = nil
             accounts = LocalAccountService(store: secureStore)
@@ -133,7 +138,6 @@ final class AppModel {
             let core = try CoreLibrary.open(directory: base.appendingPathComponent("Library", isDirectory: true))
             CoreLibrary.importLegacy(from: .appSupport(), into: core)
             let library = LibraryStore(backend: core)
-            core.dropSeededCoverOnce(in: library)
             return (library, core)
         } catch {
             // Keep working on the JSON stand-in rather than failing to launch.

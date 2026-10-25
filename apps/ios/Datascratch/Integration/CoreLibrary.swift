@@ -35,7 +35,7 @@ nonisolated final class WrappedKeyIndex: @unchecked Sendable {
 ///
 /// The UI keeps working on `LibrarySnapshot`; this backend turns snapshot diffs
 /// into document transactions and rebuilds the snapshot from the documents.
-/// Values without a place in the contract yet (gradient covers, the active space,
+/// Values without a place in the contract yet (build 1 gradient covers, the active space,
 /// local version history) live in a small local overlay.
 final class CoreLibrary: LibraryBackend {
     nonisolated private static let log = Logger(subsystem: "com.datascratch.app", category: "CoreLibrary")
@@ -64,6 +64,8 @@ final class CoreLibrary: LibraryBackend {
         }
     }
     private var notebookIdOfNote: [String: String] = [:]
+    /// Notes whose documents are open (their keys are known).
+    var knownNoteIds: [String] { Array(notebookIdOfNote.keys) }
     private var overlay: Overlay
     var onExternalChange: ((LibrarySnapshot) -> Void)?
 
@@ -280,7 +282,9 @@ final class CoreLibrary: LibraryBackend {
         var item = NoteMeta(id: meta.id, notebookId: notebookId, folderId: meta.folderId, parentNoteId: meta.parentNoteId,
                             title: meta.title, kind: NoteKind(rawValue: meta.kind.rawValue) ?? .note,
                             dailyDate: meta.dailyDate, tags: meta.tags, icon: meta.icon,
-                            cover: overlay.covers[meta.id], backdrop: Self.backdrop(note.meta().backdrop),
+                            cover: overlay.covers[meta.id],
+                            coverImage: note.meta().cover.map { NoteCover(attachmentId: $0.attachmentId, offsetY: $0.offsetY) },
+                            coverThumb: meta.coverThumb, backdrop: Self.backdrop(note.meta().backdrop),
                             style: Self.style(note.meta().style), snippet: "",
                             createdAt: DSCore.DSDate.parseISO(meta.createdAt) ?? Date(),
                             updatedAt: DSCore.DSDate.parseISO(meta.updatedAt) ?? Date(),
@@ -443,6 +447,7 @@ final class CoreLibrary: LibraryBackend {
         try notebook.putNote(coreMeta(meta, wrappedKey: wrapped))
         try write(body: body, title: meta.title, previous: nil, to: doc, resolve: resolve)
         try writeStyle(meta, doc: doc)
+        if meta.coverImage != nil { try writeCover(meta, doc: doc) }
     }
 
     /// A note moved to another notebook: its key is re-wrapped by the new notebook key.
@@ -470,12 +475,20 @@ final class CoreLibrary: LibraryBackend {
         if meta.trashedAt != previous.trashedAt { fields["trashedAt"] = .optionalString(meta.trashedAt.map(DSCore.DSDate.iso)) }
         if meta.order != previous.order { fields["order"] = .number(value: meta.order) }
         if meta.updatedAt != previous.updatedAt { fields["updatedAt"] = .string(value: DSCore.DSDate.iso(meta.updatedAt)) }
+        if meta.coverThumb != previous.coverThumb { fields["coverThumb"] = .optionalString(meta.coverThumb) }
         if !fields.isEmpty {
             try notebookDocument(meta.notebookId).updateNote(id: meta.id, fields)
         }
         if meta.style != previous.style || meta.backdrop != previous.backdrop {
             try writeStyle(meta, doc: doc)
         }
+        if meta.coverImage != previous.coverImage {
+            try writeCover(meta, doc: doc)
+        }
+    }
+
+    private func writeCover(_ meta: NoteMeta, doc: NoteDocument) throws {
+        try doc.setCover(meta.coverImage.map { NoteMetaContent.Cover(attachmentId: $0.attachmentId, offsetY: $0.offsetY) })
     }
 
     private func writeStyle(_ meta: NoteMeta, doc: NoteDocument) throws {
@@ -487,7 +500,7 @@ final class CoreLibrary: LibraryBackend {
     private func coreMeta(_ meta: NoteMeta, wrappedKey: String) -> DSCore.NoteMeta {
         DSCore.NoteMeta(id: meta.id, folderId: meta.folderId, parentNoteId: meta.parentNoteId, title: meta.title,
                         kind: DSCore.NoteKind(rawValue: meta.kind.rawValue) ?? .note, dailyDate: meta.dailyDate,
-                        tags: meta.tags, icon: meta.icon, coverThumb: nil, wrappedKey: wrappedKey,
+                        tags: meta.tags, icon: meta.icon, coverThumb: meta.coverThumb, wrappedKey: wrappedKey,
                         createdAt: DSCore.DSDate.iso(meta.createdAt), updatedAt: DSCore.DSDate.iso(meta.updatedAt),
                         trashedAt: meta.trashedAt.map(DSCore.DSDate.iso), order: meta.order)
     }
@@ -626,19 +639,6 @@ final class CoreLibrary: LibraryBackend {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         try store.setValue(try encoder.encode(next), for: Self.overlayKey)
-    }
-
-    /// Build 1 seeded the welcome note with a gradient cover; covers are now only what the
-    /// user adds. Drops that seeded cover once (a cover set later by the user stays).
-    func dropSeededCoverOnce(in library: LibraryStore) {
-        let flag = "app.migration.seedCover"
-        guard (try? store.string(flag)) == nil else { return }
-        try? store.setString("done", for: flag)
-        guard let firstSpace = library.data.spaces.min(by: { $0.createdAt < $1.createdAt }) else { return }
-        for note in library.data.notes where note.cover == .dusk
-            && abs(note.createdAt.timeIntervalSince(firstSpace.createdAt)) < 5 {
-            library.updateNote(note.id) { $0.cover = nil }
-        }
     }
 
     /// One-time move of the JSON library written by earlier builds into the documents.

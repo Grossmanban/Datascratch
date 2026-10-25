@@ -117,6 +117,8 @@ jobs:
         working-directory: apps/web
         env:
           VITE_DS_SERVER_URL: http://localhost:8080
+          # Test hooks: the two-tab session test drives refreshes against the real server.
+          VITE_DS_TEST_HOOKS: "1"
           # The job-level NODE_ENV=development is for the server; a dev-mode build skips the
           # service worker and breaks the offline test.
           NODE_ENV: production

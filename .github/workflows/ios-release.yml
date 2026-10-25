@@ -80,13 +80,24 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/keys"
           KEY_PATH="$RUNNER_TEMP/keys/AuthKey_$KEY_ID.p8"
-          # Accept the .p8 file contents either as-is or base64-encoded.
-          if printf '%s' "$KEY_P8" | grep -q "BEGIN PRIVATE KEY"; then
-            printf '%s\n' "$KEY_P8" > "$KEY_PATH"
-          else
-            printf '%s' "$KEY_P8" | base64 --decode > "$KEY_PATH"
+          # Accept the .p8 contents as-is, with mangled line breaks (pasted on a phone),
+          # as the bare key body, or base64-encoded; rebuild a clean PEM from the body.
+          RAW=$(printf '%s' "$KEY_P8" | tr -d '\r')
+          if ! printf '%s' "$RAW" | grep -q "BEGIN PRIVATE KEY"; then
+            DECODED=$(printf '%s' "$RAW" | tr -d '[:space:]' | base64 --decode 2>/dev/null || true)
+            if printf '%s' "$DECODED" | grep -q "BEGIN PRIVATE KEY"; then RAW="$DECODED"; fi
           fi
+          BODY=$(printf '%s' "$RAW" | sed -e 's/-----BEGIN PRIVATE KEY-----//' -e 's/-----END PRIVATE KEY-----//' \
+            | LC_ALL=C tr -cd 'A-Za-z0-9+/=')
+          { echo "-----BEGIN PRIVATE KEY-----"; printf '%s' "$BODY" | fold -w 64; echo; echo "-----END PRIVATE KEY-----"; } \
+            | sed '/^$/d' > "$KEY_PATH"
           chmod 600 "$KEY_PATH"
+          if ! openssl pkey -in "$KEY_PATH" -noout 2>/dev/null; then
+            HAS_MARKERS=$(printf '%s' "$KEY_P8" | grep -c "PRIVATE KEY" || true)
+            echo "::error::APP_STORE_CONNECT_KEY_P8 is not a valid private key: ${#BODY} base64 characters after cleanup (an App Store Connect .p8 has about 184), BEGIN/END marker lines found: $HAS_MARKERS. Paste the whole AuthKey_*.p8 file contents again."
+            exit 1
+          fi
+          echo "API key OK; KEY_ID length ${#KEY_ID} (expected 10), ISSUER_ID length ${#ISSUER_ID} (expected 36)."
           echo "KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
 
       # Optional (plan B in RELEASE.md): a distribution certificate exported as .p12.

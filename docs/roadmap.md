@@ -12,17 +12,19 @@
 
 | Поток | Ветка | Владеет | Главное | Статус |
 | --- | --- | --- | --- | --- |
-| core | `claude/core` | `packages/shared`, `packages/test-vectors`, корневые `package.json`/`turbo.json`/`tsconfig.base.json`, `.github/workflows/ts.yml` | Типы контрактов, криптография, кодек штрихов, схема документа, клиент синхронизации, тестовые векторы | Запущен |
-| design-system | `claude/design-system` | `packages/design-tokens`, `packages/ui`, `apps/ios/Packages/DSDesign`, `.github/workflows/design.yml` | Токены «Тихая бумага», веб-компоненты, SwiftUI-компоненты | Запущен |
-| server | `claude/server` | `apps/server`, `infra/`, `.github/workflows/server.yml` | Fastify, PostgreSQL, авторизация, синхронизация, вложения, шеринг, docker compose, инструкция развёртывания | Запущен |
-| agents | `claude/agents` | `packages/agents`, `docs/architecture/contracts/agents-api.md` (черновик), `.github/workflows/agents.yml` | MCP, REST для агентов, токены, журнал, рендер PNG | Запущен |
+| core | `claude/core` | `packages/shared`, `packages/test-vectors`, корневые `package.json`/`turbo.json`/`tsconfig.base.json`, `.github/workflows/ts.yml` | Типы контрактов, криптография, кодек штрихов, схема документа, клиент синхронизации, тестовые векторы | v1 влит в main (контракты, крипто, документ, штрихи, синхронизация, тестовые векторы) — по запросам потоков |
+| design-system | `claude/design-system` | `packages/design-tokens`, `packages/ui`, `apps/ios/Packages/DSDesign`, `.github/workflows/design.yml` | Токены «Тихая бумага», веб-компоненты, SwiftUI-компоненты | v1 влит в main (токены, веб-компоненты, DSDesign) — доводка |
+| server | `claude/server` | `apps/server`, `infra/`, `.github/workflows/server.yml` | Fastify, PostgreSQL, авторизация, синхронизация, вложения, шеринг, docker compose, инструкция развёртывания | этап 1 влит в main (REST, синхронизация, RLS, pg-boss, docker, инструкция развёртывания) — переход на shared, агенты, метрики |
+| agents | `claude/agents` | `packages/agents`, `docs/architecture/contracts/agents-api.md` (черновик), `.github/workflows/agents.yml` | MCP, REST для агентов, токены, журнал, рендер PNG | этап 1 влит в main (MCP, OAuth 2.1, REST для агентов, PNG рукописи) — переход на shared |
 | web-app | `claude/web-app` | `apps/web`, `.github/workflows/web.yml` | Оболочка веба: вход, боковая панель, пространства/блокноты/папки, списки, задачи, календарь, шеринг, офлайн, PWA | Запущен |
-| web-editor | `claude/web-editor` | `packages/web-editor`, `.github/workflows/web-editor.yml` | TipTap-редактор со всеми блоками, перо на Canvas | Запущен |
+| web-editor | `claude/web-editor` | `packages/web-editor`, `.github/workflows/web-editor.yml` | TipTap-редактор со всеми блоками, перо на Canvas | этап 1 влит в main (все блоки, перо поверх текста) — переход на shared/ui, лассо, жесты, производительность |
 | ios-core | `claude/ios-core` | `apps/ios/Packages/DSCore`, `.github/workflows/ios-core.yml` | Swift: криптография, Yrs-модель документа, GRDB, клиент синхронизации и API, векторы | Запущен |
 | ios-editor | `claude/ios-editor` | `apps/ios/Packages/DSEditor`, `.github/workflows/ios-editor.yml` | TextKit 2 + Yrs + слой пера (живой штрих), блоки, демо-приложение | Запущен |
 | ios-app | `claude/ios-app` | `apps/ios` (кроме `Packages/`), `.github/workflows/ios-app.yml` | XcodeGen-проект, оболочка SwiftUI в стиле Craft, навигация, задачи, календарь, настройки, интеграция пакетов | Запущен |
 
-Координатор — исходная сессия (вливает ветки в `main`, ведёт `roadmap.md`, `CHANGELOG.md`, контракты).
+Координатор — исходная сессия `session_01BHFN8NGWP5pDXZVpTHf3j6` (вливает ветки в `main`, ведёт `roadmap.md`, `CHANGELOG.md`, контракты).
+
+Сессии потоков (запущены 2026-10-25): core — `session_01XWpXh8jqbr4WKuz1nTyMp5`, design-system — `session_01PENhhCToZxXqEKh48JVug2`, server — `session_017AMEpomNx1UkLQ7fnRVvgC`, agents — `session_012mVhoDCN32qxivvdic3XNY`, web-app — `session_01UF6ApJj7iyUFnJDBsg6EuD`, web-editor — `session_01LnrQUSGxKD7gjqCtSaBQ5P`, ios-core — `session_01EvRSg6kqUcN8bwyXUimBoY`, ios-editor — `session_01PUMGxXhJZy9JSvKivd91NP`, ios-app — `session_01U11CUfbmwb46GNY8G8pUjt`.
 
 ## Этап 0 — подготовка (завершён)
 

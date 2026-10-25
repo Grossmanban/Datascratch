@@ -1046,14 +1046,14 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792930104.298869,
     "seen": 1792931877.4388902,
-    "ast_hash": "a5de2feab812287bedd5a0f8cb793b6a",
-    "semantic_hash": "a5de2feab812287bedd5a0f8cb793b6a"
+    "ast_hash": "",
+    "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792930104.299103,
     "seen": 1792931877.4388914,
-    "ast_hash": "4203dbf78c0e858320c15f29875ac97d",
-    "semantic_hash": "4203dbf78c0e858320c15f29875ac97d"
+    "ast_hash": "",
+    "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1792930104.299103,
@@ -2478,10 +2478,10 @@
     "semantic_hash": "0d7097d52269b9fe4a17015572f396c5"
   },
   ".github/workflows/ios-editor.yml": {
-    "mtime": 1792931588.3916416,
-    "seen": 1792931877.4386115,
-    "ast_hash": "e26ce00499eec5ee054b84efb23e9bf8",
-    "semantic_hash": "e26ce00499eec5ee054b84efb23e9bf8"
+    "mtime": 1792932105.5362842,
+    "seen": 1792932151.3563147,
+    "ast_hash": "4a98726ef013792665d173646a9e10d1",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSCore/Package.swift": {
     "mtime": 1792931667.7505174,
@@ -3100,5 +3100,23 @@
     "seen": 1792931877.4394321,
     "ast_hash": "c06d54b935c5ea2158444a214eebef04",
     "semantic_hash": "c06d54b935c5ea2158444a214eebef04"
+  },
+  "apps/ios/Packages/DSEditor/CoreAdapter/Package.swift": {
+    "mtime": 1792931922.6644104,
+    "seen": 1792932151.3600864,
+    "ast_hash": "5a6a2d579115b9b7b69d9abf499978bf",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSEditor/CoreAdapter/Sources/DSEditorCore/CoreEditorDocument.swift": {
+    "mtime": 1792931974.4148502,
+    "seen": 1792932151.3600895,
+    "ast_hash": "75a1176237e7b83b30b25d75dfa40273",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSEditor/CoreAdapter/Tests/DSEditorCoreTests/CoreEditorDocumentTests.swift": {
+    "mtime": 1792932000.7849693,
+    "seen": 1792932151.360092,
+    "ast_hash": "606014230fa9f49aa15d818595778a2c",
+    "semantic_hash": ""
   }
 }

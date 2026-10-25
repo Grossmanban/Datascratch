@@ -6,12 +6,14 @@ on:
     paths:
       - "apps/ios/Packages/DSEditor/**"
       - "apps/ios/Packages/DSDesign/**"
+      - "apps/ios/Packages/DSCore/**"
       - "packages/test-vectors/**"
       - ".github/workflows/ios-editor.yml"
   pull_request:
     paths:
       - "apps/ios/Packages/DSEditor/**"
       - "apps/ios/Packages/DSDesign/**"
+      - "apps/ios/Packages/DSCore/**"
       - "packages/test-vectors/**"
       - ".github/workflows/ios-editor.yml"
   workflow_dispatch:
@@ -31,6 +33,30 @@ jobs:
       - name: Test DSInk and DSEditorModel
         working-directory: apps/ios/Packages/DSEditor
         run: swift test --parallel
+
+  # Editor model over the real Yrs document model of DSCore (adapter package DSEditorCore).
+  core-adapter-linux:
+    runs-on: ubuntu-latest
+    container: swift:6.2-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust and system libraries
+        run: |
+          apt-get update -qq && apt-get install -y -qq curl build-essential libsodium-dev libsqlite3-dev >/dev/null
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal >/dev/null
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            apps/ios/Packages/DSCore/yrs-ffi/target
+          key: yrs-linux-${{ hashFiles('apps/ios/Packages/DSCore/yrs-ffi/**/*.rs', 'apps/ios/Packages/DSCore/yrs-ffi/Cargo.lock') }}
+      - name: Build Yrs for Linux
+        run: |
+          . "$HOME/.cargo/env"
+          apps/ios/Packages/DSCore/scripts/build-linux.sh
+      - name: Test DSEditorCore
+        working-directory: apps/ios/Packages/DSEditor/CoreAdapter
+        run: swift test
 
   ios:
     runs-on: macos-26

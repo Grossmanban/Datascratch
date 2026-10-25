@@ -1045,14 +1045,14 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792932377.575155,
-    "seen": 1792939043.1326668,
-    "ast_hash": "",
+    "seen": 1792939373.9453669,
+    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792932377.575155,
-    "seen": 1792939043.1326725,
-    "ast_hash": "",
+    "seen": 1792939373.9453692,
+    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -3240,10 +3240,10 @@
     "semantic_hash": "84ca829dcc5b2bda1f15be300a4cd866"
   },
   "apps/ios/DatascratchTests/CoreLibraryTests.swift": {
-    "mtime": 1792938311.5290732,
-    "seen": 1792939043.125822,
-    "ast_hash": "7fe74acfffe81c0287110211c28c5e34",
-    "semantic_hash": "7fe74acfffe81c0287110211c28c5e34"
+    "mtime": 1792939358.7852075,
+    "seen": 1792939373.945167,
+    "ast_hash": "0f02a83fdb28fead2cb704835bd3c46c",
+    "semantic_hash": ""
   },
   "apps/ios/Datascratch/Integration/ServerConnection.swift": {
     "mtime": 1792938237.0319474,

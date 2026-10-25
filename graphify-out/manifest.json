@@ -294,16 +294,16 @@
     "semantic_hash": ""
   },
   "docs/spec/03-pencil.md": {
-    "mtime": 1792927481.4072206,
-    "seen": 1792929273.4234552,
-    "ast_hash": "8262888caf0f0e3482ccbf68482c9634",
-    "semantic_hash": "8262888caf0f0e3482ccbf68482c9634"
+    "mtime": 1792929336.051053,
+    "seen": 1792929528.0157845,
+    "ast_hash": "d307e6e0f47d494cd2691d49b0a86050",
+    "semantic_hash": ""
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1792927481.4072206,
-    "seen": 1792929273.4234564,
-    "ast_hash": "54e58f3789893db2220c9603c7e06ccb",
-    "semantic_hash": "54e58f3789893db2220c9603c7e06ccb"
+    "mtime": 1792929336.0368285,
+    "seen": 1792929528.0157864,
+    "ast_hash": "8c97cd33e8f16beeaf09291c48a3be06",
+    "semantic_hash": ""
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1792927481.4072206,
@@ -588,9 +588,9 @@
     "semantic_hash": ""
   },
   "packages/web-editor/src/ui/TaskMenu.tsx": {
-    "mtime": 1792928721.800792,
-    "seen": 1792929273.423339,
-    "ast_hash": "58b102e7dcc8340d6074f85645f0d82e",
+    "mtime": 1792929427.947283,
+    "seen": 1792929528.0156648,
+    "ast_hash": "cd64bc4f580e05232e0e6897ec605df3",
     "semantic_hash": ""
   },
   "packages/web-editor/src/ui/blockItems.ts": {
@@ -810,9 +810,9 @@
     "semantic_hash": ""
   },
   "packages/web-editor/README.md": {
-    "mtime": 1792927481.4788496,
-    "seen": 1792929273.423475,
-    "ast_hash": "d9cb3ec7a7aba30cc3422c5df9fc8aa6",
+    "mtime": 1792929450.2910213,
+    "seen": 1792929528.0158074,
+    "ast_hash": "08b0e870b4ae76cc400d010b0fa0a3d0",
     "semantic_hash": ""
   },
   "packages/web-editor/index.html": {
@@ -825,6 +825,12 @@
     "mtime": 1792929151.5871243,
     "seen": 1792929273.4234772,
     "ast_hash": "19d17c77e2466738c78d498a0b819489",
+    "semantic_hash": ""
+  },
+  "docs/changelog.d/2026-10-25-web-editor-editor-and-pen.md": {
+    "mtime": 1792929336.0551279,
+    "seen": 1792929528.0157156,
+    "ast_hash": "a866c263a402761a52999d93a3e177f5",
     "semantic_hash": ""
   }
 }

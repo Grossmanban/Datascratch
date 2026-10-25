@@ -112,7 +112,10 @@ struct NativeDocumentScreen: View {
                         DocumentBackground(note: note)
                         // The editor ends above the palette: extended under it, the pen recognizer
                         // (which takes every touch in pen mode) won taps meant for the palette.
+                        // It does not shrink for the keyboard (EditorView insets its own scrolling):
+                        // resizing it while UIKit delivered a tap into the text crashed on iPhone.
                         NativeEditorRepresentable(editor: model.editor)
+                            .ignoresSafeArea(.keyboard, edges: .bottom)
                             .accessibilityIdentifier("editor")
                     }
                     // The palette sits in the bottom safe area: the text scrolls clear of it, and it

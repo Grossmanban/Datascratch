@@ -10,8 +10,11 @@ public struct TaskEntry: Hashable, Sendable, Codable {
     public var scheduled: String?
     public var deadline: String?
     public var completedAt: String?
+    /// Position among the note's tasks in document order (0-based).
+    public var order: Int
 
-    public init(noteId: String, taskId: String, blockId: String?, text: String, state: TaskState, scheduled: String?, deadline: String?, completedAt: String?) {
+    public init(noteId: String, taskId: String, blockId: String?, text: String, state: TaskState, scheduled: String?, deadline: String?,
+                completedAt: String?, order: Int = 0) {
         self.noteId = noteId
         self.taskId = taskId
         self.blockId = blockId
@@ -20,6 +23,7 @@ public struct TaskEntry: Hashable, Sendable, Codable {
         self.scheduled = scheduled
         self.deadline = deadline
         self.completedAt = completedAt
+        self.order = order
     }
 }
 
@@ -93,7 +97,7 @@ public struct NoteDerivedData: Hashable, Sendable {
                     state: block.attrs["state"]?.stringValue.flatMap(TaskState.init(rawValue:)) ?? .open,
                     scheduled: nonEmpty(block.attrs["scheduled"]?.stringValue),
                     deadline: nonEmpty(block.attrs["deadline"]?.stringValue),
-                    completedAt: nonEmpty(block.attrs["completedAt"]?.stringValue)))
+                    completedAt: nonEmpty(block.attrs["completedAt"]?.stringValue), order: tasks.count))
             }
             for child in block.children { visit(child, enclosingBlockId: blockId) }
         }

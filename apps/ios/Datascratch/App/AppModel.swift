@@ -107,6 +107,7 @@ final class AppModel {
             let connection = ServerConnection(serverURL: server, webHost: host, core: coreStack, sync: sync,
                                               attachmentsDirectory: coverImages.directory)
             self.connection = connection
+            connection.onLibraryCarried = { [library] in library.mergeCarriedDuplicates() }
             accounts = ServerAccountService(connection: connection)
             sharing = ServerSharingService(connection: connection)
             access = ServerAccessService(connection: connection)

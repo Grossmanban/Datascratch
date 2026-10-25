@@ -42,6 +42,14 @@ nonisolated final class WrappedKeyIndex: @unchecked Sendable {
 final class CoreLibrary: LibraryBackend {
     nonisolated private static let log = Logger(subsystem: "com.datascratch.app", category: "CoreLibrary")
     private static let accountDocKey = "app.accountDocId"
+    private static let carriedMergeKey = "app.carriedLibraryMergePending"
+
+    /// The device library was carried in and `LibraryStore.mergeCarriedDuplicates` has not run
+    /// yet (kept in the store so that a launch cut short still merges next time).
+    var needsCarriedMerge: Bool {
+        get { (try? store.string(Self.carriedMergeKey)) == "1" }
+        set { try? store.setString(newValue ? "1" : nil, for: Self.carriedMergeKey) }
+    }
     private static let overlayKey = "app.overlay"
 
     let store: LocalStore
@@ -249,6 +257,7 @@ final class CoreLibrary: LibraryBackend {
     func carryDeviceLibraries() throws -> [CarriedNotebook] {
         let orphans = try store.documents(kind: .account).filter { !$0.registered && $0.docId != account.accountDocId }
         guard !orphans.isEmpty else { return [] }
+        needsCarriedMerge = true
         let master = try keys.masterKey()
         var carried: [CarriedNotebook] = []
         for record in orphans {

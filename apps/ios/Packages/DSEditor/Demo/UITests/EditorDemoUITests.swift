@@ -46,9 +46,11 @@ final class EditorDemoUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting"]
         app.launch()
-        app.buttons["tool.text"].tap()
         let editor = app.textViews["editor.text"]
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        app.buttons["tool.text"].tap()
+        XCTAssertEqual(app.state, .runningForeground, "the app must survive switching to the text tool")
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "editor still reachable after switching tools")
         // Tap into the first body paragraph (not on a block attachment).
         editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
         sleep(1)

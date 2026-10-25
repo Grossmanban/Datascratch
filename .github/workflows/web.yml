@@ -1,0 +1,60 @@
+name: web
+
+on:
+  push:
+    branches: [main, "claude/web-app"]
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/web.yml"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "packages/**"
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/web.yml"
+      - "pnpm-lock.yaml"
+      - "packages/**"
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+        working-directory: .
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit tests
+        run: pnpm test
+      - name: Build (no server needed; address comes from VITE_DS_SERVER_URL)
+        run: pnpm exec vite build
+        env:
+          VITE_DS_SERVER_URL: http://localhost:8787
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: E2E (mock server + production build with service worker)
+        run: pnpm e2e
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7

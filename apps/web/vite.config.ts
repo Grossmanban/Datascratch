@@ -40,5 +40,19 @@ export default defineConfig({
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
   server: { port: 5173 },
-  build: { target: "es2022", sourcemap: true },
+  build: {
+    target: "es2022",
+    sourcemap: true,
+    chunkSizeWarningLimit: 1600,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("libsodium")) return "sodium";
+          if (id.includes("prosemirror") || id.includes("@tiptap") || id.includes("y-prosemirror")) return "editor";
+          if (id.includes("node_modules/react") || id.includes("node_modules/scheduler")) return "react";
+          return undefined;
+        },
+      },
+    },
+  },
 });

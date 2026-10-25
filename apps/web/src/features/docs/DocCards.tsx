@@ -10,6 +10,8 @@ import { isStarred, noteTitle, useWorkspace, type NoteEntry } from "@/domain/wor
 import { dragNote } from "@/lib/dnd";
 import { formatRelative } from "@/lib/dates";
 import { coverGradient } from "@/lib/tokens";
+import { runtime } from "@/data/runtime";
+import { useAttachmentUrl } from "@/features/doc/Cover";
 import { cn, ContextMenu } from "@/ui";
 import { noteMenuItems } from "./menus";
 
@@ -78,6 +80,7 @@ function DocCard({ note, snippet, index }: { note: NoteEntry; snippet?: string; 
           data-testid="doc-card"
         >
           <div className="relative h-24 overflow-hidden" style={{ background: coverGradient(note.id) }}>
+            {note.coverThumb && <CardThumb noteId={note.id} attachmentId={note.coverThumb} />}
             <div className="absolute inset-0 opacity-[0.15] mix-blend-overlay [background-image:radial-gradient(rgb(0_0_0/0.5)_0.6px,transparent_0.8px)] [background-size:3px_3px]" />
             {starred && <Star className="absolute right-3 top-3 size-3.5 fill-white/90 text-white/90 drop-shadow" />}
             <span className="absolute -bottom-4 left-4 flex size-10 items-center justify-center rounded-lg bg-surface text-[20px] shadow-card ring-1 ring-line/70">
@@ -131,4 +134,10 @@ function DocRow({ note, snippet, first }: { note: NoteEntry; snippet?: string; f
       </Link>
     </ContextMenu>
   );
+}
+
+function CardThumb({ noteId, attachmentId }: { noteId: string; attachmentId: string }) {
+  const { url } = useAttachmentUrl(attachmentId, () => runtime().store.keyFor(noteId));
+  if (!url) return null;
+  return <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />;
 }

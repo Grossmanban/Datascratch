@@ -8,6 +8,7 @@ import { GuestSession } from "@/data/guest";
 import { colorFor } from "@/data/presence";
 import { readNotebook } from "@/domain/notebook";
 import { readNoteMeta } from "@/domain/note";
+import { CoverImage } from "@/features/doc/Cover";
 import { DocView } from "@/features/doc/DocView";
 import { PresenceStack } from "@/features/doc/PresenceStack";
 import { usePresence } from "@/features/doc/usePresence";
@@ -157,6 +158,11 @@ function GuestNote({ session, noteId, embedded }: { session: GuestSession; noteI
       titlePlaceholder={t("docs.titlePlaceholder")}
       awareness={awareness}
       user={user}
+      cover={
+        meta.cover ? (
+          <CoverImage cover={meta.cover} keyFor={() => session.keyFor(noteId)} editable={false} auth={session.grant.guestToken} persist={false} />
+        ) : null
+      }
     />
   );
   if (embedded)

@@ -20,6 +20,7 @@ const db = {
   guests: new Map(), // guestToken -> shareId
   agentTokens: new Map(),
   recovery: new Map(),
+  attachments: new Map(), // id -> { id, userId, noteId, size, chunkCount, mime, chunks: Map<index, Buffer> }
 };
 
 function err(res, status, code, message = code) {
@@ -241,6 +242,47 @@ route("GET", "/v1/docs/:id/versions/:seq", (_q, res, { auth, params }) => {
   const v = d?.history.find((h) => h.seq === Number(params.seq));
   if (!d || d.userId !== auth.userId || !v) return err(res, 404, "not_found");
   json(res, 200, { payload: v.payload });
+});
+
+const attAccess = (auth, req, a) => {
+  if (!a) return false;
+  if (auth && a.userId === auth.userId) return true;
+  // Guests may read attachments of notes in their share (bearer = guest token).
+  const h = req.headers.authorization ?? "";
+  const shareId = db.guests.get(h.startsWith("Bearer ") ? h.slice(7) : "");
+  const s = shareId && db.shares.get(shareId);
+  if (!shareActive(s)) return false;
+  return shareDocIds(s).includes(a.noteId);
+};
+route("POST", "/v1/attachments", (_q, res, { auth, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  if (body.size > 200 * 1024 * 1024 * 1.01) return err(res, 413, "payload_too_large");
+  if (!db.attachments.has(body.attachmentId))
+    db.attachments.set(body.attachmentId, { id: body.attachmentId, userId: auth.userId, noteId: body.noteId, size: body.size, chunkCount: body.chunkCount, mime: body.mime, chunks: new Map() });
+  json(res, 204);
+});
+route("PUT", "/v1/attachments/:id/chunks/:index", (req, res, { auth, params, body }) => {
+  const a = db.attachments.get(params.id);
+  if (!auth || !a || a.userId !== auth.userId) return err(res, 404, "not_found");
+  a.chunks.set(Number(params.index), Buffer.isBuffer(body) ? body : Buffer.from([]));
+  json(res, 204);
+});
+route("GET", "/v1/attachments/:id", (req, res, { auth, params }) => {
+  const a = db.attachments.get(params.id);
+  if (!attAccess(auth, req, a)) return err(res, 404, "not_found");
+  json(res, 200, { size: a.size, chunkCount: a.chunkCount, mime: a.mime, uploadedChunks: [...a.chunks.keys()].sort((x, y) => x - y) });
+});
+route("GET", "/v1/attachments/:id/chunks/:index", (req, res, { auth, params }) => {
+  const a = db.attachments.get(params.id);
+  const c = a?.chunks.get(Number(params.index));
+  if (!attAccess(auth, req, a) || !c) return err(res, 404, "not_found");
+  res.writeHead(200, { "content-type": "application/octet-stream", ...cors });
+  res.end(c);
+});
+route("DELETE", "/v1/attachments/:id", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  db.attachments.delete(params.id);
+  json(res, 204);
 });
 
 route("POST", "/v1/shares", (_q, res, { auth, body }) => {

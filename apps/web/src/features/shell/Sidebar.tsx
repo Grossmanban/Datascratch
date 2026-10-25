@@ -43,12 +43,14 @@ import {
 import {
   activeSpace,
   allTags,
+  folderCounts,
   noteTitle,
   setActiveSpace,
   spaceNotebooks,
   useWorkspace,
   type FolderEntry,
 } from "@/domain/workspace";
+import { useRecoveryUnconfirmed } from "@/auth/recovery";
 import { folderMenuItems, newNoteAndOpen, noteMenuItems } from "@/features/docs/menus";
 import { useUi } from "@/hooks/useUi";
 import { DND_FOLDER, DND_NOTE, dragFolder, dragNote, dropKind } from "@/lib/dnd";
@@ -89,6 +91,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   const notebooks = useWorkspace((s) => s.account.notebooks);
   const spaceId = useWorkspace((s) => s.activeSpaceId);
   const nbs = useMemo(() => notebooks.filter((n) => n.spaceId === spaceId), [notebooks, spaceId]);
+  const recoveryUnconfirmed = useRecoveryUnconfirmed();
   const todayCount = useLiveQuery(
     async () => {
       const d = today();
@@ -167,7 +170,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
           ))}
           {!nbs.length && space && (
             <button
-              className="mx-2 my-1 text-left text-[12.5px] text-ink-3 hover:text-ink-2"
+              className="mx-2 my-1 text-left text-[12.5px] text-ink-2 hover:text-ink"
               onClick={() => useUi.setState({ newNotebookFor: spaceId })}
             >
               + {t("nav.newNotebook")}
@@ -180,7 +183,21 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
 
       <div className="flex items-center gap-1 border-t border-line px-2 py-2">
         <NavLink to="/trash" icon={<Trash2 className="size-4" />} label={t("nav.trash")} compact />
-        <NavLink to="/settings/account" match="/settings" icon={<Settings className="size-4" />} label={t("nav.settings")} compact />
+        <NavLink
+          to="/settings/account"
+          match="/settings"
+          icon={
+            <span className="relative">
+              <Settings className="size-4" />
+              {/* Gentle reminder while the recovery key is not confirmed (spec/07). */}
+              {recoveryUnconfirmed && (
+                <span className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-[var(--ds-warning)]" data-testid="recovery-dot" />
+              )}
+            </span>
+          }
+          label={recoveryUnconfirmed ? `${t("nav.settings")} · ${t("settings.recoveryTitle")}` : t("nav.settings")}
+          compact
+        />
         <div className="flex-1" />
         <SyncIndicator compact />
       </div>
@@ -230,7 +247,7 @@ function Section({ id, title, action, children }: { id: string; title: string; a
       <div className="group flex h-7 items-center px-2">
         <button
           onClick={toggle}
-          className="flex flex-1 items-center gap-1 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-3 hover:text-ink-2"
+          className="flex flex-1 items-center gap-1 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-2 hover:text-ink"
         >
           {title}
           <ChevronDown className={cn("size-3 transition-transform", collapsed && "-rotate-90")} />
@@ -344,7 +361,7 @@ function TabsSection() {
               </Link>
               <button
                 aria-label={t("common.close")}
-                className="flex size-6 items-center justify-center rounded text-ink-3 opacity-0 hover:bg-ink/10 hover:text-ink group-hover:opacity-100"
+                className="flex size-6 items-center justify-center rounded text-ink-3 opacity-0 focus-visible:opacity-100 hover:bg-ink/10 hover:text-ink group-hover:opacity-100"
                 onClick={() => {
                   const next = closeTab(tab.noteId);
                   if (active) {
@@ -517,7 +534,8 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
         >
           <button
             onClick={toggle}
-            aria-label={collapsed ? "expand" : "collapse"}
+            aria-label={collapsed ? t("common.expand") : t("common.collapse")}
+            aria-expanded={!collapsed}
             className="flex size-6 shrink-0 items-center justify-center rounded text-ink-3 hover:text-ink"
           >
             <ChevronRight className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
@@ -546,7 +564,10 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
             items={menu}
             align="end"
             trigger={
-              <button className="flex size-6 items-center justify-center rounded text-ink-3 opacity-0 hover:bg-ink/10 hover:text-ink group-hover:opacity-100 data-[state=open]:opacity-100">
+              <button
+                aria-label={t("nav.addToNotebook")}
+                className="flex size-6 items-center justify-center rounded text-ink-3 opacity-0 focus-visible:opacity-100 hover:bg-ink/10 hover:text-ink group-hover:opacity-100 data-[state=open]:opacity-100"
+              >
                 <Plus className="size-3.5" />
               </button>
             }
@@ -579,7 +600,7 @@ function FolderNode({ folder, depth }: { folder: FolderEntry; depth: number }) {
   const [renaming, setRenaming] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const folders = useWorkspace((s) => s.folders);
-  const count = useWorkspace((s) => Object.values(s.notes).filter((n) => n.folderId === folder.id && !n.trashedAt).length);
+  const count = useWorkspace((s) => folderCounts(s.notes).get(folder.id) ?? 0);
   const children = useMemo(
     () => Object.values(folders).filter((f) => f.parentId === folder.id).sort((a, b) => a.order - b.order),
     [folders, folder.id],
@@ -640,7 +661,7 @@ function FolderNode({ folder, depth }: { folder: FolderEntry; depth: number }) {
               {folder.name}
             </Link>
           )}
-          {count > 0 && <span className="pr-1 text-[11.5px] text-ink-3 group-hover:hidden">{count}</span>}
+          {count > 0 && <span className="pr-1 text-[11.5px] text-ink-2 group-hover:hidden">{count}</span>}
           <button
             aria-label={t("nav.newDoc")}
             onClick={() => void newNoteAndOpen(navigate, folder.notebookId, folder.id)}

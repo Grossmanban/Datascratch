@@ -72,15 +72,19 @@ def ensure_bundle_id(identifier: str, name: str) -> None:
         bundle = call("POST", "/bundleIds", {"data": {"type": "bundleIds", "attributes": {
             "identifier": identifier, "name": name, "platform": "IOS"}}})["data"]
         print(f"Registered bundle ID {identifier}.")
-    capabilities = call("GET", f"/bundleIds/{bundle['id']}/bundleCapabilities")["data"]
-    if any(c["attributes"].get("capabilityType") == "ASSOCIATED_DOMAINS" for c in capabilities):
-        print("Associated Domains is enabled.")
-        return
-    call("POST", "/bundleIdCapabilities", {"data": {
-        "type": "bundleIdCapabilities",
-        "attributes": {"capabilityType": "ASSOCIATED_DOMAINS"},
-        "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle["id"]}}}}})
-    print("Enabled Associated Domains.")
+    # The capability is a safety net (automatic signing enables it too), so a failure here only warns.
+    try:
+        capabilities = call("GET", f"/bundleIds/{bundle['id']}/bundleIdCapabilities")["data"]
+        if any(c["attributes"].get("capabilityType") == "ASSOCIATED_DOMAINS" for c in capabilities):
+            print("Associated Domains is enabled.")
+            return
+        call("POST", "/bundleIdCapabilities", {"data": {
+            "type": "bundleIdCapabilities",
+            "attributes": {"capabilityType": "ASSOCIATED_DOMAINS"},
+            "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle["id"]}}}}})
+        print("Enabled Associated Domains.")
+    except SystemExit as error:
+        print(str(error).replace("::error", "::warning", 1))
 
 
 def check_app(identifier: str) -> None:

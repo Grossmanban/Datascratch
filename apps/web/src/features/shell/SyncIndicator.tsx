@@ -26,7 +26,7 @@ export function SyncIndicator({ compact }: { compact?: boolean }) {
   return (
     <Tooltip content={label} side="top">
       <div
-        className="flex h-7 items-center gap-2 rounded-md px-2 text-[12px] text-ink-3"
+        className="flex h-7 items-center gap-2 rounded-md px-2 text-[12px] text-ink-2"
         data-testid="sync-status"
         data-status={status}
         aria-label={label}

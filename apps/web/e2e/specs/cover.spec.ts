@@ -22,9 +22,12 @@ test("document cover: encrypted upload, visible on another device", async ({ pag
   await signUp(page, email);
   await newDoc(page, "С обложкой", "Текст");
   const png = await makePng(page);
-  await page.locator("article").hover();
+  // spec/12 §12.7: no cover by default; added from «…» → «Обложка».
+  await expect(page.getByTestId("doc-cover")).toHaveCount(0);
+  await page.getByRole("button", { name: /Ещё|More/ }).click();
+  await page.getByRole("menuitem", { name: "Обложка…" }).click();
   const chooser = page.waitForEvent("filechooser");
-  await page.getByTestId("add-cover").click();
+  await page.getByTestId("cover-pick").click();
   await (await chooser).setFiles({ name: "cover.png", mimeType: "image/png", buffer: png });
   await expect(page.getByTestId("doc-cover").locator("img")).toBeVisible({ timeout: 15_000 });
   await expectSynced(page);
@@ -38,4 +41,22 @@ test("document cover: encrypted upload, visible on another device", async ({ pag
   await card.click();
   await expect(p2.getByTestId("doc-cover").locator("img")).toBeVisible({ timeout: 15_000 });
   await ctx.close();
+});
+
+test("cover from the clipboard; cards without a cover have no picture", async ({ page }) => {
+  await signUp(page, uniqueEmail("cover-paste"));
+  await expect(page.getByTestId("doc-card").first().locator("img")).toHaveCount(0);
+  await newDoc(page, "Скриншот", "Текст");
+  const png = await makePng(page);
+  await page.getByRole("button", { name: /Ещё|More/ }).click();
+  await page.getByRole("menuitem", { name: "Обложка…" }).click();
+  await expect(page.getByTestId("cover-drop")).toBeVisible();
+  await page.evaluate((b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], "shot.png", { type: "image/png" }));
+    window.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt }));
+  }, png.toString("base64"));
+  await expect(page.getByTestId("doc-cover").locator("img")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("cover-drop")).toBeHidden();
 });

@@ -12,7 +12,7 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "mock-server": "node e2e/mock-server/server.mjs",
-    "e2e:build": "VITE_DS_SERVER_URL=http://localhost:8787 vite build && playwright test"
+    "e2e:build": "VITE_DS_SERVER_URL=http://localhost:8787 VITE_DS_TEST_HOOKS=1 vite build && playwright test"
   },
   "dependencies": {
     "@datascratch/design-tokens": "workspace:^",
@@ -21,6 +21,7 @@
     "@datascratch/web-editor": "workspace:^",
     "@tanstack/react-query": "^5",
     "@tanstack/react-router": "^1.168",
+    "@tanstack/react-virtual": "^3",
     "@tiptap/core": "^3",
     "@tiptap/extension-collaboration": "^3",
     "@tiptap/extension-collaboration-caret": "^3",
@@ -49,6 +50,7 @@
     "zustand": "^5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "^4",
     "@testing-library/dom": "^10.4.2",

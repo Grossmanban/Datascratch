@@ -21,7 +21,7 @@ test("move a note to another notebook and open it on another device", async ({ p
   await page.getByRole("menuitem", { name: "Переместить в блокнот…" }).click();
   await page.getByRole("menuitem", { name: "Архив" }).click();
   await page.getByRole("menuitem", { name: "Корень блокнота" }).click();
-  await expect(page.getByText("Перемещено в «Архив»")).toBeVisible();
+  await expect(page.getByText("Перемещено в «Архив»", { exact: true })).toBeVisible();
   await expectSynced(page);
 
   await archive.click();

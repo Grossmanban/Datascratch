@@ -74,7 +74,8 @@ export function Spinner({ className, size }: { className?: string; size?: number
 }
 
 export function Kbd({ children }: { children: string }) {
-  return <UIKbd shortcut={children} />;
+  // text.secondary: the design system's tertiary caption fails AA contrast in the dark theme.
+  return <UIKbd shortcut={children} className="text-ink-2" />;
 }
 
 // ---------- dialogs ----------

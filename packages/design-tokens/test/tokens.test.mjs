@@ -63,18 +63,61 @@ test("contract values that are fixed by the type scale", () => {
     assert.equal(v.lineHeight, v.font === "display" ? 1.2 : 1.5);
 });
 
-test("text is legible on paper in both themes (WCAG)", () => {
-  for (const theme of ["light", "dark"]) {
-    const bg = t.color["bg.canvas"][theme];
-    assert.ok(contrast(t.color["text.primary"][theme], bg) >= 12, `primary ${theme}`);
-    assert.ok(contrast(t.color["text.secondary"][theme], bg) >= 4.5, `secondary ${theme}`);
-    assert.ok(contrast(t.color.accent[theme], bg) >= 4.5, `accent ${theme}`);
-    assert.ok(contrast(t.color.danger[theme], bg) >= 3, `danger ${theme}`);
-    for (const [name, tint] of Object.entries(t.tint)) {
-      assert.ok(contrast(tint.fg[theme], tint.bg[theme]) >= 3, `tint ${name} ${theme}`);
+// WCAG AA matrix: every colour used for text against every surface it sits on.
+// Surfaces: canvas, surface, sidebar and the elevated glass (as solid). Soft chip
+// backgrounds are the colour mixed 14 % into canvas/surface (bg-accent-soft & co.).
+const mix = (fg, bg, p) => {
+  const a = parseHex(fg);
+  const b = parseHex(bg);
+  return toHex({
+    r: a.r * p + b.r * (1 - p),
+    g: a.g * p + b.g * (1 - p),
+    b: a.b * p + b.b * (1 - p),
+  });
+};
+const surfaces = (theme) => [
+  ...["bg.canvas", "bg.surface", "bg.sidebar"].map((k) => t.color[k][theme]),
+  t.color["bg.elevated"][theme].slice(0, 7),
+];
+const AA = 4.5;
+
+for (const theme of ["light", "dark"]) {
+  test(`text contrast ≥ AA on every surface (${theme})`, () => {
+    const failures = [];
+    const check = (name, fg, bg, min) => {
+      const c = contrast(fg, bg);
+      if (c < min) failures.push(`${name} ${fg} on ${bg}: ${c.toFixed(2)} < ${min}`);
+    };
+    for (const bg of surfaces(theme)) {
+      check("text.primary", t.color["text.primary"][theme], bg, 12);
+      check("text.secondary", t.color["text.secondary"][theme], bg, 6);
+      check("text.tertiary", t.color["text.tertiary"][theme], bg, AA);
+      for (const k of ["accent", "danger", "success", "warning"])
+        check(k, t.color[k][theme], bg, AA);
     }
-  }
-});
+    for (const bg of surfaces(theme).slice(0, 2)) {
+      for (const k of ["accent", "danger", "success", "warning"]) {
+        check(`${k} on soft`, t.color[k][theme], mix(t.color[k][theme], bg, 0.14), AA);
+      }
+    }
+    for (const [name, tint] of Object.entries(t.tint)) {
+      check(`tint.${name} on its bg`, tint.fg[theme], tint.bg[theme], AA);
+      for (const bg of surfaces(theme).slice(0, 2)) check(`tint.${name}`, tint.fg[theme], bg, AA);
+    }
+    assert.deepEqual(failures, []);
+  });
+
+  test(`text hierarchy is preserved (${theme})`, () => {
+    const bg = t.color["bg.canvas"][theme];
+    const [p, s, q] = ["text.primary", "text.secondary", "text.tertiary"].map((k) =>
+      contrast(t.color[k][theme], bg),
+    );
+    assert.ok(
+      p > s + 3 && s > q + 1,
+      `primary ${p.toFixed(2)} > secondary ${s.toFixed(2)} > tertiary ${q.toFixed(2)}`,
+    );
+  });
+}
 
 test("labels on filled accent read in both themes", () => {
   // UI uses white on light accent and canvas ink on the (light) dark-theme accent.

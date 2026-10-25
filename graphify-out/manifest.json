@@ -313,9 +313,9 @@
   },
   "docs/spec/06-data-server.md": {
     "mtime": 1792943219.4900932,
-    "seen": 1792943236.934984,
+    "seen": 1792943373.229848,
     "ast_hash": "62b4f0dbd4cdf6aa4958261863617057",
-    "semantic_hash": ""
+    "semantic_hash": "62b4f0dbd4cdf6aa4958261863617057"
   },
   "docs/spec/07-encryption.md": {
     "mtime": 1792941192.3340766,
@@ -1045,15 +1045,15 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792930021.2139332,
-    "seen": 1792943244.2348192,
+    "seen": 1792943373.2287736,
     "ast_hash": "24098989e922515ff0fa0aac07aa956f",
-    "semantic_hash": ""
+    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792930021.2139332,
-    "seen": 1792943244.2348232,
+    "seen": 1792943373.228777,
     "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
-    "semantic_hash": ""
+    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1792930021.2197683,
@@ -3955,9 +3955,9 @@
   },
   ".github/workflows/deploy.yml": {
     "mtime": 1792942918.0772011,
-    "seen": 1792943236.913244,
+    "seen": 1792943373.228349,
     "ast_hash": "fbed4575a68176e06bbaa10807e7929a",
-    "semantic_hash": ""
+    "semantic_hash": "fbed4575a68176e06bbaa10807e7929a"
   },
   "infra/deploy/bootstrap.sh": {
     "mtime": 1792942884.813867,
@@ -3997,8 +3997,8 @@
   },
   "infra/DEPLOY.md": {
     "mtime": 1792942918.0775747,
-    "seen": 1792943236.9351408,
+    "seen": 1792943373.22985,
     "ast_hash": "7b77fed8a7bf3b469971c0d5f4a1b521",
-    "semantic_hash": ""
+    "semantic_hash": "7b77fed8a7bf3b469971c0d5f4a1b521"
   }
 }

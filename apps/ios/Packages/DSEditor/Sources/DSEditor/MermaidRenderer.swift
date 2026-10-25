@@ -10,12 +10,16 @@ final class MermaidRenderer: NSObject {
     static let didRender = Notification.Name("DSEditor.MermaidRenderer.didRender")
 
     private var webView: WKWebView?
+    /// Separate off-screen window for the web view. WebKit installs many touch-delaying gesture
+    /// recognizers; inside the editor's window they took part in every touch on the text and
+    /// crashed UIKit's gesture environment depending on when the diagram finished loading.
+    private var offscreenWindow: UIWindow?
     private var ready = false
     private var queue: [(String, (UIImage?) -> Void)] = []
     private var busy = false
     private var images: [String: UIImage] = [:]
     private var failed: Set<String> = []
-    /// View the web view is attached to (snapshots need a window).
+    /// A view of the editor; only its window scene is used (snapshots need a window).
     weak var host: UIView?
 
     func cachedImage(for source: String) -> UIImage? { images[source] }
@@ -30,7 +34,7 @@ final class MermaidRenderer: NSObject {
 
     private func setUp() -> Bool {
         if webView != nil { return true }
-        guard let host, host.window != nil,
+        guard let host, let scene = host.window?.windowScene,
               let url = Bundle.module.url(forResource: "mermaid.min", withExtension: "js"),
               let script = try? String(contentsOf: url, encoding: .utf8) else { return false }
         let config = WKWebViewConfiguration()
@@ -43,7 +47,16 @@ final class MermaidRenderer: NSObject {
         wv.alpha = 0.011
         wv.isUserInteractionEnabled = false
         wv.navigationDelegate = self
-        host.addSubview(wv)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: -5000, y: 0, width: 900, height: 1200)
+        window.windowLevel = UIWindow.Level(rawValue: -1000)
+        window.isUserInteractionEnabled = false
+        window.rootViewController = UIViewController()
+        window.isHidden = false
+        window.addSubview(wv)
+        wv.frame = window.bounds
+        offscreenWindow = window
+        EditorDiagnostics.log("mermaid web view created in its own window")
         wv.loadHTMLString("<html><head><meta name='viewport' content='width=900'><style>body{margin:0;background:transparent}#c{display:inline-block;padding:8px}</style></head><body><div id='c'></div></body></html>", baseURL: nil)
         webView = wv
         return true
@@ -98,6 +111,7 @@ final class MermaidRenderer: NSObject {
 
 extension MermaidRenderer: @preconcurrency WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        EditorDiagnostics.log("mermaid web view loaded")
         ready = true
         pump()
     }

@@ -45,6 +45,16 @@ final class EditorTextView: UITextView {
         onLayout?()
     }
 
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        EditorDiagnostics.log("text view touchesBegan \(touches.map { "\($0.type.rawValue)@\(String(describing: type(of: $0.view as Any)))" })")
+        super.touchesBegan(touches, with: event)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        EditorDiagnostics.log("text view touchesEnded")
+        super.touchesEnded(touches, with: event)
+    }
+
     override var keyCommands: [UIKeyCommand]? {
         func cmd(_ title: String, _ input: String, _ mods: UIKeyModifierFlags, _ action: EditorAction) -> UIKeyCommand {
             let c = UIKeyCommand(title: title, action: #selector(handleKey(_:)), input: input, modifierFlags: mods,

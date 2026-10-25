@@ -1,3 +1,6 @@
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 import Foundation
 
 /// Shared stroke thickness rules (`strokes.md` §5) so ink looks the same on every platform.

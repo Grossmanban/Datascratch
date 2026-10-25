@@ -1,0 +1,59 @@
+# Production stack installed by the deploy workflow into /opt/datascratch.
+# Images come from GHCR; the tag and the domain are written by deploy.sh into
+# the managed block of .env (secrets in .env are generated once on the server).
+name: datascratch
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-datascratch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-datascratch}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    shm_size: 128mb
+
+  server:
+    image: ${DS_SERVER_IMAGE:-ghcr.io/grossmanban/datascratch-server}:${DS_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-datascratch}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-datascratch}
+      STORAGE_DIR: /data/files
+      PORT: 8080
+      PUBLIC_URL: https://${DS_DOMAIN:-localhost}
+      APP_URL: https://${DS_DOMAIN:-localhost}
+      DS_VERSION: ${DS_TAG:-latest}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - files:/data/files
+
+  caddy:
+    image: ${DS_WEB_IMAGE:-ghcr.io/grossmanban/datascratch-web}:${DS_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DS_DOMAIN: ${DS_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - server
+
+volumes:
+  pgdata:
+  files:
+  caddy_data:
+  caddy_config:

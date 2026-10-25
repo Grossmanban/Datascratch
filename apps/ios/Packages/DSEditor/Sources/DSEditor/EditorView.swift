@@ -307,11 +307,10 @@ public final class EditorView: UIView {
 
     // MARK: - Keyboard
 
-    /// Keyboard overlap is handled inside the editor: the bottom scroll inset grows so the caret
-    /// stays visible, while the view keeps its size. Hosts should not shrink the editor for the
-    /// keyboard (SwiftUI: `.ignoresSafeArea(.keyboard)`): resizing it while a tap into the text was
-    /// still being delivered re-laid out the whole document and crashed UIKit's gesture environment.
-    /// If the host does shrink it anyway, the overlap is zero and nothing changes.
+    /// Keyboard overlap fallback: when the host keeps the editor full height under the keyboard,
+    /// the bottom scroll inset grows by the overlap. Hosts should let the editor shrink for the
+    /// keyboard (the SwiftUI default) — then the overlap is zero and this does nothing. In the demo
+    /// under XCUITest, a full-height editor under the keyboard crashed UIKit on a tap into the text.
     private var keyboardFrame: CGRect?
 
     private func keyboardFrameChanged(_ frame: CGRect?) {
@@ -331,13 +330,12 @@ public final class EditorView: UIView {
         let inkBeyond = max(0, (ink?.inkExtentMaxY ?? 0) + 40 - textView.contentSize.height)
         let bottom = overlap + inkBeyond
         guard textView.contentInset.bottom != bottom else { return }
-        textView.contentInset.bottom = bottom
-        textView.verticalScrollIndicatorInsets.bottom = overlap
-        if overlap > 0, textView.isFirstResponder {
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.textView.scrollRangeToVisible(self.textView.selectedRange)
-            }
+        // Applied on the next main-queue turn (never while a touch is being delivered), without
+        // forcing a scroll: the text view keeps the caret visible itself.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.textView.contentInset.bottom != bottom else { return }
+            self.textView.contentInset.bottom = bottom
+            self.textView.verticalScrollIndicatorInsets.bottom = overlap
         }
     }
 

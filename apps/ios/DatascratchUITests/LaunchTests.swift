@@ -363,24 +363,45 @@ final class LibraryUITests: XCTestCase {
         checkInside("back from full screen")
     }
 
-    /// iPad: Tasks (like the calendar or a list) can take the whole width and come back.
+    /// iPad: Tasks get the whole width when chosen, come back to the columns and go full
+    /// screen again; the segment labels are never cut off (a menu replaces them when narrow).
     func testContentFullScreenOnIPad() throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
         let app = launchSignedIn()
         let tasks = sidebarElement(app, "sidebar.tasks")
         XCTAssertTrue(tasks.exists, "no Tasks in the sidebar; buttons: \(Self.buttons(app))")
         tasks.tap()
-        let expand = app.buttons["content.fullScreen"].firstMatch
-        XCTAssertTrue(expand.waitForExistence(timeout: 5), "no Full Screen button on Tasks; buttons: \(Self.buttons(app))")
-        expand.tap()
         settle(1.5)
         let bucket = app.descendants(matching: .any)["tasks.bucket"].firstMatch
         XCTAssertTrue(bucket.waitForExistence(timeout: 3))
         let window = app.windows.firstMatch.frame
         XCTAssertGreaterThan(bucket.frame.midX, window.width * 0.35, "Tasks did not take the whole width")
-        app.buttons["content.fullScreen"].firstMatch.tap()
+        let toggle = app.buttons["content.fullScreen"].firstMatch
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3), "no Full Screen button on Tasks; buttons: \(Self.buttons(app))")
+        toggle.tap()
         settle(1.5)
         XCTAssertTrue(sidebarElement(app, "sidebar.tasks").exists, "the columns did not come back")
+        // In the narrow column the bucket labels must not be truncated ("С…").
+        let truncated = app.buttons.allElementsBoundByIndex.prefix(40).filter { $0.label.hasSuffix("…") && $0.label.count <= 3 }
+        XCTAssertTrue(truncated.isEmpty, "cut-off labels: \(truncated.map(\.label))")
+        app.buttons["content.fullScreen"].firstMatch.tap()
+        settle(1.5)
+        XCTAssertGreaterThan(bucket.frame.midX, window.width * 0.35, "Full Screen did not come back")
+    }
+
+    /// iPad: closing the document gives the screen beside it the whole width.
+    func testClosingTheDocumentOnIPad() throws {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let close = app.buttons["document.close"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 3), "no Close Document button; buttons: \(Self.buttons(app))")
+        close.tap()
+        settle(1.5)
+        XCTAssertFalse(app.descendants(matching: .any)["editor"].firstMatch.exists, "the document is still open")
+        let card = app.descendants(matching: .any)["document.card"].firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 3), "the document list is not shown")
+        XCTAssertTrue(app.buttons["content.fullScreen"].firstMatch.exists, "the list is not on the whole width")
     }
 
     /// Tabs close with their own button.

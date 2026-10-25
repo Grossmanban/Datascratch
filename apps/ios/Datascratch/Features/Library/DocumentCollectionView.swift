@@ -299,16 +299,21 @@ struct DocumentRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Space.s3) {
-            RoundedRectangle(cornerRadius: Theme.Radius.sm)
-                .fill(note.cover.map { AnyShapeStyle($0.gradient) } ?? AnyShapeStyle(Theme.Palette.sidebar))
-                .overlay {
-                    if let thumb = note.coverThumb ?? note.coverImage?.attachmentId {
-                        CoverImageView(noteId: note.id, attachmentId: thumb, offsetY: note.coverImage?.offsetY ?? 0.5)
+            // A thumbnail only for a cover the user chose (spec/12 §12.7); otherwise just the emoji.
+            if CoverHeader.hasCover(note) {
+                RoundedRectangle(cornerRadius: Theme.Radius.sm)
+                    .fill(note.cover.map { AnyShapeStyle($0.gradient) } ?? AnyShapeStyle(Theme.Palette.sidebar))
+                    .overlay {
+                        if let thumb = note.coverThumb ?? note.coverImage?.attachmentId {
+                            CoverImageView(noteId: note.id, attachmentId: thumb, offsetY: note.coverImage?.offsetY ?? 0.5)
+                        }
                     }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
-                .frame(width: 40, height: 40)
-                .overlay { if let icon = note.icon { Text(icon) } }
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+                    .frame(width: 40, height: 40)
+                    .overlay { if let icon = note.icon { Text(icon) } }
+            } else if let icon = note.icon {
+                Text(icon).font(.system(size: 22)).frame(width: 32)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(note.title.isEmpty ? String(localized: "Untitled") : note.title)
                     .font(.headline)

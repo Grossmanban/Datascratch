@@ -2,7 +2,7 @@ import { Check, ChevronRight } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { cn } from "../lib/cn";
-import { formatShortcut } from "./Kbd";
+import { shortcutLabel } from "./Kbd";
 import {
   menuContent,
   menuItem,
@@ -53,7 +53,7 @@ export const DropdownMenuItem = forwardRef<HTMLDivElement, MenuItemProps>(functi
     <M.Item ref={ref} className={cn(menuItem, danger && menuItemDanger, className)} {...rest}>
       {icon}
       <span className="flex-1 truncate">{children}</span>
-      {shortcut && <span className={menuShortcut}>{formatShortcut(shortcut).join("")}</span>}
+      {shortcut && <span className={menuShortcut}>{shortcutLabel(shortcut)}</span>}
     </M.Item>
   );
 });

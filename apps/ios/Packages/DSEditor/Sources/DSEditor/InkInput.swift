@@ -70,6 +70,8 @@ final class InkInputRecognizer: UIGestureRecognizer {
                 ignore(t, for: event)
             }
         }
+        // Not a pen stroke: get out of the way of text selection and scrolling at once.
+        if tracked == nil, state == .possible { state = .failed }
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {

@@ -107,11 +107,18 @@ public final class EditorView: UIView {
             guard let self, self.tools.mode.capturesPen else { return false }
             return touch.type == .pencil || (self.tools.allowsFingerDrawing && touch.type == .direct)
         }
-        inkInput.onBegan = { [weak self] s in self?.ink.penBegan(s) }
+        inkInput.onBegan = { [weak self] s in
+            guard let self else { return }
+            // Palm rejection: a resting hand must not scroll the page while the pen draws.
+            self.textView.panGestureRecognizer.isEnabled = false
+            self.ink.penBegan(s)
+        }
         inkInput.onMoved = { [weak self] c, p in self?.ink.penMoved(c, predicted: p) }
         inkInput.onEnded = { [weak self] cancelled in
-            self?.ink.penEnded(cancelled: cancelled)
-            self?.onStateChange?()
+            guard let self else { return }
+            self.ink.penEnded(cancelled: cancelled)
+            self.textView.panGestureRecognizer.isEnabled = true
+            self.onStateChange?()
         }
         inkInput.onEstimatedUpdate = { [weak self] s in self?.ink.penEstimatedUpdate(s) }
         textView.addGestureRecognizer(inkInput)

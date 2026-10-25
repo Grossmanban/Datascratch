@@ -11,6 +11,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/mgriebling/SwiftMath.git", from: "1.7.0"),
+        .package(path: "../DSDesign"),
     ],
     targets: [
         // Pure Swift: stroke format, codec, living-stroke geometry. Builds on Linux.
@@ -23,6 +24,7 @@ let package = Package(
             dependencies: [
                 "DSInk", "DSEditorModel",
                 .product(name: "SwiftMath", package: "SwiftMath", condition: .when(platforms: [.iOS])),
+                .product(name: "DSDesign", package: "DSDesign", condition: .when(platforms: [.iOS])),
             ],
             resources: [.copy("Resources/mermaid.min.js"), .copy("Resources/mermaid-LICENSE.txt")]
         ),

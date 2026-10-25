@@ -68,7 +68,7 @@ public struct InkPaint: Equatable, Sendable {
         case .pen: InkPaint(color: "ink.blue", width: 2.2, opacity: 1)
         case .pencil: InkPaint(color: "ink.black", width: 1.6, opacity: 0.85)
         case .marker: InkPaint(color: "ink.red", width: 3.5, opacity: 0.95)
-        case .highlighter: InkPaint(color: "highlight.yellow", width: 16, opacity: 0.45)
+        case .highlighter: InkPaint(color: "highlight.yellow", width: 16, opacity: 1)
         }
     }
 }

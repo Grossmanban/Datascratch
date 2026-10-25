@@ -503,8 +503,8 @@ export const tokens = {
     "display": {
       "ios": "New York",
       "web": [
-        "Newsreader Variable",
-        "Newsreader",
+        "Source Serif 4 Variable",
+        "Source Serif 4",
         "ui-serif",
         "New York",
         "Georgia",

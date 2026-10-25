@@ -45,7 +45,11 @@ DSHaptics.taskComplete()                          // тактильная отд
 | `DSSkeleton`, `DSSkeletonLines`, `DSSpinner` | Загрузка |
 | `DSAvatar`, `DSAvatarStack` | Аватары и присутствие |
 
+| `DSShowcase` | Все компоненты на одном экране (превью, отладочный экран, снимки в CI) |
+
 У каждого компонента есть превью (`#Preview`) в светлой и тёмной теме.
+
+Подключение в приложении: локальная зависимость `.package(path: "Packages/DSDesign")`, продукт `DSDesign`.
 
 ## Сборка и тесты
 
@@ -54,4 +58,6 @@ xcodebuild -scheme DSDesign -destination 'generic/platform=iOS Simulator' build
 xcodebuild -scheme DSDesign -destination 'platform=iOS Simulator,name=<iPhone>' test
 ```
 
-В CI — `.github/workflows/design.yml` (macOS). Тесты — Swift Testing (`Tests/DSDesignTests`).
+В CI — `.github/workflows/design.yml` (macOS). Тесты — Swift Testing (`Tests/DSDesignTests`). CI также рендерит `DSShowcase` в PNG (светлая и тёмная тема) и выкладывает артефактом `dsdesign-snapshots` — для проверки дизайна без Mac. Локально: `TEST_RUNNER_DS_SNAPSHOT_DIR=/tmp/snap xcodebuild test …`.
+
+Правила дат (`DSDateChipModel`) совпадают с вебом (`packages/ui/src/lib/date.ts`): одинаковые подписи и тона, общие тестовые случаи.

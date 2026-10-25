@@ -33,5 +33,5 @@ fi
 
 echo "[graphify] $(graphify --version 2>/dev/null) ready; $(graphify hook status 2>/dev/null | head -1)"
 graphify check-update . 2>/dev/null | head -5
-echo "[graphify] Rule: before committing, refresh the graph — code: 'graphify update .', docs meaning layer: '/graphify . --update' (the git hook refreshes only code and doc structure; see CLAUDE.md)."
+echo "[graphify] Rule: before committing, refresh the graph — code: 'graphify update .', docs: tools/graphify_docs.py prepare/finish (the git hook skips docs; see docs/development.md)."
 exit 0

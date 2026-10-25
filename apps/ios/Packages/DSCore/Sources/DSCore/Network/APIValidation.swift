@@ -237,6 +237,69 @@ public struct RegisterDocRequest: Codable, Sendable {
 }
 
 /// `PATCH /docs/:id` — move a note to another notebook of the same user.
+/// `POST /auth/recovery-key`: new recovery key, confirmed by the current password (crypto.md §4).
+public struct RotateRecoveryKeyRequest: Codable, Sendable, Equatable {
+    public var currentLoginKey: Base64URLData
+    public var recoveryLoginKey: Base64URLData
+    public var wrappedMasterKeyRecovery: Base64URLData
+
+    public init(currentLoginKey: Data, recoveryLoginKey: Data, wrappedMasterKeyRecovery: Data) {
+        self.currentLoginKey = .init(currentLoginKey)
+        self.recoveryLoginKey = .init(recoveryLoginKey)
+        self.wrappedMasterKeyRecovery = .init(wrappedMasterKeyRecovery)
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        currentLoginKey = try APIValidation.bytes(c, .currentLoginKey, length: 32)
+        recoveryLoginKey = try APIValidation.bytes(c, .recoveryLoginKey, length: 32)
+        wrappedMasterKeyRecovery = try APIValidation.bytes(c, .wrappedMasterKeyRecovery, nonEmpty: true)
+    }
+}
+
+public enum SecurityEventKind: String, Codable, Sendable {
+    case passwordChanged = "password_changed"
+    case recoveryUsed = "recovery_used"
+    case recoveryKeyRotated = "recovery_key_rotated"
+}
+
+/// Entry of the account security log (`GET /me/security-events`, newest first).
+public struct SecurityEvent: Codable, Hashable, Sendable {
+    public var kind: SecurityEventKind
+    public var at: String
+    /// Device that did it; `nil` when it was not a signed-in device (recovery) or is gone.
+    public var deviceId: String?
+    public var deviceName: String?
+
+    enum CodingKeys: String, CodingKey { case kind, at, deviceId, deviceName }
+
+    public init(kind: SecurityEventKind, at: String, deviceId: String?, deviceName: String?) {
+        self.kind = kind
+        self.at = at
+        self.deviceId = deviceId
+        self.deviceName = deviceName
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decode(SecurityEventKind.self, forKey: .kind)
+        at = try APIValidation.isoDateTime(c, .at)
+        // Nullable but required, like the TS schema.
+        deviceId = try c.decodeNil(forKey: .deviceId) ? nil : try c.decode(String.self, forKey: .deviceId)
+        deviceName = try c.decodeNil(forKey: .deviceName) ? nil : try c.decode(String.self, forKey: .deviceName)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(kind, forKey: .kind)
+        try c.encode(at, forKey: .at)
+        try c.encode(deviceId, forKey: .deviceId)
+        try c.encode(deviceName, forKey: .deviceName)
+    }
+
+    public var date: Date? { DSDate.parseISO(at) }
+}
+
 public struct MoveDocRequest: Codable, Sendable {
     public var notebookId: String
 

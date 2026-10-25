@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-10-25)
 
 ## Corpus Check
-- 656 files · ~350,963 words
+- 656 files · ~350,966 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 31 file(s) not represented in the graph (top: (none) 15, .css 6, .example 4)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `cb732b8e`
+- Built from commit: `9096d730`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -363,7 +363,7 @@
   docs/architecture/contracts/document-model.md → packages/shared/src/contracts/common.ts
 - `4.4. `comments`` --references--> `Comment`  [INFERRED]
   docs/architecture/contracts/document-model.md → apps/ios/Packages/DSCore/Sources/DSCore/Model/NoteDocument.swift
-- `2. Документ `account`` --references--> `Space`  [INFERRED]
+- `2. Документ `account`` --references--> `NotebookRef`  [INFERRED]
   docs/architecture/contracts/document-model.md → packages/shared/src/contracts/document.ts
 
 ## Import Cycles
@@ -1507,14 +1507,14 @@ Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `1. Три вида документов Yjs` connect `String` to `.start`, `document-model.md`?**
-  _High betweenness centrality (0.087) - this node is a cross-community bridge._
+- **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `ui/src/index.ts`, `scripts/generate.mjs`, `SwiftUI`, `DatascratchEditor component`, `DSDateChip`?**
+  _High betweenness centrality (0.070) - this node is a cross-community bridge._
 - **What connects `signUp`, `signIn`, `recover` to the rest of the system?**
   _981 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `0025-no-redis.md` be split into smaller, more focused modules?**
   _Cohesion score 0.023738626964433417 - nodes in this community are weakly interconnected._
-- **Why does `DocKind` connect `String` to `CRDTDocument.swift`, `DSColorToken`, `CRDTDocument`, `LocalStore`, `Sendable`?**
-  _High betweenness centrality (0.085) - this node is a cross-community bridge._
+- **Why does `1. Три вида документов Yjs` connect `String` to `.start`, `document-model.md`?**
+  _High betweenness centrality (0.068) - this node is a cross-community bridge._
 - **Should `.start` be split into smaller, more focused modules?**
   _Cohesion score 0.06430745814307458 - nodes in this community are weakly interconnected._
 

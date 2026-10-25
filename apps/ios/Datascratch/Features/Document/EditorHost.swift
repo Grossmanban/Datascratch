@@ -34,7 +34,10 @@ struct StandInBlockEditor: View {
         let blocks = library.body(noteId).blocks
         VStack(alignment: .leading, spacing: Theme.Space.s2) {
             ForEach(blocks) { block in
+                // The hint shows only on an empty document or the empty line being edited.
                 BlockRow(noteId: noteId, block: block, style: style, readOnly: readOnly,
+                         showsPlaceholder: !readOnly && (focusedBlock == block.id
+                             || (blocks.count == 1 && focusedBlock == nil)),
                          focusedBlock: $focusedBlock,
                          onChangeText: { update(block.id, text: $0) },
                          onConvert: { convert(block.id, to: $0) },
@@ -153,6 +156,7 @@ struct BlockRow: View {
     let block: NoteBlock
     let style: NoteStyle
     let readOnly: Bool
+    let showsPlaceholder: Bool
     var focusedBlock: FocusState<String?>.Binding
     let onChangeText: (String) -> Void
     let onConvert: (NoteBlock.Kind) -> Void
@@ -167,7 +171,10 @@ struct BlockRow: View {
                     .frame(height: 1)
                     .padding(.vertical, Theme.Space.s3)
             } else {
-                TextField(placeholder, text: Binding(get: { block.text }, set: onChangeText), axis: .vertical)
+                TextField(text: Binding(get: { block.text }, set: onChangeText),
+                          prompt: showsPlaceholder ? Text(placeholder) : nil, axis: .vertical) {
+                    Text(placeholder)
+                }
                     .font(font)
                     .foregroundStyle(textColor)
                     .strikethrough(block.task?.state == .done || block.task?.state == .cancelled,

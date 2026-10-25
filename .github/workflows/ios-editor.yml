@@ -1,0 +1,182 @@
+name: ios-editor
+
+on:
+  push:
+    branches: [main, claude/ios-editor]
+    paths:
+      - "apps/ios/Packages/DSEditor/**"
+      - "apps/ios/Packages/DSDesign/**"
+      - "apps/ios/Packages/DSCore/**"
+      - "packages/test-vectors/**"
+      - ".github/workflows/ios-editor.yml"
+  pull_request:
+    paths:
+      - "apps/ios/Packages/DSEditor/**"
+      - "apps/ios/Packages/DSDesign/**"
+      - "apps/ios/Packages/DSCore/**"
+      - "packages/test-vectors/**"
+      - ".github/workflows/ios-editor.yml"
+  workflow_dispatch:
+
+# No cancel-in-progress: cancelling a job stuck in the simulator can take many minutes and
+# would block the next run behind it.
+concurrency:
+  group: ios-editor-${{ github.sha }}
+
+jobs:
+  # Pure-Swift logic (stroke format, living-stroke geometry, document model) on Linux: fast feedback.
+  logic-linux:
+    runs-on: ubuntu-latest
+    container: swift:6.2-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test DSInk and DSEditorModel
+        working-directory: apps/ios/Packages/DSEditor
+        run: swift test --parallel
+
+  # Editor model over the real Yrs document model of DSCore (adapter package DSEditorCore).
+  core-adapter-linux:
+    runs-on: ubuntu-latest
+    container: swift:6.2-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust and system libraries
+        run: |
+          apt-get update -qq && apt-get install -y -qq curl build-essential libsodium-dev libsqlite3-dev >/dev/null
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal >/dev/null
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            apps/ios/Packages/DSCore/yrs-ffi/target
+          key: yrs-linux-${{ hashFiles('apps/ios/Packages/DSCore/yrs-ffi/**/*.rs', 'apps/ios/Packages/DSCore/yrs-ffi/Cargo.lock') }}
+      - name: Build Yrs for Linux
+        run: |
+          . "$HOME/.cargo/env"
+          apps/ios/Packages/DSCore/scripts/build-linux.sh
+      - name: Test DSEditorCore
+        working-directory: apps/ios/Packages/DSEditor/CoreAdapter
+        run: swift test
+
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          ls -d /Applications/Xcode*.app
+          XC=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          echo "Using $XC"
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - name: Pick iPad simulator
+        id: sim
+        run: |
+          ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)["devices"]
+          best = None
+          for runtime, devices in data.items():
+              if "iOS-26" not in runtime:
+                  continue
+              for d in devices:
+                  if d["name"].startswith("iPad Pro") or (best is None and d["name"].startswith("iPad")):
+                      best = d["udid"]
+          print(best or "")
+          ')
+          echo "Simulator: $ID"
+          test -n "$ID"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Build package tests
+        timeout-minutes: 15
+        working-directory: apps/ios/Packages/DSEditor
+        run: |
+          set +e
+          xcodebuild build-for-testing \
+            -scheme DSEditor-Package \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -derivedDataPath "$RUNNER_TEMP/pkg-dd" \
+            -skipPackagePluginValidation \
+            2>&1 | tee "$RUNNER_TEMP/package-build.log" | grep --line-buffered -E "error:|warning: .*DSEditor/Sources|\*\* "
+          exit ${PIPESTATUS[0]}
+
+      - name: Run package tests on iPad simulator
+        timeout-minutes: 20
+        working-directory: apps/ios/Packages/DSEditor
+        run: |
+          set +e
+          xcodebuild test-without-building \
+            -scheme DSEditor-Package \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -derivedDataPath "$RUNNER_TEMP/pkg-dd" \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 300 \
+            -resultBundlePath "$RUNNER_TEMP/package-tests.xcresult" \
+            2>&1 | tee "$RUNNER_TEMP/package-tests.log" \
+            | grep --line-buffered -E "error|Test (Suite|Case|case|run)|✔|✘|OPEN_10K|passed|failed|\*\* "
+          exit ${PIPESTATUS[0]}
+
+      - name: Generate demo project
+        if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
+        working-directory: apps/ios/Packages/DSEditor/Demo
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build and UI-test demo on iPad simulator
+        timeout-minutes: 25
+        if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
+        working-directory: apps/ios/Packages/DSEditor/Demo
+        run: |
+          set +e
+          xcodebuild test \
+            -project EditorDemo.xcodeproj -scheme EditorDemo \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 300 -maximum-test-execution-time-allowance 600 \
+            -resultBundlePath "$RUNNER_TEMP/demo-tests.xcresult" \
+            2>&1 | tee "$RUNNER_TEMP/demo-tests.log" \
+            | grep --line-buffered -E "error:|Test (Suite|Case|case)|measured|\*\* "
+          status=${PIPESTATUS[0]}
+          exit $status
+
+      - name: Build unsigned device IPA
+        timeout-minutes: 15
+        if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
+        working-directory: apps/ios/Packages/DSEditor/Demo
+        run: |
+          status=0
+          xcodebuild build \
+            -project EditorDemo.xcodeproj -scheme EditorDemo -configuration Release \
+            -destination "generic/platform=iOS" -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            > "$RUNNER_TEMP/device-build.log" 2>&1 || status=$?
+          grep -E "error:|\*\* " "$RUNNER_TEMP/device-build.log" | head -200 || true
+          test $status -eq 0
+          # ProMotion on iPhone: without this key the system caps the app at 60 Hz.
+          plutil -extract CADisableMinimumFrameDurationOnPhone raw \
+            "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/EditorDemo.app/Info.plist" | grep -qx true
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/EditorDemo.app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qr EditorDemo-unsigned.ipa Payload)
+
+      - name: Upload IPA
+        if: hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: EditorDemo-unsigned-ipa
+          path: ${{ runner.temp }}/ipa/EditorDemo-unsigned.ipa
+          if-no-files-found: ignore
+
+      - name: Upload logs and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-editor-results
+          path: |
+            ${{ runner.temp }}/*.log
+            ${{ runner.temp }}/*.xcresult
+          if-no-files-found: ignore

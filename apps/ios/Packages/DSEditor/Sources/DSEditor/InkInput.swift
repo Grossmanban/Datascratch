@@ -66,9 +66,9 @@ final class InkInputRecognizer: UIGestureRecognizer {
                 onBegan?(samples.first ?? sample(t))
                 if samples.count > 1 { onMoved?(Array(samples.dropFirst()), []) }
                 state = .began
-            } else if t !== tracked {
-                ignore(t, for: event)
             }
+            // Untracked touches are simply not followed. (Calling `ignore(_:for:)` here made UIKit's
+            // gesture environment throw while delaying touches for other recognizers.)
         }
     }
 

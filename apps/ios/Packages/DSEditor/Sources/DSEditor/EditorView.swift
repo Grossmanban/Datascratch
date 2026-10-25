@@ -130,6 +130,7 @@ public final class EditorView: UIView {
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
         tap.delegate = self
+        tap.delaysTouchesEnded = false
         textView.addGestureRecognizer(tap)
 
         textView.addInteraction(UIScribbleInteraction(delegate: self))

@@ -9,13 +9,14 @@ public protocol MapRecord: Hashable, Sendable {
 }
 
 extension CRDTDocument {
-    func records<R: MapRecord>(_ root: String, as type: R.Type = R.self) -> [R] {
-        // JSON fast path: one FFI call for the whole map (records hold no binary fields).
-        guard let map = mapJSON(root) else { return [] }
-        return map.compactMap { id, value in
-            guard let fields = value as? [String: Any] else { return nil }
-            return R(id: id, fields: fields.mapValues(YValue.fromJSONObject))
+    func records<R: MapRecord & Decodable>(_ root: String, as type: R.Type = R.self) -> [R] {
+        // Fast path: one FFI call returns the whole map as JSON, decoded straight into records
+        // (no YValue tree, no NSDictionary bridging).
+        guard let json = (try? raw.mapJson(root: root, path: [])) ?? nil else { return [] }
+        if let decoded = try? JSONDecoder().decode([String: Lenient<R>].self, from: Data(json.utf8)) {
+            return decoded.values.compactMap(\.value)
         }
+        return []
     }
 
     func record<R: MapRecord>(_ root: String, id: String, as type: R.Type = R.self) -> R? {
@@ -236,5 +237,76 @@ public struct StarredItem: Hashable, Sendable, Codable {
     init?(value: YValue) {
         guard let k = value["kind"]?.stringValue.flatMap(Kind.init(rawValue:)), let id = value["id"]?.stringValue else { return nil }
         self.init(kind: k, id: id)
+    }
+}
+
+// MARK: - Fast decoding from `Y.Map.toJSON()`
+
+/// Skips entries that are not records (e.g. a stray primitive under a record key).
+struct Lenient<R: Decodable>: Decodable {
+    let value: R?
+    init(from decoder: any Decoder) throws { value = try? R(from: decoder) }
+}
+
+/// Decodes a record straight from the JSON of its map (key = record id), without building
+/// `YValue`s. Missing or mistyped fields fall back like `init(id:fields:)` does.
+struct RecordJSON {
+    let c: KeyedDecodingContainer<AnyKey>
+    let id: String
+
+    struct AnyKey: CodingKey {
+        var stringValue: String
+        var intValue: Int? { nil }
+        init(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
+
+    init(_ decoder: any Decoder) throws {
+        c = try decoder.container(keyedBy: AnyKey.self)
+        id = decoder.codingPath.last?.stringValue ?? ""
+    }
+
+    func str(_ k: String) -> String? { (try? c.decodeIfPresent(String.self, forKey: AnyKey(stringValue: k))) ?? nil }
+    func num(_ k: String) -> Double? { (try? c.decodeIfPresent(Double.self, forKey: AnyKey(stringValue: k))) ?? nil }
+    func strings(_ k: String) -> [String] { ((try? c.decodeIfPresent([String].self, forKey: AnyKey(stringValue: k))) ?? nil) ?? [] }
+}
+
+extension Space: Decodable {
+    public init(from decoder: any Decoder) throws {
+        let r = try RecordJSON(decoder)
+        self.init(id: r.id, name: r.str("name") ?? "", icon: r.str("icon"), color: r.str("color"), order: r.num("order") ?? 0, createdAt: r.str("createdAt") ?? "")
+    }
+}
+
+extension NotebookRef: Decodable {
+    public init(from decoder: any Decoder) throws {
+        let r = try RecordJSON(decoder)
+        self.init(id: r.id, spaceId: r.str("spaceId") ?? "", name: r.str("name") ?? "", icon: r.str("icon"), color: r.str("color"), order: r.num("order") ?? 0,
+                  mode: r.str("mode").flatMap(NotebookMode.init(rawValue:)) ?? .private, createdAt: r.str("createdAt") ?? "")
+    }
+}
+
+extension Folder: Decodable {
+    public init(from decoder: any Decoder) throws {
+        let r = try RecordJSON(decoder)
+        self.init(id: r.id, parentId: r.str("parentId"), name: r.str("name") ?? "", icon: r.str("icon"), color: r.str("color"),
+                  order: r.num("order") ?? 0, createdAt: r.str("createdAt") ?? "")
+    }
+}
+
+extension NoteMeta: Decodable {
+    public init(from decoder: any Decoder) throws {
+        let r = try RecordJSON(decoder)
+        self.init(id: r.id, folderId: r.str("folderId"), parentNoteId: r.str("parentNoteId"), title: r.str("title") ?? "",
+                  kind: r.str("kind").flatMap(NoteKind.init(rawValue:)) ?? .note, dailyDate: r.str("dailyDate"), tags: r.strings("tags"),
+                  icon: r.str("icon"), coverThumb: r.str("coverThumb"), wrappedKey: r.str("wrappedKey") ?? "",
+                  createdAt: r.str("createdAt") ?? "", updatedAt: r.str("updatedAt"), trashedAt: r.str("trashedAt"), order: r.num("order") ?? 0)
+    }
+}
+
+extension TagProperties: Decodable {
+    public init(from decoder: any Decoder) throws {
+        let r = try RecordJSON(decoder)
+        self.init(name: r.id, color: r.str("color"), icon: r.str("icon"))
     }
 }

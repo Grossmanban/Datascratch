@@ -12,6 +12,9 @@ final class NativeEditorModel {
     let editor: EditorView
     let noteId: String
     let notebookId: String
+    /// Which editor instance this is (UI-test diagnostics: a rebuilt screen must reuse it).
+    let serial: Int
+    nonisolated(unsafe) private static var created = 0
     /// Bumped on every editor change so toolbars refresh.
     var revision = 0
     /// Cover and metadata scrolled with the text (`EditorView.headerView`).
@@ -24,6 +27,8 @@ final class NativeEditorModel {
         self.app = app
         self.noteId = noteId
         self.notebookId = notebookId
+        Self.created += 1
+        serial = Self.created
         let note = try core.noteDocument(noteId, notebookId: notebookId)
         editor = EditorView(document: CoreEditorDocument(note: note))
         // D-06: a finger draws only when enabled; on iPhone (no Pencil) it is on by default.
@@ -140,9 +145,14 @@ struct NativeDocumentScreen: View {
             if app.core == nil { failed = true }
             return
         }
+        if let kept = scene.editor(for: noteId) as? NativeEditorModel, kept.notebookId == note.notebookId {
+            model = kept
+            return
+        }
         do {
             let model = try NativeEditorModel(app: app, core: core, noteId: noteId, notebookId: note.notebookId)
             model.installHeader(app: app, scene: scene)
+            scene.keepEditor(model, for: noteId)
             self.model = model
         } catch {
             failed = true
@@ -366,6 +376,7 @@ struct PenPalette: View {
         .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
         .padding(.horizontal, Theme.Space.s3)
         .accessibilityElement(children: .contain)
+        .accessibilityValue(Text(verbatim: "editor \(model.serial), mode \(tools.mode.rawValue)"))
         .accessibilityIdentifier("penPalette")
     }
 

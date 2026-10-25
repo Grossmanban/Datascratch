@@ -4,3 +4,4 @@ docs/history/
 docs/decisions/0000-template.md
 .claude/
 graphify-out/
+docs/changelog.d/

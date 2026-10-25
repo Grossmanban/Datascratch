@@ -11,7 +11,15 @@ export interface BackdropProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 /** Soft Craft-like gradient (base + colour blobs) with paper grain. Themes via tokens. */
-export function Backdrop({ name, grain = true, fill = true, className, style, children, ...rest }: BackdropProps) {
+export function Backdrop({
+  name,
+  grain = true,
+  fill = true,
+  className,
+  style,
+  children,
+  ...rest
+}: BackdropProps) {
   const bg: CSSProperties = { backgroundImage: `var(--ds-backdrop-${name})`, ...style };
   return (
     <div
@@ -22,7 +30,10 @@ export function Backdrop({ name, grain = true, fill = true, className, style, ch
       {...rest}
     >
       {grain && (
-        <div className="paper-noise pointer-events-none absolute inset-0" style={{ opacity: `calc(var(--ds-backdrop-${name}-noise) * 3)` }} />
+        <div
+          className="paper-noise pointer-events-none absolute inset-0"
+          style={{ opacity: `calc(var(--ds-backdrop-${name}-noise) * 3)` }}
+        />
       )}
       {children && <div className="relative h-full">{children}</div>}
     </div>

@@ -66,7 +66,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 layout={!reduce}
                 initial={reduce ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={reduce ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.97, transition: { duration: 0.14 } }}
+                exit={
+                  reduce
+                    ? { opacity: 0 }
+                    : { opacity: 0, y: 8, scale: 0.97, transition: { duration: 0.14 } }
+                }
                 transition={spring("snappy")}
                 className={cn(
                   "glass pointer-events-auto flex w-[min(380px,calc(100vw-24px))] items-start gap-3 rounded-lg px-3.5 py-3",
@@ -76,7 +80,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 <span className="mt-px">{icons[it.tone ?? "neutral"]}</span>
                 <div className="min-w-0 flex-1">
                   <T.Title className="text-callout font-medium text-fg">{it.title}</T.Title>
-                  {it.description && <T.Description className="mt-0.5 text-footnote text-fg-secondary">{it.description}</T.Description>}
+                  {it.description && (
+                    <T.Description className="mt-0.5 text-footnote text-fg-secondary">
+                      {it.description}
+                    </T.Description>
+                  )}
                 </div>
                 {it.action && (
                   <T.Action altText={it.action.label} asChild>
@@ -89,7 +97,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     </button>
                   </T.Action>
                 )}
-                <T.Close aria-label={t.close} className="-mr-1 rounded-sm p-0.5 text-fg-tertiary outline-none hover:text-fg focus-visible:focus-ring">
+                <T.Close
+                  aria-label={t.close}
+                  className="-mr-1 rounded-sm p-0.5 text-fg-tertiary outline-none hover:text-fg focus-visible:focus-ring"
+                >
                   <X className="!size-4" />
                 </T.Close>
               </motion.li>

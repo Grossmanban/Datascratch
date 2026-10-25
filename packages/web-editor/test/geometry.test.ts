@@ -13,7 +13,7 @@ import {
   type Glyph,
   type InputPoint,
 } from "../src/pen/geometry";
-import { strokeThickness, type StrokePoint } from "../src/shared/strokes";
+import { strokeWidthAt, type StrokePoint } from "@datascratch/shared/strokes";
 
 /** A monospace line of text: glyph i spans [x0 + i*cw, x0 + (i+1)*cw]. */
 function line(text: string, opts: { x0?: number; baseline?: number; block?: number; pos0?: number; cw?: number; fontSize?: number } = {}): Glyph[] {
@@ -77,7 +77,7 @@ describe("resolveTextSegments (strokes.md §4)", () => {
     const segs = resolveTextSegments(stroke, [sp(0, 0.5, 0.1), sp(0, 1, 0.1)], (a) => boxes[a] ?? null);
     expect(segs).toHaveLength(1);
     expect(segs[0]![0]).toMatchObject({ x: 110, y: 52 });
-    expect(segs[0]![0]!.w).toBeCloseTo(strokeThickness(stroke, { pressure: 1, altitude: Math.PI / 2 }, 20 / 17));
+    expect(segs[0]![0]!.w).toBeCloseTo(strokeWidthAt(stroke, { pressure: 1, altitude: Math.PI / 2 }, { fontSize: 20 }));
   });
 
   it("breaks the stroke where neighbouring points are on different lines", () => {
@@ -158,5 +158,29 @@ describe("outlineShapes", () => {
       ]);
       expect(signedArea(quads[0]!)).toBeGreaterThan(0);
     }
+  });
+});
+
+import { expandToWords, fractionInside, pointInPolygon } from "../src/pen/geometry";
+
+describe("lasso and gestures", () => {
+  const square = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 10 },
+    { x: 0, y: 10 },
+  ];
+  it("point in polygon", () => {
+    expect(pointInPolygon(5, 5, square)).toBe(true);
+    expect(pointInPolygon(15, 5, square)).toBe(false);
+  });
+  it("fraction of a stroke inside the lasso", () => {
+    const seg = [0, 4, 8, 12].map((x, i) => ({ x, y: 5, w: 1, i }));
+    expect(fractionInside([seg], square)).toBe(0.75);
+  });
+  it("scribble deletion expands to whole words", () => {
+    const text = "one two three";
+    expect(expandToWords(text, 5, 6)).toEqual([4, 8]);
+    expect(text.slice(...expandToWords(text, 0, 1))).toBe("one ");
   });
 });

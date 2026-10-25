@@ -181,9 +181,15 @@ def finish():
     touched = {str(Path(f).resolve().relative_to(ROOT.resolve()))
                for t in SEMANTIC_TYPES for f in inc.get("new_files", {}).get(t, [])}
     touched |= {str(Path(f).resolve().relative_to(ROOT.resolve())) for f in inc.get("deleted_files", [])}
+    # build_merge also deduplicates nodes by normalized label; a node merged
+    # into a same-label survivor is not lost.
+    from graphify.build import _norm_label
     kept = {n["id"] for n in extraction["nodes"]}
+    kept_labels = {_norm_label(n.get("label", n["id"])) for n in extraction["nodes"]}
     lost = [n for n in old["nodes"] if n["id"] not in kept]
-    foreign = [n["id"] for n in lost if n.get("source_file") not in touched]
+    # Source-less nodes left without edges are pruned by build_merge itself.
+    foreign = [n["id"] for n in lost if n.get("source_file") and n.get("source_file") not in touched
+               and _norm_label(n.get("label", n["id"])) not in kept_labels]
     if foreign:
         sys.exit(f"Refusing to write: nodes from unchanged files would be lost: {foreign[:20]}")
 

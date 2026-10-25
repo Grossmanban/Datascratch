@@ -10,8 +10,8 @@ async function setup(text = "Hello brave new world") {
   await tick();
   ctx.undoManager.clear();
   const frag = ctx.doc.getXmlFragment("content");
-  const anchor = (pos: number) => decodeAnchor(encodeCharAnchor(pos, frag, binding(ctx.editor).mapping))!;
-  const resolve = (rel: Y.RelativePosition) => resolveCharAnchor(rel, ctx.doc, frag, binding(ctx.editor).mapping);
+  const anchor = (pos: number) => encodeCharAnchor(pos, frag, binding(ctx.editor).mapping);
+  const resolve = (bytes: Uint8Array) => resolveCharAnchor(bytes, decodeAnchor(bytes)!, ctx.doc, frag, binding(ctx.editor).mapping);
   const charAt = (pos: number | null) => (pos === null ? null : ctx.editor.state.doc.textBetween(pos, pos + 1));
   return { ...ctx, anchor, resolve, charAt };
 }
@@ -95,24 +95,29 @@ describe("character anchors (strokes.md §4)", () => {
 
 describe("rebaseRedoneAnchors (strokes.md: anchors after undo/redo)", () => {
   it("another device resolves the mark after the author undoes a deletion", async () => {
-    const { rebaseRedoneAnchors } = await import("../src/pen/anchors");
+    const { rebaseRedoneAnchors } = await import("@datascratch/shared/strokes");
     const t = await setup();
     const start = findText(t.editor, "brave");
     const bytes = [..."brave"].map((_, i) => encodeCharAnchor(start + i, t.doc.getXmlFragment("content"), binding(t.editor).mapping));
-    t.doc.getMap("strokes").set("s1", new Y.Map([["anchorKind", "text"], ["anchors", bytes]]) as never);
+    const { putStroke, packPoints } = await import("@datascratch/shared/strokes");
+    putStroke(t.doc, "s1", {
+      v: 1, tool: "pen", color: "ink.black", width: 2, opacity: 1, anchorKind: "text", blockId: null, anchors: bytes,
+      points: packPoints([{ a: 0, x: 0, y: 0, pressure: 1, altitude: 1, azimuth: 0, roll: 0, t: 0 }]),
+      hint: "free", author: { kind: "user", id: "u" }, createdAt: 0,
+    });
     t.editor.chain().setTextSelection({ from: start, to: start + 5 }).deleteSelection().run();
     await tick();
     t.undoManager.undo();
     await tick();
-    expect(rebaseRedoneAnchors(t.doc, "test")).toBe(1);
+    expect(rebaseRedoneAnchors(t.doc)).toEqual(["s1"]);
     // A second replica never saw the local `redone` links.
     const other = makeEditor(new Y.Doc());
     Y.applyUpdate(other.doc, Y.encodeStateAsUpdate(t.doc));
     await tick();
-    const anchors = (other.doc.getMap<Y.Map<unknown>>("strokes").get("s1")!.get("anchors") as Uint8Array[]).map((b) => decodeAnchor(b)!);
+    const anchors = other.doc.getMap<Y.Map<unknown>>("strokes").get("s1")!.get("anchors") as Uint8Array[];
     const frag = other.doc.getXmlFragment("content");
-    const chars = anchors.map((r) => {
-      const pos = resolveCharAnchor(r, other.doc, frag, binding(other.editor).mapping);
+    const chars = anchors.map((b) => {
+      const pos = resolveCharAnchor(b, decodeAnchor(b)!, other.doc, frag, binding(other.editor).mapping);
       return pos === null ? "∅" : other.editor.state.doc.textBetween(pos, pos + 1);
     });
     expect(chars.join("")).toBe("brave");

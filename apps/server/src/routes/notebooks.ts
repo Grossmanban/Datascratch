@@ -1,10 +1,10 @@
-import { and, asc, eq, inArray, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { requireUser } from '../auth/guard.js';
 import type { AppContext } from '../context.js';
 import type { DbOrTx } from '../db/client.js';
-import { docs, notebooks, shares, users } from '../db/schema.js';
+import { agentGrants, docs, notebooks, shares, users } from '../db/schema.js';
 import { fromB64, safeEqual, toB64 } from '../lib/encoding.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { topics } from '../sync/hub.js';
@@ -172,6 +172,10 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           await revokeSharesFor(ctx, tx, p.userId, [nbId, ...ids]);
           await tx.delete(docs).where(or(eq(docs.notebookId, nbId), eq(docs.id, nbId)));
           await tx.delete(notebooks).where(eq(notebooks.id, nbId));
+          await tx
+            .update(agentGrants)
+            .set({ notebookIds: sql`array_remove(${agentGrants.notebookIds}, ${nbId}::uuid)` })
+            .where(sql`${nbId}::uuid = ANY(${agentGrants.notebookIds})`);
           return ids;
         });
         for (const d of gone) ctx.hub.publish(topics.doc(d), { type: 'doc_deleted', docId: d });

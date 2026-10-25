@@ -1,0 +1,78 @@
+name: ios-app
+
+on:
+  push:
+    branches: [main, claude/ios-app]
+    paths:
+      - "apps/ios/**"
+      - ".github/workflows/ios-app.yml"
+  pull_request:
+    paths:
+      - "apps/ios/**"
+      - ".github/workflows/ios-app.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & test (${{ matrix.family }})
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        family: [iPad, iPhone]
+    defaults:
+      run:
+        working-directory: apps/ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen xcbeautify || brew install xcodegen
+
+      - name: Generate project
+        run: scripts/generate.sh
+
+      - name: Pick simulator
+        id: sim
+        run: echo "destination=$(scripts/ci-destination.sh ${{ matrix.family }})" >> "$GITHUB_OUTPUT"
+
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild build-for-testing \
+            -project Datascratch.xcodeproj -scheme Datascratch \
+            -destination "${{ steps.sim.outputs.destination }}" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO | tee build/build.log | xcbeautify --renderer github-actions || \
+          (grep -E "error:" build/build.log | head -50; exit 1)
+
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project Datascratch.xcodeproj -scheme Datascratch \
+            -destination "${{ steps.sim.outputs.destination }}" \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/Tests-${{ matrix.family }}.xcresult \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult-${{ matrix.family }}
+          path: apps/ios/build/Tests-${{ matrix.family }}.xcresult
+          retention-days: 7

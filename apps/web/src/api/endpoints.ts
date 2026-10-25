@@ -17,6 +17,7 @@ import type {
   SharePermission,
   ShareTarget,
   SignupRequest,
+  SecurityEvent,
 } from "@/lib/shared";
 import { api } from "./client";
 
@@ -27,6 +28,9 @@ export const authApi = {
   signup: (body: SignupRequest) => api.post<Session>("/auth/signup", body, noAuth),
   login: (email: string, loginKey: string, deviceName: string) =>
     api.post<Session>("/auth/login", { email, loginKey, deviceName }, noAuth),
+  /** New recovery key (crypto.md §4); the old one stops working at once. */
+  rotateRecoveryKey: (body: { currentLoginKey: string; recoveryLoginKey: string; wrappedMasterKeyRecovery: string }) =>
+    api.post<void>("/auth/recovery-key", body),
   refresh: (refreshToken: string) => api.post<Session>("/auth/refresh", { refreshToken }, noAuth),
   logout: (refreshToken: string) => api.post<void>("/auth/logout", { refreshToken }, noAuth),
   recoveryStart: (email: string, recoveryLoginKey: string) =>
@@ -51,6 +55,7 @@ export const accountApi = {
   me: () => api.get<Me>("/me"),
   devices: () => api.get<Device[]>("/devices"),
   revokeDevice: (id: string) => api.del<void>(`/devices/${id}`),
+  securityEvents: () => api.get<SecurityEvent[]>("/me/security-events"),
   deleteAccount: (loginKey: string) => api.del<void>("/me", { loginKey }),
 };
 

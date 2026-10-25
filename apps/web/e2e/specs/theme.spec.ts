@@ -14,12 +14,20 @@ function staleSurfaces(page: Page, theme: "light" | "dark") {
       const [r, g, b] = [m[1], m[2], m[3]].map((v) => Number(v) / 255);
       return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
     };
+    // Accent fills (buttons, the selected day) are meant to stand out in either theme.
+    const probe = document.createElement("div");
+    probe.style.background = "var(--ds-accent)";
+    document.body.appendChild(probe);
+    const accent = getComputedStyle(probe).backgroundColor;
+    probe.remove();
     const out: string[] = [];
     for (const el of Array.from(document.querySelectorAll<HTMLElement>("body *"))) {
       if (el.closest("img,svg,[data-testid=doc-cover],.ds-swatch,.ds-palette-tool,canvas")) continue;
       const r = el.getBoundingClientRect();
       if (r.width * r.height < 4000 || r.bottom < 0 || r.top > innerHeight) continue;
-      const l = lum(getComputedStyle(el).backgroundColor);
+      const bg = getComputedStyle(el).backgroundColor;
+      if (bg === accent) continue;
+      const l = lum(bg);
       if (l === null) continue;
       if (theme === "dark" ? l > 0.6 : l < 0.25) out.push(`${el.tagName.toLowerCase()}.${String(el.className).slice(0, 60)} (${Math.round(l * 100)}%)`);
     }

@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { HardDrive, KeyRound, LogOut, Monitor, Smartphone, Trash2 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError } from "@/api/client";
 import { accountApi } from "@/api/endpoints";
 import { changePassword, loginKeyFor } from "@/auth/flows";
+import { createNewRecoveryKey, dropStaleRecoveryKey, useRecoveryUnconfirmed } from "@/auth/recovery";
 import { confirmRecoveryKeySaved, getRecoveryKey, signOut, useAuth } from "@/auth/session";
 import { RecoveryKeyPanel } from "@/features/auth/RecoveryKeyPanel";
 import { MIN_PASSWORD } from "@/features/auth/SignupPage";
-import { formatRelative } from "@/lib/dates";
+import { formatDateTime, formatRelative } from "@/lib/dates";
 import { useSyncStatus } from "@/sync/engine";
 import { Button, cn, confirmDialog, Dialog, DialogActions, Field, Input, Spinner, toast } from "@/ui";
 import { Card, Row } from "./SettingsPage";
@@ -72,12 +73,22 @@ export function AccountSection() {
   );
 }
 
-/** spec/07: the key can be shown again; until confirmed, a gentle reminder stays here. */
+/**
+ * spec/07: the recovery key can be shown again on the device that holds it, and a new one can
+ * be made on any device (with the password). Until the current key is confirmed, a gentle
+ * reminder stays here (and as a dot on the settings icon).
+ */
 function RecoveryKeyCard() {
   const { t } = useTranslation();
-  const recovery = useAuth((s) => s.recovery);
+  const onDevice = useAuth((s) => s.recoveryOnDevice);
+  const unconfirmed = useRecoveryUnconfirmed();
   const [key, setKey] = useState<string | null>(null);
-  const unconfirmed = recovery === "unconfirmed";
+  const [fresh, setFresh] = useState(false);
+  const [rotateOpen, setRotateOpen] = useState(false);
+  useEffect(() => {
+    void dropStaleRecoveryKey();
+  }, []);
+  const text = onDevice ? (unconfirmed ? t("settings.recoveryUnconfirmed") : t("settings.recoveryConfirmed")) : unconfirmed ? t("settings.recoveryElsewhereUnconfirmed") : t("settings.recoveryElsewhere");
   return (
     <>
       <section
@@ -86,24 +97,38 @@ function RecoveryKeyCard() {
           unconfirmed ? "border-[color-mix(in_srgb,var(--ds-warning)_35%,transparent)] bg-[var(--ds-tint-yellow-bg)]" : "border-line bg-surface",
         )}
         data-testid="recovery-card"
-        data-state={recovery}
+        data-state={unconfirmed ? "unconfirmed" : "confirmed"}
+        data-on-device={onDevice}
       >
         <div className="flex items-start gap-3">
           <KeyRound className={cn("mt-0.5 size-5 shrink-0", unconfirmed ? "text-[var(--ds-tint-yellow-fg)]" : "text-ink-2")} />
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <h2 className="text-[15px] font-semibold text-ink">{t("settings.recoveryTitle")}</h2>
-            <p className="mt-1 text-[13.5px] leading-relaxed text-ink-2">
-              {recovery === "none" ? t("settings.recoveryElsewhere") : unconfirmed ? t("settings.recoveryUnconfirmed") : t("settings.recoveryConfirmed")}
-            </p>
+            <p className="mt-1 text-[13.5px] leading-relaxed text-ink-2">{text}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {onDevice && (
+                <Button
+                  size="sm"
+                  variant={unconfirmed ? "primary" : "secondary"}
+                  onClick={() =>
+                    void getRecoveryKey().then((k) => {
+                      setFresh(false);
+                      setKey(k);
+                    })
+                  }
+                  data-testid="recovery-show"
+                >
+                  {t("settings.recoveryShow")}
+                </Button>
+              )}
+              <Button size="sm" variant={!onDevice && unconfirmed ? "primary" : "ghost"} onClick={() => setRotateOpen(true)} data-testid="recovery-rotate">
+                {t("settings.recoveryNew")}
+              </Button>
+            </div>
           </div>
-          {recovery !== "none" && (
-            <Button size="sm" variant={unconfirmed ? "primary" : "secondary"} onClick={() => void getRecoveryKey().then(setKey)} data-testid="recovery-show">
-              {t("settings.recoveryShow")}
-            </Button>
-          )}
         </div>
       </section>
-      <Dialog open={!!key} onOpenChange={(o) => !o && setKey(null)} title={t("settings.recoveryTitle")}>
+      <Dialog open={!!key} onOpenChange={(o) => !o && setKey(null)} title={fresh ? t("settings.recoveryNewTitle") : t("settings.recoveryTitle")}>
         {key && (
           <RecoveryKeyPanel
             recoveryKey={key}
@@ -116,7 +141,56 @@ function RecoveryKeyCard() {
           />
         )}
       </Dialog>
+      <NewRecoveryKeyDialog
+        open={rotateOpen}
+        onOpenChange={setRotateOpen}
+        onCreated={(k) => {
+          setRotateOpen(false);
+          setFresh(true);
+          setKey(k);
+        }}
+      />
     </>
+  );
+}
+
+function NewRecoveryKeyDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: (key: string) => void }) {
+  const { t } = useTranslation();
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const key = await createNewRecoveryKey(password);
+      setPassword("");
+      onCreated(key);
+    } catch (err) {
+      setError(err instanceof ApiError && (err.status === 403 || err.status === 401) ? t("settings.wrongPassword") : t("auth.serverUnavailable"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title={t("settings.recoveryNewTitle")} description={t("settings.recoveryNewText")}>
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <Field label={t("settings.currentPassword")} error={error}>
+          {(id) => (
+            <Input id={id} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus data-testid="recovery-rotate-password" />
+          )}
+        </Field>
+        <DialogActions>
+          <Button type="button" onClick={() => onOpenChange(false)}>
+            {t("common.cancel")}
+          </Button>
+          <Button type="submit" variant="primary" loading={busy} disabled={!password}>
+            {t("settings.recoveryNewCreate")}
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
   );
 }
 
@@ -155,7 +229,31 @@ function DevicesCard() {
           </Row>
         ))
       )}
+      <SecurityLog />
     </Card>
+  );
+}
+
+/** `GET /me/security-events`: password changes, recoveries, new recovery keys. */
+function SecurityLog() {
+  const { t } = useTranslation();
+  const events = useQuery({ queryKey: ["security-events"], queryFn: accountApi.securityEvents });
+  if (!events.data?.length) return null;
+  return (
+    <div className="mt-4 border-t border-line pt-4" data-testid="security-log">
+      <h3 className="mb-2 text-[13px] font-semibold text-ink">{t("settings.securityLog")}</h3>
+      <ul className="flex flex-col gap-1.5">
+        {events.data.slice(0, 20).map((e, i) => (
+          <li key={i} className="flex items-baseline justify-between gap-3 text-[13px]">
+            <span className="text-ink">
+              {t(`settings.securityEvent.${e.kind}`)}
+              {e.deviceName && <span className="text-ink-2"> · {e.deviceName}</span>}
+            </span>
+            <span className="shrink-0 text-ink-2">{formatDateTime(e.at)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

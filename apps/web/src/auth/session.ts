@@ -17,10 +17,11 @@ type AuthState = {
   /** Right after signup: the recovery key screen is shown (until confirmed or skipped). */
   recoveryStep: boolean;
   /**
-   * The recovery key on this device (spec/07: checking it was written down is optional):
-   * "none" — not stored here (account created elsewhere), otherwise confirmed or not yet.
+   * The current recovery key is stored (sealed) on this device — the device it was created
+   * on (spec/07, option A). Whether it is confirmed lives in the account doc
+   * (`settings.recoveryKeyConfirmed`), see auth/recovery.ts.
    */
-  recovery: "none" | "unconfirmed" | "confirmed";
+  recoveryOnDevice: boolean;
 };
 
 export const useAuth = create<AuthState>(() => ({
@@ -29,7 +30,7 @@ export const useAuth = create<AuthState>(() => ({
   email: null,
   accountDocId: null,
   recoveryStep: false,
-  recovery: "none",
+  recoveryOnDevice: false,
 }));
 
 // Secrets live only in module memory (and sealed in IndexedDB), never in React state.
@@ -107,8 +108,7 @@ export async function establish(params: {
   if (params.pendingRecoveryKey) {
     // Kept sealed on this device so it can be shown again from the settings (spec/07).
     // Written before the state flips: the key screen reads it as soon as it mounts.
-    await kvSet("recoveryKey", await sealLocal(new TextEncoder().encode(params.pendingRecoveryKey)));
-    await kvSet("recoveryConfirmed", false);
+    await storeRecoveryKey(params.pendingRecoveryKey);
     await kvSet("recoveryStep", true);
     await kvSet("freshAccount", params.userId);
   }
@@ -118,7 +118,7 @@ export async function establish(params: {
     email: params.email,
     accountDocId: params.session.accountDocId,
     recoveryStep: !!params.pendingRecoveryKey,
-    recovery: params.pendingRecoveryKey ? "unconfirmed" : "none",
+    recoveryOnDevice: !!params.pendingRecoveryKey,
   });
   await persist();
 }
@@ -129,11 +129,46 @@ export async function getRecoveryKey(): Promise<string | null> {
   return sealed ? new TextDecoder().decode(await openLocal(sealed)) : null;
 }
 
+/**
+ * Keep a recovery key sealed on this device. `recoveryConfirmed` mirrors the account flag
+ * until the account doc can take it (the signup screen runs before the account syncs).
+ */
+export async function storeRecoveryKey(text: string) {
+  await kvSet("recoveryKey", await sealLocal(new TextEncoder().encode(text)));
+  await kvSet("recoveryKeyAt", new Date().toISOString());
+  await kvSet("recoveryConfirmed", false);
+  useAuth.setState({ recoveryOnDevice: true });
+}
+
+/** When this device's key was stored (to notice a rotation made elsewhere). */
+export async function recoveryKeyStoredAt(): Promise<string | null> {
+  return (await kvGet<string>("recoveryKeyAt")) ?? null;
+}
+
+/** The key here was replaced on another device: it no longer works, forget it. */
+export async function forgetRecoveryKey() {
+  for (const k of ["recoveryKey", "recoveryKeyAt", "recoveryConfirmed"]) await kvDelete(k);
+  useAuth.setState({ recoveryOnDevice: false });
+}
+
+/** Device-side note that the user confirmed (applied to the account doc by auth/recovery.ts). */
+export async function recoveryConfirmedLocally(): Promise<boolean | null> {
+  return (await kvGet<boolean>("recoveryConfirmed")) ?? null;
+}
+
 /** The user typed the end of the key back: it is written down. */
 export async function confirmRecoveryKeySaved() {
   await kvSet("recoveryConfirmed", true);
   await kvDelete("recoveryStep");
-  useAuth.setState({ recoveryStep: false, recovery: "confirmed" });
+  useAuth.setState({ recoveryStep: false });
+  recoveryListeners.forEach((fn) => fn(true));
+}
+
+const recoveryListeners = new Set<(confirmed: boolean) => void>();
+/** The account doc subscribes here to store `settings.recoveryKeyConfirmed`. */
+export function onRecoveryConfirmed(fn: (confirmed: boolean) => void) {
+  recoveryListeners.add(fn);
+  return () => recoveryListeners.delete(fn);
 }
 
 /** "Skip" on the signup screen: the settings keep a gentle reminder. */
@@ -180,7 +215,7 @@ export async function restore(): Promise<void> {
       email: stored.email,
       accountDocId: stored.session.accountDocId,
       recoveryStep: hasKey && !!(await kvGet<boolean>("recoveryStep")),
-      recovery: !hasKey ? "none" : (await kvGet<boolean>("recoveryConfirmed")) ? "confirmed" : "unconfirmed",
+      recoveryOnDevice: hasKey,
     });
   } catch (e) {
     console.error("Failed to restore session", e);
@@ -195,9 +230,9 @@ async function signOutLocal() {
   masterKey?.fill(0);
   masterKey = null;
   await kvDelete("account");
-  for (const k of ["pendingRecovery", "recoveryKey", "recoveryConfirmed", "recoveryStep"]) await kvDelete(k);
+  for (const k of ["pendingRecovery", "recoveryKey", "recoveryKeyAt", "recoveryConfirmed", "recoveryStep"]) await kvDelete(k);
   if (userId) await deleteAccountDb(userId);
-  useAuth.setState({ status: "signedOut", userId: null, email: null, accountDocId: null, recoveryStep: false, recovery: "none" });
+  useAuth.setState({ status: "signedOut", userId: null, email: null, accountDocId: null, recoveryStep: false, recoveryOnDevice: false });
 }
 
 export async function signOut() {

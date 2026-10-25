@@ -1,0 +1,1 @@
+- 2026-10-25 · core · Инструменты монорепо (pnpm, turbo, ESLint, Prettier, Vitest, CI `ts.yml`); `@datascratch/shared`: типы и zod-схемы всех контрактов, криптография по `crypto.md` (Argon2id, конверт XChaCha20-Poly1305, обёртки ключей, ключ восстановления `DS1-…`, вложения кусками), UUIDv7.

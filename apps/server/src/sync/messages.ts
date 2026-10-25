@@ -43,6 +43,7 @@ export type SyncErrorCode =
   | 'payload_too_large'
   | 'rate_limited'
   | 'protocol_mismatch'
+  | 'bad_request'
   | 'internal';
 
 /** Server → client messages (sync-protocol.md §4). */

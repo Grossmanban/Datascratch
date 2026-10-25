@@ -256,6 +256,15 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(pan.minimumNumberOfTouches, 1)
     }
 
+    func testTouchesOnTextGoToTheTextViewNotTextKitInternals() {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello brave new world")]))
+        let r = flatRange(editor, of: "brave")
+        let p = editor.geometry.placement(at: r.lowerBound)!
+        let point = CGPoint(x: p.origin.x + 4, y: p.origin.y - p.fontSize * 0.3)
+        let hit = editor.textView.hitTest(point, with: nil)
+        XCTAssertTrue(hit === editor.textView, "text is hit-tested to the text view (got \(hit.map { NSStringFromClass(type(of: $0)) } ?? "nil"))")
+    }
+
     func testOpenLargeNote() {
         let doc = SampleDocument.large()
         let start = CACurrentMediaTime()

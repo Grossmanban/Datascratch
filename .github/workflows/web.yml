@@ -115,6 +115,9 @@ jobs:
         working-directory: apps/web
         env:
           VITE_DS_SERVER_URL: http://localhost:8080
+          # The job-level NODE_ENV=development is for the server; a dev-mode build skips the
+          # service worker and breaks the offline test.
+          NODE_ENV: production
       - run: pnpm exec playwright install --with-deps chromium
         working-directory: apps/web
       - name: E2E against apps/server

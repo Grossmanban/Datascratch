@@ -1045,14 +1045,14 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792932020.6857393,
-    "seen": 1792948926.1511717,
-    "ast_hash": "",
+    "seen": 1792949273.6161375,
+    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792932020.6857393,
-    "seen": 1792948926.1511736,
-    "ast_hash": "",
+    "seen": 1792949273.6161413,
+    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -4009,8 +4009,8 @@
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948008.1153855,
-    "seen": 1792948926.1511762,
-    "ast_hash": "",
+    "seen": 1792949273.6161442,
+    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {

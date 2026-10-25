@@ -160,8 +160,11 @@ struct DocumentCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .bottomLeading) {
-                // A cover only when the user chose one; otherwise a barely tinted paper band.
-                if let cover = note.cover {
+                // The cover thumbnail makes a document recognisable (spec/12 §12.7);
+                // without a cover, a barely tinted paper band.
+                if let thumb = note.coverThumb ?? note.coverImage?.attachmentId {
+                    CoverImageView(noteId: note.id, attachmentId: thumb, offsetY: note.coverImage?.offsetY ?? 0.5)
+                } else if let cover = note.cover {
                     cover.gradient
                 } else {
                     Theme.Palette.sidebar.opacity(0.55)
@@ -172,7 +175,7 @@ struct DocumentCard: View {
                         .padding(Theme.Space.s3)
                 }
             }
-            .frame(height: note.cover == nil ? 44 : 92)
+            .frame(height: CoverHeader.hasCover(note) ? 92 : 44)
             .clipped()
 
             VStack(alignment: .leading, spacing: Theme.Space.s1) {
@@ -227,6 +230,12 @@ struct DocumentRow: View {
         HStack(spacing: Theme.Space.s3) {
             RoundedRectangle(cornerRadius: Theme.Radius.sm)
                 .fill(note.cover.map { AnyShapeStyle($0.gradient) } ?? AnyShapeStyle(Theme.Palette.sidebar))
+                .overlay {
+                    if let thumb = note.coverThumb ?? note.coverImage?.attachmentId {
+                        CoverImageView(noteId: note.id, attachmentId: thumb, offsetY: note.coverImage?.offsetY ?? 0.5)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
                 .frame(width: 40, height: 40)
                 .overlay { if let icon = note.icon { Text(icon) } }
             VStack(alignment: .leading, spacing: 2) {

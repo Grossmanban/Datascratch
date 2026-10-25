@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 @testable import Datascratch
 
 @MainActor
@@ -133,5 +134,42 @@ struct LibraryStoreTests {
         store.moveTask(from: a.id, blockId: task.id, to: b.id)
         #expect(!store.body(a.id).blocks.contains { $0.id == task.id })
         #expect(store.body(b.id).blocks.contains { $0.id == task.id })
+    }
+}
+
+@MainActor
+struct CoverImagesTests {
+    private func pngData(width: Int, height: Int) -> Data {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format).pngData { context in
+            UIColor.orange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        }
+    }
+
+    @Test func addingAnImageStoresACoverAndAThumbnail() async throws {
+        let images = CoverImages.temporary()
+        let added = try await images.add(pngData(width: 3000, height: 1500), noteId: "n1")
+        let cover = try #require(images.image(added.cover, noteId: "n1"))
+        let thumb = try #require(images.image(added.thumb, noteId: "n1"))
+        #expect(cover.size.width * cover.scale <= CoverImages.maxCoverPixels)
+        #expect(thumb.size.width * thumb.scale <= CoverImages.thumbPixels)
+
+        let library = LibraryStore(persistence: .inMemory)
+        library.seedIfEmpty()
+        let note = try #require(library.documents.first)
+        library.setCover(added, ofNote: note.id, images: images)
+        #expect(library.note(note.id)?.coverImage?.attachmentId == added.cover)
+        #expect(library.note(note.id)?.coverThumb == added.thumb)
+        library.removeCover(ofNote: note.id, images: images)
+        #expect(library.note(note.id)?.coverImage == nil)
+        #expect(images.image(added.cover, noteId: "n1") == nil)
+    }
+
+    @Test func rejectsDataThatIsNotAnImage() async {
+        await #expect(throws: CoverImages.CoverError.self) {
+            _ = try await CoverImages.temporary().add(Data("hello".utf8), noteId: "n1")
+        }
     }
 }

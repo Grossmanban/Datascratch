@@ -79,10 +79,7 @@ export function allAnchorsDeleted(resolved: readonly (ResolvedAnchor | null)[]):
  * anchors to the restored characters so every device sees the stroke again.
  * Returns the new anchor list, or null when nothing changed.
  */
-export function rebaseRedoneAnchors(
-  doc: Y.Doc,
-  anchors: readonly Uint8Array[],
-): Uint8Array[] | null {
+export function rebaseAnchorList(doc: Y.Doc, anchors: readonly Uint8Array[]): Uint8Array[] | null {
   let changed = false;
   const out = anchors.map((encoded) => {
     let rpos: Y.RelativePosition;

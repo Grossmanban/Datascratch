@@ -231,7 +231,7 @@ export class MemorySyncHub {
             type: "ack",
             docId: msg.docId,
             clientMsgId: msg.clientMsgId,
-            seq: Math.max(baseSeq, 1),
+            seq: baseSeq,
           });
         }
         return;

@@ -10,7 +10,7 @@
 | `@datascratch/shared/crypto` | libsodium: `initCrypto()`, Argon2id → `loginKey`/`passwordKey`, конверт v1, обёртки ключей, `createAccountKeys`/`rekeyPassword`, ключ восстановления `DS1-…`, вложения кусками 1 MiB, ссылки шеринга, base64url | `crypto.md` |
 | `@datascratch/shared/ids` | `uuidv7()` (монотонный), проверка, время из id | `document-model.md` §1 |
 | `@datascratch/shared/document` | Фабрики `account`/`notebook`/`note`, доступ к записям (пространства, блокноты, папки, мета заметок, теги, избранное, вкладки), PM-JSON ↔ Yjs (как y-prosemirror), задачи, бэклинки, теги, текст для поиска, экспорт в Markdown, блочные операции для агентов (`applyBlockOperations`) | `document-model.md` |
-| `@datascratch/shared/strokes` | Упаковка точек, якоря (Yjs RelativePosition) и D-35, раскладка по строкам при заданной платформой геометрии глифов, толщина, хранение штрихов, `rebaseRedoneStrokes` после undo | `strokes.md` |
+| `@datascratch/shared/strokes` | Упаковка точек, якоря (Yjs RelativePosition) и D-35, раскладка по строкам при заданной платформой геометрии глифов, толщина, хранение штрихов, `rebaseRedoneAnchors` и `attachAnchorRebase` после undo, `restoreNoteVersion` | `strokes.md` |
 | `@datascratch/shared/sync` | `SyncClient` (WebSocket браузера/Node, офлайн-очередь через `SyncStorage`, шифрование, переподключение с backoff, снимки по порогам), `MemorySyncStorage`, `MemorySyncHub` — эталонный сервер протокола в памяти для тестов | `sync-protocol.md` |
 
 Корневой импорт `@datascratch/shared` реэкспортирует всё.
@@ -46,7 +46,7 @@ sync.start();
 ### Особенности, о которых стоит знать
 
 - Атрибуты узлов со значением `null` в Yjs не хранятся (как в y-prosemirror); метки без атрибутов хранятся как `{}`.
-- Якорь штриха на удалённом символе разрешается с `deleted: true`; точки на нём не рисуются, но штрих остаётся (D-35). Восстановление текста отменой видно другим устройствам только после `rebaseRedoneStrokes(doc)` (ссылки redone в Yjs локальны).
+- Якорь штриха на удалённом символе разрешается с `deleted: true`; точки на нём не рисуются, но штрих остаётся (D-35). Восстановление текста отменой видно другим устройствам только после `rebaseRedoneAnchors(doc)` (ссылки redone в Yjs локальны).
 - Клиент синхронизации считает `lastSeq` по максимуму полученных `seq` (из `update`, `updates`, `ack`): сервер обязан рассылать обновления документа в порядке `seq`.
 
 ## Разработка

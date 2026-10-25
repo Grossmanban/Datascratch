@@ -37,15 +37,15 @@ struct TaskIndexTests {
         #expect(!store.taskEntries.contains { $0.text.isEmpty && $0.noteKind == .note })
     }
 
-    @Test func inbox() {
+    @Test func inboxBucket() {
         #expect(texts(.inbox, makeStore()) == ["Inbox task"])
     }
 
-    @Test func today() {
+    @Test func todayBucket() {
         #expect(texts(.today, makeStore()) == ["Overdue", "Deadline today", "Inbox today", "From daily note"])
     }
 
-    @Test func upcoming() {
+    @Test func upcomingBucket() {
         #expect(texts(.upcoming, makeStore()) == ["Later"])
     }
 

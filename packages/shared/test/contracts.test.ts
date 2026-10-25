@@ -1,0 +1,113 @@
+import { describe, expect, it } from "vitest";
+import {
+  AD,
+  createNotebookRequestSchema,
+  emailSchema,
+  isoDateTimeSchema,
+  parseClientMessage,
+  parseServerMessage,
+  registerDocRequestSchema,
+  signupRequestSchema,
+  uuidSchema,
+} from "../src/contracts/index.js";
+
+const ID = "0192f3c4-a1b2-7c3d-8e4f-0123456789ab";
+const KEY = "A".repeat(43);
+
+describe("primitive schemas", () => {
+  it("accepts only lowercase UUIDv7", () => {
+    expect(uuidSchema.safeParse(ID).success).toBe(true);
+    expect(uuidSchema.safeParse(ID.toUpperCase()).success).toBe(false);
+    expect(uuidSchema.safeParse("0192f3c4-a1b2-4c3d-8e4f-0123456789ab").success).toBe(false);
+  });
+  it("accepts ISO timestamps with ms and Z only", () => {
+    expect(isoDateTimeSchema.safeParse("2026-10-25T12:00:00.000Z").success).toBe(true);
+    expect(isoDateTimeSchema.safeParse("2026-10-25T12:00:00Z").success).toBe(false);
+    expect(isoDateTimeSchema.safeParse("2026-13-45T12:00:00.000Z").success).toBe(false);
+  });
+  it("normalizes emails", () => {
+    expect(emailSchema.parse("  Foo@Example.COM ")).toBe("foo@example.com");
+  });
+});
+
+describe("ad strings", () => {
+  it("matches crypto.md §3", () => {
+    expect(AD.doc(ID)).toBe(`ds1|doc|${ID}`);
+    expect(AD.attachmentChunk(ID, 3, true)).toBe(`ds1|att|${ID}|3|1`);
+    expect(AD.notebookKeyServer(ID)).toBe(`ds1|key|notebook-server|${ID}`);
+  });
+});
+
+describe("sync messages", () => {
+  it("parses valid client and server frames", () => {
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          type: "hello",
+          protocol: 1,
+          auth: { kind: "user", accessToken: "t" },
+          deviceId: "dev",
+          client: { platform: "web", version: "0.1.0" },
+        }),
+      )?.type,
+    ).toBe("hello");
+    expect(
+      parseServerMessage(JSON.stringify({ type: "ack", docId: ID, clientMsgId: "m1", seq: 4 })),
+    ).toEqual({
+      type: "ack",
+      docId: ID,
+      clientMsgId: "m1",
+      seq: 4,
+    });
+  });
+  it("rejects garbage", () => {
+    expect(parseServerMessage("{")).toBeNull();
+    expect(parseServerMessage(JSON.stringify({ type: "ack", docId: ID }))).toBeNull();
+    expect(
+      parseClientMessage(
+        JSON.stringify({ type: "push", docId: ID, clientMsgId: "m", payload: "a+b" }),
+      ),
+    ).toBeNull();
+    expect(parseClientMessage(JSON.stringify({ type: "hello", protocol: 2 }))).toBeNull();
+  });
+});
+
+describe("api bodies", () => {
+  it("validates signup", () => {
+    const body = {
+      email: "a@b.co",
+      salt: "A".repeat(22),
+      kdf: { alg: "argon2id13", ops: 3, mem: 67108864 },
+      loginKey: KEY,
+      recoveryLoginKey: KEY,
+      wrappedMasterKeyPassword: "xx",
+      wrappedMasterKeyRecovery: "yy",
+      userId: ID,
+      accountDocId: ID,
+    };
+    expect(signupRequestSchema.safeParse(body).success).toBe(true);
+    expect(signupRequestSchema.safeParse({ ...body, loginKey: "short" }).success).toBe(false);
+  });
+  it("requires notebookKey exactly for agent mode", () => {
+    const base = { notebookId: ID, wrappedKey: "w" };
+    expect(createNotebookRequestSchema.safeParse({ ...base, mode: "private" }).success).toBe(true);
+    expect(createNotebookRequestSchema.safeParse({ ...base, mode: "agent" }).success).toBe(false);
+    expect(
+      createNotebookRequestSchema.safeParse({ ...base, mode: "agent", notebookKey: KEY }).success,
+    ).toBe(true);
+    expect(
+      createNotebookRequestSchema.safeParse({ ...base, mode: "private", notebookKey: KEY }).success,
+    ).toBe(false);
+  });
+  it("checks doc registration consistency", () => {
+    expect(
+      registerDocRequestSchema.safeParse({ docId: ID, kind: "account", notebookId: null }).success,
+    ).toBe(true);
+    expect(
+      registerDocRequestSchema.safeParse({ docId: ID, kind: "note", notebookId: null }).success,
+    ).toBe(false);
+    expect(
+      registerDocRequestSchema.safeParse({ docId: ID, kind: "notebook", notebookId: ID }).success,
+    ).toBe(true);
+  });
+});

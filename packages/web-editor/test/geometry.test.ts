@@ -13,7 +13,7 @@ import {
   type Glyph,
   type InputPoint,
 } from "../src/pen/geometry";
-import { strokeThickness, type StrokePoint } from "../src/shared/strokes";
+import { strokeWidthAt, type StrokePoint } from "@datascratch/shared/strokes";
 
 /** A monospace line of text: glyph i spans [x0 + i*cw, x0 + (i+1)*cw]. */
 function line(text: string, opts: { x0?: number; baseline?: number; block?: number; pos0?: number; cw?: number; fontSize?: number } = {}): Glyph[] {
@@ -77,7 +77,7 @@ describe("resolveTextSegments (strokes.md §4)", () => {
     const segs = resolveTextSegments(stroke, [sp(0, 0.5, 0.1), sp(0, 1, 0.1)], (a) => boxes[a] ?? null);
     expect(segs).toHaveLength(1);
     expect(segs[0]![0]).toMatchObject({ x: 110, y: 52 });
-    expect(segs[0]![0]!.w).toBeCloseTo(strokeThickness(stroke, { pressure: 1, altitude: Math.PI / 2 }, 20 / 17));
+    expect(segs[0]![0]!.w).toBeCloseTo(strokeWidthAt(stroke, { pressure: 1, altitude: Math.PI / 2 }, { fontSize: 20 }));
   });
 
   it("breaks the stroke where neighbouring points are on different lines", () => {

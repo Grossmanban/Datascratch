@@ -33,7 +33,7 @@
 | `update` | `docId`, `seq`, `payload`, `deviceId` | Живое обновление от другого устройства |
 | `ack` | `docId`, `clientMsgId`, `seq` | Обновление/снимок принят и сохранён (для снимка `seq` = его `baseSeq`) |
 | `awareness` | `docId`, `payload`, `deviceId` | |
-| `error` | `code`, `message`, `ref?` (clientMsgId/docId) | См. коды ниже |
+| `error` | `code`, `message`, `ref?` | См. коды ниже. Для ошибок `push`/`snapshot` `ref` = их `clientMsgId`, иначе — `docId` при наличии |
 
 **Порядок (обязательно для сервера):** назначение `seq` и рассылка внутри одного документа сериализованы — подписчики получают обновления строго в порядке `seq`, и `ack` отправителю уходит не раньше, чем обновление записано. Клиент хранит `lastSeq = max(seq)` из `updates`/`update`/`ack`; при нарушении порядка обновление могло бы потеряться при обрыве. «Дыры» в `seq` допустимы.
 
@@ -53,7 +53,7 @@
 
 ## 7. Коды ошибок
 
-`unauthorized`, `forbidden`, `doc_not_found`, `payload_too_large` (лимит обновления 2 MiB, снимка 50 MiB — считаются **декодированные** байты, не base64), `rate_limited`, `protocol_mismatch`, `internal`.
+`bad_request` (некорректное сообщение), `unauthorized`, `forbidden`, `doc_not_found`, `payload_too_large` (лимит обновления 2 MiB, снимка 50 MiB — считаются **декодированные** байты, не base64), `rate_limited`, `protocol_mismatch`, `internal`.
 
 ## 8. Тестовые векторы
 

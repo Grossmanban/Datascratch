@@ -1,0 +1,13 @@
+export { agentsPlugin, type AgentsPluginOptions, type AgentsRuntime } from "./plugin.js";
+export type * from "./context.js";
+export { AgentError, type AgentErrorCode } from "./errors.js";
+export { AgentService } from "./service/agent-service.js";
+export type { Principal } from "./service/access.js";
+export { GrantService, SCOPE_READ, SCOPE_WRITE } from "./auth/grants.js";
+export { authorizationServerMetadata, protectedResourceMetadata } from "./auth/oauth.js";
+export { renderHandwriting } from "./render/handwriting-png.js";
+export { collectHandwriting, type HandwritingItem } from "./doc/handwriting.js";
+export { noteToMarkdown } from "./doc/markdown-export.js";
+export { markdownToBlocks } from "./doc/markdown-import.js";
+export { applyEdits, type EditOp } from "./doc/edits.js";
+export { VERSION } from "./version.js";

@@ -42,7 +42,7 @@ export const createNoteInput = z.object({
     .string()
     .max(200_000)
     .default("")
-    .describe("Body in Markdown: headings (#..###), lists, task lists (- [ ] / - [x], optional 📅 YYYY-MM-DD scheduled, ⏰ YYYY-MM-DD deadline), > quotes, > [!note] callouts, tables, code, $$math$$, ```mermaid, [[Note title]] links, #tags."),
+    .describe("Body in Markdown: headings (#..###), lists, task lists (- [ ] / - [x], optional ⏳ YYYY-MM-DD scheduled, 📅 YYYY-MM-DD deadline), > quotes, > [!note] callouts, tables, code, $$math$$, ```mermaid, [[Note title]] links, #tags."),
   folderId: id.nullable().optional(),
 });
 

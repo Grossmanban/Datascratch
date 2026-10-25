@@ -5,11 +5,15 @@ on:
     branches: [main, "claude/agents"]
     paths:
       - "packages/agents/**"
+      - "packages/shared/**"
+      - "packages/design-tokens/**"
       - "pnpm-lock.yaml"
       - ".github/workflows/agents.yml"
   pull_request:
     paths:
       - "packages/agents/**"
+      - "packages/shared/**"
+      - "packages/design-tokens/**"
       - "pnpm-lock.yaml"
       - ".github/workflows/agents.yml"
 
@@ -31,6 +35,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Build dependencies (@datascratch/shared)
+        run: pnpm --filter "@datascratch/agents^..." build
       - name: Typecheck
         run: pnpm --filter @datascratch/agents typecheck
       - name: Test

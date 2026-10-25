@@ -261,3 +261,33 @@ fn relative_positions_survive_undo_mid_item() {
         assert_eq!(r, &Some(ResolvedIndex { path: vec![0, 0], index: i as u32, deleted: false }));
     }
 }
+
+#[test]
+fn rebase_after_undo_survives_reload_on_other_peer() {
+    let a = YDocument::new(Some(1), note_roots());
+    a.enable_undo(vec!["content".into()], 0).unwrap();
+    a.apply(vec![YOp::XmlInsert { root: "content".into(), parent: vec![], index: 0, nodes: vec![paragraph("b1", "")] }], local()).unwrap();
+    a.stop_capturing();
+    a.apply(vec![YOp::TextInsert { root: "content".into(), path: vec![0, 0], index: 0, chunks: vec![chunk("abcdef")] }], local()).unwrap();
+    let positions: Vec<Vec<u8>> = vec![
+        a.encode_relative_position("content".into(), vec![0, 0], 2, 0).unwrap(),
+        a.encode_relative_position("content".into(), vec![0, 0], 5, -1).unwrap(),
+    ];
+    // Live positions need no rebase.
+    assert_eq!(a.rebase_relative_positions("content".into(), positions.clone()).unwrap(), vec![None, None]);
+    a.stop_capturing();
+    a.apply(vec![YOp::TextDelete { root: "content".into(), path: vec![0, 0], index: 0, len: 6 }], local()).unwrap();
+    assert_eq!(a.rebase_relative_positions("content".into(), positions.clone()).unwrap(), vec![None, None]);
+    a.undo();
+    let rebased = a.rebase_relative_positions("content".into(), positions.clone()).unwrap();
+    let rebased: Vec<Vec<u8>> = rebased.into_iter().map(|r| r.expect("rebased")).collect();
+
+    // Another peer has no `redone` links: old positions are deleted there, rebased ones are live.
+    let b = YDocument::new(Some(2), note_roots());
+    b.apply_update(a.encode_state_as_update(None).unwrap(), "remote".into()).unwrap();
+    let old = b.resolve_relative_positions("content".into(), positions).unwrap();
+    assert!(old.iter().all(|r| r.as_ref().unwrap().deleted));
+    let new = b.resolve_relative_positions("content".into(), rebased).unwrap();
+    assert_eq!(new[0], Some(ResolvedIndex { path: vec![0, 0], index: 2, deleted: false }));
+    assert_eq!(new[1], Some(ResolvedIndex { path: vec![0, 0], index: 5, deleted: false }));
+}

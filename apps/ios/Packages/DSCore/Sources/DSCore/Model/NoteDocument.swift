@@ -353,6 +353,67 @@ public final class NoteDocument: Sendable {
         try crdt.transact(origin: origin) { $0.set("strokes", [id], key: "hidden", .bool(value: hidden)) }
     }
 
+    // MARK: Undo (with stroke anchor rebasing, strokes.md §4.1)
+
+    /// Undoes the last local step and rebases stroke anchors restored by it, so that other
+    /// devices see the marks on the restored text too. Prefer this over `crdt.undo()`.
+    @discardableResult
+    public func undo() throws -> Bool {
+        guard crdt.undo() else { return false }
+        try rebaseRestoredAnchors()
+        return true
+    }
+
+    @discardableResult
+    public func redo() throws -> Bool {
+        guard crdt.redo() else { return false }
+        try rebaseRestoredAnchors()
+        return true
+    }
+
+    /// Rewrites `anchors` of text strokes whose anchors point at text restored by undo/redo.
+    /// Runs as a non-undoable outgoing transaction right after the undo step.
+    public func rebaseRestoredAnchors() throws {
+        var changes: [(id: String, anchors: [Data])] = []
+        for stroke in strokes() where stroke.anchorKind == .text && !stroke.anchors.isEmpty {
+            let rebased = try crdt.rebase(relativePositions: stroke.anchors)
+            guard rebased.contains(where: { $0 != nil }) else { continue }
+            changes.append((stroke.id, zip(stroke.anchors, rebased).map { $1 ?? $0 }))
+        }
+        guard !changes.isEmpty else { return }
+        try crdt.transact(origin: .undo) { txn in
+            for c in changes {
+                txn.set("strokes", [c.id], key: "anchors", .list(items: c.anchors.map { .bytes(value: $0) }))
+            }
+        }
+    }
+
+    /// Text strokes whose anchors are all deleted (drawn nowhere; D-35, strokes.md §4.2).
+    public func orphanedStrokeIds() throws -> Set<String> {
+        var out = Set<String>()
+        for stroke in strokes() where stroke.anchorKind == .text {
+            let resolved = try crdt.resolve(relativePositions: stroke.anchors)
+            if resolved.allSatisfy({ $0 == nil || $0!.deleted }) { out.insert(stroke.id) }
+        }
+        return out
+    }
+
+    /// Before building a snapshot: deletes strokes whose anchors are all deleted and that have
+    /// been orphaned (or, if unknown, created) more than `days` ago (strokes.md §4.2).
+    /// Returns the removed ids.
+    @discardableResult
+    public func purgeOrphanedStrokes(orphanedAt: (String) -> Date?, now: Date = Date(), days: Int = 30) throws -> [String] {
+        let orphaned = try orphanedStrokeIds()
+        let limit = now.addingTimeInterval(-Double(days) * 86_400)
+        let expired = strokes().filter { s in
+            guard orphaned.contains(s.id) else { return false }
+            let since = orphanedAt(s.id) ?? Date(timeIntervalSince1970: s.createdAt / 1000)
+            return since < limit
+        }.map(\.id)
+        if !expired.isEmpty { try removeStrokes(ids: expired, origin: .system) }
+        return expired
+    }
+
     // MARK: Comments
 
     public func comments() -> [Comment] {

@@ -713,6 +713,15 @@ public protocol YDocumentProtocol: AnyObject, Sendable {
      */
     func observeUpdates(observer: UpdateObserver)  -> YSubscription
     
+    /**
+     * Rebases positions that point at deleted items which were restored by undo/redo
+     * (strokes.md §4.1): for each such position returns a new encoding pointing at the
+     * restored item; `None` for positions that need no change (live, deleted for good, or
+     * undecodable). The `redone` link is local to this document instance, so this must run on
+     * the device that performed the undo/redo.
+     */
+    func rebaseRelativePositions(root: String, positions: [Data]) throws  -> [Data?]
+    
     func redo()  -> Bool
     
     /**
@@ -1002,6 +1011,24 @@ open func observeUpdates(observer: UpdateObserver) -> YSubscription  {
     uniffi_yrs_ffi_fn_method_ydocument_observe_updates(
             self.uniffiCloneHandle(),
         FfiConverterCallbackInterfaceUpdateObserver_lower(observer),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Rebases positions that point at deleted items which were restored by undo/redo
+     * (strokes.md §4.1): for each such position returns a new encoding pointing at the
+     * restored item; `None` for positions that need no change (live, deleted for good, or
+     * undecodable). The `redone` link is local to this document instance, so this must run on
+     * the device that performed the undo/redo.
+     */
+open func rebaseRelativePositions(root: String, positions: [Data])throws  -> [Data?]  {
+    return try  FfiConverterSequenceOptionData.lift(try rustCallWithError(FfiConverterTypeYrsError_lift) {
+        uniffiCallStatus in
+    uniffi_yrs_ffi_fn_method_ydocument_rebase_relative_positions(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(root),
+        FfiConverterSequenceData.lower(positions),uniffiCallStatus
     )
 })
 }
@@ -3404,6 +3431,31 @@ fileprivate struct FfiConverterSequenceTypeYValue: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceOptionData: FfiConverterRustBuffer {
+    typealias SwiftType = [Data?]
+
+    public static func write(_ value: [Data?], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterOptionData.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Data?] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Data?]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterOptionData.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceOptionTypeResolvedIndex: FfiConverterRustBuffer {
     typealias SwiftType = [ResolvedIndex?]
 
@@ -3553,6 +3605,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_yrs_ffi_checksum_method_ydocument_observe_updates() != 15399) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_yrs_ffi_checksum_method_ydocument_rebase_relative_positions() != 45789) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_yrs_ffi_checksum_method_ydocument_redo() != 13683) {

@@ -160,10 +160,7 @@ struct DocumentCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .bottomLeading) {
-                (note.cover ?? .none).gradient
-                    .overlay {
-                        if note.cover == nil { PaperPattern(paper: note.style.paper).opacity(0.6) }
-                    }
+                (note.cover ?? .mist).gradient
                 if let icon = note.icon {
                     Text(icon)
                         .font(.system(size: 30))
@@ -196,14 +193,19 @@ struct DocumentCard: View {
             }
             .padding(Theme.Space.s3)
         }
-        .background(Theme.Palette.surface)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous)
                 .strokeBorder(isSelected ? Theme.Palette.accent : Theme.Palette.separator,
                               lineWidth: isSelected ? 2 : 1)
         }
-        .shadow(color: .black.opacity(0.06), radius: 16, y: 6)
+        // The shadow is cast by a plain shape behind the card: Core Animation draws it from
+        // the path instead of rendering the whole card offscreen on every frame (120 Hz scrolling).
+        .background {
+            RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous)
+                .fill(Theme.Palette.surface)
+                .shadow(color: .black.opacity(0.06), radius: 16, y: 6)
+        }
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.lg))
         .hoverEffect(.lift)
         .draggable(note.id)

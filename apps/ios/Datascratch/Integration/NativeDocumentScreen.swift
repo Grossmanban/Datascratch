@@ -195,8 +195,12 @@ struct PenPalette: View {
         HStack(spacing: Theme.Space.s1) {
             ForEach(modes, id: \.self) { mode in
                 Button {
-                    tools.mode = mode
-                    model.revision &+= 1
+                    // Change the tool on the next run-loop turn: switching it while the tap is
+                    // still being delivered reconfigures gesture recognizers mid-event (crash).
+                    DispatchQueue.main.async {
+                        tools.mode = mode
+                        model.revision &+= 1
+                    }
                     Haptics.selection()
                 } label: {
                     Image(systemName: mode.symbolName)
@@ -231,8 +235,10 @@ struct PenPalette: View {
             }
             Divider().frame(height: 24)
             Button {
-                tools.allowsFingerDrawing.toggle()
-                model.revision &+= 1
+                DispatchQueue.main.async {
+                    tools.allowsFingerDrawing.toggle()
+                    model.revision &+= 1
+                }
             } label: {
                 Image(systemName: tools.allowsFingerDrawing ? "hand.draw.fill" : "hand.draw")
                     .font(.system(size: 17, weight: .medium))

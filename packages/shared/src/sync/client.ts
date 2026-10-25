@@ -278,6 +278,38 @@ export class SyncClient {
     await this.flushStates();
   }
 
+  /**
+   * Upload a snapshot now (e.g. when leaving a document after many own edits,
+   * for version history). Returns false when the document is not caught up yet
+   * or a snapshot is already in flight.
+   */
+  async requestSnapshot(docId: string): Promise<boolean> {
+    const entry = this.docs.get(docId);
+    if (!entry) throw new Error(`document ${docId} is not synced`);
+    await this.flushPending(docId, entry);
+    return this.serial(async () => {
+      if (!entry.synced || entry.snapshotInFlight) return false;
+      await this.enqueueSnapshot(docId, entry, false);
+      return entry.snapshotInFlight !== null;
+    });
+  }
+
+  /**
+   * Subscribe again and resend the document's queued messages — e.g. after
+   * `POST /v1/docs` registered a document created offline (the first
+   * subscribe got `doc_not_found`).
+   */
+  async resubscribe(docId: string): Promise<void> {
+    const entry = this.docs.get(docId);
+    if (!entry) throw new Error(`document ${docId} is not synced`);
+    await this.serial(async () => {
+      if (!this.welcomed) return; // the next welcome subscribes anyway
+      this.send({ type: "subscribe", docs: [{ docId, since: entry.state.lastSeq }] });
+      for (const item of (await this.outboxItems()).values())
+        if (item.docId === docId) this.sendItem(item);
+    });
+  }
+
   /** Resend every outbox item (e.g. after registering a document that got `doc_not_found`). */
   async resendOutbox(): Promise<void> {
     await this.serial(async () => {

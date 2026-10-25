@@ -2808,9 +2808,9 @@
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1792938426.8664699,
-    "seen": 1792938445.9448016,
-    "ast_hash": "49c4feebb2842e4eecbb0d1bfde25490",
+    "mtime": 1792939548.4233167,
+    "seen": 1792939567.2125754,
+    "ast_hash": "2bbebe0af348b41592d75a28019a33b7",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
@@ -2862,9 +2862,9 @@
     "semantic_hash": "1fafa46b19b644ede18952afb85c6843"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1792937041.0535784,
-    "seen": 1792937060.6515183,
-    "ast_hash": "da84d2604e7937c0fda8e05dccc6aeca",
+    "mtime": 1792939548.4211767,
+    "seen": 1792939567.2125971,
+    "ast_hash": "be15d6af8b4864c7920927bfc15b6780",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormulaViews.swift": {

@@ -178,3 +178,55 @@ test("drawing block keeps strokes in block coordinates", async ({ mount, page })
   expect(s.kind).toBe("drawing");
   expect(s.blockId).toMatch(/^[0-9a-f-]{36}$/);
 });
+
+test("lasso selects strokes, moves them onto other words and deletes them", async ({ mount, page }) => {
+  await mount(<TestEditor width={700} html={TEXT} />);
+  await ready(page);
+  const { box } = await wordRect(page, "ipsum");
+  await drawLine(page, box.left, box.bottom + 2, box.right, box.bottom + 2);
+  await expect.poll(() => strokeCount(page)).toBe(1);
+  await page.evaluate(() => window.__ct!.api.pen.setSettings({ tool: "lasso" }));
+  // Loop around the underline.
+  const cx = (box.left + box.right) / 2;
+  const cy = box.bottom + 2;
+  await page.mouse.move(cx + 60, cy);
+  await page.mouse.down();
+  for (let i = 1; i <= 24; i++) {
+    const t = (i / 24) * Math.PI * 2;
+    await page.mouse.move(cx + 60 * Math.cos(t), cy + 14 * Math.sin(t));
+  }
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.__ct!.api.pen.selectedStrokes().length)).toBe(1);
+  // Drag the selection down onto the second paragraph.
+  const target = await wordRect(page, "Second");
+  const dy = target.box.bottom - box.bottom;
+  const dx = target.box.left - box.left;
+  await drawLine(page, cx, cy, cx + dx, cy + dy, 10);
+  await expect.poll(() => strokeCount(page)).toBe(1);
+  const anchoredText = await page.evaluate(() => {
+    const { editor } = window.__ct!.api;
+    const segs = Object.values(window.__ct!.api.pen.debugSegments())[0]!;
+    const root = window.__ct!.api.pen.root.getBoundingClientRect();
+    const p = segs[0]![0]!;
+    const hit = editor.view.posAtCoords({ left: p.x + root.left + 2, top: p.y + root.top - 8 });
+    return hit ? editor.state.doc.resolve(hit.pos).parent.textContent.slice(0, 6) : "";
+  });
+  expect(anchoredText).toBe("Second");
+  await page.keyboard.press("Delete");
+  await expect.poll(() => strokeCount(page)).toBe(0);
+});
+
+test("a scribble over a word deletes the word", async ({ mount, page }) => {
+  await mount(<TestEditor width={700} html={TEXT} />);
+  await ready(page);
+  const { box } = await wordRect(page, "dolor");
+  const y = (box.top + box.bottom) / 2;
+  await page.mouse.move(box.left, y);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(i % 2 ? box.right : box.left, y + (i % 3) - 1, { steps: 3 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.__ct!.api.editor.state.doc.textContent.includes("dolor sit"))).toBe(false);
+  expect(await strokeCount(page)).toBe(0);
+  await page.evaluate(() => window.__ct!.api.undoManager.undo());
+  await expect.poll(() => page.evaluate(() => window.__ct!.api.editor.state.doc.textContent.includes("dolor sit"))).toBe(true);
+});

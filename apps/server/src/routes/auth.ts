@@ -3,7 +3,9 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { WEB_COOKIE, WEB_SESSION_TTL_SEC, requireUser } from '../auth/guard.js';
 import type { AppContext } from '../context.js';
-import { devices, docs, recoveryTokens, refreshTokens, users } from '../db/schema.js';
+import type { DbOrTx } from '../db/client.js';
+import type { UserPrincipal } from '../services/principal.js';
+import { devices, docs, recoveryTokens, refreshTokens, securityEvents, users } from '../db/schema.js';
 import { fromB64, randomToken, safeEqual, sha256, toB64, uuidv7 } from '../lib/encoding.js';
 import { conflict, unauthorized } from '../lib/errors.js';
 import { fakeSalt, hashSecret, verifyDummy, verifySecret } from '../lib/password.js';
@@ -19,6 +21,15 @@ import { DeviceName, Email, Key32, Kdf, Salt, Session, WrappedKey, errorResponse
 const DEFAULT_KDF = { alg: 'argon2id13', ops: 3, mem: 67_108_864 } as const;
 const RECOVERY_TTL_MS = 15 * 60_000;
 const authLimit = { rateLimit: { max: 20, timeWindow: '1 minute' } };
+
+async function recordEvent(
+  tx: DbOrTx,
+  p: UserPrincipal,
+  kind: 'password_changed' | 'recovery_used' | 'recovery_key_rotated',
+) {
+  const [d] = await tx.select({ name: devices.name }).from(devices).where(eq(devices.id, p.deviceId));
+  await tx.insert(securityEvents).values({ userId: p.userId, kind, deviceId: p.deviceId, deviceName: d?.name ?? null });
+}
 
 export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
   return async (app) => {
@@ -238,7 +249,14 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             .returning();
           // A forgotten (or stolen) password: sign out everywhere.
           revoked = await revokeOtherDevices(ctx, tx, rt.userId, null);
-          return createSession(ctx, tx, user!, b.deviceName ?? 'Recovered device');
+          const session = await createSession(ctx, tx, user!, b.deviceName ?? 'Recovered device');
+          await tx.insert(securityEvents).values({
+            userId: rt.userId,
+            kind: 'recovery_used',
+            deviceId: session.deviceId,
+            deviceName: b.deviceName ?? 'Recovered device',
+          });
+          return session;
         });
         publishDeviceRevocations(ctx, revoked, 'password reset');
         return session;
@@ -281,9 +299,52 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
               updatedAt: sql`now()`,
             })
             .where(eq(users.id, p.userId));
+          await recordEvent(tx, p, 'password_changed');
           return revokeOtherDevices(ctx, tx, p.userId, p.deviceId);
         });
         publishDeviceRevocations(ctx, revoked, 'password changed');
+        return reply.code(204).send(null);
+      },
+    );
+
+    // Replace the recovery key (crypto.md §4): new Argon2id(recoveryLoginKey) and a new
+    // wrapping of masterKey, atomically. The old recovery key stops working at once.
+    app.post(
+      '/auth/recovery-key',
+      {
+        config: authLimit,
+        schema: {
+          tags: ['auth'],
+          security: [{ bearer: [] }],
+          body: z.object({
+            currentLoginKey: Key32,
+            recoveryLoginKey: Key32,
+            wrappedMasterKeyRecovery: WrappedKey,
+          }),
+          response: { 204: z.null(), ...errorResponses },
+        },
+      },
+      async (req, reply) => {
+        const p = await requireUser(ctx, req);
+        const b = req.body;
+        const [u] = await db.select().from(users).where(eq(users.id, p.userId));
+        if (!u || !(await verifySecret(u.loginHash, fromB64(b.currentLoginKey)))) {
+          throw unauthorized('current password is wrong');
+        }
+        const recoveryHash = await hashSecret(fromB64(b.recoveryLoginKey));
+        await db.transaction(async (tx) => {
+          await tx
+            .update(users)
+            .set({
+              recoveryHash,
+              wrappedMasterKeyRecovery: fromB64(b.wrappedMasterKeyRecovery),
+              updatedAt: sql`now()`,
+            })
+            .where(eq(users.id, p.userId));
+          // Recovery flows started with the old key must not finish.
+          await tx.delete(recoveryTokens).where(eq(recoveryTokens.userId, p.userId));
+          await recordEvent(tx, p, 'recovery_key_rotated');
+        });
         return reply.code(204).send(null);
       },
     );

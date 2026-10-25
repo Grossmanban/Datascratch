@@ -363,6 +363,15 @@ importers:
 
   packages/web-editor:
     dependencies:
+      '@datascratch/design-tokens':
+        specifier: workspace:*
+        version: link:../design-tokens
+      '@datascratch/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@datascratch/ui':
+        specifier: workspace:*
+        version: link:../ui
       '@tiptap/core':
         specifier: ^3.32.0
         version: 3.32.0(@tiptap/pm@3.32.0)
@@ -421,6 +430,9 @@ importers:
       '@playwright/test':
         specifier: 1.62.1
         version: 1.62.1
+      '@tailwindcss/vite':
+        specifier: ^4.3.3
+        version: 4.3.3(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
       '@types/katex':
         specifier: ^0.16.8
         version: 0.16.8
@@ -442,6 +454,9 @@ importers:
       react-dom:
         specifier: ^19.0.0
         version: 19.3.1(react@19.3.1)
+      tailwindcss:
+        specifier: ^4.3.3
+        version: 4.3.3
       typescript:
         specifier: ^5.6.0
         version: 5.9.3

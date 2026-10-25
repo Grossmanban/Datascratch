@@ -12,8 +12,8 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "check": "turbo run build typecheck lint test",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format": "prettier --write packages/shared packages/test-vectors eslint.config.js package.json turbo.json tsconfig.base.json .prettierrc.json .github/workflows/ts.yml",
+    "format:check": "prettier --check packages/shared packages/test-vectors eslint.config.js package.json turbo.json tsconfig.base.json .prettierrc.json .github/workflows/ts.yml"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

@@ -5,6 +5,9 @@ on:
     branches: [main, "claude/web-editor"]
     paths:
       - "packages/web-editor/**"
+      - "packages/shared/**"
+      - "packages/ui/**"
+      - "packages/design-tokens/**"
       - ".github/workflows/web-editor.yml"
       - "pnpm-lock.yaml"
   pull_request:
@@ -32,9 +35,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # The root lockfile is owned by the core stream; until it covers this package, resolve freshly.
       - name: Install
-        run: pnpm install --filter "@datascratch/web-editor..." --no-frozen-lockfile
+        run: pnpm install --filter "@datascratch/web-editor..." --frozen-lockfile
+      - name: Build @datascratch/shared
+        run: pnpm --filter @datascratch/shared build
       - name: Typecheck
         run: pnpm run typecheck
       - name: Unit tests (schema, anchors, D-35, codec, geometry)

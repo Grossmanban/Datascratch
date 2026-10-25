@@ -5,14 +5,29 @@ import type { Editor } from "@tiptap/core";
 import { ySyncPluginKey } from "y-prosemirror";
 import * as Y from "yjs";
 import { PEN_ORIGIN } from "../collab/collaboration";
-import { packPoints, strokeFromYMap, strokeToYMap, unpackPoints, type Stroke, type StrokeAuthor, type StrokePoint, type StrokeTool } from "../shared/strokes";
-import { uuidv7 } from "../shared/uuid";
+import { uuidv7 } from "@datascratch/shared/ids";
+import {
+  attachAnchorRebase,
+  packPoints,
+  pressureCurve,
+  putStroke,
+  readStroke,
+  tiltFactor,
+  unpackPoints,
+  type Stroke,
+  type StrokeAuthor,
+  type StrokePoint,
+  type StrokeTool,
+} from "@datascratch/shared/strokes";
 import { resolveColor } from "../tokens";
-import { decodeAnchor, encodeCharAnchor, rebaseRedoneAnchors, resolveCharAnchor, type ProsemirrorMapping } from "./anchors";
+import { decodeAnchor, encodeCharAnchor, resolveCharAnchor, type ProsemirrorMapping } from "./anchors";
 import {
   bindToSurface,
   bindToText,
+  expandToWords,
+  fractionInside,
   groupLines,
+  pointInPolygon,
   hitsSegments,
   pointsWithin,
   resolveSurfaceSegments,
@@ -30,7 +45,7 @@ import { LayoutPass, resetFontMetrics } from "./layout";
 import { fillSegments, prepareCanvas } from "./render";
 import { InputSmoother, pointerSample, simplify } from "./smoothing";
 
-export type PenTool = StrokeTool | "eraser";
+export type PenTool = StrokeTool | "eraser" | "lasso";
 export type EraserMode = "stroke" | "pixel";
 
 export interface PenSettings {
@@ -43,6 +58,8 @@ export interface PenSettings {
   eraserSize: number;
   /** Draw with mouse and finger too (otherwise only the stylus draws, finger scrolls). */
   drawWithAnyPointer: boolean;
+  /** A scribble over words deletes them (spec/03 «зигзаг по слову — удалить») instead of leaving ink. */
+  scribbleDeletes: boolean;
 }
 
 export const TOOL_DEFAULTS: Record<StrokeTool, { width: number; opacity: number; color: string }> = {
@@ -59,6 +76,7 @@ export const DEFAULT_PEN_SETTINGS: PenSettings = {
   eraserMode: "stroke",
   eraserSize: 12,
   drawWithAnyPointer: false,
+  scribbleDeletes: true,
 };
 
 interface Entry {
@@ -69,6 +87,8 @@ interface Entry {
   segments: RenderPoint[][] | null;
   bounds: Bounds | null;
   clip: Bounds | null;
+  /** Layout may have changed since `segments` were computed. */
+  stale: boolean;
 }
 
 type Surface = { kind: "image" | "drawing" | "block"; blockId: string; el: HTMLElement };
@@ -86,6 +106,13 @@ interface ActiveStroke {
   /** Stroke ids hit by the stroke eraser, or point indices hit by the pixel eraser. */
   erasedStrokes: Set<string>;
   erasedPoints: Map<string, Set<number>>;
+  /** Lasso: dragging the current selection instead of drawing a new loop. */
+  moving: boolean;
+}
+
+interface LassoSelection {
+  ids: Set<string>;
+  bounds: Bounds;
 }
 
 export interface PenLayerOptions {
@@ -102,8 +129,6 @@ export interface PenLayerOptions {
 }
 
 const PEN_RECENT_MS = 1500;
-/** Untracked origin: anchor rebasing must not become an undo step of its own. */
-const ANCHOR_REBASE_ORIGIN = Symbol("ds-anchor-rebase");
 
 export class PenLayer {
   readonly editor: Editor;
@@ -127,6 +152,7 @@ export class PenLayer {
   private readonly cleanups: (() => void)[] = [];
   private readonly onStroke?: (id: string, stroke: Stroke) => void;
   private colorCache = new Map<string, string>();
+  private lasso: LassoSelection | null = null;
 
   constructor(opts: PenLayerOptions) {
     this.editor = opts.editor;
@@ -217,9 +243,19 @@ export class PenLayer {
     this.cleanups.push(() => mq?.removeEventListener?.("change", onTheme));
 
     // Undo/redo restores text as new items; rebase anchors so other devices see the marks again.
-    const onPopped = () => queueMicrotask(() => !this.destroyed && rebaseRedoneAnchors(this.doc, ANCHOR_REBASE_ORIGIN));
-    this.undoManager.on("stack-item-popped", onPopped);
-    this.cleanups.push(() => this.undoManager.off("stack-item-popped", onPopped));
+    this.cleanups.push(attachAnchorRebase(this.undoManager));
+
+    const onKey = (e: KeyboardEvent) => {
+      if (!this.lasso) return;
+      if (e.key === "Escape") this.clearLasso();
+      else if ((e.key === "Delete" || e.key === "Backspace") && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.deleteSelectedStrokes();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    this.cleanups.push(() => window.removeEventListener("keydown", onKey, true));
 
     this.attachInput();
     this.schedule();
@@ -233,6 +269,7 @@ export class PenLayer {
 
   setSettings(patch: Partial<PenSettings>): void {
     this.settings = { ...this.settings, ...patch };
+    if (patch.tool !== undefined && patch.tool !== "lasso") this.clearLasso();
     this.root.classList.toggle("ds-pen-draw-any", Boolean(this.settings.tool && this.settings.drawWithAnyPointer));
     for (const l of this.listeners) l(this.settings);
   }
@@ -245,7 +282,7 @@ export class PenLayer {
   // ---------- model ----------
 
   private upsert(id: string, map: Y.Map<unknown>): void {
-    const stroke = strokeFromYMap(map);
+    const stroke = readStroke(map);
     if (!stroke) {
       this.entries.delete(id);
       return;
@@ -265,6 +302,7 @@ export class PenLayer {
       segments: null,
       bounds: null,
       clip: null,
+      stale: true,
     });
   }
 
@@ -276,6 +314,7 @@ export class PenLayer {
 
   /** Number of drawn segments per stroke id (diagnostics and tests). */
   debugSegments(): Record<string, RenderPoint[][]> {
+    this.resolveAll();
     this.flush();
     const out: Record<string, RenderPoint[][]> = {};
     for (const [id, e] of this.entries) out[id] = e.segments ?? [];
@@ -325,7 +364,7 @@ export class PenLayer {
         const rel = e.rels[a];
         let box: AnchorBox | null = null;
         if (rel && mapping) {
-          const pos = resolveCharAnchor(rel, this.doc, this.fragment, mapping);
+          const pos = resolveCharAnchor(stroke.anchors[a]!, rel, this.doc, this.fragment, mapping);
           if (pos !== null) box = pass.anchorBox(pos);
         }
         boxes.set(a, box);
@@ -340,24 +379,74 @@ export class PenLayer {
         return;
       }
       const r = el.getBoundingClientRect();
-      const left = r.left - pass.origin.x;
       const top = r.top - pass.origin.y;
-      e.segments = resolveSurfaceSegments(stroke, e.points, { left, top, width: r.width }, skip);
-      if (stroke.anchorKind !== "block") e.clip = { left, top, right: left + r.width, bottom: top + r.height };
+      if (stroke.anchorKind === "block") {
+        // Margin notes: x in fractions of the text column from its left edge, y from the block's top.
+        const col = this.textColumn();
+        e.segments = resolveSurfaceSegments(stroke, e.points, { left: col.left, top, width: col.right - col.left }, skip);
+      } else {
+        const left = r.left - pass.origin.x;
+        e.segments = resolveSurfaceSegments(stroke, e.points, { left, top, width: r.width }, skip);
+        e.clip = { left, top, right: left + r.width, bottom: top + r.height };
+      }
     }
     e.bounds = segmentsBounds(e.segments);
   }
 
   /** Resolves every stroke (after relayout) or, when `onlyNew`, just strokes never resolved yet. */
   private resolveAll(onlyNew = false): void {
+    if (!onlyNew) this.markAllStale();
+    this.resolveStale(() => true, Infinity);
+  }
+
+  private markAllStale(): void {
+    if (!this.needsResolve) return;
+    for (const e of this.entries.values()) e.stale = true;
+    this.needsResolve = false;
+  }
+
+  /** Resolves stale strokes matching `filter`, within a time budget (ms). Returns true if some remain. */
+  private resolveStale(filter: (e: Entry) => boolean, budget: number): boolean {
     let pass: LayoutPass | null = null;
     const mapping = this.mapping();
+    const start = performance.now();
+    let remaining = false;
     for (const e of this.entries.values()) {
-      if (onlyNew && e.segments) continue;
+      if (!e.stale && e.segments) continue;
+      if (!filter(e) || performance.now() - start > budget) {
+        remaining = true;
+        continue;
+      }
       pass ??= new LayoutPass(this.editor.view, this.origin());
       this.resolveEntry(e, pass, mapping, this.skipFor(e.id));
+      e.stale = false;
     }
-    if (!onlyNew) this.needsResolve = false;
+    return remaining;
+  }
+
+  /**
+   * Long notes: after an edit only strokes near the viewport are re-measured before the frame;
+   * the rest follow in idle time, so typing never waits for off-screen ink.
+   */
+  private resolveForFrame(vp: { top: number; height: number }): void {
+    this.markAllStale();
+    const near = (e: Entry) => !e.bounds || (e.bounds.bottom >= vp.top - vp.height && e.bounds.top <= vp.top + 2 * vp.height);
+    this.resolveStale(near, Infinity);
+    if (this.resolveStale(() => false, 0)) this.scheduleIdle();
+  }
+
+  private idleHandle = 0;
+  private scheduleIdle(): void {
+    if (this.idleHandle || this.destroyed) return;
+    const run = () => {
+      this.idleHandle = 0;
+      if (this.destroyed) return;
+      const more = this.resolveStale(() => true, 8);
+      this.schedule();
+      if (more) this.scheduleIdle();
+    };
+    const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    this.idleHandle = ric ? ric(run, { timeout: 200 }) : window.setTimeout(run, 16);
   }
 
   private skipFor(id: string): ReadonlySet<number> | undefined {
@@ -388,13 +477,18 @@ export class PenLayer {
   /** Resolves (if needed) and redraws synchronously. */
   flush(): void {
     if (this.destroyed) return;
-    this.resolveAll(!this.needsResolve);
     const vp = this.viewport();
+    this.resolveForFrame(vp);
     const dpr = window.devicePixelRatio || 1;
     const under = prepareCanvas(this.under, vp, dpr);
     const over = prepareCanvas(this.over, vp, dpr);
     if (!under || !over) return;
-    const hiddenIds = this.active?.tool === "eraser" && this.settings.eraserMode === "stroke" ? this.active.erasedStrokes : null;
+    const hiddenIds =
+      this.active?.tool === "eraser" && this.settings.eraserMode === "stroke"
+        ? this.active.erasedStrokes
+        : this.active?.moving && this.lasso
+          ? this.lasso.ids
+          : null;
     for (const e of this.entries.values()) {
       if (!e.segments || !e.segments.length || !e.bounds || hiddenIds?.has(e.id)) continue;
       const b = e.bounds;
@@ -416,7 +510,34 @@ export class PenLayer {
     const vp = this.viewport();
     const ctx = prepareCanvas(this.live, vp, window.devicePixelRatio || 1);
     const a = this.active;
-    if (!ctx || !a) return;
+    if (!ctx) return;
+    if (this.lasso && !a?.moving) this.drawSelectionFrame(ctx, this.lasso.bounds, 0, 0);
+    if (!a) return;
+    if (a.tool === "lasso") {
+      if (a.moving && this.lasso) {
+        const first = a.raw[0]!;
+        const last = a.raw[a.raw.length - 1]!;
+        const dx = last.x - first.x;
+        const dy = last.y - first.y;
+        ctx.save();
+        ctx.translate(dx, dy);
+        for (const id of this.lasso.ids) {
+          const e = this.entries.get(id);
+          if (e?.segments?.length) fillSegments(ctx, e.segments, this.color(e.stroke.color), e.stroke.opacity);
+        }
+        ctx.restore();
+        this.drawSelectionFrame(ctx, this.lasso.bounds, dx, dy);
+      } else if (a.raw.length > 1) {
+        ctx.beginPath();
+        a.raw.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+        ctx.setLineDash([5, 4]);
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = this.color("accent");
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      return;
+    }
     if (a.tool === "eraser") {
       const last = a.raw[a.raw.length - 1];
       if (last) {
@@ -434,13 +555,24 @@ export class PenLayer {
     const seg: RenderPoint[] = pts.map((p, i) => ({
       x: p.x,
       y: p.y,
-      w: this.settings.width * scale * (0.35 + 0.65 * Math.pow(p.pressure, 0.8)) * (tool === "pencil" || tool === "marker" ? 1 + 1.5 * (1 - p.altitude / (Math.PI / 2)) : 1),
+      w: this.settings.width * scale * pressureCurve(p.pressure) * tiltFactor(tool, p.altitude),
       i,
     }));
     if (seg.length === 1) seg.push({ ...seg[0]!, x: seg[0]!.x + 0.01 });
     if (tool === "highlighter") ctx.globalCompositeOperation = "multiply";
     fillSegments(ctx, [seg], this.color(this.settings.color), TOOL_DEFAULTS[tool].opacity);
     ctx.globalCompositeOperation = "source-over";
+  }
+
+  private drawSelectionFrame(ctx: CanvasRenderingContext2D, b: Bounds, dx: number, dy: number): void {
+    ctx.save();
+    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = this.color("accent");
+    ctx.globalAlpha = 0.9;
+    const pad = 4;
+    ctx.strokeRect(b.left - pad + dx, b.top - pad + dy, b.right - b.left + 2 * pad, b.bottom - b.top + 2 * pad);
+    ctx.restore();
   }
 
   /** Text strokes are drawn at the size they will have after binding (font-relative). */
@@ -515,7 +647,13 @@ export class PenLayer {
       /* synthetic events in tests */
     }
     const tool: PenTool = isEraserButton ? "eraser" : this.settings.tool!;
-    const surface = tool === "eraser" ? null : this.surfaceAt(e.target);
+    const surface = tool === "eraser" || tool === "lasso" ? null : this.surfaceAt(e.target);
+    const origin = this.origin();
+    const lx = e.clientX - origin.x;
+    const ly = e.clientY - origin.y;
+    const b = this.lasso?.bounds;
+    const moving = tool === "lasso" && !!b && lx >= b.left - 6 && lx <= b.right + 6 && ly >= b.top - 6 && ly <= b.bottom + 6;
+    if (tool === "lasso" && !moving) this.clearLasso();
     const t0 = e.timeStamp;
     this.active = {
       pointerId: e.pointerId,
@@ -529,6 +667,7 @@ export class PenLayer {
       surface,
       erasedStrokes: new Set(),
       erasedPoints: new Map(),
+      moving,
     };
     this.addSamples([e]);
     this.schedule();
@@ -544,7 +683,7 @@ export class PenLayer {
     this.addSamples(coalesced.length ? coalesced : [e]);
     const predicted = typeof e.getPredictedEvents === "function" ? e.getPredictedEvents() : [];
     const origin = this.origin();
-    a.predicted = a.tool === "eraser" ? [] : predicted.slice(0, 2).map((p) => pointerSample(p, origin, a.t0));
+    a.predicted = a.tool === "eraser" || a.tool === "lasso" ? [] : predicted.slice(0, 2).map((p) => pointerSample(p, origin, a.t0));
     if (a.tool !== "eraser" && a.pointerType !== "pen") for (const p of a.predicted) p.pressure = 1;
     this.schedule();
   }
@@ -557,7 +696,7 @@ export class PenLayer {
       if (a.tool === "highlighter") s.pressure = 1;
       a.raw.push(s);
       if (a.tool === "eraser") this.eraseAt(s);
-      else a.points.push(a.smoother.push(s));
+      else if (a.tool !== "lasso") a.points.push(a.smoother.push(s));
     }
   }
 
@@ -574,7 +713,8 @@ export class PenLayer {
     if (!cancelled && e.type === "pointerup") {
       const last = pointerSample(e, this.origin(), a.t0);
       if (a.tool === "highlighter") last.pressure = 1;
-      if (a.tool !== "eraser") {
+      if (a.tool === "lasso") a.raw.push(last);
+      else if (a.tool !== "eraser") {
         const prev = a.points[a.points.length - 1];
         // The pen lifts with ~0 pressure; keep the last real pressure for the end point.
         if (prev && (last.pressure === 0 || e.pointerType === "pen")) last.pressure = prev.pressure;
@@ -584,7 +724,10 @@ export class PenLayer {
     try {
       if (!cancelled) {
         if (a.tool === "eraser") this.commitErase(a);
-        else this.commitStroke(a);
+        else if (a.tool === "lasso") {
+          if (a.moving) this.commitMove(a);
+          else this.commitLasso(a);
+        } else this.commitStroke(a);
       }
     } finally {
       this.active = null;
@@ -609,12 +752,13 @@ export class PenLayer {
     };
     let stroke: Stroke | null = null;
     const surface = a.surface ? { ...a.surface, rect: a.surface.el.getBoundingClientRect() } : null;
+    const screenWidth = this.settings.width;
     if (surface) {
       const origin = this.origin();
       const s = { left: surface.rect.left - origin.x, top: surface.rect.top - origin.y, width: surface.rect.width };
       stroke = {
         ...base,
-        width: (this.settings.width * 600) / s.width,
+        width: (screenWidth * 600) / s.width,
         anchorKind: surface.kind,
         blockId: surface.blockId,
         anchors: [],
@@ -622,17 +766,26 @@ export class PenLayer {
         hint: recognizeHint(pts, tool),
       };
     } else {
-      stroke = this.bindTextStroke(pts, tool, base);
+      const bound = this.bindTextStroke(pts, tool, base, screenWidth);
+      if (bound && this.settings.scribbleDeletes && bound.stroke.hint === "scribble" && bound.positions.length && tool !== "highlighter") {
+        if (this.deleteWordsUnder(bound.positions)) return;
+      }
+      stroke = bound?.stroke ?? null;
     }
     if (!stroke) return;
     const id = uuidv7();
     this.undoManager.stopCapturing();
-    this.doc.transact(() => this.strokes.set(id, strokeToYMap(stroke)), PEN_ORIGIN);
+    this.doc.transact(() => putStroke(this.doc, id, stroke), PEN_ORIGIN);
     this.undoManager.stopCapturing();
     this.onStroke?.(id, stroke);
   }
 
-  private bindTextStroke(pts: InputPoint[], tool: StrokeTool, base: Omit<Stroke, "width" | "anchorKind" | "blockId" | "anchors" | "points" | "hint">): Stroke | null {
+  private bindTextStroke(
+    pts: InputPoint[],
+    tool: StrokeTool,
+    base: Omit<Stroke, "width" | "anchorKind" | "blockId" | "anchors" | "points" | "hint">,
+    screenWidth: number,
+  ): { stroke: Stroke; positions: number[] } | null {
     const mapping = this.mapping();
     if (!mapping) return null;
     const pass = new LayoutPass(this.editor.view, this.origin());
@@ -648,7 +801,7 @@ export class PenLayer {
     }
     const margin = 3 * 17 * 1.5;
     const column = this.textColumn();
-    const inMargin = column && (maxX < column.left || minX > column.right);
+    const inMargin = maxX < column.left || minX > column.right;
     let lines: Line[] = [];
     if (!inMargin) {
       lines = groupLines(pass.glyphsInBand(minY - margin, maxY + margin));
@@ -659,21 +812,44 @@ export class PenLayer {
       }
     }
     const binding = lines.length ? bindToText(pts, lines) : null;
-    if (!binding) return this.bindMarginStroke(pts, tool, base);
+    if (!binding) {
+      const margin = this.bindMarginStroke(pts, tool, base, screenWidth);
+      return margin ? { stroke: margin, positions: [] } : null;
+    }
     const anchors = binding.anchorPositions.map((pos) => encodeCharAnchor(pos, this.fragment, mapping));
     return {
-      ...base,
-      width: (this.settings.width * 17) / binding.referenceFontSize,
-      anchorKind: "text",
-      blockId: null,
-      anchors,
-      points: packPoints(binding.points),
-      hint: recognizeHint(pts, tool, lines),
+      stroke: {
+        ...base,
+        width: (screenWidth * 17) / binding.referenceFontSize,
+        anchorKind: "text",
+        blockId: null,
+        anchors,
+        points: packPoints(binding.points),
+        hint: recognizeHint(pts, tool, lines),
+      },
+      positions: binding.anchorPositions,
     };
   }
 
+  /** Scribble gesture: deletes the words under the scribble (one textblock, one undo step). */
+  private deleteWordsUnder(positions: number[]): boolean {
+    const { state } = this.editor;
+    const sorted = [...positions].sort((x, y) => x - y);
+    const $a = state.doc.resolve(sorted[0]!);
+    const $b = state.doc.resolve(sorted[sorted.length - 1]!);
+    if (!$a.parent.isTextblock || !$a.sameParent($b)) return false;
+    const start = $a.start();
+    const text = $a.parent.textBetween(0, $a.parent.content.size, undefined, "\ufffc");
+    const [from, to] = expandToWords(text, $a.pos - start, $b.pos - start + 1);
+    if (to <= from) return false;
+    this.undoManager.stopCapturing();
+    this.editor.chain().deleteRange({ from: start + from, to: start + to }).run();
+    this.undoManager.stopCapturing();
+    return true;
+  }
+
   /** Text column of the editor in layer coordinates (content box of the ProseMirror element). */
-  private textColumn(): { left: number; right: number } | null {
+  private textColumn(): { left: number; right: number } {
     const dom = this.editor.view.dom;
     const r = dom.getBoundingClientRect();
     const style = getComputedStyle(dom);
@@ -685,7 +861,12 @@ export class PenLayer {
   }
 
   /** Margin note: anchored to the vertically nearest block, in fractions of that block's width. */
-  private bindMarginStroke(pts: InputPoint[], tool: StrokeTool, base: Omit<Stroke, "width" | "anchorKind" | "blockId" | "anchors" | "points" | "hint">): Stroke | null {
+  private bindMarginStroke(
+    pts: InputPoint[],
+    tool: StrokeTool,
+    base: Omit<Stroke, "width" | "anchorKind" | "blockId" | "anchors" | "points" | "hint">,
+    screenWidth: number,
+  ): Stroke | null {
     const origin = this.origin();
     const midY = (Math.min(...pts.map((p) => p.y)) + Math.max(...pts.map((p) => p.y))) / 2;
     let best: { el: HTMLElement; d: number } | null = null;
@@ -700,16 +881,126 @@ export class PenLayer {
     }
     if (!best?.el.dataset.blockId) return null;
     const r = best.el.getBoundingClientRect();
-    const s = { left: r.left - origin.x, top: r.top - origin.y, width: r.width };
+    const col = this.textColumn();
+    const s = { left: col.left, top: r.top - origin.y, width: col.right - col.left };
     return {
       ...base,
-      width: (this.settings.width * 600) / s.width,
+      width: (screenWidth * 600) / s.width,
       anchorKind: "block",
       blockId: best.el.dataset.blockId,
       anchors: [],
       points: packPoints(bindToSurface(pts, s)),
       hint: recognizeHint(pts, tool),
     };
+  }
+
+  // ---------- lasso ----------
+
+  /** Ids of strokes selected with the lasso (tests, app integrations). */
+  selectedStrokes(): string[] {
+    return this.lasso ? [...this.lasso.ids] : [];
+  }
+
+  clearLasso(): void {
+    if (!this.lasso) return;
+    this.lasso = null;
+    this.schedule();
+  }
+
+  private commitLasso(a: ActiveStroke): void {
+    const poly = a.raw;
+    if (poly.length < 3) return;
+    this.resolveAll(!this.needsResolve);
+    const ids = new Set<string>();
+    let bounds: Bounds | null = null;
+    for (const e of this.entries.values()) {
+      if (!e.segments?.length || !e.bounds) continue;
+      if (fractionInside(e.segments, poly) < 0.6) continue;
+      ids.add(e.id);
+      const b = e.bounds;
+      bounds = bounds
+        ? { left: Math.min(bounds.left, b.left), top: Math.min(bounds.top, b.top), right: Math.max(bounds.right, b.right), bottom: Math.max(bounds.bottom, b.bottom) }
+        : { ...b };
+    }
+    this.lasso = ids.size && bounds ? { ids, bounds } : null;
+    // Text under the loop becomes the editor selection (format, copy, delete it as text).
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const p of poly) {
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+    const pass = new LayoutPass(this.editor.view, this.origin());
+    const inside = pass.glyphsInBand(minY, maxY).filter((g) => pointInPolygon((g.left + g.right) / 2, (g.top + g.bottom) / 2, poly));
+    if (inside.length) {
+      const from = Math.min(...inside.map((g) => g.pos));
+      const to = Math.max(...inside.map((g) => g.pos)) + 1;
+      this.editor.chain().focus().setTextSelection({ from, to }).run();
+    }
+  }
+
+  private deleteSelectedStrokes(): void {
+    const sel = this.lasso;
+    if (!sel) return;
+    this.undoManager.stopCapturing();
+    this.doc.transact(() => sel.ids.forEach((id) => this.strokes.delete(id)), PEN_ORIGIN);
+    this.undoManager.stopCapturing();
+    this.lasso = null;
+    this.schedule();
+  }
+
+  /** Drops the selected strokes at their new place: each is re-bound (to text or its surface). */
+  private commitMove(a: ActiveStroke): void {
+    const sel = this.lasso;
+    if (!sel || a.raw.length < 2) return;
+    const first = a.raw[0]!;
+    const last = a.raw[a.raw.length - 1]!;
+    const dx = last.x - first.x;
+    const dy = last.y - first.y;
+    if (Math.hypot(dx, dy) < 2) return;
+    const origin = this.origin();
+    const replacements: [string, Stroke][] = [];
+    for (const id of sel.ids) {
+      const e = this.entries.get(id);
+      if (!e?.segments?.length) continue;
+      const src = e.points;
+      // The stroke's on-screen width at pressure 1, recovered from its first drawn point.
+      const p0 = e.segments[0]![0]!;
+      const sp0 = src[p0.i]!;
+      const screenWidth = p0.w / (pressureCurve(sp0.pressure) * tiltFactor(e.stroke.tool, sp0.altitude));
+      const base = { v: 1 as const, tool: e.stroke.tool, color: e.stroke.color, opacity: e.stroke.opacity, author: e.stroke.author, createdAt: e.stroke.createdAt };
+      for (const seg of e.segments) {
+        const pts: InputPoint[] = seg.map((rp) => {
+          const sp = src[rp.i]!;
+          return { x: rp.x + dx, y: rp.y + dy, pressure: sp.pressure, altitude: sp.altitude, azimuth: sp.azimuth, roll: sp.roll, t: sp.t };
+        });
+        let next: Stroke | null = null;
+        if (e.stroke.anchorKind === "image" || e.stroke.anchorKind === "drawing") {
+          const el = this.surfaceElement(e.stroke.anchorKind, e.stroke.blockId);
+          if (!el) continue;
+          const r = el.getBoundingClientRect();
+          const s = { left: r.left - origin.x, top: r.top - origin.y, width: r.width };
+          next = { ...base, width: (screenWidth * 600) / s.width, anchorKind: e.stroke.anchorKind, blockId: e.stroke.blockId, anchors: [], points: packPoints(bindToSurface(pts, s)), hint: e.stroke.hint };
+        } else {
+          next = this.bindTextStroke(pts, e.stroke.tool, base, screenWidth)?.stroke ?? null;
+          if (next) next.hint = e.stroke.hint;
+        }
+        if (next) replacements.push([id, next]);
+      }
+    }
+    this.undoManager.stopCapturing();
+    const newIds = new Set<string>();
+    this.doc.transact(() => {
+      for (const id of sel.ids) this.strokes.delete(id);
+      for (const [, stroke] of replacements) {
+        const nid = uuidv7();
+        newIds.add(nid);
+        putStroke(this.doc, nid, stroke);
+      }
+    }, PEN_ORIGIN);
+    this.undoManager.stopCapturing();
+    const b = sel.bounds;
+    this.lasso = newIds.size ? { ids: newIds, bounds: { left: b.left + dx, top: b.top + dy, right: b.right + dx, bottom: b.bottom + dy } } : null;
   }
 
   // ---------- eraser ----------
@@ -749,7 +1040,7 @@ export class PenLayer {
         for (const piece of pieces) {
           const next: Stroke = { ...e.stroke, anchors: piece.anchors, points: packPoints(piece.points) };
           delete next.hidden;
-          this.strokes.set(uuidv7(), strokeToYMap(next));
+          putStroke(this.doc, uuidv7(), next);
         }
       }
     }, PEN_ORIGIN);
@@ -766,6 +1057,11 @@ export class PenLayer {
   destroy(): void {
     this.destroyed = true;
     if (this.frame) cancelAnimationFrame(this.frame);
+    if (this.idleHandle) {
+      const cic = (window as Window & { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback;
+      if (cic) cic(this.idleHandle);
+      else clearTimeout(this.idleHandle);
+    }
     for (const c of this.cleanups) c();
     this.under.remove();
     this.over.remove();

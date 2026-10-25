@@ -107,7 +107,7 @@ struct NativeDocumentScreen: View {
                     // The palette sits in the bottom safe area: the text scrolls clear of it, and it
                     // rides up with the keyboard in one animation (no second layout pass).
                     .safeAreaInset(edge: .bottom, spacing: 0) {
-                        PenPalette(model: model)
+                        PenPalette(model: model, isCompact: proxy.size.width < PenPalette.fullWidth)
                             .padding(.top, Theme.Space.s2)
                             .padding(.bottom, Theme.Space.s3)
                     }
@@ -287,9 +287,11 @@ struct NativeDocumentHeader: View {
 struct PenPalette: View {
     @Environment(AppModel.self) private var app
     let model: NativeEditorModel
-    /// iPhone: the main tools in one row of 44 pt targets, the rest in «More» (colours, lasso,
-    /// pixel eraser, finger drawing). iPad: everything inline.
-    private var isCompact: Bool { UIDevice.current.userInterfaceIdiom == .phone }
+    /// Narrow (iPhone, iPad portrait or split view): the main tools in one row of 44 pt targets,
+    /// the rest in «More» (colours, lasso, pixel eraser, finger drawing). Wide: everything inline.
+    let isCompact: Bool
+    /// Width the inline palette needs: 8 tools, 6 inks, finger drawing, dividers, margins.
+    static let fullWidth: CGFloat = 15 * target + 64
     private var modes: [PenMode] {
         isCompact ? [.text, .pen, .pencil, .marker, .highlighter, .strokeEraser]
             : [.text, .pen, .pencil, .marker, .highlighter, .pixelEraser, .strokeEraser, .lasso]

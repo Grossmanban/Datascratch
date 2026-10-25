@@ -8,7 +8,7 @@ import { PEN_ORIGIN } from "../collab/collaboration";
 import { packPoints, strokeFromYMap, strokeToYMap, unpackPoints, type Stroke, type StrokeAuthor, type StrokePoint, type StrokeTool } from "../shared/strokes";
 import { uuidv7 } from "../shared/uuid";
 import { resolveColor } from "../tokens";
-import { decodeAnchor, encodeCharAnchor, resolveCharAnchor, type ProsemirrorMapping } from "./anchors";
+import { decodeAnchor, encodeCharAnchor, rebaseRedoneAnchors, resolveCharAnchor, type ProsemirrorMapping } from "./anchors";
 import {
   bindToSurface,
   bindToText,
@@ -102,6 +102,8 @@ export interface PenLayerOptions {
 }
 
 const PEN_RECENT_MS = 1500;
+/** Untracked origin: anchor rebasing must not become an undo step of its own. */
+const ANCHOR_REBASE_ORIGIN = Symbol("ds-anchor-rebase");
 
 export class PenLayer {
   readonly editor: Editor;
@@ -213,6 +215,11 @@ export class PenLayer {
     };
     mq?.addEventListener?.("change", onTheme);
     this.cleanups.push(() => mq?.removeEventListener?.("change", onTheme));
+
+    // Undo/redo restores text as new items; rebase anchors so other devices see the marks again.
+    const onPopped = () => queueMicrotask(() => !this.destroyed && rebaseRedoneAnchors(this.doc, ANCHOR_REBASE_ORIGIN));
+    this.undoManager.on("stack-item-popped", onPopped);
+    this.cleanups.push(() => this.undoManager.off("stack-item-popped", onPopped));
 
     this.attachInput();
     this.schedule();

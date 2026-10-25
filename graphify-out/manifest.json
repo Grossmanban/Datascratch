@@ -1,9 +1,9 @@
 {
   "CLAUDE.md": {
-    "mtime": 1792924108.1606128,
-    "seen": 1792924331.2565382,
-    "ast_hash": "dcd1e120b526e045f949069d35b57f6b",
-    "semantic_hash": "dcd1e120b526e045f949069d35b57f6b"
+    "mtime": 1792924480.8006349,
+    "seen": 1792924682.1688411,
+    "ast_hash": "05583b8dea608ee5f8c4ef128c0e1571",
+    "semantic_hash": "05583b8dea608ee5f8c4ef128c0e1571"
   },
   "README.md": {
     "mtime": 1792923291.8045642,
@@ -36,10 +36,10 @@
     "semantic_hash": "8b12ac8cf05042d6388f70de3402a992"
   },
   "docs/README.md": {
-    "mtime": 1792923306.424565,
-    "seen": 1792924083.4237533,
-    "ast_hash": "349c4b34b62360e37c3845b9c3992b02",
-    "semantic_hash": "349c4b34b62360e37c3845b9c3992b02"
+    "mtime": 1792924498.3048007,
+    "seen": 1792924682.168846,
+    "ast_hash": "f70aab33a949f6fdd51985813571ef64",
+    "semantic_hash": "f70aab33a949f6fdd51985813571ef64"
   },
   "docs/architecture/data-model.md": {
     "mtime": 1792923426.1285722,
@@ -228,10 +228,10 @@
     "semantic_hash": "89cc5f5b6e76d732b982da561e47d972"
   },
   "docs/decisions/0029-graphify-workflow.md": {
-    "mtime": 1792924112.504613,
-    "seen": 1792924331.2565463,
-    "ast_hash": "ef16bb1755fb60fa1b125ec68cf402d5",
-    "semantic_hash": "ef16bb1755fb60fa1b125ec68cf402d5"
+    "mtime": 1792924489.7486355,
+    "seen": 1792924682.1688488,
+    "ast_hash": "7299a04badef8eb40ca8412d05d276e6",
+    "semantic_hash": "7299a04badef8eb40ca8412d05d276e6"
   },
   "docs/decisions/0030-server-database-postgresql.md": {
     "mtime": 1792923536.8726964,
@@ -252,10 +252,10 @@
     "semantic_hash": "823e70c2b93b216425a90a7aa701a103"
   },
   "docs/development.md": {
-    "mtime": 1792924106.8526127,
-    "seen": 1792924331.2565503,
-    "ast_hash": "58e31ba579d7ffd3f0453042829da944",
-    "semantic_hash": "58e31ba579d7ffd3f0453042829da944"
+    "mtime": 1792924494.126278,
+    "seen": 1792924682.1688511,
+    "ast_hash": "798e76639b5c901b44a6c233eac18ecf",
+    "semantic_hash": "798e76639b5c901b44a6c233eac18ecf"
   },
   "docs/glossary.md": {
     "mtime": 1792923616.6885836,
@@ -270,10 +270,10 @@
     "semantic_hash": "689081a1dbbc3d0a0e6e13a58940e191"
   },
   "docs/risks.md": {
-    "mtime": 1792924113.500613,
-    "seen": 1792924331.2565527,
-    "ast_hash": "c7147d8c2c5daa0130a8f7f90db234c7",
-    "semantic_hash": "c7147d8c2c5daa0130a8f7f90db234c7"
+    "mtime": 1792924433.1966321,
+    "seen": 1792924682.1688535,
+    "ast_hash": "b1cd1a0cd42ac9a29de04bacb25f884e",
+    "semantic_hash": "b1cd1a0cd42ac9a29de04bacb25f884e"
   },
   "docs/roadmap.md": {
     "mtime": 1792923565.5925806,
@@ -364,5 +364,11 @@
     "seen": 1792924083.4238408,
     "ast_hash": "113fcf2764b8e2ce461c5e8e6d9f54f3",
     "semantic_hash": "113fcf2764b8e2ce461c5e8e6d9f54f3"
+  },
+  "tools/graphify_docs.py": {
+    "mtime": 1792924722.7020128,
+    "seen": 1792924726.8331182,
+    "ast_hash": "4d8c95bd892cf1e51c92fa06497cff0f",
+    "semantic_hash": ""
   }
 }

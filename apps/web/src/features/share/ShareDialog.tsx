@@ -119,7 +119,7 @@ function ShareDialogInner() {
         <Button variant="primary" size="lg" icon={<Link2 className="size-4" />} loading={create.isPending} disabled={!key} onClick={() => create.mutate()} data-testid="create-share">
           {t("share.createLink")}
         </Button>
-        <p className="flex gap-2 text-[12.5px] leading-snug text-ink-3">
+        <p className="flex gap-2 text-[12.5px] leading-snug text-ink-2">
           {nb?.mode === "agent" ? <Sparkles className="mt-0.5 size-3.5 shrink-0" /> : <Lock className="mt-0.5 size-3.5 shrink-0" />}
           <span>
             {t("share.keyHint")} {nb?.mode === "agent" && t("share.agentModeNote")}
@@ -127,11 +127,11 @@ function ShareDialogInner() {
         </p>
 
         <div className="border-t border-line pt-4">
-          <div className="mb-2 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-3">{t("share.active")}</div>
+          <div className="mb-2 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-2">{t("share.active")}</div>
           {shares.isLoading ? (
             <Spinner className="size-4 text-ink-3" />
           ) : shares.isError ? (
-            <p className="text-[13px] text-ink-3">{t("common.requiresOnline")}</p>
+            <p className="text-[13px] text-ink-2">{t("common.requiresOnline")}</p>
           ) : mine.length ? (
             <ul className="flex flex-col gap-1.5" data-testid="share-list">
               {mine.map((s) => (
@@ -139,7 +139,7 @@ function ShareDialogInner() {
                   <Link2 className="size-3.5 shrink-0 text-ink-3" />
                   <div className="min-w-0 flex-1 text-[13px]">
                     <span className="font-medium text-ink">{s.permission === "edit" ? t("share.edit") : t("share.view")}</span>
-                    <span className="text-ink-3">
+                    <span className="text-ink-2">
                       {" · "}
                       {s.expiresAt ? t("share.expiresAt", { date: formatDay(localDate(new Date(s.expiresAt))) }) : t("share.expiresNever")}
                     </span>
@@ -154,7 +154,7 @@ function ShareDialogInner() {
               ))}
             </ul>
           ) : (
-            <p className="text-[13px] text-ink-3">{t("share.noLinks")}</p>
+            <p className="text-[13px] text-ink-2">{t("share.noLinks")}</p>
           )}
         </div>
       </div>

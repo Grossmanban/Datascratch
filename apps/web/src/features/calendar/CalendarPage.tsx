@@ -104,7 +104,7 @@ export function CalendarPage() {
                     sel ? "bg-ink text-canvas shadow-card" : "hover:bg-ink/[0.04]",
                   )}
                 >
-                  <span className={cn("text-[11px] font-medium uppercase", sel ? "text-canvas/70" : "text-ink-3")}>
+                  <span className={cn("text-[11px] font-medium uppercase", sel ? "text-canvas/70" : "text-ink-2")}>
                     {dateFormat({ weekday: "short" }, locale).format(dd)}
                   </span>
                   <span className={cn("mt-0.5 text-[18px] font-semibold", !sel && isToday && "text-accent")}>{dd.getDate()}</span>
@@ -179,7 +179,7 @@ function InlineDaily({ noteId }: { noteId: string }) {
   const meta = useNoteMeta(doc);
   if (!doc || !meta)
     return (
-      <div className="flex h-32 items-center justify-center text-ink-3">
+      <div className="flex h-32 items-center justify-center text-ink-2">
         <Spinner className="size-5" />
       </div>
     );

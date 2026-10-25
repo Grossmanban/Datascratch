@@ -158,10 +158,12 @@ const DocCard = memo(function DocCard({ note, snippet, delay }: { note: NoteEntr
           className="group block overflow-hidden rounded-xl bg-surface shadow-card ring-1 ring-line/70 transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgb(40_30_10/0.05),0_16px_36px_rgb(40_30_10/0.1)]"
           data-testid="doc-card"
         >
-          <div className="relative h-24 overflow-hidden" style={{ background: coverGradient(note.id) }}>
-            {note.coverThumb && <CardThumb noteId={note.id} attachmentId={note.coverThumb} />}
-            <div className="absolute inset-0 opacity-[0.15] mix-blend-overlay [background-image:radial-gradient(rgb(0_0_0/0.5)_0.6px,transparent_0.8px)] [background-size:3px_3px]" />
-            {starred && <Star className="absolute right-3 top-3 size-3.5 fill-white/90 text-white/90 drop-shadow" />}
+          <div className="relative">
+            <div className="relative h-24 overflow-hidden" style={{ background: coverGradient(note.id) }}>
+              {note.coverThumb && <CardThumb noteId={note.id} attachmentId={note.coverThumb} />}
+              <div className="absolute inset-0 opacity-[0.15] mix-blend-overlay [background-image:radial-gradient(rgb(0_0_0/0.5)_0.6px,transparent_0.8px)] [background-size:3px_3px]" />
+              {starred && <Star className="absolute right-3 top-3 size-3.5 fill-white/90 text-white/90 drop-shadow" />}
+            </div>
             <span className="absolute -bottom-4 left-4 flex size-10 items-center justify-center rounded-lg bg-surface text-[20px] shadow-card ring-1 ring-line/70">
               {note.icon ?? <FileText className="size-[18px] text-ink-3" />}
             </span>
@@ -171,7 +173,7 @@ const DocCard = memo(function DocCard({ note, snippet, delay }: { note: NoteEntr
               {noteTitle(note, t("app.untitled"))}
             </h3>
             <p className="mt-1.5 line-clamp-3 min-h-[3.6em] text-[13px] leading-[1.45] text-ink-2">{snippet ?? ""}</p>
-            <div className="mt-3 flex items-center gap-2 text-[11.5px] text-ink-3">
+            <div className="mt-3 flex items-center gap-2 text-[11.5px] text-ink-2">
               <span className="truncate">{formatRelative(note.updatedAt)}</span>
               {note.tags.slice(0, 2).map((tag) => (
                 <span key={tag} className="inline-flex items-center gap-0.5 truncate rounded-full bg-ink/[0.05] px-1.5 py-px">
@@ -207,9 +209,9 @@ const DocRow = memo(function DocRow({ note, snippet, first }: { note: NoteEntry;
         </span>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[14.5px] font-medium text-ink">{noteTitle(note, t("app.untitled"))}</div>
-          <div className="truncate text-[12.5px] text-ink-3">{snippet || " "}</div>
+          <div className="truncate text-[12.5px] text-ink-2">{snippet || " "}</div>
         </div>
-        <span className="hidden shrink-0 text-[12px] text-ink-3 sm:block">{formatRelative(note.updatedAt)}</span>
+        <span className="hidden shrink-0 text-[12px] text-ink-2 sm:block">{formatRelative(note.updatedAt)}</span>
       </Link>
     </ContextMenu>
   );

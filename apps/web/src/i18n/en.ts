@@ -14,6 +14,8 @@ const en: Loose<Messages> = {
     welcomeBody2: "Press ⌘K to find anything or run a command.",
   },
   common: {
+    expand: "Expand",
+    collapse: "Collapse",
     cancel: "Cancel",
     save: "Save",
     create: "Create",
@@ -88,6 +90,7 @@ const en: Loose<Messages> = {
     newNotebook: "New notebook",
     newSpace: "New space",
     spaces: "Spaces",
+    addToNotebook: "Add to notebook",
     collapseSidebar: "Hide sidebar",
     expandSidebar: "Show sidebar",
     today: "Today",

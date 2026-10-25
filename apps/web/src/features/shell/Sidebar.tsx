@@ -168,7 +168,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
           ))}
           {!nbs.length && space && (
             <button
-              className="mx-2 my-1 text-left text-[12.5px] text-ink-3 hover:text-ink-2"
+              className="mx-2 my-1 text-left text-[12.5px] text-ink-2 hover:text-ink"
               onClick={() => useUi.setState({ newNotebookFor: spaceId })}
             >
               + {t("nav.newNotebook")}
@@ -231,7 +231,7 @@ function Section({ id, title, action, children }: { id: string; title: string; a
       <div className="group flex h-7 items-center px-2">
         <button
           onClick={toggle}
-          className="flex flex-1 items-center gap-1 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-3 hover:text-ink-2"
+          className="flex flex-1 items-center gap-1 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-2 hover:text-ink"
         >
           {title}
           <ChevronDown className={cn("size-3 transition-transform", collapsed && "-rotate-90")} />
@@ -345,7 +345,7 @@ function TabsSection() {
               </Link>
               <button
                 aria-label={t("common.close")}
-                className="flex size-6 items-center justify-center rounded text-ink-3 opacity-0 hover:bg-ink/10 hover:text-ink group-hover:opacity-100"
+                className="flex size-6 items-center justify-center rounded text-ink-3 opacity-0 focus-visible:opacity-100 hover:bg-ink/10 hover:text-ink group-hover:opacity-100"
                 onClick={() => {
                   const next = closeTab(tab.noteId);
                   if (active) {
@@ -518,7 +518,8 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
         >
           <button
             onClick={toggle}
-            aria-label={collapsed ? "expand" : "collapse"}
+            aria-label={collapsed ? t("common.expand") : t("common.collapse")}
+            aria-expanded={!collapsed}
             className="flex size-6 shrink-0 items-center justify-center rounded text-ink-3 hover:text-ink"
           >
             <ChevronRight className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
@@ -547,7 +548,10 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
             items={menu}
             align="end"
             trigger={
-              <button className="flex size-6 items-center justify-center rounded text-ink-3 opacity-0 hover:bg-ink/10 hover:text-ink group-hover:opacity-100 data-[state=open]:opacity-100">
+              <button
+                aria-label={t("nav.addToNotebook")}
+                className="flex size-6 items-center justify-center rounded text-ink-3 opacity-0 focus-visible:opacity-100 hover:bg-ink/10 hover:text-ink group-hover:opacity-100 data-[state=open]:opacity-100"
+              >
                 <Plus className="size-3.5" />
               </button>
             }
@@ -641,7 +645,7 @@ function FolderNode({ folder, depth }: { folder: FolderEntry; depth: number }) {
               {folder.name}
             </Link>
           )}
-          {count > 0 && <span className="pr-1 text-[11.5px] text-ink-3 group-hover:hidden">{count}</span>}
+          {count > 0 && <span className="pr-1 text-[11.5px] text-ink-2 group-hover:hidden">{count}</span>}
           <button
             aria-label={t("nav.newDoc")}
             onClick={() => void newNoteAndOpen(navigate, folder.notebookId, folder.id)}

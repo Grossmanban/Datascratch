@@ -271,7 +271,7 @@ export function TrashPage() {
       notes={list}
       sortable={false}
       empty={{ icon: <Trash2 className="size-7" />, title: t("docs.emptyTrash"), text: t("docs.trashHint") }}
-      extra={list.length ? <p className="-mt-3 px-5 pb-5 text-[13px] text-ink-3 sm:px-10">{t("docs.trashHint")}</p> : null}
+      extra={list.length ? <p className="-mt-3 px-5 pb-5 text-[13px] text-ink-2 sm:px-10">{t("docs.trashHint")}</p> : null}
     />
   );
 }

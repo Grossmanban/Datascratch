@@ -61,7 +61,7 @@ function SignupForm() {
       >
         {busy ? t("auth.deriving") : t("auth.signUp")}
       </Button>
-      <p className="text-center text-[13px] text-ink-3">
+      <p className="text-center text-[13px] text-ink-2">
         {t("auth.haveAccount")}{" "}
         <Link to="/login" className="font-medium text-accent hover:underline">
           {t("auth.signIn")}

@@ -2862,9 +2862,9 @@
     "semantic_hash": "1fafa46b19b644ede18952afb85c6843"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1792933857.1487036,
-    "seen": 1792933923.1387289,
-    "ast_hash": "309a42f7a33bfcfda3c9f884c977635e",
+    "mtime": 1792936121.9230518,
+    "seen": 1792936142.0175717,
+    "ast_hash": "360f6969087692332c1a6a9b14e568cc",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormulaViews.swift": {
@@ -2886,9 +2886,9 @@
     "semantic_hash": "f9bde461281b5b51c32328f5928ddc5f"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/InkInput.swift": {
-    "mtime": 1792935122.5064566,
-    "seen": 1792935137.6844182,
-    "ast_hash": "22a0cda92c15ca7503a9e6447e0ff574",
+    "mtime": 1792936121.9223664,
+    "seen": 1792936142.0175796,
+    "ast_hash": "9be481fd95233be01a66150610e7d35a",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/InkTools.swift": {

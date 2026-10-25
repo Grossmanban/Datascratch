@@ -35,7 +35,7 @@ export function PageTitle({ icon, title, subtitle, children }: { icon?: ReactNod
       <div className="min-w-0 flex-1">
         {icon && <div className="mb-3 text-[34px] leading-none">{icon}</div>}
         <h1 className="font-display text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink sm:text-[38px]">{title}</h1>
-        {subtitle && <p className="mt-2 text-[14px] text-ink-3">{subtitle}</p>}
+        {subtitle && <p className="mt-2 text-[14px] text-ink-2">{subtitle}</p>}
       </div>
       {children}
     </div>

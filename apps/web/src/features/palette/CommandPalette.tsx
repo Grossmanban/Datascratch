@@ -107,18 +107,18 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
         <Kbd>esc</Kbd>
       </div>
       <Command.List className="scrollbar-thin max-h-[min(60vh,440px)] overflow-y-auto p-2">
-        <Command.Empty className="px-3 py-8 text-center text-[14px] text-ink-3">{t("palette.noResults")}</Command.Empty>
+        <Command.Empty className="px-3 py-8 text-center text-[14px] text-ink-2">{t("palette.noResults")}</Command.Empty>
         {results.length > 0 && (
-          <Command.Group heading={t("palette.docs")} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.06em] [&_[cmdk-group-heading]]:text-ink-3">
+          <Command.Group heading={t("palette.docs")} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.06em] [&_[cmdk-group-heading]]:text-ink-2">
             {results.map((r) => (
               <Item key={r.noteId} value={`note-${r.noteId}`} onSelect={() => openNote(r.noteId)} icon={notes[r.noteId]?.icon ?? <FileText className="size-4" />}>
                 <span className="truncate font-medium">{r.title}</span>
-                {r.snippet && <span className="ml-2 truncate text-[13px] text-ink-3">{r.snippet}</span>}
+                {r.snippet && <span className="ml-2 truncate text-[13px] text-ink-2">{r.snippet}</span>}
               </Item>
             ))}
           </Command.Group>
         )}
-        <Command.Group heading={t("palette.commands")} className="mt-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.06em] [&_[cmdk-group-heading]]:text-ink-3">
+        <Command.Group heading={t("palette.commands")} className="mt-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.06em] [&_[cmdk-group-heading]]:text-ink-2">
           {nb && (
             <Item
               value="new-doc"
@@ -182,7 +182,7 @@ function Item({ value, icon, children, shortcut, onSelect }: { value: string; ic
     >
       <span className="flex size-5 shrink-0 items-center justify-center text-ink-2">{icon}</span>
       <span className="flex min-w-0 flex-1 items-baseline">{children}</span>
-      {shortcut && <span className="text-[12px] text-ink-3">{shortcut}</span>}
+      {shortcut && <span className="text-[12px] text-ink-2">{shortcut}</span>}
     </Command.Item>
   );
 }

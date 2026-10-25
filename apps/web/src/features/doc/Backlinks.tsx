@@ -12,9 +12,9 @@ export function Backlinks({ noteId }: { noteId: string }) {
   const list = rows.filter((r) => r.noteId !== noteId && notes[r.noteId] && !notes[r.noteId]!.trashedAt);
   return (
     <section className="mt-16 border-t border-line pt-6" data-testid="backlinks">
-      <h2 className="mb-3 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-3">{t("docs.backlinks")}</h2>
+      <h2 className="mb-3 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-2">{t("docs.backlinks")}</h2>
       {list.length === 0 ? (
-        <p className="text-[13.5px] text-ink-3">{t("docs.noBacklinks")}</p>
+        <p className="text-[13.5px] text-ink-2">{t("docs.noBacklinks")}</p>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2">
           {list.map((r) => (
@@ -28,7 +28,7 @@ export function Backlinks({ noteId }: { noteId: string }) {
                 <span className="truncate">{noteTitle(notes[r.noteId], t("app.untitled"))}</span>
                 <ArrowUpRight className="size-3.5 shrink-0 text-ink-3 transition group-hover:text-accent" />
               </div>
-              <p className="mt-0.5 line-clamp-2 text-[12.5px] text-ink-3">{r.text.replace(/\s+/g, " ").slice(0, 160)}</p>
+              <p className="mt-0.5 line-clamp-2 text-[12.5px] text-ink-2">{r.text.replace(/\s+/g, " ").slice(0, 160)}</p>
             </Link>
           ))}
         </div>

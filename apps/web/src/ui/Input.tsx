@@ -21,7 +21,7 @@ export function Field({
         {label}
       </label>
       {children(id)}
-      {error ? <p className="text-[12px] text-danger">{error}</p> : hint ? <p className="text-[12px] text-ink-3">{hint}</p> : null}
+      {error ? <p className="text-[12px] text-danger">{error}</p> : hint ? <p className="text-[12px] text-ink-2">{hint}</p> : null}
     </div>
   );
 }

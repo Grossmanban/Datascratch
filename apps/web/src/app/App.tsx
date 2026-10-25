@@ -5,6 +5,7 @@ import { onSignedOut, restore, useAuth } from "@/auth/session";
 import { stopRuntime } from "@/data/runtime";
 import { Splash } from "@/features/shell/Splash";
 import { PwaPrompt } from "@/features/shell/PwaPrompt";
+import { MotionConfig } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { ConfirmHost, Toaster, UIProvider } from "@/ui";
 import { router } from "./router";
@@ -36,7 +37,10 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <UIProvider locale={i18n.language === "en" ? "en" : "ru"}>
-        <RouterProvider router={router} />
+        {/* Every motion animation follows the system "reduce motion" setting. */}
+        <MotionConfig reducedMotion="user">
+          <RouterProvider router={router} />
+        </MotionConfig>
         <Toaster />
         <ConfirmHost />
         <PwaPrompt />

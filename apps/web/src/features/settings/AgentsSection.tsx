@@ -39,7 +39,7 @@ export function AgentsSection() {
         {tokens.isLoading ? (
           <Spinner className="size-4 text-ink-3" />
         ) : tokens.isError ? (
-          <p className="text-[13.5px] text-ink-3">{t("common.requiresOnline")}</p>
+          <p className="text-[13.5px] text-ink-2">{t("common.requiresOnline")}</p>
         ) : tokens.data?.length ? (
           tokens.data.map((tok) => (
             <Row
@@ -70,7 +70,7 @@ export function AgentsSection() {
             </Row>
           ))
         ) : (
-          <p className="text-[13.5px] text-ink-3">{t("settings.noTokens")}</p>
+          <p className="text-[13.5px] text-ink-2">{t("settings.noTokens")}</p>
         )}
       </Card>
       <NewTokenDialog open={creating} onOpenChange={setCreating} />
@@ -191,9 +191,9 @@ function AuditDialog({ token, onClose }: { token: AgentGrant | null; onClose: ()
         <ul className="scrollbar-thin max-h-[50vh] overflow-y-auto text-[13.5px]">
           {audit.data.map((a, i) => (
             <li key={i} className="flex items-baseline gap-3 border-t border-line py-2 first:border-0">
-              <span className="w-36 shrink-0 text-ink-3">{formatDateTime(a.at)}</span>
+              <span className="w-36 shrink-0 text-ink-2">{formatDateTime(a.at)}</span>
               <span className={a.ok ? "font-medium text-ink" : "font-medium text-danger"}>{a.action}</span>
-              <span className="truncate text-ink-3">
+              <span className="truncate text-ink-2">
                 {[a.via.toUpperCase(), a.noteId ? (notes[a.noteId]?.title || a.noteId.slice(0, 8)) : null, a.errorCode, a.durationMs != null ? `${a.durationMs} ms` : null]
                   .filter(Boolean)
                   .join(" · ")}

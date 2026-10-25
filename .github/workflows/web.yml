@@ -50,6 +50,8 @@ jobs:
         run: pnpm exec vite build
         env:
           VITE_DS_SERVER_URL: http://localhost:8787
+          # Exposes the runtime to the e2e performance test (10 000 notes).
+          VITE_DS_TEST_HOOKS: "1"
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
       - name: E2E (mock server + production build with service worker)

@@ -48,12 +48,14 @@ export function DocView({
     [backdrop],
   );
   return (
-    <div className="relative min-h-full" style={bg ? { background: bg } : undefined} data-testid="doc-view">
+    // The editor stretches to the bottom of the page so its pen palette (sticky to the editor's
+    // bottom) rests at the bottom of the screen even for a short note.
+    <div className="relative flex min-h-full flex-col" style={bg ? { background: bg } : undefined} data-testid="doc-view">
       {cover && !hasBackdrop && <div className="px-3 pt-1 sm:px-6">{cover}</div>}
-      <div className={cn("mx-auto w-full", hasBackdrop ? "max-w-[1100px] px-3 pb-10 pt-10 sm:px-8 sm:pt-16" : "pb-6")}>
+      <div className={cn("mx-auto flex w-full flex-1 flex-col", hasBackdrop ? "max-w-[1100px] px-3 pb-10 pt-10 sm:px-8 sm:pt-16" : "pb-6")}>
         <article
           className={cn(
-            "mx-auto w-full",
+            "mx-auto flex w-full flex-1 flex-col",
             hasBackdrop && "overflow-hidden rounded-2xl bg-surface shadow-[0_2px_8px_rgb(40_30_10/0.06),0_30px_80px_rgb(40_30_10/0.14)]",
           )}
         >
@@ -68,6 +70,7 @@ export function DocView({
             showCover={false}
             showPalette={showPalette && editable}
             bottomPadding={compact ? 40 : 160}
+            className={compact ? "" : "ds-editor-fill"}
             onReady={onEditor}
           />
           {footer && <div className="mx-auto w-full max-w-[720px] px-6 pb-16 sm:px-8">{footer}</div>}

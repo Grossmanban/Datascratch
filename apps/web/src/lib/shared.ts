@@ -55,8 +55,19 @@ export {
 export type ApiErrorCode = import("@datascratch/shared").ApiErrorCode;
 export type NoteCover = import("@datascratch/shared").NoteCover | null;
 export type NoteBackdrop = import("@datascratch/shared").NoteBackdrop | null;
-/** Agent audit rows are defined by the agents stream (agents-api.md); keep it loose here. */
-export type AgentAuditEntry = { at: string; action: string; docId?: string | null; detail?: string };
+/** agents-api.md §8: audit rows of an agent grant, newest first. */
+export type AgentAuditEntry = {
+  at: string;
+  via: "mcp" | "rest";
+  action: string;
+  notebookId: string | null;
+  noteId: string | null;
+  ok: boolean;
+  errorCode: string | null;
+  durationMs: number | null;
+};
+/** agents-api.md §8: static tokens and OAuth connections in one list. */
+export type AgentGrant = import("@datascratch/shared").AgentToken & { kind?: "static" | "oauth"; clientId?: string | null };
 
 export const sodiumReady = () => initCrypto();
 

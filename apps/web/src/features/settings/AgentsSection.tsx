@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Copy, History, Plus, Trash2 } from "lucide-react";
+import { Bot, Check, Copy, History, Link2, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { agentTokensApi } from "@/api/endpoints";
 import { useWorkspace } from "@/domain/workspace";
+import { serverOrigin } from "@/config";
 import { formatDateTime, formatRelative } from "@/lib/dates";
-import type { AgentPermission, AgentToken } from "@/lib/shared";
+import type { AgentPermission, AgentGrant } from "@/lib/shared";
 import { Button, cn, Dialog, DialogActions, EmptyState, Field, IconButton, Input, SegmentedControl, Spinner } from "@/ui";
 import { Card, Row } from "./SettingsPage";
 
@@ -20,10 +21,11 @@ export function AgentsSection() {
   const notebooks = useWorkspace((s) => s.account.notebooks);
   const agentNbs = notebooks.filter((n) => n.mode === "agent");
   const [creating, setCreating] = useState(false);
-  const [audit, setAudit] = useState<AgentToken | null>(null);
+  const [audit, setAudit] = useState<AgentGrant | null>(null);
 
   return (
     <>
+      <McpCard />
       <Card
         title={t("settings.agentTokens")}
         description={t("settings.agentTokensText")}
@@ -44,14 +46,17 @@ export function AgentsSection() {
               key={tok.id}
               label={
                 <span className="flex items-center gap-2">
-                  <Bot className="size-4 text-ink-3" />
+                  {tok.kind === "oauth" ? <Link2 className="size-4 text-ink-3" /> : <Bot className="size-4 text-ink-3" />}
                   {tok.name}
+                  {tok.kind === "oauth" && (
+                    <span className="rounded-full bg-ink/[0.06] px-2 py-px text-[11px] font-medium text-ink-2">{t("settings.oauthConnection")}</span>
+                  )}
                 </span>
               }
               hint={[
                 tok.permission === "read" ? t("settings.tokenRead") : t("settings.tokenReadWrite"),
                 tok.notebookIds.map((id) => notebooks.find((n) => n.id === id)?.name ?? "—").join(", "),
-                formatRelative(tok.createdAt),
+                tok.lastUsedAt ? t("settings.lastUsed", { when: formatRelative(tok.lastUsedAt) }) : formatRelative(tok.createdAt),
               ].join(" · ")}
             >
               <div className="flex gap-1">
@@ -174,8 +179,9 @@ function NewTokenDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
   );
 }
 
-function AuditDialog({ token, onClose }: { token: AgentToken | null; onClose: () => void }) {
+function AuditDialog({ token, onClose }: { token: AgentGrant | null; onClose: () => void }) {
   const { t } = useTranslation();
+  const notes = useWorkspace((s) => s.notes);
   const audit = useQuery({ queryKey: ["agent-audit", token?.id], queryFn: () => agentTokensApi.audit(token!.id), enabled: !!token });
   return (
     <Dialog open={!!token} onOpenChange={(o) => !o && onClose()} title={`${t("settings.audit")} · ${token?.name ?? ""}`} wide>
@@ -184,10 +190,14 @@ function AuditDialog({ token, onClose }: { token: AgentToken | null; onClose: ()
       ) : audit.data?.length ? (
         <ul className="scrollbar-thin max-h-[50vh] overflow-y-auto text-[13.5px]">
           {audit.data.map((a, i) => (
-            <li key={i} className="flex gap-3 border-t border-line py-2 first:border-0">
-              <span className="w-40 shrink-0 text-ink-3">{formatDateTime(a.at)}</span>
-              <span className="font-medium text-ink">{a.action}</span>
-              {a.detail && <span className="truncate text-ink-2">{a.detail}</span>}
+            <li key={i} className="flex items-baseline gap-3 border-t border-line py-2 first:border-0">
+              <span className="w-36 shrink-0 text-ink-3">{formatDateTime(a.at)}</span>
+              <span className={a.ok ? "font-medium text-ink" : "font-medium text-danger"}>{a.action}</span>
+              <span className="truncate text-ink-3">
+                {[a.via.toUpperCase(), a.noteId ? (notes[a.noteId]?.title || a.noteId.slice(0, 8)) : null, a.errorCode, a.durationMs != null ? `${a.durationMs} ms` : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
             </li>
           ))}
         </ul>
@@ -195,5 +205,31 @@ function AuditDialog({ token, onClose }: { token: AgentToken | null; onClose: ()
         <EmptyState title={t("settings.noAudit")} />
       )}
     </Dialog>
+  );
+}
+
+function McpCard() {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const url = `${serverOrigin()}/mcp`;
+  return (
+    <Card title={t("settings.mcpTitle")} description={t("settings.mcpText")}>
+      <div className="flex items-center gap-2 rounded-lg border border-line bg-canvas py-1.5 pl-3 pr-1.5">
+        <code className="flex-1 truncate font-mono text-[13px] text-ink" data-testid="mcp-url">
+          {url}
+        </code>
+        <IconButton
+          size="sm"
+          label={t("common.copy")}
+          onClick={async () => {
+            await navigator.clipboard?.writeText(url).catch(() => undefined);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }}
+        >
+          {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
+        </IconButton>
+      </div>
+    </Card>
   );
 }

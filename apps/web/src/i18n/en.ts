@@ -315,6 +315,10 @@ const en: Loose<Messages> = {
     themeLight: "Light",
     themeDark: "Dark",
     language: "Language",
+    mcpTitle: "Connect an AI agent",
+    mcpText: "Add this address as an MCP server in Claude, ChatGPT or another agent. It opens a sign-in page where you choose notebooks (only “for agents” ones).",
+    oauthConnection: "Connection",
+    lastUsed: "Used {{when}}",
     agentTokens: "Agent tokens",
     agentTokensText: "A token gives an AI agent (Claude, ChatGPT…) access to chosen “for agents” notebooks via MCP or REST.",
     newToken: "New token",
@@ -335,6 +339,13 @@ const en: Loose<Messages> = {
     version: "Version {{version}}",
   },
   dates: { at: "{{date}} at {{time}}" },
+  connect: {
+    title: "Connecting your AI agent…",
+    text: "The consent screen opens next — there you choose which notebooks to share.",
+    badLink: "This connection link is invalid",
+    badLinkText: "Start the connection again from your agent app (Claude, ChatGPT…).",
+    failed: "Couldn't connect the agent",
+  },
   pwa: { update: "A new version is available", reload: "Reload", offlineReady: "Ready to work offline" },
 };
 

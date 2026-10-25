@@ -1,3 +1,0 @@
-- 2026-10-25 — **server:** реализован `AgentsContext` для `@datascratch/agents` — гранты, OAuth и журнал агентов в PostgreSQL, расшифровка документов через `DS_KMS_KEY`, Row-Level Security по гранту, cookie-сессия `ds_web` для экрана согласия (`POST /v1/auth/web-session`); собственные маршруты `/v1/agent-tokens` отданы плагину. `ack` встаёт в общий порядок `seq`; некорректные сообщения — `bad_request`.
-- 2026-10-25 — **server:** переход на `@datascratch/shared` (zod-схемы, конверт шифрования, KDF), тест совместимости с эталонным `SyncClient`; `deviceId` гостя — хэш (≤ 64 символов).
-- 2026-10-25 — **server:** `@datascratch/agents` подключён как зависимость сервера; сквозной тест плагина в настоящем сервере; переменная `APP_URL`.

@@ -359,7 +359,7 @@ final class LibraryUITests: XCTestCase {
         checkInside("full screen")
         fullScreen.tap()
         settle(1.5)
-        XCTAssertLess(editor.frame.width, window.width * 0.9, "Full Screen did not toggle back")
+        XCTAssertLessThan(editor.frame.width, window.width * 0.9, "Full Screen did not toggle back")
         checkInside("back from full screen")
     }
 

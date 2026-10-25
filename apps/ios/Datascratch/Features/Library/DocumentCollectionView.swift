@@ -18,30 +18,40 @@ struct DocumentCollectionView: View {
                 emptyState
             } else if settings.libraryLayout == .grid {
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 168, maximum: 260), spacing: Theme.Space.s4)],
-                              spacing: Theme.Space.s4) {
-                        ForEach(notes) { note in
-                            DocumentCard(note: note, isSelected: scene.selectedNoteId == note.id)
-                                .onTapGesture { scene.open(note.id) }
-                                .documentActions(note)
+                    VStack(alignment: .leading, spacing: Theme.Space.s4) {
+                        header
+                        // Cards start at the leading edge, as on the web.
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 168, maximum: 260), spacing: Theme.Space.s4,
+                                                     alignment: .top)],
+                                  alignment: .leading, spacing: Theme.Space.s4) {
+                            ForEach(notes) { note in
+                                DocumentCard(note: note, isSelected: scene.selectedNoteId == note.id)
+                                    .onTapGesture { scene.open(note.id) }
+                                    .documentActions(note)
+                            }
                         }
+                        .animation(Theme.Motion.smooth, value: notes.map(\.id))
                     }
                     .padding(Theme.Space.s4)
-                    .animation(Theme.Motion.smooth, value: notes.map(\.id))
                 }
             } else {
-                List(notes) { note in
-                    Button { scene.open(note.id) } label: { DocumentRow(note: note) }
-                        .buttonStyle(.plain)
-                        .listRowBackground(scene.selectedNoteId == note.id ? Theme.Palette.accent.opacity(0.1) : Theme.Palette.canvas)
-                        .documentActions(note)
-                        .swipeActions(edge: .trailing) {
-                            Button("Trash", systemImage: "trash", role: .destructive) { library.trash(note: note.id) }
-                        }
-                        .swipeActions(edge: .leading) {
-                            Button("Star", systemImage: "star") { library.toggleStar(.note, note.id) }
-                                .tint(Theme.Palette.warning)
-                        }
+                List {
+                    header
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    ForEach(notes) { note in
+                        Button { scene.open(note.id) } label: { DocumentRow(note: note) }
+                            .buttonStyle(.plain)
+                            .listRowBackground(scene.selectedNoteId == note.id ? Theme.Palette.textPrimary.opacity(0.08) : Theme.Palette.canvas)
+                            .documentActions(note)
+                            .swipeActions(edge: .trailing) {
+                                Button("Trash", systemImage: "trash", role: .destructive) { library.trash(note: note.id) }
+                            }
+                            .swipeActions(edge: .leading) {
+                                Button("Star", systemImage: "star") { library.toggleStar(.note, note.id) }
+                                    .tint(Theme.Palette.warning)
+                            }
+                    }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
@@ -49,6 +59,9 @@ struct DocumentCollectionView: View {
         }
         .background(Theme.Palette.canvas)
         .navigationTitle(title)
+        // The title is set in the serif face in the content (Quiet paper), not as an SF large title.
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) } }
         .searchable(text: $scene.searchText, prompt: Text("Search documents"))
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -61,7 +74,8 @@ struct DocumentCollectionView: View {
                     Image(systemName: settings.libraryLayout == .grid ? "square.grid.2x2" : "list.bullet")
                 }
                 .accessibilityLabel("Layout")
-                if canCreate {
+                // One «New» button (D-38): the toolbar on iPad, the floating button on iPhone.
+                if canCreate, sizeClass != .compact {
                     Button {
                         scene.newNote()
                     } label: {
@@ -93,6 +107,16 @@ struct DocumentCollectionView: View {
                 .padding(.bottom, Theme.Space.s2)
             }
         }
+    }
+
+    private var header: some View {
+        Text(title)
+            .font(Theme.Typography.title)
+            .foregroundStyle(Theme.Palette.textPrimary)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, Theme.Space.s2)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private var canCreate: Bool {
@@ -204,8 +228,8 @@ struct DocumentCard: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous)
-                .strokeBorder(isSelected ? Theme.Palette.accent : Theme.Palette.separator,
-                              lineWidth: isSelected ? 2 : 1)
+                .strokeBorder(isSelected ? Theme.Palette.accent.opacity(0.6) : Theme.Palette.separator,
+                              lineWidth: isSelected ? 1.5 : 1)
         }
         // The shadow is cast by a plain shape behind the card: Core Animation draws it from
         // the path instead of rendering the whole card offscreen on every frame (120 Hz scrolling).

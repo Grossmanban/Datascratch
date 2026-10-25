@@ -4,121 +4,129 @@ struct SidebarView: View {
     @Environment(AppModel.self) private var app
     @Environment(SceneModel.self) private var scene
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     private var library: LibraryStore { app.library }
 
     var body: some View {
         @Bindable var scene = scene
         List(selection: $scene.sidebar) {
-            if !library.openTabs.isEmpty {
-                Section("Tabs") {
-                    ForEach(library.openTabs) { note in
-                        Button {
-                            scene.open(note.id)
-                        } label: {
-                            NoteTitleLabel(note: note)
-                                .fontWeight(scene.selectedNoteId == note.id ? .semibold : .regular)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Open in New Window", systemImage: "macwindow.badge.plus") {
-                                openWindow(id: "note", value: note.id)
+            Group {
+                if !library.openTabs.isEmpty {
+                    Section("Tabs") {
+                        ForEach(library.openTabs) { note in
+                            Button {
+                                scene.open(note.id)
+                            } label: {
+                                NoteTitleLabel(note: note)
+                                    .fontWeight(scene.selectedNoteId == note.id ? .semibold : .regular)
                             }
-                            Button("Close Tab", systemImage: "xmark") { library.closeTab(note.id) }
-                        }
-                        .swipeActions {
-                            Button("Close", systemImage: "xmark") { library.closeTab(note.id) }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Open in New Window", systemImage: "macwindow.badge.plus") {
+                                    openWindow(id: "note", value: note.id)
+                                }
+                                Button("Close Tab", systemImage: "xmark") { library.closeTab(note.id) }
+                            }
+                            .swipeActions {
+                                Button("Close", systemImage: "xmark") { library.closeTab(note.id) }
+                            }
                         }
                     }
                 }
-            }
 
-            Section {
-                Label("All Documents", systemImage: "doc.on.doc")
-                    .tag(SidebarItem.allDocuments)
-                    .accessibilityIdentifier("sidebar.allDocuments")
-                Label {
+                Section {
+                    SidebarLabel("All Documents", systemImage: "doc.on.doc")
+                        .tag(SidebarItem.allDocuments)
+                        .accessibilityIdentifier("sidebar.allDocuments")
+                    Label {
+                        HStack {
+                            Text("Tasks")
+                            Spacer()
+                            let due = TaskIndex.filter(library.taskEntries, bucket: .today, today: DayKey.from(Date())).count
+                            if due > 0 {
+                                Text(due, format: .number)
+                                    .font(Theme.Typography.footnote.monospacedDigit())
+                                    .foregroundStyle(Theme.Palette.textSecondary)
+                            }
+                        }
+                    } icon: {
+                        Image(systemName: "checkmark.circle")
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                    }
+                    .tag(SidebarItem.tasks)
+                    .accessibilityIdentifier("sidebar.tasks")
+                    SidebarLabel("Calendar", systemImage: "calendar")
+                        .tag(SidebarItem.calendar)
+                        .accessibilityIdentifier("sidebar.calendar")
+                }
+
+                if !library.starredNotes.isEmpty {
+                    Section("Starred") {
+                        ForEach(library.starredNotes) { note in
+                            Button {
+                                scene.open(note.id)
+                            } label: {
+                                NoteTitleLabel(note: note)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Remove from Starred", systemImage: "star.slash") {
+                                    library.toggleStar(.note, note.id)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    ForEach(library.notebooks(in: library.activeSpace?.id)) { notebook in
+                        NotebookRow(notebook: notebook)
+                    }
+                } header: {
                     HStack {
-                        Text("Tasks")
+                        Text("Notebooks")
                         Spacer()
-                        let due = TaskIndex.filter(library.taskEntries, bucket: .today, today: DayKey.from(Date())).count
-                        if due > 0 {
-                            Text(due, format: .number)
-                                .font(Theme.Typography.footnote.monospacedDigit())
-                                .foregroundStyle(Theme.Palette.textSecondary)
-                        }
-                    }
-                } icon: {
-                    Image(systemName: "checkmark.circle")
-                }
-                .tag(SidebarItem.tasks)
-                .accessibilityIdentifier("sidebar.tasks")
-                Label("Calendar", systemImage: "calendar")
-                    .tag(SidebarItem.calendar)
-                    .accessibilityIdentifier("sidebar.calendar")
-            }
-
-            if !library.starredNotes.isEmpty {
-                Section("Starred") {
-                    ForEach(library.starredNotes) { note in
-                        Button {
-                            scene.open(note.id)
-                        } label: {
-                            NoteTitleLabel(note: note)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Remove from Starred", systemImage: "star.slash") {
-                                library.toggleStar(.note, note.id)
+                        if let space = library.activeSpace {
+                            Button {
+                                scene.sheet = .newNotebook(spaceId: space.id)
+                            } label: {
+                                Image(systemName: "plus")
                             }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("New Notebook")
+                            .accessibilityIdentifier("sidebar.newNotebook")
                         }
                     }
                 }
-            }
 
-            Section {
-                ForEach(library.notebooks(in: library.activeSpace?.id)) { notebook in
-                    NotebookRow(notebook: notebook)
-                }
-            } header: {
-                HStack {
-                    Text("Notebooks")
-                    Spacer()
-                    if let space = library.activeSpace {
-                        Button {
-                            scene.sheet = .newNotebook(spaceId: space.id)
-                        } label: {
-                            Image(systemName: "plus")
+                if !library.tags.isEmpty {
+                    Section("Tags") {
+                        ForEach(library.tags, id: \.name) { tag in
+                            TagRow(name: tag.name, count: tag.count)
                         }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("New Notebook")
-                        .accessibilityIdentifier("sidebar.newNotebook")
                     }
                 }
-            }
 
-            if !library.tags.isEmpty {
-                Section("Tags") {
-                    ForEach(library.tags, id: \.name) { tag in
-                        TagRow(name: tag.name, count: tag.count)
-                    }
+                Section {
+                    SidebarLabel("Trash", systemImage: "trash")
+                        .tag(SidebarItem.trash)
+                        .accessibilityIdentifier("sidebar.trash")
                 }
             }
-
-            Section {
-                Label("Trash", systemImage: "trash")
-                    .tag(SidebarItem.trash)
-                    .accessibilityIdentifier("sidebar.trash")
-            }
+            .modifier(SidebarRowStyle(isCompact: sizeClass == .compact))
         }
-        .listStyle(.sidebar)
+        .modifier(SidebarListStyle(isCompact: sizeClass == .compact))
         .scrollContentBackground(.hidden)
         .background(Theme.Palette.sidebar)
         .navigationTitle(library.activeSpace?.name ?? "Datascratch")
+        // The space tile in the toolbar names the space; no SF large title.
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 SpaceSwitcher()
             }
+            ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     scene.isCommandPalettePresented = true
@@ -156,6 +164,58 @@ struct NoteTitleLabel: View {
     }
 }
 
+/// A fixed sidebar row: neutral icon, primary text (selection shows in ink, not accent).
+struct SidebarLabel: View {
+    let title: LocalizedStringKey
+    let systemImage: String
+
+    init(_ title: LocalizedStringKey, systemImage: String) {
+        self.title = title
+        self.systemImage = systemImage
+    }
+
+    var body: some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: systemImage)
+                .foregroundStyle(Theme.Palette.textSecondary)
+        }
+    }
+}
+
+/// iPad: the system sidebar. iPhone: a flat list on the sidebar paper with section
+/// titles, no inset-grouped boxes (DSSidebarSection / DSSidebarItem look).
+struct SidebarListStyle: ViewModifier {
+    let isCompact: Bool
+
+    func body(content: Content) -> some View {
+        if isCompact {
+            content
+                .listStyle(.plain)
+                .environment(\.defaultMinListRowHeight, 40)
+        } else {
+            content.listStyle(.sidebar)
+        }
+    }
+}
+
+/// Rows of the flat iPhone sidebar: no boxes, no separators.
+struct SidebarRowStyle: ViewModifier {
+    let isCompact: Bool
+
+    func body(content: Content) -> some View {
+        if isCompact {
+            content
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listSectionSeparator(.hidden)
+        } else {
+            content
+        }
+    }
+}
+
 struct SpaceSwitcher: View {
     @Environment(AppModel.self) private var app
     @Environment(SceneModel.self) private var scene
@@ -185,8 +245,17 @@ struct SpaceSwitcher: View {
         } label: {
             HStack(spacing: Theme.Space.s2) {
                 if let space = library.activeSpace {
+                    // A 26 pt tile in the space colour, then its name (Craft).
                     Image(systemName: space.icon)
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(space.color.foreground)
+                        .frame(width: 26, height: 26)
+                        .background(space.color.background,
+                                    in: RoundedRectangle(cornerRadius: Theme.Radius.sm, style: .continuous))
+                    Text(space.name)
+                        .font(.system(.callout, design: .serif).weight(.semibold))
+                        .foregroundStyle(Theme.Palette.textPrimary)
+                        .lineLimit(1)
                 }
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption2.weight(.semibold))

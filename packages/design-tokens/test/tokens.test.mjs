@@ -12,7 +12,7 @@ const t = resolve(raw);
 
 // Names from docs/architecture/contracts/design-tokens.md (v1). Renaming = contract change.
 const CONTRACT = {
-  color: ["bg.canvas", "bg.surface", "bg.sidebar", "bg.elevated", "text.primary", "text.secondary", "text.tertiary", "line.separator", "accent", "danger", "success", "warning"],
+  color: ["bg.canvas", "bg.surface", "bg.sidebar", "bg.elevated", "text.primary", "text.secondary", "text.tertiary", "text.onAccent", "line.separator", "accent", "danger", "success", "warning"],
   ink: ["black", "blue", "red", "green", "purple", "brown"],
   highlight: ["yellow", "green", "pink", "blue"],
   tint: ["red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple", "pink", "gray"],
@@ -54,9 +54,11 @@ test("text is legible on paper in both themes (WCAG)", () => {
 
 test("labels on filled accent read in both themes", () => {
   // UI uses white on light accent and canvas ink on the (light) dark-theme accent.
-  assert.ok(contrast("#FFFFFF", t.color.accent.light) >= 4.5);
-  assert.ok(contrast(t.color["bg.canvas"].dark, t.color.accent.dark) >= 4.5);
-  assert.ok(contrast(t.color["bg.canvas"].dark, t.color.danger.dark) >= 4.5);
+  for (const theme of ["light", "dark"]) {
+    const on = t.color["text.onAccent"][theme];
+    assert.ok(contrast(on, t.color.accent[theme]) >= 4.5, `accent ${theme}`);
+    assert.ok(contrast(on, t.color.danger[theme]) >= (theme === "light" ? 3 : 4.5), `danger ${theme}`);
+  }
 });
 
 test("dark inks are lighter and readable on graphite", () => {
@@ -79,7 +81,7 @@ test("spring easing ends at 1 and starts at 0", () => {
 test("renderers are deterministic and cover every token", () => {
   const css = renderCss(t);
   assert.equal(css, renderCss(t));
-  for (const k of CONTRACT.color) assert.ok(css.includes(`--ds-${k.replace(".", "-")}:`), k);
+  for (const k of CONTRACT.color) assert.ok(css.includes(`--ds-${k.replace(".", "-").replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase()}:`), k);
   const swift = renderSwift(t);
   for (const k of CONTRACT.tint) assert.ok(swift.includes(`case ${k} = "${k}"`), k);
 });

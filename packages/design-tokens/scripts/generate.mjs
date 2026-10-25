@@ -117,6 +117,7 @@ export function renderTailwind(t) {
     "text.primary": "fg",
     "text.secondary": "fg-secondary",
     "text.tertiary": "fg-tertiary",
+    "text.onAccent": "on-accent",
     "line.separator": "separator",
   };
   for (const k of Object.keys(t.color)) L.push(`--color-${alias[k] ?? kebab(k)}: var(--ds-${kebab(k)});`);
@@ -208,7 +209,7 @@ export function renderJs(t) {
     "",
     "/** CSS custom property for a token, e.g. cssVar(\"color\", \"bg.canvas\") -> var(--ds-bg-canvas). */",
     "export function cssVar(group, name, part) {",
-    "  const n = name.replace(/\\./g, \"-\");",
+    "  const n = name.replace(/\\./g, \"-\").replace(/([a-z])([A-Z])/g, \"$1-$2\").toLowerCase();",
     "  if (group === \"color\") return `var(--ds-${n})`;",
     "  if (group === \"tint\") return `var(--ds-tint-${n}-${part ?? \"fg\"})`;",
     "  return `var(--ds-${group}-${n})`;",

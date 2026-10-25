@@ -30,6 +30,10 @@ export const tokens = {
       "light": "#9C978E",
       "dark": "#77736C"
     },
+    "text.onAccent": {
+      "light": "#FFFFFF",
+      "dark": "#1A1917"
+    },
     "line.separator": {
       "light": "#E6E1D8",
       "dark": "#34322E"
@@ -756,7 +760,7 @@ export const backdropNames = Object.keys(tokens.backdrop);
 
 /** CSS custom property for a token, e.g. cssVar("color", "bg.canvas") -> var(--ds-bg-canvas). */
 export function cssVar(group, name, part) {
-  const n = name.replace(/\./g, "-");
+  const n = name.replace(/\./g, "-").replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
   if (group === "color") return `var(--ds-${n})`;
   if (group === "tint") return `var(--ds-tint-${n}-${part ?? "fg"})`;
   return `var(--ds-${group}-${n})`;

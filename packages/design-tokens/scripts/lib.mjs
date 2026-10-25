@@ -120,5 +120,5 @@ export function springToMotion({ response, damping }) {
   return { type: "spring", visualDuration: response, bounce: Number(Math.max(0, 1 - damping).toFixed(3)) };
 }
 
-export const kebab = (name) => name.replace(/\./g, "-");
+export const kebab = (name) => name.replace(/\./g, "-").replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
 export const camel = (name) => name.replace(/[.-](\w)/g, (_, c) => c.toUpperCase());

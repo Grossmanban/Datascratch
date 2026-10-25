@@ -386,6 +386,57 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         #expect(ContinuousClock.now - start < .seconds(3))
     }
 
+    /// A refused registration fails only that document's messages (shown in `status.failed`);
+    /// other documents keep syncing, and `retryFailed` sends them once the server accepts.
+    @Test func refusedRegistrationIsReportedAndRetried() async throws {
+        let server = FakeSyncServer()
+        let refused = Locked<Set<String>>([])
+        let store = try LocalStore.inMemory()
+        var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: "A", clientVersion: "test")
+        config.minBackoff = .milliseconds(10)
+        let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
+        let key = self.key
+        let a = SyncEngine(store: store, client: client, keyFor: { _ in key }) { record in
+            if refused.withLock({ $0.contains(record.docId) }) { throw APIError.server(status: 403, code: "forbidden", message: "no") }
+            await server.register(record.docId)
+        }
+        let bad = NoteDocument(noteId: EntityID.make())
+        let good = NoteDocument(noteId: EntityID.make())
+        refused.withLock { _ = $0.insert(bad.noteId) }
+        try bad.initialize(title: "Refused")
+        try good.initialize(title: "Fine")
+        try await a.open(bad.crdt, notebookId: "nb")
+        try await a.open(good.crdt, notebookId: "nb")
+        await a.start()
+
+        #expect(try await eventually { await server.docs[good.noteId]?.isEmpty == false })
+        #expect(try await eventually { await a.status().failed.map(\.docId) == [bad.noteId] })
+        let status = await a.status()
+        #expect(status.failed.first?.reason == "register: forbidden (403)")
+        #expect(status.pending == 0 && status.isIdle)
+
+        refused.withLock { $0.removeAll() }
+        await a.retryFailed(docId: bad.noteId)
+        #expect(try await eventually { await server.docs[bad.noteId]?.isEmpty == false })
+        #expect(await a.status().failed.isEmpty)
+        await a.stop()
+    }
+
+    /// Deleting a document drops its queue, so the status can become idle.
+    @Test func deletedDocumentLeavesNothingQueued() async throws {
+        let server = FakeSyncServer()
+        await server.setAccepting(false)
+        let a = try device("A", server: server)
+        let local = NoteDocument(noteId: EntityID.make())
+        try local.initialize(title: "Local only")
+        try await a.open(local.crdt, notebookId: "nb")
+        #expect(await a.status().pending == 1)
+        try await a.deleteDocument(local.noteId)
+        #expect(await a.status().pending == 0)
+        #expect(try a.store.updates(docId: local.noteId).isEmpty)
+        #expect(await a.isOpen(local.noteId) == false)
+    }
+
     @Test func awarenessIsEncryptedAndRelayed() async throws {
         let server = FakeSyncServer()
         let a = try device("A", server: server)

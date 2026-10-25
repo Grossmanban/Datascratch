@@ -60,8 +60,20 @@ export function formatWeekday(s: string): string {
   return dateFormat({ weekday: "long" }).format(parseLocalDate(s));
 }
 
+/** Only the first letter capitalised (not every word), without the Russian year suffix «г.». */
+export function sentenceCase(text: string): string {
+  const t = text.replace(/\s?г\.$/, "");
+  return t.charAt(0).toLocaleUpperCase(locale()) + t.slice(1);
+}
+
+/** «Воскресенье, 25 октября 2026» / "Sunday, October 25, 2026". */
 export function formatLongDate(s: string): string {
-  return dateFormat({ weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(parseLocalDate(s));
+  return sentenceCase(dateFormat({ weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(parseLocalDate(s)));
+}
+
+/** «Октябрь 2026» / "October 2026". */
+export function formatMonthYear(d: Date, loc?: string): string {
+  return sentenceCase(dateFormat({ month: "long", year: "numeric" }, loc).format(d));
 }
 
 export function formatRelative(iso: string | number): string {

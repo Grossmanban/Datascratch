@@ -15,10 +15,21 @@ const COMPACT_LOCAL_AFTER = 200;
 type Listener = (docId: string, origin: unknown) => void;
 
 /**
+ * How note docs go live (SyncClient "stored" mode): a note is a Y.Doc only while something
+ * holds it (an open editor, an action editing it); otherwise it lives as saved state in
+ * IndexedDB and remote updates are merged there without a Y.Doc.
+ */
+export interface NoteSync {
+  open(docId: string, load: () => Promise<Y.Doc>): Promise<Y.Doc>;
+  close(docId: string, save: (doc: Y.Doc) => Promise<void>): Promise<void>;
+}
+
+/**
  * Owns every loaded Y.Doc of the signed-in account and persists all of its updates
  * (local and remote) in IndexedDB, so the app opens offline. Encryption, the outbox and sync
- * cursors belong to SyncClient (`runtime.ts`). Docs handed to sync are pinned in memory;
- * other note docs (e.g. loaded only for indexing) are reference-counted.
+ * cursors belong to SyncClient (`runtime.ts`). The account and notebook indexes are pinned in
+ * memory; a note is loaded only while it is held (reference-counted) and goes back to stored
+ * state when released (see NoteSync).
  */
 export class DocStore {
   private docs = new Map<string, Y.Doc>();
@@ -29,6 +40,13 @@ export class DocStore {
   private listeners = new Set<Listener>();
   private createdListeners = new Set<(docId: string) => Promise<void>>();
   private rows = new Map<string, DocRow>();
+  private closing = new Map<string, Promise<void>>();
+  private noteSync: NoteSync | null = null;
+
+  /** Set by the runtime once SyncClient runs; until then notes load straight from disk. */
+  setNoteSync(sync: NoteSync | null) {
+    this.noteSync = sync;
+  }
 
   onChange(fn: Listener) {
     this.listeners.add(fn);
@@ -113,13 +131,25 @@ export class DocStore {
     }
     this.refs.delete(docId);
     if (this.pinned.has(docId) || this.rows.get(docId)?.kind !== "note") return;
-    // Let pending writes settle before dropping the in-memory doc.
-    void (this.chains.get(docId) ?? Promise.resolve()).then(() => {
-      if (this.refs.has(docId) || this.pinned.has(docId)) return;
-      const doc = this.docs.get(docId);
-      this.docs.delete(docId);
-      doc?.destroy();
-    });
+    const doc = this.docs.get(docId);
+    if (!doc) return;
+    // From here a new load waits for this close and builds a fresh Y.Doc from the saved state.
+    this.docs.delete(docId);
+    const sync = this.noteSync;
+    const settled = () => this.chains.get(docId) ?? Promise.resolve();
+    const done = (async () => {
+      try {
+        // SyncClient queues the last edits, then `save` waits until every update is on disk.
+        if (sync) await sync.close(docId, async () => void (await settled()));
+        else await settled();
+      } catch {
+        // Not synced (e.g. signed out meanwhile): the updates are on disk all the same.
+      } finally {
+        doc.destroy();
+        this.closing.delete(docId);
+      }
+    })();
+    this.closing.set(docId, done);
   }
 
   load(docId: string): Promise<Y.Doc> {
@@ -127,10 +157,52 @@ export class DocStore {
     if (doc) return Promise.resolve(doc);
     let p = this.loading.get(docId);
     if (!p) {
-      p = this.loadFromDisk(docId).finally(() => this.loading.delete(docId));
+      p = this.open(docId).finally(() => this.loading.delete(docId));
       this.loading.set(docId, p);
     }
     return p;
+  }
+
+  private async open(docId: string): Promise<Y.Doc> {
+    await this.closing.get(docId);
+    const row = await this.row(docId);
+    if (row?.kind === "note" && this.noteSync) return this.noteSync.open(docId, () => this.loadFromDisk(docId));
+    return this.loadFromDisk(docId);
+  }
+
+  /**
+   * Remote updates of a note in stored mode (no Y.Doc): kept on disk as one merged update,
+   * before SyncClient moves its cursor on.
+   */
+  async appendStored(docId: string, updates: Uint8Array[]): Promise<void> {
+    if (!updates.length) return;
+    await this.serial(docId, () => accountDb().updates.add({ docId, update: updates.length === 1 ? updates[0]! : Y.mergeUpdates(updates) }));
+  }
+
+  /** The current state of a doc: the live Y.Doc if loaded, else its saved updates merged. */
+  async loadState(docId: string): Promise<Uint8Array | null> {
+    const live = this.docs.get(docId);
+    if (live) return Y.encodeStateAsUpdate(live);
+    return this.serial(docId, async () => {
+      const db = accountDb();
+      const rows = await db.updates.where("docId").equals(docId).toArray();
+      if (!rows.length) return null;
+      if (rows.length === 1) return rows[0]!.update;
+      const merged = Y.mergeUpdates(rows.map((r) => r.update));
+      // Keep stored notes compact: one row per note.
+      if (rows.length > 8 && !this.docs.has(docId)) {
+        await db.transaction("rw", db.updates, async () => {
+          await db.updates.bulkDelete(rows.map((r) => r.id!));
+          await db.updates.add({ docId, update: merged });
+        });
+      }
+      return merged;
+    });
+  }
+
+  /** Whether any state of the doc is saved on this device. */
+  async hasState(docId: string): Promise<boolean> {
+    return this.docs.has(docId) || (await accountDb().updates.where("docId").equals(docId).count()) > 0;
   }
 
   private async loadFromDisk(docId: string): Promise<Y.Doc> {
@@ -200,6 +272,14 @@ export class DocStore {
         await Promise.race([flushOps().catch(() => false), new Promise((r) => setTimeout(r, 3000))]);
       }
     }
+    if (kind === "note") {
+      // Known to sync (stored) first, then opened live for the first edit, then released.
+      for (const fn of this.createdListeners) await fn(docId);
+      const doc = await this.acquire(docId);
+      doc.transact(() => init(doc));
+      this.release(docId);
+      return doc;
+    }
     const doc = await this.pin(docId);
     // Attach to sync before the first edit so it is captured into the outbox.
     for (const fn of this.createdListeners) await fn(docId);
@@ -215,6 +295,8 @@ export class DocStore {
     this.pinned.clear();
     this.rows.clear();
     this.chains.clear();
+    this.closing.clear();
+    this.noteSync = null;
     this.listeners.clear();
     this.createdListeners.clear();
   }

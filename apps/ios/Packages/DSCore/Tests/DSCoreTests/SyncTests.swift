@@ -53,6 +53,14 @@ actor FakeSyncServer {
     var received: [ClientMessage] = []
     /// A client pushed into a document it had not subscribed to (protocol violation).
     var pushedWithoutSubscription = false
+    /// Keeps the sender of a snapshot waiting this long (to hold `close` inside its upload).
+    var snapshotDelay: Duration?
+
+    func setSnapshotDelay(_ d: Duration?) { snapshotDelay = d }
+
+    func snapshotsReceived(_ docId: String) -> Int {
+        received.filter { if case .snapshot(let id, _, _, _) = $0 { return id == docId } else { return false } }.count
+    }
 
     func connect() throws -> Conn {
         guard accepting else { throw SyncClientError.closed }
@@ -72,9 +80,10 @@ actor FakeSyncServer {
 
     func subscribers(_ docId: String) -> Int { conns.values.filter { $0.subs.contains(docId) }.count }
 
-    func handle(_ text: String, from c: Conn) {
+    func handle(_ text: String, from c: Conn) async {
         guard let msg = try? JSONDecoder().decode(ClientMessage.self, from: Data(text.utf8)) else { return }
         received.append(msg)
+        if case .snapshot = msg, let snapshotDelay { try? await Task.sleep(for: snapshotDelay) }
         switch msg {
         case .hello(_, let deviceId, _):
             conns[c.id]?.deviceId = deviceId
@@ -290,6 +299,179 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         await a.stop()
     }
 
+    /// Reopening a note while its close is still uploading the snapshot, with another device
+    /// writing all the time: the new instance is live and nothing is lost.
+    @Test func reopenWhileClosingUnderContinuousWrites() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        let b = try device("B", server: server)
+        await a.start()
+        await b.start()
+        let docId = EntityID.make()
+        var current = NoteDocument(noteId: docId)
+        try await a.open(current.crdt, notebookId: "nb")
+        try current.initialize(title: "Race")
+        let remote = NoteDocument(noteId: docId)
+        try await b.open(remote.crdt, notebookId: "nb")
+        #expect(try await eventually { (try? remote.block(at: [1])) != nil })
+
+        let writes = 100
+        let writer = Task {
+            for _ in 0..<writes {
+                try remote.insertText("b", at: 0, inBlock: [1])
+                try await Task.sleep(for: .milliseconds(3))
+            }
+        }
+        let rounds = 5
+        await server.setSnapshotDelay(.milliseconds(50))
+        for _ in 0..<rounds {
+            for _ in 0..<LocalStore.snapshotOnCloseEdits { try current.insertText("a", at: 0, inBlock: [1]) }
+            // Edits (and the previous snapshot) acknowledged: the close uploads its snapshot itself.
+            #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+            let before = await server.snapshotsReceived(docId)
+            let closing = Task { await a.close(docId: docId) }
+            // The close is now waiting on the server inside its snapshot upload.
+            #expect(try await eventually { await server.snapshotsReceived(docId) > before })
+            let next = NoteDocument(noteId: docId)
+            try await a.open(next.crdt, notebookId: "nb")
+            await closing.value
+            #expect(await a.isOpen(docId))
+            current = next
+        }
+        try await writer.value
+
+        func counts(_ note: NoteDocument) -> (Int, Int) {
+            let text = (try? note.block(at: [1])?.text) ?? ""
+            return (text.filter { $0 == "a" }.count, text.filter { $0 == "b" }.count)
+        }
+        let expected = (rounds * LocalStore.snapshotOnCloseEdits, writes)
+        #expect(try await eventually { counts(current) == expected && counts(remote) == expected })
+        await a.stop()
+        await b.stop()
+    }
+
+    /// Background refresh: one pass catches up, sends the outbox and disconnects; without a
+    /// server it gives up at the deadline and keeps the edit queued.
+    @Test func syncOnceCatchesUpSendsAndDisconnects() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        await a.start()
+        let docId = EntityID.make()
+        let note = NoteDocument(noteId: docId)
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "Background")
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        await a.stop()
+
+        // B knows the note (from its notebook index) and has an offline note of its own.
+        let b = try device("B", server: server)
+        try b.store.ensureDocument(docId: docId, kind: .note, notebookId: "nb")
+        let other = NoteDocument(noteId: EntityID.make())
+        try other.initialize(title: "Offline")
+        try b.store.ensureDocument(docId: other.noteId, kind: .note, notebookId: "nb")
+        try b.store.appendLocalUpdate(docId: other.noteId, update: try other.crdt.encodeStateAsUpdate(), origin: .local)
+
+        let result = await b.syncOnce(deadline: .now + .seconds(10))
+        #expect(result == .init(completed: true, pending: 0))
+        #expect(try (b.store.document(docId)?.lastSeq ?? 0) > 0)
+        #expect(await server.docs[other.noteId]?.isEmpty == false)
+        #expect(await b.client.isConnected == false)
+        #expect(try b.store.pendingIndexCount() == 2)
+
+        await server.setAccepting(false)
+        try b.store.appendLocalUpdate(docId: other.noteId, update: try other.crdt.encodeStateAsUpdate(), origin: .local)
+        let start = ContinuousClock.now
+        let cut = await b.syncOnce(deadline: .now + .milliseconds(300))
+        #expect(cut == .init(completed: false, pending: 1))
+        #expect(ContinuousClock.now - start < .seconds(3))
+    }
+
+    /// A refused registration fails only that document's messages (shown in `status.failed`);
+    /// other documents keep syncing, and `retryFailed` sends them once the server accepts.
+    @Test func refusedRegistrationIsReportedAndRetried() async throws {
+        let server = FakeSyncServer()
+        let refused = Locked<Set<String>>([])
+        let attempts = Locked(0)
+        let store = try LocalStore.inMemory()
+        var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: "A", clientVersion: "test")
+        config.minBackoff = .milliseconds(10)
+        let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
+        let key = self.key
+        let a = SyncEngine(store: store, client: client, keyFor: { _ in key }) { record in
+            if refused.withLock({ $0.contains(record.docId) }) {
+                attempts.withLock { $0 += 1 }
+                throw APIError.server(status: 404, code: "not_found", message: "notebook not found")
+            }
+            await server.register(record.docId)
+        }
+        let bad = NoteDocument(noteId: EntityID.make())
+        let good = NoteDocument(noteId: EntityID.make())
+        refused.withLock { _ = $0.insert(bad.noteId) }
+        try bad.initialize(title: "Refused")
+        try good.initialize(title: "Fine")
+        try await a.open(bad.crdt, notebookId: "nb")
+        try await a.open(good.crdt, notebookId: "nb")
+        await a.start()
+
+        #expect(try await eventually { await server.docs[good.noteId]?.isEmpty == false })
+        #expect(try await eventually { await a.status().failed.map(\.docId) == [bad.noteId] })
+        let status = await a.status()
+        #expect(status.failed.first?.reason == "register: not_found (404)")
+        #expect(status.pending == 0 && status.isIdle)
+        #expect(status.summary == .failed(documents: 1, reason: "register: not_found (404)"))
+        // Refused registrations are not retried on their own.
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(attempts.withLock { $0 } == 1)
+
+        refused.withLock { $0.removeAll() }
+        await a.retryFailed(docId: bad.noteId)
+        #expect(try await eventually { await server.docs[bad.noteId]?.isEmpty == false })
+        #expect(await a.status().failed.isEmpty)
+        #expect(try await eventually { await a.status().summary == .synced })
+        await a.stop()
+    }
+
+    /// A temporary registration failure (server down) is retried with backoff, without the
+    /// document ever showing as failed.
+    @Test func temporaryRegistrationFailureRetriesWithBackoff() async throws {
+        let server = FakeSyncServer()
+        let failuresLeft = Locked(2)
+        let store = try LocalStore.inMemory()
+        var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: "A", clientVersion: "test")
+        config.minBackoff = .milliseconds(10)
+        let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
+        let key = self.key
+        let a = SyncEngine(store: store, client: client, keyFor: { _ in key }) { record in
+            if failuresLeft.withLock({ $0 -= 1; return $0 >= 0 }) { throw APIError.server(status: 503, code: "internal", message: "down") }
+            await server.register(record.docId)
+        }
+        await a.setMinRetryDelay(.milliseconds(20))
+        let note = NoteDocument(noteId: EntityID.make())
+        try note.initialize(title: "Later")
+        try await a.open(note.crdt, notebookId: "nb")
+        await a.start()
+        #expect(try await eventually { await server.docs[note.noteId]?.isEmpty == false })
+        let status = await a.status()
+        #expect(status.failed.isEmpty)
+        #expect(try await eventually { await a.status().summary == .synced })
+        await a.stop()
+    }
+
+    /// Deleting a document drops its queue, so the status can become idle.
+    @Test func deletedDocumentLeavesNothingQueued() async throws {
+        let server = FakeSyncServer()
+        await server.setAccepting(false)
+        let a = try device("A", server: server)
+        let local = NoteDocument(noteId: EntityID.make())
+        try local.initialize(title: "Local only")
+        try await a.open(local.crdt, notebookId: "nb")
+        #expect(await a.status().pending == 1)
+        try await a.deleteDocument(local.noteId)
+        #expect(await a.status().pending == 0)
+        #expect(try a.store.updates(docId: local.noteId).isEmpty)
+        #expect(await a.isOpen(local.noteId) == false)
+    }
+
     @Test func awarenessIsEncryptedAndRelayed() async throws {
         let server = FakeSyncServer()
         let a = try device("A", server: server)
@@ -299,13 +481,18 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         await a.start()
         await b.start()
         let docId = EntityID.make()
-        try await a.track(docId: docId, kind: .note, notebookId: "nb")
+        // Awareness is only for open documents.
+        try await a.open(NoteDocument(noteId: docId).crdt, notebookId: "nb")
         try await b.track(docId: docId, kind: .note, notebookId: "nb")
         #expect(try await eventually {
             let connected = await a.client.isConnected
             let subs = await server.subscribers(docId)
             return connected && subs == 2
         })
+        try await a.sendAwareness(docId: docId, payload: Data("cursor".utf8))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(got.withLock { $0 }.isEmpty)
+        try await b.open(NoteDocument(noteId: docId).crdt, notebookId: "nb")
         try await a.sendAwareness(docId: docId, payload: Data("cursor".utf8))
         #expect(try await eventually { got.withLock { $0 } == [Data("cursor".utf8)] })
         await a.stop()

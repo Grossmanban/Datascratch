@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#endif
 import Testing
 @testable import DSCore
 
@@ -13,6 +16,28 @@ struct BenchmarkTests {
         let elapsed = clock.now - start
         print("BENCH \(label): \(elapsed)")
         return (value, elapsed)
+    }
+
+    /// Memory the process uses: `phys_footprint` on Apple platforms (what jetsam counts),
+    /// resident set size on Linux.
+    static func memoryFootprint() -> Int {
+        #if canImport(Darwin)
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let kr = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count) }
+        }
+        return kr == KERN_SUCCESS ? Int(info.phys_footprint) : 0
+        #else
+        let status = (try? String(contentsOfFile: "/proc/self/status", encoding: .utf8)) ?? ""
+        let line = status.split(separator: "\n").first { $0.hasPrefix("VmRSS:") } ?? ""
+        return (Int(line.split(separator: " ").dropFirst().first ?? "") ?? 0) * 1024
+        #endif
+    }
+
+    static func reportMemory(_ label: String, since base: Int) {
+        let mb = Double(memoryFootprint() - base) / 1_048_576
+        print("BENCH memory \(label): \(String(format: "%.1f", mb)) MB")
     }
 
     /// A typical note: title + a few paragraphs (~150 words) + a task.
@@ -56,6 +81,8 @@ struct BenchmarkTests {
             }
         }
 
+        // Baseline: the fake server already holds every encrypted note (test-only memory).
+        let base = Self.memoryFootprint()
         let (_, sync) = try await Self.measure("first sync of \(count) notes (subscribe, decrypt, store)") {
             await engine.start()
             while try await store.db.read({ try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM documents WHERE lastSeq > 0") ?? 0 }) < count {
@@ -63,16 +90,27 @@ struct BenchmarkTests {
             }
         }
         // Building the local indexes (search, tasks) is part of a usable first sync.
-        let (_, indexing) = try await Self.measure("index \(count) notes (load, derive, FTS)") {
-            var batch: [(derived: NoteDerivedData, notebookId: String?)] = []
-            for id in ids {
-                let note = NoteDocument(noteId: id)
-                try note.crdt.applyUpdates(try store.updates(docId: id), origin: .storage)
-                batch.append((try note.derived(), "nb"))
-                if batch.count == 500 { try store.index(batch); batch.removeAll() }
-            }
-            try store.index(batch)
+        // Incremental and parallel (reindexChanged on all cores), batches of 500.
+        let (_, indexing) = try await Self.measure("index \(count) notes (load, derive, FTS; \(ProcessInfo.processInfo.activeProcessorCount) cores)") {
+            while try await store.reindexChanged(limit: 500) > 0 {}
         }
+        #expect(try store.pendingIndexCount() == 0)
+        // Only open documents are live; the rest is in SQLite.
+        Self.reportMemory("after first sync + indexing of \(count) notes (no live documents)", since: base)
+        let opened = NoteDocument(noteId: ids[0])
+        try await engine.open(opened.crdt, notebookId: "nb")
+        Self.reportMemory("with one note open", since: base)
+        await engine.close(docId: ids[0])
+        // For comparison: what keeping every note as a live document would cost.
+        var all: [NoteDocument] = []
+        all.reserveCapacity(count)
+        for id in ids {
+            let note = NoteDocument(noteId: id)
+            try note.crdt.applyUpdates(try store.updates(docId: id), origin: .storage)
+            all.append(note)
+        }
+        Self.reportMemory("if all \(count) notes were live documents", since: base)
+        all.removeAll()
         await engine.stop()
         #expect(try store.search("word5").count > 0)
         #expect(sync + indexing < .seconds(60))

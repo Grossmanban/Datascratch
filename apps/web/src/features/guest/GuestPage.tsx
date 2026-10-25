@@ -218,7 +218,7 @@ function GuestNotebook({ session }: { session: GuestSession }) {
       ) : (
         <div className="flex min-h-full flex-col md:flex-row">
           <aside className="border-b border-line bg-sidebar p-2 md:w-64 md:shrink-0 md:border-b-0 md:border-r">
-            <div className="px-2 pb-2 pt-1 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-2">{t("guest.documents")}</div>
+            <div className="px-2 pb-2 pt-1 text-[12.5px] font-semibold text-ink-2">{t("guest.documents")}</div>
             <div className="flex gap-1 overflow-x-auto md:flex-col">
               {notes.map((n) => (
                 <button

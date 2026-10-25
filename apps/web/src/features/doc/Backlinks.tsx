@@ -12,7 +12,7 @@ export function Backlinks({ noteId }: { noteId: string }) {
   const list = rows.filter((r) => r.noteId !== noteId && notes[r.noteId] && !notes[r.noteId]!.trashedAt);
   return (
     <section className="mt-16 border-t border-line pt-6" data-testid="backlinks">
-      <h2 className="mb-3 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-2">{t("docs.backlinks")}</h2>
+      <h2 className="mb-3 text-[12.5px] font-semibold text-ink-2">{t("docs.backlinks")}</h2>
       {list.length === 0 ? (
         <p className="text-[13.5px] text-ink-2">{t("docs.noBacklinks")}</p>
       ) : (

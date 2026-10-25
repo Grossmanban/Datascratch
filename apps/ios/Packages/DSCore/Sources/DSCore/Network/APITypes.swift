@@ -29,7 +29,7 @@ public enum APIError: Error, Equatable, Sendable {
 public struct AuthSession: Codable, Hashable, Sendable {
     public var userId: String
     /// This device's session id on the server (`DELETE /devices/:id`).
-    public var deviceId: String?
+    public var deviceId: String
     public var accessToken: String
     public var refreshToken: String
     public var accessExpiresAt: String
@@ -54,6 +54,7 @@ public struct SignupRequest: Codable, Sendable {
     public var wrappedMasterKeyRecovery: Base64URLData
     public var userId: String
     public var accountDocId: String
+    public var deviceName: String?
 }
 
 public struct RecoveryStartResponse: Codable, Hashable, Sendable {
@@ -93,7 +94,7 @@ public struct DocVersion: Codable, Hashable, Sendable {
 public struct AttachmentStatus: Codable, Hashable, Sendable {
     public var size: Int64
     public var chunkCount: Int
-    public var mime: String?
+    public var mime: String
     public var uploadedChunks: [Int]
 }
 

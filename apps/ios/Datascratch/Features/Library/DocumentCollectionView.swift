@@ -84,7 +84,7 @@ struct DocumentCollectionView: View {
                             .font(.title2.weight(.medium))
                             .frame(width: 56, height: 56)
                     }
-                    .buttonStyle(.glassProminent)
+                    .prominentGlass()
                     .buttonBorderShape(.circle)
                     .accessibilityLabel("New Note")
                     .accessibilityIdentifier("library.newNote.floating")
@@ -141,7 +141,7 @@ struct DocumentCollectionView: View {
             } actions: {
                 if canCreate {
                     Button("New Note") { scene.newNote() }
-                        .buttonStyle(.glassProminent)
+                        .prominentGlass()
                 }
             }
         }
@@ -160,14 +160,22 @@ struct DocumentCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .bottomLeading) {
-                (note.cover ?? .mist).gradient
+                // The cover thumbnail makes a document recognisable (spec/12 §12.7);
+                // without a cover, a barely tinted paper band.
+                if let thumb = note.coverThumb ?? note.coverImage?.attachmentId {
+                    CoverImageView(noteId: note.id, attachmentId: thumb, offsetY: note.coverImage?.offsetY ?? 0.5)
+                } else if let cover = note.cover {
+                    cover.gradient
+                } else {
+                    Theme.Palette.sidebar.opacity(0.55)
+                }
                 if let icon = note.icon {
                     Text(icon)
                         .font(.system(size: 30))
                         .padding(Theme.Space.s3)
                 }
             }
-            .frame(height: 92)
+            .frame(height: CoverHeader.hasCover(note) ? 92 : 44)
             .clipped()
 
             VStack(alignment: .leading, spacing: Theme.Space.s1) {
@@ -221,7 +229,13 @@ struct DocumentRow: View {
     var body: some View {
         HStack(spacing: Theme.Space.s3) {
             RoundedRectangle(cornerRadius: Theme.Radius.sm)
-                .fill((note.cover ?? .mist).gradient)
+                .fill(note.cover.map { AnyShapeStyle($0.gradient) } ?? AnyShapeStyle(Theme.Palette.sidebar))
+                .overlay {
+                    if let thumb = note.coverThumb ?? note.coverImage?.attachmentId {
+                        CoverImageView(noteId: note.id, attachmentId: thumb, offsetY: note.coverImage?.offsetY ?? 0.5)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
                 .frame(width: 40, height: 40)
                 .overlay { if let icon = note.icon { Text(icon) } }
             VStack(alignment: .leading, spacing: 2) {

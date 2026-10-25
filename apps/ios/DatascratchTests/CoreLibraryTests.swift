@@ -62,6 +62,30 @@ struct CoreLibraryTests {
         #expect(reloaded.taskEntries.contains { $0.text == "Ship it" && $0.attributes.scheduled == "2026-10-27" })
     }
 
+    /// The user's cover image lives in `meta.cover` and its thumbnail in `NoteMeta.coverThumb`.
+    @Test func coverImageAndThumbnailPersist() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let library = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        library.seedIfEmpty()
+        let notebooks = library.notebooks(in: library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
+        let note = library.createNote(in: notebook.id, folder: nil, title: "Trip")
+        library.updateNote(note.id) {
+            $0.coverImage = NoteCover(attachmentId: "cover-1", offsetY: 0.25)
+            $0.coverThumb = "thumb-1"
+        }
+        let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        let again = try #require(reloaded.note(note.id))
+        #expect(again.coverImage == NoteCover(attachmentId: "cover-1", offsetY: 0.25))
+        #expect(again.coverThumb == "thumb-1")
+
+        reloaded.updateNote(note.id) { $0.coverImage = nil; $0.coverThumb = nil }
+        let cleared = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        #expect(cleared.note(note.id)?.coverImage == nil)
+        #expect(cleared.note(note.id)?.coverThumb == nil)
+    }
+
     @Test func notebookMetaCarriesNamesForAgents() throws {
         let core = try CoreLibrary.inMemory()
         let library = LibraryStore(backend: core)

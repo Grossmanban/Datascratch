@@ -69,9 +69,16 @@ struct NativeDocumentScreen: View {
             if let model, let note = app.library.note(noteId) {
                 ZStack(alignment: .bottom) {
                     DocumentBackground(note: note)
-                    NativeEditorRepresentable(editor: model.editor)
-                        .ignoresSafeArea(.container, edges: .bottom)
-                        .accessibilityIdentifier("editor")
+                    VStack(spacing: 0) {
+                        // Compact header above the text (the editor has no scrolling header yet).
+                        if CoverHeader.hasCover(note) {
+                            CoverHeader(note: note)
+                                .contextMenu { CoverMenuItems(note: note) }
+                        }
+                        NativeEditorRepresentable(editor: model.editor)
+                            .ignoresSafeArea(.container, edges: .bottom)
+                            .accessibilityIdentifier("editor")
+                    }
                     PenPalette(model: model)
                         .padding(.bottom, Theme.Space.s3)
                 }
@@ -80,6 +87,7 @@ struct NativeDocumentScreen: View {
                     model.editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
                 }
                 .toolbar { NativeEditorToolbar(model: model, note: note) }
+                .coverPickers()
             } else if failed {
                 // Opening the document failed: fall back to the stand-in editor.
                 DocumentScreen(noteId: noteId, forceStandIn: true)
@@ -157,6 +165,7 @@ struct NativeEditorToolbar: ToolbarContent {
 
             Menu {
                 Button("Style…", systemImage: "textformat") { scene.sheet = .documentStyle(noteId: note.id) }
+                Menu("Cover", systemImage: "photo") { CoverMenuItems(note: note) }
                 Button("Version History", systemImage: "clock.arrow.circlepath") {
                     app.library.recordVersion(ofNote: note.id)
                     scene.sheet = .versions(noteId: note.id)
@@ -206,7 +215,7 @@ struct PenPalette: View {
                     Image(systemName: mode.symbolName)
                         .font(.system(size: 17, weight: .medium))
                         .frame(width: 38, height: 38)
-                        .foregroundStyle(tools.mode == mode ? Color.white : Theme.Palette.textPrimary)
+                        .foregroundStyle(tools.mode == mode ? Theme.Palette.onAccent : Theme.Palette.textPrimary)
                         .background(tools.mode == mode ? Theme.Palette.accent : .clear, in: Circle())
                 }
                 .buttonStyle(.plain)

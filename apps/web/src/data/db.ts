@@ -31,17 +31,14 @@ export type DocRow = {
   docId: string;
   kind: DocKind;
   notebookId: string | null;
-  /** Highest contiguous server seq applied locally. */
-  lastSeq: number;
   /** Registered on the server via POST /v1/docs. */
   registered: 0 | 1;
-  /** Remote/local updates applied since the last snapshot we uploaded. */
-  sinceSnapshot: number;
 };
 
 export type UpdateRow = { id?: number; docId: string; update: Uint8Array };
 
-export type OutboxRow = {
+/** Pre-v3 outbox row (kept only for the upgrade above). */
+type OutboxRow = {
   id?: number;
   docId: string;
   clientMsgId: string;
@@ -103,19 +100,35 @@ export type AttachmentRow = {
   createdAt: number;
 };
 
+/** SyncClient cursor per document (@datascratch/shared/sync DocSyncState). */
+export type SyncDocRow = { docId: string; lastSeq: number; updatesSinceSnapshot: number; bytesSinceSnapshot: number };
+
+/** SyncClient outbox item, ordered by `seq` (insertion order = sending order). */
+export type SyncOutboxRow = {
+  seq?: number;
+  clientMsgId: string;
+  docId: string;
+  kind: "push" | "snapshot";
+  payload: string;
+  baseSeq?: number;
+  size: number;
+  createdAt: number;
+};
+
 /** Encrypted chunk envelope as uploaded (crypto.md §6). */
 export type ChunkRow = { key: string; attachmentId: string; index: number; data: Uint8Array };
 
 export class AccountDB extends Dexie {
   docs!: Table<DocRow, string>;
   updates!: Table<UpdateRow, number>;
-  outbox!: Table<OutboxRow, number>;
   ops!: Table<OpRow, number>;
   tasks!: Table<TaskRow, string>;
   noteIndex!: Table<NoteIndexRow, string>;
   kv!: Table<KvRow, string>;
   attachments!: Table<AttachmentRow, string>;
   chunks!: Table<ChunkRow, string>;
+  syncDocs!: Table<SyncDocRow, string>;
+  syncOutbox!: Table<SyncOutboxRow, number>;
 
   constructor(userId: string) {
     super(`ds-account-${userId}`);
@@ -132,6 +145,28 @@ export class AccountDB extends Dexie {
       attachments: "id, noteId, registered, local",
       chunks: "key, attachmentId",
     });
+    // v3: sync cursors and outbox are owned by SyncClient (@datascratch/shared/sync).
+    this.version(3)
+      .stores({
+        syncDocs: "docId",
+        syncOutbox: "++seq, &clientMsgId, docId",
+      })
+      .upgrade(async (tx) => {
+        // Carry unsent pushes of the old engine over: same envelopes, same protocol.
+        const old = await tx.table("outbox").toArray();
+        await tx.table("syncOutbox").bulkAdd(
+          old.map((o: OutboxRow) => ({
+            clientMsgId: o.clientMsgId,
+            docId: o.docId,
+            kind: o.type,
+            payload: o.payload,
+            ...(o.baseSeq !== undefined ? { baseSeq: o.baseSeq } : {}),
+            size: 0,
+            createdAt: o.createdAt,
+          })),
+        );
+      });
+    this.version(4).stores({ outbox: null });
   }
 }
 

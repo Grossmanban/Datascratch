@@ -40,18 +40,6 @@ struct DocumentStyleSheet: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                Section("Cover") {
-                    GradientChooser(selection: Binding(
-                        get: { library.note(noteId)?.cover ?? Backdrop.none },
-                        set: { value in library.updateNote(noteId) { $0.cover = value == .none ? nil : value } }
-                    ))
-                }
-                Section("Backdrop") {
-                    GradientChooser(selection: Binding(
-                        get: { library.note(noteId)?.backdrop ?? Backdrop.none },
-                        set: { value in library.updateNote(noteId) { $0.backdrop = value } }
-                    ))
-                }
                 Section("Icon") {
                     EmojiField(emoji: Binding(
                         get: { library.note(noteId)?.icon ?? "" },
@@ -64,45 +52,6 @@ struct DocumentStyleSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
-        }
-    }
-}
-
-struct GradientChooser: View {
-    @Binding var selection: Backdrop
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Theme.Space.s3) {
-                ForEach(Backdrop.allCases, id: \.self) { backdrop in
-                    Button {
-                        withAnimation(Theme.Motion.snappy) { selection = backdrop }
-                        Haptics.selection()
-                    } label: {
-                        VStack(spacing: Theme.Space.s1) {
-                            RoundedRectangle(cornerRadius: Theme.Radius.md, style: .continuous)
-                                .fill(backdrop.gradient)
-                                .frame(width: 64, height: 44)
-                                .overlay {
-                                    if backdrop == .none {
-                                        Image(systemName: "nosign").foregroundStyle(Theme.Palette.textTertiary)
-                                    }
-                                }
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: Theme.Radius.md, style: .continuous)
-                                        .strokeBorder(selection == backdrop ? Theme.Palette.accent : Theme.Palette.separator,
-                                                      lineWidth: selection == backdrop ? 2 : 1)
-                                }
-                            Text(backdrop.localizedName)
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.textSecondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(selection == backdrop ? .isSelected : [])
-                }
-            }
-            .padding(.vertical, Theme.Space.s2)
         }
     }
 }

@@ -41,6 +41,7 @@ export function GuestPage() {
       .then((gs) => {
         if (!alive) return gs.close();
         s = gs;
+        if (import.meta.env.DEV) (window as unknown as { __guest?: unknown }).__guest = gs;
         setSession(gs);
       })
       .catch((e) => alive && setError(e instanceof ApiError ? e.code : String(e)));
@@ -142,8 +143,7 @@ function GuestNote({ session, noteId, embedded }: { session: GuestSession; noteI
     noteId,
     ready ? doc : null,
     user,
-    () => session.keyFor(noteId),
-    (payload) => session.engine.sendAwareness(noteId, payload),
+    (update) => session.sendAwareness(noteId, update),
   );
   const editorUser = useMemo(() => ({ id: session.guestId, name: user.name, color: user.color, kind: "guest" as const }), [session, user]);
   const host = useMemo<EditorHost>(

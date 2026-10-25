@@ -97,6 +97,18 @@ jobs:
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee xcodebuild.log | grep -E "error:|warning:|Test Suite|Test Case|✔|✘|passed|failed|\*\* " || true
           grep -q "\*\* TEST SUCCEEDED \*\*" xcodebuild.log
+      - name: Benchmarks (spec/11 targets, informational)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          TEST_RUNNER_DS_BENCH=1 xcodebuild test \
+            -scheme DSCore \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -configuration Release ENABLE_TESTABILITY=YES \
+            -only-testing:DSCoreTests/BenchmarkTests \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee bench.log | grep -E "BENCH|✘|\*\* TEST" || true
+          grep "BENCH" bench.log | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY" || true
       - name: Publish yrs_ffiFFI.xcframework release
         # Consumers (DSEditor, the app) download the binary instead of building Rust.
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/ios-core')

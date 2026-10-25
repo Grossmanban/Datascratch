@@ -1,8 +1,8 @@
 import type { Editor } from "@tiptap/core";
 import { useEffect, useState } from "react";
 import { NodeSelection } from "@tiptap/pm/state";
-import { HIGHLIGHT_TOKENS, TINTS, colorTokenVar } from "../tokens";
-import { Floating } from "./Popups";
+import { ColorPanel, FormatToolbar, LinkPanel, type FormatElement } from "@datascratch/ui";
+import { Bold, Check, Code, Heading1, Heading2, Heading3, Highlighter, Italic, Link2, List, ListChecks, ListOrdered, Pilcrow, Quote, Strikethrough, Type, Underline } from "lucide-react";
 
 function selectionRect(editor: Editor): DOMRect | null {
   const { from, to, empty } = editor.state.selection;
@@ -23,7 +23,6 @@ type Panel = null | "color" | "link" | "turn";
 export function BubbleToolbar({ editor }: { editor: Editor }) {
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
-  const [href, setHref] = useState("");
   const [, force] = useState(0);
   useEffect(() => {
     let pointerDown = false;
@@ -63,78 +62,64 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
   }, [rect]);
   if (!rect || !editor.isEditable) return null;
 
-  const btn = (label: string, title: string, active: boolean, run: () => void, cls = "") => (
-    <button type="button" className={`ds-tb-btn ${cls}${active ? " is-active" : ""}`} title={title} aria-label={title} aria-pressed={active} onClick={run}>
-      {label}
-    </button>
-  );
   const c = () => editor.chain().focus();
-  const hasAgent = editor.isActive("agentEdit");
+  const item = (id: string, label: string, icon: React.ReactNode, active: boolean, onClick: () => void, shortcut?: string): FormatElement => ({ id, label, icon, active, onClick, ...(shortcut ? { shortcut } : {}) });
+  const togglePanel = (p: Panel) => setPanel(panel === p ? null : p);
+  const items: FormatElement[] = [
+    item("turn", "Превратить в…", <Type />, panel === "turn", () => togglePanel("turn")),
+    "separator",
+    item("bold", "Жирный", <Bold />, editor.isActive("bold"), () => c().toggleBold().run(), "mod+b"),
+    item("italic", "Курсив", <Italic />, editor.isActive("italic"), () => c().toggleItalic().run(), "mod+i"),
+    item("underline", "Подчёркнутый", <Underline />, editor.isActive("underline"), () => c().toggleUnderline().run(), "mod+u"),
+    item("strike", "Зачёркнутый", <Strikethrough />, editor.isActive("strike"), () => c().toggleStrike().run(), "mod+shift+s"),
+    item("code", "Код", <Code />, editor.isActive("code"), () => c().toggleCode().run(), "mod+e"),
+    "separator",
+    item("link", "Ссылка", <Link2 />, editor.isActive("link") || panel === "link", () => togglePanel("link"), "mod+k"),
+    item("color", "Цвет и выделение", <Highlighter />, panel === "color", () => togglePanel("color")),
+  ];
+  if (editor.isActive("agentEdit")) items.push("separator", item("accept", "Принять правку агента", <Check />, false, () => c().acceptAgentEdits().run()));
 
-  return (
-    <Floating rect={rect} placement="above" className="ds-toolbar">
-      <div className="ds-tb-row">
-        {btn("Aa", "Превратить в…", panel === "turn", () => setPanel(panel === "turn" ? null : "turn"))}
-        <span className="ds-tb-sep" />
-        {btn("B", "Жирный (⌘B)", editor.isActive("bold"), () => c().toggleBold().run(), "is-bold")}
-        {btn("I", "Курсив (⌘I)", editor.isActive("italic"), () => c().toggleItalic().run(), "is-italic")}
-        {btn("U", "Подчёркнутый (⌘U)", editor.isActive("underline"), () => c().toggleUnderline().run(), "is-underline")}
-        {btn("S", "Зачёркнутый", editor.isActive("strike"), () => c().toggleStrike().run(), "is-strike")}
-        {btn("‹›", "Код", editor.isActive("code"), () => c().toggleCode().run(), "is-code")}
-        <span className="ds-tb-sep" />
-        {btn("🔗", "Ссылка", editor.isActive("link") || panel === "link", () => {
-          setHref((editor.getAttributes("link").href as string) ?? "");
-          setPanel(panel === "link" ? null : "link");
-        })}
-        {btn("A", "Цвет и выделение", panel === "color", () => setPanel(panel === "color" ? null : "color"), "is-color")}
-        {hasAgent && btn("✓", "Принять правку агента", false, () => c().acceptAgentEdits().run(), "is-accept")}
-      </div>
-      {panel === "turn" && (
-        <div className="ds-tb-panel ds-tb-turn">
-          {btn("Текст", "Абзац", editor.isActive("paragraph"), () => c().setParagraph().run())}
-          {btn("H1", "Заголовок 1", editor.isActive("heading", { level: 1 }), () => c().toggleHeading({ level: 1 }).run())}
-          {btn("H2", "Заголовок 2", editor.isActive("heading", { level: 2 }), () => c().toggleHeading({ level: 2 }).run())}
-          {btn("H3", "Заголовок 3", editor.isActive("heading", { level: 3 }), () => c().toggleHeading({ level: 3 }).run())}
-          {btn("☐", "Задача", editor.isActive("taskList"), () => c().toggleTaskList().run())}
-          {btn("•", "Список", editor.isActive("bulletList"), () => c().toggleBulletList().run())}
-          {btn("1.", "Нумерованный", editor.isActive("orderedList"), () => c().toggleOrderedList().run())}
-          {btn("❝", "Цитата", editor.isActive("blockquote"), () => c().toggleBlockquote().run())}
-        </div>
-      )}
-      {panel === "link" && (
-        <form
-          className="ds-tb-panel ds-tb-link"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (href.trim()) c().extendMarkRange("link").setLink({ href: href.trim() }).run();
-            else c().extendMarkRange("link").unsetLink().run();
-            setPanel(null);
-          }}
-        >
-          <input autoFocus className="ds-input" placeholder="https://…" value={href} onChange={(e) => setHref(e.target.value)} onMouseDown={(e) => e.stopPropagation()} />
-          <button type="submit" className="ds-tb-btn">
-            OK
-          </button>
-        </form>
-      )}
-      {panel === "color" && (
-        <div className="ds-tb-panel ds-tb-colors">
-          <div className="ds-tb-label">Текст</div>
-          <div className="ds-swatches">
-            <button type="button" className="ds-swatch is-none" title="По умолчанию" onClick={() => c().unsetTextColor().run()} />
-            {TINTS.map((t) => (
-              <button key={t} type="button" className="ds-swatch" title={t} style={{ background: colorTokenVar(`tint.${t}.fg`) }} onClick={() => c().setTextColor(`tint.${t}.fg`).run()} />
-            ))}
-          </div>
-          <div className="ds-tb-label">Выделение</div>
-          <div className="ds-swatches">
-            <button type="button" className="ds-swatch is-none" title="Без выделения" onClick={() => c().unsetHighlight().run()} />
-            {HIGHLIGHT_TOKENS.map((t) => (
-              <button key={t} type="button" className="ds-swatch" title={t} style={{ background: colorTokenVar(t) }} onClick={() => c().toggleHighlight(t).run()} />
-            ))}
-          </div>
-        </div>
-      )}
-    </Floating>
-  );
+  const textColor = (editor.getAttributes("textColor").color as string | undefined)?.match(/^tint\.(\w+)\.fg$/)?.[1] ?? null;
+  const highlight = (editor.getAttributes("highlight").color as string | undefined)?.replace(/^highlight\./, "") ?? null;
+
+  let panelNode: React.ReactNode = null;
+  if (panel === "link") {
+    panelNode = (
+      <LinkPanel
+        href={(editor.getAttributes("link").href as string) ?? ""}
+        onApply={(href) => {
+          if (href.trim()) c().extendMarkRange("link").setLink({ href: href.trim() }).run();
+          else c().extendMarkRange("link").unsetLink().run();
+          setPanel(null);
+        }}
+        onRemove={() => {
+          c().extendMarkRange("link").unsetLink().run();
+          setPanel(null);
+        }}
+      />
+    );
+  } else if (panel === "color") {
+    panelNode = (
+      <ColorPanel
+        textColor={textColor as never}
+        highlight={highlight as never}
+        onTextColor={(t) => (t ? c().setTextColor(`tint.${t}.fg`).run() : c().unsetTextColor().run())}
+        onHighlight={(h) => (h ? c().setMark("highlight", { color: `highlight.${h}` }).run() : c().unsetHighlight().run())}
+      />
+    );
+  } else if (panel === "turn") {
+    const turn: [string, string, React.ReactNode, boolean, () => void][] = [
+      ["p", "Текст", <Pilcrow />, editor.isActive("paragraph"), () => c().setParagraph().run()],
+      ["h1", "Заголовок 1", <Heading1 />, editor.isActive("heading", { level: 1 }), () => c().toggleHeading({ level: 1 }).run()],
+      ["h2", "Заголовок 2", <Heading2 />, editor.isActive("heading", { level: 2 }), () => c().toggleHeading({ level: 2 }).run()],
+      ["h3", "Заголовок 3", <Heading3 />, editor.isActive("heading", { level: 3 }), () => c().toggleHeading({ level: 3 }).run()],
+      ["task", "Задача", <ListChecks />, editor.isActive("taskList"), () => c().toggleTaskList().run()],
+      ["bullet", "Список", <List />, editor.isActive("bulletList"), () => c().toggleBulletList().run()],
+      ["ordered", "Нумерованный", <ListOrdered />, editor.isActive("orderedList"), () => c().toggleOrderedList().run()],
+      ["quote", "Цитата", <Quote />, editor.isActive("blockquote"), () => c().toggleBlockquote().run()],
+    ];
+    panelNode = <FormatToolbar items={turn.map(([id, label, icon, active, onClick]) => item(id, label, icon, active, onClick))} className="ds-turn-into" />;
+  }
+
+  return <FormatToolbar items={items} panel={panelNode} anchorRect={rect} aria-label="Форматирование" />;
 }

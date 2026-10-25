@@ -18,8 +18,8 @@
     "semantic_hash": "9fe21fc69d8dc220443cb57d75775f98"
   },
   "apps/server/README.md": {
-    "mtime": 1792933790.1860971,
-    "seen": 1792934045.0407903,
+    "mtime": 1792933695.2947335,
+    "seen": 1792936082.860786,
     "ast_hash": "c0be97949300b0a640f0d459c6a5d9ea",
     "semantic_hash": "c0be97949300b0a640f0d459c6a5d9ea"
   },
@@ -30,10 +30,10 @@
     "semantic_hash": "03f2d56f1ba663a8139f7b7b43825428"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1792935569.7288268,
-    "seen": 1792935871.6864996,
-    "ast_hash": "c5342afcb01f822ab2bbaff916e11159",
-    "semantic_hash": "c5342afcb01f822ab2bbaff916e11159"
+    "mtime": 1792935895.2338634,
+    "seen": 1792936061.6365476,
+    "ast_hash": "fc73c5db5a565e8a1e68131f1bedc27e",
+    "semantic_hash": "fc73c5db5a565e8a1e68131f1bedc27e"
   },
   "docs/README.md": {
     "mtime": 1792930436.611198,
@@ -300,8 +300,8 @@
     "semantic_hash": "ff517d0e6b04b77ba09be95efbb88e2e"
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1792933934.592395,
-    "seen": 1792934045.0407922,
+    "mtime": 1792934201.2568526,
+    "seen": 1792936082.862605,
     "ast_hash": "6067d6461fffbf6d3fda86c5a413b7b7",
     "semantic_hash": "6067d6461fffbf6d3fda86c5a413b7b7"
   },
@@ -342,20 +342,20 @@
     "semantic_hash": "67c794a05b6a258217aaff194c793f0f"
   },
   "docs/spec/11-nfr.md": {
-    "mtime": 1792933798.3064086,
-    "seen": 1792935871.6865125,
-    "ast_hash": "ade02008a0842b9076f4f128c490f13c",
-    "semantic_hash": "ade02008a0842b9076f4f128c490f13c"
+    "mtime": 1792935895.23439,
+    "seen": 1792936061.6365492,
+    "ast_hash": "76efc2dc0ddaea2b5020325f2d978308",
+    "semantic_hash": "76efc2dc0ddaea2b5020325f2d978308"
   },
   "infra/README.md": {
-    "mtime": 1792933790.2980971,
-    "seen": 1792934045.040796,
+    "mtime": 1792933647.6808195,
+    "seen": 1792936082.8628254,
     "ast_hash": "188d8c165b96f7800fd1a456e842a5fc",
     "semantic_hash": "188d8c165b96f7800fd1a456e842a5fc"
   },
   "packages/shared/README.md": {
-    "mtime": 1792933790.2980971,
-    "seen": 1792934045.0407977,
+    "mtime": 1792933464.8008087,
+    "seen": 1792936082.8628836,
     "ast_hash": "81f85e2894fbf2f72e1de73fbae5a4fc",
     "semantic_hash": "81f85e2894fbf2f72e1de73fbae5a4fc"
   },
@@ -366,10 +366,10 @@
     "semantic_hash": "8a6e4f1db25c0e168e94ffbaf1beb1d6"
   },
   "tools/graphify_docs.py": {
-    "mtime": 1792932136.1191638,
-    "seen": 1792935871.6864915,
-    "ast_hash": "d43ce14aa92c588ec7551075167431bb",
-    "semantic_hash": "d43ce14aa92c588ec7551075167431bb"
+    "mtime": 1792935915.0250099,
+    "seen": 1792936061.6365411,
+    "ast_hash": "454b5c7db0cd3192b2223bd7aef45c6b",
+    "semantic_hash": "454b5c7db0cd3192b2223bd7aef45c6b"
   },
   "package.json": {
     "mtime": 1792930861.540654,
@@ -1008,8 +1008,8 @@
     "semantic_hash": "fccab16de24f4fe52c4f6ffc09589734"
   },
   "apps/ios/Packages/DSDesign/README.md": {
-    "mtime": 1792933790.185847,
-    "seen": 1792934045.0407882,
+    "mtime": 1792933738.088825,
+    "seen": 1792936082.8607318,
     "ast_hash": "f180903d833f8ac07b6cbb4ce377fec8",
     "semantic_hash": "f180903d833f8ac07b6cbb4ce377fec8"
   },
@@ -1046,14 +1046,14 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792931941.0087183,
     "seen": 1792935871.6858747,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
-    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
+    "ast_hash": "",
+    "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792931941.0087183,
     "seen": 1792935871.6858768,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
-    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
+    "ast_hash": "",
+    "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1792931941.0087183,
@@ -2754,8 +2754,8 @@
     "semantic_hash": "b1736e46e3195b6d5f35e3a2ee20a121"
   },
   "apps/ios/Packages/DSCore/README.md": {
-    "mtime": 1792933292.8574066,
-    "seen": 1792934045.0407872,
+    "mtime": 1792932913.5940447,
+    "seen": 1792936082.8607278,
     "ast_hash": "5f231fe95ca5395a7e4045ebdcb28919",
     "semantic_hash": "5f231fe95ca5395a7e4045ebdcb28919"
   },
@@ -3886,5 +3886,17 @@
     "seen": 1792935871.6865149,
     "ast_hash": "6b1e7d408d3203d63aaff82958774752",
     "semantic_hash": "6b1e7d408d3203d63aaff82958774752"
+  },
+  "apps/web/public/icons/icon-192.png": {
+    "mtime": 1792935296.3013313,
+    "seen": 1792936061.6365516,
+    "ast_hash": "2086a77163d52710a2c78fbb53539cf9",
+    "semantic_hash": "2086a77163d52710a2c78fbb53539cf9"
+  },
+  "apps/web/public/icons/icon-512.png": {
+    "mtime": 1792935296.3014085,
+    "seen": 1792936061.6365533,
+    "ast_hash": "75512baafa6488955a250da60f257fd1",
+    "semantic_hash": "75512baafa6488955a250da60f257fd1"
   }
 }

@@ -11,7 +11,8 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
         var wrappedPassword: String; var wrappedRecovery: String; var accountDocId: String }
 
     let state = Locked<(users: [String: User], notebooks: [String: [String: Any]], docs: Set<String>,
-                        attachments: [String: (chunkCount: Int, chunks: [Int: Data])], tokens: Int, moved: [String: String])>(([:], [:], [], [:], 0, [:]))
+                        attachments: [String: (chunkCount: Int, chunks: [Int: Data])], tokens: Int, moved: [String: String],
+                        events: [[String: Any]])>(([:], [:], [], [:], 0, [:], []))
 
     func session(_ u: User) -> [String: Any] {
         let n = state.withLock { $0.tokens += 1; return $0.tokens }
@@ -58,6 +59,16 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
                 return s.users[email]!
             }
             return path.hasSuffix("finish") ? (200, session(u)) : (204, nil)
+        case ("POST", "/v1/auth/recovery-key"):
+            guard let email = state.withLock({ s in s.users.first { $0.value.loginKey == b["currentLoginKey"] as? String }?.key }) else { return error(401, "unauthorized") }
+            state.withLock { s in
+                s.users[email]!.recoveryLoginKey = b["recoveryLoginKey"] as! String
+                s.users[email]!.wrappedRecovery = b["wrappedMasterKeyRecovery"] as! String
+                s.events.insert(["kind": "recovery_key_rotated", "at": DSDate.iso(Date()), "deviceId": "dev-1", "deviceName": NSNull()], at: 0)
+            }
+            return (204, nil)
+        case ("GET", "/v1/me/security-events"):
+            return (200, state.withLock { $0.events })
         case ("POST", "/v1/auth/logout"):
             return (204, nil)
         case ("POST", "/v1/notebooks"):
@@ -159,6 +170,22 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
         let device4 = try makeService(server)
         try await device4.login(email: "me@example.com", password: "new one", deviceName: "Mac")
         #expect(try device4.keys.masterKey() == master)
+
+        // Recovery key rotation: the old key stops working, the new one recovers the same master key.
+        try signup.account.setRecoveryKeyConfirmed(true)
+        await #expect(throws: (any Error).self) {
+            _ = try await device4.rotateRecoveryKey(email: "me@example.com", currentPassword: "wrong", account: signup.account)
+        }
+        let newRecovery = try await device4.rotateRecoveryKey(email: "me@example.com", currentPassword: "new one", account: signup.account)
+        #expect(newRecovery.hasPrefix("DS1-") && newRecovery != signup.recoveryKeyText)
+        #expect(signup.account.recoveryKeyConfirmed == false)
+        #expect(try await device4.securityEvents().map(\.kind) == [.recoveryKeyRotated])
+        await #expect(throws: APIError.self) {
+            try await makeService(server).recover(email: "me@example.com", recoveryKeyText: signup.recoveryKeyText, newPassword: "x")
+        }
+        let device5 = try makeService(server)
+        try await device5.recover(email: "me@example.com", recoveryKeyText: newRecovery, newPassword: "new one")
+        #expect(try device5.keys.masterKey() == master)
 
         // Attachments: encrypted chunk upload, resumable, downloaded by another device.
         let dir1 = FileManager.default.temporaryDirectory.appendingPathComponent(EntityID.make())

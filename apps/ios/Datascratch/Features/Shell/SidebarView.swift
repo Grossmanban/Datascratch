@@ -19,13 +19,29 @@ struct SidebarView: View {
                 if !library.openTabs.isEmpty {
                     Section("Tabs") {
                         ForEach(library.openTabs) { note in
-                            Button {
-                                scene.open(note.id)
-                            } label: {
-                                NoteTitleLabel(note: note)
-                                    .fontWeight(scene.selectedNoteId == note.id ? .semibold : .regular)
+                            HStack(spacing: Theme.Space.s2) {
+                                Button {
+                                    scene.open(note.id)
+                                } label: {
+                                    NoteTitleLabel(note: note)
+                                        .fontWeight(scene.selectedNoteId == note.id ? .semibold : .regular)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                                // An explicit close button on every tab (also swipe, menu and ⌘W).
+                                Button {
+                                    if scene.selectedNoteId == note.id { scene.closeTab() } else { library.closeTab(note.id) }
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(Theme.Palette.textTertiary)
+                                        .frame(width: 28, height: 28)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Close Tab")
+                                .accessibilityIdentifier("tab.close")
                             }
-                            .buttonStyle(.plain)
                             .contextMenu {
                                 Button("Open in New Window", systemImage: "macwindow.badge.plus") {
                                     openWindow(id: "note", value: note.id)

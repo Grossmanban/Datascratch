@@ -2721,6 +2721,16 @@
         }
       }
     },
+    "Show Columns": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать колонки"
+          }
+        }
+      }
+    },
     "Show Documents": {
       "localizations": {
         "ru": {

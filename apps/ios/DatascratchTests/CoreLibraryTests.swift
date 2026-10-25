@@ -86,6 +86,37 @@ struct CoreLibraryTests {
         #expect(cleared.note(note.id)?.coverThumb == nil)
     }
 
+    /// Build 4 feedback (iPad, local account): after a new space «Тест» with a notebook and a
+    /// document, the welcome document vanished from «Личное». It must stay, starred and tagged,
+    /// also after a relaunch.
+    @Test func newSpaceKeepsTheWelcomeDocument() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let library = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        library.seedIfEmpty()
+        let personal = try #require(library.activeSpace)
+        let welcome = library.documents.map(\.id)
+        let starred = library.starredNotes.map(\.id)
+        let tags = library.tags.map(\.name)
+        #expect(!welcome.isEmpty)
+
+        let test = library.createSpace(name: "Тест")
+        library.activateSpace(test.id)
+        let notebook = library.createNotebook(in: test.id, name: "Черновики", mode: .private)
+        _ = library.createNote(in: notebook.id, folder: nil, title: "Начало пути")
+        #expect(library.documents.map(\.title) == ["Начало пути"])
+
+        library.activateSpace(personal.id)
+        #expect(library.documents.map(\.id) == welcome)
+        #expect(library.starredNotes.map(\.id) == starred)
+        #expect(library.tags.map(\.name) == tags)
+
+        let relaunched = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        relaunched.activateSpace(personal.id)
+        #expect(relaunched.documents.map(\.id) == welcome)
+        #expect(relaunched.starredNotes.map(\.id) == starred)
+    }
+
     @Test func notebookMetaCarriesNamesForAgents() throws {
         let core = try CoreLibrary.inMemory()
         let library = LibraryStore(backend: core)

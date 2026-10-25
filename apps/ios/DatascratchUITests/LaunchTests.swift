@@ -363,6 +363,41 @@ final class LibraryUITests: XCTestCase {
         checkInside("back from full screen")
     }
 
+    /// iPad: Tasks (like the calendar or a list) can take the whole width and come back.
+    func testContentFullScreenOnIPad() throws {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
+        let app = launchSignedIn()
+        let tasks = sidebarElement(app, "sidebar.tasks")
+        XCTAssertTrue(tasks.exists, "no Tasks in the sidebar; buttons: \(Self.buttons(app))")
+        tasks.tap()
+        let expand = app.buttons["content.fullScreen"].firstMatch
+        XCTAssertTrue(expand.waitForExistence(timeout: 5), "no Full Screen button on Tasks; buttons: \(Self.buttons(app))")
+        expand.tap()
+        settle(1.5)
+        let bucket = app.descendants(matching: .any)["tasks.bucket"].firstMatch
+        XCTAssertTrue(bucket.waitForExistence(timeout: 3))
+        let window = app.windows.firstMatch.frame
+        XCTAssertGreaterThan(bucket.frame.midX, window.width * 0.35, "Tasks did not take the whole width")
+        app.buttons["content.fullScreen"].firstMatch.tap()
+        settle(1.5)
+        XCTAssertTrue(sidebarElement(app, "sidebar.tasks").exists, "the columns did not come back")
+    }
+
+    /// Tabs close with their own button.
+    func testClosingATab() throws {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad: sidebar beside the document") }
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let showSidebar = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar'")).firstMatch
+        if showSidebar.exists { showSidebar.tap(); settle(1) }
+        let close = app.buttons["tab.close"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 5), "no tab close button; buttons: \(Self.buttons(app))")
+        let count = app.buttons.matching(identifier: "tab.close").count
+        close.tap()
+        settle(1)
+        XCTAssertEqual(app.buttons.matching(identifier: "tab.close").count, count - 1, "the tab did not close")
+    }
+
     /// «Open in New Window» shows the document, not an empty (black) window.
     func testOpenInNewWindowShowsTheDocument() throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("multiple windows: iPad") }

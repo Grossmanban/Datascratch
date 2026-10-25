@@ -53,6 +53,12 @@ export interface AgentDataSource {
    */
   loadDoc(userId: string, docId: string): Promise<LoadedDoc | null>;
   /**
+   * Optional: current seq of several docs without decrypting them. Lets the
+   * plugin reuse its search/task index for unchanged notes instead of loading
+   * every note on each search.
+   */
+  docSeqs?(userId: string, docIds: string[]): Promise<Record<string, number>>;
+  /**
    * Applies a plain Yjs update as a regular document update: the server
    * encrypts it with the doc key, assigns a seq, stores it (version history)
    * and broadcasts it to connected clients. Returns the new seq.

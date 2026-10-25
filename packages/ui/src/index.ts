@@ -55,4 +55,6 @@ export * from "./components/TaskRow";
 export * from "./components/DocList";
 export * from "./components/PenToolbar";
 export * from "./components/FormatToolbar";
+export * from "./components/SuggestionMenu";
+export type { AnchorRect } from "./lib/floating";
 export type { HighlightName } from "@datascratch/design-tokens";

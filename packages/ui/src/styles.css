@@ -254,225 +254,96 @@
   }
 }
 
-/* ---------- document typography (editor content, read-only views) ---------- */
-
+/* ---------- task checkbox without React (ProseMirror node views) ----------
+ * <button type="button" role="checkbox" class="ds-task-check"
+ *         data-state="open|done|cancelled" aria-checked="false|true"></button>
+ * Same look and motion as <TaskCheckbox>. Size via --ds-task-size (default 20px).
+ */
 @layer components {
-  .ds-prose {
-    font-family: var(--ds-font-text);
-    font-size: var(--ds-type-body-size);
-    line-height: var(--ds-type-body-line-height);
-    letter-spacing: var(--ds-type-body-tracking);
-    color: var(--ds-text-primary);
-    overflow-wrap: break-word;
-  }
-  .ds-prose[data-font="serif"] {
-    font-family: var(--ds-font-display);
-    font-size: calc(var(--ds-type-body-size) + 1px);
-  }
-  .ds-prose[data-font="mono"] {
-    font-family: var(--ds-font-mono);
-    font-size: calc(var(--ds-type-body-size) - 2px);
-  }
-  .ds-prose > * + * {
-    margin-top: 0.6em;
-  }
-  .ds-prose :is(h1, h2, h3) {
-    font-family: var(--ds-font-display);
-    font-weight: 600;
-    line-height: 1.2;
-    color: var(--ds-text-primary);
-    text-wrap: balance;
-  }
-  .ds-prose h1 {
-    font-size: var(--ds-type-h1-size);
-    letter-spacing: var(--ds-type-h1-tracking);
-    margin-top: 1.4em;
-  }
-  .ds-prose h2 {
-    font-size: var(--ds-type-h2-size);
-    letter-spacing: var(--ds-type-h2-tracking);
-    margin-top: 1.3em;
-  }
-  .ds-prose h3 {
-    font-size: var(--ds-type-h3-size);
-    margin-top: 1.2em;
-  }
-  .ds-prose > :first-child {
-    margin-top: 0;
-  }
-  .ds-prose a {
-    color: var(--ds-accent);
-    text-decoration: underline;
-    text-decoration-color: color-mix(in oklab, var(--ds-accent) 35%, transparent);
-    text-underline-offset: 3px;
-  }
-  .ds-prose a:hover {
-    text-decoration-color: var(--ds-accent);
-  }
-  .ds-prose :is(ul, ol) {
-    padding-left: 1.4em;
-  }
-  .ds-prose ul {
-    list-style: disc;
-  }
-  .ds-prose ol {
-    list-style: decimal;
-  }
-  .ds-prose li::marker {
-    color: var(--ds-text-tertiary);
-  }
-  .ds-prose li + li {
-    margin-top: 0.2em;
-  }
-  .ds-prose blockquote {
-    border-left: 3px solid var(--ds-line-separator);
-    padding-left: 1em;
-    color: var(--ds-text-secondary);
-    font-family: var(--ds-font-display);
-    font-style: italic;
-  }
-  .ds-prose hr {
-    border: 0;
-    height: 1px;
-    background: var(--ds-line-separator);
-    margin: 1.6em 0;
-  }
-  .ds-prose :not(pre) > code {
-    font-family: var(--ds-font-mono);
-    font-size: 0.88em;
-    padding: 0.12em 0.35em;
-    border-radius: 5px;
-    background: color-mix(in oklab, var(--ds-text-primary) 7%, transparent);
-  }
-  .ds-prose pre {
-    font-family: var(--ds-font-mono);
-    font-size: var(--ds-type-footnote-size);
-    line-height: 1.6;
-    padding: 14px 16px;
-    border-radius: var(--ds-radius-md);
-    background: color-mix(in oklab, var(--ds-text-primary) 4%, var(--ds-bg-surface));
-    border: 1px solid var(--ds-line-separator);
-    overflow-x: auto;
-  }
-  .ds-prose mark {
-    color: inherit;
-    border-radius: 3px;
-    padding: 0 0.1em;
-    background: var(--ds-highlight-yellow);
-  }
-  .ds-prose mark[data-color="green"] {
-    background: var(--ds-highlight-green);
-  }
-  .ds-prose mark[data-color="pink"] {
-    background: var(--ds-highlight-pink);
-  }
-  .ds-prose mark[data-color="blue"] {
-    background: var(--ds-highlight-blue);
-  }
-  /* Callout: <div data-callout data-tint="blue">. */
-  .ds-prose [data-callout] {
-    --ui-callout-fg: var(--ds-tint-gray-fg);
-    --ui-callout-bg: var(--ds-tint-gray-bg);
-    display: flex;
-    gap: 0.7em;
-    padding: 12px 16px;
-    border-radius: var(--ds-radius-md);
-    background: var(--ui-callout-bg);
-  }
-  .ds-prose [data-callout] > [data-callout-icon] {
-    color: var(--ui-callout-fg);
+  .ds-task-check {
+    --ds-task-size: 20px;
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: var(--ds-task-size);
+    height: var(--ds-task-size);
     flex-shrink: 0;
+    border-radius: 9999px;
+    border: 1.5px solid color-mix(in oklab, var(--ds-text-tertiary) 85%, transparent);
+    background: transparent;
+    cursor: pointer;
+    outline: none;
+    vertical-align: middle;
+    transition:
+      border-color var(--ds-duration-base) ease,
+      transform var(--ds-duration-fast) ease;
   }
-  .ds-prose [data-tint="red"] {
-    --ui-callout-fg: var(--ds-tint-red-fg);
-    --ui-callout-bg: var(--ds-tint-red-bg);
+  .ds-task-check:hover {
+    border-color: var(--ds-accent);
   }
-  .ds-prose [data-tint="orange"] {
-    --ui-callout-fg: var(--ds-tint-orange-fg);
-    --ui-callout-bg: var(--ds-tint-orange-bg);
+  .ds-task-check:active {
+    transform: scale(0.9);
   }
-  .ds-prose [data-tint="yellow"] {
-    --ui-callout-fg: var(--ds-tint-yellow-fg);
-    --ui-callout-bg: var(--ds-tint-yellow-bg);
+  .ds-task-check:focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--ds-accent) 55%, transparent);
+    outline-offset: 2px;
   }
-  .ds-prose [data-tint="green"] {
-    --ui-callout-fg: var(--ds-tint-green-fg);
-    --ui-callout-bg: var(--ds-tint-green-bg);
+  /* fill */
+  .ds-task-check::before {
+    content: "";
+    position: absolute;
+    inset: -1.5px;
+    border-radius: inherit;
+    background: var(--ds-accent);
+    transform: scale(0);
+    opacity: 0;
+    transition:
+      transform var(--ds-motion-snappy-duration) var(--ds-motion-snappy-easing),
+      opacity var(--ds-duration-fast) ease;
   }
-  .ds-prose [data-tint="teal"] {
-    --ui-callout-fg: var(--ds-tint-teal-fg);
-    --ui-callout-bg: var(--ds-tint-teal-bg);
+  /* mark: check (done) or cross (cancelled), drawn with an SVG mask */
+  .ds-task-check::after {
+    content: "";
+    position: relative;
+    width: 70%;
+    height: 70%;
+    background: var(--ds-text-on-accent);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3 7.4 5.8 10 11 4' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3 7.4 5.8 10 11 4' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path var(--ds-motion-smooth-duration) var(--ds-motion-smooth-easing) 50ms;
   }
-  .ds-prose [data-tint="blue"] {
-    --ui-callout-fg: var(--ds-tint-blue-fg);
-    --ui-callout-bg: var(--ds-tint-blue-bg);
+  .ds-task-check[data-state="done"] {
+    border-color: var(--ds-accent);
   }
-  .ds-prose [data-tint="indigo"] {
-    --ui-callout-fg: var(--ds-tint-indigo-fg);
-    --ui-callout-bg: var(--ds-tint-indigo-bg);
+  .ds-task-check[data-state="done"]::before,
+  .ds-task-check[data-state="cancelled"]::before {
+    transform: scale(1);
+    opacity: 1;
   }
-  .ds-prose [data-tint="purple"] {
-    --ui-callout-fg: var(--ds-tint-purple-fg);
-    --ui-callout-bg: var(--ds-tint-purple-bg);
+  .ds-task-check[data-state="done"]::after {
+    clip-path: inset(0 0 0 0);
   }
-  .ds-prose [data-tint="pink"] {
-    --ui-callout-fg: var(--ds-tint-pink-fg);
-    --ui-callout-bg: var(--ds-tint-pink-bg);
+  .ds-task-check[data-state="cancelled"] {
+    border-color: color-mix(in oklab, var(--ds-text-tertiary) 60%, transparent);
   }
-  /* [[wiki links]] and #tags rendered inline. */
-  .ds-prose [data-wikilink] {
-    color: var(--ds-text-primary);
-    text-decoration: none;
-    border-bottom: 1.5px solid color-mix(in oklab, var(--ds-accent) 40%, transparent);
-    padding-bottom: 1px;
+  .ds-task-check[data-state="cancelled"]::before {
+    background: color-mix(in oklab, var(--ds-text-tertiary) 25%, transparent);
   }
-  .ds-prose [data-wikilink]:hover {
-    background: color-mix(in oklab, var(--ds-accent) 12%, transparent);
+  .ds-task-check[data-state="cancelled"]::after {
+    background: var(--ds-text-secondary);
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M4.5 4.5l5 5M9.5 4.5l-5 5' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M4.5 4.5l5 5M9.5 4.5l-5 5' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+    clip-path: inset(0 0 0 0);
   }
-  .ds-prose [data-tag] {
-    color: var(--ds-accent);
-    font-weight: 500;
-  }
-  .ds-prose table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: var(--ds-type-callout-size);
-  }
-  .ds-prose :is(th, td) {
-    border: 1px solid var(--ds-line-separator);
-    padding: 6px 10px;
-    text-align: left;
-  }
-  .ds-prose th {
-    font-weight: 600;
-    background: color-mix(in oklab, var(--ds-text-primary) 3%, transparent);
-  }
-  /* Document paper: data-paper on the editor surface. */
-  [data-paper="dots"] {
-    background-image: radial-gradient(
-      color-mix(in oklab, var(--ds-text-tertiary) 45%, transparent) 1px,
-      transparent 1.2px
-    );
-    background-size: 22px 22px;
-  }
-  [data-paper="grid"] {
-    background-image:
-      linear-gradient(
-        color-mix(in oklab, var(--ds-line-separator) 80%, transparent) 1px,
-        transparent 1px
-      ),
-      linear-gradient(
-        90deg,
-        color-mix(in oklab, var(--ds-line-separator) 80%, transparent) 1px,
-        transparent 1px
-      );
-    background-size: 22px 22px;
-  }
-  [data-paper="lines"] {
-    background-image: linear-gradient(
-      transparent calc(1.5em - 1px),
-      color-mix(in oklab, var(--ds-line-separator) 90%, transparent) 1px
-    );
-    background-size: 100% 1.5em;
+  @media (prefers-reduced-motion: reduce) {
+    .ds-task-check,
+    .ds-task-check::before,
+    .ds-task-check::after {
+      transition-duration: 0s;
+      transition-delay: 0s;
+    }
   }
 }

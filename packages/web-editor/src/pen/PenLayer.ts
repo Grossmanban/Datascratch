@@ -5,10 +5,22 @@ import type { Editor } from "@tiptap/core";
 import { ySyncPluginKey } from "y-prosemirror";
 import * as Y from "yjs";
 import { PEN_ORIGIN } from "../collab/collaboration";
-import { packPoints, pressureCurve, tiltFactor, strokeFromYMap, strokeToYMap, unpackPoints, type Stroke, type StrokeAuthor, type StrokePoint, type StrokeTool } from "../shared/strokes";
-import { uuidv7 } from "../shared/uuid";
+import { uuidv7 } from "@datascratch/shared/ids";
+import {
+  attachAnchorRebase,
+  packPoints,
+  pressureCurve,
+  putStroke,
+  readStroke,
+  tiltFactor,
+  unpackPoints,
+  type Stroke,
+  type StrokeAuthor,
+  type StrokePoint,
+  type StrokeTool,
+} from "@datascratch/shared/strokes";
 import { resolveColor } from "../tokens";
-import { decodeAnchor, encodeCharAnchor, rebaseRedoneAnchors, resolveCharAnchor, type ProsemirrorMapping } from "./anchors";
+import { decodeAnchor, encodeCharAnchor, resolveCharAnchor, type ProsemirrorMapping } from "./anchors";
 import {
   bindToSurface,
   bindToText,
@@ -117,8 +129,6 @@ export interface PenLayerOptions {
 }
 
 const PEN_RECENT_MS = 1500;
-/** Untracked origin: anchor rebasing must not become an undo step of its own. */
-const ANCHOR_REBASE_ORIGIN = Symbol("ds-anchor-rebase");
 
 export class PenLayer {
   readonly editor: Editor;
@@ -233,9 +243,7 @@ export class PenLayer {
     this.cleanups.push(() => mq?.removeEventListener?.("change", onTheme));
 
     // Undo/redo restores text as new items; rebase anchors so other devices see the marks again.
-    const onPopped = () => queueMicrotask(() => !this.destroyed && rebaseRedoneAnchors(this.doc, ANCHOR_REBASE_ORIGIN));
-    this.undoManager.on("stack-item-popped", onPopped);
-    this.cleanups.push(() => this.undoManager.off("stack-item-popped", onPopped));
+    this.cleanups.push(attachAnchorRebase(this.undoManager));
 
     const onKey = (e: KeyboardEvent) => {
       if (!this.lasso) return;
@@ -274,7 +282,7 @@ export class PenLayer {
   // ---------- model ----------
 
   private upsert(id: string, map: Y.Map<unknown>): void {
-    const stroke = strokeFromYMap(map);
+    const stroke = readStroke(map);
     if (!stroke) {
       this.entries.delete(id);
       return;
@@ -356,7 +364,7 @@ export class PenLayer {
         const rel = e.rels[a];
         let box: AnchorBox | null = null;
         if (rel && mapping) {
-          const pos = resolveCharAnchor(rel, this.doc, this.fragment, mapping);
+          const pos = resolveCharAnchor(stroke.anchors[a]!, rel, this.doc, this.fragment, mapping);
           if (pos !== null) box = pass.anchorBox(pos);
         }
         boxes.set(a, box);
@@ -371,10 +379,16 @@ export class PenLayer {
         return;
       }
       const r = el.getBoundingClientRect();
-      const left = r.left - pass.origin.x;
       const top = r.top - pass.origin.y;
-      e.segments = resolveSurfaceSegments(stroke, e.points, { left, top, width: r.width }, skip);
-      if (stroke.anchorKind !== "block") e.clip = { left, top, right: left + r.width, bottom: top + r.height };
+      if (stroke.anchorKind === "block") {
+        // Margin notes: x in fractions of the text column from its left edge, y from the block's top.
+        const col = this.textColumn();
+        e.segments = resolveSurfaceSegments(stroke, e.points, { left: col.left, top, width: col.right - col.left }, skip);
+      } else {
+        const left = r.left - pass.origin.x;
+        e.segments = resolveSurfaceSegments(stroke, e.points, { left, top, width: r.width }, skip);
+        e.clip = { left, top, right: left + r.width, bottom: top + r.height };
+      }
     }
     e.bounds = segmentsBounds(e.segments);
   }
@@ -541,7 +555,7 @@ export class PenLayer {
     const seg: RenderPoint[] = pts.map((p, i) => ({
       x: p.x,
       y: p.y,
-      w: this.settings.width * scale * (0.35 + 0.65 * Math.pow(p.pressure, 0.8)) * (tool === "pencil" || tool === "marker" ? 1 + 1.5 * (1 - p.altitude / (Math.PI / 2)) : 1),
+      w: this.settings.width * scale * pressureCurve(p.pressure) * tiltFactor(tool, p.altitude),
       i,
     }));
     if (seg.length === 1) seg.push({ ...seg[0]!, x: seg[0]!.x + 0.01 });
@@ -761,7 +775,7 @@ export class PenLayer {
     if (!stroke) return;
     const id = uuidv7();
     this.undoManager.stopCapturing();
-    this.doc.transact(() => this.strokes.set(id, strokeToYMap(stroke)), PEN_ORIGIN);
+    this.doc.transact(() => putStroke(this.doc, id, stroke), PEN_ORIGIN);
     this.undoManager.stopCapturing();
     this.onStroke?.(id, stroke);
   }
@@ -787,7 +801,7 @@ export class PenLayer {
     }
     const margin = 3 * 17 * 1.5;
     const column = this.textColumn();
-    const inMargin = column && (maxX < column.left || minX > column.right);
+    const inMargin = maxX < column.left || minX > column.right;
     let lines: Line[] = [];
     if (!inMargin) {
       lines = groupLines(pass.glyphsInBand(minY - margin, maxY + margin));
@@ -835,7 +849,7 @@ export class PenLayer {
   }
 
   /** Text column of the editor in layer coordinates (content box of the ProseMirror element). */
-  private textColumn(): { left: number; right: number } | null {
+  private textColumn(): { left: number; right: number } {
     const dom = this.editor.view.dom;
     const r = dom.getBoundingClientRect();
     const style = getComputedStyle(dom);
@@ -867,7 +881,8 @@ export class PenLayer {
     }
     if (!best?.el.dataset.blockId) return null;
     const r = best.el.getBoundingClientRect();
-    const s = { left: r.left - origin.x, top: r.top - origin.y, width: r.width };
+    const col = this.textColumn();
+    const s = { left: col.left, top: r.top - origin.y, width: col.right - col.left };
     return {
       ...base,
       width: (screenWidth * 600) / s.width,
@@ -980,7 +995,7 @@ export class PenLayer {
       for (const [, stroke] of replacements) {
         const nid = uuidv7();
         newIds.add(nid);
-        this.strokes.set(nid, strokeToYMap(stroke));
+        putStroke(this.doc, nid, stroke);
       }
     }, PEN_ORIGIN);
     this.undoManager.stopCapturing();
@@ -1025,7 +1040,7 @@ export class PenLayer {
         for (const piece of pieces) {
           const next: Stroke = { ...e.stroke, anchors: piece.anchors, points: packPoints(piece.points) };
           delete next.hidden;
-          this.strokes.set(uuidv7(), strokeToYMap(next));
+          putStroke(this.doc, uuidv7(), next);
         }
       }
     }, PEN_ORIGIN);

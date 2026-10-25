@@ -1,6 +1,6 @@
 // Pure geometry of the living stroke (D-05, strokes.md §4–5). No DOM, no Yjs: the DOM layer measures
 // glyphs and passes them in; everything here is unit-tested.
-import { strokeThickness, type Stroke, type StrokePoint } from "../shared/strokes";
+import { strokeWidthAt, type Stroke, type StrokePoint } from "@datascratch/shared/strokes";
 
 /** A measured character, in layer coordinates (CSS px, y grows down). */
 export interface Glyph {
@@ -194,7 +194,7 @@ export function resolveTextSegments(
     current.push({
       x: box.x + p.x * box.fontSize,
       y: box.baseline + p.y * box.fontSize,
-      w: strokeThickness(stroke, p, box.fontSize / 17),
+      w: strokeWidthAt(stroke, p, { fontSize: box.fontSize }),
       i,
     });
     currentBox = box;
@@ -210,7 +210,6 @@ export function resolveSurfaceSegments(
   surface: { left: number; top: number; width: number },
   skip?: ReadonlySet<number>,
 ): RenderPoint[][] {
-  const scale = surface.width / 600;
   const segments: RenderPoint[][] = [];
   let current: RenderPoint[] = [];
   points.forEach((p, i) => {
@@ -219,7 +218,7 @@ export function resolveSurfaceSegments(
       current = [];
       return;
     }
-    current.push({ x: surface.left + p.x * surface.width, y: surface.top + p.y * surface.width, w: strokeThickness(stroke, p, scale), i });
+    current.push({ x: surface.left + p.x * surface.width, y: surface.top + p.y * surface.width, w: strokeWidthAt(stroke, p, { blockWidth: surface.width }), i });
   });
   if (current.length >= 2) segments.push(current);
   return segments;

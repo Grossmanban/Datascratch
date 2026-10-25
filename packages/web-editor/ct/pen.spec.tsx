@@ -230,3 +230,31 @@ test("a scribble over a word deletes the word", async ({ mount, page }) => {
   await page.evaluate(() => window.__ct!.api.undoManager.undo());
   await expect.poll(() => page.evaluate(() => window.__ct!.api.editor.state.doc.textContent.includes("dolor sit"))).toBe(true);
 });
+
+test("underline survives pressing Enter right before the word", async ({ mount, page }) => {
+  await mount(<TestEditor width={700} html={TEXT} />);
+  await ready(page);
+  const { box } = await wordRect(page, "consectetur");
+  await drawLine(page, box.left, box.bottom + 2, box.right, box.bottom + 2);
+  await expect.poll(() => strokeCount(page)).toBe(1);
+  await page.evaluate(() => {
+    const { editor } = window.__ct!.api;
+    let at = -1;
+    editor.state.doc.descendants((n, pos) => {
+      if (at < 0 && n.isText && n.text!.includes("consectetur")) at = pos + n.text!.indexOf("consectetur");
+    });
+    editor.commands.focus();
+    editor.commands.setTextSelection(at);
+  });
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => window.__ct!.api.editor.state.doc.child(2).textContent.startsWith("consectetur"))).toBe(true);
+  const after = await wordRect(page, "consectetur");
+  await expect.poll(async () => (await segments(page))[0]?.length ?? 0).toBe(1);
+  const seg = (await segments(page))[0]![0]!;
+  expect(Math.abs(seg[0]!.x - after.box.left)).toBeLessThan(4);
+  expect(Math.abs(seg[0]!.y - (after.box.bottom + 2))).toBeLessThan(5);
+  // Undo restores the text and the original stroke.
+  await page.keyboard.press("Control+z");
+  await expect.poll(() => page.evaluate(() => window.__ct!.api.editor.state.doc.child(1).textContent.includes("amet, consectetur"))).toBe(true);
+  await expect.poll(async () => (await segments(page))[0]?.length ?? 0).toBe(1);
+});

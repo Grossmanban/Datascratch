@@ -1,0 +1,5 @@
+# HTTPS in front of the server. Caddy obtains and renews the certificate itself.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy server:8080
+}

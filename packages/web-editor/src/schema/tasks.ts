@@ -2,7 +2,7 @@ import { Node, mergeAttributes, wrappingInputRule } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import { dateLabel, type DateLabel } from "@datascratch/ui";
-import type { TaskState } from "../shared/document";
+import type { TaskState } from "@datascratch/shared/contracts";
 
 /** Local calendar date as YYYY-MM-DD (document-model.md §1: "date only" is local). */
 export function localDate(d: Date = new Date()): string {

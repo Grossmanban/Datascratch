@@ -1,0 +1,738 @@
+{
+  "version": 1,
+  "description": "Reference note written through y-prosemirror (field 'content') with every node and mark of document-model.md §4.2. Decode `update` (Yjs update v1), then read: `content` as canonical PM JSON (attributes with null values are not stored; mark values are the mark attrs object — {} when empty — and mark attrs are omitted when empty), the other roots as plain JSON (binary as base64url).",
+  "noteId": "0192f3c4-0000-7000-8000-000000000001",
+  "update": "AfkBAQAHAQdjb250ZW50AwV0aXRsZQcAAQAGBAABAQ5SZWZlcmVuY2Ugbm90ZSgAAQAHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA2NIcBAAMJcGFyYWdyYXBoBwABEQYEAAESB1BsYWluLCCGARkEYm9sZAJ7fYQBGgRib2xkhgEeBGJvbGQEbnVsbIQBHwIsIIYBIQZpdGFsaWMCe32EASIGaXRhbGljhgEoBml0YWxpYwRudWxshAEpAiwghgErCXVuZGVybGluZQJ7fYQBLAl1bmRlcmxpbmWGATUJdW5kZXJsaW5lBG51bGyEATYCLCCGATgGc3RyaWtlAnt9hAE5BnN0cmlrZYYBPwZzdHJpa2UEbnVsbIQBQAIsIIYBQgRjb2RlAnt9hAFDBGNvZGWGAUcEY29kZQRudWxshAFIAiwghgFKBGxpbmseeyJocmVmIjoiaHR0cHM6Ly9leGFtcGxlLmNvbSJ9hAFLBGxpbmuGAU8EbGluawRudWxshAFQAiwghgFSCWhpZ2hsaWdodBx7ImNvbG9yIjoiaGlnaGxpZ2h0LnllbGxvdyJ9hAFTCWhpZ2hsaWdodIYBXAloaWdobGlnaHQEbnVsbIQBXQIsIIYBXwl0ZXh0Q29sb3IXeyJjb2xvciI6InRleHQuYWNjZW50In2EAWAFY29sb3KGAWUJdGV4dENvbG9yBG51bGyEAWYCLCCGAWgJYWdlbnRFZGl0NXsiYWdlbnRJZCI6ImFnZW50LTEiLCJhdCI6IjIwMjYtMTAtMjVUMTI6MDA6MDAuMDAwWiJ9hAFpBWFnZW50hgFuCWFnZW50RWRpdARudWxshAFvASCGAXAEYm9sZAJ7fYYBcQZpdGFsaWMCe32EAXILYm9sZCtpdGFsaWOGAX0EYm9sZARudWxshgF-Bml0YWxpYwRudWxshwESAwloYXJkQnJlYWuHAYABBgQAAYEBCExpbmsgdG8ghwGBAQMIbm90ZUxpbmsoAAGKAQZub3RlSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAzODQoAAGKAQVsYWJlbAF3Ck90aGVyIG5vdGWHAYoBBgQAAY0BBiB3aXRoIIcBjQEDA3RhZygAAZQBBG5hbWUBdw1wcm9qZWN0L2FscGhhKAABEQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDY1hwERAwdoZWFkaW5nBwABlwEGBAABmAEJSGVhZGluZyAxKAABlwEHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA2NigAAZcBBWxldmVsAX0BhwGXAQMHaGVhZGluZwcAAaQBBgQAAaUBCUhlYWRpbmcgMigAAaQBB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwNjcoAAGkAQVsZXZlbAF9AocBpAEDB2hlYWRpbmcHAAGxAQYEAAGyAQlIZWFkaW5nIDMoAAGxAQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDY4KAABsQEFbGV2ZWwBfQOHAbEBAwlwYXJhZ3JhcGgHAAG-AQYEAAG_AQhDZW50ZXJlZCgAAb4BB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwNjkoAAG-AQl0ZXh0QWxpZ24BdwZjZW50ZXKHAb4BAwpidWxsZXRMaXN0BwABygEDCGxpc3RJdGVtBwABywEDCXBhcmFncmFwaAcAAcwBBgQAAc0BBkJ1bGxldCgAAcwBB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwNmMoAAHLAQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDZihwHLAQMIbGlzdEl0ZW0HAAHWAQMJcGFyYWdyYXBoBwAB1wEGBAAB2AERQnVsbGV0IHdpdGggY2hpbGQoAAHXAQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDZlhwHXAQMLb3JkZXJlZExpc3QHAAHrAQMIbGlzdEl0ZW0HAAHsAQMJcGFyYWdyYXBoBwAB7QEGBAAB7gEFVGhpcmQoAAHtAQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDcxKAAB7AEHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA3MCgAAesBB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwNmYoAAHrAQVzdGFydAF9AygAAdYBB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwNmQoAAHKAQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDZhhwHKAQMIdGFza0xpc3QHAAH6AQMIdGFza0l0ZW0HAAH7AQMJcGFyYWdyYXBoBwAB_AEGBAAB_QEJT3BlbiB0YXNrKAAB_AEHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA3NCgAAfsBB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwNzMoAAH7AQZ0YXNrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAxZjQoAAH7AQVzdGF0ZQF3BG9wZW4oAAH7AQlzY2hlZHVsZWQBdwoyMDI2LTEwLTI2KAAB-wEIZGVhZGxpbmUBdwoyMDI2LTEwLTMwhwH7AQMIdGFza0l0ZW0HAAGNAgMJcGFyYWdyYXBoBwABjgIGBAABjwIJRG9uZSB0YXNrKAABjgIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA3NigAAY0CB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwNzUoAAGNAgZ0YXNrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAxZjUoAAGNAgVzdGF0ZQF3BGRvbmUoAAGNAgtjb21wbGV0ZWRBdAF3GDIwMjYtMTAtMjVUMTI6MDA6MDAuMDAwWocBjQIDCHRhc2tJdGVtBwABngIDCXBhcmFncmFwaAcAAZ8CBgQAAaACDkNhbmNlbGxlZCB0YXNrKAABnwIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA3OCgAAZ4CB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwNzcoAAGeAgZ0YXNrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAxZjYoAAGeAgVzdGF0ZQF3CWNhbmNlbGxlZCgAAfoBB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwNzKHAfoBAwpibG9ja3F1b3RlBwABtAIDCXBhcmFncmFwaAcAAbUCBgQAAbYCBVF1b3RlKAABtQIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA3YSgAAbQCB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwNzmHAbQCAwdjYWxsb3V0BwABvgIDCXBhcmFncmFwaAcAAb8CBgQAAcACB0NhbGxvdXQoAAG_AgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDdjKAABvgIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA3YigAAb4CBHRvbmUBdwRpbmZvKAABvgIFZW1vamkBdwTwn5KhhwG-AgMJY29kZUJsb2NrBwABzAIGBAABzQIUbGV0IHggPSAieSIKcHJpbnQoeCkoAAHMAgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDdkKAABzAIIbGFuZ3VhZ2UBdwVzd2lmdIcBzAIDCW1hdGhCbG9jaygAAeQCB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwN2UoAAHkAgVsYXRleAF3EGVee2lccGl9ICsgMSA9IDCHAeQCAwdtZXJtYWlkKAAB5wIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA3ZigAAecCBnNvdXJjZQF3D2dyYXBoIFREOyBBLS0-QocB5wIDDmhvcml6b250YWxSdWxlKAAB6gIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA4MCgAAeoCBXN0eWxlAXcEZG90c4cB6gIDBXRhYmxlBwAB7QIDCHRhYmxlUm93BwAB7gIDC3RhYmxlSGVhZGVyBwAB7wIDCXBhcmFncmFwaAcAAfACBgQAAfECAkgxKAAB8AIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA4NCgAAe8CB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwODMoAAHvAgdjb2xzcGFuAX0BKAAB7wIHcm93c3BhbgF9ASgAAe8CCGNvbHdpZHRoAXUBfbgBhwHvAgMLdGFibGVIZWFkZXIHAAH5AgMJcGFyYWdyYXBoBwAB-gIGBAAB-wICSDIoAAH6AgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDg2KAAB-QIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA4NSgAAfkCB2NvbHNwYW4BfQEoAAH5Agdyb3dzcGFuAX0BKAAB7gIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA4MocB7gIDCHRhYmxlUm93BwABgwMDCXRhYmxlQ2VsbAcAAYQDAwlwYXJhZ3JhcGgHAAGFAwYEAAGGAwlXaWRlIGNlbGwoAAGFAwdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDg5KAABhAMHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA4OCgAAYQDB2NvbHNwYW4BfQIoAAGEAwdyb3dzcGFuAX0BKAABgwMHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA4NygAAe0CB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwODGHAe0CAwVpbWFnZSgAAZYDB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwOGEoAAGWAwxhdHRhY2htZW50SWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAyYmMoAAGWAwV3aWR0aAF8PwAAACgAAZYDA2FsdAF3A0NhdCgAAZYDB2NhcHRpb24BdwVBIGNhdIcBlgMDBGZpbGUoAAGcAwdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDhiKAABnAMMYXR0YWNobWVudElkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMmJkKAABnAMEbmFtZQF3CnJlcG9ydC5wZGYoAAGcAwRzaXplAX25wAEoAAGcAwRtaW1lAXcPYXBwbGljYXRpb24vcGRmhwGcAwMHZHJhd2luZygAAaIDB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwOGMoAAGiAwZoZWlnaHQBfbADhwGiAwMIcGFnZUNhcmQoAAGlAwdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDhkKAABpQMGbm90ZUlkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMzg1KAABpQMFc3R5bGUBdwRjYXJkhwGlAwMJcGFyYWdyYXBoKAABqQMHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA4ZSgBBG1ldGENZm9ybWF0VmVyc2lvbgF9ASgBBG1ldGEFc3R5bGUBdgQEZm9udHcFc2VyaWYFd2lkdGh3Bm5vcm1hbAVwYXBlcncEZG90cwl0ZXh0Q29sb3J-KAEEbWV0YQVjb3ZlcgF2AgxhdHRhY2htZW50SWR3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDJiZQdvZmZzZXRZez_TMzMzMzMzKAEEbWV0YQhiYWNrZHJvcAF-JwEHc3Ryb2tlcyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAxMmMBKAABrwMBdgF9ASgAAa8DBHRvb2wBdwNwZW4oAAGvAwVjb2xvcgF3CGluay5ibHVlKAABrwMFd2lkdGgBfD_AAAAoAAGvAwdvcGFjaXR5AX0BKAABrwMKYW5jaG9yS2luZAF3BHRleHQoAAGvAwdibG9ja0lkAX4oAAGvAwdhbmNob3JzAXUCdAQAARMAdAQAARcAIwABrwMGcG9pbnRzYAAAAAAAAAAAmpkZPpqZGT-amZk_AAAAPwAAAAAAAAAAAAAAAM3MzD6amRk-mpkZP5qZmT8AAAA_AAAAAAAAAEEAAIA_AAAAP5qZGT6amRk_mpmZPwAAAD8AAAAAAACAQSgAAa8DBGhpbnQBdwl1bmRlcmxpbmUoAAGvAwZhdXRob3IBdgIEa2luZHcEdXNlcgJpZHckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDBhKAABrwMJY3JlYXRlZEF0AXtCehcu6SAAACcBB3N0cm9rZXMkMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMTJkASgAAbwDAXYBfQEoAAG8AwR0b29sAXcGcGVuY2lsKAABvAMFY29sb3IBdwcjMzM2Njk5KAABvAMFd2lkdGgBfQIoAAG8AwdvcGFjaXR5AXs_6ZmZmZmZmigAAbwDCmFuY2hvcktpbmQBdwdkcmF3aW5nKAABvAMHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDA4YygAAbwDB2FuY2hvcnMBdQAjAAG8AwZwb2ludHNAAACAv83MzD2amRk-mpkZP5qZmT8AAAA_AAAAAAAAAAAAAIC_zcxMPpqZGT6amRk_mpmZPwAAAD8AAAAAAAAAQSgAAbwDBGhpbnQBdwRmcmVlKAABvAMGYXV0aG9yAXYCBGtpbmR3BHVzZXICaWR3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSgAAbwDCWNyZWF0ZWRBdAF7QnoXLukgEAAnAQhjb21tZW50cyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAxOTABKAAByQMCaWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAxOTAoAAHJAwdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDY1KAAByQMGYW5jaG9yAX4oAAHJAwZhdXRob3IBdgMEa2luZHcFYWdlbnQCaWR3B2FnZW50LTEEbmFtZXcJQXNzaXN0YW50KAAByQMEdGV4dAF3Ckxvb2tzIGdvb2QoAAHJAwljcmVhdGVkQXQBdxgyMDI2LTEwLTI1VDEyOjAwOjAwLjAwMFooAAHJAwpyZXNvbHZlZEF0AX4A",
+  "expected": {
+    "content": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "title",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-000000000064"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Reference note"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-000000000065"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Plain, "
+            },
+            {
+              "type": "text",
+              "text": "bold",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ", "
+            },
+            {
+              "type": "text",
+              "text": "italic",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ", "
+            },
+            {
+              "type": "text",
+              "text": "underline",
+              "marks": [
+                {
+                  "type": "underline"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ", "
+            },
+            {
+              "type": "text",
+              "text": "strike",
+              "marks": [
+                {
+                  "type": "strike"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ", "
+            },
+            {
+              "type": "text",
+              "text": "code",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ", "
+            },
+            {
+              "type": "text",
+              "text": "link",
+              "marks": [
+                {
+                  "type": "link",
+                  "attrs": {
+                    "href": "https://example.com"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ", "
+            },
+            {
+              "type": "text",
+              "text": "highlight",
+              "marks": [
+                {
+                  "type": "highlight",
+                  "attrs": {
+                    "color": "highlight.yellow"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ", "
+            },
+            {
+              "type": "text",
+              "text": "color",
+              "marks": [
+                {
+                  "type": "textColor",
+                  "attrs": {
+                    "color": "text.accent"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": ", "
+            },
+            {
+              "type": "text",
+              "text": "agent",
+              "marks": [
+                {
+                  "type": "agentEdit",
+                  "attrs": {
+                    "agentId": "agent-1",
+                    "at": "2026-10-25T12:00:00.000Z"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": " "
+            },
+            {
+              "type": "text",
+              "text": "bold+italic",
+              "marks": [
+                {
+                  "type": "bold"
+                },
+                {
+                  "type": "italic"
+                }
+              ]
+            },
+            {
+              "type": "hardBreak"
+            },
+            {
+              "type": "text",
+              "text": "Link to "
+            },
+            {
+              "type": "noteLink",
+              "attrs": {
+                "noteId": "0192f3c4-0000-7000-8000-000000000384",
+                "label": "Other note"
+              }
+            },
+            {
+              "type": "text",
+              "text": " with "
+            },
+            {
+              "type": "tag",
+              "attrs": {
+                "name": "project/alpha"
+              }
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-000000000066",
+            "level": 1
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Heading 1"
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-000000000067",
+            "level": 2
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Heading 2"
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-000000000068",
+            "level": 3
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Heading 3"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-000000000069",
+            "textAlign": "center"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Centered"
+            }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-00000000006a"
+          },
+          "content": [
+            {
+              "type": "listItem",
+              "attrs": {
+                "blockId": "0192f3c4-0000-7000-8000-00000000006b"
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "0192f3c4-0000-7000-8000-00000000006c"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Bullet"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "attrs": {
+                "blockId": "0192f3c4-0000-7000-8000-00000000006d"
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "0192f3c4-0000-7000-8000-00000000006e"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Bullet with child"
+                    }
+                  ]
+                },
+                {
+                  "type": "orderedList",
+                  "attrs": {
+                    "blockId": "0192f3c4-0000-7000-8000-00000000006f",
+                    "start": 3
+                  },
+                  "content": [
+                    {
+                      "type": "listItem",
+                      "attrs": {
+                        "blockId": "0192f3c4-0000-7000-8000-000000000070"
+                      },
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "attrs": {
+                            "blockId": "0192f3c4-0000-7000-8000-000000000071"
+                          },
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Third"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "taskList",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-000000000072"
+          },
+          "content": [
+            {
+              "type": "taskItem",
+              "attrs": {
+                "blockId": "0192f3c4-0000-7000-8000-000000000073",
+                "taskId": "0192f3c4-0000-7000-8000-0000000001f4",
+                "state": "open",
+                "scheduled": "2026-10-26",
+                "deadline": "2026-10-30"
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "0192f3c4-0000-7000-8000-000000000074"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Open task"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "taskItem",
+              "attrs": {
+                "blockId": "0192f3c4-0000-7000-8000-000000000075",
+                "taskId": "0192f3c4-0000-7000-8000-0000000001f5",
+                "state": "done",
+                "completedAt": "2026-10-25T12:00:00.000Z"
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "0192f3c4-0000-7000-8000-000000000076"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Done task"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "taskItem",
+              "attrs": {
+                "blockId": "0192f3c4-0000-7000-8000-000000000077",
+                "taskId": "0192f3c4-0000-7000-8000-0000000001f6",
+                "state": "cancelled"
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "blockId": "0192f3c4-0000-7000-8000-000000000078"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Cancelled task"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "blockquote",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-000000000079"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "blockId": "0192f3c4-0000-7000-8000-00000000007a"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Quote"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "callout",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-00000000007b",
+            "tone": "info",
+            "emoji": "💡"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "attrs": {
+                "blockId": "0192f3c4-0000-7000-8000-00000000007c"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Callout"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-00000000007d",
+            "language": "swift"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "let x = \"y\"\nprint(x)"
+            }
+          ]
+        },
+        {
+          "type": "mathBlock",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-00000000007e",
+            "latex": "e^{i\\pi} + 1 = 0"
+          }
+        },
+        {
+          "type": "mermaid",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-00000000007f",
+            "source": "graph TD; A-->B"
+          }
+        },
+        {
+          "type": "horizontalRule",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-000000000080",
+            "style": "dots"
+          }
+        },
+        {
+          "type": "table",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-000000000081"
+          },
+          "content": [
+            {
+              "type": "tableRow",
+              "attrs": {
+                "blockId": "0192f3c4-0000-7000-8000-000000000082"
+              },
+              "content": [
+                {
+                  "type": "tableHeader",
+                  "attrs": {
+                    "blockId": "0192f3c4-0000-7000-8000-000000000083",
+                    "colspan": 1,
+                    "rowspan": 1,
+                    "colwidth": [
+                      120
+                    ]
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "blockId": "0192f3c4-0000-7000-8000-000000000084"
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "H1"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableHeader",
+                  "attrs": {
+                    "blockId": "0192f3c4-0000-7000-8000-000000000085",
+                    "colspan": 1,
+                    "rowspan": 1
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "blockId": "0192f3c4-0000-7000-8000-000000000086"
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "H2"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableRow",
+              "attrs": {
+                "blockId": "0192f3c4-0000-7000-8000-000000000087"
+              },
+              "content": [
+                {
+                  "type": "tableCell",
+                  "attrs": {
+                    "blockId": "0192f3c4-0000-7000-8000-000000000088",
+                    "colspan": 2,
+                    "rowspan": 1
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "blockId": "0192f3c4-0000-7000-8000-000000000089"
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Wide cell"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "image",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-00000000008a",
+            "attachmentId": "0192f3c4-0000-7000-8000-0000000002bc",
+            "width": 0.5,
+            "alt": "Cat",
+            "caption": "A cat"
+          }
+        },
+        {
+          "type": "file",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-00000000008b",
+            "attachmentId": "0192f3c4-0000-7000-8000-0000000002bd",
+            "name": "report.pdf",
+            "size": 12345,
+            "mime": "application/pdf"
+          }
+        },
+        {
+          "type": "drawing",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-00000000008c",
+            "height": 240
+          }
+        },
+        {
+          "type": "pageCard",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-00000000008d",
+            "noteId": "0192f3c4-0000-7000-8000-000000000385",
+            "style": "card"
+          }
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "blockId": "0192f3c4-0000-7000-8000-00000000008e"
+          }
+        }
+      ]
+    },
+    "meta": {
+      "formatVersion": 1,
+      "style": {
+        "font": "serif",
+        "width": "normal",
+        "paper": "dots",
+        "textColor": null
+      },
+      "cover": {
+        "attachmentId": "0192f3c4-0000-7000-8000-0000000002be",
+        "offsetY": 0.3
+      },
+      "backdrop": null
+    },
+    "strokes": {
+      "0192f3c4-0000-7000-8000-00000000012c": {
+        "v": 1,
+        "tool": "pen",
+        "color": "ink.blue",
+        "width": 1.5,
+        "opacity": 1,
+        "anchorKind": "text",
+        "blockId": null,
+        "anchors": [
+          "AAETAA",
+          "AAEXAA"
+        ],
+        "points": "AAAAAAAAAACamRk-mpkZP5qZmT8AAAA_AAAAAAAAAAAAAAAAzczMPpqZGT6amRk_mpmZPwAAAD8AAAAAAAAAQQAAgD8AAAA_mpkZPpqZGT-amZk_AAAAPwAAAAAAAIBB",
+        "hint": "underline",
+        "author": {
+          "kind": "user",
+          "id": "0192f3c4-0000-7000-8000-00000000000a"
+        },
+        "createdAt": 1792929600000
+      },
+      "0192f3c4-0000-7000-8000-00000000012d": {
+        "v": 1,
+        "tool": "pencil",
+        "color": "#336699",
+        "width": 2,
+        "opacity": 0.8,
+        "anchorKind": "drawing",
+        "blockId": "0192f3c4-0000-7000-8000-00000000008c",
+        "anchors": [],
+        "points": "AACAv83MzD2amRk-mpkZP5qZmT8AAAA_AAAAAAAAAAAAAIC_zcxMPpqZGT6amRk_mpmZPwAAAD8AAAAAAAAAQQ",
+        "hint": "free",
+        "author": {
+          "kind": "user",
+          "id": "0192f3c4-0000-7000-8000-00000000000a"
+        },
+        "createdAt": 1792929600001
+      }
+    },
+    "comments": {
+      "0192f3c4-0000-7000-8000-000000000190": {
+        "id": "0192f3c4-0000-7000-8000-000000000190",
+        "blockId": "0192f3c4-0000-7000-8000-000000000065",
+        "anchor": null,
+        "author": {
+          "kind": "agent",
+          "id": "agent-1",
+          "name": "Assistant"
+        },
+        "text": "Looks good",
+        "createdAt": "2026-10-25T12:00:00.000Z",
+        "resolvedAt": null
+      }
+    },
+    "derived": {
+      "title": "Reference note",
+      "plainText": "Reference note\nPlain, bold, italic, underline, strike, code, link, highlight, color, agent bold+italic\nLink to Other note with #project/alpha\nHeading 1\nHeading 2\nHeading 3\nCentered\nBullet\nBullet with child\nThird\nOpen task\nDone task\nCancelled task\nQuote\nCallout\nlet x = \"y\"\nprint(x)\ne^{i\\pi} + 1 = 0\ngraph TD; A-->B\nH1\nH2\nWide cell\nCat A cat\nreport.pdf",
+      "tasks": [
+        {
+          "noteId": "0192f3c4-0000-7000-8000-000000000001",
+          "taskId": "0192f3c4-0000-7000-8000-0000000001f4",
+          "blockId": "0192f3c4-0000-7000-8000-000000000073",
+          "text": "Open task",
+          "state": "open",
+          "scheduled": "2026-10-26",
+          "deadline": "2026-10-30"
+        },
+        {
+          "noteId": "0192f3c4-0000-7000-8000-000000000001",
+          "taskId": "0192f3c4-0000-7000-8000-0000000001f5",
+          "blockId": "0192f3c4-0000-7000-8000-000000000075",
+          "text": "Done task",
+          "state": "done",
+          "scheduled": null,
+          "deadline": null
+        },
+        {
+          "noteId": "0192f3c4-0000-7000-8000-000000000001",
+          "taskId": "0192f3c4-0000-7000-8000-0000000001f6",
+          "blockId": "0192f3c4-0000-7000-8000-000000000077",
+          "text": "Cancelled task",
+          "state": "cancelled",
+          "scheduled": null,
+          "deadline": null
+        }
+      ],
+      "links": [
+        {
+          "fromNoteId": "0192f3c4-0000-7000-8000-000000000001",
+          "toNoteId": "0192f3c4-0000-7000-8000-000000000384",
+          "blockId": "0192f3c4-0000-7000-8000-000000000065",
+          "label": "Other note"
+        },
+        {
+          "fromNoteId": "0192f3c4-0000-7000-8000-000000000001",
+          "toNoteId": "0192f3c4-0000-7000-8000-000000000385",
+          "blockId": "0192f3c4-0000-7000-8000-00000000008d",
+          "label": ""
+        }
+      ],
+      "tags": [
+        "project/alpha"
+      ],
+      "markdown": "# Reference note\n\nPlain, **bold**, *italic*, <u>underline</u>, ~~strike~~, `code`, [link](https://example.com), ==highlight==, color, agent ***bold+italic***\\\nLink to [[Other note]] with #project/alpha\n\n![Рукописная заметка](handwriting:0192f3c4-0000-7000-8000-000000000065)\n\n## Heading 1\n\n### Heading 2\n\n#### Heading 3\n\nCentered\n\n- Bullet\n- Bullet with child\n  3. Third\n\n- [ ] Open task ⏳ 2026-10-26 📅 2026-10-30\n- [x] Done task\n- [-] Cancelled task\n\n> Quote\n\n> [!info] 💡\n> Callout\n\n```swift\nlet x = \"y\"\nprint(x)\n```\n\n$$\ne^{i\\pi} + 1 = 0\n$$\n\n```mermaid\ngraph TD; A-->B\n```\n\n---\n\n| H1 | H2 |\n| --- | --- |\n| Wide cell |  |\n\n![Cat](attachment:0192f3c4-0000-7000-8000-0000000002bc)\n*A cat*\n\n[report.pdf](attachment:0192f3c4-0000-7000-8000-0000000002bd)\n\n![Рисунок](handwriting:0192f3c4-0000-7000-8000-00000000008c)\n\n[[note:0192f3c4-0000-7000-8000-000000000385]]\n"
+    }
+  }
+}

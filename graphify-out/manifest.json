@@ -1046,13 +1046,13 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792963916.1060698,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792963916.1060739,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -4010,7 +4010,7 @@
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792963916.1060762,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
@@ -4080,9 +4080,9 @@
     "semantic_hash": "f886ae374ff4c68631281333e089e7bc"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1792963335.7644556,
-    "seen": 1792963393.8360758,
-    "ast_hash": "aa9b00c6347a2d4f2577de10e95721c2",
+    "mtime": 1792964004.5046353,
+    "seen": 1792964072.5033123,
+    "ast_hash": "09a9e01b4f19327ae92238aacc04421f",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
@@ -4098,10 +4098,10 @@
     "semantic_hash": "e88e343d62997e44734ee38cddeb85d8"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/Attachments.swift": {
-    "mtime": 1792930789.8289714,
-    "seen": 1792949276.9564908,
-    "ast_hash": "13f22bfd6714cc585266129b5b9df26a",
-    "semantic_hash": "13f22bfd6714cc585266129b5b9df26a"
+    "mtime": 1792964004.4661517,
+    "seen": 1792964072.5033772,
+    "ast_hash": "1bc1bd983d4a9d45e6e54e791c29c283",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/AttributedRenderer.swift": {
     "mtime": 1792958005.1897166,
@@ -4134,10 +4134,10 @@
     "semantic_hash": "1220edb00356bcd36a3a53e063fdaa63"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1792962139.2758138,
-    "seen": 1792962245.0057833,
-    "ast_hash": "abb82ca908df94bcb776056184c5aa9f",
-    "semantic_hash": "abb82ca908df94bcb776056184c5aa9f"
+    "mtime": 1792964009.7697213,
+    "seen": 1792964072.503612,
+    "ast_hash": "969f199c3a9cd93cb7d7720101855f39",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormulaViews.swift": {
     "mtime": 1792929059.610677,

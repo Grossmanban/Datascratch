@@ -193,6 +193,41 @@ final class EditorViewTests: XCTestCase {
         XCTAssertFalse(editor.ink.frameRate.isActive)
     }
 
+    func testHeaderScrollsWithTextAndMovesInk() {
+        let p = BlockNode.paragraph("Hello brave new world")
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), p])
+        let editor = host(doc)
+        let s = underline(editor, range: flatRange(editor, of: "brave"))
+        let before = editor.ink.resolved[s.id]!.first!.first!.location
+
+        let header = UIView()
+        let label = UILabel()
+        label.text = "Cover"
+        label.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: header.topAnchor),
+            label.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            label.bottomAnchor.constraint(equalTo: header.bottomAnchor),
+            label.heightAnchor.constraint(equalToConstant: 120),
+        ])
+        editor.headerView = header
+        settle(editor)
+
+        XCTAssertEqual(editor.headerHeight, 120)
+        XCTAssertTrue(header.isDescendant(of: editor.textView), "header scrolls with the text")
+        XCTAssertEqual(header.frame, CGRect(x: 0, y: 0, width: editor.bounds.width, height: 120))
+        XCTAssertEqual(editor.textView.textContainerInset.top, 152)
+        let after = editor.ink.resolved[s.id]!.first!.first!.location
+        XCTAssertEqual(after.y - before.y, 120, accuracy: 0.5, "ink stays on its word below the header")
+        XCTAssertEqual(after.x, before.x, accuracy: 0.5)
+
+        editor.headerView = nil
+        settle(editor)
+        XCTAssertEqual(editor.headerHeight, 0)
+        XCTAssertNil(header.superview)
+    }
+
     func testOpenLargeNote() {
         let doc = SampleDocument.large()
         let start = CACurrentMediaTime()

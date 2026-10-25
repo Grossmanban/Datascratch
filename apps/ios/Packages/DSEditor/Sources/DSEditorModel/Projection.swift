@@ -111,6 +111,18 @@ public struct Projection: Sendable {
         return TextPosition(block: paragraphs[i].blockId, offset: o)
     }
 
+    /// Updates the inline content of one text paragraph after typing (keeps the rest as is).
+    public mutating func replaceContent(ofParagraph i: Int, inline: [InlineElement]) {
+        guard paragraphs.indices.contains(i) else { return }
+        let newLength = inline.reduce(0) { $0 + $1.length }
+        let delta = newLength - paragraphs[i].length
+        paragraphs[i].inline = inline
+        paragraphs[i].length = newLength
+        if delta != 0 {
+            for j in (i + 1)..<starts.count { starts[j] += delta }
+        }
+    }
+
     // MARK: Building
 
     public static func build(_ blocks: [BlockNode]) -> Projection {

@@ -68,8 +68,7 @@ function DocScreen({ noteId }: { noteId: string }) {
     noteId,
     doc,
     user,
-    () => runtime().store.keyFor(noteId),
-    (payload) => runtime().engine.sendAwareness(noteId, payload),
+    (update) => runtime().sendAwareness(noteId, update),
   );
 
   // Count local edits; upload a version snapshot when leaving a document we changed a lot.
@@ -81,7 +80,7 @@ function DocScreen({ noteId }: { noteId: string }) {
     doc.on("update", onUpdate);
     return () => {
       doc.off("update", onUpdate);
-      if (edits.current >= 30) void runtime().store.maybeSnapshot(noteId, 30);
+      if (edits.current >= 30) runtime().requestSnapshot(noteId);
     };
   }, [doc, noteId]);
 

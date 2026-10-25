@@ -45,9 +45,9 @@ export const DateChip = forwardRef<HTMLButtonElement, DateChipProps>(function Da
   const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   if (!onClick) {
     return (
-      <span className={cls} data-tone={tone}>
-        <time dateTime={iso}>{content}</time>
-      </span>
+      <time dateTime={iso} className={cls} data-tone={tone}>
+        {content}
+      </time>
     );
   }
   return (

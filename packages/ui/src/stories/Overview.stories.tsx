@@ -82,7 +82,7 @@ export const Showcase: Story = () => {
   const [selected, setSelected] = useState("all");
   const { toast } = useToast();
   return (
-    <div className="-m-8 flex h-[860px] overflow-hidden">
+    <div className="fixed inset-0 z-0 flex overflow-hidden bg-canvas">
       <Sidebar>
         <div className="flex items-center gap-2 px-2 pb-1">
           <span className="grid size-6 place-items-center rounded-md bg-fg font-display text-callout text-canvas">D</span>
@@ -179,7 +179,7 @@ export const Showcase: Story = () => {
           </section>
         </div>
 
-        <GlassPanel shape="pill" className="fixed bottom-6 left-[calc(50%+132px)] flex -translate-x-1/2 items-center gap-0.5">
+        <GlassPanel shape="pill" className="fixed bottom-6 left-[calc(50%+132px)] z-10 flex -translate-x-1/2 items-center gap-0.5">
           <IconButton size="md" shape="round" label="Перо" icon={<PenLine />} active />
           <IconButton size="md" shape="round" label="Маркер" icon={<Highlighter />} />
           <span className="mx-1 h-5 w-px bg-separator" />

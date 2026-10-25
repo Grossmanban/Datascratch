@@ -58,6 +58,11 @@ final class EditorDemoUITests: XCTestCase {
     }
 
     @MainActor
+    func testTypingBisectOverlayLayout() throws {
+        try typing(extraArguments: ["-overlayPalette"])
+    }
+
+    @MainActor
     func testTypingBisectNeither() throws {
         try typing(extraArguments: ["-noScrollTracking", "-noSelectedTraits"])
     }

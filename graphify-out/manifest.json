@@ -1046,13 +1046,13 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792959021.675939,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792959021.6759439,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -4010,7 +4010,7 @@
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792959021.6759465,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
@@ -4056,15 +4056,15 @@
     "semantic_hash": "606014230fa9f49aa15d818595778a2c"
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoModel.swift": {
-    "mtime": 1792955009.9802282,
-    "seen": 1792955079.8268256,
-    "ast_hash": "2c9f29e278e58d37bdfa01b08c6d221d",
+    "mtime": 1792959877.5473099,
+    "seen": 1792959937.156068,
+    "ast_hash": "6bd239ad24992c3b851dd3bea4be9452",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoView.swift": {
-    "mtime": 1792958925.4577253,
-    "seen": 1792958999.7777197,
-    "ast_hash": "19ed03f9ed4b67e49f837d1932e4a4d9",
+    "mtime": 1792959877.5482771,
+    "seen": 1792959937.1560724,
+    "ast_hash": "38a9062fd9db346c8f8549d2f3c8f845",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/EditorDemoApp.swift": {
@@ -4074,9 +4074,9 @@
     "semantic_hash": "a0f80305c431ac4070e7ebc1b3465b42"
   },
   "apps/ios/Packages/DSEditor/Demo/UITests/EditorDemoUITests.swift": {
-    "mtime": 1792955009.9814827,
-    "seen": 1792955079.8268821,
-    "ast_hash": "dc24f8cc14cf64b8e290b64b1076c9b4",
+    "mtime": 1792959877.5492384,
+    "seen": 1792959937.1561096,
+    "ast_hash": "f886ae374ff4c68631281333e089e7bc",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {

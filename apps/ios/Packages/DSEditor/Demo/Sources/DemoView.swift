@@ -10,13 +10,22 @@ struct DemoView: View {
                 // The editor ends above the palette (as in the app): extended under it, the editor's
                 // recognizers saw the palette's touches. The palette sits in the bottom safe area,
                 // so it rides up with the keyboard in one layout pass.
-                EditorRepresentable(editor: model.editor)
-                    .accessibilityIdentifier("editor")
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        ToolPalette(model: model)
-                            .padding(.top, 8)
-                            .padding(.bottom, 12)
-                    }
+                if model.overlayPalette {
+                    // Bisection (temporary): the earlier layout, palette over the editor.
+                    EditorRepresentable(editor: model.editor)
+                        .ignoresSafeArea(.container, edges: .bottom)
+                        .accessibilityIdentifier("editor")
+                    ToolPalette(model: model)
+                        .padding(.bottom, 12)
+                } else {
+                    EditorRepresentable(editor: model.editor)
+                        .accessibilityIdentifier("editor")
+                        .safeAreaInset(edge: .bottom, spacing: 0) {
+                            ToolPalette(model: model)
+                                .padding(.top, 8)
+                                .padding(.bottom, 12)
+                        }
+                }
                 if model.showHUD {
                     HUDView(model: model)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)

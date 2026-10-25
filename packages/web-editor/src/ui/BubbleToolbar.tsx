@@ -26,8 +26,10 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
   const [, force] = useState(0);
   useEffect(() => {
     let pointerDown = false;
+    // The editor can be destroyed (remount) before this effect is cleaned up; keep the node we used.
+    const dom = editor.view.dom;
     const update = () => {
-      if (pointerDown) return;
+      if (pointerDown || editor.isDestroyed) return;
       setRect(selectionRect(editor));
       force((n) => n + 1);
     };
@@ -39,12 +41,12 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
       pointerDown = false;
       requestAnimationFrame(update);
     };
-    const onBlur = () => setTimeout(() => !editor.isFocused && setRect(null), 120);
+    const onBlur = () => setTimeout(() => (editor.isDestroyed || !editor.isFocused) && setRect(null), 120);
     editor.on("selectionUpdate", update);
     editor.on("transaction", update);
     editor.on("focus", update);
     editor.on("blur", onBlur);
-    editor.view.dom.addEventListener("pointerdown", onDown);
+    dom.addEventListener("pointerdown", onDown);
     document.addEventListener("pointerup", onUp);
     window.addEventListener("scroll", update, true);
     return () => {
@@ -52,7 +54,7 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
       editor.off("transaction", update);
       editor.off("focus", update);
       editor.off("blur", onBlur);
-      editor.view.dom.removeEventListener("pointerdown", onDown);
+      dom.removeEventListener("pointerdown", onDown);
       document.removeEventListener("pointerup", onUp);
       window.removeEventListener("scroll", update, true);
     };

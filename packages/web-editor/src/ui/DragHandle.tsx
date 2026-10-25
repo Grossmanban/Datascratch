@@ -36,10 +36,11 @@ export function DragHandle({ editor, root }: { editor: Editor; root: HTMLElement
   useEffect(() => {
     let frame = 0;
     const onMove = (e: PointerEvent) => {
-      if (e.pointerType === "pen" || !editor.isEditable) return;
+      if (e.pointerType === "pen" || editor.isDestroyed || !editor.isEditable) return;
       if (handleRef.current?.contains(e.target as Node)) return;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
+        if (editor.isDestroyed) return;
         const dom = editor.view.dom;
         const r = dom.getBoundingClientRect();
         const style = getComputedStyle(dom);
@@ -71,7 +72,7 @@ export function DragHandle({ editor, root }: { editor: Editor; root: HTMLElement
     };
   }, [editor, root]);
 
-  if (!target && !menu) return null;
+  if ((!target && !menu) || editor.isDestroyed) return null;
   const rootRect = root.getBoundingClientRect();
   const t = target;
   const lineHeight = t ? Math.min(t.rect.height, parseFloat(getComputedStyle(editor.view.dom).fontSize) * 1.5) : 0;

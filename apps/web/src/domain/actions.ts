@@ -505,11 +505,7 @@ export async function bootstrapAccount(labels: { space: string; notebook: string
   const nb = await createNotebook({ spaceId, name: labels.notebook, icon: "📓", color: "tint.blue" });
   acc().settings.set("dailyNotebookId", nb);
   await createNote({ notebookId: nb, title: labels.welcomeTitle, body: labels.welcomeBody });
-  await enqueueOp({
-    method: "POST",
-    path: "/docs",
-    body: { docId: runtime().accountDocId, kind: "account", notebookId: null },
-  });
+  // The account document is registered by the server at signup (api.md): nothing to send.
 }
 
 export function hasNoteKey(noteId: string) {

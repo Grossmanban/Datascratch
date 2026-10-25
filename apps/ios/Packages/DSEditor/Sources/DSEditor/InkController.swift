@@ -23,6 +23,8 @@ final class InkController {
     private(set) var renderedStrokeCount = 0
     /// Outlines computed so far (cache misses), for tests and the demo HUD.
     private(set) var outlinesBuilt = 0
+    /// Current outline of a drawn stroke (tests).
+    func renderedPath(of id: String) -> CGPath? { renderedById[id]?.path }
 
     private enum Target {
         case text(scale: CGFloat)

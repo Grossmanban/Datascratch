@@ -67,8 +67,7 @@ final class InkInputRecognizer: UIGestureRecognizer {
                 if samples.count > 1 { onMoved?(Array(samples.dropFirst()), []) }
                 state = .began
             }
-            // Untracked touches are simply not followed. (Calling `ignore(_:for:)` here made UIKit's
-            // gesture environment throw while delaying touches for other recognizers.)
+            // Untracked touches are simply not followed (see `failIfIdle`).
         }
     }
 
@@ -81,7 +80,10 @@ final class InkInputRecognizer: UIGestureRecognizer {
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
-        guard let t = tracked, touches.contains(t) else { return }
+        guard let t = tracked, touches.contains(t) else {
+            failIfIdle(event)
+            return
+        }
         let committed = (event.coalescedTouches(for: t) ?? [t]).map(sample)
         onMoved?(committed, [])
         onEnded?(false)
@@ -89,7 +91,10 @@ final class InkInputRecognizer: UIGestureRecognizer {
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
-        guard let t = tracked, touches.contains(t) else { return }
+        guard let t = tracked, touches.contains(t) else {
+            failIfIdle(event)
+            return
+        }
         onEnded?(true)
         state = .cancelled
     }
@@ -100,6 +105,16 @@ final class InkInputRecognizer: UIGestureRecognizer {
             s.estimationIndex = t.estimationUpdateIndex
             onEstimatedUpdate?(s)
         }
+    }
+
+    /// Touches the pen does not draw with are received but not followed; once the last of them
+    /// lifts the recognizer fails so it resets. (Declining them instead, with `ignore(_:for:)` or
+    /// `shouldReceive` returning false, crashed UIKit's gesture environment when another
+    /// recognizer was delaying the same touch, e.g. a SwiftUI button over the editor.)
+    private func failIfIdle(_ event: UIEvent) {
+        guard tracked == nil, state == .possible else { return }
+        let active = event.allTouches?.contains { $0.phase != .ended && $0.phase != .cancelled } ?? false
+        if !active { state = .failed }
     }
 
     override func reset() {

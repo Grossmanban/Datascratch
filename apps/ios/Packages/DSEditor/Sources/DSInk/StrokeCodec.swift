@@ -48,12 +48,20 @@ public enum StrokePointCodec {
 public enum UUIDv7 {
     public static func generate(now: Date = Date()) -> String {
         let ms = UInt64(max(0, now.timeIntervalSince1970 * 1000))
+        var rng = SystemRandomNumberGenerator()
+        return make(unixMs: ms, random: (0..<10).map { _ in UInt8.random(in: 0...255, using: &rng) })
+    }
+
+    /// Deterministic layout: bytes 0..5 = ms big-endian, 6 = 0x70 | r[0]&0x0f, 7 = r[1],
+    /// 8 = 0x80 | r[2]&0x3f, 9..15 = r[3..9].
+    public static func make(unixMs ms: UInt64, random r: [UInt8]) -> String {
+        precondition(r.count >= 10)
         var bytes = [UInt8](repeating: 0, count: 16)
         for i in 0..<6 { bytes[i] = UInt8((ms >> (8 * UInt64(5 - i))) & 0xff) }
-        var rng = SystemRandomNumberGenerator()
-        for i in 6..<16 { bytes[i] = UInt8.random(in: 0...255, using: &rng) }
-        bytes[6] = (bytes[6] & 0x0f) | 0x70
-        bytes[8] = (bytes[8] & 0x3f) | 0x80
+        bytes[6] = 0x70 | (r[0] & 0x0f)
+        bytes[7] = r[1]
+        bytes[8] = 0x80 | (r[2] & 0x3f)
+        for i in 0..<7 { bytes[9 + i] = r[3 + i] }
         let hex = bytes.map { String(format: "%02x", $0) }.joined()
         let c = Array(hex)
         return String(c[0..<8]) + "-" + String(c[8..<12]) + "-" + String(c[12..<16]) + "-"

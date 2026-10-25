@@ -99,6 +99,7 @@ public final class InMemoryEditorDocument: EditorDocument {
         case attrs(Node, old: [String: JSONValue], new: [String: JSONValue])
         case addStroke(Stroke)
         case removeStroke(Stroke)
+        case strokeAnchors(id: String, old: [Data], new: [Data])
         case style(old: DocumentStyle, new: DocumentStyle)
     }
 
@@ -292,6 +293,16 @@ public final class InMemoryEditorDocument: EditorDocument {
             dropStroke(id)
             record(.removeStroke(s))
             txChange.strokesRemoved.insert(id)
+        }
+    }
+
+    public func setStrokeAnchors(_ id: String, _ anchors: [Data]) {
+        guard var s = strokeMap[id], s.anchors != anchors else { return }
+        transact(origin: txDepth > 0 ? txOrigin : .local) {
+            record(.strokeAnchors(id: id, old: s.anchors, new: anchors))
+            s.anchors = anchors
+            strokeMap[id] = s
+            txChange.strokesAdded.insert(id)
         }
     }
 
@@ -512,6 +523,12 @@ public final class InMemoryEditorDocument: EditorDocument {
             } else {
                 dropStroke(s.id)
                 txChange.strokesRemoved.insert(s.id)
+            }
+        case .strokeAnchors(let id, let old, let new):
+            if var s = strokeMap[id] {
+                s.anchors = inverse ? old : new
+                strokeMap[id] = s
+                txChange.strokesAdded.insert(id)
             }
         case .style(let old, let new):
             currentStyle = inverse ? old : new

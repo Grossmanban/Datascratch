@@ -1,13 +1,15 @@
 import Foundation
 
-/// Inline marks as y-prosemirror stores them: formatting attributes on text,
-/// `name -> true` for marks without attributes, `name -> {attrs}` otherwise (`document-model.md` §4.1).
+/// Inline marks as y-prosemirror stores them: formatting attributes on text, `name -> {attrs}`
+/// (`{}` for marks without attributes; readers also accept `true`) — `document-model.md` §4.1.
 public struct MarkSet: Hashable, Sendable, Codable {
     public private(set) var values: [String: JSONValue]
 
     public init(_ values: [String: JSONValue] = [:]) { self.values = values }
 
     public static let empty = MarkSet()
+    /// Value written for marks without attributes.
+    public static let plain: JSONValue = .object([:])
 
     public func contains(_ name: String) -> Bool { values[name] != nil }
     public subscript(name: String) -> JSONValue? { values[name] }

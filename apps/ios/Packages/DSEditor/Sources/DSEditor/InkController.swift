@@ -400,12 +400,12 @@ final class InkController {
             onTextChangedByGesture?(caret)
         case .underline:
             document.stopCapturing()
-            cmd.setMark(MarkName.underline, value: .bool(true), range: range)
+            cmd.setMark(MarkName.underline, value: MarkSet.plain, range: range)
             document.stopCapturing()
             onTextChangedByGesture?(nil)
         case .strike:
             document.stopCapturing()
-            cmd.setMark(MarkName.strike, value: .bool(true), range: range)
+            cmd.setMark(MarkName.strike, value: MarkSet.plain, range: range)
             document.stopCapturing()
             onTextChangedByGesture?(nil)
         default:

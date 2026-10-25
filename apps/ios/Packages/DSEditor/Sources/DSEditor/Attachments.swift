@@ -129,7 +129,8 @@ final class BlockAttachmentViewProvider: NSTextAttachmentViewProvider {
     override func loadView() {
         guard let attachment = textAttachment as? BlockAttachment else { return }
         let node = attachment.node
-        let made: UIView? = MainActor.assumeIsolated { attachment.factory?.makeView(for: node) }
+        let factory = attachment.factory
+        let made: UIView? = MainActor.assumeIsolated { factory?.makeView(for: node) }
         view = made
     }
 
@@ -138,7 +139,8 @@ final class BlockAttachmentViewProvider: NSTextAttachmentViewProvider {
         guard let attachment = textAttachment as? BlockAttachment else { return .zero }
         let width = max(40, proposedLineFragment.width - 4)
         let node = attachment.node
-        let height: CGFloat = MainActor.assumeIsolated { attachment.factory?.height(for: node, width: width) ?? 48 }
+        let factory = attachment.factory
+        let height: CGFloat = MainActor.assumeIsolated { factory?.height(for: node, width: width) ?? 48 }
         return CGRect(x: 0, y: 0, width: width, height: height)
     }
 }

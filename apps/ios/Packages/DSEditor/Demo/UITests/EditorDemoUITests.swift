@@ -49,7 +49,9 @@ final class EditorDemoUITests: XCTestCase {
         app.buttons["tool.text"].tap()
         let editor = app.textViews["editor.text"]
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
-        editor.tap()
+        // Tap into the first body paragraph (not on a block attachment).
+        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        sleep(1)
         editor.typeText("Привет")
         XCTAssertTrue((editor.value as? String ?? "").contains("Привет"))
         app.buttons["undo"].tap()

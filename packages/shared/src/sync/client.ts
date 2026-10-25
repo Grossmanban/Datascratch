@@ -76,7 +76,9 @@ export interface SyncClientOptions {
   /** Sync cursors are written to storage in batches at most this often. Default 200 ms. */
   stateFlushMs?: number;
   snapshotThresholds?: { updates?: number; bytes?: number };
-  /** Hook before a compaction snapshot (e.g. purge orphaned strokes, D-35). */
+  /** Required for addStoredDocs / closeDoc. */
+  storedDocs?: StoredDocsHandler;
+  /** Hook before a compaction snapshot of a live document (e.g. purge orphaned strokes, D-35). */
   beforeSnapshot?: (docId: string, doc: Y.Doc) => void;
   /** Consecutive auth failures before giving up (status "unauthorized"). Default 3. */
   maxAuthFailures?: number;
@@ -91,8 +93,26 @@ interface Listeners {
   remoteUpdate: (docId: string, update: Uint8Array) => void;
 }
 
+/**
+ * Documents kept in the app's storage instead of a live Y.Doc ("stored" mode,
+ * e.g. every note except the open ones). Remote updates are handed to the app,
+ * which merges them into its saved state (`Y.mergeUpdates`) — no Y.Doc needed.
+ */
+export interface StoredDocsHandler {
+  /**
+   * Remote updates of a stored document, in order. Persist them (merged into
+   * the saved state) before resolving: the sync cursor advances afterwards.
+   */
+  onUpdates(docId: string, updates: Uint8Array[]): void | Promise<void>;
+  /** Saved state of a stored document (for compaction snapshots); null if none. */
+  loadState(docId: string): Uint8Array | null | Promise<Uint8Array | null>;
+}
+
 interface DocEntry {
-  doc: Y.Doc;
+  /** null = stored mode (no Y.Doc in memory). */
+  doc: Y.Doc | null;
+  /** Remote updates of a stored document not yet handed to the app. */
+  stored: Uint8Array[];
   state: DocSyncState;
   synced: boolean;
   pending: Uint8Array[];
@@ -104,7 +124,10 @@ interface DocEntry {
 
 export class SyncClient {
   private readonly opts: Required<
-    Omit<SyncClientOptions, "beforeSnapshot" | "createSocket" | "backoff" | "snapshotThresholds">
+    Omit<
+      SyncClientOptions,
+      "beforeSnapshot" | "createSocket" | "backoff" | "snapshotThresholds" | "storedDocs"
+    >
   > &
     SyncClientOptions;
   private readonly docs = new Map<string, DocEntry>();
@@ -200,6 +223,72 @@ export class SyncClient {
    * read of their cursors and one `subscribe` message.
    */
   async addDocs(list: { docId: string; doc: Y.Doc }[]): Promise<void> {
+    await this.register(list);
+  }
+
+  /**
+   * Start syncing documents in stored mode: no Y.Doc in memory, remote
+   * updates go to `storedDocs.onUpdates`. Open one with openDoc() when the
+   * user opens it. Requires the `storedDocs` option.
+   */
+  async addStoredDocs(docIds: string[]): Promise<void> {
+    if (!this.opts.storedDocs) throw new Error("addStoredDocs needs the storedDocs option");
+    await this.register(docIds.map((docId) => ({ docId, doc: null })));
+  }
+
+  /**
+   * Switch a stored document to a live Y.Doc. `load` builds the Y.Doc from the
+   * saved state; it runs while no sync message is being processed, so no
+   * remote update can slip between the saved state and the live document.
+   */
+  async openDoc(docId: string, load: () => Y.Doc | Promise<Y.Doc>): Promise<Y.Doc> {
+    const entry = this.docs.get(docId);
+    if (!entry) throw new Error(`document ${docId} is not synced`);
+    return this.serial(async () => {
+      if (entry.doc) return entry.doc;
+      await this.flushStored(docId, entry);
+      const doc = await load();
+      this.attach(docId, entry, doc);
+      return doc;
+    });
+  }
+
+  /**
+   * Switch a live document back to stored mode. Local edits are queued first;
+   * `save` persists the Y.Doc's final state and runs before any later remote
+   * update is handed to `storedDocs.onUpdates`, so nothing can be overwritten.
+   */
+  async closeDoc(docId: string, save: (doc: Y.Doc) => void | Promise<void>): Promise<void> {
+    if (!this.opts.storedDocs) throw new Error("closeDoc needs the storedDocs option");
+    const entry = this.docs.get(docId);
+    if (!entry?.doc) return;
+    await this.flushPending(docId, entry);
+    await this.serial(async () => {
+      if (!entry.doc) return;
+      entry.detach();
+      // Edits made after the flush above but before detaching.
+      await this.enqueuePending(docId, entry);
+      await save(entry.doc);
+      entry.doc = null;
+      entry.detach = () => {};
+    });
+  }
+
+  isLive(docId: string): boolean {
+    return this.docs.get(docId)?.doc != null;
+  }
+
+  private attach(docId: string, entry: DocEntry, doc: Y.Doc): void {
+    const handler = (update: Uint8Array, origin: unknown) => {
+      if (origin === REMOTE_ORIGIN) return;
+      this.queueLocalUpdate(docId, update);
+    };
+    doc.on("update", handler);
+    entry.doc = doc;
+    entry.detach = () => doc.off("update", handler);
+  }
+
+  private async register(list: { docId: string; doc: Y.Doc | null }[]): Promise<void> {
     for (const { docId } of list) {
       if (this.docs.has(docId)) throw new Error(`document ${docId} is already synced`);
     }
@@ -213,21 +302,19 @@ export class SyncClient {
           ).filter((e): e is readonly [string, DocSyncState] => e[1] !== null),
         );
     for (const { docId, doc } of list) {
-      const handler = (update: Uint8Array, origin: unknown) => {
-        if (origin === REMOTE_ORIGIN) return;
-        this.queueLocalUpdate(docId, update);
-      };
-      doc.on("update", handler);
-      this.docs.set(docId, {
-        doc,
+      const entry: DocEntry = {
+        doc: null,
+        stored: [],
         state: states.get(docId) ?? { ...EMPTY_DOC_STATE },
         synced: false,
         pending: [],
         pendingBytes: 0,
         timer: null,
         snapshotInFlight: null,
-        detach: () => doc.off("update", handler),
-      });
+        detach: () => {},
+      };
+      this.docs.set(docId, entry);
+      if (doc) this.attach(docId, entry, doc);
     }
     if (this.welcomed && list.length > 0) {
       // Subscribe before pushing (sync-protocol.md §3), then send what was queued for these docs.
@@ -244,12 +331,20 @@ export class SyncClient {
     }
   }
 
+  /** Hand buffered remote updates of a stored document to the app. */
+  private async flushStored(docId: string, entry: DocEntry): Promise<void> {
+    if (entry.stored.length === 0) return;
+    const updates = entry.stored;
+    entry.stored = [];
+    await this.opts.storedDocs!.onUpdates(docId, updates);
+  }
+
   /** Stop syncing a document (its pending local updates are still stored and sent). */
   async removeDoc(docId: string): Promise<void> {
     const entry = this.docs.get(docId);
     if (!entry) return;
     await this.flushPending(docId, entry);
-    await this.chain;
+    await this.serial(() => this.flushStored(docId, entry));
     await this.flushStates();
     entry.detach();
     this.docs.delete(docId);
@@ -262,7 +357,8 @@ export class SyncClient {
 
   /** Send an awareness update (y-protocols encoding); dropped while offline. */
   async sendAwareness(docId: string, update: Uint8Array): Promise<void> {
-    if (!this.welcomed) return;
+    // Presence only makes sense for documents open on this device.
+    if (!this.welcomed || !this.docs.get(docId)?.doc) return;
     const key = await this.opts.keyFor(docId);
     this.send({
       type: "awareness",
@@ -276,6 +372,38 @@ export class SyncClient {
     for (const [docId, entry] of this.docs) await this.flushPending(docId, entry);
     await this.chain;
     await this.flushStates();
+  }
+
+  /**
+   * Upload a snapshot now (e.g. when leaving a document after many own edits,
+   * for version history). Returns false when the document is not caught up yet
+   * or a snapshot is already in flight.
+   */
+  async requestSnapshot(docId: string): Promise<boolean> {
+    const entry = this.docs.get(docId);
+    if (!entry) throw new Error(`document ${docId} is not synced`);
+    await this.flushPending(docId, entry);
+    return this.serial(async () => {
+      if (!entry.synced || entry.snapshotInFlight) return false;
+      await this.enqueueSnapshot(docId, entry, false);
+      return entry.snapshotInFlight !== null;
+    });
+  }
+
+  /**
+   * Subscribe again and resend the document's queued messages — e.g. after
+   * `POST /v1/docs` registered a document created offline (the first
+   * subscribe got `doc_not_found`).
+   */
+  async resubscribe(docId: string): Promise<void> {
+    const entry = this.docs.get(docId);
+    if (!entry) throw new Error(`document ${docId} is not synced`);
+    await this.serial(async () => {
+      if (!this.welcomed) return; // the next welcome subscribes anyway
+      this.send({ type: "subscribe", docs: [{ docId, since: entry.state.lastSeq }] });
+      for (const item of (await this.outboxItems()).values())
+        if (item.docId === docId) this.sendItem(item);
+    });
   }
 
   /** Resend every outbox item (e.g. after registering a document that got `doc_not_found`). */
@@ -496,6 +624,7 @@ export class SyncClient {
           this.count(entry, size);
           entry.state.lastSeq = Math.max(entry.state.lastSeq, item.seq);
         }
+        await this.flushStored(msg.docId, entry);
         this.markDirty(msg.docId);
         if (msg.upToDate && !entry.synced) {
           entry.synced = true;
@@ -510,6 +639,7 @@ export class SyncClient {
         const size = await this.applyRemote(msg.docId, entry, msg.payload);
         this.count(entry, size);
         entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.seq);
+        await this.flushStored(msg.docId, entry);
         this.markDirty(msg.docId);
         await this.maybeSnapshot(msg.docId, entry);
         return;
@@ -532,7 +662,7 @@ export class SyncClient {
         return;
       }
       case "awareness": {
-        if (!this.docs.has(msg.docId)) return;
+        if (!this.docs.get(msg.docId)?.doc) return;
         try {
           const key = await this.opts.keyFor(msg.docId);
           const payload = decryptAwareness(key, msg.docId, fromBase64Url(msg.payload));
@@ -597,6 +727,11 @@ export class SyncClient {
       this.emitError({ code: "decrypt_failed", message: String(e), docId });
       return 0;
     }
+    if (!entry.doc) {
+      entry.stored.push(update);
+      for (const fn of this.listeners.remoteUpdate) fn(docId, update);
+      return update.length;
+    }
     try {
       Y.applyUpdate(entry.doc, update, REMOTE_ORIGIN);
     } catch (e) {
@@ -634,10 +769,18 @@ export class SyncClient {
     if (entry.timer) clearTimeout(entry.timer);
     entry.timer = null;
     if (entry.pending.length === 0) return Promise.resolve();
+    return this.serial(() => this.enqueuePending(docId, entry));
+  }
+
+  /** Merge pending local updates into one outbox push (call inside serial()). */
+  private async enqueuePending(docId: string, entry: DocEntry): Promise<void> {
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.timer = null;
+    if (entry.pending.length === 0) return;
     const updates = entry.pending;
     entry.pending = [];
     entry.pendingBytes = 0;
-    return this.serial(async () => {
+    {
       const update = updates.length === 1 ? updates[0]! : Y.mergeUpdates(updates);
       if (update.length > MAX_UPDATE_BYTES) {
         await this.enqueueSnapshot(docId, entry, true);
@@ -654,7 +797,7 @@ export class SyncClient {
       };
       await this.enqueue(item);
       if (this.welcomed) this.sendItem(item);
-    });
+    }
   }
 
   private async maybeSnapshot(docId: string, entry: DocEntry): Promise<void> {
@@ -671,9 +814,18 @@ export class SyncClient {
 
   private async enqueueSnapshot(docId: string, entry: DocEntry, force: boolean): Promise<void> {
     if (entry.snapshotInFlight && !force) return;
-    this.opts.beforeSnapshot?.(docId, entry.doc);
-    // Updates made by the hook are part of the state below; their pushes are harmless duplicates.
-    const state = Y.encodeStateAsUpdate(entry.doc);
+    let state: Uint8Array;
+    if (entry.doc) {
+      this.opts.beforeSnapshot?.(docId, entry.doc);
+      // Updates made by the hook are part of the state below; their pushes are harmless duplicates.
+      state = Y.encodeStateAsUpdate(entry.doc);
+    } else {
+      // Stored mode: the saved state already contains every handed-over update.
+      await this.flushStored(docId, entry);
+      const saved = await this.opts.storedDocs!.loadState(docId);
+      if (!saved) return;
+      state = Y.mergeUpdates([saved]);
+    }
     if (state.length > MAX_SNAPSHOT_BYTES) {
       this.emitError({ code: "too_large", message: "document exceeds the snapshot limit", docId });
       return;

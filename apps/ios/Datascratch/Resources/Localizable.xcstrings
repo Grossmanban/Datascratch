@@ -241,12 +241,12 @@
         }
       }
     },
-    "Backdrop": {
+    "Black": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Подложка"
+            "value": "Чёрный"
           }
         }
       }
@@ -257,6 +257,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Синий"
+          }
+        }
+      }
+    },
+    "Brown": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Коричневый"
           }
         }
       }
@@ -351,12 +361,52 @@
         }
       }
     },
+    "Check Key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверить ключ"
+          }
+        }
+      }
+    },
     "Check your key": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Проверьте ключ"
+          }
+        }
+      }
+    },
+    "Check your recovery key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверьте ключ восстановления"
+          }
+        }
+      }
+    },
+    "Choose File…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбрать файл…"
+          }
+        }
+      }
+    },
+    "Choose Photo…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбрать фото…"
           }
         }
       }
@@ -561,6 +611,16 @@
         }
       }
     },
+    "Create New Key…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создать новый ключ…"
+          }
+        }
+      }
+    },
     "Create a notebook for work": {
       "localizations": {
         "ru": {
@@ -577,6 +637,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Новый аккаунт"
+          }
+        }
+      }
+    },
+    "Current Password": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текущий пароль"
           }
         }
       }
@@ -751,6 +821,26 @@
         }
       }
     },
+    "Diagram": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Диаграмма"
+          }
+        }
+      }
+    },
+    "Divider": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разделитель"
+          }
+        }
+      }
+    },
     "Document Style": {
       "localizations": {
         "ru": {
@@ -801,6 +891,16 @@
         }
       }
     },
+    "Drag the image to choose what the header shows.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перетащите изображение, чтобы выбрать, какая часть видна в шапке."
+          }
+        }
+      }
+    },
     "Draw with Finger": {
       "localizations": {
         "ru": {
@@ -811,22 +911,42 @@
         }
       }
     },
+    "Draw with Finger: Off": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рисование пальцем выключено"
+          }
+        }
+      }
+    },
+    "Draw with Finger: On": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рисование пальцем включено"
+          }
+        }
+      }
+    },
+    "Drawing": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рисунок"
+          }
+        }
+      }
+    },
     "Duplicate": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Дублировать"
-          }
-        }
-      }
-    },
-    "Dusk": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Сумерки"
           }
         }
       }
@@ -897,16 +1017,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Email"
-          }
-        }
-      }
-    },
-    "Ember": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Угли"
           }
         }
       }
@@ -1091,6 +1201,16 @@
         }
       }
     },
+    "Formula": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Формула"
+          }
+        }
+      }
+    },
     "Full": {
       "localizations": {
         "ru": {
@@ -1251,12 +1371,32 @@
         }
       }
     },
+    "If you forget your password, this key is the only way back to your notes. Keep it in a password manager or on paper.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Если вы забудете пароль, только этот ключ вернёт доступ к заметкам. Храните его в менеджере паролей или на бумаге."
+          }
+        }
+      }
+    },
     "If you forget your password, this key is the only way back to your notes. We can't reset it for you — nobody but you can read your notes.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Если вы забудете пароль, только этот ключ вернёт доступ к заметкам. Мы не сможем сбросить его за вас — никто, кроме вас, не может прочитать ваши заметки."
+          }
+        }
+      }
+    },
+    "Image position": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Положение изображения"
           }
         }
       }
@@ -1287,6 +1427,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Индиго"
+          }
+        }
+      }
+    },
+    "Insert": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вставить"
+          }
+        }
+      }
+    },
+    "It's the only way back to your notes if you forget the password.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только он вернёт доступ к заметкам, если вы забудете пароль."
+          }
+        }
+      }
+    },
+    "Key checked": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ключ проверен"
           }
         }
       }
@@ -1381,32 +1551,12 @@
         }
       }
     },
-    "Meadow": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Луг"
-          }
-        }
-      }
-    },
     "Member since": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "С нами с"
-          }
-        }
-      }
-    },
-    "Mist": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Туман"
           }
         }
       }
@@ -1427,6 +1577,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ещё"
+          }
+        }
+      }
+    },
+    "More Pen Options": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ещё инструменты пера"
           }
         }
       }
@@ -1501,6 +1661,16 @@
         }
       }
     },
+    "New Recovery Key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый ключ восстановления"
+          }
+        }
+      }
+    },
     "New Space": {
       "localizations": {
         "ru": {
@@ -1557,6 +1727,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Новый пароль"
+          }
+        }
+      }
+    },
+    "New recovery key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый ключ восстановления"
           }
         }
       }
@@ -1641,6 +1821,16 @@
         }
       }
     },
+    "No security events": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Событий нет"
+          }
+        }
+      }
+    },
     "No tasks on this day.": {
       "localizations": {
         "ru": {
@@ -1681,22 +1871,22 @@
         }
       }
     },
-    "None": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Нет"
-          }
-        }
-      }
-    },
     "Normal": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Обычная"
+          }
+        }
+      }
+    },
+    "Not checked": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не проверен"
           }
         }
       }
@@ -1831,6 +2021,16 @@
         }
       }
     },
+    "Off": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выкл."
+          }
+        }
+      }
+    },
     "Offline": {
       "localizations": {
         "ru": {
@@ -1847,6 +2047,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Офлайн · ждут отправки: %lld"
+          }
+        }
+      }
+    },
+    "On": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вкл."
           }
         }
       }
@@ -2011,6 +2221,16 @@
         }
       }
     },
+    "Password changes, recoveries and new recovery keys appear here.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь появятся смены пароля, восстановления доступа и новые ключи восстановления."
+          }
+        }
+      }
+    },
     "Password strength": {
       "localizations": {
         "ru": {
@@ -2027,6 +2247,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пароли не совпадают."
+          }
+        }
+      }
+    },
+    "Paste Image": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вставить изображение"
           }
         }
       }
@@ -2191,12 +2421,32 @@
         }
       }
     },
+    "Recovery Key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ключ восстановления"
+          }
+        }
+      }
+    },
     "Red": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Красный"
+          }
+        }
+      }
+    },
+    "Redo": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторить"
           }
         }
       }
@@ -2281,6 +2531,26 @@
         }
       }
     },
+    "Reposition Cover": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Положение обложки"
+          }
+        }
+      }
+    },
+    "Reposition…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сдвинуть кадр…"
+          }
+        }
+      }
+    },
     "Restore": {
       "localizations": {
         "ru": {
@@ -2307,16 +2577,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Отозвать"
-          }
-        }
-      }
-    },
-    "Sand": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Песок"
           }
         }
       }
@@ -2387,6 +2647,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Найдите документ или введите команду"
+          }
+        }
+      }
+    },
+    "Security Log": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Журнал безопасности"
           }
         }
       }
@@ -2511,6 +2781,16 @@
         }
       }
     },
+    "Show Key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать ключ"
+          }
+        }
+      }
+    },
     "Sign In": {
       "localizations": {
         "ru": {
@@ -2551,12 +2831,42 @@
         }
       }
     },
+    "Signed in with the recovery key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вход по ключу восстановления"
+          }
+        }
+      }
+    },
     "Signing a device out removes its access immediately.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Выход на устройстве сразу отключает его доступ."
+          }
+        }
+      }
+    },
+    "Skip": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропустить"
+          }
+        }
+      }
+    },
+    "Skip the check?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропустить проверку?"
           }
         }
       }
@@ -2731,6 +3041,16 @@
         }
       }
     },
+    "Table": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Таблица"
+          }
+        }
+      }
+    },
     "Tabs": {
       "localizations": {
         "ru": {
@@ -2801,12 +3121,52 @@
         }
       }
     },
+    "The current key stops working at once. Your notes are not re-encrypted and your devices stay signed in.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текущий ключ сразу перестанет работать. Заметки не перешифровываются, устройства остаются в аккаунте."
+          }
+        }
+      }
+    },
+    "The encryption key of this document is not on this device.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ключа шифрования этого документа нет на этом устройстве."
+          }
+        }
+      }
+    },
+    "The key was shown on the device where you created the account. If you no longer have it, create a new one.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ключ показывался на устройстве, где вы создали аккаунт. Если его у вас больше нет, создайте новый."
+          }
+        }
+      }
+    },
     "The notebook key will be stored on the server so agents with a token can read and edit it. The server will technically be able to read these notes.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Ключ блокнота будет храниться на сервере, чтобы агенты с токеном могли читать и править его. Сервер технически сможет прочитать эти заметки."
+          }
+        }
+      }
+    },
+    "The old key no longer works. Save this one in a password manager or on paper.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Старый ключ больше не работает. Сохраните новый в менеджере паролей или на бумаге."
           }
         }
       }
@@ -2867,6 +3227,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Этот документ в корзине."
+          }
+        }
+      }
+    },
+    "This file is not an image.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Этот файл — не изображение."
           }
         }
       }
@@ -3001,6 +3371,16 @@
         }
       }
     },
+    "Undo": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить"
+          }
+        }
+      }
+    },
     "Untitled": {
       "localizations": {
         "ru": {
@@ -3131,6 +3511,26 @@
         }
       }
     },
+    "Without a signed-in device": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без входа с устройства"
+          }
+        }
+      }
+    },
+    "Without the key you can't get your notes back if you forget the password. You can show the key and check it later in Settings → Account.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без ключа заметки не вернуть, если вы забудете пароль. Показать и проверить ключ можно позже в «Настройки → Аккаунт»."
+          }
+        }
+      }
+    },
     "Work": {
       "localizations": {
         "ru": {
@@ -3207,6 +3607,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Для повторного входа понадобится пароль."
+          }
+        }
+      }
+    },
+    "Your new recovery key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваш новый ключ восстановления"
           }
         }
       }

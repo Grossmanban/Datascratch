@@ -1,0 +1,132 @@
+name: web
+
+on:
+  push:
+    branches: [main, "claude/web-app"]
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/web.yml"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "packages/**"
+      - "apps/server/**"
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/web.yml"
+      - "pnpm-lock.yaml"
+      - "packages/**"
+      - "apps/server/**"
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+        working-directory: .
+      - name: Build workspace dependencies
+        run: pnpm --filter @datascratch/shared build
+        working-directory: .
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit tests
+        run: pnpm test
+      - name: Build (no server needed; address comes from VITE_DS_SERVER_URL)
+        run: pnpm exec vite build
+        env:
+          VITE_DS_SERVER_URL: http://localhost:8787
+          # Exposes the runtime to the e2e performance test (10 000 notes).
+          VITE_DS_TEST_HOOKS: "1"
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: E2E (mock server + production build with service worker)
+        run: pnpm e2e
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7
+
+  e2e-real-server:
+    # Same e2e suite against apps/server + PostgreSQL, to catch contract drift early.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ds
+          POSTGRES_PASSWORD: ds
+          POSTGRES_DB: ds
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ds" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: development
+      HOST: 127.0.0.1
+      PORT: "8080"
+      LOG_LEVEL: warn
+      PUBLIC_URL: http://localhost:8080
+      CORS_ORIGINS: http://localhost:4173
+      APP_URL: http://localhost:4173
+      DATABASE_URL: postgres://ds:ds@localhost:5432/ds
+      DB_MIGRATE_ON_START: "true"
+      STORAGE_DRIVER: disk
+      STORAGE_DIR: /tmp/ds-files
+      E2E_SERVER_URL: http://localhost:8080
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build server dependencies (shared, agents plugin)
+        run: pnpm --filter "@datascratch/server^..." run build
+      - name: Start server
+        run: |
+          mkdir -p /tmp/ds-files
+          # Throwaway 32-byte secrets for this CI run only.
+          export DS_JWT_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")
+          export DS_KMS_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")
+          nohup pnpm --filter @datascratch/server exec tsx src/index.ts > /tmp/server.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://localhost:8080/v1/health && break; sleep 1; done
+          curl -sf http://localhost:8080/v1/health
+      - name: Build web for the real server
+        run: pnpm exec vite build
+        working-directory: apps/web
+        env:
+          VITE_DS_SERVER_URL: http://localhost:8080
+          # Test hooks: the two-tab session test drives refreshes against the real server.
+          VITE_DS_TEST_HOOKS: "1"
+          # The job-level NODE_ENV=development is for the server; a dev-mode build skips the
+          # service worker and breaks the offline test.
+          NODE_ENV: production
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: apps/web
+      - name: E2E against apps/server
+        run: pnpm e2e
+        working-directory: apps/web
+      - name: Server log
+        if: failure()
+        run: tail -200 /tmp/server.log

@@ -37,7 +37,7 @@ INTERPOLATIONS = {
 IGNORE = {
     "* ", ", ", "> ", "[ ] ", "[] ", "☐ ", "DS1", "DS1-XXXX-XXXX-…", "Datascratch", "Library.json",
     "CFBundleShortVersionString", "CFBundleVersion", "DSServerURL", "DSWebHost",
-    "XChaCha20-Poly1305 · Argon2id", "Quiet paper", "next week", "open to agents",
+    "XChaCha20-Poly1305 · Argon2id", "Quiet paper", "next week", "open to agents", "CoreLibrary", "Library", "Attachments", "a^2 + b^2 = c^2", "graph TD\n  A --> B",
 }
 
 LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
@@ -48,7 +48,9 @@ NOT_UI = re.compile(r"^([a-z0-9]+([._\-][a-zA-Z0-9]+)+|[a-z]+|#?[0-9A-Fa-f]{6}|.
 def literals():
     for path in sorted(SOURCES.rglob("*.swift")):
         for line in path.read_text().splitlines():
-            if line.strip().startswith("//"):
+            stripped = line.strip()
+            # Comments and diagnostics are not UI text.
+            if stripped.startswith("//") or "log." in line or "Logger(" in line or "print(" in line:
                 continue
             for match in LITERAL.finditer(line):
                 yield match.group(1), path.name, line

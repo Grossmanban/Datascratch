@@ -53,6 +53,14 @@ actor FakeSyncServer {
     var received: [ClientMessage] = []
     /// A client pushed into a document it had not subscribed to (protocol violation).
     var pushedWithoutSubscription = false
+    /// Keeps the sender of a snapshot waiting this long (to hold `close` inside its upload).
+    var snapshotDelay: Duration?
+
+    func setSnapshotDelay(_ d: Duration?) { snapshotDelay = d }
+
+    func snapshotsReceived(_ docId: String) -> Int {
+        received.filter { if case .snapshot(let id, _, _, _) = $0 { return id == docId } else { return false } }.count
+    }
 
     func connect() throws -> Conn {
         guard accepting else { throw SyncClientError.closed }
@@ -72,9 +80,10 @@ actor FakeSyncServer {
 
     func subscribers(_ docId: String) -> Int { conns.values.filter { $0.subs.contains(docId) }.count }
 
-    func handle(_ text: String, from c: Conn) {
+    func handle(_ text: String, from c: Conn) async {
         guard let msg = try? JSONDecoder().decode(ClientMessage.self, from: Data(text.utf8)) else { return }
         received.append(msg)
+        if case .snapshot = msg, let snapshotDelay { try? await Task.sleep(for: snapshotDelay) }
         switch msg {
         case .hello(_, let deviceId, _):
             conns[c.id]?.deviceId = deviceId
@@ -259,6 +268,88 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         await b.stop()
     }
 
+    @Test func snapshotOnCloseAfter30LocalEdits() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        await a.start()
+        let few = NoteDocument(noteId: EntityID.make())
+        let many = NoteDocument(noteId: EntityID.make())
+        for note in [few, many] {
+            try await a.open(note.crdt, notebookId: "nb")
+            try note.initialize(title: "t")
+        }
+        for i in 0..<28 { try few.insertText("\(i)", at: 0, inBlock: [1]) } // 29 edits with initialize
+        for i in 0..<29 { try many.insertText("\(i)", at: 0, inBlock: [1]) } // 30 edits
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        #expect(try a.store.document(many.noteId)?.localEditsSinceSnapshot == 30)
+
+        await a.close(docId: few.noteId)
+        await a.close(docId: many.noteId)
+        #expect(try await eventually {
+            let snap = await server.snapshots[many.noteId]
+            return snap != nil && (try? a.store.outboxCount()) == 0
+        })
+        #expect(await server.snapshots[few.noteId] == nil)
+        #expect(try a.store.document(many.noteId)?.localEditsSinceSnapshot == 0)
+        // The snapshot is the full state, readable with the note key.
+        let snap = try #require(await server.snapshots[many.noteId])
+        let restored = NoteDocument(noteId: many.noteId)
+        try restored.crdt.applyUpdate(try DSCrypto.open(snap.payload, key: key, ad: CryptoAD.doc(many.noteId)))
+        #expect(try restored.block(at: [1])?.text == (try many.block(at: [1])?.text))
+        await a.stop()
+    }
+
+    /// Reopening a note while its close is still uploading the snapshot, with another device
+    /// writing all the time: the new instance is live and nothing is lost.
+    @Test func reopenWhileClosingUnderContinuousWrites() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        let b = try device("B", server: server)
+        await a.start()
+        await b.start()
+        let docId = EntityID.make()
+        var current = NoteDocument(noteId: docId)
+        try await a.open(current.crdt, notebookId: "nb")
+        try current.initialize(title: "Race")
+        let remote = NoteDocument(noteId: docId)
+        try await b.open(remote.crdt, notebookId: "nb")
+        #expect(try await eventually { (try? remote.block(at: [1])) != nil })
+
+        let writes = 100
+        let writer = Task {
+            for _ in 0..<writes {
+                try remote.insertText("b", at: 0, inBlock: [1])
+                try await Task.sleep(for: .milliseconds(3))
+            }
+        }
+        let rounds = 5
+        await server.setSnapshotDelay(.milliseconds(50))
+        for _ in 0..<rounds {
+            for _ in 0..<LocalStore.snapshotOnCloseEdits { try current.insertText("a", at: 0, inBlock: [1]) }
+            // Edits (and the previous snapshot) acknowledged: the close uploads its snapshot itself.
+            #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+            let before = await server.snapshotsReceived(docId)
+            let closing = Task { await a.close(docId: docId) }
+            // The close is now waiting on the server inside its snapshot upload.
+            #expect(try await eventually { await server.snapshotsReceived(docId) > before })
+            let next = NoteDocument(noteId: docId)
+            try await a.open(next.crdt, notebookId: "nb")
+            await closing.value
+            #expect(await a.isOpen(docId))
+            current = next
+        }
+        try await writer.value
+
+        func counts(_ note: NoteDocument) -> (Int, Int) {
+            let text = (try? note.block(at: [1])?.text) ?? ""
+            return (text.filter { $0 == "a" }.count, text.filter { $0 == "b" }.count)
+        }
+        let expected = (rounds * LocalStore.snapshotOnCloseEdits, writes)
+        #expect(try await eventually { counts(current) == expected && counts(remote) == expected })
+        await a.stop()
+        await b.stop()
+    }
+
     @Test func awarenessIsEncryptedAndRelayed() async throws {
         let server = FakeSyncServer()
         let a = try device("A", server: server)
@@ -268,13 +359,18 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         await a.start()
         await b.start()
         let docId = EntityID.make()
-        try await a.track(docId: docId, kind: .note, notebookId: "nb")
+        // Awareness is only for open documents.
+        try await a.open(NoteDocument(noteId: docId).crdt, notebookId: "nb")
         try await b.track(docId: docId, kind: .note, notebookId: "nb")
         #expect(try await eventually {
             let connected = await a.client.isConnected
             let subs = await server.subscribers(docId)
             return connected && subs == 2
         })
+        try await a.sendAwareness(docId: docId, payload: Data("cursor".utf8))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(got.withLock { $0 }.isEmpty)
+        try await b.open(NoteDocument(noteId: docId).crdt, notebookId: "nb")
         try await a.sendAwareness(docId: docId, payload: Data("cursor".utf8))
         #expect(try await eventually { got.withLock { $0 } == [Data("cursor".utf8)] })
         await a.stop()
@@ -298,7 +394,7 @@ final class StubTransport: HTTPTransport, @unchecked Sendable {
 
 @Suite struct APIClientTests {
     func session(_ token: String, expires: Date) -> String {
-        #"{"userId":"u","accessToken":"\#(token)","refreshToken":"r-\#(token)","accessExpiresAt":"\#(DSDate.iso(expires))","wrappedMasterKeyPassword":"AQID","accountDocId":"a"}"#
+        #"{"userId":"0192f3c4-0000-7000-8000-00000000000a","deviceId":"dev","accessToken":"\#(token)","refreshToken":"r-\#(token)","accessExpiresAt":"\#(DSDate.iso(expires))","wrappedMasterKeyPassword":"AQID","accountDocId":"0192f3c4-0000-7000-8000-00000000000b"}"#
     }
 
     @Test func loginRefreshesOnExpiryAnd401() async throws {

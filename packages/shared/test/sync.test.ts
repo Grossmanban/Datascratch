@@ -296,3 +296,183 @@ describe("sync client", () => {
     await new Promise((r) => wss.close(r));
   });
 });
+
+describe("sync client extras", () => {
+  it("requestSnapshot uploads a snapshot on demand", async () => {
+    const hub = new MemorySyncHub();
+    const a = makeClient(hub, "dev-a");
+    const da = new Y.Doc();
+    await a.client.addDoc(DOC, da);
+    expect(await a.client.requestSnapshot(DOC)).toBe(false); // not caught up yet
+    a.client.start();
+    await until(() => a.client.isSynced(DOC));
+    da.getText("t").insert(0, "v1");
+    expect(await a.client.requestSnapshot(DOC)).toBe(true);
+    await until(
+      () => hub.docs.get(DOC)?.snapshot !== null && hub.docs.get(DOC)?.snapshot !== undefined,
+    );
+    await until(async () => (await a.storage.listOutbox()).length === 0);
+  });
+
+  it("resubscribe after registering an offline-created document", async () => {
+    const hub = new MemorySyncHub({ autoCreateDocs: false });
+    const a = makeClient(hub, "dev-a");
+    const errors: SyncClientError[] = [];
+    a.client.on("error", (e) => errors.push(e));
+    const da = new Y.Doc();
+    await a.client.addDoc(DOC, da);
+    da.getText("t").insert(0, "offline note");
+    da.getText("t").insert(0, ">");
+    a.client.start();
+    await until(() => errors.some((e) => e.code === "doc_not_found"));
+    hub.registerDoc(DOC); // POST /v1/docs succeeded
+    await a.client.resubscribe(DOC);
+    await until(() => a.client.isSynced(DOC));
+    await until(async () => (await a.storage.listOutbox()).length === 0);
+    const b = makeClient(hub, "dev-b");
+    const db = new Y.Doc();
+    await b.client.addDoc(DOC, db);
+    b.client.start();
+    await until(() => db.getText("t").toString() === ">offline note");
+  });
+});
+
+describe("stored documents", () => {
+  function storedApp() {
+    const states = new Map<string, Uint8Array>();
+    const seen: string[] = [];
+    return {
+      states,
+      seen,
+      handler: {
+        onUpdates: async (docId: string, updates: Uint8Array[]) => {
+          seen.push(docId);
+          // Simulate async storage between reads and writes.
+          await new Promise((r) => setTimeout(r, 1));
+          const prev = states.get(docId);
+          states.set(docId, Y.mergeUpdates(prev ? [prev, ...updates] : updates));
+        },
+        loadState: (docId: string) => states.get(docId) ?? null,
+      },
+      textOf(docId: string) {
+        const d = new Y.Doc();
+        const s = states.get(docId);
+        if (s) Y.applyUpdate(d, s);
+        return d.getText("t").toString();
+      },
+    };
+  }
+
+  it("keeps remote updates in the app's storage without a Y.Doc", async () => {
+    const hub = new MemorySyncHub();
+    const writer = makeClient(hub, "dev-w");
+    const dw = new Y.Doc();
+    await writer.client.addDoc(DOC, dw);
+    writer.client.start();
+    dw.getText("t").insert(0, "hello");
+    await writer.client.flush();
+
+    const app = storedApp();
+    const reader = makeClient(hub, "dev-r", { storedDocs: app.handler });
+    await reader.client.addStoredDocs([DOC]);
+    reader.client.start();
+    await until(() => reader.client.isSynced(DOC));
+    expect(reader.client.isLive(DOC)).toBe(false);
+    expect(app.textOf(DOC)).toBe("hello");
+    dw.getText("t").insert(5, " world");
+    await until(() => app.textOf(DOC) === "hello world");
+  });
+
+  it("switches stored → live → stored without losing concurrent updates", async () => {
+    const hub = new MemorySyncHub();
+    const writer = makeClient(hub, "dev-w", { batchMs: 0 });
+    const dw = new Y.Doc();
+    await writer.client.addDoc(DOC, dw);
+    writer.client.start();
+
+    const app = storedApp();
+    const reader = makeClient(hub, "dev-r", { storedDocs: app.handler });
+    await reader.client.addStoredDocs([DOC]);
+    reader.client.start();
+    await until(() => reader.client.isSynced(DOC));
+
+    // The writer keeps typing while the reader opens and closes the note.
+    let typing = true;
+    let n = 0;
+    const loop = (async () => {
+      while (typing) {
+        dw.getText("t").insert(dw.getText("t").length, String(n++ % 10));
+        await new Promise((r) => setTimeout(r, 1));
+      }
+    })();
+    await new Promise((r) => setTimeout(r, 30));
+    const live = await reader.client.openDoc(DOC, async () => {
+      const d = new Y.Doc();
+      const s = app.handler.loadState(DOC);
+      if (s) Y.applyUpdate(d, s);
+      return d;
+    });
+    expect(reader.client.isLive(DOC)).toBe(true);
+    await new Promise((r) => setTimeout(r, 30));
+    live.getText("t").insert(0, "R:"); // local edit while live
+    await new Promise((r) => setTimeout(r, 10));
+    await reader.client.closeDoc(DOC, (doc) => {
+      app.states.set(DOC, Y.encodeStateAsUpdate(doc));
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    typing = false;
+    await loop;
+    await writer.client.flush();
+    await reader.client.flush();
+    const expected = () => {
+      return dw.getText("t").toString();
+    };
+    await until(() => expected().startsWith("R:") && app.textOf(DOC) === expected());
+    expect(app.textOf(DOC).length).toBeGreaterThan(5);
+  });
+
+  it("ignores awareness of stored documents", async () => {
+    const hub = new MemorySyncHub();
+    const a = makeClient(hub, "dev-a");
+    const app = storedApp();
+    const b = makeClient(hub, "dev-b", { storedDocs: app.handler });
+    await a.client.addDoc(DOC, new Y.Doc());
+    await b.client.addStoredDocs([DOC]);
+    const got: string[] = [];
+    b.client.on("awareness", () => got.push("x"));
+    a.client.start();
+    b.client.start();
+    await until(() => a.client.isSynced(DOC) && b.client.isSynced(DOC));
+    await a.client.sendAwareness(DOC, new Uint8Array([1]));
+    await b.client.sendAwareness(DOC, new Uint8Array([2])); // dropped: not live
+    await new Promise((r) => setTimeout(r, 30));
+    expect(got).toEqual([]);
+  });
+
+  it("uploads compaction snapshots from the stored state", async () => {
+    const hub = new MemorySyncHub();
+    const writer = makeClient(hub, "dev-w");
+    const dw = new Y.Doc();
+    await writer.client.addDoc(DOC, dw);
+    writer.client.start();
+    const app = storedApp();
+    const reader = makeClient(hub, "dev-r", {
+      storedDocs: app.handler,
+      snapshotThresholds: { updates: 3 },
+    });
+    await reader.client.addStoredDocs([DOC]);
+    reader.client.start();
+    await until(() => reader.client.isSynced(DOC));
+    for (let i = 0; i < 6; i++) {
+      dw.getText("t").insert(0, "x");
+      await writer.client.flush();
+    }
+    await until(() => app.textOf(DOC) === "xxxxxx");
+    await until(() => hub.docs.get(DOC)!.snapshot !== null);
+    const fresh = makeClient(hub, "dev-f");
+    const df = new Y.Doc();
+    await fresh.client.addDoc(DOC, df);
+    fresh.client.start();
+    await until(() => df.getText("t").toString() === "xxxxxx");
+  });
+});

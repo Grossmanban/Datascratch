@@ -2,7 +2,7 @@ import { vid } from "./util.js";
 
 const ID = vid(1);
 const KEY = "A".repeat(43);
-const SALT = "B".repeat(22);
+const SALT = "B".repeat(21) + "A";
 const T = "2026-10-25T12:00:00.000Z";
 const KDF = { alg: "argon2id13", ops: 3, mem: 67108864 };
 
@@ -18,6 +18,10 @@ export function apiVectors() {
         valid: [{ salt: SALT, kdf: KDF }],
         invalid: [
           { reason: "salt is not 16 bytes", body: { salt: "AAAA", kdf: KDF } },
+          {
+            reason: "non-canonical salt (trailing bits set)",
+            body: { salt: "B".repeat(22), kdf: KDF },
+          },
           { reason: "unknown KDF", body: { salt: SALT, kdf: { ...KDF, alg: "scrypt" } } },
         ],
       },
@@ -75,6 +79,39 @@ export function apiVectors() {
               userId: "0192f3c4-0000-4000-8000-000000000001",
               accountDocId: ID,
             },
+          },
+        ],
+      },
+      rotateRecoveryKeyRequest: {
+        valid: [{ currentLoginKey: KEY, recoveryLoginKey: KEY, wrappedMasterKeyRecovery: "AQ" }],
+        invalid: [
+          {
+            reason: "missing currentLoginKey",
+            body: { recoveryLoginKey: KEY, wrappedMasterKeyRecovery: "AQ" },
+          },
+          {
+            reason: "recoveryLoginKey is 31 bytes",
+            body: {
+              currentLoginKey: KEY,
+              recoveryLoginKey: "A".repeat(42),
+              wrappedMasterKeyRecovery: "AQ",
+            },
+          },
+          {
+            reason: "empty wrappedMasterKeyRecovery",
+            body: { currentLoginKey: KEY, recoveryLoginKey: KEY, wrappedMasterKeyRecovery: "" },
+          },
+        ],
+      },
+      securityEvent: {
+        valid: [
+          { kind: "recovery_key_rotated", at: T, deviceId: "dev-1", deviceName: "iPad" },
+          { kind: "recovery_used", at: T, deviceId: null, deviceName: null },
+        ],
+        invalid: [
+          {
+            reason: "unknown kind",
+            body: { kind: "login", at: T, deviceId: null, deviceName: null },
           },
         ],
       },
@@ -173,6 +210,14 @@ export function apiVectors() {
             reason: "notebook doc id differs from notebookId",
             body: { docId: vid(3), kind: "notebook", notebookId: ID },
           },
+        ],
+      },
+      moveDocRequest: {
+        valid: [{ notebookId: ID }],
+        invalid: [
+          { reason: "missing notebookId", body: {} },
+          { reason: "not a UUIDv7", body: { notebookId: "nope" } },
+          { reason: "null notebookId", body: { notebookId: null } },
         ],
       },
       attachmentStatus: {

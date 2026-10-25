@@ -232,3 +232,15 @@ describe("share links", () => {
     expect(parsed.shareId).toBe("0192f3c4-0000-7000-8000-000000000009");
   });
 });
+
+describe("moving a note", () => {
+  it("rewraps the noteKey for the target notebook", async () => {
+    const { rewrapNoteKey } = await import("../src/index.js");
+    const a = generateKey();
+    const b = generateKey();
+    const note = generateKey();
+    const moved = rewrapNoteKey(wrapNoteKey(note, a, "n1"), a, b, "n1");
+    expect(unwrapNoteKey(moved, b, "n1")).toEqual(note);
+    expect(() => unwrapNoteKey(moved, a, "n1")).toThrow(CryptoError);
+  });
+});

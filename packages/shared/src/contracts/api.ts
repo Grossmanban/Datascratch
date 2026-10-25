@@ -211,6 +211,10 @@ export const registerDocRequestSchema = z
   });
 export type RegisterDocRequest = z.infer<typeof registerDocRequestSchema>;
 
+/** `PATCH /docs/:id`: move a note document to another notebook. */
+export const moveDocRequestSchema = z.object({ notebookId: uuidSchema });
+export type MoveDocRequest = z.infer<typeof moveDocRequestSchema>;
+
 export const docVersionSchema = z.object({
   seq: z.number().int().nonnegative(),
   createdAt: isoDateTimeSchema,
@@ -343,6 +347,7 @@ export const API_ROUTES = {
   patchNotebookMode: { method: "PATCH", path: "/notebooks/:id/mode" },
   deleteNotebook: { method: "DELETE", path: "/notebooks/:id" },
   registerDoc: { method: "POST", path: "/docs" },
+  moveDoc: { method: "PATCH", path: "/docs/:id" },
   deleteDoc: { method: "DELETE", path: "/docs/:id" },
   listDocVersions: { method: "GET", path: "/docs/:id/versions" },
   getDocVersion: { method: "GET", path: "/docs/:id/versions/:seq" },

@@ -1038,9 +1038,9 @@
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSFormatBar.swift": {
-    "mtime": 1792929641.855589,
-    "seen": 1792929795.6065733,
-    "ast_hash": "959a885d9449499cbb7261c7f438d8f4",
+    "mtime": 1792929899.6168644,
+    "seen": 1792929909.0546181,
+    "ast_hash": "6c60735b4a01b58a8c81649480344940",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSPenToolbar.swift": {

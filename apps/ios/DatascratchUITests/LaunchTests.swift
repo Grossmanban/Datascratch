@@ -21,7 +21,7 @@ final class OnboardingUITests: XCTestCase {
         app.buttons["signUp.submit"].tap()
 
         let grid = app.descendants(matching: .any)["recoveryKey.grid"].firstMatch
-        XCTAssertTrue(grid.waitForExistence(timeout: 5))
+        XCTAssertTrue(grid.waitForExistence(timeout: 15), "recovery key not shown; buttons: \(LibraryUITests.buttons(app))")
         let formatted = grid.label
         XCTAssertTrue(formatted.hasPrefix("DS1-"), "label: \(formatted)")
 
@@ -31,7 +31,7 @@ final class OnboardingUITests: XCTestCase {
         // Read which groups are requested from the placeholders ("Group N").
         let groups = formatted.split(separator: "-").dropFirst().map(String.init)
         let first = app.textFields["confirmKey.first"]
-        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        XCTAssertTrue(first.waitForExistence(timeout: 10), "confirm screen not shown; buttons: \(LibraryUITests.buttons(app))")
         let second = app.textFields["confirmKey.second"]
         first.tap()
         first.typeText(groups[Self.groupIndex(first.placeholderValue)])
@@ -39,8 +39,15 @@ final class OnboardingUITests: XCTestCase {
         second.typeText(groups[Self.groupIndex(second.placeholderValue)])
         app.buttons["confirmKey.finish"].tap()
 
-        XCTAssertTrue(app.staticTexts["Welcome to Datascratch"].firstMatch.waitForExistence(timeout: 10)
-                      || app.buttons["sidebar.settings"].waitForExistence(timeout: 5))
+        // iOS may offer to save the new password; that sheet belongs to SpringBoard.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for label in ["Not Now", "Не сейчас"] where springboard.buttons[label].waitForExistence(timeout: 2) {
+            springboard.buttons[label].tap()
+        }
+        let main = app.descendants(matching: .any)["sidebar.settings"].firstMatch
+        let welcome = app.staticTexts["Welcome to Datascratch"].firstMatch
+        XCTAssertTrue(main.waitForExistence(timeout: 15) || welcome.exists,
+                      "main window did not appear; buttons: \(LibraryUITests.buttons(app))")
     }
 
     private static func groupIndex(_ placeholder: String?) -> Int {

@@ -322,6 +322,8 @@ describe("extraction", () => {
         state: "open",
         scheduled: "2026-10-26",
         deadline: null,
+        completedAt: null,
+        order: 0,
       },
       {
         noteId: "note",
@@ -331,6 +333,8 @@ describe("extraction", () => {
         state: "done",
         scheduled: null,
         deadline: "2026-11-01",
+        completedAt: null,
+        order: 1,
       },
     ]);
     const links = extractNoteLinks(doc, "note");

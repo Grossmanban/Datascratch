@@ -1,0 +1,1 @@
+- 2026-10-25 · core · `TaskIndexEntry`: поля `completedAt` и `order` (порядок задачи в заметке); вектор `document/note.json` обновлён.

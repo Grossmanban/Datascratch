@@ -26,14 +26,14 @@ apt_install() {
   apt-get install -y -qq --no-install-recommends "${missing[@]}" > /dev/null
 }
 
-# 1. Docker Engine + compose plugin.
+# 1. Docker Engine + compose plugin — from the distribution's own repository
+#    (Docker Hub and download.docker.com may be unreachable from some regions).
 if ! command -v docker > /dev/null 2>&1 || ! docker compose version > /dev/null 2>&1; then
-  if [ -r /etc/os-release ] && . /etc/os-release && [ "${ID:-}" = "ubuntu" ]; then
-    apt_install docker.io docker-compose-v2
-  else
-    apt_install ca-certificates curl
-    log "installing Docker from get.docker.com"
-    curl -fsSL https://get.docker.com | sh > /dev/null
+  apt_install docker.io
+  if ! docker compose version > /dev/null 2>&1; then
+    apt-get install -y -qq --no-install-recommends docker-compose-v2 > /dev/null 2>&1 \
+      || apt-get install -y -qq --no-install-recommends docker-compose-plugin > /dev/null 2>&1 \
+      || { echo "cannot install the docker compose plugin from apt (Ubuntu 24.04 is supported)" >&2; exit 1; }
   fi
   systemctl enable --now docker > /dev/null 2>&1 || true
 fi

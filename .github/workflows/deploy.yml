@@ -59,6 +59,7 @@ jobs:
     outputs:
       server: ${{ steps.names.outputs.server }}
       web: ${{ steps.names.outputs.web }}
+      postgres: ${{ steps.names.outputs.postgres }}
       tag: ${{ steps.names.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
@@ -68,6 +69,7 @@ jobs:
           {
             echo "server=ghcr.io/$owner/datascratch-server"
             echo "web=ghcr.io/$owner/datascratch-web"
+            echo "postgres=ghcr.io/$owner/datascratch-postgres:16-alpine"
             echo "tag=${GITHUB_SHA::12}"
           } >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
@@ -76,6 +78,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # The server never pulls from Docker Hub (it can be unreachable from the VPS's
+      # region): third-party base images are copied to GHCR here, on GitHub's side.
+      - name: Mirror PostgreSQL to GHCR
+        run: docker buildx imagetools create -t "${{ steps.names.outputs.postgres }}" docker.io/library/postgres:16-alpine
       - name: Server image
         uses: docker/build-push-action@v6
         with:
@@ -117,6 +123,7 @@ jobs:
       DS_TAG: ${{ needs.images.outputs.tag }}
       DS_SERVER_IMAGE: ${{ needs.images.outputs.server }}
       DS_WEB_IMAGE: ${{ needs.images.outputs.web }}
+      DS_POSTGRES_IMAGE: ${{ needs.images.outputs.postgres }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

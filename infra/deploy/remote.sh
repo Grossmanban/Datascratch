@@ -4,7 +4,7 @@
 #   remote.sh deploy     bootstrap (idempotent) + deploy.sh up $DS_TAG
 #   remote.sh rollback   deploy.sh rollback
 # Required env: DEPLOY_HOST, DEPLOY_KEY_FILE, DEPLOY_KNOWN_HOSTS_FILE, DS_DOMAIN,
-#   DS_TAG, DS_SERVER_IMAGE, DS_WEB_IMAGE.
+#   DS_TAG, DS_SERVER_IMAGE, DS_WEB_IMAGE, DS_POSTGRES_IMAGE (full reference with tag).
 # Optional: DEPLOY_USER (root), DEPLOY_PORT (22), DS_REGISTRY_USER + DS_REGISTRY_TOKEN
 #   (GHCR pull), DS_SKIP_FIREWALL.
 set -euo pipefail
@@ -35,7 +35,7 @@ case "${1:-}" in
     echo "::endgroup::"
 
     echo "::group::Deploy $DS_TAG"
-    vars="DS_DOMAIN='$DS_DOMAIN' DS_SERVER_IMAGE='$DS_SERVER_IMAGE' DS_WEB_IMAGE='$DS_WEB_IMAGE'"
+    vars="DS_DOMAIN='$DS_DOMAIN' DS_SERVER_IMAGE='$DS_SERVER_IMAGE' DS_WEB_IMAGE='$DS_WEB_IMAGE' DS_POSTGRES_IMAGE='$DS_POSTGRES_IMAGE'"
     if [ -n "${DS_REGISTRY_TOKEN:-}" ]; then
       # The token travels on stdin, never on a command line or in a log.
       printf '%s' "$DS_REGISTRY_TOKEN" \

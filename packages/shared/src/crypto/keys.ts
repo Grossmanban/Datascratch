@@ -185,6 +185,42 @@ export function rekeyPassword(
   };
 }
 
+export interface RotatedRecoveryKey {
+  recoveryKey: Uint8Array;
+  /** `DS1-…`, shown to the user exactly once. */
+  recoveryKeyText: string;
+  /** Body of `POST /auth/recovery-key` (base64url fields). */
+  body: { currentLoginKey: string; recoveryLoginKey: string; wrappedMasterKeyRecovery: string };
+}
+
+/**
+ * New recovery key for an existing account: generates the key, derives the
+ * new recoveryLoginKey and wraps the masterKey with it. `currentLoginKey`
+ * (from the password) confirms the request on the server.
+ */
+export function rotateRecoveryKey(
+  masterKey: Uint8Array,
+  currentLoginKey: Uint8Array,
+  userId: string,
+  options: { recoveryKey?: Uint8Array; nonce?: Uint8Array } = {},
+): RotatedRecoveryKey {
+  const recoveryKey = options.recoveryKey ?? generateRecoveryKey();
+  return {
+    recoveryKey,
+    recoveryKeyText: formatRecoveryKey(recoveryKey),
+    body: {
+      currentLoginKey: toBase64Url(currentLoginKey),
+      recoveryLoginKey: toBase64Url(deriveRecoveryLoginKey(recoveryKey)),
+      wrappedMasterKeyRecovery: wrapKey(
+        recoveryKey,
+        masterKey,
+        AD.masterKeyRecovery(userId),
+        options.nonce ? { nonce: options.nonce } : undefined,
+      ),
+    },
+  };
+}
+
 /** JSON-ready signup fields (base64url) from {@link createAccountKeys}. */
 export function signupFields(keys: NewAccountKeys) {
   return {

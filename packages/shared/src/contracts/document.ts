@@ -84,11 +84,14 @@ export const ACCOUNT_SETTINGS_KEYS = {
   dailyNotebookId: "dailyNotebookId",
   /** noteId of the last active tab (§2). */
   activeTab: "activeTab",
+  /** The user confirmed they saved the current recovery key (reset on rotation). */
+  recoveryKeyConfirmed: "recoveryKeyConfirmed",
 } as const;
 
 export interface AccountSettings {
   dailyNotebookId?: Uuid | null;
   activeTab?: Uuid | null;
+  recoveryKeyConfirmed?: boolean;
   [key: string]: unknown;
 }
 

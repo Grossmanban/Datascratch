@@ -133,6 +133,29 @@ export const changePasswordRequestSchema = z.object({
 });
 export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
 
+/** `POST /auth/recovery-key` (authorized): replace the recovery key; confirmed by the password. */
+export const rotateRecoveryKeyRequestSchema = z.object({
+  currentLoginKey: key32Schema,
+  recoveryLoginKey: key32Schema,
+  wrappedMasterKeyRecovery: wrappedKeySchema,
+});
+export type RotateRecoveryKeyRequest = z.infer<typeof rotateRecoveryKeyRequestSchema>;
+
+/** Account security log (`GET /me/security-events`). */
+export const SECURITY_EVENT_KINDS = [
+  "password_changed",
+  "recovery_used",
+  "recovery_key_rotated",
+] as const;
+export type SecurityEventKind = (typeof SECURITY_EVENT_KINDS)[number];
+export const securityEventSchema = z.object({
+  kind: z.enum(SECURITY_EVENT_KINDS),
+  at: isoDateTimeSchema,
+  deviceId: z.string().nullable(),
+  deviceName: z.string().nullable(),
+});
+export type SecurityEvent = z.infer<typeof securityEventSchema>;
+
 // ---------------------------------------------------------------------------
 // Account and devices
 // ---------------------------------------------------------------------------
@@ -337,7 +360,9 @@ export const API_ROUTES = {
   recoveryStart: { method: "POST", path: "/auth/recovery/start" },
   recoveryFinish: { method: "POST", path: "/auth/recovery/finish" },
   changePassword: { method: "POST", path: "/auth/password" },
+  rotateRecoveryKey: { method: "POST", path: "/auth/recovery-key" },
   me: { method: "GET", path: "/me" },
+  securityEvents: { method: "GET", path: "/me/security-events" },
   deleteMe: { method: "DELETE", path: "/me" },
   listDevices: { method: "GET", path: "/devices" },
   deleteDevice: { method: "DELETE", path: "/devices/:id" },

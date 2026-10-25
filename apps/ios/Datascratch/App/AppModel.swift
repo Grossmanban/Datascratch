@@ -27,6 +27,8 @@ final class AppModel {
     #if canImport(DSCore)
     /// The document store behind `library` (nil when DSCore could not open).
     let core: CoreLibrary?
+    /// The server connection when `DS_SERVER_URL` is set.
+    let connection: ServerConnection?
     #endif
     let accounts: any AccountService
     let sync: SyncCenter
@@ -69,11 +71,27 @@ final class AppModel {
             sync = SyncCenter(serverURL: server)
         }
         #if canImport(DSCore)
-        core = coreLibrary as? CoreLibrary
-        #endif
+        let coreStack = coreLibrary as? CoreLibrary
+        core = coreStack
+        if let server, let coreStack, !options.uiTesting {
+            // An account on the Datascratch server: DSCore does auth, keys and sync.
+            let connection = ServerConnection(serverURL: server, webHost: host, core: coreStack, sync: sync)
+            self.connection = connection
+            accounts = ServerAccountService(connection: connection)
+            sharing = ServerSharingService(connection: connection)
+            access = ServerAccessService(connection: connection)
+            sync.onBackOnline = { connection.reconnect() }
+        } else {
+            connection = nil
+            accounts = LocalAccountService(store: secureStore)
+            sharing = LocalSharingService(webHost: host)
+            access = LocalAccessService()
+        }
+        #else
         accounts = LocalAccountService(store: secureStore)
         sharing = LocalSharingService(webHost: host)
         access = LocalAccessService()
+        #endif
 
         if options.uiTesting, options.signedIn {
             library.seedIfEmpty()
@@ -116,9 +134,12 @@ final class AppModel {
 
     /// Called once the user has an account and confirmed the recovery key.
     func finishOnboarding() {
+        // A server account signing in on a new device gets its library by sync; seed
+        // first-run content only for new or local accounts.
+        let seed = !accounts.isServerBacked || isSigningUp
         pendingRecoveryKey = nil
         isSigningUp = false
-        library.seedIfEmpty()
+        if seed { library.seedIfEmpty() }
     }
 
     func signOut() async {

@@ -1,0 +1,153 @@
+import Foundation
+import Observation
+import SwiftUI
+
+enum SidebarItem: Hashable {
+    case allDocuments
+    case tasks
+    case calendar
+    case starred
+    case trash
+    case notebook(String)
+    case folder(String)
+    case tag(String)
+}
+
+enum TaskDateField: Hashable {
+    case scheduled, deadline
+}
+
+enum SceneSheet: Identifiable, Hashable {
+    case newNotebook(spaceId: String)
+    case editNotebook(String)
+    case newSpace
+    case editSpace(String)
+    case newFolder(notebookId: String, parentId: String?)
+    case editFolder(String)
+    case settings
+    case share(ShareTarget)
+    case versions(noteId: String)
+    case documentStyle(noteId: String)
+    case move(noteId: String)
+    case sharedLink(shareId: String, key: String?)
+    case taskDate(noteId: String, blockId: String, field: TaskDateField)
+
+    var id: Self { self }
+}
+
+/// Per-window navigation state (every window/Stage Manager scene has its own).
+@Observable
+final class SceneModel {
+    let app: AppModel
+
+    var sidebar: SidebarItem? = .allDocuments {
+        didSet { if oldValue != sidebar { searchText = "" } }
+    }
+    var selectedNoteId: String?
+    var columnVisibility: NavigationSplitViewVisibility = .all
+    var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
+    var isCommandPalettePresented = false
+    var sheet: SceneSheet?
+    var searchText = ""
+    var taskBucket: TaskIndex.Bucket = .today
+    var calendarDay: String = DayKey.from(Date())
+    var pendingModeChange: (notebookId: String, mode: NotebookMode)?
+
+    init(app: AppModel) {
+        self.app = app
+    }
+
+    var library: LibraryStore { app.library }
+
+    /// Notebook + folder where "New note" puts a note, based on what is selected.
+    var newNoteDestination: (notebookId: String, folderId: String?)? {
+        switch sidebar {
+        case .notebook(let id): return (id, nil)
+        case .folder(let id):
+            if let folder = library.folder(id) { return (folder.notebookId, folder.id) }
+        default: break
+        }
+        if let current = selectedNoteId.flatMap({ library.note($0) }), current.kind == .note {
+            return (current.notebookId, current.folderId)
+        }
+        guard let notebook = library.notebooks(in: library.activeSpace?.id).first else { return nil }
+        return (notebook.id, nil)
+    }
+
+    @discardableResult
+    func newNote(title: String = "") -> NoteMeta? {
+        if newNoteDestination == nil, let space = library.activeSpace {
+            library.createNotebook(in: space.id, name: String(localized: "Notes"), mode: .private)
+        }
+        guard let destination = newNoteDestination else { return nil }
+        let note = library.createNote(in: destination.notebookId, folder: destination.folderId, title: title)
+        if case .tag(let tag) = sidebar {
+            library.setBody(NoteBody(blocks: [.paragraph("#\(tag) ")]), ofNote: note.id)
+        }
+        open(note.id)
+        return note
+    }
+
+    func open(_ noteId: String) {
+        withAnimation(Theme.Motion.snappy) {
+            selectedNoteId = noteId
+            preferredCompactColumn = .detail
+        }
+        library.openTab(noteId)
+    }
+
+    func closeDocument() {
+        if let id = selectedNoteId { library.recordVersion(ofNote: id) }
+        selectedNoteId = nil
+        preferredCompactColumn = .content
+    }
+
+    func show(_ item: SidebarItem) {
+        withAnimation(Theme.Motion.snappy) {
+            sidebar = item
+            preferredCompactColumn = .content
+        }
+    }
+
+    func openToday() {
+        let today = DayKey.from(Date())
+        calendarDay = today
+        if let note = library.ensureDailyNote(for: today) {
+            sidebar = .calendar
+            open(note.id)
+        }
+    }
+
+    func toggleSidebar() {
+        withAnimation(Theme.Motion.smooth) {
+            columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+        }
+    }
+
+    func handle(_ route: AppRoute) {
+        switch route {
+        case .note(let id):
+            if library.note(id) != nil { open(id) }
+        case .today:
+            openToday()
+        case .share(let shareId, let key):
+            sheet = .sharedLink(shareId: shareId, key: key)
+        }
+    }
+
+    /// Request to change a notebook's encryption mode; the UI asks for confirmation.
+    func requestModeChange(_ notebookId: String, to mode: NotebookMode) {
+        guard library.notebook(notebookId)?.mode != mode else { return }
+        pendingModeChange = (notebookId, mode)
+    }
+
+    func confirmModeChange() {
+        guard let change = pendingModeChange else { return }
+        library.setMode(change.mode, forNotebook: change.notebookId)
+        pendingModeChange = nil
+    }
+}
+
+extension FocusedValues {
+    @Entry var sceneModel: SceneModel?
+}

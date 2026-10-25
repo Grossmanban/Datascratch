@@ -1,0 +1,16 @@
+// Shared build settings. Secrets and the Apple Team ID never live in git (D-33):
+// put them into Config/Local.xcconfig (ignored) or pass them on the command line.
+
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+// Web host for share links and Universal Links (D-13, D-40: domain not chosen yet).
+DS_WEB_HOST = datascratch.app
+// Sync/REST server base URL (contracts/api.md). Empty = offline-only mode.
+DS_SERVER_URL =
+
+// Team ID: Config/Local.xcconfig `DS_TEAM_ID = XXXXXXXXXX` or `DS_TEAM_ID=...` on xcodebuild.
+DS_TEAM_ID =
+DEVELOPMENT_TEAM = $(DS_TEAM_ID)
+
+#include? "Local.xcconfig"

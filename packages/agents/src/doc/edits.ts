@@ -14,7 +14,8 @@ import { base64url, fromBase64url } from "../util.js";
 import { cloneInto, insertBlocks, type BuildContext } from "./build.js";
 import { markdownToBlocks, type BlockSpec, type ImportOptions } from "./markdown-import.js";
 import { blockIdOf, childElements, contentOf, findBlock, TEXT_BLOCKS, type BlockLocation, type Marks } from "./model.js";
-import { readStroke, resolveAnchor } from "./strokes.js";
+import { readStroke } from "@datascratch/shared/strokes";
+import { resolveAnchor } from "./strokes.js";
 
 export type Position = { after: string } | { before: string } | { at: "start" | "end" };
 
@@ -236,9 +237,10 @@ function moveBlock(doc: Y.Doc, op: Extract<EditOp, { op: "move" }>): void {
   };
 
   // `anchors` is mutable (strokes.md §1): rewrite the anchors of affected strokes in place.
-  doc.getMap("strokes").forEach((raw, id) => {
-    const s = readStroke(id, raw);
-    if (!s || s.anchorKind !== "text" || !(raw instanceof Y.Map)) return;
+  doc.getMap("strokes").forEach((raw) => {
+    if (!(raw instanceof Y.Map)) return;
+    const s = readStroke(raw);
+    if (!s || s.anchorKind !== "text") return;
     let touched = false;
     const anchors = s.anchors.map((a) => {
       const n = reanchor(a);

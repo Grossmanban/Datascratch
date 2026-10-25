@@ -27,6 +27,8 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@datascratch/design-tokens": "workspace:^",
+    "@datascratch/shared": "workspace:^",
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/newsreader": "^0.4.1",
     "@modelcontextprotocol/server": "^2.4.0",
@@ -39,6 +41,7 @@
     "zod": "^4.2.0"
   },
   "devDependencies": {
+    "@datascratch/test-vectors": "workspace:^",
     "@modelcontextprotocol/client": "^2.4.0",
     "@types/mdast": "^4.0.4",
     "@types/node": "^22",

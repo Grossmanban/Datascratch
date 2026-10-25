@@ -292,7 +292,12 @@ export function documentVectors() {
 
   // --- notebook ---------------------------------------------------------------
   const notebookId = vid(2);
-  const notebook = createNotebookDoc(notebookId, { doc: fixedDoc(2) });
+  const notebook = createNotebookDoc(notebookId, {
+    doc: fixedDoc(2),
+    name: "Main",
+    icon: "📓",
+    space: { id: vid(60), name: "Personal", icon: "🏠" },
+  });
   putFolder(notebook, {
     id: vid(50),
     parentId: null,

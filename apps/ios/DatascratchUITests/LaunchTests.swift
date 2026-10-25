@@ -132,9 +132,11 @@ final class LibraryUITests: XCTestCase {
 
     func testCreateNoteAndWriteTitle() throws {
         let app = launchSignedIn()
+        // One New button (D-38): the toolbar on iPad, the floating button on iPhone.
         let newNote = app.buttons["library.newNote"].firstMatch
-        if !newNote.waitForExistence(timeout: 5) {
-            // iPhone: start from the sidebar.
+        let floating = app.buttons["library.newNote.floating"].firstMatch
+        if !newNote.waitForExistence(timeout: 5), !floating.exists {
+            // Start from the sidebar.
             app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch.tap()
         }
         let button = app.buttons["library.newNote"].exists ? app.buttons["library.newNote"].firstMatch

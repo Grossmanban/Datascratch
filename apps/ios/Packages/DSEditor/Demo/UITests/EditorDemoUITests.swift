@@ -56,7 +56,9 @@ final class EditorDemoUITests: XCTestCase {
         sleep(1)
         editor.typeText("Inkwell")
         XCTAssertTrue((editor.value as? String ?? "").contains("Inkwell"))
-        app.buttons["undo"].tap()
+        // The software keyboard has its own "undo" key: use the editor's toolbar button.
+        app.navigationBars.buttons["undo"].tap()
+        XCTAssertEqual(app.state, .runningForeground)
     }
 
     /// Narrows down the tool-switch crash: an ink-to-ink switch, and the text tool with finger

@@ -100,3 +100,40 @@ test("lists stay fast with 10 000 notes", async ({ page }) => {
   expect(rows).toBeLessThan(300);
   expect(coldMs).toBeLessThan(15_000);
 });
+
+test("cold start with 10 000 notes that have content keeps notes out of memory", async ({ page }) => {
+  test.skip(!!process.env.E2E_SERVER_URL, "mock server only");
+  test.setTimeout(240_000);
+  await signUp(page, uniqueEmail("perf-mem"));
+  await expect.poll(() => page.evaluate(() => "__dsTest" in window)).toBe(true);
+  await seedNotes(page, COUNT);
+  // Every seeded note gets real content: the welcome note's state, stored as on a synced device.
+  await page.evaluate(async (count) => {
+    const w = window as unknown as {
+      __ds: { store: { rows: Map<string, { kind: string }>; loadState(id: string): Promise<Uint8Array | null> } };
+      __dsTest: { db: () => { updates: { bulkAdd(rows: unknown[]): Promise<unknown> } } };
+    };
+    const [welcomeId] = [...w.__ds.store.rows].find(([id, r]) => r.kind === "note" && !id.startsWith("01a00000"))!;
+    const state = (await w.__ds.store.loadState(welcomeId))!;
+    const rows = Array.from({ length: count }, (_, i) => ({ docId: `01a00000-0000-7000-8000-${String(i).padStart(12, "0")}`, update: state }));
+    for (let i = 0; i < rows.length; i += 1000) await w.__dsTest.db().updates.bulkAdd(rows.slice(i, i + 1000));
+  }, COUNT);
+  await page.waitForTimeout(3000);
+
+  const t0 = Date.now();
+  await page.reload();
+  await expect(page.getByTestId("doc-card").filter({ hasText: "Заметка 9999" })).toBeVisible({ timeout: 60_000 });
+  const coldMs = Date.now() - t0;
+  await page.waitForTimeout(Number(process.env.PERF_SETTLE_MS ?? 8000)); // background attach / indexing
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("HeapProfiler.collectGarbage");
+  const mem = await page.evaluate(() => {
+    const w = window as unknown as { __ds: { store: { docs: Map<string, unknown> } } };
+    const heap = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? 0;
+    return { docs: w.__ds.store.docs.size, heapMb: Math.round(heap / 1e6) };
+  });
+  console.log(`perf: content cold start ${coldMs} ms, docs in memory ${mem.docs}, JS heap ${mem.heapMb} MB`);
+  expect(coldMs).toBeLessThan(20_000);
+  // Before stored mode: 10 003 Y.Docs and ~139 MB after GC; now only the account and notebook indexes.
+  expect(mem.docs).toBeLessThan(20);
+});

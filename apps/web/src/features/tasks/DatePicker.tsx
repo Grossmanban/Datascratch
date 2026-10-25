@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import { addDays, localDate, monthGrid, parseLocalDate, today, weekdayNames, dateFormat } from "@/lib/dates";
+import { addDays, localDate, monthGrid, parseLocalDate, today, weekdayNames, formatMonthYear } from "@/lib/dates";
 import i18n from "@/i18n";
 import { cn, IconButton } from "@/ui";
 
@@ -19,14 +19,12 @@ export function MonthCalendar({
   const [cursor, setCursor] = useState({ y: base.getFullYear(), m: base.getMonth() });
   const days = monthGrid(cursor.y, cursor.m);
   const t = today();
-  const title = dateFormat({ month: "long", year: "numeric" }, i18n.language === "en" ? "en-US" : "ru-RU").format(
-    new Date(cursor.y, cursor.m, 1),
-  );
+  const title = formatMonthYear(new Date(cursor.y, cursor.m, 1), i18n.language === "en" ? "en-US" : "ru-RU");
   const shift = (d: number) => setCursor(({ y, m }) => ({ y: m + d < 0 ? y - 1 : m + d > 11 ? y + 1 : y, m: (m + d + 12) % 12 }));
   return (
     <div className={cn("select-none", compact ? "w-[252px]" : "w-full")}>
       <div className="mb-2 flex items-center">
-        <span className="flex-1 pl-1 text-[14px] font-semibold capitalize text-ink">{title}</span>
+        <span className="flex-1 pl-1 text-[14px] font-semibold text-ink">{title}</span>
         <IconButton size="sm" label="prev" onClick={() => shift(-1)}>
           <ChevronLeft className="size-4" />
         </IconButton>

@@ -84,7 +84,7 @@ export function TasksPage() {
           key={date}
           title={
             <Link to="/calendar" search={{ date }} className="hover:text-ink">
-              <span className="text-ink">{formatDay(date)}</span> <span className="font-normal capitalize text-ink-2">· {formatWeekday(date)}</span>
+              <span className="text-ink">{formatDay(date)}</span> <span className="font-normal text-ink-2">· {formatWeekday(date)}</span>
             </Link>
           }
         >

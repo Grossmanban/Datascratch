@@ -247,10 +247,17 @@ function Section({ id, title, action, children }: { id: string; title: string; a
       <div className="group flex h-7 items-center px-2">
         <button
           onClick={toggle}
-          className="flex flex-1 items-center gap-1 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-2 hover:text-ink"
+          aria-expanded={!collapsed}
+          className="flex flex-1 items-center gap-1 text-[12.5px] font-semibold text-ink-3 hover:text-ink-2"
         >
           {title}
-          <ChevronDown className={cn("size-3 transition-transform", collapsed && "-rotate-90")} />
+          {/* The chevron shows on hover (and while collapsed, so the section can be found again). */}
+          <ChevronDown
+            className={cn(
+              "size-3 transition-[transform,opacity]",
+              collapsed ? "-rotate-90 opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+            )}
+          />
         </button>
         <div className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">{action}</div>
       </div>

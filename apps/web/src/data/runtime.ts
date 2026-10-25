@@ -67,6 +67,18 @@ export class AccountRuntime {
         if (!key) throw new Error(`no key for ${docId}`);
         return key;
       },
+      // Notes sync in stored mode: no Y.Doc unless open (10 000 notes stay on disk, not in memory).
+      storedDocs: {
+        onUpdates: async (docId, updates) => {
+          await this.store.appendStored(docId, updates);
+          if (useWorkspace.getState().notes[docId]) this.indexer.schedule(docId);
+        },
+        loadState: (docId) => this.store.loadState(docId),
+      },
+    });
+    this.store.setNoteSync({
+      open: (docId, load) => this.openNote(docId, load),
+      close: (docId, save) => this.client.closeDoc(docId, save),
     });
     this.cleanups.push(
       this.client.on("status", () => this.updateStatus()),
@@ -154,8 +166,12 @@ export class AccountRuntime {
     if (!fresh.length) return;
     for (const id of fresh) this.attached.add(id);
     const done = (async () => {
-      const docs = await Promise.all(fresh.map(async (docId) => ({ docId, doc: await this.store.pin(docId) })));
-      await this.client.addDocs(docs);
+      const rows = await Promise.all(fresh.map((docId) => this.store.row(docId)));
+      const notes = fresh.filter((_, i) => rows[i]?.kind === "note");
+      const live = fresh.filter((_, i) => rows[i]?.kind !== "note");
+      // Account and notebook indexes are live Y.Docs; notes are stored (opened on demand).
+      if (notes.length) await this.client.addStoredDocs(notes);
+      if (live.length) await this.client.addDocs(await Promise.all(live.map(async (docId) => ({ docId, doc: await this.store.pin(docId) }))));
     })();
     for (const id of fresh) this.attaching.set(id, done);
     try {
@@ -164,6 +180,13 @@ export class AccountRuntime {
       for (const id of fresh) if (this.attaching.get(id) === done) this.attaching.delete(id);
     }
     this.updateStatus();
+  }
+
+  /** A note becomes a live Y.Doc while held (DocStore.acquire): SyncClient.openDoc. */
+  private async openNote(docId: string, load: () => Promise<Y.Doc>): Promise<Y.Doc> {
+    await this.attach([docId]);
+    await this.attaching.get(docId);
+    return this.client.openDoc(docId, load);
   }
 
   private async reattach(docId: string) {
@@ -331,7 +354,11 @@ export async function startRuntime(accountDocId: string) {
   void current?.stop();
   current = new AccountRuntime(accountDocId);
   // Dev tools and e2e performance tests (a build with VITE_DS_TEST_HOOKS=1) reach the runtime here.
-  if (import.meta.env.DEV || import.meta.env.VITE_DS_TEST_HOOKS) (window as unknown as { __ds?: unknown }).__ds = current;
+  if (import.meta.env.DEV || import.meta.env.VITE_DS_TEST_HOOKS) {
+    const w = window as unknown as { __ds?: unknown; __dsTest?: unknown };
+    w.__ds = current;
+    w.__dsTest = { Y: await import("yjs"), db: accountDb };
+  }
   await current.start();
   return current;
 }

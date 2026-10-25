@@ -1,17 +1,37 @@
 import { Menu, PanelLeftOpen } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useIsMobile } from "@/hooks/useMedia";
 import { toggleSidebar, useUi } from "@/hooks/useUi";
 import { cn, IconButton } from "@/ui";
 
-/** Top bar of every page: sidebar toggle, breadcrumbs/title, actions. Glassy when content scrolls under it. */
+/**
+ * Top bar of every page: sidebar toggle, breadcrumbs/title, actions. It is part of the paper
+ * (canvas, translucent with blur — no shadow); a hairline appears once content scrolls under it.
+ */
 export function TopBar({ children, actions, className }: { children?: ReactNode; actions?: ReactNode; className?: string }) {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const sidebarOpen = useUi((s) => s.sidebarOpen);
+  const ref = useRef<HTMLElement>(null);
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const scroller = ref.current?.parentElement;
+    if (!scroller) return;
+    const onScroll = () => setScrolled(scroller.scrollTop > 2);
+    onScroll();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", onScroll);
+  }, []);
   return (
-    <header className={cn("glass sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 px-3 sm:px-4", className)}>
+    <header
+      ref={ref}
+      className={cn(
+        "sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b bg-canvas/85 px-3 backdrop-blur-xl transition-colors sm:px-4",
+        scrolled ? "border-line" : "border-transparent",
+        className,
+      )}
+    >
       {isMobile ? (
         <IconButton label={t("nav.expandSidebar")} onClick={() => useUi.setState({ mobileNavOpen: true })} data-testid="mobile-menu">
           <Menu className="size-[18px]" />

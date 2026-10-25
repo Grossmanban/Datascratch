@@ -527,3 +527,18 @@ describe("PenToolbar compact", () => {
     expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, color: "blue" });
   });
 });
+
+describe("DocCard asChild", () => {
+  it("uses the child link as root so its name comes from the content", async () => {
+    const { DocCard } = await import("../src");
+    renderUI(
+      <DocCard asChild title="План квартала" subtitle="Цели">
+        <a href="/doc/7" />
+      </DocCard>,
+    );
+    const link = screen.getByRole("link", { name: /План квартала/ });
+    expect(link).toHaveAttribute("href", "/doc/7");
+    expect(link.querySelector("article")).toBeNull();
+    expect(screen.getByRole("heading", { name: "План квартала" })).toBeInTheDocument();
+  });
+});

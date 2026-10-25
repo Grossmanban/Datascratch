@@ -156,14 +156,7 @@ export const Document: Story = () => {
       />
 
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2">
-        <PenToolbar
-          value={pen}
-          onChange={setPen}
-          canUndo
-          onUndo={() => {}}
-          onRedo={() => {}}
-          tools={["pen", "pencil", "marker", "highlighter", "eraser", "lasso"]}
-        />
+        <PenToolbar value={pen} onChange={setPen} canUndo onUndo={() => {}} onRedo={() => {}} />
       </div>
     </div>
   );

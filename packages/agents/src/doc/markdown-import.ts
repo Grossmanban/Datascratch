@@ -159,15 +159,17 @@ class Importer {
       state = "cancelled";
       inl[0] = { ...head, text: head.text.replace(/^\[-\]\s/, "") };
     }
-    // Dates written the way read_note prints them: 📅 2026-10-25 ⏰ 2026-10-30
+    // Dates in the Obsidian Tasks style that read_note prints: ⏳ scheduled, 📅 deadline (any order).
     let scheduled: string | null = null;
     let deadline: string | null = null;
     const last = inl[inl.length - 1];
     if (last && "text" in last) {
       let t = last.text;
-      t = t.replace(/\s*⏰\s*(\d{4}-\d{2}-\d{2})\s*$/u, (_, d: string) => ((deadline = d), ""));
-      t = t.replace(/\s*📅\s*(\d{4}-\d{2}-\d{2})\s*$/u, (_, d: string) => ((scheduled = d), ""));
-      t = t.replace(/\s*⏰\s*(\d{4}-\d{2}-\d{2})\s*$/u, (_, d: string) => ((deadline = d), ""));
+      for (let m = /\s*(⏳|📅)\s*(\d{4}-\d{2}-\d{2})\s*$/u.exec(t); m; m = /\s*(⏳|📅)\s*(\d{4}-\d{2}-\d{2})\s*$/u.exec(t)) {
+        if (m[1] === "⏳") scheduled = m[2]!;
+        else deadline = m[2]!;
+        t = t.slice(0, m.index);
+      }
       inl[inl.length - 1] = { ...last, text: t };
     }
     first.inline = inl.filter((i) => !("text" in i) || i.text.length > 0);

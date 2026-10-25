@@ -8,35 +8,34 @@
  * thickness = width × f(pressure) × scale, highlighter under the text with
  * multiply. The image is cropped to the marked lines plus context.
  */
+import { tokens } from "@datascratch/design-tokens";
+import {
+  drawsUnderText,
+  layoutBlockStroke,
+  layoutTextStroke,
+  resolveAnchors,
+  type Segment,
+} from "@datascratch/shared/strokes";
 import { createCanvas, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
 import type * as Y from "yjs";
 import type { HandwritingItem } from "../doc/handwriting.js";
 import { attr, findBlock, flatten, markName, TEXT_BLOCKS, childElements, type Marks } from "../doc/model.js";
-import { anchorTextStrokes, readStrokes, type Stroke, type StrokePoint } from "../doc/strokes.js";
+import { anchorTextStrokes, readStrokes, type Stroke } from "../doc/strokes.js";
 import { DISPLAY_FAMILY, ensureFonts, TEXT_FAMILY } from "./fonts.js";
 
 /** Reference column width in pt (strokes.md §5 scales block strokes by blockWidth/600). */
 export const COLUMN = 600;
 const PAD = 20;
 
+/** Light-theme colors from the design tokens (contracts/design-tokens.md). */
 const COLORS: Record<string, string> = {
-  "ink.black": "#1D1C1A",
-  "ink.blue": "#2E5BDB",
-  "ink.red": "#D2453B",
-  "ink.green": "#3E8E5A",
-  "ink.purple": "#7A4FD6",
-  "ink.brown": "#8A5A32",
-  "highlight.yellow": "#FFE36E80",
-  "highlight.green": "#9BE3A880",
-  "highlight.pink": "#FFB3C780",
-  "highlight.blue": "#A9CCFF80",
-  "text.primary": "#1D1C1A",
-  "text.secondary": "#6B6862",
-  accent: "#2E5BDB",
+  ...Object.fromEntries(Object.entries(tokens.ink).map(([k, v]) => [`ink.${k}`, v.light])),
+  ...Object.fromEntries(Object.entries(tokens.highlight).map(([k, v]) => [`highlight.${k}`, v.light])),
+  ...Object.fromEntries(Object.entries(tokens.color).map(([k, v]) => [k, v.light])),
 };
-const BG = "#FFFFFF";
-const INK = "#1D1C1A";
-const LINK = "#2E5BDB";
+const BG = tokens.color["bg.surface"].light;
+const INK = tokens.color["text.primary"].light;
+const LINK = tokens.color.accent.light;
 
 export function cssColor(token: string, fallback = INK): string {
   const hex = COLORS[token] ?? (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(token) ? token : null);
@@ -51,15 +50,7 @@ export function cssColor(token: string, fallback = INK): string {
   return hex;
 }
 
-/** Pressure curve shared by all platforms (strokes.md §5). */
-export function pressureCurve(p: number): number {
-  return 0.35 + 0.65 * Math.pow(Math.max(0, Math.min(1, p)), 0.8);
-}
-
-function tiltFactor(stroke: Stroke, p: StrokePoint): number {
-  if (stroke.tool !== "pencil" && stroke.tool !== "marker") return 1;
-  return 1 + 1.5 * (1 - Math.max(0, Math.min(Math.PI / 2, p.altitude)) / (Math.PI / 2));
-}
+export { pressureCurve } from "@datascratch/shared/strokes";
 
 // ---------------------------------------------------------------------------
 // Text layout
@@ -86,7 +77,8 @@ function blockStyle(el: Y.XmlElement): BlockStyle {
   }
 }
 
-interface Glyph {
+/** @internal exported for tests */
+export interface Glyph {
   ch: string;
   x: number;
   w: number;
@@ -95,13 +87,15 @@ interface Glyph {
   marks: Marks;
 }
 
-interface Line {
+/** @internal */
+export interface Line {
   top: number;
   baseline: number;
   bottom: number;
 }
 
-interface Layout {
+/** @internal */
+export interface Layout {
   glyphs: Glyph[];
   lines: Line[];
   fontSize: number;
@@ -223,9 +217,7 @@ interface Pt {
   w: number;
 }
 
-function strokeWidthAt(stroke: Stroke, p: StrokePoint, scale: number): number {
-  return Math.max(0.4, stroke.width * pressureCurve(p.pressure) * scale * tiltFactor(stroke, p));
-}
+const toPts = (segments: Segment[]): Pt[][] => segments.map((seg) => seg.map((p) => ({ x: p.x, y: p.y, w: Math.max(0.4, p.width) })));
 
 function drawSegment(ctx: SKRSContext2D, stroke: Stroke, pts: Pt[]): void {
   if (pts.length < 2) return; // D-35: a segment shorter than 2 points is not drawn
@@ -235,8 +227,8 @@ function drawSegment(ctx: SKRSContext2D, stroke: Stroke, pts: Pt[]): void {
   ctx.lineJoin = "round";
   ctx.strokeStyle = color;
   ctx.globalAlpha = stroke.opacity;
-  if (stroke.tool === "highlighter") ctx.globalCompositeOperation = "multiply";
-  const uniform = stroke.tool === "highlighter" || stroke.opacity < 1 || color.startsWith("rgba");
+  if (drawsUnderText(stroke.tool)) ctx.globalCompositeOperation = "multiply";
+  const uniform = drawsUnderText(stroke.tool) || stroke.opacity < 1 || color.startsWith("rgba");
   if (uniform) {
     ctx.lineWidth = pts.reduce((s, p) => s + p.w, 0) / pts.length;
     ctx.beginPath();
@@ -257,31 +249,18 @@ function drawSegment(ctx: SKRSContext2D, stroke: Stroke, pts: Pt[]): void {
   ctx.restore();
 }
 
-/** Text stroke → segments in layout coordinates (split at line changes and deleted anchors). */
-function textSegments(stroke: Stroke, offsets: (number | null)[], layout: Layout, dy: number): Pt[][] {
-  const segments: Pt[][] = [];
-  let cur: Pt[] = [];
-  let curLine = -1;
-  const fs = layout.fontSize;
-  for (const p of stroke.points) {
-    const off = offsets[Math.round(p.a)];
-    const g = off === null || off === undefined ? undefined : layout.glyphs[off];
-    if (!g) {
-      if (cur.length) segments.push(cur);
-      cur = [];
-      curLine = -1;
-      continue;
-    }
-    if (curLine !== -1 && g.line !== curLine) {
-      segments.push(cur);
-      cur = [];
-    }
-    curLine = g.line;
-    const line = layout.lines[g.line]!;
-    cur.push({ x: g.x + p.x * fs, y: dy + line.baseline + p.y * fs, w: strokeWidthAt(stroke, p, fs / 17) });
-  }
-  if (cur.length) segments.push(cur);
-  return segments;
+/** Text stroke → segments via the shared layout rules; the glyph geometry comes from our typesetter. @internal */
+export function textSegments(doc: Y.Doc, stroke: Stroke, block: Y.XmlElement, layout: Layout, dy: number): Pt[][] {
+  const flat = flatten(block);
+  const anchors = resolveAnchors(doc, stroke.anchors);
+  return toPts(
+    layoutTextStroke(stroke, stroke.points, anchors, (anchor) => {
+      const start = flat.runStart.get(anchor.text);
+      const g = start === undefined ? undefined : layout.glyphs[start + anchor.index];
+      if (!g) return null;
+      return { x: g.x, baseline: dy + layout.lines[g.line]!.baseline, fontSize: layout.fontSize, line: g.line };
+    }),
+  );
 }
 
 function boxOf(segments: Pt[][]): { minY: number; maxY: number; minX: number; maxX: number } | null {
@@ -341,7 +320,7 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
     if (!block) throw new Error("handwriting has no live anchors");
     const layout = layoutText(measureCanvas(), block, PAD, COLUMN);
     const dy = PAD;
-    const segs = anchored.map((a) => ({ a, segments: textSegments(a.stroke, a.offsets, layout, dy) }));
+    const segs = anchored.map((a) => ({ a, segments: textSegments(doc, a.stroke, block, layout, dy) }));
     const markedLines = new Set<number>();
     for (const a of anchored) for (const o of a.offsets) if (o !== null) markedLines.add(layout.glyphs[o]?.line ?? 0);
     const minL = Math.max(0, Math.min(...markedLines) - ctxLines);
@@ -354,8 +333,8 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
       bottom = Math.max(bottom, box.maxY + 8);
     }
     const focus = new Set<number>([...markedLines]);
-    const under = segs.filter((s) => s.a.stroke.tool === "highlighter");
-    const over = segs.filter((s) => s.a.stroke.tool !== "highlighter");
+    const under = segs.filter((s) => drawsUnderText(s.a.stroke.tool));
+    const over = segs.filter((s) => !drawsUnderText(s.a.stroke.tool));
     return paint(width, top, bottom, scale, [
       (c) => under.forEach((s) => s.segments.forEach((seg) => drawSegment(c, s.a.stroke, seg))),
       (c) => drawText(c, layout, dy, focus, [minL, maxL]),
@@ -365,14 +344,12 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
 
   const loc = item.blockId ? findBlock(doc, item.blockId) : null;
   if (!loc) throw new Error("handwriting block not found");
-  const toPts = (s: Stroke, originY: number) => [
-    s.points.map((p) => ({ x: PAD + p.x * COLUMN, y: originY + p.y * COLUMN, w: strokeWidthAt(s, p, COLUMN / 600) })),
-  ];
+  const blockPts = (s: Stroke, originY: number) => toPts(layoutBlockStroke(s, s.points, { x: PAD, y: originY, width: COLUMN }));
 
   if (item.kind === "margin") {
     const textEl = TEXT_BLOCKS.has(loc.el.nodeName) ? loc.el : (childElements(loc.el).find((c) => TEXT_BLOCKS.has(c.nodeName)) ?? null);
     const layout = textEl ? layoutText(measureCanvas(), textEl, PAD, COLUMN) : null;
-    const segs = strokes.map((s) => ({ s, segments: toPts(s, PAD) }));
+    const segs = strokes.map((s) => ({ s, segments: blockPts(s, PAD) }));
     const box = boxOf(segs.flatMap((x) => x.segments));
     const top = Math.min(0, (box?.minY ?? PAD) - 8);
     const bottom = Math.max(PAD + (layout?.height ?? 0) + PAD, (box?.maxY ?? 0) + 8);
@@ -383,7 +360,7 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
   }
 
   // drawing / image: points in fractions of the block width
-  const segs = strokes.map((s) => ({ s, segments: toPts(s, PAD) }));
+  const segs = strokes.map((s) => ({ s, segments: blockPts(s, PAD) }));
   const box = boxOf(segs.flatMap((x) => x.segments));
   let contentH = Number(attr(loc.el, "height") ?? 0) || 0;
   let img: Awaited<ReturnType<typeof loadImage>> | null = null;

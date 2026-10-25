@@ -3,10 +3,23 @@ import Foundation
 /// Overall sync state for the UI.
 public struct SyncStatus: Equatable, Sendable {
     public var connection: SyncConnectionState
-    /// Outgoing messages not yet acknowledged.
+    /// Outgoing messages not yet acknowledged (failed ones not included).
     public var pending: Int
     /// Documents still catching up after (re)connect.
     public var catchingUp: Int
+    /// Documents whose messages could not be delivered and are no longer retried on their own
+    /// (`retryFailed`, `discardFailed`). Everything else keeps syncing.
+    public var failed: [FailedSync] = []
+
+    public init(connection: SyncConnectionState, pending: Int, catchingUp: Int, failed: [FailedSync] = []) {
+        self.connection = connection
+        self.pending = pending
+        self.catchingUp = catchingUp
+        self.failed = failed
+    }
+
+    /// Nothing left to send or fetch (failed messages aside).
+    public var isIdle: Bool { pending == 0 && catchingUp == 0 }
 }
 
 /// Ties documents, the local store, encryption and the WebSocket together
@@ -133,8 +146,12 @@ public actor SyncEngine: SyncClientDelegate {
 
     private func removeStatus(_ id: UUID) { statusContinuations[id] = nil }
 
+    /// Current status (the same value `statusUpdates()` yields).
+    public func status() -> SyncStatus { currentStatus() }
+
     private func currentStatus() -> SyncStatus {
-        SyncStatus(connection: connection, pending: (try? store.outboxCount()) ?? 0, catchingUp: catchingUp.count)
+        SyncStatus(connection: connection, pending: (try? store.outboxCount()) ?? 0, catchingUp: catchingUp.count,
+                   failed: (try? store.failedOutbox()) ?? [])
     }
 
     private func publish() {
@@ -190,6 +207,48 @@ public actor SyncEngine: SyncClientDelegate {
 
     public func isOpen(_ docId: String) -> Bool { open[docId] != nil }
 
+    /// Deletes a document locally: stops syncing it and removes it, its queue and its index
+    /// entries from the store (e.g. a local document replaced at sign-in).
+    public func deleteDocument(_ docId: String) throws {
+        open.removeValue(forKey: docId)?.subscription.cancel()
+        known[docId] = nil
+        live.remove(docId)
+        catchingUp.remove(docId)
+        try store.deleteDocument(docId)
+        publish()
+    }
+
+    // MARK: Failed messages
+
+    /// Puts failed messages (of one document or all) back into the queue and tries again:
+    /// registration, subscription, sending.
+    public func retryFailed(docId: String? = nil) async {
+        try? store.retryFailed(docId: docId)
+        if await client.isConnected, let records = try? store.documents() {
+            let waiting = records.filter { !live.contains($0.docId) && !catchingUp.contains($0.docId) && (docId == nil || $0.docId == docId) }
+            try? await subscribe(waiting)
+        }
+        await flush()
+    }
+
+    /// Gives up on a document's failed messages (its local content stays).
+    public func discardFailed(docId: String) {
+        try? store.discardOutbox(docId: docId, onlyFailed: true)
+        publish()
+    }
+
+    /// Errors that will not pass by retrying: the request was refused (4xx other than 401,
+    /// 408 and 429).
+    static func isPermanent(_ error: any Error) -> Bool {
+        if case APIError.server(let status, _, _) = error { return (400..<500).contains(status) && ![401, 408, 429].contains(status) }
+        return false
+    }
+
+    static func describe(_ error: any Error) -> String {
+        if case APIError.server(let status, let code, _) = error { return "\(code) (\(status))" }
+        return String(describing: error)
+    }
+
     // MARK: Awareness
 
     public func sendAwareness(docId: String, payload: Data) async throws {
@@ -221,22 +280,34 @@ public actor SyncEngine: SyncClientDelegate {
         }
         guard let items = try? store.pendingOutbox(limit: Self.maxInFlight * 2) else { return }
         backlog = items.count == Self.maxInFlight * 2
-        for item in items where !inFlight.contains(item.clientMsgId) && live.contains(item.docId) {
+        // Documents whose registration failed in this pass: their other messages wait.
+        var skip: Set<String> = []
+        for item in items where !inFlight.contains(item.clientMsgId) && live.contains(item.docId) && !skip.contains(item.docId) {
             guard inFlight.count < Self.maxInFlight else {
                 backlog = true
                 break
             }
-            guard let record = try? store.document(item.docId) else { continue }
+            guard let record = try? store.document(item.docId) else {
+                // The document is gone; its messages can never be sent.
+                try? store.discardOutbox(docId: item.docId)
+                continue
+            }
             do {
                 guard let key = try keyFor(record) else { continue }
                 if !record.registered {
-                    if let register { try await register(record) }
-                    try store.setRegistered(record.docId)
+                    do {
+                        if let register { try await register(record) }
+                        try store.setRegistered(record.docId)
+                    } catch {
+                        skip.insert(item.docId)
+                        if Self.isPermanent(error) { try? store.failOutbox(docId: item.docId, reason: "register: \(Self.describe(error))") }
+                        continue
+                    }
                 }
                 let sealed = try DSCrypto.seal(item.payload, key: key, ad: CryptoAD.doc(item.docId))
                 let limit = item.kind == .push ? SyncProtocol.maxUpdateBytes : SyncProtocol.maxSnapshotBytes
                 guard sealed.count <= limit else {
-                    try store.markFailed(clientMsgId: item.clientMsgId, error: "payload_too_large (local)")
+                    try store.markFailed(clientMsgId: item.clientMsgId, error: "payload_too_large (local)", permanent: true)
                     continue
                 }
                 inFlight.insert(item.clientMsgId)
@@ -251,7 +322,7 @@ public actor SyncEngine: SyncClientDelegate {
                 break
             } catch {
                 inFlight.remove(item.clientMsgId)
-                try? store.markFailed(clientMsgId: item.clientMsgId, error: String(describing: error))
+                try? store.markFailed(clientMsgId: item.clientMsgId, error: Self.describe(error))
             }
         }
         publish()
@@ -267,7 +338,10 @@ public actor SyncEngine: SyncClientDelegate {
                     if let register { try await register(record) }
                     try store.setRegistered(record.docId)
                 } catch {
-                    continue // retried on the next connect
+                    // Refused: its messages show up as failed (retryFailed tries again).
+                    // Anything else is retried on the next connect.
+                    if Self.isPermanent(error) { try? store.failOutbox(docId: record.docId, reason: "register: \(Self.describe(error))") }
+                    continue
                 }
             }
             ready.append(record)
@@ -382,7 +456,10 @@ public actor SyncEngine: SyncClientDelegate {
             guard let ref else { return }
             if inFlight.contains(ref) {
                 inFlight.remove(ref)
-                try? store.markFailed(clientMsgId: ref, error: code.rawValue)
+                // Refusals fail at once; doc_not_found (re-registered below) and server
+                // trouble are retried up to LocalStore.maxSendAttempts.
+                let permanent = [.forbidden, .payloadTooLarge, .badRequest, .protocolMismatch].contains(code)
+                if code != .rateLimited { try? store.markFailed(clientMsgId: ref, error: code.rawValue, permanent: permanent) }
                 if code == .docNotFound, let item = try? store.pendingOutbox().first(where: { $0.clientMsgId == ref }) {
                     // Registration was lost: register again on the next flush.
                     try? store.setRegistered(item.docId, false)

@@ -168,6 +168,16 @@ public final class LocalStore: Sendable {
                 BEGIN UPDATE documents SET contentVersion = contentVersion + 1 WHERE docId = NEW.docId; END
                 """)
         }
+        m.registerMigration("v6-outbox-failed") { db in
+            // Messages that cannot be delivered (registration refused, payload too large, …)
+            // leave the queue's pending part; the app shows them and offers a retry.
+            try db.alter(table: "outbox") { t in
+                t.add(column: "failed", .boolean).notNull().defaults(to: false)
+            }
+            // Leftovers of documents deleted earlier (they could never be sent).
+            try db.execute(sql: "DELETE FROM outbox WHERE docId NOT IN (SELECT docId FROM documents)")
+            try db.execute(sql: "DELETE FROM docUpdates WHERE docId NOT IN (SELECT docId FROM documents)")
+        }
         return m
     }
 }
@@ -226,6 +236,14 @@ public struct StoredUpdate: Codable, FetchableRecord, MutablePersistableRecord, 
 }
 
 /// A queued outgoing message (`push` or `snapshot`), kept until the server `ack`s it.
+/// Messages of one document that could not be delivered.
+public struct FailedSync: Hashable, Sendable {
+    public var docId: String
+    /// Last error (`register: forbidden`, `payload_too_large`, …).
+    public var reason: String
+    public var count: Int
+}
+
 public struct OutboxItem: Codable, FetchableRecord, MutablePersistableRecord, Hashable, Sendable {
     public enum Kind: String, Codable, Sendable { case push, snapshot }
     public static let databaseTableName = "outbox"
@@ -389,16 +407,58 @@ extension LocalStore {
     }
 
     /// Pending outgoing messages, oldest first.
+    /// Queued messages still to be sent (not failed), oldest first.
     public func pendingOutbox(docId: String? = nil, limit: Int = 100) throws -> [OutboxItem] {
         try db.read { db in
-            var request = OutboxItem.order(Column("id")).limit(limit)
+            var request = OutboxItem.filter(Column("failed") == false).order(Column("id")).limit(limit)
             if let docId { request = request.filter(Column("docId") == docId) }
             return try request.fetchAll(db)
         }
     }
 
+    /// Messages still to be sent (failed ones not included).
     public func outboxCount() throws -> Int {
-        try db.read { try OutboxItem.fetchCount($0) }
+        try db.read { try OutboxItem.filter(Column("failed") == false).fetchCount($0) }
+    }
+
+    /// Delivery attempts after which a message counts as failed (errors that may pass, such as
+    /// `doc_not_found` before re-registration, are retried until then).
+    public static let maxSendAttempts = 5
+
+    /// Messages that could not be delivered, per document (latest reason).
+    public func failedOutbox() throws -> [FailedSync] {
+        try db.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT docId, COUNT(*) AS n, (SELECT lastError FROM outbox AS o2 WHERE o2.docId = outbox.docId AND o2.failed ORDER BY id DESC LIMIT 1) AS reason
+                FROM outbox WHERE failed GROUP BY docId ORDER BY MIN(id)
+                """).map { FailedSync(docId: $0["docId"], reason: $0["reason"] ?? "", count: $0["n"]) }
+        }
+    }
+
+    /// Fails every queued message of a document (its registration was refused).
+    public func failOutbox(docId: String, reason: String) throws {
+        try db.write {
+            try $0.execute(sql: "UPDATE outbox SET failed = 1, lastError = ? WHERE docId = ? AND NOT failed", arguments: [reason, docId])
+        }
+    }
+
+    /// Puts failed messages (of one document or all) back into the queue.
+    public func retryFailed(docId: String? = nil) throws {
+        try db.write { db in
+            if let docId {
+                try db.execute(sql: "UPDATE outbox SET failed = 0, attempts = 0 WHERE failed AND docId = ?", arguments: [docId])
+            } else {
+                try db.execute(sql: "UPDATE outbox SET failed = 0, attempts = 0 WHERE failed")
+            }
+        }
+    }
+
+    /// Drops queued messages of a document (all, or only failed ones). Its local updates stay
+    /// in the store: the document keeps its content here, and a later snapshot carries it.
+    public func discardOutbox(docId: String, onlyFailed: Bool = false) throws {
+        try db.write {
+            try $0.execute(sql: "DELETE FROM outbox WHERE docId = ?\(onlyFailed ? " AND failed" : "")", arguments: [docId])
+        }
     }
 
     /// Handles `ack`: removes the item; for pushes, records the server seq on the stored update;
@@ -425,9 +485,13 @@ extension LocalStore {
         }
     }
 
-    public func markFailed(clientMsgId: String, error: String) throws {
+    /// Records a failed delivery. `permanent` (or reaching `maxSendAttempts`) moves the message
+    /// out of the pending queue into `failedOutbox()`.
+    public func markFailed(clientMsgId: String, error: String, permanent: Bool = false) throws {
         try db.write {
-            try $0.execute(sql: "UPDATE outbox SET attempts = attempts + 1, lastError = ? WHERE clientMsgId = ?", arguments: [error, clientMsgId])
+            try $0.execute(sql: """
+                UPDATE outbox SET attempts = attempts + 1, lastError = ?, failed = (? OR attempts + 1 >= ?) WHERE clientMsgId = ?
+                """, arguments: [error, permanent, Self.maxSendAttempts, clientMsgId])
         }
     }
 
@@ -483,6 +547,9 @@ extension LocalStore {
     public func deleteDocument(_ docId: String) throws {
         try db.write { db in
             _ = try DocumentRecord.deleteOne(db, key: docId)
+            // Foreign keys cascade too; explicit so that nothing of it can stay queued.
+            try db.execute(sql: "DELETE FROM outbox WHERE docId = ?", arguments: [docId])
+            try db.execute(sql: "DELETE FROM docUpdates WHERE docId = ?", arguments: [docId])
             try db.execute(sql: "DELETE FROM noteIndex WHERE noteId = ?", arguments: [docId])
             try db.execute(sql: "DELETE FROM tasks WHERE noteId = ?", arguments: [docId])
             try db.execute(sql: "DELETE FROM noteLinks WHERE sourceNoteId = ?", arguments: [docId])

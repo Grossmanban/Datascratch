@@ -131,6 +131,28 @@ import GRDB
         #expect(try store.pendingIndexCount() == 0)
     }
 
+    /// Failed messages leave the pending queue after a refusal or too many attempts.
+    @Test func failedOutboxPolicy() throws {
+        let store = try LocalStore.inMemory()
+        try store.ensureDocument(docId: "d1", kind: .note, notebookId: "nb")
+        try store.ensureDocument(docId: "d2", kind: .note, notebookId: "nb")
+        try store.appendLocalUpdate(docId: "d1", update: Data([1]), origin: .local)
+        try store.appendLocalUpdate(docId: "d2", update: Data([2]), origin: .local)
+        let (m1, m2) = (try store.pendingOutbox()[0].clientMsgId, try store.pendingOutbox()[1].clientMsgId)
+        try store.markFailed(clientMsgId: m1, error: "forbidden", permanent: true)
+        for _ in 1..<LocalStore.maxSendAttempts { try store.markFailed(clientMsgId: m2, error: "internal") }
+        #expect(try store.outboxCount() == 1)
+        try store.markFailed(clientMsgId: m2, error: "internal")
+        #expect(try store.outboxCount() == 0)
+        #expect(try store.failedOutbox() == [FailedSync(docId: "d1", reason: "forbidden", count: 1), FailedSync(docId: "d2", reason: "internal", count: 1)])
+        try store.retryFailed(docId: "d2")
+        #expect(try store.pendingOutbox().map(\.clientMsgId) == [m2])
+        try store.discardOutbox(docId: "d1", onlyFailed: true)
+        #expect(try store.failedOutbox().isEmpty)
+        try store.deleteDocument("d2")
+        #expect(try store.outboxCount() == 0)
+    }
+
     /// Tasks indexed before the `order` column existed get their document order from rowid.
     @Test func taskOrderMigrationBackfills() throws {
         let queue = try DatabaseQueue()

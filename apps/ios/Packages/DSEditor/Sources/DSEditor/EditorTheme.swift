@@ -120,6 +120,22 @@ public struct EditorTheme: Sendable {
         UIFontMetrics(forTextStyle: .body).scaledValue(for: 17, compatibleWith: traits).rounded()
     }
 
+    /// Headings use the token's family (`display` = New York) whatever the document font is.
+    func design(for kind: ParagraphKind, attrs: [String: JSONValue]) -> UIFontDescriptor.SystemDesign? {
+        guard let token = Self.typeToken(for: kind, attrs: attrs) else { return nil }
+        switch token.value.family {
+        case .display: return .serif
+        case .text: return .default
+        case .mono: return .monospaced
+        }
+    }
+
+    /// Letter spacing of a heading token, scaled with Dynamic Type.
+    func tracking(for kind: ParagraphKind, attrs: [String: JSONValue]) -> CGFloat? {
+        guard let token = Self.typeToken(for: kind, attrs: attrs) else { return nil }
+        return token.value.tracking * baseFontSize / 17
+    }
+
     public func weight(for kind: ParagraphKind, attrs: [String: JSONValue] = [:]) -> UIFont.Weight {
         guard let token = Self.typeToken(for: kind, attrs: attrs) else { return .regular }
         switch token.value.weight {

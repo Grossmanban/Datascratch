@@ -95,3 +95,20 @@ describe("re-anchoring after structural edits (strokes.md §4)", () => {
     expect(t.marked()).toBe("brave");
   });
 });
+
+describe("moving a block", () => {
+  it("dragging the paragraph below another keeps its marks", async () => {
+    const t = await setup("<h1 data-type=title>T</h1><p>moved words here</p><p>other paragraph</p>", "words");
+    const { state } = t.editor;
+    const first = state.doc.child(1);
+    const from = state.doc.child(0).nodeSize;
+    const to = from + first.nodeSize;
+    // Same shape as ProseMirror's drop with move: delete the block and insert it after the next one.
+    const tr = state.tr.delete(from, to);
+    tr.insert(tr.doc.content.size, first);
+    t.editor.view.dispatch(tr);
+    await tick();
+    expect(t.editor.state.doc.child(2).textContent).toBe("moved words here");
+    expect(t.marked()).toBe("words");
+  });
+});

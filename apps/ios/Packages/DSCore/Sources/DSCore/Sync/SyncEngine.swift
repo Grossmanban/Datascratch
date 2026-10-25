@@ -57,6 +57,10 @@ public actor SyncEngine: SyncClientDelegate {
     /// Records of subscribed documents (kind/notebook for key lookup without a DB read).
     private var known: [String: DocumentRecord] = [:]
     private var connection: SyncConnectionState = .disconnected
+    /// `start()` was called and `stop()` was not.
+    private var running = false
+    /// Every known document was subscribed on the current connection.
+    private var subscribedAll = false
     private var statusContinuations: [UUID: AsyncStream<SyncStatus>.Continuation] = [:]
 
     /// - Parameters:
@@ -73,12 +77,44 @@ public actor SyncEngine: SyncClientDelegate {
 
     /// Connects and starts syncing every document known to the store.
     public func start() async {
+        running = true
         await client.setDelegate(self)
         await client.start()
     }
 
     public func stop() async {
+        running = false
         await client.stop()
+    }
+
+    /// Result of `syncOnce`.
+    public struct SyncOnceResult: Sendable, Equatable {
+        /// Every document was caught up and every sendable message acknowledged.
+        public var completed: Bool
+        /// Messages still queued (unsendable ones included: no key yet, failed).
+        public var pending: Int
+    }
+
+    /// One sync pass for a background refresh (`BGAppRefreshTask`): connects, catches every
+    /// known document up from its `lastSeq`, sends the outbox, waits for the acks and
+    /// disconnects — or returns at `deadline` (or on task cancellation). Remote updates only go
+    /// to the store (no documents are loaded, nothing is indexed), and cutting it short loses
+    /// nothing: whatever was not stored or acknowledged is fetched or sent next time. If the
+    /// engine was already running (app in the foreground) it stays connected.
+    public func syncOnce(deadline: ContinuousClock.Instant) async -> SyncOnceResult {
+        let wasRunning = running
+        if !wasRunning { await start() }
+        var completed = false
+        while ContinuousClock.now < deadline, !Task.isCancelled {
+            if await client.isConnected, subscribedAll, catchingUp.isEmpty, inFlight.isEmpty,
+               (try? store.pendingOutbox(limit: Self.maxInFlight * 2))?.contains(where: { live.contains($0.docId) }) == false {
+                completed = true
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        if !wasRunning { await stop() }
+        return SyncOnceResult(completed: completed, pending: (try? store.outboxCount()) ?? 0)
     }
 
     public func setAwarenessHandler(_ handler: AwarenessHandler?) {
@@ -298,9 +334,11 @@ public actor SyncEngine: SyncClientDelegate {
         inFlight.removeAll()
         catchingUp.removeAll()
         live.removeAll()
+        subscribedAll = false
         if let records = try? store.documents() {
             try? await subscribe(records)
         }
+        subscribedAll = true
         await flush()
     }
 
@@ -309,6 +347,7 @@ public actor SyncEngine: SyncClientDelegate {
         if case .connected = state {} else {
             inFlight.removeAll()
             live.removeAll()
+            subscribedAll = false
         }
         publish()
     }

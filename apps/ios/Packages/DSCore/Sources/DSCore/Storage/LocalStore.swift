@@ -155,6 +155,19 @@ public final class LocalStore: Sendable {
                 UPDATE tasks SET "order" = (SELECT COUNT(*) FROM tasks AS t2 WHERE t2.noteId = tasks.noteId AND t2.rowid < tasks.rowid)
                 """)
         }
+        m.registerMigration("v5-index-version") { db in
+            // Incremental indexing: every stored update (not local compaction, origin
+            // "storage") bumps contentVersion; reindexChanged() catches indexedVersion up.
+            // Existing notes start pending, so the first launch reindexes them once.
+            try db.alter(table: "documents") { t in
+                t.add(column: "contentVersion", .integer).notNull().defaults(to: 1)
+                t.add(column: "indexedVersion", .integer).notNull().defaults(to: 0)
+            }
+            try db.execute(sql: """
+                CREATE TRIGGER docUpdatesContentVersion AFTER INSERT ON docUpdates WHEN NEW.origin != 'storage'
+                BEGIN UPDATE documents SET contentVersion = contentVersion + 1 WHERE docId = NEW.docId; END
+                """)
+        }
         return m
     }
 }

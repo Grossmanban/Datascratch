@@ -58,7 +58,25 @@ function str(v: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
 
-function readNotebookDoc(doc: Y.Doc): { name: string | null; notes: Map<string, NoteMetaView>; folders: Map<string, FolderView> } {
+interface NotebookDocMeta {
+  name: string | null;
+  icon: string | null;
+  space: AgentNotebook["space"];
+}
+
+/** Notebook name, icon and space mirrored by clients into the notebook document (document-model.md, `meta`). */
+function readNotebookMeta(doc: Y.Doc): NotebookDocMeta {
+  const meta = doc.getMap("meta");
+  const raw = meta.get("space");
+  const spaceObj = raw instanceof Y.Map ? (raw.toJSON() as Record<string, unknown>) : (raw as Record<string, unknown> | null | undefined);
+  const space =
+    spaceObj && typeof spaceObj.id === "string" && typeof spaceObj.name === "string"
+      ? { id: spaceObj.id, name: spaceObj.name, icon: str(spaceObj.icon) }
+      : null;
+  return { name: str(meta.get("name")), icon: str(meta.get("icon")), space };
+}
+
+function readNotebookDoc(doc: Y.Doc): { meta: NotebookDocMeta; notes: Map<string, NoteMetaView>; folders: Map<string, FolderView> } {
   const notes = new Map<string, NoteMetaView>();
   doc.getMap("notes").forEach((raw, id) => {
     if (!(raw instanceof Y.Map)) return;
@@ -78,7 +96,7 @@ function readNotebookDoc(doc: Y.Doc): { name: string | null; notes: Map<string, 
     if (!(raw instanceof Y.Map)) return;
     folders.set(id, { id, parentId: str(raw.get("parentId")), name: str(raw.get("name")) ?? "" });
   });
-  return { name: str(doc.getMap("meta").get("name")), notes, folders };
+  return { meta: readNotebookMeta(doc), notes, folders };
 }
 
 /** Null attributes are not stored (y-prosemirror convention, document-model.md §4.1). */
@@ -147,7 +165,8 @@ export class AgentService {
       const loaded = await this.ctx.data.loadDoc(p.grant.userId, info.id, p.grant.id);
       if (!loaded) continue;
       const parsed = readNotebookDoc(loaded.doc);
-      views.push({ info, name: info.name ?? parsed.name ?? "Без названия", doc: loaded.doc, notes: parsed.notes, folders: parsed.folders });
+      const merged: AgentNotebook = { ...info, icon: info.icon ?? parsed.meta.icon, space: info.space ?? parsed.meta.space };
+      views.push({ info: merged, name: info.name ?? parsed.meta.name ?? "Без названия", doc: loaded.doc, notes: parsed.notes, folders: parsed.folders });
     }
     return views;
   }

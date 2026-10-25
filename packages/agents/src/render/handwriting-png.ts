@@ -77,7 +77,8 @@ function blockStyle(el: Y.XmlElement): BlockStyle {
   }
 }
 
-interface Glyph {
+/** @internal exported for tests */
+export interface Glyph {
   ch: string;
   x: number;
   w: number;
@@ -86,13 +87,15 @@ interface Glyph {
   marks: Marks;
 }
 
-interface Line {
+/** @internal */
+export interface Line {
   top: number;
   baseline: number;
   bottom: number;
 }
 
-interface Layout {
+/** @internal */
+export interface Layout {
   glyphs: Glyph[];
   lines: Line[];
   fontSize: number;
@@ -246,8 +249,8 @@ function drawSegment(ctx: SKRSContext2D, stroke: Stroke, pts: Pt[]): void {
   ctx.restore();
 }
 
-/** Text stroke → segments via the shared layout rules; the glyph geometry comes from our typesetter. */
-function textSegments(doc: Y.Doc, stroke: Stroke, block: Y.XmlElement, layout: Layout, dy: number): Pt[][] {
+/** Text stroke → segments via the shared layout rules; the glyph geometry comes from our typesetter. @internal */
+export function textSegments(doc: Y.Doc, stroke: Stroke, block: Y.XmlElement, layout: Layout, dy: number): Pt[][] {
   const flat = flatten(block);
   const anchors = resolveAnchors(doc, stroke.anchors);
   return toPts(

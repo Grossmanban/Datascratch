@@ -20,6 +20,20 @@ describe("access", () => {
     expect(spaces.spaces).toEqual([{ id: "s1", name: "Основное", icon: "🏠", notebooks: [{ id: NB_WORK, name: "Работа" }] }]);
   });
 
+  it("takes name, icon and space from the notebook document when the server does not know them", async () => {
+    const { ctx, svc } = setup();
+    const nb = ctx.data.notebooks.get(NB_WORK)!;
+    nb.name = null;
+    nb.space = null;
+    const doc = ctx.data.current(NB_WORK);
+    doc.transact(() => {
+      doc.getMap("meta").set("icon", "💼");
+      doc.getMap("meta").set("space", { id: "s9", name: "Проекты", icon: null });
+    });
+    const r = await svc.listNotebooks(principal());
+    expect(r.notebooks[0]).toMatchObject({ name: "Работа", icon: "💼", space: { id: "s9", name: "Проекты" } });
+  });
+
   it("never exposes private or ungranted notebooks", async () => {
     const { svc } = setup();
     const p = principal();

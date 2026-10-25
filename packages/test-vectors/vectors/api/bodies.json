@@ -137,6 +137,32 @@
         }
       ]
     },
+    "rotateRecoveryKeyRequest": {
+      "valid": [
+        {
+          "currentLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "wrappedMasterKeyRecovery": "AQ"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing currentLoginKey",
+          "body": {
+            "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "wrappedMasterKeyRecovery": "AQ"
+          }
+        },
+        {
+          "reason": "recoveryLoginKey is not 32 bytes",
+          "body": {
+            "currentLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "recoveryLoginKey": "AA",
+            "wrappedMasterKeyRecovery": "AQ"
+          }
+        }
+      ]
+    },
     "loginRequest": {
       "valid": [
         {

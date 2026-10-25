@@ -82,6 +82,19 @@ export function apiVectors() {
           },
         ],
       },
+      rotateRecoveryKeyRequest: {
+        valid: [{ currentLoginKey: KEY, recoveryLoginKey: KEY, wrappedMasterKeyRecovery: "AQ" }],
+        invalid: [
+          {
+            reason: "missing currentLoginKey",
+            body: { recoveryLoginKey: KEY, wrappedMasterKeyRecovery: "AQ" },
+          },
+          {
+            reason: "recoveryLoginKey is not 32 bytes",
+            body: { currentLoginKey: KEY, recoveryLoginKey: "AA", wrappedMasterKeyRecovery: "AQ" },
+          },
+        ],
+      },
       loginRequest: {
         valid: [{ email: "a@b.co", loginKey: KEY, deviceName: "iPhone" }],
         invalid: [{ reason: "missing deviceName", body: { email: "a@b.co", loginKey: KEY } }],

@@ -133,6 +133,14 @@ export const changePasswordRequestSchema = z.object({
 });
 export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
 
+/** `POST /auth/recovery-key` (authorized): replace the recovery key; confirmed by the password. */
+export const rotateRecoveryKeyRequestSchema = z.object({
+  currentLoginKey: key32Schema,
+  recoveryLoginKey: key32Schema,
+  wrappedMasterKeyRecovery: wrappedKeySchema,
+});
+export type RotateRecoveryKeyRequest = z.infer<typeof rotateRecoveryKeyRequestSchema>;
+
 // ---------------------------------------------------------------------------
 // Account and devices
 // ---------------------------------------------------------------------------
@@ -337,6 +345,7 @@ export const API_ROUTES = {
   recoveryStart: { method: "POST", path: "/auth/recovery/start" },
   recoveryFinish: { method: "POST", path: "/auth/recovery/finish" },
   changePassword: { method: "POST", path: "/auth/password" },
+  rotateRecoveryKey: { method: "POST", path: "/auth/recovery-key" },
   me: { method: "GET", path: "/me" },
   deleteMe: { method: "DELETE", path: "/me" },
   listDevices: { method: "GET", path: "/devices" },

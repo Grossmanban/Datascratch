@@ -1,0 +1,1 @@
+- 2026-10-25 · core · Ротация ключа восстановления: `rotateRecoveryKeyRequestSchema` (`POST /auth/recovery-key`), хелпер `rotateRecoveryKey`, векторы `crypto/recovery-rotate.json` и `api/bodies.json`; `settings.recoveryKeyConfirmed` в документе аккаунта (document-model §2).

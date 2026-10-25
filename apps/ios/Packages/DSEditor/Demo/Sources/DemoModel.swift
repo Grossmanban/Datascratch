@@ -39,8 +39,29 @@ final class DemoModel {
             editor.tools.allowsFingerDrawing = true
         }
         if args.contains("-hud") { showHUD = true }
-        editor.onStateChange = { [weak self] in self?.revision &+= 1 }
+        editor.onStateChange = { [weak self] in
+            guard let self else { return }
+            self.revision &+= 1
+            if self.isUITesting { NSLog("DIAG state mode=%@", self.editor.tools.mode.rawValue) }
+        }
+        if args.contains("-uiTesting") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { Self.dumpGestureRecognizers() }
+        }
         editor.onPaletteRequest = { [weak self] _ in self?.showPalette = true }
+    }
+
+    /// UI-test diagnostics: every gesture recognizer in the window that delays touches.
+    static func dumpGestureRecognizers() {
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
+        func walk(_ v: UIView, depth: Int) {
+            for g in v.gestureRecognizers ?? [] where g.delaysTouchesBegan || g.delaysTouchesEnded {
+                NSLog("DIAG recognizer %@ on %@ began=%d ended=%d enabled=%d cancels=%d", String(describing: type(of: g)),
+                      String(describing: type(of: v)), g.delaysTouchesBegan ? 1 : 0, g.delaysTouchesEnded ? 1 : 0,
+                      g.isEnabled ? 1 : 0, g.cancelsTouchesInView ? 1 : 0)
+            }
+            for sub in v.subviews { walk(sub, depth: depth + 1) }
+        }
+        for w in windows { walk(w, depth: 0) }
     }
 
     func save() {

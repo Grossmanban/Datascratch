@@ -59,6 +59,33 @@ final class EditorDemoUITests: XCTestCase {
         app.buttons["undo"].tap()
     }
 
+    /// Narrows down the tool-switch crash: an ink-to-ink switch, and the text tool with finger
+    /// drawing on (the drawing test switches tools with finger drawing on and passes).
+    @MainActor
+    func testSwitchBetweenInkTools() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting"]
+        app.launch()
+        XCTAssertTrue(app.textViews["editor.text"].waitForExistence(timeout: 10))
+        app.buttons["tool.marker"].tap()
+        sleep(1)
+        XCTAssertTrue(app.textViews["editor.text"].waitForExistence(timeout: 5), "app alive after switching to the marker")
+        app.buttons["tool.lasso"].tap()
+        sleep(1)
+        XCTAssertTrue(app.textViews["editor.text"].waitForExistence(timeout: 5), "app alive after switching to the lasso")
+    }
+
+    @MainActor
+    func testSwitchToTextWithFingerDrawing() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-fingerDrawing"]
+        app.launch()
+        XCTAssertTrue(app.textViews["editor.text"].waitForExistence(timeout: 10))
+        app.buttons["tool.text"].tap()
+        sleep(1)
+        XCTAssertTrue(app.textViews["editor.text"].waitForExistence(timeout: 5), "app alive after switching to text")
+    }
+
     @MainActor
     func testOpenLargeNotePerformance() throws {
         let app = XCUIApplication()

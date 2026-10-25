@@ -628,13 +628,13 @@ extension EditorView: UIGestureRecognizerDelegate {
     }
 }
 
-extension EditorView: UIScribbleInteractionDelegate {
+extension EditorView: @preconcurrency UIScribbleInteractionDelegate {
     public func scribbleInteraction(_ interaction: UIScribbleInteraction, shouldBeginAt location: CGPoint) -> Bool {
         !tools.mode.capturesPen
     }
 }
 
-extension EditorView: UIPencilInteractionDelegate {
+extension EditorView: @preconcurrency UIPencilInteractionDelegate {
     public func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
         switch UIPencilInteraction.preferredTapAction {
         case .switchEraser: tools.toggleEraser()
@@ -658,7 +658,7 @@ extension EditorView: UIPencilInteractionDelegate {
     }
 }
 
-extension EditorView: UIEditMenuInteractionDelegate {
+extension EditorView: @preconcurrency UIEditMenuInteractionDelegate {
     public func editMenuInteraction(_ interaction: UIEditMenuInteraction, menuFor configuration: UIEditMenuConfiguration,
                                     suggestedActions: [UIMenuElement]) -> UIMenu? {
         guard configuration.identifier as? String == "lasso" else { return UIMenu(children: suggestedActions) }

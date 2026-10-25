@@ -142,9 +142,13 @@ DSCore
 
 - `AccountService(api:keys:store:)`: `signup(email:password:)` (возвращает текст ключа
   восстановления — показать один раз), `login`, `recover(email:recoveryKeyText:newPassword:)`,
-  `changePassword`, `logout`, `createNotebook(name:spaceId:mode:...in:)` (ключ, `POST /notebooks`,
-  `POST /docs`, документ блокнота, `NotebookRef`), `loadNotebookKeys()` (новое устройство),
-  `setMode` (режим «для агентов»), `createNote(in:...)` (ключ заметки, `NoteMeta`).
+  `changePassword`, `rotateRecoveryKey(email:currentPassword:account:)` (новый ключ восстановления,
+  подтверждение паролем; возвращает текст ключа — показать один раз; сбрасывает
+  `AccountDocument.recoveryKeyConfirmed`, подтверждение — `setRecoveryKeyConfirmed(true)`),
+  `securityEvents()` (журнал безопасности), `logout`, `createNotebook(name:spaceId:mode:...in:)`
+  (ключ, `POST /notebooks`, `POST /docs`, документ блокнота, `NotebookRef`), `loadNotebookKeys()`
+  (новое устройство), `setMode` (режим «для агентов»), `createNote(in:...)` (ключ заметки,
+  `NoteMeta`), `moveNote(id:from:to:)` (перенос в другой блокнот), `dailyNote(for:in:)`, `inbox(in:)`.
 - `AttachmentManager(api:store:directory:)`: `add(_:mime:noteId:)` → `attachmentId` (файл
   сохраняется локально и ставится в очередь), `uploadPending(noteKey:)` / `upload` (куски по
   1 MiB, докачка), `download(...)`, `localURL`, `delete`.
@@ -171,8 +175,18 @@ for await status in await engine.statusUpdates() { /* connection, pending, catch
 документ перед первым `push`, подписывает все известные документы с их `lastSeq` при каждом
 подключении, применяет чужие обновления к открытым документам, отправляет снимок после
 500 обновлений / 1 MiB (предварительно удаляя осиротевшие штрихи) и передаёт awareness
-(`sendAwareness`, `setAwarenessHandler`). `SyncClient` — WebSocket: `hello`/`welcome`,
+(`sendAwareness`, `setAwarenessHandler` — только для открытых документов). В очереди ожидания
+`ack` не больше 100 сообщений, следующие уходят по мере подтверждений. `SyncClient` — WebSocket: `hello`/`welcome`,
 пинг 25 с, переподключение с экспоненциальной задержкой (`reconnectNow()` — при появлении сети).
+
+**Живые документы — только открытые.** `CRDTDocument` в памяти есть лишь у документов, переданных
+в `open`; остальные (тысячи заметок) лежат в SQLite как обновления: чужие дописываются в хранилище,
+снимок закрытого документа собирается слиянием обновлений без документа (`CRDTUpdates.merge`,
+`Y.mergeUpdates`), обход осиротевших штрихов — при снимке открытой заметки, в том числе при её
+закрытии. `close` сначала отцепляет документ и лишь потом ждёт отправки снимка, поэтому `open`
+той же заметки во время закрытия получает свежий экземпляр из хранилища со всеми правками.
+Индексацию (поиск, задачи) по мере прихода обновлений вызывает приложение — пакетами
+`LocalStore.index(_ batch:)`, с задержкой после последнего изменения.
 
 ## Локальное хранилище
 
@@ -185,6 +199,25 @@ for await status in await engine.statusUpdates() { /* connection, pending, catch
   префиксы, без учёта диакритики), `tasks(TaskQuery)`, `backlinks(to:)`, `tags()`,
   `notes(withTag:)` (с вложенными `тег/…`);
 - вложения: `saveAttachment`, `markChunkUploaded` (докачка по кускам), `attachments(state:)`.
+
+## Производительность (spec/11)
+
+Бенчмарки `Tests/DSCoreTests/BenchmarkTests.swift` (включаются `DS_BENCH=1`; в CI — отдельный
+информационный шаг на симуляторе, итоги в сводке задания). Замеры 2026-10-25, release, база на диске;
+iOS — симулятор iPad (iOS 26) на раннере GitHub `macos-26`, Linux — x86-64, 4 ядра:
+
+| Цель spec/11 | iOS (симулятор) | Linux |
+| --- | --- | --- |
+| Первая синхронизация 10 000 заметок ≤ 1 мин | ≈ 9–10 с приём + ≈ 6–15 с индексация ≈ 15–26 с | ≈ 17 с + ≈ 5 с |
+| Открытие заметки на 10 000 слов ≤ 300 мс | ≈ 12 мс | ≈ 10 мс |
+| Холодный старт ≤ 1 с | ≈ 0,33–0,37 с | ≈ 0,5 с |
+| Память после первой синхронизации 10 000 заметок (прирост, `phys_footprint` / RSS) | ≈ 0 (−7,5 МБ к исходному; если держать все заметки живыми — +112 МБ) | ≈ 40 МБ (все живые — ≈ 166 МБ) |
+
+Приём включает фейковый сервер в тесте. Холодный старт = открыть базу, загрузить блокнот с 10 000
+заметок, получить список; записи читаются одним JSON (`map_json`) через `JSONDecoder` — путь
+через `NSDictionary` на iOS давал ≈ 1,8 с.
+
+Индексация после первой синхронизации — `LocalStore.index(_ batch:)` одной транзакцией.
 
 ## Тесты
 

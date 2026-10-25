@@ -58,3 +58,6 @@ jobs:
       # time out when every package's tests compete for the runner's CPUs.
       - name: Test
         run: pnpm turbo run test --continue --concurrency=2
+      # Client memory for 10 000 notes in stored mode must stay within budget (spec/11).
+      - name: Memory budget (shared sync client, stored mode)
+        run: pnpm --filter @datascratch/shared test:memory 10000 80

@@ -6,6 +6,8 @@ struct DocumentScreen: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.horizontalSizeClass) private var sizeClass
     let noteId: String
+    /// Use the stand-in editor even when the native one is available.
+    var forceStandIn = false
 
     @FocusState private var titleFocused: Bool
 
@@ -13,7 +15,15 @@ struct DocumentScreen: View {
 
     var body: some View {
         if let note = library.note(noteId) {
+            #if canImport(DSEditor) && canImport(DSEditorCore) && canImport(DSCore)
+            if !forceStandIn, app.core != nil {
+                NativeDocumentScreen(noteId: noteId)
+            } else {
+                content(note)
+            }
+            #else
             content(note)
+            #endif
         } else {
             ContentUnavailableView("Document not found", systemImage: "doc.questionmark")
         }
@@ -24,9 +34,9 @@ struct DocumentScreen: View {
         let readOnly = note.isTrashed
         return ScrollView {
             VStack(spacing: 0) {
-                if let cover = note.cover {
-                    CoverView(cover: cover)
-                        .contextMenu { coverMenu(note) }
+                if CoverHeader.hasCover(note) {
+                    CoverHeader(note: note)
+                        .contextMenu { if !readOnly { CoverMenuItems(note: note) } }
                 }
                 VStack(alignment: .leading, spacing: Theme.Space.s4) {
                     header(note, readOnly: readOnly)
@@ -36,7 +46,7 @@ struct DocumentScreen: View {
                 }
                 .frame(maxWidth: width, alignment: .leading)
                 .padding(.horizontal, sizeClass == .compact ? Theme.Space.s5 : Theme.Space.s10)
-                .padding(.top, note.cover == nil ? Theme.Space.s8 : Theme.Space.s5)
+                .padding(.top, CoverHeader.hasCover(note) ? Theme.Space.s5 : Theme.Space.s8)
                 .padding(.bottom, 120)
                 .frame(maxWidth: .infinity)
             }
@@ -47,6 +57,7 @@ struct DocumentScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar(note) }
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+        .coverPickers()
         .userActivity("com.datascratch.app.openNote") { activity in
             activity.title = note.title
             activity.userInfo = ["noteId": note.id]
@@ -123,7 +134,7 @@ struct DocumentScreen: View {
 
             Menu {
                 Button("Style…", systemImage: "textformat") { scene.sheet = .documentStyle(noteId: note.id) }
-                Menu("Cover", systemImage: "photo") { coverMenu(note) }
+                Menu("Cover", systemImage: "photo") { CoverMenuItems(note: note) }
                 Button("Version History", systemImage: "clock.arrow.circlepath") {
                     library.recordVersion(ofNote: note.id)
                     scene.sheet = .versions(noteId: note.id)
@@ -149,32 +160,6 @@ struct DocumentScreen: View {
             .accessibilityIdentifier("document.more")
         }
     }
-
-    @ViewBuilder
-    private func coverMenu(_ note: NoteMeta) -> some View {
-        ForEach(Backdrop.allCases.filter { $0 != .none }, id: \.self) { cover in
-            Button(cover.localizedName) { library.updateNote(note.id) { $0.cover = cover } }
-        }
-        if note.cover != nil {
-            Divider()
-            Button("Remove Cover", role: .destructive) { library.updateNote(note.id) { $0.cover = nil } }
-        }
-    }
-}
-
-struct CoverView: View {
-    let cover: Backdrop
-
-    var body: some View {
-        cover.gradient
-            .overlay(alignment: .bottom) {
-                LinearGradient(colors: [.clear, Theme.Palette.canvas.opacity(0.4)], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 60)
-            }
-            .frame(height: 220)
-            .frame(maxWidth: .infinity)
-            .accessibilityHidden(true)
-    }
 }
 
 struct DocumentBackground: View {
@@ -190,19 +175,6 @@ struct DocumentBackground: View {
             PaperPattern(paper: note.style.paper, spacing: 26)
         }
         .ignoresSafeArea()
-    }
-}
-
-extension Backdrop {
-    var localizedName: LocalizedStringKey {
-        switch self {
-        case .none: "None"
-        case .sand: "Sand"
-        case .dusk: "Dusk"
-        case .mist: "Mist"
-        case .meadow: "Meadow"
-        case .ember: "Ember"
-        }
     }
 }
 

@@ -322,6 +322,8 @@ describe("extraction", () => {
         state: "open",
         scheduled: "2026-10-26",
         deadline: null,
+        completedAt: null,
+        order: 0,
       },
       {
         noteId: "note",
@@ -331,6 +333,8 @@ describe("extraction", () => {
         state: "done",
         scheduled: null,
         deadline: "2026-11-01",
+        completedAt: null,
+        order: 1,
       },
     ]);
     const links = extractNoteLinks(doc, "note");
@@ -552,5 +556,114 @@ describe("block operations", () => {
     expect(getTitle(doc)).toBe("New");
     setTitle(doc, "");
     expect(getTitle(doc)).toBe("");
+  });
+});
+
+describe("moving a note between notebooks", () => {
+  it("rewraps the key, writes the target entry, patches, then removes the source entry", async () => {
+    const { initCrypto, generateKey, wrapNoteKey, unwrapNoteKey, moveNoteToNotebook } =
+      await import("../src/index.js");
+    await initCrypto();
+    const fromKey = generateKey();
+    const toKey = generateKey();
+    const noteKey = generateKey();
+    const from = createNotebookDoc("nb-a");
+    const to = createNotebookDoc("nb-b");
+    putNoteMeta(from, {
+      id: "n1",
+      folderId: "f1",
+      parentNoteId: null,
+      title: "T",
+      kind: "note",
+      dailyDate: null,
+      tags: [],
+      icon: null,
+      coverThumb: null,
+      wrappedKey: wrapNoteKey(noteKey, fromKey, "n1"),
+      createdAt: T,
+      updatedAt: T,
+      trashedAt: null,
+      order: 1,
+    });
+    const calls: string[] = [];
+    const moved = await moveNoteToNotebook({
+      noteId: "n1",
+      fromIndex: from,
+      toIndex: to,
+      fromNotebookKey: fromKey,
+      toNotebookKey: toKey,
+      toNotebookId: "nb-b",
+      patchDoc: async (id, nb) => {
+        calls.push(`${id}->${nb}`);
+        expect(getNoteMetas(to)).toHaveLength(1); // target entry exists before the PATCH
+        expect(getNoteMetas(from)).toHaveLength(1);
+      },
+    });
+    expect(calls).toEqual(["n1->nb-b"]);
+    expect(getNoteMetas(from)).toHaveLength(0);
+    expect(moved.folderId).toBeNull();
+    expect(unwrapNoteKey(getNoteMetas(to)[0]!.wrappedKey, toKey, "n1")).toEqual(noteKey);
+  });
+  it("rolls back the target entry when the PATCH fails", async () => {
+    const { initCrypto, generateKey, wrapNoteKey, moveNoteToNotebook } =
+      await import("../src/index.js");
+    await initCrypto();
+    const fromKey = generateKey();
+    const from = createNotebookDoc("nb-a");
+    const to = createNotebookDoc("nb-b");
+    putNoteMeta(from, {
+      id: "n1",
+      folderId: null,
+      parentNoteId: null,
+      title: "T",
+      kind: "note",
+      dailyDate: null,
+      tags: [],
+      icon: null,
+      coverThumb: null,
+      wrappedKey: wrapNoteKey(generateKey(), fromKey, "n1"),
+      createdAt: T,
+      updatedAt: T,
+      trashedAt: null,
+      order: 1,
+    });
+    await expect(
+      moveNoteToNotebook({
+        noteId: "n1",
+        fromIndex: from,
+        toIndex: to,
+        fromNotebookKey: fromKey,
+        toNotebookKey: generateKey(),
+        toNotebookId: "nb-b",
+        patchDoc: async () => {
+          throw new Error("409");
+        },
+      }),
+    ).rejects.toThrow("409");
+    expect(getNoteMetas(to)).toHaveLength(0);
+    expect(getNoteMetas(from)).toHaveLength(1);
+  });
+});
+
+describe("note indexer", () => {
+  it("indexes stored states in debounced batches", async () => {
+    const { indexNoteState, createNoteIndexer } = await import("../src/index.js");
+    const { doc } = richNote();
+    const state = Y.encodeStateAsUpdate(doc);
+    const idx = indexNoteState("note", state);
+    expect(idx.title).toBe("Plan");
+    expect(idx.tasks).toHaveLength(2);
+    expect(idx.tags).toEqual(["work/q4"]);
+    const batches: string[][] = [];
+    const indexer = createNoteIndexer({
+      loadState: (id) => (id === "missing" ? null : state),
+      onIndex: (list) => void batches.push(list.map((i) => i.noteId)),
+      delayMs: 5,
+      batchSize: 2,
+    });
+    for (const id of ["a", "b", "a", "c", "missing"]) indexer.schedule(id);
+    expect(indexer.pending).toBe(4);
+    await indexer.flush();
+    expect(batches).toEqual([["a", "b"], ["c"]]);
   });
 });

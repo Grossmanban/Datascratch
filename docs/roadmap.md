@@ -4,7 +4,7 @@
 
 ## Текущий статус
 
-**Этап 0 завершён. Идёт параллельная разработка всех частей девятью сессиями (D-39).** Этапы ниже остаются логическим планом функций; по времени потоки идут одновременно.
+**Этап 0 завершён. Идёт параллельная разработка всех частей девятью сессиями (D-39).** На 2026-10-25: в main все потоки; на iPhone пользователя — TestFlight build 4 с пером; сервер готовится к запуску на VPS пользователя рядом с его мессенджером Sinhron. Этапы ниже остаются логическим планом функций; по времени потоки идут одновременно.
 
 ## Потоки разработки (D-39)
 
@@ -12,15 +12,15 @@
 
 | Поток | Ветка | Владеет | Главное | Статус |
 | --- | --- | --- | --- | --- |
-| core | `claude/core` | `packages/shared`, `packages/test-vectors`, корневые `package.json`/`turbo.json`/`tsconfig.base.json`, `.github/workflows/ts.yml` | Типы контрактов, криптография, кодек штрихов, схема документа, клиент синхронизации, тестовые векторы | v1 влит в main (контракты, крипто, документ, штрихи, синхронизация, тестовые векторы) — по запросам потоков |
-| design-system | `claude/design-system` | `packages/design-tokens`, `packages/ui`, `apps/ios/Packages/DSDesign`, `.github/workflows/design.yml` | Токены «Тихая бумага», веб-компоненты, SwiftUI-компоненты | v3 влит в main (токены, веб- и SwiftUI-компоненты, палитра пера, панель форматирования, меню / и [[ ]]) — ревизия экранов |
-| server | `claude/server` | `apps/server`, `infra/`, `.github/workflows/server.yml` | Fastify, PostgreSQL, авторизация, синхронизация, вложения, шеринг, docker compose, инструкция развёртывания | этап 2 влит в main (REST, синхронизация, RLS, pg-boss, docker, инструкция развёртывания; плагин агентов подключён; на shared) — метрики, нагрузочный тест первой синхронизации |
+| core | `claude/core` | `packages/shared`, `packages/test-vectors`, корневые `package.json`/`turbo.json`/`tsconfig.base.json`, `.github/workflows/ts.yml` | Типы контрактов, криптография, кодек штрихов, схема документа, клиент синхронизации, тестовые векторы | влит в main (контракты, крипто, документ, штрихи, синхронизация, ленивые документы ~49 МБ на 10 000 заметок, перенос заметки, ротация ключа) — по запросам потоков |
+| design-system | `claude/design-system` | `packages/design-tokens`, `packages/ui`, `apps/ios/Packages/DSDesign`, `.github/workflows/design.yml` | Токены «Тихая бумага», веб-компоненты, SwiftUI-компоненты | влит в main (токены WCAG AA с проверкой контраста, веб/SwiftUI-компоненты, компактная палитра пера, карточки без подложки) — дизайн-ревью экранов |
+| server | `claude/server` | `apps/server`, `infra/`, `.github/workflows/server.yml` | Fastify, PostgreSQL, авторизация, синхронизация, вложения, шеринг, docker compose, инструкция развёртывания | влит в main (REST, синхронизация, RLS, агенты, метрики, перенос заметки, ротация ключа восстановления, деплой через GitHub Actions с предохранителем DEPLOY_ENABLED) — режим «рядом с Sinhron» на VPS пользователя |
 | agents | `claude/agents` | `packages/agents`, `docs/architecture/contracts/agents-api.md` (черновик), `.github/workflows/agents.yml` | MCP, REST для агентов, токены, журнал, рендер PNG | этап 1 влит в main (MCP, OAuth 2.1, REST для агентов, PNG рукописи; на shared) — доводка |
-| web-app | `claude/web-app` | `apps/web`, `.github/workflows/web.yml` | Оболочка веба: вход, боковая панель, пространства/блокноты/папки, списки, задачи, календарь, шеринг, офлайн, PWA | Запущен |
-| web-editor | `claude/web-editor` | `packages/web-editor`, `.github/workflows/web-editor.yml` | TipTap-редактор со всеми блоками, перо на Canvas | этап 3 влит в main (все блоки, перо, лассо, жесты, перепривязка при перестройке блоков; на shared/ui) — подключение компонентов design-system |
+| web-app | `claude/web-app` | `apps/web`, `.github/workflows/web.yml` | Оболочка веба: вход, боковая панель, пространства/блокноты/папки, списки, задачи, календарь, шеринг, офлайн, PWA | влит в main (полный клиент, SyncClient + IndexedDB, перенос заметки, 10 000 заметок за 45 мс, WCAG AA, обложки, ключ восстановления) — ленивые документы, дизайн-ревью |
+| web-editor | `claude/web-editor` | `packages/web-editor`, `.github/workflows/web-editor.yml` | TipTap-редактор со всеми блоками, перо на Canvas | влит в main (все блоки, перо, лассо, жесты, перепривязка, компоненты design-system, смена awareness без пересоздания; заметка на 10 000 слов открывается за 35–51 мс) — по запросам |
 | ios-core | `claude/ios-core` | `apps/ios/Packages/DSCore`, `.github/workflows/ios-core.yml` | Swift: криптография, Yrs-модель документа, GRDB, клиент синхронизации и API, векторы | влит в main (DSCore: Yrs через UniFFI, крипто, GRDB, API и синхронизация) — поддержка ios-editor/ios-app |
-| ios-editor | `claude/ios-editor` | `apps/ios/Packages/DSEditor`, `.github/workflows/ios-editor.yml` | TextKit 2 + Yrs + слой пера (живой штрих), блоки, демо-приложение | Запущен |
-| ios-app | `claude/ios-app` | `apps/ios` (кроме `Packages/`), `.github/workflows/ios-app.yml` | XcodeGen-проект, оболочка SwiftUI в стиле Craft, навигация, задачи, календарь, настройки, интеграция пакетов | оболочка влита в main (XcodeGen, Craft-оболочка, вход с ключом восстановления, задачи, календарь, настройки, TestFlight-workflow и RELEASE.md) — замена заглушек на DSCore и DSEditor |
+| ios-editor | `claude/ios-editor` | `apps/ios/Packages/DSEditor`, `.github/workflows/ios-editor.yml` | TextKit 2 + Yrs + слой пера (живой штрих), блоки, демо-приложение | влит в main (TextKit 2 + живой штрих, DSEditorCore, ProMotion 80–120 Гц при рисовании, прокручиваемая шапка; вылет палитры без пальца устранён) — качество пера (предсказание, Pencil Pro), os_signpost |
+| ios-app | `claude/ios-app` | `apps/ios` (кроме `Packages/`), `.github/workflows/ios-app.yml` | XcodeGen-проект, оболочка SwiftUI в стиле Craft, навигация, задачи, календарь, настройки, интеграция пакетов | влита в main (Craft-оболочка, библиотека на DSCore, серверный режим, DSEditor в экране заметки, правки по отзыву на build 1: тема, обложки, задачи, ключ восстановления и журнал безопасности); TestFlight build 4 с пером — дизайн-ревью, сборка с сервером |
 
 Координатор — исходная сессия `session_01BHFN8NGWP5pDXZVpTHf3j6` (вливает ветки в `main`, ведёт `roadmap.md`, `CHANGELOG.md`, контракты).
 

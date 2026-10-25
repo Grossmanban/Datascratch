@@ -23,12 +23,12 @@ export const tokens = {
       dark: "#ECE9E3",
     },
     "text.secondary": {
-      light: "#6B6862",
-      dark: "#A19D95",
+      light: "#57544F",
+      dark: "#B1ADA7",
     },
     "text.tertiary": {
-      light: "#9C978E",
-      dark: "#77736C",
+      light: "#706B62",
+      dark: "#95918A",
     },
     "text.onAccent": {
       light: "#FFFFFF",
@@ -39,19 +39,19 @@ export const tokens = {
       dark: "#34322E",
     },
     accent: {
-      light: "#2E5BDB",
+      light: "#2B58DA",
       dark: "#7B9BFF",
     },
     danger: {
-      light: "#D2453B",
+      light: "#B43329",
       dark: "#FF6B5E",
     },
     success: {
-      light: "#3E8E5A",
+      light: "#317047",
       dark: "#6BC48A",
     },
     warning: {
-      light: "#C98A1B",
+      light: "#855B12",
       dark: "#F2B54B",
     },
   },
@@ -102,7 +102,7 @@ export const tokens = {
   tint: {
     red: {
       fg: {
-        light: "#C8443A",
+        light: "#BA3D34",
         dark: "#FF7B6E",
       },
       bg: {
@@ -112,7 +112,7 @@ export const tokens = {
     },
     orange: {
       fg: {
-        light: "#C2661B",
+        light: "#A45617",
         dark: "#FFA24D",
       },
       bg: {
@@ -122,7 +122,7 @@ export const tokens = {
     },
     yellow: {
       fg: {
-        light: "#A27B0C",
+        light: "#88680A",
         dark: "#F2C94C",
       },
       bg: {
@@ -132,7 +132,7 @@ export const tokens = {
     },
     green: {
       fg: {
-        light: "#3E8E5A",
+        light: "#34774C",
         dark: "#6BC48A",
       },
       bg: {
@@ -142,7 +142,7 @@ export const tokens = {
     },
     teal: {
       fg: {
-        light: "#2A8584",
+        light: "#257473",
         dark: "#5CCFCF",
       },
       bg: {
@@ -172,7 +172,7 @@ export const tokens = {
     },
     purple: {
       fg: {
-        light: "#7A4FD6",
+        light: "#774BD5",
         dark: "#B595FF",
       },
       bg: {
@@ -182,7 +182,7 @@ export const tokens = {
     },
     pink: {
       fg: {
-        light: "#C2427A",
+        light: "#B43A70",
         dark: "#FF8DBF",
       },
       bg: {

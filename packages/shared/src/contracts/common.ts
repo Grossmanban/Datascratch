@@ -19,6 +19,17 @@ export type IsoDateTime = string;
 export type DateOnly = string;
 export type Base64Url = string;
 
+const B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+/** True when the unused low bits of the last character are zero (one text form per byte string). */
+export function isCanonicalBase64Url(text: string): boolean {
+  const rest = text.length % 4;
+  if (rest === 0) return true;
+  if (rest === 1) return false;
+  const v = B64_ALPHABET.indexOf(text[text.length - 1]!);
+  return v >= 0 && (v & (rest === 2 ? 0x0f : 0x03)) === 0;
+}
+
 export const uuidSchema = z.string().regex(UUID_V7_REGEX, "expected lowercase UUIDv7");
 export const isoDateTimeSchema = z
   .string()
@@ -27,7 +38,8 @@ export const isoDateTimeSchema = z
 export const dateOnlySchema = z.string().regex(DATE_ONLY_REGEX, "expected YYYY-MM-DD");
 export const base64UrlSchema = z
   .string()
-  .regex(BASE64URL_REGEX, "expected base64url without padding");
+  .regex(BASE64URL_REGEX, "expected base64url without padding")
+  .refine(isCanonicalBase64Url, "non-canonical base64url (bad length or non-zero trailing bits)");
 
 /** Length of the base64url (no padding) encoding of `n` bytes. */
 export function base64UrlLength(n: number): number {

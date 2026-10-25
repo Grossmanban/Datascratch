@@ -33,7 +33,7 @@ public struct DSTaskCheckbox: View {
         } label: {
             ZStack {
                 Circle()
-                    .strokeBorder(isDone ? tint : Color.dsTertiary, lineWidth: 1.5)
+                    .strokeBorder(isDone ? tint : Color.dsTertiary.opacity(0.55), lineWidth: 1.5)
                 Circle()
                     .fill(tint)
                     .scaleEffect(isDone ? 1 : 0.2)

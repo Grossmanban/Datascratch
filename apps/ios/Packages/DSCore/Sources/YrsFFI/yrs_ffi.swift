@@ -699,6 +699,13 @@ public protocol YDocumentProtocol: AnyObject, Sendable {
     func mapGet(root: String, path: [String]) throws  -> YValue?
     
     /**
+     * The (nested) map at `path` as a JSON string (`Y.Map.toJSON()`), or `None` if missing.
+     * Much faster than `map_get` for large maps of records (no per-value FFI conversion);
+     * binary values come out as JSON arrays of numbers.
+     */
+    func mapJson(root: String, path: [String]) throws  -> String?
+    
+    /**
      * Keys of the (nested) map at `path`; empty if it does not exist.
      */
     func mapKeys(root: String, path: [String]) throws  -> [String]
@@ -967,6 +974,22 @@ open func mapGet(root: String, path: [String])throws  -> YValue?  {
     return try  FfiConverterOptionTypeYValue.lift(try rustCallWithError(FfiConverterTypeYrsError_lift) {
         uniffiCallStatus in
     uniffi_yrs_ffi_fn_method_ydocument_map_get(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(root),
+        FfiConverterSequenceString.lower(path),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The (nested) map at `path` as a JSON string (`Y.Map.toJSON()`), or `None` if missing.
+     * Much faster than `map_get` for large maps of records (no per-value FFI conversion);
+     * binary values come out as JSON arrays of numbers.
+     */
+open func mapJson(root: String, path: [String])throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeYrsError_lift) {
+        uniffiCallStatus in
+    uniffi_yrs_ffi_fn_method_ydocument_map_json(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(root),
         FfiConverterSequenceString.lower(path),uniffiCallStatus
@@ -3596,6 +3619,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_yrs_ffi_checksum_method_ydocument_map_get() != 65294) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_yrs_ffi_checksum_method_ydocument_map_json() != 31433) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_yrs_ffi_checksum_method_ydocument_map_keys() != 41716) {

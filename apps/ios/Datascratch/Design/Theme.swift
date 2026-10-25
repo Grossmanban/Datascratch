@@ -23,6 +23,8 @@ enum Theme {
         static var danger: Color { DSColorToken.danger.color }
         static var success: Color { DSColorToken.success.color }
         static var warning: Color { DSColorToken.warning.color }
+        /// Text and icons on an accent fill (dark text on the light dark-mode accent).
+        static var onAccent: Color { .dsOnAccent }
         #else
         static let canvas = Color(light: 0xFAF8F4, dark: 0x1A1917)
         static let surface = Color(light: 0xFFFFFF, dark: 0x22211E)
@@ -36,6 +38,7 @@ enum Theme {
         static let danger = Color(light: 0xD2453B, dark: 0xFF6B5E)
         static let success = Color(light: 0x3E8E5A, dark: 0x6BC48A)
         static let warning = Color(light: 0xC98A1B, dark: 0xF2B54B)
+        static let onAccent = Color(light: 0xFFFFFF, dark: 0x14161F)
         #endif
     }
 
@@ -154,4 +157,14 @@ enum Haptics {
     static func selection() { UISelectionFeedbackGenerator().selectionChanged() }
     static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
     static func warning() { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
+}
+
+extension View {
+    /// The prominent Liquid Glass button with label colour that keeps contrast on the
+    /// accent fill in both themes (the dark-mode accent is light).
+    func prominentGlass() -> some View {
+        buttonStyle(.glassProminent)
+            .tint(Theme.Palette.accent)
+            .foregroundStyle(Theme.Palette.onAccent)
+    }
 }

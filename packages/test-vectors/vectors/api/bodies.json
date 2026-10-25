@@ -20,7 +20,7 @@
     "preloginResponse": {
       "valid": [
         {
-          "salt": "BBBBBBBBBBBBBBBBBBBBBB",
+          "salt": "BBBBBBBBBBBBBBBBBBBBBA",
           "kdf": {
             "alg": "argon2id13",
             "ops": 3,
@@ -41,9 +41,20 @@
           }
         },
         {
-          "reason": "unknown KDF",
+          "reason": "non-canonical salt (trailing bits set)",
           "body": {
             "salt": "BBBBBBBBBBBBBBBBBBBBBB",
+            "kdf": {
+              "alg": "argon2id13",
+              "ops": 3,
+              "mem": 67108864
+            }
+          }
+        },
+        {
+          "reason": "unknown KDF",
+          "body": {
+            "salt": "BBBBBBBBBBBBBBBBBBBBBA",
             "kdf": {
               "alg": "scrypt",
               "ops": 3,
@@ -57,7 +68,7 @@
       "valid": [
         {
           "email": "a@b.co",
-          "salt": "BBBBBBBBBBBBBBBBBBBBBB",
+          "salt": "BBBBBBBBBBBBBBBBBBBBBA",
           "kdf": {
             "alg": "argon2id13",
             "ops": 3,
@@ -72,7 +83,7 @@
         },
         {
           "email": "a@b.co",
-          "salt": "BBBBBBBBBBBBBBBBBBBBBB",
+          "salt": "BBBBBBBBBBBBBBBBBBBBBA",
           "kdf": {
             "alg": "argon2id13",
             "ops": 3,
@@ -92,7 +103,7 @@
           "reason": "loginKey is not 32 bytes",
           "body": {
             "email": "a@b.co",
-            "salt": "BBBBBBBBBBBBBBBBBBBBBB",
+            "salt": "BBBBBBBBBBBBBBBBBBBBBA",
             "kdf": {
               "alg": "argon2id13",
               "ops": 3,
@@ -110,7 +121,7 @@
           "reason": "userId is not a UUIDv7",
           "body": {
             "email": "a@b.co",
-            "salt": "BBBBBBBBBBBBBBBBBBBBBB",
+            "salt": "BBBBBBBBBBBBBBBBBBBBBA",
             "kdf": {
               "alg": "argon2id13",
               "ops": 3,
@@ -122,6 +133,67 @@
             "wrappedMasterKeyRecovery": "AQ",
             "userId": "0192f3c4-0000-4000-8000-000000000001",
             "accountDocId": "0192f3c4-0000-7000-8000-000000000001"
+          }
+        }
+      ]
+    },
+    "rotateRecoveryKeyRequest": {
+      "valid": [
+        {
+          "currentLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "wrappedMasterKeyRecovery": "AQ"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing currentLoginKey",
+          "body": {
+            "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "wrappedMasterKeyRecovery": "AQ"
+          }
+        },
+        {
+          "reason": "recoveryLoginKey is 31 bytes",
+          "body": {
+            "currentLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "wrappedMasterKeyRecovery": "AQ"
+          }
+        },
+        {
+          "reason": "empty wrappedMasterKeyRecovery",
+          "body": {
+            "currentLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "wrappedMasterKeyRecovery": ""
+          }
+        }
+      ]
+    },
+    "securityEvent": {
+      "valid": [
+        {
+          "kind": "recovery_key_rotated",
+          "at": "2026-10-25T12:00:00.000Z",
+          "deviceId": "dev-1",
+          "deviceName": "iPad"
+        },
+        {
+          "kind": "recovery_used",
+          "at": "2026-10-25T12:00:00.000Z",
+          "deviceId": null,
+          "deviceName": null
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "unknown kind",
+          "body": {
+            "kind": "login",
+            "at": "2026-10-25T12:00:00.000Z",
+            "deviceId": null,
+            "deviceName": null
           }
         }
       ]
@@ -186,7 +258,7 @@
       "valid": [
         {
           "recoveryToken": "rt",
-          "salt": "BBBBBBBBBBBBBBBBBBBBBB",
+          "salt": "BBBBBBBBBBBBBBBBBBBBBA",
           "kdf": {
             "alg": "argon2id13",
             "ops": 3,
@@ -197,7 +269,7 @@
         },
         {
           "recoveryToken": "rt",
-          "salt": "BBBBBBBBBBBBBBBBBBBBBB",
+          "salt": "BBBBBBBBBBBBBBBBBBBBBA",
           "kdf": {
             "alg": "argon2id13",
             "ops": 3,
@@ -212,7 +284,7 @@
         {
           "reason": "missing recoveryToken",
           "body": {
-            "salt": "BBBBBBBBBBBBBBBBBBBBBB",
+            "salt": "BBBBBBBBBBBBBBBBBBBBBA",
             "kdf": {
               "alg": "argon2id13",
               "ops": 3,
@@ -291,6 +363,31 @@
             "docId": "0192f3c4-0000-7000-8000-000000000003",
             "kind": "notebook",
             "notebookId": "0192f3c4-0000-7000-8000-000000000001"
+          }
+        }
+      ]
+    },
+    "moveDocRequest": {
+      "valid": [
+        {
+          "notebookId": "0192f3c4-0000-7000-8000-000000000001"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing notebookId",
+          "body": {}
+        },
+        {
+          "reason": "not a UUIDv7",
+          "body": {
+            "notebookId": "nope"
+          }
+        },
+        {
+          "reason": "null notebookId",
+          "body": {
+            "notebookId": null
           }
         }
       ]

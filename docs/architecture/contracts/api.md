@@ -21,6 +21,7 @@
 | POST | `/auth/recovery/start` | `{ email, recoveryLoginKey }` → `{ recoveryToken, wrappedMasterKeyRecovery, userId }` |
 | POST | `/auth/recovery/finish` | `{ recoveryToken, salt, kdf, loginKey, wrappedMasterKeyPassword }` → `Session` |
 | POST | `/auth/password` | (авторизован) `{ currentLoginKey, salt, kdf, loginKey, wrappedMasterKeyPassword }` → `204` |
+| POST | `/auth/recovery-key` | (авторизован) `{ currentLoginKey, recoveryLoginKey, wrappedMasterKeyRecovery }` → `204` — новый ключ восстановления (`crypto.md` §4): старый перестаёт работать сразу, незавершённые восстановления отменяются, другие устройства остаются в системе |
 
 `Session = { userId, deviceId, accessToken, refreshToken, accessExpiresAt, wrappedMasterKeyPassword, accountDocId }`. В `signup` и `recovery/finish` можно передать необязательное `deviceName` (уточнение потока server).
 
@@ -30,6 +31,7 @@
 | --- | --- | --- |
 | GET | `/me` | `{ userId, email, accountDocId, createdAt }` |
 | GET | `/devices` / DELETE `/devices/:id` | список и отзыв устройств (сессий) |
+| GET | `/me/security-events` | журнал безопасности, новые сверху (до 100): `{ kind: "password_changed"\|"recovery_used"\|"recovery_key_rotated", at, deviceId \| null, deviceName \| null }[]` |
 | DELETE | `/me` | удаление аккаунта (с подтверждением `loginKey`) |
 
 ## Блокноты и документы (D-36)
@@ -42,11 +44,14 @@
 | PATCH | `/notebooks/:id/mode` | `{ mode, notebookKey? }` — включение режима «для агентов» передаёт ключ, выключение — удаляет серверную обёртку |
 | DELETE | `/notebooks/:id` | удаляет блокнот и все его документы |
 | POST | `/docs` | `{ docId, kind: "account"\|"notebook"\|"note", notebookId \| null }` → `204`; регистрация до первого `push` |
+| PATCH | `/docs/:id` | `{ notebookId }` → `204` — перенос заметки (`kind = note`) в другой блокнот того же пользователя; повтор с тем же `notebookId` — `204` |
 | DELETE | `/docs/:id` | окончательное удаление (после корзины) |
 | GET | `/docs/:id/versions` | список снимков для истории версий `{ seq, createdAt, deviceId }[]` |
 | GET | `/docs/:id/versions/:seq` | `{ payload }` — зашифрованное состояние на момент `seq` |
 
 `Notebook = { id, mode, createdAt, wrappedKey }`.
+
+**Перенос заметки** (`PATCH /docs/:id`, 2026-10-25). Сервер меняет только блокнот документа; содержимое, история версий, вложения и `noteKey` остаются прежними. Порядок на клиенте: (1) обернуть `noteKey` ключом нового блокнота (`ad = ds1|key|note|<noteId>`) и записать `NoteMeta` в индекс нового блокнота; (2) `PATCH /docs/:id`; (3) удалить `NoteMeta` из индекса старого блокнота. Отдельно передавать ключ серверу не нужно: для блокнотов «для агентов» сервер получает `noteKey` из `NoteMeta.wrappedKey` индекса, а ключ блокнота у него есть (`crypto.md` §8). Права следуют за заметкой сразу: гости шеринга старого блокнота её теряют (подписчики получают `error doc_not_found` с `ref = docId`), шеринг самой заметки сохраняется; агенты видят заметку, только если новый блокнот «для агентов» и входит в их разрешение. Ошибки: `400` — документ не заметка; `404` — нет документа или целевого блокнота у пользователя.
 
 Прочие типы ответов (уточнение 2026-10-25, предложение потока core):
 

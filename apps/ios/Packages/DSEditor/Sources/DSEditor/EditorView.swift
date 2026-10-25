@@ -26,6 +26,20 @@ public final class EditorView: UIView {
     public var onOpenNote: ((String) -> Void)?
     /// Tools, undo availability or selection changed (refresh toolbars).
     public var onStateChange: (() -> Void)?
+    private var stateChangePending = false
+
+    /// Tells the host about a change on the next main-queue turn, coalesced. Never during UIKit's
+    /// touch dispatch: a host that re-renders its interface synchronously (SwiftUI state) while a
+    /// touch is still being delivered crashed UIKit's gesture environment.
+    private func notifyStateChange() {
+        guard !stateChangePending else { return }
+        stateChangePending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.stateChangePending = false
+            self.onStateChange?()
+        }
+    }
 
     /// A view scrolled together with the text above the first block (cover, title, metadata).
     /// It gets the editor's full width and its height from Auto Layout
@@ -135,7 +149,7 @@ public final class EditorView: UIView {
         textView.onLayout = { [weak self] in self?.textViewDidLayout() }
         textView.keyHandler = { [weak self] in self?.perform($0) }
         textView.documentUndo.document = document
-        textView.documentUndo.afterChange = { [weak self] in self?.onStateChange?() }
+        textView.documentUndo.afterChange = { [weak self] in self?.notifyStateChange() }
 
         inkInput = InkInputRecognizer(target: nil, action: nil)
         inkInput.shouldTrack = { [weak self] touch in
@@ -153,7 +167,7 @@ public final class EditorView: UIView {
         inkInput.onEnded = { [weak self] cancelled in
             guard let self else { return }
             self.ink.penEnded(cancelled: cancelled)
-            self.onStateChange?()
+            self.notifyStateChange()
         }
         inkInput.onEstimatedUpdate = { [weak self] s in self?.ink.penEstimatedUpdate(s) }
         inkInput.delegate = self
@@ -348,7 +362,7 @@ public final class EditorView: UIView {
         if !change.strokesAdded.isEmpty || !change.strokesRemoved.isEmpty || change.origin != .textInput {
             setNeedsInkRefresh()
         }
-        onStateChange?()
+        notifyStateChange()
     }
 
     private var inkRefreshScheduled = false
@@ -547,7 +561,7 @@ public final class EditorView: UIView {
                 cmd.setMark(MarkName.link, value: .object(["href": .string(s)]), range: range)
             }
         }
-        onStateChange?()
+        notifyStateChange()
     }
 
     /// Inserts a block after the paragraph with the caret.
@@ -577,7 +591,7 @@ public final class EditorView: UIView {
         // it instead made UIKit's gesture environment throw on the next tap into the text.
         if tools.mode != .lasso { ink.clearSelection() }
         hoverLayer.path = nil
-        onStateChange?()
+        notifyStateChange()
     }
 
     @objc private func hovered(_ g: UIHoverGestureRecognizer) {
@@ -764,7 +778,7 @@ extension EditorView: UITextViewDelegate {
         }
         normalizeParagraph(i)
         ink.invalidateLayout()
-        onStateChange?()
+        notifyStateChange()
     }
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -775,7 +789,7 @@ extension EditorView: UITextViewDelegate {
         if suppressDelegate { return }
         pendingMarks = nil
         updateTypingAttributes()
-        onStateChange?()
+        notifyStateChange()
     }
 
     public func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {

@@ -20,6 +20,23 @@ public struct SyncStatus: Equatable, Sendable {
 
     /// Nothing left to send or fetch (failed messages aside).
     public var isIdle: Bool { pending == 0 && catchingUp == 0 }
+
+    /// One state for the sync indicator.
+    public enum Summary: Equatable, Sendable {
+        /// Not connected (`pending` changes wait for the connection).
+        case offline
+        case syncing
+        case synced
+        /// Idle, but messages of `documents` documents could not be delivered.
+        case failed(documents: Int, reason: String)
+    }
+
+    public var summary: Summary {
+        guard case .connected = connection else { return .offline }
+        if !isIdle { return .syncing }
+        if let first = failed.first { return .failed(documents: failed.count, reason: first.reason) }
+        return .synced
+    }
 }
 
 /// Ties documents, the local store, encryption and the WebSocket together
@@ -74,6 +91,13 @@ public actor SyncEngine: SyncClientDelegate {
     private var running = false
     /// Every known document was subscribed on the current connection.
     private var subscribedAll = false
+    /// Documents whose registration was refused: not tried again until `retryFailed`.
+    private var refused: Set<String> = []
+    /// Retry of temporary failures (registration, server errors) with exponential backoff.
+    private var retryTask: Task<Void, Never>?
+    private var retryDelay: Duration?
+    var minRetryDelay: Duration = .seconds(1)
+    static let maxRetryDelay: Duration = .seconds(60)
     private var statusContinuations: [UUID: AsyncStream<SyncStatus>.Continuation] = [:]
 
     /// - Parameters:
@@ -97,7 +121,36 @@ public actor SyncEngine: SyncClientDelegate {
 
     public func stop() async {
         running = false
+        retryTask?.cancel()
+        retryTask = nil
         await client.stop()
+    }
+
+    func setMinRetryDelay(_ d: Duration) { minRetryDelay = d }
+
+    /// Schedules one retry pass (registration, subscription, sending) after a temporary
+    /// failure; the delay doubles up to a minute and resets once a pass has none.
+    private func scheduleRetry() {
+        guard retryTask == nil else { return }
+        let delay = retryDelay.map { min($0 * 2, Self.maxRetryDelay) } ?? minRetryDelay
+        retryDelay = delay
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            await self?.retryPass()
+        }
+    }
+
+    private func retryPass() async {
+        retryTask = nil
+        guard await client.isConnected else { return }
+        var temporary = false
+        if let records = try? store.documents() {
+            let waiting = records.filter { !live.contains($0.docId) && !catchingUp.contains($0.docId) && !refused.contains($0.docId) }
+            temporary = (try? await subscribe(waiting)) == false
+        }
+        await flush()
+        if !temporary, retryTask == nil { retryDelay = nil }
     }
 
     /// Result of `syncOnce`.
@@ -210,6 +263,7 @@ public actor SyncEngine: SyncClientDelegate {
     /// Deletes a document locally: stops syncing it and removes it, its queue and its index
     /// entries from the store (e.g. a local document replaced at sign-in).
     public func deleteDocument(_ docId: String) throws {
+        refused.remove(docId)
         open.removeValue(forKey: docId)?.subscription.cancel()
         known[docId] = nil
         live.remove(docId)
@@ -224,6 +278,7 @@ public actor SyncEngine: SyncClientDelegate {
     /// registration, subscription, sending.
     public func retryFailed(docId: String? = nil) async {
         try? store.retryFailed(docId: docId)
+        if let docId { refused.remove(docId) } else { refused.removeAll() }
         if await client.isConnected, let records = try? store.documents() {
             let waiting = records.filter { !live.contains($0.docId) && !catchingUp.contains($0.docId) && (docId == nil || $0.docId == docId) }
             try? await subscribe(waiting)
@@ -300,7 +355,12 @@ public actor SyncEngine: SyncClientDelegate {
                         try store.setRegistered(record.docId)
                     } catch {
                         skip.insert(item.docId)
-                        if Self.isPermanent(error) { try? store.failOutbox(docId: item.docId, reason: "register: \(Self.describe(error))") }
+                        if Self.isPermanent(error) {
+                            refused.insert(item.docId)
+                            try? store.failOutbox(docId: item.docId, reason: "register: \(Self.describe(error))")
+                        } else {
+                            scheduleRetry()
+                        }
                         continue
                     }
                 }
@@ -329,18 +389,27 @@ public actor SyncEngine: SyncClientDelegate {
     }
 
     /// Registers (if needed) and subscribes documents whose key is known. A document must be
-    /// subscribed and caught up before the first push (sync-protocol.md §4).
-    private func subscribe(_ records: [DocumentRecord]) async throws {
+    /// subscribed and caught up before the first push (sync-protocol.md §4). Returns false
+    /// when a registration failed temporarily (a retry is scheduled).
+    @discardableResult
+    private func subscribe(_ records: [DocumentRecord]) async throws -> Bool {
         var ready: [DocumentRecord] = []
-        for record in records where (try? keyFor(record)) != nil {
+        var temporaryFailure = false
+        for record in records where !refused.contains(record.docId) && (try? keyFor(record)) != nil {
             if !record.registered {
                 do {
                     if let register { try await register(record) }
                     try store.setRegistered(record.docId)
                 } catch {
                     // Refused: its messages show up as failed (retryFailed tries again).
-                    // Anything else is retried on the next connect.
-                    if Self.isPermanent(error) { try? store.failOutbox(docId: record.docId, reason: "register: \(Self.describe(error))") }
+                    // Anything else is retried with backoff.
+                    if Self.isPermanent(error) {
+                        refused.insert(record.docId)
+                        try? store.failOutbox(docId: record.docId, reason: "register: \(Self.describe(error))")
+                    } else {
+                        temporaryFailure = true
+                        scheduleRetry()
+                    }
                     continue
                 }
             }
@@ -348,13 +417,14 @@ public actor SyncEngine: SyncClientDelegate {
         }
         for r in ready { known[r.docId] = r }
         let entries = ready.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }
-        guard !entries.isEmpty else { return }
+        guard !entries.isEmpty else { return !temporaryFailure }
         for e in entries { catchingUp.insert(e.docId) }
         // Keep frames reasonably small.
         for chunk in stride(from: 0, to: entries.count, by: 100).map({ Array(entries[$0..<min($0 + 100, entries.count)]) }) {
             try await client.send(.subscribe(docs: chunk))
         }
         publish()
+        return !temporaryFailure
     }
 
     // MARK: Snapshots
@@ -460,6 +530,7 @@ public actor SyncEngine: SyncClientDelegate {
                 // trouble are retried up to LocalStore.maxSendAttempts.
                 let permanent = [.forbidden, .payloadTooLarge, .badRequest, .protocolMismatch].contains(code)
                 if code != .rateLimited { try? store.markFailed(clientMsgId: ref, error: code.rawValue, permanent: permanent) }
+                if !permanent { scheduleRetry() }
                 if code == .docNotFound, let item = try? store.pendingOutbox().first(where: { $0.clientMsgId == ref }) {
                     // Registration was lost: register again on the next flush.
                     try? store.setRegistered(item.docId, false)

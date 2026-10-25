@@ -391,13 +391,17 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
     @Test func refusedRegistrationIsReportedAndRetried() async throws {
         let server = FakeSyncServer()
         let refused = Locked<Set<String>>([])
+        let attempts = Locked(0)
         let store = try LocalStore.inMemory()
         var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: "A", clientVersion: "test")
         config.minBackoff = .milliseconds(10)
         let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
         let key = self.key
         let a = SyncEngine(store: store, client: client, keyFor: { _ in key }) { record in
-            if refused.withLock({ $0.contains(record.docId) }) { throw APIError.server(status: 403, code: "forbidden", message: "no") }
+            if refused.withLock({ $0.contains(record.docId) }) {
+                attempts.withLock { $0 += 1 }
+                throw APIError.server(status: 404, code: "not_found", message: "notebook not found")
+            }
             await server.register(record.docId)
         }
         let bad = NoteDocument(noteId: EntityID.make())
@@ -412,13 +416,44 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         #expect(try await eventually { await server.docs[good.noteId]?.isEmpty == false })
         #expect(try await eventually { await a.status().failed.map(\.docId) == [bad.noteId] })
         let status = await a.status()
-        #expect(status.failed.first?.reason == "register: forbidden (403)")
+        #expect(status.failed.first?.reason == "register: not_found (404)")
         #expect(status.pending == 0 && status.isIdle)
+        #expect(status.summary == .failed(documents: 1, reason: "register: not_found (404)"))
+        // Refused registrations are not retried on their own.
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(attempts.withLock { $0 } == 1)
 
         refused.withLock { $0.removeAll() }
         await a.retryFailed(docId: bad.noteId)
         #expect(try await eventually { await server.docs[bad.noteId]?.isEmpty == false })
         #expect(await a.status().failed.isEmpty)
+        #expect(try await eventually { await a.status().summary == .synced })
+        await a.stop()
+    }
+
+    /// A temporary registration failure (server down) is retried with backoff, without the
+    /// document ever showing as failed.
+    @Test func temporaryRegistrationFailureRetriesWithBackoff() async throws {
+        let server = FakeSyncServer()
+        let failuresLeft = Locked(2)
+        let store = try LocalStore.inMemory()
+        var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: "A", clientVersion: "test")
+        config.minBackoff = .milliseconds(10)
+        let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
+        let key = self.key
+        let a = SyncEngine(store: store, client: client, keyFor: { _ in key }) { record in
+            if failuresLeft.withLock({ $0 -= 1; return $0 >= 0 }) { throw APIError.server(status: 503, code: "internal", message: "down") }
+            await server.register(record.docId)
+        }
+        await a.setMinRetryDelay(.milliseconds(20))
+        let note = NoteDocument(noteId: EntityID.make())
+        try note.initialize(title: "Later")
+        try await a.open(note.crdt, notebookId: "nb")
+        await a.start()
+        #expect(try await eventually { await server.docs[note.noteId]?.isEmpty == false })
+        let status = await a.status()
+        #expect(status.failed.isEmpty)
+        #expect(try await eventually { await a.status().summary == .synced })
         await a.stop()
     }
 

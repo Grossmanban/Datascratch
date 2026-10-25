@@ -188,7 +188,9 @@ for await status in await engine.statusUpdates() { /* connection, pending, catch
 ### Статус и ошибки отправки
 
 `engine.status()` / `statusUpdates()` → `SyncStatus { connection, pending, catchingUp, failed }`,
-`isIdle` — нечего отправлять и догонять. Сообщения, которые не доставить повтором, уходят из
+`isIdle` — нечего отправлять и догонять, `summary` — одно состояние для индикатора:
+`.offline`, `.syncing`, `.synced`, `.failed(documents:reason:)` (без связи, идёт, всё
+синхронизировано, есть недоставленное). Сообщения, которые не доставить повтором, уходят из
 `pending` в `failed: [FailedSync { docId, reason, count }]`, остальное синхронизируется дальше:
 
 - регистрация документа отклонена (`POST /docs` 4xx, кроме 401/408/429) — все сообщения
@@ -197,6 +199,9 @@ for await status in await engine.statusUpdates() { /* connection, pending, catch
   больше лимита ещё до отправки;
 - `doc_not_found` (документ регистрируется заново) и ошибки сервера — после
   `LocalStore.maxSendAttempts` (5) попыток; `rate_limited` и обрывы связи повторяются без счёта.
+
+Временные ошибки (сервер недоступен, 5xx, 429) повторяются сами с нарастающей задержкой —
+от 1 с до минуты; отклонённая регистрация сама не повторяется (до `retryFailed`).
 
 `retryFailed(docId:)` — вернуть в очередь и попробовать снова (регистрация, подписка,
 отправка); `discardFailed(docId:)` — отказаться (локальное содержимое остаётся).

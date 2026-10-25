@@ -136,9 +136,9 @@ private struct DocRowPreview: View {
             }
             .padding(DSSpace.s4)
             DSDocGrid {
-                DSDocCard(title: "Идеи для рассказа", subtitle: "Персонажи", backdrop: .dusk)
-                DSDocCard(title: "Рецепты", subtitle: "С первого раза", backdrop: .sand)
-                DSDocCard(title: "Учёба", subtitle: "Конспекты", backdrop: .meadow)
+                DSDocCard(title: "Идеи для рассказа", subtitle: "Персонажи", icon: "✍️")
+                DSDocCard(title: "Рецепты", subtitle: "С первого раза")
+                DSDocCard(title: "Учёба", subtitle: "Конспекты", icon: "📚")
             }
             .padding(DSSpace.s4)
         }

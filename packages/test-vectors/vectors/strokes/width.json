@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "description": "f(p) = 0.35 + 0.65 p^0.8; width × f × (fontSize/17 | blockWidth/600) × tilt; tilt = 1 + 1.5 (1 − altitude/(π/2)) for pencil and marker only.",
+  "cases": [
+    {
+      "tool": "pen",
+      "width": 2,
+      "pressure": 1,
+      "altitude": 1.5707963267948966,
+      "scale": {
+        "fontSize": 17
+      },
+      "f": 1,
+      "result": 2
+    },
+    {
+      "tool": "pen",
+      "width": 2,
+      "pressure": 0,
+      "altitude": 1.5707963267948966,
+      "scale": {
+        "fontSize": 34
+      },
+      "f": 0.35,
+      "result": 1.4
+    },
+    {
+      "tool": "pencil",
+      "width": 1.5,
+      "pressure": 0.5,
+      "altitude": 0,
+      "scale": {
+        "fontSize": 17
+      },
+      "f": 0.7233,
+      "result": 2.7125
+    },
+    {
+      "tool": "marker",
+      "width": 6,
+      "pressure": 0.3,
+      "altitude": 0.7853981633974483,
+      "scale": {
+        "blockWidth": 300
+      },
+      "f": 0.5981,
+      "result": 3.14
+    },
+    {
+      "tool": "highlighter",
+      "width": 10,
+      "pressure": 0.7,
+      "altitude": 0.2,
+      "scale": {
+        "blockWidth": 600
+      },
+      "f": 0.8386,
+      "result": 8.3864
+    }
+  ]
+}

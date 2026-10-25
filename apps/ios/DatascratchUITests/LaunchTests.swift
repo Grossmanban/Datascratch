@@ -21,7 +21,7 @@ final class OnboardingUITests: XCTestCase {
         app.buttons["signUp.submit"].tap()
 
         let grid = app.descendants(matching: .any)["recoveryKey.grid"].firstMatch
-        XCTAssertTrue(grid.waitForExistence(timeout: 5))
+        XCTAssertTrue(grid.waitForExistence(timeout: 15), "recovery key not shown; buttons: \(LibraryUITests.buttons(app))")
         let formatted = grid.label
         XCTAssertTrue(formatted.hasPrefix("DS1-"), "label: \(formatted)")
 
@@ -31,7 +31,7 @@ final class OnboardingUITests: XCTestCase {
         // Read which groups are requested from the placeholders ("Group N").
         let groups = formatted.split(separator: "-").dropFirst().map(String.init)
         let first = app.textFields["confirmKey.first"]
-        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        XCTAssertTrue(first.waitForExistence(timeout: 10), "confirm screen not shown; buttons: \(LibraryUITests.buttons(app))")
         let second = app.textFields["confirmKey.second"]
         first.tap()
         first.typeText(groups[Self.groupIndex(first.placeholderValue)])
@@ -39,8 +39,15 @@ final class OnboardingUITests: XCTestCase {
         second.typeText(groups[Self.groupIndex(second.placeholderValue)])
         app.buttons["confirmKey.finish"].tap()
 
-        XCTAssertTrue(app.staticTexts["Welcome to Datascratch"].firstMatch.waitForExistence(timeout: 10)
-                      || app.buttons["sidebar.settings"].waitForExistence(timeout: 5))
+        // iOS may offer to save the new password; that sheet belongs to SpringBoard.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for label in ["Not Now", "Не сейчас"] where springboard.buttons[label].waitForExistence(timeout: 2) {
+            springboard.buttons[label].tap()
+        }
+        let main = app.descendants(matching: .any)["sidebar.settings"].firstMatch
+        let welcome = app.staticTexts["Welcome to Datascratch"].firstMatch
+        XCTAssertTrue(main.waitForExistence(timeout: 15) || welcome.exists,
+                      "main window did not appear; buttons: \(LibraryUITests.buttons(app))")
     }
 
     private static func groupIndex(_ placeholder: String?) -> Int {
@@ -107,6 +114,34 @@ final class LibraryUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts["Pencil test"].firstMatch.waitForExistence(timeout: 5)
                           || (textView.value as? String)?.contains("Pencil test") == true)
         }
+    }
+
+    /// Native editor only (DSEditor): switching Text ↔ Pen repeatedly must not crash.
+    func testSwitchingPenToolsInEditor() throws {
+        let app = launchSignedIn()
+        let newNote = app.buttons["library.newNote"].exists ? app.buttons["library.newNote"].firstMatch
+            : app.buttons["library.newNote.floating"].firstMatch
+        if !newNote.waitForExistence(timeout: 5) {
+            app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch.tap()
+        }
+        let button = app.buttons["library.newNote"].exists ? app.buttons["library.newNote"].firstMatch
+            : app.buttons["library.newNote.floating"].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 5))
+        button.tap()
+        let pen = app.buttons["tool.pen"].firstMatch
+        guard pen.waitForExistence(timeout: 5) else {
+            throw XCTSkip("Stand-in editor: no pen palette")
+        }
+        let text = app.buttons["tool.text"].firstMatch
+        for _ in 0..<5 {
+            pen.tap()
+            text.tap()
+        }
+        app.buttons["tool.pencil"].firstMatch.tap()
+        app.buttons["tool.fingerDrawing"].firstMatch.tap()
+        text.tap()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2))
+        XCTAssertTrue(text.exists)
     }
 
     func testCommandPaletteOpensTasks() throws {

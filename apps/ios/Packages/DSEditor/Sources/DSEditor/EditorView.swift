@@ -139,7 +139,6 @@ public final class EditorView: UIView {
         inkInput = InkInputRecognizer(target: nil, action: nil)
         inkInput.shouldTrack = { [weak self] touch in
             guard let self, self.tools.mode.capturesPen else { return false }
-            if let header = self.headerView, header.bounds.contains(touch.location(in: header)) { return false }
             return touch.type == .pencil || (self.tools.allowsFingerDrawing && touch.type == .direct)
         }
         inkInput.onBegan = { [weak self] s in
@@ -768,12 +767,11 @@ extension EditorView: UIGestureRecognizerDelegate {
         false
     }
 
-    /// The pen recognizer receives every touch and follows only those it draws with (it never
-    /// begins for the others, so selection and scrolling are unaffected). Declining touches here
-    /// crashed UIKit when a SwiftUI control over the editor was delaying the same touch.
+    /// Touches the pen does not draw with never reach its recognizer, so selection and scrolling
+    /// get them untouched.
     public func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        if g === inkInput { return true }
         if let header = headerView, header.bounds.contains(touch.location(in: header)) { return false }
+        if g === inkInput { return inkInput.shouldTrack(touch) }
         return true
     }
 }

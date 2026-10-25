@@ -1,0 +1,1 @@
+- 2026-10-25 · core · Перенос заметки между блокнотами: `moveDocRequestSchema` (`PATCH /docs/:id`), `rewrapNoteKey`, вектор в `api/bodies.json`.

@@ -1,8 +1,9 @@
-import { Menu, PanelLeftOpen } from "lucide-react";
+import { Maximize2, Menu, Minimize2, PanelLeftOpen } from "lucide-react";
+import { useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useIsMobile } from "@/hooks/useMedia";
-import { toggleSidebar, useUi } from "@/hooks/useUi";
+import { focusKindOf, toggleFocus, toggleSidebar, useUi } from "@/hooks/useUi";
 import { cn, IconButton } from "@/ui";
 
 /**
@@ -13,6 +14,9 @@ export function TopBar({ children, actions, className }: { children?: ReactNode;
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const sidebarOpen = useUi((s) => s.sidebarOpen);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const focusKind = focusKindOf(pathname);
+  const focused = useUi((s) => !!focusKind && s.focus[focusKind]);
   const ref = useRef<HTMLElement>(null);
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -37,14 +41,28 @@ export function TopBar({ children, actions, className }: { children?: ReactNode;
           <Menu className="size-[18px]" />
         </IconButton>
       ) : (
-        !sidebarOpen && (
+        !sidebarOpen &&
+        !focused && (
           <IconButton label={t("nav.expandSidebar")} onClick={toggleSidebar}>
             <PanelLeftOpen className="size-[18px]" />
           </IconButton>
         )
       )}
       <div className="flex min-w-0 flex-1 items-center gap-1.5 text-[13.5px] text-ink-2">{children}</div>
-      <div className="flex shrink-0 items-center gap-1">{actions}</div>
+      <div className="flex shrink-0 items-center gap-1">
+        {/* Document, calendar and tasks can take the whole window; remembered per kind of screen. */}
+        {focusKind && !isMobile && (
+          <IconButton
+            label={focused ? t("nav.exitFullScreen") : t("nav.fullScreen")}
+            onClick={() => toggleFocus(focusKind)}
+            aria-pressed={focused}
+            data-testid="focus-toggle"
+          >
+            {focused ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+          </IconButton>
+        )}
+        {actions}
+      </div>
     </header>
   );
 }

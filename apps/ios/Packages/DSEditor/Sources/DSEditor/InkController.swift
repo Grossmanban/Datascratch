@@ -21,6 +21,8 @@ final class InkController {
     /// Performance counters for the demo HUD.
     private(set) var lastRefreshDuration: TimeInterval = 0
     private(set) var renderedStrokeCount = 0
+    /// Outlines computed so far (cache misses), for tests and the demo HUD.
+    private(set) var outlinesBuilt = 0
 
     private enum Target {
         case text(scale: CGFloat)
@@ -52,6 +54,16 @@ final class InkController {
     /// Resolved segments of the strokes currently drawn (for hit testing).
     private(set) var resolved: [String: [[ResolvedInkPoint]]] = [:]
     private var renderedById: [String: RenderedStroke] = [:]
+    /// Outlines from the previous refresh: reused when a stroke lands on exactly the same points
+    /// (scrolling, edits elsewhere), since outlining is the expensive part of a refresh.
+    private var outlineCache: [String: (key: OutlineKey, rendered: RenderedStroke)] = [:]
+    private struct OutlineKey: Equatable {
+        var segments: [[ResolvedInkPoint]]
+        var tool: InkTool
+        var color: String
+        var width: Double
+        var opacity: Double
+    }
     private(set) var selectedStrokes: Set<String> = []
     private var generation = 0
     private var renderedGeneration = -1
@@ -104,15 +116,25 @@ final class InkController {
         resolved.removeAll(keepingCapacity: true)
         renderedById.removeAll(keepingCapacity: true)
         let column = geometry.columnFrame
+        var cache: [String: (key: OutlineKey, rendered: RenderedStroke)] = [:]
         for stroke in document.strokes where !stroke.hidden {
             guard let segments = place(stroke, projection: p, window: window, column: column), !segments.isEmpty else { continue }
             resolved[stroke.id] = segments
-            let r = render(stroke, segments: segments)
+            let key = OutlineKey(segments: segments, tool: stroke.tool, color: stroke.color, width: stroke.width, opacity: stroke.opacity)
+            let r: RenderedStroke
+            if let cached = outlineCache[stroke.id], cached.key == key {
+                r = cached.rendered
+            } else {
+                r = render(stroke, segments: segments)
+                outlinesBuilt += 1
+            }
+            cache[stroke.id] = (key, r)
             renderedById[stroke.id] = r
             if stroke.tool.drawsUnderText { underStrokes.append(r) } else { overStrokes.append(r) }
         }
         over.apply(overStrokes)
         under.apply(underStrokes)
+        outlineCache = cache
         renderedGeneration = generation
         renderedWindow = window
         renderedStrokeCount = overStrokes.count + underStrokes.count
@@ -125,10 +147,18 @@ final class InkController {
     private func place(_ stroke: Stroke, projection p: Projection, window: Range<Int>?, column: CGRect) -> [[ResolvedInkPoint]]? {
         switch stroke.anchorKind {
         case .text:
-            let offsets: [Int?] = stroke.anchors.map { a in
+            func offset(_ a: Data) -> Int? {
                 guard let pos = document.resolveAnchor(a) else { return nil }
                 return p.offset(block: pos.block, offset: pos.offset)
             }
+            // Cheap rejection before resolving every anchor: a stroke spans a few lines, so when
+            // both its first and last anchors are past the same edge of the window it is off screen.
+            if let window, let first = stroke.anchors.first, let last = stroke.anchors.last,
+               let a = offset(first), let b = offset(last),
+               (a < window.lowerBound && b < window.lowerBound) || (a >= window.upperBound && b >= window.upperBound) {
+                return nil
+            }
+            let offsets: [Int?] = stroke.anchors.map(offset)
             let live = offsets.compactMap { $0 }
             guard !live.isEmpty else { return nil }
             if let window, !live.contains(where: { window.contains($0) }) { return nil }

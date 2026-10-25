@@ -249,6 +249,24 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(pan.minimumNumberOfTouches, 1)
     }
 
+    func testRefreshReusesOutlinesOfStrokesThatDidNotMove() {
+        let p = BlockNode.paragraph("Hello brave new world")
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), p, .paragraph("Second paragraph here")])
+        let editor = host(doc)
+        _ = underline(editor, range: flatRange(editor, of: "brave"))
+        _ = underline(editor, range: flatRange(editor, of: "Second"))
+        let built = editor.ink.outlinesBuilt
+        editor.ink.invalidateLayout()
+        editor.ink.refresh()
+        XCTAssertEqual(editor.ink.outlinesBuilt, built, "nothing moved: both outlines come from the cache")
+        // Typing at the start of the first paragraph moves the stroke on "brave"; the one in the
+        // second paragraph stays where it is.
+        let pos = TextPosition(block: p.id, offset: 0)
+        EditorCommands(document: doc).typeText("Oh ", marks: .plain, at: pos, replacing: 0)
+        settle(editor)
+        XCTAssertEqual(editor.ink.outlinesBuilt, built + 1, "only the moved stroke is outlined again")
+    }
+
     func testOpenLargeNote() {
         let doc = SampleDocument.large()
         let start = CACurrentMediaTime()

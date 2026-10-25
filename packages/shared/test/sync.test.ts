@@ -296,3 +296,43 @@ describe("sync client", () => {
     await new Promise((r) => wss.close(r));
   });
 });
+
+describe("sync client extras", () => {
+  it("requestSnapshot uploads a snapshot on demand", async () => {
+    const hub = new MemorySyncHub();
+    const a = makeClient(hub, "dev-a");
+    const da = new Y.Doc();
+    await a.client.addDoc(DOC, da);
+    expect(await a.client.requestSnapshot(DOC)).toBe(false); // not caught up yet
+    a.client.start();
+    await until(() => a.client.isSynced(DOC));
+    da.getText("t").insert(0, "v1");
+    expect(await a.client.requestSnapshot(DOC)).toBe(true);
+    await until(
+      () => hub.docs.get(DOC)?.snapshot !== null && hub.docs.get(DOC)?.snapshot !== undefined,
+    );
+    await until(async () => (await a.storage.listOutbox()).length === 0);
+  });
+
+  it("resubscribe after registering an offline-created document", async () => {
+    const hub = new MemorySyncHub({ autoCreateDocs: false });
+    const a = makeClient(hub, "dev-a");
+    const errors: SyncClientError[] = [];
+    a.client.on("error", (e) => errors.push(e));
+    const da = new Y.Doc();
+    await a.client.addDoc(DOC, da);
+    da.getText("t").insert(0, "offline note");
+    da.getText("t").insert(0, ">");
+    a.client.start();
+    await until(() => errors.some((e) => e.code === "doc_not_found"));
+    hub.registerDoc(DOC); // POST /v1/docs succeeded
+    await a.client.resubscribe(DOC);
+    await until(() => a.client.isSynced(DOC));
+    await until(async () => (await a.storage.listOutbox()).length === 0);
+    const b = makeClient(hub, "dev-b");
+    const db = new Y.Doc();
+    await b.client.addDoc(DOC, db);
+    b.client.start();
+    await until(() => db.getText("t").toString() === ">offline note");
+  });
+});

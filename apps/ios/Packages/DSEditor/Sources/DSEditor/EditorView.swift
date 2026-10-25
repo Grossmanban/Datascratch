@@ -138,7 +138,12 @@ public final class EditorView: UIView {
         editMenu = UIEditMenuInteraction(delegate: self)
         textView.addInteraction(editMenu)
 
-        tools.onChange = { [weak self] in self?.toolsChanged() }
+        // Tool changes usually come from a button whose touch UIKit is still dispatching; reacting
+        // synchronously (gesture recognizer changes, SwiftUI updates) made the gesture environment
+        // throw. Apply them on the next run loop turn.
+        tools.onChange = { [weak self] in
+            DispatchQueue.main.async { self?.toolsChanged() }
+        }
         toolsChanged()
         factory.onTableCellEdit = { [weak self] table, row, column, text in
             self?.commands.setTableCell(table, row: row, column: column, text: text)
@@ -492,10 +497,7 @@ public final class EditorView: UIView {
         // scrolling), so the scroll recognizer's touch types are left alone: changing them while a
         // tool button's touch is being dispatched made UIKit's gesture environment throw.
         // Finger drawing (D-06) only changes how many fingers scroll, applied after this event.
-        let fingers = tools.mode.capturesPen && tools.allowsFingerDrawing ? 2 : 1
-        DispatchQueue.main.async { [weak self] in
-            self?.textView.panGestureRecognizer.minimumNumberOfTouches = fingers
-        }
+        textView.panGestureRecognizer.minimumNumberOfTouches = tools.mode.capturesPen && tools.allowsFingerDrawing ? 2 : 1
         if tools.mode != .lasso { ink.clearSelection() }
         hoverLayer.path = nil
         onStateChange?()

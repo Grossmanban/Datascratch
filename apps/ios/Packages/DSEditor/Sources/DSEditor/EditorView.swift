@@ -296,7 +296,8 @@ public final class EditorView: UIView {
         let column = theme.columnWidth(available: max(200, available))
         let side = max(theme.horizontalPadding, (bounds.width - column) / 2)
         layoutHeader()
-        let inset = UIEdgeInsets(top: 32 + headerHeight, left: side, bottom: 160, right: side)
+        // Room to draw below the last paragraph: at least one screen (`strokes.md` §4, free drawing).
+        let inset = UIEdgeInsets(top: 32 + headerHeight, left: side, bottom: max(160, bounds.height), right: side)
         if textView.textContainerInset != inset { textView.textContainerInset = inset }
         applyKeyboardInset()
     }
@@ -323,8 +324,11 @@ public final class EditorView: UIView {
             overlap = max(0, mine.maxY - frame.minY)
             if frame.minY >= window.bounds.maxY { overlap = 0 }
         }
-        guard textView.contentInset.bottom != overlap else { return }
-        textView.contentInset.bottom = overlap
+        // Free drawings may reach below the text: keep them reachable by scrolling.
+        let inkBeyond = max(0, (ink?.inkExtentMaxY ?? 0) + 40 - textView.contentSize.height)
+        let bottom = overlap + inkBeyond
+        guard textView.contentInset.bottom != bottom else { return }
+        textView.contentInset.bottom = bottom
         textView.verticalScrollIndicatorInsets.bottom = overlap
         if overlap > 0, textView.isFirstResponder {
             DispatchQueue.main.async { [weak self] in
@@ -375,6 +379,7 @@ public final class EditorView: UIView {
             ink.invalidateLayout()
         }
         ink.refreshIfNeeded()
+        applyKeyboardInset()
     }
 
     // MARK: - Document → view

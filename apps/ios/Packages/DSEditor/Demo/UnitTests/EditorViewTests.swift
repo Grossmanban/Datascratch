@@ -158,13 +158,22 @@ final class EditorViewTests: XCTestCase {
         let doc = InMemoryEditorDocument(blocks: [.title("T"), p])
         let editor = host(doc)
         editor.tools.mode = .text
-        window.makeKeyAndVisible()
-        XCTAssertTrue(editor.textView.becomeFirstResponder())
         let end = editor.projection.offset(block: p.id, offset: 5)!
         editor.textView.selectedRange = NSRange(location: end, length: 0)
-        editor.textView.insertText(" world")
+        // What the keyboard does: ask the delegate, apply the text if allowed, report the change.
+        // (Programmatic `insertText` does not consult the delegate in a hosted test.)
+        let tv = editor.textView
+        if editor.textView(tv, shouldChangeTextIn: NSRange(location: end, length: 0), replacementText: " world") {
+            tv.textStorage.replaceCharacters(in: NSRange(location: end, length: 0), with: " world")
+            tv.selectedRange = NSRange(location: end + 6, length: 0)
+            editor.textViewDidChange(tv)
+        }
+        settle(editor)
         XCTAssertEqual(doc.flatText(of: p.id), "Hello world")
-        editor.textView.insertText("\n")
+        XCTAssertTrue(tv.textStorage.string.contains("Hello world"))
+        let caret = tv.selectedRange
+        XCTAssertFalse(editor.textView(tv, shouldChangeTextIn: caret, replacementText: "\n"), "Return is a command")
+        settle(editor)
         XCTAssertEqual(doc.blocks.count, 3, "Return splits the paragraph in the document")
         editor.undo()
         XCTAssertEqual(doc.blocks.count, 2)
@@ -182,6 +191,62 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(FrameRateBoost.drawingRange.minimum, 80)
         editor.ink.penEnded(cancelled: true)
         XCTAssertFalse(editor.ink.frameRate.isActive)
+    }
+
+    func testHeaderScrollsWithTextAndMovesInk() {
+        let p = BlockNode.paragraph("Hello brave new world")
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), p])
+        let editor = host(doc)
+        let s = underline(editor, range: flatRange(editor, of: "brave"))
+        let before = editor.ink.resolved[s.id]!.first!.first!.location
+
+        let header = UIView()
+        let label = UILabel()
+        label.text = "Cover"
+        label.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: header.topAnchor),
+            label.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            label.bottomAnchor.constraint(equalTo: header.bottomAnchor),
+            label.heightAnchor.constraint(equalToConstant: 120),
+        ])
+        editor.headerView = header
+        settle(editor)
+
+        XCTAssertEqual(editor.headerHeight, 120)
+        XCTAssertTrue(header.isDescendant(of: editor.textView), "header scrolls with the text")
+        XCTAssertEqual(header.frame, CGRect(x: 0, y: 0, width: editor.bounds.width, height: 120))
+        XCTAssertEqual(editor.textView.textContainerInset.top, 152)
+        let after = editor.ink.resolved[s.id]!.first!.first!.location
+        XCTAssertEqual(after.y - before.y, 120, accuracy: 0.5, "ink stays on its word below the header")
+        XCTAssertEqual(after.x, before.x, accuracy: 0.5)
+
+        editor.headerView = nil
+        settle(editor)
+        XCTAssertEqual(editor.headerHeight, 0)
+        XCTAssertNil(header.superview)
+    }
+
+    func testToolChangesNeverReconfigureRecognizersDuringDispatch() {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello")]))
+        let pan = editor.textView.panGestureRecognizer
+        for g in [editor.inkInput!] + (editor.textView.gestureRecognizers ?? []).filter({ $0.delegate === editor }) {
+            XCTAssertFalse(g.delaysTouchesBegan, "\(type(of: g)) must not delay touches")
+            XCTAssertFalse(g.delaysTouchesEnded, "\(type(of: g)) must not delay touches")
+        }
+        XCTAssertFalse(editor.textView.delaysContentTouches)
+        XCTAssertEqual(pan.minimumNumberOfTouches, 1)
+        // As if called from a button's or the pen's touch handler: nothing changes synchronously.
+        editor.tools.allowsFingerDrawing = true
+        editor.tools.mode = .marker
+        editor.tools.mode = .pen
+        XCTAssertEqual(pan.minimumNumberOfTouches, 1, "recognizers are reconfigured only after the event")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertEqual(pan.minimumNumberOfTouches, 2, "finger drawing: scrolling with two fingers")
+        editor.tools.mode = .text
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertEqual(pan.minimumNumberOfTouches, 1)
     }
 
     func testOpenLargeNote() {

@@ -224,7 +224,7 @@ export function PenToolbar({
       aria-hidden
       className={cn(
         "shrink-0 bg-separator",
-        vertical ? "my-1 h-px w-6 self-center" : "mx-1 h-6 w-px",
+        vertical ? "my-1 h-px w-6 self-center" : folded ? "mx-0.5 h-6 w-px" : "mx-1 h-6 w-px",
       )}
     />
   );
@@ -373,7 +373,8 @@ export function PenToolbar({
         aria-orientation={orientation}
         onMouseDown={(e) => e.preventDefault()}
         className={cn(
-          "glass inline-flex items-center gap-0.5 rounded-[20px] p-1",
+          "glass inline-flex items-center rounded-[20px] p-1",
+          folded ? "gap-0" : "gap-0.5",
           vertical && "flex-col",
           className,
         )}
@@ -424,7 +425,10 @@ export function PenToolbar({
                 <button
                   type="button"
                   aria-label={`${t.color}, ${t.width}`}
-                  className="grid size-9 place-items-center rounded-full outline-none hover:bg-hover focus-visible:focus-ring"
+                  className={cn(
+                    folded ? "size-8" : "size-9",
+                    "grid place-items-center rounded-full outline-none hover:bg-hover focus-visible:focus-ring",
+                  )}
                 >
                   <span
                     className="rounded-full"
@@ -457,7 +461,10 @@ export function PenToolbar({
             aria-pressed={value.drawWithAnyPointer}
             aria-label={t.anyPointer}
             onClick={() => onChange({ ...value, drawWithAnyPointer: !value.drawWithAnyPointer })}
-            className="grid size-9 place-items-center rounded-full text-fg-secondary outline-none transition-colors duration-fast hover:bg-hover hover:text-fg focus-visible:focus-ring aria-pressed:bg-accent-soft aria-pressed:text-accent [&_svg]:size-[18px]"
+            className={cn(
+              folded ? "size-8" : "size-9",
+              "grid place-items-center rounded-full text-fg-secondary outline-none transition-colors duration-fast hover:bg-hover hover:text-fg focus-visible:focus-ring aria-pressed:bg-accent-soft aria-pressed:text-accent [&_svg]:size-[18px]",
+            )}
           >
             <Hand />
           </button>
@@ -470,7 +477,10 @@ export function PenToolbar({
                 aria-label={t.undo}
                 disabled={!canUndo}
                 onClick={onUndo}
-                className="grid size-9 place-items-center rounded-full text-fg-secondary outline-none hover:bg-hover hover:text-fg focus-visible:focus-ring disabled:opacity-35 disabled:hover:bg-transparent [&_svg]:size-[18px]"
+                className={cn(
+                  folded ? "size-8" : "size-9",
+                  "grid place-items-center rounded-full text-fg-secondary outline-none hover:bg-hover hover:text-fg focus-visible:focus-ring disabled:opacity-35 disabled:hover:bg-transparent [&_svg]:size-[18px]",
+                )}
               >
                 <Undo2 />
               </button>
@@ -481,7 +491,10 @@ export function PenToolbar({
                 aria-label={t.redo}
                 disabled={!canRedo}
                 onClick={onRedo}
-                className="grid size-9 place-items-center rounded-full text-fg-secondary outline-none hover:bg-hover hover:text-fg focus-visible:focus-ring disabled:opacity-35 disabled:hover:bg-transparent [&_svg]:size-[18px]"
+                className={cn(
+                  folded ? "size-8" : "size-9",
+                  "grid place-items-center rounded-full text-fg-secondary outline-none hover:bg-hover hover:text-fg focus-visible:focus-ring disabled:opacity-35 disabled:hover:bg-transparent [&_svg]:size-[18px]",
+                )}
               >
                 <Redo2 />
               </button>

@@ -188,6 +188,8 @@ public struct DSPenToolbar: View {
     private let canRedo: Bool
     private let onUndo: (() -> Void)?
     private let onRedo: (() -> Void)?
+    private let compact: Bool
+    @State private var showsMore = false
     @State private var lastInk: DSInkToken = .black
     @State private var lastHighlight: DSHighlightToken = .yellow
     @Namespace private var namespace
@@ -202,9 +204,11 @@ public struct DSPenToolbar: View {
         canUndo: Bool = false,
         canRedo: Bool = false,
         onUndo: (() -> Void)? = nil,
-        onRedo: (() -> Void)? = nil
+        onRedo: (() -> Void)? = nil,
+        compact: Bool = false
     ) {
         _selection = selection
+        self.compact = compact
         self.axis = axis
         self.tools = tools
         self.showsTextMode = showsTextMode
@@ -239,19 +243,11 @@ public struct DSPenToolbar: View {
                 ForEach(tools, id: \.self) { tool in
                     toolButton(tool)
                 }
-                if selection.isDrawing {
+                if compact {
                     separator
-                    swatches
-                    separator
-                    ForEach(DSPenWidth.allCases, id: \.self) { width in
-                        widthButton(width)
-                    }
-                }
-                separator
-                fingerButton
-                if onUndo != nil || onRedo != nil {
-                    iconButton("arrow.uturn.backward", label: DSStrings.tr("Отменить", "Undo", language), enabled: canUndo) { onUndo?() }
-                    iconButton("arrow.uturn.forward", label: DSStrings.tr("Повторить", "Redo", language), enabled: canRedo) { onRedo?() }
+                    moreButton
+                } else {
+                    inlineControls
                 }
             }
             .padding(DSSpace.s1)
@@ -260,6 +256,89 @@ public struct DSPenToolbar: View {
         .sensoryFeedback(.selection, trigger: selection)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(DSStrings.tr("Перо", "Pen", language))
+    }
+
+    private var hasHistory: Bool { onUndo != nil || onRedo != nil }
+
+    /// Colours, widths, finger drawing and undo / redo inside the capsule (regular mode).
+    @ViewBuilder private var inlineControls: some View {
+        if selection.isDrawing {
+            separator
+            swatches
+            separator
+            ForEach(DSPenWidth.allCases, id: \.self) { width in
+                widthButton(width)
+            }
+        }
+        separator
+        fingerButton
+        if hasHistory {
+            historyButtons
+        }
+    }
+
+    @ViewBuilder private var historyButtons: some View {
+        iconButton("arrow.uturn.backward", id: "tool.undo", label: DSStrings.tr("Отменить", "Undo", language), enabled: canUndo) { onUndo?() }
+        iconButton("arrow.uturn.forward", id: "tool.redo", label: DSStrings.tr("Повторить", "Redo", language), enabled: canRedo) { onRedo?() }
+    }
+
+    /// Compact mode: one trailing button that opens colours, widths, finger drawing, undo / redo.
+    private var moreButton: some View {
+        Button {
+            showsMore = true
+        } label: {
+            HStack(spacing: 2) {
+                if selection.isDrawing {
+                    let dot = CGFloat(10 + selection.width.step * 3)
+                    Circle()
+                        .fill(selection.color.color)
+                        .overlay(Circle().strokeBorder(Color.dsPrimary.opacity(0.15), lineWidth: 0.5))
+                        .frame(width: dot, height: dot)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Color.dsTertiary)
+                } else {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(Color.dsSecondary)
+                }
+            }
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(DSPressableStyle(scale: 0.9))
+        .accessibilityLabel(DSStrings.tr("Цвет, толщина и другие настройки", "Colour, width and more", language))
+        .accessibilityIdentifier("tool.more")
+        .popover(isPresented: $showsMore) {
+            morePanel
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+
+    private var morePanel: some View {
+        VStack(alignment: .leading, spacing: DSSpace.s2) {
+            if selection.isDrawing {
+                HStack(spacing: 2) { swatches }
+                HStack(spacing: 2) {
+                    ForEach(DSPenWidth.allCases, id: \.self) { width in
+                        widthButton(width)
+                    }
+                }
+                Divider().overlay(Color.dsSeparator)
+            }
+            HStack(spacing: 2) {
+                fingerButton
+                Text(DSStrings.tr("Рисовать пальцем", "Draw with finger", language))
+                    .dsFont(.footnote)
+                    .foregroundStyle(Color.dsSecondary)
+                Spacer(minLength: DSSpace.s4)
+                if hasHistory {
+                    historyButtons
+                }
+            }
+        }
+        .padding(DSSpace.s3)
+        .frame(minWidth: 260)
     }
 
     private var separator: some View {
@@ -288,12 +367,13 @@ public struct DSPenToolbar: View {
             Image(systemName: "character.cursor.ibeam")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(isOn ? Color.dsPrimary : Color.dsSecondary)
-                .frame(width: 38, height: 46)
+                .frame(width: compact ? 44 : 38, height: compact ? 44 : 46)
                 .background(selectedFill(isOn, id: "tool"))
                 .contentShape(Rectangle())
         }
         .buttonStyle(DSPressableStyle(scale: 0.9))
         .accessibilityLabel(DSStrings.tr("Текст", "Text", language))
+        .accessibilityIdentifier("tool.text")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
@@ -315,7 +395,7 @@ public struct DSPenToolbar: View {
                             .foregroundStyle(isOn ? Color.dsPrimary : Color.dsSecondary)
                             .frame(maxHeight: .infinity)
                     } else {
-                        DSNib(tool: tool, tip: tool == .eraser ? Color.dsTint(.pink) : nibColor(tool))
+                        DSPenNib(tool: tool, color: tool == .eraser ? Color.dsTint(.pink) : nibColor(tool))
                             .frame(width: 16, height: 32)
                     }
                 }
@@ -332,7 +412,7 @@ public struct DSPenToolbar: View {
                         .transition(.opacity)
                 }
             }
-            .frame(width: 38, height: 46)
+            .frame(width: compact ? 44 : 38, height: compact ? 44 : 46)
             .background(selectedFill(isOn, id: "tool"))
             .contentShape(Rectangle())
         }
@@ -342,6 +422,7 @@ public struct DSPenToolbar: View {
                 ? "\(tool.title(language)): \(selection.eraserMode.title(language))"
                 : tool.title(language)
         )
+        .accessibilityIdentifier("tool.\(tool.rawValue)")
         .accessibilityHint(tool == .eraser && isOn ? DSStrings.tr("Нажмите ещё раз, чтобы сменить режим", "Tap again to switch mode", language) : "")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
@@ -381,6 +462,7 @@ public struct DSPenToolbar: View {
         }
         .buttonStyle(DSPressableStyle(scale: 0.88))
         .accessibilityLabel(DSStrings.colorName(color.name, language))
+        .accessibilityIdentifier("color.\(color.name)")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
@@ -407,6 +489,7 @@ public struct DSPenToolbar: View {
         }
         .buttonStyle(DSPressableStyle(scale: 0.88))
         .accessibilityLabel(DSStrings.width(width, language))
+        .accessibilityIdentifier("width.\(width.step)")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
@@ -424,10 +507,11 @@ public struct DSPenToolbar: View {
         }
         .buttonStyle(DSPressableStyle(scale: 0.9))
         .accessibilityLabel(DSStrings.tr("Рисовать пальцем", "Draw with finger", language))
+        .accessibilityIdentifier("tool.finger")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
-    private func iconButton(_ systemImage: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+    private func iconButton(_ systemImage: String, id: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .medium))
@@ -439,15 +523,27 @@ public struct DSPenToolbar: View {
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.35)
         .accessibilityLabel(label)
+        .accessibilityIdentifier(id)
     }
 }
 
-/// Nib silhouette: a coloured tip over a paper-coloured body.
-struct DSNib: View {
-    let tool: DSPenTool
-    let tip: Color
+/// Nib silhouette of a pen tool: a tip in the current ink over a paper-coloured
+/// body (Goodnotes-like, quieter). Use it wherever a tool is shown, e.g. a custom
+/// palette, so tools look the same as in `DSPenToolbar` and on the web.
+/// Suggested frame: 16 × 32 pt. `.lasso` draws a rounded tip; prefer SF Symbol "lasso".
+public struct DSPenNib: View {
+    private let tool: DSPenTool
+    private let tip: Color
 
-    var body: some View {
+    /// - Parameters:
+    ///   - tool: tool whose silhouette to draw.
+    ///   - color: tip colour (current ink or highlight; erasers usually `.dsTint(.pink)`).
+    public init(tool: DSPenTool, color: Color) {
+        self.tool = tool
+        self.tip = color
+    }
+
+    public var body: some View {
         let wide = tool == .highlighter || tool == .eraser
         VStack(spacing: 0) {
             DSNibTip(tool: tool)
@@ -501,6 +597,22 @@ struct DSNibTip: Shape {
 
 #Preview("Pen toolbar — light") {
     PenToolbarPreview()
+}
+
+#Preview("Pen toolbar — compact (iPhone)") {
+    PenToolbarCompactPreview()
+        .frame(width: 390)
+}
+
+private struct PenToolbarCompactPreview: View {
+    @State private var selection = DSPenSelection()
+
+    var body: some View {
+        ZStack {
+            Color.dsCanvas.ignoresSafeArea()
+            DSPenToolbar(selection: $selection, canUndo: true, onUndo: {}, onRedo: {}, compact: true)
+        }
+    }
 }
 
 #Preview("Pen toolbar — dark") {

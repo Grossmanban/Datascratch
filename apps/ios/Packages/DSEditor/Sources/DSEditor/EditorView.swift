@@ -25,6 +25,20 @@ public final class EditorView: UIView {
     public var onOpenNote: ((String) -> Void)?
     /// Tools, undo availability or selection changed (refresh toolbars).
     public var onStateChange: (() -> Void)?
+    private var stateChangePending = false
+
+    /// Tells the host about a change on the next main-queue turn, coalesced. Never during UIKit's
+    /// touch dispatch: a host that re-renders its interface synchronously (SwiftUI state) while a
+    /// touch is still being delivered crashed UIKit's gesture environment.
+    private func notifyStateChange() {
+        guard !stateChangePending else { return }
+        stateChangePending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.stateChangePending = false
+            self.onStateChange?()
+        }
+    }
 
     /// A view scrolled together with the text above the first block (cover, title, metadata).
     /// It gets the editor's full width and its height from Auto Layout
@@ -134,7 +148,7 @@ public final class EditorView: UIView {
         textView.onLayout = { [weak self] in self?.textViewDidLayout() }
         textView.keyHandler = { [weak self] in self?.perform($0) }
         textView.documentUndo.document = document
-        textView.documentUndo.afterChange = { [weak self] in self?.onStateChange?() }
+        textView.documentUndo.afterChange = { [weak self] in self?.notifyStateChange() }
 
         inkInput = InkInputRecognizer(target: nil, action: nil)
         inkInput.shouldTrack = { [weak self] touch in
@@ -152,7 +166,7 @@ public final class EditorView: UIView {
         inkInput.onEnded = { [weak self] cancelled in
             guard let self else { return }
             self.ink.penEnded(cancelled: cancelled)
-            self.onStateChange?()
+            self.notifyStateChange()
         }
         inkInput.onEstimatedUpdate = { [weak self] s in self?.ink.penEstimatedUpdate(s) }
         inkInput.delegate = self
@@ -204,8 +218,19 @@ public final class EditorView: UIView {
             self.dynamicTypeChanged()
         }
 
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
+            let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
+            MainActor.assumeIsolated { self?.keyboardFrameChanged(frame) }
+        }
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.keyboardFrameChanged(nil) }
+        }
+
         NotificationCenter.default.addObserver(forName: MermaidRenderer.didRender, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.rerenderAtoms(of: NodeType.mermaid) }
+            MainActor.assumeIsolated {
+                EditorDiagnostics.log("mermaid rendered: re-laying out diagrams")
+                self?.rerenderAtoms(of: NodeType.mermaid)
+            }
         }
     }
 
@@ -273,6 +298,40 @@ public final class EditorView: UIView {
         layoutHeader()
         let inset = UIEdgeInsets(top: 32 + headerHeight, left: side, bottom: 160, right: side)
         if textView.textContainerInset != inset { textView.textContainerInset = inset }
+        applyKeyboardInset()
+    }
+
+    // MARK: - Keyboard
+
+    /// Keyboard overlap is handled inside the editor: the bottom scroll inset grows so the caret
+    /// stays visible, while the view keeps its size. Hosts should not shrink the editor for the
+    /// keyboard (SwiftUI: `.ignoresSafeArea(.keyboard)`): resizing it while a tap into the text was
+    /// still being delivered re-laid out the whole document and crashed UIKit's gesture environment.
+    /// If the host does shrink it anyway, the overlap is zero and nothing changes.
+    private var keyboardFrame: CGRect?
+
+    private func keyboardFrameChanged(_ frame: CGRect?) {
+        keyboardFrame = frame
+        applyKeyboardInset()
+    }
+
+    private func applyKeyboardInset() {
+        var overlap: CGFloat = 0
+        if let screenFrame = keyboardFrame, let window {
+            let frame = window.convert(screenFrame, from: window.screen.coordinateSpace)
+            let mine = convert(bounds, to: window)
+            overlap = max(0, mine.maxY - frame.minY)
+            if frame.minY >= window.bounds.maxY { overlap = 0 }
+        }
+        guard textView.contentInset.bottom != overlap else { return }
+        textView.contentInset.bottom = overlap
+        textView.verticalScrollIndicatorInsets.bottom = overlap
+        if overlap > 0, textView.isFirstResponder {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.textView.scrollRangeToVisible(self.textView.selectedRange)
+            }
+        }
     }
 
     private func layoutHeader() {
@@ -303,6 +362,7 @@ public final class EditorView: UIView {
         // Reorder only when needed: changing subview order marks the text view for layout again.
         let subs = textView.subviews
         if subs.first !== paper || (subs.count > 1 && subs[1] !== inkUnder) {
+            EditorDiagnostics.log("reorder ink layers")
             textView.sendSubviewToBack(inkUnder)
             textView.sendSubviewToBack(paper)
         }
@@ -341,7 +401,7 @@ public final class EditorView: UIView {
         if !change.strokesAdded.isEmpty || !change.strokesRemoved.isEmpty || change.origin != .textInput {
             setNeedsInkRefresh()
         }
-        onStateChange?()
+        notifyStateChange()
     }
 
     private var inkRefreshScheduled = false
@@ -538,7 +598,7 @@ public final class EditorView: UIView {
                 cmd.setMark(MarkName.link, value: .object(["href": .string(s)]), range: range)
             }
         }
-        onStateChange?()
+        notifyStateChange()
     }
 
     /// Inserts a block after the paragraph with the caret.
@@ -557,6 +617,7 @@ public final class EditorView: UIView {
     // MARK: - Tools
 
     private func toolsChanged() {
+        EditorDiagnostics.log("tools changed: \(tools.mode.rawValue)")
         // The pen recognizer wins pen touches by itself (it begins on touch down and prevents
         // scrolling), so the scroll recognizer's touch types are left alone: changing them while a
         // tool button's touch is being dispatched made UIKit's gesture environment throw.
@@ -564,7 +625,7 @@ public final class EditorView: UIView {
         textView.panGestureRecognizer.minimumNumberOfTouches = tools.mode.capturesPen && tools.allowsFingerDrawing ? 2 : 1
         if tools.mode != .lasso { ink.clearSelection() }
         hoverLayer.path = nil
-        onStateChange?()
+        notifyStateChange()
     }
 
     @objc private func hovered(_ g: UIHoverGestureRecognizer) {
@@ -693,7 +754,7 @@ extension EditorView: UITextViewDelegate {
         }
         normalizeParagraph(i)
         ink.invalidateLayout()
-        onStateChange?()
+        notifyStateChange()
     }
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -704,7 +765,7 @@ extension EditorView: UITextViewDelegate {
         if suppressDelegate { return }
         pendingMarks = nil
         updateTypingAttributes()
-        onStateChange?()
+        notifyStateChange()
     }
 
     public func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {

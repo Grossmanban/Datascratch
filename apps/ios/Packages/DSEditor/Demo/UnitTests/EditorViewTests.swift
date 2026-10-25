@@ -33,6 +33,13 @@ final class EditorViewTests: XCTestCase {
         return editor
     }
 
+    /// Runs every block already enqueued on the main queue (tool changes are applied there).
+    func drainMainQueue() {
+        let done = expectation(description: "main queue drained")
+        DispatchQueue.main.async { done.fulfill() }
+        wait(for: [done], timeout: 2)
+    }
+
     func settle(_ editor: EditorView) {
         editor.setNeedsLayout()
         editor.layoutIfNeeded()
@@ -242,10 +249,10 @@ final class EditorViewTests: XCTestCase {
         editor.tools.mode = .marker
         editor.tools.mode = .pen
         XCTAssertEqual(pan.minimumNumberOfTouches, 1, "recognizers are reconfigured only after the event")
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        drainMainQueue()
         XCTAssertEqual(pan.minimumNumberOfTouches, 2, "finger drawing: scrolling with two fingers")
         editor.tools.mode = .text
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        drainMainQueue()
         XCTAssertEqual(pan.minimumNumberOfTouches, 1)
     }
 

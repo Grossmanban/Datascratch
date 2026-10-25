@@ -35,6 +35,8 @@ Y.Array "tabs"      [ { noteId } ]  (открытые вкладки; после
 
 `NotebookRef`: `{ id, spaceId, name, icon, color, order, mode: "private"|"agent", createdAt }`. Ключ блокнота **не** хранится здесь — он лежит в `notebook_keys` на сервере, обёрнутый мастер-ключом (`crypto.md`).
 
+Известные ключи `settings` (остальные — свободный JSON): `dailyNotebookId` (блокнот ежедневных заметок и «Входящих»), `activeTab` (noteId активной вкладки), `recoveryKeyConfirmed: boolean` — пользователь подтвердил, что сохранил текущий ключ восстановления; сбрасывается в `false` при его ротации (`POST /v1/auth/recovery-key`, `api.md`). Уточнение 2026-10-25 (по поручению координатора).
+
 ## 3. Документ `notebook` (индекс блокнота)
 
 ```

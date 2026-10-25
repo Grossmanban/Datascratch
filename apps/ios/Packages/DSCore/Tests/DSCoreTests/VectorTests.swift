@@ -394,6 +394,8 @@ struct EncodingVectorTests {
             "createNotebookRequest": { _ = try JSONDecoder().decode(CreateNotebookRequest.self, from: $0) },
             "registerDocRequest": { _ = try JSONDecoder().decode(RegisterDocRequest.self, from: $0) },
             "moveDocRequest": { _ = try JSONDecoder().decode(MoveDocRequest.self, from: $0) },
+            "rotateRecoveryKeyRequest": { _ = try JSONDecoder().decode(RotateRecoveryKeyRequest.self, from: $0) },
+            "securityEvent": { _ = try JSONDecoder().decode(SecurityEvent.self, from: $0) },
             "attachmentStatus": { _ = try JSONDecoder().decode(AttachmentStatus.self, from: $0) },
             "createShareRequest": { _ = try JSONDecoder().decode(CreateShareRequest.self, from: $0) },
             "apiError": { _ = try JSONDecoder().decode(APIErrorBody.self, from: $0) },
@@ -427,6 +429,22 @@ struct FlowVectorTests {
         }
         for r in file["reject"] as! [[String: String]] {
             #expect(ShareLink(url: URL(string: r["url"]!)!) == nil, "\(r["reason"]!)")
+        }
+    }
+
+    @Test(.enabled(if: has("crypto/recovery-rotate.json")))
+    func recoveryRotate() throws {
+        let file = try Vectors.json("crypto/recovery-rotate.json")
+        let i = file["inputs"] as! [String: String]
+        let expected = file["expected"] as! [String: Any]
+        let r = try RecoveryKeyRotation.make(masterKey: try Vectors.b64(i["masterKey"]), currentLoginKey: try Vectors.b64(i["currentLoginKey"]),
+                                             userId: i["userId"]!, recoveryKey: try Vectors.b64(i["newRecoveryKey"]), nonce: try Vectors.b64(i["nonce"]))
+        #expect(r.recoveryKeyText == expected["recoveryKeyText"] as! String)
+        let json = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(r.body)) as? [String: Any])
+        let body = expected["body"] as! [String: Any]
+        #expect(Set(json.keys) == Set(body.keys))
+        for (k, v) in body {
+            #expect(jsonEqual(json[k], v), "\(k)")
         }
     }
 

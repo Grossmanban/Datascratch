@@ -132,9 +132,17 @@ public actor APIClient {
             wrappedMasterKeyPassword: .init(material.wrappedMasterKeyPassword)))
     }
 
+    /// Replaces the recovery key; the old one stops working at once (crypto.md §4).
+    public func rotateRecoveryKey(_ body: RotateRecoveryKeyRequest) async throws {
+        try await send("POST", "/auth/recovery-key", body: body)
+    }
+
     // MARK: Account
 
     public func me() async throws -> MeResponse { try await call("GET", "/me") }
+
+    /// Security log, newest first (up to 100).
+    public func securityEvents() async throws -> [SecurityEvent] { try await call("GET", "/me/security-events") }
 
     public func devices() async throws -> [Device] { try await call("GET", "/devices") }
 

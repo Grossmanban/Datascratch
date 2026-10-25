@@ -142,9 +142,13 @@ DSCore
 
 - `AccountService(api:keys:store:)`: `signup(email:password:)` (возвращает текст ключа
   восстановления — показать один раз), `login`, `recover(email:recoveryKeyText:newPassword:)`,
-  `changePassword`, `logout`, `createNotebook(name:spaceId:mode:...in:)` (ключ, `POST /notebooks`,
-  `POST /docs`, документ блокнота, `NotebookRef`), `loadNotebookKeys()` (новое устройство),
-  `setMode` (режим «для агентов»), `createNote(in:...)` (ключ заметки, `NoteMeta`).
+  `changePassword`, `rotateRecoveryKey(email:currentPassword:account:)` (новый ключ восстановления,
+  подтверждение паролем; возвращает текст ключа — показать один раз; сбрасывает
+  `AccountDocument.recoveryKeyConfirmed`, подтверждение — `setRecoveryKeyConfirmed(true)`),
+  `securityEvents()` (журнал безопасности), `logout`, `createNotebook(name:spaceId:mode:...in:)`
+  (ключ, `POST /notebooks`, `POST /docs`, документ блокнота, `NotebookRef`), `loadNotebookKeys()`
+  (новое устройство), `setMode` (режим «для агентов»), `createNote(in:...)` (ключ заметки,
+  `NoteMeta`), `moveNote(id:from:to:)` (перенос в другой блокнот), `dailyNote(for:in:)`, `inbox(in:)`.
 - `AttachmentManager(api:store:directory:)`: `add(_:mime:noteId:)` → `attachmentId` (файл
   сохраняется локально и ставится в очередь), `uploadPending(noteKey:)` / `upload` (куски по
   1 MiB, докачка), `download(...)`, `localURL`, `delete`.

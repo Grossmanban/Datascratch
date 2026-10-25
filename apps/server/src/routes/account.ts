@@ -3,7 +3,7 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { requireUser } from '../auth/guard.js';
 import type { AppContext } from '../context.js';
-import { devices, users } from '../db/schema.js';
+import { devices, securityEvents, users } from '../db/schema.js';
 import { fromB64 } from '../lib/encoding.js';
 import { notFound, unauthorized } from '../lib/errors.js';
 import { verifySecret } from '../lib/password.js';
@@ -66,6 +66,37 @@ export function accountRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         );
         await ctx.jobs.enqueue(CLEANUP_JOB, {});
         return reply.code(204).send(null);
+      },
+    );
+
+    app.get(
+      '/me/security-events',
+      {
+        schema: {
+          tags: ['account'],
+          security,
+          response: {
+            200: z.array(
+              z.object({
+                kind: z.enum(['password_changed', 'recovery_used', 'recovery_key_rotated']),
+                at: z.string(),
+                deviceId: z.string().nullable(),
+                deviceName: z.string().nullable(),
+              }),
+            ),
+            ...errorResponses,
+          },
+        },
+      },
+      async (req) => {
+        const p = await requireUser(ctx, req);
+        const rows = await db
+          .select()
+          .from(securityEvents)
+          .where(eq(securityEvents.userId, p.userId))
+          .orderBy(desc(securityEvents.id))
+          .limit(100);
+        return rows.map((r) => ({ kind: r.kind, at: r.at.toISOString(), deviceId: r.deviceId, deviceName: r.deviceName }));
       },
     );
 

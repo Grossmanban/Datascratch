@@ -1,0 +1,1 @@
+- 2026-10-25 — web-editor: палитра пера, панель форматирования, меню «/» и `[[`, чек-бокс задачи — компоненты `@datascratch/ui`; замена штриха при переякоривании — `replaceStrokeWithReanchored` из `@datascratch/shared`.

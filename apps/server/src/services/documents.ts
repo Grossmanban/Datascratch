@@ -262,6 +262,19 @@ export class DocumentService {
     return out;
   }
 
+  /** The newest snapshot of each document (fast path of a first sync). */
+  async latestSnapshots(db: DbOrTx, docIds: string[]): Promise<Map<string, { seq: number; payload: Buffer }>> {
+    const out = new Map<string, { seq: number; payload: Buffer }>();
+    if (docIds.length === 0) return out;
+    const res = await db.execute<{ doc_id: string; seq: string | number; payload: Buffer }>(sql`
+      SELECT DISTINCT ON (doc_id) doc_id, seq, payload
+      FROM doc_snapshots
+      WHERE doc_id = ANY(${`{${docIds.join(',')}}`}::uuid[])
+      ORDER BY doc_id, seq DESC`);
+    for (const r of res.rows) out.set(r.doc_id, { seq: Number(r.seq), payload: r.payload });
+    return out;
+  }
+
   /** Updates with after < seq < before, in order (gap filling for live delivery). */
   async range(db: DbOrTx, docId: string, after: number, before: number): Promise<CatchUpItem[]> {
     return db

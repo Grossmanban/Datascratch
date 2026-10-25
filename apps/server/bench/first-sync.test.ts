@@ -7,6 +7,8 @@ import { uuidv7 } from '../src/lib/encoding.js';
 
 const N = Number(process.env.BENCH_NOTES ?? 10_000);
 const UPDATES_PER_NOTE = Number(process.env.BENCH_UPDATES ?? 3);
+/** Each note has a snapshot (~3 KB) covering all but its last update. */
+const WITH_SNAPSHOT = process.env.BENCH_SNAPSHOT !== '0';
 let s: TestServer;
 let u: TestUser;
 
@@ -29,8 +31,13 @@ it(`first sync of ${N} notes`, async () => {
       await db.execute(sql`INSERT INTO doc_updates (doc_id, seq, payload, device_id)
         SELECT unnest(${chunk}::uuid[]), ${k}, ${rnd(300)}, 'seed'`);
     }
+    if (WITH_SNAPSHOT && UPDATES_PER_NOTE > 1) {
+      await db.execute(sql`INSERT INTO doc_snapshots (doc_id, seq, payload, device_id)
+        SELECT unnest(${chunk}::uuid[]), ${UPDATES_PER_NOTE - 1}, ${rnd(3000)}, 'seed'`);
+      await db.execute(sql`UPDATE docs SET snapshot_seq = ${UPDATES_PER_NOTE - 1} WHERE id = ANY(${chunk}::uuid[])`);
+    }
   }
-  console.log(`seeded ${N} notes × ${UPDATES_PER_NOTE} updates in ${Date.now() - t0} ms`);
+  console.log(`seeded ${N} notes × ${UPDATES_PER_NOTE} updates${WITH_SNAPSHOT ? ' + snapshot' : ''} in ${Date.now() - t0} ms`);
 
   const c = await SyncClient.user(s, u);
   const start = Date.now();
@@ -44,9 +51,8 @@ it(`first sync of ${N} notes`, async () => {
       }
     });
   });
-  for (let i = 0; i < N; i += 500) {
-    c.send({ type: 'subscribe', docs: ids.slice(i, i + 500).map((docId) => ({ docId, since: 0 })) });
-  }
+  // One subscribe for every document, like SyncClient.addDocs of @datascratch/shared.
+  c.send({ type: 'subscribe', docs: ids.map((docId) => ({ docId, since: 0 })) });
   await done;
   const ms = Date.now() - start;
   console.log(`first sync of ${N} notes: ${ms} ms (${Math.round(N / (ms / 1000))} docs/s)`);

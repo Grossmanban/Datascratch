@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "description": "Attachment chunks of 1 MiB plaintext; plaintext byte i = (i * 31 + 7) mod 256. Each chunk is an envelope with ad 'ds1|att|<id>|<index>|<last>'. Large envelopes are given by length and SHA-256.",
+  "attachmentId": "0192f3c4-0000-7000-8000-000000000014",
+  "noteKey": "_qPGWmyR5rxBmiai3s4I-VShavyF5Y7Ud6TRp1CXWV0",
+  "plaintextSize": 1048676,
+  "plaintextSha256": "d374c1936970031dbb8940eb08cb9813ca7396530459c16511dab946f7bb35c3",
+  "chunkCount": 2,
+  "chunks": [
+    {
+      "index": 0,
+      "last": false,
+      "ad": "ds1|att|0192f3c4-0000-7000-8000-000000000014|0|0",
+      "nonce": "g17CPcw_q8APV5LdNez5NYoqEiMilLnT",
+      "plaintextLength": 1048576,
+      "envelopeLength": 1048617,
+      "envelopeSha256": "8c23a2441b5e8fa01ce76229db0d1229a5fa303f1344e0f9483f9e29fd39da5b"
+    },
+    {
+      "index": 1,
+      "last": true,
+      "ad": "ds1|att|0192f3c4-0000-7000-8000-000000000014|1|1",
+      "nonce": "Qh86yC7mLHqbPXuIQjMMCXcpiLruiYAo",
+      "plaintextLength": 100,
+      "envelopeLength": 141,
+      "envelopeSha256": "a7743bdcb84a35bdc7877d852055c82dda70c67fda3ec7cfe1dbe8bb61b0720f",
+      "envelope": "AUIfOsgu5ix6mz17iEIzDAl3KYi67omAKK3-oO1Q9nkpZPVYOWFrD1_Jedq7xqGBWhMZ-hOnQ10eROQjrxEHK2T_tjBdgmmE2xHivo2QHUR_MYlzorsxUhwuybBriVBhNDaUphUBVjNj16SH1rKZSLsBztf1o6q3UntM4mkzNorlmi072EZg_sdTqIId"
+    }
+  ]
+}

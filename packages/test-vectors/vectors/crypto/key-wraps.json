@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "description": "Key wraps are envelopes of the 32-byte key with the contract ad strings (crypto.md §3).",
+  "ids": {
+    "userId": "0192f3c4-0000-7000-8000-00000000000a",
+    "notebookId": "0192f3c4-0000-7000-8000-00000000000b",
+    "noteId": "0192f3c4-0000-7000-8000-00000000000c"
+  },
+  "cases": [
+    {
+      "name": "masterKey/password",
+      "wrappingKey": "JkoT8Q-57S3QTFgGy_WHmoVx3v5ToTSmC0rTlMrkTTM",
+      "key": "EhdaPpPlc5Dl4b4XVzMK-EBrU_toOB5z7Cs4oUlBeYM",
+      "ad": "ds1|key|master|password|0192f3c4-0000-7000-8000-00000000000a",
+      "nonce": "J9T2gBq8DnQY-UJjInUPsgXZ1JKMSMa-",
+      "wrapped": "ASfU9oAavA50GPlCYyJ1D7IF2dSSjEjGvrMXN4sUdJxwOrtasr_Vw3Ij0hGglUNYy3BbZqRF57TA8z3ixnHEJIIS8t3vb7s-wA"
+    },
+    {
+      "name": "masterKey/recovery",
+      "wrappingKey": "_J1w7jK692ur98_7VusDDLYR_vfirb6F4K29OILJm_o",
+      "key": "EhdaPpPlc5Dl4b4XVzMK-EBrU_toOB5z7Cs4oUlBeYM",
+      "ad": "ds1|key|master|recovery|0192f3c4-0000-7000-8000-00000000000a",
+      "nonce": "tQ9rFf4OViMYs702zqCrJvyMCRV64ADj",
+      "wrapped": "AbUPaxX-DlYjGLO9Ns6gqyb8jAkVeuAA43K3PSJhD4-NGpVwxxKxSlqkn-cbL0m5e7NYWGqqneNHAZpSy2dyxVdyeWMjOf43lg"
+    },
+    {
+      "name": "notebookKey/master",
+      "wrappingKey": "EhdaPpPlc5Dl4b4XVzMK-EBrU_toOB5z7Cs4oUlBeYM",
+      "key": "O5L4kFTJ3n-fDyelamVZoflu5pZKUjjihTqJRqMmUMU",
+      "ad": "ds1|key|notebook|0192f3c4-0000-7000-8000-00000000000b",
+      "nonce": "j593Ifl3840YNXh6Rq9gklG6JDX7Qn5c",
+      "wrapped": "AY-fdyH5d_ONGDV4ekavYJJRuiQ1-0J-XArBNsDs61keAj8pV1E0NZwpRCsw6LI7Lmjcc2L9AM_7eIeSXRLH1hOCHVLjqEoNew"
+    },
+    {
+      "name": "notebookKey/server",
+      "wrappingKey": "j5kGwQXI3uevFSSFanKY7lgZbOtYL2_psUbVAr3TTZM",
+      "key": "O5L4kFTJ3n-fDyelamVZoflu5pZKUjjihTqJRqMmUMU",
+      "ad": "ds1|key|notebook-server|0192f3c4-0000-7000-8000-00000000000b",
+      "nonce": "sJxnpkrdA7urmeUANrsm-w7SsDtxjvYa",
+      "wrapped": "AbCcZ6ZK3QO7q5nlADa7JvsO0rA7cY72GnNMGj-52GlJYp7A2nrcPbksqXzaUp-cWInkr38b5VWTX54z91QBbIewIBbeEYewDA"
+    },
+    {
+      "name": "noteKey/notebook",
+      "wrappingKey": "O5L4kFTJ3n-fDyelamVZoflu5pZKUjjihTqJRqMmUMU",
+      "key": "_qPGWmyR5rxBmiai3s4I-VShavyF5Y7Ud6TRp1CXWV0",
+      "ad": "ds1|key|note|0192f3c4-0000-7000-8000-00000000000c",
+      "nonce": "R44kLkBaEA6F3M4fuXUJhhfKhD31Qhqg",
+      "wrapped": "AUeOJC5AWhAOhdzOH7l1CYYXyoQ99UIaoPv2pza3KTCe6UXKM-XGGsPOoDUa-eQf7dJybrnTu8M9QQKHInOQO6Kpw1Y7MKOztg"
+    }
+  ]
+}

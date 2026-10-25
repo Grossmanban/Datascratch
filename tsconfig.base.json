@@ -6,6 +6,8 @@
     "lib": ["ES2022"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
     "exactOptionalPropertyTypes": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -13,6 +15,7 @@
     "sourceMap": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "forceConsistentCasingInFileNames": true
   }
 }

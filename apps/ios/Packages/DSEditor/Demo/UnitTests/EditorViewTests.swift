@@ -33,6 +33,13 @@ final class EditorViewTests: XCTestCase {
         return editor
     }
 
+    /// Runs every block already enqueued on the main queue (tool changes are applied there).
+    func drainMainQueue() {
+        let done = expectation(description: "main queue drained")
+        DispatchQueue.main.async { done.fulfill() }
+        wait(for: [done], timeout: 2)
+    }
+
     func settle(_ editor: EditorView) {
         editor.setNeedsLayout()
         editor.layoutIfNeeded()
@@ -242,10 +249,10 @@ final class EditorViewTests: XCTestCase {
         editor.tools.mode = .marker
         editor.tools.mode = .pen
         XCTAssertEqual(pan.minimumNumberOfTouches, 1, "recognizers are reconfigured only after the event")
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        drainMainQueue()
         XCTAssertEqual(pan.minimumNumberOfTouches, 2, "finger drawing: scrolling with two fingers")
         editor.tools.mode = .text
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        drainMainQueue()
         XCTAssertEqual(pan.minimumNumberOfTouches, 1)
     }
 
@@ -266,7 +273,7 @@ final class EditorViewTests: XCTestCase {
         // (Not `EditorCommands.typeText`: it reports keyboard input the text view already shows.)
         doc.insertText("Oh ", marks: .empty, block: p.id, at: 0)
         settle(editor)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        drainMainQueue()
         XCTAssertTrue(editor.ink.renderedPath(of: still.id) === stillPath, "the unmoved stroke reuses its outline")
         XCTAssertFalse(editor.ink.renderedPath(of: moving.id) === movingPath, "the moved stroke is outlined again")
     }
@@ -275,12 +282,12 @@ final class EditorViewTests: XCTestCase {
         let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello")]))
         editor.tools.allowsFingerDrawing = true
         editor.tools.mode = .text
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        drainMainQueue()
         XCTAssertTrue(editor.inkInput.isEnabled, "stays enabled (disabling it crashed UIKit), but never begins")
         XCTAssertEqual(editor.inkInput.state, .possible)
         XCTAssertEqual(editor.textView.panGestureRecognizer.minimumNumberOfTouches, 1, "one finger scrolls in the text tool")
         editor.tools.mode = .pen
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        drainMainQueue()
         XCTAssertEqual(editor.textView.panGestureRecognizer.minimumNumberOfTouches, 2)
     }
 
@@ -296,7 +303,7 @@ final class EditorViewTests: XCTestCase {
         let offset = editor.textView.contentOffset
         button.sendActions(for: .touchUpInside)
         editor.tools.mode = .text
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        drainMainQueue()
         XCTAssertTrue(tapped)
         XCTAssertEqual(editor.textView.contentOffset, offset, "switching tools does not scroll")
     }

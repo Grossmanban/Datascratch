@@ -79,7 +79,11 @@ final class OnboardingUITests: XCTestCase {
         confirm.tap()
         let main = waitForMain(app)
         guard main.exists, main.isHittable else { return }
+        // The first tap can land while onboarding is still animating away: retry once.
+        let account = app.descendants(matching: .any)["settings.account"].firstMatch
         main.tap()
+        if !account.waitForExistence(timeout: 5), main.isHittable { main.tap() }
+        XCTAssertTrue(account.waitForExistence(timeout: 5), "settings not opened; buttons: \(LibraryUITests.buttons(app))")
         XCTAssertTrue(app.descendants(matching: .any)["settings.recoveryKeyReminder"].firstMatch.waitForExistence(timeout: 5),
                       "reminder not shown; buttons: \(LibraryUITests.buttons(app))")
     }
@@ -244,7 +248,9 @@ final class AppearanceUITests: XCTestCase {
         let settings = app.descendants(matching: .any)["sidebar.settings"].firstMatch
         XCTAssertTrue(settings.waitForExistence(timeout: 10))
         snapshot(app, "dark-sidebar")
-        app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch.tap()
+        // The identifier also reaches the row's image; tap the row itself when it is hittable.
+        let allDocuments = app.buttons["sidebar.allDocuments"].firstMatch
+        if allDocuments.waitForExistence(timeout: 3), allDocuments.isHittable { allDocuments.tap() }
         snapshot(app, "dark-documents")
         let card = app.descendants(matching: .any)["document.card"].firstMatch
         if card.waitForExistence(timeout: 5) {

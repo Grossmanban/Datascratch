@@ -179,6 +179,9 @@ struct ToolPalette: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .glassEffect(.regular, in: Capsule())
+        // The whole capsule is the palette's: a tap between two buttons must not fall through
+        // to the editor underneath (it would move the caret and scroll).
+        .contentShape(Capsule())
     }
 }
 

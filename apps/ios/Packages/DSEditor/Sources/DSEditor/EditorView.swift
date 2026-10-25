@@ -566,6 +566,9 @@ public final class EditorView: UIView {
         // tool button's touch is being dispatched made UIKit's gesture environment throw.
         // Finger drawing (D-06) only changes how many fingers scroll, applied after this event.
         textView.panGestureRecognizer.minimumNumberOfTouches = tools.mode.capturesPen && tools.allowsFingerDrawing ? 2 : 1
+        // In the text tool the pen recognizer stays out of the way entirely (fingers type and
+        // scroll, the Pencil writes through Scribble). Safe here: this runs after the event.
+        inkInput.isEnabled = tools.mode.capturesPen
         if tools.mode != .lasso { ink.clearSelection() }
         hoverLayer.path = nil
         onStateChange?()

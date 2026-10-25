@@ -1,0 +1,4 @@
+apps/ios/Datascratch/Features/Library/DocumentCollectionView.swift
+apps/ios/Datascratch/Features/Shell/SidebarView.swift
+apps/ios/Datascratch/Integration/NativeDocumentScreen.swift
+docs/changelog.d/2026-10-25-ios-app-ds-cards.md

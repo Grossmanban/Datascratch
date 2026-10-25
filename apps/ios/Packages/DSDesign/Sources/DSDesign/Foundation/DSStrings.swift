@@ -29,6 +29,14 @@ enum DSStrings {
     static var online: String { tr("в сети", "online") }
     static var away: String { tr("отошёл", "away") }
 
+    static func width(_ width: DSPenWidth) -> String {
+        switch width {
+        case .fine: tr("Толщина: тонкая", "Fine")
+        case .medium: tr("Толщина: средняя", "Medium")
+        case .bold: tr("Толщина: толстая", "Bold")
+        }
+    }
+
     static func tr(_ ru: String, _ en: String, _ language: DSLanguage = .current) -> String {
         language == .ru ? ru : en
     }

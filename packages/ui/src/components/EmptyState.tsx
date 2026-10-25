@@ -13,9 +13,23 @@ export interface EmptyStateProps {
 }
 
 /** Calm, centred empty state: tinted glyph, serif title, one action. */
-export function EmptyState({ icon, title, description, action, tint = "gray", size = "md", className }: EmptyStateProps) {
+export function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+  tint = "gray",
+  size = "md",
+  className,
+}: EmptyStateProps) {
   return (
-    <div className={cn("mx-auto flex max-w-[360px] flex-col items-center text-center", size === "md" ? "py-16" : "py-8", className)}>
+    <div
+      className={cn(
+        "mx-auto flex max-w-[360px] flex-col items-center text-center",
+        size === "md" ? "py-16" : "py-8",
+        className,
+      )}
+    >
       <span
         aria-hidden
         className={cn(

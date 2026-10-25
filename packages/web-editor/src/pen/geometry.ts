@@ -1,6 +1,6 @@
 // Pure geometry of the living stroke (D-05, strokes.md §4–5). No DOM, no Yjs: the DOM layer measures
 // glyphs and passes them in; everything here is unit-tested.
-import { strokeThickness, type Stroke, type StrokePoint } from "../shared/strokes";
+import { strokeWidthAt, type Stroke, type StrokePoint } from "@datascratch/shared/strokes";
 
 /** A measured character, in layer coordinates (CSS px, y grows down). */
 export interface Glyph {
@@ -194,7 +194,7 @@ export function resolveTextSegments(
     current.push({
       x: box.x + p.x * box.fontSize,
       y: box.baseline + p.y * box.fontSize,
-      w: strokeThickness(stroke, p, box.fontSize / 17),
+      w: strokeWidthAt(stroke, p, { fontSize: box.fontSize }),
       i,
     });
     currentBox = box;
@@ -210,7 +210,6 @@ export function resolveSurfaceSegments(
   surface: { left: number; top: number; width: number },
   skip?: ReadonlySet<number>,
 ): RenderPoint[][] {
-  const scale = surface.width / 600;
   const segments: RenderPoint[][] = [];
   let current: RenderPoint[] = [];
   points.forEach((p, i) => {
@@ -219,7 +218,7 @@ export function resolveSurfaceSegments(
       current = [];
       return;
     }
-    current.push({ x: surface.left + p.x * surface.width, y: surface.top + p.y * surface.width, w: strokeThickness(stroke, p, scale), i });
+    current.push({ x: surface.left + p.x * surface.width, y: surface.top + p.y * surface.width, w: strokeWidthAt(stroke, p, { blockWidth: surface.width }), i });
   });
   if (current.length >= 2) segments.push(current);
   return segments;
@@ -363,4 +362,39 @@ export function signedArea(poly: readonly [number, number][]): number {
     s += x1 * y2 - x2 * y1;
   }
   return s / 2;
+}
+
+/** Even-odd point-in-polygon test (lasso). */
+export function pointInPolygon(x: number, y: number, poly: readonly { x: number; y: number }[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]!;
+    const b = poly[j]!;
+    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+/** Share of a stroke's drawn points inside a lasso polygon. */
+export function fractionInside(segments: readonly RenderPoint[][], poly: readonly { x: number; y: number }[]): number {
+  let total = 0;
+  let inside = 0;
+  for (const seg of segments)
+    for (const p of seg) {
+      total++;
+      if (pointInPolygon(p.x, p.y, poly)) inside++;
+    }
+  return total ? inside / total : 0;
+}
+
+/** Expands [from, to) to whole words of `text` (offsets within one textblock). */
+export function expandToWords(text: string, from: number, to: number): [number, number] {
+  const isWord = (c: string | undefined) => c !== undefined && /[\p{L}\p{N}_'’-]/u.test(c);
+  let a = from;
+  let b = to;
+  while (a > 0 && isWord(text[a - 1])) a--;
+  while (b < text.length && isWord(text[b])) b++;
+  // Swallow one following space so the sentence stays tidy.
+  if (b < text.length && text[b] === " " && (a === 0 || text[a - 1] === " ")) b++;
+  return [a, b];
 }

@@ -9,8 +9,7 @@ import { readNoteMeta, readTitle, setNoteCover, SUPPORTED_FORMAT_VERSION, useNot
 import { PenLayer, type PenSettings } from "./pen/PenLayer";
 import { guardSchema } from "./schema/unknown";
 import { TASK_MENU_EVENT, type TaskMenuRequest } from "./schema/tasks";
-import type { NoteStyle } from "./shared/document";
-import type { StrokeAuthor } from "./shared/strokes";
+import type { NoteStyle, StrokeAuthor } from "@datascratch/shared/contracts";
 import { filterBlocks, type BlockItem } from "./ui/blockItems";
 import { BubbleToolbar } from "./ui/BubbleToolbar";
 import { DragHandle } from "./ui/DragHandle";

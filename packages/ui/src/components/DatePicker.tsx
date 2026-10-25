@@ -1,4 +1,12 @@
-import { ArrowRight, CalendarCheck, CalendarX2, ChevronLeft, ChevronRight, Sun, Sunrise } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarCheck,
+  CalendarX2,
+  ChevronLeft,
+  ChevronRight,
+  Sun,
+  Sunrise,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "../lib/cn";
 import { addDays, addMonths, isSameDay, monthGrid, startOfDay } from "../lib/date";
@@ -19,7 +27,15 @@ export interface CalendarProps {
 }
 
 /** Month grid with full keyboard support (arrows, Home/End, PageUp/PageDown). */
-export function Calendar({ value, onChange, defaultMonth, now, weekStartsOn, marked, className }: CalendarProps) {
+export function Calendar({
+  value,
+  onChange,
+  defaultMonth,
+  now,
+  weekStartsOn,
+  marked,
+  className,
+}: CalendarProps) {
   const locale = useLocale();
   const t = useStrings();
   const today = startOfDay(now ?? new Date());
@@ -35,7 +51,9 @@ export function Calendar({ value, onChange, defaultMonth, now, weekStartsOn, mar
     const fmt = new Intl.DateTimeFormat(tag, { weekday: "short" });
     return Array.from({ length: 7 }, (_, i) => fmt.format(addDays(grid[0]!, i)).replace(".", ""));
   }, [grid, tag]);
-  const title = new Intl.DateTimeFormat(tag, { month: "long", year: "numeric" }).format(month).replace(" г.", "");
+  const title = new Intl.DateTimeFormat(tag, { month: "long", year: "numeric" })
+    .format(month)
+    .replace(" г.", "");
 
   useEffect(() => {
     if (!keyboard.current) return;
@@ -76,14 +94,30 @@ export function Calendar({ value, onChange, defaultMonth, now, weekStartsOn, mar
           {title}
         </span>
         <div className="flex">
-          <IconButton size="sm" label={t.previousMonth} tooltip={false} icon={<ChevronLeft />} onClick={() => setMonth(addMonths(month, -1))} />
-          <IconButton size="sm" label={t.nextMonth} tooltip={false} icon={<ChevronRight />} onClick={() => setMonth(addMonths(month, 1))} />
+          <IconButton
+            size="sm"
+            label={t.previousMonth}
+            tooltip={false}
+            icon={<ChevronLeft />}
+            onClick={() => setMonth(addMonths(month, -1))}
+          />
+          <IconButton
+            size="sm"
+            label={t.nextMonth}
+            tooltip={false}
+            icon={<ChevronRight />}
+            onClick={() => setMonth(addMonths(month, 1))}
+          />
         </div>
       </div>
       <div role="grid" aria-label={title} ref={gridRef} onKeyDown={onKey}>
         <div role="row" className="grid grid-cols-7">
           {weekdays.map((w) => (
-            <span role="columnheader" key={w} className="grid h-7 place-items-center text-caption text-fg-tertiary">
+            <span
+              role="columnheader"
+              key={w}
+              className="grid h-7 place-items-center text-caption text-fg-tertiary"
+            >
               {w}
             </span>
           ))}
@@ -96,7 +130,12 @@ export function Calendar({ value, onChange, defaultMonth, now, weekStartsOn, mar
               const outside = d.getMonth() !== month.getMonth();
               const focused = isSameDay(d, focus);
               return (
-                <span role="gridcell" key={d.toISOString()} aria-selected={selected} className="grid place-items-center p-px">
+                <span
+                  role="gridcell"
+                  key={d.toISOString()}
+                  aria-selected={selected}
+                  className="grid place-items-center p-px"
+                >
                   <button
                     type="button"
                     tabIndex={focused ? 0 : -1}
@@ -117,7 +156,13 @@ export function Calendar({ value, onChange, defaultMonth, now, weekStartsOn, mar
                   >
                     {d.getDate()}
                     {marked?.(d) && (
-                      <span aria-hidden className={cn("absolute bottom-1 size-1 rounded-full", selected ? "bg-canvas" : "bg-fg-tertiary")} />
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "absolute bottom-1 size-1 rounded-full",
+                          selected ? "bg-canvas" : "bg-fg-tertiary",
+                        )}
+                      />
                     )}
                   </button>
                 </span>
@@ -142,7 +187,15 @@ export interface DatePickerProps {
 }
 
 /** Popover with quick picks (Today / Tomorrow / Next week) and a calendar — as in Craft's task menu. */
-export function DatePicker({ value, onChange, children, now, required, open, onOpenChange }: DatePickerProps) {
+export function DatePicker({
+  value,
+  onChange,
+  children,
+  now,
+  required,
+  open,
+  onOpenChange,
+}: DatePickerProps) {
   const t = useStrings();
   const [innerOpen, setInnerOpen] = useState(false);
   const isOpen = open ?? innerOpen;
@@ -151,7 +204,7 @@ export function DatePicker({ value, onChange, children, now, required, open, onO
     onOpenChange?.(o);
   };
   const today = startOfDay(now ?? new Date());
-  const nextMonday = addDays(today, ((8 - today.getDay()) % 7) || 7);
+  const nextMonday = addDays(today, (8 - today.getDay()) % 7 || 7);
   const pick = (d: Date | null) => {
     onChange(d);
     setOpen(false);

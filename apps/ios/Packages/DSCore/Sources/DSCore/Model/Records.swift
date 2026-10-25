@@ -1,0 +1,236 @@
+import Foundation
+
+/// A record stored as a nested `Y.Map` under its id in a root map (spaces, notebooks,
+/// folders, notes, tags). Each field merges independently between devices.
+public protocol MapRecord: Hashable, Sendable {
+    var id: String { get }
+    var fields: [String: YValue] { get }
+    init?(id: String, fields: [String: YValue])
+}
+
+extension CRDTDocument {
+    func records<R: MapRecord>(_ root: String, as type: R.Type = R.self) -> [R] {
+        guard let map = mapValue(root)?.entries else { return [] }
+        return map.compactMap { id, value in value.entries.flatMap { R(id: id, fields: $0) } }
+    }
+
+    func record<R: MapRecord>(_ root: String, id: String, as type: R.Type = R.self) -> R? {
+        mapValue(root, [id])?.entries.flatMap { R(id: id, fields: $0) }
+    }
+}
+
+extension CRDTTransaction {
+    /// Creates or fully replaces a record.
+    mutating func put<R: MapRecord>(_ root: String, _ record: R) {
+        set(root, key: record.id, .sharedMap(entries: record.fields))
+    }
+
+    /// Updates single fields of an existing record (concurrent edits of other fields survive).
+    mutating func update(_ root: String, id: String, _ fields: [String: YValue]) {
+        for (k, v) in fields.sorted(by: { $0.key < $1.key }) {
+            set(root, [id], key: k, v)
+        }
+    }
+}
+
+private func str(_ f: [String: YValue], _ k: String) -> String? { f[k]?.stringValue }
+private func num(_ f: [String: YValue], _ k: String) -> Double? { f[k]?.doubleValue }
+
+/// `Space` (document-model.md §2).
+public struct Space: MapRecord {
+    public var id: String
+    public var name: String
+    /// Emoji or SF Symbol name.
+    public var icon: String?
+    /// Color token.
+    public var color: String?
+    public var order: Double
+    public var createdAt: String
+
+    public init(id: String = EntityID.make(), name: String, icon: String? = nil, color: String? = nil, order: Double, createdAt: String = DSDate.iso(Date())) {
+        self.id = id
+        self.name = name
+        self.icon = icon
+        self.color = color
+        self.order = order
+        self.createdAt = createdAt
+    }
+
+    public var fields: [String: YValue] {
+        ["id": .string(value: id), "name": .string(value: name), "icon": .optionalString(icon), "color": .optionalString(color),
+         "order": .number(value: order), "createdAt": .string(value: createdAt)]
+    }
+
+    public init?(id: String, fields f: [String: YValue]) {
+        self.init(id: id, name: str(f, "name") ?? "", icon: str(f, "icon"), color: str(f, "color"), order: num(f, "order") ?? 0, createdAt: str(f, "createdAt") ?? "")
+    }
+}
+
+/// Notebook mode (D-09).
+public enum NotebookMode: String, Codable, Sendable { case `private`, agent }
+
+/// `NotebookRef` in the account document (document-model.md §2).
+public struct NotebookRef: MapRecord {
+    public var id: String
+    public var spaceId: String
+    public var name: String
+    public var icon: String?
+    public var color: String?
+    public var order: Double
+    public var mode: NotebookMode
+    public var createdAt: String
+
+    public init(id: String = EntityID.make(), spaceId: String, name: String, icon: String? = nil, color: String? = nil, order: Double,
+                mode: NotebookMode = .private, createdAt: String = DSDate.iso(Date())) {
+        self.id = id
+        self.spaceId = spaceId
+        self.name = name
+        self.icon = icon
+        self.color = color
+        self.order = order
+        self.mode = mode
+        self.createdAt = createdAt
+    }
+
+    public var fields: [String: YValue] {
+        ["id": .string(value: id), "spaceId": .string(value: spaceId), "name": .string(value: name), "icon": .optionalString(icon),
+         "color": .optionalString(color), "order": .number(value: order), "mode": .string(value: mode.rawValue), "createdAt": .string(value: createdAt)]
+    }
+
+    public init?(id: String, fields f: [String: YValue]) {
+        guard let spaceId = str(f, "spaceId") else { return nil }
+        self.init(id: id, spaceId: spaceId, name: str(f, "name") ?? "", icon: str(f, "icon"), color: str(f, "color"), order: num(f, "order") ?? 0,
+                  mode: str(f, "mode").flatMap(NotebookMode.init(rawValue:)) ?? .private, createdAt: str(f, "createdAt") ?? "")
+    }
+}
+
+/// `Folder` (document-model.md §3).
+public struct Folder: MapRecord {
+    public var id: String
+    /// nil = notebook root.
+    public var parentId: String?
+    public var name: String
+    public var icon: String?
+    public var color: String?
+    public var order: Double
+    public var createdAt: String
+
+    public init(id: String = EntityID.make(), parentId: String?, name: String, icon: String? = nil, color: String? = nil, order: Double, createdAt: String = DSDate.iso(Date())) {
+        self.id = id
+        self.parentId = parentId
+        self.name = name
+        self.icon = icon
+        self.color = color
+        self.order = order
+        self.createdAt = createdAt
+    }
+
+    public var fields: [String: YValue] {
+        ["id": .string(value: id), "parentId": .optionalString(parentId), "name": .string(value: name), "icon": .optionalString(icon),
+         "color": .optionalString(color), "order": .number(value: order), "createdAt": .string(value: createdAt)]
+    }
+
+    public init?(id: String, fields f: [String: YValue]) {
+        self.init(id: id, parentId: str(f, "parentId"), name: str(f, "name") ?? "", icon: str(f, "icon"), color: str(f, "color"),
+                  order: num(f, "order") ?? 0, createdAt: str(f, "createdAt") ?? "")
+    }
+}
+
+public enum NoteKind: String, Codable, Sendable { case note, daily, inbox }
+
+/// `NoteMeta` in the notebook document (document-model.md §3).
+public struct NoteMeta: MapRecord {
+    public var id: String
+    public var folderId: String?
+    public var parentNoteId: String?
+    public var title: String
+    public var kind: NoteKind
+    public var dailyDate: String?
+    public var tags: [String]
+    public var icon: String?
+    public var coverThumb: String?
+    /// noteKey wrapped by notebookKey, base64url (crypto.md).
+    public var wrappedKey: String
+    public var createdAt: String
+    public var updatedAt: String
+    public var trashedAt: String?
+    public var order: Double
+
+    public init(id: String = EntityID.make(), folderId: String? = nil, parentNoteId: String? = nil, title: String = "", kind: NoteKind = .note,
+                dailyDate: String? = nil, tags: [String] = [], icon: String? = nil, coverThumb: String? = nil, wrappedKey: String,
+                createdAt: String = DSDate.iso(Date()), updatedAt: String? = nil, trashedAt: String? = nil, order: Double = 0) {
+        self.id = id
+        self.folderId = folderId
+        self.parentNoteId = parentNoteId
+        self.title = title
+        self.kind = kind
+        self.dailyDate = dailyDate
+        self.tags = tags
+        self.icon = icon
+        self.coverThumb = coverThumb
+        self.wrappedKey = wrappedKey
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt ?? createdAt
+        self.trashedAt = trashedAt
+        self.order = order
+    }
+
+    public var fields: [String: YValue] {
+        [
+            "id": .string(value: id), "folderId": .optionalString(folderId), "parentNoteId": .optionalString(parentNoteId),
+            "title": .string(value: title), "kind": .string(value: kind.rawValue), "dailyDate": .optionalString(dailyDate),
+            "tags": .list(items: tags.map { .string(value: $0) }), "icon": .optionalString(icon), "coverThumb": .optionalString(coverThumb),
+            "wrappedKey": .string(value: wrappedKey), "createdAt": .string(value: createdAt), "updatedAt": .string(value: updatedAt),
+            "trashedAt": .optionalString(trashedAt), "order": .number(value: order),
+        ]
+    }
+
+    public init?(id: String, fields f: [String: YValue]) {
+        self.init(id: id, folderId: str(f, "folderId"), parentNoteId: str(f, "parentNoteId"), title: str(f, "title") ?? "",
+                  kind: str(f, "kind").flatMap(NoteKind.init(rawValue:)) ?? .note, dailyDate: str(f, "dailyDate"),
+                  tags: f["tags"]?.items?.compactMap(\.stringValue) ?? [], icon: str(f, "icon"), coverThumb: str(f, "coverThumb"),
+                  wrappedKey: str(f, "wrappedKey") ?? "", createdAt: str(f, "createdAt") ?? "", updatedAt: str(f, "updatedAt"),
+                  trashedAt: str(f, "trashedAt"), order: num(f, "order") ?? 0)
+    }
+
+    public var isTrashed: Bool { trashedAt != nil }
+}
+
+/// Optional tag properties (`tags` map of the notebook document).
+public struct TagProperties: MapRecord {
+    /// Tag name (the map key).
+    public var id: String
+    public var color: String?
+    public var icon: String?
+
+    public init(name: String, color: String? = nil, icon: String? = nil) {
+        self.id = name
+        self.color = color
+        self.icon = icon
+    }
+
+    public var fields: [String: YValue] { ["color": .optionalString(color), "icon": .optionalString(icon)] }
+
+    public init?(id: String, fields f: [String: YValue]) {
+        self.init(name: id, color: str(f, "color"), icon: str(f, "icon"))
+    }
+}
+
+/// An entry of `starred` in the account document.
+public struct StarredItem: Hashable, Sendable, Codable {
+    public enum Kind: String, Codable, Sendable { case note, folder, notebook }
+    public var kind: Kind
+    public var id: String
+
+    public init(kind: Kind, id: String) {
+        self.kind = kind
+        self.id = id
+    }
+
+    var value: YValue { .object(entries: ["kind": .string(value: kind.rawValue), "id": .string(value: id)]) }
+
+    init?(value: YValue) {
+        guard let k = value["kind"]?.stringValue.flatMap(Kind.init(rawValue:)), let id = value["id"]?.stringValue else { return nil }
+        self.init(kind: k, id: id)
+    }
+}

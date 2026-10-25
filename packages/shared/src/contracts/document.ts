@@ -130,6 +130,20 @@ export const noteMetaSchema = z.object({
 });
 export type NoteMeta = z.infer<typeof noteMetaSchema>;
 
+/**
+ * `meta` of a notebook document. `name`, `icon` and `space` duplicate the
+ * account document for agents, which only see notebook documents.
+ */
+export const notebookMetaSchema = z.object({
+  formatVersion: z.number().int().positive(),
+  notebookId: uuidSchema,
+  name: z.string(),
+  icon: z.string().nullable(),
+  space: z.object({ id: uuidSchema, name: z.string(), icon: z.string().nullable() }).nullable(),
+});
+export type NotebookMeta = z.infer<typeof notebookMetaSchema>;
+export type NotebookMetaFields = Pick<NotebookMeta, "name" | "icon" | "space">;
+
 export const tagPropsSchema = z.object({
   color: z.string().nullable(),
   icon: z.string().nullable(),

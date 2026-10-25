@@ -12,7 +12,10 @@ export const DialogClose = D.Close;
 const overlay =
   "animate-overlay fixed inset-0 z-50 bg-[color-mix(in_oklab,var(--ds-text-primary)_18%,transparent)] backdrop-blur-[2px] dark:bg-black/45";
 
-export interface DialogContentProps extends Omit<ComponentPropsWithoutRef<typeof D.Content>, "title"> {
+export interface DialogContentProps extends Omit<
+  ComponentPropsWithoutRef<typeof D.Content>,
+  "title"
+> {
   title: ReactNode;
   description?: ReactNode;
   /** Visually hide the title (still announced). */
@@ -25,7 +28,17 @@ export interface DialogContentProps extends Omit<ComponentPropsWithoutRef<typeof
 const widths = { sm: "max-w-[400px]", md: "max-w-[520px]", lg: "max-w-[720px]" };
 
 export const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(function DialogContent(
-  { title, description, hideTitle, size = "md", footer, showClose = true, className, children, ...rest },
+  {
+    title,
+    description,
+    hideTitle,
+    size = "md",
+    footer,
+    showClose = true,
+    className,
+    children,
+    ...rest
+  },
   ref,
 ) {
   const t = useStrings();
@@ -45,13 +58,27 @@ export const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(func
         >
           <div className={cn("px-6 pt-6", hideTitle && "sr-only")}>
             <D.Title className="font-display text-h2 text-fg">{title}</D.Title>
-            {description && <D.Description className="mt-1.5 text-callout text-fg-secondary">{description}</D.Description>}
+            {description && (
+              <D.Description className="mt-1.5 text-callout text-fg-secondary">
+                {description}
+              </D.Description>
+            )}
           </div>
           {children && <div className="px-6 py-5">{children}</div>}
-          {footer && <div className="flex justify-end gap-2 border-t border-hairline px-6 py-4">{footer}</div>}
+          {footer && (
+            <div className="flex justify-end gap-2 border-t border-hairline px-6 py-4">
+              {footer}
+            </div>
+          )}
           {showClose && (
             <D.Close asChild>
-              <IconButton label={t.close} icon={<X />} size="sm" tooltip={false} className="absolute right-3 top-3" />
+              <IconButton
+                label={t.close}
+                icon={<X />}
+                size="sm"
+                tooltip={false}
+                className="absolute right-3 top-3"
+              />
             </D.Close>
           )}
         </D.Content>
@@ -60,7 +87,10 @@ export const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(func
   );
 });
 
-export interface SheetContentProps extends Omit<ComponentPropsWithoutRef<typeof D.Content>, "title"> {
+export interface SheetContentProps extends Omit<
+  ComponentPropsWithoutRef<typeof D.Content>,
+  "title"
+> {
   title: ReactNode;
   description?: ReactNode;
   side?: "right" | "bottom";
@@ -88,14 +118,34 @@ export const SheetContent = forwardRef<HTMLDivElement, SheetContentProps>(functi
         )}
         {...rest}
       >
-        {side === "bottom" && <div aria-hidden className="mx-auto mt-2 h-1 w-9 rounded-full bg-[color-mix(in_oklab,var(--ds-text-primary)_18%,transparent)]" />}
-        <div className={cn("flex items-start justify-between gap-4 px-5 pb-2 pt-5", hideTitle && "sr-only")}>
+        {side === "bottom" && (
+          <div
+            aria-hidden
+            className="mx-auto mt-2 h-1 w-9 rounded-full bg-[color-mix(in_oklab,var(--ds-text-primary)_18%,transparent)]"
+          />
+        )}
+        <div
+          className={cn(
+            "flex items-start justify-between gap-4 px-5 pb-2 pt-5",
+            hideTitle && "sr-only",
+          )}
+        >
           <div>
             <D.Title className="font-display text-h3 text-fg">{title}</D.Title>
-            {description && <D.Description className="mt-1 text-footnote text-fg-secondary">{description}</D.Description>}
+            {description && (
+              <D.Description className="mt-1 text-footnote text-fg-secondary">
+                {description}
+              </D.Description>
+            )}
           </div>
           <D.Close asChild>
-            <IconButton label={t.close} icon={<X />} size="sm" tooltip={false} className="-mr-1.5 -mt-1" />
+            <IconButton
+              label={t.close}
+              icon={<X />}
+              size="sm"
+              tooltip={false}
+              className="-mr-1.5 -mt-1"
+            />
           </D.Close>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">{children}</div>

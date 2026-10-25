@@ -25,7 +25,7 @@ export function SettingsPage() {
   return (
     <div className="scrollbar-thin h-full overflow-y-auto">
       <TopBar>
-        <nav className="flex min-w-0 gap-0.5 overflow-x-auto">
+        <nav className="flex min-w-0 gap-0.5 overflow-x-auto" aria-label={t("nav.settings")}>
           {SECTIONS.map((s) => (
             <Link
               key={s.id}
@@ -35,9 +35,10 @@ export function SettingsPage() {
                 "flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13.5px] transition-colors",
                 s.id === section ? "bg-ink/[0.07] font-medium text-ink" : "text-ink-2 hover:bg-ink/[0.04] hover:text-ink",
               )}
+              aria-current={s.id === section ? "page" : undefined}
             >
               {s.icon}
-              <span className={cn(s.id !== section && "hidden sm:inline")}>{t(`settings.${s.id}`)}</span>
+              <span className={cn(s.id !== section && "sr-only sm:not-sr-only")}>{t(`settings.${s.id}`)}</span>
             </Link>
           ))}
         </nav>
@@ -49,7 +50,7 @@ export function SettingsPage() {
           {section === "notebooks" && <NotebooksSection />}
           {section === "agents" && <AgentsSection />}
           {section === "appearance" && <AppearanceSection />}
-          <p className="pt-6 text-center text-[12px] text-ink-3">{t("settings.version", { version: APP_VERSION })}</p>
+          <p className="pt-6 text-center text-[12px] text-ink-2">{t("settings.version", { version: APP_VERSION })}</p>
         </div>
       </div>
     </div>
@@ -78,7 +79,7 @@ export function Row({ label, hint, children }: { label: ReactNode; hint?: ReactN
     <div className="flex items-center gap-4 border-t border-line py-3 first:border-t-0 first:pt-0 last:pb-0">
       <div className="min-w-0 flex-1">
         <div className="text-[14px] text-ink">{label}</div>
-        {hint && <div className="mt-0.5 text-[12.5px] text-ink-3">{hint}</div>}
+        {hint && <div className="mt-0.5 text-[12.5px] text-ink-2">{hint}</div>}
       </div>
       <div className="shrink-0">{children}</div>
     </div>

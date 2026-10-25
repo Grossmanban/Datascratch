@@ -7,6 +7,7 @@ import {
   FolderPlus,
   BookCopy,
   History,
+  Image as ImageIcon,
   Palette,
   Pencil,
   Share2,
@@ -167,6 +168,9 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
     },
     { label: t("docs.share"), icon: <Share2 className="size-3.5" />, onSelect: () => useUi.setState({ shareFor: { kind: "note", id: noteId } }) },
     { label: t("docs.history"), icon: <History className="size-3.5" />, onSelect: () => useUi.setState({ historyFor: noteId }) },
+    ...(opts.inDoc
+      ? [{ label: `${t("style.cover")}…`, icon: <ImageIcon className="size-3.5" />, onSelect: () => useUi.setState({ coverFor: noteId }) }]
+      : []),
     {
       kind: "sub",
       label: t("docs.moveTo"),

@@ -49,7 +49,7 @@ export function LoginPage() {
         <Link to="/recover" className="text-ink-2 hover:text-ink">
           {t("auth.forgot")}
         </Link>
-        <span className="text-ink-3">
+        <span className="text-ink-2">
           {t("auth.noAccount")}{" "}
           <Link to="/signup" className="font-medium text-accent hover:underline">
             {t("auth.signUp")}

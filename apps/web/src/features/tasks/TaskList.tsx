@@ -19,7 +19,7 @@ import { taskMenuItems } from "./taskMenu";
 export function TaskItems({ tasks, showSource = true, emptyText }: { tasks: TaskRow[]; showSource?: boolean; emptyText?: string }) {
   const [picking, setPicking] = useState<{ task: TaskRow; field: "scheduled" | "deadline" } | null>(null);
   const { t } = useTranslation();
-  if (!tasks.length && emptyText) return <p className="px-2 py-3 text-[14px] text-ink-3">{emptyText}</p>;
+  if (!tasks.length && emptyText) return <p className="px-2 py-3 text-[14px] text-ink-2">{emptyText}</p>;
   return (
     <>
       <ul className="flex flex-col" data-testid="task-list">
@@ -116,10 +116,10 @@ function TaskLine({ task, showSource, onPick }: { task: TaskRow; showSource: boo
                   task.state === "open" ? "text-ink" : "text-ink-3 line-through decoration-ink-3/50",
                 )}
               >
-                {task.text || <span className="text-ink-3">{t("app.untitled")}</span>}
+                {task.text || <span className="text-ink-2">{t("app.untitled")}</span>}
               </button>
             )}
-            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-ink-3">
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-ink-2">
               {showSource && note && note.kind !== "inbox" && (
                 <button
                   onClick={() => {
@@ -150,7 +150,7 @@ function TaskLine({ task, showSource, onPick }: { task: TaskRow; showSource: boo
             align="end"
             items={items()}
             trigger={
-              <IconButton label={t("common.more")} size="sm" className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100">
+              <IconButton label={t("common.more")} size="sm" className="opacity-0 focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100">
                 <MoreHorizontal className="size-4" />
               </IconButton>
             }

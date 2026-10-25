@@ -515,3 +515,15 @@ describe("Editor & lists v2", () => {
     expect(bold).toHaveBeenCalledOnce();
   });
 });
+
+describe("PenToolbar compact", () => {
+  it("folds colours and widths into a popover", async () => {
+    const { PenToolbar, defaultPenSelection } = await import("../src");
+    const on = vi.fn();
+    renderUI(<PenToolbar value={defaultPenSelection} onChange={on} compact />);
+    expect(screen.queryByRole("radio", { name: "Синий" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Цвет, Толщина" }));
+    await userEvent.click(await screen.findByRole("radio", { name: "Синий" }));
+    expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, color: "blue" });
+  });
+});

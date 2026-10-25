@@ -48,23 +48,28 @@ final class EditorDemoUITests: XCTestCase {
 
     // Temporary bisection of the tap-into-text crash (one variant per suspect).
     @MainActor
-    func testTypingBisectNoScrollTracking() throws {
-        try typing(extraArguments: ["-noScrollTracking"])
-    }
-
-    @MainActor
-    func testTypingBisectNoSelectedTraits() throws {
-        try typing(extraArguments: ["-noSelectedTraits"])
-    }
-
-    @MainActor
     func testTypingBisectOverlayLayout() throws {
         try typing(extraArguments: ["-overlayPalette"])
     }
 
     @MainActor
-    func testTypingBisectNeither() throws {
-        try typing(extraArguments: ["-noScrollTracking", "-noSelectedTraits"])
+    func testTypingBisectSampleTextOnly() throws {
+        try typing(extraArguments: ["-sampleTextOnly"])
+    }
+
+    @MainActor
+    func testTypingBisectSampleNoTable() throws {
+        try typing(extraArguments: ["-sampleNoTable"])
+    }
+
+    @MainActor
+    func testTypingBisectSampleNoMermaid() throws {
+        try typing(extraArguments: ["-sampleNoMermaid"])
+    }
+
+    @MainActor
+    func testTypingBisectNoDiagDump() throws {
+        try typing(extraArguments: ["-noDiagDump"])
     }
 
     @MainActor

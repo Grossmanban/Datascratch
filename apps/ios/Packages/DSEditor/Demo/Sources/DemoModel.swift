@@ -34,7 +34,7 @@ final class DemoModel {
                   let loaded = try? InMemoryEditorDocument(fileData: data) {
             doc = loaded
         } else {
-            doc = SampleDocument.make()
+            doc = Self.sample(args)
         }
         document = doc
         editor = EditorView(document: doc)
@@ -49,7 +49,9 @@ final class DemoModel {
             if self.isUITesting { NSLog("DIAG state mode=%@", self.editor.tools.mode.rawValue) }
         }
         if args.contains("-uiTesting") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { Self.dumpGestureRecognizers() }
+            if !args.contains("-noDiagDump") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { Self.dumpGestureRecognizers() }
+            }
         }
         // UI-test bisection switches (temporary): `-noScrollTracking`, `-noSelectedTraits`.
         if !args.contains("-noScrollTracking") {
@@ -59,6 +61,20 @@ final class DemoModel {
     }
 
     /// UI-test diagnostics: every gesture recognizer in the window that delays touches.
+    /// The sample note, optionally without some block types (UI-test bisection switches:
+    /// `-sampleTextOnly`, `-sampleNoTable`, `-sampleNoMermaid`).
+    static func sample(_ args: [String]) -> InMemoryEditorDocument {
+        let doc = SampleDocument.make()
+        let atoms: Set<String> = [NodeType.table, NodeType.mermaid, NodeType.mathBlock, NodeType.image, NodeType.drawing,
+                                  NodeType.file, NodeType.pageCard, NodeType.horizontalRule]
+        var drop: Set<String> = []
+        if args.contains("-sampleTextOnly") { drop = atoms }
+        if args.contains("-sampleNoTable") { drop.insert(NodeType.table) }
+        if args.contains("-sampleNoMermaid") { drop.insert(NodeType.mermaid) }
+        guard !drop.isEmpty else { return doc }
+        return InMemoryEditorDocument(blocks: doc.blocks.filter { !drop.contains($0.type) })
+    }
+
     static func dumpGestureRecognizers() {
         let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
         func walk(_ v: UIView, depth: Int) {

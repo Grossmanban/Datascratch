@@ -62,6 +62,8 @@ export const notebooksApi = {
 export const docsApi = {
   versions: (docId: string) => api.get<DocVersion[]>(`/docs/${docId}/versions`),
   version: (docId: string, seq: number) => api.get<{ payload: string }>(`/docs/${docId}/versions/${seq}`),
+  /** Move a note to another notebook of the same user (api.md «Перенос заметки»). */
+  move: (docId: string, notebookId: string) => api.patch<void>(`/docs/${docId}`, { notebookId }),
 };
 
 // Mutating calls that must survive offline go through the op queue (sync/ops.ts);

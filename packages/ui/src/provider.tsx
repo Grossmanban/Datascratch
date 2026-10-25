@@ -25,7 +25,10 @@ export function UIProvider({ children, locale = "ru", theme, onThemeChange }: UI
     </LocaleContext.Provider>
   );
   return theme ? (
-    <ThemeProvider defaultPreference={theme} {...(onThemeChange ? { onChange: onThemeChange } : {})}>
+    <ThemeProvider
+      defaultPreference={theme}
+      {...(onThemeChange ? { onChange: onThemeChange } : {})}
+    >
       {inner}
     </ThemeProvider>
   ) : (

@@ -332,3 +332,64 @@ describe("orphanedAt bookkeeping", () => {
     expect(seen.has("s")).toBe(false);
   });
 });
+
+describe("re-anchoring after block rewrites", () => {
+  it("replaces strokes whose text was recreated by a split", async () => {
+    const { captureAnchorOffsets, reanchorStrokes, textOffsetOf } = await import("../src/index.js");
+    const { doc, text } = noteWithText("hello world");
+    putStroke(doc, "s", base([encodeAnchor(text, 1), encodeAnchor(text, 7)], [pt(0, 0), pt(1, 0)]));
+    const snap = captureAnchorOffsets(doc);
+    let ids: { from: string; to: string }[] = [];
+    doc.transact(() => {
+      // Emulate y-prosemirror splitting "hello world" into "hello " + "world".
+      const content = noteRoots(doc).content;
+      content.delete(1, 1);
+      const mk = (s: string) => {
+        const p = new Y.XmlElement("paragraph");
+        const t = new Y.XmlText();
+        t.insert(0, s);
+        p.insert(0, [t]);
+        return p;
+      };
+      content.insert(1, [mk("hello "), mk("world")]);
+      ids = reanchorStrokes(doc, snap, { newId: () => "s2" });
+    });
+    expect(ids).toEqual([{ from: "s", to: "s2" }]);
+    expect(getStroke(doc, "s")).toBeNull();
+    const s2 = getStroke(doc, "s2")!;
+    expect(unpackPoints(s2.points)).toHaveLength(2);
+    const r = resolveAnchors(doc, s2.anchors).map(
+      (a) => a && !a.deleted && a.text.toString().charAt(a.index),
+    );
+    expect(r).toEqual(["e", "o"]);
+    expect(textOffsetOf(doc, resolveAnchors(doc, s2.anchors)[1]!)).toBe(7);
+  });
+  it("leaves untouched strokes alone", async () => {
+    const { captureAnchorOffsets, reanchorStrokes } = await import("../src/index.js");
+    const { doc, text } = noteWithText("abc");
+    putStroke(doc, "s", base([encodeAnchor(text, 1)], [pt(0, 0), pt(0, 1)]));
+    const snap = captureAnchorOffsets(doc);
+    expect(reanchorStrokes(doc, snap)).toEqual([]);
+  });
+});
+
+describe("replaceStrokeWithReanchored", () => {
+  it("replaces under the given origin so an UndoManager tracks it", async () => {
+    const { replaceStrokeWithReanchored } = await import("../src/index.js");
+    const { doc, text } = noteWithText("abcdef");
+    putStroke(doc, "s", base([encodeAnchor(text, 1)], [pt(0, 0), pt(0, 1)]));
+    const origin = { editor: true };
+    const undo = new Y.UndoManager(noteRoots(doc).strokes, { trackedOrigins: new Set([origin]) });
+    const to = replaceStrokeWithReanchored(doc, "s", [encodeAnchor(text, 4)], {
+      origin,
+      newId: () => "s2",
+    });
+    expect(to).toBe("s2");
+    expect(getStroke(doc, "s")).toBeNull();
+    expect(resolveAnchors(doc, getStroke(doc, "s2")!.anchors)[0]!.index).toBe(4);
+    expect(undo.undoStack.length).toBe(1);
+    undo.undo();
+    expect(getStroke(doc, "s")).not.toBeNull();
+    expect(replaceStrokeWithReanchored(doc, "missing", [])).toBeNull();
+  });
+});

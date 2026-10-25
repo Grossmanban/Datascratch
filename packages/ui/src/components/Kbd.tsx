@@ -1,15 +1,44 @@
 import type { HTMLAttributes } from "react";
 import { cn } from "../lib/cn";
 
-const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const isMac = () =>
+  typeof navigator !== "undefined" &&
+  /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 /** Format "mod+k" as ⌘K on Apple platforms and Ctrl K elsewhere. */
 export function formatShortcut(shortcut: string): string[] {
   const mac = isMac();
   const map: Record<string, string> = mac
-    ? { mod: "⌘", cmd: "⌘", shift: "⇧", alt: "⌥", option: "⌥", ctrl: "⌃", enter: "↩", backspace: "⌫", esc: "esc" }
-    : { mod: "Ctrl", cmd: "Ctrl", shift: "Shift", alt: "Alt", option: "Alt", ctrl: "Ctrl", enter: "Enter", backspace: "Backspace", esc: "Esc" };
-  return shortcut.split("+").map((k) => map[k.toLowerCase()] ?? (k.length === 1 ? k.toUpperCase() : k));
+    ? {
+        mod: "⌘",
+        cmd: "⌘",
+        shift: "⇧",
+        alt: "⌥",
+        option: "⌥",
+        ctrl: "⌃",
+        enter: "↩",
+        backspace: "⌫",
+        esc: "esc",
+      }
+    : {
+        mod: "Ctrl",
+        cmd: "Ctrl",
+        shift: "Shift",
+        alt: "Alt",
+        option: "Alt",
+        ctrl: "Ctrl",
+        enter: "Enter",
+        backspace: "Backspace",
+        esc: "Esc",
+      };
+  return shortcut
+    .split("+")
+    .map((k) => map[k.toLowerCase()] ?? (k.length === 1 ? k.toUpperCase() : k));
+}
+
+/** One-line shortcut label: "⌘⇧K" on Apple platforms, "Ctrl+Shift+K" elsewhere. */
+export function shortcutLabel(shortcut: string): string {
+  return formatShortcut(shortcut).join(isMac() ? "" : "+");
 }
 
 export interface KbdProps extends HTMLAttributes<HTMLElement> {
@@ -19,7 +48,13 @@ export interface KbdProps extends HTMLAttributes<HTMLElement> {
 
 export function Kbd({ shortcut, className, ...rest }: KbdProps) {
   return (
-    <kbd className={cn("inline-flex items-center gap-0.5 font-text text-caption text-fg-tertiary", className)} {...rest}>
+    <kbd
+      className={cn(
+        "inline-flex items-center gap-0.5 font-text text-caption text-fg-tertiary",
+        className,
+      )}
+      {...rest}
+    >
       {formatShortcut(shortcut).map((k, i) => (
         <span
           key={i}

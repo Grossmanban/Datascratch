@@ -6,6 +6,7 @@ public struct DSShowcase: View {
     @State private var tasks: [DSTaskState] = [.open, .done, .open, .cancelled]
     @State private var segment = "cards"
     @State private var workOpen = true
+    @State private var pen = DSPenSelection()
     private let now: Date
 
     public init(now: Date = .now) {
@@ -50,7 +51,7 @@ public struct DSShowcase: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: DSSpace.s6) {
+        VStack(alignment: .leading, spacing: DSSpace.s5) {
             HStack(alignment: .lastTextBaseline) {
                 VStack(alignment: .leading, spacing: DSSpace.s1) {
                     Text("Все документы").dsFont(.title).foregroundStyle(Color.dsPrimary)
@@ -70,20 +71,31 @@ public struct DSShowcase: View {
                 DSDocCard(title: "Конспект: теория графов", subtitle: "Лекции 4–6", detail: "Вчера", icon: "📐", backdrop: .mist)
                 DSDocCard(title: "План квартала", subtitle: "Цели и метрики", detail: "12 окт", backdrop: .meadow)
             }
-            .frame(height: 210)
+            .frame(height: 196)
 
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: DSSpace.s2) {
-                    Text("Сегодня").dsFont(.h2).foregroundStyle(Color.dsPrimary)
-                    DSBadge(count: 3, style: .accent)
+            HStack(alignment: .top, spacing: DSSpace.s8) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: DSSpace.s2) {
+                        Text("Сегодня").dsFont(.h2).foregroundStyle(Color.dsPrimary)
+                        DSBadge(count: 3, style: .accent)
+                    }
+                    .padding(.bottom, DSSpace.s1)
+                    taskRow(0, "Отправить черновик договора", scheduled: day(-2), source: "Работа")
+                    taskRow(1, "Позвонить в типографию", scheduled: now)
+                    taskRow(2, "Сдать курсовую", deadline: day(1), tags: [DSTag("учёба", tint: .green)])
+                    taskRow(3, "Старая идея", scheduled: day(5))
                 }
-                .padding(.bottom, DSSpace.s2)
-                taskRow(0, "Отправить черновик договора", date: day(-2), deadline: false)
-                taskRow(1, "Позвонить в типографию", date: now, deadline: false)
-                taskRow(2, "Сдать курсовую", date: day(1), deadline: true)
-                taskRow(3, "Старая идея", date: day(5), deadline: false)
+                .frame(maxWidth: 540)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Недавние").dsFont(.h2).foregroundStyle(Color.dsPrimary)
+                        .padding(.bottom, DSSpace.s1)
+                    DSDocRow(title: "Дневник поездки", subtitle: "Старый город, серные бани", detail: "2 ч", icon: .emoji("🏔️"), folderTint: .orange, isSelected: true)
+                    DSDocRow(title: "Теория графов", subtitle: "Лекции 4–6", detail: "Вчера", folderTint: .green)
+                    DSDocRow(title: "План квартала", detail: "12 окт", icon: .symbol("chart.bar.doc.horizontal"), folderTint: .blue)
+                }
+                .frame(width: 380)
             }
-            .frame(maxWidth: 560)
 
             HStack(spacing: DSSpace.s3) {
                 DSTagChip("работа", tint: .blue)
@@ -103,22 +115,27 @@ public struct DSShowcase: View {
             HStack(alignment: .top, spacing: DSSpace.s4) {
                 ZStack {
                     DSBackdrop(.dusk)
-                    DSGlassPanel(cornerRadius: DSRadius.full, padding: DSSpace.s2) {
-                        HStack(spacing: DSSpace.s4) {
-                            ForEach(["pencil.tip", "highlighter", "bold", "italic", "underline"], id: \.self) { name in
-                                Image(systemName: name).font(.system(size: 17, weight: .medium)).foregroundStyle(Color.dsPrimary)
-                            }
-                        }
-                        .padding(.horizontal, DSSpace.s2)
+                    VStack(spacing: DSSpace.s3) {
+                        DSPenToolbar(selection: $pen, tools: [.pen, .marker, .highlighter], showsTextMode: false)
+                            .fixedSize()
+                        DSFormatBar(items: [
+                            .item(DSFormatBarItem(id: "style", systemImage: "textformat.size", label: "Стиль") {}),
+                            .separator(id: "1"),
+                            .item(DSFormatBarItem(id: "bold", systemImage: "bold", label: "Жирный", isActive: true) {}),
+                            .item(DSFormatBarItem(id: "italic", systemImage: "italic", label: "Курсив") {}),
+                            .item(DSFormatBarItem(id: "underline", systemImage: "underline", label: "Подчеркнуть") {}),
+                            .separator(id: "2"),
+                            .item(DSFormatBarItem(id: "link", systemImage: "link", label: "Ссылка") {}),
+                        ])
                     }
                 }
-                .frame(width: 320, height: 150)
+                .frame(width: 470, height: 170)
                 .clipShape(RoundedRectangle(cornerRadius: DSRadius.lg, style: .continuous))
 
                 DSCard {
                     DSEmptyState(systemImage: "tray", title: "Здесь пока пусто", message: "Создайте первый документ", tint: .blue)
                 }
-                .frame(width: 300)
+                .frame(width: 280)
 
                 VStack(alignment: .leading, spacing: DSSpace.s3) {
                     DSSkeletonLines(lines: 3)
@@ -128,7 +145,7 @@ public struct DSShowcase: View {
                         DSSpinner()
                     }
                 }
-                .frame(width: 180)
+                .frame(width: 160)
             }
             Spacer(minLength: 0)
         }
@@ -145,18 +162,16 @@ public struct DSShowcase: View {
         Calendar.current.date(byAdding: .day, value: offset, to: now) ?? now
     }
 
-    private func taskRow(_ index: Int, _ title: String, date: Date, deadline: Bool) -> some View {
-        HStack(spacing: DSSpace.s3) {
-            DSTaskCheckbox(state: $tasks[index], label: title)
-            Text(title)
-                .dsFont(.body)
-                .foregroundStyle(tasks[index] == .open ? Color.dsPrimary : Color.dsTertiary)
-                .strikethrough(tasks[index] != .open, color: .dsTertiary)
-            Spacer()
-            DSDateChip(date: date, now: now, isDeadline: deadline, isCompleted: tasks[index] != .open)
-        }
-        .padding(.vertical, DSSpace.s2)
-        .overlay(alignment: .bottom) { Rectangle().fill(Color.dsSeparator).frame(height: 0.5) }
+    private func taskRow(
+        _ index: Int,
+        _ title: String,
+        scheduled: Date? = nil,
+        deadline: Date? = nil,
+        tags: [DSTag] = [],
+        source: String? = nil
+    ) -> some View {
+        DSTaskRow(state: $tasks[index], title: title, scheduled: scheduled, deadline: deadline, tags: tags, source: source, now: now)
+            .overlay(alignment: .bottom) { Rectangle().fill(Color.dsSeparator).frame(height: 0.5) }
     }
 }
 

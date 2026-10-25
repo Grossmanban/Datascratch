@@ -15,7 +15,17 @@ export const tintBg = (tint: TintName): string => `var(--ds-tint-${tint}-bg)`;
 
 /** Stable tint for an arbitrary string (avatars, untagged colours). */
 export function tintFor(seed: string): TintName {
-  const palette: TintName[] = ["red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple", "pink"];
+  const palette: TintName[] = [
+    "red",
+    "orange",
+    "yellow",
+    "green",
+    "teal",
+    "blue",
+    "indigo",
+    "purple",
+    "pink",
+  ];
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return palette[h % palette.length]!;

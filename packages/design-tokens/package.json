@@ -15,7 +15,13 @@
     "./theme.css": "./generated/theme.css",
     "./tokens.json": "./tokens.json"
   },
-  "files": ["generated", "tokens.json"],
+  "files": [
+    "generated",
+    "tokens.json"
+  ],
+  "devDependencies": {
+    "prettier": "^3.6.0"
+  },
   "scripts": {
     "generate": "node scripts/generate.mjs",
     "check": "node scripts/generate.mjs --check",

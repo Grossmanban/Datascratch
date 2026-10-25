@@ -11,6 +11,7 @@ public enum DSColorToken: String, CaseIterable, Sendable {
     case textPrimary = "text.primary"
     case textSecondary = "text.secondary"
     case textTertiary = "text.tertiary"
+    case textOnAccent = "text.onAccent"
     case lineSeparator = "line.separator"
     case accent = "accent"
     case danger = "danger"
@@ -26,6 +27,7 @@ public enum DSColorToken: String, CaseIterable, Sendable {
         case .textPrimary: DSColorPair(light: DSRGBA(0x1D1C1AFF), dark: DSRGBA(0xECE9E3FF))
         case .textSecondary: DSColorPair(light: DSRGBA(0x6B6862FF), dark: DSRGBA(0xA19D95FF))
         case .textTertiary: DSColorPair(light: DSRGBA(0x9C978EFF), dark: DSRGBA(0x77736CFF))
+        case .textOnAccent: DSColorPair(light: DSRGBA(0xFFFFFFFF), dark: DSRGBA(0x1A1917FF))
         case .lineSeparator: DSColorPair(light: DSRGBA(0xE6E1D8FF), dark: DSRGBA(0x34322EFF))
         case .accent: DSColorPair(light: DSRGBA(0x2E5BDBFF), dark: DSRGBA(0x7B9BFFFF))
         case .danger: DSColorPair(light: DSRGBA(0xD2453BFF), dark: DSRGBA(0xFF6B5EFF))

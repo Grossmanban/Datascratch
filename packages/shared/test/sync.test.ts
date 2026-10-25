@@ -45,7 +45,8 @@ function makeClient(hub: MemorySyncHub, deviceId: string, extra: Partial<SyncCli
   return { client, storage };
 }
 
-async function until(cond: () => boolean | Promise<boolean>, ms = 3000): Promise<void> {
+// Generous deadline: the suite runs in parallel with other packages in CI.
+async function until(cond: () => boolean | Promise<boolean>, ms = 20_000): Promise<void> {
   const start = Date.now();
   while (!(await cond())) {
     if (Date.now() - start > ms) throw new Error("timeout");

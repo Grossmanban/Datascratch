@@ -43,8 +43,5 @@ export async function docAccess(db: DbOrTx, p: Principal, docId: string): Promis
       return doc.userId === p.userId ? { doc, write: true } : null;
     case 'guest':
       return docInShare(doc, p) ? { doc, write: p.permission === 'edit' } : null;
-    case 'agent':
-      if (doc.userId !== p.userId || !doc.notebookId || !p.notebookIds.includes(doc.notebookId)) return null;
-      return { doc, write: p.permission === 'read_write' };
   }
 }

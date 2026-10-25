@@ -1,7 +1,8 @@
 import { Node, mergeAttributes, wrappingInputRule } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
-import type { TaskState } from "../shared/document";
+import { dateLabel, type DateLabel } from "@datascratch/ui";
+import type { TaskState } from "@datascratch/shared/contracts";
 
 /** Local calendar date as YYYY-MM-DD (document-model.md §1: "date only" is local). */
 export function localDate(d: Date = new Date()): string {
@@ -24,16 +25,19 @@ export function nextWeek(from: string = localDate()): string {
   return addDays(from, 7 - dow);
 }
 
-const MONTHS = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
-
-/** Human chip label: «Сегодня», «Завтра», «Вчера», «3 ноя», «3 ноя 2027». */
-export function dateChipLabel(date: string, today: string = localDate()): string {
-  if (date === today) return "Сегодня";
-  if (date === addDays(today, 1)) return "Завтра";
-  if (date === addDays(today, -1)) return "Вчера";
+function parseLocalDate(date: string): Date {
   const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  const base = `${d} ${MONTHS[m - 1]}`;
-  return String(y) === today.slice(0, 4) ? base : `${base} ${y}`;
+  return new Date(y, m - 1, d);
+}
+
+/** Chip label and tone — the design system's rules, shared with iOS (`DSDateChipModel`). */
+export function dateChip(date: string, opts: { deadline?: boolean; completed?: boolean } = {}, now: Date = new Date()): DateLabel {
+  return dateLabel(parseLocalDate(date), now, "ru", opts);
+}
+
+/** Human chip label: «Сегодня», «Завтра», «Вчера», weekday, «3 ноя», «3 ноя 2027». */
+export function dateChipLabel(date: string, today: string = localDate()): string {
+  return dateChip(date, {}, parseLocalDate(today)).label;
 }
 
 export interface TaskMenuRequest {
@@ -238,20 +242,21 @@ export const TaskItem = Node.create({
         box.setAttribute("aria-checked", a.state === "done" ? "true" : a.state === "cancelled" ? "mixed" : "false");
         box.title = a.state === "cancelled" ? "Отменено" : a.state === "done" ? "Выполнено" : "Отметить выполненной";
         chips.replaceChildren();
-        const today = localDate();
+        const completed = a.state !== "open";
         if (a.scheduled) {
+          const { label, tone } = dateChip(a.scheduled, { completed });
           const c = document.createElement("span");
           c.className = "ds-chip ds-chip-scheduled";
-          if (a.scheduled < today && a.state === "open") c.classList.add("is-past");
-          c.textContent = dateChipLabel(a.scheduled, today);
+          c.dataset.tone = tone;
+          c.textContent = label;
           chips.append(c);
         }
         if (a.deadline) {
+          const { label, tone } = dateChip(a.deadline, { deadline: true, completed });
           const c = document.createElement("span");
           c.className = "ds-chip ds-chip-deadline";
-          if (a.state === "open" && a.deadline < today) c.classList.add("is-overdue");
-          else if (a.state === "open" && a.deadline <= addDays(today, 2)) c.classList.add("is-soon");
-          c.textContent = `⚑ ${dateChipLabel(a.deadline, today)}`;
+          c.dataset.tone = tone;
+          c.textContent = `⚑ ${label}`;
           chips.append(c);
         }
         chips.hidden = !a.scheduled && !a.deadline;

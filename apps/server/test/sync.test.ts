@@ -137,6 +137,27 @@ describe('push and live updates between two devices', () => {
     for (const c of [...writers, reader]) c.close();
   });
 
+  it('never lets an ack overtake an earlier seq on a subscribed writer', async () => {
+    const noteId = await createNote(s, u, notebookId);
+    const writers = await Promise.all([1, 2, 3].map(() => SyncClient.user(s, u)));
+    for (const w of writers) await w.subscribe(noteId);
+    const N = 15;
+    await Promise.all(
+      writers.map(async (w) => {
+        for (let i = 0; i < N; i++) w.send({ type: 'push', docId: noteId, clientMsgId: newId(), payload: b64(rnd(8)) });
+        for (let i = 0; i < N; i++) await w.next((m) => m.type === 'ack');
+      }),
+    );
+    for (const w of writers) {
+      for (let i = 0; i < 100 && w.messages.filter((m) => m.type === 'ack' || m.type === 'update').length < 3 * N; i++) {
+        await sleep(20);
+      }
+      const seqs = w.messages.filter((m) => m.type === 'ack' || m.type === 'update').map((m) => m.seq);
+      expect(seqs).toEqual(Array.from({ length: 3 * N }, (_, i) => i + 1));
+    }
+    for (const w of writers) w.close();
+  });
+
   it('enforces limits and access', async () => {
     const noteId = await createNote(s, u, notebookId);
     const a = await SyncClient.user(s, u);

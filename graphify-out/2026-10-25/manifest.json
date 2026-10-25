@@ -742,5 +742,23 @@
     "seen": 1792929317.6562533,
     "ast_hash": "49c5e1af2859e6c665e1761303ca0229",
     "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSCore/Sources/DSCore/Crypto/DSCrypto.swift": {
+    "mtime": 1792929417.8010256,
+    "seen": 1792929465.3774302,
+    "ast_hash": "86847d4c77d2b49364329c87ecbb6e92",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSCore/Sources/DSCore/Crypto/KeyStore.swift": {
+    "mtime": 1792929400.1718154,
+    "seen": 1792929465.3774347,
+    "ast_hash": "0790a86875de6b4bce2649b21b2faa87",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSCore/Tests/DSCoreTests/CryptoTests.swift": {
+    "mtime": 1792929449.443818,
+    "seen": 1792929465.3774996,
+    "ast_hash": "3adffbbb8f1785b1e950dcb90563699e",
+    "semantic_hash": ""
   }
 }

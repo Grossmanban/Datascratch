@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-10-25)
 
 ## Corpus Check
-- 135 files · ~53,675 words
+- 135 files · ~53,811 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 3 file(s) not represented in the graph (top: (none) 3)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `552027ae`
+- Built from commit: `d8c702c1`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -583,7 +583,7 @@ Nodes (11): D-20. Сроки — начинаем сейчас, без жёст�
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `D-29. Graphify: порядок работы, чтобы граф был всегда актуален` connect `D-29. Graphify: порядок работы, чтобы граф был всегда актуален` to `Datascratch — правила для ИИ (CLAUDE.md)`, `Процесс разработки (docs/development.md)`, `Скрипт обновления графа`, `0031-crdt-yjs.md`, `Определение «готово» для любого изменения`, `Процесс разработки (docs/development.md)`?**
-  _High betweenness centrality (0.044) - this node is a cross-community bridge._
+  _High betweenness centrality (0.049) - this node is a cross-community bridge._
 - **Are the 4 inferred relationships involving `registerOAuthRoutes()` (e.g. with `canonicalResource()` and `.get()`) actually correct?**
   _`registerOAuthRoutes()` has 4 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `RFC-8707`, `RFC-9728`, `RFC-8414` to the rest of the system?**
@@ -591,7 +591,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `steps` be split into smaller, more focused modules?**
   _Cohesion score 0.07407407407407407 - nodes in this community are weakly interconnected._
 - **Why does `Добавлен tools/graphify_docs.py (prepare / finish / label) — обновление графа после правки документов` connect `Скрипт обновления графа` to `D-29. Graphify: порядок работы, чтобы граф был всегда актуален`, `2026-10-25`, `Определение «готово» для любого изменения`, `Процесс разработки (docs/development.md)`?**
-  _High betweenness centrality (0.027) - this node is a cross-community bridge._
+  _High betweenness centrality (0.030) - this node is a cross-community bridge._
 - **Should `iOS universal app (Swift 6, SwiftUI shell, UIKit + TextKit 2 editor, GRDB, Yrs, libsodium)` be split into smaller, more focused modules?**
   _Cohesion score 0.12380952380952381 - nodes in this community are weakly interconnected._
 - **Why does `yjs` connect `fixtures.ts` to `dependencies`, `agent-service.ts`, `context.ts`, `model.ts`, `handwriting-png.ts`, `src/index.ts`, `edits.ts`, `markdown-export.ts`, `strokes.ts`?**

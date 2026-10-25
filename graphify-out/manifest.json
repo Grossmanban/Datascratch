@@ -396,9 +396,9 @@
     "semantic_hash": ""
   },
   "packages/shared/package.json": {
-    "mtime": 1792927656.3529046,
-    "seen": 1792928161.8766954,
-    "ast_hash": "a49b3c2b592e72b845190eb4de947f78",
+    "mtime": 1792928239.7874901,
+    "seen": 1792928535.5076885,
+    "ast_hash": "5ecd1e776be69f9f67e28d7fb24e15ea",
     "semantic_hash": ""
   },
   "packages/shared/src/contracts/api.ts": {
@@ -504,9 +504,9 @@
     "semantic_hash": ""
   },
   "packages/shared/src/document/index.ts": {
-    "mtime": 1792928001.0070958,
-    "seen": 1792928161.8767507,
-    "ast_hash": "e2ebd7ddedcadeeadbf819c35985c768",
+    "mtime": 1792928420.3237345,
+    "seen": 1792928535.507738,
+    "ast_hash": "f01730a763739d0a57b47e6e2dbb1090",
     "semantic_hash": ""
   },
   "packages/shared/src/ids.ts": {
@@ -729,6 +729,48 @@
     "mtime": 1792927480.9516845,
     "seen": 1792928161.8770814,
     "ast_hash": "d9cb3ec7a7aba30cc3422c5df9fc8aa6",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/document/blocks.ts": {
+    "mtime": 1792928523.7754796,
+    "seen": 1792928535.507732,
+    "ast_hash": "e09db7cc17feb245a203da2cb55516c6",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/document/extract.ts": {
+    "mtime": 1792928523.8194795,
+    "seen": 1792928535.507734,
+    "ast_hash": "5ea0b48930c21341da2eae169d6d6561",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/document/factories.ts": {
+    "mtime": 1792928523.8594797,
+    "seen": 1792928535.5077357,
+    "ast_hash": "fc13ec26b7825923dffbab3c36aed04d",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/document/markdown.ts": {
+    "mtime": 1792928523.9754796,
+    "seen": 1792928535.50774,
+    "ast_hash": "1099a394105681011e0ad6025d4ef493",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/document/records.ts": {
+    "mtime": 1792928524.0354795,
+    "seen": 1792928535.5077415,
+    "ast_hash": "639a181e15e21b2ac2d1bb894ee2808f",
+    "semantic_hash": ""
+  },
+  "packages/shared/src/document/yjs.ts": {
+    "mtime": 1792928524.0834796,
+    "seen": 1792928535.507743,
+    "ast_hash": "c7625de7fd8e3da2b5b69ecfd12baeb3",
+    "semantic_hash": ""
+  },
+  "packages/shared/test/document.test.ts": {
+    "mtime": 1792928550.0188177,
+    "seen": 1792928567.3262694,
+    "ast_hash": "131ce63e7d3bc5a2a658441f50cd60d8",
     "semantic_hash": ""
   }
 }

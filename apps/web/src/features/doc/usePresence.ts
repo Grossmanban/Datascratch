@@ -1,20 +1,14 @@
 import { useEffect, useState } from "react";
 import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
-import { joinPresence, type PresenceUser } from "@/data/presence";
+import { joinPresence, type PresenceSend, type PresenceUser } from "@/data/presence";
 
-export function usePresence(
-  docId: string,
-  doc: Y.Doc | null,
-  user: PresenceUser,
-  key: () => Promise<Uint8Array | null>,
-  send: (payload: string) => void,
-) {
+export function usePresence(docId: string, doc: Y.Doc | null, user: PresenceUser, send: PresenceSend) {
   const [awareness, setAwareness] = useState<Awareness | null>(null);
   const [others, setOthers] = useState<PresenceUser[]>([]);
   useEffect(() => {
     if (!doc) return;
-    const p = joinPresence(docId, doc, user, key, send);
+    const p = joinPresence(docId, doc, user, send);
     setAwareness(p.awareness);
     const refresh = () => {
       const list: PresenceUser[] = [];

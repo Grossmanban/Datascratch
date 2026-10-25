@@ -1,0 +1,1 @@
+- 2026-10-25 · web · Синхронизация веба переведена на `SyncClient` из `shared` с хранилищем `DexieSyncStorage` на IndexedDB (пакетные `getDocStates`/`setDocStates`); миграция старой исходящей очереди без потерь; гость — `MemorySyncStorage`.

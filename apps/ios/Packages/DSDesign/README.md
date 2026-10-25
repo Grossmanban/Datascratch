@@ -38,7 +38,8 @@ DSHaptics.taskComplete()                          // тактильная отд
 | `DSDateChip`, `DSDateChipModel` | «Сегодня / Завтра / дата», красный для просрочки (ru/en) |
 | `DSTagChip`, `DSBadge` | Теги и счётчики |
 | `DSTaskCheckbox` | Круглый чек-бокс задачи с анимацией и тактильной отдачей |
-| `DSCard`, `DSDocCard` | Карточка и документ-карточка с обложкой |
+| `DSSpaceTile` | Плитка пространства / блокнота: эмодзи или буква на его `tint` |
+| `DSCard`, `DSDocCard` | Карточка и документ-карточка: миниатюра обложки — только своё изображение (spec 12.7), без обложки — без полосы |
 | `DSEmptyState` | Пустые состояния |
 | `DSButtonStyle` (`.buttonStyle(.ds(.primary))`) | Кнопки: primary / secondary / ghost / destructive |
 | `DSSegmentedControl` | Переключатель видов |

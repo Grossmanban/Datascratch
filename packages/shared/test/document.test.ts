@@ -640,3 +640,26 @@ describe("moving a note between notebooks", () => {
     expect(getNoteMetas(from)).toHaveLength(1);
   });
 });
+
+describe("note indexer", () => {
+  it("indexes stored states in debounced batches", async () => {
+    const { indexNoteState, createNoteIndexer } = await import("../src/index.js");
+    const { doc } = richNote();
+    const state = Y.encodeStateAsUpdate(doc);
+    const idx = indexNoteState("note", state);
+    expect(idx.title).toBe("Plan");
+    expect(idx.tasks).toHaveLength(2);
+    expect(idx.tags).toEqual(["work/q4"]);
+    const batches: string[][] = [];
+    const indexer = createNoteIndexer({
+      loadState: (id) => (id === "missing" ? null : state),
+      onIndex: (list) => void batches.push(list.map((i) => i.noteId)),
+      delayMs: 5,
+      batchSize: 2,
+    });
+    for (const id of ["a", "b", "a", "c", "missing"]) indexer.schedule(id);
+    expect(indexer.pending).toBe(4);
+    await indexer.flush();
+    expect(batches).toEqual([["a", "b"], ["c"]]);
+  });
+});

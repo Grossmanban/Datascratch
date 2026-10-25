@@ -1,3 +1,6 @@
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 import Foundation
 
 /// Vertical metrics of the text line a stroke was drawn over, in layout coordinates.

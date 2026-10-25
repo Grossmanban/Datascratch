@@ -456,45 +456,45 @@
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSInk/InkGeometry.swift": {
-    "mtime": 1792927976.3186126,
-    "seen": 1792928642.7433872,
-    "ast_hash": "f16159a82f0ed05244cf19e8e04fe4dc",
+    "mtime": 1792928817.3547392,
+    "seen": 1792928835.7263186,
+    "ast_hash": "a5cc47f8f94dd7730b38b702654990f0",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSInk/InkOutline.swift": {
-    "mtime": 1792927954.6306112,
-    "seen": 1792928642.7433884,
-    "ast_hash": "612773fd05c7830a92874948b30d3ab8",
+    "mtime": 1792928817.376399,
+    "seen": 1792928835.7263212,
+    "ast_hash": "363339ab394c17829a2342d21cedd65c",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSInk/InkWidth.swift": {
-    "mtime": 1792927928.5788689,
-    "seen": 1792928642.7433896,
-    "ast_hash": "a1eab447286c5dd8bb788f48791ef7c1",
+    "mtime": 1792928817.3926091,
+    "seen": 1792928835.7263227,
+    "ast_hash": "fdce7b6d201e826d2838b93950de792f",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSInk/LivingStroke.swift": {
-    "mtime": 1792927928.5826097,
-    "seen": 1792928642.743391,
-    "ast_hash": "9e7b1e9190a397430733cfec8ebf2072",
+    "mtime": 1792928817.4074402,
+    "seen": 1792928835.7263248,
+    "ast_hash": "3cd9de6a1a7ff6f8a5b554f96c598949",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSInk/Stroke.swift": {
-    "mtime": 1792927903.424384,
-    "seen": 1792928642.743392,
-    "ast_hash": "8389da5b39579a47fa6a1e421f541233",
+    "mtime": 1792928817.4284518,
+    "seen": 1792928835.7263262,
+    "ast_hash": "59b69c61d2da733291e06127a2a7ed97",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSInk/StrokeCodec.swift": {
-    "mtime": 1792927903.4264634,
-    "seen": 1792928642.7433932,
-    "ast_hash": "cf594b247ec59cc95a36906a084e5a9c",
+    "mtime": 1792928817.4466627,
+    "seen": 1792928835.7263281,
+    "ast_hash": "905a8533326c82ef401837f86af30418",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSInk/StrokeShapeClassifier.swift": {
-    "mtime": 1792928004.357339,
-    "seen": 1792928642.7433946,
-    "ast_hash": "d4e4491fe5239eff99bbd66225855ebd",
+    "mtime": 1792928817.466722,
+    "seen": 1792928835.7263298,
+    "ast_hash": "9e35c2469b2dfaa011957f7fbc749c4d",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Tests/DSEditorModelTests/CommandsTests.swift": {
@@ -687,6 +687,18 @@
     "mtime": 1792927481.4788496,
     "seen": 1792928642.7435226,
     "ast_hash": "d9cb3ec7a7aba30cc3422c5df9fc8aa6",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSEditor/Sources/DSEditorModel/CodeHighlighter.swift": {
+    "mtime": 1792928789.970661,
+    "seen": 1792928835.726292,
+    "ast_hash": "cc625e2f4d6336a2e4f43ffece97397a",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSEditor/Tests/DSEditorModelTests/CodeHighlighterTests.swift": {
+    "mtime": 1792928789.9737587,
+    "seen": 1792928835.7263322,
+    "ast_hash": "ccec2cb1d1e8eb0f1ed6760af2627023",
     "semantic_hash": ""
   }
 }

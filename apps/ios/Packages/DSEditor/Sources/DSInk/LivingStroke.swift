@@ -1,3 +1,6 @@
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 import Foundation
 
 /// Current placement of a character glyph, as reported by the text layout.

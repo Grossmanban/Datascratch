@@ -1,3 +1,6 @@
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 import Foundation
 
 /// Drawing tool of a stroke (`strokes.md` §2).

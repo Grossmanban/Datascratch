@@ -1,5 +1,7 @@
 # Контракт: модель документа (v1)
 
+> Уточнение 2026-10-25 (предложение потока core): формат меток и отсутствующих атрибутов в §4.1.
+
 Связано: D-01, D-05, D-31, D-36, D-41. Типы TS: `packages/shared/src/contracts/document.ts`.
 
 ## 1. Три вида документов Yjs
@@ -36,11 +38,13 @@ Y.Array "tabs"      [ { noteId } ]  (открытые вкладки; после
 ## 3. Документ `notebook` (индекс блокнота)
 
 ```
-Y.Map "meta"     { formatVersion: 1, notebookId }
+Y.Map "meta"     { formatVersion: 1, notebookId, name, icon, space: { id, name, icon } }
 Y.Map "folders"  folderId -> Y.Map Folder
 Y.Map "notes"    noteId -> Y.Map NoteMeta
 Y.Map "tags"     tagName -> Y.Map { color, icon }   (необязательные свойства тегов)
 ```
+
+`meta.name`, `meta.icon`, `meta.space` — **копия** названий из документа `account` (его сервер не видит), чтобы агенты в режиме «для агентов» видели названия блокнота и пространства. Клиенты обновляют копию при создании блокнота, переименовании блокнота/пространства и включении режима «для агентов» (уточнение потока agents, 2026-10-25).
 
 `Folder`: `{ id, parentId (null = корень блокнота), name, icon, color, order, createdAt }`. Вложенность без ограничения глубины.
 
@@ -77,7 +81,9 @@ Y.Map "comments"          commentId -> Y.Map Comment
 Веб использует TipTap + `y-prosemirror` с `field: "content"`. Поэтому `content` — это ровно то, что пишет y-prosemirror:
 
 - узел ProseMirror = `Y.XmlElement` с `nodeName` = имя узла, атрибуты узла = атрибуты элемента (значения — JSON: строка, число, boolean, null);
-- текст = `Y.XmlText`, метки (marks) = атрибуты форматирования: `{ bold: true }`, `{ link: { href } }` и т. п. (значение — объект атрибутов метки или `true`, если атрибутов нет).
+- текст = `Y.XmlText`, метки (marks) = атрибуты форматирования; значение — **объект атрибутов метки**: `{ bold: {} }`, `{ link: { href } }` (у метки без атрибутов — пустой объект `{}`). Писатели пишут объект; читатели обязаны принимать и `{}`, и `true`, а также ключи вида `<имя>--<хэш>` (так y-prosemirror хранит перекрывающиеся метки одного типа);
+- вставка текста в `Y.XmlText` без явных атрибутов **наследует форматирование слева** (поведение Yjs/Yrs) — писатели всегда передают явный набор атрибутов (уточнение потока ios-core);
+- y-prosemirror **не записывает** атрибуты узлов со значением `null`: отсутствующий атрибут читатель трактует как `null` (значение по умолчанию из схемы). Это особенно важно для iOS (Yrs).
 
 iOS (Yrs) **обязан** читать и писать именно этот формат. Совместимость проверяется векторами `packages/test-vectors/document/*`.
 
@@ -105,7 +111,7 @@ iOS (Yrs) **обязан** читать и писать именно этот ф
 | `table` / `tableRow` / `tableHeader` / `tableCell` | `colspan`, `rowspan`, `colwidth` (как в TipTap) | | MVP |
 | `image` | `attachmentId`, `width: number\|null` (доля ширины 0..1), `alt`, `caption` | — | MVP |
 | `file` | `attachmentId`, `name`, `size`, `mime` | — | MVP |
-| `drawing` | `height: number` (в pt при ширине колонки 1.0) | — (штрихи — в `strokes`) | MVP |
+| `drawing` | `height: number` — отображаемая высота = `height × ширинаБлока / 600` (опорная ширина 600, как в формуле толщины штриха) | — (штрихи — в `strokes`) | MVP |
 | `pageCard` | `noteId`, `style: "card"\|"link"` | — | MVP |
 | `collection` | (после MVP) | | После MVP |
 
@@ -118,7 +124,7 @@ Inline-узлы и метки:
 | `mention`(резерв) | inline-атом | — |
 | `hardBreak` | inline | — |
 | `bold`, `italic`, `underline`, `strike`, `code` | метки | — |
-| `link` | метка | `href` |
+| `link` | метка | `href` (писатели пишут только `href`; `target`/`rel` добавляются при отрисовке, читатели терпят лишние поля) |
 | `highlight` | метка | `color` (токен) |
 | `textColor` | метка | `color` (токен) |
 | `agentEdit` | метка | `agentId`, `at` (ISO) — подсветка правок агента (D-10); снимается, когда пользователь принял правку |

@@ -90,16 +90,11 @@ struct BenchmarkTests {
             }
         }
         // Building the local indexes (search, tasks) is part of a usable first sync.
-        let (_, indexing) = try await Self.measure("index \(count) notes (load, derive, FTS)") {
-            var batch: [(derived: NoteDerivedData, notebookId: String?)] = []
-            for id in ids {
-                let note = NoteDocument(noteId: id)
-                try note.crdt.applyUpdates(try store.updates(docId: id), origin: .storage)
-                batch.append((try note.derived(), "nb"))
-                if batch.count == 500 { try store.index(batch); batch.removeAll() }
-            }
-            try store.index(batch)
+        // Incremental and parallel (reindexChanged on all cores), batches of 500.
+        let (_, indexing) = try await Self.measure("index \(count) notes (load, derive, FTS; \(ProcessInfo.processInfo.activeProcessorCount) cores)") {
+            while try await store.reindexChanged(limit: 500) > 0 {}
         }
+        #expect(try store.pendingIndexCount() == 0)
         // Only open documents are live; the rest is in SQLite.
         Self.reportMemory("after first sync + indexing of \(count) notes (no live documents)", since: base)
         let opened = NoteDocument(noteId: ids[0])

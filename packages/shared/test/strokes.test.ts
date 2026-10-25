@@ -254,8 +254,8 @@ describe("store", () => {
 });
 
 describe("undo across replicas", () => {
-  it("rebaseRedoneStrokes makes restored anchors visible on other devices", async () => {
-    const { rebaseRedoneStrokes } = await import("../src/index.js");
+  it("rebaseRedoneAnchors makes restored anchors visible on other devices", async () => {
+    const { rebaseRedoneAnchors } = await import("../src/index.js");
     const { doc, text } = noteWithText("hello world");
     const undo = new Y.UndoManager(noteRoots(doc).content, { captureTimeout: 0 });
     const anchors = [encodeAnchor(text, 6), encodeAnchor(text, 7)];
@@ -266,11 +266,48 @@ describe("undo across replicas", () => {
     Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
     // Without rebasing the remote replica cannot see the restored characters.
     expect(findOrphanedStrokes(remote)).toEqual(["s"]);
-    expect(rebaseRedoneStrokes(doc)).toEqual(["s"]);
+    expect(rebaseRedoneAnchors(doc)).toEqual(["s"]);
     Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
     expect(findOrphanedStrokes(remote)).toEqual([]);
     const r = resolveAnchor(remote, getStroke(remote, "s")!.anchors[0]!)!;
     expect(r.text.toString().charAt(r.index)).toBe("w");
-    expect(rebaseRedoneStrokes(doc)).toEqual([]);
+    expect(rebaseRedoneAnchors(doc)).toEqual([]);
+  });
+});
+
+describe("anchor rebase hooks and version restore", () => {
+  it("attachAnchorRebase rebases after undo without touching the redo stack", async () => {
+    const { attachAnchorRebase } = await import("../src/index.js");
+    const { doc, text } = noteWithText("hello world");
+    const undo = new Y.UndoManager([noteRoots(doc).content, noteRoots(doc).strokes], {
+      captureTimeout: 0,
+    });
+    attachAnchorRebase(undo);
+    putStroke(doc, "s", base([encodeAnchor(text, 6), encodeAnchor(text, 7)], [pt(0, 0), pt(1, 0)]));
+    undo.stopCapturing();
+    text.delete(6, 5);
+    undo.undo();
+    expect(undo.redoStack.length).toBe(1);
+    const remote = new Y.Doc();
+    Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
+    expect(findOrphanedStrokes(remote)).toEqual([]);
+  });
+  it("restoreNoteVersion recomputes anchors by index", async () => {
+    const { restoreNoteVersion } = await import("../src/index.js");
+    const { doc, text } = noteWithText("hello world");
+    putStroke(
+      doc,
+      "s",
+      base([encodeAnchor(text, 6), encodeAnchor(text, 10)], [pt(0, 0), pt(1, 0)]),
+    );
+    const v1 = Y.encodeStateAsUpdate(doc);
+    text.delete(0, text.length);
+    text.insert(0, "something else");
+    restoreNoteVersion(doc, v1);
+    const remote = new Y.Doc();
+    Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
+    const s = getStroke(remote, "s")!;
+    const r = resolveAnchors(remote, s.anchors);
+    expect(r.map((a) => a && !a.deleted && a.text.toString().charAt(a.index))).toEqual(["w", "d"]);
   });
 });

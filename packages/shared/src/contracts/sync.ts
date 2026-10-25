@@ -132,7 +132,8 @@ export const ackMessageSchema = z.object({
   type: z.literal("ack"),
   docId: uuidSchema,
   clientMsgId: clientMsgIdSchema,
-  seq: seqSchema,
+  /** seq of the stored update; for a snapshot its baseSeq (may be 0). */
+  seq: sinceSchema,
 });
 
 export const serverAwarenessMessageSchema = z.object({

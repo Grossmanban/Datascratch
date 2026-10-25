@@ -9,7 +9,8 @@ import {
   STROKE_TOOLS,
   type Stroke,
 } from "../contracts/strokes.js";
-import { allAnchorsDeleted, rebaseRedoneAnchors, resolveAnchors } from "./anchors.js";
+import { allAnchorsDeleted, encodeAnchor, rebaseAnchorList, resolveAnchors } from "./anchors.js";
+import { pmContentToY, yFragmentToPM } from "../document/yjs.js";
 import { pointCount } from "./codec.js";
 
 export function strokesMap(doc: Y.Doc): Y.Map<unknown> {
@@ -169,24 +170,103 @@ export function purgeStrokes(doc: Y.Doc, strokeIds: readonly string[]): void {
   });
 }
 
+/** Transaction origin of anchor rebasing (not captured by UndoManagers). */
+export const STROKE_REBASE_ORIGIN: unique symbol = Symbol("datascratch.strokes.rebase");
+
 /**
  * Rewrite the anchors of text strokes whose characters were restored by undo
- * in this replica (see rebaseRedoneAnchors). Call after UndoManager undo/redo.
- * Returns the ids of rewritten strokes.
+ * or redo in this replica (strokes.md §4.1; see rebaseAnchorList). Returns the
+ * ids of rewritten strokes.
  */
-export function rebaseRedoneStrokes(doc: Y.Doc): string[] {
+export function rebaseRedoneAnchors(doc: Y.Doc): string[] {
   const changed: string[] = [];
   doc.transact(() => {
     strokesMap(doc).forEach((value, id) => {
       if (!(value instanceof Y.Map) || value.get("anchorKind") !== "text") return;
       const stroke = readStroke(value);
       if (!stroke) return;
-      const next = rebaseRedoneAnchors(doc, stroke.anchors);
+      const next = rebaseAnchorList(doc, stroke.anchors);
       if (next) {
         value.set("anchors", next);
         changed.push(id);
       }
     });
-  });
+  }, STROKE_REBASE_ORIGIN);
   return changed;
+}
+
+/**
+ * Rebase anchors after every undo/redo of `undoManager`. Returns a detach function.
+ * The rebase runs right after the undo transaction with an untracked origin,
+ * so it never lands on the undo stack.
+ */
+export function attachAnchorRebase(undoManager: Y.UndoManager): () => void {
+  const doc = undoManager.doc;
+  const handler = () => {
+    rebaseRedoneAnchors(doc);
+  };
+  undoManager.on("stack-item-popped", handler);
+  return () => undoManager.off("stack-item-popped", handler);
+}
+
+// ---------------------------------------------------------------------------
+// Version restore (strokes.md §4.1)
+// ---------------------------------------------------------------------------
+
+/** Path of child indices from the `content` fragment to a Y.XmlText. */
+function pathOf(text: Y.XmlText, root: Y.XmlFragment): number[] | null {
+  const path: number[] = [];
+  let node: Y.AbstractType<unknown> = text as unknown as Y.AbstractType<unknown>;
+  while (node !== (root as unknown as Y.AbstractType<unknown>)) {
+    const parent = node.parent as Y.XmlElement | Y.XmlFragment | null;
+    if (!parent) return null;
+    const i = parent.toArray().indexOf(node as unknown as Y.XmlElement);
+    if (i < 0) return null;
+    path.unshift(i);
+    node = parent as unknown as Y.AbstractType<unknown>;
+  }
+  return path;
+}
+
+function atPath(root: Y.XmlFragment, path: number[]): Y.XmlText | null {
+  let node: Y.XmlElement | Y.XmlFragment | Y.XmlText = root;
+  for (const i of path) {
+    if (node instanceof Y.XmlText) return null;
+    const next = node.get(i) as Y.XmlElement | Y.XmlText | undefined;
+    if (!next) return null;
+    node = next;
+  }
+  return node instanceof Y.XmlText ? node : null;
+}
+
+/**
+ * Restore `content` and `strokes` of a note from a historical state (e.g. the
+ * decrypted payload of `GET /docs/:id/versions/:seq`). The content is rewritten
+ * as new Yjs items, so text anchors are recomputed by absolute position: the
+ * anchor's index in the old version → the same index in the restored text.
+ * Anchors already deleted in that version are kept as they are.
+ */
+export function restoreNoteVersion(doc: Y.Doc, versionState: Uint8Array, origin?: unknown): void {
+  const version = new Y.Doc();
+  Y.applyUpdate(version, versionState);
+  const fromRoot = version.getXmlFragment(NOTE_ROOTS.content);
+  const toRoot = doc.getXmlFragment(NOTE_ROOTS.content);
+  doc.transact(() => {
+    if (toRoot.length > 0) toRoot.delete(0, toRoot.length);
+    toRoot.insert(0, pmContentToY(yFragmentToPM(fromRoot).content));
+    const strokes = strokesMap(doc);
+    for (const key of [...strokes.keys()]) strokes.delete(key);
+    for (const { id, stroke } of listStrokes(version)) {
+      if (stroke.anchorKind === "text") {
+        stroke.anchors = stroke.anchors.map((encoded) => {
+          const r = resolveAnchors(version, [encoded])[0];
+          if (!r || r.deleted) return encoded;
+          const path = pathOf(r.text, fromRoot);
+          const target = path ? atPath(toRoot, path) : null;
+          return target ? encodeAnchor(target, r.index) : encoded;
+        });
+      }
+      putStroke(doc, id, stroke);
+    }
+  }, origin);
 }

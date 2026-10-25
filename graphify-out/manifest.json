@@ -1046,13 +1046,13 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792930099.2008767,
     "seen": 1792930627.796382,
-    "ast_hash": "a5de2feab812287bedd5a0f8cb793b6a",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792930099.2021437,
     "seen": 1792930627.7963884,
-    "ast_hash": "4203dbf78c0e858320c15f29875ac97d",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -1680,10 +1680,10 @@
     "semantic_hash": "069ff76729912d4149203677b2d9051a"
   },
   "packages/shared/test/sync.test.ts": {
-    "mtime": 1792929001.7514617,
-    "seen": 1792930607.0312304,
-    "ast_hash": "e11db82cf022785a0091a5661fbe71cf",
-    "semantic_hash": "e11db82cf022785a0091a5661fbe71cf"
+    "mtime": 1792930702.2056234,
+    "seen": 1792930761.651531,
+    "ast_hash": "8afd8f2e11c1ec10ea661bf7e43a1f02",
+    "semantic_hash": ""
   },
   "packages/shared/test/vectors.test.ts": {
     "mtime": 1792929418.5234463,
@@ -1704,10 +1704,10 @@
     "semantic_hash": "8e72c2c1226011104d0cdcda76f31f51"
   },
   "packages/shared/vitest.config.ts": {
-    "mtime": 1792927656.3610206,
-    "seen": 1792930607.0312366,
-    "ast_hash": "89720e8283809fdf5ee9d9e4e64e0a3f",
-    "semantic_hash": "89720e8283809fdf5ee9d9e4e64e0a3f"
+    "mtime": 1792930702.210069,
+    "seen": 1792930761.6517875,
+    "ast_hash": "62895938d4ac35ec411a7d9da629de95",
+    "semantic_hash": ""
   },
   "packages/test-vectors/package.json": {
     "mtime": 1792929236.842162,

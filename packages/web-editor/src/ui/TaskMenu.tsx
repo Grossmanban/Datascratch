@@ -50,7 +50,7 @@ export function TaskMenu({ editor, request, host, onClose }: { editor: Editor; r
     <Floating rect={request.rect} className="ds-menu ds-task-menu" onDismiss={onClose}>
       <div className="ds-menu-list">
         <div className="ds-menu-group">Перенести</div>
-        {item("Сегодня", run(() => setDates({ scheduled: today })), { hint: dateChipLabel(today, today), active: a.scheduled === today })}
+        {item("Сегодня", run(() => setDates({ scheduled: today })), { active: a.scheduled === today })}
         {item("Завтра", run(() => setDates({ scheduled: addDays(today, 1) })), { active: a.scheduled === addDays(today, 1) })}
         {item("След. неделя", run(() => setDates({ scheduled: nextWeek(today) })), { hint: dateChipLabel(nextWeek(today), today) })}
         {item("Дата…", () => setPicker("scheduled"), { hint: a.scheduled ? dateChipLabel(a.scheduled, today) : undefined })}

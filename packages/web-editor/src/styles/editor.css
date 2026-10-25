@@ -907,6 +907,7 @@ span.ds-unsupported {
 }
 .ds-task-menu {
   width: 240px;
+  max-height: 520px;
 }
 .ds-block-menu {
   width: 220px;

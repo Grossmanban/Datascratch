@@ -1045,13 +1045,13 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
-    "seen": 1792953909.7793374,
+    "seen": 1792954984.670625,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
-    "seen": 1792953909.7793398,
+    "seen": 1792954984.6706278,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -4009,7 +4009,7 @@
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
-    "seen": 1792953909.7793412,
+    "seen": 1792954984.6706297,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -4056,16 +4056,16 @@
     "semantic_hash": "606014230fa9f49aa15d818595778a2c"
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoModel.swift": {
-    "mtime": 1792951467.6070523,
-    "seen": 1792951585.3994403,
-    "ast_hash": "18206bc50c708cdcec418ae04f0d45cd",
-    "semantic_hash": "18206bc50c708cdcec418ae04f0d45cd"
+    "mtime": 1792955009.9802282,
+    "seen": 1792955079.8268256,
+    "ast_hash": "2c9f29e278e58d37bdfa01b08c6d221d",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoView.swift": {
-    "mtime": 1792953810.7021503,
-    "seen": 1792953909.7792177,
-    "ast_hash": "afd9a4373b7cc5ede8e2205c3bb55c85",
-    "semantic_hash": "afd9a4373b7cc5ede8e2205c3bb55c85"
+    "mtime": 1792955009.9808311,
+    "seen": 1792955079.8268309,
+    "ast_hash": "41f58c5129d47e2fee13c7a1052af27b",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/EditorDemoApp.swift": {
     "mtime": 1792929845.1587236,
@@ -4074,10 +4074,10 @@
     "semantic_hash": "a0f80305c431ac4070e7ebc1b3465b42"
   },
   "apps/ios/Packages/DSEditor/Demo/UITests/EditorDemoUITests.swift": {
-    "mtime": 1792953545.471985,
-    "seen": 1792953637.8048115,
-    "ast_hash": "0d48fe1795ecb8d3ac60a0fc69af95fa",
-    "semantic_hash": "0d48fe1795ecb8d3ac60a0fc69af95fa"
+    "mtime": 1792955009.9814827,
+    "seen": 1792955079.8268821,
+    "ast_hash": "dc24f8cc14cf64b8e290b64b1076c9b4",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
     "mtime": 1792954903.789376,

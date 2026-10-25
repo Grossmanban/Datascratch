@@ -43,8 +43,29 @@ final class EditorDemoUITests: XCTestCase {
 
     @MainActor
     func testTypingGoesToDocument() throws {
+        try typing(extraArguments: [])
+    }
+
+    // Temporary bisection of the tap-into-text crash (one variant per suspect).
+    @MainActor
+    func testTypingBisectNoScrollTracking() throws {
+        try typing(extraArguments: ["-noScrollTracking"])
+    }
+
+    @MainActor
+    func testTypingBisectNoSelectedTraits() throws {
+        try typing(extraArguments: ["-noSelectedTraits"])
+    }
+
+    @MainActor
+    func testTypingBisectNeither() throws {
+        try typing(extraArguments: ["-noScrollTracking", "-noSelectedTraits"])
+    }
+
+    @MainActor
+    private func typing(extraArguments: [String]) throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting"]
+        app.launchArguments = ["-uiTesting"] + extraArguments
         app.launch()
         let editor = app.textViews["editor.text"]
         XCTAssertTrue(editor.waitForExistence(timeout: 10))

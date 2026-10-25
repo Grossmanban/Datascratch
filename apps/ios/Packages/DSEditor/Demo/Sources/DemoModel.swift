@@ -17,6 +17,7 @@ final class DemoModel {
     var scrollOffset: CGFloat = 0
 
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
+    let selectedTraits = !ProcessInfo.processInfo.arguments.contains("-noSelectedTraits")
     private let images = DemoImages()
 
     static var fileURL: URL {
@@ -49,7 +50,10 @@ final class DemoModel {
         if args.contains("-uiTesting") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { Self.dumpGestureRecognizers() }
         }
-        editor.onScroll = { [weak self] y in self?.scrollOffset = y }
+        // UI-test bisection switches (temporary): `-noScrollTracking`, `-noSelectedTraits`.
+        if !args.contains("-noScrollTracking") {
+            editor.onScroll = { [weak self] y in self?.scrollOffset = y }
+        }
         editor.onPaletteRequest = { [weak self] _ in self?.showPalette = true }
     }
 

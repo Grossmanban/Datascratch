@@ -27,6 +27,7 @@ import {
   expandToWords,
   fractionInside,
   groupLines,
+  isFreeDrawing,
   pointInPolygon,
   hitsSegments,
   pointsWithin,
@@ -504,6 +505,21 @@ export class PenLayer {
       if (e.clip) ctx.restore();
     }
     this.renderLive();
+    this.fitContentToDrawings();
+  }
+
+  private extentApplied = -1;
+  /**
+   * strokes.md §4: the content height includes every free drawing (so it can be scrolled to) plus
+   * room to keep drawing below it — at least one viewport.
+   */
+  private fitContentToDrawings(): void {
+    let bottom = 0;
+    for (const e of this.entries.values()) if (e.bounds && e.stroke.anchorKind === "block") bottom = Math.max(bottom, e.bounds.bottom);
+    const want = bottom > 0 ? Math.ceil(bottom + window.innerHeight) : 0;
+    if (want === this.extentApplied) return;
+    this.extentApplied = want;
+    this.root.style.minHeight = want ? `${want}px` : "";
   }
 
   private renderLive(): void {
@@ -811,7 +827,8 @@ export class PenLayer {
         lines = groupLines(pass.glyphsInBand(vp.top - vp.height, vp.top + 2 * vp.height));
       }
     }
-    const binding = lines.length ? bindToText(pts, lines) : null;
+    // Far from text (strokes.md §4): the whole stroke becomes a free drawing of the nearest paragraph.
+    const binding = lines.length && !isFreeDrawing(pts, lines) ? bindToText(pts, lines) : null;
     if (!binding) {
       const margin = this.bindMarginStroke(pts, tool, base, screenWidth);
       return margin ? { stroke: margin, positions: [] } : null;
@@ -860,7 +877,11 @@ export class PenLayer {
     };
   }
 
-  /** Margin note: anchored to the vertically nearest block, in fractions of that block's width. */
+  /**
+   * Free drawing or margin note (`anchorKind: "block"`): anchored to the vertically nearest
+   * paragraph (below the last one — the last one), x in fractions of the text column from its left
+   * edge, y from the paragraph's top in the same units, unbounded.
+   */
   private bindMarginStroke(
     pts: InputPoint[],
     tool: StrokeTool,
@@ -1067,5 +1088,6 @@ export class PenLayer {
     this.over.remove();
     this.live.remove();
     this.root.classList.remove("ds-pen-root", "ds-pen-draw-any");
+    this.root.style.minHeight = "";
   }
 }

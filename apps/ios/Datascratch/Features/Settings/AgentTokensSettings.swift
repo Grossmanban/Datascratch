@@ -5,10 +5,34 @@ import SwiftUI
 struct AgentTokensSettings: View {
     @Environment(AppModel.self) private var app
     @State private var isCreating = false
+    @State private var copiedMCP = false
+
+    private var mcpURL: URL? { app.sync.serverURL?.appendingPathComponent("mcp") }
 
     var body: some View {
         let tokens = app.access.agentTokens
         List {
+            if let mcp = mcpURL {
+                Section {
+                    HStack {
+                        Text(mcp.absoluteString)
+                            .font(.system(.footnote, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                        Spacer()
+                        Button(copiedMCP ? LocalizedStringKey("Copied") : "Copy") {
+                            UIPasteboard.general.url = mcp
+                            copiedMCP = true
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                } header: {
+                    Text("MCP server address")
+                } footer: {
+                    Text("Claude and ChatGPT connect by this address and ask for consent in the browser.")
+                }
+            }
             Section {
                 if tokens.isEmpty {
                     Text("No tokens yet.")
@@ -20,6 +44,8 @@ struct AgentTokensSettings: View {
                     } label: {
                     VStack(alignment: .leading, spacing: Theme.Space.s1) {
                         HStack {
+                            Image(systemName: token.kind == .oauth ? "person.badge.key" : "key")
+                                .foregroundStyle(Tint.purple.foreground)
                             Text(token.name).font(.headline)
                             Spacer()
                             Text(token.permission == .readWrite ? LocalizedStringKey("Read & write") : "Read only")
@@ -32,6 +58,11 @@ struct AgentTokensSettings: View {
                         Text(notebookNames(token.notebookIds))
                             .font(Theme.Typography.footnote)
                             .foregroundStyle(Theme.Palette.textSecondary)
+                        if let lastUsed = token.lastUsedAt {
+                            Text("Last used \(lastUsed.formatted(.relative(presentation: .named)))")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.textTertiary)
+                        }
                         if let expiresAt = token.expiresAt {
                             Text("Expires \(expiresAt.formatted(date: .abbreviated, time: .omitted))")
                                 .font(Theme.Typography.caption)
@@ -180,12 +211,25 @@ struct AgentAuditView: View {
             }
             ForEach(entries) { entry in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.action)
-                        .font(.system(.body, design: .monospaced))
-                    if let title = entry.noteTitle {
+                    HStack {
+                        Image(systemName: entry.ok ? "checkmark.circle" : "exclamationmark.triangle")
+                            .foregroundStyle(entry.ok ? Theme.Palette.success : Theme.Palette.danger)
+                        Text(entry.action)
+                            .font(.system(.body, design: .monospaced))
+                        Spacer()
+                        Text(entry.via.uppercased())
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                    }
+                    if let title = entry.noteId.flatMap({ app.library.note($0)?.title }) {
                         Text(title)
                             .font(Theme.Typography.footnote)
                             .foregroundStyle(Theme.Palette.textSecondary)
+                    }
+                    if let code = entry.errorCode {
+                        Text(code)
+                            .font(Theme.Typography.caption.monospaced())
+                            .foregroundStyle(Theme.Palette.danger)
                     }
                     Text(entry.at.formatted(date: .abbreviated, time: .standard))
                         .font(Theme.Typography.caption)

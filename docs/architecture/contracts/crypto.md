@@ -60,6 +60,7 @@ recoveryKey (32, показывается 1 раз) ─┐ ▼
 
 - 32 случайных байта, показываются пользователю один раз в виде **Crockford Base32** (52 символа), группами по 4 через дефис, с префиксом `DS1-`.
 - `recoveryLoginKey = crypto_generichash(32, "ds1|recovery-login", key = recoveryKey)`; сервер хранит `Argon2id(recoveryLoginKey)`.
+- **Замена ключа восстановления** (например, старый потерян или мог попасть к посторонним): клиент создаёт новый `recoveryKey`, считает новый `recoveryLoginKey`, оборачивает `masterKey` новым ключом (`ad = ds1|key|master|recovery|<userId>`) и отправляет `POST /v1/auth/recovery-key` с подтверждением текущим `loginKey`. Сервер атомарно заменяет `Argon2id(recoveryLoginKey)` и `wrappedMasterKeyRecovery`; старый ключ восстановления перестаёт работать. Новый ключ показывается пользователю один раз. Данные не перешифровываются.
 - Восстановление: клиент доказывает знание ключа восстановления (`recoveryLoginKey`), получает `wrappedMasterKeyRecovery`, расшифровывает masterKey, задаёт новый пароль (новая соль, новый `loginKey`, новый `wrappedMasterKeyPassword`). Данные не перешифровываются.
 
 ## 5. Смена пароля

@@ -213,3 +213,45 @@ describe('service', () => {
     expect(nf.body.error.code).toBe('not_found');
   });
 });
+
+describe('recovery key rotation', () => {
+  it('replaces the recovery key atomically; the old one stops working; journal records it', async () => {
+    const u = await signup(s);
+    const t = u.session.accessToken;
+    const newRecovery = b64(rnd(32));
+    const wrapped = b64(rnd(73));
+    // A recovery flow started with the old key...
+    const pending = await api(s, 'POST', '/auth/recovery/start', {
+      body: { email: u.email, recoveryLoginKey: u.recoveryLoginKey },
+    });
+    expect(pending.status).toBe(200);
+
+    const wrong = await api(s, 'POST', '/auth/recovery-key', {
+      token: t,
+      body: { currentLoginKey: b64(rnd(32)), recoveryLoginKey: newRecovery, wrappedMasterKeyRecovery: wrapped },
+    });
+    expect(wrong.status).toBe(401);
+    const ok = await api(s, 'POST', '/auth/recovery-key', {
+      token: t,
+      body: { currentLoginKey: u.loginKey, recoveryLoginKey: newRecovery, wrappedMasterKeyRecovery: wrapped },
+    });
+    expect(ok.status).toBe(204);
+
+    // ...cannot be finished, and the old key no longer starts one.
+    const fin = await api(s, 'POST', '/auth/recovery/finish', {
+      body: { recoveryToken: pending.body.recoveryToken, salt: b64(rnd(16)), kdf: KDF, loginKey: b64(rnd(32)), wrappedMasterKeyPassword: b64(rnd(73)) },
+    });
+    expect(fin.status).toBe(401);
+    expect(
+      (await api(s, 'POST', '/auth/recovery/start', { body: { email: u.email, recoveryLoginKey: u.recoveryLoginKey } })).status,
+    ).toBe(401);
+    const start = await api(s, 'POST', '/auth/recovery/start', { body: { email: u.email, recoveryLoginKey: newRecovery } });
+    expect(start.status).toBe(200);
+    expect(start.body.wrappedMasterKeyRecovery).toBe(wrapped);
+    // Other sessions stay signed in.
+    expect((await api(s, 'GET', '/me', { token: t })).status).toBe(200);
+
+    const events = await api(s, 'GET', '/me/security-events', { token: t });
+    expect(events.body[0]).toMatchObject({ kind: 'recovery_key_rotated', deviceId: u.session.deviceId, deviceName: 'Test device' });
+  });
+});

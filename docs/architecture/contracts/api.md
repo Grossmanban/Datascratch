@@ -21,6 +21,7 @@
 | POST | `/auth/recovery/start` | `{ email, recoveryLoginKey }` → `{ recoveryToken, wrappedMasterKeyRecovery, userId }` |
 | POST | `/auth/recovery/finish` | `{ recoveryToken, salt, kdf, loginKey, wrappedMasterKeyPassword }` → `Session` |
 | POST | `/auth/password` | (авторизован) `{ currentLoginKey, salt, kdf, loginKey, wrappedMasterKeyPassword }` → `204` |
+| POST | `/auth/recovery-key` | (авторизован) `{ currentLoginKey, recoveryLoginKey, wrappedMasterKeyRecovery }` → `204` — новый ключ восстановления (`crypto.md` §4): старый перестаёт работать сразу, незавершённые восстановления отменяются, другие устройства остаются в системе |
 
 `Session = { userId, deviceId, accessToken, refreshToken, accessExpiresAt, wrappedMasterKeyPassword, accountDocId }`. В `signup` и `recovery/finish` можно передать необязательное `deviceName` (уточнение потока server).
 
@@ -30,6 +31,7 @@
 | --- | --- | --- |
 | GET | `/me` | `{ userId, email, accountDocId, createdAt }` |
 | GET | `/devices` / DELETE `/devices/:id` | список и отзыв устройств (сессий) |
+| GET | `/me/security-events` | журнал безопасности, новые сверху (до 100): `{ kind: "password_changed"\|"recovery_used"\|"recovery_key_rotated", at, deviceId \| null, deviceName \| null }[]` |
 | DELETE | `/me` | удаление аккаунта (с подтверждением `loginKey`) |
 
 ## Блокноты и документы (D-36)

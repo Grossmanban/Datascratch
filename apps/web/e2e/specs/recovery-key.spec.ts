@@ -1,11 +1,13 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { PASSWORD, uniqueEmail } from "./helpers";
+import { expectSynced, PASSWORD, signIn, uniqueEmail } from "./helpers";
 
-test("the recovery key check can be skipped; settings remind and show the key again", async ({ page }) => {
+test("the recovery key check can be skipped; settings remind, show the key again and make a new one", async ({ page, browser }) => {
+  test.setTimeout(120_000);
+  const email = uniqueEmail("skip");
   await page.goto("/signup");
   const form = page.getByTestId("signup-form");
-  await form.locator("input[type=email]").fill(uniqueEmail("skip"));
+  await form.locator("input[type=email]").fill(email);
   await form.locator("input[type=password]").nth(0).fill(PASSWORD);
   await form.locator("input[type=password]").nth(1).fill(PASSWORD);
   await form.locator("button[type=submit]").click();
@@ -41,4 +43,35 @@ test("the recovery key check can be skipped; settings remind and show the key ag
   // Still viewable after confirming.
   await page.getByTestId("recovery-show").click();
   await expect(page.getByRole("dialog").getByTestId("recovery-key")).toHaveAttribute("data-key", key);
+
+  await page.keyboard.press("Escape");
+  await expectSynced(page);
+
+  // Another device: the confirmation is in the account doc; the key itself is not here.
+  const ctx = await browser.newContext();
+  const p2 = await ctx.newPage();
+  await signIn(p2, email);
+  await p2.goto("/settings/account");
+  const card2 = p2.getByTestId("recovery-card");
+  await expect(card2).toHaveAttribute("data-state", "confirmed", { timeout: 15_000 });
+  await expect(card2).toHaveAttribute("data-on-device", "false");
+  await expect(p2.getByTestId("recovery-show")).toHaveCount(0);
+
+  // A new key from the second device (password required); the old one stops working.
+  await p2.getByTestId("recovery-rotate").click();
+  await p2.getByTestId("recovery-rotate-password").fill(PASSWORD);
+  await p2.getByRole("dialog").locator("button[type=submit]").click();
+  const newKey = (await p2.getByRole("dialog").getByTestId("recovery-key").getAttribute("data-key", { timeout: 20_000 }))!;
+  expect(newKey).not.toBe(key);
+  await p2.keyboard.press("Escape");
+  await expect(card2).toHaveAttribute("data-state", "unconfirmed");
+  await expect(card2).toHaveAttribute("data-on-device", "true");
+  await p2.reload();
+  await expect(p2.getByTestId("security-log")).toContainText(/Новый ключ восстановления/);
+
+  // The first device gets the reminder back and forgets its replaced key.
+  await expect(page.getByTestId("recovery-dot")).toBeVisible({ timeout: 15_000 });
+  await page.reload();
+  await expect(page.getByTestId("recovery-card")).toHaveAttribute("data-on-device", "false", { timeout: 15_000 });
+  await ctx.close();
 });

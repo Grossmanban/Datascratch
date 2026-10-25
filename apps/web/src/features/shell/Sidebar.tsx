@@ -50,7 +50,7 @@ import {
   useWorkspace,
   type FolderEntry,
 } from "@/domain/workspace";
-import { useAuth } from "@/auth/session";
+import { useRecoveryUnconfirmed } from "@/auth/recovery";
 import { folderMenuItems, newNoteAndOpen, noteMenuItems } from "@/features/docs/menus";
 import { useUi } from "@/hooks/useUi";
 import { DND_FOLDER, DND_NOTE, dragFolder, dragNote, dropKind } from "@/lib/dnd";
@@ -91,7 +91,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   const notebooks = useWorkspace((s) => s.account.notebooks);
   const spaceId = useWorkspace((s) => s.activeSpaceId);
   const nbs = useMemo(() => notebooks.filter((n) => n.spaceId === spaceId), [notebooks, spaceId]);
-  const recoveryUnconfirmed = useAuth((s) => s.recovery === "unconfirmed");
+  const recoveryUnconfirmed = useRecoveryUnconfirmed();
   const todayCount = useLiveQuery(
     async () => {
       const d = today();

@@ -11,6 +11,7 @@ import {
   initCrypto,
   moveNoteToNotebook as moveNoteSync,
   parseRecoveryKey,
+  rotateRecoveryKey as rotateRecoverySync,
   unwrapKey as unwrapSync,
   wrapKey as wrapSync,
   type KdfParams,
@@ -47,11 +48,18 @@ export {
   type Space,
   type SyncAuth as HelloAuth,
   type SyncErrorCode,
+  type SecurityEvent,
   type TaskState,
   type GuestSessionResponse as GuestGrant,
   type MeResponse as Me,
   type StarredItem as StarredRef,
 } from "@datascratch/shared";
+
+/** A new recovery key and the `POST /auth/recovery-key` body (crypto.md §4). */
+export async function rotateRecoveryKey(masterKey: Uint8Array, currentLoginKey: Uint8Array, userId: string) {
+  await initCrypto();
+  return rotateRecoverySync(masterKey, currentLoginKey, userId);
+}
 
 /** Re-wraps the note key and moves its NoteMeta between notebook indexes (api.md «Перенос заметки»). */
 export async function moveNoteToNotebook(options: Parameters<typeof moveNoteSync>[0]) {

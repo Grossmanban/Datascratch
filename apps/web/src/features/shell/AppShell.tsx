@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverDialog } from "@/features/doc/CoverDialog";
+import { syncRecoveryFlag } from "@/auth/recovery";
 import { consumeFreshAccount, useAuth } from "@/auth/session";
 import { hasRuntime, startRuntime } from "@/data/runtime";
 import { bootstrapAccount, purgeOldTrash } from "@/domain/actions";
@@ -64,6 +65,11 @@ export function AppShell() {
   useEffect(() => {
     if (ready) void purgeOldTrash();
   }, [ready]);
+
+  // The signup screen runs before the account doc syncs: carry its recovery-key note over.
+  useEffect(() => {
+    if (ready && synced) void syncRecoveryFlag();
+  }, [ready, synced]);
 
   useEffect(() => {
     useUi.setState({ mobileNavOpen: false });

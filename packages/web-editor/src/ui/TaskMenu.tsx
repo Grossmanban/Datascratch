@@ -1,8 +1,14 @@
 import type { Editor } from "@tiptap/core";
+import { Calendar } from "@datascratch/ui";
 import { useState } from "react";
 import type { EditorHost } from "../host";
 import { addDays, dateChipLabel, localDate, nextWeek, type TaskMenuRequest } from "../schema/tasks";
 import { Floating } from "./Popups";
+
+function parseDate(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number) as [number, number, number];
+  return new Date(y, m - 1, d);
+}
 
 /** Context menu of a task (spec/12 §12.1): reschedule, deadline, complete, cancel, open, move, delete. */
 export function TaskMenu({ editor, request, host, onClose }: { editor: Editor; request: TaskMenuRequest; host: EditorHost; onClose: () => void }) {
@@ -28,19 +34,15 @@ export function TaskMenu({ editor, request, host, onClose }: { editor: Editor; r
       <Floating rect={request.rect} className="ds-menu ds-task-menu" onDismiss={onClose}>
         <div className="ds-menu-list">
           <div className="ds-menu-group">{picker === "scheduled" ? "Запланировать на" : "Дедлайн"}</div>
-          <input
-            autoFocus
-            type="date"
-            className="ds-input"
-            defaultValue={current ?? today}
-            onMouseDown={(e) => e.stopPropagation()}
-            onChange={(e) => {
-              if (e.target.value) {
-                setDates({ [picker]: e.target.value });
+          <div className="ds-calendar" onMouseDown={(e) => e.stopPropagation()}>
+            <Calendar
+              value={current ? parseDate(current) : null}
+              onChange={(d) => {
+                setDates({ [picker]: localDate(d) });
                 onClose();
-              }
-            }}
-          />
+              }}
+            />
+          </div>
           {current && item("Убрать дату", run(() => setDates({ [picker]: null })), { danger: true })}
         </div>
       </Floating>

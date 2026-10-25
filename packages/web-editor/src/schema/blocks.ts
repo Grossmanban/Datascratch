@@ -2,7 +2,7 @@ import { InputRule, Node, mergeAttributes, nodeInputRule } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { NodeViewRendererProps } from "@tiptap/core";
 import type { HostRef } from "../host";
-import type { CalloutTone } from "../shared/document";
+import type { CalloutTone } from "@datascratch/shared/contracts";
 
 export interface HostOptions {
   host: HostRef;

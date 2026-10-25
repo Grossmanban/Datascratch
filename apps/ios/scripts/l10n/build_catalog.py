@@ -37,7 +37,7 @@ INTERPOLATIONS = {
 IGNORE = {
     "* ", ", ", "> ", "[ ] ", "[] ", "☐ ", "DS1", "DS1-XXXX-XXXX-…", "Datascratch", "Library.json",
     "CFBundleShortVersionString", "CFBundleVersion", "DSServerURL", "DSWebHost",
-    "XChaCha20-Poly1305 · Argon2id", "Quiet paper", "next week", "open to agents",
+    "XChaCha20-Poly1305 · Argon2id", "Quiet paper", "next week", "open to agents", "CoreLibrary", "Library",
 }
 
 LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')

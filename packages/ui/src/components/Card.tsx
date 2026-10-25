@@ -50,8 +50,13 @@ export interface DocCardProps extends Omit<HTMLAttributes<HTMLElement>, "title">
   meta?: ReactNode;
   footer?: ReactNode;
   size?: "sm" | "md" | "lg";
-  /** Render the card as a link. */
+  /** Render the card as a plain link. */
   href?: string;
+  /**
+   * Use the child element (e.g. a router `<Link>`) as the card root, so the
+   * link's accessible name comes from the title and excerpt.
+   */
+  asChild?: boolean;
 }
 
 const coverHeights = { sm: "h-20", md: "h-28", lg: "h-40" };
@@ -70,13 +75,14 @@ export const DocCard = forwardRef<HTMLElement, DocCardProps>(function DocCard(
     footer,
     size = "md",
     href,
+    asChild,
     className,
     children,
     ...rest
   },
   ref,
 ) {
-  const Comp = href ? "a" : "article";
+  const Comp = asChild ? Slot.Root : href ? "a" : "article";
   const body = (
     <>
       {(cover || backdrop) && (
@@ -117,7 +123,7 @@ export const DocCard = forwardRef<HTMLElement, DocCardProps>(function DocCard(
         {subtitle && (
           <p className="mt-1 line-clamp-2 text-footnote text-fg-secondary">{subtitle}</p>
         )}
-        {children}
+        {!asChild && children}
         {(meta || footer) && (
           <div className="mt-auto flex items-center gap-2 pt-3 text-caption text-fg-tertiary">
             {meta}
@@ -140,6 +146,7 @@ export const DocCard = forwardRef<HTMLElement, DocCardProps>(function DocCard(
       {...rest}
     >
       {body}
+      {asChild && <Slot.Slottable>{children}</Slot.Slottable>}
     </Comp>
   );
 });

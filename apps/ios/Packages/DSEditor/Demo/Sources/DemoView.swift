@@ -7,15 +7,16 @@ struct DemoView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
-                // The palette sits below the editor, never over it: SwiftUI controls laid over a
-                // UIKit view let that view's gesture recognizers see the same touches, so the pen
-                // recognizer competed with the palette buttons.
-                VStack(spacing: 0) {
-                    EditorRepresentable(editor: model.editor)
-                        .accessibilityIdentifier("editor")
-                    ToolPalette(model: model)
-                        .padding(.vertical, 8)
-                }
+                // The editor ends above the palette (as in the app): extended under it, the editor's
+                // recognizers saw the palette's touches. The palette sits in the bottom safe area,
+                // so it rides up with the keyboard in one layout pass.
+                EditorRepresentable(editor: model.editor)
+                    .accessibilityIdentifier("editor")
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        ToolPalette(model: model)
+                            .padding(.top, 8)
+                            .padding(.bottom, 12)
+                    }
                 if model.showHUD {
                     HUDView(model: model)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)

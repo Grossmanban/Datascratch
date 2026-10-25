@@ -56,6 +56,8 @@ export const wrappedKeySchema = base64UrlSchema.min(1);
 
 export const sessionSchema = z.object({
   userId: uuidSchema,
+  /** The session's device (refresh-token family); also the sync `deviceId`. */
+  deviceId: z.string().min(1),
   accessToken: z.string().min(1),
   refreshToken: z.string().min(1),
   accessExpiresAt: isoDateTimeSchema,
@@ -83,6 +85,7 @@ export const signupRequestSchema = z.object({
   wrappedMasterKeyRecovery: wrappedKeySchema,
   userId: uuidSchema,
   accountDocId: uuidSchema,
+  deviceName: z.string().min(1).max(200).optional(),
 });
 export type SignupRequest = z.infer<typeof signupRequestSchema>;
 
@@ -117,6 +120,7 @@ export const recoveryFinishRequestSchema = z.object({
   kdf: kdfParamsSchema,
   loginKey: key32Schema,
   wrappedMasterKeyPassword: wrappedKeySchema,
+  deviceName: z.string().min(1).max(200).optional(),
 });
 export type RecoveryFinishRequest = z.infer<typeof recoveryFinishRequestSchema>;
 
@@ -128,6 +132,29 @@ export const changePasswordRequestSchema = z.object({
   wrappedMasterKeyPassword: wrappedKeySchema,
 });
 export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
+
+/** `POST /auth/recovery-key` (authorized): replace the recovery key; confirmed by the password. */
+export const rotateRecoveryKeyRequestSchema = z.object({
+  currentLoginKey: key32Schema,
+  recoveryLoginKey: key32Schema,
+  wrappedMasterKeyRecovery: wrappedKeySchema,
+});
+export type RotateRecoveryKeyRequest = z.infer<typeof rotateRecoveryKeyRequestSchema>;
+
+/** Account security log (`GET /me/security-events`). */
+export const SECURITY_EVENT_KINDS = [
+  "password_changed",
+  "recovery_used",
+  "recovery_key_rotated",
+] as const;
+export type SecurityEventKind = (typeof SECURITY_EVENT_KINDS)[number];
+export const securityEventSchema = z.object({
+  kind: z.enum(SECURITY_EVENT_KINDS),
+  at: isoDateTimeSchema,
+  deviceId: z.string().nullable(),
+  deviceName: z.string().nullable(),
+});
+export type SecurityEvent = z.infer<typeof securityEventSchema>;
 
 // ---------------------------------------------------------------------------
 // Account and devices
@@ -207,6 +234,10 @@ export const registerDocRequestSchema = z
   });
 export type RegisterDocRequest = z.infer<typeof registerDocRequestSchema>;
 
+/** `PATCH /docs/:id`: move a note document to another notebook. */
+export const moveDocRequestSchema = z.object({ notebookId: uuidSchema });
+export type MoveDocRequest = z.infer<typeof moveDocRequestSchema>;
+
 export const docVersionSchema = z.object({
   seq: z.number().int().nonnegative(),
   createdAt: isoDateTimeSchema,
@@ -234,6 +265,7 @@ export type CreateAttachmentRequest = z.infer<typeof createAttachmentRequestSche
 export const attachmentStatusSchema = z.object({
   size: z.number().int().nonnegative(),
   chunkCount: z.number().int().positive(),
+  mime: z.string(),
   uploadedChunks: z.array(z.number().int().nonnegative()),
 });
 export type AttachmentStatus = z.infer<typeof attachmentStatusSchema>;
@@ -328,7 +360,9 @@ export const API_ROUTES = {
   recoveryStart: { method: "POST", path: "/auth/recovery/start" },
   recoveryFinish: { method: "POST", path: "/auth/recovery/finish" },
   changePassword: { method: "POST", path: "/auth/password" },
+  rotateRecoveryKey: { method: "POST", path: "/auth/recovery-key" },
   me: { method: "GET", path: "/me" },
+  securityEvents: { method: "GET", path: "/me/security-events" },
   deleteMe: { method: "DELETE", path: "/me" },
   listDevices: { method: "GET", path: "/devices" },
   deleteDevice: { method: "DELETE", path: "/devices/:id" },
@@ -338,6 +372,7 @@ export const API_ROUTES = {
   patchNotebookMode: { method: "PATCH", path: "/notebooks/:id/mode" },
   deleteNotebook: { method: "DELETE", path: "/notebooks/:id" },
   registerDoc: { method: "POST", path: "/docs" },
+  moveDoc: { method: "PATCH", path: "/docs/:id" },
   deleteDoc: { method: "DELETE", path: "/docs/:id" },
   listDocVersions: { method: "GET", path: "/docs/:id/versions" },
   getDocVersion: { method: "GET", path: "/docs/:id/versions/:seq" },

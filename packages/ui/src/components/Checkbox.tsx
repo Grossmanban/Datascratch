@@ -33,7 +33,7 @@ export const Checkbox = forwardRef<HTMLButtonElement, CheckboxProps>(function Ch
       disabled={disabled}
       aria-label={aria["aria-label"]}
       className={cn(
-        "peer grid size-[18px] shrink-0 place-items-center rounded-[5px] border-[1.5px] border-[color-mix(in_oklab,var(--ds-text-tertiary)_80%,transparent)] bg-surface outline-none",
+        "peer grid size-[18px] shrink-0 place-items-center rounded-[5px] border-[1.5px] border-[color-mix(in_oklab,var(--ds-text-tertiary)_55%,transparent)] bg-surface outline-none",
         "transition-[background-color,border-color,transform] duration-fast ease-snappy active:scale-90",
         "data-[state=checked]:border-accent data-[state=checked]:bg-accent data-[state=indeterminate]:border-accent data-[state=indeterminate]:bg-accent",
         "focus-visible:focus-ring disabled:opacity-45",
@@ -123,8 +123,8 @@ export const TaskCheckbox = forwardRef<HTMLButtonElement, TaskCheckboxProps>(fun
         className={cn(
           "absolute inset-0 rounded-full border-[1.5px] transition-colors duration-base",
           cancelled
-            ? "border-fg-tertiary/60"
-            : "border-[color-mix(in_oklab,var(--ds-text-tertiary)_85%,transparent)] group-hover:border-accent",
+            ? "border-fg-tertiary/45"
+            : "border-[color-mix(in_oklab,var(--ds-text-tertiary)_55%,transparent)] group-hover:border-accent",
         )}
       />
       {/* fill */}

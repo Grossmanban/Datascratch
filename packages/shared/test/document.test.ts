@@ -554,3 +554,89 @@ describe("block operations", () => {
     expect(getTitle(doc)).toBe("");
   });
 });
+
+describe("moving a note between notebooks", () => {
+  it("rewraps the key, writes the target entry, patches, then removes the source entry", async () => {
+    const { initCrypto, generateKey, wrapNoteKey, unwrapNoteKey, moveNoteToNotebook } =
+      await import("../src/index.js");
+    await initCrypto();
+    const fromKey = generateKey();
+    const toKey = generateKey();
+    const noteKey = generateKey();
+    const from = createNotebookDoc("nb-a");
+    const to = createNotebookDoc("nb-b");
+    putNoteMeta(from, {
+      id: "n1",
+      folderId: "f1",
+      parentNoteId: null,
+      title: "T",
+      kind: "note",
+      dailyDate: null,
+      tags: [],
+      icon: null,
+      coverThumb: null,
+      wrappedKey: wrapNoteKey(noteKey, fromKey, "n1"),
+      createdAt: T,
+      updatedAt: T,
+      trashedAt: null,
+      order: 1,
+    });
+    const calls: string[] = [];
+    const moved = await moveNoteToNotebook({
+      noteId: "n1",
+      fromIndex: from,
+      toIndex: to,
+      fromNotebookKey: fromKey,
+      toNotebookKey: toKey,
+      toNotebookId: "nb-b",
+      patchDoc: async (id, nb) => {
+        calls.push(`${id}->${nb}`);
+        expect(getNoteMetas(to)).toHaveLength(1); // target entry exists before the PATCH
+        expect(getNoteMetas(from)).toHaveLength(1);
+      },
+    });
+    expect(calls).toEqual(["n1->nb-b"]);
+    expect(getNoteMetas(from)).toHaveLength(0);
+    expect(moved.folderId).toBeNull();
+    expect(unwrapNoteKey(getNoteMetas(to)[0]!.wrappedKey, toKey, "n1")).toEqual(noteKey);
+  });
+  it("rolls back the target entry when the PATCH fails", async () => {
+    const { initCrypto, generateKey, wrapNoteKey, moveNoteToNotebook } =
+      await import("../src/index.js");
+    await initCrypto();
+    const fromKey = generateKey();
+    const from = createNotebookDoc("nb-a");
+    const to = createNotebookDoc("nb-b");
+    putNoteMeta(from, {
+      id: "n1",
+      folderId: null,
+      parentNoteId: null,
+      title: "T",
+      kind: "note",
+      dailyDate: null,
+      tags: [],
+      icon: null,
+      coverThumb: null,
+      wrappedKey: wrapNoteKey(generateKey(), fromKey, "n1"),
+      createdAt: T,
+      updatedAt: T,
+      trashedAt: null,
+      order: 1,
+    });
+    await expect(
+      moveNoteToNotebook({
+        noteId: "n1",
+        fromIndex: from,
+        toIndex: to,
+        fromNotebookKey: fromKey,
+        toNotebookKey: generateKey(),
+        toNotebookId: "nb-b",
+        patchDoc: async () => {
+          throw new Error("409");
+        },
+      }),
+    ).rejects.toThrow("409");
+    expect(getNoteMetas(to)).toHaveLength(0);
+    expect(getNoteMetas(from)).toHaveLength(1);
+  });
+});

@@ -13,10 +13,10 @@ import {
 } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { AppContext } from './context.js';
+import { safeEqual } from './lib/encoding.js';
 import { ApiError, type ApiErrorCode } from './lib/errors.js';
 import { loadPlugins, type LoadedPlugin } from './plugins/loader.js';
 import { accountRoutes } from './routes/account.js';
-import { agentTokenRoutes } from './routes/agent-tokens.js';
 import { attachmentRoutes } from './routes/attachments.js';
 import { authRoutes } from './routes/auth.js';
 import { notebookRoutes } from './routes/notebooks.js';
@@ -88,7 +88,8 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
     await app.register(cors, {
       origin: origins,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-      allowedHeaders: ['authorization', 'content-type'],
+      allowedHeaders: ['authorization', 'content-type', 'mcp-session-id', 'mcp-protocol-version'],
+      credentials: true,
       maxAge: 86_400,
     });
   }
@@ -116,7 +117,25 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
     transformObject: jsonSchemaTransformObject,
   });
 
-  const plugins = opts.plugins ?? (await loadPlugins(ctx));
+  app.addHook('onResponse', async (req, reply) => {
+    ctx.metrics.httpRequests.inc({ method: req.method, status: `${Math.floor(reply.statusCode / 100)}xx` });
+  });
+  const { pool } = ctx.database;
+  ctx.metrics.gauge('ds_db_pool_total', 'PostgreSQL pool connections.', () => pool.totalCount);
+  ctx.metrics.gauge('ds_db_pool_idle', 'Idle PostgreSQL pool connections.', () => pool.idleCount);
+  ctx.metrics.gauge('ds_db_pool_waiting', 'Queries waiting for a pool connection.', () => pool.waitingCount);
+  if (ctx.config.METRICS_TOKEN) {
+    const expected = Buffer.from(`Bearer ${ctx.config.METRICS_TOKEN}`);
+    app.get('/metrics', { logLevel: 'warn', schema: { hide: true } }, async (req, reply) => {
+      const got = Buffer.from(req.headers.authorization ?? '');
+      if (!safeEqual(got, expected)) {
+        return reply.code(401).send({ error: { code: 'unauthorized', message: 'metrics token required' } });
+      }
+      return reply.header('content-type', 'text/plain; version=0.0.4').send(ctx.metrics.render());
+    });
+  }
+
+  const plugins = opts.plugins ?? loadPlugins();
 
   await app.register(
     async (v1) => {
@@ -134,7 +153,6 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
       await v1.register(notebookRoutes(ctx));
       await v1.register(attachmentRoutes(ctx));
       await v1.register(shareRoutes(ctx));
-      await v1.register(agentTokenRoutes(ctx));
       await registerSync(v1, ctx);
     },
     { prefix: '/v1' },

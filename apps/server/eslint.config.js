@@ -11,7 +11,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['test/**'],
+    files: ['test/**', 'bench/**'],
     rules: { '@typescript-eslint/no-explicit-any': 'off', '@typescript-eslint/no-non-null-assertion': 'off' },
   },
 );

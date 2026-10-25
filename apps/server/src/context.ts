@@ -4,9 +4,9 @@ import type { Config } from './config.js';
 import type { Database } from './db/client.js';
 import type { JobQueue } from './jobs/queue.js';
 import { fromB64 } from './lib/encoding.js';
-import { AuditService } from './services/audit.js';
 import { DocumentService } from './services/documents.js';
 import { KeyService } from './services/keys.js';
+import { Metrics } from './metrics.js';
 import type { BlobStorage } from './storage/index.js';
 import { MemoryBroadcaster, type Broadcaster } from './sync/hub.js';
 
@@ -21,7 +21,7 @@ export interface AppContext {
   tokens: TokenSigner;
   documents: DocumentService;
   keys: KeyService;
-  audit: AuditService;
+  metrics: Metrics;
 }
 
 export function createContext(opts: {
@@ -45,6 +45,6 @@ export function createContext(opts: {
       coveredUpdatesKeepDays: config.COVERED_UPDATES_KEEP_DAYS,
     }),
     keys: new KeyService(fromB64(config.DS_KMS_KEY)),
-    audit: new AuditService(),
+    metrics: new Metrics(),
   };
 }

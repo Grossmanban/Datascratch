@@ -2,9 +2,9 @@ import type { WebSocket } from 'ws';
 import { verifyGuestToken, verifyUserToken } from '../auth/guard.js';
 import type { AppContext } from '../context.js';
 import { COMPACT_JOB } from '../jobs/index.js';
-import { fromB64, toB64, uuidv7 } from '../lib/encoding.js';
+import { fromB64, sha256, toB64, uuidv7 } from '../lib/encoding.js';
 import { ApiError } from '../lib/errors.js';
-import { docAccess } from '../services/access.js';
+import { accessFor, docAccess, loadDocs } from '../services/access.js';
 import type { GuestPrincipal, UserPrincipal } from '../services/principal.js';
 import { topics, type HubMessage } from './hub.js';
 import {
@@ -36,7 +36,13 @@ interface Subscription {
 }
 
 const HELLO_TIMEOUT_MS = 10_000;
+/** Subscribe fast path: documents per batched query, and max updates per document in it. */
+const FAST_PATH_BATCH = 200;
+const FAST_PATH_MAX_UPDATES = 100;
 const MAX_BUFFERED_BYTES = 64 * 1024 * 1024;
+/** Catch-up pauses while this much is still queued on the socket (backpressure). */
+const CATCHUP_HIGH_WATER = 4 * 1024 * 1024;
+const CATCHUP_STALL_MS = 120_000;
 
 class SyncError extends Error {
   constructor(
@@ -70,7 +76,7 @@ export class SyncConnection {
     this.#helloTimer = setTimeout(() => this.#fail('unauthorized', 'hello timeout', CloseCode.unauthorized), HELLO_TIMEOUT_MS);
     socket.on('message', (data, isBinary) => {
       if (isBinary) {
-        this.#send({ type: 'error', code: 'protocol_mismatch', message: 'binary frames are not supported' });
+        this.#send({ type: 'error', code: 'bad_request', message: 'binary frames are not supported' });
         return;
       }
       const text = Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.concat(data as Buffer[]).toString('utf8');
@@ -110,6 +116,7 @@ export class SyncConnection {
   }
 
   #send(msg: ServerMessage) {
+    if (msg.type === 'error') this.ctx.metrics.syncErrors.inc({ code: msg.code });
     if (this.#closed || this.socket.readyState !== this.socket.OPEN) return;
     if (this.socket.bufferedAmount > MAX_BUFFERED_BYTES) {
       // The client cannot keep up; it will catch up from lastSeq after reconnecting.
@@ -117,6 +124,18 @@ export class SyncConnection {
       return;
     }
     this.socket.send(JSON.stringify(msg));
+  }
+
+  /** Wait until the client has read most of what was sent (catch-up backpressure). */
+  async #drained() {
+    const start = Date.now();
+    while (!this.#closed && this.socket.bufferedAmount > CATCHUP_HIGH_WATER) {
+      if (Date.now() - start > CATCHUP_STALL_MS) {
+        this.close(CloseCode.goingAway, 'client too slow');
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 5));
+    }
   }
 
   #fail(code: SyncErrorCode, message: string, closeCode: number) {
@@ -145,27 +164,33 @@ export class SyncConnection {
     try {
       raw = JSON.parse(text);
     } catch {
-      this.#send({ type: 'error', code: 'protocol_mismatch', message: 'invalid JSON' });
+      this.#send({ type: 'error', code: 'bad_request', message: 'invalid JSON' });
       return;
+    }
+    const r = raw as { type?: unknown; protocol?: unknown } | null;
+    if (r && typeof r === 'object' && r.type === 'hello' && r.protocol !== PROTOCOL_VERSION) {
+      clearTimeout(this.#helloTimer);
+      return this.#fail('protocol_mismatch', `protocol ${PROTOCOL_VERSION} required`, CloseCode.protocol);
     }
     const parsed = ClientMessage.safeParse(raw);
     if (!parsed.success) {
       const ref = typeof raw === 'object' && raw ? ((raw as { clientMsgId?: unknown }).clientMsgId as string) : undefined;
       this.#send({
         type: 'error',
-        code: 'protocol_mismatch',
+        code: 'bad_request',
         message: `invalid message: ${parsed.error.issues[0]?.path.join('.') ?? ''} ${parsed.error.issues[0]?.message ?? ''}`.trim(),
         ...(typeof ref === 'string' ? { ref } : {}),
       });
       return;
     }
     const msg = parsed.data;
+    this.ctx.metrics.syncMessages.inc({ type: msg.type });
     if (!this.#principal) {
       if (msg.type !== 'hello') return this.#fail('unauthorized', 'hello expected', CloseCode.unauthorized);
       return this.#hello(msg);
     }
     if (msg.type === 'hello') {
-      this.#send({ type: 'error', code: 'protocol_mismatch', message: 'already authenticated' });
+      this.#send({ type: 'error', code: 'bad_request', message: 'already authenticated' });
       return;
     }
     if (!this.#takeToken()) {
@@ -200,7 +225,7 @@ export class SyncConnection {
       }
       if (err instanceof ApiError && err.code === 'bad_request') {
         const ref = 'clientMsgId' in msg ? msg.clientMsgId : undefined;
-        this.#send({ type: 'error', code: 'protocol_mismatch', message: err.message, ...(ref ? { ref } : {}) });
+        this.#send({ type: 'error', code: 'bad_request', message: err.message, ...(ref ? { ref } : {}) });
         return;
       }
       throw err;
@@ -209,15 +234,14 @@ export class SyncConnection {
 
   async #hello(msg: Extract<ClientMessage, { type: 'hello' }>) {
     clearTimeout(this.#helloTimer);
-    if (msg.protocol !== PROTOCOL_VERSION) {
-      return this.#fail('protocol_mismatch', `protocol ${PROTOCOL_VERSION} required`, CloseCode.protocol);
-    }
     let p: SyncPrincipal | null;
     if (msg.auth.kind === 'user') {
       p = await verifyUserToken(this.ctx, msg.auth.accessToken);
     } else {
-      // Guest device ids are namespaced so they can never collide with a user's devices.
-      p = await verifyGuestToken(this.ctx, msg.auth.guestToken, `guest:${msg.auth.shareId}:${msg.deviceId}`);
+      // Guest device ids are namespaced so they can never collide with a user's devices
+      // (and stay within the 64 characters of the contract's deviceId).
+      const tag = sha256(`${msg.auth.shareId}|${msg.deviceId}`).subarray(0, 16).toString('base64url');
+      p = await verifyGuestToken(this.ctx, msg.auth.guestToken, `guest:${tag}`);
       if (p && p.shareId !== msg.auth.shareId) p = null;
     }
     if (!p) return this.#fail('unauthorized', 'invalid credentials', CloseCode.unauthorized);
@@ -242,7 +266,9 @@ export class SyncConnection {
   /** Read access → `false` (read-only) / `true` (write); throws doc_not_found. */
   async #canWrite(docId: string): Promise<boolean> {
     const cached = this.#access.get(docId);
-    if (cached !== undefined) return cached;
+    // A guest's access can change when a note moves; only subscriptions hear about it,
+    // so for unsubscribed documents a guest's access is checked every time.
+    if (cached !== undefined && (this.#principal!.kind === 'user' || this.#subs.has(docId))) return cached;
     const a = await docAccess(this.ctx.database.db, this.#principal!, docId);
     if (!a) throw new SyncError('doc_not_found', 'document not found', docId);
     this.#access.set(docId, a.write);
@@ -253,32 +279,97 @@ export class SyncConnection {
     return this.#principal!.deviceId;
   }
 
+  #newSub(docId: string, since: number): Subscription {
+    this.#unsubscribe(docId);
+    const sub: Subscription = {
+      unsubscribe: () => {},
+      live: false,
+      buffer: [],
+      sent: since,
+      pending: new Map(),
+      filling: false,
+    };
+    // Registered before reading the history: live events meanwhile are buffered.
+    sub.unsubscribe = this.ctx.hub.subscribe(topics.doc(docId), (m) => this.#onDocEvent(docId, sub, m));
+    this.#subs.set(docId, sub);
+    return sub;
+  }
+
+  #goLive(docId: string, sub: Subscription) {
+    sub.live = true;
+    for (const e of sub.buffer) this.#enqueue(docId, sub, e);
+    sub.buffer = [];
+  }
+
   async #subscribe(list: { docId: string; since: number }[]) {
+    const db = this.ctx.database.db;
+    const rows = await loadDocs(db, [...new Set(list.map((d) => d.docId))]);
+    type Item = { docId: string; since: number; sub: Subscription; lastSeq: number; snapshotSeq: number };
+    const fast: Item[] = [];
+    const slow: Item[] = [];
     for (const { docId, since } of list) {
+      const row = rows.get(docId);
+      const a = row ? accessFor(this.#principal!, row) : null;
+      if (!row || !a) {
+        this.#access.delete(docId);
+        this.#send({ type: 'error', code: 'doc_not_found', message: 'document not found', ref: docId });
+        continue;
+      }
+      this.#access.set(docId, a.write);
+      // A client ahead of the server (e.g. restored from another backup) starts over.
+      const from = since > row.lastSeq ? 0 : since;
+      const item = { docId, since: from, sub: this.#newSub(docId, from), lastSeq: row.lastSeq, snapshotSeq: 0 };
+      // Fast path: either every update after `from` is still stored (no newer snapshot) and
+      // there are few, or the newest snapshot plus a short tail after it.
+      if (from >= row.snapshotSeq && row.lastSeq - from <= FAST_PATH_MAX_UPDATES) fast.push(item);
+      else if (from < row.snapshotSeq && row.lastSeq - row.snapshotSeq <= FAST_PATH_MAX_UPDATES) {
+        fast.push({ ...item, snapshotSeq: row.snapshotSeq });
+      } else slow.push(item);
+    }
+
+    for (let i = 0; i < fast.length; i += FAST_PATH_BATCH) {
       if (this.#closed) return;
-      this.#access.delete(docId);
-      try {
-        await this.#canWrite(docId);
-      } catch (err) {
-        if (err instanceof SyncError) {
-          this.#send({ type: 'error', code: err.code, message: err.message, ref: docId });
+      const batch = fast.slice(i, i + FAST_PATH_BATCH);
+      const withSnap = batch.filter((b) => b.snapshotSeq > 0);
+      const snaps = await this.ctx.documents.latestSnapshots(
+        db,
+        withSnap.map((b) => b.docId),
+      );
+      // Updates are read after the snapshot (if any) or after `since`.
+      const base = (b: Item) => (b.snapshotSeq > 0 ? (snaps.get(b.docId)?.seq ?? b.since) : b.since);
+      const toFetch = batch.filter((b) => b.lastSeq > base(b)).map((b) => ({ docId: b.docId, since: base(b) }));
+      const found = await this.ctx.documents.updatesForMany(db, toFetch);
+      for (const b of batch) {
+        if (this.#closed) return;
+        if (this.#subs.get(b.docId) !== b.sub) continue;
+        const snap = b.snapshotSeq > 0 ? (snaps.get(b.docId) ?? null) : null;
+        const from = base(b);
+        const items = found.get(b.docId) ?? [];
+        // Snapshot missing or updates compacted in the meantime: fall back to the general path.
+        if ((b.snapshotSeq > 0 && !snap) || (b.lastSeq > from && items[0]?.seq !== from + 1)) {
+          slow.push(b);
           continue;
         }
-        throw err;
+        if (snap) b.sub.sent = snap.seq;
+        const last = items[items.length - 1];
+        if (last) b.sub.sent = last.seq;
+        this.#send({
+          type: 'updates',
+          docId: b.docId,
+          snapshot: snap ? { seq: snap.seq, payload: toB64(snap.payload) } : null,
+          items: items.map((x) => ({ seq: x.seq, payload: toB64(x.payload), deviceId: x.deviceId })),
+          upToDate: true,
+        });
+        this.#goLive(b.docId, b.sub);
       }
-      this.#unsubscribe(docId);
-      const sub: Subscription = {
-        unsubscribe: () => {},
-        live: false,
-        buffer: [],
-        sent: since,
-        pending: new Map(),
-        filling: false,
-      };
-      sub.unsubscribe = this.ctx.hub.subscribe(topics.doc(docId), (m) => this.#onDocEvent(docId, sub, m));
-      this.#subs.set(docId, sub);
+      await this.#drained();
+    }
+
+    for (const { docId, since, sub } of slow) {
+      if (this.#closed) return;
+      if (this.#subs.get(docId) !== sub) continue;
       try {
-        for await (const page of this.ctx.documents.catchUp(this.ctx.database.db, docId, since)) {
+        for await (const page of this.ctx.documents.catchUp(db, docId, since)) {
           if (this.#closed || this.#subs.get(docId) !== sub) return;
           if (page.snapshot) sub.sent = page.snapshot.seq;
           const last = page.items[page.items.length - 1];
@@ -287,9 +378,10 @@ export class SyncConnection {
             type: 'updates',
             docId,
             snapshot: page.snapshot ? { seq: page.snapshot.seq, payload: toB64(page.snapshot.payload) } : null,
-            items: page.items.map((i) => ({ seq: i.seq, payload: toB64(i.payload), deviceId: i.deviceId })),
+            items: page.items.map((x) => ({ seq: x.seq, payload: toB64(x.payload), deviceId: x.deviceId })),
             upToDate: page.upToDate,
           });
+          await this.#drained();
         }
       } catch (err) {
         this.#unsubscribe(docId);
@@ -299,9 +391,7 @@ export class SyncConnection {
         }
         throw err;
       }
-      sub.live = true;
-      for (const e of sub.buffer) this.#enqueue(docId, sub, e);
-      sub.buffer = [];
+      this.#goLive(docId, sub);
     }
   }
 
@@ -317,6 +407,23 @@ export class SyncConnection {
       this.#unsubscribe(docId);
       this.#access.delete(docId);
       this.#send({ type: 'error', code: 'doc_not_found', message: 'document deleted', ref: docId });
+      return;
+    }
+    if (m.type === 'doc_moved') {
+      // Moved to another notebook: a guest of the old notebook's share may lose access.
+      this.#access.delete(docId);
+      this.#queue = this.#queue
+        .then(async () => {
+          if (this.#subs.get(docId) !== sub) return;
+          const a = await docAccess(this.ctx.database.db, this.#principal!, docId);
+          if (a) {
+            this.#access.set(docId, a.write);
+            return;
+          }
+          this.#unsubscribe(docId);
+          this.#send({ type: 'error', code: 'doc_not_found', message: 'document is no longer shared', ref: docId });
+        })
+        .catch((err) => this.#internal(err));
       return;
     }
     if (m.type === 'awareness') {
@@ -399,6 +506,7 @@ export class SyncConnection {
     // On a subscribed document the ack takes its place in seq order.
     if (sub) this.#enqueue(docId, sub, { kind: 'ack', seq: r.seq, clientMsgId });
     else this.#send({ type: 'ack', docId, clientMsgId, seq: r.seq });
+    if (!r.duplicate) this.ctx.metrics.syncUpdates.inc({ source: this.#principal!.kind });
     if (!r.duplicate) this.ctx.documents.publishUpdate(docId, r.seq, payload, deviceId, this.id);
   }
 
@@ -418,6 +526,11 @@ export class SyncConnection {
     if (!(await this.#canWriteRef(docId, clientMsgId))) {
       throw new SyncError('forbidden', 'read-only access', clientMsgId);
     }
+    if (baseSeq === 0) {
+      // A snapshot of an empty history covers nothing: acknowledge, keep nothing.
+      this.#send({ type: 'ack', docId, clientMsgId, seq: 0 });
+      return;
+    }
     try {
       const r = await this.ctx.documents.storeSnapshot(this.ctx.database.db, {
         docId,
@@ -429,7 +542,7 @@ export class SyncConnection {
       if (r.newest) await this.ctx.jobs.enqueue(COMPACT_JOB, { docId }, { singletonKey: docId, startAfterSec: 30 });
     } catch (err) {
       if (err instanceof ApiError && err.code === 'bad_request') {
-        throw new SyncError('protocol_mismatch', err.message, clientMsgId);
+        throw new SyncError('bad_request', err.message, clientMsgId);
       }
       throw err;
     }

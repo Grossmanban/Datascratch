@@ -1,0 +1,473 @@
+{
+  "version": 1,
+  "description": "REST bodies (api.md v1): every `valid` body must be accepted and every `invalid` one rejected by the schema of the same name (TS: `<name>Schema` in @datascratch/shared/contracts). Unknown extra fields are ignored.",
+  "cases": {
+    "preloginRequest": {
+      "valid": [
+        {
+          "email": "a@b.co"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "not an email",
+          "body": {
+            "email": "nope"
+          }
+        }
+      ]
+    },
+    "preloginResponse": {
+      "valid": [
+        {
+          "salt": "BBBBBBBBBBBBBBBBBBBBBA",
+          "kdf": {
+            "alg": "argon2id13",
+            "ops": 3,
+            "mem": 67108864
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "salt is not 16 bytes",
+          "body": {
+            "salt": "AAAA",
+            "kdf": {
+              "alg": "argon2id13",
+              "ops": 3,
+              "mem": 67108864
+            }
+          }
+        },
+        {
+          "reason": "non-canonical salt (trailing bits set)",
+          "body": {
+            "salt": "BBBBBBBBBBBBBBBBBBBBBB",
+            "kdf": {
+              "alg": "argon2id13",
+              "ops": 3,
+              "mem": 67108864
+            }
+          }
+        },
+        {
+          "reason": "unknown KDF",
+          "body": {
+            "salt": "BBBBBBBBBBBBBBBBBBBBBA",
+            "kdf": {
+              "alg": "scrypt",
+              "ops": 3,
+              "mem": 67108864
+            }
+          }
+        }
+      ]
+    },
+    "signupRequest": {
+      "valid": [
+        {
+          "email": "a@b.co",
+          "salt": "BBBBBBBBBBBBBBBBBBBBBA",
+          "kdf": {
+            "alg": "argon2id13",
+            "ops": 3,
+            "mem": 67108864
+          },
+          "loginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "wrappedMasterKeyPassword": "AQ",
+          "wrappedMasterKeyRecovery": "AQ",
+          "userId": "0192f3c4-0000-7000-8000-000000000001",
+          "accountDocId": "0192f3c4-0000-7000-8000-000000000002"
+        },
+        {
+          "email": "a@b.co",
+          "salt": "BBBBBBBBBBBBBBBBBBBBBA",
+          "kdf": {
+            "alg": "argon2id13",
+            "ops": 3,
+            "mem": 67108864
+          },
+          "loginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "wrappedMasterKeyPassword": "AQ",
+          "wrappedMasterKeyRecovery": "AQ",
+          "userId": "0192f3c4-0000-7000-8000-000000000001",
+          "accountDocId": "0192f3c4-0000-7000-8000-000000000002",
+          "deviceName": "iPad Pro"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "loginKey is not 32 bytes",
+          "body": {
+            "email": "a@b.co",
+            "salt": "BBBBBBBBBBBBBBBBBBBBBA",
+            "kdf": {
+              "alg": "argon2id13",
+              "ops": 3,
+              "mem": 67108864
+            },
+            "loginKey": "AA",
+            "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "wrappedMasterKeyPassword": "AQ",
+            "wrappedMasterKeyRecovery": "AQ",
+            "userId": "0192f3c4-0000-7000-8000-000000000001",
+            "accountDocId": "0192f3c4-0000-7000-8000-000000000001"
+          }
+        },
+        {
+          "reason": "userId is not a UUIDv7",
+          "body": {
+            "email": "a@b.co",
+            "salt": "BBBBBBBBBBBBBBBBBBBBBA",
+            "kdf": {
+              "alg": "argon2id13",
+              "ops": 3,
+              "mem": 67108864
+            },
+            "loginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "wrappedMasterKeyPassword": "AQ",
+            "wrappedMasterKeyRecovery": "AQ",
+            "userId": "0192f3c4-0000-4000-8000-000000000001",
+            "accountDocId": "0192f3c4-0000-7000-8000-000000000001"
+          }
+        }
+      ]
+    },
+    "rotateRecoveryKeyRequest": {
+      "valid": [
+        {
+          "currentLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "wrappedMasterKeyRecovery": "AQ"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing currentLoginKey",
+          "body": {
+            "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "wrappedMasterKeyRecovery": "AQ"
+          }
+        },
+        {
+          "reason": "recoveryLoginKey is 31 bytes",
+          "body": {
+            "currentLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "wrappedMasterKeyRecovery": "AQ"
+          }
+        },
+        {
+          "reason": "empty wrappedMasterKeyRecovery",
+          "body": {
+            "currentLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "recoveryLoginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "wrappedMasterKeyRecovery": ""
+          }
+        }
+      ]
+    },
+    "securityEvent": {
+      "valid": [
+        {
+          "kind": "recovery_key_rotated",
+          "at": "2026-10-25T12:00:00.000Z",
+          "deviceId": "dev-1",
+          "deviceName": "iPad"
+        },
+        {
+          "kind": "recovery_used",
+          "at": "2026-10-25T12:00:00.000Z",
+          "deviceId": null,
+          "deviceName": null
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "unknown kind",
+          "body": {
+            "kind": "login",
+            "at": "2026-10-25T12:00:00.000Z",
+            "deviceId": null,
+            "deviceName": null
+          }
+        }
+      ]
+    },
+    "loginRequest": {
+      "valid": [
+        {
+          "email": "a@b.co",
+          "loginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "deviceName": "iPhone"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing deviceName",
+          "body": {
+            "email": "a@b.co",
+            "loginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          }
+        }
+      ]
+    },
+    "session": {
+      "valid": [
+        {
+          "userId": "0192f3c4-0000-7000-8000-000000000001",
+          "deviceId": "dev-1",
+          "accessToken": "at",
+          "refreshToken": "rt",
+          "accessExpiresAt": "2026-10-25T12:00:00.000Z",
+          "wrappedMasterKeyPassword": "AQ",
+          "accountDocId": "0192f3c4-0000-7000-8000-000000000002"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing deviceId",
+          "body": {
+            "userId": "0192f3c4-0000-7000-8000-000000000001",
+            "accessToken": "at",
+            "refreshToken": "rt",
+            "accessExpiresAt": "2026-10-25T12:00:00.000Z",
+            "wrappedMasterKeyPassword": "AQ",
+            "accountDocId": "0192f3c4-0000-7000-8000-000000000002"
+          }
+        },
+        {
+          "reason": "timestamp without milliseconds",
+          "body": {
+            "userId": "0192f3c4-0000-7000-8000-000000000001",
+            "deviceId": "d",
+            "accessToken": "at",
+            "refreshToken": "rt",
+            "accessExpiresAt": "2026-10-25T12:00:00Z",
+            "wrappedMasterKeyPassword": "AQ",
+            "accountDocId": "0192f3c4-0000-7000-8000-000000000002"
+          }
+        }
+      ]
+    },
+    "recoveryFinishRequest": {
+      "valid": [
+        {
+          "recoveryToken": "rt",
+          "salt": "BBBBBBBBBBBBBBBBBBBBBA",
+          "kdf": {
+            "alg": "argon2id13",
+            "ops": 3,
+            "mem": 67108864
+          },
+          "loginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "wrappedMasterKeyPassword": "AQ"
+        },
+        {
+          "recoveryToken": "rt",
+          "salt": "BBBBBBBBBBBBBBBBBBBBBA",
+          "kdf": {
+            "alg": "argon2id13",
+            "ops": 3,
+            "mem": 67108864
+          },
+          "loginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "wrappedMasterKeyPassword": "AQ",
+          "deviceName": "Mac"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing recoveryToken",
+          "body": {
+            "salt": "BBBBBBBBBBBBBBBBBBBBBA",
+            "kdf": {
+              "alg": "argon2id13",
+              "ops": 3,
+              "mem": 67108864
+            },
+            "loginKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "wrappedMasterKeyPassword": "AQ"
+          }
+        }
+      ]
+    },
+    "createNotebookRequest": {
+      "valid": [
+        {
+          "notebookId": "0192f3c4-0000-7000-8000-000000000001",
+          "mode": "private",
+          "wrappedKey": "AQ"
+        },
+        {
+          "notebookId": "0192f3c4-0000-7000-8000-000000000001",
+          "mode": "agent",
+          "wrappedKey": "AQ",
+          "notebookKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "agent mode without notebookKey",
+          "body": {
+            "notebookId": "0192f3c4-0000-7000-8000-000000000001",
+            "mode": "agent",
+            "wrappedKey": "AQ"
+          }
+        },
+        {
+          "reason": "private mode with notebookKey",
+          "body": {
+            "notebookId": "0192f3c4-0000-7000-8000-000000000001",
+            "mode": "private",
+            "wrappedKey": "AQ",
+            "notebookKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          }
+        }
+      ]
+    },
+    "registerDocRequest": {
+      "valid": [
+        {
+          "docId": "0192f3c4-0000-7000-8000-000000000001",
+          "kind": "account",
+          "notebookId": null
+        },
+        {
+          "docId": "0192f3c4-0000-7000-8000-000000000001",
+          "kind": "notebook",
+          "notebookId": "0192f3c4-0000-7000-8000-000000000001"
+        },
+        {
+          "docId": "0192f3c4-0000-7000-8000-000000000003",
+          "kind": "note",
+          "notebookId": "0192f3c4-0000-7000-8000-000000000001"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "note without notebook",
+          "body": {
+            "docId": "0192f3c4-0000-7000-8000-000000000001",
+            "kind": "note",
+            "notebookId": null
+          }
+        },
+        {
+          "reason": "notebook doc id differs from notebookId",
+          "body": {
+            "docId": "0192f3c4-0000-7000-8000-000000000003",
+            "kind": "notebook",
+            "notebookId": "0192f3c4-0000-7000-8000-000000000001"
+          }
+        }
+      ]
+    },
+    "moveDocRequest": {
+      "valid": [
+        {
+          "notebookId": "0192f3c4-0000-7000-8000-000000000001"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing notebookId",
+          "body": {}
+        },
+        {
+          "reason": "not a UUIDv7",
+          "body": {
+            "notebookId": "nope"
+          }
+        },
+        {
+          "reason": "null notebookId",
+          "body": {
+            "notebookId": null
+          }
+        }
+      ]
+    },
+    "attachmentStatus": {
+      "valid": [
+        {
+          "size": 1048676,
+          "chunkCount": 2,
+          "mime": "image/png",
+          "uploadedChunks": [
+            0
+          ]
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing mime",
+          "body": {
+            "size": 1,
+            "chunkCount": 1,
+            "uploadedChunks": []
+          }
+        }
+      ]
+    },
+    "createShareRequest": {
+      "valid": [
+        {
+          "shareId": "0192f3c4-0000-7000-8000-000000000001",
+          "target": {
+            "kind": "note",
+            "id": "0192f3c4-0000-7000-8000-000000000003"
+          },
+          "permission": "view",
+          "expiresAt": null
+        },
+        {
+          "shareId": "0192f3c4-0000-7000-8000-000000000001",
+          "target": {
+            "kind": "notebook",
+            "id": "0192f3c4-0000-7000-8000-000000000003"
+          },
+          "permission": "edit"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "unknown permission",
+          "body": {
+            "shareId": "0192f3c4-0000-7000-8000-000000000001",
+            "target": {
+              "kind": "note",
+              "id": "0192f3c4-0000-7000-8000-000000000003"
+            },
+            "permission": "admin"
+          }
+        }
+      ]
+    },
+    "apiError": {
+      "valid": [
+        {
+          "error": {
+            "code": "conflict",
+            "message": "id exists with different content"
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "unknown code",
+          "body": {
+            "error": {
+              "code": "teapot",
+              "message": ""
+            }
+          }
+        }
+      ]
+    }
+  }
+}

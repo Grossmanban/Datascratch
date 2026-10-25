@@ -223,53 +223,119 @@ export const shares = pgTable(
   (t) => [index('shares_user_idx').on(t.userId)],
 );
 
-export const agentTokens = pgTable(
-  'agent_tokens',
+// ---------------------------------------------------------------------------
+// Agents (@datascratch/agents, AgentsStore). Ids and hashes are plugin-defined
+// strings; secrets are stored only as SHA-256 hex.
+// ---------------------------------------------------------------------------
+
+/** What the user allowed an agent to do: a static token or an OAuth authorization. */
+export const agentGrants = pgTable(
+  'agent_grants',
   {
-    id: uuid('id').primaryKey(),
+    id: text('id').primaryKey(),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    kind: text('kind').$type<'static' | 'oauth'>().notNull(),
     name: text('name').notNull(),
-    tokenHash: bytea('token_hash').notNull().unique(),
+    clientId: text('client_id'),
+    notebookIds: uuid('notebook_ids').array().notNull(),
     permission: agentPermission('permission').notNull(),
+    createdAt: ts('created_at').notNull(),
     expiresAt: ts('expires_at'),
     revokedAt: ts('revoked_at'),
     lastUsedAt: ts('last_used_at'),
-    createdAt: created(),
+    secretHash: text('secret_hash').unique(),
   },
-  (t) => [index('agent_tokens_user_idx').on(t.userId)],
+  (t) => [index('agent_grants_user_idx').on(t.userId)],
 );
 
-export const agentTokenNotebooks = pgTable(
-  'agent_token_notebooks',
+export const oauthClients = pgTable('oauth_clients', {
+  clientId: text('client_id').primaryKey(),
+  clientSecretHash: text('client_secret_hash'),
+  clientName: text('client_name').notNull(),
+  clientUri: text('client_uri'),
+  logoUri: text('logo_uri'),
+  redirectUris: text('redirect_uris').array().notNull(),
+  tokenEndpointAuthMethod: text('token_endpoint_auth_method')
+    .$type<'none' | 'client_secret_post' | 'client_secret_basic'>()
+    .notNull(),
+  registration: text('registration').$type<'dcr' | 'cimd'>().notNull(),
+  createdAt: ts('created_at').notNull(),
+});
+
+export const oauthCodes = pgTable('oauth_codes', {
+  codeHash: text('code_hash').primaryKey(),
+  clientId: text('client_id').notNull(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  redirectUri: text('redirect_uri').notNull(),
+  codeChallenge: text('code_challenge').notNull(),
+  resource: text('resource').notNull(),
+  scope: text('scope').notNull(),
+  notebookIds: uuid('notebook_ids').array().notNull(),
+  permission: agentPermission('permission').notNull(),
+  expiresAt: ts('expires_at').notNull(),
+});
+
+export const oauthTokens = pgTable(
+  'oauth_tokens',
   {
-    tokenId: uuid('token_id')
+    tokenHash: text('token_hash').primaryKey(),
+    kind: text('kind').$type<'access' | 'refresh'>().notNull(),
+    grantId: text('grant_id')
       .notNull()
-      .references(() => agentTokens.id, { onDelete: 'cascade' }),
-    notebookId: uuid('notebook_id')
-      .notNull()
-      .references(() => notebooks.id, { onDelete: 'cascade' }),
+      .references(() => agentGrants.id, { onDelete: 'cascade' }),
+    clientId: text('client_id').notNull(),
+    scope: text('scope').notNull(),
+    resource: text('resource').notNull(),
+    expiresAt: ts('expires_at').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.tokenId, t.notebookId] })],
+  (t) => [index('oauth_tokens_grant_idx').on(t.grantId)],
 );
 
 export const agentAudit = pgTable(
   'agent_audit',
   {
-    id: bigserial('id', { mode: 'number' }).primaryKey(),
-    tokenId: uuid('token_id')
+    id: text('id').primaryKey(),
+    grantId: text('grant_id')
       .notNull()
-      .references(() => agentTokens.id, { onDelete: 'cascade' }),
+      .references(() => agentGrants.id, { onDelete: 'cascade' }),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    at: ts('at').notNull(),
+    via: text('via').$type<'mcp' | 'rest'>().notNull(),
     action: text('action').notNull(),
     notebookId: uuid('notebook_id'),
-    docId: uuid('doc_id'),
-    ok: boolean('ok').notNull().default(true),
-    details: jsonb('details').$type<Record<string, unknown>>(),
-    createdAt: created(),
+    noteId: uuid('note_id'),
+    ok: boolean('ok').notNull(),
+    errorCode: text('error_code'),
+    durationMs: integer('duration_ms').notNull(),
   },
-  (t) => [index('agent_audit_token_idx').on(t.tokenId, t.id)],
+  (t) => [index('agent_audit_grant_idx').on(t.grantId, t.at)],
+);
+
+export const securityEventKind = pgEnum('security_event_kind', [
+  'password_changed',
+  'recovery_used',
+  'recovery_key_rotated',
+]);
+
+/** Account security journal (what changed, when, from which device). */
+export const securityEvents = pgTable(
+  'security_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: securityEventKind('kind').notNull(),
+    /** Device the change was made from (null if it no longer exists or for recovery). */
+    deviceId: uuid('device_id'),
+    deviceName: text('device_name'),
+    at: ts('at').notNull().defaultNow(),
+  },
+  (t) => [index('security_events_user_idx').on(t.userId, t.id)],
 );

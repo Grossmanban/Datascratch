@@ -7,6 +7,8 @@ import * as Y from "yjs";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   ATTACHMENT_CHUNK_BYTES,
+  buildShareLink,
+  parseShareLink,
   clientMessageSchema,
   decryptEnvelope,
   deriveRecoveryLoginKey,
@@ -245,5 +247,79 @@ describe("sync vectors", () => {
       expect(clientMessageSchema.safeParse(c.message).success, c.reason).toBe(false);
     for (const c of v.invalid.server)
       expect(serverMessageSchema.safeParse(c.message).success, c.reason).toBe(false);
+  });
+});
+
+describe("extra crypto vectors", () => {
+  it("base64url", () => {
+    const v = load("crypto/base64url.json");
+    for (const c of v.encode) {
+      expect(toBase64Url(fromHex(c.hex))).toBe(c.base64url);
+      expect(toHex(fromBase64Url(c.base64url))).toBe(c.hex);
+    }
+    for (const c of v.rejectDecode) expect(() => fromBase64Url(c.input), c.reason).toThrow();
+  });
+  it("share links", () => {
+    const v = load("crypto/share-link.json");
+    for (const c of v.build) {
+      expect(buildShareLink(c.origin, c.shareId, b(c.key))).toBe(c.url);
+      const p = parseShareLink(c.url);
+      expect(p.shareId).toBe(c.shareId);
+      expect(toBase64Url(p.key)).toBe(c.key);
+    }
+    for (const c of v.reject) expect(() => parseShareLink(c.url), c.reason).toThrow();
+  });
+  it("signup flow", () => {
+    const { inputs: i, expected: e } = load("crypto/signup-flow.json");
+    const pk = derivePasswordKeys(i.password, b(i.salt));
+    expect(formatRecoveryKey(b(i.recoveryKey))).toBe(e.recoveryKeyText);
+    expect(toBase64Url(pk.loginKey)).toBe(e.body.loginKey);
+    expect(toBase64Url(deriveRecoveryLoginKey(b(i.recoveryKey)))).toBe(e.body.recoveryLoginKey);
+    expect(
+      wrapKey(pk.passwordKey, b(i.masterKey), `ds1|key|master|password|${i.userId}`, {
+        nonce: b(i.nonceMasterPassword),
+      }),
+    ).toBe(e.body.wrappedMasterKeyPassword);
+    expect(
+      wrapKey(b(i.recoveryKey), b(i.masterKey), `ds1|key|master|recovery|${i.userId}`, {
+        nonce: b(i.nonceMasterRecovery),
+      }),
+    ).toBe(e.body.wrappedMasterKeyRecovery);
+  });
+});
+
+describe("api vectors", () => {
+  it("valid bodies parse, invalid bodies are rejected", async () => {
+    const contracts = (await import("../src/contracts/index.js")) as unknown as Record<
+      string,
+      { safeParse(v: unknown): { success: boolean } }
+    >;
+    const v = load("api/bodies.json");
+    for (const [name, c] of Object.entries(v.cases) as [string, Json][]) {
+      const schema = contracts[`${name}Schema`];
+      expect(schema, name).toBeDefined();
+      for (const body of c.valid)
+        expect(schema!.safeParse(body).success, `${name} valid`).toBe(true);
+      for (const bad of c.invalid)
+        expect(schema!.safeParse(bad.body).success, `${name}: ${bad.reason}`).toBe(false);
+    }
+  });
+});
+
+describe("recovery key rotation vector", () => {
+  it("builds the expected body", async () => {
+    const { rotateRecoveryKey, unwrapMasterKeyWithRecovery } = await import("../src/index.js");
+    const { inputs: i, expected: e } = load("crypto/recovery-rotate.json");
+    const r = rotateRecoveryKey(b(i.masterKey), b(i.currentLoginKey), i.userId, {
+      recoveryKey: b(i.newRecoveryKey),
+      nonce: b(i.nonce),
+    });
+    expect(r.recoveryKeyText).toBe(e.recoveryKeyText);
+    expect(r.body).toEqual(e.body);
+    expect(
+      toBase64Url(
+        unwrapMasterKeyWithRecovery(r.body.wrappedMasterKeyRecovery, r.recoveryKey, i.userId),
+      ),
+    ).toBe(i.masterKey);
   });
 });

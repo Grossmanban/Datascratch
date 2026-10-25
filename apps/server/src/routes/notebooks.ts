@@ -1,10 +1,10 @@
-import { and, asc, eq, inArray, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { requireUser } from '../auth/guard.js';
 import type { AppContext } from '../context.js';
 import type { DbOrTx } from '../db/client.js';
-import { docs, notebooks, shares, users } from '../db/schema.js';
+import { agentGrants, docs, notebooks, shares, users } from '../db/schema.js';
 import { fromB64, safeEqual, toB64 } from '../lib/encoding.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { topics } from '../sync/hub.js';
@@ -172,6 +172,10 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           await revokeSharesFor(ctx, tx, p.userId, [nbId, ...ids]);
           await tx.delete(docs).where(or(eq(docs.notebookId, nbId), eq(docs.id, nbId)));
           await tx.delete(notebooks).where(eq(notebooks.id, nbId));
+          await tx
+            .update(agentGrants)
+            .set({ notebookIds: sql`array_remove(${agentGrants.notebookIds}, ${nbId}::uuid)` })
+            .where(sql`${nbId}::uuid = ANY(${agentGrants.notebookIds})`);
           return ids;
         });
         for (const d of gone) ctx.hub.publish(topics.doc(d), { type: 'doc_deleted', docId: d });
@@ -213,6 +217,40 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             throw conflict('document exists');
           }
         }
+        return reply.code(204).send(null);
+      },
+    );
+
+    // Move a note to another notebook of the same user. Only the document's metadata
+    // changes; the client re-wraps the note key with the new notebook key and writes
+    // NoteMeta into the new notebook index (crypto.md §1). Access of guests and agents
+    // follows the new notebook immediately.
+    app.patch(
+      '/docs/:id',
+      {
+        schema: {
+          tags: ['docs'],
+          security,
+          params: z.object({ id: id() }),
+          body: z.object({ notebookId: id() }),
+          response: { 204: z.null(), ...errorResponses },
+        },
+      },
+      async (req, reply) => {
+        const p = await requireUser(ctx, req);
+        const [doc] = await db
+          .select()
+          .from(docs)
+          .where(and(eq(docs.id, req.params.id), eq(docs.userId, p.userId)));
+        if (!doc) throw notFound('document not found');
+        if (doc.kind !== 'note') throw badRequest('only note documents can be moved');
+        await ownNotebook(p.userId, req.body.notebookId);
+        if (doc.notebookId === req.body.notebookId) return reply.code(204).send(null);
+        await db
+          .update(docs)
+          .set({ notebookId: req.body.notebookId, updatedAt: sql`now()` })
+          .where(eq(docs.id, doc.id));
+        ctx.hub.publish(topics.doc(doc.id), { type: 'doc_moved', docId: doc.id });
         return reply.code(204).send(null);
       },
     );

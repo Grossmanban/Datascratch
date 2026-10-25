@@ -24,3 +24,10 @@ describe("uuidv7", () => {
     expect(id).toBe("0192f3c4-a1b2-7fff-bf01-020304050607");
   });
 });
+
+describe("guestDeviceId", () => {
+  it("is guest: + 22 base64url chars", async () => {
+    const { guestDeviceId } = await import("../src/ids.js");
+    expect(guestDeviceId()).toMatch(/^guest:[A-Za-z0-9_-]{22}$/);
+  });
+});

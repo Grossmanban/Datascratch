@@ -1,1315 +1,1866 @@
 # Graph Report - Datascratch  (2026-10-25)
 
 ## Corpus Check
-- 10 files · ~329,752 words
+- 164 files · ~461,562 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 10761 nodes · 26178 edges · 274 communities (244 shown, 30 thin omitted)
-- Extraction: 89% EXTRACTED · 11% INFERRED · 0% AMBIGUOUS · INFERRED: 2863 edges (avg confidence: 0.86)
+- 14190 nodes · 35558 edges · 393 communities (348 shown, 45 thin omitted)
+- Extraction: 90% EXTRACTED · 10% INFERRED · 0% AMBIGUOUS · INFERRED: 3443 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
 - mermaid.min.js
 - n
-- e
-- 06-data-server.md
-- EditorCommands
-- api.md
-- development.md
-- InMemoryEditorDocument
-- roadmap.md
-- stack.md
-- 09-agents-api.md
-- h0
-- EditorTheme
-- constructor
-- tn
-- 0031-crdt-yjs.md
-- contracts/sync.ts
-- NoteDocument
-- pU
-- crypto/keys.ts
-- TransactionOrigin
-- contracts/api.ts
 - decisions/README.md
-- Foundation
+- e
+- X8
+- DSPenTool
+- OAuth 2.1 для MCP (2)
+- devDependencies
+- agents-users.ts
 - document-model.md
-- auth.ts
-- handwriting-png.ts
-- sync-protocol.md
-- server/package.json
-- Block
-- ui/package.json
-- Sendable
-- String
-- records.ts
-- String (2)
-- consumeInternal
-- D-39 Parallel sessions; Claude merges into main
-- plugin.ts
-- in-memory.ts
-- store.ts (2)
-- contracts/document.ts
-- r
-- plugin.ts (2)
-- PenLayer.ts
-- strokes.md
-- CoreEditorDocument
-- agents/package.json
-- consume
-- D-30. База данных сервера — PostgreSQL (2)
-- BlockNode (2)
-- scripts/generate.mjs
-- oauth.ts
-- DocumentStyle
-- EditorView
-- InkController
-- update
-- server/src/context.ts
-- draw
-- roadmap.md (2)
-- Data
-- YrsError
-- JSONValue
+- crypto.md
 - Editor.tsx
-- cn
-- agents/src/context.ts
-- plugins/host.ts
-- 04-editor.md
-- String (3)
-- DSRGBA
-- EditorAction
-- 12-craft-features.md
-- caddy
-- cn (2)
-- .make
-- roadmap.md (2)
-- server/src/context.ts (2)
-- PenLayer
-- visit
-- .segments
-- strokes.md (2)
-- DocumentStyle (2)
-- schema/index.ts
-- shared/test/vectors.test.ts
-- br
-- peekChar
-- Equatable
-- server/src/context.ts (2)
-- 0036-space-notebook-folder.md (2)
-- DSPenSelection (2)
-- String (3)
-- CaseIterable
-- plugins/host.ts (2)
-- server/test/helpers.ts (2)
-- steps
-- handwriting-png.ts (2)
-- SyncEngine
-- gFe
-- lib.rs
-- DSTintToken
-- ui/src/index.ts
-- AttachmentRecord
-- TextGeometry
-- BlobStorage
-- shared/package.json
-- ServerMessage
-- DSTintToken (2)
-- PenMode
-- Wt
-- DSSidebarItem
-- steps (2)
-- DSColorToken
-- String (4)
-- DSRGBA (2)
-- ParagraphDecoration
-- EditorView.swift
-- 10-sync.md
-- SyncClient
-- Qt
-- collab/reanchor.ts
-- @datascratch/shared/crypto (libsodium, Argon2id, envelope v1, recovery key DS1-, 1 MiB chunks)
-- Editor.tsx (2)
-- Configuration
-- InkCanvas
-- connection.ts
-- 0032-min-ios-version.md
-- Controls.stories.tsx
-- DatePicker.tsx
-- YValue
-- YValue (2)
-- decisions/README.md (3)
-- Overview.stories.tsx
-- DSCore
-- DS
-- steps (2) (2)
-- cn (2)
-- xml.rs
-- DSDesign Swift package (iOS 26, Swift 6)
-- .content
-- CodingKeys
-- DSDesign Swift package
-- 0013-collaboration-sharing.md
-- common.ts
-- components.test.tsx (2)
-- lib/tokens.ts
-- editorCore.ts
-- .json
-- DSMotionToken
-- ii
-- schema.ts
-- 09-agents-api.md (2)
-- api.md (2)
-- tests.rs
-- 05-organization-design.md
-- design-tokens.md (2)
-- Web editor implementation (@datascratch/web-editor DatascratchEditor)
-- CRDTTransaction
-- MermaidRenderer
-- 0018-monetization.md
-- .iso
-- compat/generate.mjs
-- YOp
-- DSAvatar
-- .polygon
-- Контракт: шифрование (v1)
-- check
-- 4. Editor
-- tasks.ts
-- InkInputRecognizer
-- uOe
-- @datascratch/design-tokens README
-- steps (3)
-- DSDocRow
-- yjs_compat.rs
-- base
-- .classify
-- agents-api.md (5)
-- agents-api.md (3)
-- Новая группа (2)
-- risks.md (2)
-- factories.ts
-- AttachmentManager
-- ClientMessage
-- with
-- sync-protocol.md (2)
-- DSFormatBarItem
-- .contains
-- DSDocRow (2)
-- DSSidebarItem (2)
-- design.yml
-- PenToolbar.tsx
-- agents-api.md
-- agents: пакет @datascratch/agents — Fastify-плагин: MCP (SDK v2, спецификация 2026-07-28, Streamable HTTP), OAuth 2.1 (CIMD, DCR, PKCE, экран согласия), статические токены, REST /v1/agent/*, журнал, лимиты, PNG рукописи
-- Foundations.stories.tsx
-- FakeRESTServer
-- compat/package.json
-- Дизайн-система «Тихая бумага» v1 (D-15, D-38): packages/design-tokens, packages/ui (27 веб-компонентов), apps/ios/Packages/DSDesign, design.yml; Source Serif 4 вместо Newsreader
-- DSSkeleton
-- DSFeedback
-- Handwriting input types (text marks, margin notes, drawing block, drawing on images, Scribble)
-- DocList.tsx
-- Пошагово: сервер на VPS (Hetzner)
-- DSStrings
-- .generate
-- .decode (2)
-- agents/package.json (2)
-- DateChipTests
-- EditorDemo
-- 03-pencil.md
-- Agents API Contract (MCP, REST, OAuth) v1 — approved by coordinator 2026-10-25
-- Kinds of handwriting input
-- 0036-space-notebook-folder.md (4)
-- pen.spec.tsx
-- contracts/README.md
-- FrameRateBoost
-- 3. Apple Pencil в тексте — ключевая фича
-- TestProvider
+- components.test.tsx
+- TransactionOrigin
+- 0039-parallel-sessions.md
+- Agents API Contract (MCP, REST, OAuth) v1 draft
+- 06-data-server.md (2)
+- OAuth 2.1 для MCP
+- NoteDocument
 - ref_react
-- Tokens.generated.swift
-- DSSegment
-- r8
-- Дизайн и организация
-- MemorySyncHub
-- Открытые вопросы
-- context.data methods (listAgentNotebooks, loadDoc, docSeqs, applyUpdate, createNoteDoc, loadAttachmentImage)
-- Web pen layer (packages/web-editor/src/pen)
-- Stream design-system (claude/design-system): packages/design-tokens, packages/ui, apps/ios/Packages/DSDesign, design.yml — статус: v1 влит в main (токены, веб-компоненты, DSDesign), доводка
-- SyncErrorCode
-- EditorDemoTests
-- Новая группа (3)
-- OAuth consent screen ('Quiet paper' server HTML page)
-- edit_note operations (insert, replace, delete, move, replace_text)
-- Реализация сервера (поток server, 2026-10-25)
-- 12. Функции по мотивам Craft
-- Stream design-system (claude/design-system): packages/design-tokens, packages/ui, apps/ios/Packages/DSDesign, design.yml — статус: v1 влит в main (токены, веб-компоненты, DSDesign), доводка (2)
-- design-tokens/README.md
-- smoke-test.sh (2)
-- Organization Hierarchy (Account > Space > Notebook > Folder > Note) (2) (2)
-- project.yml
-- Обзор архитектуры
+- constructor
+- InMemoryEditorDocument
+- stack.md (2)
+- design-tokens.md (2)
+- contracts/sync.ts (2)
+- CaseIterable (2)
+- shell/Sidebar.tsx
+- DSPenTool (2)
+- AppModel
+- EditorTheme
+- Datascratch Server (apps/server)
+- Sendable
+- server/package.json
+- design-tokens.md
+- EditorCommands
+- DSColorToken
+- runtime.ts
+- server
+- store.ts (2)
+- records.ts
+- Sendable (2)
+- tn
+- 09-agents-api.md
+- contracts/api.ts
+- consumeInternal
+- store.ts
+- TransactionOrigin (2)
+- decisions/README.md (2)
+- h0
+- shared.ts
+- pU
 - True
-- strokes.md (3)
-- EditorDemo (2)
-- KeyService
+- infra/README.md
+- CaseIterable
+- .content
+- JSONValue
+- server/src/context.ts
+- Stroke
+- agents-api.md
+- CoreEditorDocument
+- InkController
+- ParagraphDecoration
+- CalendarPage.tsx
+- actions.ts (2)
+- consume
+- crypto/keys.ts (2)
+- CalendarPage.tsx (2)
 - plugins/host.ts (2)
+- EditorView
+- runtime.ts (2)
+- Overview.stories.tsx
+- DSDesign Swift package
+- in-memory.ts
+- SceneModel
+- String
+- Foundation
+- .from
+- Gi
+- .json
+- devDependencies (2)
+- .make
+- schema.ts (2)
+- draw
+- 0004-encryption-and-api.md
+- 0024-product-name.md (2)
+- shell/Sidebar.tsx (2)
+- ui/src/lib/tokens.ts (2)
+- DocumentStyle
+- InkInputRecognizer
+- collab/reanchor.ts
+- server/src/context.ts (2)
+- Editor.tsx (2)
+- String (2)
+- String (3)
+- session.ts
+- DocumentCollectionView
+- EditorAction
+- br
+- shares.ts
+- apps/web — веб-клиент Datascratch
+- sync-protocol.md
+- edits.ts
+- Equatable
+- shared/test/vectors.test.ts (2)
+- caddy
+- dependencies (2)
+- document/blocks.ts
+- Projection
+- gFe
+- visit
+- LocalStore
+- DSTypeToken
+- sync-protocol.md (2)
+- AppModel (2)
+- shared/test/vectors.test.ts
+- .make (2)
+- .polygon
+- peekChar
+- actions.ts
+- steps
+- agents-api.md (2)
+- Qt
+- steps (2)
+- 08-sharing.md
+- DSRGBA
+- 11-nfr.md
+- DSCore
+- DSInlineChipStyle (2)
+- SyncClient
+- BlockNode
+- EditorDocument
+- caddy (2)
+- open-questions.md (2)
+- DocPage.tsx (2)
+- CodingKeys
+- Wt
+- Server PostgreSQL schema (encrypted bytea content; spaces/folders/meta inside account/notebook docs)
+- 2026-10-25 (вторая половина дня)
+- with (2)
+- steps (2)
+- web-editor/package.json (2)
+- Datascratch Server (apps/server) (2)
+- 04-editor.md
+- Datascratch Server (apps/server) (2)
+- TextGeometry
+- with (2) (2)
+- EditorView.swift
+- cn.ts
+- DSTaskCheckbox
+- .buttons
+- design-tokens.md (2)
+- plugins/host.ts (2) (2)
+- AttachmentRecord (2)
+- lib.rs
+- document/blocks.ts (2)
+- 2026-10-25 (вторая половина дня) (2)
+- PenLayer
+- CoverImages
+- PenMode
+- shared/test/sync.test.ts (2)
+- store.ts (2) (2)
+- DSMotionToken
+- DatascratchTests
+- 12-craft-features.md (2)
+- DS
+- package.json (2)
+- 0004-encryption-and-api.md (2)
+- generate.ts
+- DSCore (2)
+- InkCanvas
+- ii
+- DSBackdrop
+- CodingKeys (2)
+- DSDesign Swift package (2)
+- Скрипт обновления графа (2)
+- CRDTTransaction (2)
+- DocumentCollectionView (2)
+- Stroke (2)
+- infra/README.md (2)
+- DSBackdrop (2)
+- Foundation (2)
+- InkController (2)
+- .json (2)
+- LocalStore (2)
+- LocalStore (3)
+- SyncClient (2)
+- actions.ts (2)
+- removeNode
+- crypto.md (2)
+- agents-api.md (3)
+- design-tokens.md (4)
+- Configuration
+- tests.rs
+- DSLanguage
+- ItemID
+- MCP tools / REST operations table
+- 0004-encryption-and-api.md (3)
+- MCP tools / REST operations set
+- CRDTTransaction
+- InkInputRecognizer (2)
+- MermaidRenderer
+- properties
+- dependencies (2) (2)
+- Модель данных и глоссарий (2)
+- DSDateChip (2)
+- DSTintToken (2) (2)
+- web-editor/package.json
+- base
+- Organization Hierarchy (Account > Space > Notebook > Folder > Note) (2)
+- Правила для ИИ и документации (4)
+- MCP tools / REST operations set (2)
+- design-tokens/package.json
+- DSTintToken
+- NOe
+- CodeTokenKind
+- base (2)
+- Как устроено
+- AgentsContext plugin-server interface
+- True (2)
+- RecoveryKey (2)
+- crypto.md (2) (2)
+- .classify
+- agents-api.md (4)
+- runtime.ts (2) (2)
+- CodingKeys (3)
+- AttachmentRecord (2) (2)
+- agents-data.ts
+- Контракт: дизайн-токены «Тихая бумага» (v1)
+- DSDocRow
+- 0024-product-name.md (2) (3)
+- e2e.sh
+- Stroke (2) (2)
+- Контракт: REST API сервера (v1)
+- DSMotionToken (2)
+- DSStrings
+- crypto.md (2) (3)
+- risks.md
+- Модель данных и глоссарий (2) (2)
+- DSInlineChipStyle (2) (2)
+- Обзор архитектуры
+- index.js
+- DSColorToken (2)
+- build-xcframework.sh
+- Модель данных и глоссарий (2) (3)
+- F_e
+- DSTintToken (4)
+- AgentsContext plugin-server interface (2)
+- web/vite.config.ts
+- i18n/index.ts
+- compilerOptions
+- DSTintToken (2)
+- DSButtonBody
+- MCP tools / REST operations set (3)
+- DSSegment
+- Stroke (2) (3)
+- EditorDemo
+- DemoImages
+- SecureStore
+- open-questions.md (2) (2)
+- AppModel (3)
+- compilerOptions (2)
+- with
+- compilerOptions (2) (2)
+- DSSegment (2)
+- 0039-parallel-sessions.md (2)
+- True (3)
+- DocPage.tsx (3)
+- ui/test/setup.ts (2)
+- Новая группа
+- deploy.yml
+- images
+- 12. Функции по мотивам Craft
+- ui/test/setup.ts
+- ui/test/setup.ts (2)
+- FrameRateBoost
+- design-tokens/README.md
+- web-editor/vite.config.ts
+- scripts (2)
+- edit_note tool
+- 09-agents-api.md (2)
+- with (2)
+- Запуск
+- e2e-real-server
+- peerDependencies
+- CodingKeys (2)
+- AccountError (2)
+- String (4)
+- CodingKeys (4)
+- DSTintToken (3)
+- 11-nfr.md (2)
+- 0039-parallel-sessions.md (3)
+- MCP tools / REST operations set (4)
+- steps (3)
+- EditorDemoTests
+- Новая группа (2)
+- env (2)
+- 06-data-server.md (2) (2)
+- DSTintToken (4)
+- server (2)
+- environment
+- web.yml
+- with (3)
+- with (4)
+- e2e-real-server (2)
+- План этапов и отложенное (2)
+- deploy.sh
 - scripts
+- .send
+- agents/tsconfig.build.json
+- shared/tsconfig.json
+- test-vectors/tsconfig.json
+- Services/AccountService.swift
+- DSTintToken (5)
+- InkCanvas (2)
+- Модель данных и глоссарий (2) (4)
+- Demo/project.yml
+- 2026-10-25 (вторая половина дня) (3)
+- Модель данных и глоссарий (2) (5)
+- Web editor implementation (@datascratch/web-editor DatascratchEditor)
+- bootstrap.sh
+- design-tokens.md (3)
+- resources
+- MCP tools / REST operations set (5)
+- Обзор архитектуры (2)
+- String (5)
+- EditorDemo (2)
+- 0004-encryption-and-api.md (4)
+- DSTintToken (6)
+- DSTintToken (7)
+- DSTintToken (8)
+- permissions
+- with (5)
+- healthcheck
+- smoke.mjs
+- @datascratch/ui — веб-компоненты «Тихая бумага»
+- 12. Функции по мотивам Craft (2)
+- yjs
+- .prettierrc.json
+- server.yml (2)
+- MCP tools / REST operations set (6)
 - options
 - EditorDemoUITests
 - Демо «Живой штрих» (EditorDemo)
 - C1e
-- tTe
-- 5. Организация заметок и дизайн
-- packages/shared — `@datascratch/shared`
-- packages/test-vectors — общие тестовые векторы
-- build-xcframework.sh
-- 0007-no-handwriting-recognition.md
-- .prettierrc.json
-- Новая группа (4)
-- vB
+- with (3)
 - Web editor showcase page (index.html)
+- healthcheck (2)
 - build-linux.sh
+- devDependencies (2) (2)
+- @datascratch/ui — веб-компоненты «Тихая бумага» (2)
+- schema.ts (2) (2)
+- build-xcframework.sh (2)
+- DSTintToken (9)
+- with (6)
+- DSCore (4)
+- .prettierrc.json (2)
+- Новая группа (3)
+- vB
+- DSCore (5)
+- tsup
+- ./document
+- exports
+- Web editor showcase page (index.html) (2)
+- MCP tools / REST operations set (7)
+- build-linux.sh (2)
 - generate-bindings.sh
 - yrs-ffi-hash.sh
+- tsup (2)
+- exports (2)
+- typescript@^5.9.0
+- MCP tools / REST operations set (8)
+- MCP tools / REST operations set (9)
+- MCP tools / REST operations set (10)
+- MCP tools / REST operations set (11)
+- MCP tools / REST operations set (12)
+- MCP tools / REST operations set (13)
+- MCP tools / REST operations set (14)
+- MCP tools / REST operations set (15)
 - pnpm-workspace.yaml
-- CLOSED: GitHub repository Grossmanban/Datascratch
-- CLOSED: Mac with Apple Silicon available; iPad with Apple Pencil Pro
+- AppModel (services) and SceneModel (window navigation), multi-window WindowGroup
+- agents.authenticate(dsa_ token) -> AgentPrincipal { tokenId, userId, permission, notebookIds } or null; updates lastUsedAt
+- Server does not echo client's own updates (except catch-up updates from another device)
+- D-08 PDF pen annotations after MVP
+- dependencies (3)
 - Local run without domain (http://localhost:8080; SERVER_BIND=0.0.0.0 only for LAN testing, no passwords over plain HTTP)
-- Контракт: REST API сервера (v1)
 - yrs-ffi
 
 ## God Nodes (most connected - your core abstractions)
 1. `e()` - 207 edges
 2. `r()` - 175 edges
-3. `t()` - 109 edges
-4. `n()` - 94 edges
-5. `i()` - 93 edges
-6. `cn()` - 90 edges
-7. `InMemoryEditorDocument` - 85 edges
-8. `X8()` - 79 edges
-9. `NoteDocument` - 74 edges
-10. `BlockNode` - 73 edges
+3. `cn()` - 146 edges
+4. `t()` - 109 edges
+5. `LibraryStore` - 105 edges
+6. `n()` - 94 edges
+7. `i()` - 93 edges
+8. `NoteDocument` - 91 edges
+9. `InMemoryEditorDocument` - 85 edges
+10. `X8()` - 79 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Перестройка блоков (§4.1a): при разделении, слиянии, смене типа и перемещении блока клиент в той же транзакции заменяет затронутый штрих копией (новый strokeId, те же точки, якоря по соответствию символов)` --semantically_similar_to--> `rebaseRedoneAnchors()`  [INFERRED] [semantically similar]
-  docs/architecture/contracts/strokes.md → packages/shared/src/strokes/store.ts
-- `deviceName при регистрации устройства: обязательно в /auth/login, необязательно в signup и recovery/finish (уточнение потока server)` --references--> `LoginRequest`  [INFERRED]
-  docs/architecture/contracts/api.md → packages/shared/src/contracts/api.ts
-- `Правило ref в error: для ошибок push/snapshot ref = их clientMsgId, иначе — docId при наличии` --references--> `ErrorMessage`  [INFERRED]
-  docs/architecture/contracts/sync-protocol.md → packages/shared/src/contracts/sync.ts
-- `Server update (git pull + rebuild, auto migrations)` --references--> `runMigrations()`  [INFERRED]
-  infra/README.md → apps/server/src/db/client.ts
-- `2. Поля штриха` --references--> `block()`  [INFERRED]
-  docs/architecture/contracts/strokes.md → packages/design-tokens/scripts/generate.mjs
+- `4.2. Схема блоков` --references--> `at()`  [INFERRED]
+  docs/architecture/contracts/document-model.md → apps/server/test/retention.test.ts
+- `DSTaskRow task row` --semantically_similar_to--> `TaskRow`  [INFERRED] [semantically similar]
+  apps/ios/Packages/DSDesign/README.md → packages/ui/README.md
+- `Slash menu and format toolbar` --semantically_similar_to--> `DSSuggestionList («/» and [[ ]] menu)`  [INFERRED] [semantically similar]
+  docs/spec/04-editor.md → apps/ios/Packages/DSDesign/README.md
+- `DSGlassPanel (Liquid Glass)` --semantically_similar_to--> `Card / DocCard / GlassPanel / Backdrop`  [INFERRED] [semantically similar]
+  apps/ios/Packages/DSDesign/README.md → packages/ui/README.md
+- `Вложения во внешнем S3 (STORAGE_DRIVER=s3, D-26)` --references--> `S3Storage`  [INFERRED]
+  infra/README.md → apps/server/src/storage/s3.ts
 
 ## Import Cycles
 - 2-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs`
 - 3-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/events.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/events.rs`
 
 ## Hyperedges (group relationships)
+- **Офлайн-первый конвейер синхронизации веба** — apps_web_readme_yjs_doc, apps_web_readme_syncclient, apps_web_readme_dexiesyncstorage, apps_web_readme_dexie_indexeddb, apps_web_readme_rest_op_queue [EXTRACTED 1.00]
+- **Жизненный цикл ключа восстановления в вебе** — apps_web_readme_recovery_key, apps_web_readme_recovery_key_confirmed_flag, apps_web_readme_rotate_recovery_key, apps_web_readme_security_events [EXTRACTED 1.00]
+- **Тестовая инфраструктура веба** — apps_web_readme_vitest_unit_tests, apps_web_readme_playwright_e2e, apps_web_readme_mock_server, apps_web_readme_test_hooks, apps_web_readme_e2e_real_server [EXTRACTED 1.00]
+- **Design Tokens Pipeline (contract, tokens.json, generator, contrast test)** — docs_architecture_contracts_design_tokens, packages_design_tokens_readme_tokens_json, packages_design_tokens_readme_generator, packages_design_tokens_readme_contrast_test [EXTRACTED 1.00]
 - **iOS DSEditor package modules** — docs_spec_03_pencil_ds_ink, docs_spec_03_pencil_ds_editor_model, docs_spec_03_pencil_ds_editor [EXTRACTED 1.00]
 - **Live stroke mechanism: anchor + em offset + line split** — docs_spec_03_pencil_d_05_live_stroke, docs_spec_03_pencil_char_anchor_offset, docs_spec_03_pencil_line_split, docs_spec_03_pencil_yjs_relative_position [EXTRACTED 1.00]
-- **Local edit → store/outbox → encrypt → push** — apps_ios_packages_dscore_readme_crdtdocument, apps_ios_packages_dscore_readme_localstore, apps_ios_packages_dscore_readme_dscrypto, apps_ios_packages_dscore_readme_syncengine, apps_ios_packages_dscore_readme_syncclient [EXTRACTED 1.00]
+- **Recovery Key Lifecycle (optional check, rotation, security log)** — docs_spec_07_encryption_login_recovery, docs_changelog_optional_recovery_key_check, docs_changelog_recovery_key_rotation, docs_changelog_security_events_log [EXTRACTED 1.00]
+- **Two Notebook Encryption Modes** — docs_spec_07_encryption_private_notebooks, docs_spec_07_encryption_agent_notebooks, docs_spec_07_encryption_per_notebook_key, docs_spec_07_encryption_server_key_separation [EXTRACTED 1.00]
 - **Cross-platform re-anchoring on text recreation** — docs_spec_03_pencil_web_reanchoring, docs_spec_03_pencil_ios_cross_block_reanchor, docs_spec_03_pencil_strokes_contract_s4_1a, docs_spec_03_pencil_d_35_rule [INFERRED 0.85]
 
-## Communities (274 total, 30 thin omitted)
+## Communities (393 total, 45 thin omitted)
 
 ### Community 0 - "mermaid.min.js"
 Cohesion: 0.00
-Nodes (264): _7(), a8e(), addDocument(), addParents(), ait(), AT_LEAST_ONE(), AT_LEAST_ONE1(), AT_LEAST_ONE2() (+256 more)
+Nodes (270): _7(), a8e(), addDocument(), addParents(), ait(), AN(), AT_LEAST_ONE(), AT_LEAST_ONE1() (+262 more)
 
 ### Community 1 - "n"
 Cohesion: 0.02
-Nodes (241): $9(), Aet(), aRe(), AS(), b(), B3(), bB(), bh() (+233 more)
+Nodes (245): $9(), Aet(), aRe(), AS(), b(), B3(), bB(), bh() (+237 more)
 
-### Community 2 - "e"
+### Community 2 - "decisions/README.md"
+Cohesion: 0.02
+Nodes (142): libsodium на всех платформах (libsodium-wrappers-sumo в TS, swift-sodium в iOS), Web PWA Client (React, TipTap, Yjs, IndexedDB), Astro (landing page), Automerge (fallback CRDT), Dexie (IndexedDB), Drizzle ORM, GRDB (SQLite), MinIO (rejected) (+134 more)
+
+### Community 3 - "e"
 Cohesion: 0.01
-Nodes (238): $3(), _4(), _8(), addAstNodeRegionWithAssignmentsTo(), aMe(), aO(), aOe(), r() (+230 more)
+Nodes (169): $3(), _4(), aO(), B7(), BNe(), bOe(), bTe(), buildEarlyExitMessage() (+161 more)
 
-### Community 3 - "06-data-server.md"
+### Community 4 - "X8"
 Cohesion: 0.02
-Nodes (119): AgentPrincipal, AgentScope, AppContext, apps/server — сервер, apps/server — сервер Datascratch, BlobStorage (disk.ts, s3.ts), Broadcaster interface (sync/hub.ts, in-memory), @datascratch/agents package (+111 more)
+Nodes (130): _8(), addAstNodeRegionWithAssignmentsTo(), aEe(), Ake(), aMe(), aOe(), r(), AW() (+122 more)
 
-### Community 4 - "EditorCommands"
-Cohesion: 0.06
-Nodes (16): deleteLassoSelection(), EditorCommands, Segment, EditorDocument, .allBlocks, MarkdownShortcuts, .document, Projection (+8 more)
-
-### Community 5 - "api.md"
-Cohesion: 0.03
-Nodes (115): contracts/crypto.md (envelope v1), SessionDto, Аккаунт и устройства: /me, /devices (отзыв сессий), удаление аккаунта, mime вложения: передаётся в POST /attachments и возвращается в GET /attachments/:id для докачки, Вложения: загрузка и докачка по кускам (/attachments/:id/chunks/:index), лимит 200 МБ, Эндпоинты /auth: prelogin, signup, login, refresh, logout, recovery, password, bad_request — код ошибки REST для некорректного запроса (тело/параметры не прошли проверку), Аутентификация Bearer: accessToken 15 мин + refreshToken 30 дней с ротацией (+107 more)
-
-### Community 6 - "development.md"
-Cohesion: 0.03
-Nodes (90): Перед любой работой: порядок чтения, Datascratch — правила для ИИ (CLAUDE.md), Datascratch — приложение заметок (Obsidian + Notesnook, перо в тексте), Datascratch — правила для ИИ, Статусы решений: РЕШЕНО / ПРЕДЛОЖЕНО / ОТКРЫТО, Доступ внешних ИИ-агентов через MCP/REST, graphify, Apple Pencil в тексте — ключевая фича и главный риск (+82 more)
-
-### Community 7 - "InMemoryEditorDocument"
+### Community 5 - "DSPenTool"
 Cohesion: 0.05
-Nodes (42): ChangeOrigin, local, redo, remote, textInput, undo, DocumentChange, .isEmpty (+34 more)
+Nodes (29): CryptoAD, DSCrypto, PasswordKeys, RecoveryKeyFormat, InMemorySecretStore, KeychainSecretStore, KeyRing, PasswordChangeMaterial (+21 more)
 
-### Community 8 - "roadmap.md"
+### Community 6 - "OAuth 2.1 для MCP (2)"
 Cohesion: 0.04
-Nodes (96): apps/ios — iPhone + iPad, apps/web — веб-клиент, agents-api v1 — предложен потоком agents и утверждён координатором 2026-10-25, Контракт меняет только сессия-координатор; исполнитель присылает предложение, Обводки и стрелки «растягиваются» вместе с текстом; при проблемах — изменение контракта через координатора, Разрыв штриха по строкам: соседние точки на разных line fragments → отдельные сегменты, 2026-10-25, 2026-10-25 (вторая половина дня) (+88 more)
+Nodes (95): RFC-7009, RFC-8252, RFC-9207, ACCESS_PREFIX, bearer(), GrantService, REFRESH_PREFIX, SCOPE_READ (+87 more)
 
-### Community 9 - "stack.md"
-Cohesion: 0.04
-Nodes (90): Agent rate limits (in-memory counters, D-25) and OAuth 2.1 for MCP are the plugin's responsibility, Записываются только сглаженные coalesced-точки завершённого штриха, без predicted, Транспорт wss://<host>/v1/sync: JSON-кадры с type, base64url, ping/pong каждые 25 с, agent_tokens / agent_audit_log Tables, Agent Edit Flow (agent notebook), Accounts, OAuth, Tokens Service, edit_note MCP Tool, External AI Agents (+82 more)
+### Community 7 - "devDependencies"
+Cohesion: 0.06
+Nodes (21): .newNoteDestination, .filtered, .title, LibraryBackend, LibraryPersistence, LibrarySnapshot, LibraryStore, .activeSpace (+13 more)
 
-### Community 10 - "09-agents-api.md"
-Cohesion: 0.03
-Nodes (86): Журнал действий агента GET /agent-tokens/:id/audit, AgentToken { id, name, notebookIds, permission, expiresAt, createdAt, lastUsedAt } — без секрета, Токены агентов /agent-tokens: блокноты, read / read_write, срок; токен показывается один раз, Контракт agents-api.md (MCP и REST для самих агентов) — появится на этапе агентов, PATCH /notebooks/:id/mode — включение режима «для агентов» передаёт notebookKey, выключение удаляет серверную обёртку, Режим «для агентов»: клиент передаёт notebookKey по TLS, сервер оборачивает его serverKey; расшифровка только при запросе агента с токеном, blockId (UUIDv7) у каждого блочного узла — для точечных правок агентов, заметок на полях и комментариев, D-04. Одновременно сквозное шифрование и доступ по API (+78 more)
-
-### Community 11 - "h0"
+### Community 8 - "agents-users.ts"
 Cohesion: 0.02
-Nodes (102): AN(), Ar(), aze(), bAe(), _Be(), bT(), buildKeywordPattern(), buildKeywordToken() (+94 more)
+Nodes (90): .background, .foreground, .localizedName, Tint, blue, gray, green, indigo (+82 more)
 
-### Community 12 - "EditorTheme"
+### Community 9 - "document-model.md"
+Cohesion: 0.03
+Nodes (115): Обложка документа в вебе, masterKey — 32 случайных байта, создаётся при регистрации, шифрует account-документ, 1. Три вида документов Yjs, 3. Документ `notebook` (индекс блокнота), 4.1. Совместимость с TipTap / y-prosemirror, 4.2. Схема блоков, 4.3. `meta` заметки, 4.4. `comments` (+107 more)
+
+### Community 10 - "crypto.md"
+Cohesion: 0.03
+Nodes (119): Shared test vectors (VectorTests), Access-токен 15 мин + refresh-токен 30 дней с ротацией, Аккаунт и устройства (/me, /devices), Режим блокнота private/agent, Токены агентов (/agent-tokens, аудит), Agent Tokens Endpoints, contracts/agents-api.md (будущий), Вложения (/attachments, куски, докачка, 200 МБ) (+111 more)
+
+### Community 11 - "Editor.tsx"
 Cohesion: 0.04
+Nodes (88): NoteBackdrop, NoteCover, NoteStyle, Provider(), TooltipProvider, UIProvider(), renderUI(), AwarenessEditor() (+80 more)
+
+### Community 12 - "components.test.tsx"
+Cohesion: 0.05
+Nodes (95): Avatar(), AvatarProps, AvatarStack(), AvatarStackProps, initials(), Presence, Backdrop(), BackdropProps (+87 more)
+
+### Community 13 - "TransactionOrigin"
+Cohesion: 0.03
+Nodes (75): DSPenSelection.selecting(…) tool switching logic, DSPenMode, .eraserMode, highlighter, lasso, marker, pen, pencil (+67 more)
+
+### Community 14 - "0039-parallel-sessions.md"
+Cohesion: 0.04
+Nodes (104): apps/ios — iPhone + iPad, ios-app.yml CI workflow, ios-release.yml: TestFlight without Mac (RELEASE.md), iOS universal app (Swift 6, SwiftUI shell, UIKit + TextKit 2 editor, GRDB, Yrs, libsodium), Localization catalog build (build_catalog.py, Localizable.xcstrings), TestFlight release without Mac (ios-release.yml, RELEASE.md), XcodeGen project.yml (D-28), Временные замены (до пакетов других потоков) (+96 more)
+
+### Community 15 - "Agents API Contract (MCP, REST, OAuth) v1 draft"
+Cohesion: 0.04
+Nodes (59): StrokeAuthor, StrokeTool, packPoints(), ProsemirrorMapping, AnchorBox, bindToSurface(), bindToText(), Bounds (+51 more)
+
+### Community 16 - "06-data-server.md (2)"
+Cohesion: 0.03
+Nodes (101): Agent rate limits (in-memory counters, D-25) and OAuth 2.1 for MCP are the plugin's responsibility, agent_tokens / agent_audit_log Tables, Anchor (textRange / paragraph / drawingBlock / image), Agent Edit Flow (agent notebook), Accounts, OAuth, Tokens Service, edit_note MCP Tool, External AI Agents, File Storage (disk or external S3) (+93 more)
+
+### Community 17 - "OAuth 2.1 для MCP"
+Cohesion: 0.05
+Nodes (94): Stroke, ANCHOR_KINDS, AnchorKind, MIN_SEGMENT_POINTS, ORPHAN_STROKE_PURGE_DAYS, POINT_BYTES, POINT_FIELDS, REFERENCE_FONT_SIZE (+86 more)
+
+### Community 18 - "NoteDocument"
+Cohesion: 0.05
+Nodes (33): Backdrop, .yValue, Comment, .fields, Cover, .value, DocumentError, notFound (+25 more)
+
+### Community 19 - "ref_react"
+Cohesion: 0.04
+Nodes (57): api, ApiError, doFetch(), NetworkError, request(), RequestOptions, toError(), TokenSource (+49 more)
+
+### Community 20 - "constructor"
+Cohesion: 0.02
+Nodes (110): add(), ase(), atLeastOneInternalRecord(), atLeastOneSepFirstInternalRecord(), bMe(), br(), cacheForContext(), calculate() (+102 more)
+
+### Community 21 - "InMemoryEditorDocument"
+Cohesion: 0.05
+Nodes (41): ChangeOrigin, local, redo, remote, textInput, undo, DocumentChange, .isEmpty (+33 more)
+
+### Community 22 - "stack.md (2)"
+Cohesion: 0.05
+Nodes (92): RFC-4648, AD, ATTACHMENT_CHUNK_BYTES, DEFAULT_KDF, ENVELOPE_OVERHEAD, ENVELOPE_VERSION, KDF_ALG, KDF_MEM (+84 more)
+
+### Community 23 - "design-tokens.md (2)"
+Cohesion: 0.04
+Nodes (84): clip(), collectHandwriting(), describeSpans(), findHandwriting(), HandwritingItem, HandwritingKind, HINT_RU, hintOf() (+76 more)
+
+### Community 24 - "contracts/sync.ts (2)"
+Cohesion: 0.04
+Nodes (10): APIClient, .currentSession, .isSignedIn, HTTPTransport, SecretSessionStore, SessionStore, AuthSession, AttachmentManager (+2 more)
+
+### Community 25 - "CaseIterable (2)"
+Cohesion: 0.03
+Nodes (81): D-02. Отдельной десктоп-версии нет, на компьютере — веб, Последствия, Решение, D-03. Платформы: нативные iPhone и iPad + полноценный веб, Full-featured web client (TypeScript), Контекст, Последствия, Решение (+73 more)
+
+### Community 26 - "shell/Sidebar.tsx"
+Cohesion: 0.07
+Nodes (92): useRecoveryUnconfirmed(), cachedNoteKey(), rememberNotebookKey(), rememberNoteKey(), enqueueOp(), runtime(), acc(), belongsTo() (+84 more)
+
+### Community 27 - "DSPenTool (2)"
+Cohesion: 0.03
+Nodes (86): Access rights: user / guest / agent, Access rules: user = own docs; guest = shared note/notebook docs (push/snapshot only with edit); agent = only token notebooks in agent mode, also enforced by PostgreSQL RLS, AgentScope: one transaction under role ds_agent with RLS by token; listNotebooks/listDocs/getDoc, notebookKey/docKey, readDoc, applyUpdate, createNoteDoc, attachments, audit, tx, Agents API contract (agents-api.md), agents.authenticate(token) -> AgentPrincipal, AgentsContext interface, agents data (plugins/agents-data.ts), Пакет @datascratch/agents (MCP, OAuth 2.1, REST, токены, журнал, PNG) (+78 more)
+
+### Community 28 - "AppModel"
+Cohesion: 0.03
+Nodes (67): MemorySyncHub (in-memory reference protocol server), base64UrlDecodedLength(), AckMessage, ackMessageSchema, CLIENT_PLATFORMS, ClientAwarenessMessage, clientAwarenessMessageSchema, clientMsgIdSchema (+59 more)
+
+### Community 29 - "EditorTheme"
+Cohesion: 0.05
 Nodes (19): AttachmentFactory, BlockAttachment, BlockAttachmentViewProvider, BlockContentView, DrawingBlockView, EditorAttachmentResolver, FileBlockView, ImageBlockView (+11 more)
 
-### Community 13 - "constructor"
-Cohesion: 0.02
-Nodes (98): add(), ase(), atLeastOneInternalRecord(), atLeastOneSepFirstInternalRecord(), cacheForContext(), calculate(), cancel(), chopInput() (+90 more)
-
-### Community 14 - "tn"
-Cohesion: 0.02
-Nodes (100): all(), allElements(), BIe(), children(), computeExports(), computeExportsForNode(), computeIsSubtype(), computeLocalScopes() (+92 more)
-
-### Community 15 - "0031-crdt-yjs.md"
-Cohesion: 0.03
-Nodes (79): MinIO (rejected), Убран MinIO (D-26): файлы на диске, внешнее S3 — опционально, Убран Redis (D-25): один процесс сервера, очередь — pg-boss на PostgreSQL, Утверждён технологический стек (D-21), отказ от ядра на Rust (D-22), Canvas + Pointer Events, Custom pen renderer (Metal vs Core Animation TBD), D-21. Технологический стек, Dexie (IndexedDB) (+71 more)
-
-### Community 16 - "contracts/sync.ts"
-Cohesion: 0.03
-Nodes (71): base64UrlDecodedLength(), AckMessage, ackMessageSchema, CLIENT_PLATFORMS, ClientAwarenessMessage, clientAwarenessMessageSchema, ClientMessage, clientMsgIdSchema (+63 more)
-
-### Community 17 - "NoteDocument"
-Cohesion: 0.07
-Nodes (20): TransactionOrigin, .description, .isOutgoing, local, other, remote, storage, system (+12 more)
-
-### Community 18 - "pU"
-Cohesion: 0.03
-Nodes (90): a(), aA(), aFe(), aU(), B_e(), bA(), brighter(), c8() (+82 more)
-
-### Community 19 - "crypto/keys.ts"
+### Community 30 - "Datascratch Server (apps/server)"
 Cohesion: 0.06
-Nodes (75): RFC-4648, DEFAULT_KDF, ENVELOPE_OVERHEAD, ENVELOPE_VERSION, KDF_ALG, KDF_MEM, KDF_OPS, KDF_OUTPUT_BYTES (+67 more)
-
-### Community 20 - "TransactionOrigin"
-Cohesion: 0.06
-Nodes (15): AccountDocument, .accountDocId, .activeTab, .dailyNotebookId, .formatVersion, NotebookDocument, .formatVersion, .inbox (+7 more)
-
-### Community 21 - "contracts/api.ts"
-Cohesion: 0.03
-Nodes (81): Блокноты и документы (D-36), Шеринг (D-13, D-37), ACCESS_TOKEN_TTL_MS, AGENT_PERMISSIONS, AgentPermission, AgentToken, agentTokenSchema, API_PREFIX (+73 more)
-
-### Community 22 - "decisions/README.md"
-Cohesion: 0.03
-Nodes (63): iOS universal app (Swift 6, SwiftUI shell, UIKit + TextKit 2 editor, GRDB, Yrs, libsodium), XcodeGen project.yml (D-28), Журнал изменений (CHANGELOG), D-02. Отдельной десктоп-версии нет, на компьютере — веб, Последствия, Решение, D-03. Платформы: нативные iPhone и iPad + полноценный веб, Full-featured web client (TypeScript) (+55 more)
-
-### Community 23 - "Foundation"
-Cohesion: 0.04
-Nodes (31): VersionRestoreTests, NSAttributedString.Key, DSEditorInfo, BlockKind, blockquote, bulletList, callout, codeBlock (+23 more)
-
-### Community 24 - "document-model.md"
-Cohesion: 0.05
-Nodes (77): AgentNotebook, Тестовые векторы crypto: KDF, конверты, Base32 ключа восстановления, куски вложений (Swift и TS), Чернила пера и маркеры (ink.*, highlight.*), 5. Производные данные (не синхронизируются), 6. Версия формата, y-prosemirror не записывает атрибуты узлов со значением null: отсутствующий атрибут = null (значение по умолчанию схемы), Документ account: spaces, notebooks, settings, starred, tabs (ключ — masterKey), Документ account (пространства, NotebookRef, настройки) (+69 more)
-
-### Community 25 - "auth.ts"
-Cohesion: 0.08
-Nodes (68): Fastify + zod with OpenAPI generated from code (GET /v1/openapi.json), Revoking a device, a share or deleting the account immediately closes WebSocket connections (code 4401), buildApp(), codeForStatus(), requireUser(), devices, notebooks, refreshTokens (+60 more)
-
-### Community 26 - "handwriting-png.ts"
-Cohesion: 0.07
-Nodes (61): insertBlocks(), initNoteContent(), clip(), collectHandwriting(), describeSpans(), findHandwriting(), HandwritingItem, HandwritingKind (+53 more)
-
-### Community 27 - "sync-protocol.md"
-Cohesion: 0.06
-Nodes (8): APIClient, .currentSession, .isSignedIn, HTTPTransport, SessionStore, AuthSession, .accessExpiry, normalizeEmail()
-
-### Community 28 - "server/package.json"
-Cohesion: 0.03
-Nodes (77): dependencies, @aws-sdk/client-s3@^3.1156.0, drizzle-orm@^0.45.4, fastify@^5.12.7, @fastify/cors@^11.3.1, fastify-plugin@^6.0.1, @fastify/rate-limit@^11.2.1, @fastify/swagger@^9.9.2 (+69 more)
-
-### Community 29 - "Block"
-Cohesion: 0.06
-Nodes (24): Array, .attributes, Block, .blockId, .isKnown, .isTextBlock, .text, .xml (+16 more)
-
-### Community 30 - "ui/package.json"
-Cohesion: 0.03
-Nodes (69): dependencies, clsx@^2.1.1, cmdk@^1.1.1, @datascratch/design-tokens@workspace:*, @fontsource-variable/inter@^5.3.0, @fontsource-variable/jetbrains-mono@^5.3.0, @fontsource-variable/source-serif-4@^5, lucide-react@^1.61.0 (+61 more)
+Nodes (22): TransactionOrigin, .description, .isOutgoing, local, other, remote, storage, system (+14 more)
 
 ### Community 31 - "Sendable"
-Cohesion: 0.07
-Nodes (47): NoteDerivedData, NoteLinkEntry, TaskEntry, Backdrop, .yValue, Comment, Cover, .value (+39 more)
-
-### Community 32 - "String"
-Cohesion: 0.04
-Nodes (43): AnchorKind, block, drawing, image, text, Author, .value, Kind (+35 more)
-
-### Community 33 - "records.ts"
-Cohesion: 0.07
-Nodes (71): PMNode, TASK_STATES, listTopLevelBlocks(), setTitle(), ATTR_TEXT_BLOCKS, attrText(), buildBacklinks(), deltaText() (+63 more)
-
-### Community 34 - "String (2)"
-Cohesion: 0.04
-Nodes (23): CRDTDocument, .canRedo, .canUndo, .clientId, CRDTSubscription, DeepHandler, DocKind, account (+15 more)
-
-### Community 35 - "consumeInternal"
-Cohesion: 0.04
-Nodes (74): addToResyncTokens(), atLeastOneInternalLogic(), atLeastOneSepFirstInternalLogic(), attemptInRepetitionRecovery(), BACKTRACK(), buildFullFollowKeyStack(), canPerformInRuleRecovery(), canRecoverWithSingleTokenDeletion() (+66 more)
-
-### Community 36 - "D-39 Parallel sessions; Claude merges into main"
-Cohesion: 0.03
-Nodes (51): Guest drawing via edit link, Rejected design options: Clean Neutral, Graphite, Architecture contracts (docs/architecture/contracts), Claude coordinator session merges to main on green CI, Work streams with ownership zones (claude/<stream> branches), docker compose up one-command server launch, infra/README.md deployment guide, Decision log (ADR table) (+43 more)
-
-### Community 37 - "plugin.ts"
-Cohesion: 0.04
-Nodes (72): dependencies, @datascratch/design-tokens@workspace:*, @datascratch/shared@workspace:*, @datascratch/ui@workspace:*, lowlight@^3.3.0, mermaid@^12.2.0, @tiptap/core@^3.32.0, @tiptap/extension-code-block-lowlight@^3.32.0 (+64 more)
-
-### Community 38 - "in-memory.ts"
-Cohesion: 0.04
-Nodes (19): AgentDataSource, AgentEditOrigin, AgentGrant, AgentNotebook, AgentsStore, AuditEntry, AuthorizationCode, LoadedDoc (+11 more)
-
-### Community 39 - "store.ts (2)"
 Cohesion: 0.06
-Nodes (61): AuthorKind, NOTE_ROOTS, ANCHOR_KINDS, AnchorKind, MIN_SEGMENT_POINTS, ORPHAN_STROKE_PURGE_DAYS, POINT_BYTES, POINT_FIELDS (+53 more)
+Nodes (69): Font, mono, sans, serif, NoteStyle, Paper, dots, grid (+61 more)
 
-### Community 40 - "contracts/document.ts"
+### Community 32 - "server/package.json"
+Cohesion: 0.03
+Nodes (86): dependencies, @aws-sdk/client-s3@^3.1156.0, @datascratch/agents@workspace:^, @datascratch/shared@workspace:^, drizzle-orm@^0.45.4, fastify@^5.12.7, @fastify/cors@^11.3.1, fastify-plugin@^6.0.1 (+78 more)
+
+### Community 33 - "design-tokens.md"
 Cohesion: 0.04
-Nodes (69): 2. Документ `account`, 3. Документ `notebook` (индекс блокнота), DateOnly, IsoDateTime, Uuid, ACCOUNT_ROOTS, ACCOUNT_SETTINGS_KEYS, AccountSettings (+61 more)
+Nodes (69): apps/web index.html (PWA entry), Inline theme bootstrap script (ds.theme), Web favicon (SVG), Blue ink stroke logo mark on warm paper (#2E5BDB on #FAF8F4), PWA icon 192x192 (blue ink stroke on warm paper), PWA icon 512x512 (blue ink stroke on warm paper), Blue ink stroke brand motif on warm off-white background, Organization Hierarchy (Account > Space > Notebook > Folder > Note) (+61 more)
 
-### Community 41 - "r"
-Cohesion: 0.04
-Nodes (61): aEe(), Ake(), AW(), bke(), bW(), By(), cke(), CW() (+53 more)
+### Community 34 - "EditorCommands"
+Cohesion: 0.09
+Nodes (17): deleteLassoSelection(), BlockKind, blockquote, bulletList, callout, codeBlock, heading, orderedList (+9 more)
 
-### Community 42 - "plugin.ts (2)"
-Cohesion: 0.07
-Nodes (48): ACCESS_PREFIX, bearer(), REFRESH_PREFIX, SCOPE_READ, SCOPE_WRITE, STATIC_PREFIX, RFC-8707, VerifiedToken (+40 more)
-
-### Community 43 - "PenLayer.ts"
-Cohesion: 0.07
-Nodes (49): StrokePoint, ProsemirrorMapping, AnchorBox, bindToText(), Bounds, distToSegment(), expandToWords(), fractionInside() (+41 more)
-
-### Community 44 - "strokes.md"
+### Community 35 - "DSColorToken"
 Cohesion: 0.05
-Nodes (61): Блок drawing (высота в pt; штрихи — в strokes), Отображаемая высота drawing = height × ширинаБлока / 600 (опорная ширина 600, как в формуле толщины штриха), 1. Где хранятся, 2. Поля штриха, 3. Упаковка точек, 5. Отрисовка толщины, 6. Тестовые векторы, anchorKind: text | block (заметка на полях) | image | drawing (+53 more)
+Nodes (73): ButtonProps, Ctx, Drop, MenuItem, queue, renderItems(), Variant, CommandGroup() (+65 more)
 
-### Community 45 - "CoreEditorDocument"
-Cohesion: 0.08
-Nodes (10): CoreEditorDocument, .blocks, .canRedo, .canUndo, .coreOrigin, .strokes, .style, Snapshot (+2 more)
-
-### Community 46 - "agents/package.json"
+### Community 36 - "runtime.ts"
 Cohesion: 0.04
-Nodes (66): dependencies, @datascratch/design-tokens@workspace:^, @datascratch/shared@workspace:^, @expo-google-fonts/inter@^0.4.2, @expo-google-fonts/newsreader@^0.4.1, fastify-plugin@^6.0.1, mdast-util-from-markdown@^2.1.0, mdast-util-gfm@^3.1.0 (+58 more)
+Nodes (44): Haptics, CommandPaletteView, .body, .commands, .documents, .ranked, FuzzyMatch, Kind (+36 more)
 
-### Community 47 - "consume"
+### Community 37 - "server"
+Cohesion: 0.03
+Nodes (77): AUTHOR_KINDS, AuthorKind, authorKindSchema, Base64Url, BASE64URL_REGEX, base64UrlBytesSchema(), base64UrlLength(), base64UrlSchema (+69 more)
+
+### Community 38 - "store.ts (2)"
+Cohesion: 0.03
+Nodes (70): Client messages: hello, subscribe, unsubscribe, push, snapshot, awareness, Sync unit: Yjs document (account, notebook, note), Error codes: bad_request, unauthorized, forbidden, doc_not_found, payload_too_large (2 MiB / 50 MiB decoded), rate_limited, protocol_mismatch, internal, Guest device id: guest:<22-char hash> (fits 64-char limit), Client keeps lastSeq per document and catches up on connect, Offline queue until ack; unacknowledged never removed, Server messages: welcome, updates, update, ack, awareness, error, Server assigns seq to encrypted updates, stores and relays; does not merge or read (+62 more)
+
+### Community 39 - "records.ts"
+Cohesion: 0.07
+Nodes (71): TASK_STATES, ATTR_TEXT_BLOCKS, attrText(), buildBacklinks(), deltaText(), extractNoteLinks(), extractTags(), extractTasks() (+63 more)
+
+### Community 40 - "Sendable (2)"
+Cohesion: 0.05
+Nodes (45): Backdrop, dusk, ember, meadow, mist, none, sand, NoteBlock (+37 more)
+
+### Community 41 - "tn"
+Cohesion: 0.03
+Nodes (79): all(), allElements(), computeExports(), computeExportsForNode(), computeIsSubtype(), computeLocalScopes(), createDehyrationContext(), createDescription() (+71 more)
+
+### Community 42 - "09-agents-api.md"
+Cohesion: 0.04
+Nodes (59): D-01. Хранение заметок — в базе данных на своём сервере, не в файлах, Markdown files option (rejected), Obsidian, Own server storage, Контекст, Последствия, Рассмотренные варианты, Решение (+51 more)
+
+### Community 43 - "contracts/api.ts"
+Cohesion: 0.03
+Nodes (74): ACCESS_TOKEN_TTL_MS, AGENT_PERMISSIONS, AgentToken, agentTokenSchema, API_ERROR_CODES, API_PREFIX, API_ROUTES, ApiError (+66 more)
+
+### Community 44 - "consumeInternal"
+Cohesion: 0.04
+Nodes (76): addToResyncTokens(), atLeastOneInternalLogic(), atLeastOneSepFirstInternalLogic(), attemptInRepetitionRecovery(), BACKTRACK(), buildFullFollowKeyStack(), canPerformInRuleRecovery(), canRecoverWithSingleTokenDeletion() (+68 more)
+
+### Community 45 - "store.ts"
+Cohesion: 0.10
+Nodes (56): signOut(), setNotebookMode(), authErrorMessage(), LoginPage(), submit(), RecoverPage(), submit(), RecoveryKeyPanel() (+48 more)
+
+### Community 46 - "TransactionOrigin (2)"
+Cohesion: 0.07
+Nodes (20): Array, .attributes, Block, .isKnown, .isTextBlock, .xml, BlockType, Inline (+12 more)
+
+### Community 47 - "decisions/README.md (2)"
+Cohesion: 0.07
+Nodes (50): AuthCard, .body, CheckboxToggleStyle, ConfirmRecoveryKeyView, .body, ErrorText, .body, FieldBox (+42 more)
+
+### Community 48 - "h0"
+Cohesion: 0.04
+Nodes (73): Ar(), aze(), bT(), buildKeywordPattern(), buildKeywordToken(), buildKeywordTokens(), buildTerminalToken(), buildTerminalTokens() (+65 more)
+
+### Community 49 - "shared.ts"
+Cohesion: 0.07
+Nodes (62): accountApi, agentTokensApi, authApi, docsApi, noAuth, notebooksApi, notebooksModeApi, opBodies (+54 more)
+
+### Community 50 - "pU"
+Cohesion: 0.03
+Nodes (71): a(), aA(), aFe(), aU(), bA(), brighter(), c8(), cA() (+63 more)
+
+### Community 51 - "True"
+Cohesion: 0.05
+Nodes (46): AgentScope, Db, migrationsFolder, withAgentScope(), agentAudit, agentGrants, agentPermission, attachmentChunks (+38 more)
+
+### Community 52 - "infra/README.md"
+Cohesion: 0.05
+Nodes (62): R-11 Single VPS Is a Single Point of Failure, Ежедневные резервные копии БД и файлов вне VPS с проверкой восстановления (R-11), backup.sh script, Адрес сервера для iPhone и iPad, Если выкладка не удалась, Как развернуть сервер Datascratch на своём VPS без компьютера (GitHub Actions), Какие адреса в интернете нужны серверу, Память (+54 more)
+
+### Community 53 - "CaseIterable"
+Cohesion: 0.03
+Nodes (57): Appearance, dark, .id, light, system, AppSettings, .appearance, .colorScheme (+49 more)
+
+### Community 54 - ".content"
+Cohesion: 0.05
+Nodes (36): CoverAction, file, .kind, .noteId, photo, reposition, CoverHeader, .body (+28 more)
+
+### Community 55 - "JSONValue"
+Cohesion: 0.04
+Nodes (31): XmlNode, .attributes, .children, .elementName, .textContent, YValue, .boolValue, .dataValue (+23 more)
+
+### Community 56 - "server/src/context.ts"
+Cohesion: 0.05
+Nodes (30): bearer(), deviceActive(), readCookie(), requireUserOrGuest(), verifyGuestToken(), verifyUserToken(), verifyWebCookie(), WEB_COOKIE (+22 more)
+
+### Community 57 - "Stroke"
+Cohesion: 0.04
+Nodes (47): AnchorKind, block, drawing, image, text, Hint, arrow, circle (+39 more)
+
+### Community 58 - "agents-api.md"
+Cohesion: 0.06
+Nodes (31): check_text_range(), decoding(), diff_update(), merge_updates(), mismatch(), missing_map(), nested_map(), state_vector_from_update() (+23 more)
+
+### Community 59 - "CoreEditorDocument"
+Cohesion: 0.08
+Nodes (9): CoreEditorDocument, .blocks, .canRedo, .canUndo, .coreOrigin, .strokes, Snapshot, CoreEditorDocumentTests (+1 more)
+
+### Community 60 - "InkController"
+Cohesion: 0.07
+Nodes (9): InkController, .commands, .eraserRadius, Session, Target, block, text, PenSample (+1 more)
+
+### Community 61 - "ParagraphDecoration"
+Cohesion: 0.06
+Nodes (17): AttributedRenderer, MarksBox, .hash, NSAttributedString.Key, ParagraphDecoration, .taskState, BlockLayoutFragment, .containerWidth (+9 more)
+
+### Community 62 - "CalendarPage.tsx"
+Cohesion: 0.09
+Nodes (35): buildMcpServer(), RenderedImage, Principal, requireWrite(), AgentService, folderPath(), FolderView, NoteMetaView (+27 more)
+
+### Community 63 - "actions.ts (2)"
+Cohesion: 0.08
+Nodes (8): CoreLibrary, .knownNoteIds, .remote, CoreLibraryRemote, Overlay, WrappedKeyIndex, CRDTSubscription, NoteMetaContent
+
+### Community 64 - "consume"
 Cohesion: 0.06
 Nodes (65): acquireParserWorker(), ACTION(), after(), assign(), assignWithoutOverride(), before(), BG(), callFunction() (+57 more)
 
-### Community 48 - "D-30. База данных сервера — PostgreSQL (2)"
-Cohesion: 0.09
-Nodes (34): buildMcpServer(), Principal, requireWrite(), AgentService, folderPath(), FolderView, NoteMetaView, NoteSummary (+26 more)
-
-### Community 49 - "BlockNode (2)"
-Cohesion: 0.06
-Nodes (25): BlockNode, .isTextblock, .plainText, .textLength, InlineAtom, InlineElement, atom, .length (+17 more)
-
-### Community 50 - "scripts/generate.mjs"
-Cohesion: 0.07
-Nodes (51): doc, s1, update, aue(), kue(), Sue(), D-39. Разработка параллельными сессиями; Claude сам вливает в main, Контекст (+43 more)
-
-### Community 51 - "oauth.ts"
+### Community 65 - "crypto/keys.ts (2)"
 Cohesion: 0.08
-Nodes (48): RFC-7009, RFC-8252, RFC-9207, GrantService, scopeFor(), authorizationServerMetadata(), canonicalResource(), clientAuth() (+40 more)
+Nodes (54): Revoking a device, a share or deleting the account immediately closes WebSocket connections (code 4401), requireUser(), devices, refreshTokens, securityEvents, users, b64(), fromB64() (+46 more)
 
-### Community 52 - "DocumentStyle"
+### Community 66 - "CalendarPage.tsx (2)"
+Cohesion: 0.10
+Nodes (57): attachmentUrl(), TaskRow, addTask(), dailyNotebookId(), deleteTask(), editTaskText(), findDaily(), findInbox() (+49 more)
+
+### Community 67 - "plugins/host.ts (2)"
 Cohesion: 0.05
-Nodes (20): DemoModel, .fileURL, .style, DemoView, .body, .toolbarContent, FPSCounter, HUDView (+12 more)
+Nodes (48): backdropNames, colorNames, highlightNames, inkNames, tintNames, tokens, ColorPanel(), ColorPanelProps (+40 more)
 
-### Community 53 - "EditorView"
-Cohesion: 0.07
-Nodes (5): EditorRepresentable, EditorViewTests, EditorView, tapped(), taskItem()
+### Community 68 - "EditorView"
+Cohesion: 0.06
+Nodes (6): NativeEditorRepresentable, EditorRepresentable, EditorViewTests, EditorView, tapped(), taskItem()
 
-### Community 54 - "InkController"
+### Community 69 - "runtime.ts (2)"
+Cohesion: 0.04
+Nodes (63): dependencies, clsx@^2.1.1, cmdk@^1, @datascratch/design-tokens@workspace:^, @datascratch/shared@workspace:^, @datascratch/ui@workspace:^, @datascratch/web-editor@workspace:^, dexie-react-hooks@^4.4.0 (+55 more)
+
+### Community 70 - "Overview.stories.tsx"
 Cohesion: 0.08
-Nodes (8): InkController, .commands, .eraserRadius, Session, Target, block, text, PenSample
+Nodes (43): resizeImage(), GuestSession, channels, colorFor(), COLORS, joinPresence(), PresenceSend, PresenceUser (+35 more)
 
-### Community 55 - "update"
+### Community 71 - "DSDesign Swift package"
+Cohesion: 0.07
+Nodes (57): CI design workflow and snapshot rendering, D-15 Design principle, D-38 Design system decision, D-39 design-system stream, CI design.yml: сборка, Swift Testing, снимки dsdesign-snapshots, Токены дизайна (Tokens.generated.swift из tokens.json), design-tokens contract (docs/architecture/contracts/design-tokens.md), packages/design-tokens tokens.json (+49 more)
+
+### Community 72 - "in-memory.ts"
+Cohesion: 0.04
+Nodes (14): AgentDataSource, AgentEditOrigin, AgentGrant, AgentNotebook, AgentsStore, AuditEntry, LoadedDoc, RFC-7591 (+6 more)
+
+### Community 73 - "SceneModel"
+Cohesion: 0.04
+Nodes (45): .body, NoteWindow, .body, FocusedValues, SceneModel, .library, .sidebar, SceneSheet (+37 more)
+
+### Community 74 - "String"
+Cohesion: 0.06
+Nodes (56): AgentPrincipal, AgentScope, withAgentScope RLS (ds_agent role), agent_audit table, agent_grants table, agent_tokens / agent_token_notebooks tables, attachments, attachment_chunks and storage_trash tables (chunks stored in file storage att/<id>/<index>; trigger fills storage_trash), attachments / attachment_chunks tables (+48 more)
+
+### Community 75 - "Foundation"
+Cohesion: 0.05
+Nodes (20): .linkedTitles, .tags, TextScanner, CoreLibraryRemoteTests, CoreLibrarySafetyTests, RecordingRemote, CoverImagesTests, ModelTests (+12 more)
+
+### Community 76 - ".from"
+Cohesion: 0.06
+Nodes (33): CalendarView, .body, DailyNoteCard, .body, DayCell, .body, DayStrip, .body (+25 more)
+
+### Community 77 - "Gi"
 Cohesion: 0.04
 Nodes (61): bl(), build(), buildDocuments(), calculateHorizontalSpace(), calculateSpace(), calculateSpaceIfDrawnHorizontally(), calculateSpaceIfDrawnVertical(), calculateVerticalSpace() (+53 more)
 
-### Community 56 - "server/src/context.ts"
+### Community 78 - ".json"
 Cohesion: 0.06
-Nodes (33): pg-boss@^12.38.0, Server tests: vitest against a real PostgreSQL (TEST_DATABASE_URL), base64urlKey, bool, Config, ConfigSchema, loadConfig(), createContext() (+25 more)
+Nodes (50): Блок drawing (высота в pt; штрихи — в strokes), Отображаемая высота drawing = height × ширинаБлока / 600, CalloutTone, REFERENCE_BLOCK_WIDTH, CoreOptions, HostRef, BlockId, blockIdPluginKey (+42 more)
 
-### Community 57 - "draw"
+### Community 79 - "devDependencies (2)"
+Cohesion: 0.04
+Nodes (59): dependencies, @datascratch/design-tokens@workspace:^, @datascratch/shared@workspace:^, @expo-google-fonts/inter@^0.4.2, @expo-google-fonts/newsreader@^0.4.1, fastify-plugin@^6.0.1, mdast-util-from-markdown@^2.1.0, mdast-util-gfm@^3.1.0 (+51 more)
+
+### Community 80 - ".make"
+Cohesion: 0.07
+Nodes (10): docs, Locked, BenchmarkTests, Conn, eventually(), FakeFactory, FakeSyncServer, Stored (+2 more)
+
+### Community 81 - "schema.ts (2)"
+Cohesion: 0.07
+Nodes (5): ServerAccessService, ServerAccountService, .isServerBacked, ServerConnection, ServerSharingService
+
+### Community 82 - "draw"
 Cohesion: 0.05
 Nodes (58): _5(), am(), arc(), Bj(), C5(), C9(), cAe(), circle() (+50 more)
 
-### Community 58 - "roadmap.md (2)"
-Cohesion: 0.05
-Nodes (44): Web client app (Vite + React + TS PWA, TipTap + Yjs, Canvas pen, Dexie, Radix + Tailwind + Motion), applyBlockOperations (block ops for agents), @datascratch/shared/contracts (types and zod schemas, parseClientMessage/parseServerMessage), createAccountKeys / rekeyPassword, crypto.md contract, @datascratch/shared/crypto (libsodium, Argon2id, envelope v1, recovery key DS1-, 1 MiB chunks), D-35 (strokes on deleted text kept), @datascratch/shared package (ESM, strict TS, tsup) (+36 more)
+### Community 83 - "0004-encryption-and-api.md"
+Cohesion: 0.06
+Nodes (46): Datascratch — правила для ИИ (CLAUDE.md), Datascratch — приложение заметок (Obsidian + Notesnook, перо в тексте), Datascratch — правила для ИИ, Доступ внешних ИИ-агентов через MCP/REST, graphify, Apple Pencil в тексте — ключевая фича и главный риск, Запись итогов сессии docs/history/ГГГГ-ММ-ДД-session-NN.md, Стартовый хук Claude Code (.claude/hooks/session-start.sh) (+38 more)
 
-### Community 59 - "Data"
+### Community 84 - "0024-product-name.md (2)"
+Cohesion: 0.12
+Nodes (25): N, UPDATES_PER_NOTE, createDatabase(), agentsPlugin, createAgentsContext(), grant(), setupNotebook(), until() (+17 more)
+
+### Community 85 - "shell/Sidebar.tsx (2)"
 Cohesion: 0.08
-Nodes (14): CRDTUpdates, .jsonObject, KeyRing, PasswordChangeMaterial, .fields, AccountService, ShareLink, .url (+6 more)
+Nodes (41): App(), queryClient, router, createNewRecoveryKey(), syncRecoveryFlag(), onSignedOut(), recoveryConfirmedLocally(), useAuth (+33 more)
 
-### Community 60 - "YrsError"
+### Community 86 - "ui/src/lib/tokens.ts (2)"
+Cohesion: 0.08
+Nodes (43): snippetAround(), DateChipProps, tones, Calendar(), CalendarProps, DatePicker(), DatePickerProps, Popover (+35 more)
+
+### Community 87 - "DocumentStyle"
 Cohesion: 0.07
-Nodes (18): check_text_range(), decoding(), diff_update(), is_inside(), merge_updates(), mismatch(), missing_map(), nested_map() (+10 more)
+Nodes (19): DemoModel, .fileURL, .style, DemoView, .body, .toolbarContent, FPSCounter, HUDView (+11 more)
 
-### Community 61 - "JSONValue"
+### Community 88 - "InkInputRecognizer"
 Cohesion: 0.06
-Nodes (19): AttributedRenderer, MarksBox, .hash, JSONValue, array, bool, .boolValue, .isNull (+11 more)
+Nodes (10): InkWidth, StrokeCodecError, invalidLength, StrokePointCodec, UUIDv7, InkWidthTests, StrokeCodecTests, StrokeVectorTests (+2 more)
 
-### Community 62 - "Editor.tsx"
+### Community 89 - "collab/reanchor.ts"
 Cohesion: 0.08
-Nodes (39): DEFAULT_NOTE_STYLE, NoteBackdrop, NoteCover, NoteStyle, App(), attachments, awA, awB (+31 more)
+Nodes (47): iOS pen palette model (text mode, pen/pencil/marker/highlighter/eraser/lasso, width steps 0.6/1/1.6, stroke/pixel eraser, finger drawing, undo/redo), withDSAnimation (reduced-motion aware springs), DatascratchEditor component, Task blocks (checkbox, date chips, context menu), Button / IconButton / Kbd, Card / DocCard / GlassPanel / Backdrop, ColorPanel / LinkPanel, CommandPalette (cmdk, Cmd+K) (+39 more)
 
-### Community 63 - "cn"
-Cohesion: 0.09
-Nodes (45): CommandGroup(), CommandItem(), CommandItemProps, CommandPalette(), CommandPaletteProps, useCommandPaletteShortcut(), ContextMenu, ContextMenuCheckboxItem (+37 more)
-
-### Community 64 - "agents/src/context.ts"
-Cohesion: 0.10
-Nodes (9): DocumentRecord, Kind, push, snapshot, LocalStore, .migrator, OutboxItem, SnapshotPolicy (+1 more)
-
-### Community 65 - "plugins/host.ts"
-Cohesion: 0.09
-Nodes (43): agents.authenticate(dsa_ token) -> AgentPrincipal { tokenId, userId, permission, notebookIds } or null; updates lastUsedAt, AgentScope (listNotebooks, docKey, readDoc, applyUpdate, createNoteDoc, attachments, audit, tx), agents.authenticate(token) -> AgentPrincipal, agents.withScope(principal, fn): transaction under ds_agent with RLS, PluginHost (apiVersion, log, config, db, pool, jobs, crypto, agents), withAgentScope(), attachmentChunks, attachments (+35 more)
-
-### Community 66 - "04-editor.md"
-Cohesion: 0.05
-Nodes (39): Производные данные строятся локально: индекс задач, полнотекстовый поиск, бэклинки, теги, Inline-узлы noteLink ([[ ]]) и tag (без #, вложенность через /), taskItem: taskId, state open / done / cancelled, scheduled, deadline, completedAt, hint — распознанная форма (underline, strike, circle, highlight, arrow, scribble) для агентов и экспорта, D-01. Хранение заметок — в базе данных на своём сервере, не в файлах, Markdown files option (rejected), Obsidian, Own server storage (+31 more)
-
-### Community 67 - "String (3)"
-Cohesion: 0.09
-Nodes (16): CryptoAD, CryptoError, decryptionFailed, invalidKeyLength, invalidRecoveryKey, kdfFailed, malformedEnvelope, sodiumInit (+8 more)
-
-### Community 68 - "DSRGBA"
+### Community 90 - "server/src/context.ts (2)"
 Cohesion: 0.06
-Nodes (37): DSGlassPanel, .body, GlassPreview, .body, View, Color, .dsAccent, .dsCanvas (+29 more)
+Nodes (27): pino@^10.4.0, Drizzle schema and SQL migrations (drizzle-kit db:generate, DB_MIGRATE_ON_START; 0001 = Row-Level Security + file cleanup trigger), Server tests: vitest against a real PostgreSQL (TEST_DATABASE_URL), base64urlKey, bool, ConfigSchema, loadConfig(), runMigrations() (+19 more)
 
-### Community 69 - "EditorAction"
+### Community 91 - "Editor.tsx (2)"
+Cohesion: 0.11
+Nodes (28): Folder, AnyKey, .intValue, .fields, Kind, folder, note, notebook (+20 more)
+
+### Community 92 - "String (2)"
+Cohesion: 0.06
+Nodes (10): CRDTDocument, .canRedo, .canUndo, .clientId, CRDTUpdates, UpdateHandler, CRDTDocumentTests, Fixture (+2 more)
+
+### Community 93 - "String (3)"
+Cohesion: 0.11
+Nodes (9): normalizeEmail(), APIValidation, CreateShareRequest, RegisterDocRequest, SecurityEvent, SecurityEventKind, passwordChanged, recoveryKeyRotated (+1 more)
+
+### Community 94 - "session.ts"
+Cohesion: 0.08
+Nodes (43): dexie@^4, setTokenSource(), deviceId(), deviceKey(), openLocal(), SealedBlob, sealLocal(), dropStaleRecoveryKey() (+35 more)
+
+### Community 95 - "DocumentCollectionView"
+Cohesion: 0.07
+Nodes (45): allRoute, appLayout, authLayout, calendarRoute, connectRoute, docRoute, folderRoute, guestRoute (+37 more)
+
+### Community 96 - "EditorAction"
 Cohesion: 0.05
 Nodes (29): DocumentUndoManager, .canRedo, .canUndo, .groupingLevel, .isUndoRegistrationEnabled, .redoActionName, .undoActionName, EditorAction (+21 more)
 
-### Community 70 - "12-craft-features.md"
-Cohesion: 0.07
-Nodes (38): Ежедневные заметки и «Входящие» (kind daily / inbox) в блокноте settings.dailyNotebookId, Organization hierarchy (Account > Space > Notebook > Folder > Note), Проекты, личное, работа, учёба не смешиваются; минимум кнопок на экране, Предложенная структура: пространства → вложенные папки; поперёк — вложенные и умные теги, цвета, избранное, недавние, D-15. Дизайн — основная концепция продукта, Design references: Things 3, Linear, Craft, Arc, Последствия, Решение (+30 more)
-
-### Community 71 - "caddy"
-Cohesion: 0.04
-Nodes (47): context, dockerfile, depends_on, environment, image, ports, profiles, restart (+39 more)
-
-### Community 72 - "cn (2)"
-Cohesion: 0.08
-Nodes (38): buttonClasses(), ButtonProps, ButtonSize, ButtonVariant, sizes, variants, Dialog, DialogClose (+30 more)
-
-### Community 73 - ".make"
-Cohesion: 0.08
-Nodes (8): Locked, Conn, eventually(), FakeFactory, FakeSyncServer, Stored, StubTransport, SyncTests
-
-### Community 74 - "roadmap.md (2)"
-Cohesion: 0.07
-Nodes (26): Axis, horizontal, vertical, DSPenSelection, .color, .points, DSPenTool, eraser (+18 more)
-
-### Community 75 - "server/src/context.ts (2)"
+### Community 97 - "br"
 Cohesion: 0.05
-Nodes (45): concurrency, cancel-in-progress, group, runs-on, steps, timeout-minutes, POSTGRES_DB, POSTGRES_PASSWORD (+37 more)
+Nodes (48): aD(), addHiddenToken(), addHiddenTokens(), aie(), bD(), clamp(), cOe(), createGrammarElementIdMap() (+40 more)
 
-### Community 76 - "PenLayer"
+### Community 98 - "shares.ts"
+Cohesion: 0.10
+Nodes (39): Server makes snapshots itself every 500 updates / 1 MB for agent edits (it knows the key), buildApp(), BuildOptions, codeForStatus(), shares, ApiError, ApiErrorCode, badRequest() (+31 more)
+
+### Community 99 - "apps/web — веб-клиент Datascratch"
+Cohesion: 0.07
+Nodes (40): Notebook 'for agents' mode, apps/web — веб-клиент Datascratch, @datascratch/shared (core), IndexedDB через Dexie (ds-device, ds-account-<userId>), DexieSyncStorage (src/data/syncStorage.ts), E2E против настоящего сервера (E2E_SERVER_URL, CI-джоб с PostgreSQL), EditorHost (src/editor/hosts.ts), Guest session (/s/:shareId#k=) (+32 more)
+
+### Community 100 - "sync-protocol.md"
+Cohesion: 0.05
+Nodes (39): anchorKind: text | block (margin note) | image | drawing, Block rebuild re-anchoring (§4.1a), Circles and arrows stretch with text; change goes through coordinator if bad in practice, Deleted-text rule (D-35), Line-break stroke split, Live stroke anchoring: each point bound to nearest character of its line, offset in em, Margin note coords from text column: x in column widths (may be <0 or >1), y from paragraph top, Orphaned stroke (orphanedAt, 30 days, §4.2) (+31 more)
+
+### Community 101 - "edits.ts"
+Cohesion: 0.10
+Nodes (43): BuildContext, cloneInto(), copyChildren(), fill(), fillInline(), insertBlock(), insertBlocks(), withAgentMark() (+35 more)
+
+### Community 102 - "Equatable"
 Cohesion: 0.12
-Nodes (6): packPoints(), putStroke(), bindToSurface(), PenLayer, prepareCanvas(), pointerSample()
+Nodes (12): Phase, onboarding, ready, BlockAnchorBuilder, CharacterHit, GlyphPlacement, InkSample, LivingStrokeResolver (+4 more)
 
-### Community 77 - "visit"
+### Community 103 - "shared/test/vectors.test.ts (2)"
+Cohesion: 0.11
+Nodes (16): Pending, Subscription, SyncConnection, SyncError, SyncPrincipal, HubListener, HubMessage, topics (+8 more)
+
+### Community 104 - "caddy"
+Cohesion: 0.04
+Nodes (46): context, dockerfile, depends_on, environment, image, ports, profiles, restart (+38 more)
+
+### Community 105 - "dependencies (2)"
+Cohesion: 0.07
+Nodes (37): Guest via Link (web, no account), D-13. Совместная работа: шеринг по ссылке, правка без аккаунта, реальное время, Link sharing with editing without account, Real-time collaborative editing, Universal Links (paid Apple Developer account), Последствия, Решение, Платный аккаунт Apple Developer; Team ID задаётся на Mac при первой подписи, в репозитории не хранится (+29 more)
+
+### Community 106 - "document/blocks.ts"
+Cohesion: 0.07
+Nodes (35): applyBlockOperations (block ops for agents), @datascratch/shared/contracts (types, zod schemas), @datascratch/shared/contracts (types and zod schemas), createAccountKeys / rekeyPassword, @datascratch/shared/crypto (libsodium, Argon2id, envelope v1), crypto.md contract, @datascratch/shared/crypto (libsodium), D-35 (strokes on deleted text kept) (+27 more)
+
+### Community 107 - "Projection"
+Cohesion: 0.10
+Nodes (13): CalloutInfo, ListMarker, bullet, ordered, task, ParagraphContext, ProjectedParagraph, Projection (+5 more)
+
+### Community 108 - "gFe"
+Cohesion: 0.07
+Nodes (45): af(), Ai(), bFe(), buildDuplicateFoundError(), buildEmptyRepetitionError(), buildLookaheadForAlternation(), buildLookaheadForOptional(), dg() (+37 more)
+
+### Community 109 - "visit"
 Cohesion: 0.06
 Nodes (45): BBe(), checkIsTarget(), e0(), fR(), Iae(), oBe(), pBe(), startWalking() (+37 more)
 
-### Community 78 - ".segments"
-Cohesion: 0.08
-Nodes (9): InkWidth, StrokeCodecError, invalidLength, StrokePointCodec, InkWidthTests, StrokeCodecTests, StrokeVectorTests, Vectors (+1 more)
+### Community 110 - "LocalStore"
+Cohesion: 0.06
+Nodes (41): Datascratch/App: entry point, WindowGroup per document (multi-window, Stage Manager), menu commands and shortcuts, AppModel, SceneModel, Integration/CoreLibrary.swift over DSCore: account/notebook/note documents on Yrs, LocalStore (GRDB) with send queue, KeyRing keys, notebook meta name/icon/space for agents, one-time JSON migration, DSCore package (Yrs, GRDB, libsodium, API/sync client), DSDesign package, DSEditor package (TextKit 2 + Yrs + pen layer), Datascratch/Features screens: sidebar, documents (cards/list), document, tasks, calendar, ⌘K palette, sharing, settings, onboarding, Finger drawing (D-06): in Text mode finger scrolls/selects; draws with pen tool + flag; flag on by default on iPhone, off on iPad, scripts/generate.sh (generates Datascratch.xcodeproj, attaches existing local packages from Packages/) (+33 more)
 
-### Community 79 - "strokes.md (2)"
-Cohesion: 0.08
-Nodes (30): ArrayDelta, Delete, Insert, Retain, convert(), DeepObserver, path(), sorted_keys() (+22 more)
-
-### Community 80 - "DocumentStyle (2)"
+### Community 111 - "DSTypeToken"
 Cohesion: 0.06
 Nodes (34): DSFontFamily, display, mono, text, DSFontWeight, bold, medium, regular (+26 more)
 
-### Community 81 - "schema/index.ts"
-Cohesion: 0.08
-Nodes (38): CalloutTone, katex@^0.16.0, CoreOptions, HostRef, Callout, CALLOUT_TONES, Commands, FileBlock (+30 more)
+### Community 112 - "sync-protocol.md (2)"
+Cohesion: 0.09
+Nodes (24): makeNotebookDoc(), createInMemoryContext(), authorize(), consent(), TestProvider, setup(), freePort(), SECRET (+16 more)
 
-### Community 82 - "shared/test/vectors.test.ts"
-Cohesion: 0.11
-Nodes (31): ATTACHMENT_CHUNK_BYTES, clientMessageSchema, serverMessageSchema, encryptAttachmentChunk(), toHex(), utf8(), encryptEnvelope(), derivePasswordKeys() (+23 more)
-
-### Community 83 - "br"
-Cohesion: 0.06
-Nodes (42): aD(), addHiddenToken(), addHiddenTokens(), aie(), bD(), bMe(), br(), cOe() (+34 more)
-
-### Community 84 - "peekChar"
-Cohesion: 0.12
-Nodes (42): alternative(), assertion(), atom(), atomEscape(), characterClass(), characterClassEscape(), classAtom(), classEscape() (+34 more)
-
-### Community 85 - "Equatable"
-Cohesion: 0.14
-Nodes (9): BlockAnchorBuilder, CharacterHit, GlyphPlacement, InkSample, LivingStrokeResolver, ResolvedInkPoint, TextAnchorBuilder, GridLayout (+1 more)
-
-### Community 86 - "server/src/context.ts (2)"
+### Community 113 - "AppModel (2)"
 Cohesion: 0.07
-Nodes (21): Server makes snapshots itself every 500 updates / 1 MB for agent edits (it knows the key), DbOrTx, docSnapshots, docUpdates, AuditService, AppendInput, AppendResult, CatchUpItem (+13 more)
+Nodes (19): AppCommands, .body, AppModel, .isRecoveryKeyConfirmed, .phase, DatascratchApp, .body, MainWindow (+11 more)
 
-### Community 87 - "0036-space-notebook-folder.md (2)"
-Cohesion: 0.11
-Nodes (36): BuildContext, cloneInto(), copyChildren(), fill(), fillInline(), insertBlock(), withAgentMark(), applyEdits() (+28 more)
-
-### Community 88 - "DSPenSelection (2)"
-Cohesion: 0.08
-Nodes (37): BLOCK_NODES, INLINE_NODES, MARKS, PMMark, pmNodeSchema, TEXTBLOCK_NODES, addAgentMark(), applyBlockOperations() (+29 more)
-
-### Community 89 - "String (3)"
-Cohesion: 0.13
-Nodes (27): Folder, .fields, Kind, folder, note, notebook, MapRecord, NotebookMode (+19 more)
-
-### Community 90 - "CaseIterable"
-Cohesion: 0.05
-Nodes (35): Hint, arrow, circle, free, highlight, scribble, strike, underline (+27 more)
-
-### Community 91 - "plugins/host.ts (2)"
-Cohesion: 0.06
-Nodes (13): Server plugin interface (ServerPlugin) for optional package @datascratch/agents, loaded at startup if present, BuildOptions, AgentDoc, AgentHost, AgentScope, PluginCrypto, PluginJobs, ServerPlugin (+5 more)
-
-### Community 92 - "server/test/helpers.ts (2)"
-Cohesion: 0.14
-Nodes (18): setupNotebook(), token(), api(), ApiResult, b64(), createNote(), createNotebook(), KDF (+10 more)
-
-### Community 93 - "steps"
-Cohesion: 0.06
-Nodes (39): concurrency, cancel-in-progress, group, defaults, run, GH_TOKEN, name, permissions (+31 more)
-
-### Community 94 - "handwriting-png.ts (2)"
-Cohesion: 0.08
-Nodes (34): Marks, Stroke, DISPLAY_FAMILY, ensureFonts(), require, TEXT_FAMILY, BlockStyle, boxOf() (+26 more)
-
-### Community 95 - "SyncEngine"
+### Community 114 - "shared/test/vectors.test.ts"
 Cohesion: 0.10
 Nodes (3): OpenDoc, SyncEngine, SyncStatus
 
-### Community 96 - "gFe"
+### Community 115 - ".make (2)"
 Cohesion: 0.08
-Nodes (39): af(), Ai(), buildDuplicateFoundError(), buildEmptyRepetitionError(), buildLookaheadForAlternation(), buildLookaheadForOptional(), cFe(), dg() (+31 more)
+Nodes (28): ArrayDelta, Delete, Insert, Retain, convert(), DeepObserver, path(), sorted_keys() (+20 more)
 
-### Community 97 - "lib.rs"
-Cohesion: 0.07
-Nodes (16): UpdateObserver, ORIGIN_LOCAL, origin_name(), ORIGIN_UNDO, RootDef, RootKind, Array, Map (+8 more)
-
-### Community 98 - "DSTintToken"
-Cohesion: 0.07
-Nodes (28): ChipsPreview, .body, DSBadge, .body, .colors, DSTagChip, .body, Style (+20 more)
-
-### Community 99 - "ui/src/index.ts"
-Cohesion: 0.09
-Nodes (27): Provider(), CheckboxProps, TaskCheckboxProps, TaskState, TaskRowProps, TaskTag, icons, ToastApi (+19 more)
-
-### Community 100 - "AttachmentRecord"
-Cohesion: 0.10
-Nodes (11): AttachmentRecord, .missingChunks, .uploaded, LocalStore, State, pendingUpload, remote, synced (+3 more)
-
-### Community 101 - "TextGeometry"
+### Community 116 - ".polygon"
 Cohesion: 0.12
-Nodes (6): TextGeometry, .columnFrame, .contentManager, .layoutManager, .origin, .projection
+Nodes (4): InkGeometry, InkOutline, WidthPoint, InkGeometryTests
 
-### Community 102 - "BlobStorage"
+### Community 117 - "peekChar"
+Cohesion: 0.12
+Nodes (42): alternative(), assertion(), atom(), atomEscape(), characterClass(), characterClassEscape(), classAtom(), classEscape() (+34 more)
+
+### Community 118 - "actions.ts"
+Cohesion: 0.09
+Nodes (34): clearKeys(), accountMaps(), AccountSnapshot, initAccountDoc(), readAccount(), initNotebookDoc(), notebookMaps(), NotebookSnapshot (+26 more)
+
+### Community 119 - "steps"
+Cohesion: 0.08
+Nodes (21): TaskCheckbox, .body, .fallback, .content, DSTaskCheckbox, .isDone, DSTaskState, cancelled (+13 more)
+
+### Community 120 - "agents-api.md (2)"
 Cohesion: 0.07
-Nodes (11): jose@^6.2.13, Server source layout (index, config, app, context, db, routes, sync, services, storage, jobs, plugins, drizzle), AccessClaims, GuestClaims, subkey(), TokenSigner, DiskStorage, S3Options (+3 more)
+Nodes (17): UpdateObserver, is_inside(), ORIGIN_LOCAL, origin_name(), ORIGIN_UNDO, RootDef, RootKind, Array (+9 more)
 
-### Community 103 - "shared/package.json"
+### Community 121 - "Qt"
+Cohesion: 0.09
+Nodes (41): a_e(), aZ(), b8(), Ci(), cm(), CZ(), d3(), dTe() (+33 more)
+
+### Community 122 - "steps (2)"
+Cohesion: 0.05
+Nodes (40): concurrency, cancel-in-progress, group, defaults, run, GH_TOKEN, name, permissions (+32 more)
+
+### Community 123 - "08-sharing.md"
+Cohesion: 0.08
+Nodes (9): .accessExpiry, .date, DSDate, EntityID, AccountServiceTests, FakeRESTServer, User, UtilTests (+1 more)
+
+### Community 124 - "DSRGBA"
+Cohesion: 0.05
+Nodes (38): devDependencies, @axe-core/playwright@^4, fake-indexeddb@^6.2.6, jsdom@^30.1.3, @playwright/test@1.63.0, tailwindcss@^4, @tailwindcss/vite@^4, @testing-library/dom@^10.4.2 (+30 more)
+
+### Community 125 - "11-nfr.md"
+Cohesion: 0.08
+Nodes (30): Server stack: Node 22 + Fastify + zod + Drizzle + pg-boss, Pen prototype acceptance criteria (120 fps, no drift), Stage 1 pen-in-text prototype (iPad), Пакетная первая синхронизация: по 200 документов, backpressure при > 4 МБ в сокете; ~1,2 с на 10 000 заметок, First sync batching: 200 docs per request if <=100 updates, backpressure above 4 MB unread; 10 000 notes ~1.2 s server (~0.9 s without snapshots), Self-hosting, 10. Синхронизация и офлайн, Encrypted relay without server merge; agent notebooks decrypted on server (+22 more)
+
+### Community 126 - "DSCore"
+Cohesion: 0.09
+Nodes (34): AccountService, APIClient (REST), AttachmentManager, spec/11 benchmarks (BenchmarkTests), Block / Inline / Mark, CRDTDocument, DSCore, DSCrypto / KeyRing / KeychainSecretStore (+26 more)
+
+### Community 127 - "DSInlineChipStyle (2)"
+Cohesion: 0.13
+Nodes (19): chunk(), Container, container(), Element, Fragment, element(), index_paths(), insert_chunks() (+11 more)
+
+### Community 128 - "SyncClient"
+Cohesion: 0.09
+Nodes (13): URLSession, SyncClient, .isConnected, SyncClientDelegate, SyncConnectionState, connected, connecting, disconnected (+5 more)
+
+### Community 129 - "BlockNode"
+Cohesion: 0.10
+Nodes (12): BlockNode, .isTextblock, .plainText, .textLength, InlineAtom, InlineElement, atom, .length (+4 more)
+
+### Community 130 - "EditorDocument"
+Cohesion: 0.11
+Nodes (3): EditorDocument, .allBlocks, MarkdownTests
+
+### Community 132 - "open-questions.md (2)"
 Cohesion: 0.07
-Nodes (35): dependencies, libsodium-wrappers-sumo@^0.8.2, zod@^4.1.0, description, devDependencies, eslint@^9.39.0, prosemirror-model@^1.25.12, tsup@^8.5.0 (+27 more)
+Nodes (24): Backdrop, .colors, .gradient, Color, Palette, .accent, .canvas, .danger (+16 more)
 
-### Community 104 - "ServerMessage"
+### Community 133 - "DocPage.tsx (2)"
+Cohesion: 0.06
+Nodes (35): APIErrorBody.Inner, CodingKeys, accessExpiresAt, accessToken, accountDocId, alg, at, chunkCount (+27 more)
+
+### Community 134 - "CodingKeys"
 Cohesion: 0.13
 Nodes (16): ClientInfo, Item, JSONEncoder, .sync, ServerMessage, ack, awareness, error (+8 more)
 
-### Community 105 - "DSTintToken (2)"
-Cohesion: 0.09
-Nodes (18): DSCheckmark, DSTaskCheckbox, .body, .isDone, DSTaskState, cancelled, done, open (+10 more)
-
-### Community 106 - "PenMode"
-Cohesion: 0.07
-Nodes (27): InkPaint, InkToolState, .allowsFingerDrawing, .currentPaint, .mode, .paints, PenMode, .capturesPen (+19 more)
-
-### Community 107 - "Wt"
+### Community 135 - "Wt"
 Cohesion: 0.07
 Nodes (36): bK(), Cd(), CQ(), cze(), eK(), eQ(), Fh(), fK() (+28 more)
 
-### Community 108 - "DSSidebarItem"
+### Community 136 - "Server PostgreSQL schema (encrypted bytea content; spaces/folders/meta inside account/notebook docs)"
 Cohesion: 0.07
 Nodes (31): devDependencies, eslint@^9.39.0, eslint-config-prettier@^10.1.0, @eslint/js@^9.39.0, globals@^16.4.0, prettier@^3.6.0, turbo@^2.5.0, typescript@^5.9.0 (+23 more)
 
-### Community 109 - "steps (2)"
+### Community 137 - "2026-10-25 (вторая половина дня)"
+Cohesion: 0.07
+Nodes (33): Document model contract (document-model.md), Stage 2 MVP on iPad/iPhone, local, Agent edits with agentEdit mark (D-10), Collaborator cursors via awareness (y-protocols), Contract schema: y-prosemirror field content, blockId UUIDv7, taskId, Web editor demo showcase (port 5174, two devices, agent edit, width slider), EditorHost app callbacks, Input UI: Markdown shortcuts, slash menu, [[ autocomplete, glass format toolbar, block handles (+25 more)
+
+### Community 138 - "with (2)"
+Cohesion: 0.06
+Nodes (35): defaults, name, runs-on, steps, strategy, timeout-minutes, concurrency, cancel-in-progress (+27 more)
+
+### Community 139 - "steps (2)"
 Cohesion: 0.07
 Nodes (35): concurrency, group, container, runs-on, steps, runs-on, steps, timeout-minutes (+27 more)
 
-### Community 110 - "DSColorToken"
-Cohesion: 0.06
-Nodes (24): .color, DSShadowModifier, View, DSColorToken, accent, bgCanvas, bgElevated, bgSidebar (+16 more)
-
-### Community 111 - "String (4)"
-Cohesion: 0.12
-Nodes (9): InMemorySecretStore, KeychainSecretStore, SecretStore, SecretStoreError, keychain, SignupMaterial, SecretSessionStore, APIClientTests (+1 more)
-
-### Community 112 - "DSRGBA (2)"
+### Community 140 - "web-editor/package.json (2)"
 Cohesion: 0.10
-Nodes (19): .color, .uiColor, .color, .uiColor, DSBackdropBlob, DSBackdropSpec, DSColorPair, DSRGBA (+11 more)
+Nodes (32): PMMark, attr(), block(), blockBody(), CALLOUT_KIND, children(), close(), Ctx (+24 more)
 
-### Community 113 - "ParagraphDecoration"
+### Community 141 - "Datascratch Server (apps/server) (2)"
+Cohesion: 0.08
+Nodes (22): .emptyState, FolderRow, .body, .label, FolderRows, .body, NotebookRow, .body (+14 more)
+
+### Community 142 - "04-editor.md"
 Cohesion: 0.11
-Nodes (8): ParagraphDecoration, .taskState, BlockLayoutFragment, .containerWidth, .decoration, .renderingSurfaceBounds, .textBounds, FragmentProvider
+Nodes (13): Bucket, all, .id, inbox, today, upcoming, .taskEntries, TaskEntry (+5 more)
 
-### Community 114 - "EditorView.swift"
-Cohesion: 0.11
-Nodes (22): applyTheme(), documentChanged(), dynamicTypeChanged(), hovered(), init(), insertBlock(), lassoSelected(), layoutHeader() (+14 more)
-
-### Community 115 - "10-sync.md"
+### Community 143 - "Datascratch Server (apps/server) (2)"
 Cohesion: 0.09
-Nodes (26): RetentionPolicy, История версий: GET /docs/:id/versions и /versions/:seq (зашифрованные снимки), Метка agentEdit (agentId, at) — подсветка правок агента до принятия пользователем, Агенты не подключаются по WebSocket — работают через MCP/REST; сервер применяет их правки как обычные обновления, Снимки и уплотнение: > 500 обновлений или > 1 MiB → снимок; удаление seq ≤ baseSeq, кроме нужных истории (R-05), doc_snapshots Table (compacted snapshots, version history), D-10. Правки агента применяются сразу, подсвечиваются, откатываются через историю, Suggestions for approval (rejected) (+18 more)
+Nodes (11): AccountError, missingKey, notSignedIn, AccountService, ShareLink, .url, SignupResult, ShareLinkTests (+3 more)
 
-### Community 116 - "SyncClient"
+### Community 144 - "TextGeometry"
+Cohesion: 0.13
+Nodes (5): TextGeometry, .columnFrame, .contentManager, .layoutManager, .origin
+
+### Community 145 - "with (2) (2)"
+Cohesion: 0.13
+Nodes (7): NoteBodyCodec, .blockId, .text, StorageTests, .plainText, attrs, DSCore
+
+### Community 146 - "EditorView.swift"
+Cohesion: 0.10
+Nodes (21): applyTheme(), documentChanged(), dynamicTypeChanged(), hovered(), insertBlock(), lassoSelected(), layoutHeader(), layoutSubviews() (+13 more)
+
+### Community 147 - "cn.ts"
+Cohesion: 0.07
+Nodes (33): concurrency, cancel-in-progress, group, run, defaults, name, runs-on, steps (+25 more)
+
+### Community 148 - "DSTaskCheckbox"
+Cohesion: 0.06
+Nodes (33): env, runs-on, services, steps, timeout-minutes, concurrency, cancel-in-progress, group (+25 more)
+
+### Community 149 - ".buttons"
+Cohesion: 0.14
+Nodes (4): AppearanceUITests, LibraryUITests, OnboardingUITests, EditorDemoUITests
+
+### Community 150 - "design-tokens.md (2)"
 Cohesion: 0.09
-Nodes (10): SyncClient, .isConnected, SyncClientDelegate, SyncConnectionState, connected, connecting, disconnected, stopped (+2 more)
+Nodes (28): Backdrop Gradients, Color Tokens (bg, text, accent, semantic), Date Chip Rules, Motion Tokens (springs, durations, haptics), Pen Ink and Highlighter Colors, Spacing, Radius, Shadow and Column Width Tokens, text.onAccent Token, Tint Colors (tint.*.fg / .bg) (+20 more)
 
-### Community 117 - "Qt"
-Cohesion: 0.12
-Nodes (33): a_e(), aZ(), bFe(), Ci(), cm(), CZ(), e_e(), F5() (+25 more)
-
-### Community 118 - "collab/reanchor.ts"
-Cohesion: 0.16
-Nodes (22): Stroke, readStroke(), AnchorSnapshot, isStructural(), isStructuralStep(), locate(), mappingOf(), Pending (+14 more)
-
-### Community 119 - "@datascratch/shared/crypto (libsodium, Argon2id, envelope v1, recovery key DS1-, 1 MiB chunks)"
+### Community 151 - "plugins/host.ts (2) (2)"
 Cohesion: 0.08
 Nodes (32): description, devDependencies, @datascratch/shared@workspace:*, eslint@^9.39.0, libsodium-wrappers-sumo@^0.8.2, prosemirror-model@^1.25.0, tsx@^4.20.0, @types/node@^22.10.0 (+24 more)
 
-### Community 120 - "Editor.tsx (2)"
-Cohesion: 0.09
-Nodes (25): @tiptap/pm@^3.32.0, @tiptap/suggestion@^3.32.0, BlockId, blockIdPluginKey, findIdFixes(), hasAttr(), stripIds(), UNIQUE_ATTRS (+17 more)
+### Community 152 - "AttachmentRecord (2)"
+Cohesion: 0.07
+Nodes (32): run, BUILD_NUMBER, CERT_P12, CERT_PASSWORD, DS_SERVER_URL, DS_WEB_HOST, ISSUER_ID, KEY_ID (+24 more)
 
-### Community 121 - "Configuration"
+### Community 153 - "lib.rs"
+Cohesion: 0.06
+Nodes (31): concurrency, cancel-in-progress, group, run, CI, jobs, test, name (+23 more)
+
+### Community 154 - "document/blocks.ts (2)"
 Cohesion: 0.10
-Nodes (11): URLSession, Configuration, SyncClientError, closed, notConnected, server, URLSessionWebSocket, URLSessionWebSocketFactory (+3 more)
+Nodes (30): BLOCK_NODES, INLINE_NODES, MARKS, pmNodeSchema, TEXTBLOCK_NODES, addAgentMark(), applyBlockOperations(), ApplyOptions (+22 more)
 
-### Community 122 - "InkCanvas"
-Cohesion: 0.10
-Nodes (5): UIColor, InkCanvas, PaperView, .paper, RenderedStroke
-
-### Community 123 - "connection.ts"
+### Community 155 - "2026-10-25 (вторая половина дня) (2)"
 Cohesion: 0.11
-Nodes (24): bearer(), requireUserOrGuest(), verifyGuestToken(), verifyUserToken(), AppContext, docs, docInShare(), DocRow (+16 more)
+Nodes (30): 2026-10-25, 2026-10-25 (вторая половина дня), @datascratch/agents (MCP server, OAuth 2.1, REST), Document Cover: Own Image Only (spec/12 12.7), Design System v3 (pen palette, FormatToolbar, SuggestionMenu), DSCore iOS Package, First Sync Performance (10k notes batching), Graphify Workflow (D-29, tools/graphify_docs.py) (+22 more)
 
-### Community 125 - "Controls.stories.tsx"
+### Community 156 - "PenLayer"
 Cohesion: 0.13
-Nodes (28): Button, Checkbox, Input, InputProps, TextArea, TextAreaProps, Kbd(), Skeleton() (+20 more)
+Nodes (14): BlockRow, .body, .bodyFont, .font, .leading, .placeholder, .textColor, .topPadding (+6 more)
 
-### Community 126 - "DatePicker.tsx"
+### Community 157 - "CoverImages"
 Cohesion: 0.16
-Nodes (25): DateChip, DateChipProps, tones, Calendar(), CalendarProps, DatePicker(), DatePickerProps, Popover (+17 more)
+Nodes (6): Added, CoverAttachmentRemote, CoverError, .errorDescription, notAnImage, CoverImages
 
-### Community 127 - "YValue"
+### Community 158 - "PenMode"
 Cohesion: 0.09
-Nodes (14): XmlNode, .attributes, .children, .elementName, .textContent, YValue, .boolValue, .dataValue (+6 more)
+Nodes (20): InkPaint, InkToolState, .allowsFingerDrawing, .currentPaint, .mode, .paints, PenMode, .capturesPen (+12 more)
 
-### Community 128 - "YValue (2)"
+### Community 159 - "shared/test/sync.test.ts (2)"
+Cohesion: 0.09
+Nodes (15): device(), client, docs, done, hub, ids, key, LATENCY (+7 more)
+
+### Community 160 - "store.ts (2) (2)"
+Cohesion: 0.08
+Nodes (22): Line-break segmentation: adjacent points on different line fragments -> separate segments, orphanedAt: local mark when all anchors first deleted; orphan strokes older than 30 days purged at history compaction, captureAnchorOffsets -> reanchorStrokes (@datascratch/shared/strokes), rebaseRedoneAnchors(doc): undo/redo client rewrites anchors to redone items in same transaction (DSCore equivalent on iOS), Render after reflow: anchor -> absolute position (with redone items) -> current glyph rect, Web: stroke copy written right after y-prosemirror transaction with tracked origin; Y.UndoManager merges into one undo step, Version restore: restore content and strokes; anchors recomputed via absolute indices, D-35 Annotation disappears with deleted text (+14 more)
+
+### Community 161 - "DSMotionToken"
+Cohesion: 0.10
+Nodes (14): Motion, .disclosure, DSCheckmark, .body, Animation, DSAnimationModifier, .animation, View (+6 more)
+
+### Community 162 - "DatascratchTests"
+Cohesion: 0.12
+Nodes (13): .body, .background, CardsPreview, .body, DSCard, .body, DSDocCard, .body (+5 more)
+
+### Community 163 - "12-craft-features.md (2)"
 Cohesion: 0.09
 Nodes (17): map_to_attrs(), value_to_any(), value_to_in(), YValue, BigInt, Bool, Bytes, List (+9 more)
 
-### Community 129 - "decisions/README.md (3)"
-Cohesion: 0.11
-Nodes (18): DateChipPreview, .body, DSDateChip, .body, .color, .model, DSDateChipModel, Tone (+10 more)
-
-### Community 130 - "Overview.stories.tsx"
-Cohesion: 0.11
-Nodes (24): Backdrop(), BackdropProps, Card, CardProps, coverHeights, DocCard, DocCardProps, pads (+16 more)
-
-### Community 131 - "DSCore"
-Cohesion: 0.11
-Nodes (27): AccountService, APIClient (REST), AttachmentManager, Block / Inline / Mark, CRDTDocument, DSCore, DSCrypto / KeyRing / KeychainSecretStore, NotebookDocument / AccountDocument (+19 more)
-
-### Community 132 - "DS"
+### Community 164 - "DS"
 Cohesion: 0.12
 Nodes (29): _2e(), A1(), A2e(), B2e(), cl(), D2e(), DS(), F2e() (+21 more)
 
-### Community 133 - "steps (2) (2)"
+### Community 165 - "package.json (2)"
+Cohesion: 0.21
+Nodes (7): expectSynced(), newDoc(), PASSWORD, signIn(), signUp(), uniqueEmail(), @axe-core/playwright
+
+### Community 166 - "0004-encryption-and-api.md (2)"
+Cohesion: 0.11
+Nodes (22): Перед любой работой: порядок чтения, Статусы решений: РЕШЕНО / ПРЕДЛОЖЕНО / ОТКРЫТО, D-08. Аннотации PDF пером — не в MVP (PDFKit + слой штрихов), ADR file number equals decision number (D-05 -> 0005-*.md), template 0000-template.md, Нумерация решений D-NN и файлы decisions/00NN-*.md, Same-commit change workflow (spec, ADR, changelog, graph), Документация Datascratch — единственный источник истины, Документация Datascratch (docs/README.md) (+14 more)
+
+### Community 167 - "generate.ts"
 Cohesion: 0.13
-Nodes (27): 4.1. Совместимость с TipTap / y-prosemirror, 4.2. Схема блоков, 4.3. `meta` заметки, 4.4. `comments`, 4. Документ `note`, Comment, attr(), block() (+19 more)
+Nodes (22): RFC-9562, UUID_V7_REGEX, toHex(), guestDeviceId(), isUuidV7(), random(), uuidv7FromParts(), uuidv7Timestamp() (+14 more)
 
-### Community 134 - "cn (2)"
+### Community 168 - "DSCore (2)"
+Cohesion: 0.16
+Nodes (12): AccessService, AgentAuditEntry, .id, AgentPermission, read, readWrite, AgentToken, Device (+4 more)
+
+### Community 169 - "InkCanvas"
 Cohesion: 0.14
-Nodes (20): authorize(), consent(), setup(), freePort(), SECRET, startServer(), setup(), FOLDER (+12 more)
+Nodes (10): AttachmentRecord, .missingChunks, .uploaded, LocalStore, SearchHit, State, pendingUpload, remote (+2 more)
 
-### Community 135 - "xml.rs"
-Cohesion: 0.17
-Nodes (11): Container, container(), Element, Fragment, element(), index_paths(), insert_chunks(), insert_nodes() (+3 more)
+### Community 170 - "ii"
+Cohesion: 0.08
+Nodes (28): A7(), bAe(), D7(), Dit(), Ent(), f7(), hy(), I7() (+20 more)
 
-### Community 136 - "DSDesign Swift package (iOS 26, Swift 6)"
+### Community 171 - "DSBackdrop"
 Cohesion: 0.10
-Nodes (27): D-15 Design principle, D-38 Design system decision, D-39 design-system stream, DSAvatar / DSAvatarStack, DSBackdrop / DSGrain, DSButtonStyle, DSCard / DSDocCard, DSDesign Swift package (iOS 26, Swift 6) (+19 more)
+Nodes (27): dependencies, clsx@^2.1.1, cmdk@^1.1.1, @datascratch/design-tokens@workspace:*, @fontsource-variable/inter@^5.3.0, @fontsource-variable/jetbrains-mono@^5.3.0, @fontsource-variable/source-serif-4@^5, lucide-react@^1.61.0 (+19 more)
 
-### Community 137 - ".content"
-Cohesion: 0.12
-Nodes (12): CardsPreview, .body, DSCard, .body, DSDocCard, .body, View, .background (+4 more)
-
-### Community 138 - "CodingKeys"
+### Community 172 - "CodingKeys (2)"
 Cohesion: 0.07
 Nodes (26): CodingKeys, accessToken, baseSeq, client, clientMsgId, code, deviceId, docId (+18 more)
 
-### Community 139 - "DSDesign Swift package"
+### Community 173 - "DSDesign Swift package (2)"
+Cohesion: 0.13
+Nodes (7): Server source layout (index, config, app, context, db, routes, sync, services, storage, jobs, plugins, drizzle), DiskStorage, createStorage(), S3Options, S3Storage, BlobStorage, chunkKey()
+
+### Community 174 - "Скрипт обновления графа (2)"
 Cohesion: 0.11
-Nodes (26): design.yml CI workflow (macOS), DSDateChipModel, DSDesign Swift package, DSDesignTests (Swift Testing), DSDocRow / DSDocGrid, DSFormatBar, DSGlassPanel (Liquid Glass), DSHaptics (+18 more)
+Nodes (20): attAccess(), authed(), b64u(), clients, cors, db, err(), issueSession() (+12 more)
 
-### Community 140 - "0013-collaboration-sharing.md"
-Cohesion: 0.22
-Nodes (4): SyncConnection, SyncError, b64Size(), Sync limits: update 2 MB, snapshot 50 MB, awareness 64 KB, 100 msg/s per connection (burst x5)
-
-### Community 141 - "common.ts"
-Cohesion: 0.10
-Nodes (22): RFC-9562, AUTHOR_KINDS, authorKindSchema, Base64Url, BASE64URL_REGEX, base64UrlBytesSchema(), base64UrlLength(), base64UrlSchema (+14 more)
-
-### Community 142 - "components.test.tsx (2)"
+### Community 175 - "CRDTTransaction (2)"
 Cohesion: 0.07
 Nodes (26): concurrency, cancel-in-progress, group, CI, jobs, test, name, paths (+18 more)
 
-### Community 143 - "lib/tokens.ts"
-Cohesion: 0.15
-Nodes (18): Avatar(), AvatarProps, AvatarStack(), AvatarStackProps, initials(), Presence, Badge(), BadgeProps (+10 more)
-
-### Community 144 - "editorCore.ts"
-Cohesion: 0.13
-Nodes (22): SAMPLE_CONTENT, y-protocols@^1.0.7, Collaboration, CollaborationOptions, createNoteUndoManager(), cursorBuilder(), META_ORIGIN, PEN_ORIGIN (+14 more)
-
-### Community 145 - ".json"
-Cohesion: 0.15
-Nodes (8): Fixture, BadValue, CryptoVectorTests, jsonEqual(), sortedMarks(), SyncVectorTests, Vectors, .available
-
-### Community 146 - "DSMotionToken"
-Cohesion: 0.12
-Nodes (14): .body, .disclosure, Animation, DSAnimationModifier, .animation, .animation, View, withDSAnimation() (+6 more)
-
-### Community 147 - "ii"
-Cohesion: 0.09
-Nodes (26): A7(), D7(), Dit(), Ent(), f7(), hy(), I7(), ii() (+18 more)
-
-### Community 148 - "schema.ts"
+### Community 176 - "DocumentCollectionView (2)"
 Cohesion: 0.10
-Nodes (22): Drizzle schema and SQL migrations (drizzle-kit db:generate, DB_MIGRATE_ON_START; 0001 = Row-Level Security + file cleanup trigger), agentAudit, agentPermission, agentTokenNotebooks, agentTokens, bytea, docKind, KdfParams (+14 more)
+Nodes (16): .body, DocumentActions, DocumentCard, .body, DocumentCollectionView, .body, .canCreate, .emptyTitle (+8 more)
 
-### Community 149 - "09-agents-api.md (2)"
+### Community 177 - "Stroke (2)"
+Cohesion: 0.20
+Nodes (4): AccountService, LocalAccountService, .isServerBacked, AccountServiceTests
+
+### Community 178 - "infra/README.md (2)"
 Cohesion: 0.11
+Nodes (8): Phase, failed, localOnly, offline, syncing, upToDate, SyncCenter, .isLocalOnly
+
+### Community 179 - "DSBackdrop (2)"
+Cohesion: 0.10
 Nodes (18): ButtonsPreview, .body, ButtonStyle, DSButtonBody, .body, .fill, .foreground, .height (+10 more)
 
-### Community 150 - "api.md (2)"
-Cohesion: 0.11
-Nodes (25): Core Animation renderer (PROPOSED), Custom stroke rendering layer over TextKit 2, D-06 Finger drawing on iPhone (opt-in), D-27 Yrs in prototype, Spec 3: Apple Pencil in text, DSCore (Yrs), DSEditor (UIKit + TextKit 2, pen layer), DSEditorModel (EditorDocument, EditorCommands) (+17 more)
+### Community 180 - "Foundation (2)"
+Cohesion: 0.10
+Nodes (6): DSEditorInfo, MathBlockView, ObservationToken, DSEditorModel, DSInk, SwiftMath
 
-### Community 151 - "tests.rs"
+### Community 181 - "InkController (2)"
+Cohesion: 0.12
+Nodes (5): InkCanvas, PaperView, .paper, RenderedStroke, QuartzCore
+
+### Community 182 - ".json (2)"
+Cohesion: 0.09
+Nodes (15): CryptoError, decryptionFailed, invalidKeyLength, invalidRecoveryKey, kdfFailed, malformedEnvelope, sodiumInit, unsupportedKDF (+7 more)
+
+### Community 183 - "LocalStore (2)"
+Cohesion: 0.15
+Nodes (7): DocumentRecord, Kind, push, snapshot, OutboxItem, SnapshotPolicy, StoredUpdate
+
+### Community 185 - "SyncClient (2)"
+Cohesion: 0.13
+Nodes (7): Configuration, SyncClientError, closed, notConnected, server, URLSessionWebSocket, WebSocketConnection
+
+### Community 186 - "actions.ts (2)"
 Cohesion: 0.19
+Nodes (22): setTitleOf(), appendTask(), cloneNode(), DEFAULT_STYLE, el(), Extracted, ExtractedTask, extractNote() (+14 more)
+
+### Community 187 - "removeNode"
+Cohesion: 0.09
+Nodes (24): BIe(), children(), createHydrationContext(), edge(), getTokenType(), hasEdge(), hasNode(), hydrate() (+16 more)
+
+### Community 188 - "crypto.md (2)"
+Cohesion: 0.15
+Nodes (9): literals(), main(), draw(), finish(), label(), _line_count(), prepare(), _read() (+1 more)
+
+### Community 189 - "agents-api.md (3)"
+Cohesion: 0.14
+Nodes (21): /v1/agent-tokens access management endpoints, @datascratch/agents Fastify plugin (packages/agents), Audit log (AuditEntry), Client ID Metadata Documents (CIMD), Agents API Contract (MCP, REST, OAuth) v1 draft, Dynamic Client Registration RFC 7591, Authorization response iss (RFC 9207), /mcp MCP server (Streamable HTTP) (+13 more)
+
+### Community 190 - "design-tokens.md (4)"
+Cohesion: 0.11
+Nodes (21): Prometheus /metrics (METRICS_TOKEN), Автоматический откат на предыдущую версию, Caddy (веб + обратный прокси), Свой домен DS_DOMAIN, deploy.sh (rollback, status), Ключ деплоя DEPLOY_SSH_KEY, созданный на сервере, Workflow deploy в GitHub Actions, DS_KMS_KEY (+13 more)
+
+### Community 191 - "Configuration"
+Cohesion: 0.15
+Nodes (6): DSInlineChip, .body, .shape, DSInlineChipStyle, InlineChipsPreview, .body
+
+### Community 192 - "tests.rs"
+Cohesion: 0.20
 Nodes (17): arrays_and_errors(), Collect, local(), merge_and_diff_updates(), nested_maps_merge_per_field(), note_roots(), observers_report_paths_deltas_and_origins(), paragraph() (+9 more)
 
-### Community 152 - "05-organization-design.md"
+### Community 193 - "DSLanguage"
 Cohesion: 0.14
-Nodes (9): BackdropGallery, .body, DSBackdrop, .body, DSGrain, .body, GrainPattern, SplitMix64 (+1 more)
+Nodes (13): DateChipPreview, .body, DSDateChip, .body, .color, .model, DSDateChipModel, Tone (+5 more)
 
-### Community 153 - "design-tokens.md (2)"
-Cohesion: 0.16
-Nodes (22): Подложки backdrop.* (sand, dusk, mist, meadow, ember) — мягкие градиенты в духе Craft, Цветовые токены: bg.canvas («бумага»), text.primary («чернила»), accent («синие чернила»), danger/success/warning — светлая и тёмная тема, Ширина колонки документа: normal 720, wide 960, full, Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary, Тактильная отдача iOS: selection, success (задача выполнена), warning (удаление), Чернила пера ink.* (black, blue, red, green, purple, brown) и маркеры highlight.*, Движение: пружины motion.snappy / smooth / gentle, длительности duration.* для веба, Сетка отступов 4 pt, радиусы radius.*, тени shadow.card / shadow.popover (+14 more)
-
-### Community 154 - "Web editor implementation (@datascratch/web-editor DatascratchEditor)"
-Cohesion: 0.10
-Nodes (23): Agent edits with agentEdit mark (D-10), Collaborator cursors via awareness (y-protocols), Block editor with Markdown shortcuts; CRDT block tree storage, Markdown export only (D-01), Contract schema: y-prosemirror field content, blockId UUIDv7, taskId, Web editor demo showcase (port 5174, two devices, agent edit, width slider), 4. Editor, EditorHost app callbacks, Export (Markdown, PDF, HTML; ink as images); no import now (D-16) (+15 more)
-
-### Community 157 - "0018-monetization.md"
-Cohesion: 0.11
-Nodes (17): D-12. Аудитория — в первую очередь для себя, Single VPS, single process server, Последствия, Решение, D-18. Монетизация — не решена; архитектура готова к self-hosting, Monetization options: subscription, one-time, open source + paid hosting, PostgreSQL, Контекст (+9 more)
-
-### Community 158 - ".iso"
+### Community 194 - "ItemID"
 Cohesion: 0.15
-Nodes (3): DSDate, EntityID, UtilTests
+Nodes (4): ItemID, RelativePositionCodec, AnchorVectorTests, .available
 
-### Community 159 - "compat/generate.mjs"
+### Community 195 - "MCP tools / REST operations table"
+Cohesion: 0.13
+Nodes (20): add_comment tool, Agent Markdown dialect (block markers, tasks, callouts), AgentService — общий сервис для MCP и REST (R-13), create_note tool, context.data.createNoteDoc, get_backlinks tool, get_handwriting_image tool, Handwriting group (strokes within 24 chars) (+12 more)
+
+### Community 196 - "0004-encryption-and-api.md (3)"
 Cohesion: 0.10
-Nodes (16): b64(), content, doc, firstRun, fixture, json, para, rel() (+8 more)
+Nodes (14): D-19. Весь код пишет Claude, Последствия, Решение, D-23. Документация — источник истины; Graphify — граф знаний поверх неё, Контекст, Последствия, Решение, D-23 (документация) (+6 more)
 
-### Community 160 - "YOp"
+### Community 197 - "MCP tools / REST operations set"
+Cohesion: 0.09
+Nodes (23): devDependencies, happy-dom@^21.0.4, @playwright/test@1.62.1, tailwindcss@^4.3.3, @tailwindcss/vite@^4.3.3, @types/katex@^0.16.8, @types/react@^19.0.0, @types/react-dom@^19.0.0 (+15 more)
+
+### Community 201 - "properties"
+Cohesion: 0.09
+Nodes (22): CFBundleURLName, CFBundleURLSchemes, properties, CADisableMinimumFrameDurationOnPhone, CFBundleDevelopmentRegion, CFBundleDisplayName, CFBundleLocalizations, CFBundleShortVersionString (+14 more)
+
+### Community 202 - "dependencies (2) (2)"
 Cohesion: 0.10
-Nodes (20): YOp, ArrayDelete, ArrayInsert, MapDelete, MapSet, RootTextDelete, RootTextInsert, TextDelete (+12 more)
+Nodes (20): Agent Markdown dialect, Block markers <!-- block:<blockId> -->, Strokes with all anchors deleted hidden (D-35), Рукопись в Markdown (D-11): ![✍️ описание](handwriting:<id>), группы штрихов < 24 символов, Handwriting image references (D-11), Рендер рукописи в PNG: @napi-rs/canvas, Inter/Newsreader, колонка 600 pt, 2 px/pt, кэш 200, Handwriting PNG renderer (@napi-rs/canvas), In-process PNG render cache (200 images) (+12 more)
 
-### Community 161 - "DSAvatar"
+### Community 203 - "Модель данных и глоссарий (2)"
+Cohesion: 0.19
+Nodes (17): resolve(), contrast(), darkHighlight(), darkInk(), h2(), hslToRgb(), luminance(), parseHex() (+9 more)
+
+### Community 204 - "DSDateChip (2)"
+Cohesion: 0.09
+Nodes (22): devDependencies, jsdom@^30.1.3, @ladle/react@^5.1.1, @tailwindcss/vite@^4.3.3, @testing-library/react@^16.3.3, @testing-library/user-event@^14.6.8, @types/react@^19.3.0, @types/react-dom@^19.3.0 (+14 more)
+
+### Community 205 - "DSTintToken (2) (2)"
 Cohesion: 0.18
 Nodes (11): AvatarPreview, .body, DSAvatar, .body, .presenceLabel, DSAvatarStack, .body, DSPresence (+3 more)
 
-### Community 163 - "Контракт: шифрование (v1)"
-Cohesion: 0.10
-Nodes (21): note(), 1. Иерархия ключей, 2. Вывод ключей из пароля, 3. Формат шифротекста (конверт), 4. Ключ восстановления, 5. Смена пароля, 6. Вложения, 7. Шеринг по ссылке (+13 more)
+### Community 206 - "web-editor/package.json"
+Cohesion: 0.17
+Nodes (8): BackdropGallery, .body, DSBackdrop, .body, DSGrain, .body, GrainPattern, SplitMix64
 
-### Community 164 - "check"
+### Community 207 - "base"
 Cohesion: 0.10
-Nodes (21): env, runs-on, services, steps, timeout-minutes, POSTGRES_DB, POSTGRES_PASSWORD, POSTGRES_USER (+13 more)
+Nodes (21): ASSETCATALOG_COMPILER_APPICON_NAME, ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME, BUNDLE_LOADER, CODE_SIGN_STYLE, ENABLE_PREVIEWS, ENABLE_USER_SCRIPT_SANDBOXING, GENERATE_INFOPLIST_FILE, LOCALIZATION_PREFERS_STRING_CATALOGS (+13 more)
 
-### Community 165 - "4. Editor"
+### Community 208 - "Organization Hierarchy (Account > Space > Notebook > Folder > Note) (2)"
 Cohesion: 0.10
 Nodes (20): description, devDependencies, prettier@^3.6.0, exports, ./theme.css, ./tokens.css, ./tokens.json, files (+12 more)
 
-### Community 166 - "tasks.ts"
+### Community 209 - "Правила для ИИ и документации (4)"
 Cohesion: 0.19
 Nodes (18): TaskState, addDays(), Commands, dateChip(), dateChipLabel(), localDate(), nextWeek(), parseLocalDate() (+10 more)
 
-### Community 168 - "uOe"
+### Community 210 - "MCP tools / REST operations set (2)"
+Cohesion: 0.10
+Nodes (21): dependencies, @datascratch/design-tokens@workspace:*, @datascratch/shared@workspace:*, @datascratch/ui@workspace:*, @tiptap/core@^3.32.0, @tiptap/extension-horizontal-rule@^3.32.0, @tiptap/extension-link@^3.32.0, @tiptap/extension-list@^3.32.0 (+13 more)
+
+### Community 211 - "design-tokens/package.json"
+Cohesion: 0.19
+Nodes (12): b64(), el(), empty(), fixture(), normalize(), reads_yjs_document(), roots(), s() (+4 more)
+
+### Community 212 - "DSTintToken"
+Cohesion: 0.14
+Nodes (13): ChipsPreview, .body, DSBadge, .body, .colors, DSTagChip, .body, Style (+5 more)
+
+### Community 213 - "NOe"
 Cohesion: 0.10
 Nodes (19): addEntry(), Ane(), cancelWrite(), cne(), dequeue(), enqueue(), HIe(), hOe() (+11 more)
 
-### Community 169 - "@datascratch/design-tokens README"
-Cohesion: 0.15
-Nodes (16): Design principles: minimal buttons, command palette, own design system, Radix + Tailwind + Motion web design system, Single design-token source for iOS and web, Backdrops (gradient + 3 color blobs + paper grain --ds-noise), @datascratch/design-tokens README, scripts/generate.mjs generator, generated/index.js + .d.ts (JS/TS tokens, Motion spring params), generated/theme.css (Tailwind v4 @theme inline) (+8 more)
+### Community 214 - "CodeTokenKind"
+Cohesion: 0.12
+Nodes (11): CodeHighlighter, CodeToken, CodeTokenKind, comment, function, keyword, number, punctuation (+3 more)
 
-### Community 170 - "steps (3)"
-Cohesion: 0.10
-Nodes (20): run, CI, jobs, test, working-directory, env, if, name (+12 more)
-
-### Community 171 - "DSDocRow"
-Cohesion: 0.10
-Nodes (20): import, types, import, types, import, types, exports, ./contracts (+12 more)
-
-### Community 172 - "yjs_compat.rs"
-Cohesion: 0.20
-Nodes (12): b64(), el(), empty(), fixture(), normalize(), reads_yjs_document(), roots(), s() (+4 more)
-
-### Community 173 - "base"
+### Community 215 - "base (2)"
 Cohesion: 0.11
 Nodes (19): CODE_SIGN_STYLE, CURRENT_PROJECT_VERSION, DEVELOPMENT_TEAM, GENERATE_INFOPLIST_FILE, INFOPLIST_KEY_CFBundleDisplayName, INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace, INFOPLIST_KEY_UIApplicationSceneManifest_Generation, INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents (+11 more)
 
-### Community 174 - ".classify"
-Cohesion: 0.20
-Nodes (4): LineMetrics, .midline, StrokeShapeClassifier, ShapeClassifierTests
+### Community 216 - "Как устроено"
+Cohesion: 0.10
+Nodes (19): Если что-то пошло не так, Запасной вариант: свой сертификат распространения, Как выпустить сборку, Как поставить Datascratch на iPad без Mac (TestFlight), Необязательные настройки, Сборка на Mac (когда он будет), Шаг 1. Узнать Team ID, Шаг 2. Зарегистрировать идентификатор приложения (+11 more)
 
-### Community 175 - "agents-api.md (5)"
-Cohesion: 0.18
-Nodes (18): add_comment tool, Agent Markdown dialect (block markers, tasks, callouts), create_note tool, context.data.createNoteDoc, edit_note tool, get_backlinks tool, get_handwriting_image tool, Handwriting group (strokes within 24 chars, handwritingId = earliest stroke) (+10 more)
-
-### Community 176 - "agents-api.md (3)"
-Cohesion: 0.11
-Nodes (19): Agent Markdown dialect, Block markers <!-- block:<blockId> -->, Strokes with all anchors deleted hidden (D-35), Agent error format (isError, {error:{code,message}}), Handwriting image references (D-11), Handwriting PNG renderer (@napi-rs/canvas), In-process PNG render cache (200 images), packages/agents/src/service/schemas.ts (zod input schemas) (+11 more)
-
-### Community 177 - "Новая группа (2)"
+### Community 217 - "AgentsContext plugin-server interface"
 Cohesion: 0.15
-Nodes (19): attachAnchorRebase (@datascratch/shared), Point = character anchor + em offset from glyph, CI on macOS (GitHub Actions), D-35 Stroke on deleted text rule, DSInk (stroke format, live-stroke geometry), iOS anchoring and relayout per strokes.md §4, iOS cross-block text move re-anchoring, Stroke split across lines on rewrap (+11 more)
+Nodes (18): agents store (plugins/agents-store.ts), agents users (plugins/agents-users.ts), Реализация AgentsContext сервером (src/plugins/agents-context.ts), ds_web consent cookie (POST /v1/auth/web-session), apps/server/src/plugins/agents-*.ts, /v1/agent-tokens management endpoints, AgentsContext plugin-server interface, AuditEntry — журнал каждого вызова (mcp/rest), ошибка записи не роняет операцию (+10 more)
 
-### Community 178 - "risks.md (2)"
+### Community 218 - "True (2)"
+Cohesion: 0.15
+Nodes (7): DbOrTx, DocumentService, isUniqueViolation(), selectSnapshotsToDrop(), at(), now, policy
+
+### Community 219 - "RecoveryKey (2)"
 Cohesion: 0.11
 Nodes (18): BackdropBlob, BackdropName, BackdropSpec, ColorName, DurationName, HighlightName, InkName, MotionName (+10 more)
 
-### Community 179 - "factories.ts"
+### Community 220 - "crypto.md (2) (2)"
 Cohesion: 0.11
 Nodes (18): compilerOptions, declaration, esModuleInterop, exactOptionalPropertyTypes, forceConsistentCasingInFileNames, isolatedModules, lib, module (+10 more)
 
-### Community 181 - "ClientMessage"
-Cohesion: 0.14
-Nodes (11): ClientMessage, awareness, hello, push, snapshot, subscribe, unsubscribe, SyncAuth (+3 more)
+### Community 221 - ".classify"
+Cohesion: 0.22
+Nodes (4): LineMetrics, .midline, StrokeShapeClassifier, ShapeClassifierTests
 
-### Community 182 - "with"
+### Community 222 - "agents-api.md (4)"
 Cohesion: 0.13
-Nodes (18): run, defaults, name, runs-on, steps, ios, working-directory, if (+10 more)
+Nodes (14): Доступ агента: только блокноты «для агентов» (D-04) из разрешения; корзина скрыта, context.data methods (listAgentNotebooks, loadDoc, docSeqs, applyUpdate, createNoteDoc, loadAttachmentImage), Optional grantId parameter on context.data methods — server runs query under RLS role limited to grant notebooks (D-30), Grant (static / oauth), 403 insufficient_scope step-up / 401 WWW-Authenticate resource_metadata, KMS decryption of agent notebooks (R-10), Permissions read / read_write, Permissions read / read_write and scopes notes:read, notes:write (+6 more)
 
-### Community 183 - "sync-protocol.md (2)"
-Cohesion: 0.18
-Nodes (15): PenTool, TOOL_DEFAULTS, HIGHLIGHT_TOKENS, INK_TOKENS, resolveColor(), TINTS, TOKEN_FALLBACKS, tokenVarName() (+7 more)
+### Community 223 - "runtime.ts (2) (2)"
+Cohesion: 0.19
+Nodes (5): RecoveryKey, .base32, .formatted, .groups, RecoveryKeyTests
 
-### Community 184 - "DSFormatBarItem"
+### Community 224 - "CodingKeys (3)"
+Cohesion: 0.14
+Nodes (8): ClientMessage, awareness, hello, push, snapshot, subscribe, unsubscribe, SyncFrame
+
+### Community 225 - "AttachmentRecord (2) (2)"
 Cohesion: 0.20
 Nodes (11): DSFormatBar, .body, DSFormatBarButton, .body, DSFormatBarElement, .id, item, separator (+3 more)
 
-### Community 186 - "DSDocRow (2)"
+### Community 226 - "agents-data.ts"
+Cohesion: 0.26
+Nodes (4): Tx, BoundedMap, PgAgentDataSource, readWrappedKey()
+
+### Community 227 - "Контракт: дизайн-токены «Тихая бумага» (v1)"
+Cohesion: 0.12
+Nodes (17): import, types, import, types, exports, ./contracts, ./crypto, ./ids (+9 more)
+
+### Community 228 - "DSDocRow"
 Cohesion: 0.19
 Nodes (10): DocRowPreview, .body, DSDocGrid, .body, DSDocIcon, emoji, symbol, DSDocRow (+2 more)
 
-### Community 187 - "DSSidebarItem (2)"
-Cohesion: 0.24
-Nodes (8): DSSidebarItem, .body, DSSidebarSection, .body, .isExpanded, SidebarPreview, .body, .sidebar
+### Community 229 - "0024-product-name.md (2) (3)"
+Cohesion: 0.27
+Nodes (7): DSSuggestionGroup, DSSuggestionItem, DSSuggestionList, .body, .isEmpty, SuggestionPreview, .body
 
-### Community 188 - "design.yml"
-Cohesion: 0.12
-Nodes (15): concurrency, cancel-in-progress, group, jobs, web, name, paths, branches (+7 more)
+### Community 230 - "e2e.sh"
+Cohesion: 0.16
+Nodes (14): DEPLOY_HOST, DEPLOY_KEY_FILE, DEPLOY_KNOWN_HOSTS_FILE, DEPLOY_PORT, DS_DOMAIN, DS_POSTGRES_IMAGE, DS_SERVER_IMAGE, DS_SKIP_FIREWALL (+6 more)
 
-### Community 189 - "PenToolbar.tsx"
+### Community 231 - "Stroke (2) (2)"
+Cohesion: 0.25
+Nodes (4): .pendingRecoveryKey, .savedRecoveryKey, SecureStore, Security
+
+### Community 232 - "Контракт: REST API сервера (v1)"
+Cohesion: 0.15
+Nodes (12): b64(), content, doc, firstRun, fixture, json, para, rel() (+4 more)
+
+### Community 233 - "DSMotionToken (2)"
+Cohesion: 0.27
+Nodes (7): DSSidebarItem, DSSidebarSection, .body, .isExpanded, SidebarPreview, .body, .sidebar
+
+### Community 234 - "DSStrings"
 Cohesion: 0.14
-Nodes (12): COLOR_NAMES, defaultPenSelection, HIGHLIGHTS, icons, INKS, PenSelection, PenTool, PenToolbarProps (+4 more)
+Nodes (15): targets, build, dependencies, platform, settings, sources, type, dependencies (+7 more)
 
-### Community 190 - "agents-api.md"
-Cohesion: 0.28
-Nodes (13): apps/server/src/plugins/agents-*.ts, /v1/agent-tokens management endpoints, AgentsContext plugin-server interface, AuditEntry agent call journal, context.store (grants, OAuth clients, codes, tokens, audit), Optional grantId parameter on context.data methods — server runs query under RLS role limited to grant notebooks (D-30), context.data.loadDoc, Grant (static / oauth agent permission) (+5 more)
-
-### Community 191 - "agents: пакет @datascratch/agents — Fastify-плагин: MCP (SDK v2, спецификация 2026-07-28, Streamable HTTP), OAuth 2.1 (CIMD, DCR, PKCE, экран согласия), статические токены, REST /v1/agent/*, журнал, лимиты, PNG рукописи"
+### Community 235 - "crypto.md (2) (3)"
 Cohesion: 0.18
-Nodes (15): Client ID Metadata Documents (CIMD), Dynamic Client Registration RFC 7591, 403 insufficient_scope step-up / 401 WWW-Authenticate resource_metadata, Authorization response iss (RFC 9207), OAuth 2.1 authorization server (per MCP spec 2026-07-28), Permissions read / read_write, Permissions read / read_write and scopes notes:read, notes:write, PKCE S256 mandatory, response_type=code (+7 more)
+Nodes (6): b64url(), call(), check_app(), der_to_raw(), ensure_bundle_id(), token()
 
-### Community 192 - "Foundations.stories.tsx"
-Cohesion: 0.17
-Nodes (9): backdropNames, colorNames, highlightNames, inkNames, tintNames, tokens, Backdrops(), Colors() (+1 more)
+### Community 236 - "risks.md"
+Cohesion: 0.22
+Nodes (15): 10. Открытые вопросы (к координатору), 1. Как устроено, 2.1. Токены, 2.2. OAuth 2.1 (по спецификации MCP 2026-07-28), 2. Доступ, 3. Инструменты MCP и REST, 4. Markdown для агента (`read_note`), 5. Правки агента (D-10) (+7 more)
 
-### Community 193 - "FakeRESTServer"
-Cohesion: 0.30
-Nodes (3): AccountServiceTests, FakeRESTServer, User
+### Community 237 - "Модель данных и глоссарий (2) (2)"
+Cohesion: 0.24
+Nodes (13): backdropSwift(), num(), pair(), pkg, renderSwift(), repo, rgba(), shadowSwift() (+5 more)
 
-### Community 194 - "compat/package.json"
+### Community 238 - "DSInlineChipStyle (2) (2)"
+Cohesion: 0.13
+Nodes (15): devDependencies, eslint@^9.39.0, prosemirror-model@^1.25.12, tsx@^4.20.0, @types/ws@^8.5.13, vitest@^3.2.0, ws@^8.18.0, y-prosemirror@^1.3.7 (+7 more)
+
+### Community 239 - "Обзор архитектуры"
 Cohesion: 0.18
 Nodes (13): dependencies, prosemirror-model@1.25.1, y-prosemirror@1.3.7, yjs@13.6.27, description, prosemirror-model, y-prosemirror, yjs (+5 more)
 
-### Community 195 - "Дизайн-система «Тихая бумага» v1 (D-15, D-38): packages/design-tokens, packages/ui (27 веб-компонентов), apps/ios/Packages/DSDesign, design.yml; Source Serif 4 вместо Newsreader"
-Cohesion: 0.19
-Nodes (12): CI workflow design.yml (macOS), dsdesign-snapshots CI artifact, DSDesign — дизайн-система «Тихая бумага» для iOS, DSShowcase, Как пользоваться, Компоненты, Сборка и тесты, Токены (+4 more)
-
-### Community 196 - "DSSkeleton"
+### Community 240 - "index.js"
 Cohesion: 0.23
 Nodes (8): DSSkeleton, .body, DSSkeletonLines, .body, DSSpinner, .body, SkeletonPreview, .body
 
-### Community 197 - "DSFeedback"
+### Community 241 - "DSColorToken (2)"
+Cohesion: 0.14
+Nodes (14): Color, .dsAccent, .dsCanvas, .dsDanger, .dsElevated, .dsOnAccent, .dsPrimary, .dsSecondary (+6 more)
+
+### Community 242 - "build-xcframework.sh"
 Cohesion: 0.21
 Nodes (7): DSFeedback, delete, selection, .sensoryFeedback, taskComplete, DSHaptics, View
 
-### Community 198 - "Handwriting input types (text marks, margin notes, drawing block, drawing on images, Scribble)"
-Cohesion: 0.24
-Nodes (14): 10. Открытые вопросы (к координатору), 1. Как устроено, 2.1. Токены, 2.2. OAuth 2.1 (по спецификации MCP 2026-07-28), 2. Доступ, 3. Инструменты MCP и REST, 4. Markdown для агента (`read_note`), 5. Правки агента (D-10) (+6 more)
+### Community 243 - "Модель данных и глоссарий (2) (3)"
+Cohesion: 0.19
+Nodes (14): aue(), kue(), Sue(), backdropCss(), block(), outputs(), px(), renderCss() (+6 more)
 
-### Community 199 - "DocList.tsx"
-Cohesion: 0.24
-Nodes (12): Дизайн-система v2: токен text.onAccent; TaskRow/DSTaskRow, DocRow, DocGrid/DSDocRow, DSDocGrid, PenToolbar/DSPenToolbar (одинаковые толщины), FormatToolbar/DSFormatBar; типографика .ds-prose и «бумага» data-paper для веб-редактора, Document typography .ds-prose and data-paper surface for web editor, DocGrid(), DocGridProps, DocList(), DocListProps, DocRow, DocRowProps (+4 more)
+### Community 244 - "F_e"
+Cohesion: 0.19
+Nodes (14): B_e(), F_e(), G5(), G_e(), hZ(), kv(), lZ(), oZ() (+6 more)
 
-### Community 200 - "Пошагово: сервер на VPS (Hetzner)"
+### Community 245 - "DSTintToken (4)"
 Cohesion: 0.14
-Nodes (14): 1. Купить сервер, 2. Домен, 3. Подключиться и подготовить сервер, 4. Скачать проект, 5. Заполнить настройки, 6. Запустить, 7. Резервные копии каждую ночь, 8. Обновление сервера (+6 more)
+Nodes (14): entitlements, info, platform, settings, sources, type, path, properties (+6 more)
 
-### Community 201 - "DSStrings"
-Cohesion: 0.29
-Nodes (11): DSStrings, .away, .cancelled, .collapse, .collapsed, .done, .expand, .expanded (+3 more)
+### Community 246 - "AgentsContext plugin-server interface (2)"
+Cohesion: 0.18
+Nodes (14): @datascratch/agents Fastify plugin (MCP, OAuth 2.1), POST/DELETE /v1/auth/web-session — cookie ds_web для экрана согласия, 10. Решённые вопросы стыков, /connect?returnTo=… login page (web-app) used as context.users.loginUrl, OAuth consent screen 'Тихая бумага', cookie ds_web, loginUrl = <appUrl>/connect?returnTo=… (страница /connect в web-app), ds_web cookie session and /connect login page, Open question: consent screen login (ds_web cookie) (+6 more)
 
-### Community 204 - "agents/package.json (2)"
+### Community 247 - "web/vite.config.ts"
+Cohesion: 0.21
+Nodes (4): vite-plugin-pwa@^1.2, SERVER_PATHS, isServer(), vite-plugin-pwa
+
+### Community 248 - "i18n/index.ts"
+Cohesion: 0.24
+Nodes (8): en, Loose, keys(), Lang, setLang(), Messages, ru, i18next
+
+### Community 249 - "compilerOptions"
 Cohesion: 0.15
-Nodes (13): Критерии приёмки, План разработки, Подготовка, Потоки разработки (D-39), Состав прототипа, Текущий статус, Этап 0 — подготовка (завершён), Этап 1 — прототип пера в тексте (iPad) (+5 more)
+Nodes (12): compilerOptions, baseUrl, declaration, jsx, lib, noEmit, paths, sourceMap (+4 more)
 
-### Community 206 - "EditorDemo"
+### Community 250 - "DSTintToken (2)"
+Cohesion: 0.22
+Nodes (13): Point = character anchor + em offset from glyph, CI on macOS (GitHub Actions), D-35 Stroke on deleted text rule, DSInk (stroke format, live-stroke geometry), iOS anchoring and relayout per strokes.md §4, Stroke split across lines on rewrap, Live stroke implementation hypothesis, R-03 Versioned stroke format (+5 more)
+
+### Community 251 - "DSButtonBody"
+Cohesion: 0.18
+Nodes (12): dependencies, libsodium-wrappers-sumo@^0.8.2, zod@^4.1.0, description, files, libsodium-wrappers-sumo, zod, name (+4 more)
+
+### Community 252 - "MCP tools / REST operations set (3)"
+Cohesion: 0.15
+Nodes (12): @tiptap/starter-kit@^3.32.0, @tiptap/suggestion@^3.32.0, exports, ./styles.css, @tiptap/starter-kit, main, name, private (+4 more)
+
+### Community 253 - "DSSegment"
+Cohesion: 0.26
+Nodes (7): .bucketPicker, DSSegment, .id, DSSegmentedControl, .body, SegmentedPreview, .body
+
+### Community 254 - "Stroke (2) (3)"
+Cohesion: 0.21
+Nodes (9): Account, Kind, passwordChanged, recoveryKeyRotated, recoveryUsed, Record, SecurityEvent, .id (+1 more)
+
+### Community 255 - "EditorDemo"
 Cohesion: 0.17
 Nodes (12): package, product, dependencies, info, platform, settings, sources, type (+4 more)
 
-### Community 207 - "03-pencil.md"
+### Community 257 - "SecureStore"
+Cohesion: 0.17
+Nodes (12): config, archive, run, test, config, schemes, Datascratch, name (+4 more)
+
+### Community 258 - "open-questions.md (2) (2)"
 Cohesion: 0.17
 Nodes (11): compilerOptions, lib, module, moduleResolution, noEmit, outDir, rootDir, types (+3 more)
 
-### Community 208 - "Agents API Contract (MCP, REST, OAuth) v1 — approved by coordinator 2026-10-25"
-Cohesion: 0.26
-Nodes (11): /v1/agent-tokens access management endpoints, agentsPlugin (@datascratch/agents Fastify plugin), Audit log (AuditEntry), Agents API Contract (MCP, REST, OAuth) v1 — approved by coordinator 2026-10-25, context.users (authenticate, loginUrl), /mcp MCP server (Streamable HTTP), MCP TypeScript SDK v2 (@modelcontextprotocol/server 2.4, spec 2026-07-28), MCP TypeScript SDK v2 (spec 2026-07-28) (+3 more)
+### Community 259 - "AppModel (3)"
+Cohesion: 0.21
+Nodes (3): DexieSyncStorage, DocEntry, DocSyncState
 
-### Community 209 - "Kinds of handwriting input"
-Cohesion: 0.24
-Nodes (12): D-07 No handwriting recognition, Drawing block between paragraphs, Kinds of handwriting input, Drawing on images, iOS scrolling note header (EditorView.headerView), iOS surfaces (drawing, image, margin notes), UITextView in TextKit 2 mode, Margin notes (anchored to paragraph) (+4 more)
+### Community 260 - "compilerOptions (2)"
+Cohesion: 0.17
+Nodes (12): with, cache-from, cache-to, context, file, labels, node-version, password (+4 more)
 
-### Community 211 - "pen.spec.tsx"
-Cohesion: 0.20
-Nodes (5): TestEditor(), TestEditorProps, Window, Window, EditorApi
+### Community 261 - "with"
+Cohesion: 0.17
+Nodes (12): env, APP_URL, CORS_ORIGINS, DATABASE_URL, DB_MIGRATE_ON_START, E2E_SERVER_URL, HOST, LOG_LEVEL (+4 more)
 
-### Community 212 - "contracts/README.md"
+### Community 263 - "DSSegment (2)"
 Cohesion: 0.17
 Nodes (11): dependsOn, outputs, dependsOn, $schema, tasks, build, lint, test (+3 more)
 
-### Community 213 - "FrameRateBoost"
-Cohesion: 0.22
-Nodes (3): FrameRateBoost, .isActive, Tick
+### Community 264 - "0039-parallel-sessions.md (2)"
+Cohesion: 0.18
+Nodes (10): App integration: local SwiftPM dependency .package(path: "Packages/DSDesign"), product DSDesign, configFiles, Debug, Release, include, path, relativePaths, name (+2 more)
 
-### Community 214 - "3. Apple Pencil в тексте — ключевая фича"
+### Community 265 - "True (3)"
+Cohesion: 0.36
+Nodes (5): DSGlassPanel, .body, GlassPreview, .body, View
+
+### Community 267 - "ui/test/setup.ts (2)"
 Cohesion: 0.18
 Nodes (11): 3. Apple Pencil в тексте — ключевая фича, iOS: редактор и слой пера (поток ios-editor), Веб: слой пера (поток web-editor), Виды рукописного ввода, Гипотеза реализации (проверяется на этапе 1), Жесты пером, Критерии приёмки прототипа, Нужно решить на прототипе (см. `open-questions.md`) (+3 more)
 
-### Community 216 - "ref_react"
+### Community 268 - "Новая группа"
+Cohesion: 0.22
+Nodes (11): D-27 Yrs in prototype, DSCore (Yrs), DSEditor (UIKit + TextKit 2, pen layer), DSEditorModel (EditorDocument, EditorCommands), EditorCommands, EditorDocument protocol, Document as source of truth (ProseMirror-like commands), Shared text+stroke undo history (+3 more)
+
+### Community 269 - "deploy.yml"
+Cohesion: 0.18
+Nodes (10): concurrency, cancel-in-progress, group, jobs, name, branches, paths, True (+2 more)
+
+### Community 270 - "images"
+Cohesion: 0.18
+Nodes (11): if, name, needs, outputs, runs-on, timeout-minutes, images, postgres (+3 more)
+
+### Community 271 - "12. Функции по мотивам Craft"
+Cohesion: 0.27
+Nodes (11): steps, NODE_ENV, VITE_DS_SERVER_URL, VITE_DS_TEST_HOOKS, env, if, name, run (+3 more)
+
+### Community 272 - "ui/test/setup.ts"
 Cohesion: 0.18
 Nodes (10): compilerOptions, lib, module, moduleResolution, noEmit, rootDir, types, extends (+2 more)
 
-### Community 217 - "Tokens.generated.swift"
-Cohesion: 0.22
-Nodes (7): Design tokens contract (contracts/design-tokens.md), packages/design-tokens tokens.json, DSDuration, DSFontFamilyName, DSRadius, DSSpace, design-tokens check command (CI generated == committed)
+### Community 273 - "ui/test/setup.ts (2)"
+Cohesion: 0.18
+Nodes (3): @testing-library/jest-dom@^7.0.1, RO, @testing-library/jest-dom
 
-### Community 218 - "DSSegment"
-Cohesion: 0.31
-Nodes (5): DSSegment, .id, DSSegmentedControl, SegmentedPreview, .body
+### Community 274 - "FrameRateBoost"
+Cohesion: 0.24
+Nodes (3): FrameRateBoost, .isActive, Tick
 
-### Community 219 - "r8"
-Cohesion: 0.27
-Nodes (10): b8(), d3(), gTe(), l3(), m3(), od(), oH(), p3() (+2 more)
-
-### Community 220 - "Дизайн и организация"
+### Community 275 - "design-tokens/README.md"
 Cohesion: 0.20
 Nodes (9): compilerOptions, declaration, noEmit, outDir, rootDir, sourceMap, extends, include (+1 more)
 
-### Community 222 - "Открытые вопросы"
+### Community 276 - "web-editor/vite.config.ts"
+Cohesion: 0.20
+Nodes (10): scripts, build, dev, e2e, e2e:build, lint, mock-server, preview (+2 more)
+
+### Community 277 - "scripts (2)"
+Cohesion: 0.20
+Nodes (9): compilerOptions, declaration, lib, noEmit, sourceMap, types, extends, include (+1 more)
+
+### Community 278 - "edit_note tool"
+Cohesion: 0.31
+Nodes (8): agentEdit mark { agentId, at }, agentEdit mark {agentId: grantId, at}, Agent edit as Yjs update via context.data.applyUpdate with agent origin, edit_note tool, edit_note atomic operations (insert, replace, delete, move, replace_text) (D-10), edit_note operations (insert, replace, delete, move, replace_text), edit_note move: блок копируется, у затронутых штрихов и комментариев переписываются anchors на символы копии, MCP tool edit_note
+
+### Community 279 - "09-agents-api.md (2)"
+Cohesion: 0.20
+Nodes (10): ChatGPT, Claude (claude.ai, приложение Claude, Claude Code), Агент без OAuth или свой скрипт, Если что-то не работает, Как подключить Claude или ChatGPT к Datascratch, Управление доступом, Что получит агент, Шаг 1. Включите режим «для агентов» у блокнота (+2 more)
+
+### Community 280 - "with (2)"
+Cohesion: 0.20
+Nodes (10): with, cache, cache-from, cache-to, context, file, load, node-version (+2 more)
+
+### Community 281 - "Запуск"
+Cohesion: 0.20
+Nodes (9): concurrency, cancel-in-progress, group, runs-on, services, timeout-minutes, jobs, e2e-real-server (+1 more)
+
+### Community 282 - "e2e-real-server"
+Cohesion: 0.20
+Nodes (10): POSTGRES_DB, POSTGRES_PASSWORD, POSTGRES_USER, command, environment, image, restart, shm_size (+2 more)
+
+### Community 283 - "peerDependencies"
+Cohesion: 0.20
+Nodes (10): react@^19.3.1, react-dom@^19.3.1, tailwindcss@^4.3.3, react, react-dom, tailwindcss, peerDependencies, react@^19.0.0 (+2 more)
+
+### Community 284 - "CodingKeys (2)"
 Cohesion: 0.20
 Nodes (9): compilerOptions, declaration, jsx, lib, noEmit, types, extends, include (+1 more)
 
-### Community 223 - "context.data methods (listAgentNotebooks, loadDoc, docSeqs, applyUpdate, createNoteDoc, loadAttachmentImage)"
+### Community 285 - "AccountError (2)"
 Cohesion: 0.22
-Nodes (6): context.data methods (listAgentNotebooks, loadDoc, docSeqs, applyUpdate, createNoteDoc, loadAttachmentImage), KMS decryption of agent notebooks (R-10), Resolved: notebook and space names — copy name/icon/space in notebook doc meta (document-model), fallback 'Без названия', MCP tool create_note, Notebook name fallback 'Без названия' (AgentNotebook → notebook meta → default), Agent edit as Yjs update via context.data.applyUpdate
+Nodes (9): AccountError, accountExists, .errorDescription, invalidEmail, invalidRecoveryKey, passwordsDoNotMatch, server, weakPassword (+1 more)
 
-### Community 224 - "Web pen layer (packages/web-editor/src/pen)"
+### Community 286 - "String (4)"
+Cohesion: 0.22
+Nodes (5): DocKind, account, note, notebook, .roots
+
+### Community 287 - "CodingKeys (4)"
+Cohesion: 0.22
+Nodes (9): SyncErrorCode, badRequest, docNotFound, forbidden, `internal`, payloadTooLarge, protocolMismatch, rateLimited (+1 more)
+
+### Community 288 - "DSTintToken (3)"
 Cohesion: 0.33
 Nodes (9): Draw-and-hold gestures (PROPOSED), iOS tools (pen, pencil, marker, highlighter, eraser, lasso), Pen gestures (zigzag delete, underline, strike, lasso), packages/web-editor, Web eraser (stroke and pixel), Web lasso (select, drag re-anchor), Web glass palette (ink.* / highlight.* tokens), Web pen layer (packages/web-editor/src/pen) (+1 more)
 
-### Community 225 - "Stream design-system (claude/design-system): packages/design-tokens, packages/ui, apps/ios/Packages/DSDesign, design.yml — статус: v1 влит в main (токены, веб-компоненты, DSDesign), доводка"
+### Community 289 - "11-nfr.md (2)"
+Cohesion: 0.25
+Nodes (8): Typing in a 300-paragraph note with 100 strokes (web): 3.7 ms median (window.__dsPerf, Chromium), .ds-prose document typography, packages/web-editor: TipTap + Yjs editor with Canvas pen layer, packages/web-editor — веб-редактор, TipTap + Yjs editor, Использование, Команды, Устройство
+
+### Community 290 - "0039-parallel-sessions.md (3)"
+Cohesion: 0.22
+Nodes (8): concurrency, cancel-in-progress, group, runs-on, timeout-minutes, jobs, docker, name
+
+### Community 292 - "steps (3)"
 Cohesion: 0.22
 Nodes (8): compilerOptions, jsx, lib, noEmit, types, extends, include, ../../tsconfig.base.json
 
-### Community 226 - "SyncErrorCode"
-Cohesion: 0.25
-Nodes (8): SyncErrorCode, docNotFound, forbidden, `internal`, payloadTooLarge, protocolMismatch, rateLimited, unauthorized
-
-### Community 227 - "EditorDemoTests"
+### Community 293 - "EditorDemoTests"
 Cohesion: 0.25
 Nodes (8): target, dependencies, platform, settings, sources, type, dependencies, EditorDemoTests
 
-### Community 228 - "Новая группа (3)"
+### Community 294 - "Новая группа (2)"
 Cohesion: 0.25
 Nodes (8): Demo verification checklist, EditorDemo README, EditorDemo app, ios-editor.yml CI unsigned IPA artifact, Metrics menu (open time, redraw, FPS, 10k words), Sideloadly / AltStore sideload, XcodeGen project generation, D-05 Live stroke (variant A, DECIDED)
 
-### Community 229 - "OAuth consent screen ('Quiet paper' server HTML page)"
-Cohesion: 0.36
-Nodes (8): 10. Решённые вопросы стыков, /connect?returnTo=… login page (web-app) used as context.users.loginUrl, OAuth consent screen ('Quiet paper' server HTML page), ds_web cookie session and /connect login page, Resolved: consent screen login — ds_web cookie (POST /v1/auth/web-session), loginUrl = <appUrl>/connect, page by web-app, Agents API §10 resolved interface questions (notebook names, consent login, server AgentsContext), context.users.authenticate / loginUrl, POST /v1/auth/web-session — sets ds_web cookie for consent screen
-
-### Community 230 - "edit_note operations (insert, replace, delete, move, replace_text)"
-Cohesion: 0.36
-Nodes (7): agentEdit mark { agentId, at }, agentEdit mark {agentId: grantId, at}, Agent edit as Yjs update via context.data.applyUpdate with agent origin, edit_note atomic operations (insert, replace, delete, move, replace_text) (D-10), edit_note operations (insert, replace, delete, move, replace_text), edit_note move: блок копируется, у затронутых штрихов и комментариев переписываются anchors на символы копии, MCP tool edit_note
-
-### Community 231 - "Реализация сервера (поток server, 2026-10-25)"
+### Community 295 - "env (2)"
 Cohesion: 0.25
-Nodes (8): Агенты (D-30), Вход и сессии (D-34, `contracts/crypto.md`), Корзина, Реализация сервера (поток server, 2026-10-25), Синхронизация (`contracts/sync-protocol.md`), Снимки, уплотнение и история версий (R-05), Фоновые задачи (pg-boss), Шеринг и гости (D-13, D-37)
+Nodes (8): iOS, options, bundleIdPrefix, createIntermediateGroups, deploymentTarget, developmentLanguage, groupSortPosition, xcodeVersion
 
-### Community 232 - "12. Функции по мотивам Craft"
+### Community 296 - "06-data-server.md (2) (2)"
 Cohesion: 0.25
-Nodes (8): 12.1. Задачи, 12.2. Ежедневные заметки и календарь, 12.3. Красота документа, 12.4. Блоки, 12.5. Коллекции, 12.6. Навигация (как в Craft), 12. Функции по мотивам Craft, Связь с моделью данных
+Nodes (8): iPhone / iPad (`apps/ios`), Веб (`apps/web`), Инфраструктура, Как будем масштабироваться, если понадобится, Ресурсы сервера, Сервер (`apps/server`), Совместимость iOS ↔ веб без общего ядра (D-22), Технологический стек — РЕШЕНО (2026-10-25)
 
-### Community 233 - "Stream design-system (claude/design-system): packages/design-tokens, packages/ui, apps/ios/Packages/DSDesign, design.yml — статус: v1 влит в main (токены, веб-компоненты, DSDesign), доводка (2)"
+### Community 297 - "DSTintToken (4)"
+Cohesion: 0.43
+Nodes (8): Drawing block between paragraphs, Kinds of handwriting input, Drawing on images, iOS surfaces (drawing, image, margin notes), Margin notes (anchored to paragraph), Text markup (underline, strike, circle, highlight, arrow), Web stroke hint recognition (underline, strike, circle, arrow, scribble, highlight), Web surfaces (drawing, image, margin anchorKind block)
+
+### Community 298 - "server (2)"
+Cohesion: 0.25
+Nodes (8): env, DEPLOY_HOST, DEPLOY_PORT, DEPLOY_USER, DS_POSTGRES_IMAGE, DS_SERVER_IMAGE, DS_TAG, DS_WEB_IMAGE
+
+### Community 299 - "environment"
+Cohesion: 0.39
+Nodes (8): steps, steps, steps, id, if, name, run, uses
+
+### Community 300 - "web.yml"
+Cohesion: 0.25
+Nodes (8): DOMAIN, DS_REGISTRY_TOKEN, DS_REGISTRY_USER, HOST, IOS_URL, KEY, KNOWN_HOSTS, env
+
+### Community 301 - "with (3)"
+Cohesion: 0.43
+Nodes (8): steps, steps, if, name, run, uses, working-directory, steps
+
+### Community 302 - "with (4)"
+Cohesion: 0.25
+Nodes (8): POSTGRES_DB, POSTGRES_PASSWORD, POSTGRES_USER, env, image, options, ports, postgres
+
+### Community 303 - "e2e-real-server (2)"
+Cohesion: 0.25
+Nodes (8): POSTGRES_DB, POSTGRES_PASSWORD, POSTGRES_USER, env, image, options, ports, postgres
+
+### Community 304 - "План этапов и отложенное (2)"
+Cohesion: 0.25
+Nodes (7): name, services, volumes, caddy_config, caddy_data, files, pgdata
+
+### Community 305 - "deploy.sh"
+Cohesion: 0.25
+Nodes (8): depends_on, environment, image, ports, restart, volumes, DS_DOMAIN, caddy
+
+### Community 306 - "scripts"
+Cohesion: 0.25
+Nodes (8): postgres, condition, depends_on, env_file, image, restart, volumes, server
+
+### Community 307 - ".send"
+Cohesion: 0.25
+Nodes (8): APP_URL, DATABASE_URL, DS_VERSION, NODE_OPTIONS, PORT, PUBLIC_URL, STORAGE_DIR, environment
+
+### Community 308 - "agents/tsconfig.build.json"
 Cohesion: 0.25
 Nodes (7): compilerOptions, noEmit, outDir, rootDir, extends, include, ./tsconfig.json
 
-### Community 234 - "design-tokens/README.md"
-Cohesion: 0.25
-Nodes (7): @datascratch/design-tokens — токены «Тихая бумага», packages/design-tokens — дизайн-токены «Тихая бумага», Команды, Подключение в вебе, Правила генерации, Что внутри, Шрифты
-
-### Community 235 - "smoke-test.sh (2)"
+### Community 309 - "shared/tsconfig.json"
 Cohesion: 0.25
 Nodes (7): compilerOptions, lib, noEmit, types, extends, include, ../../tsconfig.base.json
 
-### Community 236 - "Organization Hierarchy (Account > Space > Notebook > Folder > Note) (2) (2)"
+### Community 310 - "test-vectors/tsconfig.json"
 Cohesion: 0.25
 Nodes (7): compilerOptions, lib, noEmit, types, extends, include, ../../tsconfig.base.json
 
-### Community 237 - "project.yml"
+### Community 312 - "DSTintToken (5)"
+Cohesion: 0.38
+Nodes (3): .emptyState, DSEmptyState, .body
+
+### Community 314 - "Модель данных и глоссарий (2) (4)"
+Cohesion: 0.29
+Nodes (3): doc, s1, update
+
+### Community 315 - "Demo/project.yml"
 Cohesion: 0.29
 Nodes (6): path, name, packages, DSEditor, settings, targets
 
-### Community 238 - "Обзор архитектуры"
-Cohesion: 0.29
-Nodes (7): Ключевые архитектурные идеи, Обзор архитектуры, Общая схема, Потоки данных, Правка агента в блокноте «для агентов», Правка в приватном блокноте, Структура репозитория
+### Community 316 - "2026-10-25 (вторая половина дня) (3)"
+Cohesion: 0.33
+Nodes (5): Agent error format (isError / REST error codes), Permissions: user - own account docs (registered via POST /v1/docs); guest - shared docs, push only with edit; agents not via WebSocket (MCP/REST), Перенос заметки: PATCH /v1/docs/:id { notebookId } — история и ключ не меняются, гости старого блокнота теряют доступ, RLS пересчитывается, Agent notebooks: server decrypts and applies agent edit as a normal update, api/bodies.json REST body vectors
 
-### Community 239 - "True"
+### Community 317 - "Модель данных и глоссарий (2) (5)"
 Cohesion: 0.29
-Nodes (7): paths-ignore, branches, paths-ignore, True, pull_request, push, workflow_dispatch
+Nodes (6): D-39. Разработка параллельными сессиями; Claude сам вливает в main, Контекст, Последствия, Решение, formatted(), main()
 
-### Community 240 - "strokes.md (3)"
+### Community 318 - "Web editor implementation (@datascratch/web-editor DatascratchEditor)"
 Cohesion: 0.29
-Nodes (7): paths, branches, paths, True, pull_request, push, workflow_dispatch
+Nodes (7): EditorHost callbacks, Note style and cover from meta, Slash menu and format toolbar, Tasks: checkbox, scheduled/deadline chips, context menu, Single Y.UndoManager for content and strokes, Unsupported block placeholder (forward compatibility), @datascratch/web-editor (DatascratchEditor)
 
-### Community 241 - "EditorDemo (2)"
+### Community 319 - "bootstrap.sh"
+Cohesion: 0.52
+Nodes (6): current(), log(), deploy.sh script, start(), wait_healthy(), write_managed()
+
+### Community 320 - "design-tokens.md (3)"
+Cohesion: 0.29
+Nodes (7): @datascratch/design-tokens — токены «Тихая бумага», Команды, Контраст (WCAG AA), Подключение в вебе, Правила генерации, Что внутри, Шрифты
+
+### Community 321 - "resources"
+Cohesion: 0.29
+Nodes (7): scripts, bench, build, lint, test, test:watch, typecheck
+
+### Community 322 - "MCP tools / REST operations set (5)"
+Cohesion: 0.29
+Nodes (7): react@^19.0.0, react-dom@^19.0.0, react, react-dom, peerDependencies, react@^19.0.0, react-dom@^19.0.0
+
+### Community 323 - "Обзор архитектуры (2)"
+Cohesion: 0.33
+Nodes (6): Step, confirmKey, recover, recoveryKey, signIn, signUp
+
+### Community 325 - "EditorDemo (2)"
 Cohesion: 0.33
 Nodes (6): targets, build, test, schemes, EditorDemo, targets
 
-### Community 243 - "plugins/host.ts (2)"
+### Community 326 - "0004-encryption-and-api.md (4)"
 Cohesion: 0.33
-Nodes (6): scripts, build, lint, test, test:watch, typecheck
+Nodes (6): Git, Две среды, Конец сессии, Кто что делает, Правила для сессий-исполнителей (D-39), Процесс разработки
 
-### Community 245 - "scripts"
+### Community 327 - "DSTintToken (6)"
+Cohesion: 0.40
+Nodes (6): attachAnchorRebase (@datascratch/shared), iOS cross-block text move re-anchoring, strokes.md (stroke contract), strokes.md §4 (anchoring and relayout), strokes.md §4.1a (re-anchor copy, new strokeId), Web re-anchoring on y-prosemirror recreation
+
+### Community 328 - "DSTintToken (7)"
+Cohesion: 0.40
+Nodes (6): Core Animation renderer (PROPOSED), Custom stroke rendering layer over TextKit 2, Metal renderer (fallback), PKCanvasView, TextKit 2, Three canvases: under-text, over-text, live
+
+### Community 329 - "DSTintToken (8)"
+Cohesion: 0.33
+Nodes (6): D-06 Finger drawing on iPhone (opt-in), DSEditor Demo app (XcodeGen), iOS pen input (gesture recognizer, coalesced/predicted, Pencil Pro), iOS ProMotion frame rate request while drawing, Pen feel requirements (PencilKit latency, 120 fps, pressure, tilt, Pencil Pro), Pointer Events input (coalesced, predicted, palm rejection)
+
+### Community 330 - "permissions"
+Cohesion: 0.33
+Nodes (6): if, name, needs, runs-on, timeout-minutes, deploy
+
+### Community 331 - "with (5)"
+Cohesion: 0.33
+Nodes (6): TEST_DATABASE_URL, test, env, runs-on, services, timeout-minutes
+
+### Community 332 - "healthcheck"
+Cohesion: 0.33
+Nodes (6): paths, branches, paths, True, pull_request, push
+
+### Community 333 - "smoke.mjs"
+Cohesion: 0.33
+Nodes (6): run, web, working-directory, defaults, runs-on, timeout-minutes
+
+### Community 334 - "@datascratch/ui — веб-компоненты «Тихая бумага»"
+Cohesion: 0.33
+Nodes (6): paths, branches, paths, True, pull_request, push
+
+### Community 335 - "12. Функции по мотивам Craft (2)"
+Cohesion: 0.33
+Nodes (6): with, cache, name, node-version, path, retention-days
+
+### Community 336 - "yjs"
+Cohesion: 0.53
+Nodes (4): apt_install(), DEBIAN_FRONTEND, log(), bootstrap.sh script
+
+### Community 337 - ".prettierrc.json"
+Cohesion: 0.33
+Nodes (6): deploy, resources, memory, deploy, limits, deploy
+
+### Community 338 - "server.yml (2)"
+Cohesion: 0.33
+Nodes (6): scripts, dev, lint, showcase:build, test, typecheck
+
+### Community 339 - "MCP tools / REST operations set (6)"
 Cohesion: 0.33
 Nodes (6): scripts, build, dev, test, test:ct, typecheck
 
-### Community 246 - "options"
+### Community 340 - "options"
 Cohesion: 0.40
 Nodes (5): iOS, options, bundleIdPrefix, createIntermediateGroups, deploymentTarget
 
-### Community 247 - "EditorDemoUITests"
+### Community 341 - "EditorDemoUITests"
 Cohesion: 0.40
 Nodes (5): platform, settings, sources, type, EditorDemoUITests
 
-### Community 248 - "Демо «Живой штрих» (EditorDemo)"
+### Community 342 - "Демо «Живой штрих» (EditorDemo)"
 Cohesion: 0.40
 Nodes (4): Без Mac (временный вариант), Демо «Живой штрих» (EditorDemo), Как поставить на iPad (Mac с Xcode), Что проверить
 
-### Community 249 - "C1e"
+### Community 343 - "C1e"
 Cohesion: 0.40
 Nodes (4): A1e(), C1e(), n1e(), O6()
 
-### Community 250 - "tTe"
-Cohesion: 0.40
-Nodes (5): eTe(), tTe(), i(), n(), wTe()
+### Community 344 - "with (3)"
+Cohesion: 0.50
+Nodes (5): permissions, permissions, permissions, contents, packages
 
-### Community 251 - "5. Организация заметок и дизайн"
+### Community 345 - "Web editor showcase page (index.html)"
 Cohesion: 0.40
-Nodes (5): 5. Организация заметок и дизайн, Дизайн (D-15 — РЕШЕНО, главный принцип продукта), Организация (D-14 — РЕШЕНО по сути; структура ниже — ПРЕДЛОЖЕНО), Принципы, Реализация
+Nodes (5): secrets, ready, name, outputs, runs-on
 
-### Community 252 - "packages/shared — `@datascratch/shared`"
+### Community 346 - "healthcheck (2)"
 Cohesion: 0.40
-Nodes (5): packages/shared — `@datascratch/shared`, Коротко об использовании, Особенности, о которых стоит знать, Подпути, Разработка
+Nodes (5): interval, retries, test, timeout, healthcheck
 
-### Community 253 - "packages/test-vectors — общие тестовые векторы"
+### Community 347 - "build-linux.sh"
+Cohesion: 0.50
+Nodes (3): base, retry(), sleep()
+
+### Community 348 - "devDependencies (2) (2)"
 Cohesion: 0.40
-Nodes (5): packages/test-vectors — общие тестовые векторы, Как обновлять, Как пользоваться из Swift, Канонический JSON содержимого заметки, Что внутри
+Nodes (5): scripts, build, lint, test, typecheck
 
-### Community 254 - "build-xcframework.sh"
+### Community 349 - "@datascratch/ui — веб-компоненты «Тихая бумага» (2)"
+Cohesion: 0.40
+Nodes (5): @datascratch/ui — веб-компоненты «Тихая бумага», Витрина и тесты, Доступность и движение, Компоненты, Подключение
+
+### Community 351 - "build-xcframework.sh (2)"
 Cohesion: 0.50
 Nodes (3): IPHONEOS_DEPLOYMENT_TARGET, MACOSX_DEPLOYMENT_TARGET, build-xcframework.sh script
 
-### Community 256 - "0007-no-handwriting-recognition.md"
+### Community 353 - "DSTintToken (9)"
 Cohesion: 0.50
-Nodes (3): D-07. Распознавание рукописи в текст — не делаем, iOS system Scribble support, Решение
+Nodes (4): D-07 No handwriting recognition, iOS scrolling note header (EditorView.headerView), UITextView in TextKit 2 mode, System Scribble (iOS)
 
-### Community 257 - ".prettierrc.json"
+### Community 354 - "with (6)"
+Cohesion: 0.50
+Nodes (4): name, runs-on, timeout-minutes, deploy-e2e
+
+### Community 355 - "DSCore (4)"
+Cohesion: 0.50
+Nodes (4): yjs@^13.6.27, yjs, peerDependencies, yjs@^13.6.0
+
+### Community 356 - ".prettierrc.json (2)"
 Cohesion: 0.50
 Nodes (3): printWidth, singleQuote, trailingComma
 
-### Community 258 - "Новая группа (4)"
+### Community 357 - "Новая группа (3)"
 Cohesion: 1.00
 Nodes (3): Mermaid MIT License, mermaid.js (Knut Sveidqvist), MIT License terms
 
-### Community 260 - "Web editor showcase page (index.html)"
+### Community 361 - "./document"
+Cohesion: 0.67
+Nodes (3): import, types, ./document
+
+### Community 362 - "exports"
+Cohesion: 0.67
+Nodes (3): exports, ./fonts.css, ./styles.css
+
+### Community 363 - "Web editor showcase page (index.html) (2)"
 Cohesion: 1.00
 Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main.tsx, Root mount element #root
 
+### Community 364 - "MCP tools / REST operations set (7)"
+Cohesion: 0.67
+Nodes (3): katex@^0.16.0, loadKatex(), katex
+
+## Ambiguous Edges - Review These
+- `0008-pdf-annotations.md` → `Схема блоков: doc = title block+ (paragraph, heading, списки, taskList, callout, codeBlock, mathBlock, mermaid, table, image, file, drawing, pageCard)`  [AMBIGUOUS]
+  docs/architecture/contracts/document-model.md · relation: conceptually_related_to
+- `0039-parallel-sessions.md` → `CLOSED: XcodeGen accepted (D-39 as cited; proposed in D-28)`  [AMBIGUOUS]
+  docs/open-questions.md · relation: references
+- `Cover is only the user's own image (gallery, file, screenshot, paste); no preset gradients` → `Document style: font (serif/sans/mono), width, paper (smooth/dots/grid/ruled), backdrop color or gradient, text color; style gallery after MVP`  [AMBIGUOUS]
+  docs/spec/12-craft-features.md · relation: conceptually_related_to
+
 ## Knowledge Gaps
-- **747 isolated node(s):** `block`, `drawing`, `image`, `text`, `agent` (+742 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 3092 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **30 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **1147 isolated node(s):** `.dsAccent`, `.dsCanvas`, `.dsDanger`, `.dsElevated`, `.dsOnAccent` (+1142 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 4119 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **45 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md (2)` to `decisions/README.md (3)`, `12-craft-features.md`, `DSDesign Swift package`, `scripts/generate.mjs`, `Foundation`, `DatePicker.tsx`?**
-  _High betweenness centrality (0.211) - this node is a cross-community bridge._
+- **Why does `L` connect `n` to `mermaid.min.js`, `plugins/host.ts (2)`, `e`, `ii`, `Модель данных и глоссарий (2) (3)`?**
+  _High betweenness centrality (0.192) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `block`, `drawing`, `image` to the rest of the system?**
-  _747 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **What connects `.dsAccent`, `.dsCanvas`, `.dsDanger` to the rest of the system?**
+  _1147 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
-  _Cohesion score 0.0035038281185933995 - nodes in this community are weakly interconnected._
-- **Why does `t` connect `n` to `mermaid.min.js`, `scripts/generate.mjs`, `Wt`?**
-  _High betweenness centrality (0.200) - this node is a cross-community bridge._
-- **Are the 115 inferred relationships involving `r()` (e.g. with `mermaid.min.js` and `_4()`) actually correct?**
-  _`r()` has 115 INFERRED edges - model-reasoned connections that need verification._
-- **Should `n` be split into smaller, more focused modules?**
-  _Cohesion score 0.018937468225724452 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0034932506719911162 - nodes in this community are weakly interconnected._
+- **Why does `PenToolbar (penWidthPx)` connect `collab/reanchor.ts` to `plugins/host.ts (2)`, `DSDesign Swift package`?**
+  _High betweenness centrality (0.153) - this node is a cross-community bridge._
+
+### Low-confidence Hints
+_AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
+
+- **What is the exact relationship between `0008-pdf-annotations.md` and `Схема блоков: doc = title block+ (paragraph, heading, списки, taskList, callout, codeBlock, mathBlock, mermaid, table, image, file, drawing, pageCard)`?**
+  _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
+- **What is the exact relationship between `0039-parallel-sessions.md` and `CLOSED: XcodeGen accepted (D-39 as cited; proposed in D-28)`?**
+  _Edge tagged AMBIGUOUS (relation: references) - confidence is low._

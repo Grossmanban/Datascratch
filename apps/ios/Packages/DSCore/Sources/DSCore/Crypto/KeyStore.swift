@@ -206,16 +206,41 @@ public struct SignupMaterial: Sendable {
 
     /// Generates keys for a new account. Slow (Argon2id) — call off the main thread.
     public static func make(password: String, userId: String, kdf: KDFParams = .v1) throws -> SignupMaterial {
-        let salt = DSCrypto.newSalt()
+        try make(password: password, userId: userId, kdf: kdf, salt: DSCrypto.newSalt(), masterKey: DSCrypto.newKey(), recoveryKey: DSCrypto.newKey())
+    }
+
+    /// Deterministic variant (vector `crypto/signup-flow.json`).
+    static func make(password: String, userId: String, kdf: KDFParams, salt: Data, masterKey master: Data, recoveryKey recovery: Data,
+                     nonceMasterPassword: Data? = nil, nonceMasterRecovery: Data? = nil) throws -> SignupMaterial {
         let keys = try DSCrypto.deriveKeys(password: password, salt: salt, params: kdf)
-        let master = DSCrypto.newKey()
-        let recovery = DSCrypto.newKey()
         return SignupMaterial(
             salt: salt, kdf: kdf, loginKey: keys.loginKey, passwordKey: keys.passwordKey, masterKey: master,
             recoveryKey: recovery, recoveryKeyText: try RecoveryKeyFormat.format(recovery),
             recoveryLoginKey: try DSCrypto.recoveryLoginKey(recovery),
-            wrappedMasterKeyPassword: try DSCrypto.wrapKey(master, with: keys.passwordKey, ad: CryptoAD.masterByPassword(userId: userId)),
-            wrappedMasterKeyRecovery: try DSCrypto.wrapKey(master, with: recovery, ad: CryptoAD.masterByRecovery(userId: userId)))
+            wrappedMasterKeyPassword: try DSCrypto.wrapKey(master, with: keys.passwordKey, ad: CryptoAD.masterByPassword(userId: userId), nonce: nonceMasterPassword),
+            wrappedMasterKeyRecovery: try DSCrypto.wrapKey(master, with: recovery, ad: CryptoAD.masterByRecovery(userId: userId), nonce: nonceMasterRecovery))
+    }
+}
+
+/// New recovery key for a signed-in account (crypto.md §4, `POST /auth/recovery-key`). The master
+/// key is rewrapped with the new key; data is not re-encrypted.
+public struct RecoveryKeyRotation: Sendable {
+    public var recoveryKey: Data
+    /// Shown to the user once (`DS1-XXXX-...`).
+    public var recoveryKeyText: String
+    public var body: RotateRecoveryKeyRequest
+
+    public static func make(masterKey: Data, currentLoginKey: Data, userId: String) throws -> RecoveryKeyRotation {
+        try make(masterKey: masterKey, currentLoginKey: currentLoginKey, userId: userId, recoveryKey: DSCrypto.newKey())
+    }
+
+    /// Deterministic variant (vector `crypto/recovery-rotate.json`).
+    static func make(masterKey: Data, currentLoginKey: Data, userId: String, recoveryKey: Data, nonce: Data? = nil) throws -> RecoveryKeyRotation {
+        RecoveryKeyRotation(
+            recoveryKey: recoveryKey, recoveryKeyText: try RecoveryKeyFormat.format(recoveryKey),
+            body: RotateRecoveryKeyRequest(
+                currentLoginKey: currentLoginKey, recoveryLoginKey: try DSCrypto.recoveryLoginKey(recoveryKey),
+                wrappedMasterKeyRecovery: try DSCrypto.wrapKey(masterKey, with: recoveryKey, ad: CryptoAD.masterByRecovery(userId: userId), nonce: nonce)))
     }
 }
 

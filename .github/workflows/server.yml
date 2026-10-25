@@ -5,19 +5,21 @@ on:
     branches: [main, claude/server]
     paths:
       - apps/server/**
-      - packages/shared/**
-      - packages/agents/**
+      - apps/web/**
+      - packages/**
       - infra/**
       - pnpm-lock.yaml
       - .github/workflows/server.yml
+      - .github/workflows/deploy.yml
   pull_request:
     paths:
       - apps/server/**
-      - packages/shared/**
-      - packages/agents/**
+      - apps/web/**
+      - packages/**
       - infra/**
       - pnpm-lock.yaml
       - .github/workflows/server.yml
+      - .github/workflows/deploy.yml
 
 concurrency:
   group: server-${{ github.ref }}
@@ -91,3 +93,37 @@ jobs:
         if: failure()
         working-directory: infra
         run: docker compose logs --tail 200
+
+  deploy-e2e:
+    name: Deploy scripts end to end (simulated Ubuntu 24.04 VPS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint
+        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.7 -color .github/workflows/deploy.yml .github/workflows/server.yml
+      - name: shellcheck
+        run: shellcheck -S warning infra/deploy/*.sh infra/deploy/test/*.sh infra/*.sh
+      - uses: docker/setup-buildx-action@v3
+      - name: Server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile
+          tags: datascratch-server:latest
+          load: true
+          cache-from: type=gha,scope=server
+      - name: Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/deploy/web.Dockerfile
+          tags: datascratch-web:latest
+          load: true
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Bootstrap, deploy, redeploy, automatic and manual rollback, backup
+        run: infra/deploy/test/e2e.sh

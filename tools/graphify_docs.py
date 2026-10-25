@@ -36,6 +36,7 @@ OUT = Path("graphify-out")
 SPEC = Path(".claude/skills/graphify/references/extraction-spec.md").resolve()
 SEMANTIC_TYPES = ("document", "paper", "image")
 CHUNK_MAX_FILES = 20
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".heic"}
 CHUNK_MAX_LINES = 5000
 
 TEMP_FILES = [
@@ -138,6 +139,9 @@ def finish():
         edges += d.get("edges", [])
         hyper += d.get("hyperedges", [])
         for src, n in (d.get("coverage") or {}).items():
+            # Images have no lines; only text files can be partly read.
+            if Path(src).suffix.lower() in IMAGE_SUFFIXES:
+                continue
             if Path(src).is_file() and int(n) < _line_count(src):
                 partial.append(src)
     reported = {n.get("source_file") for n in nodes}
@@ -187,7 +191,8 @@ def finish():
     kept = {n["id"] for n in extraction["nodes"]}
     kept_labels = {_norm_label(n.get("label", n["id"])) for n in extraction["nodes"]}
     lost = [n for n in old["nodes"] if n["id"] not in kept]
-    foreign = [n["id"] for n in lost if n.get("source_file") not in touched
+    # Source-less nodes left without edges are pruned by build_merge itself.
+    foreign = [n["id"] for n in lost if n.get("source_file") and n.get("source_file") not in touched
                and _norm_label(n.get("label", n["id"])) not in kept_labels]
     if foreign:
         sys.exit(f"Refusing to write: nodes from unchanged files would be lost: {foreign[:20]}")

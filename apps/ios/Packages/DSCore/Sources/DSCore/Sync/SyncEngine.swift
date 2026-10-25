@@ -38,7 +38,16 @@ public actor SyncEngine: SyncClientDelegate {
 
     private var open: [String: OpenDoc] = [:]
     private var inFlight: Set<String> = []
+    /// A flush is running; calls made meanwhile only ask it for another pass. Bulk edits
+    /// (hundreds of updates in a row) then cost a few outbox scans instead of one per update.
+    private var flushing = false
+    private var flushAgain = false
     private var catchingUp: Set<String> = []
+    /// Documents subscribed on the current connection whose catch-up finished (`upToDate`).
+    /// Pushes go only to these: otherwise `lastSeq = max(ack)` could skip others' updates.
+    private var live: Set<String> = []
+    /// Records of subscribed documents (kind/notebook for key lookup without a DB read).
+    private var known: [String: DocumentRecord] = [:]
     private var connection: SyncConnectionState = .disconnected
     private var statusContinuations: [UUID: AsyncStream<SyncStatus>.Continuation] = [:]
 
@@ -121,7 +130,12 @@ public actor SyncEngine: SyncClientDelegate {
     }
 
     /// Stops applying remote updates to `docId` in memory (it stays tracked in the store).
-    public func close(docId: String) {
+    /// Uploads a snapshot first when ≥ 30 local edits were made since the last one: snapshots
+    /// are the versions of the history (sync-protocol.md §5, spec/06).
+    public func close(docId: String, now: Date = Date()) async {
+        if let record = try? store.document(docId), record.localEditsSinceSnapshot >= LocalStore.snapshotOnCloseEdits {
+            await snapshot(docId: docId, now: now)
+        }
         open[docId]?.subscription.cancel()
         open[docId] = nil
     }
@@ -140,12 +154,25 @@ public actor SyncEngine: SyncClientDelegate {
 
     /// Sends queued messages that are not in flight on the current connection.
     public func flush() async {
+        if flushing {
+            flushAgain = true
+            return
+        }
+        flushing = true
+        defer { flushing = false }
+        repeat {
+            flushAgain = false
+            await flushPass()
+        } while flushAgain
+    }
+
+    private func flushPass() async {
         guard await client.isConnected else {
             publish()
             return
         }
         guard let items = try? store.pendingOutbox(limit: 500) else { return }
-        for item in items where !inFlight.contains(item.clientMsgId) {
+        for item in items where !inFlight.contains(item.clientMsgId) && live.contains(item.docId) {
             guard let record = try? store.document(item.docId) else { continue }
             do {
                 guard let key = try keyFor(record) else { continue }
@@ -177,8 +204,23 @@ public actor SyncEngine: SyncClientDelegate {
         publish()
     }
 
+    /// Registers (if needed) and subscribes documents whose key is known. A document must be
+    /// subscribed and caught up before the first push (sync-protocol.md §4).
     private func subscribe(_ records: [DocumentRecord]) async throws {
-        let entries = records.filter { (try? keyFor($0)) != nil }.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }
+        var ready: [DocumentRecord] = []
+        for record in records where (try? keyFor(record)) != nil {
+            if !record.registered {
+                do {
+                    if let register { try await register(record) }
+                    try store.setRegistered(record.docId)
+                } catch {
+                    continue // retried on the next connect
+                }
+            }
+            ready.append(record)
+        }
+        for r in ready { known[r.docId] = r }
+        let entries = ready.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }
         guard !entries.isEmpty else { return }
         for e in entries { catchingUp.insert(e.docId) }
         // Keep frames reasonably small.
@@ -192,8 +234,13 @@ public actor SyncEngine: SyncClientDelegate {
 
     /// Uploads a snapshot when the thresholds are exceeded (sync-protocol.md §5).
     public func snapshotIfNeeded(docId: String, now: Date = Date()) async {
-        guard (try? store.needsSnapshot(docId: docId)) == true,
-              let record = try? store.document(docId),
+        guard (try? store.needsSnapshot(docId: docId)) == true else { return }
+        await snapshot(docId: docId, now: now)
+    }
+
+    /// Builds, stores and sends a snapshot of `docId` (unless one is already queued).
+    private func snapshot(docId: String, now: Date) async {
+        guard let record = try? store.document(docId),
               (try? store.pendingOutbox(docId: docId))?.contains(where: { $0.kind == .snapshot }) != true else { return }
         do {
             let doc: CRDTDocument
@@ -228,6 +275,7 @@ public actor SyncEngine: SyncClientDelegate {
     public func syncClientDidConnect(_ client: SyncClient, userId: String?) async {
         inFlight.removeAll()
         catchingUp.removeAll()
+        live.removeAll()
         if let records = try? store.documents() {
             try? await subscribe(records)
         }
@@ -236,7 +284,10 @@ public actor SyncEngine: SyncClientDelegate {
 
     public func syncClient(_ client: SyncClient, didChangeState state: SyncConnectionState) async {
         connection = state
-        if case .connected = state {} else { inFlight.removeAll() }
+        if case .connected = state {} else {
+            inFlight.removeAll()
+            live.removeAll()
+        }
         publish()
     }
 
@@ -248,7 +299,9 @@ public actor SyncEngine: SyncClientDelegate {
             receive(docId: docId, snapshot: snapshot, items: items)
             if upToDate {
                 catchingUp.remove(docId)
+                live.insert(docId)
                 publish()
+                await flush()
                 await snapshotIfNeeded(docId: docId)
             }
         case .update(let docId, let item):
@@ -282,24 +335,22 @@ public actor SyncEngine: SyncClientDelegate {
     /// Decrypts, stores and applies remote data. Stops at the first item it cannot decrypt so
     /// that `lastSeq` never skips it.
     private func receive(docId: String, snapshot: (seq: Int64, payload: Data)?, items: [UpdateItem]) {
-        guard let record = try? store.document(docId), let key = try? keyFor(record) else { return }
+        guard let record = known[docId] ?? (try? store.document(docId)), let key = try? keyFor(record) else { return }
         let doc = open[docId]?.doc
         let ad = CryptoAD.doc(docId)
-        if let snapshot, snapshot.seq > record.lastSeq {
+        if let snapshot {
             guard let state = try? DSCrypto.open(snapshot.payload, key: key, ad: ad) else { return }
-            try? store.applyRemoteSnapshot(docId: docId, seq: snapshot.seq, state: state)
-            try? doc?.applyUpdate(state, origin: .remote)
+            if (try? store.applyRemoteSnapshot(docId: docId, seq: snapshot.seq, state: state)) == true {
+                try? doc?.applyUpdate(state, origin: .remote)
+            }
         }
         var decrypted: [(seq: Int64, data: Data)] = []
         for item in items.sorted(by: { $0.seq < $1.seq }) {
             guard let plain = try? DSCrypto.open(item.payload, key: key, ad: ad) else { break }
             decrypted.append((item.seq, plain))
         }
-        guard !decrypted.isEmpty else { return }
-        try? store.appendRemoteUpdates(docId: docId, items: decrypted)
-        if let doc {
-            try? doc.applyUpdates(decrypted.filter { $0.seq > record.lastSeq }.map(\.data), origin: .remote)
-        }
+        guard !decrypted.isEmpty, let added = try? store.appendRemoteUpdates(docId: docId, items: decrypted), !added.isEmpty else { return }
+        try? doc?.applyUpdates(added.map(\.data), origin: .remote)
     }
 }
 

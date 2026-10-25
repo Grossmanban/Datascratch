@@ -17,6 +17,8 @@ const ConfigSchema = z
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
     /** Public base URL of the server, used in OpenAPI and links. */
     PUBLIC_URL: z.string().url().default('http://localhost:8080'),
+    /** Web app URL (links from server pages, e.g. the agents consent screen). */
+    APP_URL: z.string().url().optional(),
     /** Comma-separated list of allowed CORS origins (web client). Empty = same origin only. */
     CORS_ORIGINS: z.string().default(''),
 
@@ -58,6 +60,8 @@ const ConfigSchema = z
     COVERED_UPDATES_KEEP_DAYS: z.coerce.number().int().nonnegative().default(7),
 
     JOBS_ENABLED: bool.default(true),
+    /** Enables GET /metrics (Prometheus) for requests with `Authorization: Bearer <METRICS_TOKEN>`. */
+    METRICS_TOKEN: z.string().min(16).optional(),
   })
   .superRefine((c, ctx) => {
     if (c.STORAGE_DRIVER === 's3' && !c.S3_BUCKET) {
@@ -68,7 +72,9 @@ const ConfigSchema = z
 export type Config = z.infer<typeof ConfigSchema>;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const parsed = ConfigSchema.safeParse(env);
+  // `KEY=` in an .env file means "not set".
+  const cleaned = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== ''));
+  const parsed = ConfigSchema.safeParse(cleaned);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Invalid server configuration:\n${issues}`);

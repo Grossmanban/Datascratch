@@ -3,6 +3,8 @@ import {
   ATTACHMENT_CHUNK_BYTES,
   DEFAULT_KDF,
   attachmentChunkCount,
+  buildShareLink,
+  rotateRecoveryKey,
   deriveRecoveryLoginKey,
   derivePasswordKeys,
   encryptAttachmentChunk,
@@ -196,6 +198,117 @@ export function cryptoVectors() {
       plaintextSha256: sha256(data),
       chunkCount: count,
       chunks,
+    },
+  };
+}
+
+export function cryptoExtraVectors() {
+  // base64url edge cases.
+  const lengths = [0, 1, 2, 3, 4, 5, 31, 32, 33];
+  const encode = lengths.map((n) => {
+    const bytes = det(`b64-${n}`, n);
+    return { hex: hex(bytes), base64url: b64(bytes) };
+  });
+  const rejectDecode = [
+    { input: "AA==", reason: "padding" },
+    { input: "A", reason: "length mod 4 = 1" },
+    { input: "A+B/", reason: "standard base64 alphabet" },
+    { input: "AB", reason: "non-zero trailing bits" },
+    { input: "AAA ", reason: "whitespace" },
+  ];
+
+  // Share links (crypto.md §7).
+  const shareKey = det("share-key", 32);
+  const shareId = vid(5);
+  const shareLinks = {
+    build: [
+      {
+        origin: "https://app.example",
+        shareId,
+        key: b64(shareKey),
+        url: buildShareLink("https://app.example/", shareId, shareKey),
+      },
+    ],
+    reject: [
+      { url: `https://app.example/notes/${shareId}#k=${b64(shareKey)}`, reason: "not a /s/ path" },
+      { url: `https://app.example/s/${shareId}`, reason: "no key" },
+      { url: `https://app.example/s/${shareId}#k=AAAA`, reason: "key is not 32 bytes" },
+    ],
+  };
+
+  // A whole signup with fixed randomness: what `POST /auth/signup` must contain.
+  const userId = vid(10);
+  const password = "correct horse battery staple";
+  const salt = det("signup-salt", 16);
+  const masterKey = det("signup-master", 32);
+  const recoveryKey = det("signup-recovery", 32);
+  const pk = derivePasswordKeys(password, salt, DEFAULT_KDF);
+  const signup = {
+    inputs: {
+      password,
+      userId,
+      salt: b64(salt),
+      masterKey: b64(masterKey),
+      recoveryKey: b64(recoveryKey),
+      nonceMasterPassword: b64(det("signup-nonce-1", 24)),
+      nonceMasterRecovery: b64(det("signup-nonce-2", 24)),
+    },
+    expected: {
+      recoveryKeyText: formatRecoveryKey(recoveryKey),
+      body: {
+        salt: b64(salt),
+        kdf: DEFAULT_KDF,
+        loginKey: b64(pk.loginKey),
+        recoveryLoginKey: b64(deriveRecoveryLoginKey(recoveryKey)),
+        wrappedMasterKeyPassword: wrapKey(pk.passwordKey, masterKey, AD.masterKeyPassword(userId), {
+          nonce: det("signup-nonce-1", 24),
+        }),
+        wrappedMasterKeyRecovery: wrapKey(recoveryKey, masterKey, AD.masterKeyRecovery(userId), {
+          nonce: det("signup-nonce-2", 24),
+        }),
+        userId,
+      },
+    },
+  };
+
+  // Recovery key rotation with fixed randomness (POST /auth/recovery-key).
+  const rotRecovery = det("rotate-recovery", 32);
+  const rotNonce = det("rotate-nonce", 24);
+  const rotated = rotateRecoveryKey(masterKey, pk.loginKey, userId, {
+    recoveryKey: rotRecovery,
+    nonce: rotNonce,
+  });
+  const recoveryRotate = {
+    inputs: {
+      userId,
+      masterKey: b64(masterKey),
+      currentLoginKey: b64(pk.loginKey),
+      newRecoveryKey: b64(rotRecovery),
+      nonce: b64(rotNonce),
+    },
+    expected: { recoveryKeyText: rotated.recoveryKeyText, body: rotated.body },
+  };
+
+  return {
+    "crypto/recovery-rotate.json": {
+      description:
+        "Recovery key rotation (POST /auth/recovery-key) with fixed randomness: body = { currentLoginKey, recoveryLoginKey = BLAKE2b-256(key=newRecoveryKey, 'ds1|recovery-login'), wrappedMasterKeyRecovery = envelope(newRecoveryKey, masterKey, ad 'ds1|key|master|recovery|<userId>', nonce) }.",
+      ...recoveryRotate,
+    },
+    "crypto/base64url.json": {
+      description: "base64url without padding; decoders must reject every `rejectDecode` input.",
+      encode,
+      rejectDecode,
+    },
+    "crypto/share-link.json": {
+      description:
+        "Share links https://<web-host>/s/<shareId>#k=<base64url key> (crypto.md §7); `reject` inputs must fail to parse.",
+      ...shareLinks,
+    },
+    "crypto/signup-flow.json": {
+      description:
+        "End-to-end signup with fixed randomness: password + salt → keys; masterKey wrapped by passwordKey and by recoveryKey with the given nonces. `expected.body` is the crypto part of POST /auth/signup.",
+      ...signup,
     },
   };
 }

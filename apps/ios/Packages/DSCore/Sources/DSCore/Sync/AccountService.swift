@@ -72,6 +72,22 @@ public actor AccountService {
         try await api.changePassword(currentLoginKey: current.loginKey, material: material)
     }
 
+    /// Replaces the recovery key (confirmed by the current password) and returns the new key text
+    /// to show once. `settings.recoveryKeyConfirmed` goes back to `false` until the user confirms
+    /// they saved it.
+    public func rotateRecoveryKey(email: String, currentPassword: String, account: AccountDocument) async throws -> String {
+        guard let session = await api.currentSession, let master = try keys.masterKey() else { throw AccountError.notSignedIn }
+        let pre = try await api.prelogin(email: email)
+        let current = try await Task.detached { try DSCrypto.deriveKeys(password: currentPassword, salt: pre.salt.data, params: pre.kdf) }.value
+        let rotation = try RecoveryKeyRotation.make(masterKey: master, currentLoginKey: current.loginKey, userId: session.userId)
+        try await api.rotateRecoveryKey(rotation.body)
+        try account.setRecoveryKeyConfirmed(false)
+        return rotation.recoveryKeyText
+    }
+
+    /// Account security log (password changes, recoveries, recovery key rotations), newest first.
+    public func securityEvents() async throws -> [SecurityEvent] { try await api.securityEvents() }
+
     /// Signs out and forgets all keys on this device.
     public func logout() async throws {
         try await api.logout()
@@ -121,6 +137,22 @@ public actor AccountService {
         try notebook.putNote(NoteMeta(id: id, folderId: folderId, title: title, kind: kind, dailyDate: dailyDate, wrappedKey: wrappedKey, order: order))
         try store.ensureDocument(docId: id, kind: .note, notebookId: notebook.notebookId)
         return note
+    }
+
+    /// Moves a note to another notebook (api.md «Перенос заметки»): (1) wraps the note key with
+    /// the target notebook key and writes `NoteMeta` there, (2) `PATCH /docs/:id`, (3) removes
+    /// `NoteMeta` from the source notebook. Content, history, attachments and the note key stay.
+    public func moveNote(id noteId: String, from source: NotebookDocument, to target: NotebookDocument, folderId: String? = nil) async throws {
+        guard var meta = source.note(id: noteId) else { throw DocumentError.notFound("note \(noteId)") }
+        let noteKey = try keys.noteKey(noteId: noteId, wrappedKey: meta.wrappedKey, notebookId: source.notebookId)
+        guard let targetKey = try keys.notebookKey(target.notebookId) else { throw AccountError.missingKey(target.notebookId) }
+        meta.wrappedKey = Base64URL.encode(try DSCrypto.wrapKey(noteKey, with: targetKey, ad: CryptoAD.noteKey(noteId)))
+        meta.folderId = folderId
+        meta.parentNoteId = nil
+        try target.putNote(meta)
+        try await api.moveDoc(id: noteId, toNotebook: target.notebookId)
+        try store.setNotebook(noteId, notebookId: target.notebookId)
+        try source.purgeNote(id: noteId)
     }
 
     /// The daily note for `day` (`YYYY-MM-DD`) in the daily-notes notebook

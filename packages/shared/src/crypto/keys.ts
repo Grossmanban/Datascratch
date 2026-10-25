@@ -84,6 +84,17 @@ export const wrapNoteKey = (noteKey: Uint8Array, notebookKey: Uint8Array, noteId
 export const unwrapNoteKey = (wrapped: string, notebookKey: Uint8Array, noteId: string) =>
   unwrapKey(notebookKey, wrapped, AD.noteKey(noteId));
 
+/**
+ * Move a note to another notebook: its noteKey re-wrapped by the new
+ * notebookKey (the note content itself is not re-encrypted).
+ */
+export const rewrapNoteKey = (
+  wrapped: string,
+  fromNotebookKey: Uint8Array,
+  toNotebookKey: Uint8Array,
+  noteId: string,
+) => wrapNoteKey(unwrapNoteKey(wrapped, fromNotebookKey, noteId), toNotebookKey, noteId);
+
 /** Encrypt a Yjs update or snapshot of `docId` (ad `ds1|doc|<docId>`). */
 export const encryptDocUpdate = (
   key: Uint8Array,
@@ -171,6 +182,42 @@ export function rekeyPassword(
     loginKey,
     passwordKey,
     wrappedMasterKeyPassword: wrapMasterKeyWithPassword(masterKey, passwordKey, userId),
+  };
+}
+
+export interface RotatedRecoveryKey {
+  recoveryKey: Uint8Array;
+  /** `DS1-…`, shown to the user exactly once. */
+  recoveryKeyText: string;
+  /** Body of `POST /auth/recovery-key` (base64url fields). */
+  body: { currentLoginKey: string; recoveryLoginKey: string; wrappedMasterKeyRecovery: string };
+}
+
+/**
+ * New recovery key for an existing account: generates the key, derives the
+ * new recoveryLoginKey and wraps the masterKey with it. `currentLoginKey`
+ * (from the password) confirms the request on the server.
+ */
+export function rotateRecoveryKey(
+  masterKey: Uint8Array,
+  currentLoginKey: Uint8Array,
+  userId: string,
+  options: { recoveryKey?: Uint8Array; nonce?: Uint8Array } = {},
+): RotatedRecoveryKey {
+  const recoveryKey = options.recoveryKey ?? generateRecoveryKey();
+  return {
+    recoveryKey,
+    recoveryKeyText: formatRecoveryKey(recoveryKey),
+    body: {
+      currentLoginKey: toBase64Url(currentLoginKey),
+      recoveryLoginKey: toBase64Url(deriveRecoveryLoginKey(recoveryKey)),
+      wrappedMasterKeyRecovery: wrapKey(
+        recoveryKey,
+        masterKey,
+        AD.masterKeyRecovery(userId),
+        options.nonce ? { nonce: options.nonce } : undefined,
+      ),
+    },
   };
 }
 

@@ -45,6 +45,8 @@ public protocol EditorDocument: AnyObject {
     func stroke(_ id: String) -> Stroke?
     func addStroke(_ stroke: Stroke)
     func removeStroke(_ id: String)
+    /// Rewrites the anchors of a text stroke (re-anchoring, `strokes.md` §1/§4.1).
+    func setStrokeAnchors(_ id: String, _ anchors: [Data])
 
     // MARK: Meta
 

@@ -62,7 +62,7 @@ func makeDoc(_ text: String = "Hello brave new world") -> (InMemoryEditorDocumen
         let (doc, b) = makeDoc("abcdef")
         doc.setMark(MarkName.bold, value: true, block: b, range: 1..<3)
         let runs = doc.inline(of: b, range: nil)
-        #expect(runs == [.text("a", .empty), .text("bc", MarkSet([MarkName.bold: true])), .text("def", .empty)])
+        #expect(runs == [.text("a", .empty), .text("bc", MarkSet([MarkName.bold: .bool(true)])), .text("def", .empty)])
         doc.insertAtom(.tag("x"), marks: .empty, block: b, at: 6)
         #expect(doc.textLength(of: b) == 7)
         #expect(doc.flatText(of: b) == "abcdef\u{FFFC}")

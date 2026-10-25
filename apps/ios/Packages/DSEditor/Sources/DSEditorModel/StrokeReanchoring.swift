@@ -6,8 +6,9 @@ import Foundation
 /// Over Yjs/y-prosemirror, splitting or merging paragraphs, changing a block type and moving blocks
 /// re-create the moved text as new items; anchors to the old items would resolve as deleted (D-35)
 /// and the ink would vanish. Commands therefore capture the positions of affected anchors before the
-/// change and, in the same transaction, replace each affected stroke with a copy anchored to the new
-/// characters (strokes are immutable, `strokes.md` §1). Undo reverts both together.
+/// change and, in the same transaction, point each affected stroke at the new characters by
+/// rewriting its `anchors` (the only mutable field besides `hidden`, `strokes.md` §1).
+/// Undo reverts both together.
 @MainActor
 public struct StrokeReanchoring {
     struct Captured {
@@ -58,12 +59,9 @@ public struct StrokeReanchoring {
                 }
             }
             guard changed else { continue }
-            var copy = c.stroke
-            copy.id = UUIDv7.generate()
-            copy.anchors = anchors
-            document.removeStroke(c.stroke.id)
-            document.addStroke(copy)
+            document.setStrokeAnchors(c.stroke.id, anchors)
         }
+        // `blockId` is immutable: a margin note of a removed block becomes a copy on the new block.
         for s in blockStrokes {
             guard let old = s.blockId, document.block(old) == nil, let target = mapBlock(old) else { continue }
             var copy = s

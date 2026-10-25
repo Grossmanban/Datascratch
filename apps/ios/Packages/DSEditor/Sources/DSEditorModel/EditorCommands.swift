@@ -355,7 +355,7 @@ public struct EditorCommands {
     // MARK: - Marks
 
     /// Toggles a mark over a flattened range (removes it if the whole range already has it).
-    public func toggleMark(_ name: String, value: JSONValue = true, range: Range<Int>) {
+    public func toggleMark(_ name: String, value: JSONValue = MarkSet.plain, range: Range<Int>) {
         guard !range.isEmpty else { return }
         let p = projection
         let segments = textSegments(range, in: p)

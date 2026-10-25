@@ -390,7 +390,7 @@ public final class EditorView: UIView {
         let para = projection.paragraphs[i]
         let pos = TextPosition(block: para.blockId, offset: o)
         let cmd = commands
-        func mark(_ name: String, _ value: JSONValue = .bool(true)) {
+        func mark(_ name: String, _ value: JSONValue = MarkSet.plain) {
             if range.isEmpty {
                 var m = pendingMarks ?? cmd.marks(at: range)
                 m.set(name, m.contains(name) ? nil : value)

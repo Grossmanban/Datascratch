@@ -104,7 +104,8 @@ public struct BlockNode: Hashable, Sendable {
                 inline: [InlineElement]? = nil, children: [BlockNode] = []) {
         self.id = id
         self.type = type
-        self.attrs = attrs
+        // y-prosemirror does not store null attributes; absent means null (`document-model.md` §4.1).
+        self.attrs = attrs.filter { $0.value != .null }
         self.inline = inline ?? (NodeType.textblocks.contains(type) ? [] : nil)
         self.children = children
     }

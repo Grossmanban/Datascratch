@@ -92,9 +92,9 @@ public struct MarkdownShortcuts {
             }
         })
         let patterns: [(String, String, JSONValue)] = [
-            ("**", MarkName.bold, true), ("__", MarkName.bold, true), ("~~", MarkName.strike, true),
+            ("**", MarkName.bold, MarkSet.plain), ("__", MarkName.bold, MarkSet.plain), ("~~", MarkName.strike, MarkSet.plain),
             ("==", MarkName.highlight, .object(["color": "highlight.yellow"])),
-            ("*", MarkName.italic, true), ("_", MarkName.italic, true), ("`", MarkName.code, true),
+            ("*", MarkName.italic, MarkSet.plain), ("_", MarkName.italic, MarkSet.plain), ("`", MarkName.code, MarkSet.plain),
         ]
         for (delim, mark, value) in patterns {
             let d = Array(delim.utf16)

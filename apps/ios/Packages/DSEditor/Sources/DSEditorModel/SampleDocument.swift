@@ -4,8 +4,8 @@ import Foundation
 public enum SampleDocument {
     @MainActor
     public static func make() -> InMemoryEditorDocument {
-        let bold = MarkSet([MarkName.bold: true])
-        let italic = MarkSet([MarkName.italic: true])
+        let bold = MarkSet([MarkName.bold: MarkSet.plain])
+        let italic = MarkSet([MarkName.italic: MarkSet.plain])
         let highlight = MarkSet([MarkName.highlight: .object(["color": "highlight.yellow"])])
         let blocks: [BlockNode] = [
             .title("Живой штрих"),

@@ -68,7 +68,8 @@ struct CoreLibraryTests {
         let store = try LocalStore.inMemory()
         let library = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
         library.seedIfEmpty()
-        let notebook = try #require(library.notebooks(in: library.activeSpace?.id).first)
+        let notebooks = library.notebooks(in: library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
         let note = library.createNote(in: notebook.id, folder: nil, title: "Trip")
         library.updateNote(note.id) {
             $0.coverImage = NoteCover(attachmentId: "cover-1", offsetY: 0.25)

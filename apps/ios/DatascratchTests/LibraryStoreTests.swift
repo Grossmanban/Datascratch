@@ -158,7 +158,8 @@ struct CoverImagesTests {
 
         let library = LibraryStore(persistence: .inMemory)
         library.seedIfEmpty()
-        let note = try #require(library.documents.first)
+        let documents = library.documents
+        let note = try #require(documents.first)
         library.setCover(added, ofNote: note.id, images: images)
         #expect(library.note(note.id)?.coverImage?.attachmentId == added.cover)
         #expect(library.note(note.id)?.coverThumb == added.thumb)

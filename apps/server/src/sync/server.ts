@@ -12,6 +12,7 @@ export async function registerSync(app: FastifyInstance, ctx: AppContext) {
   // Base64 inflates by 4/3, plus JSON framing.
   const maxPayload = Math.ceil((ctx.config.SYNC_SNAPSHOT_MAX_BYTES * 4) / 3) + 64 * 1024;
   await app.register(websocket, { options: { maxPayload } });
+  ctx.metrics.gauge('ds_sync_connections', 'Open sync WebSocket connections.', () => connections.size);
 
   app.get('/sync', { websocket: true, schema: { hide: true } }, (socket) => {
     let alive = true;

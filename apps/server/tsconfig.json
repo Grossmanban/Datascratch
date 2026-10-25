@@ -9,5 +9,5 @@
     "rootDir": ".",
     "noEmit": true
   },
-  "include": ["src", "test", "vitest.config.ts", "drizzle.config.ts"]
+  "include": ["src", "test", "bench", "vitest.config.ts", "drizzle.config.ts"]
 }

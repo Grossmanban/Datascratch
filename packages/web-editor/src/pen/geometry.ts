@@ -79,12 +79,16 @@ export function lineForPoint(lines: readonly Line[], x: number, y: number): Line
   return best;
 }
 
-/** The glyph of a line nearest to x (containing glyph first). */
+/**
+ * The glyph of a line nearest to x. Glyph intervals are half-open [left, right): a point exactly on
+ * the boundary of two characters belongs to the one on the right, so a stroke that starts at a
+ * word's first letter is not anchored to the space before it.
+ */
 export function glyphForX(line: Line, x: number): Glyph {
   let best = line.glyphs[0]!;
   let bestD = Infinity;
   for (const g of line.glyphs) {
-    const d = intervalDistance(x, g.left, g.right);
+    const d = x < g.left ? g.left - x : x >= g.right ? x - g.right + (x === g.right ? 1e-6 : 0) : 0;
     if (d < bestD) {
       best = g;
       bestD = d;

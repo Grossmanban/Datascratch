@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "description": "End-to-end signup with fixed randomness: password + salt → keys; masterKey wrapped by passwordKey and by recoveryKey with the given nonces. `expected.body` is the crypto part of POST /auth/signup.",
+  "inputs": {
+    "password": "correct horse battery staple",
+    "userId": "0192f3c4-0000-7000-8000-00000000000a",
+    "salt": "Q4WalZTxEYsfmG_6EGEb_w",
+    "masterKey": "figdsEzoA7Zi49Om4MmTE1rDGYVbT2HfPWXLdJ3JWu4",
+    "recoveryKey": "5dK7KTveOaoZMa0GsQPGy7HpV5JHl2Yl_RobpUHUkxY",
+    "nonceMasterPassword": "DmyGXjk2pynF2VNVy_E2t_Fj_KTYbHVk",
+    "nonceMasterRecovery": "wjbEPIYQiNx4VHTORDqK6kxM5ptz671j"
+  },
+  "expected": {
+    "recoveryKeyText": "DS1-WQ9B-PA9V-VRWT-M69H-NM3B-20Y6-SERY-JNWJ-8YBP-C9FX-38DT-AGEM-JCB0",
+    "body": {
+      "salt": "Q4WalZTxEYsfmG_6EGEb_w",
+      "kdf": {
+        "alg": "argon2id13",
+        "ops": 3,
+        "mem": 67108864
+      },
+      "loginKey": "4ozyZOvptnxp-Yivlc7Z_HP5I0o4l1ej0Z2P8nToNew",
+      "recoveryLoginKey": "gdbGIsVVDKXTPltdZ-7eUnMX7TjpeZpjuZ6DqTj57NU",
+      "wrappedMasterKeyPassword": "AQ5shl45NqcpxdlTVcvxNrfxY_yk2Gx1ZOLJsDtwDrZfdQx8bKee0-ffNE_VgS4Q7iY800KHMzfrRBAGE7EFNXTnSUACav6HCg",
+      "wrappedMasterKeyRecovery": "AcI2xDyGEIjceFR0zkQ6iupMTOabc-u9YyihlvzHwI0Ajs_Kn4-ln6A1s-78Nn_81grTKpoENtZHo9ysB79xK2cfE4cmWiH9Bg",
+      "userId": "0192f3c4-0000-7000-8000-00000000000a"
+    }
+  }
+}

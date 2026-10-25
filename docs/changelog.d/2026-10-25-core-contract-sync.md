@@ -1,1 +1,3 @@
-- 2026-10-25 · core · Схемы `shared` догнали контракты: `Session.deviceId`, `deviceName` в signup/recovery, `mime` в статусе вложения, код `bad_request` в синхронизации; клиент синхронизации шлёт push только по подписанным документам; `guestDeviceId()`; хелпер `replaceStrokeWithReanchored` и `origin` у `reanchorStrokes`.
+- 2026-10-25 · core · Перенос заметки между блокнотами: `moveDocRequestSchema` (`PATCH /docs/:id`), `rewrapNoteKey`, вектор в `api/bodies.json`.
+- 2026-10-25 · core · Схемы base64url в `shared` требуют каноническую форму (как строгий декодер); исправлена неканоническая соль в `api/bodies.json` (замечание ios-core).
+- 2026-10-25 · core · Клиентский хелпер переноса заметки `moveNoteToNotebook` (переобернуть ключ → запись в новый индекс → PATCH → удаление из старого, откат при ошибке).

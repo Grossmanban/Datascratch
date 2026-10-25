@@ -1046,13 +1046,13 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792930104.298869,
     "seen": 1792933940.5097818,
-    "ast_hash": "a5de2feab812287bedd5a0f8cb793b6a",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792930104.299103,
     "seen": 1792933940.5097854,
-    "ast_hash": "4203dbf78c0e858320c15f29875ac97d",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2802,9 +2802,9 @@
     "semantic_hash": "a0f80305c431ac4070e7ebc1b3465b42"
   },
   "apps/ios/Packages/DSEditor/Demo/UITests/EditorDemoUITests.swift": {
-    "mtime": 1792933857.1511478,
-    "seen": 1792933923.1382124,
-    "ast_hash": "a9b144f4a60612d41974d07314b6b51d",
+    "mtime": 1792935010.5189517,
+    "seen": 1792935065.5560367,
+    "ast_hash": "e59171b30b73661f0731a94718b561bc",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
@@ -2940,10 +2940,10 @@
     "semantic_hash": "1d24b882fe8ba7262c3852392998e95b"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditorModel/EditorDocument.swift": {
-    "mtime": 1792930383.825808,
-    "seen": 1792931877.4388409,
-    "ast_hash": "224941b5eff91f79d3d1b6bb2e06ba38",
-    "semantic_hash": "224941b5eff91f79d3d1b6bb2e06ba38"
+    "mtime": 1792934937.9886696,
+    "seen": 1792935065.5567486,
+    "ast_hash": "37d415dc7e09000762aacc85da2fddb1",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditorModel/InMemoryEditorDocument.swift": {
     "mtime": 1792930383.8267283,

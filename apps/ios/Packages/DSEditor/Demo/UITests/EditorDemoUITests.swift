@@ -52,8 +52,8 @@ final class EditorDemoUITests: XCTestCase {
         // Tap into the first body paragraph (not on a block attachment).
         editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
         sleep(1)
-        editor.typeText("Привет")
-        XCTAssertTrue((editor.value as? String ?? "").contains("Привет"))
+        editor.typeText("Inkwell")
+        XCTAssertTrue((editor.value as? String ?? "").contains("Inkwell"))
         app.buttons["undo"].tap()
     }
 

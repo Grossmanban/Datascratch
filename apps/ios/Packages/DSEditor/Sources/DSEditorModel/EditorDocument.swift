@@ -67,18 +67,20 @@ public protocol EditorDocument: AnyObject {
 }
 
 /// Keeps an observation alive; dropping it (or calling `cancel`) stops it.
-@MainActor
-public final class ObservationToken {
+/// A plain (non-isolated) deinit: `isolated deinit` crashed in the Swift runtime on iOS 26
+/// (`swift_task_deinitOnExecutor` freeing a task-local scope it did not allocate).
+public final class ObservationToken: @unchecked Sendable {
     private var onCancel: (() -> Void)?
 
     public init(_ onCancel: @escaping () -> Void) { self.onCancel = onCancel }
 
     public func cancel() {
-        onCancel?()
+        let c = onCancel
         onCancel = nil
+        c?()
     }
 
-    isolated deinit { cancel() }
+    deinit { cancel() }
 }
 
 public extension EditorDocument {

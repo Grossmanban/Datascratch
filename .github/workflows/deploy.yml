@@ -1,13 +1,23 @@
 name: deploy
 
-# Builds the server and web images, publishes them to GHCR and deploys them to
-# the user's VPS over SSH: idempotent bootstrap, database migrations,
-# `docker compose up`, HTTPS smoke test, automatic rollback on failure.
-# Setup: infra/DEPLOY.md. Without the secrets the run is skipped (green), so
-# forks and fresh clones are not affected.
+# Two modes (infra/DEPLOY.md):
+#   inspect — READ-ONLY survey of the server over SSH (manual run only; changes
+#             nothing; works without DEPLOY_ENABLED). The default of a manual run.
+#   deploy  — builds the server and web images, publishes them to GHCR and deploys
+#             them over SSH: idempotent bootstrap that leaves other software on the
+#             server alone, migrations, `docker compose up`, smoke test, rollback.
+# Safety switch: deploy never runs until the repository variable DEPLOY_ENABLED is
+# "true" (the server may already run other software). Without the secrets every run
+# is skipped (green), so forks and fresh clones are not affected.
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect = read-only survey of the server; deploy = install / update Datascratch"
+        type: choice
+        options: [inspect, deploy]
+        default: inspect
   push:
     branches: [main]
     paths:
@@ -30,6 +40,7 @@ jobs:
     name: Check deploy secrets
     runs-on: ubuntu-latest
     outputs:
+      inspect: ${{ steps.check.outputs.inspect }}
       ready: ${{ steps.check.outputs.ready }}
     steps:
       - id: check
@@ -37,7 +48,24 @@ jobs:
           HOST: ${{ secrets.DEPLOY_HOST }}
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           ENABLED: ${{ vars.DEPLOY_ENABLED }}
+          EVENT: ${{ github.event_name }}
+          MODE: ${{ inputs.mode }}
         run: |
+          missing=()
+          [ -n "$HOST" ] || missing+=(DEPLOY_HOST)
+          [ -n "$KEY" ] || missing+=(DEPLOY_SSH_KEY)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "inspect=false" >> "$GITHUB_OUTPUT"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Skipped::Missing secrets: ${missing[*]}. See infra/DEPLOY.md."
+            exit 0
+          fi
+          if [ "$EVENT" = workflow_dispatch ] && [ "$MODE" = inspect ]; then
+            echo "inspect=true" >> "$GITHUB_OUTPUT"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "inspect=false" >> "$GITHUB_OUTPUT"
           # Safety switch: nothing touches the server until the repository variable
           # DEPLOY_ENABLED is "true" (the VPS may run other software; see infra/DEPLOY.md).
           if [ "$ENABLED" != "true" ]; then
@@ -45,15 +73,29 @@ jobs:
             echo "::notice title=Deploy disabled::Set the repository variable DEPLOY_ENABLED=true to deploy. See infra/DEPLOY.md."
             exit 0
           fi
-          missing=()
-          [ -n "$HOST" ] || missing+=(DEPLOY_HOST)
-          [ -n "$KEY" ] || missing+=(DEPLOY_SSH_KEY)
-          if [ ${#missing[@]} -eq 0 ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Deploy skipped::Missing secrets: ${missing[*]}. See infra/DEPLOY.md."
-          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+  inspect:
+    name: Inspect the server (read-only)
+    needs: secrets
+    if: needs.secrets.outputs.inspect == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'root' }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH key and host key
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: infra/deploy/ssh-setup.sh
+      - name: Survey (changes nothing on the server)
+        run: |
+          infra/deploy/remote.sh inspect | tee "$RUNNER_TEMP/inspect.md"
+          cat "$RUNNER_TEMP/inspect.md" >> "$GITHUB_STEP_SUMMARY"
 
   images:
     name: Build and publish images
@@ -132,6 +174,14 @@ jobs:
       DS_SERVER_IMAGE: ${{ needs.images.outputs.server }}
       DS_WEB_IMAGE: ${{ needs.images.outputs.web }}
       DS_POSTGRES_IMAGE: ${{ needs.images.outputs.postgres }}
+      # Coexistence with other software on the server (infra/DEPLOY.md):
+      # auto | standalone | behind-proxy (Sinhron's Caddy if present, else any proxy).
+      DS_DEPLOY_MODE: ${{ vars.DEPLOY_MODE || 'auto' }}
+      DS_PROXY_PORT: ${{ vars.DS_PROXY_PORT || '8480' }}
+      DS_NGINX_AUTO: ${{ vars.DS_NGINX_AUTO || 'false' }}
+      DS_NGINX_CERTBOT: ${{ vars.DS_NGINX_CERTBOT || 'false' }}
+      DS_HOST_MODE: ${{ vars.DS_HOST_MODE || 'auto' }}
+      DS_MEM_PROFILE: ${{ vars.DS_MEM_PROFILE || 'auto' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -142,33 +192,7 @@ jobs:
         env:
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          dir="$RUNNER_TEMP/ssh"
-          install -d -m 700 "$dir"
-          printf '%s\n' "$KEY" | tr -d '\r' > "$dir/key"
-          chmod 600 "$dir/key"
-          if ! ssh-keygen -y -f "$dir/key" > /dev/null 2>&1; then
-            echo "::error title=DEPLOY_SSH_KEY::The secret is not a valid private key (no passphrase). Copy the whole file including the BEGIN/END lines. See infra/DEPLOY.md."
-            exit 1
-          fi
-          if [ -n "$KNOWN_HOSTS" ]; then
-            printf '%s\n' "$KNOWN_HOSTS" > "$dir/known_hosts"
-            echo "Host key pinned by the DEPLOY_KNOWN_HOSTS variable."
-          else
-            # Trust on first use: remember the key the server presents now and show its
-            # fingerprint, so it can be compared with the provider's console (infra/DEPLOY.md).
-            ssh-keyscan -p "$DEPLOY_PORT" -t ed25519,ecdsa,rsa "$DEPLOY_HOST" 2> /dev/null > "$dir/known_hosts" || true
-            if [ ! -s "$dir/known_hosts" ]; then
-              echo "::error title=Server unreachable::No SSH answer from $DEPLOY_HOST:$DEPLOY_PORT. Is the server running and port $DEPLOY_PORT open?"
-              exit 1
-            fi
-            echo "::notice title=Server host key (verify once)::$(ssh-keygen -lf "$dir/known_hosts" | head -1). To pin it, save the lines below as the repository variable DEPLOY_KNOWN_HOSTS."
-            cat "$dir/known_hosts"
-          fi
-          {
-            echo "DEPLOY_KEY_FILE=$dir/key"
-            echo "DEPLOY_KNOWN_HOSTS_FILE=$dir/known_hosts"
-          } >> "$GITHUB_ENV"
+        run: infra/deploy/ssh-setup.sh
 
       - name: Address
         env:
@@ -182,7 +206,7 @@ jobs:
               ip="$(getent ahostsv4 "$DEPLOY_HOST" | awk 'NR==1{print $1}')"
             fi
             [ -n "$ip" ] || { echo "::error::Cannot resolve $DEPLOY_HOST to an IPv4 address; set the DS_DOMAIN variable."; exit 1; }
-            # <ip-with-dashes>.sslip.io resolves to the IP itself; Caddy gets a real certificate for it.
+            # <ip-with-dashes>.sslip.io resolves to the IP itself; it gets a real certificate.
             domain="${ip//./-}.sslip.io"
           fi
           echo "DS_DOMAIN=$domain" >> "$GITHUB_ENV"
@@ -192,20 +216,44 @@ jobs:
         env:
           DS_REGISTRY_USER: ${{ github.actor }}
           DS_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: infra/deploy/remote.sh deploy
+        run: |
+          infra/deploy/remote.sh deploy
+          infra/deploy/remote.sh info | tee -a "$GITHUB_ENV"
 
-      - name: Smoke test over HTTPS
+      - name: Smoke test
         id: smoke
-        run: node infra/deploy/smoke.mjs "https://$DS_DOMAIN" 300
+        run: |
+          if [ "$DS_MODE" = proxy ]; then
+            # Behind the server's own proxy: check Datascratch itself through an SSH tunnel;
+            # the public address works once the proxy is connected (see the summary).
+            infra/deploy/remote.sh smoke-local
+          elif [ "$DS_MODE" = edge ]; then
+            # Behind the other app's Caddy: first Datascratch itself, then the public address.
+            infra/deploy/remote.sh check
+            node infra/deploy/smoke.mjs "https://$DS_DOMAIN" 300 || {
+              echo "::error title=Public address::Datascratch runs, but https://$DS_DOMAIN does not answer through the other app's Caddy (certificate or DNS?). It is not rolled back."
+              echo "public_failed=true" >> "$GITHUB_OUTPUT"
+              exit 1
+            }
+          else
+            node infra/deploy/smoke.mjs "https://$DS_DOMAIN" 300
+          fi
+
+      - name: Public address
+        id: public
+        if: env.DS_MODE == 'proxy'
+        continue-on-error: true
+        run: node infra/deploy/smoke.mjs "https://$DS_DOMAIN" 30
 
       - name: Roll back on failure
-        if: failure() && steps.smoke.outcome == 'failure'
+        if: failure() && steps.smoke.outcome == 'failure' && steps.smoke.outputs.public_failed != 'true'
         run: infra/deploy/remote.sh rollback
 
       - name: Summary
         if: always()
         env:
           IOS_URL: ${{ vars.DS_SERVER_URL }}
+          PUBLIC_OK: ${{ steps.public.outcome }}
         run: |
           {
             if [ "${{ job.status }}" = "success" ]; then
@@ -219,5 +267,21 @@ jobs:
             echo "| --- | --- |"
             echo "| Address | https://${DS_DOMAIN:-?} |"
             echo "| Version | \`${DS_TAG}\` |"
+            echo "| Mode | ${DS_MODE:-?} (direct — own Caddy on 80/443; edge — behind Sinhron's Caddy; proxy — behind your web server) |"
             echo "| iOS server (variable DS_SERVER_URL) | ${IOS_URL:-not set — set it to https://${DS_DOMAIN:-…}} |"
+            if [ "${DS_MODE:-}" = proxy ]; then
+              echo
+              echo "### Behind your existing proxy"
+              echo "Ports 80/443 are used by other software, so Datascratch listens on \`127.0.0.1:${DS_PROXY_PORT}\` only."
+              if [ "$PUBLIC_OK" = success ]; then
+                echo "The public address already works."
+              else
+                echo "Connect your proxy to it (infra/DEPLOY.md, «Сервер, на котором уже что-то работает»). Ready config for nginx:"
+                echo
+                echo '```nginx'
+                infra/deploy/remote.sh snippet 2> /dev/null || echo "# (could not read /opt/datascratch/proxy/nginx.conf)"
+                echo '```'
+                echo "Also on the server: /opt/datascratch/proxy/Caddyfile and traefik.yml."
+              fi
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

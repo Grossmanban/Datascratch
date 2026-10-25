@@ -55,8 +55,8 @@ import { folderMenuItems, newNoteAndOpen, noteMenuItems } from "@/features/docs/
 import { useUi } from "@/hooks/useUi";
 import { DND_FOLDER, DND_NOTE, dragFolder, dragNote, dropKind } from "@/lib/dnd";
 import { today } from "@/lib/dates";
-import { tintFg } from "@/lib/tokens";
-import { cn, confirmDialog, ContextMenu, DropdownMenu, IconButton, Kbd, toast, type MenuItem } from "@/ui";
+import { tintFg, tintName } from "@/lib/tokens";
+import { cn, confirmDialog, ContextMenu, DropdownMenu, IconButton, Kbd, SpaceTile, toast, type MenuItem } from "@/ui";
 import type { NotebookRef } from "@/lib/shared";
 import { InlineRename } from "./InlineRename";
 import { SyncIndicator } from "./SyncIndicator";
@@ -278,6 +278,13 @@ function Section({ id, title, action, children }: { id: string; title: string; a
   );
 }
 
+/** Emoji of a space, or its first letter (iOS may store an SF Symbol name, which the web can't draw). */
+function spaceGlyph(space: { icon: string | null; name: string } | undefined): string {
+  const icon = space?.icon ?? "";
+  if (icon && !/^[a-z0-9.]+$/i.test(icon)) return icon;
+  return space?.name?.[0]?.toUpperCase() ?? "✦";
+}
+
 function SpaceSwitcher() {
   const { t } = useTranslation();
   const spaces = useWorkspace((s) => s.account.spaces);
@@ -287,7 +294,7 @@ function SpaceSwitcher() {
     { kind: "label", label: t("nav.spaces") },
     ...spaces.map((s) => ({
       label: s.name,
-      icon: <span className="text-[14px] leading-none">{s.icon}</span>,
+      icon: <SpaceTile icon={spaceGlyph(s)} tint={tintName(s.color)} size={18} />,
       checked: s.id === current?.id,
       onSelect: () => setActiveSpace(s.id),
     })),
@@ -328,9 +335,7 @@ function SpaceSwitcher() {
           className="flex h-8 min-w-0 max-w-[170px] items-center gap-2 rounded-md px-1.5 text-[14px] font-semibold text-ink hover:bg-ink/5"
           data-testid="space-switcher"
         >
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-surface text-[14px] shadow-[0_1px_2px_rgb(40_30_10/0.08)] ring-1 ring-line">
-            {current?.icon ?? "✦"}
-          </span>
+          <SpaceTile icon={spaceGlyph(current)} tint={tintName(current?.color)} />
           <span className="truncate">{current?.name ?? "…"}</span>
           <ChevronDown className="size-3.5 shrink-0 text-ink-3" />
         </button>

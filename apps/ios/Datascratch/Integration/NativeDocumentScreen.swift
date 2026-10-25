@@ -121,8 +121,14 @@ struct NativeDocumentScreen: View {
                     // The palette sits in the bottom safe area: the text scrolls clear of it, and it
                     // rides up with the keyboard in one animation (no second layout pass).
                     .safeAreaInset(edge: .bottom, spacing: 0) {
-                        PenPalette(model: model, isCompact: proxy.size.width < PenPalette.fullWidth)
-                            .padding(.top, Theme.Space.s2)
+                        // Inline when it fits the column, else the compact row: it never runs past
+                        // the column's edges (iPad split view with three columns).
+                        ViewThatFits(in: .horizontal) {
+                            PenPalette(model: model, isCompact: false)
+                            PenPalette(model: model, isCompact: true)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, Theme.Space.s2)
                             .padding(.bottom, Theme.Space.s3)
                     }
                     .onAppear { model.header.containerHeight = proxy.size.height }
@@ -178,6 +184,7 @@ struct NativeEditorToolbar: ToolbarContent {
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarLeading) {
+            FullScreenButton()
             let _ = model.revision
             Button { model.editor.undo() } label: { Image(systemName: "arrow.uturn.backward") }
                 .disabled(!model.editor.canUndo)
@@ -309,8 +316,6 @@ struct NativeDocumentHeader: View {
 struct PenPalette: View {
     let model: NativeEditorModel
     let isCompact: Bool
-    /// Width the inline palette needs.
-    static let fullWidth: CGFloat = 724
 
     var body: some View {
         let _ = model.revision
@@ -322,7 +327,7 @@ struct PenPalette: View {
             .padding(.horizontal, Theme.Space.s3)
             .accessibilityElement(children: .contain)
             // UI tests read the editor's state here (it changes with the mode, not the animation).
-            .accessibilityValue(Text(verbatim: "editor \(model.serial), mode \(tools.mode.rawValue), finger \(tools.allowsFingerDrawing ? "on" : "off")"))
+            .accessibilityValue(Text(verbatim: "editor \(model.serial), mode \(tools.mode.rawValue), color \(tools.currentPaint?.color ?? "none"), finger \(tools.allowsFingerDrawing ? "on" : "off")"))
             .accessibilityIdentifier("penPalette")
     }
 

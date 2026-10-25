@@ -1181,6 +1181,16 @@
         }
       }
     },
+    "Full Screen": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На весь экран"
+          }
+        }
+      }
+    },
     "Give a task a date to see it here.": {
       "localizations": {
         "ru": {
@@ -2707,6 +2717,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Поделиться…"
+          }
+        }
+      }
+    },
+    "Show Documents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать документы"
           }
         }
       }

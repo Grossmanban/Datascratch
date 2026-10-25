@@ -174,3 +174,19 @@ struct CoverImagesTests {
         }
     }
 }
+
+@MainActor
+struct SpaceSwitchTests {
+    @Test func switchingSpacesKeepsTheDocuments() throws {
+        let library = LibraryStore(persistence: .inMemory)
+        library.seedIfEmpty()
+        let first = try #require(library.activeSpace)
+        let before = library.documents.map(\.id)
+        #expect(!before.isEmpty)
+        let other = library.createSpace(name: "Work")
+        library.activateSpace(other.id)
+        #expect(library.documents.isEmpty)
+        library.activateSpace(first.id)
+        #expect(library.documents.map(\.id) == before)
+    }
+}

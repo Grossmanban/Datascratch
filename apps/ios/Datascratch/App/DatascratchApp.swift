@@ -104,12 +104,19 @@ struct NoteWindow: View {
                     SceneSheetView(sheet: sheet)
                         .environment(scene)
                 }
+            } else {
+                // Something has to be on screen for onAppear to run: an empty Group never
+                // appears, and the new window stayed black.
+                Theme.Palette.canvas.ignoresSafeArea()
             }
         }
+        .background(Theme.Palette.canvas.ignoresSafeArea())
+        .tint(Theme.Palette.accent)
         .onAppear {
             if scene == nil {
                 let model = SceneModel(app: app)
                 model.selectedNoteId = noteId
+                model.isNoteWindow = true
                 scene = model
             }
         }

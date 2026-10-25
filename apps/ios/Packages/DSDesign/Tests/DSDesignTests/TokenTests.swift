@@ -18,7 +18,7 @@ struct TokenTests {
     @Test func contractNames() {
         #expect(DSColorToken.allCases.map(\.rawValue) == [
             "bg.canvas", "bg.surface", "bg.sidebar", "bg.elevated",
-            "text.primary", "text.secondary", "text.tertiary", "line.separator",
+            "text.primary", "text.secondary", "text.tertiary", "text.onAccent", "line.separator",
             "accent", "danger", "success", "warning",
         ])
         #expect(DSInkToken.allCases.map(\.rawValue) == ["black", "blue", "red", "green", "purple", "brown"])

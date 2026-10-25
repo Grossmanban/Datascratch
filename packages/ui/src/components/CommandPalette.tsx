@@ -42,7 +42,11 @@ export function CommandPalette({
           className="animate-pop glass fixed left-1/2 top-[14vh] z-50 w-[min(640px,calc(100vw-24px))] -translate-x-1/2 overflow-hidden rounded-xl outline-none"
         >
           <D.Title className="sr-only">{placeholder ?? t.commandPlaceholder}</D.Title>
-          <Command shouldFilter={shouldFilter} loop className="flex max-h-[min(480px,70vh)] flex-col">
+          <Command
+            shouldFilter={shouldFilter}
+            loop
+            className="flex max-h-[min(480px,70vh)] flex-col"
+          >
             <div className="flex items-center gap-3 border-b border-hairline px-4">
               <Search className="size-[18px] shrink-0 text-fg-tertiary" aria-hidden />
               <Command.Input
@@ -53,11 +57,21 @@ export function CommandPalette({
               />
             </div>
             <Command.List className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5 [&_[cmdk-list-sizer]]:flex [&_[cmdk-list-sizer]]:flex-col">
-              {loading && <Command.Loading className="px-3 py-6 text-center text-callout text-fg-tertiary">{t.loading}…</Command.Loading>}
-              <Command.Empty className="px-3 py-10 text-center text-callout text-fg-tertiary">{t.commandEmpty}</Command.Empty>
+              {loading && (
+                <Command.Loading className="px-3 py-6 text-center text-callout text-fg-tertiary">
+                  {t.loading}…
+                </Command.Loading>
+              )}
+              <Command.Empty className="px-3 py-10 text-center text-callout text-fg-tertiary">
+                {t.commandEmpty}
+              </Command.Empty>
               {children}
             </Command.List>
-            {footer && <div className="border-t border-hairline px-4 py-2 text-footnote text-fg-tertiary">{footer}</div>}
+            {footer && (
+              <div className="border-t border-hairline px-4 py-2 text-footnote text-fg-tertiary">
+                {footer}
+              </div>
+            )}
           </Command>
         </D.Content>
       </D.Portal>
@@ -88,7 +102,16 @@ export interface CommandItemProps {
   disabled?: boolean;
 }
 
-export function CommandItem({ onSelect, icon, shortcut, keywords, value, hint, children, disabled }: CommandItemProps) {
+export function CommandItem({
+  onSelect,
+  icon,
+  shortcut,
+  keywords,
+  value,
+  hint,
+  children,
+  disabled,
+}: CommandItemProps) {
   return (
     <Command.Item
       onSelect={onSelect}
@@ -107,7 +130,10 @@ export function CommandItem({ onSelect, icon, shortcut, keywords, value, hint, c
       {shortcut && (
         <span className="flex gap-0.5">
           {formatShortcut(shortcut).map((k, i) => (
-            <kbd key={i} className="grid h-5 min-w-5 place-items-center rounded-[5px] bg-[color-mix(in_oklab,var(--ds-text-primary)_7%,transparent)] px-1 font-text text-caption text-fg-secondary">
+            <kbd
+              key={i}
+              className="grid h-5 min-w-5 place-items-center rounded-[5px] bg-[color-mix(in_oklab,var(--ds-text-primary)_7%,transparent)] px-1 font-text text-caption text-fg-secondary"
+            >
               {k}
             </kbd>
           ))}
@@ -118,7 +144,10 @@ export function CommandItem({ onSelect, icon, shortcut, keywords, value, hint, c
 }
 
 /** Opens the palette on ⌘K / Ctrl+K. */
-export function useCommandPaletteShortcut(setOpen: (fn: (open: boolean) => boolean) => void, key = "k") {
+export function useCommandPaletteShortcut(
+  setOpen: (fn: (open: boolean) => boolean) => void,
+  key = "k",
+) {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === key && (e.metaKey || e.ctrlKey) && !e.altKey) {

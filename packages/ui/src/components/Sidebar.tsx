@@ -1,6 +1,12 @@
 import { ChevronRight, Plus } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { forwardRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from "react";
+import {
+  forwardRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 import { cn } from "../lib/cn";
 import { spring, tintFg, type TintName } from "../lib/tokens";
 
@@ -8,7 +14,10 @@ import { spring, tintFg, type TintName } from "../lib/tokens";
 export function Sidebar({ className, ...rest }: HTMLAttributes<HTMLElement>) {
   return (
     <nav
-      className={cn("flex h-full w-[264px] flex-col gap-4 overflow-y-auto bg-sidebar px-2.5 py-3 text-callout text-fg", className)}
+      className={cn(
+        "flex h-full w-[264px] flex-col gap-4 overflow-y-auto bg-sidebar px-2.5 py-3 text-callout text-fg",
+        className,
+      )}
       {...rest}
     />
   );
@@ -65,7 +74,9 @@ export function SidebarSection({
               />
             </button>
           ) : (
-            <span className="flex-1 truncate text-footnote font-semibold text-fg-tertiary">{title}</span>
+            <span className="flex-1 truncate text-footnote font-semibold text-fg-tertiary">
+              {title}
+            </span>
           )}
           {action && (
             <button
@@ -98,7 +109,10 @@ export function SidebarSection({
   );
 }
 
-export interface SidebarItemProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
+export interface SidebarItemProps extends Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  "children"
+> {
   label: ReactNode;
   /** Lucide icon element or an emoji string. */
   icon?: ReactNode;
@@ -160,7 +174,12 @@ export const SidebarItem = forwardRef<HTMLButtonElement, SidebarItemProps>(funct
             onClick={() => setExpanded(!isExpanded)}
             className="grid size-5 shrink-0 place-items-center rounded-sm text-fg-tertiary hover:text-fg"
           >
-            <ChevronRight className={cn("size-3.5 transition-transform duration-base ease-snappy", isExpanded && "rotate-90")} />
+            <ChevronRight
+              className={cn(
+                "size-3.5 transition-transform duration-base ease-snappy",
+                isExpanded && "rotate-90",
+              )}
+            />
           </button>
         ) : (
           depth > 0 && <span className="w-5 shrink-0" />
@@ -201,10 +220,21 @@ export const SidebarItem = forwardRef<HTMLButtonElement, SidebarItemProps>(funct
           )}
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {count !== undefined && count > 0 && (
-            <span className={cn("text-footnote tabular-nums text-fg-tertiary", accessory && "group-hover/item:hidden")}>{count}</span>
+            <span
+              className={cn(
+                "text-footnote tabular-nums text-fg-tertiary",
+                accessory && "group-hover/item:hidden",
+              )}
+            >
+              {count}
+            </span>
           )}
         </button>
-        {accessory && <span className="absolute right-1 hidden group-hover/item:flex group-focus-within/item:flex">{accessory}</span>}
+        {accessory && (
+          <span className="absolute right-1 hidden group-hover/item:flex group-focus-within/item:flex">
+            {accessory}
+          </span>
+        )}
       </div>
       <AnimatePresence initial={false}>
         {expandable && isExpanded && (

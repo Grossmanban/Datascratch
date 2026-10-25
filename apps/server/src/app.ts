@@ -116,7 +116,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
     transformObject: jsonSchemaTransformObject,
   });
 
-  const plugins = opts.plugins ?? (await loadPlugins(ctx));
+  const plugins = opts.plugins ?? loadPlugins();
 
   await app.register(
     async (v1) => {

@@ -73,22 +73,12 @@
 }
 
 /* Dark theme: grain blends softly, glass highlight is barely there. */
-/* Text on filled accent / danger: white on paper, ink-dark on graphite. */
-:root {
-  --ui-on-accent: #FFFFFF;
-}
-@utility text-on-accent {
-  color: var(--ui-on-accent);
-}
-
 [data-theme="dark"] {
-  --ui-on-accent: var(--ds-bg-canvas);
   --ui-glass-highlight: 7%;
   --ui-noise-blend: soft-light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ui-on-accent: var(--ds-bg-canvas);
     --ui-glass-highlight: 7%;
     --ui-noise-blend: soft-light;
   }
@@ -117,43 +107,86 @@
   }
 }
 @keyframes ds-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes ds-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 @keyframes ds-sheet-in-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 @keyframes ds-sheet-out-right {
-  from { transform: translateX(0); }
-  to { transform: translateX(100%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
 }
 @keyframes ds-sheet-in-bottom {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 @keyframes ds-sheet-out-bottom {
-  from { transform: translateY(0); }
-  to { transform: translateY(100%); }
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
 }
 @keyframes ds-shimmer {
-  from { background-position: 150% 0; }
-  to { background-position: -50% 0; }
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
 }
 @keyframes ds-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @utility animate-pop {
-  transform-origin: var(--radix-popper-transform-origin, var(--radix-dropdown-menu-content-transform-origin, center));
-  &[data-side="top"] { --ds-pop-y: -4px; }
-  &[data-side="bottom"] { --ds-pop-y: 4px; }
-  &[data-side="left"] { --ds-pop-x: -4px; --ds-pop-y: 0; }
-  &[data-side="right"] { --ds-pop-x: 4px; --ds-pop-y: 0; }
+  transform-origin: var(
+    --radix-popper-transform-origin,
+    var(--radix-dropdown-menu-content-transform-origin, center)
+  );
+  &[data-side="top"] {
+    --ds-pop-y: -4px;
+  }
+  &[data-side="bottom"] {
+    --ds-pop-y: 4px;
+  }
+  &[data-side="left"] {
+    --ds-pop-x: -4px;
+    --ds-pop-y: 0;
+  }
+  &[data-side="right"] {
+    --ds-pop-x: 4px;
+    --ds-pop-y: 0;
+  }
   &[data-state="open"],
   &[data-state="delayed-open"],
   &[data-state="instant-open"] {
@@ -164,16 +197,28 @@
   }
 }
 @utility animate-overlay {
-  &[data-state="open"] { animation: ds-fade-in var(--ds-duration-base) ease-out; }
-  &[data-state="closed"] { animation: ds-fade-out var(--ds-duration-fast) ease-in forwards; }
+  &[data-state="open"] {
+    animation: ds-fade-in var(--ds-duration-base) ease-out;
+  }
+  &[data-state="closed"] {
+    animation: ds-fade-out var(--ds-duration-fast) ease-in forwards;
+  }
 }
 @utility animate-sheet-right {
-  &[data-state="open"] { animation: ds-sheet-in-right var(--ds-motion-smooth-duration) var(--ds-motion-smooth-easing); }
-  &[data-state="closed"] { animation: ds-sheet-out-right var(--ds-duration-slow) ease-in forwards; }
+  &[data-state="open"] {
+    animation: ds-sheet-in-right var(--ds-motion-smooth-duration) var(--ds-motion-smooth-easing);
+  }
+  &[data-state="closed"] {
+    animation: ds-sheet-out-right var(--ds-duration-slow) ease-in forwards;
+  }
 }
 @utility animate-sheet-bottom {
-  &[data-state="open"] { animation: ds-sheet-in-bottom var(--ds-motion-smooth-duration) var(--ds-motion-smooth-easing); }
-  &[data-state="closed"] { animation: ds-sheet-out-bottom var(--ds-duration-slow) ease-in forwards; }
+  &[data-state="open"] {
+    animation: ds-sheet-in-bottom var(--ds-motion-smooth-duration) var(--ds-motion-smooth-easing);
+  }
+  &[data-state="closed"] {
+    animation: ds-sheet-out-bottom var(--ds-duration-slow) ease-in forwards;
+  }
 }
 @utility animate-shimmer {
   background-image: linear-gradient(
@@ -206,5 +251,228 @@
   }
   .animate-spin-ds {
     animation-duration: 2.4s;
+  }
+}
+
+/* ---------- document typography (editor content, read-only views) ---------- */
+
+@layer components {
+  .ds-prose {
+    font-family: var(--ds-font-text);
+    font-size: var(--ds-type-body-size);
+    line-height: var(--ds-type-body-line-height);
+    letter-spacing: var(--ds-type-body-tracking);
+    color: var(--ds-text-primary);
+    overflow-wrap: break-word;
+  }
+  .ds-prose[data-font="serif"] {
+    font-family: var(--ds-font-display);
+    font-size: calc(var(--ds-type-body-size) + 1px);
+  }
+  .ds-prose[data-font="mono"] {
+    font-family: var(--ds-font-mono);
+    font-size: calc(var(--ds-type-body-size) - 2px);
+  }
+  .ds-prose > * + * {
+    margin-top: 0.6em;
+  }
+  .ds-prose :is(h1, h2, h3) {
+    font-family: var(--ds-font-display);
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--ds-text-primary);
+    text-wrap: balance;
+  }
+  .ds-prose h1 {
+    font-size: var(--ds-type-h1-size);
+    letter-spacing: var(--ds-type-h1-tracking);
+    margin-top: 1.4em;
+  }
+  .ds-prose h2 {
+    font-size: var(--ds-type-h2-size);
+    letter-spacing: var(--ds-type-h2-tracking);
+    margin-top: 1.3em;
+  }
+  .ds-prose h3 {
+    font-size: var(--ds-type-h3-size);
+    margin-top: 1.2em;
+  }
+  .ds-prose > :first-child {
+    margin-top: 0;
+  }
+  .ds-prose a {
+    color: var(--ds-accent);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in oklab, var(--ds-accent) 35%, transparent);
+    text-underline-offset: 3px;
+  }
+  .ds-prose a:hover {
+    text-decoration-color: var(--ds-accent);
+  }
+  .ds-prose :is(ul, ol) {
+    padding-left: 1.4em;
+  }
+  .ds-prose ul {
+    list-style: disc;
+  }
+  .ds-prose ol {
+    list-style: decimal;
+  }
+  .ds-prose li::marker {
+    color: var(--ds-text-tertiary);
+  }
+  .ds-prose li + li {
+    margin-top: 0.2em;
+  }
+  .ds-prose blockquote {
+    border-left: 3px solid var(--ds-line-separator);
+    padding-left: 1em;
+    color: var(--ds-text-secondary);
+    font-family: var(--ds-font-display);
+    font-style: italic;
+  }
+  .ds-prose hr {
+    border: 0;
+    height: 1px;
+    background: var(--ds-line-separator);
+    margin: 1.6em 0;
+  }
+  .ds-prose :not(pre) > code {
+    font-family: var(--ds-font-mono);
+    font-size: 0.88em;
+    padding: 0.12em 0.35em;
+    border-radius: 5px;
+    background: color-mix(in oklab, var(--ds-text-primary) 7%, transparent);
+  }
+  .ds-prose pre {
+    font-family: var(--ds-font-mono);
+    font-size: var(--ds-type-footnote-size);
+    line-height: 1.6;
+    padding: 14px 16px;
+    border-radius: var(--ds-radius-md);
+    background: color-mix(in oklab, var(--ds-text-primary) 4%, var(--ds-bg-surface));
+    border: 1px solid var(--ds-line-separator);
+    overflow-x: auto;
+  }
+  .ds-prose mark {
+    color: inherit;
+    border-radius: 3px;
+    padding: 0 0.1em;
+    background: var(--ds-highlight-yellow);
+  }
+  .ds-prose mark[data-color="green"] {
+    background: var(--ds-highlight-green);
+  }
+  .ds-prose mark[data-color="pink"] {
+    background: var(--ds-highlight-pink);
+  }
+  .ds-prose mark[data-color="blue"] {
+    background: var(--ds-highlight-blue);
+  }
+  /* Callout: <div data-callout data-tint="blue">. */
+  .ds-prose [data-callout] {
+    --ui-callout-fg: var(--ds-tint-gray-fg);
+    --ui-callout-bg: var(--ds-tint-gray-bg);
+    display: flex;
+    gap: 0.7em;
+    padding: 12px 16px;
+    border-radius: var(--ds-radius-md);
+    background: var(--ui-callout-bg);
+  }
+  .ds-prose [data-callout] > [data-callout-icon] {
+    color: var(--ui-callout-fg);
+    flex-shrink: 0;
+  }
+  .ds-prose [data-tint="red"] {
+    --ui-callout-fg: var(--ds-tint-red-fg);
+    --ui-callout-bg: var(--ds-tint-red-bg);
+  }
+  .ds-prose [data-tint="orange"] {
+    --ui-callout-fg: var(--ds-tint-orange-fg);
+    --ui-callout-bg: var(--ds-tint-orange-bg);
+  }
+  .ds-prose [data-tint="yellow"] {
+    --ui-callout-fg: var(--ds-tint-yellow-fg);
+    --ui-callout-bg: var(--ds-tint-yellow-bg);
+  }
+  .ds-prose [data-tint="green"] {
+    --ui-callout-fg: var(--ds-tint-green-fg);
+    --ui-callout-bg: var(--ds-tint-green-bg);
+  }
+  .ds-prose [data-tint="teal"] {
+    --ui-callout-fg: var(--ds-tint-teal-fg);
+    --ui-callout-bg: var(--ds-tint-teal-bg);
+  }
+  .ds-prose [data-tint="blue"] {
+    --ui-callout-fg: var(--ds-tint-blue-fg);
+    --ui-callout-bg: var(--ds-tint-blue-bg);
+  }
+  .ds-prose [data-tint="indigo"] {
+    --ui-callout-fg: var(--ds-tint-indigo-fg);
+    --ui-callout-bg: var(--ds-tint-indigo-bg);
+  }
+  .ds-prose [data-tint="purple"] {
+    --ui-callout-fg: var(--ds-tint-purple-fg);
+    --ui-callout-bg: var(--ds-tint-purple-bg);
+  }
+  .ds-prose [data-tint="pink"] {
+    --ui-callout-fg: var(--ds-tint-pink-fg);
+    --ui-callout-bg: var(--ds-tint-pink-bg);
+  }
+  /* [[wiki links]] and #tags rendered inline. */
+  .ds-prose [data-wikilink] {
+    color: var(--ds-text-primary);
+    text-decoration: none;
+    border-bottom: 1.5px solid color-mix(in oklab, var(--ds-accent) 40%, transparent);
+    padding-bottom: 1px;
+  }
+  .ds-prose [data-wikilink]:hover {
+    background: color-mix(in oklab, var(--ds-accent) 12%, transparent);
+  }
+  .ds-prose [data-tag] {
+    color: var(--ds-accent);
+    font-weight: 500;
+  }
+  .ds-prose table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--ds-type-callout-size);
+  }
+  .ds-prose :is(th, td) {
+    border: 1px solid var(--ds-line-separator);
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .ds-prose th {
+    font-weight: 600;
+    background: color-mix(in oklab, var(--ds-text-primary) 3%, transparent);
+  }
+  /* Document paper: data-paper on the editor surface. */
+  [data-paper="dots"] {
+    background-image: radial-gradient(
+      color-mix(in oklab, var(--ds-text-tertiary) 45%, transparent) 1px,
+      transparent 1.2px
+    );
+    background-size: 22px 22px;
+  }
+  [data-paper="grid"] {
+    background-image:
+      linear-gradient(
+        color-mix(in oklab, var(--ds-line-separator) 80%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        90deg,
+        color-mix(in oklab, var(--ds-line-separator) 80%, transparent) 1px,
+        transparent 1px
+      );
+    background-size: 22px 22px;
+  }
+  [data-paper="lines"] {
+    background-image: linear-gradient(
+      transparent calc(1.5em - 1px),
+      color-mix(in oklab, var(--ds-line-separator) 90%, transparent) 1px
+    );
+    background-size: 100% 1.5em;
   }
 }

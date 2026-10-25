@@ -123,6 +123,7 @@ public final class EditorView: UIView {
             self.onStateChange?()
         }
         inkInput.onEstimatedUpdate = { [weak self] s in self?.ink.penEstimatedUpdate(s) }
+        inkInput.delegate = self
         textView.addGestureRecognizer(inkInput)
 
         let hover = UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:)))
@@ -700,6 +701,13 @@ extension EditorView: UIGestureRecognizerDelegate {
 
     public func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         false
+    }
+
+    /// Touches the pen does not draw with never reach its recognizer, so selection and scrolling
+    /// get them untouched.
+    public func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        if g === inkInput { return inkInput.shouldTrack(touch) }
+        return true
     }
 }
 

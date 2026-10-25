@@ -1,0 +1,160 @@
+name: ios-release
+
+# Builds the app on a macOS runner, signs it and uploads it to TestFlight —
+# no Mac needed. Setup: apps/ios/RELEASE.md. Without the secrets the run is
+# skipped (green), so forks and fresh clones are not affected.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: "Build number (leave empty to use the run number)"
+        required: false
+  push:
+    tags: ["ios-v*"]
+
+concurrency:
+  group: ios-release
+  cancel-in-progress: false
+
+jobs:
+  secrets:
+    name: Check signing secrets
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=()
+          [ -n "$KEY_ID" ] || missing+=(APP_STORE_CONNECT_KEY_ID)
+          [ -n "$ISSUER_ID" ] || missing+=(APP_STORE_CONNECT_ISSUER_ID)
+          [ -n "$KEY_P8" ] || missing+=(APP_STORE_CONNECT_KEY_P8)
+          [ -n "$TEAM_ID" ] || missing+=(APPLE_TEAM_ID)
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=TestFlight skipped::Missing secrets: ${missing[*]}. See apps/ios/RELEASE.md."
+          fi
+
+  testflight:
+    name: Archive & upload to TestFlight
+    needs: secrets
+    if: needs.secrets.outputs.ready == 'true'
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/ios
+    env:
+      KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
+      DS_WEB_HOST: ${{ vars.DS_WEB_HOST || 'datascratch.app' }}
+      DS_SERVER_URL: ${{ vars.DS_SERVER_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: scripts/generate.sh
+
+      - name: Write App Store Connect API key
+        env:
+          KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          KEY_PATH="$RUNNER_TEMP/keys/AuthKey_$KEY_ID.p8"
+          # Accept the .p8 file contents either as-is or base64-encoded.
+          if printf '%s' "$KEY_P8" | grep -q "BEGIN PRIVATE KEY"; then
+            printf '%s\n' "$KEY_P8" > "$KEY_PATH"
+          else
+            printf '%s' "$KEY_P8" | base64 --decode > "$KEY_PATH"
+          fi
+          chmod 600 "$KEY_PATH"
+          echo "KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+
+      # Optional (plan B in RELEASE.md): a distribution certificate exported as .p12.
+      - name: Import distribution certificate (optional)
+        env:
+          CERT_P12: ${{ secrets.DIST_CERTIFICATE_P12 }}
+          CERT_PASSWORD: ${{ secrets.DIST_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$CERT_P12" ]; then echo "No certificate secret: using cloud-managed signing."; exit 0; fi
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/dist.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/dist.p12"
+
+      - name: Archive
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project Datascratch.xcodeproj -scheme Datascratch -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/Datascratch.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            DS_TEAM_ID="$TEAM_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            DS_WEB_HOST="$DS_WEB_HOST" \
+            DS_SERVER_URL="$DS_SERVER_URL" \
+            | xcbeautify --renderer github-actions
+
+      - name: Export and upload to TestFlight
+        run: |
+          set -o pipefail
+          cat > build/ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>testFlightInternalTestingOnly</key><false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/Datascratch.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            | xcbeautify --renderer github-actions
+          echo "::notice title=Uploaded::Build $BUILD_NUMBER sent to App Store Connect. It appears in TestFlight after processing (5–30 min)."
+
+      - name: Clean up keys
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/keys"
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true

@@ -1158,10 +1158,10 @@
     "semantic_hash": "a5e05ac1d8eb9449ebee1ccf2504b14b"
   },
   "apps/ios/Datascratch/Features/Settings/AgentTokensSettings.swift": {
-    "mtime": 1792930316.06408,
-    "seen": 1792930962.6522524,
-    "ast_hash": "a1256b14f3ce9b573564e42f973cb735",
-    "semantic_hash": "a1256b14f3ce9b573564e42f973cb735"
+    "mtime": 1792931054.4513953,
+    "seen": 1792931715.2343895,
+    "ast_hash": "da8707cc4d5dd35dc9bafb9de11cd8e3",
+    "semantic_hash": ""
   },
   "apps/ios/Datascratch/Features/Settings/SettingsView.swift": {
     "mtime": 1792930191.51067,
@@ -1230,10 +1230,10 @@
     "semantic_hash": "e6dc1c1536a178badc3a4f17e33ad7ab"
   },
   "apps/ios/Datascratch/Services/AccountExtras.swift": {
-    "mtime": 1792930316.0635245,
-    "seen": 1792930962.6522808,
-    "ast_hash": "48a572ada4041907e381a4e219e1bd93",
-    "semantic_hash": "48a572ada4041907e381a4e219e1bd93"
+    "mtime": 1792931054.45086,
+    "seen": 1792931715.234441,
+    "ast_hash": "b8fb7c3b8e9d10bb6bf036b5798bbf37",
+    "semantic_hash": ""
   },
   "apps/ios/Datascratch/Services/AccountService.swift": {
     "mtime": 1792928992.533253,
@@ -1338,16 +1338,16 @@
     "semantic_hash": "bbdbd26d3f9173b434b8f09e3f33ed28"
   },
   "apps/ios/scripts/l10n/build_catalog.py": {
-    "mtime": 1792928970.9328306,
-    "seen": 1792930962.6523995,
-    "ast_hash": "dd26f96adb3d1412cbb6830749e7d042",
-    "semantic_hash": "dd26f96adb3d1412cbb6830749e7d042"
+    "mtime": 1792931054.4778628,
+    "seen": 1792931715.234587,
+    "ast_hash": "3f05a0f2e0bce36ad58a752598860326",
+    "semantic_hash": ""
   },
   "apps/ios/scripts/l10n/ru.json": {
-    "mtime": 1792930316.0912983,
-    "seen": 1792930962.6524017,
-    "ast_hash": "183d44eece040797279a351aa2383bd9",
-    "semantic_hash": "183d44eece040797279a351aa2383bd9"
+    "mtime": 1792931054.4774215,
+    "seen": 1792931715.2345903,
+    "ast_hash": "7b1023a8bdeb0be2c1ff744e96b9bf5a",
+    "semantic_hash": ""
   },
   "apps/ios/scripts/make_placeholder_icon.py": {
     "mtime": 1792927731.001315,

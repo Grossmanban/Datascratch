@@ -21,9 +21,11 @@ import {
   Underline,
 } from "lucide-react";
 import { useState } from "react";
+import leaves from "./assets/cover-leaves.jpg";
+import mountains from "./assets/cover-mountains.jpg";
+import sea from "./assets/cover-sea.jpg";
 import {
   AvatarStack,
-  Backdrop,
   Badge,
   ContextMenu,
   ContextMenuContent,
@@ -44,20 +46,20 @@ import {
   type TaskState,
 } from "..";
 
-const docs = [
+const docs: { title: string; subtitle: string; cover?: string; icon?: string }[] = [
   {
     title: "Дневник поездки в Тбилиси",
     subtitle: "Старый город, серные бани и хачапури на рассвете",
-    backdrop: "ember" as const,
+    cover: mountains,
   },
   {
     title: "Конспект: теория графов",
     subtitle: "Лекции 4–6 · эйлеровы циклы",
-    backdrop: "mist" as const,
+    icon: "📐",
   },
-  { title: "План квартала", subtitle: "Цели, метрики, ритм встреч", backdrop: "meadow" as const },
-  { title: "Идеи для рассказа", subtitle: "Персонажи и черновые сцены", backdrop: "dusk" as const },
-  { title: "Рецепты", subtitle: "То, что получилось с первого раза", backdrop: "sand" as const },
+  { title: "План квартала", subtitle: "Цели, метрики, ритм встреч", cover: leaves },
+  { title: "Идеи для рассказа", subtitle: "Персонажи и черновые сцены", icon: "✍️" },
+  { title: "Рецепты", subtitle: "То, что получилось с первого раза", cover: sea },
 ];
 
 function Tasks() {
@@ -184,10 +186,6 @@ export const Showcase: Story = () => {
       </Sidebar>
 
       <main className="relative flex-1 overflow-y-auto">
-        <Backdrop
-          name="sand"
-          className="h-[280px] [mask-image:linear-gradient(to_bottom,black_55%,transparent)]"
-        />
         <div className="relative mx-auto max-w-doc-wide px-10 pt-16">
           <div className="flex items-end justify-between gap-4">
             <div>
@@ -220,7 +218,8 @@ export const Showcase: Story = () => {
                     tabIndex={0}
                     title={d.title}
                     subtitle={d.subtitle}
-                    backdrop={d.backdrop}
+                    cover={d.cover ?? null}
+                    {...(d.icon ? { icon: d.icon } : {})}
                     meta={<span>2 ч назад</span>}
                     footer={<TagChip name="идеи" tint="purple" size="sm" />}
                   />

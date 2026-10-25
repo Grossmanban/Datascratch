@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "description": "Reference notebook index document (document-model.md §3). Records are nested Y.Maps.",
+  "notebookId": "0192f3c4-0000-7000-8000-000000000002",
+  "update": "ATMCACgBBG1ldGENZm9ybWF0VmVyc2lvbgF9ASgBBG1ldGEKbm90ZWJvb2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMicBB2ZvbGRlcnMkMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDMyASgAAgICaWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMzIoAAICCHBhcmVudElkAX4oAAICBG5hbWUBdwhQcm9qZWN0cygAAgIEaWNvbgF3BPCfk4EoAAICBWNvbG9yAX4oAAICBW9yZGVyAX0BKAACAgljcmVhdGVkQXQBdxgyMDI2LTEwLTI1VDEyOjAwOjAwLjAwMFonAQdmb2xkZXJzJDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAzMwEoAAIKAmlkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDMzKAACCghwYXJlbnRJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAzMigAAgoEbmFtZQF3BUFscGhhKAACCgRpY29uAX4oAAIKBWNvbG9yAXcLYWNjZW50LmJsdWUoAAIKBW9yZGVyAX0BKAACCgljcmVhdGVkQXQBdxgyMDI2LTEwLTI1VDEyOjAwOjAwLjAwMFonAQVub3RlcyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEBKAACEgJpZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMSgAAhIIZm9sZGVySWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMzMoAAISDHBhcmVudE5vdGVJZAF-KAACEgV0aXRsZQF3DlJlZmVyZW5jZSBub3RlKAACEgRraW5kAXcEbm90ZSgAAhIJZGFpbHlEYXRlAX4oAAISBHRhZ3MBdQF3DXByb2plY3QvYWxwaGEoAAISBGljb24BdwTwn5OdKAACEgpjb3ZlclRodW1iAX4oAAISCndyYXBwZWRLZXkBdwJBUSgAAhIJY3JlYXRlZEF0AXcYMjAyNi0xMC0yNVQxMjowMDowMC4wMDBaKAACEgl1cGRhdGVkQXQBdxgyMDI2LTEwLTI1VDEyOjAwOjAwLjAwMFooAAISCXRyYXNoZWRBdAF-KAACEgVvcmRlcgF8PwAAACcBBW5vdGVzJDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMwEoAAIhAmlkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAzKAACIQhmb2xkZXJJZAF-KAACIQxwYXJlbnROb3RlSWQBfigAAiEFdGl0bGUBdwoyMDI2LTEwLTI1KAACIQRraW5kAXcFZGFpbHkoAAIhCWRhaWx5RGF0ZQF3CjIwMjYtMTAtMjUoAAIhBHRhZ3MBdQAoAAIhBGljb24BfigAAiEKY292ZXJUaHVtYgF-KAACIQp3cmFwcGVkS2V5AXcCQVEoAAIhCWNyZWF0ZWRBdAF3GDIwMjYtMTAtMjVUMTI6MDA6MDAuMDAwWigAAiEJdXBkYXRlZEF0AXcYMjAyNi0xMC0yNVQxMjowMDowMC4wMDBaKAACIQl0cmFzaGVkQXQBfigAAiEFb3JkZXIBfQEnAQR0YWdzDXByb2plY3QvYWxwaGEBKAACMAVjb2xvcgF3DGFjY2VudC5ncmVlbigAAjAEaWNvbgF-AA",
+  "expected": {
+    "meta": {
+      "formatVersion": 1,
+      "notebookId": "0192f3c4-0000-7000-8000-000000000002"
+    },
+    "folders": {
+      "0192f3c4-0000-7000-8000-000000000032": {
+        "id": "0192f3c4-0000-7000-8000-000000000032",
+        "parentId": null,
+        "name": "Projects",
+        "icon": "📁",
+        "color": null,
+        "order": 1,
+        "createdAt": "2026-10-25T12:00:00.000Z"
+      },
+      "0192f3c4-0000-7000-8000-000000000033": {
+        "id": "0192f3c4-0000-7000-8000-000000000033",
+        "parentId": "0192f3c4-0000-7000-8000-000000000032",
+        "name": "Alpha",
+        "icon": null,
+        "color": "accent.blue",
+        "order": 1,
+        "createdAt": "2026-10-25T12:00:00.000Z"
+      }
+    },
+    "notes": {
+      "0192f3c4-0000-7000-8000-000000000001": {
+        "id": "0192f3c4-0000-7000-8000-000000000001",
+        "folderId": "0192f3c4-0000-7000-8000-000000000033",
+        "parentNoteId": null,
+        "title": "Reference note",
+        "kind": "note",
+        "dailyDate": null,
+        "tags": [
+          "project/alpha"
+        ],
+        "icon": "📝",
+        "coverThumb": null,
+        "wrappedKey": "AQ",
+        "createdAt": "2026-10-25T12:00:00.000Z",
+        "updatedAt": "2026-10-25T12:00:00.000Z",
+        "trashedAt": null,
+        "order": 0.5
+      },
+      "0192f3c4-0000-7000-8000-000000000003": {
+        "id": "0192f3c4-0000-7000-8000-000000000003",
+        "folderId": null,
+        "parentNoteId": null,
+        "title": "2026-10-25",
+        "kind": "daily",
+        "dailyDate": "2026-10-25",
+        "tags": [],
+        "icon": null,
+        "coverThumb": null,
+        "wrappedKey": "AQ",
+        "createdAt": "2026-10-25T12:00:00.000Z",
+        "updatedAt": "2026-10-25T12:00:00.000Z",
+        "trashedAt": null,
+        "order": 1
+      }
+    },
+    "tags": {
+      "project/alpha": {
+        "color": "accent.green",
+        "icon": null
+      }
+    }
+  }
+}

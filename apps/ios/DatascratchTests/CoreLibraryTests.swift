@@ -147,13 +147,13 @@ struct CoreLibrarySafetyTests {
 /// Records what the library asks of the server side.
 @MainActor
 final class RecordingRemote: CoreLibraryRemote {
-    var created: [(id: String, mode: NotebookMode)] = []
-    var modeChanges: [(id: String, mode: NotebookMode, hasKey: Bool)] = []
+    var created: [(id: String, mode: Datascratch.NotebookMode)] = []
+    var modeChanges: [(id: String, mode: Datascratch.NotebookMode, hasKey: Bool)] = []
     var deleted: [String] = []
     var opened: [String] = []
 
-    func notebookCreated(id: String, mode: NotebookMode, wrappedKey: Data, key: Data) { created.append((id, mode)) }
-    func notebookModeChanged(id: String, mode: NotebookMode, key: Data?) { modeChanges.append((id, mode, key != nil)) }
+    func notebookCreated(id: String, mode: Datascratch.NotebookMode, wrappedKey: Data, key: Data) { created.append((id, mode)) }
+    func notebookModeChanged(id: String, mode: Datascratch.NotebookMode, key: Data?) { modeChanges.append((id, mode, key != nil)) }
     func notebookDeleted(id: String) { deleted.append(id) }
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?) { opened.append(crdt.docId) }
 }
@@ -175,7 +175,7 @@ struct CoreLibraryRemoteTests {
         let note = library.createNote(in: notebook.id, title: "Hi")
         #expect(remote.opened.contains(note.id))
         // The key a share link carries is available for the note.
-        #expect(try core.shareKey(for: ShareTarget(kind: .note, id: note.id))?.count == 32)
+        #expect(try core.shareKey(for: Datascratch.ShareTarget(kind: .note, id: note.id))?.count == 32)
 
         library.setMode(.agent, forNotebook: notebook.id)
         #expect(remote.modeChanges.count == 1)

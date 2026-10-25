@@ -278,8 +278,8 @@ public struct DSPenToolbar: View {
     }
 
     @ViewBuilder private var historyButtons: some View {
-        iconButton("arrow.uturn.backward", label: DSStrings.tr("Отменить", "Undo", language), enabled: canUndo) { onUndo?() }
-        iconButton("arrow.uturn.forward", label: DSStrings.tr("Повторить", "Redo", language), enabled: canRedo) { onRedo?() }
+        iconButton("arrow.uturn.backward", id: "tool.undo", label: DSStrings.tr("Отменить", "Undo", language), enabled: canUndo) { onUndo?() }
+        iconButton("arrow.uturn.forward", id: "tool.redo", label: DSStrings.tr("Повторить", "Redo", language), enabled: canRedo) { onRedo?() }
     }
 
     /// Compact mode: one trailing button that opens colours, widths, finger drawing, undo / redo.
@@ -308,6 +308,7 @@ public struct DSPenToolbar: View {
         }
         .buttonStyle(DSPressableStyle(scale: 0.9))
         .accessibilityLabel(DSStrings.tr("Цвет, толщина и другие настройки", "Colour, width and more", language))
+        .accessibilityIdentifier("tool.more")
         .popover(isPresented: $showsMore) {
             morePanel
                 .presentationCompactAdaptation(.popover)
@@ -372,6 +373,7 @@ public struct DSPenToolbar: View {
         }
         .buttonStyle(DSPressableStyle(scale: 0.9))
         .accessibilityLabel(DSStrings.tr("Текст", "Text", language))
+        .accessibilityIdentifier("tool.text")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
@@ -420,6 +422,7 @@ public struct DSPenToolbar: View {
                 ? "\(tool.title(language)): \(selection.eraserMode.title(language))"
                 : tool.title(language)
         )
+        .accessibilityIdentifier("tool.\(tool.rawValue)")
         .accessibilityHint(tool == .eraser && isOn ? DSStrings.tr("Нажмите ещё раз, чтобы сменить режим", "Tap again to switch mode", language) : "")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
@@ -459,6 +462,7 @@ public struct DSPenToolbar: View {
         }
         .buttonStyle(DSPressableStyle(scale: 0.88))
         .accessibilityLabel(DSStrings.colorName(color.name, language))
+        .accessibilityIdentifier("color.\(color.name)")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
@@ -485,6 +489,7 @@ public struct DSPenToolbar: View {
         }
         .buttonStyle(DSPressableStyle(scale: 0.88))
         .accessibilityLabel(DSStrings.width(width, language))
+        .accessibilityIdentifier("width.\(width.step)")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
@@ -502,10 +507,11 @@ public struct DSPenToolbar: View {
         }
         .buttonStyle(DSPressableStyle(scale: 0.9))
         .accessibilityLabel(DSStrings.tr("Рисовать пальцем", "Draw with finger", language))
+        .accessibilityIdentifier("tool.finger")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
-    private func iconButton(_ systemImage: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+    private func iconButton(_ systemImage: String, id: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .medium))
@@ -517,6 +523,7 @@ public struct DSPenToolbar: View {
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.35)
         .accessibilityLabel(label)
+        .accessibilityIdentifier(id)
     }
 }
 

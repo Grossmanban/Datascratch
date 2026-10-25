@@ -70,4 +70,6 @@ xcodebuild -scheme DSDesign -destination 'platform=iOS Simulator,name=<iPhone>' 
 
 В CI — `.github/workflows/design.yml` (macOS). Тесты — Swift Testing (`Tests/DSDesignTests`). CI также рендерит `DSShowcase` в PNG (светлая и тёмная тема) и выкладывает артефактом `dsdesign-snapshots` — для проверки дизайна без Mac. Локально: `TEST_RUNNER_DS_SNAPSHOT_DIR=/tmp/snap xcodebuild test …`.
 
+Для UI-тестов у кнопок палитры пера есть `accessibilityIdentifier`: `tool.text`, `tool.pen` … `tool.lasso`, `tool.more`, `tool.finger`, `tool.undo`, `tool.redo`, `color.<имя>`, `width.<1–3>`.
+
 Правила дат (`DSDateChipModel`) совпадают с вебом (`packages/ui/src/lib/date.ts`): одинаковые подписи и тона, общие тестовые случаи.

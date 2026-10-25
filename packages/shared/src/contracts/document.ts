@@ -394,6 +394,9 @@ export interface TaskIndexEntry {
   state: TaskState;
   scheduled: DateOnly | null;
   deadline: DateOnly | null;
+  completedAt: IsoDateTime | null;
+  /** Position among the note's tasks in document order (0-based). */
+  order: number;
 }
 
 export interface NoteLinkRef {

@@ -694,7 +694,9 @@
           "text": "Open task",
           "state": "open",
           "scheduled": "2026-10-26",
-          "deadline": "2026-10-30"
+          "deadline": "2026-10-30",
+          "completedAt": null,
+          "order": 0
         },
         {
           "noteId": "0192f3c4-0000-7000-8000-000000000001",
@@ -703,7 +705,9 @@
           "text": "Done task",
           "state": "done",
           "scheduled": null,
-          "deadline": null
+          "deadline": null,
+          "completedAt": "2026-10-25T12:00:00.000Z",
+          "order": 1
         },
         {
           "noteId": "0192f3c4-0000-7000-8000-000000000001",
@@ -712,7 +716,9 @@
           "text": "Cancelled task",
           "state": "cancelled",
           "scheduled": null,
-          "deadline": null
+          "deadline": null,
+          "completedAt": null,
+          "order": 2
         }
       ],
       "links": [

@@ -266,7 +266,8 @@ final class LibraryUITests: XCTestCase {
             XCTAssertTrue(becomesSelected(button), "\(id) is not selected after one tap; \(paletteState(app))")
             // The highlight follows too (build 4 on iPad: «Text» stayed highlighted).
             XCTAssertTrue(showsSelected(button), "\(id) works but is not shown as selected; \(paletteState(app))")
-            XCTAssertEqual(palette.frame.minY, resting.minY, accuracy: 1, "palette moved on \(id)")
+            // Bottom edge: the toolbar may change its own height by a point or two per tool.
+            XCTAssertEqual(palette.frame.maxY, resting.maxY, accuracy: 1, "palette moved on \(id)")
         }
 
         // A colour: the editor takes it and the palette shows it.

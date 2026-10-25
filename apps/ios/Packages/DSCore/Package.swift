@@ -27,7 +27,10 @@ let yrsTarget: Target = .target(
 /// Prebuilt xcframework published by the ios-core workflow (release `yrs-ffi-<hash>`, hash from
 /// scripts/yrs-ffi-hash.sh). A local build in build/ (scripts/build-xcframework.sh) wins, so
 /// that changes to yrs-ffi can be tested before a release exists.
-let yrsRelease: (url: String, checksum: String)? = nil
+let yrsRelease: (url: String, checksum: String)? = (
+    url: "https://github.com/Grossmanban/Datascratch/releases/download/yrs-ffi-127334fa5e29/yrs_ffiFFI.xcframework.zip",
+    checksum: "65b9cf0b311cf449e6045f0d371ab9147327031ca7ab6460645555936ba9a761"
+)
 
 let localXCFramework = "\(packageDir)/build/yrs_ffiFFI.xcframework"
 let yrsTarget: Target = {

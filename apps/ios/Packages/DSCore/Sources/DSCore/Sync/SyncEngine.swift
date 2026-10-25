@@ -39,6 +39,9 @@ public actor SyncEngine: SyncClientDelegate {
     private var open: [String: OpenDoc] = [:]
     private var inFlight: Set<String> = []
     private var catchingUp: Set<String> = []
+    /// Documents subscribed on the current connection whose catch-up finished (`upToDate`).
+    /// Pushes go only to these: otherwise `lastSeq = max(ack)` could skip others' updates.
+    private var live: Set<String> = []
     private var connection: SyncConnectionState = .disconnected
     private var statusContinuations: [UUID: AsyncStream<SyncStatus>.Continuation] = [:]
 
@@ -145,7 +148,7 @@ public actor SyncEngine: SyncClientDelegate {
             return
         }
         guard let items = try? store.pendingOutbox(limit: 500) else { return }
-        for item in items where !inFlight.contains(item.clientMsgId) {
+        for item in items where !inFlight.contains(item.clientMsgId) && live.contains(item.docId) {
             guard let record = try? store.document(item.docId) else { continue }
             do {
                 guard let key = try keyFor(record) else { continue }
@@ -177,8 +180,22 @@ public actor SyncEngine: SyncClientDelegate {
         publish()
     }
 
+    /// Registers (if needed) and subscribes documents whose key is known. A document must be
+    /// subscribed and caught up before the first push (sync-protocol.md §4).
     private func subscribe(_ records: [DocumentRecord]) async throws {
-        let entries = records.filter { (try? keyFor($0)) != nil }.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }
+        var ready: [DocumentRecord] = []
+        for record in records where (try? keyFor(record)) != nil {
+            if !record.registered {
+                do {
+                    if let register { try await register(record) }
+                    try store.setRegistered(record.docId)
+                } catch {
+                    continue // retried on the next connect
+                }
+            }
+            ready.append(record)
+        }
+        let entries = ready.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }
         guard !entries.isEmpty else { return }
         for e in entries { catchingUp.insert(e.docId) }
         // Keep frames reasonably small.
@@ -228,6 +245,7 @@ public actor SyncEngine: SyncClientDelegate {
     public func syncClientDidConnect(_ client: SyncClient, userId: String?) async {
         inFlight.removeAll()
         catchingUp.removeAll()
+        live.removeAll()
         if let records = try? store.documents() {
             try? await subscribe(records)
         }
@@ -236,7 +254,10 @@ public actor SyncEngine: SyncClientDelegate {
 
     public func syncClient(_ client: SyncClient, didChangeState state: SyncConnectionState) async {
         connection = state
-        if case .connected = state {} else { inFlight.removeAll() }
+        if case .connected = state {} else {
+            inFlight.removeAll()
+            live.removeAll()
+        }
         publish()
     }
 
@@ -248,7 +269,9 @@ public actor SyncEngine: SyncClientDelegate {
             receive(docId: docId, snapshot: snapshot, items: items)
             if upToDate {
                 catchingUp.remove(docId)
+                live.insert(docId)
                 publish()
+                await flush()
                 await snapshotIfNeeded(docId: docId)
             }
         case .update(let docId, let item):

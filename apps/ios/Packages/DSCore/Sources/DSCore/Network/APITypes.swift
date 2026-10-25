@@ -28,6 +28,8 @@ public enum APIError: Error, Equatable, Sendable {
 /// `Session` (api.md «Аутентификация»).
 public struct AuthSession: Codable, Hashable, Sendable {
     public var userId: String
+    /// This device's session id on the server (`DELETE /devices/:id`).
+    public var deviceId: String?
     public var accessToken: String
     public var refreshToken: String
     public var accessExpiresAt: String
@@ -91,6 +93,7 @@ public struct DocVersion: Codable, Hashable, Sendable {
 public struct AttachmentStatus: Codable, Hashable, Sendable {
     public var size: Int64
     public var chunkCount: Int
+    public var mime: String?
     public var uploadedChunks: [Int]
 }
 

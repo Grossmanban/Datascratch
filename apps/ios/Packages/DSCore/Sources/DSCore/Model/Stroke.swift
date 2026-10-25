@@ -232,3 +232,19 @@ extension Stroke {
         return out
     }
 }
+
+extension CRDTTransaction {
+    /// Adds (or replaces) a stroke in the same transaction as other edits.
+    public mutating func putStroke(_ stroke: Stroke) {
+        set("strokes", key: stroke.id, .sharedMap(entries: stroke.fields))
+    }
+
+    public mutating func removeStroke(id: String) {
+        delete("strokes", key: id)
+    }
+
+    /// Rewrites only the anchors of a stroke (re-anchoring, strokes.md §4.1).
+    public mutating func setStrokeAnchors(id: String, _ anchors: [Data]) {
+        set("strokes", [id], key: "anchors", .list(items: anchors.map { .bytes(value: $0) }))
+    }
+}

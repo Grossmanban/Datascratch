@@ -9,6 +9,7 @@ import {
   encryptEnvelope,
   formatRecoveryKey,
   initCrypto,
+  moveNoteToNotebook as moveNoteSync,
   parseRecoveryKey,
   unwrapKey as unwrapSync,
   wrapKey as wrapSync,
@@ -51,6 +52,12 @@ export {
   type MeResponse as Me,
   type StarredItem as StarredRef,
 } from "@datascratch/shared";
+
+/** Re-wraps the note key and moves its NoteMeta between notebook indexes (api.md «Перенос заметки»). */
+export async function moveNoteToNotebook(options: Parameters<typeof moveNoteSync>[0]) {
+  await initCrypto();
+  return moveNoteSync(options);
+}
 
 export type ApiErrorCode = import("@datascratch/shared").ApiErrorCode;
 export type NoteCover = import("@datascratch/shared").NoteCover | null;

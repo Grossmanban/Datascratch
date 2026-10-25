@@ -30,6 +30,7 @@ export class AccountRuntime {
   private cleanups: (() => void)[] = [];
   private observedNotebooks = new Map<string, () => void>();
   private knownNotes = new Map<string, Set<string>>();
+  private notebookPass: Promise<void> = Promise.resolve();
   private attached = new Set<string>();
   private touchTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -227,9 +228,16 @@ export class AccountRuntime {
     }
   }
 
-  private async syncNotebookDocs() {
+  /** Serialised: an older pass must not detach a notebook a newer pass has just added. */
+  private syncNotebookDocs(): Promise<void> {
+    this.notebookPass = this.notebookPass
+      .then(() => this.syncNotebookDocsNow())
+      .catch((e) => console.warn("notebook sync failed", e));
+    return this.notebookPass;
+  }
+
+  private async syncNotebookDocsNow() {
     const refs = useWorkspace.getState().account.notebooks;
-    const ids = new Set(refs.map((r) => r.id));
     for (const ref of refs) {
       if (this.observedNotebooks.has(ref.id)) continue;
       this.observedNotebooks.set(ref.id, () => undefined);
@@ -244,6 +252,7 @@ export class AccountRuntime {
       handler();
       await this.attach([ref.id]);
     }
+    const ids = new Set(useWorkspace.getState().account.notebooks.map((r) => r.id));
     for (const [id, off] of [...this.observedNotebooks]) {
       if (ids.has(id)) continue;
       off();
@@ -272,13 +281,21 @@ export class AccountRuntime {
       current.add(noteId);
       if (known.has(noteId)) continue;
       known.add(noteId);
-      await this.store.ensureRow(noteId, "note", notebookId, 1);
+      const row = await this.store.ensureRow(noteId, "note", notebookId, 1);
+      // Moved here from another notebook: its key is now wrapped by this one.
+      if (row.notebookId !== notebookId) await this.store.patchRow(noteId, { notebookId });
       fresh.push(noteId);
       this.indexer.schedule(noteId, 300);
     }
     for (const noteId of [...known]) {
       if (current.has(noteId)) continue;
       known.delete(noteId);
+      // Moved to another notebook (its index already lists it): keep it attached.
+      const movedTo = [...this.knownNotes].find(([, set]) => set.has(noteId))?.[0];
+      if (movedTo) {
+        await this.store.patchRow(noteId, { notebookId: movedTo });
+        continue;
+      }
       void this.indexer.remove(noteId);
       await this.detach([noteId]);
     }

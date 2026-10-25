@@ -236,6 +236,18 @@ public struct RegisterDocRequest: Codable, Sendable {
     }
 }
 
+/// `PATCH /docs/:id` — move a note to another notebook of the same user.
+public struct MoveDocRequest: Codable, Sendable {
+    public var notebookId: String
+
+    public init(notebookId: String) { self.notebookId = notebookId }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        notebookId = try APIValidation.uuid(c, .notebookId)
+    }
+}
+
 public struct CreateShareRequest: Codable, Sendable {
     public var shareId: String
     public var target: ShareTarget

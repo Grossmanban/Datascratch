@@ -10,10 +10,9 @@ public enum Base64URL {
             .replacingOccurrences(of: "=", with: "")
     }
 
-    /// Strict: only `A–Z a–z 0–9 - _`, no padding, canonical (zero trailing bits) — like the
-    /// TS decoder. `canonical: false` accepts non-zero trailing bits, like the TS JSON schemas
-    /// (which check alphabet and length only).
-    public static func decode(_ string: String, canonical: Bool = true) -> Data? {
+    /// Strict, like the TS decoder and schemas: only `A–Z a–z 0–9 - _`, no padding, length
+    /// mod 4 ≠ 1, zero trailing bits (canonical).
+    public static func decode(_ string: String) -> Data? {
         guard string.utf8.allSatisfy({ ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122) || ($0 >= 48 && $0 <= 57) || $0 == 45 || $0 == 95 }) else {
             return nil
         }
@@ -24,38 +23,12 @@ public enum Base64URL {
         if remainder == 1 { return nil }
         if remainder > 0 { s += String(repeating: "=", count: 4 - remainder) }
         // Canonical only: unused trailing bits must be zero (re-encoding gives the input back).
-        guard let data = Data(base64Encoded: s, options: canonical ? [] : [.ignoreUnknownCharacters]) ?? (canonical ? nil : lenient(s)),
-              !canonical || encode(data) == string else { return nil }
+        guard let data = Data(base64Encoded: s), encode(data) == string else { return nil }
         return data
     }
 }
 
-extension Base64URL {
-    /// Decodes standard base64 (with padding) ignoring non-zero trailing bits.
-    static func lenient(_ padded: String) -> Data? {
-        let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".utf8)
-        var map = [UInt8](repeating: 255, count: 256)
-        for (i, c) in alphabet.enumerated() { map[Int(c)] = UInt8(i) }
-        var out = Data()
-        var buffer = 0
-        var bits = 0
-        for c in padded.utf8 where c != UInt8(ascii: "=") {
-            let v = map[Int(c)]
-            guard v != 255 else { return nil }
-            buffer = (buffer << 6) | Int(v)
-            bits += 6
-            if bits >= 8 {
-                bits -= 8
-                out.append(UInt8((buffer >> bits) & 0xFF))
-            }
-            buffer &= (1 << bits) - 1
-        }
-        return out
-    }
-}
-
-/// `Data` that encodes to/from base64url (no padding) in JSON. Decoding follows the TS JSON
-/// schemas: alphabet and length are checked, trailing bits are not.
+/// `Data` that encodes to/from base64url (no padding, canonical) in JSON.
 public struct Base64URLData: Codable, Hashable, Sendable {
     public var data: Data
 
@@ -63,7 +36,7 @@ public struct Base64URLData: Codable, Hashable, Sendable {
 
     public init(from decoder: any Decoder) throws {
         let string = try decoder.singleValueContainer().decode(String.self)
-        guard let data = Base64URL.decode(string, canonical: false) else {
+        guard let data = Base64URL.decode(string) else {
             throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "invalid base64url"))
         }
         self.data = data

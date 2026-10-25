@@ -114,6 +114,12 @@ struct BenchmarkTests {
             }
             try store.appendRemoteUpdates(docId: notebookId, items: [(1, try nb.crdt.encodeStateAsUpdate())])
         }
+        _ = try await Self.measure("  part: open db + read updates") { try LocalStore(url: url).updates(docId: notebookId) }
+        let updates = try LocalStore(url: url).updates(docId: notebookId)
+        let nb2 = NotebookDocument(notebookId: notebookId)
+        _ = try await Self.measure("  part: apply notebook update") { try nb2.crdt.applyUpdates(updates, origin: .storage) }
+        _ = try await Self.measure("  part: mapValue(notes) via FFI") { nb2.crdt.mapValue("notes") }
+        _ = try await Self.measure("  part: notes() typed") { nb2.notes().count }
         let (count, elapsed) = try await Self.measure("cold start (open db, load notebook with 10 000 notes, list)") {
             let store = try LocalStore(url: url)
             let nb = NotebookDocument(notebookId: notebookId)

@@ -82,6 +82,21 @@ extension YValue {
         }
     }
 
+    /// Converts a `JSONSerialization` result, telling booleans from numbers (both arrive as
+    /// `NSNumber`).
+    public static func fromJSONObject(_ any: Any) -> YValue {
+        switch any {
+        case let n as NSNumber:
+            if String(cString: n.objCType) == "c" { return .bool(value: n.boolValue) }
+            return .number(value: n.doubleValue)
+        case let s as String: return .string(value: s)
+        case is NSNull: return .null
+        case let a as [Any]: return .list(items: a.map(fromJSONObject))
+        case let d as [String: Any]: return .object(entries: d.mapValues(fromJSONObject))
+        default: return .undefined
+        }
+    }
+
     /// JSON-compatible representation (bytes become base64url strings).
     public var jsonObject: Any {
         switch self {

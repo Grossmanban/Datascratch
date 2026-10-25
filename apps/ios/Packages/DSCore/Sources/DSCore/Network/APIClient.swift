@@ -172,6 +172,12 @@ public actor APIClient {
         try await send("POST", "/docs", body: RegisterDocRequest(docId: docId, kind: kind, notebookId: notebookId))
     }
 
+    /// Moves a note document to another notebook (api.md «Перенос заметки»). Use
+    /// `AccountService.moveNote`, which also rewraps the note key and moves its `NoteMeta`.
+    public func moveDoc(id: String, toNotebook notebookId: String) async throws {
+        try await send("PATCH", "/docs/\(id)", body: MoveDocRequest(notebookId: notebookId))
+    }
+
     public func deleteDoc(id: String) async throws { try await send("DELETE", "/docs/\(id)") }
 
     public func versions(docId: String) async throws -> [DocVersion] { try await call("GET", "/docs/\(docId)/versions") }

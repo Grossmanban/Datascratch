@@ -250,6 +250,15 @@ extension LocalStore {
         }
     }
 
+    /// Updates the notebook of a document (after a move).
+    public func setNotebook(_ docId: String, notebookId: String) throws {
+        try db.write {
+            try $0.execute(sql: "UPDATE documents SET notebookId = ? WHERE docId = ?", arguments: [notebookId, docId])
+            try $0.execute(sql: "UPDATE noteIndex SET notebookId = ? WHERE noteId = ?", arguments: [notebookId, docId])
+            try $0.execute(sql: "UPDATE tasks SET notebookId = ? WHERE noteId = ?", arguments: [notebookId, docId])
+        }
+    }
+
     public func setRegistered(_ docId: String, _ registered: Bool = true) throws {
         try db.write { try $0.execute(sql: "UPDATE documents SET registered = ? WHERE docId = ?", arguments: [registered, docId]) }
     }

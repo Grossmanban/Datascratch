@@ -1046,14 +1046,14 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792951585.3995636,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
-    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
+    "ast_hash": "",
+    "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792951585.3995655,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
-    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
+    "ast_hash": "",
+    "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1792948578.3941054,
@@ -4010,8 +4010,8 @@
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792951585.3995676,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
-    "semantic_hash": "a66fd1a5c043c1420b26f520d2b23c56"
+    "ast_hash": "",
+    "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
     "mtime": 1792948578.7650733,
@@ -4080,10 +4080,10 @@
     "semantic_hash": "384356942b5dc8bd6f182c50f88498b1"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1792951317.1839788,
-    "seen": 1792951585.3994484,
-    "ast_hash": "d19b2bce9bc5e98cbc32666f359188f5",
-    "semantic_hash": "d19b2bce9bc5e98cbc32666f359188f5"
+    "mtime": 1792952114.934985,
+    "seen": 1792952175.6683538,
+    "ast_hash": "183901a97566e7006178eaf8b01b8751",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
     "mtime": 1792931235.7682118,
@@ -4158,10 +4158,10 @@
     "semantic_hash": "ae1d9508b40ff6446ed079457d8d3db8"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/InkController.swift": {
-    "mtime": 1792949705.56516,
-    "seen": 1792949835.5386076,
-    "ast_hash": "43cec5e78df65e6a031813c5579e8f8f",
-    "semantic_hash": "43cec5e78df65e6a031813c5579e8f8f"
+    "mtime": 1792952114.9337335,
+    "seen": 1792952175.6688442,
+    "ast_hash": "73dfc2a664ee1aeacf6a03ac15cb2372",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/InkInput.swift": {
     "mtime": 1792944674.9337115,

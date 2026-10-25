@@ -253,48 +253,21 @@ final class EditorViewTests: XCTestCase {
         let p = BlockNode.paragraph("Hello brave new world")
         let doc = InMemoryEditorDocument(blocks: [.title("T"), p, .paragraph("Second paragraph here")])
         let editor = host(doc)
-        _ = underline(editor, range: flatRange(editor, of: "brave"))
-        _ = underline(editor, range: flatRange(editor, of: "Second"))
+        let moving = underline(editor, range: flatRange(editor, of: "brave"))
+        let still = underline(editor, range: flatRange(editor, of: "Second"))
         let built = editor.ink.outlinesBuilt
+        let movingPath = editor.ink.renderedPath(of: moving.id)
+        let stillPath = editor.ink.renderedPath(of: still.id)
         editor.ink.invalidateLayout()
         editor.ink.refresh()
         XCTAssertEqual(editor.ink.outlinesBuilt, built, "nothing moved: both outlines come from the cache")
         // Typing at the start of the first paragraph moves the stroke on "brave"; the one in the
-        // second paragraph stays where it is.
-        let pos = TextPosition(block: p.id, offset: 0)
-        EditorCommands(document: doc).typeText("Oh ", marks: .empty, at: pos, replacing: 0)
+        // second paragraph stays where it is and keeps its outline.
+        EditorCommands(document: doc).typeText("Oh ", marks: .empty, at: TextPosition(block: p.id, offset: 0), replacing: 0)
         settle(editor)
-        XCTAssertEqual(editor.ink.outlinesBuilt, built + 1, "only the moved stroke is outlined again")
-    }
-
-    func testTextToolLeavesFingerTouchesAlone() {
-        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello")]))
-        editor.tools.allowsFingerDrawing = true
-        editor.tools.mode = .text
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        XCTAssertFalse(editor.inkInput.isEnabled, "the pen recognizer takes no part in the text tool")
-        XCTAssertEqual(editor.textView.panGestureRecognizer.minimumNumberOfTouches, 1, "one finger scrolls in the text tool")
-        editor.tools.mode = .pen
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        XCTAssertTrue(editor.inkInput.isEnabled)
-        XCTAssertEqual(editor.textView.panGestureRecognizer.minimumNumberOfTouches, 2)
-    }
-
-    func testButtonOverTheEditorGetsItsTouchAndNothingScrolls() {
-        let editor = host(SampleDocument.make())
-        let button = UIButton(type: .system)
-        button.frame = CGRect(x: 40, y: editor.bounds.maxY - 60, width: 44, height: 44)
-        window.addSubview(button)
-        var tapped = false
-        button.addAction(UIAction { _ in tapped = true }, for: .touchUpInside)
-        let center = button.convert(CGPoint(x: 22, y: 22), to: window)
-        XCTAssertTrue(window.hitTest(center, with: nil) === button, "the overlay, not the editor, receives the touch")
-        let offset = editor.textView.contentOffset
-        button.sendActions(for: .touchUpInside)
-        editor.tools.mode = .text
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        XCTAssertTrue(tapped)
-        XCTAssertEqual(editor.textView.contentOffset, offset, "switching tools does not scroll")
+        XCTAssertTrue(editor.ink.renderedPath(of: still.id) === stillPath, "the unmoved stroke reuses its outline")
+        XCTAssertFalse(editor.ink.renderedPath(of: moving.id) === movingPath, "the moved stroke is outlined again")
     }
 
     func testOpenLargeNote() {

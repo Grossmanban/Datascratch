@@ -43,9 +43,9 @@
   },
   "docs/architecture/data-model.md": {
     "mtime": 1792943501.6093373,
-    "seen": 1792943531.3730998,
+    "seen": 1792943650.4810128,
     "ast_hash": "2bc1d9ea78b7cfa860ce5f5fdd151fd6",
-    "semantic_hash": ""
+    "semantic_hash": "2bc1d9ea78b7cfa860ce5f5fdd151fd6"
   },
   "docs/architecture/overview.md": {
     "mtime": 1792927481.646325,
@@ -313,9 +313,9 @@
   },
   "docs/spec/06-data-server.md": {
     "mtime": 1792943491.6901999,
-    "seen": 1792943531.3753824,
+    "seen": 1792943650.4810154,
     "ast_hash": "580ca2bc791a25198469002cc51ae442",
-    "semantic_hash": ""
+    "semantic_hash": "580ca2bc791a25198469002cc51ae442"
   },
   "docs/spec/07-encryption.md": {
     "mtime": 1792941192.3340766,
@@ -403,15 +403,15 @@
   },
   "docs/architecture/contracts/api.md": {
     "mtime": 1792943491.6890733,
-    "seen": 1792943531.372913,
+    "seen": 1792943650.4810064,
     "ast_hash": "cb5e5333a7742e7559f34265ecfcb391",
-    "semantic_hash": ""
+    "semantic_hash": "cb5e5333a7742e7559f34265ecfcb391"
   },
   "docs/architecture/contracts/crypto.md": {
     "mtime": 1792943491.6895673,
-    "seen": 1792943531.3729172,
+    "seen": 1792943650.4810095,
     "ast_hash": "0fafb316027d38b0dddb007455df2ec0",
-    "semantic_hash": ""
+    "semantic_hash": "0fafb316027d38b0dddb007455df2ec0"
   },
   "docs/architecture/contracts/design-tokens.md": {
     "mtime": 1792930031.5803056,
@@ -1045,15 +1045,15 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792930021.2139332,
-    "seen": 1792943545.417637,
+    "seen": 1792943650.47973,
     "ast_hash": "24098989e922515ff0fa0aac07aa956f",
-    "semantic_hash": ""
+    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792930021.2139332,
-    "seen": 1792943545.4176407,
+    "seen": 1792943650.4797344,
     "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
-    "semantic_hash": ""
+    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1792930021.2197683,
@@ -1069,9 +1069,9 @@
   },
   "apps/server/drizzle/meta/_journal.json": {
     "mtime": 1792943412.7222087,
-    "seen": 1792943531.3530047,
+    "seen": 1792943650.4797595,
     "ast_hash": "13cddf50924a9fae95245e64141563e3",
-    "semantic_hash": ""
+    "semantic_hash": "13cddf50924a9fae95245e64141563e3"
   },
   "apps/server/eslint.config.js": {
     "mtime": 1792932061.187478,
@@ -1129,9 +1129,9 @@
   },
   "apps/server/src/db/schema.ts": {
     "mtime": 1792943411.4382086,
-    "seen": 1792943531.3534195,
+    "seen": 1792943650.479788,
     "ast_hash": "f6f6c5481978f598e1a61199d6ec6deb",
-    "semantic_hash": ""
+    "semantic_hash": "f6f6c5481978f598e1a61199d6ec6deb"
   },
   "apps/server/src/index.ts": {
     "mtime": 1792930021.2208993,
@@ -1183,9 +1183,9 @@
   },
   "apps/server/src/routes/account.ts": {
     "mtime": 1792943432.2696958,
-    "seen": 1792943531.3540697,
+    "seen": 1792943650.4798298,
     "ast_hash": "2be655d87d88919cf8326e5d7297cb16",
-    "semantic_hash": ""
+    "semantic_hash": "2be655d87d88919cf8326e5d7297cb16"
   },
   "apps/server/src/routes/attachments.ts": {
     "mtime": 1792928225.849915,
@@ -1195,9 +1195,9 @@
   },
   "apps/server/src/routes/auth.ts": {
     "mtime": 1792943432.2692554,
-    "seen": 1792943531.3541672,
+    "seen": 1792943650.479835,
     "ast_hash": "4215601d8543448e85e0d5745b85a4b5",
-    "semantic_hash": ""
+    "semantic_hash": "4215601d8543448e85e0d5745b85a4b5"
   },
   "apps/server/src/routes/notebooks.ts": {
     "mtime": 1792933847.2785306,
@@ -1309,9 +1309,9 @@
   },
   "apps/server/test/auth.test.ts": {
     "mtime": 1792943453.4182112,
-    "seen": 1792943531.355079,
+    "seen": 1792943650.4798937,
     "ast_hash": "ed2d15103966f50b569c7bc5c6ece1b5",
-    "semantic_hash": ""
+    "semantic_hash": "ed2d15103966f50b569c7bc5c6ece1b5"
   },
   "apps/server/test/global-setup.ts": {
     "mtime": 1792928566.626571,
@@ -4003,8 +4003,14 @@
   },
   "apps/server/drizzle/meta/0002_snapshot.json": {
     "mtime": 1792943412.7222087,
-    "seen": 1792943531.3529985,
+    "seen": 1792943650.4797482,
     "ast_hash": "b2fbfd7a4df97f681d1a6f5c36ec9a53",
-    "semantic_hash": ""
+    "semantic_hash": "b2fbfd7a4df97f681d1a6f5c36ec9a53"
+  },
+  "apps/server/drizzle/0002_security_events.sql": {
+    "mtime": 1792943412.7222087,
+    "seen": 1792943650.479738,
+    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "semantic_hash": "a66fd1a5c043c1420b26f520d2b23c56"
   }
 }

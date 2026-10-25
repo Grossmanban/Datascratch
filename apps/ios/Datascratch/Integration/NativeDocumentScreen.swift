@@ -35,7 +35,12 @@ final class NativeEditorModel {
         // D-06: a finger draws only when enabled; on iPhone (no Pencil) it is on by default.
         editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
         editor.tools.mode = .text
-        editor.onStateChange = { [weak self] in self?.changed() }
+        // Never touch SwiftUI state in the middle of a touch: the editor reports state changes
+        // during gesture handling, and an immediate re-render there crashed UIKit
+        // (_delayTouchesForEvent) in ios-editor's demo.
+        editor.onStateChange = { [weak self] in
+            DispatchQueue.main.async { self?.changed() }
+        }
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
     }
 

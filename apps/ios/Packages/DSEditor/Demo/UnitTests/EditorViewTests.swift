@@ -262,7 +262,7 @@ final class EditorViewTests: XCTestCase {
         // Typing at the start of the first paragraph moves the stroke on "brave"; the one in the
         // second paragraph stays where it is.
         let pos = TextPosition(block: p.id, offset: 0)
-        EditorCommands(document: doc).typeText("Oh ", marks: .plain, at: pos, replacing: 0)
+        EditorCommands(document: doc).typeText("Oh ", marks: .empty, at: pos, replacing: 0)
         settle(editor)
         XCTAssertEqual(editor.ink.outlinesBuilt, built + 1, "only the moved stroke is outlined again")
     }

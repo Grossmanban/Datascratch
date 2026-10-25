@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 final class OnboardingUITests: XCTestCase {
@@ -59,7 +60,27 @@ final class LibraryUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-ui-testing-signed-in"]
         app.launch()
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            // Landscape shows all three columns of the split view.
+            XCUIDevice.shared.orientation = .landscapeLeft
+        }
         return app
+    }
+
+    static func buttons(_ app: XCUIApplication) -> String {
+        app.buttons.allElementsBoundByIndex.prefix(60).map { "\($0.identifier)|\($0.label)" }.joined(separator: ", ")
+    }
+
+    /// Returns a sidebar element, revealing the sidebar first when it is collapsed.
+    private func sidebarElement(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        let element = app.descendants(matching: .any)[identifier].firstMatch
+        if element.waitForExistence(timeout: 3), element.isHittable { return element }
+        let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar'")).firstMatch
+        if toggle.exists { toggle.tap() }
+        let back = app.navigationBars.buttons.firstMatch
+        if !element.waitForExistence(timeout: 3), back.exists { back.tap() }
+        _ = element.waitForExistence(timeout: 5)
+        return element
     }
 
     func testCreateNoteAndWriteTitle() throws {
@@ -83,11 +104,11 @@ final class LibraryUITests: XCTestCase {
 
     func testCommandPaletteOpensTasks() throws {
         let app = launchSignedIn()
-        let paletteButton = app.buttons["sidebar.commandPalette"].firstMatch
-        XCTAssertTrue(paletteButton.waitForExistence(timeout: 5))
+        let paletteButton = sidebarElement(app, "sidebar.commandPalette")
+        XCTAssertTrue(paletteButton.exists, "command palette button not found; buttons: \(Self.buttons(app))")
         paletteButton.tap()
         let field = app.textFields["palette.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found; fields: \(app.textFields.allElementsBoundByIndex.map(\.identifier))")
         field.typeText("Go to Tasks\n")
         XCTAssertTrue(app.segmentedControls["tasks.bucket"].firstMatch.waitForExistence(timeout: 5)
                       || app.otherElements["tasks.bucket"].firstMatch.waitForExistence(timeout: 2))
@@ -95,14 +116,14 @@ final class LibraryUITests: XCTestCase {
 
     func testSettingsFingerDrawingToggle() throws {
         let app = launchSignedIn()
-        let settings = app.buttons["sidebar.settings"].firstMatch
-        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        let settings = sidebarElement(app, "sidebar.settings")
+        XCTAssertTrue(settings.exists, "settings button not found; buttons: \(Self.buttons(app))")
         settings.tap()
         let drawing = app.descendants(matching: .any)["settings.drawing"].firstMatch
-        XCTAssertTrue(drawing.waitForExistence(timeout: 5))
+        XCTAssertTrue(drawing.waitForExistence(timeout: 5), "drawing settings row not found; buttons: \(Self.buttons(app))")
         drawing.tap()
         let toggle = app.switches["settings.fingerDrawing"].firstMatch
-        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5), "finger drawing toggle not found")
         XCTAssertEqual(toggle.value as? String, "0")
         if toggle.switches.firstMatch.exists {
             toggle.switches.firstMatch.tap()

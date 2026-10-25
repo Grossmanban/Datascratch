@@ -184,6 +184,7 @@ struct NativeEditorToolbar: ToolbarContent {
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarLeading) {
+            CloseDocumentButton()
             FullScreenButton()
             let _ = model.revision
             Button { model.editor.undo() } label: { Image(systemName: "arrow.uturn.backward") }

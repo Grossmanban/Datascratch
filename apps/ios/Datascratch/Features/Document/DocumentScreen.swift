@@ -116,6 +116,7 @@ struct DocumentScreen: View {
 
     @ToolbarContentBuilder
     private func toolbar(_ note: NoteMeta) -> some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) { CloseDocumentButton() }
         ToolbarItem(placement: .topBarLeading) { FullScreenButton() }
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button {
@@ -208,6 +209,19 @@ struct BacklinksSection: View {
                     .buttonStyle(.plain)
                 }
             }
+        }
+    }
+}
+
+/// iPad: closes the document; what was beside it takes the whole width.
+struct CloseDocumentButton: View {
+    @Environment(SceneModel.self) private var scene
+
+    var body: some View {
+        if UIDevice.current.userInterfaceIdiom == .pad, scene.selectedNoteId != nil, !scene.isNoteWindow {
+            Button { scene.closeDocument() } label: { Image(systemName: "xmark") }
+                .accessibilityLabel("Close Document")
+                .accessibilityIdentifier("document.close")
         }
     }
 }

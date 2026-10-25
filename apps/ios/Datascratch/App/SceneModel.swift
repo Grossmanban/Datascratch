@@ -41,7 +41,18 @@ final class SceneModel {
     let app: AppModel
 
     var sidebar: SidebarItem? = .allDocuments {
-        didSet { if oldValue != sidebar { searchText = "" } }
+        didSet {
+            guard oldValue != sidebar else { return }
+            searchText = ""
+            // iPad: Tasks and the calendar get the whole width; a document opens beside them
+            // only from a task or a day.
+            if UIDevice.current.userInterfaceIdiom == .pad, !isNoteWindow, sidebar == .tasks || sidebar == .calendar {
+                if let id = selectedNoteId { library.recordVersion(ofNote: id) }
+                selectedNoteId = nil
+                isContentFullScreen = true
+                columnVisibility = .detailOnly
+            }
+        }
     }
     var selectedNoteId: String?
     /// Which columns show; remembered between launches (iPad).
@@ -131,11 +142,13 @@ final class SceneModel {
         withAnimation(Theme.Motion.snappy) {
             selectedNoteId = noteId
             preferredCompactColumn = .detail
-            isContentFullScreen = false
-            // iPad: opening a document hides the sidebar (list + document), as in Notes and Craft.
-            if UIDevice.current.userInterfaceIdiom == .pad, columnVisibility == .all {
+            // iPad: opening a document hides the sidebar (list + document), as in Notes and Craft;
+            // from full-screen tasks or calendar the document opens beside them.
+            if UIDevice.current.userInterfaceIdiom == .pad, !isNoteWindow,
+               columnVisibility == .all || isContentFullScreen {
                 columnVisibility = .doubleColumn
             }
+            isContentFullScreen = false
         }
         library.openTab(noteId)
     }
@@ -168,8 +181,15 @@ final class SceneModel {
 
     func closeDocument() {
         if let id = selectedNoteId { library.recordVersion(ofNote: id) }
-        selectedNoteId = nil
-        preferredCompactColumn = .content
+        withAnimation(Theme.Motion.smooth) {
+            selectedNoteId = nil
+            preferredCompactColumn = .content
+            // iPad: what was beside the document (tasks, calendar, a list) takes the whole width.
+            if UIDevice.current.userInterfaceIdiom == .pad, !isNoteWindow {
+                isContentFullScreen = true
+                columnVisibility = .detailOnly
+            }
+        }
     }
 
     func show(_ item: SidebarItem) {

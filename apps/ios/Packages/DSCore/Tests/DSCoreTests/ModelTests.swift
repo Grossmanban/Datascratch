@@ -317,3 +317,22 @@ import Testing
         #expect(ShareLink(url: URL(string: "https://notes.example.com/s/\(id)")!) == nil)
     }
 }
+
+@Suite struct StrokeTransactionTests {
+    @Test func strokesAndTextInOneTransaction() throws {
+        let note = NoteDocument(noteId: "n")
+        try note.initialize(title: "")
+        try note.crdt.enableUndo(captureTimeout: .zero)
+        let stroke = Stroke(tool: .pen, color: "ink.black", width: 2, anchorKind: .block, blockId: "b",
+                            points: [StrokePoint(anchor: -1, x: 0, y: 0, t: 0)], author: Author(kind: .user, id: "u"))
+        try note.crdt.transact { txn in
+            txn.insertNodes([.text(chunks: [TextChunk(text: "hi", embed: nil, attributes: [:])])], into: [1], at: 0)
+            txn.putStroke(stroke)
+            txn.setStrokeAnchors(id: stroke.id, [Data([1])])
+        }
+        #expect(note.stroke(id: stroke.id)?.anchors == [Data([1])])
+        #expect(try note.undo())
+        #expect(note.strokes().isEmpty)
+        #expect(try note.block(at: [1])?.text == "")
+    }
+}

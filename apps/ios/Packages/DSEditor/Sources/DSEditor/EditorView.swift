@@ -312,6 +312,10 @@ public final class EditorView: UIView {
     /// keyboard (the SwiftUI default) — then the overlap is zero and this does nothing. In the demo
     /// under XCUITest, a full-height editor under the keyboard crashed UIKit on a tap into the text.
     private var keyboardFrame: CGRect?
+    /// Whether the editor adds the keyboard overlap to its bottom scroll inset (see above).
+    public var adjustsForKeyboard = true {
+        didSet { applyKeyboardInset() }
+    }
 
     private func keyboardFrameChanged(_ frame: CGRect?) {
         keyboardFrame = frame
@@ -320,7 +324,7 @@ public final class EditorView: UIView {
 
     private func applyKeyboardInset() {
         var overlap: CGFloat = 0
-        if let screenFrame = keyboardFrame, let window {
+        if adjustsForKeyboard, let screenFrame = keyboardFrame, let window {
             let frame = window.convert(screenFrame, from: window.screen.coordinateSpace)
             let mine = convert(bounds, to: window)
             overlap = max(0, mine.maxY - frame.minY)

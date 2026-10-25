@@ -46,6 +46,18 @@ final class EditorDemoUITests: XCTestCase {
         try typing(extraArguments: [])
     }
 
+    // Temporary bisection: editor kept full height under the keyboard, with and without the
+    // editor's own keyboard inset.
+    @MainActor
+    func testTypingBisectFullHeight() throws {
+        try typing(extraArguments: ["-fullHeightEditor"])
+    }
+
+    @MainActor
+    func testTypingBisectFullHeightNoInset() throws {
+        try typing(extraArguments: ["-fullHeightEditor", "-noKeyboardInset"])
+    }
+
     @MainActor
     private func typing(extraArguments: [String]) throws {
         let app = XCUIApplication()

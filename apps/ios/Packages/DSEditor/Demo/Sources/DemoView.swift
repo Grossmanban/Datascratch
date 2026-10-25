@@ -15,7 +15,7 @@ struct DemoView: View {
                 // UI tests pass with; with the editor kept full height under the keyboard, a tap
                 // into the text crashed UIKit under XCUITest.
                 EditorRepresentable(editor: model.editor)
-                    .ignoresSafeArea(.container, edges: .bottom)
+                    .ignoresSafeArea(model.fullHeightEditor ? .all : .container, edges: .bottom)
                     .accessibilityIdentifier("editor")
                 ToolPalette(model: model)
                     .padding(.bottom, 12)

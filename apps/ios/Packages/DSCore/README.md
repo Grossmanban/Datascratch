@@ -17,12 +17,14 @@ Swift 6 (строгая конкурентность), iOS/iPadOS 26+ (D-32). К
 .product(name: "DSCore", package: "DSCore")
 ```
 
-Перед сборкой нужен `build/yrs_ffiFFI.xcframework` (Rust-библиотека Yrs):
+Rust-библиотека Yrs приходит готовой: `Package.swift` скачивает `yrs_ffiFFI.xcframework` из
+GitHub-релиза `yrs-ffi-<хэш>` (публикует CI `ios-core.yml` после зелёных тестов). Rust и
+скрипты потребителям **не нужны**.
 
-| Где | Команда |
+| Где | Что |
 | --- | --- |
-| Mac (Xcode 26+, `rustup`) | `apps/ios/Packages/DSCore/scripts/build-xcframework.sh` (~2 мин, один раз и после правок `yrs-ffi`) |
-| CI потребителя | тот же скрипт; кэшировать `~/.cargo` и `yrs-ffi/target` (см. `.github/workflows/ios-core.yml`) |
+| Потребитель (DSEditor, приложение, их CI) | ничего: SwiftPM сам скачает и проверит контрольную сумму |
+| Правка `yrs-ffi` на Mac | `scripts/build-xcframework.sh` (Xcode 26+, `rustup`) — локальная сборка в `build/` имеет приоритет над релизом; после зелёного CI вписать новый url/checksum из сводки задания в `yrsRelease` (`Package.swift`) |
 | Linux (облачные сессии) | `scripts/build-linux.sh`, затем `swift build` / `swift test` (Swift 6.2+, `libsodium-dev`, `libsqlite3-dev`) |
 
 `scripts/generate-bindings.sh` — перегенерировать Swift-привязки после правки `yrs-ffi/src`

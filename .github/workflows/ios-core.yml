@@ -121,6 +121,16 @@ jobs:
           if ! grep -q "$TAG" Package.swift; then
             echo "::warning::Package.swift does not pin $TAG yet (update yrsRelease url/checksum)"
           fi
+      - name: Pinned release resolves (what DSEditor and the app use)
+        run: |
+          TAG="yrs-ffi-$(./scripts/yrs-ffi-hash.sh)"
+          if grep -q "$TAG" Package.swift; then
+            mv build/yrs_ffiFFI.xcframework build/local.xcframework
+            swift package resolve
+            mv build/local.xcframework build/yrs_ffiFFI.xcframework
+          else
+            echo "::warning::Package.swift pins an older yrs-ffi release than $TAG"
+          fi
       - name: Upload xcodebuild log
         if: failure()
         uses: actions/upload-artifact@v4

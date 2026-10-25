@@ -350,6 +350,42 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         await b.stop()
     }
 
+    /// Background refresh: one pass catches up, sends the outbox and disconnects; without a
+    /// server it gives up at the deadline and keeps the edit queued.
+    @Test func syncOnceCatchesUpSendsAndDisconnects() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        await a.start()
+        let docId = EntityID.make()
+        let note = NoteDocument(noteId: docId)
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "Background")
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        await a.stop()
+
+        // B knows the note (from its notebook index) and has an offline note of its own.
+        let b = try device("B", server: server)
+        try b.store.ensureDocument(docId: docId, kind: .note, notebookId: "nb")
+        let other = NoteDocument(noteId: EntityID.make())
+        try other.initialize(title: "Offline")
+        try b.store.ensureDocument(docId: other.noteId, kind: .note, notebookId: "nb")
+        try b.store.appendLocalUpdate(docId: other.noteId, update: try other.crdt.encodeStateAsUpdate(), origin: .local)
+
+        let result = await b.syncOnce(deadline: .now + .seconds(10))
+        #expect(result == .init(completed: true, pending: 0))
+        #expect(try (b.store.document(docId)?.lastSeq ?? 0) > 0)
+        #expect(await server.docs[other.noteId]?.isEmpty == false)
+        #expect(await b.client.isConnected == false)
+        #expect(try b.store.pendingIndexCount() == 2)
+
+        await server.setAccepting(false)
+        try b.store.appendLocalUpdate(docId: other.noteId, update: try other.crdt.encodeStateAsUpdate(), origin: .local)
+        let start = ContinuousClock.now
+        let cut = await b.syncOnce(deadline: .now + .milliseconds(300))
+        #expect(cut == .init(completed: false, pending: 1))
+        #expect(ContinuousClock.now - start < .seconds(3))
+    }
+
     @Test func awarenessIsEncryptedAndRelayed() async throws {
         let server = FakeSyncServer()
         let a = try device("A", server: server)

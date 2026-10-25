@@ -97,6 +97,40 @@ import GRDB
         #expect(try store.tags().isEmpty)
     }
 
+    /// Only notes changed since they were indexed are reindexed; local compaction is no change.
+    @Test func incrementalIndexing() async throws {
+        let store = try LocalStore.inMemory()
+        var ids: [String] = []
+        for i in 0..<7 {
+            let note = NoteDocument(noteId: EntityID.make())
+            ids.append(note.noteId)
+            try note.initialize(title: "Note \(i)")
+            try store.ensureDocument(docId: note.noteId, kind: .note, notebookId: "nb")
+            try store.appendRemoteUpdates(docId: note.noteId, items: [(1, try note.crdt.encodeStateAsUpdate())])
+        }
+        try store.ensureDocument(docId: "nb", kind: .notebook, notebookId: "nb")
+        #expect(try store.pendingIndexCount() == 7)
+        #expect(try await store.reindexChanged(limit: 5) == 5)
+        #expect(try await store.reindexChanged() == 2)
+        #expect(try await store.reindexChanged() == 0)
+        #expect(try store.search("note").count == 7)
+
+        // A local edit makes its note pending again.
+        let edited = NoteDocument(noteId: ids[3])
+        try edited.crdt.applyUpdates(try store.updates(docId: ids[3]), origin: .storage)
+        let captured = Locked<[Data]>([])
+        let sub = edited.crdt.observeUpdates { update, _ in captured.withLock { $0.append(update) } }
+        try edited.insertText("Renamed ", at: 0, inBlock: [0])
+        sub.cancel()
+        for update in captured.withLock({ $0 }) { try store.appendLocalUpdate(docId: ids[3], update: update, origin: .local) }
+        #expect(try store.pendingIndexCount() == 1)
+        #expect(try await store.reindexChanged() == 1)
+        #expect(try store.search("renamed").map(\.noteId) == [ids[3]])
+
+        try store.compact(docId: ids[3])
+        #expect(try store.pendingIndexCount() == 0)
+    }
+
     /// Tasks indexed before the `order` column existed get their document order from rowid.
     @Test func taskOrderMigrationBackfills() throws {
         let queue = try DatabaseQueue()

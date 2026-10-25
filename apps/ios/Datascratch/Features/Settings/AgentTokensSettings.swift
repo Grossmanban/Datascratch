@@ -15,6 +15,9 @@ struct AgentTokensSettings: View {
                         .foregroundStyle(Theme.Palette.textTertiary)
                 }
                 ForEach(tokens) { token in
+                    NavigationLink {
+                        AgentAuditView(token: token)
+                    } label: {
                     VStack(alignment: .leading, spacing: Theme.Space.s1) {
                         HStack {
                             Text(token.name).font(.headline)
@@ -34,6 +37,7 @@ struct AgentTokensSettings: View {
                                 .font(Theme.Typography.caption)
                                 .foregroundStyle(Theme.Palette.textTertiary)
                         }
+                    }
                     }
                     .swipeActions {
                         Button("Revoke", role: .destructive) {
@@ -154,5 +158,54 @@ struct NewAgentTokenSheet: View {
                 name: name.trimmingCharacters(in: .whitespaces), notebookIds: Array(selected),
                 permission: permission, expiresAt: hasExpiry ? expiry : nil)
         }
+    }
+}
+
+/// What an agent did with its token (spec/09: every action is logged).
+struct AgentAuditView: View {
+    @Environment(AppModel.self) private var app
+    let token: AgentToken
+    @State private var entries: [AgentAuditEntry] = []
+    @State private var isLoading = true
+    @State private var error: String?
+
+    var body: some View {
+        List {
+            if let error {
+                Text(error).foregroundStyle(Theme.Palette.danger)
+            } else if !isLoading, entries.isEmpty {
+                ContentUnavailableView("No activity yet", systemImage: "list.bullet.rectangle",
+                                       description: Text("Actions of this agent will appear here."))
+                    .listRowBackground(Color.clear)
+            }
+            ForEach(entries) { entry in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.action)
+                        .font(.system(.body, design: .monospaced))
+                    if let title = entry.noteTitle {
+                        Text(title)
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                    }
+                    Text(entry.at.formatted(date: .abbreviated, time: .standard))
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.textTertiary)
+                }
+            }
+        }
+        .overlay { if isLoading { ProgressView() } }
+        .navigationTitle(token.name)
+        .refreshable { await load() }
+        .task { await load() }
+    }
+
+    private func load() async {
+        do {
+            entries = try await app.access.auditLog(forToken: token.id)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        isLoading = false
     }
 }

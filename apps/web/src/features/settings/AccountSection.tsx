@@ -93,7 +93,7 @@ function RecoveryKeyCard() {
     <>
       <section
         className={cn(
-          "rounded-xl border p-5 shadow-[0_1px_2px_rgb(40_30_10/0.04)]",
+          "rounded-lg border p-5",
           unconfirmed ? "border-[color-mix(in_srgb,var(--ds-warning)_35%,transparent)] bg-[var(--ds-tint-yellow-bg)]" : "border-line bg-surface",
         )}
         data-testid="recovery-card"

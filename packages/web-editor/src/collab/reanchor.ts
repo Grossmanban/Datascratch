@@ -21,7 +21,7 @@ interface AnchorSnapshot {
   id: string;
   stroke: Stroke;
   /** Old ProseMirror position and character of each anchor (null when already deleted). */
-  anchors: ({ pos: number; char: string } | null)[];
+  anchors: ({ pos: number; char: string; blockId: string | null; offset: number } | null)[];
 }
 
 interface Pending {
@@ -72,11 +72,35 @@ function snapshot(doc: Y.Doc, state: EditorState): AnchorSnapshot[] {
       anchors: stroke.anchors.map((bytes) => {
         const rel = decodeAnchor(bytes);
         const pos = rel ? resolveCharAnchor(bytes, rel, doc, fragment, mapping) : null;
-        return pos === null ? null : { pos, char: state.doc.textBetween(pos, pos + 1) };
+        if (pos === null) return null;
+        const $pos = state.doc.resolve(pos);
+        return { pos, char: state.doc.textBetween(pos, pos + 1), blockId: ($pos.parent.attrs.blockId as string | null) ?? null, offset: pos - $pos.start() };
       }),
     });
   });
   return out;
+}
+
+/**
+ * Where an anchored character is now: through the step mapping, or — for moved blocks, which
+ * ProseMirror sees as delete + insert — by the block's `blockId` and the offset inside it.
+ */
+function locate(doc: PMNode, mapping: Mapping, old: NonNullable<AnchorSnapshot["anchors"][number]>): number | null {
+  const charAt = (pos: number) => (pos >= 0 && pos < doc.content.size ? doc.textBetween(pos, pos + 1) : "");
+  const m = mapping.mapResult(old.pos, 1);
+  if (!m.deleted && charAt(m.pos) === old.char) return m.pos;
+  if (!old.blockId) return null;
+  let found: number | null = null;
+  doc.descendants((node, pos) => {
+    if (found !== null) return false;
+    if (node.isTextblock && node.attrs.blockId === old.blockId) {
+      const candidate = pos + 1 + old.offset;
+      if (charAt(candidate) === old.char) found = candidate;
+      return false;
+    }
+    return true;
+  });
+  return found;
 }
 
 /** Applies pending re-anchoring after y-prosemirror has written the edit into the Y.Doc. */
@@ -92,11 +116,10 @@ export function reanchorAfterEdit(doc: Y.Doc, state: EditorState, pending: Pendi
       if (!old) return bytes;
       const now = resolveAnchor(doc, bytes);
       if (now && !now.deleted) return bytes;
-      const m = pending.mapping.mapResult(old.pos, 1);
-      if (m.deleted) return bytes;
-      if (m.pos >= state.doc.content.size || state.doc.textBetween(m.pos, m.pos + 1) !== old.char) return bytes;
+      const pos = locate(state.doc, pending.mapping, old);
+      if (pos === null) return bytes;
       changed = true;
-      return encodeCharAnchor(m.pos, fragment, mapping);
+      return encodeCharAnchor(pos, fragment, mapping);
     });
     if (changed) replaced.push([snap.id, { ...snap.stroke, anchors }]);
   }

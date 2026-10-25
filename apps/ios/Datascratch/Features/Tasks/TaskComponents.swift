@@ -27,7 +27,7 @@ struct TaskCheckbox: View {
                     .background(Circle().fill(state == .done ? Theme.Palette.accent : .clear))
                 switch state {
                 case .done:
-                    Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                    Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.Palette.onAccent)
                 case .cancelled:
                     Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.Palette.accent)
                 case .open:

@@ -79,10 +79,16 @@ final class OnboardingUITests: XCTestCase {
         confirm.tap()
         let main = waitForMain(app)
         guard main.exists, main.isHittable else { return }
-        // The first tap can land while onboarding is still animating away: retry once.
+        // Open settings through the command palette (a plain tap on the sidebar
+        // button does not reach it on iPad in UI tests; see testSettingsFingerDrawingToggle).
         let account = app.descendants(matching: .any)["settings.account"].firstMatch
-        main.tap()
-        if !account.waitForExistence(timeout: 5), main.isHittable { main.tap() }
+        let palette = app.descendants(matching: .any)["sidebar.commandPalette"].firstMatch
+        XCTAssertTrue(palette.waitForExistence(timeout: 5), "command palette button not found")
+        palette.tap()
+        let field = app.textFields["palette.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
+        field.tap()
+        field.typeText("Settings\n")
         XCTAssertTrue(account.waitForExistence(timeout: 5), "settings not opened; buttons: \(LibraryUITests.buttons(app))")
         XCTAssertTrue(app.descendants(matching: .any)["settings.recoveryKeyReminder"].firstMatch.waitForExistence(timeout: 5),
                       "reminder not shown; buttons: \(LibraryUITests.buttons(app))")

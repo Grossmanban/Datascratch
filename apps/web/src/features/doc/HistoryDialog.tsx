@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import * as Y from "yjs";
 import { docsApi } from "@/api/endpoints";
 import { runtime } from "@/data/runtime";
-import { readNoteMeta, restoreFrom } from "@/domain/note";
+import { restoreNoteVersion } from "@datascratch/shared";
 import { useUi } from "@/hooks/useUi";
 import { formatDateTime } from "@/lib/dates";
 import { ad, fromBase64Url, open } from "@/lib/shared";
@@ -55,7 +55,12 @@ export function HistoryDialog() {
     const rt = runtime();
     const doc = await rt.store.acquire(noteId);
     try {
-      restoreFrom(doc, preview);
+      // Re-anchors strokes onto the restored text (strokes.md), then restores style/cover/backdrop.
+      restoreNoteVersion(doc, Y.encodeStateAsUpdate(preview));
+      const meta = preview.getMap("meta");
+      doc.transact(() => {
+        for (const k of ["style", "cover", "backdrop"]) doc.getMap("meta").set(k, meta.get(k) ?? null);
+      });
     } finally {
       rt.store.release(noteId);
     }
@@ -99,7 +104,7 @@ export function HistoryDialog() {
             ) : preview ? (
               <>
                 <div className="pointer-events-none origin-top scale-[0.9]">
-                  <DocView doc={preview} style={readNoteMeta(preview).style} backdrop={null} editable={false} placeholder="" titlePlaceholder="" />
+                  <DocView doc={preview} backdrop={null} editable={false} compact showPalette={false} />
                 </div>
                 <div className="sticky bottom-0 flex justify-end border-t border-line bg-surface/90 p-3 backdrop-blur">
                   <Button variant="primary" icon={<RotateCcw className="size-4" />} onClick={restore}>

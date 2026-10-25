@@ -16,9 +16,10 @@ on:
       - ".github/workflows/ios-editor.yml"
   workflow_dispatch:
 
+# No cancel-in-progress: cancelling a job stuck in the simulator can take many minutes and
+# would block the next run behind it.
 concurrency:
-  group: ios-editor-${{ github.ref }}
-  cancel-in-progress: true
+  group: ios-editor-${{ github.sha }}
 
 jobs:
   # Pure-Swift logic (stroke format, living-stroke geometry, document model) on Linux: fast feedback.

@@ -106,7 +106,12 @@ DSCore
   `purgeOrphanedStrokes(orphanedAt:)` перед сборкой снимка.
 - Комментарии: `comments()`, `addComment`, `resolveComment`, `deleteComment`.
 - Производные данные: `derived() -> NoteDerivedData` (заголовок, plain text, задачи,
-  ссылки `[[ ]]`, теги).
+  ссылки `[[ ]]` и карточки страниц, теги) — по тем же правилам, что
+  `packages/shared/src/document/extract.ts`.
+- Экспорт: `contentJSON()` — канонический ProseMirror-JSON; `markdown()` /
+  `MarkdownExport.render` — Markdown в стиле Obsidian (байт в байт как TS).
+- История версий: `restoreVersion(state:)` — восстанавливает `content` и `strokes` версии
+  с перепривязкой якорей (strokes.md §4.1).
 
 ## Блокнот и аккаунт
 
@@ -131,6 +136,42 @@ DSCore
   ключи заметок (в памяти). `KeychainSecretStore` (Keychain, только это устройство, после
   первой разблокировки) и `InMemorySecretStore` (тесты).
 
+## Аккаунт, вложения, шеринг
+
+- `AccountService(api:keys:store:)`: `signup(email:password:)` (возвращает текст ключа
+  восстановления — показать один раз), `login`, `recover(email:recoveryKeyText:newPassword:)`,
+  `changePassword`, `logout`, `createNotebook(name:spaceId:mode:...in:)` (ключ, `POST /notebooks`,
+  `POST /docs`, документ блокнота, `NotebookRef`), `loadNotebookKeys()` (новое устройство),
+  `setMode` (режим «для агентов»), `createNote(in:...)` (ключ заметки, `NoteMeta`).
+- `AttachmentManager(api:store:directory:)`: `add(_:mime:noteId:)` → `attachmentId` (файл
+  сохраняется локально и ставится в очередь), `uploadPending(noteKey:)` / `upload` (куски по
+  1 MiB, докачка), `download(...)`, `localURL`, `delete`.
+- `ShareLink(url:)` / `.url` — ссылки `https://<host>/s/<shareId>#k=<ключ>` (crypto.md §7).
+
+## Синхронизация
+
+```swift
+let client = SyncClient(configuration: .init(url: SyncClient.Configuration.url(forServer: server),
+                                             deviceId: try store.deviceId(), clientVersion: "1.0")) {
+    .user(accessToken: try await api.accessToken())
+}
+let keysLookup = KeyRingDocumentKeys(keyRing: keys) { noteId, notebookId in /* NoteMeta.wrappedKey */ }
+let engine = SyncEngine(store: store, client: client, keyFor: keysLookup.key(for:)) { record in
+    try await api.registerDoc(docId: record.docId, kind: record.kind, notebookId: record.notebookId)
+}
+await engine.start()
+try await engine.open(note.crdt, notebookId: notebookId)   // правки сохраняются и уходят сами
+for await status in await engine.statusUpdates() { /* connection, pending, catchingUp */ }
+```
+
+`SyncEngine` хранит каждое локальное обновление в `LocalStore` атомарно с очередью отправки
+(до подтверждения `ack` ничего не теряется), шифрует (`ds1|doc|<docId>`), регистрирует
+документ перед первым `push`, подписывает все известные документы с их `lastSeq` при каждом
+подключении, применяет чужие обновления к открытым документам, отправляет снимок после
+500 обновлений / 1 MiB (предварительно удаляя осиротевшие штрихи) и передаёт awareness
+(`sendAwareness`, `setAwarenessHandler`). `SyncClient` — WebSocket: `hello`/`welcome`,
+пинг 25 с, переподключение с экспоненциальной задержкой (`reconnectNow()` — при появлении сети).
+
 ## Локальное хранилище
 
 `LocalStore(url:)` / `LocalStore.inMemory()` (GRDB, SQLite):
@@ -148,4 +189,6 @@ DSCore
 `swift test` (Linux) или `xcodebuild test -scheme DSCore` на симуляторе iPad. Совместимость
 с Yjs: `yrs-ffi/tests/yjs_compat.rs` и `compat/verify.mjs` (в CI), эталон —
 `yrs-ffi/compat/fixtures/yjs-note.json` (генерируется `node compat/generate.mjs`).
-Векторы `packages/test-vectors` подключаются по мере публикации потоком core.
+Общие векторы `packages/test-vectors/vectors` (crypto, ids, strokes, document, sync)
+проверяются в `VectorTests.swift`: тесты читают файлы по пути от `#filePath` и включаются,
+когда каталог есть в репозитории.

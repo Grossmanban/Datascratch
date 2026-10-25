@@ -36,8 +36,7 @@ final class DocumentUndoManager: UndoManager {
 final class EditorTextView: UITextView {
     var onLayout: (() -> Void)?
     var keyHandler: ((EditorAction) -> Void)?
-    // Lazy: `UITextView(usingTextLayoutManager:)` does not run Swift property initializers of subclasses.
-    lazy var documentUndo = DocumentUndoManager()
+    let documentUndo = DocumentUndoManager()
 
     override var undoManager: UndoManager? { documentUndo }
 

@@ -31,7 +31,9 @@ public final class EditorView: UIView {
     public var lastInkRefreshDuration: TimeInterval { ink.lastRefreshDuration }
     public var renderedStrokeCount: Int { ink.renderedStrokeCount }
 
-    let textView = EditorTextView(usingTextLayoutManager: true)
+    // Designated initializer (TextKit 2 by default on iOS 16+). `UITextView(usingTextLayoutManager:)`
+    // skips the Swift property initializers of subclasses, which corrupts them at deallocation.
+    let textView = EditorTextView(frame: .zero, textContainer: nil)
     private let paper = PaperView()
     private let inkUnder = InkCanvas()
     private let inkOver = InkCanvas()

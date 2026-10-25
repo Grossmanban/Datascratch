@@ -76,7 +76,7 @@ actor FakeSyncServer {
         switch msg {
         case .hello(_, let deviceId, _):
             conns[c.id]?.deviceId = deviceId
-            c.deliver(.welcome(userId: "u1", serverTime: DSDate.iso(Date())))
+            c.deliver(.welcome(userId: "0192f3c4-0000-7000-8000-00000000000a", serverTime: DSDate.iso(Date())))
         case .subscribe(let entries):
             for e in entries {
                 conns[c.id]?.subs.insert(e.docId)
@@ -145,15 +145,16 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
     }
 
     @Test func messagesRoundTripAsContractJSON() throws {
-        let push = ClientMessage.push(docId: "d", clientMsgId: "m", payload: Data([0xfb, 0xff]))
+        let doc = "0192f3c4-0000-7000-8000-000000000001"
+        let push = ClientMessage.push(docId: doc, clientMsgId: "m", payload: Data([0xfb, 0xff]))
         let text = try SyncFrame.encode(push)
-        #expect(text == #"{"clientMsgId":"m","docId":"d","payload":"-_8","type":"push"}"#)
+        #expect(text == #"{"clientMsgId":"m","docId":"0192f3c4-0000-7000-8000-000000000001","payload":"-_8","type":"push"}"#)
         #expect(try JSONDecoder().decode(ClientMessage.self, from: Data(text.utf8)) == push)
-        let hello = try SyncFrame.encode(.hello(auth: .guest(shareId: "s", guestToken: "g"), deviceId: "dev", client: ClientInfo(version: "1")))
+        let hello = try SyncFrame.encode(.hello(auth: .guest(shareId: doc, guestToken: "g"), deviceId: "dev", client: ClientInfo(version: "1")))
         #expect(hello.contains(#""protocol":1"#) && hello.contains(#""kind":"guest""#) && hello.contains(#""platform":"ios""#))
 
-        let updates = SyncFrame.decode(#"{"type":"updates","docId":"d","snapshot":null,"items":[{"seq":3,"payload":"AQ","deviceId":"x"}],"upToDate":true}"#)
-        #expect(updates == .updates(docId: "d", snapshot: nil, items: [UpdateItem(seq: 3, payload: Data([1]), deviceId: "x")], upToDate: true))
+        let updates = SyncFrame.decode(#"{"type":"updates","docId":"0192f3c4-0000-7000-8000-000000000001","snapshot":null,"items":[{"seq":3,"payload":"AQ","deviceId":"x"}],"upToDate":true}"#)
+        #expect(updates == .updates(docId: doc, snapshot: nil, items: [UpdateItem(seq: 3, payload: Data([1]), deviceId: "x")], upToDate: true))
         #expect(SyncFrame.decode(#"{"type":"welcome","userId":null,"serverTime":"t","protocol":1}"#) == .welcome(userId: nil, serverTime: "t"))
         #expect(SyncFrame.decode(#"{"type":"error","code":"doc_not_found","message":"x","ref":"m"}"#) == .error(code: .docNotFound, message: "x", ref: "m"))
         #expect(SyncFrame.decode(#"{"type":"nope"}"#) == nil)

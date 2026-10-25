@@ -32,64 +32,78 @@ public struct NoteLinkEntry: Hashable, Sendable, Codable {
 }
 
 /// Data computed locally from a note (never synced: the server cannot read content).
+/// Rules match `packages/shared/src/document/extract.ts` (vector `document/note.json`).
 public struct NoteDerivedData: Hashable, Sendable {
     public var noteId: String
     public var title: String
-    /// Text of all blocks, one line per text block — for search and previews.
+    /// One line per text block (title, paragraph, heading, code) and per math/mermaid/
+    /// image (alt + caption)/file (name) block — for search and previews.
     public var plainText: String
+    /// Task items with both `taskId` and `blockId`.
     public var tasks: [TaskEntry]
+    /// `noteLink` inline nodes and `pageCard` blocks (label "").
     public var links: [NoteLinkEntry]
     /// Tag names without `#`, unique, in order of first appearance.
     public var tags: [String]
 
+    static let inlineTextBlocks: Set<String> = [BlockType.title, BlockType.paragraph, BlockType.heading, BlockType.codeBlock]
+
     public init(noteId: String, blocks: [Block]) {
         self.noteId = noteId
-        var title = ""
         var lines: [String] = []
         var tasks: [TaskEntry] = []
         var links: [NoteLinkEntry] = []
         var tags: [String] = []
         var seenTags = Set<String>()
 
+        func nonEmpty(_ s: String?) -> String? { (s?.isEmpty ?? true) ? nil : s }
+
+        func visitInline(_ items: [Inline], blockId: String?) {
+            for item in items {
+                guard case .node(let name, let attrs) = item else { continue }
+                if name == "noteLink", let target = nonEmpty(attrs["noteId"]?.stringValue) {
+                    links.append(NoteLinkEntry(sourceNoteId: noteId, targetNoteId: target, blockId: blockId, label: attrs["label"]?.stringValue ?? ""))
+                } else if name == "tag", let tag = nonEmpty(attrs["name"]?.stringValue), seenTags.insert(tag).inserted {
+                    tags.append(tag)
+                }
+            }
+        }
+
         func visit(_ block: Block, enclosingBlockId: String?) {
             let blockId = block.blockId ?? enclosingBlockId
-            if block.type == BlockType.title, title.isEmpty {
-                title = block.text
+            let line: String
+            switch block.type {
+            case _ where Self.inlineTextBlocks.contains(block.type): line = block.text
+            case BlockType.mathBlock: line = block.attrs["latex"]?.stringValue ?? ""
+            case BlockType.mermaid: line = block.attrs["source"]?.stringValue ?? ""
+            case BlockType.image: line = [block.attrs["alt"]?.stringValue, block.attrs["caption"]?.stringValue].compactMap(nonEmpty).joined(separator: " ")
+            case BlockType.file: line = block.attrs["name"]?.stringValue ?? ""
+            default: line = ""
             }
-            if !block.inline.isEmpty {
-                lines.append(block.text)
-                for item in block.inline {
-                    guard case .node(let name, let attrs) = item else { continue }
-                    if name == "noteLink", let target = attrs["noteId"]?.stringValue {
-                        links.append(NoteLinkEntry(sourceNoteId: noteId, targetNoteId: target, blockId: blockId, label: attrs["label"]?.stringValue ?? ""))
-                    } else if name == "tag", let tag = attrs["name"]?.stringValue, !tag.isEmpty, seenTags.insert(tag).inserted {
-                        tags.append(tag)
-                    }
-                }
-            } else {
-                for attrKey in ["caption", "alt", "latex", "source", "name"] {
-                    if let s = block.attrs[attrKey]?.stringValue, !s.isEmpty { lines.append(s) }
-                }
+            if !line.isEmpty { lines.append(line) }
+            visitInline(block.inline, blockId: blockId)
+            if block.type == BlockType.pageCard, let target = nonEmpty(block.attrs["noteId"]?.stringValue) {
+                links.append(NoteLinkEntry(sourceNoteId: noteId, targetNoteId: target, blockId: blockId, label: ""))
             }
-            if block.type == BlockType.taskItem, let taskId = block.attrs["taskId"]?.stringValue {
+            if block.type == BlockType.taskItem, let taskId = nonEmpty(block.attrs["taskId"]?.stringValue), let ownId = nonEmpty(block.blockId) {
                 // Task text = its first paragraph (nested blocks are subtasks/notes).
-                let text = block.children.first.map(\.text) ?? ""
+                let text = block.children.first { $0.type == BlockType.paragraph }?.text ?? ""
                 tasks.append(TaskEntry(
-                    noteId: noteId,
-                    taskId: taskId,
-                    blockId: block.blockId,
-                    text: text,
+                    noteId: noteId, taskId: taskId, blockId: ownId, text: text,
                     state: block.attrs["state"]?.stringValue.flatMap(TaskState.init(rawValue:)) ?? .open,
-                    scheduled: block.attrs["scheduled"]?.stringValue,
-                    deadline: block.attrs["deadline"]?.stringValue,
-                    completedAt: block.attrs["completedAt"]?.stringValue
-                ))
+                    scheduled: nonEmpty(block.attrs["scheduled"]?.stringValue),
+                    deadline: nonEmpty(block.attrs["deadline"]?.stringValue),
+                    completedAt: nonEmpty(block.attrs["completedAt"]?.stringValue)))
             }
             for child in block.children { visit(child, enclosingBlockId: blockId) }
         }
         for block in blocks { visit(block, enclosingBlockId: nil) }
 
-        self.title = title
+        if let first = blocks.first, first.type == BlockType.title {
+            title = first.text
+        } else {
+            title = ""
+        }
         self.plainText = lines.joined(separator: "\n")
         self.tasks = tasks
         self.links = links

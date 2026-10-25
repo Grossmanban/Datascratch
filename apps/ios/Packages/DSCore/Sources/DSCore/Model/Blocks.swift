@@ -31,8 +31,8 @@ public struct Mark: Hashable, Sendable {
         let name = attributeKey.components(separatedBy: "--").first ?? attributeKey
         switch value {
         case .object(let e), .sharedMap(let e): self.init(name, e)
-        case .bool(true): self.init(name)
-        default: return nil
+        case .bool(true), .string, .number: self.init(name)
+        default: return nil // null / false / undefined: no mark
         }
     }
 }
@@ -151,6 +151,7 @@ public struct Block: Hashable, Sendable {
                 case "noteLink": return attrs["label"]?.stringValue ?? ""
                 case "tag": return "#" + (attrs["name"]?.stringValue ?? "")
                 case "hardBreak": return "\n"
+                case "mention": return attrs["label"]?.stringValue ?? ""
                 default: return ""
                 }
             }

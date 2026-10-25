@@ -23,7 +23,7 @@ public enum SyncAuth: Codable, Hashable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(String.self, forKey: .kind) {
         case "user": self = .user(accessToken: try c.decode(String.self, forKey: .accessToken))
-        case "guest": self = .guest(shareId: try c.decode(String.self, forKey: .shareId), guestToken: try c.decode(String.self, forKey: .guestToken))
+        case "guest": self = .guest(shareId: try SyncValidation.uuid(c, .shareId), guestToken: try c.decode(String.self, forKey: .guestToken))
         case let k: throw DecodingError.dataCorruptedError(forKey: .kind, in: c, debugDescription: "unknown auth kind \(k)")
         }
     }
@@ -50,6 +50,14 @@ public struct SubscribeEntry: Codable, Hashable, Sendable {
         self.docId = docId
         self.since = since
     }
+
+    enum CodingKeys: String, CodingKey { case docId, since }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        docId = try SyncValidation.uuid(c, .docId)
+        since = try SyncValidation.nonNegative(c, .since)
+    }
 }
 
 public struct ClientInfo: Codable, Hashable, Sendable {
@@ -59,6 +67,51 @@ public struct ClientInfo: Codable, Hashable, Sendable {
     public init(platform: String = "ios", version: String) {
         self.platform = platform
         self.version = version
+    }
+
+    enum CodingKeys: String, CodingKey { case platform, version }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        platform = try c.decode(String.self, forKey: .platform)
+        version = try c.decode(String.self, forKey: .version)
+        guard ["ios", "web"].contains(platform), !version.isEmpty else {
+            throw DecodingError.dataCorruptedError(forKey: .platform, in: c, debugDescription: "unknown platform")
+        }
+    }
+}
+
+/// Validation shared by both directions (mirrors the zod schemas of `contracts/sync.ts`).
+enum SyncValidation {
+    static func uuid<K: CodingKey>(_ c: KeyedDecodingContainer<K>, _ k: K) throws -> String {
+        let s = try c.decode(String.self, forKey: k)
+        guard EntityID.isValid(s) else { throw DecodingError.dataCorruptedError(forKey: k, in: c, debugDescription: "expected lowercase UUIDv7") }
+        return s
+    }
+
+    static func shortId<K: CodingKey>(_ c: KeyedDecodingContainer<K>, _ k: K) throws -> String {
+        let s = try c.decode(String.self, forKey: k)
+        guard (1...64).contains(s.count) else { throw DecodingError.dataCorruptedError(forKey: k, in: c, debugDescription: "length 1...64") }
+        return s
+    }
+
+    static func positive<K: CodingKey>(_ c: KeyedDecodingContainer<K>, _ k: K) throws -> Int64 {
+        let v = try c.decode(Int64.self, forKey: k)
+        guard v > 0 else { throw DecodingError.dataCorruptedError(forKey: k, in: c, debugDescription: "expected seq > 0") }
+        return v
+    }
+
+    static func nonNegative<K: CodingKey>(_ c: KeyedDecodingContainer<K>, _ k: K) throws -> Int64 {
+        let v = try c.decode(Int64.self, forKey: k)
+        guard v >= 0 else { throw DecodingError.dataCorruptedError(forKey: k, in: c, debugDescription: "expected >= 0") }
+        return v
+    }
+
+    static func bytes<K: CodingKey>(_ c: KeyedDecodingContainer<K>, _ k: K) throws -> Data {
+        guard let d = Base64URL.decode(try c.decode(String.self, forKey: k)) else {
+            throw DecodingError.dataCorruptedError(forKey: k, in: c, debugDescription: "expected base64url without padding")
+        }
+        return d
     }
 }
 
@@ -107,27 +160,29 @@ public enum ClientMessage: Codable, Hashable, Sendable {
     }
 
     public init(from decoder: any Decoder) throws {
+        typealias V = SyncValidation
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        func bytes(_ k: CodingKeys) throws -> Data {
-            guard let d = Base64URL.decode(try c.decode(String.self, forKey: k)) else {
-                throw DecodingError.dataCorruptedError(forKey: k, in: c, debugDescription: "invalid base64url")
-            }
-            return d
-        }
         switch try c.decode(String.self, forKey: .type) {
         case "hello":
             guard try c.decode(Int.self, forKey: .protocolVersion) == SyncProtocol.version else {
                 throw DecodingError.dataCorruptedError(forKey: .protocolVersion, in: c, debugDescription: "protocol")
             }
-            self = .hello(auth: try c.decode(SyncAuth.self, forKey: .auth), deviceId: try c.decode(String.self, forKey: .deviceId),
+            self = .hello(auth: try c.decode(SyncAuth.self, forKey: .auth), deviceId: try V.shortId(c, .deviceId),
                           client: try c.decode(ClientInfo.self, forKey: .client))
-        case "subscribe": self = .subscribe(docs: try c.decode([SubscribeEntry].self, forKey: .docs))
-        case "unsubscribe": self = .unsubscribe(docIds: try c.decode([String].self, forKey: .docIds))
-        case "push": self = .push(docId: try c.decode(String.self, forKey: .docId), clientMsgId: try c.decode(String.self, forKey: .clientMsgId), payload: try bytes(.payload))
+        case "subscribe":
+            let docs = try c.decode([SubscribeEntry].self, forKey: .docs)
+            guard !docs.isEmpty else { throw DecodingError.dataCorruptedError(forKey: .docs, in: c, debugDescription: "empty") }
+            self = .subscribe(docs: docs)
+        case "unsubscribe":
+            let ids = try c.decode([String].self, forKey: .docIds)
+            guard !ids.isEmpty, ids.allSatisfy(EntityID.isValid) else { throw DecodingError.dataCorruptedError(forKey: .docIds, in: c, debugDescription: "docIds") }
+            self = .unsubscribe(docIds: ids)
+        case "push":
+            self = .push(docId: try V.uuid(c, .docId), clientMsgId: try V.shortId(c, .clientMsgId), payload: try V.bytes(c, .payload))
         case "snapshot":
-            self = .snapshot(docId: try c.decode(String.self, forKey: .docId), clientMsgId: try c.decode(String.self, forKey: .clientMsgId),
-                             baseSeq: try c.decode(Int64.self, forKey: .baseSeq), payload: try bytes(.payload))
-        case "awareness": self = .awareness(docId: try c.decode(String.self, forKey: .docId), payload: try bytes(.payload))
+            self = .snapshot(docId: try V.uuid(c, .docId), clientMsgId: try V.shortId(c, .clientMsgId),
+                             baseSeq: try V.nonNegative(c, .baseSeq), payload: try V.bytes(c, .payload))
+        case "awareness": self = .awareness(docId: try V.uuid(c, .docId), payload: try V.bytes(c, .payload))
         case let t: throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(t)")
         }
     }
@@ -154,37 +209,39 @@ public enum ServerMessage: Codable, Hashable, Sendable {
     case error(code: SyncErrorCode, message: String, ref: String?)
 
     enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref }
-    struct Item: Codable { var seq: Int64; var payload: String; var deviceId: String }
-    struct Snap: Codable { var seq: Int64; var payload: String }
+    struct Item: Encodable { var seq: Int64; var payload: String; var deviceId: String }
+    struct Snap: Encodable { var seq: Int64; var payload: String }
 
     public init(from decoder: any Decoder) throws {
+        typealias V = SyncValidation
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        func bytes(_ s: String, _ k: CodingKeys) throws -> Data {
-            guard let d = Base64URL.decode(s) else { throw DecodingError.dataCorruptedError(forKey: k, in: c, debugDescription: "invalid base64url") }
-            return d
-        }
         switch try c.decode(String.self, forKey: .type) {
         case "welcome":
             guard try c.decode(Int.self, forKey: .protocolVersion) == SyncProtocol.version else {
                 throw DecodingError.dataCorruptedError(forKey: .protocolVersion, in: c, debugDescription: "protocol")
             }
-            self = .welcome(userId: try c.decodeIfPresent(String.self, forKey: .userId), serverTime: try c.decode(String.self, forKey: .serverTime))
+            let userId = try c.decodeNil(forKey: .userId) ? nil : try V.uuid(c, .userId)
+            self = .welcome(userId: userId, serverTime: try c.decode(String.self, forKey: .serverTime))
         case "updates":
-            let snap = try c.decodeIfPresent(Snap.self, forKey: .snapshot)
-            let items = try c.decode([Item].self, forKey: .items)
-            self = .updates(docId: try c.decode(String.self, forKey: .docId),
-                            snapshot: try snap.map { ($0.seq, try bytes($0.payload, .snapshot)) },
-                            items: try items.map { UpdateItem(seq: $0.seq, payload: try bytes($0.payload, .items), deviceId: $0.deviceId) },
-                            upToDate: try c.decode(Bool.self, forKey: .upToDate))
+            var snapshot: (seq: Int64, payload: Data)?
+            if !(try c.decodeNil(forKey: .snapshot)) {
+                let s = try c.nestedContainer(keyedBy: CodingKeys.self, forKey: .snapshot)
+                snapshot = (try V.nonNegative(s, .seq), try V.bytes(s, .payload))
+            }
+            var itemsC = try c.nestedUnkeyedContainer(forKey: .items)
+            var items: [UpdateItem] = []
+            while !itemsC.isAtEnd {
+                let i = try itemsC.nestedContainer(keyedBy: CodingKeys.self)
+                items.append(UpdateItem(seq: try V.positive(i, .seq), payload: try V.bytes(i, .payload), deviceId: try V.shortId(i, .deviceId)))
+            }
+            self = .updates(docId: try V.uuid(c, .docId), snapshot: snapshot, items: items, upToDate: try c.decode(Bool.self, forKey: .upToDate))
         case "update":
-            self = .update(docId: try c.decode(String.self, forKey: .docId), item: UpdateItem(
-                seq: try c.decode(Int64.self, forKey: .seq), payload: try bytes(try c.decode(String.self, forKey: .payload), .payload),
-                deviceId: try c.decode(String.self, forKey: .deviceId)))
+            self = .update(docId: try V.uuid(c, .docId), item: UpdateItem(
+                seq: try V.positive(c, .seq), payload: try V.bytes(c, .payload), deviceId: try V.shortId(c, .deviceId)))
         case "ack":
-            self = .ack(docId: try c.decode(String.self, forKey: .docId), clientMsgId: try c.decode(String.self, forKey: .clientMsgId), seq: try c.decode(Int64.self, forKey: .seq))
+            self = .ack(docId: try V.uuid(c, .docId), clientMsgId: try V.shortId(c, .clientMsgId), seq: try V.positive(c, .seq))
         case "awareness":
-            self = .awareness(docId: try c.decode(String.self, forKey: .docId), payload: try bytes(try c.decode(String.self, forKey: .payload), .payload),
-                              deviceId: try c.decode(String.self, forKey: .deviceId))
+            self = .awareness(docId: try V.uuid(c, .docId), payload: try V.bytes(c, .payload), deviceId: try V.shortId(c, .deviceId))
         case "error":
             self = .error(code: try c.decode(SyncErrorCode.self, forKey: .code), message: try c.decode(String.self, forKey: .message),
                           ref: try c.decodeIfPresent(String.self, forKey: .ref))

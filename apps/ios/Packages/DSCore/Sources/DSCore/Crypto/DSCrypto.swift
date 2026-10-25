@@ -116,6 +116,15 @@ public enum DSCrypto {
         return out
     }
 
+    /// SHA-256 (integrity checks, test vectors).
+    public static func sha256(_ data: Data) -> Data {
+        _ = ready
+        var out = [UInt8](repeating: 0, count: 32)
+        let bytes = [UInt8](data) + [0]
+        crypto_hash_sha256(&out, bytes, UInt64(data.count))
+        return Data(out)
+    }
+
     // MARK: Envelope (crypto.md §3)
 
     /// `0x01 || nonce(24) || XChaCha20-Poly1305-IETF(plaintext, ad)`. A random nonce unless one

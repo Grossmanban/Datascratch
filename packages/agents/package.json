@@ -1,0 +1,58 @@
+{
+  "name": "@datascratch/agents",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server, agent REST API, OAuth 2.1 and handwriting PNG rendering for Datascratch (Fastify plugin)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "assets"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/newsreader": "^0.4.1",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "@napi-rs/canvas": "^1.0.13",
+    "fastify-plugin": "^6.0.1",
+    "mdast-util-from-markdown": "^2.1.0",
+    "mdast-util-gfm": "^3.1.0",
+    "micromark-extension-gfm": "^3.0.0",
+    "yjs": "^13.6.27",
+    "zod": "^4.2.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@types/mdast": "^4.0.4",
+    "@types/node": "^22",
+    "@types/pngjs": "^6.0.5",
+    "fastify": "^5.6.0",
+    "pixelmatch": "^7",
+    "pngjs": "^7",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  },
+  "peerDependencies": {
+    "fastify": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

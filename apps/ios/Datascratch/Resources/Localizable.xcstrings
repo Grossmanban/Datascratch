@@ -351,12 +351,32 @@
         }
       }
     },
+    "Check Key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверить ключ"
+          }
+        }
+      }
+    },
     "Check your key": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Проверьте ключ"
+          }
+        }
+      }
+    },
+    "Check your recovery key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверьте ключ восстановления"
           }
         }
       }
@@ -1291,6 +1311,16 @@
         }
       }
     },
+    "If you forget your password, this key is the only way back to your notes. Keep it in a password manager or on paper.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Если вы забудете пароль, только этот ключ вернёт доступ к заметкам. Храните его в менеджере паролей или на бумаге."
+          }
+        }
+      }
+    },
     "If you forget your password, this key is the only way back to your notes. We can't reset it for you — nobody but you can read your notes.": {
       "localizations": {
         "ru": {
@@ -1337,6 +1367,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Вставить"
+          }
+        }
+      }
+    },
+    "Key checked": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ключ проверен"
           }
         }
       }
@@ -1747,6 +1787,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Обычная"
+          }
+        }
+      }
+    },
+    "Not checked": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не проверен"
           }
         }
       }
@@ -2261,6 +2311,16 @@
         }
       }
     },
+    "Recovery Key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ключ восстановления"
+          }
+        }
+      }
+    },
     "Red": {
       "localizations": {
         "ru": {
@@ -2591,6 +2651,16 @@
         }
       }
     },
+    "Show Key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать ключ"
+          }
+        }
+      }
+    },
     "Sign In": {
       "localizations": {
         "ru": {
@@ -2637,6 +2707,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Выход на устройстве сразу отключает его доступ."
+          }
+        }
+      }
+    },
+    "Skip": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропустить"
+          }
+        }
+      }
+    },
+    "Skip the check?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропустить проверку?"
           }
         }
       }
@@ -3241,6 +3331,16 @@
         }
       }
     },
+    "Without the key you can't get your notes back if you forget the password. You can show the key and check it later in Settings → Account.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без ключа заметки не вернуть, если вы забудете пароль. Показать и проверить ключ можно позже в «Настройки → Аккаунт»."
+          }
+        }
+      }
+    },
     "Work": {
       "localizations": {
         "ru": {
@@ -3307,6 +3407,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Это можно изменить позже в меню блокнота."
+          }
+        }
+      }
+    },
+    "You skipped this during sign-up.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вы пропустили это при регистрации."
           }
         }
       }

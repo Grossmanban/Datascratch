@@ -206,7 +206,7 @@ struct PenPalette: View {
                     Image(systemName: mode.symbolName)
                         .font(.system(size: 17, weight: .medium))
                         .frame(width: 38, height: 38)
-                        .foregroundStyle(tools.mode == mode ? Color.white : Theme.Palette.textPrimary)
+                        .foregroundStyle(tools.mode == mode ? Theme.Palette.onAccent : Theme.Palette.textPrimary)
                         .background(tools.mode == mode ? Theme.Palette.accent : .clear, in: Circle())
                 }
                 .buttonStyle(.plain)

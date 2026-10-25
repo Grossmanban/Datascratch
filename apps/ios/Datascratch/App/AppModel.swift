@@ -41,8 +41,19 @@ final class AppModel {
     var pendingRecoveryKey: RecoveryKey? {
         didSet { secureStore.set(pendingRecoveryKey.map { Data($0.bytes) }, for: Self.pendingKeyItem) }
     }
+    /// The recovery key issued on this device, kept in the Keychain so Settings can
+    /// show it again (spec/07). Nil after signing in on another device.
+    var savedRecoveryKey: RecoveryKey? {
+        didSet { secureStore.set(savedRecoveryKey.map { Data($0.bytes) }, for: Self.savedKeyItem) }
+    }
+    /// False while the user skipped the key check; Settings shows a quiet reminder.
+    var isRecoveryKeyConfirmed = true {
+        didSet { secureStore.set(isRecoveryKeyConfirmed ? nil : Data([0]), for: Self.unconfirmedItem) }
+    }
     @ObservationIgnored private let secureStore: SecureStore
     private static let pendingKeyItem = "pending-recovery-key"
+    private static let savedKeyItem = "recovery-key"
+    private static let unconfirmedItem = "recovery-key-unconfirmed"
     /// Sign-up in progress: stay in onboarding until the recovery key is confirmed.
     var isSigningUp = false
     /// A route that arrived before the main UI could show it.
@@ -58,6 +69,7 @@ final class AppModel {
         if options.uiTesting {
             secureStore = SecureStore(inMemory: true)
             settings = AppSettings(defaults: UserDefaults(suiteName: "ui-testing-\(UUID().uuidString)") ?? .standard)
+            if ProcessInfo.processInfo.arguments.contains("-ui-testing-dark") { settings.appearance = .dark }
             let made = Self.makeLibrary(inMemory: true)
             library = made.0
             coreLibrary = made.1
@@ -99,6 +111,8 @@ final class AppModel {
         }
         library.purgeExpiredTrash()
         pendingRecoveryKey = secureStore.data(for: Self.pendingKeyItem).flatMap { RecoveryKey(bytes: [UInt8]($0)) }
+        savedRecoveryKey = secureStore.data(for: Self.savedKeyItem).flatMap { RecoveryKey(bytes: [UInt8]($0)) }
+        isRecoveryKeyConfirmed = secureStore.data(for: Self.unconfirmedItem) == nil
         let sync = self.sync
         library.onLocalChange = { sync.noteLocalChange() }
     }
@@ -118,7 +132,9 @@ final class AppModel {
                 ?? FileManager.default.temporaryDirectory
             let core = try CoreLibrary.open(directory: base.appendingPathComponent("Library", isDirectory: true))
             CoreLibrary.importLegacy(from: .appSupport(), into: core)
-            return (LibraryStore(backend: core), core)
+            let library = LibraryStore(backend: core)
+            core.dropSeededCoverOnce(in: library)
+            return (library, core)
         } catch {
             // Keep working on the JSON stand-in rather than failing to launch.
             print("DSCore library unavailable, using the local JSON library: \(error)")
@@ -132,11 +148,16 @@ final class AppModel {
         return accounts.account != nil || signedInForTesting ? .ready : .onboarding
     }
 
-    /// Called once the user has an account and confirmed the recovery key.
-    func finishOnboarding() {
+    /// Called once the user has an account and has confirmed — or chose to skip
+    /// checking — the recovery key.
+    func finishOnboarding(keyConfirmed: Bool = true) {
         // A server account signing in on a new device gets its library by sync; seed
         // first-run content only for new or local accounts.
         let seed = !accounts.isServerBacked || isSigningUp
+        if let key = pendingRecoveryKey {
+            savedRecoveryKey = key
+            isRecoveryKeyConfirmed = keyConfirmed
+        }
         pendingRecoveryKey = nil
         isSigningUp = false
         if seed { library.seedIfEmpty() }
@@ -145,6 +166,8 @@ final class AppModel {
     func signOut() async {
         library.flush()
         await accounts.signOut()
+        savedRecoveryKey = nil
+        isRecoveryKeyConfirmed = true
         signedInForTesting = false
     }
 }

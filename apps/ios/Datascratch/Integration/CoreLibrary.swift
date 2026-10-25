@@ -628,6 +628,19 @@ final class CoreLibrary: LibraryBackend {
         try store.setValue(try encoder.encode(next), for: Self.overlayKey)
     }
 
+    /// Build 1 seeded the welcome note with a gradient cover; covers are now only what the
+    /// user adds. Drops that seeded cover once (a cover set later by the user stays).
+    func dropSeededCoverOnce(in library: LibraryStore) {
+        let flag = "app.migration.seedCover"
+        guard (try? store.string(flag)) == nil else { return }
+        try? store.setString("done", for: flag)
+        guard let firstSpace = library.data.spaces.min(by: { $0.createdAt < $1.createdAt }) else { return }
+        for note in library.data.notes where note.cover == .dusk
+            && abs(note.createdAt.timeIntervalSince(firstSpace.createdAt)) < 5 {
+            library.updateNote(note.id) { $0.cover = nil }
+        }
+    }
+
     /// One-time move of the JSON library written by earlier builds into the documents.
     static func importLegacy(from legacy: LibraryPersistence, into core: CoreLibrary) {
         guard let snapshot = legacy.load(), core.account.spaces().isEmpty, !snapshot.spaces.isEmpty else { return }

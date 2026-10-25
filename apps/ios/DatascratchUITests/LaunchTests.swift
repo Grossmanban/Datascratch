@@ -3,12 +3,8 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
-    func testSignUpShowsAndConfirmsRecoveryKey() throws {
-        continueAfterFailure = false
-        let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing"]
-        app.launch()
-
+    /// Signs up and stops on the key check screen; returns the key's groups.
+    private func signUpToKeyCheck(_ app: XCUIApplication) -> [String] {
         app.buttons["welcome.signUp"].tap()
         let email = app.textFields["signUp.email"]
         XCTAssertTrue(email.waitForExistence(timeout: 5))
@@ -27,19 +23,14 @@ final class OnboardingUITests: XCTestCase {
 
         app.descendants(matching: .any)["recoveryKey.saved"].firstMatch.tap()
         app.buttons["recoveryKey.continue"].tap()
+        XCTAssertTrue(app.textFields["confirmKey.first"].waitForExistence(timeout: 10),
+                      "confirm screen not shown; buttons: \(LibraryUITests.buttons(app))")
+        return formatted.split(separator: "-").dropFirst().map(String.init)
+    }
 
-        // Read which groups are requested from the placeholders ("Group N").
-        let groups = formatted.split(separator: "-").dropFirst().map(String.init)
-        let first = app.textFields["confirmKey.first"]
-        XCTAssertTrue(first.waitForExistence(timeout: 10), "confirm screen not shown; buttons: \(LibraryUITests.buttons(app))")
-        let second = app.textFields["confirmKey.second"]
-        first.tap()
-        first.typeText(groups[Self.groupIndex(first.placeholderValue)])
-        second.tap()
-        second.typeText(groups[Self.groupIndex(second.placeholderValue)])
-        app.buttons["confirmKey.finish"].tap()
-
-        // iOS may offer to save the new password; that sheet belongs to SpringBoard.
+    /// Waits for the main window, dismissing SpringBoard's save-password offer.
+    @discardableResult
+    private func waitForMain(_ app: XCUIApplication) -> XCUIElement {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         for label in ["Not Now", "Не сейчас"] where springboard.buttons[label].waitForExistence(timeout: 2) {
             springboard.buttons[label].tap()
@@ -48,6 +39,49 @@ final class OnboardingUITests: XCTestCase {
         let welcome = app.staticTexts["Welcome to Datascratch"].firstMatch
         XCTAssertTrue(main.waitForExistence(timeout: 15) || welcome.exists,
                       "main window did not appear; buttons: \(LibraryUITests.buttons(app))")
+        return main
+    }
+
+    func testSignUpShowsAndConfirmsRecoveryKey() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing"]
+        app.launch()
+
+        // Read which groups are requested from the placeholders ("Group N").
+        let groups = signUpToKeyCheck(app)
+        let first = app.textFields["confirmKey.first"]
+        let second = app.textFields["confirmKey.second"]
+        first.tap()
+        first.typeText(groups[Self.groupIndex(first.placeholderValue)])
+        second.tap()
+        second.typeText(groups[Self.groupIndex(second.placeholderValue)])
+        app.buttons["confirmKey.finish"].tap()
+        waitForMain(app)
+    }
+
+    /// The key check is optional (spec/07): skipping finishes sign-up and Settings reminds.
+    func testSkippingKeyCheckLeavesReminderInSettings() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing"]
+        app.launch()
+
+        _ = signUpToKeyCheck(app)
+        app.buttons["confirmKey.skip"].tap()
+        // The dialog may drop custom identifiers (action sheet / popover); fall back to the label.
+        var confirm = app.buttons["confirmKey.skipConfirm"].firstMatch
+        if !confirm.waitForExistence(timeout: 3) {
+            let skips = app.buttons.matching(NSPredicate(format: "label == 'Skip'"))
+            confirm = skips.element(boundBy: max(0, skips.count - 1))
+        }
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "skip warning not shown; buttons: \(LibraryUITests.buttons(app))")
+        confirm.tap()
+        let main = waitForMain(app)
+        guard main.exists, main.isHittable else { return }
+        main.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["settings.recoveryKeyReminder"].firstMatch.waitForExistence(timeout: 5),
+                      "reminder not shown; buttons: \(LibraryUITests.buttons(app))")
     }
 
     private static func groupIndex(_ placeholder: String?) -> Int {
@@ -181,5 +215,50 @@ final class LibraryUITests: XCTestCase {
             toggle.tap()
         }
         XCTAssertNotEqual(toggle.value as? String, initial)
+    }
+}
+
+
+/// Screens in dark mode and in Russian, kept as screenshots in the test results
+/// (CI exports them as an artifact for design review).
+@MainActor
+final class AppearanceUITests: XCTestCase {
+    private func launch(_ extra: [String]) -> XCUIApplication {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-ui-testing-signed-in"] + extra
+        app.launch()
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        return app
+    }
+
+    private func snapshot(_ app: XCUIApplication, _ name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    func testDarkModeScreens() throws {
+        let app = launch(["-ui-testing-dark"])
+        let settings = app.descendants(matching: .any)["sidebar.settings"].firstMatch
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        snapshot(app, "dark-sidebar")
+        app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch.tap()
+        snapshot(app, "dark-documents")
+        let card = app.descendants(matching: .any)["document.card"].firstMatch
+        if card.waitForExistence(timeout: 5) {
+            card.tap()
+            snapshot(app, "dark-document")
+        }
+    }
+
+    func testRussianInterface() throws {
+        let app = launch(["-AppleLanguages", "(ru)", "-AppleLocale", "ru_RU"])
+        // The sidebar shows Russian titles when the system language is Russian.
+        XCTAssertTrue(app.staticTexts["Все документы"].firstMatch.waitForExistence(timeout: 10)
+                      || app.buttons["Все документы"].firstMatch.exists,
+                      "Russian strings missing; buttons: \(LibraryUITests.buttons(app))")
+        snapshot(app, "ru-sidebar")
     }
 }

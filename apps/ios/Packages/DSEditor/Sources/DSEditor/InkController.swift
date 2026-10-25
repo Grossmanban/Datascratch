@@ -37,6 +37,8 @@ final class InkController {
         var lastMoveTime: TimeInterval
         var holdAnchor: CGPoint
         var pendingGesture: StrokeHint?
+        /// Incremental outline of the live stroke (frozen chunks + tail).
+        var outline = LiveInkOutline()
     }
 
     private var session: Session?
@@ -285,16 +287,22 @@ final class InkController {
         }
     }
 
+    /// Redraws the live stroke. Committed samples are smoothed exactly as on commit, so the line
+    /// does not shift when the pen lifts; predicted samples extend it for latency. Only the tail
+    /// is re-outlined each event (`LiveInkOutline`), so long strokes stay at full frame rate.
     private func updateLive() {
-        guard let s = session else { return }
-        let all = s.samples + s.predicted
+        guard var s = session else { return }
+        let committed = smoothed(s.samples)
+        let all = committed + s.predicted
         let sc = scale(for: s.target)
         let pts = all.enumerated().map { i, p in
             ResolvedInkPoint(location: p.location, pressure: p.pressure, altitude: p.altitude, azimuth: p.azimuth, roll: p.roll,
                              scale: sc, sourceIndex: i)
         }
-        let poly = InkOutline.polygon(InkOutline.widthPoints(pts, tool: s.tool, baseWidth: s.paint.width))
-        let path = InkCanvas.path(from: [poly])
+        let widths = InkOutline.widthPoints(pts, tool: s.tool, baseWidth: s.paint.width)
+        let polygons = s.outline.update(widths, stableCount: committed.count - 2)
+        session = s
+        let path = InkCanvas.path(from: polygons)
         let canvas = s.tool.drawsUnderText ? under : over
         canvas.updateLive(path: path, color: EditorTheme.color(token: s.paint.color), opacity: Float(s.paint.opacity),
                           underText: s.tool.drawsUnderText)

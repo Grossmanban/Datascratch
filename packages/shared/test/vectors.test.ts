@@ -305,3 +305,21 @@ describe("api vectors", () => {
     }
   });
 });
+
+describe("recovery key rotation vector", () => {
+  it("builds the expected body", async () => {
+    const { rotateRecoveryKey, unwrapMasterKeyWithRecovery } = await import("../src/index.js");
+    const { inputs: i, expected: e } = load("crypto/recovery-rotate.json");
+    const r = rotateRecoveryKey(b(i.masterKey), b(i.currentLoginKey), i.userId, {
+      recoveryKey: b(i.newRecoveryKey),
+      nonce: b(i.nonce),
+    });
+    expect(r.recoveryKeyText).toBe(e.recoveryKeyText);
+    expect(r.body).toEqual(e.body);
+    expect(
+      toBase64Url(
+        unwrapMasterKeyWithRecovery(r.body.wrappedMasterKeyRecovery, r.recoveryKey, i.userId),
+      ),
+    ).toBe(i.masterKey);
+  });
+});

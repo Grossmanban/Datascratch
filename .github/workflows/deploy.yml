@@ -36,7 +36,15 @@ jobs:
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          ENABLED: ${{ vars.DEPLOY_ENABLED }}
         run: |
+          # Safety switch: nothing touches the server until the repository variable
+          # DEPLOY_ENABLED is "true" (the VPS may run other software; see infra/DEPLOY.md).
+          if [ "$ENABLED" != "true" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Deploy disabled::Set the repository variable DEPLOY_ENABLED=true to deploy. See infra/DEPLOY.md."
+            exit 0
+          fi
           missing=()
           [ -n "$HOST" ] || missing+=(DEPLOY_HOST)
           [ -n "$KEY" ] || missing+=(DEPLOY_SSH_KEY)

@@ -36,6 +36,11 @@ export function formatShortcut(shortcut: string): string[] {
     .map((k) => map[k.toLowerCase()] ?? (k.length === 1 ? k.toUpperCase() : k));
 }
 
+/** One-line shortcut label: "⌘⇧K" on Apple platforms, "Ctrl+Shift+K" elsewhere. */
+export function shortcutLabel(shortcut: string): string {
+  return formatShortcut(shortcut).join(isMac() ? "" : "+");
+}
+
 export interface KbdProps extends HTMLAttributes<HTMLElement> {
   /** Shortcut like "mod+shift+k". */
   shortcut: string;

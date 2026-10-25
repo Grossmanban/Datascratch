@@ -435,7 +435,6 @@ struct RecoveryKeyGrid: View {
 struct ConfirmRecoveryKeyView: View {
     @Environment(AppModel.self) private var app
     @State private var confirmSkip = false
-    @State private var skipChosen = false
 
     var body: some View {
         AuthCard(title: "Check your key",
@@ -448,7 +447,7 @@ struct ConfirmRecoveryKeyView: View {
                     .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("confirmKey.skip")
                     .confirmationDialog("Skip the check?", isPresented: $confirmSkip, titleVisibility: .visible) {
-                        Button("Skip") { skipChosen = true }
+                        Button("Skip") { app.finishOnboarding(keyConfirmed: false) }
                             .accessibilityIdentifier("confirmKey.skipConfirm")
                     } message: {
                         Text("Without the key you can't get your notes back if you forget the password. You can show the key and check it later in Settings → Account.")
@@ -456,19 +455,6 @@ struct ConfirmRecoveryKeyView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        // Leave onboarding only once the warning is gone: on iPad it is a popover, and
-        // swapping the root view under it leaves the window unable to present sheets.
-        .onChange(of: confirmSkip) { finishSkipIfDismissed() }
-        .onChange(of: skipChosen) { finishSkipIfDismissed() }
-    }
-
-    private func finishSkipIfDismissed() {
-        guard skipChosen, !confirmSkip else { return }
-        skipChosen = false
-        Task {
-            try? await Task.sleep(for: .milliseconds(350))
-            app.finishOnboarding(keyConfirmed: false)
-        }
     }
 }
 

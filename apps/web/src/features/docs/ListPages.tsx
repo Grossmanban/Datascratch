@@ -83,7 +83,7 @@ function ListPage({
       >
         {crumbs}
       </TopBar>
-      <PageTitle icon={icon} title={title} subtitle={t("docs.count", { count: notes.length })} />
+      <PageTitle icon={icon} title={title} subtitle={notes.length ? t("docs.count", { count: notes.length }) : undefined} />
       {extra}
       {sorted.length ? (
         <DocCollection notes={sorted} view={view} scrollRef={scrollRef} />

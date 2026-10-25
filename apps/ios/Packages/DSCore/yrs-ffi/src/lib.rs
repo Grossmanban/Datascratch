@@ -227,6 +227,20 @@ impl YDocument {
         })
     }
 
+    /// The (nested) map at `path` as a JSON string (`Y.Map.toJSON()`), or `None` if missing.
+    /// Much faster than `map_get` for large maps of records (no per-value FFI conversion);
+    /// binary values come out as JSON arrays of numbers.
+    pub fn map_json(&self, root: String, path: Vec<String>) -> Result<Option<String>, YrsError> {
+        use yrs::types::ToJson;
+        let map = self.map_root(&root)?;
+        let txn = self.doc.transact();
+        Ok(nested_map(&txn, &map, &path)?.map(|m| {
+            let mut out = String::new();
+            m.to_json(&txn).to_json(&mut out);
+            out
+        }))
+    }
+
     /// Keys of the (nested) map at `path`; empty if it does not exist.
     pub fn map_keys(&self, root: String, path: Vec<String>) -> Result<Vec<String>, YrsError> {
         let map = self.map_root(&root)?;

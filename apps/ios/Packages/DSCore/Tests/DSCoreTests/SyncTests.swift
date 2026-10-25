@@ -259,6 +259,37 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         await b.stop()
     }
 
+    @Test func snapshotOnCloseAfter30LocalEdits() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        await a.start()
+        let few = NoteDocument(noteId: EntityID.make())
+        let many = NoteDocument(noteId: EntityID.make())
+        for note in [few, many] {
+            try await a.open(note.crdt, notebookId: "nb")
+            try note.initialize(title: "t")
+        }
+        for i in 0..<28 { try few.insertText("\(i)", at: 0, inBlock: [1]) } // 29 edits with initialize
+        for i in 0..<29 { try many.insertText("\(i)", at: 0, inBlock: [1]) } // 30 edits
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        #expect(try a.store.document(many.noteId)?.localEditsSinceSnapshot == 30)
+
+        await a.close(docId: few.noteId)
+        await a.close(docId: many.noteId)
+        #expect(try await eventually {
+            let snap = await server.snapshots[many.noteId]
+            return snap != nil && (try? a.store.outboxCount()) == 0
+        })
+        #expect(await server.snapshots[few.noteId] == nil)
+        #expect(try a.store.document(many.noteId)?.localEditsSinceSnapshot == 0)
+        // The snapshot is the full state, readable with the note key.
+        let snap = try #require(await server.snapshots[many.noteId])
+        let restored = NoteDocument(noteId: many.noteId)
+        try restored.crdt.applyUpdate(try DSCrypto.open(snap.payload, key: key, ad: CryptoAD.doc(many.noteId)))
+        #expect(try restored.block(at: [1])?.text == (try many.block(at: [1])?.text))
+        await a.stop()
+    }
+
     @Test func awarenessIsEncryptedAndRelayed() async throws {
         let server = FakeSyncServer()
         let a = try device("A", server: server)
@@ -298,7 +329,7 @@ final class StubTransport: HTTPTransport, @unchecked Sendable {
 
 @Suite struct APIClientTests {
     func session(_ token: String, expires: Date) -> String {
-        #"{"userId":"u","accessToken":"\#(token)","refreshToken":"r-\#(token)","accessExpiresAt":"\#(DSDate.iso(expires))","wrappedMasterKeyPassword":"AQID","accountDocId":"a"}"#
+        #"{"userId":"0192f3c4-0000-7000-8000-00000000000a","deviceId":"dev","accessToken":"\#(token)","refreshToken":"r-\#(token)","accessExpiresAt":"\#(DSDate.iso(expires))","wrappedMasterKeyPassword":"AQID","accountDocId":"0192f3c4-0000-7000-8000-00000000000b"}"#
     }
 
     @Test func loginRefreshesOnExpiryAnd401() async throws {

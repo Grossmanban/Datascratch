@@ -226,6 +226,15 @@ route("POST", "/v1/docs", (_q, res, { auth, body }) => {
   db.docs.set(body.docId, { docId: body.docId, userId: auth.userId, kind: body.kind, notebookId: body.notebookId ?? null, items: [], snapshot: null, history: [] });
   json(res, 204);
 });
+route("PATCH", "/v1/docs/:id", (_q, res, { auth, params, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const d = db.docs.get(params.id);
+  const nb = db.notebooks.get(body?.notebookId);
+  if (!d || d.userId !== auth.userId || !nb || nb.userId !== auth.userId) return err(res, 404, "not_found");
+  if (d.kind !== "note") return err(res, 400, "bad_request", "not a note");
+  d.notebookId = nb.id;
+  json(res, 204);
+});
 route("DELETE", "/v1/docs/:id", (_q, res, { auth, params }) => {
   if (!auth) return err(res, 401, "unauthorized");
   db.docs.delete(params.id);

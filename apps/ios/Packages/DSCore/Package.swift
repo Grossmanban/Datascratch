@@ -28,8 +28,8 @@ let yrsTarget: Target = .target(
 /// scripts/yrs-ffi-hash.sh). A local build in build/ (scripts/build-xcframework.sh) wins, so
 /// that changes to yrs-ffi can be tested before a release exists.
 let yrsRelease: (url: String, checksum: String)? = (
-    url: "https://github.com/Grossmanban/Datascratch/releases/download/yrs-ffi-127334fa5e29/yrs_ffiFFI.xcframework.zip",
-    checksum: "65b9cf0b311cf449e6045f0d371ab9147327031ca7ab6460645555936ba9a761"
+    url: "https://github.com/Grossmanban/Datascratch/releases/download/yrs-ffi-cfa579e9c35b/yrs_ffiFFI.xcframework.zip",
+    checksum: "ab56fc365c0423b1a42774380f457e69af7531fcbd6541e6e0a31e17ee064ee0"
 )
 
 let localXCFramework = "\(packageDir)/build/yrs_ffiFFI.xcframework"

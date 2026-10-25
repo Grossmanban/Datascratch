@@ -15,7 +15,7 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
 
     func session(_ u: User) -> [String: Any] {
         let n = state.withLock { $0.tokens += 1; return $0.tokens }
-        return ["userId": u.userId, "accessToken": "at\(n)", "refreshToken": "rt\(n)", "accessExpiresAt": DSDate.iso(Date().addingTimeInterval(900)),
+        return ["userId": u.userId, "deviceId": "dev-\(n)", "accessToken": "at\(n)", "refreshToken": "rt\(n)", "accessExpiresAt": DSDate.iso(Date().addingTimeInterval(900)),
                 "wrappedMasterKeyPassword": u.wrappedPassword, "accountDocId": u.accountDocId]
     }
 
@@ -84,7 +84,7 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
                 guard let att = state.withLock({ $0.attachments[id] }) else { return error(404, "not_found") }
                 if parts.count == 3, method == "GET" {
                     let size = att.chunks.values.reduce(0) { $0 + $1.count }
-                    return (200, ["size": size, "chunkCount": att.chunkCount, "uploadedChunks": att.chunks.keys.sorted()])
+                    return (200, ["size": size, "chunkCount": att.chunkCount, "mime": "image/png", "uploadedChunks": att.chunks.keys.sorted()])
                 }
                 if parts.count == 5, let index = Int(parts[4]) {
                     if method == "PUT" {

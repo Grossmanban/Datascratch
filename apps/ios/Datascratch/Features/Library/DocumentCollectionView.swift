@@ -183,24 +183,28 @@ struct DocumentCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .bottomLeading) {
-                // The cover thumbnail makes a document recognisable (spec/12 §12.7);
-                // without a cover, a barely tinted paper band.
-                if let thumb = note.coverThumb ?? note.coverImage?.attachmentId {
-                    CoverImageView(noteId: note.id, attachmentId: thumb, offsetY: note.coverImage?.offsetY ?? 0.5)
-                } else if let cover = note.cover {
-                    cover.gradient
-                } else {
-                    Theme.Palette.sidebar.opacity(0.55)
+            // With a cover: its thumbnail makes the document recognisable (spec/12 §12.7).
+            // Without one: no band at all — a compact card, the emoji on top.
+            if CoverHeader.hasCover(note) {
+                ZStack(alignment: .bottomLeading) {
+                    if let thumb = note.coverThumb ?? note.coverImage?.attachmentId {
+                        CoverImageView(noteId: note.id, attachmentId: thumb, offsetY: note.coverImage?.offsetY ?? 0.5)
+                    } else if let cover = note.cover {
+                        cover.gradient
+                    }
+                    if let icon = note.icon {
+                        Text(icon)
+                            .font(.system(size: 30))
+                            .padding(Theme.Space.s3)
+                    }
                 }
-                if let icon = note.icon {
-                    Text(icon)
-                        .font(.system(size: 30))
-                        .padding(Theme.Space.s3)
-                }
+                .frame(height: 92)
+                .clipped()
+            } else if let icon = note.icon {
+                Text(icon)
+                    .font(.system(size: 26))
+                    .padding([.top, .horizontal], Theme.Space.s3)
             }
-            .frame(height: CoverHeader.hasCover(note) ? 92 : 44)
-            .clipped()
 
             VStack(alignment: .leading, spacing: Theme.Space.s1) {
                 Text(note.title.isEmpty ? String(localized: "Untitled") : note.title)

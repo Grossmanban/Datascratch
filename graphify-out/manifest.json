@@ -760,5 +760,23 @@
     "seen": 1792929465.3774996,
     "ast_hash": "3adffbbb8f1785b1e950dcb90563699e",
     "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSCore/Sources/DSCore/Storage/LocalIndex.swift": {
+    "mtime": 1792929580.987826,
+    "seen": 1792929627.4261158,
+    "ast_hash": "9b947ca495e3ef81c11ad4980a9a29d4",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSCore/Sources/DSCore/Storage/LocalStore.swift": {
+    "mtime": 1792929591.7487073,
+    "seen": 1792929627.4261181,
+    "ast_hash": "f18d8ba5df9938dc2d76eb8b146566cc",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSCore/Tests/DSCoreTests/StorageTests.swift": {
+    "mtime": 1792929613.551828,
+    "seen": 1792929627.4261312,
+    "ast_hash": "0d949b2649112895179f850a51498ebb",
+    "semantic_hash": ""
   }
 }

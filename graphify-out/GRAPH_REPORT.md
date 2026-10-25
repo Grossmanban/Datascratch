@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-10-25)
 
 ## Corpus Check
-- 656 files · ~350,864 words
+- 656 files · ~350,895 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 31 file(s) not represented in the graph (top: (none) 15, .css 6, .example 4)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ecbe3905`
+- Built from commit: `5f8eeeb0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -359,8 +359,8 @@
   infra/README.md → apps/server/src/services/keys.ts
 - `1. Три вида документов Yjs` --references--> `DocKind`  [INFERRED]
   docs/architecture/contracts/document-model.md → packages/shared/src/contracts/common.ts
-- `Notebook name fallback 'Без названия' (AgentNotebook → notebook meta → default)` --references--> `AgentNotebook`  [EXTRACTED]
-  docs/architecture/contracts/agents-api.md → packages/agents/src/context.ts
+- `4.4. `comments`` --references--> `Comment`  [INFERRED]
+  docs/architecture/contracts/document-model.md → apps/ios/Packages/DSCore/Sources/DSCore/Model/NoteDocument.swift
 
 ## Import Cycles
 - 2-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs`
@@ -1527,14 +1527,14 @@ Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `ui/src/index.ts`, `scripts/generate.mjs`, `Foundation`, `DSDateChip`, `DSDesign Swift package`?**
-  _High betweenness centrality (0.076) - this node is a cross-community bridge._
+- **Why does `1. Три вида документов Yjs` connect `document-model.md` to `.start`, `LocalStore`?**
+  _High betweenness centrality (0.082) - this node is a cross-community bridge._
 - **What connects `XCTest`, `.isReadOnly`, `.noteId` to the rest of the system?**
   _981 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `0025-no-redis.md` be split into smaller, more focused modules?**
   _Cohesion score 0.031035090812907777 - nodes in this community are weakly interconnected._
-- **Why does `1. Три вида документов Yjs` connect `document-model.md` to `.start`, `LocalStore`?**
-  _High betweenness centrality (0.065) - this node is a cross-community bridge._
+- **Why does `DocKind` connect `LocalStore` to `CRDTDocument`, `CRDTDocument.swift`, `CaseIterable`, `document-model.md`, `String`, `Sendable`?**
+  _High betweenness centrality (0.080) - this node is a cross-community bridge._
 - **Should `.start` be split into smaller, more focused modules?**
   _Cohesion score 0.04348607367475292 - nodes in this community are weakly interconnected._
 

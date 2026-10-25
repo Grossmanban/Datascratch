@@ -243,6 +243,10 @@ final class LibraryUITests: XCTestCase {
         textView.typeText("Keyboard")
         // A simulator with a hardware keyboard shows none; the palette checks still apply.
         _ = app.keyboards.firstMatch.waitForExistence(timeout: 5)
+        // ios-editor saw a UIKit crash ~1.5 s after a finger tap in text mode: still alive?
+        settle(3)
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone after typing")
+        XCTAssertTrue(textView.exists, "editor is gone after typing")
         let palette = app.descendants(matching: .any)["penPalette"].firstMatch
         XCTAssertTrue(palette.waitForExistence(timeout: 3), "palette not found")
 

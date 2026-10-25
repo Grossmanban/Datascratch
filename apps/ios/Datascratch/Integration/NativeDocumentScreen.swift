@@ -359,10 +359,9 @@ struct PenPalette: View {
             }
         }
         .padding(.horizontal, Theme.Space.s1)
-        // The whole capsule takes the touches: none fall through the gaps into the editor
-        // (where a finger would draw or scroll).
-        .contentShape(Capsule())
-        .onTapGesture {}
+        // No gaps for touches to fall through: the buttons sit edge to edge, each 44 pt wide with
+        // its own hit shape (a hit shape on the whole capsule brought back a UIKit crash in
+        // ios-editor's demo; the editor also ends above the palette).
         .glassEffect(.regular, in: .capsule)
         .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
         .padding(.horizontal, Theme.Space.s3)

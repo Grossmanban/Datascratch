@@ -47,9 +47,19 @@ final class AppModel {
     var savedRecoveryKey: RecoveryKey? {
         didSet { secureStore.set(savedRecoveryKey.map { Data($0.bytes) }, for: Self.savedKeyItem) }
     }
-    /// False while the user skipped the key check; Settings shows a quiet reminder.
+    /// False while the user skipped the key check or got a new key; Settings shows a
+    /// quiet reminder. With a server it is `settings.recoveryKeyConfirmed` of the
+    /// account document, so every device of the account agrees.
     var isRecoveryKeyConfirmed = true {
-        didSet { secureStore.set(isRecoveryKeyConfirmed ? nil : Data([0]), for: Self.unconfirmedItem) }
+        didSet {
+            secureStore.set(isRecoveryKeyConfirmed ? nil : Data([0]), for: Self.unconfirmedItem)
+            #if canImport(DSCore)
+            if accounts.isServerBacked, accounts.account != nil, let core,
+               core.account.setting("recoveryKeyConfirmed")?.boolValue != isRecoveryKeyConfirmed {
+                try? core.account.setRecoveryKeyConfirmed(isRecoveryKeyConfirmed)
+            }
+            #endif
+        }
     }
     @ObservationIgnored private let secureStore: SecureStore
     private static let pendingKeyItem = "pending-recovery-key"
@@ -166,6 +176,23 @@ final class AppModel {
         pendingRecoveryKey = nil
         isSigningUp = false
         if seed { library.seedIfEmpty() }
+    }
+
+    /// Picks up the flag from the account document (changed on another device).
+    func refreshRecoveryKeyState() {
+        #if canImport(DSCore)
+        // Accounts made before the flag existed had to check the key at sign-up.
+        guard accounts.isServerBacked, accounts.account != nil, phase == .ready,
+              let confirmed = core?.account.setting("recoveryKeyConfirmed")?.boolValue,
+              confirmed != isRecoveryKeyConfirmed else { return }
+        isRecoveryKeyConfirmed = confirmed
+        #endif
+    }
+
+    /// A new key from «Create New Key»: shown once, kept here, unchecked until the user checks it.
+    func adoptRotatedRecoveryKey(_ key: RecoveryKey) {
+        savedRecoveryKey = key
+        isRecoveryKeyConfirmed = false
     }
 
     func signOut() async {

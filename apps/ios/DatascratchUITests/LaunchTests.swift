@@ -105,6 +105,7 @@ final class LibraryUITests: XCTestCase {
         paletteButton.tap()
         let field = app.textFields["palette.field"]
         XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found; fields: \(app.textFields.allElementsBoundByIndex.map { $0.identifier })")
+        field.tap()
         field.typeText("Go to Tasks\n")
         XCTAssertTrue(app.segmentedControls["tasks.bucket"].firstMatch.waitForExistence(timeout: 5)
                       || app.otherElements["tasks.bucket"].firstMatch.waitForExistence(timeout: 2))
@@ -112,9 +113,14 @@ final class LibraryUITests: XCTestCase {
 
     func testSettingsFingerDrawingToggle() throws {
         let app = launchSignedIn()
-        let settings = sidebarElement(app, "sidebar.settings")
-        XCTAssertTrue(settings.exists, "settings button not found; buttons: \(Self.buttons(app))")
-        settings.tap()
+        // Open settings through the command palette (also covers ⌘K search).
+        let paletteButton = sidebarElement(app, "sidebar.commandPalette")
+        XCTAssertTrue(paletteButton.exists, "command palette button not found; buttons: \(Self.buttons(app))")
+        paletteButton.tap()
+        let field = app.textFields["palette.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
+        field.tap()
+        field.typeText("Settings\n")
         let drawing = app.descendants(matching: .any)["settings.drawing"].firstMatch
         XCTAssertTrue(drawing.waitForExistence(timeout: 5), "drawing settings row not found; buttons: \(Self.buttons(app))")
         drawing.tap()

@@ -91,6 +91,16 @@
         }
       }
     },
+    "Actions of this agent will appear here.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь появятся действия этого агента."
+          }
+        }
+      }
+    },
     "Active links": {
       "localizations": {
         "ru": {
@@ -1547,6 +1557,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "На следующей неделе"
+          }
+        }
+      }
+    },
+    "No activity yet": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Действий пока нет"
           }
         }
       }

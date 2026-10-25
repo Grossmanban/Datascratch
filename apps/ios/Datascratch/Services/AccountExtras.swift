@@ -25,6 +25,16 @@ nonisolated struct AgentToken: Codable, Identifiable, Hashable, Sendable {
     var expiresAt: Date?
 }
 
+/// One entry of an agent's action log (`GET /v1/agent-tokens/:id/audit`).
+nonisolated struct AgentAuditEntry: Codable, Identifiable, Hashable, Sendable {
+    var id: String
+    var at: Date
+    /// MCP tool or REST action, e.g. `read_note`, `update_note`.
+    var action: String
+    var noteId: String?
+    var noteTitle: String?
+}
+
 /// Devices and agent tokens. DSCore talks to `/v1/devices` and `/v1/agent-tokens`;
 /// the local stand-in shows this device and mints opaque tokens.
 protocol AccessService: AnyObject {
@@ -36,6 +46,7 @@ protocol AccessService: AnyObject {
     func createAgentToken(name: String, notebookIds: [String], permission: AgentPermission,
                           expiresAt: Date?) async throws -> String
     func revokeAgentToken(_ id: String) async throws
+    func auditLog(forToken id: String) async throws -> [AgentAuditEntry]
 }
 
 @Observable
@@ -66,4 +77,7 @@ final class LocalAccessService: AccessService {
     func revokeAgentToken(_ id: String) async throws {
         agentTokens.removeAll { $0.id == id }
     }
+
+    /// No server, no agents: the log stays empty until DSCore talks to the API.
+    func auditLog(forToken id: String) async throws -> [AgentAuditEntry] { [] }
 }

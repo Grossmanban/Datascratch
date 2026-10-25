@@ -221,6 +221,40 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
     );
 
+    // Move a note to another notebook of the same user. Only the document's metadata
+    // changes; the client re-wraps the note key with the new notebook key and writes
+    // NoteMeta into the new notebook index (crypto.md §1). Access of guests and agents
+    // follows the new notebook immediately.
+    app.patch(
+      '/docs/:id',
+      {
+        schema: {
+          tags: ['docs'],
+          security,
+          params: z.object({ id: id() }),
+          body: z.object({ notebookId: id() }),
+          response: { 204: z.null(), ...errorResponses },
+        },
+      },
+      async (req, reply) => {
+        const p = await requireUser(ctx, req);
+        const [doc] = await db
+          .select()
+          .from(docs)
+          .where(and(eq(docs.id, req.params.id), eq(docs.userId, p.userId)));
+        if (!doc) throw notFound('document not found');
+        if (doc.kind !== 'note') throw badRequest('only note documents can be moved');
+        await ownNotebook(p.userId, req.body.notebookId);
+        if (doc.notebookId === req.body.notebookId) return reply.code(204).send(null);
+        await db
+          .update(docs)
+          .set({ notebookId: req.body.notebookId, updatedAt: sql`now()` })
+          .where(eq(docs.id, doc.id));
+        ctx.hub.publish(topics.doc(doc.id), { type: 'doc_moved', docId: doc.id });
+        return reply.code(204).send(null);
+      },
+    );
+
     app.delete(
       '/docs/:id',
       {

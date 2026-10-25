@@ -8,7 +8,7 @@ import * as Y from "yjs";
 import { NOTE_ROOTS } from "../contracts/document.js";
 import { uuidv7 } from "../ids.js";
 import { encodeAnchor, resolveAnchor, type TextPosition } from "./anchors.js";
-import { deleteStroke, listStrokes, putStroke } from "./store.js";
+import { deleteStroke, getStroke, listStrokes, putStroke } from "./store.js";
 
 /** All Y.XmlText nodes of `content` in document order. */
 function textNodes(doc: Y.Doc): Y.XmlText[] {
@@ -71,6 +71,8 @@ export interface ReanchorOptions {
   /** Offset before → offset after; default identity (split/merge/type change keep text order). */
   mapOffset?: (offset: number) => number | null;
   newId?: () => string;
+  /** Transaction origin (e.g. one tracked by the editor's Y.UndoManager). */
+  origin?: unknown;
 }
 
 /**
@@ -104,10 +106,30 @@ export function reanchorStrokes(
         return pos ? encodeAnchor(pos.text, pos.index) : a;
       });
       const to = newId();
-      deleteStroke(doc, id);
-      putStroke(doc, to, { ...stroke, anchors });
+      replaceStrokeWithReanchored(doc, id, anchors, { newId: () => to });
       replaced.push({ from: id, to });
     }
-  });
+  }, options.origin);
   return replaced;
+}
+
+/**
+ * Replace one stroke by a copy with a new strokeId, the same points and
+ * `anchors` (strokes.md: block rewrites). For editors that compute the new
+ * positions themselves. Returns the new strokeId, or null if the stroke is missing.
+ */
+export function replaceStrokeWithReanchored(
+  doc: Y.Doc,
+  strokeId: string,
+  anchors: Uint8Array[],
+  options: { newId?: () => string; origin?: unknown } = {},
+): string | null {
+  const stroke = getStroke(doc, strokeId);
+  if (!stroke) return null;
+  const to = (options.newId ?? (() => uuidv7()))();
+  doc.transact(() => {
+    deleteStroke(doc, strokeId);
+    putStroke(doc, to, { ...stroke, anchors });
+  }, options.origin);
+  return to;
 }

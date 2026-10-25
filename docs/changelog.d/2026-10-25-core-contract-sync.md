@@ -1,0 +1,3 @@
+- 2026-10-25 · core · Схемы `shared` догнали контракты: `Session.deviceId`, `deviceName` в signup/recovery, `mime` в статусе вложения, код `bad_request` в синхронизации; клиент синхронизации шлёт push только по подписанным документам; `guestDeviceId()`; хелпер `replaceStrokeWithReanchored` и `origin` у `reanchorStrokes`.
+- 2026-10-25 · core · Производительность первой синхронизации: `SyncClient.addDocs`, пакетные `getDocStates`/`setDocStates` в `SyncStorage`, отложенная запись курсоров и копия очереди в памяти; бенчмарк `pnpm --filter @datascratch/shared bench` — 10 000 заметок ≈ 6 с на клиенте.
+- 2026-10-25 · core · Новые векторы: base64url, ссылки шеринга, сквозная регистрация, тела REST API (`api/bodies.json`).

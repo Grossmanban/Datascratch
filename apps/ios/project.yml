@@ -1,0 +1,125 @@
+# XcodeGen spec for the Datascratch iOS/iPadOS app (D-28, D-32, D-33).
+# Generate the Xcode project with `scripts/generate.sh` (it also wires up
+# the local packages that already exist in Packages/).
+name: Datascratch
+include:
+  - path: project.packages.yml
+    relativePaths: false
+options:
+  bundleIdPrefix: com.datascratch
+  deploymentTarget:
+    iOS: "26.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+  xcodeVersion: "26.0"
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
+    STRING_CATALOG_GENERATE_SYMBOLS: NO
+targets:
+  Datascratch:
+    type: application
+    platform: iOS
+    sources:
+      - path: Datascratch
+        excludes:
+          - "**/.gitkeep"
+    info:
+      path: Datascratch/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Datascratch
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, ru]
+        LSRequiresIPhoneOS: true
+        DSWebHost: $(DS_WEB_HOST)
+        DSServerURL: $(DS_SERVER_URL)
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleURLTypes:
+          - CFBundleURLName: com.datascratch.app
+            CFBundleURLSchemes: [datascratch]
+        NSUserActivityTypes:
+          - com.datascratch.app.openNote
+        NSCameraUsageDescription: Datascratch uses the camera to add photos to your notes.
+        NSPhotoLibraryUsageDescription: Datascratch uses your photo library to add images and covers to your notes.
+    entitlements:
+      path: Datascratch/Resources/Datascratch.entitlements
+      properties:
+        com.apple.developer.associated-domains:
+          - applinks:$(DS_WEB_HOST)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.datascratch.app
+        PRODUCT_NAME: Datascratch
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        CODE_SIGN_STYLE: Automatic
+  DatascratchTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [DatascratchTests]
+    dependencies:
+      - target: Datascratch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.datascratch.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Datascratch.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Datascratch
+  DatascratchUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [DatascratchUITests]
+    dependencies:
+      - target: Datascratch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.datascratch.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        TEST_TARGET_NAME: Datascratch
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+schemes:
+  Datascratch:
+    build:
+      targets:
+        Datascratch: all
+        DatascratchTests: [test]
+        DatascratchUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - name: DatascratchTests
+          parallelizable: false
+        - name: DatascratchUITests
+          parallelizable: false
+    archive:
+      config: Release

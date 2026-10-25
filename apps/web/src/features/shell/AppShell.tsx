@@ -30,6 +30,9 @@ export function AppShell() {
   const bootstrapping = useRef(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
+  // One key per screen: a document, a notebook or folder, or a section (tasks tabs share one).
+  const segments = pathname.split("/");
+  const screenKey = ["doc", "notebook", "folder", "tag"].includes(segments[1] ?? "") ? pathname : segments[1];
 
   useEffect(() => {
     if (!accountDocId || !userId) return;
@@ -108,7 +111,16 @@ export function AppShell() {
         </motion.aside>
       )}
       <main className="relative flex min-w-0 flex-1 flex-col">
-        <Outlet />
+        {/* A short fade when the screen changes (tabs inside a screen keep their own motion). */}
+        <motion.div
+          key={screenKey}
+          className="flex min-h-0 flex-1 flex-col"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.16, ease: "easeOut" }}
+        >
+          <Outlet />
+        </motion.div>
       </main>
       <CommandPalette />
       <ShareDialog />

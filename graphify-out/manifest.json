@@ -24,10 +24,10 @@
     "semantic_hash": "c0be97949300b0a640f0d459c6a5d9ea"
   },
   "apps/web/README.md": {
-    "mtime": 1792942779.262471,
-    "seen": 1792942886.7647562,
-    "ast_hash": "ed5d9d7c2ba1b5c9eb4a7a713055face",
-    "semantic_hash": "ed5d9d7c2ba1b5c9eb4a7a713055face"
+    "mtime": 1792943201.4518352,
+    "seen": 1792943294.2784998,
+    "ast_hash": "dbe68dc1423aba4482ffc0ce0a299ee3",
+    "semantic_hash": "dbe68dc1423aba4482ffc0ce0a299ee3"
   },
   "docs/CHANGELOG.md": {
     "mtime": 1792939751.8289614,
@@ -1045,13 +1045,13 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792932836.5381606,
-    "seen": 1792942886.7638404,
+    "seen": 1792943294.2776222,
     "ast_hash": "24098989e922515ff0fa0aac07aa956f",
     "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792932836.5381606,
-    "seen": 1792942886.7638435,
+    "seen": 1792943294.2776258,
     "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
     "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
@@ -3312,10 +3312,10 @@
     "semantic_hash": "b305f5562804fca090d593f386f484c9"
   },
   "apps/web/src/app/App.tsx": {
-    "mtime": 1792931760.4257221,
-    "seen": 1792939770.9433827,
-    "ast_hash": "26a90b1c845533b6440a3e7449feda1c",
-    "semantic_hash": "26a90b1c845533b6440a3e7449feda1c"
+    "mtime": 1792942947.708289,
+    "seen": 1792943294.2777996,
+    "ast_hash": "27d1dbf6809874ce8bad1a24d08f69d7",
+    "semantic_hash": "27d1dbf6809874ce8bad1a24d08f69d7"
   },
   "apps/web/src/app/router.tsx": {
     "mtime": 1792932922.0728035,
@@ -3576,10 +3576,10 @@
     "semantic_hash": "7a24d9fbdeb3cba10815735b8fe88e30"
   },
   "apps/web/src/features/docs/ListPages.tsx": {
-    "mtime": 1792942076.329043,
-    "seen": 1792942886.764181,
-    "ast_hash": "3d879a2076da53beda92b5047edb455a",
-    "semantic_hash": "3d879a2076da53beda92b5047edb455a"
+    "mtime": 1792942921.372309,
+    "seen": 1792943294.277892,
+    "ast_hash": "5f9b6a6f9a04958ef6784f386cf95817",
+    "semantic_hash": "5f9b6a6f9a04958ef6784f386cf95817"
   },
   "apps/web/src/features/docs/menus.tsx": {
     "mtime": 1792937534.6291058,
@@ -3636,10 +3636,10 @@
     "semantic_hash": "505f42f77b57263fec0c645b77c60db6"
   },
   "apps/web/src/features/shell/AppShell.tsx": {
-    "mtime": 1792928877.9256618,
-    "seen": 1792939770.9434762,
-    "ast_hash": "d2e0b51e239246bf1a1e5d7c06cbf367",
-    "semantic_hash": "d2e0b51e239246bf1a1e5d7c06cbf367"
+    "mtime": 1792942953.5203626,
+    "seen": 1792943294.2779133,
+    "ast_hash": "f1123ae7d3e0607159a102cfd061fc16",
+    "semantic_hash": "f1123ae7d3e0607159a102cfd061fc16"
   },
   "apps/web/src/features/shell/InlineRename.tsx": {
     "mtime": 1792928897.2529018,

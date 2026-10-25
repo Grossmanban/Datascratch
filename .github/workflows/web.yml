@@ -9,12 +9,14 @@ on:
       - "pnpm-lock.yaml"
       - "package.json"
       - "packages/**"
+      - "apps/server/**"
   pull_request:
     paths:
       - "apps/web/**"
       - ".github/workflows/web.yml"
       - "pnpm-lock.yaml"
       - "packages/**"
+      - "apps/server/**"
 
 concurrency:
   group: web-${{ github.ref }}
@@ -61,3 +63,60 @@ jobs:
             apps/web/playwright-report
             apps/web/test-results
           retention-days: 7
+
+  e2e-real-server:
+    # Same e2e suite against apps/server + PostgreSQL, to catch contract drift early.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ds
+          POSTGRES_PASSWORD: ds
+          POSTGRES_DB: ds
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ds" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: development
+      HOST: 127.0.0.1
+      PORT: "8080"
+      LOG_LEVEL: warn
+      PUBLIC_URL: http://localhost:8080
+      CORS_ORIGINS: http://localhost:4173
+      DATABASE_URL: postgres://ds:ds@localhost:5432/ds
+      DB_MIGRATE_ON_START: "true"
+      DS_JWT_SECRET: ci-only-jwt-secret-not-for-production-use-000
+      DS_KMS_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+      STORAGE_DRIVER: disk
+      STORAGE_DIR: /tmp/ds-files
+      E2E_SERVER_URL: http://localhost:8080
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @datascratch/shared build
+      - name: Start server
+        run: |
+          mkdir -p /tmp/ds-files
+          nohup pnpm --filter @datascratch/server exec tsx src/index.ts > /tmp/server.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://localhost:8080/v1/health && break; sleep 1; done
+          curl -sf http://localhost:8080/v1/health
+      - name: Build web for the real server
+        run: pnpm exec vite build
+        working-directory: apps/web
+        env:
+          VITE_DS_SERVER_URL: http://localhost:8080
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: apps/web
+      - name: E2E against apps/server
+        run: pnpm e2e
+        working-directory: apps/web
+      - name: Server log
+        if: failure()
+        run: tail -200 /tmp/server.log

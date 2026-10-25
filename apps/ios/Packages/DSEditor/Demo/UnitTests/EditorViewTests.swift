@@ -235,6 +235,7 @@ final class EditorViewTests: XCTestCase {
             XCTAssertFalse(g.delaysTouchesBegan, "\(type(of: g)) must not delay touches")
             XCTAssertFalse(g.delaysTouchesEnded, "\(type(of: g)) must not delay touches")
         }
+        XCTAssertFalse(editor.textView.delaysContentTouches)
         XCTAssertEqual(pan.minimumNumberOfTouches, 1)
         // As if called from a button's or the pen's touch handler: nothing changes synchronously.
         editor.tools.allowsFingerDrawing = true

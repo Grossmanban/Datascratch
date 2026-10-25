@@ -1830,10 +1830,10 @@
     "semantic_hash": "a9fe17f4ee82363aa7877051a9e1e53e"
   },
   "packages/web-editor/ct/pen.spec.tsx": {
-    "mtime": 1792930994.628927,
-    "seen": 1792932713.6991587,
-    "ast_hash": "6464d116927ec480163007ba4171187a",
-    "semantic_hash": "6464d116927ec480163007ba4171187a"
+    "mtime": 1792933071.247455,
+    "seen": 1792933080.5232008,
+    "ast_hash": "d175671508f9ec4aae8980340b2136f2",
+    "semantic_hash": ""
   },
   "packages/web-editor/demo/main.tsx": {
     "mtime": 1792929957.7266219,

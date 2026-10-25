@@ -4,7 +4,11 @@ import { signUp, uniqueEmail } from "./helpers";
 
 /** Serious and critical WCAG 2.1 AA violations on the current page. */
 async function violations(page: Page) {
-  const res = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+  // axe measures what is on screen: let fade-ins (screen change, empty states) finish first.
+  // Toasts ([data-swipe-direction]) animate on their own and go away, so they are left out.
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"), null, { timeout: 5000 }).catch(() => undefined);
+  await page.waitForTimeout(400);
+  const res = await new AxeBuilder({ page }).exclude("[data-swipe-direction]").withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   return res.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")
     .map((v) => `${v.id}: ${v.help} — ${v.nodes.slice(0, 4).map((n) => `${n.target.join(" ")} ${process.env.A11Y_DEBUG ? `${n.html.slice(0, 160)} ${n.failureSummary?.split("\n").slice(1, 2).join("")}` : ""}`).join(" | ")}`);

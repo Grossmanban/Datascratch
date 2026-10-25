@@ -7,6 +7,12 @@ import UIKit
 public protocol EditorAttachmentResolver: AnyObject {
     func image(for attachmentId: String) -> UIImage?
     func noteTitle(for noteId: String) -> String?
+    /// Note id for a typed `[[label]]` (find or create); nil keeps the text.
+    func noteId(forLinkLabel label: String) -> String?
+}
+
+public extension EditorAttachmentResolver {
+    func noteId(forLinkLabel label: String) -> String? { nil }
 }
 
 /// Creates attachments for atom blocks and inline atoms; caches them by node so unchanged blocks

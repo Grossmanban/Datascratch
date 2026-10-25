@@ -201,9 +201,13 @@ public final class EditorView: UIView {
             inkUnder.frame = CGRect(origin: .zero, size: size)
             inkOver.frame = CGRect(origin: .zero, size: size)
         }
-        textView.sendSubviewToBack(inkUnder)
-        textView.sendSubviewToBack(paper)
-        textView.bringSubviewToFront(inkOver)
+        // Reorder only when needed: changing subview order marks the text view for layout again.
+        let subs = textView.subviews
+        if subs.first !== paper || (subs.count > 1 && subs[1] !== inkUnder) {
+            textView.sendSubviewToBack(inkUnder)
+            textView.sendSubviewToBack(paper)
+        }
+        if textView.subviews.last !== inkOver { textView.bringSubviewToFront(inkOver) }
         MermaidRenderer.shared.host = self
         let width = textView.textContainer.size.width
         if width != lastContainerWidth || textView.contentSize.height != lastContentHeight {
@@ -585,8 +589,11 @@ extension EditorView: UITextViewDelegate {
             let pos = TextPosition(block: projection.paragraphs[i].blockId, offset: o)
             let md = MarkdownShortcuts(commands: commands)
             var fired: TextPosition?
-            if shortcut.char == " " { fired = md.handleSpace(at: pos) }
+            if shortcut.char == " " { fired = md.handleSpace(at: pos) ?? md.handleTag(at: pos) }
             if fired == nil, ["*", "_", "`", "~", "="].contains(shortcut.char) { fired = md.handleInline(at: pos) }
+            if fired == nil, shortcut.char == "]", let resolver = attachmentResolver {
+                fired = md.handleNoteLink(at: pos) { resolver.noteId(forLinkLabel: $0) }
+            }
             if let fired {
                 select(fired)
                 return
@@ -602,6 +609,44 @@ extension EditorView: UITextViewDelegate {
         pendingMarks = nil
         updateTypingAttributes()
         onStateChange?()
+    }
+
+    public func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
+        let (i, _) = projection.position(at: range.location)
+        guard projection.paragraphs.indices.contains(i), let item = projection.paragraphs[i].context.itemBlockId,
+              let node = document.block(item), node.type == NodeType.taskItem else { return nil }
+        return UIMenu(children: [taskMenu(item: item, node: node)] + suggestedActions)
+    }
+
+    /// Craft-like task menu: complete, schedule, deadline, cancel.
+    private func taskMenu(item: BlockID, node: BlockNode) -> UIMenu {
+        let cmd = commands
+        let state = node.attrs["state"]?.stringValue ?? "open"
+        let scheduled = node.attrs["scheduled"]?.stringValue
+        let deadline = node.attrs["deadline"]?.stringValue
+        func day(_ offset: Int) -> String {
+            let date = Calendar.current.date(byAdding: .day, value: offset, to: Date()) ?? Date()
+            let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
+            return String(format: "%04d-%02d-%02d", c.year ?? 2026, c.month ?? 1, c.day ?? 1)
+        }
+        let schedule = UIMenu(title: "Запланировать", image: UIImage(systemName: "calendar"), children: [
+            UIAction(title: "Сегодня") { _ in cmd.setTaskDates(item, scheduled: day(0), deadline: deadline) },
+            UIAction(title: "Завтра") { _ in cmd.setTaskDates(item, scheduled: day(1), deadline: deadline) },
+            UIAction(title: "Через неделю") { _ in cmd.setTaskDates(item, scheduled: day(7), deadline: deadline) },
+            UIAction(title: "Без даты") { _ in cmd.setTaskDates(item, scheduled: nil, deadline: deadline) },
+        ])
+        let due = UIMenu(title: "Дедлайн", image: UIImage(systemName: "flag"), children: [
+            UIAction(title: "Сегодня") { _ in cmd.setTaskDates(item, scheduled: scheduled, deadline: day(0)) },
+            UIAction(title: "Завтра") { _ in cmd.setTaskDates(item, scheduled: scheduled, deadline: day(1)) },
+            UIAction(title: "Через неделю") { _ in cmd.setTaskDates(item, scheduled: scheduled, deadline: day(7)) },
+            UIAction(title: "Без дедлайна") { _ in cmd.setTaskDates(item, scheduled: scheduled, deadline: nil) },
+        ])
+        let toggle = UIAction(title: state == "done" ? "Вернуть в работу" : "Выполнить",
+                              image: UIImage(systemName: state == "done" ? "circle" : "checkmark.circle")) { _ in cmd.toggleTask(item) }
+        let cancel = UIAction(title: state == "cancelled" ? "Восстановить" : "Отменить задачу", image: UIImage(systemName: "xmark.circle")) { [weak self] _ in
+            self?.document.setAttributes(item, ["state": .string(state == "cancelled" ? "open" : "cancelled"), "completedAt": nil])
+        }
+        return UIMenu(title: "Задача", image: UIImage(systemName: "checklist"), options: .displayInline, children: [toggle, schedule, due, cancel])
     }
 
     public func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem, defaultAction: UIAction) -> UIAction? {

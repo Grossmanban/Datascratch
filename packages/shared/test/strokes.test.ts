@@ -311,3 +311,24 @@ describe("anchor rebase hooks and version restore", () => {
     expect(r.map((a) => a && !a.deleted && a.text.toString().charAt(a.index))).toEqual(["w", "d"]);
   });
 });
+
+describe("orphanedAt bookkeeping", () => {
+  it("records first orphaned time and clears it when anchors come back", async () => {
+    const { updateOrphanedAt } = await import("../src/index.js");
+    const { doc, text } = noteWithText("abc");
+    const undo = new Y.UndoManager(noteRoots(doc).content, { captureTimeout: 0 });
+    putStroke(doc, "s", base([encodeAnchor(text, 1)], [pt(0, 0), pt(0, 0.5)]));
+    const seen = new Map<string, number>();
+    expect(updateOrphanedAt(doc, seen, 10)).toEqual([]);
+    text.delete(0, 3);
+    updateOrphanedAt(doc, seen, 20);
+    updateOrphanedAt(doc, seen, 30);
+    expect(seen.get("s")).toBe(20);
+    const day = 86_400_000;
+    expect(findPurgeableStrokes(doc, 20 + 31 * day, (id) => seen.get(id) ?? null)).toEqual(["s"]);
+    expect(findPurgeableStrokes(doc, 20 + 29 * day, (id) => seen.get(id) ?? null)).toEqual([]);
+    undo.undo();
+    expect(updateOrphanedAt(doc, seen, 40)).toEqual([]);
+    expect(seen.has("s")).toBe(false);
+  });
+});

@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "description": "Layout of a text stroke with the reference monospace layout: glyph x = (index mod perLine) * 10, baseline = floor(index / perLine) * 24 + 17, fontSize 17, line = floor(index / perLine). Point = (x + px*fontSize, baseline + py*fontSize); width = strokeWidth(...). Segments break between lines; points on deleted characters are dropped; segments < 2 points are dropped. Values rounded to 1e-4.",
+  "base": "AQMDAAcBB2NvbnRlbnQDCXBhcmFncmFwaAcAAwAGBAADAQphYmNkZWZnaGlqAA",
+  "textBefore": "abcdefghij",
+  "anchorIndices": [
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "anchors": [
+    "AAMEAA",
+    "AAMFAA",
+    "AAMGAA",
+    "AAMHAA",
+    "AAMIAA"
+  ],
+  "stroke": {
+    "tool": "pencil",
+    "width": 2
+  },
+  "points": "AAAAAM3MTD6amRk-zcxMPtsPST8AAAAAAAAAAAAAAAAAAIA_zcxMPpqZGT5mZuY-2w9JPwAAAAAAAAAAAAAAQQAAAEDNzEw-mpkZPjMzMz_bD0k_AAAAAAAAAAAAAIBBAABAQM3MTD6amRk-MzNzP9sPST8AAAAAAAAAAAAAwEEAAIBAzcxMPpqZGT6amZk_2w9JPwAAAAAAAAAAAAAAQg",
+  "cases": [
+    {
+      "perLine": 1000,
+      "segments": [
+        [
+          {
+            "x": 23.4,
+            "y": 19.55,
+            "width": 1.8528
+          },
+          {
+            "x": 33.4,
+            "y": 19.55,
+            "width": 2.426
+          },
+          {
+            "x": 43.4,
+            "y": 19.55,
+            "width": 2.9353
+          },
+          {
+            "x": 53.4,
+            "y": 19.55,
+            "width": 3.4085
+          },
+          {
+            "x": 63.4,
+            "y": 19.55,
+            "width": 3.5
+          }
+        ]
+      ]
+    },
+    {
+      "perLine": 4,
+      "segments": [
+        [
+          {
+            "x": 23.4,
+            "y": 19.55,
+            "width": 1.8528
+          },
+          {
+            "x": 33.4,
+            "y": 19.55,
+            "width": 2.426
+          }
+        ],
+        [
+          {
+            "x": 3.4,
+            "y": 43.55,
+            "width": 2.9353
+          },
+          {
+            "x": 13.4,
+            "y": 43.55,
+            "width": 3.4085
+          },
+          {
+            "x": 23.4,
+            "y": 43.55,
+            "width": 3.5
+          }
+        ]
+      ]
+    }
+  ],
+  "afterDeletingIndex4": {
+    "segments": [
+      [
+        {
+          "x": 23.4,
+          "y": 19.55,
+          "width": 1.8528
+        },
+        {
+          "x": 33.4,
+          "y": 19.55,
+          "width": 2.426
+        }
+      ],
+      [
+        {
+          "x": 43.4,
+          "y": 19.55,
+          "width": 3.4085
+        },
+        {
+          "x": 53.4,
+          "y": 19.55,
+          "width": 3.5
+        }
+      ]
+    ]
+  }
+}

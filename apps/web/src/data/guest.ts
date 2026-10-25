@@ -21,6 +21,8 @@ export class GuestSession {
   private wanted = new Set<string>();
   private listeners = new Set<() => void>();
   private deviceIdValue = uuidv7();
+  /** Stable id for strokes and presence authored by this guest in this tab. */
+  readonly guestId = uuidv7();
 
   private constructor(
     readonly shareId: string,

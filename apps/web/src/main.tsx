@@ -1,9 +1,5 @@
-import "@fontsource-variable/inter";
-import "@fontsource-variable/newsreader";
-import "@fontsource-variable/newsreader/opsz-italic.css";
-import "@fontsource-variable/jetbrains-mono";
+import "@datascratch/ui/fonts.css";
 import "./styles/index.css";
-import "./styles/prose.css";
 import "./i18n";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

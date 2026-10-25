@@ -191,7 +191,7 @@ export function FolderPage() {
   );
 }
 
-function FolderChips({ folders }: { folders: { id: string; name: string; color: string; icon: string }[] }) {
+function FolderChips({ folders }: { folders: { id: string; name: string; color: string | null; icon: string | null }[] }) {
   if (!folders.length) return null;
   return (
     <div className="-mt-1 flex flex-wrap gap-2 px-5 pb-6 sm:px-10">

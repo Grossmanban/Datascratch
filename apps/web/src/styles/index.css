@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "../stubs/design-tokens/tokens.css";
+@import "@datascratch/design-tokens/tokens.css";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 

@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { accountDb } from "@/data/db";
 import { addTask, findDaily, findInbox, getOrCreateDaily, getOrCreateInbox, openTab } from "@/domain/actions";
 import { useWorkspace } from "@/domain/workspace";
+import { ownerEditorHost } from "@/editor/hosts";
 import { DocView } from "@/features/doc/DocView";
 import { TopBar } from "@/features/shell/PageHeader";
 import { MonthCalendar } from "@/features/tasks/DatePicker";
@@ -172,7 +173,8 @@ export function CalendarPage() {
 }
 
 function InlineDaily({ noteId }: { noteId: string }) {
-  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const host = useMemo(() => ownerEditorHost(noteId, navigate), [noteId, navigate]);
   const doc = useNoteDoc(noteId);
   const meta = useNoteMeta(doc);
   if (!doc || !meta)
@@ -183,14 +185,7 @@ function InlineDaily({ noteId }: { noteId: string }) {
     );
   return (
     <div className="-mx-4 rounded-xl sm:-mx-6">
-      <DocView
-        doc={doc}
-        style={{ ...meta.style, width: "full" }}
-        backdrop={null}
-        editable
-        placeholder={t("docs.placeholder")}
-        titlePlaceholder={t("docs.daily")}
-      />
+      <DocView doc={doc} backdrop={null} editable compact showPalette={false} host={host} />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/session";
 import { colorFor } from "@/data/presence";
 import { runtime } from "@/data/runtime";
-import { createNote, openTab, restoreNote, toggleStar, updateNote } from "@/domain/actions";
+import { openTab, restoreNote, toggleStar, updateNote } from "@/domain/actions";
 import { folderPath, isStarred, noteTitle, useWorkspace } from "@/domain/workspace";
 import { noteMenuItems } from "@/features/docs/menus";
 import { TopBar } from "@/features/shell/PageHeader";
@@ -18,6 +18,7 @@ import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner } fr
 import { setNoteMeta } from "@/domain/note";
 import { Backlinks } from "./Backlinks";
 import { CoverImage, coverError, pickImage, uploadCover } from "./Cover";
+import { ownerEditorHost } from "@/editor/hosts";
 import { DocView } from "./DocView";
 import { PresenceStack } from "./PresenceStack";
 import { StylePopover } from "./StylePopover";
@@ -102,14 +103,9 @@ function DocScreen({ noteId }: { noteId: string }) {
     }
   };
 
-  const resolveNoteLink = async (label: string) => {
-    const st = useWorkspace.getState();
-    const lower = label.toLowerCase();
-    const found = Object.values(st.notes).find((n) => !n.trashedAt && n.title.trim().toLowerCase() === lower);
-    if (found) return { noteId: found.id, label: found.title };
-    const id = await createNote({ notebookId: note.notebookId, folderId: note.folderId, title: label });
-    return { noteId: id, label };
-  };
+  const host = useMemo(() => ownerEditorHost(noteId, navigate), [noteId, navigate]);
+  const userId = useAuth((s) => s.userId) ?? "";
+  const editorUser = useMemo(() => ({ id: userId, name: user.name, color: user.color, kind: "user" as const }), [userId, user]);
 
   return (
     <div className="scrollbar-thin h-full overflow-y-auto" data-testid="doc-page">
@@ -171,28 +167,22 @@ function DocScreen({ noteId }: { noteId: string }) {
         </div>
       )}
 
-      {!doc || !meta ? (
+      {/* Mount the editor once presence exists: changing `awareness` later recreates the editor. */}
+      {!doc || !meta || !awareness ? (
         <div className="flex h-64 items-center justify-center text-ink-3">
           <Spinner className="size-5" />
         </div>
       ) : (
         <DocView
           doc={doc}
-          style={meta.style}
           backdrop={meta.backdrop}
           editable={editable}
-          placeholder={t("docs.placeholder")}
-          titlePlaceholder={t("docs.titlePlaceholder")}
           awareness={awareness}
-          user={user}
-          autoFocus={editable && !note.title}
-          onOpenNote={(id) => {
-            openTab(id);
-            void navigate({ to: "/doc/$noteId", params: { noteId: id } });
+          user={editorUser}
+          host={host}
+          onEditor={(api) => {
+            if (editable && !note.title) api.editor.commands.focus("start");
           }}
-          onOpenTag={(tag) => void navigate({ to: "/tag/$", params: { _splat: tag } })}
-          noteTitle={(id) => useWorkspace.getState().notes[id]?.title || null}
-          resolveNoteLink={resolveNoteLink}
           cover={
             meta.cover ? (
               <CoverImage

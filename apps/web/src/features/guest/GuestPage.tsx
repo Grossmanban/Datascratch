@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import type * as Y from "yjs";
 import { ApiError } from "@/api/client";
+import { attachmentUrl } from "@/data/attachments";
 import { GuestSession } from "@/data/guest";
+import type { EditorHost } from "@/editor";
 import { colorFor } from "@/data/presence";
 import { readNotebook } from "@/domain/notebook";
 import { readNoteMeta } from "@/domain/note";
@@ -143,21 +145,29 @@ function GuestNote({ session, noteId, embedded }: { session: GuestSession; noteI
     () => session.keyFor(noteId),
     (payload) => session.engine.sendAwareness(noteId, payload),
   );
+  const editorUser = useMemo(() => ({ id: session.guestId, name: user.name, color: user.color, kind: "guest" as const }), [session, user]);
+  const host = useMemo<EditorHost>(
+    () => ({
+      resolveAttachment: async (id) => {
+        const k = await session.keyFor(noteId);
+        return k ? attachmentUrl(id, k, { auth: session.grant.guestToken, persist: false }).catch(() => null) : null;
+      },
+    }),
+    [session, noteId],
+  );
   useEffect(() => {
     if (embedded) void session.subscribeNote(noteId);
   }, [embedded, session, noteId]);
-  const body = !ready ? (
+  const body = !ready || !awareness ? (
     <Loading />
   ) : (
     <DocView
       doc={doc}
-      style={meta.style}
       backdrop={meta.backdrop}
       editable={session.canEdit}
-      placeholder={t("docs.placeholder")}
-      titlePlaceholder={t("docs.titlePlaceholder")}
       awareness={awareness}
-      user={user}
+      user={editorUser}
+      host={host}
       cover={
         meta.cover ? (
           <CoverImage cover={meta.cover} keyFor={() => session.keyFor(noteId)} editable={false} auth={session.grant.guestToken} persist={false} />

@@ -37,6 +37,9 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
         working-directory: .
+      - name: Build workspace dependencies
+        run: pnpm --filter @datascratch/shared build
+        working-directory: .
       - name: Typecheck
         run: pnpm typecheck
       - name: Unit tests

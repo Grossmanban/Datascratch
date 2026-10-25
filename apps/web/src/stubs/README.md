@@ -1,15 +1,11 @@
 # Temporary stubs
 
-Thin stand-ins for packages owned by other streams (D-39) that are not in `main` yet.
-App code never imports from here directly — it goes through `src/lib/shared.ts`,
-`src/ui/` and `src/editor/`, so replacing a stub with the real package touches one place.
+Thin stand-ins for packages owned by other streams (D-39). App code never imports from here
+directly — it goes through `src/ui/`, so replacing a stub with the real package touches one place.
 
-| Stub | Real package | Owner stream |
+| Stub | Real package | Status |
 | --- | --- | --- |
-| `shared/` | `@datascratch/shared` (contracts types, crypto, ids) | core |
-| `ui/` | `@datascratch/ui` (Radix + Tailwind components) | design-system |
-| `design-tokens/` | `@datascratch/design-tokens` (CSS variables) | design-system |
-| `web-editor/` | `@datascratch/web-editor` (TipTap editor component) | web-editor |
+| `ui/` | `@datascratch/ui` (Radix + Tailwind components) | being migrated to the real package |
 
-The stubs follow the contracts in `docs/architecture/contracts/` byte for byte where it
-matters (crypto envelopes, document schema), so data created with them stays valid.
+Already replaced by the real packages: `@datascratch/shared` (via `src/lib/shared.ts`),
+`@datascratch/web-editor` (via `src/editor/`), `@datascratch/design-tokens` (CSS variables).

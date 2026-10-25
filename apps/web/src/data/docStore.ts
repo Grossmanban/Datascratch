@@ -234,13 +234,13 @@ export class DocStore {
     });
   }
 
-  /** Our own push was stored as `seq`; advance lastSeq only if it is contiguous. */
+  /** Our own push was stored as `seq` (sync-protocol.md §4: lastSeq = max of updates/update/ack). */
   async acked(docId: string, clientMsgId: string, seq: number) {
     await this.serial(docId, async () => {
       const db = accountDb();
       const row = await this.row(docId);
       await db.outbox.where("clientMsgId").equals(clientMsgId).delete();
-      if (row && seq === row.lastSeq + 1) {
+      if (row && seq > row.lastSeq) {
         const sinceSnapshot = row.sinceSnapshot + 1;
         await db.docs.update(docId, { lastSeq: seq, sinceSnapshot });
         this.rows.set(docId, { ...row, lastSeq: seq, sinceSnapshot });

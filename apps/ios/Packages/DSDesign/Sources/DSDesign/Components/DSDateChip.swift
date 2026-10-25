@@ -79,26 +79,40 @@ public struct DSDateChipModel: Sendable, Equatable {
 
 /// Compact date chip for tasks (scheduled date or deadline).
 public struct DSDateChip: View {
-    private let model: DSDateChipModel
+    private let date: Date
+    private let now: Date
+    private let calendar: Calendar
+    private let language: DSLanguage?
     private let isDeadline: Bool
+    private let isCompleted: Bool
+    @Environment(\.locale) private var locale
 
+    /// - Parameter language: `nil` follows the environment locale.
     public init(
         date: Date,
         now: Date = .now,
         calendar: Calendar = .current,
-        language: DSLanguage = .current,
+        language: DSLanguage? = nil,
         isDeadline: Bool = false,
         isCompleted: Bool = false
     ) {
-        model = DSDateChipModel(
+        self.date = date
+        self.now = now
+        self.calendar = calendar
+        self.language = language
+        self.isDeadline = isDeadline
+        self.isCompleted = isCompleted
+    }
+
+    private var model: DSDateChipModel {
+        DSDateChipModel(
             date: date,
             now: now,
             calendar: calendar,
-            language: language,
+            language: language ?? DSLanguage(locale: locale),
             isDeadline: isDeadline,
             isCompleted: isCompleted
         )
-        self.isDeadline = isDeadline
     }
 
     private var color: Color {

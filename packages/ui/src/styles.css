@@ -73,12 +73,22 @@
 }
 
 /* Dark theme: grain blends softly, glass highlight is barely there. */
+/* Text on filled accent / danger: white on paper, ink-dark on graphite. */
+:root {
+  --ui-on-accent: #FFFFFF;
+}
+@utility text-on-accent {
+  color: var(--ui-on-accent);
+}
+
 [data-theme="dark"] {
+  --ui-on-accent: var(--ds-bg-canvas);
   --ui-glass-highlight: 7%;
   --ui-noise-blend: soft-light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    --ui-on-accent: var(--ds-bg-canvas);
     --ui-glass-highlight: 7%;
     --ui-noise-blend: soft-light;
   }

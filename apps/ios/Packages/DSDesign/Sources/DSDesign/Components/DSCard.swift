@@ -108,7 +108,7 @@ public struct DSDocCard: View {
             .padding(.horizontal, DSSpace.s4)
             .padding(.top, icon == nil ? DSSpace.s3 : DSSpace.s8)
             .padding(.bottom, DSSpace.s4)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .dsCardSurface()
         .contentShape(.hoverEffect, RoundedRectangle(cornerRadius: DSRadius.lg, style: .continuous))

@@ -9,14 +9,7 @@ export function tintName(token: string | null | undefined): Tint {
 export const tintFg = (token?: string | null) => `var(--ds-tint-${tintName(token)}-fg)`;
 export const tintBg = (token?: string | null) => `var(--ds-tint-${tintName(token)}-bg)`;
 
-export const BACKDROPS = ["sand", "dusk", "mist", "meadow", "ember"] as const;
+/** `meta.backdrop` is still rendered when a document has one (spec/12 §12.7: not offered in the UI). */
 export const backdropCss = (name: string) => `var(--ds-backdrop-${name.replace(/^backdrop\./, "")})`;
-
-/** Deterministic soft gradient for documents without a cover image. */
-export function coverGradient(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return backdropCss(BACKDROPS[h % BACKDROPS.length]!);
-}
 
 export const EMOJI_CHOICES = ["📓", "📒", "📕", "📗", "📘", "📙", "🗂️", "💼", "🏡", "🎓", "🧪", "✏️", "🎨", "🌱", "⭐️", "🔥", "💡", "🧭", "🗒️", "📌", "🎯", "🧠", "📷", "🎵"];

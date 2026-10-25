@@ -10,7 +10,6 @@ import { openTab } from "@/domain/actions";
 import { isStarred, noteTitle, useWorkspace, type NoteEntry } from "@/domain/workspace";
 import { dragNote } from "@/lib/dnd";
 import { formatRelative } from "@/lib/dates";
-import { coverGradient } from "@/lib/tokens";
 import { runtime } from "@/data/runtime";
 import { useAttachmentUrl } from "@/features/doc/Cover";
 import { cn, ContextMenu } from "@/ui";
@@ -39,7 +38,7 @@ function useSnippets(ids: string[]) {
 
 const CARD_MIN = 210;
 const GRID_GAP = { sm: 20, base: 16 };
-const CARD_HEIGHT = 236;
+const CARD_HEIGHT = 200;
 const ROW_HEIGHT = 61;
 
 /** Cards (or rows) of a document list, virtualised: only what is on screen is rendered. */
@@ -158,17 +157,28 @@ const DocCard = memo(function DocCard({ note, snippet, delay }: { note: NoteEntr
           className="group block overflow-hidden rounded-xl bg-surface shadow-card ring-1 ring-line/70 transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgb(40_30_10/0.05),0_16px_36px_rgb(40_30_10/0.1)]"
           data-testid="doc-card"
         >
-          <div className="relative">
-            <div className="relative h-24 overflow-hidden" style={{ background: coverGradient(note.id) }}>
-              {note.coverThumb && <CardThumb noteId={note.id} attachmentId={note.coverThumb} />}
-              <div className="absolute inset-0 opacity-[0.15] mix-blend-overlay [background-image:radial-gradient(rgb(0_0_0/0.5)_0.6px,transparent_0.8px)] [background-size:3px_3px]" />
-              {starred && <Star className="absolute right-3 top-3 size-3.5 fill-white/90 text-white/90 drop-shadow" />}
+          {/* spec/12 §12.7: the cover's thumbnail makes a document recognisable; no cover, no header. */}
+          {note.coverThumb ? (
+            <div className="relative">
+              <div className="relative h-24 overflow-hidden bg-ink/[0.04]">
+                <CardThumb noteId={note.id} attachmentId={note.coverThumb} />
+                {starred && <Star className="absolute right-3 top-3 size-3.5 fill-white/90 text-white/90 drop-shadow" />}
+              </div>
+              {note.icon && (
+                <span className="absolute -bottom-4 left-4 flex size-10 items-center justify-center rounded-lg bg-surface text-[20px] shadow-card ring-1 ring-line/70">
+                  {note.icon}
+                </span>
+              )}
             </div>
-            <span className="absolute -bottom-4 left-4 flex size-10 items-center justify-center rounded-lg bg-surface text-[20px] shadow-card ring-1 ring-line/70">
-              {note.icon ?? <FileText className="size-[18px] text-ink-3" />}
-            </span>
-          </div>
-          <div className="px-4 pb-4 pt-6">
+          ) : (
+            <div className="flex items-start justify-between px-4 pt-4">
+              <span className="flex size-9 items-center justify-center rounded-lg bg-ink/[0.045] text-[19px]">
+                {note.icon ?? <FileText className="size-[17px] text-ink-3" />}
+              </span>
+              {starred && <Star className="size-3.5 fill-[var(--ds-tint-yellow-fg)] text-[var(--ds-tint-yellow-fg)]" />}
+            </div>
+          )}
+          <div className={cn("px-4 pb-4", note.coverThumb ? (note.icon ? "pt-6" : "pt-3.5") : "pt-3")}>
             <h3 className="line-clamp-2 font-display text-[17px] font-semibold leading-snug tracking-[-0.005em] text-ink">
               {noteTitle(note, t("app.untitled"))}
             </h3>
@@ -204,8 +214,8 @@ const DocRow = memo(function DocRow({ note, snippet, first }: { note: NoteEntry;
         className={cn("flex items-center gap-3 px-4 py-3 transition-colors hover:bg-ink/[0.025]", !first && "border-t border-line")}
         data-testid="doc-row"
       >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md text-[17px]" style={{ background: coverGradient(note.id) }}>
-          {note.icon ?? <FileText className="size-4 text-ink-2" />}
+        <span className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-ink/[0.045] text-[17px]">
+          {note.coverThumb ? <CardThumb noteId={note.id} attachmentId={note.coverThumb} /> : (note.icon ?? <FileText className="size-4 text-ink-2" />)}
         </span>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[14.5px] font-medium text-ink">{noteTitle(note, t("app.untitled"))}</div>

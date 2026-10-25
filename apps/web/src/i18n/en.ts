@@ -293,12 +293,17 @@ const en: Loose<Messages> = {
     dots: "Dots",
     grid: "Grid",
     lines: "Lines",
-    backdrop: "Backdrop",
     cover: "Cover",
     addCover: "Add cover",
     removeCover: "Remove cover",
     icon: "Icon",
     addIcon: "Add icon",
+  },
+  cover: {
+    description: "Your own image: a photo, a screenshot or a picture file.",
+    hint: "Drop an image here or paste it (⌘V)",
+    choose: "Choose file",
+    notImage: "That's not an image",
   },
   settings: {
     title: "Settings",

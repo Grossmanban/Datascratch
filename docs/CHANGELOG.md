@@ -4,6 +4,8 @@
 
 ## 2026-10-25 (вторая половина дня)
 
+- 2026-10-25 · core · Ротация ключа восстановления: `rotateRecoveryKeyRequestSchema` (`POST /auth/recovery-key`), хелпер `rotateRecoveryKey`, векторы `crypto/recovery-rotate.json` и `api/bodies.json`; `settings.recoveryKeyConfirmed` в документе аккаунта (document-model §2).
+- 2026-10-25 · core · Журнал безопасности: `securityEventSchema`, маршрут `GET /me/security-events`, векторы.
 - 2026-10-25 — **server:** автоматическое развёртывание на VPS через GitHub Actions (`.github/workflows/deploy.yml`, `infra/deploy/`, инструкция `infra/DEPLOY.md`): образы в GHCR, идемпотентная подготовка сервера по SSH (Docker, ufw, автообновления, ночные копии, секреты создаются на сервере), миграции, проверка по HTTPS и WebSocket, автоматический откат; веб-приложение отдаёт Caddy на том же домене (`<ip>.sslip.io` без своего домена). Проверка на имитации VPS в CI (`infra/deploy/test/e2e.sh`).
 - 2026-10-25 — **server:** деплой без Docker Hub на сервере (PostgreSQL перекладывается в GHCR, Docker — из репозитория Ubuntu), список нужных серверу внешних адресов в `infra/DEPLOY.md`, лимиты памяти под VPS 4 ГБ.
 - 2026-10-25 — **server:** замена ключа восстановления `POST /v1/auth/recovery-key` (подтверждение паролем, атомарная замена, отмена начатых восстановлений) и журнал безопасности `GET /v1/me/security-events`; контракты `api.md`, `crypto.md` §4; миграция `0002_security_events`.

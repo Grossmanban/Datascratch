@@ -2,6 +2,9 @@ import { ImagePlus, MoveVertical, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { attachmentUrl, resizeImage, storeAttachment } from "@/data/attachments";
+import { runtime } from "@/data/runtime";
+import { updateNote } from "@/domain/actions";
+import { setNoteMeta } from "@/domain/note";
 import type { NoteCover } from "@/lib/shared";
 import { Button, cn, Spinner, toast } from "@/ui";
 
@@ -46,6 +49,29 @@ export async function pickImage(): Promise<File | null> {
   });
 }
 
+/** Make `file` the note's cover (spec/12 §12.7): encrypted image + card thumbnail. */
+export async function setCoverImage(noteId: string, file: File) {
+  if (!file.type.startsWith("image/")) throw new Error("not_image");
+  const store = runtime().store;
+  const key = await store.keyFor(noteId);
+  if (!key) throw new Error("no_key");
+  const doc = await store.load(noteId);
+  const { cover, thumb } = await uploadCover(noteId, key, file);
+  setNoteMeta(doc, { cover: { attachmentId: cover, offsetY: 0.5 } });
+  updateNote(noteId, { coverThumb: thumb });
+}
+
+export async function removeCover(noteId: string) {
+  setNoteMeta(await runtime().store.load(noteId), { cover: null });
+  updateNote(noteId, { coverThumb: null });
+}
+
+/** First image among dropped or pasted items. */
+export function imageFrom(data: DataTransfer | null): File | null {
+  for (const f of Array.from(data?.files ?? [])) if (f.type.startsWith("image/")) return f;
+  return null;
+}
+
 /** Encrypt and store a cover (2400px) plus a list thumbnail (640px). */
 export async function uploadCover(noteId: string, key: Uint8Array, file: File) {
   const [big, small] = await Promise.all([resizeImage(file, 2400), resizeImage(file, 640, 0.8)]);
@@ -61,6 +87,7 @@ export function CoverImage({
   onChange,
   onReposition,
   onRemove,
+  onDropImage,
   auth,
   persist,
 }: {
@@ -70,12 +97,15 @@ export function CoverImage({
   onChange?: () => void;
   onReposition?: (offsetY: number) => void;
   onRemove?: () => void;
+  /** An image dropped onto the cover replaces it. */
+  onDropImage?: (file: File) => void;
   auth?: string | null;
   persist?: boolean;
 }) {
   const { t } = useTranslation();
   const { url, failed } = useAttachmentUrl(cover.attachmentId, keyFor, { auth, persist });
   const [moving, setMoving] = useState(false);
+  const [dropping, setDropping] = useState(false);
   const [offset, setOffset] = useState(cover.offsetY);
   const drag = useRef<{ y: number; start: number } | null>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -84,8 +114,25 @@ export function CoverImage({
   return (
     <div
       ref={box}
-      className={cn("group relative h-[200px] overflow-hidden rounded-2xl bg-ink/5 sm:h-[260px]", moving && "cursor-ns-resize")}
+      className={cn(
+        "group relative h-[150px] overflow-hidden rounded-2xl bg-ink/5 sm:h-[190px]",
+        moving && "cursor-ns-resize",
+        dropping && "ring-2 ring-accent/50",
+      )}
       data-testid="doc-cover"
+      onDragOver={(e) => {
+        if (!editable || !onDropImage || !e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        setDropping(true);
+      }}
+      onDragLeave={() => setDropping(false)}
+      onDrop={(e) => {
+        setDropping(false);
+        const file = imageFrom(e.dataTransfer);
+        if (!file || !onDropImage) return;
+        e.preventDefault();
+        onDropImage(file);
+      }}
       onPointerDown={(e) => {
         if (!moving) return;
         drag.current = { y: e.clientY, start: offset };
@@ -134,5 +181,6 @@ export function CoverImage({
 }
 
 export function coverError(e: unknown, t: (k: string) => string) {
-  toast((e as Error).message === "payload_too_large" ? "200 MB max" : t("history.loadFailed"), { tone: "danger" });
+  const code = (e as Error).message;
+  toast(code === "payload_too_large" ? "200 MB max" : code === "not_image" ? t("cover.notImage") : t("history.loadFailed"), { tone: "danger" });
 }

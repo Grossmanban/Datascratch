@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { CoverDialog } from "@/features/doc/CoverDialog";
 import { consumeFreshAccount, useAuth } from "@/auth/session";
 import { hasRuntime, startRuntime } from "@/data/runtime";
 import { bootstrapAccount, purgeOldTrash } from "@/domain/actions";
@@ -125,6 +126,7 @@ export function AppShell() {
       <CommandPalette />
       <ShareDialog />
       <HistoryDialog />
+      <CoverDialog />
       <NewNotebookDialog />
     </div>
   );

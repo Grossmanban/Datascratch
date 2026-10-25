@@ -99,16 +99,19 @@ export function CalendarPage() {
                 <button
                   key={d}
                   onClick={() => setDate(d)}
+                  aria-pressed={sel}
+                  aria-current={isToday ? "date" : undefined}
                   className={cn(
                     "relative flex flex-col items-center rounded-xl py-2 transition-colors",
-                    sel ? "bg-ink text-canvas shadow-card" : "hover:bg-ink/[0.04]",
+                    // Accent (not inverted ink): reads the same in both themes.
+                    sel ? "bg-accent text-[var(--ds-text-on-accent)] shadow-card" : "hover:bg-ink/[0.04]",
                   )}
                 >
-                  <span className={cn("text-[11px] font-medium uppercase", sel ? "text-canvas/70" : "text-ink-2")}>
+                  <span className={cn("text-[11px] font-medium uppercase", sel ? "text-[var(--ds-text-on-accent)]" : "text-ink-2")}>
                     {dateFormat({ weekday: "short" }, locale).format(dd)}
                   </span>
                   <span className={cn("mt-0.5 text-[18px] font-semibold", !sel && isToday && "text-accent")}>{dd.getDate()}</span>
-                  <span className={cn("mt-1 size-1 rounded-full", marks[d] ? (sel ? "bg-canvas" : "bg-accent") : "bg-transparent")} />
+                  <span className={cn("mt-1 size-1 rounded-full", marks[d] ? (sel ? "bg-[var(--ds-text-on-accent)]" : "bg-accent") : "bg-transparent")} />
                 </button>
               );
             })}

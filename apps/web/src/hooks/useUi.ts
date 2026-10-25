@@ -15,6 +15,8 @@ type UiState = {
   paletteOpen: boolean;
   shareFor: { kind: "note" | "notebook"; id: string } | null;
   historyFor: string | null;
+  /** Note whose cover dialog is open (spec/12 §12.7). */
+  coverFor: string | null;
   newNotebookFor: string | null;
   docView: "grid" | "list";
   sort: "updated" | "created" | "title";
@@ -26,6 +28,7 @@ export const useUi = create<UiState>(() => ({
   paletteOpen: false,
   shareFor: null,
   historyFor: null,
+  coverFor: null,
   newNotebookFor: null,
   docView: (() => {
     try {

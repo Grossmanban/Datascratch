@@ -65,14 +65,30 @@ jobs:
             CODE_SIGNING_ALLOWED=NO | tee build/build.log | xcbeautify --renderer github-actions || \
           (grep -E "error:" build/build.log | head -50; exit 1)
 
-      - name: Test
+      - name: Unit tests
+        timeout-minutes: 15
         run: |
           set -o pipefail
           xcodebuild test-without-building \
             -project Datascratch.xcodeproj -scheme Datascratch \
             -destination "${{ steps.sim.outputs.destination }}" \
             -derivedDataPath build/DerivedData \
-            -resultBundlePath build/Tests-${{ matrix.family }}.xcresult \
+            -only-testing:DatascratchTests \
+            -resultBundlePath build/Unit-${{ matrix.family }}.xcresult \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 60 \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
+
+      - name: UI tests
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project Datascratch.xcodeproj -scheme Datascratch \
+            -destination "${{ steps.sim.outputs.destination }}" \
+            -derivedDataPath build/DerivedData \
+            -only-testing:DatascratchUITests \
+            -resultBundlePath build/UI-${{ matrix.family }}.xcresult \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
             CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
 
       - name: Upload test results
@@ -80,5 +96,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: xcresult-${{ matrix.family }}
-          path: apps/ios/build/Tests-${{ matrix.family }}.xcresult
+          path: apps/ios/build/*.xcresult
           retention-days: 7

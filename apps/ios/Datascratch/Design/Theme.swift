@@ -1,12 +1,29 @@
 import SwiftUI
 import UIKit
+#if canImport(DSDesign)
+import DSDesign
+#endif
 
-// Built-in stand-in for the "Quiet paper" tokens (contracts/design-tokens.md, D-38).
-// Values mirror the contract; once the DSDesign package lands, `Theme` forwards
-// to it (see Design/DesignBridge.swift) and these literals go away.
+// "Quiet paper" tokens (contracts/design-tokens.md, D-38). With the DSDesign
+// package linked, colours come from its generated tokens; without it, the
+// literals below (copied from the contract) stand in.
 
 enum Theme {
     enum Palette {
+        #if canImport(DSDesign)
+        static var canvas: Color { DSColorToken.bgCanvas.color }
+        static var surface: Color { DSColorToken.bgSurface.color }
+        static var sidebar: Color { DSColorToken.bgSidebar.color }
+        static var elevated: Color { DSColorToken.bgElevated.color }
+        static var textPrimary: Color { DSColorToken.textPrimary.color }
+        static var textSecondary: Color { DSColorToken.textSecondary.color }
+        static var textTertiary: Color { DSColorToken.textTertiary.color }
+        static var separator: Color { DSColorToken.lineSeparator.color }
+        static var accent: Color { DSColorToken.accent.color }
+        static var danger: Color { DSColorToken.danger.color }
+        static var success: Color { DSColorToken.success.color }
+        static var warning: Color { DSColorToken.warning.color }
+        #else
         static let canvas = Color(light: 0xFAF8F4, dark: 0x1A1917)
         static let surface = Color(light: 0xFFFFFF, dark: 0x22211E)
         static let sidebar = Color(light: 0xF3EFE7, dark: 0x1F1E1B)
@@ -19,6 +36,7 @@ enum Theme {
         static let danger = Color(light: 0xD2453B, dark: 0xFF6B5E)
         static let success = Color(light: 0x3E8E5A, dark: 0x6BC48A)
         static let warning = Color(light: 0xC98A1B, dark: 0xF2B54B)
+        #endif
     }
 
     enum Space {
@@ -71,6 +89,10 @@ enum Theme {
 }
 
 extension Tint {
+    #if canImport(DSDesign)
+    var foreground: Color { (DSTintToken(rawValue: rawValue) ?? .gray).foreground }
+    var background: Color { (DSTintToken(rawValue: rawValue) ?? .gray).background }
+    #else
     var foreground: Color {
         switch self {
         case .red: Color(light: 0xC2413A, dark: 0xFF7A6E)
@@ -87,6 +109,7 @@ extension Tint {
     }
 
     var background: Color { foreground.opacity(0.14) }
+    #endif
 }
 
 extension Backdrop {

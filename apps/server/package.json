@@ -31,6 +31,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1156.0",
+    "@datascratch/agents": "workspace:^",
+    "@datascratch/shared": "workspace:^",
     "@fastify/cors": "^11.3.1",
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/swagger": "^9.9.2",

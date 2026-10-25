@@ -42,15 +42,23 @@ export async function runMigrations(pool: pg.Pool): Promise<void> {
   }
 }
 
+export interface AgentScope {
+  userId: string;
+  /** When set, access is narrowed to this grant's notebooks and permission. */
+  grantId?: string | undefined;
+}
+
 /**
- * Run `fn` with the database restricted to what the given agent token may see
- * (PostgreSQL Row-Level Security, D-30). Use for every query made on behalf of
- * an agent, in addition to the permission checks in code.
+ * Run `fn` with the database restricted to what an agent may see (PostgreSQL
+ * Row-Level Security, D-30): agent-mode notebooks of the user, narrowed to the
+ * grant's notebooks when a grant is given. Use for every query made on behalf
+ * of an agent, in addition to the permission checks in code.
  */
-export async function withAgentScope<T>(db: Db, tokenId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+export async function withAgentScope<T>(db: Db, scope: AgentScope, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`SET LOCAL ROLE ds_agent`);
-    await tx.execute(sql`SELECT set_config('ds.agent_token_id', ${tokenId}, true)`);
+    await tx.execute(sql`SELECT set_config('ds.agent_user_id', ${scope.userId}, true)`);
+    await tx.execute(sql`SELECT set_config('ds.agent_grant_id', ${scope.grantId ?? ''}, true)`);
     return fn(tx);
   });
 }

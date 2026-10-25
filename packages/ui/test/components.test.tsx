@@ -390,20 +390,111 @@ describe("Editor & lists v2", () => {
     await userEvent.click(row);
     expect(on).toHaveBeenCalledOnce();
   });
-  it("PenToolbar switches tool, colour and width", async () => {
+  it("PenToolbar switches tool, colour, width, eraser mode and undo", async () => {
     const { PenToolbar, defaultPenSelection } = await import("../src");
     const on = vi.fn();
-    const { rerender } = renderUI(<PenToolbar value={defaultPenSelection} onChange={on} />);
-    expect(screen.getByRole("toolbar")).toBeInTheDocument();
+    const undo = vi.fn();
+    const { rerender } = renderUI(
+      <PenToolbar
+        value={defaultPenSelection}
+        onChange={on}
+        canUndo
+        onUndo={undo}
+        onRedo={() => {}}
+      />,
+    );
     await userEvent.click(screen.getByRole("radio", { name: "Синий" }));
-    expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, ink: "blue" });
-    await userEvent.click(screen.getByRole("radio", { name: "Маркер" }));
-    expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, tool: "highlighter" });
-    rerender(<PenToolbar value={{ ...defaultPenSelection, tool: "highlighter" }} onChange={on} />);
+    expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, color: "blue" });
+    await userEvent.click(screen.getByRole("button", { name: "Текстовыделитель" }));
+    expect(on).toHaveBeenLastCalledWith({
+      ...defaultPenSelection,
+      tool: "highlighter",
+      color: "yellow",
+    });
+    rerender(
+      <PenToolbar
+        value={{ ...defaultPenSelection, tool: "highlighter", color: "yellow" }}
+        onChange={on}
+      />,
+    );
     expect(screen.getByRole("radio", { name: "Жёлтый" })).toHaveAttribute("aria-checked", "true");
     expect(screen.queryByRole("radio", { name: "Коричневый" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Ручка" }));
+    expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, tool: "pen", color: "black" });
     await userEvent.click(screen.getByRole("radio", { name: "Толстая" }));
-    expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, tool: "highlighter", width: 3 });
+    expect(on).toHaveBeenLastCalledWith({
+      ...defaultPenSelection,
+      tool: "highlighter",
+      color: "yellow",
+      width: 3,
+    });
+    rerender(<PenToolbar value={{ ...defaultPenSelection, tool: "eraser" }} onChange={on} />);
+    expect(screen.getByText("штрих")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Ластик/ }));
+    expect(on).toHaveBeenLastCalledWith({
+      ...defaultPenSelection,
+      tool: "eraser",
+      eraserMode: "pixel",
+    });
+    expect(screen.queryByRole("radiogroup", { name: "Цвет" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^Текст \(/ }));
+    expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, tool: null });
+    await userEvent.click(screen.getByRole("button", { name: "Рисовать мышью и пальцем" }));
+    expect(on).toHaveBeenLastCalledWith({
+      ...defaultPenSelection,
+      tool: "eraser",
+      drawWithAnyPointer: true,
+    });
+    rerender(
+      <PenToolbar
+        value={defaultPenSelection}
+        onChange={on}
+        canUndo
+        onUndo={undo}
+        onRedo={() => {}}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Отменить" }));
+    expect(undo).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Повторить" })).toBeDisabled();
+  });
+  it("SuggestionMenu marks the selected option and picks on click", async () => {
+    const { SuggestionMenu } = await import("../src");
+    const pick = vi.fn();
+    renderUI(
+      <SuggestionMenu
+        anchorRect={{ top: 100, left: 100, width: 1, height: 20 }}
+        selectedIndex={1}
+        onPick={pick}
+        groups={[
+          {
+            heading: "Текст",
+            items: [
+              { id: "h1", label: "Заголовок 1", hint: "#" },
+              { id: "task", label: "Задача", hint: "[]" },
+            ],
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("option", { name: /Задача/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("option", { name: /Задача/ })).toHaveAttribute("id", "ds-suggest-task");
+    await userEvent.click(screen.getByRole("option", { name: /Заголовок 1/ }));
+    expect(pick).toHaveBeenCalledWith(expect.objectContaining({ id: "h1" }));
+  });
+  it("FormatToolbar floats with a panel", async () => {
+    const { FormatToolbar, LinkPanel } = await import("../src");
+    const apply = vi.fn();
+    renderUI(
+      <FormatToolbar
+        aria-label="Формат"
+        anchorRect={{ top: 300, left: 200, width: 80, height: 20 }}
+        items={[{ id: "link", label: "Ссылка", icon: <Folder />, active: true, onClick: () => {} }]}
+        panel={<LinkPanel href="" onApply={apply} />}
+      />,
+    );
+    await userEvent.type(screen.getByPlaceholderText("Вставьте ссылку"), "https://ex.am{enter}");
+    expect(apply).toHaveBeenCalledWith("https://ex.am");
   });
   it("FormatToolbar reflects active marks and runs actions", async () => {
     const { FormatToolbar } = await import("../src");

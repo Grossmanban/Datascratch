@@ -1,0 +1,39 @@
+[package]
+name = "yrs-ffi"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "UniFFI bindings over Yrs (Yjs CRDT) for the Datascratch iOS client"
+license = "MIT"
+
+[lib]
+name = "yrs_ffi"
+crate-type = ["staticlib", "cdylib", "lib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+required-features = ["cli"]
+
+[features]
+cli = ["uniffi/cli"]
+
+[dependencies]
+yrs = { version = "=0.25.0", features = ["sync"] }
+uniffi = "0.32"
+thiserror = "2"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = "debuginfo"
+
+[dev-dependencies]
+base64 = "0.22"
+serde_json = "1"
+
+# Vendored yrs 0.25.0 with a fix for StickyIndex resolution through redone items
+# (see vendor/PATCHES.md). Remove once fixed upstream.
+[patch.crates-io]
+yrs = { path = "vendor/yrs" }

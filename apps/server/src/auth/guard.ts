@@ -14,6 +14,35 @@ export function bearer(req: FastifyRequest): string | null {
   return h.slice(7).trim() || null;
 }
 
+export const WEB_COOKIE = 'ds_web';
+export const WEB_SESSION_TTL_SEC = 60 * 60;
+
+export function readCookie(req: FastifyRequest, name: string): string | null {
+  const header = req.headers.cookie;
+  if (!header) return null;
+  for (const part of header.split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === name) return decodeURIComponent(v.join('='));
+  }
+  return null;
+}
+
+async function deviceActive(ctx: AppContext, userId: string, deviceId: string) {
+  const [dev] = await ctx.database.db
+    .select({ id: devices.id })
+    .from(devices)
+    .where(and(eq(devices.id, deviceId), eq(devices.userId, userId), isNull(devices.revokedAt)));
+  return !!dev;
+}
+
+/** The browser session cookie (set by POST /v1/auth/web-session); the device must still be active. */
+export async function verifyWebCookie(ctx: AppContext, req: FastifyRequest): Promise<UserPrincipal | null> {
+  const token = readCookie(req, WEB_COOKIE);
+  const claims = token ? await ctx.tokens.verifyWeb(token) : null;
+  if (!claims || !(await deviceActive(ctx, claims.userId, claims.deviceId))) return null;
+  return { kind: 'user', userId: claims.userId, deviceId: claims.deviceId };
+}
+
 /** Verify an access token and that its device (session) has not been revoked. */
 export async function verifyUserToken(ctx: AppContext, token: string): Promise<UserPrincipal | null> {
   const claims = await ctx.tokens.verifyAccess(token);

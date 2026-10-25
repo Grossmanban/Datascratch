@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { requireUser } from '../auth/guard.js';
+import { WEB_COOKIE, WEB_SESSION_TTL_SEC, requireUser } from '../auth/guard.js';
 import type { AppContext } from '../context.js';
 import { devices, docs, recoveryTokens, refreshTokens, users } from '../db/schema.js';
 import { fromB64, randomToken, safeEqual, sha256, toB64, uuidv7 } from '../lib/encoding.js';
@@ -284,6 +284,32 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           return revokeOtherDevices(ctx, tx, p.userId, p.deviceId);
         });
         publishDeviceRevocations(ctx, revoked, 'password changed');
+        return reply.code(204).send(null);
+      },
+    );
+
+    // Browser session for server-rendered pages (OAuth consent of agents): the web app
+    // calls this with its access token (credentials: "include"), then navigates there.
+    const secure = ctx.config.PUBLIC_URL.startsWith('https:') ? '; Secure' : '';
+    app.post(
+      '/auth/web-session',
+      { schema: { tags: ['auth'], security: [{ bearer: [] }], response: { 204: z.null(), ...errorResponses } } },
+      async (req, reply) => {
+        const p = await requireUser(ctx, req);
+        const token = await ctx.tokens.signWeb(p, WEB_SESSION_TTL_SEC);
+        reply.header(
+          'set-cookie',
+          `${WEB_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${WEB_SESSION_TTL_SEC}${secure}`,
+        );
+        return reply.code(204).send(null);
+      },
+    );
+
+    app.delete(
+      '/auth/web-session',
+      { schema: { tags: ['auth'], response: { 204: z.null() } } },
+      async (_req, reply) => {
+        reply.header('set-cookie', `${WEB_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`);
         return reply.code(204).send(null);
       },
     );

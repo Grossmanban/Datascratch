@@ -20,6 +20,9 @@ function subkey(secret: Uint8Array, label: string): Uint8Array {
 export class TokenSigner {
   readonly #accessKey: Uint8Array;
   readonly #guestKey: Uint8Array;
+  readonly #webKey: Uint8Array;
+  /** Secret handed to the agents plugin (signs its consent-form state). */
+  readonly pluginSecret: Uint8Array;
   /** Key for deterministic values that must not be guessable (fake prelogin salts). */
   readonly fakeSaltKey: Uint8Array;
 
@@ -29,6 +32,8 @@ export class TokenSigner {
   ) {
     this.#accessKey = subkey(secret, 'jwt-access');
     this.#guestKey = subkey(secret, 'jwt-guest');
+    this.#webKey = subkey(secret, 'jwt-web');
+    this.pluginSecret = subkey(secret, 'agents-plugin');
     this.fakeSaltKey = subkey(secret, 'fake-salt');
   }
 
@@ -48,6 +53,27 @@ export class TokenSigner {
     try {
       const { payload } = await jwtVerify(token, this.#accessKey, { issuer: ISSUER, algorithms: ['HS256'] });
       if (payload.typ !== 'access' || typeof payload.sub !== 'string' || typeof payload.did !== 'string') return null;
+      return { userId: payload.sub, deviceId: payload.did };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Browser session for server-rendered pages (OAuth consent of the agents plugin). */
+  async signWeb(c: AccessClaims, ttlSec: number): Promise<string> {
+    return new SignJWT({ did: c.deviceId, typ: 'web' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuer(ISSUER)
+      .setSubject(c.userId)
+      .setIssuedAt()
+      .setExpirationTime(Math.floor(Date.now() / 1000) + ttlSec)
+      .sign(this.#webKey);
+  }
+
+  async verifyWeb(token: string): Promise<AccessClaims | null> {
+    try {
+      const { payload } = await jwtVerify(token, this.#webKey, { issuer: ISSUER, algorithms: ['HS256'] });
+      if (payload.typ !== 'web' || typeof payload.sub !== 'string' || typeof payload.did !== 'string') return null;
       return { userId: payload.sub, deviceId: payload.did };
     } catch {
       return null;

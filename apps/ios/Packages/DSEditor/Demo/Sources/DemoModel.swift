@@ -18,8 +18,6 @@ final class DemoModel {
 
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
     let selectedTraits = !ProcessInfo.processInfo.arguments.contains("-noSelectedTraits")
-    /// UI-test bisection (temporary): the editor kept full height under the keyboard.
-    let fullHeightEditor = ProcessInfo.processInfo.arguments.contains("-fullHeightEditor")
     private let images = DemoImages()
 
     static var fileURL: URL {
@@ -59,6 +57,8 @@ final class DemoModel {
             editor.onScroll = { [weak self] y in self?.scrollOffset = y }
         }
         if args.contains("-noKeyboardInset") { editor.adjustsForKeyboard = false }
+        // The tool palette floats over the bottom of the editor.
+        editor.overlayInsets = UIEdgeInsets(top: 0, left: 0, bottom: 76, right: 0)
         editor.onPaletteRequest = { [weak self] _ in self?.showPalette = true }
     }
 

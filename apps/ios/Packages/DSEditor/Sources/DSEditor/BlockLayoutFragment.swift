@@ -163,6 +163,17 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
         }
     }
 
+    /// Room the date chips take after the text (gaps included); the renderer keeps every line of
+    /// a dated task this much short of the column so the chips always fit after the last line.
+    static func dateChipsWidth(scheduled: String?, deadline: String?, fontSize: CGFloat) -> CGFloat {
+        var texts: [String] = []
+        if let s = scheduled { texts.append("◷ " + shortDate(s)) }
+        if let dl = deadline { texts.append("⚑ " + shortDate(dl)) }
+        guard !texts.isEmpty else { return 0 }
+        let font = UIFont.systemFont(ofSize: max(11, fontSize * 0.7), weight: .medium)
+        return texts.reduce(8) { $0 + NSAttributedString(string: $1, attributes: [.font: font]).size().width + 12 + 6 }
+    }
+
     private func drawDateChips(scheduled: String?, deadline: String?, d: ParagraphDecoration, in ctx: CGContext) {
         guard let last = textLineFragments.last else { return }
         var chips: [(String, UIColor)] = []

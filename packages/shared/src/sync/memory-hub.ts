@@ -150,7 +150,16 @@ export class MemorySyncHub {
   private receive(conn: Connection, raw: string): void {
     const msg = parseClientMessage(raw);
     if (!msg) {
-      this.error(conn, "protocol_mismatch", "invalid message");
+      const hello = safeJson(raw) as { type?: unknown; protocol?: unknown } | null;
+      if (hello?.type === "hello" && hello.protocol !== SYNC_PROTOCOL_VERSION) {
+        this.error(
+          conn,
+          "protocol_mismatch",
+          `protocol ${String(hello.protocol)} is not supported`,
+        );
+      } else {
+        this.error(conn, "bad_request", "invalid message");
+      }
       return;
     }
     if (msg.type === "hello") {
@@ -270,6 +279,14 @@ export class MemorySyncHub {
       });
       first = false;
     }
+  }
+}
+
+function safeJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
   }
 }
 

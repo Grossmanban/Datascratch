@@ -108,6 +108,26 @@ describe("sync client", () => {
     expect(statuses.at(-1)).toBe("online");
   });
 
+  it("holds queued pushes of a document until it is subscribed", async () => {
+    const hub = new MemorySyncHub();
+    const storage = new MemorySyncStorage();
+    const first = makeClient(hub, "dev-a", { storage });
+    const d1 = new Y.Doc();
+    await first.client.addDoc(DOC, d1);
+    d1.getText("t").insert(0, "queued");
+    await first.client.stop();
+    expect(await storage.listOutbox()).toHaveLength(1);
+
+    const again = makeClient(hub, "dev-a", { storage });
+    again.client.start();
+    await until(() => again.client.status === "online");
+    await new Promise((r) => setTimeout(r, 30));
+    expect(hub.docs.get(DOC)?.items.length ?? 0).toBe(0);
+    await again.client.addDoc(DOC, d1);
+    await until(() => hub.docs.get(DOC)?.items.length === 1);
+    await until(async () => (await storage.listOutbox()).length === 0);
+  });
+
   it("catches up from lastSeq after restart with persisted storage", async () => {
     const hub = new MemorySyncHub({ catchUpChunk: 2 });
     const a = makeClient(hub, "dev-a");

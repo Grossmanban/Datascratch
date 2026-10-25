@@ -3,6 +3,30 @@ import DSCore
 import Foundation
 import os
 
+/// Server side of the library (set by `ServerConnection` when an account on a server
+/// is signed in): notebooks must exist on the server, documents go to the sync engine.
+protocol CoreLibraryRemote: AnyObject {
+    func notebookCreated(id: String, mode: NotebookMode, wrappedKey: Data, key: Data)
+    func notebookModeChanged(id: String, mode: NotebookMode, key: Data?)
+    func notebookDeleted(id: String)
+    /// A document was opened; from now on the sync engine persists and sends its updates.
+    func documentOpened(_ crdt: CRDTDocument, notebookId: String?)
+}
+
+/// `NoteMeta.wrappedKey` by note id, readable from the sync engine's actor.
+nonisolated final class WrappedKeyIndex: @unchecked Sendable {
+    private let lock = NSLock()
+    private var keys: [String: (notebookId: String, wrapped: String)] = [:]
+
+    func set(noteId: String, notebookId: String, wrapped: String) {
+        lock.withLock { keys[noteId] = (notebookId, wrapped) }
+    }
+
+    func wrapped(noteId: String, notebookId: String) -> String? {
+        lock.withLock { keys[noteId].flatMap { $0.notebookId == notebookId ? $0.wrapped : nil } }
+    }
+}
+
 /// The library stored the way the contracts describe it: one Yjs `account`
 /// document, a `notebook` document per notebook and a `note` document per note
 /// (Yrs via DSCore), every update persisted in DSCore's `LocalStore` together
@@ -20,10 +44,26 @@ final class CoreLibrary: LibraryBackend {
 
     let store: LocalStore
     let keys: KeyRing
+    /// Where keys and the server session are kept (Keychain on devices).
+    let secrets: any SecretStore
     private(set) var account: AccountDocument
     private var notebookDocs: [String: NotebookDocument] = [:]
     private var noteDocs: [String: NoteDocument] = [:]
     private var subscriptions: [String: CRDTSubscription] = [:]
+    private var remoteSubscriptions: [String: CRDTSubscription] = [:]
+    private var reloadTask: Task<Void, Never>?
+    let wrappedKeys = WrappedKeyIndex()
+    /// While set, the sync engine stores and sends document updates (instead of `observe`).
+    weak var remote: (any CoreLibraryRemote)? {
+        didSet {
+            guard remote != nil else { return }
+            subscriptions.removeAll()
+            remote?.documentOpened(account.crdt, notebookId: nil)
+            for (id, doc) in notebookDocs { remote?.documentOpened(doc.crdt, notebookId: id) }
+            for (id, doc) in noteDocs { remote?.documentOpened(doc.crdt, notebookId: notebookIdOfNote[id]) }
+        }
+    }
+    private var notebookIdOfNote: [String: String] = [:]
     private var overlay: Overlay
     var onExternalChange: ((LibrarySnapshot) -> Void)?
 
@@ -35,9 +75,10 @@ final class CoreLibrary: LibraryBackend {
     }
 
     /// Opens (or creates) the library in `directory`.
-    init(store: LocalStore, keys: KeyRing) throws {
+    init(store: LocalStore, keys: KeyRing, secrets: any SecretStore = InMemorySecretStore()) throws {
         self.store = store
         self.keys = keys
+        self.secrets = secrets
         if try keys.masterKey() == nil {
             // Local-only account until a server is connected: a device master key.
             try keys.setMasterKey(DSCrypto.newKey())
@@ -52,6 +93,7 @@ final class CoreLibrary: LibraryBackend {
         let accountId = existingId ?? DSCore.EntityID.make()
         account = AccountDocument(try Self.open(.account, docId: accountId, notebookId: nil, store: store))
         subscriptions[accountId] = observe(account.crdt, notebookId: nil)
+        remoteSubscriptions[accountId] = observeRemote(account.crdt)
         if existingId == nil {
             try account.initialize()
             try store.setString(accountId, for: Self.accountDocKey)
@@ -64,7 +106,8 @@ final class CoreLibrary: LibraryBackend {
     static func open(directory: URL) throws -> CoreLibrary {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let store = try LocalStore(url: directory.appendingPathComponent("library.sqlite"))
-        return try CoreLibrary(store: store, keys: KeyRing(store: secretStore()))
+        let secrets = try secretStore()
+        return try CoreLibrary(store: store, keys: KeyRing(store: secrets), secrets: secrets)
     }
 
     /// The Keychain; on an unsigned simulator build (CI) the Keychain is unavailable
@@ -86,7 +129,8 @@ final class CoreLibrary: LibraryBackend {
     }
 
     static func inMemory() throws -> CoreLibrary {
-        try CoreLibrary(store: LocalStore.inMemory(), keys: KeyRing(store: InMemorySecretStore()))
+        let secrets = InMemorySecretStore()
+        return try CoreLibrary(store: LocalStore.inMemory(), keys: KeyRing(store: secrets), secrets: secrets)
     }
 
     // MARK: - Documents
@@ -119,9 +163,10 @@ final class CoreLibrary: LibraryBackend {
         let isNew = try store.document(id) == nil
         let crdt = try Self.open(.notebook, docId: id, notebookId: id, store: store)
         let doc = NotebookDocument(crdt)
-        subscriptions[id] = observe(crdt, notebookId: id)
+        attach(crdt, notebookId: id)
         if isNew { try doc.initialize() }
         notebookDocs[id] = doc
+        remote?.documentOpened(crdt, notebookId: id)
         return doc
     }
 
@@ -130,10 +175,62 @@ final class CoreLibrary: LibraryBackend {
         let isNew = try store.document(id) == nil
         let crdt = try Self.open(.note, docId: id, notebookId: notebookId, store: store)
         let doc = NoteDocument(crdt)
-        subscriptions[id] = observe(crdt, notebookId: notebookId)
+        attach(crdt, notebookId: notebookId)
         if isNew { try doc.initialize() }
         noteDocs[id] = doc
+        notebookIdOfNote[id] = notebookId
+        remote?.documentOpened(crdt, notebookId: notebookId)
         return doc
+    }
+
+    private func attach(_ crdt: CRDTDocument, notebookId: String?) {
+        if remote == nil { subscriptions[crdt.docId] = observe(crdt, notebookId: notebookId) }
+        remoteSubscriptions[crdt.docId] = observeRemote(crdt)
+    }
+
+    /// Changes from other devices (applied by the sync engine) refresh the snapshot.
+    private func observeRemote(_ crdt: CRDTDocument) -> CRDTSubscription {
+        crdt.observeUpdates { _, origin in
+            guard origin == .remote else { return }
+            Task { @MainActor in self.scheduleReload() }
+        }
+    }
+
+    private func scheduleReload() {
+        reloadTask?.cancel()
+        reloadTask = Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            onExternalChange?(loadSnapshot())
+        }
+    }
+
+    /// Switches to the account document of a server account (after sign-in / sign-up).
+    func adoptAccount(docId: String, isNew: Bool) throws {
+        guard docId != account.accountDocId else { return }
+        notebookDocs.removeAll()
+        noteDocs.removeAll()
+        subscriptions.removeAll()
+        remoteSubscriptions.removeAll()
+        account = AccountDocument(try Self.open(.account, docId: docId, notebookId: nil, store: store))
+        attach(account.crdt, notebookId: nil)
+        if isNew, account.crdt.stateVector().count <= 1 { try account.initialize() }
+        try store.setString(docId, for: Self.accountDocKey)
+        remote?.documentOpened(account.crdt, notebookId: nil)
+        for ref in account.notebooks() { _ = try? notebookDocument(ref.id) }
+        onExternalChange?(loadSnapshot())
+    }
+
+    /// The key a share link carries: the note key or the notebook key (crypto.md §7).
+    func shareKey(for target: ShareTarget) throws -> Data? {
+        switch target.kind {
+        case .notebook:
+            return try keys.notebookKey(target.id)
+        case .note:
+            guard let notebookId = notebookIdOfNote[target.id],
+                  let wrapped = wrappedKeys.wrapped(noteId: target.id, notebookId: notebookId) else { return nil }
+            return try keys.noteKey(noteId: target.id, wrappedKey: wrapped, notebookId: notebookId)
+        }
     }
 
     // MARK: - Snapshot
@@ -177,6 +274,7 @@ final class CoreLibrary: LibraryBackend {
     }
 
     private func snapshotNote(_ meta: DSCore.NoteMeta, notebookId: String) -> (NoteMeta, NoteBody)? {
+        wrappedKeys.set(noteId: meta.id, notebookId: notebookId, wrapped: meta.wrappedKey)
         guard let note = try? noteDocument(meta.id, notebookId: notebookId) else { return nil }
         let body = NoteBodyCodec.body(from: (try? note.blocks()) ?? [])
         var item = NoteMeta(id: meta.id, notebookId: notebookId, folderId: meta.folderId, parentNoteId: meta.parentNoteId,
@@ -241,7 +339,11 @@ final class CoreLibrary: LibraryBackend {
         let before = Dictionary(old.notebooks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         for notebook in new.notebooks where before[notebook.id] != notebook {
             if before[notebook.id] == nil, try keys.notebookKey(notebook.id) == nil {
-                _ = try keys.createNotebookKey(notebookId: notebook.id)
+                let (key, wrapped) = try keys.createNotebookKey(notebookId: notebook.id)
+                remote?.notebookCreated(id: notebook.id, mode: notebook.mode, wrappedKey: wrapped, key: key)
+            } else if let previous = before[notebook.id], previous.mode != notebook.mode {
+                let key = try keys.notebookKey(notebook.id)
+                remote?.notebookModeChanged(id: notebook.id, mode: notebook.mode, key: notebook.mode == .agent ? key : nil)
             }
             _ = try notebookDocument(notebook.id)
             try account.putNotebook(NotebookRef(id: notebook.id, spaceId: notebook.spaceId, name: notebook.name,
@@ -253,6 +355,7 @@ final class CoreLibrary: LibraryBackend {
         let ids = Set(new.notebooks.map(\.id))
         for notebook in old.notebooks where !ids.contains(notebook.id) {
             try account.deleteNotebook(id: notebook.id)
+            remote?.notebookDeleted(id: notebook.id)
             for note in old.notes where note.notebookId == notebook.id {
                 noteDocs[note.id] = nil
                 subscriptions[note.id] = nil
@@ -335,6 +438,7 @@ final class CoreLibrary: LibraryBackend {
         let notebook = try notebookDocument(meta.notebookId)
         if try keys.notebookKey(meta.notebookId) == nil { _ = try keys.createNotebookKey(notebookId: meta.notebookId) }
         let (_, wrapped) = try keys.createNoteKey(noteId: meta.id, notebookId: meta.notebookId)
+        wrappedKeys.set(noteId: meta.id, notebookId: meta.notebookId, wrapped: wrapped)
         let doc = try noteDocument(meta.id, notebookId: meta.notebookId)
         try notebook.putNote(coreMeta(meta, wrappedKey: wrapped))
         try write(body: body, title: meta.title, previous: nil, to: doc, resolve: resolve)
@@ -350,7 +454,10 @@ final class CoreLibrary: LibraryBackend {
         guard let targetKey = try keys.notebookKey(meta.notebookId) else { return }
         let wrapped = try DSCrypto.wrapKey(noteKey, with: targetKey, ad: CryptoAD.noteKey(meta.id))
         try source.purgeNote(id: meta.id)
-        try notebookDocument(meta.notebookId).putNote(coreMeta(meta, wrappedKey: DSCore.Base64URL.encode(wrapped)))
+        let encoded = DSCore.Base64URL.encode(wrapped)
+        wrappedKeys.set(noteId: meta.id, notebookId: meta.notebookId, wrapped: encoded)
+        notebookIdOfNote[meta.id] = meta.notebookId
+        try notebookDocument(meta.notebookId).putNote(coreMeta(meta, wrappedKey: encoded))
         _ = try store.ensureDocument(docId: meta.id, kind: .note, notebookId: meta.notebookId)
     }
 

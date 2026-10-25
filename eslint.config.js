@@ -11,6 +11,10 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/**",
+      // Temporary files tsup/vite write next to their config while a build runs.
+      "**/tsup.config.bundled_*",
+      "**/vite.config.*.timestamp-*",
+      "**/vitest.config.*.timestamp-*",
       "**/build/**",
       "**/coverage/**",
       "**/node_modules/**",

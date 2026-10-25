@@ -13,14 +13,16 @@
 | `bg.sidebar` | `#F3EFE7` | `#1F1E1B` | боковая панель |
 | `bg.elevated` | `#FFFFFFCC` | `#2A2926CC` | стеклянные плавающие панели (с размытием) |
 | `text.primary` | `#1D1C1A` | `#ECE9E3` | основной текст («чернила») |
-| `text.secondary` | `#6B6862` | `#A19D95` | вторичный |
-| `text.tertiary` | `#9C978E` | `#77736C` | подсказки |
+| `text.secondary` | `#57544F` | `#B1ADA7` | вторичный |
+| `text.tertiary` | `#706B62` | `#95918A` | значимый третичный текст: даты, подписи, счётчики, подсказки клавиш |
 | `line.separator` | `#E6E1D8` | `#34322E` | разделители |
-| `accent` | `#2E5BDB` | `#7B9BFF` | акцент («синие чернила») |
-| `danger` | `#D2453B` | `#FF6B5E` | удаление, просрочено |
-| `success` | `#3E8E5A` | `#6BC48A` | выполнено |
-| `warning` | `#C98A1B` | `#F2B54B` | дедлайн скоро |
+| `accent` | `#2B58DA` | `#7B9BFF` | акцент («синие чернила») |
+| `danger` | `#B43329` | `#FF6B5E` | удаление, просрочено |
+| `success` | `#317047` | `#6BC48A` | выполнено |
+| `warning` | `#855B12` | `#F2B54B` | дедлайн скоро |
 | `text.onAccent` | `#FFFFFF` | = `bg.canvas` | текст и иконки на заливке `accent`/`danger` (в тёмной теме акцент светлый, белый на нём не читается) |
+
+**Контраст (обязательно).** Любой цвет, которым пишут текст, проходит WCAG AA в обеих темах на всех фонах, где встречается (`bg.canvas`, `bg.surface`, `bg.sidebar`, `bg.elevated`, мягкие подложки 14 %, `tint.*.bg`): `text.primary` ≥ 12:1, `text.secondary` ≥ 6:1, `text.tertiary`, `accent`, `danger`, `success`, `warning`, `tint.*.fg` ≥ 4,5:1. `text.tertiary` — для значимого вторичного текста; декоративные линии и обводки берут его с прозрачностью. Проверяется тестом `packages/design-tokens/test/tokens.test.mjs` в CI. Точные значения `tint.*` — в `packages/design-tokens/tokens.json` (уточнение 2026-10-25 по замечанию web-app: прежние tertiary/semantic-цвета светлой темы давали 2,5–3,9:1).
 
 **Чернила пера:** `ink.black #1D1C1A`, `ink.blue #2E5BDB`, `ink.red #D2453B`, `ink.green #3E8E5A`, `ink.purple #7A4FD6`, `ink.brown #8A5A32`; маркеры: `highlight.yellow #FFE36E80`, `highlight.green #9BE3A880`, `highlight.pink #FFB3C780`, `highlight.blue #A9CCFF80`. В тёмной теме чернила осветляются генератором (те же имена).
 

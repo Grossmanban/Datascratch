@@ -13,6 +13,10 @@ struct DatascratchApp: App {
         .commands { AppCommands() }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { app.library.flush() }
+            if phase == .active {
+                app.settings.applyAppearanceToWindows()
+                app.refreshRecoveryKeyState()
+            }
         }
 
         // A single document in its own window (Stage Manager, split view).
@@ -20,6 +24,8 @@ struct DatascratchApp: App {
             if let noteId {
                 NoteWindow(noteId: noteId)
                     .environment(app)
+                    .preferredColorScheme(app.settings.colorScheme)
+                    .onAppear { app.settings.applyAppearanceToWindows() }
             }
         }
     }
@@ -42,6 +48,7 @@ struct RootView: View {
         .animation(Theme.Motion.smooth, value: app.phase)
         .preferredColorScheme(app.settings.colorScheme)
         .tint(Theme.Palette.accent)
+        .onAppear { app.settings.applyAppearanceToWindows() }
         .onOpenURL { url in
             app.pendingRoute = AppRoute.parse(url, webHost: app.webHost)
         }

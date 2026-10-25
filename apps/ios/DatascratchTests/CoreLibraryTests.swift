@@ -62,6 +62,30 @@ struct CoreLibraryTests {
         #expect(reloaded.taskEntries.contains { $0.text == "Ship it" && $0.attributes.scheduled == "2026-10-27" })
     }
 
+    /// The user's cover image lives in `meta.cover` and its thumbnail in `NoteMeta.coverThumb`.
+    @Test func coverImageAndThumbnailPersist() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let library = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        library.seedIfEmpty()
+        let notebooks = library.notebooks(in: library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
+        let note = library.createNote(in: notebook.id, folder: nil, title: "Trip")
+        library.updateNote(note.id) {
+            $0.coverImage = NoteCover(attachmentId: "cover-1", offsetY: 0.25)
+            $0.coverThumb = "thumb-1"
+        }
+        let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        let again = try #require(reloaded.note(note.id))
+        #expect(again.coverImage == NoteCover(attachmentId: "cover-1", offsetY: 0.25))
+        #expect(again.coverThumb == "thumb-1")
+
+        reloaded.updateNote(note.id) { $0.coverImage = nil; $0.coverThumb = nil }
+        let cleared = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        #expect(cleared.note(note.id)?.coverImage == nil)
+        #expect(cleared.note(note.id)?.coverThumb == nil)
+    }
+
     @Test func notebookMetaCarriesNamesForAgents() throws {
         let core = try CoreLibrary.inMemory()
         let library = LibraryStore(backend: core)
@@ -139,6 +163,50 @@ struct CoreLibrarySafetyTests {
         #expect(blocks.contains { $0.text == "Plain, edited" })
         let taskBlock = blocks.first { $0.type == BlockType.taskList }?.children.first
         #expect(taskBlock?.attrs["state"]?.stringValue == "done")
+    }
+}
+#endif
+
+#if canImport(DSCore)
+/// Records what the library asks of the server side.
+@MainActor
+final class RecordingRemote: CoreLibraryRemote {
+    var created: [(id: String, mode: Datascratch.NotebookMode)] = []
+    var modeChanges: [(id: String, mode: Datascratch.NotebookMode, hasKey: Bool)] = []
+    var deleted: [String] = []
+    var opened: [String] = []
+
+    func notebookCreated(id: String, mode: Datascratch.NotebookMode, wrappedKey: Data, key: Data) { created.append((id, mode)) }
+    func notebookModeChanged(id: String, mode: Datascratch.NotebookMode, key: Data?) { modeChanges.append((id, mode, key != nil)) }
+    func notebookDeleted(id: String) { deleted.append(id) }
+    func documentOpened(_ crdt: CRDTDocument, notebookId: String?) { opened.append(crdt.docId) }
+}
+
+@MainActor
+struct CoreLibraryRemoteTests {
+    @Test func notebooksAndDocumentsReachTheServerSide() throws {
+        let core = try CoreLibrary.inMemory()
+        let remote = RecordingRemote()
+        core.remote = remote
+        #expect(remote.opened.contains(core.account.accountDocId))
+
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "N", mode: .private)
+        #expect(remote.created.map(\.id) == [notebook.id])
+        #expect(remote.opened.contains(notebook.id))
+
+        let note = library.createNote(in: notebook.id, title: "Hi")
+        #expect(remote.opened.contains(note.id))
+        // The key a share link carries is available for the note.
+        #expect(try core.shareKey(for: Datascratch.ShareTarget(kind: .note, id: note.id))?.count == 32)
+
+        library.setMode(.agent, forNotebook: notebook.id)
+        #expect(remote.modeChanges.count == 1)
+        #expect(remote.modeChanges.first?.hasKey == true)
+
+        library.deleteNotebook(notebook.id)
+        #expect(remote.deleted == [notebook.id])
     }
 }
 #endif

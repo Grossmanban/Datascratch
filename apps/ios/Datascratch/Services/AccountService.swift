@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Observation
+import UIKit
 
 nonisolated struct Account: Codable, Hashable, Sendable {
     var userId: String
@@ -41,7 +42,25 @@ protocol AccountService: AnyObject {
     func signIn(email: String, password: String) async throws
     func recover(email: String, recoveryKey: RecoveryKey, newPassword: String) async throws
     func changePassword(current: String, new: String) async throws
+    /// Issues a new recovery key (confirmed by the current password); the old one stops
+    /// working at once. Show the new key once, like at sign-up (crypto.md §4).
+    func rotateRecoveryKey(currentPassword: String) async throws -> RecoveryKey
+    /// Password changes, recoveries and key rotations, newest first.
+    func securityEvents() async throws -> [SecurityEvent]
     func signOut() async
+}
+
+/// One entry of the account security log (`GET /me/security-events`).
+nonisolated struct SecurityEvent: Identifiable, Hashable, Sendable, Codable {
+    nonisolated enum Kind: String, Codable, Sendable {
+        case passwordChanged, recoveryUsed, recoveryKeyRotated
+    }
+
+    var id: String { "\(kind.rawValue)-\(date.timeIntervalSince1970)" }
+    var kind: Kind
+    var date: Date
+    /// Nil for a recovery or a device that is gone.
+    var deviceName: String?
 }
 
 enum Credentials {
@@ -82,6 +101,7 @@ final class LocalAccountService: AccountService {
         var salt: Data
         var passwordVerifier: Data
         var recoveryVerifier: Data
+        var events: [SecurityEvent]? = nil
     }
 
     private(set) var account: Account?
@@ -139,6 +159,7 @@ final class LocalAccountService: AccountService {
         record.recoveryVerifier = Self.verifier(recoveryKey.base32, salt: salt)
         record.passwordVerifier = Self.verifier(newPassword, salt: salt)
         record.salt = salt
+        Self.log(.recoveryUsed, in: &record, device: nil)
         store.setCodable(record, for: Self.recordKey)
         store.set(Data([1]), for: Self.sessionKey)
         account = record.account
@@ -151,7 +172,31 @@ final class LocalAccountService: AccountService {
         }
         guard new.count >= Credentials.minimumPasswordLength else { throw AccountError.weakPassword }
         record.passwordVerifier = Self.verifier(new, salt: record.salt)
+        Self.log(.passwordChanged, in: &record)
         store.setCodable(record, for: Self.recordKey)
+    }
+
+    func rotateRecoveryKey(currentPassword: String) async throws -> RecoveryKey {
+        guard var record = store.codable(Record.self, for: Self.recordKey),
+              record.passwordVerifier == Self.verifier(currentPassword, salt: record.salt) else {
+            throw AccountError.wrongCredentials
+        }
+        let key = RecoveryKey.random()
+        record.recoveryVerifier = Self.verifier(key.base32, salt: record.salt)
+        Self.log(.recoveryKeyRotated, in: &record)
+        store.setCodable(record, for: Self.recordKey)
+        return key
+    }
+
+    func securityEvents() async throws -> [SecurityEvent] {
+        store.codable(Record.self, for: Self.recordKey)?.events ?? []
+    }
+
+    private static func log(_ kind: SecurityEvent.Kind, in record: inout Record,
+                            device: String? = UIDevice.current.name) {
+        var events = record.events ?? []
+        events.insert(SecurityEvent(kind: kind, date: Date(), deviceName: device), at: 0)
+        record.events = Array(events.prefix(100))
     }
 
     func signOut() async {

@@ -22,14 +22,17 @@ final class ServerConnection: CoreLibraryRemote {
     private var statusTask: Task<Void, Never>?
     /// `POST /notebooks` in flight; notebook and note documents are registered after it.
     private var notebookCreation: [String: Task<Void, Never>] = [:]
+    /// Encrypted attachments (cover images) in the same directory as `CoverImages`.
+    let attachments: AttachmentManager?
 
-    init(serverURL: URL, webHost: String, core: CoreLibrary, sync: SyncCenter) {
+    init(serverURL: URL, webHost: String, core: CoreLibrary, sync: SyncCenter, attachmentsDirectory: URL) {
         self.serverURL = serverURL
         self.webHost = webHost
         self.core = core
         self.sync = sync
         api = APIClient(baseURL: serverURL, sessionStore: SecretSessionStore(store: core.secrets))
         accounts = DSCore.AccountService(api: api, keys: core.keys, store: core.store)
+        attachments = try? AttachmentManager(api: api, store: core.store, directory: attachmentsDirectory)
     }
 
     /// Starts syncing for a signed-in account.
@@ -55,6 +58,7 @@ final class ServerConnection: CoreLibraryRemote {
             core.remote = self
             await engine.start()
             observeStatus(engine)
+            uploadPendingAttachments()
         } catch {
             Self.log.error("starting sync failed: \(error.localizedDescription, privacy: .public)")
             sync.markFailed(error.localizedDescription)
@@ -72,6 +76,18 @@ final class ServerConnection: CoreLibraryRemote {
     func reconnect() {
         guard let engine else { return }
         Task { await engine.client.reconnectNow() }
+        uploadPendingAttachments()
+    }
+
+    /// Attachments added offline (or interrupted) go up once the note key is known.
+    private func uploadPendingAttachments() {
+        guard let attachments else { return }
+        let keys = Dictionary(core.knownNoteIds.compactMap { id in noteKey(id).map { (id, $0) } }, uniquingKeysWith: { a, _ in a })
+        Task { await attachments.uploadPending { keys[$0] } }
+    }
+
+    private func noteKey(_ noteId: String) -> Data? {
+        try? core.shareKey(for: ShareTarget(kind: .note, id: noteId))
     }
 
     private func observeStatus(_ engine: SyncEngine) {
@@ -130,6 +146,34 @@ final class ServerConnection: CoreLibraryRemote {
                 ServerConnection.log.error("sync open \(crdt.docId, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             }
         }
+    }
+}
+
+// MARK: - Attachments
+
+extension ServerConnection: CoverAttachmentRemote {
+    func addAttachment(_ data: Data, mime: String, noteId: String) async throws -> String {
+        guard let attachments else { throw APIError.notAuthenticated }
+        return try await attachments.add(data, mime: mime, noteId: noteId)
+    }
+
+    func uploadAttachment(_ attachmentId: String, noteId: String) async {
+        guard let attachments, engine != nil, let key = noteKey(noteId) else { return }
+        do {
+            try await attachments.upload(attachmentId, noteKey: key)
+        } catch {
+            Self.log.error("attachment upload \(attachmentId, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func downloadAttachment(_ attachmentId: String, noteId: String) async -> URL? {
+        guard let attachments, engine != nil, let key = noteKey(noteId) else { return nil }
+        return try? await attachments.download(attachmentId, noteId: noteId, noteKey: key)
+    }
+
+    func deleteAttachment(_ attachmentId: String) async {
+        guard let attachments else { return }
+        try? await attachments.delete(attachmentId)
     }
 }
 
@@ -206,6 +250,34 @@ final class ServerAccountService: AccountService {
         guard new.count >= Credentials.minimumPasswordLength else { throw AccountError.weakPassword }
         do {
             try await connection.accounts.changePassword(email: email, currentPassword: current, newPassword: new)
+        } catch let error as APIError {
+            throw Self.map(error)
+        }
+    }
+
+    func rotateRecoveryKey(currentPassword: String) async throws -> RecoveryKey {
+        guard let email = account?.email else { throw AccountError.wrongCredentials }
+        do {
+            let text = try await connection.accounts.rotateRecoveryKey(email: email, currentPassword: currentPassword,
+                                                                       account: connection.core.account)
+            guard let key = RecoveryKey(text) else { throw AccountError.invalidRecoveryKey }
+            return key
+        } catch let error as APIError {
+            throw Self.map(error)
+        }
+    }
+
+    func securityEvents() async throws -> [SecurityEvent] {
+        do {
+            return try await connection.accounts.securityEvents().compactMap { event in
+                guard let date = event.date else { return nil }
+                let kind: SecurityEvent.Kind = switch event.kind {
+                case .passwordChanged: .passwordChanged
+                case .recoveryUsed: .recoveryUsed
+                case .recoveryKeyRotated: .recoveryKeyRotated
+                }
+                return SecurityEvent(kind: kind, date: date, deviceName: event.deviceName)
+            }
         } catch let error as APIError {
             throw Self.map(error)
         }

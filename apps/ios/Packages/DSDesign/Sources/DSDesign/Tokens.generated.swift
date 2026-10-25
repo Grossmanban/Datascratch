@@ -25,14 +25,14 @@ public enum DSColorToken: String, CaseIterable, Sendable {
         case .bgSidebar: DSColorPair(light: DSRGBA(0xF3EFE7FF), dark: DSRGBA(0x1F1E1BFF))
         case .bgElevated: DSColorPair(light: DSRGBA(0xFFFFFFCC), dark: DSRGBA(0x2A2926CC))
         case .textPrimary: DSColorPair(light: DSRGBA(0x1D1C1AFF), dark: DSRGBA(0xECE9E3FF))
-        case .textSecondary: DSColorPair(light: DSRGBA(0x6B6862FF), dark: DSRGBA(0xA19D95FF))
-        case .textTertiary: DSColorPair(light: DSRGBA(0x9C978EFF), dark: DSRGBA(0x77736CFF))
+        case .textSecondary: DSColorPair(light: DSRGBA(0x57544FFF), dark: DSRGBA(0xB1ADA7FF))
+        case .textTertiary: DSColorPair(light: DSRGBA(0x706B62FF), dark: DSRGBA(0x95918AFF))
         case .textOnAccent: DSColorPair(light: DSRGBA(0xFFFFFFFF), dark: DSRGBA(0x1A1917FF))
         case .lineSeparator: DSColorPair(light: DSRGBA(0xE6E1D8FF), dark: DSRGBA(0x34322EFF))
-        case .accent: DSColorPair(light: DSRGBA(0x2E5BDBFF), dark: DSRGBA(0x7B9BFFFF))
-        case .danger: DSColorPair(light: DSRGBA(0xD2453BFF), dark: DSRGBA(0xFF6B5EFF))
-        case .success: DSColorPair(light: DSRGBA(0x3E8E5AFF), dark: DSRGBA(0x6BC48AFF))
-        case .warning: DSColorPair(light: DSRGBA(0xC98A1BFF), dark: DSRGBA(0xF2B54BFF))
+        case .accent: DSColorPair(light: DSRGBA(0x2B58DAFF), dark: DSRGBA(0x7B9BFFFF))
+        case .danger: DSColorPair(light: DSRGBA(0xB43329FF), dark: DSRGBA(0xFF6B5EFF))
+        case .success: DSColorPair(light: DSRGBA(0x317047FF), dark: DSRGBA(0x6BC48AFF))
+        case .warning: DSColorPair(light: DSRGBA(0x855B12FF), dark: DSRGBA(0xF2B54BFF))
         }
     }
 }
@@ -90,15 +90,15 @@ public enum DSTintToken: String, CaseIterable, Sendable {
 
     public var value: DSTintPair {
         switch self {
-        case .red: DSTintPair(fg: DSColorPair(light: DSRGBA(0xC8443AFF), dark: DSRGBA(0xFF7B6EFF)), bg: DSColorPair(light: DSRGBA(0xFBE7E4FF), dark: DSRGBA(0x3A2321FF)))
-        case .orange: DSTintPair(fg: DSColorPair(light: DSRGBA(0xC2661BFF), dark: DSRGBA(0xFFA24DFF)), bg: DSColorPair(light: DSRGBA(0xFCEBDDFF), dark: DSRGBA(0x3A2A1CFF)))
-        case .yellow: DSTintPair(fg: DSColorPair(light: DSRGBA(0xA27B0CFF), dark: DSRGBA(0xF2C94CFF)), bg: DSColorPair(light: DSRGBA(0xFBF1CFFF), dark: DSRGBA(0x383018FF)))
-        case .green: DSTintPair(fg: DSColorPair(light: DSRGBA(0x3E8E5AFF), dark: DSRGBA(0x6BC48AFF)), bg: DSColorPair(light: DSRGBA(0xE3F1E6FF), dark: DSRGBA(0x1F3326FF)))
-        case .teal: DSTintPair(fg: DSColorPair(light: DSRGBA(0x2A8584FF), dark: DSRGBA(0x5CCFCFFF)), bg: DSColorPair(light: DSRGBA(0xDDF0EFFF), dark: DSRGBA(0x1C3333FF)))
+        case .red: DSTintPair(fg: DSColorPair(light: DSRGBA(0xBA3D34FF), dark: DSRGBA(0xFF7B6EFF)), bg: DSColorPair(light: DSRGBA(0xFBE7E4FF), dark: DSRGBA(0x3A2321FF)))
+        case .orange: DSTintPair(fg: DSColorPair(light: DSRGBA(0xA45617FF), dark: DSRGBA(0xFFA24DFF)), bg: DSColorPair(light: DSRGBA(0xFCEBDDFF), dark: DSRGBA(0x3A2A1CFF)))
+        case .yellow: DSTintPair(fg: DSColorPair(light: DSRGBA(0x88680AFF), dark: DSRGBA(0xF2C94CFF)), bg: DSColorPair(light: DSRGBA(0xFBF1CFFF), dark: DSRGBA(0x383018FF)))
+        case .green: DSTintPair(fg: DSColorPair(light: DSRGBA(0x34774CFF), dark: DSRGBA(0x6BC48AFF)), bg: DSColorPair(light: DSRGBA(0xE3F1E6FF), dark: DSRGBA(0x1F3326FF)))
+        case .teal: DSTintPair(fg: DSColorPair(light: DSRGBA(0x257473FF), dark: DSRGBA(0x5CCFCFFF)), bg: DSColorPair(light: DSRGBA(0xDDF0EFFF), dark: DSRGBA(0x1C3333FF)))
         case .blue: DSTintPair(fg: DSColorPair(light: DSRGBA(0x2E5BDBFF), dark: DSRGBA(0x7B9BFFFF)), bg: DSColorPair(light: DSRGBA(0xE3EAFBFF), dark: DSRGBA(0x1F2740FF)))
         case .indigo: DSTintPair(fg: DSColorPair(light: DSRGBA(0x4B4FC4FF), dark: DSRGBA(0x9A9DFFFF)), bg: DSColorPair(light: DSRGBA(0xE7E7F8FF), dark: DSRGBA(0x26263FFF)))
-        case .purple: DSTintPair(fg: DSColorPair(light: DSRGBA(0x7A4FD6FF), dark: DSRGBA(0xB595FFFF)), bg: DSColorPair(light: DSRGBA(0xEEE6FAFF), dark: DSRGBA(0x2E2440FF)))
-        case .pink: DSTintPair(fg: DSColorPair(light: DSRGBA(0xC2427AFF), dark: DSRGBA(0xFF8DBFFF)), bg: DSColorPair(light: DSRGBA(0xFAE4EEFF), dark: DSRGBA(0x3A2230FF)))
+        case .purple: DSTintPair(fg: DSColorPair(light: DSRGBA(0x774BD5FF), dark: DSRGBA(0xB595FFFF)), bg: DSColorPair(light: DSRGBA(0xEEE6FAFF), dark: DSRGBA(0x2E2440FF)))
+        case .pink: DSTintPair(fg: DSColorPair(light: DSRGBA(0xB43A70FF), dark: DSRGBA(0xFF8DBFFF)), bg: DSColorPair(light: DSRGBA(0xFAE4EEFF), dark: DSRGBA(0x3A2230FF)))
         case .gray: DSTintPair(fg: DSColorPair(light: DSRGBA(0x6B6862FF), dark: DSRGBA(0xA19D95FF)), bg: DSColorPair(light: DSRGBA(0xEEEBE5FF), dark: DSRGBA(0x2C2B28FF)))
         }
     }

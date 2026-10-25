@@ -1,22 +1,28 @@
 # План разработки
 
-> Обновляется при каждом сдвиге этапа. Последнее обновление: 2026-10-25.
+> Обновляется координатором. Последнее обновление: 2026-10-25.
 
 ## Текущий статус
 
-**Этап 0 (подготовка) — завершён. Следующий — этап 1: прототип пера в тексте на iPad.**
+**Этап 0 завершён. Идёт параллельная разработка всех частей девятью сессиями (D-39).** Этапы ниже остаются логическим планом функций; по времени потоки идут одновременно.
 
-| Этап | Что | Статус |
-| --- | --- | --- |
-| 0 | Подготовка: стек, репозиторий, документация, Graphify | ✅ Завершён 2026-10-25 |
-| 1 | Прототип пера в тексте (iPad) | ⏭ Следующий |
-| 2 | MVP на iPad и iPhone, локально | — |
-| 3 | Сервер, синхронизация, шифрование | — |
-| 4 | Веб-клиент | — |
-| 5 | API и MCP для агентов | — |
-| 6 | Расширения | — |
+## Потоки разработки (D-39)
 
-Публикация в App Store — после этапа 3.
+Каждый поток — отдельная сессия Claude Code, своя ветка `claude/<поток>` и своя зона владения. Чужие каталоги поток не меняет; изменения контрактов — только через координатора.
+
+| Поток | Ветка | Владеет | Главное | Статус |
+| --- | --- | --- | --- | --- |
+| core | `claude/core` | `packages/shared`, `packages/test-vectors`, корневые `package.json`/`turbo.json`/`tsconfig.base.json`, `.github/workflows/ts.yml` | Типы контрактов, криптография, кодек штрихов, схема документа, клиент синхронизации, тестовые векторы | Запущен |
+| design-system | `claude/design-system` | `packages/design-tokens`, `packages/ui`, `apps/ios/Packages/DSDesign`, `.github/workflows/design.yml` | Токены «Тихая бумага», веб-компоненты, SwiftUI-компоненты | Запущен |
+| server | `claude/server` | `apps/server`, `infra/`, `.github/workflows/server.yml` | Fastify, PostgreSQL, авторизация, синхронизация, вложения, шеринг, docker compose, инструкция развёртывания | Запущен |
+| agents | `claude/agents` | `packages/agents`, `docs/architecture/contracts/agents-api.md` (черновик), `.github/workflows/agents.yml` | MCP, REST для агентов, токены, журнал, рендер PNG | Запущен |
+| web-app | `claude/web-app` | `apps/web`, `.github/workflows/web.yml` | Оболочка веба: вход, боковая панель, пространства/блокноты/папки, списки, задачи, календарь, шеринг, офлайн, PWA | Запущен |
+| web-editor | `claude/web-editor` | `packages/web-editor`, `.github/workflows/web-editor.yml` | TipTap-редактор со всеми блоками, перо на Canvas | Запущен |
+| ios-core | `claude/ios-core` | `apps/ios/Packages/DSCore`, `.github/workflows/ios-core.yml` | Swift: криптография, Yrs-модель документа, GRDB, клиент синхронизации и API, векторы | Запущен |
+| ios-editor | `claude/ios-editor` | `apps/ios/Packages/DSEditor`, `.github/workflows/ios-editor.yml` | TextKit 2 + Yrs + слой пера (живой штрих), блоки, демо-приложение | Запущен |
+| ios-app | `claude/ios-app` | `apps/ios` (кроме `Packages/`), `.github/workflows/ios-app.yml` | XcodeGen-проект, оболочка SwiftUI в стиле Craft, навигация, задачи, календарь, настройки, интеграция пакетов | Запущен |
+
+Координатор — исходная сессия (вливает ветки в `main`, ведёт `roadmap.md`, `CHANGELOG.md`, контракты).
 
 ## Этап 0 — подготовка (завершён)
 

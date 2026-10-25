@@ -47,7 +47,11 @@ DSHaptics.taskComplete()                          // тактильная отд
 | `DSTaskRow`, `DSTag` | Строка задачи целиком: чек-бокс, название, заметка, даты, теги, документ-источник (контекстное меню — у вызывающего) |
 | `DSDocRow`, `DSDocIcon`, `DSDocGrid` | Строка документа в списке (иконка, заголовок с засечками, выдержка, дата, цвет папки) и адаптивная сетка карточек |
 | `DSPenToolbar`, `DSPenSelection`, `DSPenTool`, `DSPenColor`, `DSPenWidth`, `DSEraserMode` | Стеклянная палитра пера (как `PenToolbar` в вебе): режим «Текст» (`tool == nil`), ручка / карандаш / маркер / текстовыделитель / ластик / лассо, перья окрашены текущими чернилами, цвета `ink.*` или `highlight.*`, толщина шагами 1/2/3 (множитель базовой толщины редактора 0.6/1/1.6), ластик «штрих / пиксель» (повторное нажатие), рисование пальцем, отменить / повторить. Логика переключения — `DSPenSelection.selecting(…)` |
+| `DSPenMode`, `DSPenToolbar(mode:color:width:drawWithFinger:…)` | Плоский режим пера для редактора: text / pen / pencil / marker / highlighter / strokeEraser / pixelEraser / lasso; палитра на простых `Binding` (`DSPenSelection.mode` — то же в одном значении); `DSPenWidth.points(base:)` |
 | `DSFormatBar`, `DSFormatBarItem`, `DSFormatBarElement` | Стеклянная панель форматирования с активными состояниями и разделителями |
+| `DSInlineChip`, `DSInlineChipStyle` (`.wikiLink`, `.tag(_:)`) | Плашки `[[ссылок]]` и `#тегов` в тексте; `renderImage(…)` — картинка для `NSTextAttachment`, `uiFont(for:)` — метрики |
+| `DSSuggestionList`, `DSSuggestionGroup`, `DSSuggestionItem` | Меню «/» и `[[ ]]` (как `SuggestionMenu` в вебе): группы, плитки иконок, подсказки сокращений, прокрутка к выбранному; клавиатуру ведёт редактор |
+| `DSCalloutTone` | Тона выносок note / info / success / warning / danger → `tint` gray / blue / green / yellow / red, цвета и SF Symbol |
 
 | `DSShowcase` | Все компоненты на одном экране (превью, отладочный экран, снимки в CI) |
 

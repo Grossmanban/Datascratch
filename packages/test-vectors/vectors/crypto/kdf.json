@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "description": "Argon2id13 (ops 3, mem 64 MiB, 64-byte output) over NFKC(password) UTF-8; authSeed = out[0..32], passwordKey = out[32..64], loginKey = BLAKE2b-256(key=authSeed, msg='ds1|login').",
+  "cases": [
+    {
+      "password": "correct horse battery staple",
+      "passwordNfkcUtf8": "636f727265637420686f727365206261747465727920737461706c65",
+      "salt": "lLE9jiY5-JeAxjmlXJMTgg",
+      "kdf": {
+        "alg": "argon2id13",
+        "ops": 3,
+        "mem": 67108864
+      },
+      "authSeed": "47eb355944b029d5b7172d882ce253f714587d005e238ed8ee1672dd7f50d7b8",
+      "loginKey": "bwbbh2IdLELKSLUjhlyuch8CeAfXoEwvvyT6E-O3RoU",
+      "passwordKey": "r1nKYGEGZjXBM0DZy_tGYjT2_uNEimrYrtcV3UzjJdA"
+    },
+    {
+      "password": "ﬁé-пароль-🔑",
+      "passwordNfkcUtf8": "6669c3a92dd0bfd0b0d180d0bed0bbd18c2df09f9491",
+      "salt": "bHeVX7cZLiFrqwHeKoEJhA",
+      "kdf": {
+        "alg": "argon2id13",
+        "ops": 3,
+        "mem": 67108864
+      },
+      "authSeed": "da7e335eb4d8b9961e5c14c4b2df00cd6d8386e3a7bfd3693f4d939dc0dc5496",
+      "loginKey": "Vk_Khvq1kBtYIqnyUgXe8GG9b3S8HZ7s-5Brzvj4AWo",
+      "passwordKey": "up5GXYfUyMbzdavlij01yMIk-_JRYa8E370YpnXR3SQ"
+    },
+    {
+      "password": "",
+      "passwordNfkcUtf8": "",
+      "salt": "2sagqAbotRaJ1wt2soW_7A",
+      "kdf": {
+        "alg": "argon2id13",
+        "ops": 3,
+        "mem": 67108864
+      },
+      "authSeed": "e41cef6b717912e42d8f6e658fc7375dabcdcc8090c261334d624f258a5a210e",
+      "loginKey": "XarJSpZB8LujA011t-qYHiLzAwj8zJo-XEVD8xPbs-g",
+      "passwordKey": "xcIoZiQ_3ROcGGdyh3U1JHE4BQVZOppB_IY-n2bcLq0"
+    }
+  ]
+}

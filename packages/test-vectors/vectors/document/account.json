@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "description": "Reference account document (document-model.md §2).",
+  "update": "ARUDACgBBG1ldGENZm9ybWF0VmVyc2lvbgF9AScBBnNwYWNlcyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwM2MBKAADAQJpZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAzYygAAwEEbmFtZQF3CFBlcnNvbmFsKAADAQRpY29uAXcE8J-PoCgAAwEFY29sb3IBdwthY2NlbnQuYmx1ZSgAAwEFb3JkZXIBfQEoAAMBCWNyZWF0ZWRBdAF3GDIwMjYtMTAtMjVUMTI6MDA6MDAuMDAwWicBCW5vdGVib29rcyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIBKAADCAJpZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMigAAwgHc3BhY2VJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAzYygAAwgEbmFtZQF3BE1haW4oAAMIBGljb24BdwTwn5OTKAADCAVjb2xvcgF-KAADCAVvcmRlcgF9ASgAAwgEbW9kZQF3B3ByaXZhdGUoAAMICWNyZWF0ZWRBdAF3GDIwMjYtMTAtMjVUMTI6MDA6MDAuMDAwWigBCHNldHRpbmdzD2RhaWx5Tm90ZWJvb2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMggBB3N0YXJyZWQBdgIEa2luZHcEbm90ZQJpZHckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAxCAEEdGFicwF2AQZub3RlSWR3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMSgBCHNldHRpbmdzCWFjdGl2ZVRhYgF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMQA",
+  "expected": {
+    "meta": {
+      "formatVersion": 1
+    },
+    "spaces": {
+      "0192f3c4-0000-7000-8000-00000000003c": {
+        "id": "0192f3c4-0000-7000-8000-00000000003c",
+        "name": "Personal",
+        "icon": "🏠",
+        "color": "accent.blue",
+        "order": 1,
+        "createdAt": "2026-10-25T12:00:00.000Z"
+      }
+    },
+    "notebooks": {
+      "0192f3c4-0000-7000-8000-000000000002": {
+        "id": "0192f3c4-0000-7000-8000-000000000002",
+        "spaceId": "0192f3c4-0000-7000-8000-00000000003c",
+        "name": "Main",
+        "icon": "📓",
+        "color": null,
+        "order": 1,
+        "mode": "private",
+        "createdAt": "2026-10-25T12:00:00.000Z"
+      }
+    },
+    "settings": {
+      "dailyNotebookId": "0192f3c4-0000-7000-8000-000000000002",
+      "activeTab": "0192f3c4-0000-7000-8000-000000000001"
+    },
+    "starred": [
+      {
+        "kind": "note",
+        "id": "0192f3c4-0000-7000-8000-000000000001"
+      }
+    ],
+    "tabs": [
+      {
+        "noteId": "0192f3c4-0000-7000-8000-000000000001"
+      }
+    ]
+  }
+}

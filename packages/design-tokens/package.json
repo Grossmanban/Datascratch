@@ -1,0 +1,31 @@
+{
+  "name": "@datascratch/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Quiet Paper design tokens: single source for web (CSS, Tailwind v4) and iOS (Swift).",
+  "type": "module",
+  "main": "./generated/index.js",
+  "types": "./generated/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./generated/index.d.ts",
+      "default": "./generated/index.js"
+    },
+    "./tokens.css": "./generated/tokens.css",
+    "./theme.css": "./generated/theme.css",
+    "./tokens.json": "./tokens.json"
+  },
+  "files": [
+    "generated",
+    "tokens.json"
+  ],
+  "devDependencies": {
+    "prettier": "^3.6.0"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "check": "node scripts/generate.mjs --check",
+    "test": "node --test test/*.test.mjs",
+    "lint": "node scripts/generate.mjs --check"
+  }
+}

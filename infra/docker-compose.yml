@@ -1,0 +1,65 @@
+# Datascratch self-hosting: server + PostgreSQL (+ optional Caddy for HTTPS).
+#   cd infra && cp .env.example .env   # fill in the secrets
+#   docker compose up -d                # http://localhost:8080
+#   docker compose --profile https up -d   # with HTTPS on $DOMAIN
+name: datascratch
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-datascratch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-datascratch}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    shm_size: 128mb
+
+  server:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    image: datascratch-server:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-datascratch}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-datascratch}
+      STORAGE_DIR: /data/files
+      PORT: 8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - files:/data/files
+    ports:
+      # Without Caddy the server is reachable on this port; with Caddy keep 127.0.0.1.
+      - "${SERVER_BIND:-127.0.0.1}:${SERVER_PORT:-8080}:8080"
+
+  caddy:
+    profiles: ["https"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in infra/.env for the https profile}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - server
+
+volumes:
+  pgdata:
+  files:
+  caddy_data:
+  caddy_config:

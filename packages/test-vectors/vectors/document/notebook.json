@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "description": "Reference notebook index document (document-model.md §3). Records are nested Y.Maps.",
+  "notebookId": "0192f3c4-0000-7000-8000-000000000002",
+  "update": "ATYCACgBBG1ldGENZm9ybWF0VmVyc2lvbgF9ASgBBG1ldGEKbm90ZWJvb2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMigBBG1ldGEEbmFtZQF3BE1haW4oAQRtZXRhBGljb24BdwTwn5OTKAEEbWV0YQVzcGFjZQF2AwJpZHckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDNjBG5hbWV3CFBlcnNvbmFsBGljb253BPCfj6AnAQdmb2xkZXJzJDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAzMgEoAAIFAmlkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDMyKAACBQhwYXJlbnRJZAF-KAACBQRuYW1lAXcIUHJvamVjdHMoAAIFBGljb24BdwTwn5OBKAACBQVjb2xvcgF-KAACBQVvcmRlcgF9ASgAAgUJY3JlYXRlZEF0AXcYMjAyNi0xMC0yNVQxMjowMDowMC4wMDBaJwEHZm9sZGVycyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMzMBKAACDQJpZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAzMygAAg0IcGFyZW50SWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMzIoAAINBG5hbWUBdwVBbHBoYSgAAg0EaWNvbgF-KAACDQVjb2xvcgF3C2FjY2VudC5ibHVlKAACDQVvcmRlcgF9ASgAAg0JY3JlYXRlZEF0AXcYMjAyNi0xMC0yNVQxMjowMDowMC4wMDBaJwEFbm90ZXMkMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAxASgAAhUCaWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEoAAIVCGZvbGRlcklkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDMzKAACFQxwYXJlbnROb3RlSWQBfigAAhUFdGl0bGUBdw5SZWZlcmVuY2Ugbm90ZSgAAhUEa2luZAF3BG5vdGUoAAIVCWRhaWx5RGF0ZQF-KAACFQR0YWdzAXUBdw1wcm9qZWN0L2FscGhhKAACFQRpY29uAXcE8J-TnSgAAhUKY292ZXJUaHVtYgF-KAACFQp3cmFwcGVkS2V5AXcCQVEoAAIVCWNyZWF0ZWRBdAF3GDIwMjYtMTAtMjVUMTI6MDA6MDAuMDAwWigAAhUJdXBkYXRlZEF0AXcYMjAyNi0xMC0yNVQxMjowMDowMC4wMDBaKAACFQl0cmFzaGVkQXQBfigAAhUFb3JkZXIBfD8AAAAnAQVub3RlcyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMBKAACJAJpZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMygAAiQIZm9sZGVySWQBfigAAiQMcGFyZW50Tm90ZUlkAX4oAAIkBXRpdGxlAXcKMjAyNi0xMC0yNSgAAiQEa2luZAF3BWRhaWx5KAACJAlkYWlseURhdGUBdwoyMDI2LTEwLTI1KAACJAR0YWdzAXUAKAACJARpY29uAX4oAAIkCmNvdmVyVGh1bWIBfigAAiQKd3JhcHBlZEtleQF3AkFRKAACJAljcmVhdGVkQXQBdxgyMDI2LTEwLTI1VDEyOjAwOjAwLjAwMFooAAIkCXVwZGF0ZWRBdAF3GDIwMjYtMTAtMjVUMTI6MDA6MDAuMDAwWigAAiQJdHJhc2hlZEF0AX4oAAIkBW9yZGVyAX0BJwEEdGFncw1wcm9qZWN0L2FscGhhASgAAjMFY29sb3IBdwxhY2NlbnQuZ3JlZW4oAAIzBGljb24BfgA",
+  "expected": {
+    "meta": {
+      "formatVersion": 1,
+      "notebookId": "0192f3c4-0000-7000-8000-000000000002",
+      "name": "Main",
+      "icon": "📓",
+      "space": {
+        "id": "0192f3c4-0000-7000-8000-00000000003c",
+        "name": "Personal",
+        "icon": "🏠"
+      }
+    },
+    "folders": {
+      "0192f3c4-0000-7000-8000-000000000032": {
+        "id": "0192f3c4-0000-7000-8000-000000000032",
+        "parentId": null,
+        "name": "Projects",
+        "icon": "📁",
+        "color": null,
+        "order": 1,
+        "createdAt": "2026-10-25T12:00:00.000Z"
+      },
+      "0192f3c4-0000-7000-8000-000000000033": {
+        "id": "0192f3c4-0000-7000-8000-000000000033",
+        "parentId": "0192f3c4-0000-7000-8000-000000000032",
+        "name": "Alpha",
+        "icon": null,
+        "color": "accent.blue",
+        "order": 1,
+        "createdAt": "2026-10-25T12:00:00.000Z"
+      }
+    },
+    "notes": {
+      "0192f3c4-0000-7000-8000-000000000001": {
+        "id": "0192f3c4-0000-7000-8000-000000000001",
+        "folderId": "0192f3c4-0000-7000-8000-000000000033",
+        "parentNoteId": null,
+        "title": "Reference note",
+        "kind": "note",
+        "dailyDate": null,
+        "tags": [
+          "project/alpha"
+        ],
+        "icon": "📝",
+        "coverThumb": null,
+        "wrappedKey": "AQ",
+        "createdAt": "2026-10-25T12:00:00.000Z",
+        "updatedAt": "2026-10-25T12:00:00.000Z",
+        "trashedAt": null,
+        "order": 0.5
+      },
+      "0192f3c4-0000-7000-8000-000000000003": {
+        "id": "0192f3c4-0000-7000-8000-000000000003",
+        "folderId": null,
+        "parentNoteId": null,
+        "title": "2026-10-25",
+        "kind": "daily",
+        "dailyDate": "2026-10-25",
+        "tags": [],
+        "icon": null,
+        "coverThumb": null,
+        "wrappedKey": "AQ",
+        "createdAt": "2026-10-25T12:00:00.000Z",
+        "updatedAt": "2026-10-25T12:00:00.000Z",
+        "trashedAt": null,
+        "order": 1
+      }
+    },
+    "tags": {
+      "project/alpha": {
+        "color": "accent.green",
+        "icon": null
+      }
+    }
+  }
+}

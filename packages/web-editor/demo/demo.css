@@ -1,0 +1,112 @@
+:root {
+  color-scheme: light dark;
+}
+html,
+body {
+  margin: 0;
+  background: var(--ds-bg-canvas, #faf8f4);
+  color: var(--ds-text-primary, #1d1c1a);
+  font-family: "Inter", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  html,
+  body {
+    background: var(--ds-bg-canvas, #1a1917);
+    color: var(--ds-text-primary, #ece9e3);
+  }
+  .ds-editor {
+    --ds-bg-surface: #22211e;
+    --ds-text-primary: #ece9e3;
+    --ds-text-secondary: #a19d95;
+    --ds-text-tertiary: #77736c;
+    --ds-line-separator: #34322e;
+    --ds-accent: #7b9bff;
+    --ds-ink-black: #ece9e3;
+    --ds-ink-blue: #7b9bff;
+  }
+}
+.demo-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  margin: 0;
+  border-radius: 0;
+  border-width: 0 0 1px;
+  font-size: 13px;
+}
+.demo-logo {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 18px;
+}
+.demo-sub {
+  color: var(--ds-text-secondary, #6b6862);
+}
+.demo-controls {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.demo-controls label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--ds-text-secondary, #6b6862);
+}
+.demo-controls select,
+.demo-controls button {
+  font: inherit;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ds-line-separator, #e6e1d8);
+  background: var(--ds-bg-surface, #fff);
+  color: inherit;
+  cursor: pointer;
+}
+.demo-controls button.is-on {
+  border-color: var(--ds-accent, #2e5bdb);
+  color: var(--ds-accent, #2e5bdb);
+}
+.demo-main {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+}
+.demo-main.is-split {
+  gap: 16px;
+  padding: 24px 16px;
+}
+.demo-main.is-split .demo-pane {
+  flex: 1;
+}
+.demo-pane {
+  background: var(--ds-bg-surface, #fff);
+  border-radius: 20px;
+  box-shadow: 0 8px 40px rgba(40, 32, 20, 0.06);
+  overflow: clip;
+  transition: width 200ms ease;
+}
+.demo-toast {
+  position: fixed;
+  left: 50%;
+  top: 70px;
+  transform: translate(-50%, -10px);
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 200ms,
+    transform 200ms;
+  z-index: 100;
+}
+.demo-toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

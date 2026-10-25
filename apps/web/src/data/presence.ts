@@ -1,16 +1,12 @@
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from "y-protocols/awareness";
 import type * as Y from "yjs";
-import { ad, fromBase64Url, open, seal, toBase64Url } from "@/lib/shared";
 
 export type PresenceUser = { name: string; color: string; kind: "user" | "guest" };
 
-type Channel = {
-  awareness: Awareness;
-  key: () => Promise<Uint8Array | null>;
-  send: (payload: string) => void;
-};
+/** Sends a y-protocols awareness update; SyncClient encrypts it (ds1|awareness|<docId>). */
+export type PresenceSend = (update: Uint8Array) => void;
 
-const channels = new Map<string, Channel>();
+const channels = new Map<string, Awareness>();
 
 const COLORS = ["#2E5BDB", "#D2453B", "#3E8E5A", "#7A4FD6", "#C98A1B", "#1F7F80", "#C23F7A"];
 export const colorFor = (seed: string) => {
@@ -19,35 +15,22 @@ export const colorFor = (seed: string) => {
   return COLORS[h % COLORS.length]!;
 };
 
-/**
- * Presence over the sync socket (sync-protocol.md: `awareness`, encrypted with the doc key,
- * ad = ds1|awareness|<docId>, never stored by the server).
- */
-export function joinPresence(
-  docId: string,
-  doc: Y.Doc,
-  user: PresenceUser,
-  key: () => Promise<Uint8Array | null>,
-  send: (payload: string) => void,
-): { awareness: Awareness; leave: () => void } {
+/** Presence over the sync socket (never stored by the server). */
+export function joinPresence(docId: string, doc: Y.Doc, user: PresenceUser, send: PresenceSend): { awareness: Awareness; leave: () => void } {
   const awareness = new Awareness(doc);
   awareness.setLocalStateField("user", user);
-  const ch: Channel = { awareness, key, send };
-  channels.set(docId, ch);
+  channels.set(docId, awareness);
   let timer: ReturnType<typeof setTimeout> | null = null;
   const pendingClients = new Set<number>();
   const onUpdate = ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
     if (origin === "remote") return;
     for (const c of [...added, ...updated, ...removed]) pendingClients.add(c);
     if (timer) return;
-    timer = setTimeout(async () => {
+    timer = setTimeout(() => {
       timer = null;
       const clients = [...pendingClients];
       pendingClients.clear();
-      const k = await key();
-      if (!k) return;
-      const update = encodeAwarenessUpdate(awareness, clients);
-      send(toBase64Url(await seal(k, update, ad.awareness(docId))));
+      send(encodeAwarenessUpdate(awareness, clients));
     }, 60);
   };
   awareness.on("update", onUpdate);
@@ -57,29 +40,23 @@ export function joinPresence(
     awareness,
     leave: () => {
       clearInterval(heartbeat);
-      removeAwarenessStates(awareness, [doc.clientID], "local");
-      awareness.off("update", onUpdate);
       if (timer) clearTimeout(timer);
-      // Send the "left" state right away.
-      void key().then(async (k) => {
-        if (!k) return;
-        const update = encodeAwarenessUpdate(awareness, [doc.clientID]);
-        send(toBase64Url(await seal(k, update, ad.awareness(docId))));
-        awareness.destroy();
-      });
-      if (channels.get(docId) === ch) channels.delete(docId);
+      awareness.off("update", onUpdate);
+      removeAwarenessStates(awareness, [doc.clientID], "local");
+      send(encodeAwarenessUpdate(awareness, [doc.clientID]));
+      awareness.destroy();
+      if (channels.get(docId) === awareness) channels.delete(docId);
     },
   };
 }
 
-export async function receivePresence(docId: string, payload: string) {
-  const ch = channels.get(docId);
-  if (!ch) return;
-  const k = await ch.key();
-  if (!k) return;
+/** A decrypted awareness update arrived from another device or guest. */
+export function receivePresence(docId: string, update: Uint8Array) {
+  const awareness = channels.get(docId);
+  if (!awareness) return;
   try {
-    applyAwarenessUpdate(ch.awareness, await open(k, fromBase64Url(payload), ad.awareness(docId)), "remote");
+    applyAwarenessUpdate(awareness, update, "remote");
   } catch {
-    // ignore undecryptable presence
+    // ignore malformed presence
   }
 }

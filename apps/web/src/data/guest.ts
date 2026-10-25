@@ -1,28 +1,26 @@
+import { guestDeviceId, MemorySyncStorage, REMOTE_ORIGIN, SyncClient } from "@datascratch/shared";
 import * as Y from "yjs";
 import { sharesApi } from "@/api/endpoints";
-import { ad, fromBase64Url, open, seal, toBase64Url, unwrapKey, uuidv7, type GuestGrant } from "@/lib/shared";
-import { createSyncStatusStore, SyncEngine, type OutgoingMessage, type SyncHost } from "@/sync/engine";
+import { APP_VERSION, syncUrl } from "@/config";
+import { ad, fromBase64Url, sodiumReady, unwrapKey, uuidv7, type GuestGrant } from "@/lib/shared";
+import { createSyncStatusStore, uiStatus } from "@/sync/engine";
 import { receivePresence } from "./presence";
 
-const ORIGIN_REMOTE = Symbol("guest-remote");
-
 /**
- * A guest's view of a shared note or notebook (spec/08-sharing.md, D-13, D-37).
- * Everything lives in memory: the key comes from the URL fragment and never reaches the server.
+ * A guest's view of a shared note or notebook (spec/08-sharing.md, D-13, D-37), synced with
+ * SyncClient over in-memory storage. The key comes from the URL fragment and never reaches
+ * the server.
  */
 export class GuestSession {
   readonly status = createSyncStatusStore();
-  readonly engine: SyncEngine;
+  readonly client: SyncClient;
   readonly docs = new Map<string, Y.Doc>();
-  private keys = new Map<string, Uint8Array>();
-  private outbox = new Map<string, OutgoingMessage>();
-  private lastSeq = new Map<string, number>();
-  private readyDocs = new Set<string>();
-  private wanted = new Set<string>();
-  private listeners = new Set<() => void>();
-  private deviceIdValue = uuidv7();
   /** Stable id for strokes and presence authored by this guest in this tab. */
   readonly guestId = uuidv7();
+  private keys = new Map<string, Uint8Array>();
+  private readyDocs = new Set<string>();
+  private attached = new Set<string>();
+  private listeners = new Set<() => void>();
 
   private constructor(
     readonly shareId: string,
@@ -30,15 +28,45 @@ export class GuestSession {
     rootKey: Uint8Array,
   ) {
     this.keys.set(grant.target.id, rootKey);
-    this.engine = new SyncEngine(this.host(), this.status);
+    this.client = new SyncClient({
+      url: syncUrl(),
+      deviceId: guestDeviceId(),
+      client: { platform: "web", version: APP_VERSION },
+      storage: new MemorySyncStorage(),
+      auth: () => ({ kind: "guest", shareId: this.shareId, guestToken: this.grant.guestToken }),
+      keyFor: async (docId) => {
+        const k = await this.keyFor(docId);
+        if (!k) throw new Error(`no key for ${docId}`);
+        return k;
+      },
+    });
+    this.client.on("synced", (docId) => {
+      this.readyDocs.add(docId);
+      this.emit();
+      this.updateStatus();
+    });
+    this.client.on("status", () => this.updateStatus());
+    this.client.on("awareness", (docId, payload) => receivePresence(docId, payload));
+    this.client.on("error", (e) => {
+      console.warn("guest sync:", e.code, e.message, e.docId ?? "");
+      // Guest tokens are short-lived: fetch a new one and reconnect.
+      if (e.code === "unauthorized")
+        void sharesApi.guest(this.shareId).then((g) => {
+          this.grant.guestToken = g.guestToken;
+          this.client.reconnect();
+        });
+    });
   }
 
   static async open(shareId: string, keyText: string): Promise<GuestSession> {
+    // SyncClient encrypts synchronously with libsodium: it must be ready first.
+    await sodiumReady();
     const key = fromBase64Url(keyText);
     if (key.length !== 32) throw new Error("bad_key");
     const grant = await sharesApi.guest(shareId);
     const s = new GuestSession(shareId, grant, key);
-    s.engine.start();
+    await s.attach(grant.target.id);
+    s.client.start();
     return s;
   }
 
@@ -54,6 +82,11 @@ export class GuestSession {
     for (const fn of this.listeners) fn();
   }
 
+  private updateStatus() {
+    const all = [...this.attached].every((id) => this.client.isSynced(id));
+    this.status.setState({ status: uiStatus(this.client.status, all) });
+  }
+
   isReady(docId: string) {
     return this.readyDocs.has(docId);
   }
@@ -62,13 +95,15 @@ export class GuestSession {
     let d = this.docs.get(docId);
     if (!d) {
       d = new Y.Doc({ guid: docId, gc: false });
-      d.on("update", (update: Uint8Array, origin: unknown) => {
-        if (origin === ORIGIN_REMOTE || !this.canEdit) return;
-        void this.queuePush(docId, update);
-      });
       this.docs.set(docId, d);
     }
     return d;
+  }
+
+  private async attach(docId: string) {
+    if (this.attached.has(docId)) return;
+    this.attached.add(docId);
+    await this.client.addDoc(docId, this.doc(docId));
   }
 
   /** Keys for notes inside a shared notebook are wrapped with the notebook key in its index. */
@@ -89,92 +124,22 @@ export class GuestSession {
     }
   }
 
-  private async queuePush(docId: string, update: Uint8Array) {
-    const key = await this.keyFor(docId);
-    if (!key) return;
-    const clientMsgId = uuidv7();
-    this.outbox.set(clientMsgId, { type: "push", docId, clientMsgId, payload: toBase64Url(await seal(key, update, ad.doc(docId))) });
-    this.status.setState({ pending: this.outbox.size });
-    void this.engine.flush();
-  }
-
   /** Subscribe to a note of a shared notebook once its key is known. */
   async subscribeNote(noteId: string) {
     if (!(await this.keyFor(noteId))) return;
-    this.wanted.add(noteId);
-    this.engine.subscribe([{ docId: noteId, since: this.lastSeq.get(noteId) ?? 0 }]);
+    await this.attach(noteId);
+  }
+
+  sendAwareness(docId: string, update: Uint8Array) {
+    void this.client.sendAwareness(docId, update);
   }
 
   close() {
-    this.engine.stop();
+    void this.client.stop();
     for (const d of this.docs.values()) d.destroy();
     this.docs.clear();
     this.keys.clear();
   }
-
-  private async apply(docId: string, items: { seq: number; payload: string }[], snapshot: { seq: number; payload: string } | null) {
-    const key = await this.keyFor(docId);
-    if (!key) return;
-    const doc = this.doc(docId);
-    let last = this.lastSeq.get(docId) ?? 0;
-    const all = snapshot && snapshot.seq > last ? [snapshot, ...items] : items;
-    const decoded: Uint8Array[] = [];
-    for (const it of all) {
-      if (it.seq <= last && it !== snapshot) continue;
-      try {
-        decoded.push(await open(key, fromBase64Url(it.payload), ad.doc(docId)));
-      } catch {
-        // skip undecryptable
-      }
-      last = Math.max(last, it.seq);
-    }
-    this.lastSeq.set(docId, last);
-    Y.transact(
-      doc,
-      () => {
-        for (const u of decoded) Y.applyUpdate(doc, u, ORIGIN_REMOTE);
-      },
-      ORIGIN_REMOTE,
-    );
-  }
-
-  private host(): SyncHost {
-    return {
-      deviceId: async () => this.deviceIdValue,
-      auth: async () => ({ kind: "guest", shareId: this.shareId, guestToken: this.grant.guestToken }),
-      refreshAuth: async () => {
-        try {
-          const g = await sharesApi.guest(this.shareId);
-          this.grant.guestToken = g.guestToken;
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      subscriptions: async () => {
-        const root = this.grant.target.id;
-        const out = [{ docId: root, since: this.lastSeq.get(root) ?? 0 }];
-        for (const id of this.wanted) if (id !== root) out.push({ docId: id, since: this.lastSeq.get(id) ?? 0 });
-        return out;
-      },
-      beforeFlush: async () => true,
-      outgoing: async () => [...this.outbox.values()],
-      onUpdates: async (msg) => {
-        await this.apply(msg.docId, msg.items, msg.snapshot);
-        if (msg.upToDate && !this.readyDocs.has(msg.docId)) {
-          this.readyDocs.add(msg.docId);
-          this.emit();
-        }
-      },
-      onUpdate: (msg) => this.apply(msg.docId, [msg], null),
-      onAck: async (msg) => {
-        this.outbox.delete(msg.clientMsgId);
-        this.status.setState({ pending: this.outbox.size });
-      },
-      onAwareness: (msg) => void receivePresence(msg.docId, msg.payload),
-      onError: (msg) => {
-        if (msg.code === "forbidden" && msg.ref) this.outbox.delete(msg.ref);
-      },
-    };
-  }
 }
+
+export { REMOTE_ORIGIN };

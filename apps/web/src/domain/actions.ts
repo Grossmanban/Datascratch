@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { notebooksModeApi } from "@/api/endpoints";
+import { docsApi, notebooksModeApi } from "@/api/endpoints";
 import { getMasterKey } from "@/auth/session";
 import { cachedNoteKey, notebookKey, rememberNotebookKey, rememberNoteKey } from "@/data/keys";
 import { enqueueOp } from "@/data/ops";
@@ -17,6 +17,7 @@ import {
   type NotebookRef,
   type Space,
   type StarredRef,
+  moveNoteToNotebook,
 } from "@/lib/shared";
 import { formatLongDate } from "@/lib/dates";
 import { accountMaps } from "./account";
@@ -282,6 +283,37 @@ export function moveNote(noteId: string, folderId: string | null) {
   if (folderId && st.folders[folderId]?.notebookId !== n.notebookId) return false;
   nbMaps(n.notebookId).notes.get(noteId)?.set("folderId", folderId);
   return true;
+}
+
+/**
+ * Move a note into another notebook (api.md «Перенос заметки»). Needs the network:
+ * the server must accept the PATCH before the note leaves the source index.
+ * Nested notes stay in the source notebook and move up to its root level.
+ */
+export async function moveNoteToOtherNotebook(noteId: string, toNotebookId: string, toFolderId: string | null = null) {
+  const st = useWorkspace.getState();
+  const n = st.notes[noteId];
+  if (!n || n.notebookId === toNotebookId) return;
+  const fromNotebookId = n.notebookId;
+  const [fromKey, toKey] = await Promise.all([notebookKey(fromNotebookId), notebookKey(toNotebookId)]);
+  if (!fromKey || !toKey) throw new Error("notebook key unavailable");
+  const store = runtime().store;
+  const [fromIndex, toIndex] = await Promise.all([store.load(fromNotebookId), store.load(toNotebookId)]);
+  await moveNoteToNotebook({
+    noteId,
+    fromIndex,
+    toIndex,
+    fromNotebookKey: fromKey,
+    toNotebookKey: toKey,
+    toNotebookId,
+    toFolderId,
+    patchDoc: (id, notebookId) => docsApi.move(id, notebookId),
+  });
+  await store.patchRow(noteId, { notebookId: toNotebookId });
+  fromIndex.transact(() => {
+    for (const m of notebookMaps(fromIndex).notes.values()) if (m.get("parentNoteId") === noteId) m.set("parentNoteId", null);
+  });
+  runtime().indexer.schedule(noteId, 50);
 }
 
 export function trashNote(noteId: string) {

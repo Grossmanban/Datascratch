@@ -42,6 +42,14 @@ nonisolated final class WrappedKeyIndex: @unchecked Sendable {
 final class CoreLibrary: LibraryBackend {
     nonisolated private static let log = Logger(subsystem: "com.datascratch.app", category: "CoreLibrary")
     private static let accountDocKey = "app.accountDocId"
+    private static let carriedMergeKey = "app.carriedLibraryMergePending"
+
+    /// The device library was carried in and `LibraryStore.mergeCarriedDuplicates` has not run
+    /// yet (kept in the store so that a launch cut short still merges next time).
+    var needsCarriedMerge: Bool {
+        get { (try? store.string(Self.carriedMergeKey)) == "1" }
+        set { try? store.setString(newValue ? "1" : nil, for: Self.carriedMergeKey) }
+    }
     private static let overlayKey = "app.overlay"
 
     let store: LocalStore
@@ -249,6 +257,7 @@ final class CoreLibrary: LibraryBackend {
     func carryDeviceLibraries() throws -> [CarriedNotebook] {
         let orphans = try store.documents(kind: .account).filter { !$0.registered && $0.docId != account.accountDocId }
         guard !orphans.isEmpty else { return [] }
+        needsCarriedMerge = true
         let master = try keys.masterKey()
         var carried: [CarriedNotebook] = []
         for record in orphans {
@@ -270,6 +279,15 @@ final class CoreLibrary: LibraryBackend {
             try store.deleteDocument(record.docId)
         }
         return carried
+    }
+
+    /// What `POST /notebooks` needs for a notebook of the account whose key this device holds
+    /// (one carried in while offline never reached the server).
+    func serverNotebook(_ id: String) -> CarriedNotebook? {
+        guard let ref = account.notebook(id: id), let master = try? keys.masterKey(),
+              let key = try? keys.notebookKey(id),
+              let wrapped = try? DSCrypto.wrapKey(key, with: master, ad: CryptoAD.notebookKey(id)) else { return nil }
+        return CarriedNotebook(id: id, mode: ref.mode, wrappedKey: wrapped, key: key)
     }
 
     /// The key a share link carries: the note key or the notebook key (crypto.md §7).

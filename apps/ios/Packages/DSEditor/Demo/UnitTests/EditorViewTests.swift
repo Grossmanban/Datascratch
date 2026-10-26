@@ -872,7 +872,17 @@ final class EditorViewTests: XCTestCase {
         editor.textViewDidChangeSelection(editor.textView)
         XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "Заметка")
         XCTAssertEqual(editor.textView.selectedRange.location, inText + "Заметка".utf16.count, "the caret stays on the same text")
-        XCTAssertFalse(editor.fillEmptyTitleIfNeeded(), "a named title is not touched again")
+        XCTAssertFalse(editor.commitDefaultTitleIfNeeded(), "a named title is not touched again")
+    }
+
+    func testAnEmptyNoteKeepsAnEmptyTitleWhenClosedOrLeft() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title(""), .paragraph("")])
+        let editor = host(doc)
+        editor.defaultTitle = { "Заметка" }
+        window.makeKey()
+        editor.focusTitle()
+        XCTAssertFalse(editor.commitDefaultTitleIfNeeded(), "no text: the host drops the note, no title is invented")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "")
     }
 
     // MARK: - Block rendering (build 16 feedback)

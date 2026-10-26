@@ -200,6 +200,21 @@ public enum SyncErrorCode: String, Codable, Sendable {
     case rateLimited = "rate_limited", protocolMismatch = "protocol_mismatch", `internal`
 }
 
+/// Timing events of `SyncEngine` (`setTraceHandler`), e.g. for `os_signpost` intervals:
+/// subscribe → caught up per document.
+public enum SyncTraceEvent: Sendable, Equatable {
+    /// `welcome` received; subscriptions follow.
+    case connected
+    /// One subscribe frame sent, in this order.
+    case subscribed(docIds: [String])
+    /// A document's catch-up finished (`upToDate`).
+    case caughtUp(docId: String)
+    /// Registered after the server did not know it (`doc_not_found`).
+    case registered(docId: String)
+    /// Not subscribed: its key is not on this device yet.
+    case keyMissing(docId: String)
+}
+
 /// Server → client (§4).
 public enum ServerMessage: Codable, Hashable, Sendable {
     case welcome(userId: String?, serverTime: String)

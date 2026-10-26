@@ -4,10 +4,19 @@ import { create } from "zustand";
 /** What the UI shows (sync indicator); derived from SyncClient's status and per-doc sync. */
 export type SyncStatus = "offline" | "connecting" | "syncing" | "online";
 
-type SyncState = { status: SyncStatus; pending: number; lastSyncedAt: number | null; error: string | null };
+/** A document whose changes the server refused (shown as «Не отправлено: N» with a retry). */
+export type SyncFailure = { code: string; reason: string };
+
+type SyncState = {
+  status: SyncStatus;
+  pending: number;
+  lastSyncedAt: number | null;
+  error: string | null;
+  failed: Record<string, SyncFailure>;
+};
 
 export function createSyncStatusStore() {
-  return create<SyncState>(() => ({ status: "offline", pending: 0, lastSyncedAt: null, error: null }));
+  return create<SyncState>(() => ({ status: "offline", pending: 0, lastSyncedAt: null, error: null, failed: {} }));
 }
 export type SyncStatusStore = ReturnType<typeof createSyncStatusStore>;
 

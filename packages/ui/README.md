@@ -26,7 +26,7 @@ import { UIProvider } from "@datascratch/ui";
 | Кнопки | `Button` (primary / ink / secondary / ghost / danger, `loading`, `asChild`), `IconButton` (подсказка с горячей клавишей), `Kbd` |
 | Поля | `Input` (иконки, `bare` для заголовков), `TextArea` (растёт с текстом) |
 | Выбор | `Checkbox`, `TaskCheckbox` (круглый, пружина + рисование галочки + всплеск; `open / done / cancelled`), `Switch`, `SegmentedControl` (скользящая плашка), `Tabs` |
-| Всплывающее | `Tooltip`, `Popover`, `DropdownMenu`, `ContextMenu` (главный способ действий, D-38), `Dialog`, `Sheet` (справа или снизу), `CommandPalette` (cmdk, ⌘K, `useCommandPaletteShortcut`), `Toast` (`useToast`, действие «Отменить») |
+| Всплывающее | `Tooltip`, `Popover`, `DropdownMenu`, `ContextMenu` (строка: иконка, подпись с обрезкой, правый слот `checked` / `trailing` / `shortcut` — никогда не переносится) (главный способ действий, D-38), `Dialog`, `Sheet` (справа или снизу), `CommandPalette` (cmdk, ⌘K, `useCommandPaletteShortcut`), `Toast` (`useToast`, действие «Отменить») |
 | Даты | `DateChip` (Сегодня / Завтра / день недели / дата; красный — просрочено), `DatePicker` (быстрый выбор + календарь), `Calendar` (полная клавиатурная навигация) |
 | Метки и люди | `Badge`, `TagChip`, `Avatar` (присутствие), `AvatarStack`, `SpaceTile` (эмодзи/буква пространства на его `tint`) |
 | Поверхности | `Card`, `DocCard` (`asChild` — корнем становится ссылка роутера; миниатюра обложки — только своё изображение пользователя, spec 12.7; без обложки — компактная карточка с эмодзи; заголовок с засечками), `GlassPanel`, `Backdrop` (градиент + зерно) |
@@ -52,6 +52,7 @@ pnpm --filter @datascratch/ui dev              # витрина Ladle (localhost
 pnpm --filter @datascratch/ui showcase:build   # статическая витрина (в CI — артефакт ui-showcase)
 pnpm --filter @datascratch/ui test             # vitest + testing-library
 pnpm --filter @datascratch/ui typecheck
+pnpm --filter @datascratch/ui test:layout     # Playwright по собранной витрине: раскладка на ширине десктопа и телефона
 ```
 
 Истории: `src/stories/` — «Editor / Document» (документ, панель форматирования, палитра пера), «Lists» (задачи, документы), «Overview / Showcase» (экран в духе Craft: боковая панель, карточки, задачи, стеклянная панель пера), основы (цвета, типографика, подложки, тени), элементы управления, всплывающие окна.

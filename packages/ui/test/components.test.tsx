@@ -607,3 +607,31 @@ describe("PenToolbar custom colours and collapse", () => {
       expect(hsvToHex(hexToHsv(h))).toBe(h);
   });
 });
+
+describe("Menu rows", () => {
+  it("keep icon, label and trailing check in one row structure", async () => {
+    const { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, SpaceTile } =
+      await import("../src");
+    renderUI(
+      <DropdownMenu open>
+        <DropdownMenuTrigger>open</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem icon={<SpaceTile icon="🏡" />} checked shortcut="mod+1">
+            Личное
+          </DropdownMenuItem>
+          <DropdownMenuItem checked={false}>Работа</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    const [first, second] = screen.getAllByRole("menuitem");
+    const label = first!.querySelector("[data-menu-label]")!;
+    const trailing = first!.querySelector("[data-menu-trailing]")!;
+    expect(label).toHaveClass("flex", "min-w-0", "flex-1", "whitespace-nowrap");
+    expect(trailing).toHaveClass("shrink-0");
+    expect(trailing.querySelector("svg")).not.toHaveClass("invisible");
+    expect(trailing).toHaveTextContent(/1/);
+    expect(label.nextElementSibling).toBe(trailing);
+    // Unchecked rows keep the check's width so names stay aligned.
+    expect(second!.querySelector("[data-menu-trailing] svg")).toHaveClass("invisible");
+  });
+});

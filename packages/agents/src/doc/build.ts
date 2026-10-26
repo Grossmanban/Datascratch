@@ -9,6 +9,8 @@ export interface BuildContext {
   agentEdit: { agentId: string; at: string } | null;
   /** Keep this blockId for the first top-level block (replace keeps the id). */
   keepBlockId?: string;
+  /** Id generator for blockId/taskId (default UUIDv7; fixed in test vectors). */
+  newId?: () => string;
 }
 
 function withAgentMark(marks: Record<string, unknown>, ctx: BuildContext): Record<string, unknown> {
@@ -52,9 +54,10 @@ function fill(el: Y.XmlElement, spec: BlockSpec, ctx: BuildContext): void {
 export function insertBlock(parent: Y.XmlFragment | Y.XmlElement, index: number, spec: BlockSpec, ctx: BuildContext): Y.XmlElement {
   const el = new Y.XmlElement(spec.type);
   parent.insert(index, [el]);
-  el.setAttribute("blockId", ctx.keepBlockId ?? uuidv7());
+  const newId = ctx.newId ?? uuidv7;
+  el.setAttribute("blockId", ctx.keepBlockId ?? newId());
   const attrs = { ...spec.attrs };
-  if (spec.type === "taskItem" && !attrs.taskId) attrs.taskId = uuidv7();
+  if (spec.type === "taskItem" && !attrs.taskId) attrs.taskId = newId();
   // y-prosemirror never writes null attributes: a missing attribute means null (document-model.md §4.1).
   for (const [k, v] of Object.entries(attrs)) if (v !== undefined && v !== null) el.setAttribute(k, v as never);
   fill(el, spec, ctx);

@@ -614,27 +614,29 @@ public struct EditorCommands {
     /// Returns whether anything changed.
     @discardableResult
     public func repairTitles() -> Bool {
-        var changed = false
         let titles = document.blocks.filter { $0.type == NodeType.title }
+        var emptyExtras: [BlockID] = []
         if titles.count > 1 {
             let keep = titles.first { $0.textLength > 0 } ?? titles[0]
-            let empty = titles.filter { $0.id != keep.id && $0.textLength == 0 }
-            if !empty.isEmpty {
-                document.stopCapturing()
-                document.transact(origin: .local) { for t in empty { document.deleteBlock(t.id) } }
-                document.stopCapturing()
-                changed = true
-            }
+            emptyExtras = titles.filter { $0.id != keep.id && $0.textLength == 0 }.map(\.id)
         }
-        let top = document.blocks
+        // The rest of the document after the empty extras are gone (they are deleted first).
+        let top = document.blocks.filter { !emptyExtras.contains($0.id) }
+        var demoted: (title: BlockID, paragraph: BlockID)?
         if top.count >= 2, top[0].type == NodeType.title, top[0].textLength == 0,
            top[1].type == NodeType.paragraph, top[1].textLength > 0,
            let titleTime = Self.uuidV7Time(top[0].id), let paraTime = Self.uuidV7Time(top[1].id), paraTime < titleTime {
-            let title = top[0].id, para = top[1].id
-            let inline = document.inline(of: para, range: nil)
-            let re = StrokeReanchoring(document: document, blocks: [para])
-            document.stopCapturing()
-            document.transact(origin: .local) {
+            demoted = (top[0].id, top[1].id)
+        }
+        guard !emptyExtras.isEmpty || demoted != nil else { return false }
+        let re = demoted.map { StrokeReanchoring(document: document, blocks: [$0.paragraph]) }
+        let inline = demoted.map { document.inline(of: $0.paragraph, range: nil) } ?? []
+        document.stopCapturing()
+        // One transaction for the whole repair.
+        document.transact(origin: .local) {
+            for id in emptyExtras { document.deleteBlock(id) }
+            if let d = demoted {
+                let title = d.title, para = d.paragraph
                 var offset = 0
                 for el in inline {
                     switch el {
@@ -644,13 +646,12 @@ public struct EditorCommands {
                     offset += el.length
                 }
                 document.deleteBlock(para)
-                re.apply(to: document, map: { $0.block == para ? TextPosition(block: title, offset: $0.offset) : nil },
-                         mapBlock: { $0 == para ? title : nil })
+                re?.apply(to: document, map: { $0.block == para ? TextPosition(block: title, offset: $0.offset) : nil },
+                          mapBlock: { $0 == para ? title : nil })
             }
-            document.stopCapturing()
-            changed = true
         }
-        return changed
+        document.stopCapturing()
+        return true
     }
 
     /// Millisecond time of a UUIDv7 block id (its first 48 bits); nil for other ids.

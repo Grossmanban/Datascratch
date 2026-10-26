@@ -72,13 +72,29 @@
   }
 }
 
+/* Pen nib art (PenToolbar): barrel shading per theme. */
+:root {
+  --ui-nib-body-a: #ffffff;
+  --ui-nib-body-b: color-mix(in oklab, var(--ds-bg-surface), var(--ds-text-primary) 9%);
+  --ui-nib-edge: color-mix(in oklab, var(--ds-text-primary) 22%, transparent);
+  --ui-nib-shine: rgb(255 255 255 / 0.75);
+}
+
 /* Dark theme: grain blends softly, glass highlight is barely there. */
 [data-theme="dark"] {
+  --ui-nib-body-a: #4a4844;
+  --ui-nib-body-b: #2c2b28;
+  --ui-nib-edge: rgb(0 0 0 / 0.5);
+  --ui-nib-shine: rgb(255 255 255 / 0.16);
   --ui-glass-highlight: 7%;
   --ui-noise-blend: soft-light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    --ui-nib-body-a: #4a4844;
+    --ui-nib-body-b: #2c2b28;
+    --ui-nib-edge: rgb(0 0 0 / 0.5);
+    --ui-nib-shine: rgb(255 255 255 / 0.16);
     --ui-glass-highlight: 7%;
     --ui-noise-blend: soft-light;
   }

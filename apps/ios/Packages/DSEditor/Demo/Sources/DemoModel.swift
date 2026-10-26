@@ -1,8 +1,5 @@
-import DSCore
 import DSEditor
-import DSEditorCore
 import Observation
-import SwiftUI
 import UIKit
 
 /// Owns the editor and the demo document file.
@@ -11,9 +8,6 @@ import UIKit
 final class DemoModel {
     let editor: EditorView
     private(set) var document: InMemoryEditorDocument
-    /// The app's document model, when the editor runs on it (`-coreDocument`).
-    @ObservationIgnored private var coreDocument: CoreEditorDocument?
-    @ObservationIgnored private var headerHost: UIHostingController<AnyView>?
     var status = ""
     var showHUD = false
     var showPalette = false
@@ -23,16 +17,6 @@ final class DemoModel {
     var scrollOffset: CGFloat = 0
 
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
-    let selectedTraits = !ProcessInfo.processInfo.arguments.contains("-noSelectedTraits")
-    let hidesPalette = ProcessInfo.processInfo.arguments.contains("-noPalette")
-    /// UI-test bisection (temporary): `-splitView`, `-noNavigation`.
-    enum Navigation { case stack, split, none }
-    let navigation: Navigation = {
-        let args = ProcessInfo.processInfo.arguments
-        if args.contains("-splitView") { return .split }
-        if args.contains("-noNavigation") { return .none }
-        return .stack
-    }()
     private let images = DemoImages()
 
     static var fileURL: URL {
@@ -48,26 +32,10 @@ final class DemoModel {
                   let loaded = try? InMemoryEditorDocument(fileData: data) {
             doc = loaded
         } else {
-            doc = Self.sample(args)
+            doc = SampleDocument.make()
         }
         document = doc
-        if args.contains("-coreDocument"), let core = Self.coreDocument() {
-            // UI-test bisection (temporary): the app's document model (Yrs) under the editor.
-            coreDocument = core
-            editor = EditorView(document: core)
-        } else {
-            editor = EditorView(document: doc)
-        }
-        // UI-test bisection (temporary): the app creates its editor in text mode.
-        if args.contains("-startInText") { editor.tools.mode = .text }
-        // UI-test bisection (temporary): the app always puts a SwiftUI header above the text.
-        if args.contains("-header") {
-            let host = UIHostingController(rootView: AnyView(Text("Шапка заметки").font(.title3).padding(.vertical, 24)))
-            host.sizingOptions = .intrinsicContentSize
-            host.view.backgroundColor = .clear
-            headerHost = host
-            editor.headerView = host.view
-        }
+        editor = EditorView(document: doc)
         editor.attachmentResolver = images
         if args.contains("-fingerDrawing") || UIDevice.current.userInterfaceIdiom == .phone && args.contains("-fingerDrawingOnPhone") {
             editor.tools.allowsFingerDrawing = true
@@ -78,54 +46,8 @@ final class DemoModel {
             self.revision &+= 1
             if self.isUITesting { NSLog("DIAG state mode=%@", self.editor.tools.mode.rawValue) }
         }
-        if args.contains("-uiTesting") {
-            if !args.contains("-noDiagDump") {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { Self.dumpGestureRecognizers() }
-            }
-        }
-        // UI-test bisection switches (temporary): `-noScrollTracking`, `-noSelectedTraits`.
-        if !args.contains("-noScrollTracking") {
-            editor.onScroll = { [weak self] y in self?.scrollOffset = y }
-        }
-        if args.contains("-noKeyboardInset") { editor.adjustsForKeyboard = false }
+        editor.onScroll = { [weak self] y in self?.scrollOffset = y }
         editor.onPaletteRequest = { [weak self] _ in self?.showPalette = true }
-    }
-
-    /// UI-test diagnostics: every gesture recognizer in the window that delays touches.
-    /// The sample note, optionally without some block types (UI-test bisection switches:
-    /// `-sampleTextOnly`, `-sampleNoTable`, `-sampleNoMermaid`; `-sampleEmpty` is a new note,
-    /// like the one the app's UI test types into).
-    static func sample(_ args: [String]) -> InMemoryEditorDocument {
-        if args.contains("-sampleEmpty") { return InMemoryEditorDocument(blocks: [.title(""), .paragraph()]) }
-        let doc = SampleDocument.make()
-        let atoms: Set<String> = [NodeType.table, NodeType.mermaid, NodeType.mathBlock, NodeType.image, NodeType.drawing,
-                                  NodeType.file, NodeType.pageCard, NodeType.horizontalRule]
-        var drop: Set<String> = []
-        if args.contains("-sampleTextOnly") { drop = atoms }
-        if args.contains("-sampleNoTable") { drop.insert(NodeType.table) }
-        if args.contains("-sampleNoMermaid") { drop.insert(NodeType.mermaid) }
-        guard !drop.isEmpty else { return doc }
-        return InMemoryEditorDocument(blocks: doc.blocks.filter { !drop.contains($0.type) })
-    }
-
-    /// A new note in the app's document model, as the app's UI test opens it.
-    static func coreDocument() -> CoreEditorDocument? {
-        let note = NoteDocument(noteId: UUID().uuidString.lowercased())
-        guard (try? note.initialize(title: "")) != nil else { return nil }
-        return CoreEditorDocument(note: note)
-    }
-
-    static func dumpGestureRecognizers() {
-        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
-        func walk(_ v: UIView, depth: Int) {
-            for g in v.gestureRecognizers ?? [] where g.delaysTouchesBegan || g.delaysTouchesEnded {
-                NSLog("DIAG recognizer %@ on %@ began=%d ended=%d enabled=%d cancels=%d", String(describing: type(of: g)),
-                      String(describing: type(of: v)), g.delaysTouchesBegan ? 1 : 0, g.delaysTouchesEnded ? 1 : 0,
-                      g.isEnabled ? 1 : 0, g.cancelsTouchesInView ? 1 : 0)
-            }
-            for sub in v.subviews { walk(sub, depth: depth + 1) }
-        }
-        for w in windows { walk(w, depth: 0) }
     }
 
     func save() {

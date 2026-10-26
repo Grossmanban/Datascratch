@@ -103,6 +103,7 @@ public actor AccountService {
         let id = EntityID.make()
         let (key, wrapped) = try keys.createNotebookKey(notebookId: id)
         _ = try await api.createNotebook(id: id, mode: mode, wrappedKey: wrapped, notebookKey: mode == .agent ? key : nil)
+        keys.markNotebookKeyVerified(id)
         try await api.registerDoc(docId: id, kind: .notebook, notebookId: id)
         try store.ensureDocument(docId: id, kind: .notebook, notebookId: id)
         try store.setRegistered(id)

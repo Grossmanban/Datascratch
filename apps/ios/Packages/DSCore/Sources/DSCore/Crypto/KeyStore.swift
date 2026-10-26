@@ -93,6 +93,8 @@ public final class KeychainSecretStore: SecretStore {
 public final class KeyRing: Sendable {
     private let store: any SecretStore
     private let cache = Locked<[String: Data]>([:])
+    /// Notebooks whose key was confirmed by the server in this session (`adoptNotebookKey`).
+    private let verified = Locked<Set<String>>([])
 
     static let masterKeyName = "masterKey"
     static func notebookKeyName(_ id: String) -> String { "notebookKey.\(id)" }
@@ -149,6 +151,7 @@ public final class KeyRing: Sendable {
     /// returned.
     @discardableResult
     public func adoptNotebookKey(_ key: Data, notebookId: String) throws -> Data? {
+        defer { verified.withLock { _ = $0.insert(notebookId) } }
         let previous = try notebookKey(notebookId)
         if let previous, previous != key {
             let name = Self.retiredNotebookKeysName(notebookId)
@@ -159,6 +162,12 @@ public final class KeyRing: Sendable {
         try setNotebookKey(key, notebookId: notebookId)
         return previous == key ? nil : previous
     }
+
+    /// The notebook's key came from (or was confirmed by) the server in this session.
+    public func isNotebookKeyVerified(_ notebookId: String) -> Bool { verified.withLock { $0.contains(notebookId) } }
+
+    /// Marks a key as the server's — after `POST /notebooks` accepted it.
+    public func markNotebookKeyVerified(_ notebookId: String) { verified.withLock { _ = $0.insert(notebookId) } }
 
     /// Keys this notebook had on this device before the canonical one (`adoptNotebookKey`).
     public func retiredNotebookKeys(_ notebookId: String) -> [Data] {

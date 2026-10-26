@@ -17,8 +17,14 @@ for (const variant of ["agent", "paragraphBefore", "twoTitles"] as AgentTitleVar
     await mount(<AgentTitleEditor variant={variant} />);
     await open(page);
     let s = await state(page);
-    expect(s.updates, "zero Y updates on open").toBe(0);
-    expect(s.blocks).toEqual(s.before);
+    if (variant === "twoTitles") {
+      // The stray empty title (seeded by another client) is removed on open; nothing else changes.
+      expect(s.blocks).toEqual(s.before.slice(1));
+      s = { ...s, before: s.before.slice(1) };
+    } else {
+      expect(s.updates, "zero Y updates on open").toBe(0);
+      expect(s.blocks).toEqual(s.before);
+    }
     // The user clicks into the last paragraph and types.
     const p = page.locator(".ds-prose > p").last();
     await p.click();
@@ -26,7 +32,7 @@ for (const variant of ["agent", "paragraphBefore", "twoTitles"] as AgentTitleVar
     await page.keyboard.type("!");
     await page.locator(".ds-prose").evaluate((e) => (e as HTMLElement).blur());
     await page.waitForTimeout(200);
-    s = await state(page);
+    s = { ...(await state(page)), before: s.before };
     // Same blocks, same ids, same title text; only the edited paragraph changed.
     expect(s.blocks.length).toBe(s.before.length);
     const changed = s.blocks.filter((b, i) => b !== s.before[i]);

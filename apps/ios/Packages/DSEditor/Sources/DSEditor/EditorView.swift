@@ -1328,6 +1328,7 @@ public final class EditorView: UIView {
 
     @objc private func tapped(_ g: UITapGestureRecognizer) {
         let point = g.location(in: textView)
+        EditorDiagnostics.log("tap at \(Int(point.x)),\(Int(point.y)): link \(noteLink(at: point) != nil), date chip \(taskDateChip(at: point) != nil)")
         if let link = noteLink(at: point) {
             DSHaptics.selection()
             switch link {
@@ -1719,6 +1720,7 @@ extension EditorView {
 
     /// Menu of a tapped date chip: move the date (or deadline) or remove it.
     func dateMenu() -> UIMenu? {
+        EditorDiagnostics.log("date menu requested (target \(dateMenuTarget != nil))")
         guard let target = dateMenuTarget, let node = document.block(target.item) else { return nil }
         let cmd = commands
         let item = target.item

@@ -1,13 +1,20 @@
 import { create } from "zustand";
 import { authApi } from "@/api/endpoints";
 import { ApiError, setTokenSource } from "@/api/client";
-import { deleteAccountDb, kvDelete, kvGet, kvSet, openAccountDb } from "@/data/db";
+import { accountDb, closeAccountDb, deleteAccountDb, hasAccountDb, kvDelete, kvGet, kvSet, openAccountDb } from "@/data/db";
 import type { Session } from "@/lib/shared";
 import { openLocal, sealLocal, type SealedBlob } from "./deviceKey";
 
 type StoredAccount = { userId: string; email: string; session: Session; masterKey: SealedBlob };
 
 export type AuthStatus = "loading" | "signedOut" | "ready";
+
+/**
+ * This device was signed out from elsewhere (device revoked: refresh answers 401). Its local
+ * data — unsent changes included — stays until the next sign-in, which sends it (same account)
+ * or deletes it (another account), or until the user deletes it from the login screen.
+ */
+export type RevokedInfo = { userId: string; email: string; at: string; unsent: number };
 
 type AuthState = {
   status: AuthStatus;
@@ -22,6 +29,8 @@ type AuthState = {
    * (`settings.recoveryKeyConfirmed`), see auth/recovery.ts.
    */
   recoveryOnDevice: boolean;
+  /** Set on the login screen after a revocation (see RevokedInfo). */
+  revoked: RevokedInfo | null;
 };
 
 export const useAuth = create<AuthState>(() => ({
@@ -31,6 +40,7 @@ export const useAuth = create<AuthState>(() => ({
   accountDocId: null,
   recoveryStep: false,
   recoveryOnDevice: false,
+  revoked: null,
 }));
 
 // Secrets live only in module memory (and sealed in IndexedDB), never in React state.
@@ -83,8 +93,8 @@ async function refresh(): Promise<Session | null> {
         return session;
       } catch (e) {
         if (e instanceof ApiError && (e.status === 401 || e.code === "unauthorized")) {
-          // Refresh token revoked (device removed elsewhere) → sign out locally.
-          await signOutLocal();
+          // Refresh token revoked (session ended from another device): leave, keeping local data.
+          await endRevoked();
           return null;
         }
         return session;
@@ -115,6 +125,13 @@ export async function establish(params: {
 }) {
   session = params.session;
   masterKey = params.masterKey;
+  // Data left by a revoked session: kept for the same account (its unsent changes go out now),
+  // deleted for another one.
+  const revoked = await kvGet<RevokedInfo>("revoked");
+  if (revoked) {
+    if (revoked.userId !== params.userId) await forgetLocalData(revoked.userId);
+    await kvDelete("revoked");
+  }
   openAccountDb(params.userId);
   if (params.pendingRecoveryKey) {
     // Kept sealed on this device so it can be shown again from the settings (spec/07).
@@ -133,6 +150,7 @@ export async function establish(params: {
     accountDocId: params.session.accountDocId,
     recoveryStep: !!params.pendingRecoveryKey,
     recoveryOnDevice: !!params.pendingRecoveryKey,
+    revoked: null,
   });
 }
 
@@ -207,7 +225,7 @@ export async function restore(): Promise<void> {
   try {
     const stored = await kvGet<StoredAccount>("account");
     if (!stored) {
-      useAuth.setState({ status: "signedOut" });
+      useAuth.setState({ status: "signedOut", revoked: (await kvGet<RevokedInfo>("revoked")) ?? null });
       return;
     }
     masterKey = await openLocal(stored.masterKey);
@@ -236,6 +254,37 @@ export async function restore(): Promise<void> {
   }
 }
 
+async function endRevoked() {
+  const { userId, email } = useAuth.getState();
+  let unsent = 0;
+  if (hasAccountDb()) {
+    const db = accountDb();
+    unsent = await Promise.all([db.syncOutbox.count(), db.ops.count()]).then(([a, b]) => a + b, () => 0);
+  }
+  const info: RevokedInfo | null = userId && email ? { userId, email, at: new Date().toISOString(), unsent } : null;
+  for (const fn of signedOutListeners) fn();
+  session = null;
+  masterKey?.fill(0);
+  masterKey = null;
+  await kvDelete("account");
+  if (info) await kvSet("revoked", info);
+  closeAccountDb();
+  useAuth.setState({ status: "signedOut", userId: null, email: null, accountDocId: null, recoveryStep: false, recoveryOnDevice: false, revoked: info });
+}
+
+async function forgetLocalData(userId: string) {
+  for (const k of ["pendingRecovery", "recoveryKey", "recoveryKeyAt", "recoveryConfirmed", "recoveryStep"]) await kvDelete(k);
+  await deleteAccountDb(userId);
+}
+
+/** «Удалить данные с этого устройства» after a revocation (e.g. the device was lost). */
+export async function forgetRevokedData() {
+  const revoked = await kvGet<RevokedInfo>("revoked");
+  if (revoked) await forgetLocalData(revoked.userId);
+  await kvDelete("revoked");
+  useAuth.setState({ revoked: null });
+}
+
 async function signOutLocal() {
   const userId = useAuth.getState().userId;
   for (const fn of signedOutListeners) fn();
@@ -243,9 +292,8 @@ async function signOutLocal() {
   masterKey?.fill(0);
   masterKey = null;
   await kvDelete("account");
-  for (const k of ["pendingRecovery", "recoveryKey", "recoveryKeyAt", "recoveryConfirmed", "recoveryStep"]) await kvDelete(k);
-  if (userId) await deleteAccountDb(userId);
-  useAuth.setState({ status: "signedOut", userId: null, email: null, accountDocId: null, recoveryStep: false, recoveryOnDevice: false });
+  if (userId) await forgetLocalData(userId);
+  useAuth.setState({ status: "signedOut", userId: null, email: null, accountDocId: null, recoveryStep: false, recoveryOnDevice: false, revoked: null });
 }
 
 export async function signOut() {

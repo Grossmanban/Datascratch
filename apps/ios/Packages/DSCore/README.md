@@ -274,7 +274,9 @@ keep-alive), новых TLS-рукопожатий меньше; `waitsForConnec
 
 ### Статус и ошибки отправки
 
-`engine.status()` / `statusUpdates()` → `SyncStatus { connection, pending, catchingUp, failed }`,
+`engine.status()` / `statusUpdates()` → `SyncStatus { connection, pending, catchingUp, failed, held }`
+(`pending` — только то, что движок может отправить сейчас; `held` — сообщения документов, чей
+ключ ещё не на устройстве: уйдут сами, когда ключ появится — спокойная пометка, не крутилка),
 `isIdle` — нечего отправлять и догонять, `summary` — одно состояние для индикатора:
 `.offline`, `.syncing`, `.synced`, `.failed(documents:reason:)` (без связи, идёт, всё
 синхронизировано, есть недоставленное). Сообщения, которые не доставить повтором, уходят из

@@ -13,8 +13,6 @@ export const ORIGIN_LOAD = Symbol("load");
 const COMPACT_LOCAL_AFTER = 200;
 /** How long a held doc waits for its row before loading unsynced (see open()). */
 const ROW_WAIT_MS = 15_000;
-/** How long decrypting a note waits for an index that lists its key (see keyFor). */
-const KEY_WAIT_MS = 10_000;
 
 type Listener = (docId: string, origin: unknown) => void;
 
@@ -46,7 +44,6 @@ export class DocStore {
   private rows = new Map<string, DocRow>();
   private closing = new Map<string, Promise<void>>();
   private rowWaiters = new Map<string, Set<() => void>>();
-  private waitedForKey = new Set<string>();
   private noteSync: NoteSync | null = null;
 
   /** Set by the runtime once SyncClient runs; until then notes load straight from disk. */
@@ -109,6 +106,11 @@ export class DocStore {
     for (const fn of this.rowWaiters.get(docId) ?? []) fn();
     this.rowWaiters.delete(docId);
     return row;
+  }
+
+  /** Kind of a known doc (from the cached rows), without waiting for storage. */
+  rowKind(docId: string): DocKind | undefined {
+    return this.rows.get(docId)?.kind;
   }
 
   get(docId: string): Y.Doc | undefined {
@@ -272,19 +274,15 @@ export class DocStore {
     if (!row.notebookId) return null;
     let notebookId = row.notebookId;
     let meta = (await this.load(notebookId)).getMap<Y.Map<unknown>>("notes").get(docId);
-    // Moved to another notebook (api.md «Перенос заметки»): the index that lists it now may not
-    // have arrived yet on this device. An update that cannot be decrypted is skipped for good, so
-    // wait for it a little instead of answering «no key».
-    const wait = !this.waitedForKey.has(docId);
-    this.waitedForKey.add(docId); // once per note: a note without a key must not stall sync each time
-    for (const until = Date.now() + (wait ? KEY_WAIT_MS : 0); !meta?.get("wrappedKey") && Date.now() < until; ) {
+    // Moved to another notebook (api.md «Перенос заметки»): find the index that lists it now. If none
+    // has arrived yet, the answer is «no key yet» (null) and SyncClient pauses the note until the
+    // runtime calls keyAvailable.
+    if (!meta?.get("wrappedKey")) {
       const found = this.findNoteMeta(docId);
       if (found) {
         ({ notebookId, meta } = found);
         if (row.notebookId !== notebookId) await this.patchRow(docId, { notebookId });
-        break;
       }
-      await new Promise((r) => setTimeout(r, 200));
     }
     return noteKey(docId, notebookId, meta?.get("wrappedKey") as string | undefined);
   }

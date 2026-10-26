@@ -69,8 +69,7 @@
   box-sizing: border-box;
   max-width: var(--ds-doc-width, 720px);
   margin: 0 auto;
-  /* strokes.md §4: free room to draw below the last paragraph — at least the visible height. */
-  padding: 24px 56px max(var(--ds-doc-bottom, 160px), 100vh);
+  padding: 24px 56px var(--ds-doc-bottom, 160px);
   outline: none;
   font-size: 17px;
   line-height: 1.5;
@@ -210,6 +209,14 @@
   font-weight: 600;
   cursor: pointer;
 }
+/* Inline $…$ math: the source is hidden (not removed) while its KaTeX rendering is shown. */
+.ds-prose .ds-inline-math-src {
+  display: none;
+}
+.ds-prose .ds-inline-math {
+  padding: 0 1px;
+  cursor: text;
+}
 .ds-prose .ds-missing-link {
   color: var(--ds-accent-c);
   text-decoration: underline dashed color-mix(in srgb, var(--ds-accent-c) 45%, transparent);
@@ -221,6 +228,25 @@
 .ds-prose ol {
   padding-left: 1.5em;
   margin: 0.25em 0;
+}
+/* Explicit markers: CSS resets (Tailwind preflight in the design system) set list-style: none. */
+.ds-prose ul:not([data-type="taskList"]) {
+  list-style: disc;
+}
+.ds-prose ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
+  list-style: circle;
+}
+.ds-prose ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
+  list-style: square;
+}
+.ds-prose ol {
+  list-style: decimal;
+}
+.ds-prose ol ol {
+  list-style: lower-alpha;
+}
+.ds-prose li::marker {
+  color: var(--ds-muted);
 }
 .ds-prose li > p {
   margin: 0;
@@ -796,6 +822,11 @@ span.ds-unsupported {
 }
 .ds-pen-live {
   z-index: 3;
+}
+/* strokes.md §4: free room to draw below the last paragraph (at least the visible height) whenever
+   drawing is possible — finger/mouse drawing on, or a stylus seen. Otherwise the note ends normally. */
+.ds-pen-room .ds-prose {
+  padding-bottom: max(var(--ds-doc-bottom, 160px), 100vh);
 }
 .ds-pen-draw-any .ds-prose {
   touch-action: none;

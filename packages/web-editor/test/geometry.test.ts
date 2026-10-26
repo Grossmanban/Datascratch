@@ -204,3 +204,12 @@ describe("free drawings far from text (strokes.md §4)", () => {
     expect(isFreeDrawing([{ y: 10 }], [])).toBe(true); // no text at all
   });
 });
+
+describe("inline math detection", () => {
+  it("finds $…$ but not prices or escaped dollars", async () => {
+    const { findInlineMath } = await import("../src/schema/inlineMath");
+    expect(findInlineMath("Энергия $E=mc^2$ и $a_i$.").map((m) => m.latex)).toEqual(["E=mc^2", "a_i"]);
+    expect(findInlineMath("Стоит $5 и $10")).toEqual([]);
+    expect(findInlineMath("не формула \\$x$ и $ x $")).toEqual([]);
+  });
+});

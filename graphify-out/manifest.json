@@ -1046,13 +1046,13 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792978387.973888,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792978387.9738936,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -4010,7 +4010,7 @@
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792978387.973897,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
@@ -4056,9 +4056,9 @@
     "semantic_hash": "606014230fa9f49aa15d818595778a2c"
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoModel.swift": {
-    "mtime": 1792976067.580637,
-    "seen": 1792976198.8361936,
-    "ast_hash": "234a41af2924a95f17da9eee5d4a3d2b",
+    "mtime": 1792979614.7635374,
+    "seen": 1792979683.9027274,
+    "ast_hash": "6cf7ccfbab7613b3b066aebfbed37821",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoView.swift": {
@@ -4074,9 +4074,9 @@
     "semantic_hash": "a0f80305c431ac4070e7ebc1b3465b42"
   },
   "apps/ios/Packages/DSEditor/Demo/UITests/EditorDemoUITests.swift": {
-    "mtime": 1792976067.5812736,
-    "seen": 1792976198.836201,
-    "ast_hash": "76644b16787773e115f2b91fec7430f5",
+    "mtime": 1792979614.7813444,
+    "seen": 1792979683.9027953,
+    "ast_hash": "29aa87b6c972557bab26f0e7568202ca",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
@@ -4086,9 +4086,9 @@
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
-    "mtime": 1792978310.0335693,
-    "seen": 1792978378.3709004,
-    "ast_hash": "486a4f4a31741d84a190fdcd276b52ed",
+    "mtime": 1792979601.7038207,
+    "seen": 1792979683.9028277,
+    "ast_hash": "156fb1b3079f5fb8e7d0b31142e634f1",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Package.swift": {
@@ -4508,7 +4508,7 @@
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792967462.0829601,
     "seen": 1792978387.9746165,
-    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "infra/deploy/inspect.sh": {

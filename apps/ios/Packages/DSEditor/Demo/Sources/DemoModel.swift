@@ -1,4 +1,6 @@
+import DSCore
 import DSEditor
+import DSEditorCore
 import Observation
 import UIKit
 
@@ -8,6 +10,8 @@ import UIKit
 final class DemoModel {
     let editor: EditorView
     private(set) var document: InMemoryEditorDocument
+    /// The app's document model, when the editor runs on it (`-coreDocument`).
+    @ObservationIgnored private var coreDocument: CoreEditorDocument?
     var status = ""
     var showHUD = false
     var showPalette = false
@@ -44,7 +48,15 @@ final class DemoModel {
             doc = Self.sample(args)
         }
         document = doc
-        editor = EditorView(document: doc)
+        if args.contains("-coreDocument"), let core = Self.coreDocument() {
+            // UI-test bisection (temporary): the app's document model (Yrs) under the editor.
+            coreDocument = core
+            editor = EditorView(document: core)
+        } else {
+            editor = EditorView(document: doc)
+        }
+        // UI-test bisection (temporary): the app creates its editor in text mode.
+        if args.contains("-startInText") { editor.tools.mode = .text }
         editor.attachmentResolver = images
         if args.contains("-fingerDrawing") || UIDevice.current.userInterfaceIdiom == .phone && args.contains("-fingerDrawingOnPhone") {
             editor.tools.allowsFingerDrawing = true
@@ -83,6 +95,13 @@ final class DemoModel {
         if args.contains("-sampleNoMermaid") { drop.insert(NodeType.mermaid) }
         guard !drop.isEmpty else { return doc }
         return InMemoryEditorDocument(blocks: doc.blocks.filter { !drop.contains($0.type) })
+    }
+
+    /// A new note in the app's document model, as the app's UI test opens it.
+    static func coreDocument() -> CoreEditorDocument? {
+        let note = NoteDocument(noteId: UUID().uuidString.lowercased())
+        guard (try? note.initialize(title: "")) != nil else { return nil }
+        return CoreEditorDocument(note: note)
     }
 
     static func dumpGestureRecognizers() {

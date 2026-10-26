@@ -104,6 +104,12 @@ export function updateNotebook(id: string, patch: Partial<Pick<NotebookRef, "nam
   if (m) patchYMap(m, patch);
 }
 
+/** Move a notebook to another space (an explicit command, D-48): it goes last there, with its notes. */
+export function moveNotebookToSpace(id: string, spaceId: string) {
+  const st = useWorkspace.getState();
+  updateNotebook(id, { spaceId, order: nextOrder(st.account.notebooks.filter((n) => n.spaceId === spaceId)) });
+}
+
 /** Needs the server: switching to "agent" hands the notebook key to it (crypto.md §8). */
 export async function setNotebookMode(id: string, mode: NotebookMode) {
   await pushNotebookMode(id, mode);

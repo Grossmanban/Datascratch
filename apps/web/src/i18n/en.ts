@@ -167,6 +167,7 @@ const en: Loose<Messages> = {
     moveTo: "Move to…",
     closeTab: "Close tab",
     moveToNotebook: "Move to notebook…",
+    moveToSpace: "Move to space…",
     movedTo: "Moved to “{{name}}”",
     moveFailed: "Couldn’t move the document. Try again.",
     moveNeedsNetwork: "Moving to another notebook needs a connection.",

@@ -6,10 +6,10 @@
     "semantic_hash": "8ed5ea815c922d10241dff6213dc8744"
   },
   ".github/workflows/agents.yml": {
-    "mtime": 1792930769.1206486,
-    "seen": 1793048243.4514952,
-    "ast_hash": "9a7159cfa5a66eb529781445054cb843",
-    "semantic_hash": "9a7159cfa5a66eb529781445054cb843"
+    "mtime": 1793051115.3094463,
+    "seen": 1793051171.455128,
+    "ast_hash": "f99666aa98f673b725860804f190d469",
+    "semantic_hash": ""
   },
   ".github/workflows/deploy.yml": {
     "mtime": 1793021800.0708838,
@@ -2754,16 +2754,16 @@
     "semantic_hash": "003b2947a17ad8e144056de57500115f"
   },
   "packages/agents/src/doc/build.ts": {
-    "mtime": 1792930355.0633101,
-    "seen": 1793048243.4523292,
-    "ast_hash": "9437f2817384655b62dec212c81fc2e1",
-    "semantic_hash": "9437f2817384655b62dec212c81fc2e1"
+    "mtime": 1793051115.3894465,
+    "seen": 1793051171.470713,
+    "ast_hash": "a8e3015a912663021f9fe29f4b1b419e",
+    "semantic_hash": ""
   },
   "packages/agents/src/doc/edits.ts": {
-    "mtime": 1793022824.700249,
-    "seen": 1793048243.452331,
-    "ast_hash": "d14ce0b735168ce17164d9b7bcd61d81",
-    "semantic_hash": "d14ce0b735168ce17164d9b7bcd61d81"
+    "mtime": 1793051115.3894465,
+    "seen": 1793051171.4707212,
+    "ast_hash": "5bbbfd17d8998c6e609611fdbb8276ac",
+    "semantic_hash": ""
   },
   "packages/agents/src/doc/handwriting.ts": {
     "mtime": 1793026087.1039248,
@@ -2784,10 +2784,10 @@
     "semantic_hash": "78fe9272f2d6313e0c911e6d863f8cbb"
   },
   "packages/agents/src/doc/model.ts": {
-    "mtime": 1792930769.1526484,
-    "seen": 1793048243.4523368,
-    "ast_hash": "3437ae5fee84b2f450ac9fc991f3c35f",
-    "semantic_hash": "3437ae5fee84b2f450ac9fc991f3c35f"
+    "mtime": 1793051115.3894465,
+    "seen": 1793051171.4708154,
+    "ast_hash": "36ef93f98e1ff11df6ac09c228881568",
+    "semantic_hash": ""
   },
   "packages/agents/src/doc/strokes.ts": {
     "mtime": 1793022824.700249,
@@ -2862,10 +2862,10 @@
     "semantic_hash": "0ed7f84bd1143878a1862367a7312d84"
   },
   "packages/agents/src/service/agent-service.ts": {
-    "mtime": 1793026087.1044428,
-    "seen": 1793048243.4523592,
-    "ast_hash": "1158d4af1b2e81df2cd12437d9abe707",
-    "semantic_hash": "1158d4af1b2e81df2cd12437d9abe707"
+    "mtime": 1793051115.3894465,
+    "seen": 1793051171.4711196,
+    "ast_hash": "e8ff4df22e9ec1932b43e8435cdcefca",
+    "semantic_hash": ""
   },
   "packages/agents/src/service/note-index.ts": {
     "mtime": 1792930769.1526484,
@@ -2916,10 +2916,10 @@
     "semantic_hash": "9dd809afaa1dcd7ac0f040354dc5e92d"
   },
   "packages/agents/test/doc.test.ts": {
-    "mtime": 1792930355.0687377,
-    "seen": 1793048243.4523714,
-    "ast_hash": "d7c4bfb36708373b51bb3b9175ed7a08",
-    "semantic_hash": "d7c4bfb36708373b51bb3b9175ed7a08"
+    "mtime": 1793051115.3919027,
+    "seen": 1793051171.4713223,
+    "ast_hash": "c87acbad7a04408570f12586911edc5d",
+    "semantic_hash": ""
   },
   "packages/agents/test/markdown.test.ts": {
     "mtime": 1793026087.1084428,
@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793050961.8570716,
-    "seen": 1793051016.8982177,
-    "ast_hash": "53fd9278bd3304ef174754cca3582aa3",
+    "mtime": 1793051115.773304,
+    "seen": 1793051171.4784715,
+    "ast_hash": "2a1fa7587d883e38a236933c7369dcdc",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -4794,10 +4794,10 @@
     "semantic_hash": "b757b624995ead23bb5da2804c216a03"
   },
   "packages/test-vectors/README.md": {
-    "mtime": 1792934697.384882,
-    "seen": 1793045735.2125702,
-    "ast_hash": "8a6e4f1db25c0e168e94ffbaf1beb1d6",
-    "semantic_hash": "8a6e4f1db25c0e168e94ffbaf1beb1d6"
+    "mtime": 1793051115.3919027,
+    "seen": 1793051171.4810395,
+    "ast_hash": "bdb2386479010aa01f399fe650b1af81",
+    "semantic_hash": ""
   },
   "packages/ui/README.md": {
     "mtime": 1793022328.2722194,
@@ -5199,6 +5199,18 @@
     "mtime": 1793050961.4541104,
     "seen": 1793051016.8976583,
     "ast_hash": "89b15c1e6a929efb95125e735aeeefd9",
+    "semantic_hash": ""
+  },
+  "packages/agents/test/agent-vectors.test.ts": {
+    "mtime": 1793051115.3919027,
+    "seen": 1793051171.4713194,
+    "ast_hash": "574174e8d712eb13a2bf1f44e4e1d037",
+    "semantic_hash": ""
+  },
+  "packages/test-vectors/vectors/agents/create-note.json": {
+    "mtime": 1793051115.3919027,
+    "seen": 1793051171.4736764,
+    "ast_hash": "934acaac3ee6eafadf1a3f52fd0ba19b",
     "semantic_hash": ""
   }
 }

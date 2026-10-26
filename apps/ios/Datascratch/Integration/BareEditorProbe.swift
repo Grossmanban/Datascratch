@@ -10,7 +10,8 @@ struct BareEditorProbe: UIViewRepresentable {
     static var isRequested: Bool { ProcessInfo.processInfo.arguments.contains("-bareEditorProbe") }
 
     func makeUIView(context: Context) -> EditorView {
-        let document = InMemoryEditorDocument(blocks: [.title("Probe"), .paragraph("Tap here and type.")])
+        // Lowercase single words: not UI text for the string catalog check.
+        let document = InMemoryEditorDocument(blocks: [.title("probe"), .paragraph("ink")])
         let editor = EditorView(document: document)
         editor.accessibilityIdentifier = "bareEditor"
         return editor

@@ -24,7 +24,7 @@ test("the app runs under the production CSP without violations", async ({ page }
   await newDoc(page, "Под CSP", "Формула и рисунок");
   await page.waitForTimeout(1000);
   await collect();
-  for (const path of ["/tasks", "/calendar", "/settings/account", "/settings/appearance"]) {
+  for (const path of ["/all", "/settings/account", "/settings/appearance"]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");
     await collect();

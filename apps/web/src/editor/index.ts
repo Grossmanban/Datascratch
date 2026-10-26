@@ -4,6 +4,7 @@ import "@datascratch/web-editor/styles.css";
 export {
   DatascratchEditor,
   PEN_ORIGIN,
+  readTitle,
   META_ORIGIN,
   type DatascratchEditorProps,
   type EditorApi,

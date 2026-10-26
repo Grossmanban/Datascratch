@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type * as Y from "yjs";
 import type { Folder, NoteMeta, NotebookRef, Space, StarredRef } from "@/lib/shared";
-import { readAccount, type AccountSnapshot } from "./account";
+import { readAccount, type AccountSnapshot, type TabEntry } from "./account";
 import { readNotebook, type NotebookSnapshot, type TagProps } from "./notebook";
 
 export type NoteEntry = NoteMeta & { notebookId: string };
@@ -146,7 +146,7 @@ export function starredInSpace(st: WorkspaceState, ref: StarredRef, spaceId: str
 }
 
 /** Open tabs of a space, in order (the account keeps one list for all spaces). */
-export function tabsInSpace(st: WorkspaceState, spaceId: string | null): { noteId: string }[] {
+export function tabsInSpace(st: WorkspaceState, spaceId: string | null): TabEntry[] {
   return st.account.tabs.filter((t) => {
     const n = st.notes[t.noteId];
     return n && !n.trashedAt && spaceOfNotebook(st, n.notebookId) === spaceId;

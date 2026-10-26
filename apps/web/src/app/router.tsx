@@ -12,6 +12,7 @@ import { GuestPage } from "@/features/guest/GuestPage";
 import { SettingsPage, type SettingsSection } from "@/features/settings/SettingsPage";
 import { AppShell } from "@/features/shell/AppShell";
 import { TasksPage, type TaskView } from "@/features/tasks/TasksPage";
+import { features } from "@/lib/features";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -72,6 +73,10 @@ const tasksRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/tasks/$view",
   component: TasksPage,
+  // Extended mode only (D-51); a minimal build lands on the documents.
+  beforeLoad: () => {
+    if (!features.tasks) throw redirect({ to: "/all" });
+  },
   params: {
     parse: (p) => ({ view: (["inbox", "today", "upcoming", "all", "logbook"].includes(p.view) ? p.view : "today") as TaskView }),
     stringify: (p) => ({ view: p.view }),
@@ -81,6 +86,7 @@ const tasksIndex = createRoute({
   getParentRoute: () => appLayout,
   path: "/tasks",
   beforeLoad: () => {
+    if (!features.tasks) throw redirect({ to: "/all" });
     throw redirect({ to: "/tasks/$view", params: { view: "today" } });
   },
 });
@@ -88,6 +94,9 @@ const calendarRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/calendar",
   component: CalendarPage,
+  beforeLoad: () => {
+    if (!features.calendar) throw redirect({ to: "/all" });
+  },
   validateSearch: (s: Record<string, unknown>): { date?: string } => ({
     date: typeof s.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.date) ? s.date : undefined,
   }),

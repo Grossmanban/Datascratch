@@ -1,0 +1,22 @@
+name: net-probe
+on:
+  push:
+    branches: [claude/net-probe]
+jobs:
+  probe:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: HTTPS vs HTTP to the Datascratch server
+        run: |
+          for kind in https http; do
+            ok=0; hang=0; other=0
+            for i in $(seq 1 40); do
+              if [ $kind = https ]; then u="https://ds.777400777.xyz/v1/health"; else u="http://ds.777400777.xyz/"; fi
+              c=$(curl -s -m 6 -o /dev/null -w "%{http_code}" "$u?x=$i" || true)
+              case $c in 200|308|301) ok=$((ok+1));; 000) hang=$((hang+1));; *) other=$((other+1));; esac
+            done
+            echo "$kind: ok=$ok hang=$hang other=$other"
+          done

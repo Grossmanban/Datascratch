@@ -650,4 +650,49 @@ final class EditorViewTests: XCTestCase {
         XCTAssertLessThan(visible.maxY - caret.maxY, 80,
                           "only the needed amount: the caret stays just above the keyboard, not at the top")
     }
+
+    // MARK: - Ruled paper follows the text (build 13 check)
+
+    /// Bottoms of every laid-out line (text lines and block attachments), in text container coordinates.
+    private func lineBottoms(_ editor: EditorView) -> [CGFloat] {
+        guard let lm = editor.textView.textLayoutManager else { return [] }
+        var out: [CGFloat] = []
+        lm.enumerateTextLayoutFragments(from: lm.documentRange.location, options: [.ensuresLayout]) { frag in
+            for line in frag.textLineFragments where line.characterRange.length > 0 {
+                out.append(frag.layoutFragmentFrame.minY + line.typographicBounds.maxY)
+            }
+            return true
+        }
+        return out
+    }
+
+    func testRuledPaperRulesStayUnderTheTextForEveryFontSizeAndWidth() throws {
+        for font in DocumentStyle.Font.allCases {
+            for size in [CGFloat(14), 17, 22] {
+                for width in DocumentStyle.Width.allCases {
+                    let doc = SampleDocument.make()
+                    doc.setStyle(DocumentStyle(font: font, width: width, paper: .lines))
+                    let editor = host(doc, width: 900, height: 1200)
+                    editor.setBaseFontSize(size)
+                    settle(editor)
+                    let pitch = try XCTUnwrap(editor.theme.paperPitch)
+                    XCTAssertEqual(pitch, (editor.theme.bodyFont.lineHeight * 1.22).rounded(), "pitch = body line height")
+                    let bottoms = lineBottoms(editor)
+                    XCTAssertGreaterThan(bottoms.count, 20)
+                    for (i, y) in bottoms.enumerated() {
+                        let r = y.truncatingRemainder(dividingBy: pitch)
+                        XCTAssertTrue(min(r, pitch - r) < 0.75,
+                                      "\(font) \(size) \(width): line \(i) ends at \(y), off the \(pitch) pt rules by \(r)")
+                    }
+                    // The pattern's rules sit just under those line ends, in content coordinates.
+                    let paper = try XCTUnwrap(editor.textView.subviews.first { $0 is PaperView } as? PaperView)
+                    let ruleInContent = paper.frame.minY + PaperView.ruleY(pitch: paper.pitch, phaseY: paper.phase.y, lift: paper.ruleLift)
+                    let lineEnd = ruleInContent + paper.ruleLift - editor.textView.textContainerInset.top
+                    let r = lineEnd.truncatingRemainder(dividingBy: pitch)
+                    XCTAssertTrue(min(abs(r), pitch - abs(r)) < 0.5, "\(font) \(size) \(width): rules are off the lines by \(r)")
+                    window.isHidden = true
+                }
+            }
+        }
+    }
 }

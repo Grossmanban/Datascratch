@@ -324,7 +324,11 @@ public final class EditorView: UIView {
     }
 
     private func dynamicTypeChanged() {
-        let size = EditorTheme.dynamicBaseSize(for: traitCollection)
+        setBaseFontSize(EditorTheme.dynamicBaseSize(for: traitCollection))
+    }
+
+    /// Body text size (Dynamic Type); everything else scales with it.
+    func setBaseFontSize(_ size: CGFloat) {
         guard size != theme.baseFontSize else { return }
         theme.baseFontSize = size
         applyTheme()
@@ -335,6 +339,7 @@ public final class EditorView: UIView {
         renderer.theme = theme
         factory.theme = theme
         paper.paper = theme.style.paper
+        alignPaper(frame: paper.frame)
         setNeedsLayout()
     }
 
@@ -413,6 +418,16 @@ public final class EditorView: UIView {
         }
     }
 
+    /// Ruled, grid and dot paper follow the text: the pitch is the body line height and the
+    /// rules sit under the lines, which start at the top of the text container.
+    private func alignPaper(frame: CGRect) {
+        guard let pitch = theme.paperPitch else { return }
+        let inset = textView.textContainerInset
+        paper.pitch = pitch
+        paper.ruleLift = (abs(theme.bodyFont.descender) - 2).rounded()
+        paper.phase = CGPoint(x: inset.left - frame.minX, y: inset.top - frame.minY)
+    }
+
     /// Scrolls the least needed to show the caret line above the bottom inset.
     func scrollCaretIntoView() {
         guard textView.isFirstResponder, let range = textView.selectedTextRange else { return }
@@ -442,6 +457,7 @@ public final class EditorView: UIView {
         let size = CGSize(width: max(textView.contentSize.width, textView.bounds.width),
                           height: max(textView.contentSize.height, textView.bounds.height) + 400)
         let frame = CGRect(origin: CGPoint(x: 0, y: -200), size: size)
+        alignPaper(frame: frame)
         if paper.frame != frame {
             paper.frame = frame
             inkUnder.frame = CGRect(origin: .zero, size: size)

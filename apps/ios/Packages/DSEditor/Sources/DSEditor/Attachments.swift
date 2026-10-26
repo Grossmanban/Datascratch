@@ -177,7 +177,15 @@ final class BlockAttachmentViewProvider: NSTextAttachmentViewProvider {
         let width = max(40, proposedLineFragment.width - 4)
         let node = attachment.node
         let factory = attachment.factory
-        let height: CGFloat = MainActor.assumeIsolated { factory?.height(for: node, width: width) ?? 48 }
+        let (height, pitch): (CGFloat, CGFloat?) = MainActor.assumeIsolated {
+            (factory?.height(for: node, width: width) ?? 48, factory?.theme.paperPitch)
+        }
+        // On ruled paper a block takes whole lines: its height is rounded up to the pitch and it
+        // reaches down to the descender, so the line it occupies is exactly that tall.
+        if let pitch, pitch > 0 {
+            let descent = abs((attributes[.font] as? UIFont)?.descender ?? 0)
+            return CGRect(x: 0, y: -descent, width: width, height: (height / pitch).rounded(.up) * pitch)
+        }
         return CGRect(x: 0, y: 0, width: width, height: height)
     }
 }

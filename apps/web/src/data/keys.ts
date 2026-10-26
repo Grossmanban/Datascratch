@@ -6,9 +6,16 @@ import { accountDb } from "./db";
 // Unwrapped keys live only in memory. Wrapped forms (under the master key) are cached
 // in IndexedDB so the app opens offline.
 const notebookKeys = new Map<string, Uint8Array>();
+/** Keys this device used before switching to the server's (items it sealed with them stay readable). */
+const retiredNotebookKeys = new Map<string, Uint8Array[]>();
+
+export function retiredKeysFor(notebookId: string): Uint8Array[] {
+  return retiredNotebookKeys.get(notebookId) ?? [];
+}
 const noteKeys = new Map<string, Uint8Array>();
 
 export function clearKeys() {
+  retiredNotebookKeys.clear();
   for (const k of notebookKeys.values()) k.fill(0);
   for (const k of noteKeys.values()) k.fill(0);
   notebookKeys.clear();
@@ -96,6 +103,7 @@ export async function checkNotebookKeys(list: { id: string; wrappedKey: string }
     if (local && !sameBytes(local, serverKey)) {
       console.warn("[ds] notebook key differed from the server's; switching to the server's", n.id);
       replaced.push({ notebookId: n.id, oldKey: local, newKey: serverKey });
+      retiredNotebookKeys.set(n.id, [...retiredKeysFor(n.id), local]);
     }
     notebookKeys.set(n.id, serverKey);
     await db.kv.put({ key: `nbkey:${n.id}`, value: n.wrappedKey });

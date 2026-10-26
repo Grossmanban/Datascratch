@@ -18,6 +18,10 @@ final class EditorViewTests: XCTestCase {
 
     func host(_ doc: EditorDocument, width: CGFloat = 700, height: CGFloat = 900) -> EditorView {
         let editor = EditorView(document: doc)
+        // A test that hosts several editors (the ruled paper matrix) releases each one before the
+        // next: dozens of live editors kept the main queue busy into the following test.
+        window?.isHidden = true
+        window?.rootViewController = nil
         if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
             window = UIWindow(windowScene: scene)
         } else {
@@ -37,7 +41,8 @@ final class EditorViewTests: XCTestCase {
     func drainMainQueue() {
         let done = expectation(description: "main queue drained")
         DispatchQueue.main.async { done.fulfill() }
-        wait(for: [done], timeout: 2)
+        // Generous: the CI simulator can be busy for seconds (it is a wait, not a measurement).
+        wait(for: [done], timeout: 10)
     }
 
     func settle(_ editor: EditorView) {
@@ -348,6 +353,45 @@ final class EditorViewTests: XCTestCase {
             let t = CGFloat(i) / CGFloat(steps)
             return CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
         }
+    }
+
+    /// Build 13 feedback (iPad, Pencil): the eraser circle stuck at the touch-down point. Driven
+    /// through the ink recognizer's callbacks, as UIKit delivers a drag, in a scrolled note.
+    func testEraserIndicatorFollowsThePenAndHidesOnLift() throws {
+        let doc = SampleDocument.make()
+        let editor = host(doc, width: 700, height: 600)
+        editor.textView.setContentOffset(CGPoint(x: 0, y: 300), animated: false)
+        settle(editor)
+        editor.tools.mode = .strokeEraser
+        drainMainQueue()
+        let input = try XCTUnwrap(editor.inkInput)
+        let t0 = CACurrentMediaTime()
+        func sample(_ p: CGPoint, _ i: Int) -> PenSample {
+            PenSample(location: p, pressure: 0.5, altitude: 1, azimuth: 0, roll: 0, timestamp: t0 + Double(i) * 0.008, estimationIndex: nil)
+        }
+        let points = line(from: CGPoint(x: 100, y: 420), to: CGPoint(x: 400, y: 560), steps: 12)
+        input.onBegan?(sample(points[0], 0))
+        XCTAssertEqual(editor.indicatorCenter, points[0], "shown where the pen touches")
+        for i in stride(from: 1, to: points.count, by: 3) {
+            // Coalesced samples: the indicator sits at the latest one.
+            let batch = (i..<min(i + 3, points.count)).map { sample(points[$0], $0) }
+            input.onMoved?(batch, [])
+            XCTAssertEqual(editor.indicatorCenter, batch.last?.location, "follows the pen, not stuck at the first point")
+        }
+        input.onEnded?(false)
+        XCTAssertNil(editor.indicatorCenter, "hidden once the pen lifts")
+
+        input.onBegan?(sample(points[0], 0))
+        input.onMoved?([sample(points[5], 1)], [])
+        input.onEnded?(true)
+        XCTAssertNil(editor.indicatorCenter, "hidden when the touch is cancelled")
+
+        editor.tools.mode = .pen
+        drainMainQueue()
+        input.onBegan?(sample(points[0], 0))
+        input.onMoved?([sample(points[3], 1)], [])
+        XCTAssertNil(editor.indicatorCenter, "ink tools show the stroke itself, no circle stuck under the pen")
+        input.onEnded?(false)
     }
 
     func testStrokeFarBelowTheTextIsKeptAsFreeDrawing() {

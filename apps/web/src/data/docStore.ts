@@ -108,6 +108,11 @@ export class DocStore {
     return row;
   }
 
+  /** Kind of a known doc (from the cached rows), without waiting for storage. */
+  rowKind(docId: string): DocKind | undefined {
+    return this.rows.get(docId)?.kind;
+  }
+
   get(docId: string): Y.Doc | undefined {
     return this.docs.get(docId);
   }
@@ -269,18 +274,26 @@ export class DocStore {
     if (!row.notebookId) return null;
     let notebookId = row.notebookId;
     let meta = (await this.load(notebookId)).getMap<Y.Map<unknown>>("notes").get(docId);
-    if (!meta) {
-      // Moved to another notebook (api.md «Перенос заметки»): find the index that lists it now.
-      for (const [id, doc] of this.docs) {
-        const m = this.rows.get(id)?.kind === "notebook" ? doc.getMap<Y.Map<unknown>>("notes").get(docId) : undefined;
-        if (!m) continue;
-        notebookId = id;
-        meta = m;
-        await this.patchRow(docId, { notebookId });
-        break;
+    // Moved to another notebook (api.md «Перенос заметки»): find the index that lists it now. If none
+    // has arrived yet, the answer is «no key yet» (null) and SyncClient pauses the note until the
+    // runtime calls keyAvailable.
+    if (!meta?.get("wrappedKey")) {
+      const found = this.findNoteMeta(docId);
+      if (found) {
+        ({ notebookId, meta } = found);
+        if (row.notebookId !== notebookId) await this.patchRow(docId, { notebookId });
       }
     }
     return noteKey(docId, notebookId, meta?.get("wrappedKey") as string | undefined);
+  }
+
+  private findNoteMeta(docId: string): { notebookId: string; meta: Y.Map<unknown> } | null {
+    for (const [id, doc] of this.docs) {
+      if (this.rows.get(id)?.kind !== "notebook") continue;
+      const m = doc.getMap<Y.Map<unknown>>("notes").get(docId);
+      if (m?.get("wrappedKey")) return { notebookId: id, meta: m };
+    }
+    return null;
   }
 
   /** Create a brand-new doc on this device: registers it (queued) and applies `init` as a local edit. */

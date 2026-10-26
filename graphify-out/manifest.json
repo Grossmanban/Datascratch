@@ -306,9 +306,9 @@
     "semantic_hash": ""
   },
   "docs/spec/05-organization-design.md": {
-    "mtime": 1793014620.5082476,
-    "seen": 1793028240.3850784,
-    "ast_hash": "428eeddc3cb55c60e98825ff60eb26e3",
+    "mtime": 1793034529.1848018,
+    "seen": 1793034546.0361228,
+    "ast_hash": "ab65d8aa597c194baaf3732ece3da322",
     "semantic_hash": ""
   },
   "docs/spec/06-data-server.md": {
@@ -2988,9 +2988,9 @@
     "semantic_hash": "9a61c4b4b65dc6a07d8b1ce79638f773"
   },
   "apps/ios/Datascratch/Services/LibraryStore.swift": {
-    "mtime": 1793018219.1127255,
-    "seen": 1793028240.3842227,
-    "ast_hash": "17a2e7505a52b1ed4888537d3291480d",
+    "mtime": 1793034499.566393,
+    "seen": 1793034546.0351229,
+    "ast_hash": "b128f8bff69761e0f1086d98154d0acf",
     "semantic_hash": ""
   },
   "apps/ios/Datascratch/Services/Models.swift": {
@@ -3906,15 +3906,15 @@
     "semantic_hash": ""
   },
   "apps/ios/DatascratchTests/CoreLibraryTests.swift": {
-    "mtime": 1793022387.7021856,
-    "seen": 1793028240.384232,
-    "ast_hash": "301943115863061850d602b54da1c0b9",
+    "mtime": 1793034499.5659027,
+    "seen": 1793034546.035131,
+    "ast_hash": "be6ce515925d6bdb87f8852c6f603d8b",
     "semantic_hash": ""
   },
   "apps/ios/Datascratch/Integration/ServerConnection.swift": {
-    "mtime": 1793031299.0439897,
-    "seen": 1793031313.634698,
-    "ast_hash": "d9cbc165e36ecf2901422e11f36c36cb",
+    "mtime": 1793034462.3579283,
+    "seen": 1793034546.0351152,
+    "ast_hash": "380fcd1590fe83cb208e91b618a0c377",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Network/APIValidation.swift": {

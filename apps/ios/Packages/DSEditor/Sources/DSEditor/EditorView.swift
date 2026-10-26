@@ -234,6 +234,12 @@ public final class EditorView: UIView {
         let hover = UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:)))
         hover.delaysTouchesEnded = false
         textView.addGestureRecognizer(hover)
+        textView.addGestureRecognizer(touchObserver)
+        // Work held back while a finger was on the text: the keyboard inset, late block heights.
+        touchObserver.onLift = { [weak self] in
+            self?.applyKeyboardInset()
+            self?.flushPendingAtomRelayout()
+        }
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
         tap.delegate = self
@@ -429,6 +435,11 @@ public final class EditorView: UIView {
             guard let pending = self.pendingBottomInset else { return }
             self.pendingBottomInset = nil
             guard abs(self.textView.contentInset.bottom - pending.bottom) > 1 else { return }
+            if self.userIsInteracting {
+                // Changing the inset under a dragging finger moves the content: applied after.
+                // `touchObserver.onLift` applies it once the finger is up.
+                return
+            }
             let grows = pending.bottom > self.textView.contentInset.bottom
             self.textView.contentInset.bottom = pending.bottom
             self.textView.verticalScrollIndicatorInsets.bottom = pending.overlap
@@ -460,13 +471,47 @@ public final class EditorView: UIView {
     /// below the last paragraph (one screen for drawing) exists only then.
     public var drawingAvailable: Bool { tools.allowsFingerDrawing || Self.pencilSeen }
 
-    /// Scrolls the least needed to show the caret line above the bottom inset.
+    /// Scrolls the least needed to show the caret line, with about a line of margin, above the
+    /// bottom obstruction (keyboard inset, the host's palette band). Never while the person is
+    /// touching the text (dragging a selection handle, scrolling): UIKit's own edge autoscroll
+    /// runs then, and scrolling on top of it made the selection run away (build 14).
     func scrollCaretIntoView() {
-        guard textView.isFirstResponder, let range = textView.selectedTextRange else { return }
-        let caret = textView.caretRect(for: range.end).insetBy(dx: 0, dy: -8)
-        let visible = textView.bounds.inset(by: textView.adjustedContentInset)
-        guard !visible.contains(caret) else { return }
-        textView.scrollRectToVisible(caret, animated: false)
+        guard textView.isFirstResponder, !userIsInteracting, let range = textView.selectedTextRange else { return }
+        let caret = textView.caretRect(for: range.end)
+        let margin = max(8, theme.bodyFont.lineHeight)
+        var visible = textView.bounds.inset(by: textView.adjustedContentInset)
+        visible.size.height -= overlayInsets.bottom
+        visible.origin.y += overlayInsets.top
+        visible.size.height -= overlayInsets.top
+        guard caret.minY < visible.minY || caret.maxY > visible.maxY else { return }
+        var y = textView.contentOffset.y
+        if caret.maxY > visible.maxY { y += caret.maxY + margin - visible.maxY }
+        if caret.minY < visible.minY { y -= visible.minY - caret.minY + margin }
+        let minY = -textView.adjustedContentInset.top
+        let maxY = max(minY, textView.contentSize.height + textView.adjustedContentInset.bottom - textView.bounds.height)
+        textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: min(max(y, minY), maxY)), animated: false)
+    }
+
+    /// The person has a finger (or pencil) on the text view: no programmatic scrolling then.
+    var userIsInteracting: Bool { userIsScrolling }
+
+    /// A structural edit at the caret (Return, joining paragraphs, a paste) re-renders paragraphs and
+    /// moves the selection; UIKit then scrolled on its own — often far past the keyboard. The scroll
+    /// position is kept and only the least needed to show the caret is added (build 14).
+    func keepingScroll(_ edit: () -> Void) {
+        let offset = textView.contentOffset
+        edit()
+        guard !userIsInteracting else { return }
+        textView.layoutIfNeeded()
+        if textView.contentOffset != offset { textView.setContentOffset(offset, animated: false) }
+        scrollCaretIntoView()
+        let settled = textView.contentOffset
+        // UIKit scrolls to a programmatic selection on the next turn too.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.userIsInteracting, self.textView.contentOffset != settled else { return }
+            self.textView.setContentOffset(settled, animated: false)
+            self.scrollCaretIntoView()
+        }
     }
 
     private func layoutHeader() {
@@ -630,7 +675,9 @@ public final class EditorView: UIView {
     /// Block types whose height changed (a late Mermaid render) while the person was scrolling.
     private var pendingAtomRelayout: Set<String> = []
 
-    private var userIsScrolling: Bool { textView.isTracking || textView.isDragging || textView.isDecelerating }
+    private var userIsScrolling: Bool {
+        textView.isTracking || textView.isDragging || textView.isDecelerating || touchObserver.touching
+    }
 
     /// Lays blocks of `type` out again after their height changed. Never while the person is
     /// scrolling (it is applied when the scroll ends), and the text at the top of the screen
@@ -1128,6 +1175,9 @@ public final class EditorView: UIView {
         set {}
     }
 
+    /// Notices fingers on the text view without taking part in any gesture.
+    let touchObserver = TouchObserver()
+
     private var tapTargetElementsDirty = true
     private var cachedTapTargetElements: [UIAccessibilityElement] = []
 
@@ -1401,17 +1451,19 @@ extension EditorView: UITextViewDelegate {
             if range.length > 0 { cmd.replace(lo..<hi, with: "") }
             let pos = TextPosition(block: start.blockId, offset: so)
             var caret = range.length == 0 ? MarkdownShortcuts(commands: cmd).handleReturn(at: pos) : nil
-            if caret == nil {
-                document.stopCapturing()
-                caret = cmd.splitParagraph(at: pos)
-                document.stopCapturing()
+            keepingScroll {
+                if caret == nil {
+                    document.stopCapturing()
+                    caret = cmd.splitParagraph(at: pos)
+                    document.stopCapturing()
+                }
+                select(caret)
             }
-            select(caret)
             return false
         }
         // Backspace at the start of a paragraph (or delete at the end of the previous one).
         if text.isEmpty, range.length == 1, ei == si + 1, eo == 0, so == start.length {
-            select(cmd.joinBackward(at: TextPosition(block: p.paragraphs[ei].blockId, offset: 0)))
+            keepingScroll { select(cmd.joinBackward(at: TextPosition(block: p.paragraphs[ei].blockId, offset: 0))) }
             return false
         }
         // Plain typing inside one text paragraph: let the text view apply it, mirror to the model.
@@ -1427,7 +1479,7 @@ extension EditorView: UITextViewDelegate {
         }
         // Everything else is structural.
         let clean = text.replacingOccurrences(of: "\u{FFFC}", with: "").replacingOccurrences(of: "\u{2028}", with: "\n")
-        select(cmd.replace(lo..<hi, with: clean, marks: (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil)))
+        keepingScroll { select(cmd.replace(lo..<hi, with: clean, marks: (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil))) }
         return false
     }
 
@@ -1701,6 +1753,59 @@ extension EditorView {
         picker.sheetPresentationController?.detents = [.medium()]
         top.present(picker, animated: true)
     }
+}
+
+/// Follows whether a finger is on the text view (selection handles included) without
+/// recognizing anything or delaying touches.
+final class TouchObserver: UIGestureRecognizer, UIGestureRecognizerDelegate {
+    private(set) var touching = false
+    /// Called (on the next turn) whenever the last touch ends.
+    var onLift: (() -> Void)?
+    private var count = 0
+
+    init() {
+        super.init(target: nil, action: nil)
+        cancelsTouchesInView = false
+        delaysTouchesBegan = false
+        delaysTouchesEnded = false
+        delegate = self
+    }
+
+    /// Tests: as if a finger were down.
+    func setTouchingForTesting(_ value: Bool) {
+        touching = value
+        if !value { finish() }
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        count += touches.count
+        touching = true
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) { lift(touches.count) }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) { lift(touches.count) }
+
+    private func lift(_ n: Int) {
+        count = max(0, count - n)
+        guard count == 0 else { return }
+        touching = false
+        // Never recognizes: fails once the touches are over, so it never blocks others.
+        state = .failed
+        finish()
+    }
+
+    private func finish() {
+        guard let lift = onLift else { return }
+        DispatchQueue.main.async { lift() }
+    }
+
+    override func reset() {
+        super.reset()
+        count = 0
+        touching = false
+    }
+
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
 }
 
 /// Accessibility element of a link or chip: activating it does what a tap does.

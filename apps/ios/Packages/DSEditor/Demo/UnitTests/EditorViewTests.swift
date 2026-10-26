@@ -885,6 +885,74 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "")
     }
 
+    // MARK: - Scroll on Return and while selecting (build 14 feedback)
+
+    private func longDoc() -> InMemoryEditorDocument {
+        var blocks: [BlockNode] = [.title("Длинная")]
+        for i in 1...60 { blocks.append(.paragraph("Строка \(i) обычного текста")) }
+        return InMemoryEditorDocument(blocks: blocks)
+    }
+
+    /// Return on the last visible line scrolls at most a line plus a line of margin — the new line
+    /// sits just above the bottom, not far up the screen.
+    func testReturnAtTheBottomScrollsJustEnough() throws {
+        let editor = host(longDoc(), width: 700, height: 600)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        // The paragraph whose line is just above the bottom edge.
+        let visibleBottom = editor.textView.contentOffset.y + editor.textView.bounds.height - editor.textView.adjustedContentInset.bottom
+        var target = 0
+        for i in 1...60 {
+            let r = flatRange(editor, of: "Строка \(i) ")
+            if let p = editor.geometry.placement(at: r.lowerBound), p.origin.y + 6 < visibleBottom - 4 { target = r.lowerBound + "Строка \(i) обычного текста".utf16.count }
+        }
+        editor.textView.selectedRange = NSRange(location: target, length: 0)
+        settle(editor)
+        let before = editor.textView.contentOffset.y
+        XCTAssertFalse(editor.textView(editor.textView, shouldChangeTextIn: NSRange(location: target, length: 0), replacementText: "\n"))
+        drainMainQueue()
+        drainMainQueue()
+        settle(editor)
+        let line = editor.theme.bodyFont.lineHeight * EditorTheme.bodyLineHeightMultiple
+        let delta = editor.textView.contentOffset.y - before
+        XCTAssertLessThanOrEqual(delta, line * 2 + 24, "scrolled \(delta) pt for one new line (line \(line) pt)")
+        let caret = editor.textView.caretRect(for: try XCTUnwrap(editor.textView.selectedTextRange).end)
+        let visible = editor.textView.bounds.inset(by: editor.textView.adjustedContentInset)
+        XCTAssertTrue(visible.contains(caret), "the new line is visible")
+    }
+
+    /// While a finger is on the text (dragging a selection handle), the editor never scrolls by
+    /// itself: no keyboard-inset change, no late block height, no caret scroll moves the content.
+    func testNothingScrollsTheTextWhileAFingerIsOnIt() throws {
+        let source = "flowchart TD\n  S[Select] --> T[Touch]"
+        var blocks: [BlockNode] = [.title("Выделение"), .mermaid(source)]
+        for i in 1...60 { blocks.append(.paragraph("Абзац \(i) для выделения")) }
+        let editor = host(InMemoryEditorDocument(blocks: blocks), width: 700, height: 600)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        editor.textView.setContentOffset(CGPoint(x: 0, y: 900), animated: false)
+        settle(editor)
+        editor.touchObserver.setTouchingForTesting(true)
+        let before = editor.textView.contentOffset.y
+        let start = flatRange(editor, of: "Абзац 30 ").lowerBound
+        for end in stride(from: start + 5, to: start + 400, by: 40) {
+            editor.textView.selectedRange = NSRange(location: start, length: end - start)
+            editor.textViewDidChangeSelection(editor.textView)
+            editor.scrollCaretIntoView()
+            drainMainQueue()
+        }
+        postKeyboard(UIResponder.keyboardDidChangeFrameNotification, top: 300, in: window)
+        MermaidRenderer.shared.store(UIGraphicsImageRenderer(size: CGSize(width: 600, height: 500)).image { _ in }, for: source, dark: false)
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.contentOffset.y, before, accuracy: 0.5, "no programmatic scroll while the finger is down")
+        editor.touchObserver.setTouchingForTesting(false)
+        drainMainQueue()
+        drainMainQueue()
+        settle(editor)
+        XCTAssertGreaterThan(editor.textView.contentInset.bottom, 0, "the held-back keyboard inset is applied after the finger lifts")
+    }
+
     // MARK: - Block rendering (build 16 feedback)
 
     static let clippedFormulas = [

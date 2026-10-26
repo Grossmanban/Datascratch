@@ -161,6 +161,15 @@ SELECT g.kind, g.permission, g.created_at, g.revoked_at, g.expires_at, g.last_us
 SELECT left(n.id::text, 13) AS id, n.server_wrapped_key IS NOT NULL AS server_key, d.last_seq,
        (SELECT string_agg(x.dev || '@' || x.seq, ' ') FROM (SELECT left(u.device_id, 18) AS dev, u.seq FROM doc_updates u WHERE u.doc_id = n.id ORDER BY u.seq DESC LIMIT 10) x) AS recent
   FROM notebooks n LEFT JOIN docs d ON d.id = n.id WHERE n.mode = 'agent';
+\echo Recent notebook-doc updates of agent notebooks: seq | device prefix | device kind | payload bytes | envelope head
+SELECT u.seq, left(u.device_id, 13) AS device,
+       CASE WHEN u.device_id LIKE 'agent:%' THEN 'agent'
+            ELSE coalesce((SELECT CASE WHEN dv.name ILIKE '%ipad%' THEN 'iPad' WHEN dv.name ILIKE '%iphone%' THEN 'iPhone'
+                                       WHEN dv.name ILIKE '%mac%' OR dv.name ILIKE '%safari%' OR dv.name ILIKE '%chrome%' OR dv.name ILIKE '%web%' OR dv.name ILIKE '%browser%' THEN 'web'
+                                       ELSE 'other' END FROM devices dv WHERE dv.id::text = u.device_id), 'unknown') END AS kind,
+       octet_length(u.payload) AS bytes, encode(substring(u.payload from 1 for 4), 'hex') AS head
+  FROM doc_updates u JOIN notebooks n ON n.id = u.doc_id AND n.mode = 'agent'
+  ORDER BY u.seq DESC LIMIT 14;
 SQL
   end
 fi

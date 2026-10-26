@@ -57,8 +57,13 @@ public struct DSSettingsSampleContent: View {
 
     @ViewBuilder
     private var settings: some View {
-        DSProfileHeader(name: "Анна Петрова", email: "anna@example.com", sync: .synced(syncedAt), now: now)
-            .padding(.vertical, -DSSpace.s4)
+        Button {} label: {
+            DSProfileHeader(name: "Анна Петрова", email: "anna@example.com", sync: .synced(syncedAt), now: now,
+                            linkTitle: "Аккаунт и безопасность")
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, -DSSpace.s4)
         DSCallout(
             tone: .warning,
             title: "Проверьте ключ восстановления",
@@ -66,8 +71,7 @@ public struct DSSettingsSampleContent: View {
             systemImage: "key",
             actionTitle: "Проверить"
         ) {}
-        DSSettingsSection("Аккаунт") {
-            Button {} label: { DSSettingsRow("Аккаунт", systemImage: "person.crop.circle", accessory: .chevron) }
+        DSSettingsSection("Доступ") {
             Button {} label: { DSSettingsRow("Устройства", systemImage: "ipad.and.iphone", value: "3", accessory: .chevron) }
             Button {} label: { DSSettingsRow("Доступ для агентов", systemImage: "sparkles", accessory: .chevron) }
         }
@@ -93,7 +97,7 @@ public struct DSSettingsSampleContent: View {
             "Безопасность",
             footer: "Пароль защищает и ключ шифрования. Ключ восстановления продолжит работать после смены пароля."
         ) {
-            Button {} label: { DSSettingsRow("Ключ восстановления", systemImage: "key", accessory: .badge("Не проверен", .warning)) }
+            Button {} label: { DSSettingsRow("Ключ восстановления", systemImage: "key", accessory: .badgeLink("Не проверен", .warning)) }
             Button {} label: { DSSettingsRow("Сменить пароль", systemImage: "lock", accessory: .chevron) }
             Button {} label: { DSSettingsRow("Журнал безопасности", systemImage: "list.bullet.rectangle", accessory: .chevron) }
         }

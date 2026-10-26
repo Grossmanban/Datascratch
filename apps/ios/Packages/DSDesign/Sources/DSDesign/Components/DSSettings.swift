@@ -69,6 +69,8 @@ public enum DSSettingsAccessory {
     case chevron
     case toggle(Binding<Bool>)
     case badge(String, DSCalloutTone)
+    /// Badge followed by a chevron: a status on a row that opens a screen.
+    case badgeLink(String, DSCalloutTone)
     case check
     case custom(AnyView)
 }
@@ -168,6 +170,19 @@ public struct DSSettingsRow: View {
                 .padding(.horizontal, DSSpace.s2)
                 .padding(.vertical, 3)
                 .background(Capsule().fill(tone.background))
+        case let .badgeLink(text, tone):
+            HStack(spacing: DSSpace.s2) {
+                Text(text)
+                    .dsFont(.caption)
+                    .foregroundStyle(tone.foreground)
+                    .padding(.horizontal, DSSpace.s2)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(tone.background))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.dsTertiary)
+                    .accessibilityHidden(true)
+            }
         case .check:
             Image(systemName: "checkmark")
                 .font(.system(size: 14, weight: .semibold))
@@ -285,12 +300,16 @@ public struct DSProfileHeader: View {
     private let sync: DSSyncState
     private let now: Date
 
-    public init(name: String?, email: String, image: Image? = nil, sync: DSSyncState, now: Date = .now) {
+    private let linkTitle: String?
+
+    /// - Parameter linkTitle: small "Account & security ›" hint when the header opens the account screen.
+    public init(name: String?, email: String, image: Image? = nil, sync: DSSyncState, now: Date = .now, linkTitle: String? = nil) {
         self.name = name
         self.email = email
         self.image = image
         self.sync = sync
         self.now = now
+        self.linkTitle = linkTitle
     }
 
     private var displayName: String {
@@ -313,6 +332,16 @@ public struct DSProfileHeader: View {
             }
             DSSyncChip(sync, now: now)
                 .padding(.top, DSSpace.s1)
+            if let linkTitle {
+                HStack(spacing: 3) {
+                    Text(linkTitle)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .dsFont(.footnote)
+                .foregroundStyle(Color.dsSecondary)
+                .padding(.top, DSSpace.s2)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, DSSpace.s6)

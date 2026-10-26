@@ -14,9 +14,13 @@ struct DemoView: View {
             .navigationTitle("Живой штрих")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
-            .alert("Открыть «\(model.openedNoteTitle ?? "")»",
-                   isPresented: Binding(get: { model.openedNoteTitle != nil }, set: { if !$0 { model.openedNoteTitle = nil } })) {
-                Button("OK", role: .cancel) {}
+            // On its own view: two alerts on the same view, and SwiftUI showed only one of them.
+            .background {
+                Color.clear
+                    .alert("Открыть «\(model.openedNoteTitle ?? "")»",
+                           isPresented: Binding(get: { model.openedNoteTitle != nil }, set: { if !$0 { model.openedNoteTitle = nil } })) {
+                        Button("OK", role: .cancel) {}
+                    }
             }
             .alert("Заметки «\(model.pendingNoteTitle ?? "")» нет",
                    isPresented: Binding(get: { model.pendingNoteTitle != nil }, set: { if !$0 { model.pendingNoteTitle = nil } })) {

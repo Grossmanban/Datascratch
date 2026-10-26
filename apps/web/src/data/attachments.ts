@@ -87,6 +87,9 @@ async function runUploads(): Promise<boolean> {
   for (const a of pending) {
     try {
       if (!a.registered) {
+        // The server knows the attachment's note only once the note is registered (queued POST /docs);
+        // registering it re-runs the uploads.
+        if ((await db.docs.get(a.noteId))?.registered === 0) continue;
         await request("POST", "/attachments", {
           body: { attachmentId: a.id, noteId: a.noteId, size: a.size, chunkCount: a.chunkCount, mime: a.mime },
         }).catch((e) => {

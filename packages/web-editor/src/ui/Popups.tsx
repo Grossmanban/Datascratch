@@ -47,9 +47,41 @@ function useStore<S>(store: Store<S>): S {
   return useSyncExternalStore(store.subscribe, store.get, store.get);
 }
 
+/**
+ * The caret rect of an open suggestion, kept live while the page scrolls or resizes, so the menu
+ * stays attached to the caret. Null when the caret is scrolled out of view (the menu hides).
+ */
+function useLiveCaretRect<T>(s: SuggestionState<T>): DOMRect | null {
+  const [rect, setRect] = useState<DOMRect | null>(s.rect);
+  useEffect(() => {
+    setRect(s.rect);
+    if (!s.open || !s.rectFn) return;
+    const fn = s.rectFn;
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setRect(fn()));
+    };
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("resize", update);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, [s.open, s.rect, s.rectFn]);
+  if (!rect) return null;
+  const vh = window.visualViewport?.height ?? window.innerHeight;
+  if (rect.bottom < 0 || rect.top > vh) return null;
+  return rect;
+}
+
 export function SlashMenu({ store }: { store: Store<SuggestionState<BlockItem>> }) {
   const s = useStore(store);
-  if (!s.open || !s.rect) return null;
+  const anchor = useLiveCaretRect(s);
+  if (!s.open || !anchor) return null;
   const groups: SuggestionGroup[] = [];
   for (const item of s.items) {
     let g = groups.find((x) => x.heading === item.group);
@@ -63,7 +95,7 @@ export function SlashMenu({ store }: { store: Store<SuggestionState<BlockItem>> 
     <SuggestionMenu
       groups={groups}
       selectedIndex={Math.max(0, selected)}
-      anchorRect={s.rect}
+      anchorRect={anchor}
       empty="Ничего не найдено"
       idPrefix="ds-slash"
       onPick={(it) => {
@@ -78,7 +110,8 @@ export type LinkItem = NoteSummary & { create?: boolean };
 
 export function NoteLinkMenu({ store }: { store: Store<SuggestionState<LinkItem>> }) {
   const s = useStore(store);
-  if (!s.open || !s.rect) return null;
+  const anchor = useLiveCaretRect(s);
+  if (!s.open || !anchor) return null;
   const key = (i: LinkItem) => (i.create ? "__create" : i.noteId);
   return (
     <SuggestionMenu
@@ -92,7 +125,7 @@ export function NoteLinkMenu({ store }: { store: Store<SuggestionState<LinkItem>
         },
       ]}
       selectedIndex={s.selected}
-      anchorRect={s.rect}
+      anchorRect={anchor}
       empty={s.query ? "Нет заметок" : "Начните вводить название"}
       idPrefix="ds-links"
       onPick={(it) => {

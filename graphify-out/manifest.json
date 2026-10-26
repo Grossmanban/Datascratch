@@ -31,9 +31,9 @@
   },
   "docs/CHANGELOG.md": {
     "mtime": 1793005791.9930465,
-    "seen": 1793005850.667936,
+    "seen": 1793005979.473652,
     "ast_hash": "4bfa73c925fcbe909532ca65c9325ba1",
-    "semantic_hash": ""
+    "semantic_hash": "4bfa73c925fcbe909532ca65c9325ba1"
   },
   "docs/README.md": {
     "mtime": 1792930436.611198,
@@ -301,9 +301,9 @@
   },
   "docs/spec/04-editor.md": {
     "mtime": 1793005791.9044397,
-    "seen": 1793005850.6700826,
+    "seen": 1793005979.4736538,
     "ast_hash": "a15a68e98d4aae931b5a7c9943d0aba0",
-    "semantic_hash": ""
+    "semantic_hash": "a15a68e98d4aae931b5a7c9943d0aba0"
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1792927372.4280927,
@@ -1027,9 +1027,9 @@
   },
   ".github/workflows/web-editor.yml": {
     "mtime": 1793005785.1278849,
-    "seen": 1793005850.6402102,
+    "seen": 1793005979.4724436,
     "ast_hash": "5001ec8584db32789f7ae79f4313527f",
-    "semantic_hash": ""
+    "semantic_hash": "5001ec8584db32789f7ae79f4313527f"
   },
   ".prettierrc.json": {
     "mtime": 1792929828.3525927,
@@ -1045,15 +1045,15 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792931941.0087183,
-    "seen": 1793005641.0165293,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1793005979.4728699,
+    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792931941.0087183,
-    "seen": 1793005641.0165317,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1793005979.472872,
+    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1792931941.0087183,
@@ -1867,9 +1867,9 @@
   },
   "packages/web-editor/src/Editor.tsx": {
     "mtime": 1793005785.207885,
-    "seen": 1793005850.6659014,
+    "seen": 1793005979.473588,
     "ast_hash": "a3bbc62d21ae1118de927e09061998b6",
-    "semantic_hash": ""
+    "semantic_hash": "a3bbc62d21ae1118de927e09061998b6"
   },
   "packages/web-editor/src/collab/collaboration.ts": {
     "mtime": 1792934201.3768525,
@@ -4009,9 +4009,9 @@
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792944154.5631447,
-    "seen": 1793005641.0165336,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1793005979.4728734,
+    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "semantic_hash": "a66fd1a5c043c1420b26f520d2b23c56"
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
     "mtime": 1792944383.6471584,
@@ -4507,9 +4507,9 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792953658.4392745,
-    "seen": 1793005641.0168374,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1793005979.4732008,
+    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "semantic_hash": "c9f780dd0f9b83af1132086b539b65c4"
   },
   "infra/deploy/inspect.sh": {
     "mtime": 1792953658.4392745,
@@ -4699,32 +4699,32 @@
   },
   "packages/web-editor/ct/AgentNoteEditor.tsx": {
     "mtime": 1793005785.207885,
-    "seen": 1793005850.6655233,
+    "seen": 1793005979.4735703,
     "ast_hash": "baccd6b74a2e0d0d431c6dfa3ca44d63",
-    "semantic_hash": ""
+    "semantic_hash": "baccd6b74a2e0d0d431c6dfa3ca44d63"
   },
   "packages/web-editor/ct/agentFixture.ts": {
     "mtime": 1793004985.6678374,
-    "seen": 1793005703.177602,
+    "seen": 1793005979.4735744,
     "ast_hash": "b6da590b27e98832c13727d88d29f75f",
-    "semantic_hash": ""
+    "semantic_hash": "b6da590b27e98832c13727d88d29f75f"
   },
   "packages/web-editor/ct/agentNote.spec.tsx": {
     "mtime": 1793005785.207885,
-    "seen": 1793005850.665629,
+    "seen": 1793005979.4735758,
     "ast_hash": "a2e09ee6133c968b40409782809225e2",
-    "semantic_hash": ""
+    "semantic_hash": "a2e09ee6133c968b40409782809225e2"
   },
   "packages/web-editor/src/schema/agentReview.ts": {
     "mtime": 1793004985.6725125,
-    "seen": 1793005703.1782172,
+    "seen": 1793005979.4736085,
     "ast_hash": "cc44b78cc4e24d224564fed4fb27f5f3",
-    "semantic_hash": ""
+    "semantic_hash": "cc44b78cc4e24d224564fed4fb27f5f3"
   },
   "packages/web-editor/src/schema/missingLinks.ts": {
     "mtime": 1793004985.6725125,
-    "seen": 1793005703.178331,
+    "seen": 1793005979.4736154,
     "ast_hash": "debdeb224c1dc2eadd8a629d2be51b92",
-    "semantic_hash": ""
+    "semantic_hash": "debdeb224c1dc2eadd8a629d2be51b92"
   }
 }

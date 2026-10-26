@@ -823,6 +823,58 @@ final class EditorViewTests: XCTestCase {
         XCTAssertTrue(editor.hasTapTarget(at: try chipCentre()))
     }
 
+    // MARK: - Title (Apple Notes style)
+
+    func testFocusTitlePutsTheCaretInTheTitle() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Черновик"), .paragraph("текст")])
+        let editor = host(doc)
+        window.makeKey()
+        editor.focusTitle()
+        XCTAssertTrue(editor.textView.isFirstResponder, "the keyboard comes up")
+        XCTAssertEqual(editor.textView.selectedRange.location, "Черновик".utf16.count, "the caret is at the end of the title")
+    }
+
+    func testReturnInAnEmptyTitleNamesTheNoteAndMovesToTheText() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title(""), .paragraph("Первый абзац")])
+        let editor = host(doc)
+        editor.defaultTitle = { "Заметка 26 октября 2026" }
+        window.makeKey()
+        editor.focusTitle()
+        XCTAssertFalse(editor.textView(editor.textView, shouldChangeTextIn: NSRange(location: 0, length: 0), replacementText: "\n"))
+        XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "Заметка 26 октября 2026")
+        XCTAssertEqual(doc.blocks.count, 2, "Return in the title does not split it")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "Первый абзац")
+        XCTAssertEqual(editor.textView.selectedRange.location, flatRange(editor, of: "Первый").lowerBound, "the caret is at the start of the text")
+    }
+
+    func testReturnInANamedTitleMovesToTheTextAndCreatesItIfMissing() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Идеи")])
+        let editor = host(doc)
+        editor.defaultTitle = { "не нужно" }
+        window.makeKey()
+        editor.focusTitle()
+        XCTAssertFalse(editor.textView(editor.textView, shouldChangeTextIn: NSRange(location: 2, length: 0), replacementText: "\n"))
+        XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "Идеи", "a named title is kept and not split")
+        XCTAssertEqual(doc.blocks.count, 2, "an empty paragraph for the text")
+        XCTAssertEqual(doc.blocks[1].type, NodeType.paragraph)
+        let bodyStart = try XCTUnwrap(Projection.build(doc.blocks).starts.dropFirst().first)
+        XCTAssertEqual(editor.textView.selectedRange.location, bodyStart)
+    }
+
+    func testLeavingAnEmptyTitleNamesTheNote() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title(""), .paragraph("текст заметки")])
+        let editor = host(doc)
+        editor.defaultTitle = { "Заметка" }
+        window.makeKey()
+        editor.focusTitle()
+        let inText = flatRange(editor, of: "заметки").lowerBound
+        editor.textView.selectedRange = NSRange(location: inText, length: 0)
+        editor.textViewDidChangeSelection(editor.textView)
+        XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "Заметка")
+        XCTAssertEqual(editor.textView.selectedRange.location, inText + "Заметка".utf16.count, "the caret stays on the same text")
+        XCTAssertFalse(editor.fillEmptyTitleIfNeeded(), "a named title is not touched again")
+    }
+
     // MARK: - Block rendering (build 16 feedback)
 
     static let clippedFormulas = [

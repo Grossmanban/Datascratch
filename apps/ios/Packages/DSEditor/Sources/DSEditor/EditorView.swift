@@ -1190,6 +1190,62 @@ public final class EditorView: UIView {
         }
     }
 
+    // MARK: - Title (Apple Notes style, spec/04 «Название новой заметки»)
+
+    /// The title a new note gets when it is left empty («Заметка 26 октября 2026»): the host
+    /// supplies it, localized and dated by the note's creation day. Nil leaves empty titles alone.
+    public var defaultTitle: (() -> String)?
+    /// The caret was in the title at the last selection change (to notice it leaving).
+    private var caretWasInTitle = false
+
+    private var titleIndex: Int? { projection.paragraphs.first?.kind.type == NodeType.title ? 0 : nil }
+
+    private func caretIsInTitle(_ location: Int) -> Bool {
+        guard let i = titleIndex else { return false }
+        return location <= projection.starts[i] + projection.paragraphs[i].length
+    }
+
+    /// Puts the caret at the end of the title and brings up the keyboard (a new note).
+    public func focusTitle() {
+        guard let i = titleIndex else { return }
+        _ = textView.becomeFirstResponder()
+        selectOffset(projection.starts[i] + projection.paragraphs[i].length)
+        caretWasInTitle = true
+    }
+
+    /// Fills an empty title with `defaultTitle`; returns whether it did. The editor calls it on
+    /// Return in the title and when the caret leaves it; hosts call it when the note closes.
+    @discardableResult
+    public func fillEmptyTitleIfNeeded() -> Bool {
+        guard let i = titleIndex, projection.paragraphs[i].length == 0, let title = defaultTitle?(), !title.isEmpty else { return false }
+        let caret = textView.selectedRange.location
+        let start = projection.starts[i]
+        let block = projection.paragraphs[i].blockId
+        document.stopCapturing()
+        document.transact(origin: .local) { document.insertText(title, marks: .empty, block: block, at: 0) }
+        document.stopCapturing()
+        selectOffset(caret > start ? caret + title.utf16.count : start + title.utf16.count)
+        return true
+    }
+
+    /// Return in the title: no split — the caret goes to the start of the text (a new empty
+    /// paragraph if the note has none yet), after filling an empty title.
+    private func returnInTitle() {
+        fillEmptyTitleIfNeeded()
+        let p = projection
+        caretWasInTitle = false
+        if p.paragraphs.count > 1, p.paragraphs[1].kind.isText {
+            selectOffset(p.starts[1])
+        } else if let title = p.paragraphs.first?.blockId, let loc = document.location(of: title) {
+            let body = BlockNode.paragraph()
+            document.stopCapturing()
+            document.transact(origin: .local) { document.insertBlock(body, parent: loc.parent, at: loc.index + 1) }
+            document.stopCapturing()
+            select(TextPosition(block: body.id, offset: 0))
+        }
+        notifyStateChange()
+    }
+
     /// The date chip whose menu is showing.
     private var dateMenuTarget: (item: BlockID, deadline: Bool, rect: CGRect)?
 
@@ -1311,6 +1367,11 @@ extension EditorView: UITextViewDelegate {
         let start = p.paragraphs[si]
         pendingShortcut = nil
 
+        // Return in the title moves to the text (Apple Notes, spec/04).
+        if text == "\n", start.kind.type == NodeType.title, range.length == 0, tv.markedTextRange == nil {
+            returnInTitle()
+            return false
+        }
         // Return.
         if text == "\n", start.kind.isText {
             if range.length > 0 { cmd.replace(lo..<hi, with: "") }
@@ -1429,6 +1490,16 @@ extension EditorView: UITextViewDelegate {
     public func textViewDidChangeSelection(_ tv: UITextView) {
         if suppressDelegate { return }
         pendingMarks = nil
+        // The caret left an empty title: it gets the default name.
+        let inTitle = caretIsInTitle(tv.selectedRange.location)
+        if caretWasInTitle, !inTitle, tv.markedTextRange == nil {
+            caretWasInTitle = false
+            if fillEmptyTitleIfNeeded() {
+                notifyStateChange()
+                return
+            }
+        }
+        caretWasInTitle = inTitle && tv.isFirstResponder
         // Typing attributes are left alone while text is marked (dictation, input methods).
         if tv.markedTextRange == nil { updateTypingAttributes() }
         updateSlashMenu()

@@ -261,6 +261,14 @@ final class LibraryUITests: XCTestCase {
         text.typeText("Format")
         let bar = app.descendants(matching: .any)["formatBar"].firstMatch
         XCTAssertTrue(bar.waitForExistence(timeout: 5), "no format bar while typing; buttons: \(Self.buttons(app))")
+        // The bar sits above the palette, never over it, and stays inside the window.
+        let palette = app.descendants(matching: .any)["penPalette"].firstMatch
+        let window = app.windows.firstMatch.frame
+        if palette.exists {
+            XCTAssertLessThanOrEqual(bar.frame.maxY, palette.frame.minY + 1, "format bar overlaps the pen palette")
+        }
+        XCTAssertGreaterThanOrEqual(bar.frame.minX, window.minX - 1, "format bar starts off screen")
+        XCTAssertLessThanOrEqual(bar.frame.maxX, window.maxX + 1, "format bar ends off screen")
         let bold = bar.buttons["Bold"].firstMatch
         XCTAssertTrue(bold.exists && bold.isHittable, "no Bold on the format bar")
         XCTAssertFalse(bold.isSelected, "Bold is on before it was tapped")

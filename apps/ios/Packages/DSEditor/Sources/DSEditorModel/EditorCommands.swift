@@ -605,36 +605,49 @@ public struct EditorCommands {
     }
 
     /// Title repair on load (`document-model.md`, same rule as web-editor), deterministic and
-    /// idempotent, creating nothing:
-    /// - several top-level `title` nodes: the first non-empty one stays and the EMPTY ones are
-    ///   deleted (all empty: the first stays);
-    /// - the note starts with an empty title followed by a paragraph whose blockId is older
-    ///   (UUIDv7 time) than the title's: that paragraph was the original title, demoted by the
-    ///   empty-document race — its text (marks, strokes) moves into the title and it is deleted.
-    /// Returns whether anything changed.
+    /// idempotent, creating nothing, in this order:
+    /// 1. several top-level `title` nodes: the first non-empty one stays and the EMPTY ones are
+    ///    deleted (all empty: the first stays);
+    /// 2. the note starts with an empty title, then possibly empty paragraphs, then a paragraph
+    ///    whose blockId is older (UUIDv7 time) than the title's: that paragraph was the original
+    ///    title, demoted by the empty-document race — its inline content (marks, strokes) moves
+    ///    into the title, and it and the skipped empty paragraphs are deleted;
+    /// 4. empty paragraphs before the first title are deleted.
+    /// One transaction, not undoable; read-only notes are left alone. Returns whether anything changed.
     @discardableResult
     public func repairTitles() -> Bool {
         guard !document.isReadOnly else { return false }
+        var deletions: [BlockID] = []
+        // 1.
         let titles = document.blocks.filter { $0.type == NodeType.title }
-        var emptyExtras: [BlockID] = []
         if titles.count > 1 {
             let keep = titles.first { $0.textLength > 0 } ?? titles[0]
-            emptyExtras = titles.filter { $0.id != keep.id && $0.textLength == 0 }.map(\.id)
+            deletions += titles.filter { $0.id != keep.id && $0.textLength == 0 }.map(\.id)
         }
-        // The rest of the document after the empty extras are gone (they are deleted first).
-        let top = document.blocks.filter { !emptyExtras.contains($0.id) }
+        var top = document.blocks.filter { !deletions.contains($0.id) }
+        func isEmptyParagraph(_ b: BlockNode) -> Bool { b.type == NodeType.paragraph && b.textLength == 0 }
+        // 2.
         var demoted: (title: BlockID, paragraph: BlockID)?
-        if top.count >= 2, top[0].type == NodeType.title, top[0].textLength == 0,
-           top[1].type == NodeType.paragraph, top[1].textLength > 0,
-           let titleTime = Self.uuidV7Time(top[0].id), let paraTime = Self.uuidV7Time(top[1].id), paraTime < titleTime {
-            demoted = (top[0].id, top[1].id)
+        if let first = top.first, first.type == NodeType.title, first.textLength == 0 {
+            var i = 1
+            while i < top.count, isEmptyParagraph(top[i]) { i += 1 }
+            if i < top.count, top[i].type == NodeType.paragraph, top[i].textLength > 0,
+               let titleTime = Self.uuidV7Time(first.id), let paraTime = Self.uuidV7Time(top[i].id), paraTime < titleTime {
+                demoted = (first.id, top[i].id)
+                deletions += top[1..<i].map(\.id)
+                top.removeSubrange(1...i)
+            }
         }
-        guard !emptyExtras.isEmpty || demoted != nil else { return false }
+        // 4.
+        if let firstTitle = top.firstIndex(where: { $0.type == NodeType.title }) {
+            deletions += top[..<firstTitle].filter(isEmptyParagraph).map(\.id)
+        }
+        guard !deletions.isEmpty || demoted != nil else { return false }
         let re = demoted.map { StrokeReanchoring(document: document, blocks: [$0.paragraph]) }
         let inline = demoted.map { document.inline(of: $0.paragraph, range: nil) } ?? []
         // One transaction for the whole repair, synced but not undoable.
         document.transact(origin: .system) {
-            for id in emptyExtras { document.deleteBlock(id) }
+            for id in deletions { document.deleteBlock(id) }
             if let d = demoted {
                 let title = d.title, para = d.paragraph
                 var offset = 0

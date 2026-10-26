@@ -181,10 +181,15 @@ final class BlockAttachmentViewProvider: NSTextAttachmentViewProvider {
             (factory?.height(for: node, width: width) ?? 48, factory?.theme.paperPitch)
         }
         // On ruled paper a block takes whole lines: its height is rounded up to the pitch and it
-        // reaches down to the descender, so the line it occupies is exactly that tall.
+        // reaches down to the descender, so the line it occupies is exactly that tall. The line
+        // adds the font's leading (non-zero for SF Mono) and is rounded up to whole points, so the
+        // block gives the leading back, minus a hair to stay under the next whole point.
         if let pitch, pitch > 0 {
-            let descent = abs((attributes[.font] as? UIFont)?.descender ?? 0)
-            return CGRect(x: 0, y: -descent, width: width, height: (height / pitch).rounded(.up) * pitch)
+            let font = attributes[.font] as? UIFont
+            let descent = abs(font?.descender ?? 0)
+            let leading = max(0, font?.leading ?? 0)
+            let lines = (height / pitch).rounded(.up) * pitch
+            return CGRect(x: 0, y: -descent, width: width, height: lines - leading - 0.01)
         }
         return CGRect(x: 0, y: 0, width: width, height: height)
     }

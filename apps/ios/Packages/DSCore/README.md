@@ -218,6 +218,16 @@ SyncEngine(store:client:keyFor: keys.key(for:), register:, retiredKeysFor: keys.
 отставной ключ) и выгружает снимок каноническим ключом, чтобы все устройства снова читали весь
 документ; переживает перезапуск.
 
+### Нечитаемые данные (карантин)
+
+Чужое обновление или снимок, который не расшифровывается (другой ключ) или не является
+обновлением Yrs, не останавливает документ: он откладывается (`LocalStore.quarantined` —
+документ, seq, устройство, причина), остальное применяется, `lastSeq` идёт дальше.
+`SyncStatus.unreadable: [UnreadableSync { docId, notebookId, count, firstSeq, lastSeq,
+deviceIds, reason }]` — спокойное предупреждение у блокнота («часть изменений с другого
+устройства не прочитана»), на `summary` не влияет. После того как ключи поменялись
+(`reconcileNotebookKeys`) — `engine.retryUnreadable()`: отложенное скачивается заново.
+
 ### Ненадёжная сеть
 
 Один `URLSession` (`DSNetwork.session`) на REST и WebSocket: соединения переиспользуются (HTTP/2

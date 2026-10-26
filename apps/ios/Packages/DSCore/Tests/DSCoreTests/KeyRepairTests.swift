@@ -71,6 +71,55 @@ import Testing
         #expect(try await device2.notebookKeyForWriting(EntityID.make()) == nil)
     }
 
+    /// One unreadable item (another key) and one invalid update in the middle of a stream: the
+    /// rest is applied, `lastSeq` moves past them, the status shows a calm per-notebook warning
+    /// (not a spinner), and once the other key is known the item is fetched and read.
+    @Test func unreadableItemsAreSetAsideAndRetried() async throws {
+        let server = FakeSyncServer()
+        let nbId = EntityID.make()
+        let key = DSCrypto.newKey()
+        let other = DSCrypto.newKey()
+        let ad = CryptoAD.doc(nbId)
+        func update(_ folder: String) throws -> Data {
+            let d = NotebookDocument(notebookId: nbId)
+            try d.putFolder(Folder(id: folder, parentId: nil, name: folder, order: 1))
+            return try d.crdt.encodeStateAsUpdate()
+        }
+        await server.register(nbId)
+        await server.seed(docId: nbId, payload: try DSCrypto.seal(try update("one"), key: key, ad: ad))
+        await server.seed(docId: nbId, payload: try DSCrypto.seal(try update("two"), key: other, ad: ad))
+        await server.seed(docId: nbId, payload: try DSCrypto.seal(Data([0xFF, 0x00, 0x13]), key: key, ad: ad))
+        await server.seed(docId: nbId, payload: try DSCrypto.seal(try update("four"), key: key, ad: ad))
+
+        let retired = Locked<[Data]>([])
+        var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: "B", clientVersion: "test")
+        config.minBackoff = .milliseconds(10)
+        let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
+        let b = SyncEngine(store: try LocalStore.inMemory(), client: client, keyFor: { _ in key },
+                           register: { await server.register($0.docId) }, retiredKeysFor: { _ in retired.withLock { $0 } })
+        await b.start()
+        let doc = NotebookDocument(notebookId: nbId)
+        try await b.open(doc.crdt, notebookId: nbId)
+        #expect(try await eventually { doc.folders().map(\.id).sorted() == ["four", "one"] })
+        #expect(try b.store.document(nbId)?.lastSeq == 4)
+        let status = await b.status()
+        #expect(status.unreadable.map(\.docId) == [nbId])
+        #expect(status.unreadable.first?.notebookId == nbId)
+        #expect(status.unreadable.first?.count == 2)
+        #expect(status.unreadable.first?.deviceIds == ["other"])
+        #expect(try b.store.quarantined(docId: nbId).map(\.seq) == [2, 3])
+        #expect(status.summary == .synced)
+
+        // The other key becomes known (as a retired key after a repair): seq 2 is read now; the
+        // invalid update stays aside.
+        retired.withLock { $0 = [other] }
+        await b.retryUnreadable()
+        #expect(try await eventually { doc.folder(id: "two") != nil })
+        #expect(try await eventually { (try? b.store.quarantined(docId: nbId).map(\.seq)) == [3] })
+        #expect(try b.store.document(nbId)?.lastSeq == 4)
+        await b.stop()
+    }
+
     /// Device B wrote a notebook document with its own key. After adopting the canonical key and
     /// `rekey`, it reads everything (its old updates through the retired key) and uploads a
     /// canonical snapshot: a fresh device with the canonical key sees both devices' edits.

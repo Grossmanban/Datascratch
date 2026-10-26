@@ -13,7 +13,7 @@ import { Button, DropdownMenu, EmptyState, IconButton, SegmentedControl } from "
 import { DocCollection } from "./DocCards";
 import { FolderStrip } from "./FolderStrip";
 import { UnreadableNote } from "./UnreadableNote";
-import { newNoteAndOpen } from "./menus";
+import { newDocTarget, newNoteAndOpen } from "./menus";
 import { iconGlyph, withIcon } from "@/lib/glyph";
 
 function sortNotes(notes: NoteEntry[], sort: "updated" | "created" | "title"): NoteEntry[] {
@@ -204,14 +204,15 @@ export function AllDocsPage() {
     () => visibleNotes(notesInSpace({ ...useWorkspace.getState(), notes, account: { ...useWorkspace.getState().account, notebooks } }, spaceId)),
     [notes, notebooks, spaceId],
   );
-  const firstNb = notebooks.find((n) => n.spaceId === spaceId);
+  // The same place as the sidebar's «Новый документ»: the notebook last used in this space.
+  const target = useMemo(() => newDocTarget("/all"), [notebooks, spaceId]);
   return (
     <ListPage
       title={t("nav.allDocs")}
       crumbs={space ? <span className="truncate">{withIcon(space.icon, space.name)}</span> : null}
       notes={list}
       empty={{ icon: <Layers className="size-7" />, title: t("docs.emptyTitle"), text: t("docs.emptyText") }}
-      newIn={firstNb ? { notebookId: firstNb.id, folderId: null } : null}
+      newIn={target ? { notebookId: target.notebookId, folderId: null } : null}
     />
   );
 }

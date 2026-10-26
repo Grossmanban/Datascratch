@@ -373,7 +373,11 @@ struct HideKeyboardButton: View {
     var body: some View {
         let _ = model.revision
         let editing = model.editor.isEditingText
-        Button { model.editor.dismissKeyboard() } label: {
+        Button {
+            model.editor.dismissKeyboard()
+            // With a hardware keyboard nothing else reports the end of editing: refresh the bar.
+            DispatchQueue.main.async { model.revision &+= 1 }
+        } label: {
             Image(systemName: "keyboard.chevron.compact.down")
                 .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
                 .foregroundStyle(Theme.Palette.textSecondary)
@@ -430,7 +434,6 @@ struct PenPalette: View {
                      tools: isCompact ? [.pen, .pencil, .marker, .highlighter, .eraser]
                          : [.pen, .pencil, .marker, .highlighter, .eraser, .lasso],
                      compact: isCompact)
-            .padding(.horizontal, Theme.Space.s3)
             .accessibilityElement(children: .contain)
             // UI tests read the editor's state here (it changes with the mode, not the animation).
             .accessibilityValue(Text(verbatim: "editor \(model.serial), mode \(tools.mode.rawValue), color \(tools.currentPaint?.color ?? "none"), finger \(tools.allowsFingerDrawing ? "on" : "off")"))

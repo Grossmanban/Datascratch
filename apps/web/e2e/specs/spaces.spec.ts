@@ -12,8 +12,11 @@ test("spaces are isolated (D-48): a starred note and a tab of one space are not 
   const noteUrl = page.url();
   await page.getByRole("button", { name: "В избранное" }).click();
   const sidebar = page.getByTestId("sidebar");
-  const inSidebar = sidebar.getByRole("link", { name: /Рабочий план/ });
-  await expect(inSidebar).toHaveCount(2); // tab + starred
+  const strip = page.getByTestId("tab-strip");
+  const tabOf = (name: RegExp) => strip.getByTestId("tab").filter({ hasText: name });
+  // Shown twice: as a tab in the strip and in «Избранное».
+  const inSidebar = sidebar.getByRole("link", { name: /Рабочий план/ }).or(tabOf(/Рабочий план/));
+  await expect(inSidebar).toHaveCount(2);
 
   // A second space (with its own notebook) becomes the active one: nothing of the first is shown.
   await page.getByTestId("space-switcher").click();
@@ -35,7 +38,7 @@ test("spaces are isolated (D-48): a starred note and a tab of one space are not 
 
   // A document of the second space has its own tab.
   await newDoc(page, "Личный список");
-  await expect(sidebar.getByRole("link", { name: /Личный список/ })).toHaveCount(1);
+  await expect(tabOf(/Личный список/)).toHaveCount(1);
   await expect(inSidebar).toHaveCount(0);
 
   // Back in the first space: its tab (opened again) and its starred note return; the other's tab hides.
@@ -43,7 +46,7 @@ test("spaces are isolated (D-48): a starred note and a tab of one space are not 
   await expect(page).toHaveURL(noteUrl);
   await expect(page.locator(".ds-prose")).toContainText("Рабочий план");
   await expect(inSidebar).toHaveCount(2);
-  await expect(sidebar.getByRole("link", { name: /Личный список/ })).toHaveCount(0);
+  await expect(tabOf(/Личный список/)).toHaveCount(0);
 
   // A link to a document of the other space (older links) opens it and switches to its space.
   await switchSpace(page, /Новое пространство/);

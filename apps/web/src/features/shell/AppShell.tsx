@@ -16,6 +16,8 @@ import { useIsMobile } from "@/hooks/useMedia";
 import { focusKindOf, toggleSidebar, useUi } from "@/hooks/useUi";
 import { cn } from "@/ui";
 import { Sidebar } from "./Sidebar";
+import { TabOverview } from "./TabOverview";
+import { TabStrip } from "./TabStrip";
 import { Splash } from "./Splash";
 import { useShortcuts } from "./shortcuts";
 
@@ -29,6 +31,7 @@ export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const focusKind = focusKindOf(pathname);
   // Full screen on this kind of screen hides the sidebar without changing its own setting.
+  const focused = useUi((s) => !!focusKind && s.focus[focusKind]);
   const sidebarOpen = useUi((s) => s.sidebarOpen && !(focusKind && s.focus[focusKind]));
   const mobileNavOpen = useUi((s) => s.mobileNavOpen);
   const isMobile = useIsMobile();
@@ -158,19 +161,24 @@ export function AppShell() {
           </div>
         </motion.aside>
       )}
-      <main className="relative flex min-w-0 flex-1 flex-col">
-        {/* A short fade when the screen changes (tabs inside a screen keep their own motion). */}
-        <motion.div
-          key={screenKey}
-          className="flex min-h-0 flex-1 flex-col"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.16, ease: "easeOut" }}
-        >
-          <Outlet />
-        </motion.div>
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Tabs of the current space above the screen; full screen hides them like the sidebar. */}
+        {!isMobile && !(focusKind && focused) && <TabStrip />}
+        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* A short fade when the screen changes (tabs inside a screen keep their own motion). */}
+          <motion.div
+            key={screenKey}
+            className="flex min-h-0 flex-1 flex-col"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
+          >
+            <Outlet />
+          </motion.div>
+        </main>
+      </div>
       <CommandPalette />
+      <TabOverview />
       <ShareDialog />
       <HistoryDialog />
       <CoverDialog />

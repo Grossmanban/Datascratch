@@ -17,6 +17,12 @@ export function useShortcuts(navigate: ReturnType<typeof useNavigate>) {
         useUi.setState((s) => ({ paletteOpen: !s.paletteOpen }));
         return;
       }
+      // ⌘⇧\ — the tab overview (spec/12 §12.6); the shifted key varies by layout, the code does not.
+      if (mod && e.shiftKey && e.code === "Backslash") {
+        e.preventDefault();
+        useUi.setState((s) => ({ tabOverviewOpen: !s.tabOverviewOpen }));
+        return;
+      }
       if (mod && key === "\\") {
         e.preventDefault();
         toggleSidebar();

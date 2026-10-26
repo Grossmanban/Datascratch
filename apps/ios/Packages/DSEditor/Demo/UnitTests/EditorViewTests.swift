@@ -501,4 +501,23 @@ final class EditorViewTests: XCTestCase {
         editor.dismissKeyboard()
         XCTAssertFalse(editor.isEditingText)
     }
+
+    /// D-45: a note an agent created says so once, with «Понятно», instead of line-by-line marks.
+    func testCreatedByAgentBannerAcknowledges() throws {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Заметка агента")]))
+        var acknowledged = false
+        editor.onAcknowledgeCreatedByAgent = { acknowledged = true }
+        editor.createdByAgent = "Claude"
+        settle(editor)
+        let banner = try XCTUnwrap(editor.textView.subviews.first { $0.accessibilityIdentifier == "agentEdits.banner" })
+        XCTAssertFalse(banner.isHidden)
+        let label = banner.subviews.compactMap { $0 as? UILabel }.first
+        XCTAssertEqual(label?.text, "Создано агентом Claude")
+        let ok = try XCTUnwrap(banner.subviews.compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "agentCreated.acknowledge" })
+        ok.sendActions(for: .primaryActionTriggered)
+        settle(editor)
+        XCTAssertTrue(acknowledged)
+        XCTAssertNil(editor.createdByAgent)
+        XCTAssertTrue(banner.isHidden)
+    }
 }

@@ -109,6 +109,17 @@ const route = (method, pattern, handler) => {
 
 route("GET", "/v1/health", (_q, res) => json(res, 200, { ok: true, version: "mock" }));
 
+// Test control: an item sealed with a key nobody holds (garbage), as left by a lost device.
+route("POST", "/v1/__test/inject-unreadable", (_q, res, { body }) => {
+  const d = db.docs.get(body.docId);
+  if (!d) return err(res, 404, "not_found");
+  const seq = (d.items[d.items.length - 1]?.seq ?? d.snapshot?.seq ?? 0) + 1;
+  const payload = b64u(randomBytes(64));
+  d.items.push({ seq, payload, deviceId: "lost-device", createdAt: nowIso() });
+  for (const o of clients) if (o.welcomed && o.subs.has(body.docId)) o.ws.send(JSON.stringify({ type: "update", docId: body.docId, seq, payload, deviceId: "lost-device" }));
+  json(res, 200, { seq });
+});
+
 // Test control: refuse every push with `internal` (the sync indicator's «Не отправлено» state).
 let refusePushes = false;
 route("POST", "/v1/__test/refuse-pushes", (_q, res, { body }) => {

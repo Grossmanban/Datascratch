@@ -2712,10 +2712,10 @@
     "semantic_hash": "ba5027f3016e7e42a2384b62deb29755"
   },
   "packages/agents/package.json": {
-    "mtime": 1792930769.1526484,
-    "seen": 1793019610.0909066,
-    "ast_hash": "418bbe40928570aa1819dcb206a47df9",
-    "semantic_hash": "418bbe40928570aa1819dcb206a47df9"
+    "mtime": 1793022824.700249,
+    "seen": 1793022882.0241995,
+    "ast_hash": "0770d5bbc56f83c4c350a00e829ac063",
+    "semantic_hash": ""
   },
   "packages/agents/src/auth/grants.ts": {
     "mtime": 1792930355.0631814,
@@ -2760,28 +2760,28 @@
     "semantic_hash": "9437f2817384655b62dec212c81fc2e1"
   },
   "packages/agents/src/doc/edits.ts": {
-    "mtime": 1792930769.1526484,
-    "seen": 1793019610.0909271,
-    "ast_hash": "7d5897f7ff6a322a8af949a90533b0ed",
-    "semantic_hash": "7d5897f7ff6a322a8af949a90533b0ed"
+    "mtime": 1793022824.700249,
+    "seen": 1793022882.024405,
+    "ast_hash": "d14ce0b735168ce17164d9b7bcd61d81",
+    "semantic_hash": ""
   },
   "packages/agents/src/doc/handwriting.ts": {
-    "mtime": 1792930355.0640614,
-    "seen": 1793019610.09093,
-    "ast_hash": "b0db33fc42745183124e23780fc930b4",
-    "semantic_hash": "b0db33fc42745183124e23780fc930b4"
+    "mtime": 1793022824.700249,
+    "seen": 1793022882.0244083,
+    "ast_hash": "88c26bcb0f26ff0294176fe5abe21f49",
+    "semantic_hash": ""
   },
   "packages/agents/src/doc/markdown-export.ts": {
-    "mtime": 1793006058.3599012,
-    "seen": 1793019610.0909333,
-    "ast_hash": "289c73c73197e38aa64f1f8963360caa",
-    "semantic_hash": "289c73c73197e38aa64f1f8963360caa"
+    "mtime": 1793022824.700249,
+    "seen": 1793022882.0244114,
+    "ast_hash": "edb3521ba815fce967f988ffc28d82f5",
+    "semantic_hash": ""
   },
   "packages/agents/src/doc/markdown-import.ts": {
-    "mtime": 1793006058.3599012,
-    "seen": 1793019610.0909364,
-    "ast_hash": "e841940ccb240e73b08b6bc6b67f6644",
-    "semantic_hash": "e841940ccb240e73b08b6bc6b67f6644"
+    "mtime": 1793022824.700249,
+    "seen": 1793022882.0244136,
+    "ast_hash": "0dc51fb8a33a394c307ac54da2f3f302",
+    "semantic_hash": ""
   },
   "packages/agents/src/doc/model.ts": {
     "mtime": 1792930769.1526484,
@@ -2790,10 +2790,10 @@
     "semantic_hash": "3437ae5fee84b2f450ac9fc991f3c35f"
   },
   "packages/agents/src/doc/strokes.ts": {
-    "mtime": 1792930769.1526484,
-    "seen": 1793019610.0909424,
-    "ast_hash": "bbec6ea8b0fb591589096306f2bc2a1e",
-    "semantic_hash": "bbec6ea8b0fb591589096306f2bc2a1e"
+    "mtime": 1793022824.700249,
+    "seen": 1793022882.024446,
+    "ast_hash": "ccd988e715820dafc679d47b8090cf4f",
+    "semantic_hash": ""
   },
   "packages/agents/src/errors.ts": {
     "mtime": 1792930355.0644505,
@@ -2844,16 +2844,16 @@
     "semantic_hash": "827a0f99d0b2c57c2301e253c192ca2d"
   },
   "packages/agents/src/render/fonts.ts": {
-    "mtime": 1792930355.065016,
-    "seen": 1793019610.090968,
-    "ast_hash": "81038d7e1c1fdffa2b6376a85ece9559",
-    "semantic_hash": "81038d7e1c1fdffa2b6376a85ece9559"
+    "mtime": 1793022824.700249,
+    "seen": 1793022882.0246992,
+    "ast_hash": "21a70039ecadc3d6123e888ea6c2078f",
+    "semantic_hash": ""
   },
   "packages/agents/src/render/handwriting-png.ts": {
-    "mtime": 1792930769.1526484,
-    "seen": 1793019610.09097,
-    "ast_hash": "a65d6876018e57343ec6924f34dd5180",
-    "semantic_hash": "a65d6876018e57343ec6924f34dd5180"
+    "mtime": 1793022824.700249,
+    "seen": 1793022882.0247023,
+    "ast_hash": "f0091196f786291c21063a7b388e9768",
+    "semantic_hash": ""
   },
   "packages/agents/src/service/access.ts": {
     "mtime": 1792930355.0655015,
@@ -2880,10 +2880,10 @@
     "semantic_hash": "cd5b8086b25a2b372fe11ee3a50ab766"
   },
   "packages/agents/src/service/schemas.ts": {
-    "mtime": 1793006058.3599012,
-    "seen": 1793019610.0909824,
-    "ast_hash": "efc1616d5da9d3d813aebd361cacb8e8",
-    "semantic_hash": "efc1616d5da9d3d813aebd361cacb8e8"
+    "mtime": 1793022824.700249,
+    "seen": 1793022882.0248215,
+    "ast_hash": "5b1799412a95083123bae57918bb2ae0",
+    "semantic_hash": ""
   },
   "packages/agents/src/testing/fixtures.ts": {
     "mtime": 1792930355.065985,
@@ -2922,10 +2922,10 @@
     "semantic_hash": "d7c4bfb36708373b51bb3b9175ed7a08"
   },
   "packages/agents/test/markdown.test.ts": {
-    "mtime": 1793006058.3599012,
-    "seen": 1793019610.0909965,
-    "ast_hash": "00378acc724fa1e0a60eee2c33a68772",
-    "semantic_hash": "00378acc724fa1e0a60eee2c33a68772"
+    "mtime": 1793022824.704249,
+    "seen": 1793022882.024993,
+    "ast_hash": "5d27b358ce71370b112a485d115f4ca7",
+    "semantic_hash": ""
   },
   "packages/agents/test/mcp.test.ts": {
     "mtime": 1792930355.0687377,
@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793022470.285614,
-    "seen": 1793022529.1924677,
-    "ast_hash": "351a1629bcadbd5cad575ddd4ca300a4",
+    "mtime": 1793022825.2337663,
+    "seen": 1793022882.032457,
+    "ast_hash": "f6ecae79a9ab71ef07833d7ae6bfa841",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -4302,10 +4302,10 @@
     "semantic_hash": "4e12d508cbe83842d35667ec3683e82b"
   },
   "docs/architecture/contracts/agents-api.md": {
-    "mtime": 1793006058.2879012,
-    "seen": 1793019610.0916438,
-    "ast_hash": "e74cf4ca638f7112d99ad5d8d346f1f8",
-    "semantic_hash": "e74cf4ca638f7112d99ad5d8d346f1f8"
+    "mtime": 1793022824.624249,
+    "seen": 1793022882.0325093,
+    "ast_hash": "abd04bbeb9e2e80f1635b7c444460a0a",
+    "semantic_hash": ""
   },
   "docs/architecture/contracts/api.md": {
     "mtime": 1793021394.2184982,
@@ -4326,9 +4326,9 @@
     "semantic_hash": "4ac1df3269effc7a1afe18500a423d82"
   },
   "docs/architecture/contracts/document-model.md": {
-    "mtime": 1793022470.2826684,
-    "seen": 1793022529.192633,
-    "ast_hash": "3a0111455b29c19c543f9de5f5ae08b2",
+    "mtime": 1793022825.2241197,
+    "seen": 1793022882.0325863,
+    "ast_hash": "db105279ac6f6ef8f1c15e61cd24df31",
     "semantic_hash": ""
   },
   "docs/architecture/contracts/strokes.md": {
@@ -4935,6 +4935,12 @@
     "mtime": 1793022450.5242267,
     "seen": 1793022529.191816,
     "ast_hash": "088d1eb66686dcf99c10bf3ba7197636",
+    "semantic_hash": ""
+  },
+  "packages/agents/test/handwriting-table.test.ts": {
+    "mtime": 1793022824.704249,
+    "seen": 1793022882.0249903,
+    "ast_hash": "34f6e5382f0fc4761aa0578846af80e0",
     "semantic_hash": ""
   }
 }

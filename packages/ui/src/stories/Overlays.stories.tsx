@@ -16,7 +16,9 @@ import {
   XCircle,
 } from "lucide-react";
 import { useState } from "react";
+import { Plus as PlusIcon, Settings2 } from "lucide-react";
 import {
+  Badge,
   Button,
   Calendar,
   CommandGroup,
@@ -47,6 +49,7 @@ import {
   IconButton,
   Input,
   Popover,
+  SpaceTile,
   PopoverContent,
   PopoverTrigger,
   Sheet,
@@ -245,5 +248,49 @@ export const Toasts: Story = () => {
         Ошибка
       </Button>
     </div>
+  );
+};
+
+/** Regression story: space switcher rows (tile + long name + check / shortcut) never wrap. */
+export const SpaceSwitcher: Story = () => {
+  const [space, setSpace] = useState("personal");
+  const spaces = [
+    { id: "personal", name: "Личное", icon: "🏡", tint: "green" as const },
+    {
+      id: "work",
+      name: "Работа и очень длинное название пространства клиента",
+      icon: "💼",
+      tint: "blue" as const,
+    },
+    { id: "study", name: "Учёба", icon: "📚", tint: "orange" as const },
+  ];
+  return (
+    <DropdownMenu open modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button>Пространство</Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-[min(280px,calc(100vw-24px))]">
+        <DropdownMenuLabel>Пространства</DropdownMenuLabel>
+        {spaces.map((s, i) => (
+          <DropdownMenuItem
+            key={s.id}
+            icon={<SpaceTile icon={s.icon} tint={s.tint} size={20} />}
+            checked={space === s.id}
+            shortcut={`mod+${i + 1}`}
+            onSelect={(e) => {
+              e.preventDefault();
+              setSpace(s.id);
+            }}
+          >
+            {s.name}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem icon={<PlusIcon />}>Новое пространство</DropdownMenuItem>
+        <DropdownMenuItem icon={<Settings2 />} trailing={<Badge>3</Badge>}>
+          Настройки пространства
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };

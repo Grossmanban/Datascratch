@@ -10,7 +10,7 @@ import * as Y from "yjs";
 import { collectHandwriting } from "../src/doc/handwriting.js";
 import { childElements, contentOf } from "../src/doc/model.js";
 import { writeStroke, type StrokePoint } from "../src/doc/strokes.js";
-import { autoScale, renderHandwriting, textSegments, type Layout } from "../src/render/handwriting-png.js";
+import { autoScale, renderHandwriting, groupInRegion, regionOf, strokeInRegion, textSegments, type Layout } from "../src/render/handwriting-png.js";
 import { readStrokes } from "../src/doc/strokes.js";
 import { makeNoteDoc } from "../src/testing/fixtures.js";
 
@@ -186,6 +186,82 @@ describe("handwriting in tables", () => {
     // The plain contract layout would jump by the advance difference at every anchor change.
     const plain = steps(textSegments(doc, stroke, block, layout, 0, false)[0]!.map((p) => p.x));
     expect(Math.max(...plain.map((d, k) => Math.abs(d - editor[k]!)))).toBeGreaterThan(1.5);
+  });
+
+  it("keeps the shape of a word written across two adjacent cells («greg» over «код» | «курсив»)", () => {
+    const doc = makeNoteDoc("Таблица", "| A | B | C |\n| --- | --- | --- |\n| x | код | курсив |");
+    const left = cellText(doc, 1, 1);
+    const right = cellText(doc, 1, 2);
+    const table = childElements(contentOf(doc)).find((e) => e.nodeName === "table")!;
+    const region = regionOf([table]);
+    const placed = (t: Y.XmlText) => region.texts.get(t.parent as Y.XmlElement)!;
+    const fs = placed(left).layout.fontSize;
+    // The editor lays the table out differently: the right column starts 14 pt further right
+    // and its glyphs are 1 pt wider each — where our renderer used to tear the word apart.
+    const editorGlyphX = (t: Y.XmlText, i: number) => placed(t).layout.glyphs[i]!.x + (t === right ? 14 + i : 0);
+    const baseline = placed(left).dy + placed(left).layout.lines[0]!.baseline;
+    const startX = editorGlyphX(right, 0) - 45;
+    const editorX = Array.from({ length: 40 }, (_, k) => startX + k * 2.2 + 6 * Math.sin(k / 2));
+    const editorY = Array.from({ length: 40 }, (_, k) => baseline - 6 - 5 * Math.cos(k / 2));
+    const glyphs = [...[0, 1, 2].map((i) => ({ t: left, i })), ...[0, 1, 2, 3, 4, 5].map((i) => ({ t: right, i }))];
+    const pts = editorX.map((x, k) => {
+      const g = [...glyphs].reverse().find((c) => editorGlyphX(c.t, c.i) <= x) ?? glyphs[0]!;
+      return { t: g.t, i: g.i, x: (x - editorGlyphX(g.t, g.i)) / fs, y: (editorY[k]! - baseline) / fs };
+    });
+    expect(new Set(pts.map((p) => p.t)).size).toBe(2); // the word really crosses the cell boundary
+    strokeAt(doc, "greg", 1_760_000_500_000, pts);
+    const stroke = readStrokes(doc).find((s) => s.id === "greg")!;
+    const steps = (v: number[]) => v.slice(1).map((x, k) => x - v[k]!);
+    const worst = (seg: { x: number; y: number }[]) => {
+      const sx = steps(seg.map((p) => p.x));
+      const sy = steps(seg.map((p) => p.y));
+      const ex = steps(editorX);
+      const ey = steps(editorY);
+      return Math.max(...sx.map((d, k) => Math.abs(d - ex[k]!)), ...sy.map((d, k) => Math.abs(d - ey[k]!)));
+    };
+    const segments = strokeInRegion(doc, stroke, [table]);
+    expect(segments).toHaveLength(1);
+    expect(segments[0]).toHaveLength(40);
+    expect(worst(segments[0]!)).toBeLessThan(2);
+    // Without keeping the shape the stroke is torn at the cell boundary.
+    const plain = strokeInRegion(doc, stroke, [table], false);
+    expect(plain.length > 1 || worst(plain[0]!) > 5).toBe(true);
+  });
+
+  it("keeps the spacing between strokes of one word in neighbouring cells", () => {
+    const doc = makeNoteDoc("Таблица", "| A | B | C |\n| --- | --- | --- |\n| x | код | курсив |");
+    const left = cellText(doc, 1, 1);
+    const right = cellText(doc, 1, 2);
+    const table = childElements(contentOf(doc)).find((e) => e.nodeName === "table")!;
+    const region = regionOf([table]);
+    const placed = (t: Y.XmlText) => region.texts.get(t.parent as Y.XmlElement)!;
+    const fs = placed(left).layout.fontSize;
+    const editorGlyphX = (t: Y.XmlText, i: number) => placed(t).layout.glyphs[i]!.x + (t === right ? 14 : 0);
+    const baseline = placed(left).dy + placed(left).layout.lines[0]!.baseline;
+    const glyphs = [...[0, 1, 2].map((i) => ({ t: left, i })), ...[0, 1, 2, 3, 4, 5].map((i) => ({ t: right, i }))];
+    const boundary = editorGlyphX(right, 0);
+    // Three letters in editor coordinates: before the boundary, across it, after it.
+    const letter = (x0: number) => Array.from({ length: 12 }, (_, k) => ({ x: x0 + k * 0.8 + 3 * Math.sin(k / 2), y: baseline - 6 - 4 * Math.cos(k / 2) }));
+    const letters = [letter(boundary - 40), letter(boundary - 6), letter(boundary + 20)];
+    letters.forEach((pts, n) =>
+      strokeAt(
+        doc,
+        `l${n}`,
+        1_760_000_600_000 + n * 300,
+        pts.map(({ x, y }) => {
+          const g = [...glyphs].reverse().find((c) => editorGlyphX(c.t, c.i) <= x) ?? glyphs[0]!;
+          return { t: g.t, i: g.i, x: (x - editorGlyphX(g.t, g.i)) / fs, y: (y - baseline) / fs };
+        }),
+      ),
+    );
+    const strokes = ["l0", "l1", "l2"].map((id) => readStrokes(doc).find((s) => s.id === id)!);
+    const mean = (seg: { x: number }[]) => seg.reduce((a, p) => a + p.x, 0) / seg.length;
+    const [a, , c] = groupInRegion(doc, strokes, [table]).map((segs) => mean(segs[0]!));
+    const editorGap = mean(letters[2]!) - mean(letters[0]!);
+    expect(Math.abs(c! - a! - editorGap)).toBeLessThan(2);
+    // Each stroke placed on its own keeps the layouts' 14 pt disagreement between the cells.
+    const alone = strokes.map((s) => mean(strokeInRegion(doc, s, [table])[0]!));
+    expect(Math.abs(alone[2]! - alone[0]! - editorGap)).toBeGreaterThan(10);
   });
 
   it("draws small fragments at a higher default scale", () => {

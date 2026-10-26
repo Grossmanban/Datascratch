@@ -7,6 +7,7 @@ import {
   SyncClient,
   generateKey,
   initCrypto,
+  KeyUnavailableError,
   encryptDocUpdate,
   toBase64Url,
   type SkippedUpdate,
@@ -620,5 +621,101 @@ describe("undecryptable items", () => {
     r.client.start();
     await until(() => dr.getText("t").toString() === "hello");
     expect(r.client.getSkipped(DOC)).toHaveLength(1);
+  });
+});
+
+describe("key not available yet", () => {
+  function seed(hub: MemorySyncHub, sealKey: Uint8Array, texts: string[]) {
+    hub.registerDoc(DOC);
+    const d = hub.docs.get(DOC)!;
+    const src = new Y.Doc();
+    for (const t of texts) {
+      const sv = Y.encodeStateVector(src);
+      src.getText("t").insert(src.getText("t").length, t);
+      const up = Y.encodeStateAsUpdate(src, sv);
+      d.items.push({
+        seq: ++d.seq,
+        payload: toBase64Url(encryptDocUpdate(sealKey, DOC, up)),
+        deviceId: "dev-x",
+      });
+    }
+  }
+
+  it("pauses without skipping or advancing, then resumes on keyAvailable", async () => {
+    const hub = new MemorySyncHub();
+    seed(hub, key, ["a", "b", "c"]);
+    let known: Uint8Array | null = null;
+    const errors: SyncClientError[] = [];
+    const missing: string[] = [];
+    const r = makeClient(hub, "dev-r", { keyFor: () => known, missingKeyReportMs: 20 });
+    r.client.on("error", (e) => errors.push(e));
+    r.client.on("keyMissing", (id) => missing.push(id));
+    const dr = new Y.Doc();
+    await r.client.addDoc(DOC, dr);
+    r.client.start();
+    await until(() => r.client.isPaused(DOC));
+    await until(() => errors.some((e) => e.code === "key_missing"));
+    expect(missing).toEqual([DOC]);
+    expect(r.client.getSkipped()).toEqual([]);
+    expect(r.client.isSynced(DOC)).toBe(false);
+    expect(dr.getText("t").toString()).toBe("");
+    await r.client.flush();
+    expect((await r.storage.getDocState(DOC))?.lastSeq ?? 0).toBe(0);
+
+    known = key; // e.g. the notebook index with the wrapped noteKey arrived
+    await r.client.keyAvailable(DOC);
+    await until(() => r.client.isSynced(DOC));
+    expect(dr.getText("t").toString()).toBe("abc");
+    expect(r.client.isPaused(DOC)).toBe(false);
+    expect(r.client.getSkipped()).toEqual([]);
+  });
+
+  it("treats a thrown KeyUnavailableError the same way and keeps local edits", async () => {
+    const hub = new MemorySyncHub();
+    hub.registerDoc(DOC);
+    let ready = false;
+    const r = makeClient(hub, "dev-r", {
+      keyFor: (id) => {
+        if (!ready) throw new KeyUnavailableError(id);
+        return key;
+      },
+    });
+    const dr = new Y.Doc();
+    await r.client.addDoc(DOC, dr);
+    r.client.start();
+    await until(() => r.client.isSynced(DOC)); // empty doc: nothing to decrypt
+    dr.getText("t").insert(0, "local");
+    await until(() => r.client.isPaused(DOC));
+    expect(await r.storage.listOutbox()).toHaveLength(0);
+    ready = true;
+    await r.client.keyAvailable(DOC);
+    await until(
+      async () =>
+        hub.docs.get(DOC)!.items.length === 1 && (await r.storage.listOutbox()).length === 0,
+    );
+    const other = makeClient(hub, "dev-o");
+    const d2 = new Y.Doc();
+    await other.client.addDoc(DOC, d2);
+    other.client.start();
+    await until(() => d2.getText("t").toString() === "local");
+  });
+
+  it("still skips items that fail with a key, and retrySkipped picks them up with a later key", async () => {
+    const hub = new MemorySyncHub();
+    const retired = generateKey();
+    seed(hub, retired, ["old"]);
+    let alternates: Uint8Array[] = [];
+    const r = makeClient(hub, "dev-r", { alternateKeysFor: () => alternates });
+    const dr = new Y.Doc();
+    await r.client.addDoc(DOC, dr);
+    r.client.start();
+    await until(() => r.client.isSynced(DOC));
+    expect(r.client.isPaused(DOC)).toBe(false);
+    expect(r.client.getSkipped(DOC)).toHaveLength(1);
+    alternates = [retired];
+    expect(await r.client.retrySkipped(DOC)).toBe(true);
+    await until(() => dr.getText("t").toString() === "old");
+    expect(r.client.getSkipped(DOC)).toEqual([]);
+    expect(await r.client.retrySkipped(DOC)).toBe(false);
   });
 });

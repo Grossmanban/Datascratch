@@ -63,6 +63,9 @@ interface BlockStyle {
 }
 
 function blockStyle(el: Y.XmlElement): BlockStyle {
+  // Table cells as the iOS editor draws them (TableBlockView): 15 pt, header semibold.
+  const cell = el.parent instanceof Y.XmlElement ? el.parent.nodeName : null;
+  if (cell === "tableCell" || cell === "tableHeader") return { family: TEXT_FAMILY, size: 15, weight: cell === "tableHeader" ? 600 : 400 };
   switch (el.nodeName) {
     case "title":
       return { family: DISPLAY_FAMILY, size: 34, weight: 600 };
@@ -334,14 +337,15 @@ export function layoutRegion(ctx: SKRSContext2D, tops: Y.XmlElement[], x0: numbe
         return h;
       }
       case "table": {
+        // Equal columns, 10 pt inset, rows at least 38 pt — the editors' table geometry.
         const cols = Math.max(1, ...kids.map((r) => childElements(r).length));
         const cw = w / cols;
         let h = 0;
         kids.forEach((row, r) => {
           const cells = childElements(row);
           const ry = y + h;
-          const heights = cells.map((cell, ci) => stack(childElements(cell), x + ci * cw + 8, ry + 6, cw - 16, 2) + 12);
-          const rh = Math.max(30, ...heights);
+          const heights = cells.map((cell, ci) => stack(childElements(cell), x + ci * cw + 10, ry + 8, cw - 20, 2) + 16);
+          const rh = Math.max(38, ...heights);
           const header = cells.some((c) => c.nodeName === "tableHeader") || r === 0;
           decor.push((c) => {
             if (header) ((c.fillStyle = PANEL), c.fillRect(x, ry, cols * cw, rh));
@@ -418,64 +422,166 @@ function drawSegment(ctx: SKRSContext2D, stroke: Stroke, pts: Pt[]): void {
   ctx.restore();
 }
 
-/**
- * Text stroke → segments via the shared layout rules; anchors may point into
- * any laid-out text block of the region (a word written across cells).
- */
-function regionSegments(doc: Y.Doc, stroke: Stroke, region: Region, anchorLines?: { top: number; bottom: number }[], keepShape = true): Pt[][] {
-  const starts = new Map<Y.XmlElement, Map<Y.XmlText, number>>();
-  const anchors = resolveAnchors(doc, stroke.anchors);
-  // `t` carries the point index through the shared layout, to know each drawn point's anchor.
-  const indexed = stroke.points.map((p, i) => ({ ...p, t: i }));
-  const segments = layoutTextStroke(stroke, indexed, anchors, (anchor) => {
-      const block = anchor.text.parent;
-      if (!(block instanceof Y.XmlElement)) return null;
-      const placed = region.texts.get(block);
-      if (!placed) return null;
-      let runStart = starts.get(block);
-      if (!runStart) starts.set(block, (runStart = flatten(block).runStart));
-      const start = runStart.get(anchor.text);
-      const g = start === undefined ? undefined : placed.layout.glyphs[start + anchor.index];
-      if (!g) return null;
-      const line = placed.layout.lines[g.line]!;
-      anchorLines?.push({ top: placed.dy + line.top, bottom: placed.dy + line.bottom });
-      return { x: g.x, baseline: placed.dy + line.baseline, fontSize: placed.layout.fontSize, line: `${placed.key}:${g.line}` };
-  });
-  const rigidShape = keepShape && RIGID_HINTS.has(stroke.hint);
-  return toPts(
-    segments.map((seg) => {
-      const out = rigidShape ? rigid(seg, (k) => stroke.points[seg[k]!.t]!.a) : seg;
-      return out.map((p) => ({ ...p, t: stroke.points[p.t]!.t }));
-    }),
-  );
+/** Where a drawn point's anchor landed in our layout. */
+interface PointInfo {
+  anchor: number;
+  block: Y.XmlElement;
+  baseline: number;
+}
+
+/** A text stroke laid out by the shared rules, with each drawn point's anchor placement. */
+interface Traced {
+  stroke: Stroke;
+  rigid: boolean;
+  segments: Segment[];
+  info: PointInfo[][];
 }
 
 /** Handwritten words and symbols keep their own shape; underlines, circles and highlights follow the text. */
 const RIGID_HINTS = new Set<Stroke["hint"]>(["free", "scribble", "arrow"]);
 
 /**
- * Each point of a text stroke is stored relative to its own anchor character,
- * so one handwritten letter spans several anchors. Our font's advances differ
- * slightly from the editor's, which would shift the parts of a letter against
- * each other at every anchor change (a crisp «g» smeared into its «e»). Within
- * one anchor the motion is exact; across a change we take the motion of the
- * neighbouring samples instead, then centre the stroke where the text puts it.
+ * Text stroke → segments via the shared layout rules; anchors may point into
+ * any laid-out text block of the region (a word written across cells).
  */
-function rigid(seg: Segment, anchorAt: (k: number) => number): Segment {
-  if (seg.length < 3) return seg;
-  const dx = (k: number) => seg[k]!.x - seg[k - 1]!.x;
-  const same = (k: number) => k >= 1 && k < seg.length && anchorAt(k) === anchorAt(k - 1);
-  const xs = [seg[0]!.x];
-  for (let k = 1; k < seg.length; k++) {
-    let step = dx(k);
-    if (!same(k)) {
-      const around = [k - 1, k + 1].filter(same).map(dx);
-      step = around.length ? around.reduce((a, b) => a + b, 0) / around.length : 0;
-    }
-    xs.push(xs[k - 1]! + step);
+function traceStroke(doc: Y.Doc, stroke: Stroke, region: Region, anchorLines: { top: number; bottom: number }[] | undefined, keepShape: boolean): Traced {
+  const starts = new Map<Y.XmlElement, Map<Y.XmlText, number>>();
+  const anchors = resolveAnchors(doc, stroke.anchors);
+  const rigid = keepShape && RIGID_HINTS.has(stroke.hint);
+  const placedAt = new Map<object, { block: Y.XmlElement; baseline: number }>();
+  // `t` carries the point index through the shared layout, to know each drawn point's anchor.
+  const indexed = stroke.points.map((p, i) => ({ ...p, t: i }));
+  const segments = layoutTextStroke(stroke, indexed, anchors, (anchor) => {
+    const block = anchor.text.parent;
+    if (!(block instanceof Y.XmlElement)) return null;
+    const placed = region.texts.get(block);
+    if (!placed) return null;
+    let runStart = starts.get(block);
+    if (!runStart) starts.set(block, (runStart = flatten(block).runStart));
+    const start = runStart.get(anchor.text);
+    const g = start === undefined ? undefined : placed.layout.glyphs[start + anchor.index];
+    if (!g) return null;
+    const line = placed.layout.lines[g.line]!;
+    anchorLines?.push({ top: placed.dy + line.top, bottom: placed.dy + line.bottom });
+    placedAt.set(anchor, { block, baseline: placed.dy + line.baseline });
+    // A handwritten word is one shape even where our layout wraps or changes cell: never split it there.
+    return { x: g.x, baseline: placed.dy + line.baseline, fontSize: placed.layout.fontSize, line: rigid ? "stroke" : `${placed.key}:${g.line}` };
+  });
+  const info = segments.map((seg) =>
+    seg.map((p) => {
+      const a = stroke.points[p.t]!.a;
+      return { anchor: a, ...placedAt.get(anchors[a]!)! };
+    }),
+  );
+  return { stroke, rigid, segments, info };
+}
+
+/**
+ * Each point of a text stroke is stored relative to its own anchor character,
+ * so one handwritten word spans several anchors — often in different cells or
+ * lines, and over several strokes. Our font advances, line wraps and table
+ * columns differ from the editor's, which would shift the parts of a word
+ * against each other at every anchor change (a crisp «g» smeared into its «e»).
+ *
+ * Within one anchor the motion is exact (vertically also on one baseline);
+ * across a change we take the motion of the neighbouring samples instead. The
+ * difference at a change between two text blocks tells how far our layout of
+ * one block is shifted against the other compared to the editor; all strokes
+ * of the group are placed in the frame of the block most of them sit in, so
+ * letters in neighbouring cells keep their spacing too.
+ */
+function shapeGroup(traced: Traced[]): Pt[][][] {
+  type Shape = { xs: number[]; ys: number[] };
+  const shapes = new Map<Segment, Shape>();
+  const jumps = new Map<Y.XmlElement, Map<Y.XmlElement, { x: number; y: number }[]>>();
+  const jump = (a: Y.XmlElement, b: Y.XmlElement, x: number, y: number) => {
+    let m = jumps.get(a);
+    if (!m) jumps.set(a, (m = new Map()));
+    m.set(b, [...(m.get(b) ?? []), { x, y }]);
+  };
+  const blockCount = new Map<Y.XmlElement, number>();
+  for (const t of traced) {
+    if (!t.rigid) continue;
+    t.segments.forEach((seg, si) => {
+      const info = t.info[si]!;
+      const same = (k: number) => k >= 1 && k < seg.length && info[k]!.anchor === info[k - 1]!.anchor;
+      const step = (k: number, axis: "x" | "y") => seg[k]![axis] - seg[k - 1]![axis];
+      const estimate = (k: number, axis: "x" | "y") => {
+        const around = [k - 1, k + 1].filter(same).map((j) => step(j, axis));
+        return around.length ? around.reduce((a, b) => a + b, 0) / around.length : 0;
+      };
+      const xs = [seg[0]!.x];
+      const ys = [seg[0]!.y];
+      for (let k = 1; k < seg.length; k++) {
+        const exact = same(k);
+        const sx = exact ? step(k, "x") : estimate(k, "x");
+        const sy = exact || info[k]!.baseline === info[k - 1]!.baseline ? step(k, "y") : estimate(k, "y");
+        xs.push(xs[k - 1]! + sx);
+        ys.push(ys[k - 1]! + sy);
+        const a = info[k - 1]!.block;
+        const b = info[k]!.block;
+        if (a !== b) {
+          // How much further our layout puts block b than the editor did, relative to block a.
+          jump(a, b, step(k, "x") - sx, step(k, "y") - sy);
+          jump(b, a, sx - step(k, "x"), sy - step(k, "y"));
+        }
+      }
+      for (const i of info) blockCount.set(i.block, (blockCount.get(i.block) ?? 0) + 1);
+      shapes.set(seg, { xs, ys });
+    });
   }
-  const shift = seg.reduce((sum, p, k) => sum + p.x - xs[k]!, 0) / seg.length;
-  return seg.map((p, k) => ({ ...p, x: xs[k]! + shift }));
+  // Offsets of every block against the main one, through the observed jumps (breadth-first).
+  const main = [...blockCount.entries()].sort((p, q) => q[1] - p[1])[0]?.[0];
+  const offset = new Map<Y.XmlElement, { x: number; y: number }>();
+  if (main) {
+    offset.set(main, { x: 0, y: 0 });
+    const queue = [main];
+    while (queue.length) {
+      const a = queue.shift()!;
+      for (const [b, list] of jumps.get(a) ?? []) {
+        if (offset.has(b)) continue;
+        const o = offset.get(a)!;
+        offset.set(b, { x: o.x + list.reduce((s, j) => s + j.x, 0) / list.length, y: o.y + list.reduce((s, j) => s + j.y, 0) / list.length });
+        queue.push(b);
+      }
+    }
+  }
+  return traced.map((t) =>
+    toPts(
+      t.segments.map((seg, si) => {
+        const shape = shapes.get(seg);
+        const out = shape
+          ? (() => {
+              // Place the shape where our layout puts its points, each moved into the main block's frame.
+              const info = t.info[si]!;
+              const off = (k: number) => offset.get(info[k]!.block) ?? { x: 0, y: 0 };
+              const dx = seg.reduce((s, p, k) => s + p.x - off(k).x - shape.xs[k]!, 0) / seg.length;
+              const dy = seg.reduce((s, p, k) => s + p.y - off(k).y - shape.ys[k]!, 0) / seg.length;
+              return seg.map((p, k) => ({ ...p, x: shape.xs[k]! + dx, y: shape.ys[k]! + dy }));
+            })()
+          : seg;
+        return out.map((p) => ({ ...p, t: t.stroke.points[p.t]!.t }));
+      }),
+    ),
+  );
+}
+
+function regionSegments(doc: Y.Doc, stroke: Stroke, region: Region, anchorLines?: { top: number; bottom: number }[], keepShape = true): Pt[][] {
+  return shapeGroup([traceStroke(doc, stroke, region, anchorLines, keepShape)])[0]!;
+}
+
+/** Lays out top-level blocks like the PNG does. @internal (tests) */
+export const regionOf = (tops: Y.XmlElement[]): Region => layoutRegion(measureCanvas(), tops, PAD, COLUMN);
+
+/** A text stroke's drawn segments in the region of `tops`. @internal (tests) */
+export function strokeInRegion(doc: Y.Doc, stroke: Stroke, tops: Y.XmlElement[], keepShape = true): Pt[][] {
+  return regionSegments(doc, stroke, regionOf(tops), undefined, keepShape);
+}
+
+/** The drawn segments of several strokes of one group (placed together). @internal (tests) */
+export function groupInRegion(doc: Y.Doc, strokes: Stroke[], tops: Y.XmlElement[]): Pt[][][] {
+  const region = regionOf(tops);
+  return shapeGroup(strokes.map((s) => traceStroke(doc, s, region, undefined, true)));
 }
 
 /**
@@ -550,7 +656,8 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
     const tops = all.slice(Math.min(...idx), Math.max(...idx) + 1);
     const region = layoutRegion(measureCanvas(), tops, PAD, COLUMN);
     const anchorLines: { top: number; bottom: number }[] = [];
-    const segs = placements.map((p) => ({ s: p.stroke, segments: regionSegments(doc, p.stroke, region, anchorLines) }));
+    const shaped = shapeGroup(placements.map((p) => traceStroke(doc, p.stroke, region, anchorLines, true)));
+    const segs = placements.map((p, i) => ({ s: p.stroke, segments: shaped[i]! }));
     const box = boxOf(segs.flatMap((x) => x.segments));
     if (!box) throw new Error("handwriting has no visible strokes");
     // Frame: every stroke (never clipped) plus the lines it sits on and some context around them.

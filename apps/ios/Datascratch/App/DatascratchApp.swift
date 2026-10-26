@@ -6,9 +6,11 @@ struct DatascratchApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             RootView()
                 .environment(app)
+                .onAppear { app.mainWindowCount += 1 }
+                .onDisappear { app.mainWindowCount -= 1 }
         }
         .commands { AppCommands() }
         .onChange(of: scenePhase) { _, phase in
@@ -89,6 +91,8 @@ struct MainWindow: View {
 /// A secondary window showing one document.
 struct NoteWindow: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.openWindow) private var openWindow
     let noteId: String
     @State private var scene: SceneModel?
 
@@ -104,12 +108,30 @@ struct NoteWindow: View {
                     SceneSheetView(sheet: sheet)
                         .environment(scene)
                 }
+            } else {
+                // Something has to be on screen for onAppear to run: an empty Group never
+                // appears, and the new window stayed black.
+                Theme.Palette.canvas.ignoresSafeArea()
             }
         }
+        .background(Theme.Palette.canvas.ignoresSafeArea())
+        .tint(Theme.Palette.accent)
         .onAppear {
+            // A window the system restored for a note that is gone (deleted, or a fresh UI-test
+            // library) closes instead of staying empty; the library window comes back if the system
+            // restored only this one.
+            guard app.library.note(noteId) != nil else {
+                // Next turn: a library window restored alongside has appeared by then.
+                DispatchQueue.main.async {
+                    if app.mainWindowCount == 0 { openWindow(id: "main") }
+                    dismissWindow()
+                }
+                return
+            }
             if scene == nil {
                 let model = SceneModel(app: app)
                 model.selectedNoteId = noteId
+                model.isNoteWindow = true
                 scene = model
             }
         }

@@ -16,13 +16,17 @@ struct MainSplitView: View {
                 .navigationSplitViewColumnWidth(min: 320, ideal: 400, max: 560)
         } detail: {
             NavigationStack {
-                if let noteId = scene.selectedNoteId, app.library.note(noteId) != nil {
+                if scene.isContentFullScreen {
+                    ContentColumn()
+                } else if let noteId = scene.selectedNoteId, app.library.note(noteId) != nil {
                     DocumentScreen(noteId: noteId)
                         .id(noteId)
                 } else {
                     EmptyDetailView()
                 }
             }
+            // Warm paper behind the document column too (not the system white / blue-black).
+            .background(Theme.Palette.canvas.ignoresSafeArea())
         }
         .navigationSplitViewStyle(.balanced)
         // Craft-like chrome: toolbar and sidebar icons in neutral ink; the accent is
@@ -68,7 +72,7 @@ struct EmptyDetailView: View {
 
     var body: some View {
         ZStack {
-            Backdrop.mist.gradient.opacity(0.35).ignoresSafeArea()
+            Theme.Palette.canvas.ignoresSafeArea()
             VStack(spacing: Theme.Space.s4) {
                 Image(systemName: "pencil.and.scribble")
                     .font(.system(size: 44, weight: .light))

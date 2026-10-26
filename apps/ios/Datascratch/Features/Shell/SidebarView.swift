@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(DSDesign)
+import DSDesign
+#endif
 
 struct SidebarView: View {
     @Environment(AppModel.self) private var app
@@ -16,13 +19,29 @@ struct SidebarView: View {
                 if !library.openTabs.isEmpty {
                     Section("Tabs") {
                         ForEach(library.openTabs) { note in
-                            Button {
-                                scene.open(note.id)
-                            } label: {
-                                NoteTitleLabel(note: note)
-                                    .fontWeight(scene.selectedNoteId == note.id ? .semibold : .regular)
+                            HStack(spacing: Theme.Space.s2) {
+                                Button {
+                                    scene.open(note.id)
+                                } label: {
+                                    NoteTitleLabel(note: note)
+                                        .fontWeight(scene.selectedNoteId == note.id ? .semibold : .regular)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                                // An explicit close button on every tab (also swipe, menu and ⌘W).
+                                Button {
+                                    if scene.selectedNoteId == note.id { scene.closeTab() } else { library.closeTab(note.id) }
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(Theme.Palette.textTertiary)
+                                        .frame(width: 28, height: 28)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Close Tab")
+                                .accessibilityIdentifier("tab.close")
                             }
-                            .buttonStyle(.plain)
                             .contextMenu {
                                 Button("Open in New Window", systemImage: "macwindow.badge.plus") {
                                     openWindow(id: "note", value: note.id)
@@ -246,13 +265,8 @@ struct SpaceSwitcher: View {
         } label: {
             HStack(spacing: Theme.Space.s2) {
                 if let space = library.activeSpace {
-                    // A 26 pt tile in the space colour, then its name (Craft).
-                    Image(systemName: space.icon)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(space.color.foreground)
-                        .frame(width: 26, height: 26)
-                        .background(space.color.background,
-                                    in: RoundedRectangle(cornerRadius: Theme.Radius.sm, style: .continuous))
+                    // A 26 pt tile in the space colour (its emoji or first letter), then its name.
+                    SpaceTile(space: space)
                     Text(space.name)
                         .font(.system(.callout, design: .serif).weight(.semibold))
                         .foregroundStyle(Theme.Palette.textPrimary)
@@ -265,6 +279,31 @@ struct SpaceSwitcher: View {
         }
         .accessibilityLabel("Switch Space")
         .accessibilityIdentifier("sidebar.spaceSwitcher")
+    }
+}
+
+/// `DSSpaceTile`: the space's emoji, or the first letter of its name when the icon is an
+/// SF Symbol, on the space colour.
+struct SpaceTile: View {
+    let space: Space
+    var size: CGFloat = 26
+
+    private var glyph: String {
+        // SF Symbol names are ASCII words with dots ("square.stack"); emoji are not.
+        let isSymbol = space.icon.allSatisfy { $0.isASCII }
+        return isSymbol ? (space.name.first.map(String.init) ?? "·") : space.icon
+    }
+
+    var body: some View {
+        #if canImport(DSDesign)
+        DSSpaceTile(glyph, tint: DSTintToken(rawValue: space.color.rawValue) ?? .gray, size: size)
+        #else
+        Text(glyph)
+            .font(.system(size: size * 0.56, weight: .semibold, design: .serif))
+            .foregroundStyle(space.color.foreground)
+            .frame(width: size, height: size)
+            .background(space.color.background, in: RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+        #endif
     }
 }
 
@@ -298,7 +337,17 @@ struct SyncStatusBadge: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        let (icon, text, color) = describe(app.sync.phase)
+        if case .notSent(let documents, let reason) = app.sync.phase {
+            notSent(documents: documents, reason: reason)
+        } else {
+            let (icon, text, color) = describe(app.sync.phase)
+            label(icon: icon, text: text, color: color)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("sync.status")
+        }
+    }
+
+    private func label(icon: String, text: LocalizedStringKey, color: Color) -> some View {
         Label {
             Text(text)
                 .font(Theme.Typography.footnote)
@@ -308,7 +357,27 @@ struct SyncStatusBadge: View {
                 .foregroundStyle(color)
                 .symbolEffect(.pulse, isActive: app.sync.phase == .syncing)
         }
-        .accessibilityElement(children: .combine)
+    }
+
+    /// Changes the server refused: how many documents, why, and a way to send them again.
+    private func notSent(documents: Int, reason: String) -> some View {
+        HStack(spacing: Theme.Space.s2) {
+            VStack(alignment: .leading, spacing: 2) {
+                let (icon, text, color) = describe(app.sync.phase)
+                label(icon: icon, text: text, color: color)
+                Text(reason)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+                    .lineLimit(2)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("sync.status")
+            Button("Retry") { app.sync.retryFailed() }
+                .font(Theme.Typography.footnote.weight(.semibold))
+                .buttonStyle(.borderless)
+                .tint(Theme.Palette.accent)
+                .accessibilityIdentifier("sync.retry")
+        }
     }
 
     private func describe(_ phase: SyncCenter.Phase) -> (String, LocalizedStringKey, Color) {
@@ -324,6 +393,9 @@ struct SyncStatusBadge: View {
             return ("checkmark.icloud", "Up to date", Theme.Palette.success)
         case .failed:
             return ("exclamationmark.icloud", "Sync problem", Theme.Palette.danger)
+        case .notSent(let documents, _):
+            let text: LocalizedStringKey = "Not sent: \(documents)"
+            return ("exclamationmark.icloud", text, Theme.Palette.danger)
         }
     }
 }

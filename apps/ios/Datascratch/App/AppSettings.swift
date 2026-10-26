@@ -32,6 +32,8 @@ final class AppSettings {
     var defaultPaper: NoteStyle.Paper { didSet { defaults.set(defaultPaper.rawValue, forKey: "defaultPaper") } }
     var libraryLayout: LibraryLayout { didSet { defaults.set(libraryLayout.rawValue, forKey: "libraryLayout") } }
     var hapticsEnabled: Bool { didSet { defaults.set(hapticsEnabled, forKey: "haptics") } }
+    /// Which columns the main window showed last ("all", "doubleColumn", "detailOnly").
+    var columnLayout: String { didSet { defaults.set(columnLayout, forKey: "columnLayout") } }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -42,6 +44,7 @@ final class AppSettings {
         defaultPaper = NoteStyle.Paper(rawValue: defaults.string(forKey: "defaultPaper") ?? "") ?? .plain
         libraryLayout = LibraryLayout(rawValue: defaults.string(forKey: "libraryLayout") ?? "") ?? .grid
         hapticsEnabled = defaults.object(forKey: "haptics") as? Bool ?? true
+        columnLayout = defaults.string(forKey: "columnLayout") ?? "all"
     }
 
     var interfaceStyle: UIUserInterfaceStyle {

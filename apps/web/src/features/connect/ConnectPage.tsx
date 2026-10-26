@@ -6,6 +6,7 @@ import { getSession, refreshSession, useAuth } from "@/auth/session";
 import { apiBase, serverOrigin } from "@/config";
 import { Logo } from "@/features/shell/Splash";
 import { Button, Spinner } from "@/ui";
+import { timedFetch } from "@/api/client";
 
 /** Only the server's own OAuth consent screen may be a return target (no open redirect). */
 export function safeReturnTo(raw: string | null): string | null {
@@ -44,11 +45,12 @@ export function ConnectPage() {
         let session = getSession();
         if (session && Date.parse(session.accessExpiresAt) - Date.now() < 60_000) session = await refreshSession();
         if (!session) throw new Error("no session");
-        const res = await fetch(`${apiBase()}/auth/web-session`, {
-          method: "POST",
-          headers: { authorization: `Bearer ${session.accessToken}` },
-          credentials: "include",
-        });
+        // Only sets the web-session cookie: safe to repeat on a flaky connection.
+        const res = await timedFetch(
+          `${apiBase()}/auth/web-session`,
+          { method: "POST", headers: { authorization: `Bearer ${session.accessToken}` }, credentials: "include" },
+          { retry: true },
+        );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         if (!cancelled) location.href = returnTo;
       } catch (e) {

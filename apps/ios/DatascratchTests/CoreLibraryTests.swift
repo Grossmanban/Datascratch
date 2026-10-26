@@ -275,6 +275,34 @@ struct CoreLibraryTests {
         #expect(library.dailyNotebook?.id == kept.id)
     }
 
+    /// spec/07: «Delete data from this device» (and signing in to another account) leaves an
+    /// empty library, new keys and nothing to send.
+    @Test func wipingLocalDataLeavesNothingBehind() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        library.seedIfEmpty()
+        let space = try #require(library.spaces.first)
+        let notebook = try #require(library.notebooks(in: space.id).first)
+        let note = library.createNote(in: notebook.id, folder: nil, title: "Секрет")
+        let oldAccount = core.account.accountDocId
+        let oldMaster = try keys.masterKey()
+
+        try core.wipeLocalData()
+        #expect(library.data.notes.isEmpty)
+        #expect(library.data.spaces.isEmpty)
+        #expect(try store.document(note.id) == nil)
+        #expect(try store.document(notebook.id) == nil)
+        #expect(try store.document(oldAccount) == nil)
+        #expect(core.account.accountDocId != oldAccount)
+        #expect(try keys.notebookKey(notebook.id) == nil)
+        #expect(try keys.masterKey() != oldMaster)
+        #expect(core.pendingMoves.isEmpty)
+        // Nothing of the old library is carried into the next account.
+        #expect(try core.carryDeviceLibraries().isEmpty)
+    }
+
     @Test func notebookMetaCarriesNamesForAgents() throws {
         let core = try CoreLibrary.inMemory()
         let library = LibraryStore(backend: core)

@@ -48,6 +48,15 @@ protocol AccountService: AnyObject {
     /// Password changes, recoveries and key rotations, newest first.
     func securityEvents() async throws -> [SecurityEvent]
     func signOut() async
+    /// The account this device was signed out of by the server, if any (spec/07).
+    var signedOutEmail: String? { get }
+    /// Removes the library, keys and session from this device (spec/07).
+    func deleteLocalData() async
+}
+
+extension AccountService {
+    var signedOutEmail: String? { nil }
+    func deleteLocalData() async {}
 }
 
 /// One entry of the account security log (`GET /me/security-events`).

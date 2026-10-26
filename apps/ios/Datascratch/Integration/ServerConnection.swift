@@ -337,6 +337,11 @@ final class ServerAccountService: AccountService {
 
     func signIn(email: String, password: String) async throws {
         let email = Credentials.normalizedEmail(email)
+        // Signed out on this device, now signing in to a different account: what the previous
+        // account left here is removed first, so none of it reaches the new one (spec/07).
+        if let previous = signedOutEmail, previous != email {
+            try? connection.core.wipeLocalData()
+        }
         do {
             let session = try await connection.accounts.login(email: email, password: password, deviceName: UIDevice.current.name)
             try await connection.accounts.loadNotebookKeys()
@@ -347,6 +352,22 @@ final class ServerAccountService: AccountService {
         } catch let error as APIError {
             throw Self.map(error)
         }
+    }
+
+    /// The account this device was signed out of (the server ended the session), if any.
+    var signedOutEmail: String? {
+        guard let email = try? connection.core.store.string(Self.sessionEndedKey), !email.isEmpty else { return nil }
+        return Credentials.normalizedEmail(email)
+    }
+
+    /// «Delete data from this device» (spec/07): documents, keys and the stored session go; the
+    /// app starts over at the welcome screen.
+    func deleteLocalData() async {
+        await connection.stop()
+        try? connection.core.wipeLocalData()
+        try? connection.core.store.setString(nil, for: Self.emailKey)
+        sessionResumed()
+        account = nil
     }
 
     private func sessionResumed() {

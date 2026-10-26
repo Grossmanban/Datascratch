@@ -303,6 +303,31 @@ final class CoreLibrary: LibraryBackend {
         return carried
     }
 
+    /// Removes everything this device holds — documents, keys, pending work — and starts over
+    /// with an empty device library (spec/07: «Delete data from this device», and signing in to a
+    /// different account after this device was signed out).
+    func wipeLocalData() throws {
+        notebookDocs.removeAll()
+        noteDocs.removeAll()
+        subscriptions.removeAll()
+        remoteSubscriptions.removeAll()
+        notebookIdOfNote.removeAll()
+        for record in try store.documents() { try store.deleteDocument(record.docId) }
+        pendingMoves = [:]
+        needsCarriedMerge = false
+        overlay = Overlay()
+        try store.setValue(nil, for: Self.overlayKey)
+        try keys.clear()
+        try keys.setMasterKey(DSCrypto.newKey())
+        let accountId = DSCore.EntityID.make()
+        account = AccountDocument(try Self.open(.account, docId: accountId, notebookId: nil, store: store))
+        subscriptions[accountId] = observe(account.crdt, notebookId: nil)
+        remoteSubscriptions[accountId] = observeRemote(account.crdt)
+        try account.initialize()
+        try store.setString(accountId, for: Self.accountDocKey)
+        onExternalChange?(loadSnapshot())
+    }
+
     /// What `POST /notebooks` needs for a notebook of the account whose key this device holds
     /// (one carried in while offline never reached the server).
     func serverNotebook(_ id: String) -> CarriedNotebook? {

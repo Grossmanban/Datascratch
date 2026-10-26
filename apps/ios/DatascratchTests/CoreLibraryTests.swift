@@ -62,6 +62,34 @@ struct CoreLibraryTests {
         #expect(reloaded.taskEntries.contains { $0.text == "Ship it" && $0.attributes.scheduled == "2026-10-27" })
     }
 
+    /// spec/07 «Выход из аккаунта»: signing out keeps the keys of notebooks the server has not
+    /// received yet, so after signing in to the same account they upload and stay readable.
+    @Test func unsentNotebookKeysSurviveSignOut() throws {
+        let secrets = InMemorySecretStore()
+        let keys = KeyRing(store: secrets)
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        library.seedIfEmpty()
+        let notebooks = library.notebooks(in: library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
+        let note = library.createNote(in: notebook.id, folder: nil, title: "Offline")
+        library.setBody(NoteBody(blocks: [.paragraph("Written before sign-out")]), ofNote: note.id)
+
+        #expect(core.unsentNotebookIds.contains(notebook.id))
+        #expect(core.unsentChangeCount > 0)
+        let kept = core.unsentNotebookKeys()
+        let key = try #require(kept[notebook.id])
+
+        try keys.clear()
+        core.restoreNotebookKeys(kept)
+
+        let fresh = KeyRing(store: secrets)
+        #expect(try fresh.notebookKey(notebook.id) == key)
+        let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: fresh))
+        #expect(reloaded.body(note.id).blocks.map(\.text) == ["Written before sign-out"])
+    }
+
     /// The user's cover image lives in `meta.cover` and its thumbnail in `NoteMeta.coverThumb`.
     @Test func coverImageAndThumbnailPersist() throws {
         let keys = KeyRing(store: InMemorySecretStore())

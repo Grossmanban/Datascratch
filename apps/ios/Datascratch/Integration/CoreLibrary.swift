@@ -303,6 +303,28 @@ final class CoreLibrary: LibraryBackend {
         return carried
     }
 
+    /// Notebooks of the account that never reached the server (their documents are not registered).
+    var unsentNotebookIds: [String] {
+        account.notebooks().map(\.id).filter { id in (try? store.document(id))??.registered != true }
+    }
+
+    /// Changes waiting to be sent plus notebooks not yet on the server (spec/07, sign-out).
+    var unsentChangeCount: Int {
+        ((try? store.outboxCount()) ?? 0) + unsentNotebookIds.count
+    }
+
+    /// Keys of the notebooks that never reached the server: signing out keeps them, so the
+    /// notebooks can still be uploaded after signing in to the same account (spec/07).
+    func unsentNotebookKeys() -> [String: Data] {
+        var result: [String: Data] = [:]
+        for id in unsentNotebookIds { if let key = try? keys.notebookKey(id) { result[id] = key } }
+        return result
+    }
+
+    func restoreNotebookKeys(_ kept: [String: Data]) {
+        for (id, key) in kept { try? keys.setNotebookKey(key, notebookId: id) }
+    }
+
     /// Removes everything this device holds — documents, keys, pending work — and starts over
     /// with an empty device library (spec/07: «Delete data from this device», and signing in to a
     /// different account after this device was signed out).

@@ -29,16 +29,88 @@ export interface ImportOptions {
   resolveNoteLink?: (label: string) => string | null;
 }
 
-const CALLOUT_RE = /^\[!(note|info|success|warning|danger|tip|important|caution)\]\s*(\S+)?\s*/i;
-const CALLOUT_TONE: Record<string, string> = { tip: "success", important: "info", caution: "warning" };
+/**
+ * Callout tones are the five of the document schema; Obsidian / GitHub callout
+ * names map onto the closest tone (`tip` → `success`, `important` → `info`, …).
+ */
+export const CALLOUT_TONE: Record<string, string> = {
+  note: "note",
+  info: "info",
+  success: "success",
+  warning: "warning",
+  danger: "danger",
+  tip: "success",
+  hint: "success",
+  check: "success",
+  done: "success",
+  important: "info",
+  abstract: "info",
+  summary: "info",
+  tldr: "info",
+  todo: "info",
+  question: "info",
+  help: "info",
+  faq: "info",
+  caution: "warning",
+  attention: "warning",
+  error: "danger",
+  failure: "danger",
+  fail: "danger",
+  missing: "danger",
+  bug: "danger",
+  example: "note",
+  quote: "note",
+  cite: "note",
+};
+const CALLOUT_RE = /^\[!([a-z]+)\][+-]?[ \t]*([^\s]+)?[ \t]*/i;
 
 export function markdownToBlocks(markdown: string, options: ImportOptions = {}): BlockSpec[] {
   const tree = fromMarkdown(markdown, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
-  return new Importer(options).blocks(tree.children);
+  const blocks = new Importer(options, markdown).blocks(tree.children);
+  // An empty paragraph at the end is noise (e.g. a trailing image without alt text).
+  while (blocks.length > 1 && isEmptyParagraph(blocks[blocks.length - 1]!)) blocks.pop();
+  return blocks;
+}
+
+function isEmptyParagraph(b: BlockSpec): boolean {
+  return b.type === "paragraph" && (b.inline ?? []).every((i) => "text" in i && i.text.trim() === "");
+}
+
+const ASCII_PUNCT = /[!-/:-@[-`{-~]/;
+
+/**
+ * Which characters of a text node's value came from backslash escapes, so
+ * `\#tag` stays literal text. Null when the raw source does not decode to the
+ * value one-to-one (entities etc.): then nothing is treated as escaped.
+ */
+function escapeMask(raw: string, value: string): boolean[] | null {
+  const chars: string[] = [];
+  const mask: boolean[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === "\\" && i + 1 < raw.length && ASCII_PUNCT.test(raw[i + 1]!)) {
+      chars.push(raw[i + 1]!);
+      mask.push(true);
+      i++;
+    } else {
+      chars.push(raw[i]!);
+      mask.push(false);
+    }
+  }
+  return chars.join("") === value ? mask : null;
 }
 
 class Importer {
-  constructor(private readonly opts: ImportOptions) {}
+  constructor(
+    private readonly opts: ImportOptions,
+    private readonly src: string,
+  ) {}
+
+  /** Source text of a node (for verbatim math and escape detection). */
+  private raw(node: Mdast.Node): string | null {
+    const a = node.position?.start.offset;
+    const b = node.position?.end.offset;
+    return a === undefined || b === undefined ? null : this.src.slice(a, b);
+  }
 
   blocks(nodes: Mdast.RootContent[]): BlockSpec[] {
     const out: BlockSpec[] = [];
@@ -51,9 +123,10 @@ class Importer {
       case "heading":
         return [{ type: "heading", attrs: { level: Math.min(3, node.depth) }, inline: this.inline(node.children) }];
       case "paragraph": {
-        const text = node.children.length === 1 && node.children[0]!.type === "text" ? node.children[0]!.value : null;
-        const math = text ? /^\$\$\s*([\s\S]*?)\s*\$\$$/.exec(text) : null;
-        if (math) return [{ type: "mathBlock", attrs: { latex: math[1]! } }];
+        // $$…$$ is math, taken verbatim from the source (backslashes are LaTeX, not Markdown escapes).
+        const raw = this.raw(node)?.replace(/\n[ \t]*>[ \t]?/g, "\n").trim();
+        const math = raw ? /^\$\$([\s\S]*?)\$\$$/.exec(raw) : null;
+        if (math) return [{ type: "mathBlock", attrs: { latex: math[1]!.trim() } }];
         if (node.children.length === 1 && node.children[0]!.type === "image") {
           const img = node.children[0]!;
           const m = /^attachment:([0-9a-f-]{36})$/.exec(img.url);
@@ -94,8 +167,7 @@ class Importer {
       const t = first.children[0];
       const m = CALLOUT_RE.exec(t.value);
       if (m) {
-        const raw = m[1]!.toLowerCase();
-        const tone = CALLOUT_TONE[raw] ?? raw;
+        const tone = CALLOUT_TONE[m[1]!.toLowerCase()] ?? "note";
         const rest = t.value.slice(m[0].length);
         const emoji = m[2] && /\p{Extended_Pictographic}/u.test(m[2]) ? m[2] : null;
         const restText = emoji ? rest : (m[2] ? m[2] + " " : "") + rest;
@@ -200,9 +272,11 @@ class Importer {
     const out: InlineSpec[] = [];
     for (const n of nodes) {
       switch (n.type) {
-        case "text":
-          out.push(...this.text(n.value, marks));
+        case "text": {
+          const raw = this.raw(n);
+          out.push(...this.text(n.value, marks, raw === null ? null : escapeMask(raw, n.value)));
           break;
+        }
         case "strong":
           out.push(...this.inline(n.children, { ...marks, bold: {} }));
           break;
@@ -239,15 +313,23 @@ class Importer {
           else if ("children" in n) out.push(...this.inline(n.children as Mdast.PhrasingContent[], marks));
       }
     }
-    return mergeUnderline(out);
+    return softBreaks(mergeUnderline(out));
   }
 
-  /** Splits text into runs, turning `[[Title]]`, `==highlight==` and `#tag` into nodes/marks. */
-  private text(value: string, marks: Record<string, unknown>): InlineSpec[] {
+  /**
+   * Splits text into runs, turning `[[Title]]`, `==highlight==` and `#tag`
+   * into nodes/marks — unless their first character was backslash-escaped.
+   */
+  private text(value: string, marks: Record<string, unknown>, escaped: boolean[] | null): InlineSpec[] {
     const out: InlineSpec[] = [];
     const re = /\[\[([^\]\n]+)\]\]|==([^=\n]+)==|(^|[\s(])#([\p{L}\p{N}_][\p{L}\p{N}_/-]*)/gu;
     let last = 0;
     for (let m = re.exec(value); m; m = re.exec(value)) {
+      const trigger = m[3] !== undefined ? m.index + m[3].length : m.index;
+      if (escaped?.[trigger]) {
+        re.lastIndex = trigger + 1;
+        continue;
+      }
       if (m[1] !== undefined) {
         const noteId = this.opts.resolveNoteLink?.(m[1]) ?? null;
         if (!noteId) continue; // unknown note → keep literal text
@@ -268,6 +350,25 @@ class Importer {
     if (last < value.length) out.push({ text: value.slice(last), marks });
     return out;
   }
+}
+
+/**
+ * Line breaks inside a paragraph become hard breaks: agents (like Obsidian
+ * users) mean a new line when they write one.
+ */
+function softBreaks(items: InlineSpec[]): InlineSpec[] {
+  const out: InlineSpec[] = [];
+  for (const it of items) {
+    if (!("text" in it) || !it.text.includes("\n") || "code" in it.marks) {
+      out.push(it);
+      continue;
+    }
+    it.text.split("\n").forEach((part, i) => {
+      if (i > 0) out.push({ atom: "hardBreak", attrs: {} });
+      if (part) out.push({ text: part, marks: it.marks });
+    });
+  }
+  return out;
 }
 
 /** Applies `<u>`…`</u>` html pairs produced by read_note as the underline mark. */

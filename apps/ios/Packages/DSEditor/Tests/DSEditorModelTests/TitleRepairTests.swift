@@ -60,6 +60,53 @@ import Testing
         #expect(doc.blocks.filter { $0.type == NodeType.title }.count == 1)
     }
 
+    static let agentTitleId = "0192f3c4-0000-7000-8000-000000000002"
+
+    /// (i) [stray empty title, stray empty paragraph, agent title, …]: rule 1 drops the empty
+    /// title, rule 4 the empty paragraph that is left before the title.
+    @Test func strayTitleAndParagraphBeforeTheAgentTitleGo() {
+        let doc = InMemoryEditorDocument(blocks: [
+            BlockNode(id: Self.newer, type: NodeType.title, inline: []),
+            BlockNode(id: "01a179ea-5a5a-7e49-ab53-d3acec118202", type: NodeType.paragraph, inline: []),
+            BlockNode(id: Self.agentTitleId, type: NodeType.title, inline: [.text("План", .empty)]),
+            .paragraph("тело"),
+        ])
+        #expect(EditorCommands(document: doc).repairTitles())
+        #expect(doc.blocks.map(\.id).first == Self.agentTitleId)
+        #expect(doc.blocks.count == 2)
+        #expect(!EditorCommands(document: doc).repairTitles())
+    }
+
+    /// (ii) [stray empty title, stray empty paragraph, demoted agent title (older), …]: the empty
+    /// paragraphs are skipped, the demoted text goes back into the title, both paragraphs go.
+    @Test func demotedTitleBehindAnEmptyParagraphIsRestored() {
+        let strayParagraph = "01a179ea-5a5a-7e49-ab53-d3acec118202"
+        let doc = InMemoryEditorDocument(blocks: [
+            BlockNode(id: Self.newer, type: NodeType.title, inline: []),
+            BlockNode(id: strayParagraph, type: NodeType.paragraph, inline: []),
+            BlockNode(id: Self.older, type: NodeType.paragraph, inline: [.text("Стратегия продукта", .empty)]),
+            .paragraph("тело"),
+        ])
+        #expect(EditorCommands(document: doc).repairTitles())
+        #expect(doc.flatText(of: Self.newer) == "Стратегия продукта")
+        #expect(doc.block(strayParagraph) == nil && doc.block(Self.older) == nil)
+        #expect(doc.blocks.count == 2)
+        #expect(!EditorCommands(document: doc).repairTitles())
+    }
+
+    /// Note 01a17944…: [empty title, agent title, older paragraph]. Rule 1 runs first and resolves
+    /// it; the paragraph is not promoted.
+    @Test func ruleOneRunsBeforeRuleTwo() {
+        let doc = InMemoryEditorDocument(blocks: [
+            BlockNode(id: Self.newer, type: NodeType.title, inline: []),
+            BlockNode(id: Self.agentTitleId, type: NodeType.title, inline: [.text("Агент", .empty)]),
+            BlockNode(id: Self.older, type: NodeType.paragraph, inline: [.text("2026-10-26 · план", .empty)]),
+        ])
+        #expect(EditorCommands(document: doc).repairTitles())
+        #expect(doc.blocks.map(\.id) == [Self.agentTitleId, Self.older])
+        #expect(doc.blocks[1].type == NodeType.paragraph, "the older paragraph stays a paragraph")
+    }
+
     @Test func theRepairIsNotUndoable() {
         let doc = InMemoryEditorDocument(blocks: [.title(""), .title("Название"), .paragraph("x")])
         #expect(EditorCommands(document: doc).repairTitles())

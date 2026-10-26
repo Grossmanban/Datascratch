@@ -13,7 +13,7 @@ import { AgentError } from "../errors.js";
 import { base64url, fromBase64url } from "../util.js";
 import { cloneInto, insertBlocks, type BuildContext } from "./build.js";
 import { markdownToBlocks, type BlockSpec, type ImportOptions } from "./markdown-import.js";
-import { blockIdOf, childElements, contentOf, findBlock, TEXT_BLOCKS, type BlockLocation, type Marks } from "./model.js";
+import { blockIdOf, childElements, contentOf, findBlock, runText, TEXT_BLOCKS, type BlockLocation, type Marks } from "./model.js";
 import { readStroke } from "@datascratch/shared/strokes";
 import { resolveAnchor } from "./strokes.js";
 
@@ -34,6 +34,7 @@ export interface EditResult {
 
 export interface EditContext extends ImportOptions {
   agentEdit: BuildContext["agentEdit"];
+  newId?: BuildContext["newId"];
 }
 
 const ITEM_OF: Record<string, string[]> = {
@@ -176,7 +177,7 @@ function replaceText(doc: Y.Doc, op: Extract<EditOp, { op: "replace_text" }>, ct
   }
   const hits: { t: Y.XmlText; at: number }[] = [];
   for (const t of runs) {
-    const s = t.toString();
+    const s = runText(t);
     for (let i = s.indexOf(op.find); i !== -1; i = s.indexOf(op.find, i + 1)) hits.push({ t, at: i });
   }
   if (hits.length === 0) throw new AgentError("not_found", `Text "${op.find}" not found in block ${op.blockId}. Match plain text without Markdown formatting.`);
@@ -283,7 +284,7 @@ function replaceBlock(doc: Y.Doc, op: Extract<EditOp, { op: "replace" }>, ctx: E
   if (loc.el.nodeName === "title") throw new AgentError("bad_request", "The title block cannot be replaced. Use replace_text to rename the note.");
   const specs = parse(op.markdown, ctx);
   const place = placement(doc, loc, "after", specs);
-  const els = insertBlocks(place.parent, place.index, fitRoot(place.parent, place.specs), { agentEdit: ctx.agentEdit, keepBlockId: op.blockId });
+  const els = insertBlocks(place.parent, place.index, fitRoot(place.parent, place.specs), { agentEdit: ctx.agentEdit, newId: ctx.newId, keepBlockId: op.blockId });
   // The new first block now carries the original id; drop the original.
   const parent = loc.el.parent as Y.XmlFragment | Y.XmlElement;
   parent.delete(parent.toArray().indexOf(loc.el), 1);
@@ -299,7 +300,7 @@ export function applyEdits(doc: Y.Doc, ops: EditOp[], ctx: EditContext): EditRes
       try {
         switch (op.op) {
           case "insert":
-            results.push({ op: op.op, blockIds: insertAt(doc, op.position, parse(op.markdown, ctx), { agentEdit: ctx.agentEdit }) });
+            results.push({ op: op.op, blockIds: insertAt(doc, op.position, parse(op.markdown, ctx), { agentEdit: ctx.agentEdit, newId: ctx.newId }) });
             break;
           case "replace":
             results.push({ op: op.op, blockIds: replaceBlock(doc, op, ctx) });
@@ -313,7 +314,7 @@ export function applyEdits(doc: Y.Doc, ops: EditOp[], ctx: EditContext): EditRes
             results.push({ op: op.op, blockIds: [op.blockId] });
             break;
           case "replace_text":
-            replaceText(doc, op, { agentEdit: ctx.agentEdit });
+            replaceText(doc, op, { agentEdit: ctx.agentEdit, newId: ctx.newId });
             results.push({ op: op.op, blockIds: [op.blockId] });
             break;
           default:
@@ -332,14 +333,14 @@ export function applyEdits(doc: Y.Doc, ops: EditOp[], ctx: EditContext): EditRes
 export function initNoteContent(doc: Y.Doc, title: string, markdown: string, ctx: EditContext): void {
   doc.transact(() => {
     const root = contentOf(doc);
-    insertBlocks(root, 0, [{ type: "title", attrs: {}, inline: title ? [{ text: title, marks: {} }] : [] }], { agentEdit: ctx.agentEdit });
+    insertBlocks(root, 0, [{ type: "title", attrs: {}, inline: title ? [{ text: title, marks: {} }] : [] }], { agentEdit: ctx.agentEdit, newId: ctx.newId });
     let specs = markdown.trim() ? markdownToBlocks(markdown, ctx) : [];
     // Agents often repeat the title as a leading "# Title": the title block already says it.
     const first = specs[0];
     const firstText = first?.type === "heading" && first.attrs.level === 1 ? (first.inline ?? []).map((i) => ("text" in i ? i.text : "")).join("") : null;
     if (firstText !== null && firstText.trim().toLowerCase() === title.trim().toLowerCase()) specs = specs.slice(1);
     const body = specs.length ? specs : [{ type: "paragraph", attrs: {}, inline: [] } as BlockSpec];
-    insertBlocks(root, 1, fitRoot(root, body), { agentEdit: ctx.agentEdit });
+    insertBlocks(root, 1, fitRoot(root, body), { agentEdit: ctx.agentEdit, newId: ctx.newId });
     const meta = doc.getMap("meta");
     if (!meta.has("formatVersion")) meta.set("formatVersion", 1);
   });

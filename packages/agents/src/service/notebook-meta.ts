@@ -43,13 +43,14 @@ export function mergeNotebookMeta(info: AgentNotebook, meta: NotebookDocMeta): A
 }
 
 /** Agent-mode notebooks of a user with names filled in from their documents (consent page, settings). */
-export async function describeAgentNotebooks(ctx: AgentsContext, userId: string): Promise<(AgentNotebook & { name: string })[]> {
+export async function describeAgentNotebooks(ctx: AgentsContext, userId: string): Promise<(AgentNotebook & { name: string; unavailable: boolean })[]> {
   const list = await ctx.data.listAgentNotebooks(userId);
   return Promise.all(
     list.map(async (info) => {
-      if (info.name && info.icon !== null && info.space) return { ...info, name: info.name };
+      if (info.name && info.icon !== null && info.space) return { ...info, name: info.name, unavailable: false };
       const loaded = await ctx.data.loadDoc(userId, info.id).catch(() => null);
-      return mergeNotebookMeta(info, loaded ? readNotebookMeta(loaded.doc) : { name: null, icon: null, color: null, space: null });
+      const merged = mergeNotebookMeta(info, loaded ? readNotebookMeta(loaded.doc) : { name: null, icon: null, color: null, space: null });
+      return { ...merged, unavailable: loaded === null };
     }),
   );
 }

@@ -335,6 +335,19 @@ final class LibraryStore {
         }
     }
 
+    /// D-48: «Move to Space…» — the notebook (and so its notes, starred notes and tabs) moves to
+    /// another space; it stops being the old space's daily notebook.
+    func moveNotebook(_ id: String, toSpace spaceId: String) {
+        guard let notebook = notebook(id), notebook.spaceId != spaceId else { return }
+        mutate { snapshot in
+            snapshot.dropDailyNotebook(id)
+            if let index = snapshot.notebooks.firstIndex(where: { $0.id == id }) {
+                snapshot.notebooks[index].spaceId = spaceId
+            }
+            if snapshot.dailyNotebookId(inSpace: spaceId) == nil { snapshot.setDailyNotebook(id, inSpace: spaceId) }
+        }
+    }
+
     func setMode(_ mode: NotebookMode, forNotebook id: String) {
         updateNotebook(id) { $0.mode = mode }
     }

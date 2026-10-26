@@ -551,7 +551,8 @@ final class LibraryStore {
     /// Only first-run content: untouched welcome notes and an empty Inbox, nothing else.
     private func holdsOnlyFirstRunContent(_ notebookId: String) -> Bool {
         data.notes.filter { $0.notebookId == notebookId && !$0.isTrashed }.allSatisfy { note in
-            isUntouchedWelcome(note) || (note.kind == .inbox && body(note.id).blocks.isEmpty)
+            // An empty Inbox comes back from the documents as one empty paragraph.
+            isUntouchedWelcome(note) || (note.kind == .inbox && body(note.id).blocks.allSatisfy { $0.text.isEmpty })
         } && !data.folders.contains { $0.notebookId == notebookId }
     }
 

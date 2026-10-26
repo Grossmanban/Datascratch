@@ -418,4 +418,87 @@ final class EditorViewTests: XCTestCase {
         // Target on device: 300 ms (`11-nfr.md`). CI simulators are slower and noisy, so the hard limit here is loose.
         XCTAssertLessThan(elapsed, 2.0)
     }
+
+    // MARK: - Build 10 feedback
+
+    /// Mermaid diagrams must be clearly visible: the snapshot carried the web view's near-zero
+    /// alpha and the diagrams looked like empty grey boxes.
+    func testMermaidRendersAnOpaqueDiagram() throws {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("M"), .paragraph("x")]))
+        MermaidRenderer.shared.host = editor
+        let done = expectation(description: "mermaid rendered")
+        var image: UIImage?
+        MermaidRenderer.shared.render("flowchart LR\n  A[Идея] --> B[Черновик] --> C[Готово]", dark: false) { img in
+            image = img
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 60)
+        let img = try XCTUnwrap(image, "Mermaid rendered nothing")
+        XCTAssertGreaterThan(img.size.width, 100)
+        XCTAssertGreaterThan(maxAlpha(of: img), 0.9, "the diagram is (nearly) transparent")
+    }
+
+    private func maxAlpha(of image: UIImage) -> CGFloat {
+        guard let cg = image.cgImage else { return 0 }
+        let w = cg.width, h = cg.height
+        var pixels = [UInt8](repeating: 0, count: w * h * 4)
+        let ctx = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        var best: UInt8 = 0
+        for i in stride(from: 3, to: pixels.count, by: 4) where pixels[i] > best { best = pixels[i] }
+        return CGFloat(best) / 255
+    }
+
+    func testAgentEditsBannerAcceptsAll() {
+        let agent = MarkSet([MarkName.agentEdit: .object(["agent": "claude"])])
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph([.text("Написал агент", agent)]), .paragraph("моё")])
+        let editor = host(doc)
+        XCTAssertTrue(editor.hasAgentEdits)
+        let banner = editor.textView.subviews.first { $0.accessibilityIdentifier == "agentEdits.banner" }
+        XCTAssertEqual(banner?.isHidden, false, "the banner shows while there are agent edits")
+        let deco = editor.textView.textStorage.attribute(.dsDecoration, at: flatRange(editor, of: "Написал").lowerBound,
+                                                         effectiveRange: nil) as? ParagraphDecoration
+        XCTAssertEqual(deco?.hasAgentEdit, true)
+        XCTAssertNil(editor.textView.textStorage.attribute(.backgroundColor, at: flatRange(editor, of: "Написал").lowerBound,
+                                                           effectiveRange: nil), "no tint on the text itself")
+        editor.acceptAgentEdits()
+        drainMainQueue()
+        settle(editor)
+        XCTAssertFalse(editor.hasAgentEdits)
+        XCTAssertEqual(banner?.isHidden, true)
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "Написал агент")
+        editor.undo()
+        drainMainQueue()
+        XCTAssertTrue(editor.hasAgentEdits, "accepting is undoable")
+    }
+
+    func testTypingInsideAgentTextIsNotMarkedAsAgent() {
+        let agent = MarkSet([MarkName.agentEdit: .object(["agent": "claude"])])
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph([.text("агент", agent)])]))
+        let r = flatRange(editor, of: "агент")
+        editor.textView.selectedRange = NSRange(location: r.lowerBound + 2, length: 0)
+        let marks = (editor.textView.typingAttributes[.dsMarks] as? MarksBox)?.marks
+        XCTAssertEqual(marks?.contains(MarkName.agentEdit), false)
+    }
+
+    func testLiteralWikiLinkIsTappableByTitle() throws {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("См. [[Тест форматирования]] ниже")]))
+        editor.onOpenNoteTitled = { _ in }
+        let r = flatRange(editor, of: "форматирования")
+        XCTAssertEqual(editor.textView.textStorage.attribute(.dsWikiLink, at: r.lowerBound, effectiveRange: nil) as? String,
+                       "Тест форматирования")
+        let frame = try XCTUnwrap(editor.geometry.segmentFrame(r.lowerBound..<(r.lowerBound + 3)))
+        XCTAssertEqual(editor.noteLink(at: CGPoint(x: frame.midX, y: frame.midY)), .title("Тест форматирования"))
+        let plain = try XCTUnwrap(editor.geometry.segmentFrame(flatRange(editor, of: "ниже")))
+        XCTAssertNil(editor.noteLink(at: CGPoint(x: plain.midX, y: plain.midY)))
+    }
+
+    func testDismissKeyboardEndsEditing() {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("текст")]))
+        editor.textView.becomeFirstResponder()
+        XCTAssertTrue(editor.isEditingText)
+        editor.dismissKeyboard()
+        XCTAssertFalse(editor.isEditingText)
+    }
 }

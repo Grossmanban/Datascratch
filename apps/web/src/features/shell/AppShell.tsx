@@ -6,7 +6,7 @@ import { CoverDialog } from "@/features/doc/CoverDialog";
 import { syncRecoveryFlag } from "@/auth/recovery";
 import { consumeFreshAccount, useAuth } from "@/auth/session";
 import { hasRuntime, startRuntime } from "@/data/runtime";
-import { activeTabOf, bootstrapAccount, migrateSpaceSettings, purgeOldTrash } from "@/domain/actions";
+import { activeTabOf, bootstrapAccount, migrateSpaceSettings, purgeOldTrash, tidyTabs } from "@/domain/actions";
 import { spaceOfNote, spaceOfNotebook, useWorkspace } from "@/domain/workspace";
 import { CommandPalette } from "@/features/palette/CommandPalette";
 import { ShareDialog } from "@/features/share/ShareDialog";
@@ -80,6 +80,18 @@ export function AppShell() {
   useEffect(() => {
     if (ready && synced && hasRuntime()) migrateSpaceSettings();
   }, [ready, synced, notes, settings]);
+
+  // Quiet tab tidy-up (spec/12 §12.6): at start and then hourly; never the document on screen.
+  useEffect(() => {
+    if (!ready || !synced || !hasRuntime()) return;
+    const run = () => {
+      const p = window.location.pathname;
+      tidyTabs(p.startsWith("/doc/") ? p.slice(5) : null);
+    };
+    run();
+    const timer = window.setInterval(run, 60 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [ready, synced]);
 
   // Switching spaces swaps the screen too: the space's own last tab, or its documents (D-48).
   const activeSpaceId = useWorkspace((s) => s.activeSpaceId);

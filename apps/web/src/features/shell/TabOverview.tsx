@@ -1,5 +1,5 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { FileText, History, Search, X } from "lucide-react";
+import { FileText, History, Pin, Search, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -175,6 +175,7 @@ function TabCard({
   onOpen: () => void;
   onClose: () => void;
 }) {
+  const pinned = useWorkspace((s) => s.account.tabs.some((x) => x.noteId === note.id && x.pinned));
   const { t } = useTranslation();
   const cover = useCardThumb(note.id, note.coverThumb);
   const title = noteTitle(note, t("app.untitled"));
@@ -203,6 +204,7 @@ function TabCard({
           <span className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold text-ink">
             {iconGlyph(note.icon) && <span className="text-[12.5px] leading-none">{iconGlyph(note.icon)}</span>}
             <span className="truncate">{title}</span>
+            {pinned && <Pin className="size-3 shrink-0 text-ink-2" aria-label={t("tabs.pinned")} />}
           </span>
           <span className="flex items-center gap-1.5 truncate text-[12px] text-ink-2">
             <span className="size-1.5 shrink-0 rounded-full" style={{ background: tintFg(tint) }} aria-hidden />

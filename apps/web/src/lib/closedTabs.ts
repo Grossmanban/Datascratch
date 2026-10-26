@@ -46,3 +46,16 @@ export function forgetClosedTab(spaceId: string, noteId: string) {
 export function clearClosedTabs() {
   save({});
 }
+
+/** When this version first ran on this device: a tab without `openedAt` counts as opened then. */
+export function tabsEpoch(): number {
+  try {
+    const v = Number(localStorage.getItem("ds.tabsEpoch"));
+    if (v > 0) return v;
+    const now = Date.now();
+    localStorage.setItem("ds.tabsEpoch", String(now));
+    return now;
+  } catch {
+    return Date.now();
+  }
+}

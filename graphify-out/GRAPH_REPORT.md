@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-10-26)
 
 ## Corpus Check
-- 817 files · ~556,713 words
+- 817 files · ~556,732 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 37 file(s) not represented in the graph (top: (none) 18, .css 6, .example 4)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1bf2b70e`
+- Built from commit: `73af773b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -2002,7 +2002,7 @@ Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `iOS: DSEditor (DSInk, DSEditorModel, DSEditor)` connect `Apple Pencil в тексте — ключевая фича` to `EditorView (2)`, `tn`, `DSPenToolbar`?**
-  _High betweenness centrality (0.169) - this node is a cross-community bridge._
+  _High betweenness centrality (0.165) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `.body`, `onboarding`, `ready` to the rest of the system?**
@@ -2010,7 +2010,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Data` be split into smaller, more focused modules?**
   _Cohesion score 0.0035022014905847967 - nodes in this community are weakly interconnected._
 - **Why does `P` connect `X8` to `Data`, `r`, `PenLayer.ts`?**
-  _High betweenness centrality (0.156) - this node is a cross-community bridge._
+  _High betweenness centrality (0.155) - this node is a cross-community bridge._
 - **Are the 115 inferred relationships involving `r()` (e.g. with `mermaid.min.js` and `_4()`) actually correct?**
   _`r()` has 115 INFERRED edges - model-reasoned connections that need verification._
 

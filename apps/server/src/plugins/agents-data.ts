@@ -60,24 +60,58 @@ export class PgAgentDataSource implements AgentDataSource {
     return key;
   }
 
-  async #state(tx: Tx, docId: string, key: Uint8Array): Promise<{ doc: Y.Doc; seq: number }> {
+  /**
+   * Decrypted state of a document. Every stored item is opened and applied on
+   * its own: an update that cannot be decrypted or applied (wrong key, wrong
+   * AD, corrupt or foreign encoding) is skipped and logged with docId, seq and
+   * deviceId, and the rest of the document still loads — one bad write must
+   * never hide a whole notebook or note from agents.
+   */
+  async #state(
+    tx: Tx,
+    docId: string,
+    key: Uint8Array,
+  ): Promise<{ doc: Y.Doc; seq: number; skipped: { seq: number; deviceId: string | null; reason: string }[] }> {
     const [snap] = await tx
-      .select({ seq: docSnapshots.seq, payload: docSnapshots.payload })
+      .select({ seq: docSnapshots.seq, payload: docSnapshots.payload, deviceId: docSnapshots.deviceId })
       .from(docSnapshots)
       .where(eq(docSnapshots.docId, docId))
       .orderBy(desc(docSnapshots.seq))
       .limit(1);
     const from = snap?.seq ?? 0;
     const rows = await tx
-      .select({ seq: docUpdates.seq, payload: docUpdates.payload })
+      .select({ seq: docUpdates.seq, payload: docUpdates.payload, deviceId: docUpdates.deviceId })
       .from(docUpdates)
       .where(and(eq(docUpdates.docId, docId), gt(docUpdates.seq, from)))
       .orderBy(asc(docUpdates.seq));
     const doc = new Y.Doc({ gc: false });
     const ad = AD.doc(docId);
-    if (snap) Y.applyUpdate(doc, await open(key, snap.payload, ad));
-    for (const r of rows) Y.applyUpdate(doc, await open(key, r.payload, ad));
-    return { doc, seq: rows.length ? rows[rows.length - 1]!.seq : from };
+    const skipped: { seq: number; deviceId: string | null; reason: string }[] = [];
+    const applyOne = async (item: { seq: number; payload: Uint8Array; deviceId: string }, kind: 'snapshot' | 'update') => {
+      let plain: Uint8Array;
+      try {
+        plain = await open(key, item.payload, ad);
+      } catch (err) {
+        skipped.push({ seq: item.seq, deviceId: item.deviceId, reason: 'decrypt' });
+        this.ctx.log.warn(
+          { err, docId, seq: item.seq, deviceId: item.deviceId, kind },
+          'agent: skipped a document item that could not be decrypted (wrong key or AD?)',
+        );
+        return;
+      }
+      try {
+        Y.applyUpdate(doc, plain);
+      } catch (err) {
+        skipped.push({ seq: item.seq, deviceId: item.deviceId, reason: 'apply' });
+        this.ctx.log.warn(
+          { err, docId, seq: item.seq, deviceId: item.deviceId, kind, bytes: plain.byteLength },
+          'agent: skipped a document item that is not a valid Yjs v1 update',
+        );
+      }
+    };
+    if (snap) await applyOne(snap, 'snapshot');
+    for (const r of rows) await applyOne(r, 'update');
+    return { doc, seq: rows.length ? rows[rows.length - 1]!.seq : from, skipped };
   }
 
   /** The doc row (visible under RLS) and the key that encrypts it. */
@@ -120,9 +154,10 @@ export class PgAgentDataSource implements AgentDataSource {
       const dk = await this.#docAndKey(tx, docId);
       if (!dk) return null;
       try {
-        return await this.#state(tx, docId, dk.key);
+        const state = await this.#state(tx, docId, dk.key);
+        return state.skipped.length ? state : { doc: state.doc, seq: state.seq };
       } catch (err) {
-        this.ctx.log.warn({ err, docId }, 'agent: document could not be decrypted');
+        this.ctx.log.warn({ err, docId }, 'agent: document could not be loaded');
         return null;
       }
     });
@@ -152,7 +187,13 @@ export class PgAgentDataSource implements AgentDataSource {
       after.push(() => this.ctx.documents.publishUpdate(docId, r.seq, payload, deviceId, null));
       this.ctx.metrics.syncUpdates.inc({ source: 'agent' });
       if (r.updatesSinceSnapshot >= SNAPSHOT_AFTER_UPDATES || r.bytesSinceSnapshot >= SNAPSHOT_AFTER_BYTES) {
-        const { doc, seq } = await this.#state(tx, docId, dk.key);
+        const { doc, seq, skipped } = await this.#state(tx, docId, dk.key);
+        if (skipped.length > 0) {
+          // A snapshot would let compaction delete the unreadable updates for good: leave them for a client to fix.
+          doc.destroy();
+          this.ctx.log.warn({ docId, skipped }, 'agent: no server snapshot while the document has unreadable updates');
+          return { seq: r.seq };
+        }
         const state = Y.encodeStateAsUpdate(doc);
         doc.destroy();
         await this.ctx.documents.storeSnapshot(tx, {

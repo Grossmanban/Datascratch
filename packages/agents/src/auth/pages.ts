@@ -61,6 +61,8 @@ export interface ConsentNotebook {
   space: string | null;
   icon: string | null;
   color: string | null;
+  /** The server cannot read this notebook's data right now (its name is unknown). */
+  unavailable?: boolean;
 }
 
 export interface ConsentPageInput {
@@ -85,7 +87,7 @@ export function consentPage(i: ConsentPageInput): string {
     ? i.notebooks
         .map(
           (n, k) =>
-            `<label class="nb"><input type="checkbox" name="notebook" value="${esc(n.id)}"${i.notebooks.length === 1 || k === 0 ? " checked" : ""}>${notebookIcon(n.icon, n.color)}<span>${esc(n.name)}</span>${n.space ? `<small>${esc(n.space)}</small>` : ""}</label>`,
+            `<label class="nb"><input type="checkbox" name="notebook" value="${esc(n.id)}"${i.notebooks.length === 1 || k === 0 ? " checked" : ""}>${notebookIcon(n.icon, n.color)}<span>${esc(n.name)}</span>${n.unavailable ? `<small>данные сейчас недоступны</small>` : n.space ? `<small>${esc(n.space)}</small>` : ""}</label>`,
         )
         .join("")
     : `<div class="empty">Нет блокнотов в режиме «для агентов». Включите этот режим у блокнота в Datascratch${i.appUrl ? ` (<a href="${esc(i.appUrl)}">открыть</a>)` : ""} и вернитесь сюда.</div>`;

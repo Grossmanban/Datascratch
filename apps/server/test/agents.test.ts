@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
@@ -19,6 +21,8 @@ import {
   type TestServer,
   type TestUser,
 } from './helpers.js';
+
+const execFileAsync = promisify(execFile);
 
 let s: TestServer;
 let u: TestUser;
@@ -176,6 +180,69 @@ describe('data source', () => {
     expect((await open(noteKey, Buffer.from(live.payload, 'base64url'), AD.doc(noteId))).length).toBeGreaterThan(0);
     client.close();
     priv.client.close();
+  });
+
+  it('skips an undecryptable update instead of hiding the whole document', async () => {
+    const { notebookId, noteId, client } = await setupNotebook();
+    const g = grant([notebookId], 'read_write');
+    await agents.store.insertGrant(g);
+    // A client seals an update of the notebook index with a wrong key.
+    await client.push(notebookId, await seal(rnd(32), new Uint8Array([1, 2, 3]), AD.doc(notebookId)));
+    const nb = (await agents.data.loadDoc(u.userId, notebookId, g.id))!;
+    expect(nb).not.toBeNull();
+    expect(nb.skipped).toEqual([{ seq: 2, deviceId: expect.any(String), reason: 'decrypt' }]);
+    expect((nb.doc.getMap('notes').get(noteId) as Y.Map<unknown>).get('title')).toBe('Hello');
+    // The note still loads: its key comes from the partly readable notebook index.
+    const note = (await agents.data.loadDoc(u.userId, noteId, g.id))!;
+    expect(note.doc.getText('t').toString()).toBe('from user');
+    expect(note.skipped).toBeUndefined();
+    client.close();
+  });
+
+  it('refuses to switch to agent mode with a key that does not open the notebook data', async () => {
+    const { notebookId, notebookKey, client } = await setupNotebook();
+    const t = u.session.accessToken;
+    await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, { token: t, body: { mode: 'private' } });
+    const wrong = await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, {
+      token: t,
+      body: { mode: 'agent', notebookKey: b64(rnd(32)) },
+    });
+    expect(wrong.status).toBe(409);
+    expect(wrong.body.error.message).toContain('key mismatch');
+    const right = await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, {
+      token: t,
+      body: { mode: 'agent', notebookKey: b64(notebookKey) },
+    });
+    expect(right.status).toBe(200);
+    expect(right.body.mode).toBe('agent');
+    // A brand-new notebook without data accepts any key.
+    const { notebookId: empty } = await createNotebook(s, u, { mode: 'private', notebookKey: rnd(32) });
+    const fresh = await api(s, 'PATCH', `/notebooks/${empty}/mode`, {
+      token: t,
+      body: { mode: 'agent', notebookKey: b64(rnd(32)) },
+    });
+    expect(fresh.status).toBe(200);
+    client.close();
+  });
+
+  it('diag CLI names the unreadable items of a document', async () => {
+    const { notebookId, client } = await setupNotebook();
+    await client.push(notebookId, await seal(rnd(32), new Uint8Array([1, 2, 3]), AD.doc(notebookId)));
+    const env = {
+      ...process.env,
+      NODE_ENV: 'test',
+      LOG_LEVEL: 'silent',
+      DATABASE_URL: s.ctx.config.DATABASE_URL,
+      DS_JWT_SECRET: s.ctx.config.DS_JWT_SECRET,
+      DS_KMS_KEY: s.ctx.config.DS_KMS_KEY,
+      STORAGE_DIR: s.ctx.config.STORAGE_DIR,
+    };
+    const { stdout } = await execFileAsync('npx', ['tsx', 'src/diag-agent-doc-cli.ts', notebookId], { env, cwd: process.cwd() });
+    expect(stdout).toContain(`kind=notebook`);
+    expect(stdout).toMatch(/update\s+seq=1 .*decrypt=ok\s+apply=ok/);
+    expect(stdout).toMatch(/update\s+seq=2 .*decrypt=FAIL/);
+    expect(stdout).toContain('UNREADABLE items: seq 2');
+    client.close();
   });
 
   it('creates notes whose wrapped key the notebook key opens', async () => {

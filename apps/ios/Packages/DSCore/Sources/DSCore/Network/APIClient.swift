@@ -48,8 +48,8 @@ public struct SecretSessionStore: SessionStore {
 /// idle timeout, and failed attempts are retried with jittered backoff — any request when it
 /// certainly was not sent (`TransportFailure.notSent`), idempotent ones (GET/PUT/DELETE and
 /// the POST/PATCH that are idempotent by id) also after timeouts and 502/503/504. Requests that
-/// may have reached the server and are not idempotent — sign-in, password change, the one-time
-/// token refresh — are not repeated.
+/// may have reached the server and are not idempotent — sign-in, password change — are not
+/// repeated. The token refresh is: the server answers a repeat within 60 s with the same session.
 public actor APIClient {
     /// Idle timeout of attempt 1, 2, …; a stuck connection fails fast and the next attempt
     /// opens a new one.
@@ -278,7 +278,9 @@ public actor APIClient {
         if !forceRefresh, let exp = s.accessExpiry, exp.timeIntervalSince(now()) > 60 { return s }
         if let task = refreshTask { return try await task.value }
         let task = Task { () throws -> AuthSession in
-            let fresh: AuthSession = try await self.call("POST", "/auth/refresh", body: ["refreshToken": s.refreshToken], auth: false)
+            // The server answers a repeat of the same token within 60 s with the same new session
+            // (api.md), so a lost response is retried; all attempts fit in that window.
+            let fresh: AuthSession = try await self.call("POST", "/auth/refresh", body: ["refreshToken": s.refreshToken], auth: false, idempotent: true)
             return fresh
         }
         refreshTask = task

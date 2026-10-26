@@ -313,8 +313,12 @@ public final class EditorView: UIView {
         ink.invalidateLayout()
         if bounds.width > 0 {
             layoutIfNeeded()
-            if let viewport = textView.textLayoutManager?.textViewportLayoutController {
-                viewport.layoutViewport()
+            if let tlm = textView.textLayoutManager {
+                // A note of ordinary length is laid out whole on open: with TextKit 2's estimated
+                // heights the content size kept changing under the first swipes and the text view
+                // pulled the note back (build 15). Long notes keep the lazy layout (open time).
+                if text.length <= Self.fullLayoutLimit { tlm.ensureLayout(for: tlm.documentRange) }
+                tlm.textViewportLayoutController.layoutViewport()
             }
         }
         lastOpenDuration = CACurrentMediaTime() - start
@@ -618,14 +622,61 @@ public final class EditorView: UIView {
         setNeedsInkRefresh()
     }
 
+    /// Notes up to this many characters are laid out whole when opened.
+    static let fullLayoutLimit = 40_000
+    /// Block types whose height changed (a late Mermaid render) while the person was scrolling.
+    private var pendingAtomRelayout: Set<String> = []
+
+    private var userIsScrolling: Bool { textView.isTracking || textView.isDragging || textView.isDecelerating }
+
+    /// Lays blocks of `type` out again after their height changed. Never while the person is
+    /// scrolling (it is applied when the scroll ends), and the text at the top of the screen
+    /// stays where it is: blocks above it that grow or shrink do not move what is being read.
     private func rerenderAtoms(of type: String) {
         guard let tlm = textView.textLayoutManager else { return }
+        if userIsScrolling {
+            pendingAtomRelayout.insert(type)
+            return
+        }
+        let anchor = visibleAnchor()
         for (i, p) in projection.paragraphs.enumerated() where p.kind == .atom(type) {
             if let r = geometry.textRange(projection.starts[i]..<(projection.starts[i] + 1)) { tlm.invalidateLayout(for: r) }
+        }
+        if let anchor {
+            if textView.text.utf16.count <= Self.fullLayoutLimit { tlm.ensureLayout(for: tlm.documentRange) }
+            tlm.textViewportLayoutController.layoutViewport()
+            restore(anchor)
         }
         textView.setNeedsLayout()
         ink.invalidateLayout()
         setNeedsInkRefresh()
+    }
+
+    private func flushPendingAtomRelayout() {
+        guard !pendingAtomRelayout.isEmpty, !userIsScrolling else { return }
+        let types = pendingAtomRelayout
+        pendingAtomRelayout = []
+        for type in types { rerenderAtoms(of: type) }
+    }
+
+    /// The first fragment at the top of the visible area and its distance from that edge.
+    private func visibleAnchor() -> (location: NSTextLocation, offset: CGFloat)? {
+        guard let tlm = textView.textLayoutManager else { return nil }
+        let top = textView.contentOffset.y + textView.adjustedContentInset.top
+        // Nothing to keep at the very top of the note.
+        guard top > textView.textContainerInset.top + 1 else { return nil }
+        let point = CGPoint(x: textView.textContainer.size.width / 2, y: top - textView.textContainerInset.top)
+        guard let fragment = tlm.textLayoutFragment(for: point) else { return nil }
+        return (fragment.rangeInElement.location, fragment.layoutFragmentFrame.minY - point.y)
+    }
+
+    private func restore(_ anchor: (location: NSTextLocation, offset: CGFloat)) {
+        guard let tlm = textView.textLayoutManager, let fragment = tlm.textLayoutFragment(for: anchor.location) else { return }
+        let wantedTop = fragment.layoutFragmentFrame.minY - anchor.offset + textView.textContainerInset.top
+        let y = wantedTop - textView.adjustedContentInset.top
+        guard abs(y - textView.contentOffset.y) > 0.5 else { return }
+        textView.layoutIfNeeded()
+        textView.contentOffset.y = y
     }
 
     /// Re-applies rendered attributes of a paragraph without touching its characters.
@@ -1159,6 +1210,14 @@ extension EditorView: UITextViewDelegate {
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
         onScroll?(scrollView.contentOffset.y + scrollView.adjustedContentInset.top)
+    }
+
+    public func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate { DispatchQueue.main.async { [weak self] in self?.flushPendingAtomRelayout() } }
+    }
+
+    public func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        DispatchQueue.main.async { [weak self] in self?.flushPendingAtomRelayout() }
     }
 
     public func textViewDidBeginEditing(_ textView: UITextView) { notifyStateChange() }

@@ -36,6 +36,8 @@ const ConfigSchema = z
 
     ACCESS_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(15 * 60),
     REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
+    /** A used refresh token presented again within this window returns the same new token (lost response). */
+    REFRESH_REUSE_GRACE_SEC: z.coerce.number().int().nonnegative().default(60),
 
     STORAGE_DRIVER: z.enum(['disk', 's3']).default('disk'),
     STORAGE_DIR: z.string().default('./data/files'),

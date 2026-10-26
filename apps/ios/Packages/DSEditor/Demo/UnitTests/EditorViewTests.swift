@@ -351,6 +351,12 @@ final class EditorViewTests: XCTestCase {
     }
 
     func testStrokeFarBelowTheTextIsKeptAsFreeDrawing() {
+        let pencilSeen = EditorView.pencilSeen
+        EditorView.pencilSeen = true // the screen of room below the text is there once a Pencil was used
+        defer {
+            EditorView.pencilSeen = pencilSeen
+            if !pencilSeen { UserDefaults.standard.removeObject(forKey: "ds.pencilSeen") }
+        }
         let last = BlockNode.paragraph("The end of the note")
         let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello"), last])
         let editor = host(doc)
@@ -367,6 +373,15 @@ final class EditorViewTests: XCTestCase {
         XCTAssertNotNil(drawn, "drawn after relayout")
         XCTAssertEqual(drawn?.y ?? 0, y, accuracy: 2, "where it was drawn")
         XCTAssertGreaterThanOrEqual(editor.textView.textContainerInset.bottom, editor.bounds.height, "a screen of room below the text")
+    }
+
+    func testNoScreenOfRoomBeforeAnyPencil() {
+        let pencilSeen = EditorView.pencilSeen
+        EditorView.pencilSeen = false
+        defer { EditorView.pencilSeen = pencilSeen }
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello")]))
+        if editor.tools.allowsFingerDrawing { return }
+        XCTAssertEqual(editor.textView.textContainerInset.bottom, 160, "no drawing yet: only the usual end room")
     }
 
     func testStrokePartlyFarFromTextIsWhollyFreeDrawing() {
@@ -649,5 +664,61 @@ final class EditorViewTests: XCTestCase {
         XCTAssertTrue(visible.contains(caret), "the caret line is above the keyboard")
         XCTAssertLessThan(visible.maxY - caret.maxY, 80,
                           "only the needed amount: the caret stays just above the keyboard, not at the top")
+    }
+
+    // MARK: - Ruled paper follows the text (build 13 check)
+
+    /// Bottoms of every laid-out line (text lines and block attachments), in text container coordinates.
+    /// Each with a description of its fragment, so a failure names the block that is off.
+    private func lineBottoms(_ editor: EditorView) -> [(y: CGFloat, what: String)] {
+        guard let lm = editor.textView.textLayoutManager else { return [] }
+        var out: [(CGFloat, String)] = []
+        lm.enumerateTextLayoutFragments(from: lm.documentRange.location, options: [.ensuresLayout]) { frag in
+            let text = (frag.textElement as? NSTextParagraph)?.attributedString
+            let font = text.flatMap { $0.length > 0 ? $0.attribute(.font, at: 0, effectiveRange: nil) as? UIFont : nil }
+            let isAttachment = text.map { $0.length > 0 && $0.attribute(.attachment, at: 0, effectiveRange: nil) != nil } ?? false
+            let what = "fragment \(isAttachment ? "attachment" : "text") \(text?.string.prefix(16) ?? "") at \(frag.layoutFragmentFrame.minY) "
+                + "height \(frag.layoutFragmentFrame.height), font leading \(font?.leading ?? -1) lineHeight \(font?.lineHeight ?? -1)"
+            for line in frag.textLineFragments where line.characterRange.length > 0 {
+                out.append((frag.layoutFragmentFrame.minY + line.typographicBounds.maxY, what))
+            }
+            return true
+        }
+        return out
+    }
+
+    func testRuledPaperRulesStayUnderTheTextForEveryFontSizeAndWidth() throws {
+        for font in DocumentStyle.Font.allCases {
+            for size in [CGFloat(14), 17, 22] {
+                for width in DocumentStyle.Width.allCases {
+                    let doc = SampleDocument.make()
+                    doc.setStyle(DocumentStyle(font: font, width: width, paper: .lines))
+                    let editor = host(doc, width: 900, height: 1200)
+                    editor.setBaseFontSize(size)
+                    settle(editor)
+                    let pitch = try XCTUnwrap(editor.theme.paperPitch)
+                    XCTAssertEqual(pitch, (editor.theme.bodyFont.lineHeight * 1.22).rounded(), "pitch = body line height")
+                    let bottoms = lineBottoms(editor)
+                    XCTAssertGreaterThan(bottoms.count, 20)
+                    // Only the first line off is reported: the ones after it are usually off by the same.
+                    if let hit = bottoms.enumerated().first(where: { _, line in
+                        let r = line.y.truncatingRemainder(dividingBy: pitch)
+                        return min(r, pitch - r) >= 0.75
+                    }) {
+                        let (i, line) = (hit.offset, hit.element)
+                        let before = i > 0 ? bottoms[i - 1].what : "none"
+                        XCTFail("\(font) \(size) \(width): line \(i) ends at \(line.y), off the \(pitch) pt rules by "
+                                + "\(line.y.truncatingRemainder(dividingBy: pitch)); \(line.what); previous: \(before)")
+                    }
+                    // The pattern's rules sit just under those line ends, in content coordinates.
+                    let paper = try XCTUnwrap(editor.textView.subviews.first { $0 is PaperView } as? PaperView)
+                    let ruleInContent = paper.frame.minY + PaperView.ruleY(pitch: paper.pitch, phaseY: paper.phase.y, lift: paper.ruleLift)
+                    let lineEnd = ruleInContent + paper.ruleLift - editor.textView.textContainerInset.top
+                    let r = lineEnd.truncatingRemainder(dividingBy: pitch)
+                    XCTAssertTrue(min(abs(r), pitch - abs(r)) < 0.5, "\(font) \(size) \(width): rules are off the lines by \(r)")
+                    window.isHidden = true
+                }
+            }
+        }
     }
 }

@@ -22,6 +22,9 @@ final class SyncCenter {
     private(set) var isOnline = true
     private(set) var phase: Phase
     private(set) var pendingChanges = 0
+    /// Notebooks with changes from other devices this device could not read (another key):
+    /// set aside, everything else syncs. A calm note on the notebook, not a global state.
+    var unreadableNotebookIds: Set<String> = []
     let serverURL: URL?
 
     @ObservationIgnored private var monitor: NWPathMonitor?

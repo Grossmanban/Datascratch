@@ -1387,21 +1387,21 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1793004480.1294332,
-    "seen": 1793025859.913891,
+    "seen": 1793027456.0471897,
     "ast_hash": "24098989e922515ff0fa0aac07aa956f",
-    "semantic_hash": ""
+    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1793004480.1294332,
-    "seen": 1793025859.9138937,
+    "seen": 1793027456.047193,
     "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
-    "semantic_hash": ""
+    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1793004480.1294332,
-    "seen": 1793025859.9138951,
+    "seen": 1793027456.0471945,
     "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
-    "semantic_hash": ""
+    "semantic_hash": "a66fd1a5c043c1420b26f520d2b23c56"
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1793004480.1294332,
@@ -2635,9 +2635,9 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1793004480.6963804,
-    "seen": 1793025859.9142408,
+    "seen": 1793027456.0475218,
     "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
-    "semantic_hash": ""
+    "semantic_hash": "c9f780dd0f9b83af1132086b539b65c4"
   },
   "infra/deploy/docker-compose.yml": {
     "mtime": 1793021975.275287,
@@ -2850,10 +2850,10 @@
     "semantic_hash": "21a70039ecadc3d6123e888ea6c2078f"
   },
   "packages/agents/src/render/handwriting-png.ts": {
-    "mtime": 1793024795.7575946,
-    "seen": 1793025776.3532047,
-    "ast_hash": "3fc46b7cfe9e8c4762d53292df8140d7",
-    "semantic_hash": "3fc46b7cfe9e8c4762d53292df8140d7"
+    "mtime": 1793027224.236077,
+    "seen": 1793027456.0475743,
+    "ast_hash": "49c58c40c866891cbc35938d7dca9f41",
+    "semantic_hash": "49c58c40c866891cbc35938d7dca9f41"
   },
   "packages/agents/src/service/access.ts": {
     "mtime": 1792928452.15631,
@@ -4302,10 +4302,10 @@
     "semantic_hash": "4e12d508cbe83842d35667ec3683e82b"
   },
   "docs/architecture/contracts/agents-api.md": {
-    "mtime": 1793024869.7702353,
-    "seen": 1793025776.3535533,
-    "ast_hash": "75ff7f37187131b882c01fdaacec72a9",
-    "semantic_hash": "75ff7f37187131b882c01fdaacec72a9"
+    "mtime": 1793027261.8738952,
+    "seen": 1793027456.0479107,
+    "ast_hash": "134fc03c006dd4264ae9619c417f9e73",
+    "semantic_hash": "134fc03c006dd4264ae9619c417f9e73"
   },
   "docs/architecture/contracts/api.md": {
     "mtime": 1793021975.1592867,
@@ -4938,10 +4938,10 @@
     "semantic_hash": "088d1eb66686dcf99c10bf3ba7197636"
   },
   "packages/agents/test/handwriting-table.test.ts": {
-    "mtime": 1793024844.0246258,
-    "seen": 1793025776.3532245,
-    "ast_hash": "2839d30f6ddddbbd777d90a917defdc3",
-    "semantic_hash": "2839d30f6ddddbbd777d90a917defdc3"
+    "mtime": 1793027248.2634676,
+    "seen": 1793027456.0475883,
+    "ast_hash": "fe095bbb397a3b6da69f28a020ed9059",
+    "semantic_hash": "fe095bbb397a3b6da69f28a020ed9059"
   },
   "packages/web-editor/ct/PaperEditor.tsx": {
     "mtime": 1793025519.4916446,
@@ -4993,9 +4993,9 @@
   },
   "apps/server/drizzle/0003_agent_move_note.sql": {
     "mtime": 1793024044.533317,
-    "seen": 1793025859.9138968,
+    "seen": 1793027456.0471966,
     "ast_hash": "dc7975f711d91ebab97fb9b5b28fc1d1",
-    "semantic_hash": ""
+    "semantic_hash": "dc7975f711d91ebab97fb9b5b28fc1d1"
   },
   "apps/server/drizzle/meta/0003_snapshot.json": {
     "mtime": 1793024044.565648,

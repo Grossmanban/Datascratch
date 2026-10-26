@@ -21,6 +21,8 @@ export interface AgentNotebook {
    */
   name: string | null;
   icon: string | null;
+  /** Colour token (`tint.blue`, `blue`) or `#RRGGBB`; optional, else taken from the notebook document. */
+  color?: string | null;
   space: { id: string; name: string; icon: string | null } | null;
   createdAt: string;
 }

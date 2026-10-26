@@ -122,6 +122,14 @@ DSCore
   `notes(inFolder:)`, `note(id:)`, `putNote`, `updateNote`, `syncDerived(_:)` (копия
   заголовка и тегов в `NoteMeta`), `trashNote/restoreNote/purgeNote`, `expiredTrash()`,
   `dailyNote(for:)`, `inbox`, `tagCounts()`, `setTagProperties`.
+  `metaCopy` / `setMetaCopy(_:)` — копия названия, иконки, цвета и пространства в `meta` блокнота
+  для агентов (они не читают документ аккаунта); обновлять при создании, переименовании, смене
+  иконки или цвета, переносе в другое пространство и переименовании пространства — проще всего
+  `AccountService.refreshNotebookMeta(_:in:)`, который берёт всё из документа аккаунта.
+- Заметка, созданная агентом (D-45): `NoteMeta.createdByAgent` (`AgentAuthor { agentId,
+  agentName, at }` или `nil`; отсутствующее и испорченное значение читается как `nil`) —
+  показать полоску «Создано агентом {agentName}»; «Понятно» →
+  `NotebookDocument.clearCreatedByAgent(noteId:)` (поле становится `null` на всех устройствах).
 - `AccountDocument`: `spaces()`, `putSpace`, `notebooks(inSpace:)`, `putNotebook`,
   `setting/setSetting`, `dailyNotebookId`, `starred/star/unstar`, `tabs/openTab/closeTab`.
 - Записи: `Space`, `NotebookRef`, `Folder`, `NoteMeta`, `TagProperties`, `StarredItem`.

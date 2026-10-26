@@ -109,7 +109,16 @@ public actor AccountService {
         let notebook = NotebookDocument(notebookId: id)
         try notebook.initialize()
         try account.putNotebook(NotebookRef(id: id, spaceId: spaceId, name: name, icon: icon, color: color, order: order, mode: mode))
+        try refreshNotebookMeta(notebook, in: account)
         return notebook
+    }
+
+    /// Copies the notebook's name, icon, colour and space from the account document into the
+    /// notebook's `meta` (agents read it there). Call after renaming, changing icon or colour,
+    /// moving to another space or renaming the space; mode switches do it themselves.
+    public nonisolated func refreshNotebookMeta(_ notebook: NotebookDocument, in account: AccountDocument) throws {
+        guard let ref = account.notebook(id: notebook.notebookId) else { return }
+        try notebook.setMetaCopy(.init(ref, space: account.spaces().first { $0.id == ref.spaceId }))
     }
 
     /// Unwraps the keys of all notebooks of the account (after sign-in on a new device).
@@ -120,8 +129,10 @@ public actor AccountService {
     }
 
     /// Switches a notebook between private and agent mode (crypto.md §8).
-    public func setMode(_ mode: NotebookMode, notebookId: String, in account: AccountDocument) async throws {
+    /// Pass the notebook document so that its `meta` copy is fresh when agents get access.
+    public func setMode(_ mode: NotebookMode, notebookId: String, in account: AccountDocument, notebook: NotebookDocument? = nil) async throws {
         guard let key = try keys.notebookKey(notebookId) else { throw AccountError.missingKey(notebookId) }
+        if mode == .agent, let notebook { try refreshNotebookMeta(notebook, in: account) }
         try await api.setNotebookMode(id: notebookId, mode: mode, notebookKey: mode == .agent ? key : nil)
         try account.updateNotebook(id: notebookId, ["mode": .string(value: mode.rawValue)])
     }

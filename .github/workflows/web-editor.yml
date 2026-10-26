@@ -45,8 +45,16 @@ jobs:
         run: pnpm run test
       - name: Build showcase
         run: pnpm run build
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('packages/web-editor/package.json') }}
+      # ubuntu-latest already has Chromium's system libraries; skipping apt (--with-deps) avoids
+      # runs hanging on slow package mirrors.
       - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
+        timeout-minutes: 5
+        run: pnpm exec playwright install chromium
       - name: Component tests (pen over text, reflow)
         run: pnpm run test:ct
         env:

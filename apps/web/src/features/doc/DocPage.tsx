@@ -10,7 +10,7 @@ import { acknowledgeAgentCreated, agentCreatedOf, deleteNoteForever, openTab, re
 import { folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
 import { closeDocTab, isFreshNote, noteMenuItems } from "@/features/docs/menus";
 import { TopBar } from "@/features/shell/PageHeader";
-import { useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
+import { useNoteContentReady, useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
 import { useUi } from "@/hooks/useUi";
 import { FORMAT_VERSION } from "@/lib/shared";
 import { EMOJI_CHOICES } from "@/lib/tokens";
@@ -70,6 +70,7 @@ function DocScreen({ noteId }: { noteId: string }) {
   const email = useAuth((s) => s.email) ?? "";
   const doc = useNoteDoc(noteId);
   const meta = useNoteMeta(doc);
+  const contentReady = useNoteContentReady(noteId, doc);
   const edits = useRef(0);
   const [editorApi, setEditorApi] = useState<EditorApi | null>(null);
   const paletteCollapsed = useUi((s) => s.penPaletteCollapsed);
@@ -189,7 +190,7 @@ function DocScreen({ noteId }: { noteId: string }) {
       )}
 
       {/* Mount the editor once presence exists: changing `awareness` later recreates the editor. */}
-      {!doc || !meta || !awareness ? (
+      {!doc || !meta || !awareness || !contentReady ? (
         <div className="flex h-64 items-center justify-center text-ink-2">
           <Spinner className="size-5" />
         </div>

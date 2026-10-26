@@ -46,3 +46,38 @@ function cachedMeta(doc: Y.Doc) {
   metaCache.set(doc, { key, value });
   return value;
 }
+
+/**
+ * Whether a note's content is here to edit: it has blocks, or sync is caught up and it really is
+ * empty. Until then the editor must not be mounted: on an empty document it writes a fresh empty
+ * title of its own, and when the real content arrives (a note made on another device or by an
+ * agent, not downloaded or decrypted yet) that title wins and the real one becomes a paragraph —
+ * the «Без названия» notes of 2026-10-26.
+ */
+export function useNoteContentReady(noteId: string, doc: Y.Doc | null): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    setReady(false);
+    if (!doc) return;
+    const content = doc.getXmlFragment("content");
+    const check = () => {
+      if (content.length > 0 || runtime().isDocSynced(noteId)) {
+        setReady(true);
+        return true;
+      }
+      return false;
+    };
+    if (check()) return;
+    const onChange = () => void check();
+    content.observe(onChange);
+    const timer = window.setInterval(() => {
+      if (check()) window.clearInterval(timer);
+    }, 400);
+    return () => {
+      content.unobserve(onChange);
+      window.clearInterval(timer);
+    };
+  }, [doc, noteId]);
+  return ready;
+}
+

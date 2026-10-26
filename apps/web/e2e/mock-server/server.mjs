@@ -120,6 +120,19 @@ route("POST", "/v1/__test/inject-unreadable", (_q, res, { body }) => {
   json(res, 200, { seq });
 });
 
+// Test control: hold back what a subscription to a document returns (its content arrives late,
+// as for a note created on another device or by an agent), and let it through on release.
+const heldDocs = new Map();
+route("POST", "/v1/__test/hold-doc", (_q, res, { body }) => {
+  if (body.on) heldDocs.set(body.docId, heldDocs.get(body.docId) ?? []);
+  else {
+    const pending = heldDocs.get(body.docId) ?? [];
+    heldDocs.delete(body.docId);
+    for (const run of pending) run();
+  }
+  json(res, 200, { held: [...heldDocs.keys()] });
+});
+
 // Test control: refuse every push with `internal` (the sync indicator's «Не отправлено» state).
 let refusePushes = false;
 route("POST", "/v1/__test/refuse-pushes", (_q, res, { body }) => {
@@ -494,6 +507,10 @@ wss.on("connection", (ws) => {
             continue;
           }
           c.subs.add(docId);
+          if (heldDocs.has(docId)) {
+            heldDocs.get(docId).push(() => send({ type: "updates", docId, snapshot: d.snapshot && since < d.snapshot.seq ? { seq: d.snapshot.seq, payload: d.snapshot.payload } : null, items: d.items.filter((i) => i.seq > Math.max(since, d.snapshot && since < d.snapshot.seq ? d.snapshot.seq : since)).map(({ seq, payload, deviceId }) => ({ seq, payload, deviceId })), upToDate: true }));
+            continue;
+          }
           let items = d.items.filter((i) => i.seq > since);
           let snapshot = null;
           if (d.snapshot && since < d.snapshot.seq) {

@@ -9,7 +9,20 @@ import type { AgentEditOrigin, AgentNotebook, AgentsContext } from "../context.j
 import { applyEdits, initNoteContent } from "../doc/edits.js";
 import { collectHandwriting, findHandwriting, type HandwritingItem } from "../doc/handwriting.js";
 import { noteToMarkdown } from "../doc/markdown-export.js";
-import { getTitle } from "@datascratch/shared/document";
+import {
+  deleteFolder,
+  deleteNoteMeta,
+  folderSubtree,
+  getFolders,
+  getNoteMeta,
+  getNoteMetas,
+  getTitle,
+  patchFolder,
+  patchNoteMeta,
+  putFolder,
+  putNoteMeta,
+  type Folder,
+} from "@datascratch/shared/document";
 import { blockIdOf, childElements, contentOf, findBlock, TEXT_BLOCKS, walkBlocks } from "../doc/model.js";
 import { AgentError } from "../errors.js";
 import { renderHandwriting, type RenderedImage } from "../render/handwriting-png.js";
@@ -17,17 +30,23 @@ import { base64url, uuidv7 } from "../util.js";
 import { requireWrite, type Principal } from "./access.js";
 import { mergeNotebookMeta, readNotebookMeta, type NotebookDocMeta } from "./notebook-meta.js";
 import { buildNoteIndex, matchNote, NoteIndexCache, searchTerms, type NoteIndex, type TaskInfo } from "./note-index.js";
-import type {
-  AddCommentInput,
-  BacklinksInput,
-  CreateNoteInput,
-  EditNoteInput,
-  HandwritingImageInput,
-  ListNotesInput,
-  ListTasksInput,
-  ReadNoteInput,
-  SearchNotesInput,
-  UpdateTaskInput,
+import {
+  NO_NOTEBOOKS_HINT,
+  type AddCommentInput,
+  type BacklinksInput,
+  type CreateFolderInput,
+  type CreateNoteInput,
+  type DeleteFolderInput,
+  type EditNoteInput,
+  type HandwritingImageInput,
+  type ListNotesInput,
+  type ListTasksInput,
+  type MoveFolderInput,
+  type MoveNoteInput,
+  type ReadNoteInput,
+  type RenameFolderInput,
+  type SearchNotesInput,
+  type UpdateTaskInput,
 } from "./schemas.js";
 
 interface NoteMetaView {
@@ -45,9 +64,18 @@ interface FolderView {
   id: string;
   parentId: string | null;
   name: string;
+  icon: string | null;
+}
+
+/** A granted notebook whose document could not be loaded: listed, never silently dropped. */
+interface UnavailableNotebook {
+  info: AgentNotebook & { name: string };
+  reason: string;
 }
 
 interface NotebookView {
+  /** Updates of the notebook index the server had to skip (partly readable notebook). */
+  skippedUpdates: number;
   info: AgentNotebook;
   name: string;
   doc: Y.Doc;
@@ -77,7 +105,7 @@ function readNotebookDoc(doc: Y.Doc): { meta: NotebookDocMeta; notes: Map<string
   const folders = new Map<string, FolderView>();
   doc.getMap("folders").forEach((raw, id) => {
     if (!(raw instanceof Y.Map)) return;
-    folders.set(id, { id, parentId: str(raw.get("parentId")), name: str(raw.get("name")) ?? "" });
+    folders.set(id, { id, parentId: str(raw.get("parentId")), name: str(raw.get("name")) ?? "", icon: str(raw.get("icon")) });
   });
   return { meta: readNotebookMeta(doc), notes, folders };
 }
@@ -86,6 +114,11 @@ function readNotebookDoc(doc: Y.Doc): { meta: NotebookDocMeta; notes: Map<string
 function setOrRemove(el: Y.XmlElement, name: string, value: string | null): void {
   if (value === null) el.removeAttribute(name);
   else el.setAttribute(name, value);
+}
+
+/** Order value that puts a new item after its siblings. */
+function nextOrder(items: { order: number }[]): number {
+  return items.reduce((max, i) => Math.max(max, typeof i.order === "number" ? i.order : 0), 0) + 1;
 }
 
 function folderPath(nb: NotebookView, folderId: string | null): string[] {
@@ -138,28 +171,51 @@ export class AgentService {
   // -------------------------------------------------------------------------
 
   /** Agent-mode notebooks the grant may use, loaded. Private or unlisted notebooks never appear. */
-  private async notebooks(p: Principal, only?: string): Promise<NotebookView[]> {
+  /** Granted agent-mode notebooks, loaded; the ones that fail to load are reported, not dropped. */
+  private async notebookStates(p: Principal, only?: string): Promise<{ views: NotebookView[]; unavailable: UnavailableNotebook[] }> {
     const all = await this.ctx.data.listAgentNotebooks(p.grant.userId, p.grant.id);
     const allowed = all.filter((n) => p.grant.notebookIds.includes(n.id) && (!only || n.id === only));
     if (only && allowed.length === 0)
       throw new AgentError("not_found", `Notebook ${only} is not available to this agent. Call list_notebooks to see the notebooks you can access.`);
     const views: NotebookView[] = [];
+    const unavailable: UnavailableNotebook[] = [];
     for (const info of allowed) {
-      const loaded = await this.ctx.data.loadDoc(p.grant.userId, info.id, p.grant.id);
-      if (!loaded) continue;
+      let loaded: Awaited<ReturnType<typeof this.ctx.data.loadDoc>>;
+      try {
+        loaded = await this.ctx.data.loadDoc(p.grant.userId, info.id, p.grant.id);
+      } catch {
+        loaded = null;
+      }
+      if (!loaded) {
+        unavailable.push({
+          info: mergeNotebookMeta(info, { name: null, icon: null, color: null, space: null }),
+          reason: "The server could not decrypt or load this notebook. Tell the user: the notebook is in “for agents” mode, but its data is not readable right now; reopening it in the app usually re-syncs it.",
+        });
+        continue;
+      }
       const parsed = readNotebookDoc(loaded.doc);
       const merged = mergeNotebookMeta(info, parsed.meta);
-      views.push({ info: merged, name: merged.name, doc: loaded.doc, notes: parsed.notes, folders: parsed.folders });
+      views.push({ info: merged, name: merged.name, doc: loaded.doc, notes: parsed.notes, folders: parsed.folders, skippedUpdates: loaded.skipped?.length ?? 0 });
     }
+    return { views, unavailable };
+  }
+
+  private async notebooks(p: Principal, only?: string): Promise<NotebookView[]> {
+    const { views, unavailable } = await this.notebookStates(p, only);
+    if (only && views.length === 0 && unavailable[0]) throw new AgentError("conflict", `Notebook ${only} is temporarily unavailable. ${unavailable[0].reason}`);
     return views;
   }
 
   private async locate(p: Principal, noteId: string): Promise<{ nb: NotebookView; meta: NoteMetaView }> {
-    for (const nb of await this.notebooks(p)) {
+    const { views, unavailable } = await this.notebookStates(p);
+    for (const nb of views) {
       const meta = nb.notes.get(noteId);
       if (meta && !meta.trashedAt) return { nb, meta };
     }
-    throw new AgentError("not_found", `Note ${noteId} not found or not available to this agent. Use search_notes or list_notes to find notes.`);
+    const hint = unavailable.length
+      ? ` ${unavailable.length} granted notebook(s) are temporarily unavailable (${unavailable.map((u) => u.info.id).join(", ")}): the note may be there. ${unavailable[0]!.reason}`
+      : "";
+    throw new AgentError("not_found", `Note ${noteId} not found or not available to this agent. Use search_notes or list_notes to find notes.${hint}`);
   }
 
   private async loadNote(p: Principal, noteId: string): Promise<{ doc: Y.Doc; seq: number }> {
@@ -239,7 +295,8 @@ export class AgentService {
   // -------------------------------------------------------------------------
 
   async listSpaces(p: Principal) {
-    const views = await this.notebooks(p);
+    const { views: loaded, unavailable } = await this.notebookStates(p);
+    const views = [...loaded.map((v) => ({ info: v.info, name: v.name })), ...unavailable.map((u) => ({ info: u.info, name: u.info.name }))];
     const spaces = new Map<string, { id: string | null; name: string; icon: string | null; notebooks: { id: string; name: string }[] }>();
     for (const nb of views) {
       const s = nb.info.space;
@@ -252,17 +309,32 @@ export class AgentService {
   }
 
   async listNotebooks(p: Principal) {
-    const views = await this.notebooks(p);
+    const { views, unavailable } = await this.notebookStates(p);
     return {
-      notebooks: views.map((nb) => ({
-        id: nb.info.id,
-        name: nb.name,
-        icon: nb.info.icon,
-        space: nb.info.space ? { id: nb.info.space.id, name: nb.info.space.name } : null,
-        permission: p.grant.permission,
-        noteCount: [...nb.notes.values()].filter((n) => !n.trashedAt).length,
-        folders: [...nb.folders.values()].map((f) => ({ id: f.id, parentId: f.parentId, name: f.name, path: folderPath(nb, f.id).join(" / ") })),
-      })),
+      notebooks: [
+        ...views.map((nb) => ({
+          id: nb.info.id,
+          name: nb.name,
+          icon: nb.info.icon,
+          space: nb.info.space ? { id: nb.info.space.id, name: nb.info.space.name } : null,
+          permission: p.grant.permission,
+          noteCount: [...nb.notes.values()].filter((n) => !n.trashedAt).length,
+          folders: [...nb.folders.values()].map((f) => ({ id: f.id, parentId: f.parentId, name: f.name, icon: f.icon, path: folderPath(nb, f.id).join(" / ") })),
+          ...(nb.skippedUpdates
+            ? { warning: `${nb.skippedUpdates} recent change(s) of this notebook could not be read by the server and are not shown.` }
+            : {}),
+        })),
+        ...unavailable.map((u) => ({
+          id: u.info.id,
+          name: u.info.name,
+          icon: u.info.icon,
+          space: u.info.space ? { id: u.info.space.id, name: u.info.space.name } : null,
+          permission: p.grant.permission,
+          unavailable: true as const,
+          reason: u.reason,
+        })),
+      ],
+      hint: NO_NOTEBOOKS_HINT,
     };
   }
 
@@ -319,7 +391,7 @@ export class AgentService {
     const images: ReadNoteResult["images"] = [];
     if (input.includeImages) {
       for (const item of handwriting.slice(0, this.options.maxImagesPerRead ?? 6)) {
-        const img = await this.image(p, input.noteId, seq, doc, item, 2);
+        const img = await this.image(p, input.noteId, seq, doc, item, undefined);
         images.push({ handwritingId: item.id, png: img.png });
       }
     }
@@ -332,8 +404,8 @@ export class AgentService {
     };
   }
 
-  private async image(p: Principal, noteId: string, seq: number, doc: Y.Doc, item: HandwritingItem, scale: number): Promise<RenderedImage> {
-    const key = `${p.grant.userId}:${noteId}:${seq}:${item.id}:${scale}`;
+  private async image(p: Principal, noteId: string, seq: number, doc: Y.Doc, item: HandwritingItem, scale: number | undefined): Promise<RenderedImage> {
+    const key = `${p.grant.userId}:${noteId}:${seq}:${item.id}:${scale ?? "auto"}`;
     const hit = this.images.get(key);
     if (hit) return hit;
     let attachment: Uint8Array | null = null;
@@ -444,6 +516,161 @@ export class AgentService {
       { doc: nb.doc },
     );
     return { note: { id: noteId, title: input.title, notebookId: nb.info.id, folderId: input.folderId ?? null }, blocks: this.blockList(doc) };
+  }
+
+  // -------------------------------------------------------------------------
+  // Organising: folders and moving notes (notebooks themselves are never created by agents)
+  // -------------------------------------------------------------------------
+
+  private async findFolder(p: Principal, folderId: string): Promise<{ nb: NotebookView; folder: FolderView }> {
+    for (const nb of await this.notebooks(p)) {
+      const folder = nb.folders.get(folderId);
+      if (folder) return { nb, folder };
+    }
+    throw new AgentError("not_found", `Folder ${folderId} not found. Call list_notebooks to see the folders of each notebook.`);
+  }
+
+  private requireFolder(nb: NotebookView, folderId: string | null): void {
+    if (folderId && !nb.folders.has(folderId))
+      throw new AgentError("not_found", `Folder ${folderId} is not in notebook “${nb.name}”. Call list_notebooks to see its folders.`);
+  }
+
+  /** Two folders with one name side by side are confusing in the app: refuse, name the existing one. */
+  private requireUniqueName(nb: NotebookView, parentId: string | null, name: string, except?: string): void {
+    const clash = [...nb.folders.values()].find((f) => f.parentId === parentId && f.id !== except && f.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (clash) throw new AgentError("conflict", `A folder named “${clash.name}” already exists here (folderId ${clash.id}). Use it, or choose another name.`);
+  }
+
+  private folderOut(nb: NotebookView, f: { id: string; parentId: string | null; name: string; icon: string | null }) {
+    return { id: f.id, notebookId: nb.info.id, parentId: f.parentId, name: f.name, icon: f.icon, path: [...folderPath(nb, f.parentId), f.name].join(" / ") };
+  }
+
+  async createFolder(p: Principal, input: CreateFolderInput) {
+    requireWrite(p);
+    const [nb] = await this.notebooks(p, input.notebookId);
+    const parentId = input.parentFolderId ?? null;
+    this.requireFolder(nb!, parentId);
+    this.requireUniqueName(nb!, parentId, input.name);
+    const folder: Folder = {
+      id: uuidv7(this.now().getTime()),
+      parentId,
+      name: input.name,
+      icon: input.icon ?? null,
+      color: null,
+      order: nextOrder(getFolders(nb!.doc).filter((f) => f.parentId === parentId)),
+      createdAt: this.now().toISOString(),
+    };
+    await this.mutate(p, nb!.info.id, "create_folder", (doc) => putFolder(doc, folder), { doc: nb!.doc });
+    return { folder: this.folderOut(nb!, folder) };
+  }
+
+  async renameFolder(p: Principal, input: RenameFolderInput) {
+    requireWrite(p);
+    const { nb, folder } = await this.findFolder(p, input.folderId);
+    this.requireUniqueName(nb, folder.parentId, input.name, folder.id);
+    const patch: Partial<Folder> = { name: input.name };
+    if (input.icon !== undefined) patch.icon = input.icon;
+    await this.mutate(p, nb.info.id, "rename_folder", (doc) => patchFolder(doc, folder.id, patch), { doc: nb.doc });
+    return { folder: this.folderOut(nb, { ...folder, name: input.name, icon: input.icon === undefined ? folder.icon : input.icon }) };
+  }
+
+  async moveFolder(p: Principal, input: MoveFolderInput) {
+    requireWrite(p);
+    const { nb, folder } = await this.findFolder(p, input.folderId);
+    const parentId = input.parentFolderId;
+    this.requireFolder(nb, parentId);
+    if (parentId && folderSubtree(nb.doc, folder.id).includes(parentId))
+      throw new AgentError("bad_request", `Folder “${folder.name}” cannot be moved into itself or one of its subfolders.`);
+    if (folder.parentId !== parentId) {
+      this.requireUniqueName(nb, parentId, folder.name, folder.id);
+      const order = nextOrder(getFolders(nb.doc).filter((f) => f.parentId === parentId));
+      await this.mutate(p, nb.info.id, "move_folder", (doc) => patchFolder(doc, folder.id, { parentId, order }), { doc: nb.doc });
+    }
+    nb.folders.set(folder.id, { ...folder, parentId });
+    return { folder: this.folderOut(nb, { ...folder, parentId }) };
+  }
+
+  async deleteFolder(p: Principal, input: DeleteFolderInput) {
+    requireWrite(p);
+    const { nb, folder } = await this.findFolder(p, input.folderId);
+    const notes = [...nb.notes.values()].filter((n) => n.folderId === folder.id);
+    const live = notes.filter((n) => !n.trashedAt);
+    const subfolders = [...nb.folders.values()].filter((f) => f.parentId === folder.id);
+    if (input.contents === "refuse" && (live.length > 0 || subfolders.length > 0))
+      throw new AgentError(
+        "conflict",
+        `Folder “${folder.name}” is not empty (${live.length} note(s), ${subfolders.length} subfolder(s)). Move them first, or call delete_folder with contents: "move_to_parent". Notes are never deleted by agents.`,
+      );
+    const target = folder.parentId;
+    // Trashed notes go up too, so restoring them from the trash never points at a missing folder.
+    await this.mutate(
+      p,
+      nb.info.id,
+      "delete_folder",
+      (doc) =>
+        doc.transact(() => {
+          for (const n of notes) patchNoteMeta(doc, n.id, { folderId: target });
+          for (const f of subfolders) patchFolder(doc, f.id, { parentId: target });
+          deleteFolder(doc, folder.id);
+        }),
+      { doc: nb.doc },
+    );
+    return {
+      deleted: { id: folder.id, name: folder.name },
+      movedTo: target ? this.folderOut(nb, nb.folders.get(target)!) : null,
+      movedNotes: live.length,
+      movedFolders: subfolders.length,
+    };
+  }
+
+  async moveNote(p: Principal, input: MoveNoteInput) {
+    requireWrite(p);
+    const { nb: from, meta } = await this.locate(p, input.noteId);
+    const toId = input.notebookId ?? from.info.id;
+    if (toId === from.info.id) {
+      this.requireFolder(from, input.folderId);
+      if (meta.folderId !== input.folderId) {
+        const order = nextOrder(getNoteMetas(from.doc).filter((n) => (n.folderId ?? null) === input.folderId));
+        await this.mutate(
+          p,
+          from.info.id,
+          "move_note",
+          (doc) => patchNoteMeta(doc, meta.id, { folderId: input.folderId, parentNoteId: null, order, updatedAt: this.now().toISOString() }),
+          { doc: from.doc },
+        );
+      }
+      return { note: { id: meta.id, title: meta.title, notebookId: from.info.id, folderId: input.folderId, folderPath: folderPath(from, input.folderId) } };
+    }
+
+    const [to] = await this.notebooks(p, toId);
+    this.requireFolder(to!, input.folderId);
+    if (meta.kind !== "note")
+      throw new AgentError("bad_request", `“${meta.title}” is a ${meta.kind === "daily" ? "daily note" : "task inbox"}; it stays in its notebook. It can still be moved between folders there.`);
+    const move = this.ctx.data.moveNoteDoc?.bind(this.ctx.data);
+    if (!move) throw new AgentError("bad_request", "This server cannot move notes between notebooks yet; notes can be moved between folders of one notebook.");
+    const full = getNoteMeta(from.doc, meta.id);
+    if (!full) throw new AgentError("not_found", `Note ${meta.id} is not in the notebook index.`);
+    const fromDoc = from.doc;
+    const toDoc = to!.doc;
+    const order = nextOrder(getNoteMetas(toDoc).filter((n) => (n.folderId ?? null) === input.folderId));
+    await move(p.grant.userId, {
+      noteId: meta.id,
+      fromNotebookId: from.info.id,
+      toNotebookId: to!.info.id,
+      origin: this.origin(p, "move_note"),
+      indexUpdates: (wrappedKey) => {
+        const toBefore = Y.encodeStateVector(toDoc);
+        // Nesting under another note does not survive a move to another notebook (as in the apps).
+        putNoteMeta(toDoc, { ...full, wrappedKey, folderId: input.folderId, parentNoteId: null, order, updatedAt: this.now().toISOString() });
+        const fromBefore = Y.encodeStateVector(fromDoc);
+        fromDoc.transact(() => {
+          deleteNoteMeta(fromDoc, meta.id);
+          for (const n of getNoteMetas(fromDoc)) if (n.parentNoteId === meta.id) patchNoteMeta(fromDoc, n.id, { parentNoteId: null });
+        });
+        return { from: Y.encodeStateAsUpdate(fromDoc, fromBefore), to: Y.encodeStateAsUpdate(toDoc, toBefore) };
+      },
+    });
+    return { note: { id: meta.id, title: meta.title, notebookId: to!.info.id, folderId: input.folderId, folderPath: folderPath(to!, input.folderId) } };
   }
 
   /** `agentEdit` mark attrs for text written by this agent (D-10). */

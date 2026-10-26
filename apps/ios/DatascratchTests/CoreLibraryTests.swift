@@ -62,6 +62,102 @@ struct CoreLibraryTests {
         #expect(reloaded.taskEntries.contains { $0.text == "Ship it" && $0.attributes.scheduled == "2026-10-27" })
     }
 
+    /// spec/07 «Выход из аккаунта»: signing out keeps the keys of notebooks the server has not
+    /// received yet, so after signing in to the same account they upload and stay readable.
+    @Test func unsentNotebookKeysSurviveSignOut() throws {
+        let secrets = InMemorySecretStore()
+        let keys = KeyRing(store: secrets)
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        library.seedIfEmpty()
+        let notebooks = library.notebooks(in: library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
+        let note = library.createNote(in: notebook.id, folder: nil, title: "Offline")
+        library.setBody(NoteBody(blocks: [.paragraph("Written before sign-out")]), ofNote: note.id)
+
+        #expect(core.unsentNotebookIds.contains(notebook.id))
+        #expect(core.unsentChangeCount > 0)
+        let kept = core.unsentNotebookKeys()
+        let key = try #require(kept[notebook.id])
+
+        try keys.clear()
+        core.restoreNotebookKeys(kept)
+
+        let fresh = KeyRing(store: secrets)
+        #expect(try fresh.notebookKey(notebook.id) == key)
+        let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: fresh))
+        #expect(reloaded.body(note.id).blocks.map(\.text) == ["Written before sign-out"])
+    }
+
+    /// Prod, 2026-10-26: a notebook made on another device reached the iPad without its key; the
+    /// first note written there made the app invent a key the server never saw, and the notebook
+    /// got sealed with it. Now no key is invented for an existing notebook.
+    @Test func noKeyIsInventedForANotebookWithoutOne() throws {
+        let secrets = InMemorySecretStore()
+        let keys = KeyRing(store: secrets)
+        let core = try CoreLibrary(store: try LocalStore.inMemory(), keys: keys)
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "Ии", mode: .private)
+        let master = try #require(try keys.masterKey())
+        try keys.clear()
+        try keys.setMasterKey(master)
+        #expect(core.notebooksWithoutKey == [notebook.id])
+
+        _ = library.createNote(in: notebook.id, title: "Written without the key")
+        #expect(try keys.notebookKey(notebook.id) == nil)
+        #expect(core.notebooksWithoutKey == [notebook.id])
+    }
+
+    /// A key an earlier build invented is replaced by the server's (DSCore `adoptNotebookKey`,
+    /// `rewrapNoteKeys`): the notes open with the server's key and nothing needs healing.
+    @Test func serverNotebookKeyReplacesAnInventedOne() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let core = try CoreLibrary(store: try LocalStore.inMemory(), keys: keys)
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "Ии", mode: .agent)
+        let serverKey = try #require(try keys.notebookKey(notebook.id))
+        let invented = DSCrypto.newKey()
+        try keys.setNotebookKey(invented, notebookId: notebook.id)
+        let note = library.createNote(in: notebook.id, title: "Sealed with the invented key")
+
+        let previous = try #require(try keys.adoptNotebookKey(serverKey, notebookId: notebook.id))
+        #expect(previous == invented)
+        #expect(try core.notebookDocument(notebook.id).rewrapNoteKeys(from: previous, to: serverKey) == 1)
+        let meta = try #require(try core.notebookDocument(notebook.id).note(id: note.id))
+        let wrapped = try #require(DSCore.Base64URL.decode(meta.wrappedKey))
+        #expect((try? DSCrypto.unwrapKey(wrapped, with: serverKey, ad: CryptoAD.noteKey(note.id))) != nil)
+        #expect(core.healUnreadableNotes().isEmpty)
+        #expect(keys.retiredNotebookKeys(notebook.id) == [invented])
+    }
+
+    /// The invented key is gone (signed out) but this device still holds the note: it gets a new
+    /// key wrapped by the server's notebook key, so every device can read it again.
+    @Test func noteWrappedByALostKeyIsReKeyed() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "Ии", mode: .private)
+        let serverKey = try #require(try keys.notebookKey(notebook.id))
+        try keys.setNotebookKey(DSCrypto.newKey(), notebookId: notebook.id)
+        let note = library.createNote(in: notebook.id, title: "Only on this iPad")
+        library.setBody(NoteBody(blocks: [.paragraph("Kept locally")]), ofNote: note.id)
+        try keys.setNotebookKey(serverKey, notebookId: notebook.id)
+        keys.markNotebookKeyVerified(notebook.id)
+
+        #expect(core.healUnreadableNotes() == [note.id])
+        let meta = try #require(try core.notebookDocument(notebook.id).note(id: note.id))
+        let wrapped = try #require(DSCore.Base64URL.decode(meta.wrappedKey))
+        #expect((try? DSCrypto.unwrapKey(wrapped, with: serverKey, ad: CryptoAD.noteKey(note.id))) != nil)
+        #expect(core.healUnreadableNotes().isEmpty)
+        let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: KeyRing(store: InMemorySecretStore())))
+        #expect(reloaded.body(note.id).blocks.map(\.text) == ["Kept locally"])
+    }
+
     /// The user's cover image lives in `meta.cover` and its thumbnail in `NoteMeta.coverThumb`.
     @Test func coverImageAndThumbnailPersist() throws {
         let keys = KeyRing(store: InMemorySecretStore())
@@ -148,6 +244,42 @@ struct CoreLibraryTests {
         // No second welcome document after sign-up seeding.
         library.seedIfEmpty()
         #expect(Set(library.data.notes.map(\.id)) == notes)
+    }
+
+    /// Prod 2026-10-26: a device library with only untouched first-run content added a second
+    /// «Personal»/«Work» to the account on sign-in. It is no longer carried.
+    @Test func untouchedFirstRunLibraryIsNotCarried() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        library.seedIfEmpty()
+        let localAccount = core.account.accountDocId
+        let seeded = library.data.notebooks.map(\.id)
+
+        try keys.setMasterKey(DSCrypto.newKey())
+        let carried = try core.adoptAccount(docId: DSCore.EntityID.make(), isNew: false)
+        #expect(carried.isEmpty)
+        #expect(library.spaces.isEmpty)
+        #expect(try store.document(localAccount) == nil)
+        for id in seeded { #expect(try store.document(id) == nil) }
+    }
+
+    /// The same first-run spaces seeded in English and in Russian are one space.
+    @Test func firstRunSpacesMergeAcrossLanguages() throws {
+        let library = LibraryStore(backend: try CoreLibrary.inMemory())
+        let russian = library.createSpace(name: "Личное")
+        let mine = library.createNotebook(in: russian.id, name: "Заметки", mode: .private)
+        let note = library.createNote(in: mine.id, folder: nil, title: "Моя заметка")
+        let english = library.createSpace(name: "Personal")
+        let twin = library.createNotebook(in: english.id, name: "Notes", mode: .private)
+        _ = library.createSpace(name: "Работа")
+        _ = library.createSpace(name: "Work")
+
+        library.mergeCarriedDuplicates(anyName: false)
+        #expect(library.spaces.count == 2, "spaces: \(library.spaces.map(\.name))")
+        #expect(library.notebook(twin.id) == nil)
+        #expect(library.note(note.id)?.notebookId == mine.id)
     }
 
     /// Build 5 signed up without carrying: the new account got first-run content of its own, the
@@ -275,6 +407,34 @@ struct CoreLibraryTests {
         #expect(library.dailyNotebook?.id == kept.id)
     }
 
+    /// spec/07: «Delete data from this device» (and signing in to another account) leaves an
+    /// empty library, new keys and nothing to send.
+    @Test func wipingLocalDataLeavesNothingBehind() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        library.seedIfEmpty()
+        let space = try #require(library.spaces.first)
+        let notebook = try #require(library.notebooks(in: space.id).first)
+        let note = library.createNote(in: notebook.id, folder: nil, title: "Секрет")
+        let oldAccount = core.account.accountDocId
+        let oldMaster = try keys.masterKey()
+
+        try core.wipeLocalData()
+        #expect(library.data.notes.isEmpty)
+        #expect(library.data.spaces.isEmpty)
+        #expect(try store.document(note.id) == nil)
+        #expect(try store.document(notebook.id) == nil)
+        #expect(try store.document(oldAccount) == nil)
+        #expect(core.account.accountDocId != oldAccount)
+        #expect(try keys.notebookKey(notebook.id) == nil)
+        #expect(try keys.masterKey() != oldMaster)
+        #expect(core.pendingMoves.isEmpty)
+        // Nothing of the old library is carried into the next account.
+        #expect(try core.carryDeviceLibraries().isEmpty)
+    }
+
     @Test func notebookMetaCarriesNamesForAgents() throws {
         let core = try CoreLibrary.inMemory()
         let library = LibraryStore(backend: core)
@@ -286,6 +446,11 @@ struct CoreLibraryTests {
         library.updateNotebook(notebook.id) { $0.name = "Papers" }
         #expect(doc.crdt.mapValue("meta", ["name"])?.stringValue == "Papers")
         #expect(core.account.notebook(id: notebook.id)?.mode == .agent)
+        // The colour is copied too (document-model §3), and a space rename reaches the copy.
+        library.updateNotebook(notebook.id) { $0.color = .green }
+        #expect(doc.metaCopy?.color == Datascratch.Tint.green.rawValue)
+        library.updateSpace(space.id) { $0.name = "Job" }
+        #expect(doc.metaCopy?.spaceName == "Job")
     }
 
     @Test func trashAndDeleteForever() throws {
@@ -397,6 +562,8 @@ final class RecordingRemote: CoreLibraryRemote {
     var moved: [(noteId: String, notebookId: String)] = []
     func noteMoved(_ noteId: String, toNotebook notebookId: String) { moved.append((noteId, notebookId)) }
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?) { opened.append(crdt.docId) }
+    var keysMissing = 0
+    func notebookKeysMissing() { keysMissing += 1 }
 }
 
 @MainActor

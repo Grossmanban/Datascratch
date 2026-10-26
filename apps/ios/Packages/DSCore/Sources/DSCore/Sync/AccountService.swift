@@ -34,6 +34,7 @@ public actor AccountService {
         let accountDocId = EntityID.make()
         let material = try await Task.detached { try SignupMaterial.make(password: password, userId: userId) }.value
         let session = try await api.signup(email: email, material: material, userId: userId, accountDocId: accountDocId)
+        try keys.resolveKeptKeys(signingInAs: userId)
         try keys.setMasterKey(material.masterKey)
         let account = AccountDocument(accountDocId: accountDocId)
         try account.initialize()
@@ -47,6 +48,7 @@ public actor AccountService {
         let pre = try await api.prelogin(email: email)
         let derived = try await Task.detached { try DSCrypto.deriveKeys(password: password, salt: pre.salt.data, params: pre.kdf) }.value
         let session = try await api.login(email: email, loginKey: derived.loginKey, deviceName: deviceName)
+        try keys.resolveKeptKeys(signingInAs: session.userId)
         try keys.unlock(wrappedMasterKey: session.wrappedMasterKeyPassword.data, passwordKey: derived.passwordKey, userId: session.userId)
         try store.ensureDocument(docId: session.accountDocId, kind: .account, notebookId: nil)
         return session
@@ -60,6 +62,7 @@ public actor AccountService {
         let master = try DSCrypto.unwrapKey(start.wrappedMasterKeyRecovery.data, with: recoveryKey, ad: CryptoAD.masterByRecovery(userId: start.userId))
         let material = try await Task.detached { try PasswordChangeMaterial.make(newPassword: newPassword, masterKey: master, userId: start.userId) }.value
         let session = try await api.recoveryFinish(recoveryToken: start.recoveryToken, material: material)
+        try keys.resolveKeptKeys(signingInAs: session.userId)
         try keys.setMasterKey(master)
         return session
     }
@@ -89,8 +92,27 @@ public actor AccountService {
     public func securityEvents() async throws -> [SecurityEvent] { try await api.securityEvents() }
 
     /// Signs out and forgets all keys on this device.
-    public func logout() async throws {
+    ///
+    /// Keys of notebooks not on the server yet survive (spec/07): signing in to the same account
+    /// uploads them; another account or `eraseDeviceKeys()` removes them. Returns their ids.
+    /// Other keys come back from the server at the next sign-in. Show
+    /// `LocalStore.unsentChangeCount()` before signing out.
+    @discardableResult
+    public func logout() async throws -> [String] {
+        let owner = await api.currentSession?.userId
+        let unsent = (try? store.unsentNotebookIds()) ?? []
         try await api.logout()
+        if let owner, !unsent.isEmpty {
+            try keys.clear(keepingNotebooks: unsent, owner: owner)
+            return keys.keptNotebookKeys?.notebookIds ?? []
+        }
+        try keys.clear()
+        return []
+    }
+
+    /// «Удалить данные с этого устройства»: forgets every key, kept ones too (the app deletes
+    /// the local database).
+    public nonisolated func eraseDeviceKeys() throws {
         try keys.clear()
     }
 
@@ -103,6 +125,7 @@ public actor AccountService {
         let id = EntityID.make()
         let (key, wrapped) = try keys.createNotebookKey(notebookId: id)
         _ = try await api.createNotebook(id: id, mode: mode, wrappedKey: wrapped, notebookKey: mode == .agent ? key : nil)
+        keys.markNotebookKeyVerified(id)
         try await api.registerDoc(docId: id, kind: .notebook, notebookId: id)
         try store.ensureDocument(docId: id, kind: .notebook, notebookId: id)
         try store.setRegistered(id)
@@ -123,8 +146,43 @@ public actor AccountService {
 
     /// Unwraps the keys of all notebooks of the account (after sign-in on a new device).
     public func loadNotebookKeys() async throws {
+        _ = try await reconcileNotebookKeys()
+    }
+
+    /// A notebook whose local key differed from the server's and was replaced.
+    public struct NotebookKeyChange: Hashable, Sendable {
+        public var notebookId: String
+        public var previousKey: Data
+        public var key: Data
+    }
+
+    /// Makes every notebook key match the server's — `GET /notebooks`, the canonical wrapping:
+    /// fills in keys this device lacks (notebooks created on other devices) and replaces local
+    /// keys that differ. Call on every start before syncing and when the account document lists
+    /// a notebook this device has no key for. Each change needs repair:
+    /// `NotebookDocument.rewrapNoteKeys(from:to:)` and `SyncEngine.rekey(docId:)`.
+    public func reconcileNotebookKeys() async throws -> [NotebookKeyChange] {
+        var changes: [NotebookKeyChange] = []
         for nb in try await api.notebooks() {
-            try keys.addNotebookKey(wrapped: nb.wrappedKey.data, notebookId: nb.id)
+            guard let master = try keys.masterKey() else { throw AccountError.notSignedIn }
+            let key = try DSCrypto.unwrapKey(nb.wrappedKey.data, with: master, ad: CryptoAD.notebookKey(nb.id))
+            if let previous = try keys.adoptNotebookKey(key, notebookId: nb.id) {
+                changes.append(NotebookKeyChange(notebookId: nb.id, previousKey: previous, key: key))
+            }
+        }
+        return changes
+    }
+
+    /// The notebook's key for writing: this device's, else the server's (`GET /notebooks/:id/key`).
+    /// `nil` when the notebook is not on the server — only then may a new key be created
+    /// (`KeyRing.createNotebookKey` + `POST /notebooks`). Never create a key for a notebook that
+    /// came from another device.
+    public func notebookKeyForWriting(_ notebookId: String) async throws -> Data? {
+        if let key = try keys.notebookKey(notebookId) { return key }
+        do {
+            return try keys.addNotebookKey(wrapped: try await api.notebookKey(id: notebookId), notebookId: notebookId)
+        } catch APIError.server(404, _, _) {
+            return nil
         }
     }
 

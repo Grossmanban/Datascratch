@@ -68,6 +68,17 @@ export interface SyncClientOptions {
   storage: SyncStorage;
   /** Encryption key of a document (masterKey / notebookKey / noteKey). */
   keyFor: (docId: string) => Uint8Array | Promise<Uint8Array>;
+  /**
+   * Retired or alternate keys tried when `keyFor` cannot decrypt an item
+   * (e.g. after a key rotation or a client that sealed with a wrong key).
+   */
+  alternateKeysFor?: (docId: string) => Uint8Array[] | Promise<Uint8Array[]>;
+  /**
+   * After a catch-up that skipped items, subscribe once more from 0 so the
+   * server can answer with its latest snapshot (which may cover the bad items).
+   * Useful only with servers that send the snapshot whenever `since` is below it.
+   */
+  recoverSkippedFromSnapshot?: boolean;
   /** Defaults to the global WebSocket (browsers, Node ≥ 22). */
   createSocket?: WebSocketFactory;
   backoff?: { initialMs?: number; maxMs?: number };
@@ -85,8 +96,22 @@ export interface SyncClientOptions {
   random?: () => number;
 }
 
+/** A server item this client could not use (wrong key, corrupt data). */
+export interface SkippedUpdate {
+  docId: string;
+  seq: number;
+  /** Device that pushed it (null for snapshots). */
+  deviceId: string | null;
+  kind: "update" | "snapshot";
+  reason: "decrypt_failed" | "apply_failed";
+  message: string;
+  at: number;
+}
+
 interface Listeners {
   status: (status: SyncStatus) => void;
+  /** An item was skipped; the rest of the document keeps syncing. */
+  skipped: (item: SkippedUpdate) => void;
   synced: (docId: string) => void;
   error: (error: SyncClientError) => void;
   awareness: (docId: string, payload: Uint8Array, deviceId: string) => void;
@@ -126,7 +151,13 @@ export class SyncClient {
   private readonly opts: Required<
     Omit<
       SyncClientOptions,
-      "beforeSnapshot" | "createSocket" | "backoff" | "snapshotThresholds" | "storedDocs"
+      | "beforeSnapshot"
+      | "createSocket"
+      | "backoff"
+      | "snapshotThresholds"
+      | "storedDocs"
+      | "alternateKeysFor"
+      | "recoverSkippedFromSnapshot"
     >
   > &
     SyncClientOptions;
@@ -137,7 +168,10 @@ export class SyncClient {
     error: new Set(),
     awareness: new Set(),
     remoteUpdate: new Set(),
+    skipped: new Set(),
   };
+  private readonly skippedLog = new Map<string, SkippedUpdate[]>();
+  private readonly recoveryTried = new Set<string>();
   private socket: WebSocketLike | null = null;
   private _status: SyncStatus = "idle";
   private welcomed = false;
@@ -349,6 +383,12 @@ export class SyncClient {
     entry.detach();
     this.docs.delete(docId);
     if (this.welcomed) this.send({ type: "unsubscribe", docIds: [docId] });
+  }
+
+  /** Items skipped for a document (or all documents) since this client started. */
+  getSkipped(docId?: string): SkippedUpdate[] {
+    if (docId) return [...(this.skippedLog.get(docId) ?? [])];
+    return [...this.skippedLog.values()].flat();
   }
 
   isSynced(docId: string): boolean {
@@ -612,15 +652,18 @@ export class SyncClient {
       case "updates": {
         const entry = this.docs.get(msg.docId);
         if (!entry) return;
+        const skippedBefore = this.skippedLog.get(msg.docId)?.length ?? 0;
         if (msg.snapshot) {
-          if (await this.applyRemote(msg.docId, entry, msg.snapshot.payload)) {
+          const ref = { seq: msg.snapshot.seq, deviceId: null, kind: "snapshot" as const };
+          if (await this.applyRemote(msg.docId, entry, msg.snapshot.payload, ref)) {
             entry.state.updatesSinceSnapshot = 0;
             entry.state.bytesSinceSnapshot = 0;
           }
           entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.snapshot.seq);
         }
         for (const item of msg.items) {
-          const size = await this.applyRemote(msg.docId, entry, item.payload);
+          const ref = { seq: item.seq, deviceId: item.deviceId, kind: "update" as const };
+          const size = await this.applyRemote(msg.docId, entry, item.payload, ref);
           this.count(entry, size);
           entry.state.lastSeq = Math.max(entry.state.lastSeq, item.seq);
         }
@@ -630,13 +673,25 @@ export class SyncClient {
           entry.synced = true;
           for (const fn of this.listeners.synced) fn(msg.docId);
         }
+        const skippedNow = (this.skippedLog.get(msg.docId)?.length ?? 0) > skippedBefore;
+        if (
+          skippedNow &&
+          msg.upToDate &&
+          this.opts.recoverSkippedFromSnapshot &&
+          !this.recoveryTried.has(msg.docId)
+        ) {
+          // Ask once for the server's latest snapshot; it may cover the skipped items.
+          this.recoveryTried.add(msg.docId);
+          this.send({ type: "subscribe", docs: [{ docId: msg.docId, since: 0 }] });
+        }
         await this.maybeSnapshot(msg.docId, entry);
         return;
       }
       case "update": {
         const entry = this.docs.get(msg.docId);
         if (!entry) return;
-        const size = await this.applyRemote(msg.docId, entry, msg.payload);
+        const ref = { seq: msg.seq, deviceId: msg.deviceId, kind: "update" as const };
+        const size = await this.applyRemote(msg.docId, entry, msg.payload, ref);
         this.count(entry, size);
         entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.seq);
         await this.flushStored(msg.docId, entry);
@@ -717,17 +772,32 @@ export class SyncClient {
     }
   }
 
-  /** Decrypt and apply; returns the plaintext size (0 on failure). */
-  private async applyRemote(docId: string, entry: DocEntry, payload: string): Promise<number> {
+  /**
+   * Decrypt and apply; returns the plaintext size, 0 when the item is skipped.
+   * A bad item never stops the document: it is recorded and reported, and the
+   * cursor still advances past it.
+   */
+  private async applyRemote(
+    docId: string,
+    entry: DocEntry,
+    payload: string,
+    ref: { seq: number; deviceId: string | null; kind: "update" | "snapshot" },
+  ): Promise<number> {
     let update: Uint8Array;
     try {
-      const key = await this.opts.keyFor(docId);
-      update = decryptDocUpdate(key, docId, fromBase64Url(payload));
+      update = await this.decrypt(docId, payload);
     } catch (e) {
-      this.emitError({ code: "decrypt_failed", message: String(e), docId });
+      this.skip(docId, ref, "decrypt_failed", e);
       return 0;
     }
     if (!entry.doc) {
+      try {
+        // Validate before handing it to the app: a corrupt update must not poison the saved state.
+        Y.decodeUpdate(update);
+      } catch (e) {
+        this.skip(docId, ref, "apply_failed", e);
+        return 0;
+      }
       entry.stored.push(update);
       for (const fn of this.listeners.remoteUpdate) fn(docId, update);
       return update.length;
@@ -735,11 +805,53 @@ export class SyncClient {
     try {
       Y.applyUpdate(entry.doc, update, REMOTE_ORIGIN);
     } catch (e) {
-      this.emitError({ code: "apply_failed", message: String(e), docId });
+      this.skip(docId, ref, "apply_failed", e);
       return 0;
     }
     for (const fn of this.listeners.remoteUpdate) fn(docId, update);
     return update.length;
+  }
+
+  private async decrypt(docId: string, payload: string): Promise<Uint8Array> {
+    const envelope = fromBase64Url(payload);
+    try {
+      return decryptDocUpdate(await this.opts.keyFor(docId), docId, envelope);
+    } catch (first) {
+      for (const key of (await this.opts.alternateKeysFor?.(docId)) ?? []) {
+        try {
+          return decryptDocUpdate(key, docId, envelope);
+        } catch {
+          // try the next key
+        }
+      }
+      throw first;
+    }
+  }
+
+  private skip(
+    docId: string,
+    ref: { seq: number; deviceId: string | null; kind: "update" | "snapshot" },
+    reason: SkippedUpdate["reason"],
+    error: unknown,
+  ): void {
+    const item: SkippedUpdate = {
+      docId,
+      seq: ref.seq,
+      deviceId: ref.deviceId,
+      kind: ref.kind,
+      reason,
+      message: String(error),
+      at: Date.now(),
+    };
+    const log = this.skippedLog.get(docId) ?? [];
+    if (!log.some((s) => s.seq === item.seq && s.kind === item.kind)) log.push(item);
+    this.skippedLog.set(docId, log);
+    for (const fn of this.listeners.skipped) fn(item);
+    this.emitError({
+      code: reason,
+      message: `${ref.kind} seq ${ref.seq} skipped: ${String(error)}`,
+      docId,
+    });
   }
 
   private count(entry: DocEntry, size: number): void {

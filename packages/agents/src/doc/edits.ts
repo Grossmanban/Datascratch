@@ -333,7 +333,11 @@ export function initNoteContent(doc: Y.Doc, title: string, markdown: string, ctx
   doc.transact(() => {
     const root = contentOf(doc);
     insertBlocks(root, 0, [{ type: "title", attrs: {}, inline: title ? [{ text: title, marks: {} }] : [] }], { agentEdit: ctx.agentEdit });
-    const specs = markdown.trim() ? markdownToBlocks(markdown, ctx) : [];
+    let specs = markdown.trim() ? markdownToBlocks(markdown, ctx) : [];
+    // Agents often repeat the title as a leading "# Title": the title block already says it.
+    const first = specs[0];
+    const firstText = first?.type === "heading" && first.attrs.level === 1 ? (first.inline ?? []).map((i) => ("text" in i ? i.text : "")).join("") : null;
+    if (firstText !== null && firstText.trim().toLowerCase() === title.trim().toLowerCase()) specs = specs.slice(1);
     const body = specs.length ? specs : [{ type: "paragraph", attrs: {}, inline: [] } as BlockSpec];
     insertBlocks(root, 1, fitRoot(root, body), { agentEdit: ctx.agentEdit });
     const meta = doc.getMap("meta");

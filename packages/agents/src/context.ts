@@ -43,6 +43,12 @@ export interface LoadedDoc {
   doc: Y.Doc;
   /** Last server seq included in `doc`; used as a cache key. */
   seq: number;
+  /**
+   * Updates the server could not decrypt or apply and left out (logged with
+   * docId, seq and deviceId). The rest of the document is still returned, so
+   * one bad update never hides a whole notebook or note.
+   */
+  skipped?: { seq: number; deviceId: string | null; reason: string }[];
 }
 
 /**
@@ -79,6 +85,25 @@ export interface AgentDataSource {
    * which the plugin writes to `NoteMeta.wrappedKey` in the notebook index.
    */
   createNoteDoc(userId: string, notebookId: string, noteId: string, grantId?: string): Promise<{ wrappedKey: string }>;
+  /**
+   * Optional: moves a note document to another agent-mode notebook of the
+   * grant, atomically (one transaction): re-wraps the note key with the
+   * target notebook key (the key itself, history and attachments stay),
+   * calls `indexUpdates` with the new wrapped key and appends the returned
+   * Yjs updates to both notebook indexes, and changes the document's
+   * notebook (as `PATCH /v1/docs/:id` does). Either everything is stored or
+   * nothing. Without it, notes can only be moved between folders of one notebook.
+   */
+  moveNoteDoc?(
+    userId: string,
+    move: {
+      noteId: string;
+      fromNotebookId: string;
+      toNotebookId: string;
+      origin: AgentEditOrigin;
+      indexUpdates(wrappedKey: string): { from: Uint8Array; to: Uint8Array };
+    },
+  ): Promise<{ fromSeq: number; toSeq: number }>;
   /**
    * Optional: decrypted bytes of an image attachment (PNG/JPEG), used to draw
    * handwriting made on top of pictures. When absent a placeholder is drawn.

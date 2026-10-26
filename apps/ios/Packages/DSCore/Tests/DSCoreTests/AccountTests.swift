@@ -89,6 +89,10 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
             state.withLock { $0.attachments[id] = (b["chunkCount"] as! Int, [:]) }
             return (204, nil)
         default:
+            if parts.count == 4, parts[1] == "notebooks", parts[3] == "key", method == "GET" {
+                guard let nb = state.withLock({ $0.notebooks[parts[2]] }) else { return error(404, "not_found") }
+                return (200, ["wrappedKey": nb["wrappedKey"]!])
+            }
             if parts.count >= 3, parts[1] == "notebooks", method == "PATCH" {
                 state.withLock { $0.notebooks[parts[2]]?["mode"] = b["mode"] }
                 return (204, nil)
@@ -119,6 +123,51 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
     func makeService(_ server: FakeRESTServer) throws -> AccountService {
         let api = APIClient(baseURL: URL(string: "https://example.com")!, transport: server, sessionStore: SecretSessionStore(store: InMemorySecretStore()))
         return AccountService(api: api, keys: KeyRing(store: InMemorySecretStore()), store: try LocalStore.inMemory())
+    }
+
+    /// spec/07: signing out keeps the keys of notebooks not on the server yet; signing in to the
+    /// same account keeps them as ordinary keys, another account or «Удалить данные» removes them.
+    @Test func signOutKeepsKeysOfUnsentNotebooks() async throws {
+        let server = FakeRESTServer()
+        let device = try makeService(server)
+        let signup = try await device.signup(email: "keep@example.com", password: "pw")
+        let space = Space(name: "S", order: 1)
+        try signup.account.putSpace(space)
+        let sent = try await device.createNotebook(name: "Sent", spaceId: space.id, order: 1, in: signup.account)
+        let unsent = EntityID.make()
+        try device.store.ensureDocument(docId: unsent, kind: .notebook, notebookId: unsent)
+        let (unsentKey, _) = try device.keys.createNotebookKey(notebookId: unsent)
+        try device.store.appendLocalUpdate(docId: unsent, update: Data([1]), origin: .local)
+        #expect(try device.store.unsentNotebookIds() == [unsent])
+        #expect(try device.store.unsentChangeCount() == 2)
+
+        #expect(try await device.logout() == [unsent])
+        #expect(try device.keys.notebookKey(unsent) == unsentKey)
+        #expect(try device.keys.notebookKey(sent.notebookId) == nil)
+        #expect(try device.keys.masterKey() == nil)
+        #expect(device.keys.keptNotebookKeys?.owner == signup.session.userId)
+
+        // Same account: the key stays and is ordinary again; the rest comes from the server.
+        try await device.login(email: "keep@example.com", password: "pw", deviceName: "iPad")
+        #expect(try device.keys.notebookKey(unsent) == unsentKey)
+        #expect(device.keys.keptNotebookKeys == nil)
+        try await device.loadNotebookKeys()
+        #expect(try device.keys.notebookKey(sent.notebookId) != nil)
+
+        // Another account: kept keys are removed.
+        try await device.logout()
+        #expect(try device.keys.notebookKey(unsent) == unsentKey)
+        _ = try await device.signup(email: "other@example.com", password: "pw")
+        #expect(try device.keys.notebookKey(unsent) == nil)
+
+        // «Удалить данные с этого устройства».
+        try device.store.ensureDocument(docId: unsent, kind: .notebook, notebookId: unsent)
+        _ = try device.keys.createNotebookKey(notebookId: unsent)
+        try await device.logout()
+        #expect(try device.keys.notebookKey(unsent) != nil)
+        try device.eraseDeviceKeys()
+        #expect(try device.keys.notebookKey(unsent) == nil)
+        #expect(device.keys.keptNotebookKeys == nil)
     }
 
     @Test func signupLoginNotebookNoteRecoveryAttachment() async throws {

@@ -69,9 +69,41 @@ export const TextAlign = Extension.create({
   },
 });
 
+/**
+ * Column alignment of a table (document-model.md §4.2): the cell attribute `align` on
+ * `tableHeader`/`tableCell`, as Markdown writes it (`:---`, `:---:`, `---:`). No attribute =
+ * default alignment. Agents and iOS write the same attribute.
+ */
+export const TableCellAlign = Extension.create({
+  name: "dsTableAlign",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["tableHeader", "tableCell"],
+        attributes: {
+          align: {
+            default: null,
+            parseHTML: (el) => (el as HTMLElement).style.textAlign || (el as HTMLElement).getAttribute("align") || null,
+            renderHTML: (attrs) => (attrs.align ? { style: `text-align: ${attrs.align}` } : {}),
+          },
+        },
+      },
+    ];
+  },
+  addCommands() {
+    return {
+      setColumnAlign:
+        (align: "left" | "center" | "right" | null) =>
+        ({ commands }) =>
+          ["tableHeader", "tableCell"].map((t) => commands.updateAttributes(t, { align })).some(Boolean),
+    };
+  },
+});
+
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     dsTextAlign: { setTextAlign: (align: "left" | "center" | "right" | "justify" | null) => ReturnType };
+    dsTableAlign: { setColumnAlign: (align: "left" | "center" | "right" | null) => ReturnType };
     dsHighlight: { toggleHighlight: (color?: string) => ReturnType; unsetHighlight: () => ReturnType };
     dsTextColor: { setTextColor: (color: string) => ReturnType; unsetTextColor: () => ReturnType };
     dsAgentEdit: { acceptAgentEdits: () => ReturnType };

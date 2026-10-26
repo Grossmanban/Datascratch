@@ -130,7 +130,11 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
 
         let space = Space(name: "Personal", order: 1)
         try signup.account.putSpace(space)
-        let notebook = try await device1.createNotebook(name: "Journal", spaceId: space.id, order: 1, in: signup.account)
+        let notebook = try await device1.createNotebook(name: "Journal", spaceId: space.id, icon: "📓", color: "green", order: 1, in: signup.account)
+        #expect(notebook.metaCopy == .init(name: "Journal", icon: "📓", color: "green", spaceId: space.id, spaceName: "Personal", spaceIcon: nil))
+        try signup.account.updateNotebook(id: notebook.notebookId, ["color": .string(value: "red")])
+        try device1.refreshNotebookMeta(notebook, in: signup.account)
+        #expect(notebook.metaCopy?.color == "red")
         #expect(signup.account.notebooks(inSpace: space.id).map(\.name) == ["Journal"])
         #expect(server.state.withLock { $0.docs.contains(notebook.notebookId) })
         let note = try await device1.createNote(in: notebook, title: "First")

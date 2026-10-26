@@ -24,6 +24,54 @@ public final class NotebookDocument: Sendable {
 
     public var formatVersion: Int { crdt.mapValue("meta", ["formatVersion"])?.intValue ?? currentFormatVersion }
 
+    /// `meta.name/icon/color/space`: copy of the notebook's and its space's names from the
+    /// account document, which the server (and agents) cannot read (document-model.md §3).
+    public struct MetaCopy: Hashable, Sendable {
+        public var name: String
+        public var icon: String?
+        /// Colour token, as in `NotebookRef.color`.
+        public var color: String?
+        public var spaceId: String
+        public var spaceName: String
+        public var spaceIcon: String?
+
+        public init(name: String, icon: String?, color: String?, spaceId: String, spaceName: String, spaceIcon: String?) {
+            self.name = name
+            self.icon = icon
+            self.color = color
+            self.spaceId = spaceId
+            self.spaceName = spaceName
+            self.spaceIcon = spaceIcon
+        }
+
+        /// From the account document's records.
+        public init(_ notebook: NotebookRef, space: Space?) {
+            self.init(name: notebook.name, icon: notebook.icon, color: notebook.color, spaceId: notebook.spaceId,
+                      spaceName: space?.name ?? "", spaceIcon: space?.icon)
+        }
+    }
+
+    public var metaCopy: MetaCopy? {
+        guard let name = crdt.mapValue("meta", ["name"])?.stringValue else { return nil }
+        let space = crdt.mapValue("meta", ["space"])
+        return MetaCopy(name: name, icon: crdt.mapValue("meta", ["icon"])?.stringValue, color: crdt.mapValue("meta", ["color"])?.stringValue,
+                        spaceId: space?["id"]?.stringValue ?? "", spaceName: space?["name"]?.stringValue ?? "", spaceIcon: space?["icon"]?.stringValue)
+    }
+
+    /// Writes the copy; unchanged values are not written again. Call on create, rename,
+    /// icon/colour change, switching to «для агентов» and renaming the space.
+    public func setMetaCopy(_ copy: MetaCopy, origin: TransactionOrigin = .local) throws {
+        guard metaCopy != copy else { return }
+        try crdt.transact(origin: origin) { txn in
+            txn.set("meta", key: "name", .string(value: copy.name))
+            txn.set("meta", key: "icon", .optionalString(copy.icon))
+            txn.set("meta", key: "color", .optionalString(copy.color))
+            txn.set("meta", key: "space", .object(entries: [
+                "id": .string(value: copy.spaceId), "name": .string(value: copy.spaceName), "icon": .optionalString(copy.spaceIcon),
+            ]))
+        }
+    }
+
     // MARK: Folders
 
     public func folders() -> [Folder] { crdt.records("folders", as: Folder.self).sorted { ($0.order, $0.id) < ($1.order, $1.id) } }
@@ -97,6 +145,13 @@ public final class NotebookDocument: Sendable {
 
     public func restoreNote(id: String, origin: TransactionOrigin = .local) throws {
         try updateNote(id: id, ["trashedAt": .null], origin: origin)
+    }
+
+    /// «Понятно» on the «Создано агентом» strip (D-45): `createdByAgent = null`, the strip goes
+    /// away on every device.
+    public func clearCreatedByAgent(noteId: String, origin: TransactionOrigin = .local) throws {
+        guard note(id: noteId)?.createdByAgent != nil else { return }
+        try updateNote(id: noteId, ["createdByAgent": .null], origin: origin)
     }
 
     /// Removes the note's metadata for good (after the 30-day trash period).

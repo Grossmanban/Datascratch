@@ -10,6 +10,7 @@ import { PageTitle, TopBar } from "@/features/shell/PageHeader";
 import { formatDay, formatLongDate, formatWeekday, today } from "@/lib/dates";
 import { cn, EmptyState } from "@/ui";
 import { clearLinger, TaskItems, useLinger } from "./TaskList";
+import { withIcon } from "@/lib/glyph";
 
 export type TaskView = "inbox" | "today" | "upcoming" | "all" | "logbook";
 
@@ -108,7 +109,7 @@ export function TasksPage() {
               t("tasks.inbox")
             ) : (
               <Link to="/doc/$noteId" params={{ noteId }} className="text-ink hover:text-accent">
-                {notes[noteId]?.icon} {noteTitle(notes[noteId], t("app.untitled"))}
+                {withIcon(notes[noteId]?.icon, noteTitle(notes[noteId], t("app.untitled")))}
               </Link>
             )
           }

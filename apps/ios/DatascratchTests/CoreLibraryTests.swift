@@ -2,7 +2,14 @@
 import DSCore
 import Foundation
 import Testing
+#if canImport(DSEditorCore)
+import DSEditorCore
+import DSEditorModel
+#endif
 @testable import Datascratch
+
+@MainActor
+private final class Counter { var value = 0 }
 
 @MainActor
 struct CoreLibraryTests {
@@ -272,6 +279,48 @@ struct CoreLibraryTests {
         let fresh = try #require(core.refreshNote(note.id, notebookId: notebook.id))
         #expect(fresh.0.title == "Agent title")
         #expect(try core.notebookDocument(notebook.id).note(id: note.id)?.title == "Agent title")
+    }
+
+    /// A change made on another device (a rollback on the web) reaches the open note's editor
+    /// and the list without reopening anything (prod 2026-10-26).
+    @Test func remoteChangesReachTheOpenNoteAndTheList() async throws {
+        let core = try CoreLibrary.inMemory()
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "N", mode: .private)
+        let note = library.createNote(in: notebook.id, title: "Draft")
+        let doc = try core.noteDocument(note.id, notebookId: notebook.id)
+        #if canImport(DSEditorCore)
+        let editor = CoreEditorDocument(note: doc)
+        let remoteChanges = Counter()
+        let token = editor.observe { if $0.origin == .remote { remoteChanges.value += 1 } }
+        defer { _ = token }
+        #endif
+
+        // The other device edits the note and its entry in the notebook index.
+        let otherNote = NoteDocument(CRDTDocument(kind: .note, docId: note.id))
+        try otherNote.crdt.applyUpdates([try doc.crdt.encodeStateAsUpdate()], origin: .remote)
+        let blocks = try otherNote.blocks()
+        let titleIndex = try #require(blocks.firstIndex { $0.type == BlockType.title })
+        try otherNote.insertText("Rolled back ", at: 0, inBlock: [UInt32(titleIndex)])
+        try doc.crdt.applyUpdates([try otherNote.crdt.encodeStateAsUpdate(since: doc.crdt.stateVector())], origin: .remote)
+
+        let index = try core.notebookDocument(notebook.id)
+        let otherIndex = NotebookDocument(CRDTDocument(kind: .notebook, docId: notebook.id))
+        try otherIndex.crdt.applyUpdates([try index.crdt.encodeStateAsUpdate()], origin: .remote)
+        var meta = try #require(otherIndex.note(id: note.id))
+        meta.title = "Rolled back Draft"
+        try otherIndex.putNote(meta)
+        try index.crdt.applyUpdates([try otherIndex.crdt.encodeStateAsUpdate(since: index.crdt.stateVector())], origin: .remote)
+
+        for _ in 0..<40 where library.note(note.id)?.title != "Rolled back Draft" {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(try doc.title() == "Rolled back Draft")
+        #expect(library.note(note.id)?.title == "Rolled back Draft")
+        #if canImport(DSEditorCore)
+        #expect(remoteChanges.value > 0)
+        #endif
     }
 
     /// The user's cover image lives in `meta.cover` and its thumbnail in `NoteMeta.coverThumb`.

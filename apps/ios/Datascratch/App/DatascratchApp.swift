@@ -4,6 +4,7 @@ import SwiftUI
 struct DatascratchApp: App {
     @State private var app = AppModel()
     @Environment(\.scenePhase) private var scenePhase
+    @State private var wasInBackground = false
 
     @ViewBuilder private var mainContent: some View {
         #if canImport(DSEditor)
@@ -30,6 +31,16 @@ struct DatascratchApp: App {
             if phase == .active {
                 app.settings.applyAppearanceToWindows()
                 app.refreshRecoveryKeyState()
+            }
+            // iOS drops the sync socket while the app is in the background, and a socket that
+            // looks alive may no longer deliver: coming back reconnects at once, which catches
+            // every open document up (remote edits showed only after a relaunch, 2026-10-26).
+            if phase == .background { wasInBackground = true }
+            if phase == .active, wasInBackground {
+                wasInBackground = false
+                #if canImport(DSCore)
+                app.connection?.reconnect()
+                #endif
             }
         }
 

@@ -1,1 +1,0 @@
-- Экраны «Настройки» и «Аккаунт» в стиле «Тихой бумаги» (по отзыву пользователя на build 8): компоненты DSDesign `DSSettingsSection`, `DSSettingsRow` (единые нейтральные иконки, шеврон/значение/бейдж/переключатель, сдержанный danger), `DSProfileHeader`, `DSSyncChip`, `DSCallout`; образцы экранов `DSSettingsSampleScreen` со снимками в CI.

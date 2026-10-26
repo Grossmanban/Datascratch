@@ -85,7 +85,7 @@ export const opBodies = {
 
 export const notebooksModeApi = {
   setMode: (id: string, mode: NotebookMode, notebookKey?: string) =>
-    api.patch<void>(`/notebooks/${id}/mode`, { mode, ...(notebookKey ? { notebookKey } : {}) }),
+    api.patch<void>(`/notebooks/${id}/mode`, { mode, ...(notebookKey ? { notebookKey } : {}) }, { retry: true }),
 };
 
 export const sharesApi = {

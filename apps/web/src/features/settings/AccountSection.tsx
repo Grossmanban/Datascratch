@@ -6,7 +6,8 @@ import { ApiError } from "@/api/client";
 import { accountApi } from "@/api/endpoints";
 import { changePassword, loginKeyFor } from "@/auth/flows";
 import { createNewRecoveryKey, dropStaleRecoveryKey, useRecoveryUnconfirmed } from "@/auth/recovery";
-import { confirmRecoveryKeySaved, getRecoveryKey, signOut, useAuth } from "@/auth/session";
+import { confirmRecoveryKeySaved, getRecoveryKey, signOut, unsentCount, useAuth } from "@/auth/session";
+import { runtime } from "@/data/runtime";
 import { RecoveryKeyPanel } from "@/features/auth/RecoveryKeyPanel";
 import { MIN_PASSWORD } from "@/features/auth/SignupPage";
 import { formatDateTime, formatRelative } from "@/lib/dates";
@@ -39,14 +40,16 @@ export function AccountSection() {
             size="sm"
             icon={<LogOut className="size-3.5" />}
             onClick={async () => {
+              // spec/07: unsent changes are kept and sent after signing in to this account again.
+              const unsent = await unsentCount();
               const ok = await confirmDialog({
                 title: t("settings.signOut"),
-                description: t("settings.signOutText"),
+                description: unsent > 0 ? t("settings.signOutUnsent", { count: unsent }) : t("settings.signOutText"),
                 confirmLabel: t("settings.signOut"),
-                cancelLabel: t("common.cancel"),
-                danger: pending > 0,
+                cancelLabel: unsent > 0 ? t("settings.sendFirst") : t("common.cancel"),
               });
               if (ok) await signOut();
+              else if (unsent > 0) void runtime().retryFailed();
             }}
             data-testid="sign-out"
           >
@@ -313,7 +316,7 @@ function DeleteAccountDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     setError(null);
     try {
       await accountApi.deleteAccount(await loginKeyFor(password));
-      await signOut();
+      await signOut({ wipe: true });
     } catch (err) {
       setError(err instanceof ApiError && err.status === 403 ? t("settings.wrongPassword") : t("auth.serverUnavailable"));
     } finally {

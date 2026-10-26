@@ -197,6 +197,10 @@ public final class EditorView: UIView {
             if p.y > self.bounds.maxY - self.overlayInsets.bottom || p.y < self.bounds.minY + self.overlayInsets.top { return false }
             if let header = self.headerView, header.bounds.contains(touch.location(in: header)) { return false }
             if self.agentBannerVisible, self.agentBanner.bounds.contains(touch.location(in: self.agentBanner)) { return false }
+            if touch.type == .pencil, !Self.pencilSeen {
+                Self.pencilSeen = true
+                DispatchQueue.main.async { self.setNeedsLayout() }
+            }
             return touch.type == .pencil || (self.tools.allowsFingerDrawing && touch.type == .direct)
         }
         inkInput.onBegan = { [weak self] s in
@@ -324,7 +328,11 @@ public final class EditorView: UIView {
     }
 
     private func dynamicTypeChanged() {
-        let size = EditorTheme.dynamicBaseSize(for: traitCollection)
+        setBaseFontSize(EditorTheme.dynamicBaseSize(for: traitCollection))
+    }
+
+    /// Body text size (Dynamic Type); everything else scales with it.
+    func setBaseFontSize(_ size: CGFloat) {
         guard size != theme.baseFontSize else { return }
         theme.baseFontSize = size
         applyTheme()
@@ -335,6 +343,7 @@ public final class EditorView: UIView {
         renderer.theme = theme
         factory.theme = theme
         paper.paper = theme.style.paper
+        alignPaper(frame: paper.frame)
         setNeedsLayout()
     }
 
@@ -347,13 +356,15 @@ public final class EditorView: UIView {
         let column = theme.columnWidth(available: max(200, available))
         let side = max(theme.horizontalPadding, (bounds.width - column) / 2)
         layoutHeader()
-        // Room to draw below the last paragraph: at least one screen (`strokes.md` §4, free drawing).
         agentBanner.isHidden = !agentBannerVisible
         if agentBannerVisible {
             let frame = CGRect(x: side, y: headerHeight + 16, width: bounds.width - side * 2, height: AgentEditsBanner.height)
             if agentBanner.frame != frame { agentBanner.frame = frame }
         }
-        let inset = UIEdgeInsets(top: 32 + headerHeight + agentBannerSpace, left: side, bottom: max(160, bounds.height), right: side)
+        // Room to draw below the last paragraph — at least one screen — only while drawing is
+        // available (`strokes.md` §4: a Pencil has been used, or finger drawing is on).
+        let room = drawingAvailable ? max(160, bounds.height) : 160
+        let inset = UIEdgeInsets(top: 32 + headerHeight + agentBannerSpace, left: side, bottom: room, right: side)
         if textView.textContainerInset != inset { textView.textContainerInset = inset }
         applyKeyboardInset()
     }
@@ -413,6 +424,28 @@ public final class EditorView: UIView {
         }
     }
 
+    /// Ruled, grid and dot paper follow the text: the pitch is the body line height and the
+    /// rules sit under the lines, which start at the top of the text container.
+    private func alignPaper(frame: CGRect) {
+        guard let pitch = theme.paperPitch else { return }
+        let inset = textView.textContainerInset
+        paper.pitch = pitch
+        paper.ruleLift = (abs(theme.bodyFont.descender) - 2).rounded()
+        paper.phase = CGPoint(x: inset.left - frame.minX, y: inset.top - frame.minY)
+    }
+
+    // MARK: - Drawing availability
+
+    /// An Apple Pencil has drawn on this device (remembered across launches), or the system says
+    /// the person draws only with a Pencil.
+    static var pencilSeen: Bool = UserDefaults.standard.bool(forKey: "ds.pencilSeen") || UIPencilInteraction.prefersPencilOnlyDrawing {
+        didSet { if pencilSeen { UserDefaults.standard.set(true, forKey: "ds.pencilSeen") } }
+    }
+
+    /// Free drawing is possible here: a Pencil has been used, or finger drawing is on. The room
+    /// below the last paragraph (one screen for drawing) exists only then.
+    public var drawingAvailable: Bool { tools.allowsFingerDrawing || Self.pencilSeen }
+
     /// Scrolls the least needed to show the caret line above the bottom inset.
     func scrollCaretIntoView() {
         guard textView.isFirstResponder, let range = textView.selectedTextRange else { return }
@@ -442,6 +475,7 @@ public final class EditorView: UIView {
         let size = CGSize(width: max(textView.contentSize.width, textView.bounds.width),
                           height: max(textView.contentSize.height, textView.bounds.height) + 400)
         let frame = CGRect(origin: CGPoint(x: 0, y: -200), size: size)
+        alignPaper(frame: frame)
         if paper.frame != frame {
             paper.frame = frame
             inkUnder.frame = CGRect(origin: .zero, size: size)
@@ -811,6 +845,7 @@ public final class EditorView: UIView {
 
     private func toolsChanged() {
         EditorDiagnostics.log("tools changed: \(tools.mode.rawValue)")
+        setNeedsLayout() // finger drawing changes the room below the text
         // The pen recognizer wins pen touches by itself (it begins on touch down and prevents
         // scrolling), so the scroll recognizer's touch types are left alone: changing them while a
         // tool button's touch is being dispatched made UIKit's gesture environment throw.

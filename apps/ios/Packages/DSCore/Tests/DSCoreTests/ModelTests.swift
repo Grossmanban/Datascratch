@@ -138,6 +138,48 @@ import Testing
 }
 
 @Suite struct IndexDocumentTests {
+    /// D-45: `createdByAgent` reads in both record paths, tolerates junk, and «Понятно» clears it.
+    @Test func noteCreatedByAgent() throws {
+        let nb = NotebookDocument(notebookId: EntityID.make())
+        try nb.initialize()
+        let author = AgentAuthor(agentId: EntityID.make(), agentName: "Claude", at: "2026-10-26T09:00:00.000Z")
+        let byAgent = NoteMeta(title: "From Claude", wrappedKey: "AQ", createdByAgent: author)
+        let mine = NoteMeta(title: "Mine", wrappedKey: "AQ")
+        try nb.putNote(byAgent)
+        try nb.putNote(mine)
+        #expect(nb.note(id: byAgent.id)?.createdByAgent == author)
+        #expect(nb.notes().first { $0.id == byAgent.id }?.createdByAgent == author)
+        #expect(nb.note(id: mine.id)?.createdByAgent == nil)
+
+        // Written by another client with extra keys, or malformed: tolerated.
+        try nb.updateNote(id: mine.id, ["createdByAgent": .object(entries: [
+            "agentId": .string(value: "g"), "agentName": .string(value: "Bot"), "at": .string(value: "2026-10-26T09:00:00.000Z"), "future": .bool(value: true),
+        ])])
+        #expect(nb.notes().first { $0.id == mine.id }?.createdByAgent?.agentName == "Bot")
+        try nb.updateNote(id: mine.id, ["createdByAgent": .string(value: "garbage")])
+        #expect(nb.note(id: mine.id)?.createdByAgent == nil)
+        #expect(nb.notes().first { $0.id == mine.id }?.createdByAgent == nil)
+
+        try nb.clearCreatedByAgent(noteId: byAgent.id)
+        #expect(nb.note(id: byAgent.id)?.createdByAgent == nil)
+        #expect(nb.crdt.mapValue("notes", [byAgent.id, "createdByAgent"])?.isNull == true)
+    }
+
+    /// `meta` copy of the notebook (name, icon, colour, space) for agents.
+    @Test func notebookMetaCopy() throws {
+        let nb = NotebookDocument(notebookId: EntityID.make())
+        try nb.initialize()
+        #expect(nb.metaCopy == nil)
+        let space = Space(name: "Work", icon: "💼", order: 1)
+        let ref = NotebookRef(id: nb.notebookId, spaceId: space.id, name: "Plans", icon: "📒", color: "blue", order: 1, mode: .agent)
+        try nb.setMetaCopy(.init(ref, space: space))
+        #expect(nb.metaCopy == .init(name: "Plans", icon: "📒", color: "blue", spaceId: space.id, spaceName: "Work", spaceIcon: "💼"))
+        #expect(nb.crdt.mapValue("meta", ["color"])?.stringValue == "blue")
+        let before = nb.crdt.stateVector()
+        try nb.setMetaCopy(.init(ref, space: space))
+        #expect(nb.crdt.stateVector() == before)
+    }
+
     @Test func notebookFoldersAndNotes() throws {
         let nb = NotebookDocument(notebookId: EntityID.make())
         try nb.initialize()

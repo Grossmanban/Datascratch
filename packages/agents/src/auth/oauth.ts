@@ -419,7 +419,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
           return u.host || u.protocol;
         })(),
         userEmail: user.email ?? null,
-        notebooks: notebooks.map((n) => ({ id: n.id, name: n.name, space: n.space?.name ?? null, icon: n.icon, color: n.color ?? null })),
+        notebooks: notebooks.map((n) => ({ id: n.id, name: n.name, space: n.space?.name ?? null, icon: n.icon, color: n.color ?? null, unavailable: n.unavailable })),
         writeRequested: requested.includes(SCOPE_WRITE),
         request: pending,
         action: "/oauth/authorize",

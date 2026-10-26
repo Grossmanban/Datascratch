@@ -178,6 +178,23 @@ describe('data source', () => {
     priv.client.close();
   });
 
+  it('skips an undecryptable update instead of hiding the whole document', async () => {
+    const { notebookId, noteId, client } = await setupNotebook();
+    const g = grant([notebookId], 'read_write');
+    await agents.store.insertGrant(g);
+    // A client seals an update of the notebook index with a wrong key.
+    await client.push(notebookId, await seal(rnd(32), new Uint8Array([1, 2, 3]), AD.doc(notebookId)));
+    const nb = (await agents.data.loadDoc(u.userId, notebookId, g.id))!;
+    expect(nb).not.toBeNull();
+    expect(nb.skipped).toEqual([{ seq: 2, deviceId: expect.any(String), reason: 'decrypt' }]);
+    expect((nb.doc.getMap('notes').get(noteId) as Y.Map<unknown>).get('title')).toBe('Hello');
+    // The note still loads: its key comes from the partly readable notebook index.
+    const note = (await agents.data.loadDoc(u.userId, noteId, g.id))!;
+    expect(note.doc.getText('t').toString()).toBe('from user');
+    expect(note.skipped).toBeUndefined();
+    client.close();
+  });
+
   it('creates notes whose wrapped key the notebook key opens', async () => {
     const { notebookId, notebookKey, client } = await setupNotebook();
     const g = grant([notebookId], 'read_write');

@@ -1353,9 +1353,14 @@ public final class EditorView: UIView {
         if let link = noteLink(at: point) {
             DSHaptics.selection()
             EditorDiagnostics.log("opening link \(link) (handlers: id \(onOpenNote != nil), title \(onOpenNoteTitled != nil))")
-            switch link {
-            case .id(let id): onOpenNote?(id)
-            case .title(let title): onOpenNoteTitled?(title)
+            // Act on the next turn: presenting UI (the host's alert, a new screen) while UIKit is
+            // still dispatching this touch crashes its gesture environment (`_delayTouchesForEvent`).
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                switch link {
+                case .id(let id): self.onOpenNote?(id)
+                case .title(let title): self.onOpenNoteTitled?(title)
+                }
             }
             return
         }
@@ -1363,8 +1368,12 @@ public final class EditorView: UIView {
             // Same choices as the task context menu (`spec/12`): reschedule or remove the date.
             DSHaptics.selection()
             dateMenuTarget = chip
-            editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: "taskDate",
-                                                                   sourcePoint: CGPoint(x: chip.rect.midX, y: chip.rect.minY)))
+            // Next turn, for the same reason as links above: the menu's own recognizers must not
+            // join a touch UIKit is still delivering.
+            DispatchQueue.main.async { [weak self] in
+                self?.editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: "taskDate",
+                                                                             sourcePoint: CGPoint(x: chip.rect.midX, y: chip.rect.minY)))
+            }
             return
         }
         guard let box = taskCheckbox(at: g.location(in: textView)) else { return }

@@ -1050,9 +1050,9 @@
     "semantic_hash": "ff372fbbcd56eb444ba92f26be7bdadc"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1793056163.3466568,
-    "seen": 1793056226.059547,
-    "ast_hash": "2e1e9b07475727f66d5bb89b698e2fae",
+    "mtime": 1793057912.142199,
+    "seen": 1793057995.955779,
+    "ast_hash": "2c29592632885b8f41d279de77515553",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormatMenu.swift": {
@@ -1388,19 +1388,19 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793056248.1870792,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793056248.1870823,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793056248.1870837,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2636,7 +2636,7 @@
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792967462.0829601,
     "seen": 1793056248.1874142,
-    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "infra/deploy/docker-compose.yml": {

@@ -655,9 +655,14 @@ public struct DSPenToolbar: View {
                         .frame(width: 28, height: 28)
                 }
                 if highlighter {
-                    Capsule()
-                        .fill(selection.color.color.opacity(0.8))
-                        .frame(width: 6 + width.barThickness * 0.25, height: width.barThickness * 0.6)
+                    // Real relative thickness as a short bar, with an edge so pale highlights stay visible.
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(selection.color.color)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                .strokeBorder(Color.dsPrimary.opacity(0.25), lineWidth: 0.75)
+                        )
+                        .frame(width: 14, height: [6.0, 10.0, 14.0][max(0, min(2, width.step - 1))])
                 } else {
                     Circle()
                         .fill(selection.color.color)

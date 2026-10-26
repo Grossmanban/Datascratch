@@ -61,11 +61,15 @@ final class DemoModel {
         editor.onScroll = { [weak self] y in self?.scrollOffset = y }
         editor.onPaletteRequest = { [weak self] _ in self?.showPalette = true }
         editor.onOpenNote = { [weak self] id in
+            if self?.isUITesting == true { NSLog("DIAG demo onOpenNote %@ (model %@)", id, self == nil ? "gone" : "alive") }
             self?.status = "Ссылка на заметку \(id.prefix(8))…"
             self?.openedNote = id
             self?.openedNoteTitle = self?.editor.attachmentResolver?.noteTitle(for: id) ?? id
         }
-        editor.onOpenNoteTitled = { [weak self] title in self?.pendingNoteTitle = title }
+        editor.onOpenNoteTitled = { [weak self] title in
+            if self?.isUITesting == true { NSLog("DIAG demo onOpenNoteTitled %@", title) }
+            self?.pendingNoteTitle = title
+        }
         editor.onSlashMenu = { [weak self] menu in
             self?.slashMenu = menu
             self?.slashSelection = menu?.items.first?.id

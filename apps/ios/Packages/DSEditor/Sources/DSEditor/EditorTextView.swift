@@ -49,12 +49,28 @@ final class EditorTextView: UITextView {
     /// (caret placement, which also brought up the keyboard and won over the link tap) do not
     /// begin there. Long press and selection still work for editing the link's text.
     var tapTargetAt: ((CGPoint) -> Bool)?
-    /// The editor's own tap recognizer (links, task boxes).
-    weak var editorTap: UIGestureRecognizer?
+    /// The editor's own tap recognizer (links, task boxes, date chips). The text view's own single
+    /// taps wait for it to fail: it begins only on a tap target and fails at once elsewhere, so
+    /// caret placement is not delayed, and on a target it always wins (date chip taps were taken
+    /// by the caret tap on iPad, build 16).
+    weak var editorTap: UIGestureRecognizer? {
+        didSet { gestureRecognizers?.forEach(yieldToEditorTap) }
+    }
+
+    override func addGestureRecognizer(_ g: UIGestureRecognizer) {
+        super.addGestureRecognizer(g)
+        yieldToEditorTap(g)
+    }
+
+    private func yieldToEditorTap(_ g: UIGestureRecognizer) {
+        guard let editorTap, g !== editorTap, let tap = g as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1 else { return }
+        tap.require(toFail: editorTap)
+    }
 
     override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
         if g !== editorTap, let tap = g as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1,
            tapTargetAt?(g.location(in: self)) == true {
+            EditorDiagnostics.log("system tap \(NSStringFromClass(type(of: g))) refused on a tap target")
             return false
         }
         return super.gestureRecognizerShouldBegin(g)

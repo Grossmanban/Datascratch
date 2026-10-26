@@ -274,6 +274,47 @@ import Testing
         }
     }
 
+    /// The byte-exact agents vector (`packages/test-vectors/vectors/agents/create-note.json`):
+    /// create_note output, then a replace_text on the title with agentEdit. Opening writes nothing,
+    /// the title repair has nothing to do, and the content is exactly as expected.
+    @Test(.enabled(if: FileManager.default.fileExists(atPath: Self.agentsVector.path)))
+    func agentsCreateNoteVector() throws {
+        let file = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: Self.agentsVector)) as? [String: Any])
+        func update(_ section: String) throws -> Data {
+            let s = try #require((file[section] as? [String: Any])?["update"] as? String)
+            var b64 = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+            while b64.count % 4 != 0 { b64 += "=" }
+            return try #require(Data(base64Encoded: b64))
+        }
+        func expected(_ section: String) throws -> String {
+            let e = try #require(((file[section] as? [String: Any])?["expected"] as? [String: Any])?["content"])
+            return Self.json(e)
+        }
+        let note = NoteDocument(noteId: "0192f3c4-0000-7000-8000-00000000b001")
+        try note.crdt.applyUpdate(try update("createNote"))
+        #expect(Self.json(try note.contentJSON()) == (try expected("createNote")), "content as the agent wrote it")
+
+        func openWritesNothing(_ label: String) throws {
+            let before = try note.crdt.encodeStateAsUpdate()
+            let doc = CoreEditorDocument(note: note)
+            _ = Projection.build(doc.blocks)
+            #expect(!EditorCommands(document: doc).repairTitles(), "\(label): the repair has nothing to do")
+            #expect(try note.crdt.encodeStateAsUpdate() == before, "\(label): opening writes nothing")
+        }
+        try openWritesNothing("create_note")
+
+        try note.crdt.applyUpdate(try update("editTitle"))
+        #expect(Self.json(try note.contentJSON()) == (try expected("editTitle")), "content after the agent's title edit")
+        #expect(try note.title().hasPrefix("План на месяц"))
+        try openWritesNothing("edited title")
+    }
+
+    nonisolated static let agentsVector = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("packages/test-vectors/vectors/agents/create-note.json")
+
     nonisolated static let vector = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent() // DSEditorCoreTests
         .deletingLastPathComponent() // Tests

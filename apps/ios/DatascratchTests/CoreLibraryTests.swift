@@ -237,6 +237,42 @@ struct CoreLibraryTests {
         #expect(library.data.spaces == before.spaces && library.data.notebooks == before.notebooks)
     }
 
+    /// Both «Notes» twins hold the person's notes (some written in the account after build 5):
+    /// the notes move into one notebook, one Inbox stays.
+    @Test func twinNotebooksWithNotesBecomeOne() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        library.seedIfEmpty()
+        let localNotes = try #require(library.notebooks(in: try #require(library.spaces.first).id).first)
+        let early = library.createNote(in: localNotes.id, folder: nil, title: "До входа").id
+        let localAccount = core.account.accountDocId
+
+        try store.setRegistered(localAccount)
+        try keys.setMasterKey(DSCrypto.newKey())
+        let accountId = DSCore.EntityID.make()
+        _ = try core.adoptAccount(docId: accountId, isNew: true)
+        library.seedIfEmpty()
+        let accountNotes = try #require(library.notebooks(in: try #require(library.spaces.first).id).first)
+        let later = library.createNote(in: accountNotes.id, folder: nil, title: "После входа").id
+        try store.setRegistered(localAccount, false)
+        _ = try core.adoptAccount(docId: accountId, isNew: false)
+        core.needsCarriedMerge = false
+
+        library.mergeCarriedDuplicates(anyName: false)
+        let personal = try #require(library.spaces.first { $0.name == String(localized: "Personal") })
+        let notebooks = library.notebooks(in: personal.id).filter { $0.name == String(localized: "Notes") }
+        #expect(notebooks.count == 1)
+        let kept = try #require(notebooks.first)
+        let live = library.data.notes.filter { !$0.isTrashed }
+        #expect(live.first { $0.id == early }?.notebookId == kept.id)
+        #expect(live.first { $0.id == later }?.notebookId == kept.id)
+        #expect(live.filter { $0.kind == .inbox }.count == 1)
+        #expect(live.filter { $0.title == LibraryStore.welcomeTitle }.count == 1)
+        #expect(library.dailyNotebook?.id == kept.id)
+    }
+
     @Test func notebookMetaCarriesNamesForAgents() throws {
         let core = try CoreLibrary.inMemory()
         let library = LibraryStore(backend: core)
@@ -261,6 +297,30 @@ struct CoreLibraryTests {
         #expect(try core.notebookDocument(notebook.id).note(id: note.id)?.isTrashed == true)
         library.deleteForever(note.id)
         #expect(try core.notebookDocument(notebook.id).note(id: note.id) == nil)
+    }
+
+    /// A move tells the server (`PATCH /docs/:id`) and stays pending until it answers; the local
+    /// record follows the note to the new notebook.
+    @Test func movingANoteTellsTheServer() throws {
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: KeyRing(store: InMemorySecretStore()))
+        let remote = RecordingRemote()
+        core.remote = remote
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let a = library.createNotebook(in: space.id, name: "A", mode: .private)
+        let b = library.createNotebook(in: space.id, name: "B", mode: .private)
+        let note = library.createNote(in: a.id, title: "Moving")
+        library.move(note: note.id, toNotebook: b.id, folder: nil)
+        #expect(remote.moved.map(\.noteId) == [note.id])
+        #expect(remote.moved.first?.notebookId == b.id)
+        #expect(try store.document(note.id)?.notebookId == b.id)
+        #expect(core.pendingMoves == [note.id: b.id])
+        // An answer for an older move does not clear a newer one.
+        core.moveDelivered(note.id, toNotebook: a.id)
+        #expect(core.pendingMoves == [note.id: b.id])
+        core.moveDelivered(note.id, toNotebook: b.id)
+        #expect(core.pendingMoves.isEmpty)
     }
 
     @Test func movingANoteRewrapsItsKey() throws {
@@ -332,6 +392,8 @@ final class RecordingRemote: CoreLibraryRemote {
     func notebookModeChanged(id: String, mode: Datascratch.NotebookMode, key: Data?) { modeChanges.append((id, mode, key != nil)) }
     func notebookDeleted(id: String) { deleted.append(id) }
     func documentDeleted(_ docId: String) { deletedDocs.append(docId) }
+    var moved: [(noteId: String, notebookId: String)] = []
+    func noteMoved(_ noteId: String, toNotebook notebookId: String) { moved.append((noteId, notebookId)) }
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?) { opened.append(crdt.docId) }
 }
 

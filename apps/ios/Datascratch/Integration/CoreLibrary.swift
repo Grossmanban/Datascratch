@@ -11,6 +11,8 @@ protocol CoreLibraryRemote: AnyObject {
     func notebookDeleted(id: String)
     /// A document was deleted locally; the sync engine forgets it and stops sending it.
     func documentDeleted(_ docId: String)
+    /// A note moved to another notebook locally; the server is told (`PATCH /docs/:id`).
+    func noteMoved(_ noteId: String, toNotebook notebookId: String)
     /// A document was opened; from now on the sync engine persists and sends its updates.
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?)
 }
@@ -43,6 +45,26 @@ final class CoreLibrary: LibraryBackend {
     nonisolated private static let log = Logger(subsystem: "com.datascratch.app", category: "CoreLibrary")
     private static let accountDocKey = "app.accountDocId"
     private static let carriedMergeKey = "app.carriedLibraryMergePending"
+    private static let pendingMovesKey = "app.pendingDocMoves"
+
+    /// Notes moved to another notebook whose `PATCH /docs/:id` has not been answered yet
+    /// (note id → notebook id), kept in the store so that a move made offline is sent later.
+    var pendingMoves: [String: String] {
+        get {
+            guard let json = try? store.string(Self.pendingMovesKey), let data = json.data(using: .utf8) else { return [:] }
+            return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+        }
+        set {
+            let json = newValue.isEmpty ? nil : (try? JSONEncoder().encode(newValue)).map { String(decoding: $0, as: UTF8.self) }
+            try? store.setString(json, for: Self.pendingMovesKey)
+        }
+    }
+
+    /// The server took the move (or will learn the notebook at registration).
+    func moveDelivered(_ noteId: String, toNotebook notebookId: String) {
+        guard pendingMoves[noteId] == notebookId else { return }
+        pendingMoves[noteId] = nil
+    }
 
     /// The device library was carried in and `LibraryStore.mergeCarriedDuplicates` has not run
     /// yet (kept in the store so that a launch cut short still merges next time).
@@ -534,6 +556,10 @@ final class CoreLibrary: LibraryBackend {
         notebookIdOfNote[meta.id] = meta.notebookId
         try notebookDocument(meta.notebookId).putNote(coreMeta(meta, wrappedKey: encoded))
         _ = try store.ensureDocument(docId: meta.id, kind: .note, notebookId: meta.notebookId)
+        // The record follows the note (registration, search, tasks), and the server is told.
+        try store.setNotebook(meta.id, notebookId: meta.notebookId)
+        pendingMoves[meta.id] = meta.notebookId
+        remote?.noteMoved(meta.id, toNotebook: meta.notebookId)
     }
 
     private func updateMeta(_ meta: NoteMeta, previous: NoteMeta, doc: NoteDocument) throws {

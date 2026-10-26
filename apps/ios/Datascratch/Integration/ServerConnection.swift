@@ -93,6 +93,9 @@ final class ServerConnection: CoreLibraryRemote {
             // Every start: build 6 carried libraries without merging the duplicates.
             onLibraryCarried?(core.needsCarriedMerge)
             core.needsCarriedMerge = false
+            // Moves made offline or before a restart.
+            let moves = core.pendingMoves
+            Task { for (noteId, notebookId) in moves { await deliverMove(noteId, to: notebookId) } }
             uploadPendingAttachments()
         } catch {
             Self.log.error("starting sync failed: \(error.localizedDescription, privacy: .public)")
@@ -175,6 +178,44 @@ final class ServerConnection: CoreLibraryRemote {
             } catch {
                 ServerConnection.log.error("sync delete \(docId, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             }
+        }
+    }
+
+    func noteMoved(_ noteId: String, toNotebook notebookId: String) {
+        let pending = notebookCreation[notebookId]
+        Task {
+            await pending?.value
+            await deliverMove(noteId, to: notebookId)
+        }
+    }
+
+    /// `PATCH /docs/:id` for a note moved to another notebook (api.md «Перенос заметки»). Stays
+    /// pending on failure and is sent again at the next start.
+    private func deliverMove(_ noteId: String, to notebookId: String) async {
+        do {
+            try await api.moveDoc(id: noteId, toNotebook: notebookId)
+            core.moveDelivered(noteId, toNotebook: notebookId)
+        } catch APIError.server(404, _, _) {
+            // Not registered yet: registration sends the new notebook itself.
+            guard (try? core.store.document(noteId))?.registered == true else {
+                core.moveDelivered(noteId, toNotebook: notebookId)
+                return
+            }
+            // Otherwise the target notebook is missing on the server: create it, try once more.
+            guard let notebook = core.serverNotebook(notebookId) else { return }
+            do {
+                _ = try await api.createNotebook(id: notebook.id, mode: notebook.mode, wrappedKey: notebook.wrappedKey,
+                                                 notebookKey: notebook.mode == .agent ? notebook.key : nil)
+            } catch APIError.server(409, _, _) {
+            } catch {
+                ServerConnection.log.error("POST /notebooks \(notebookId, privacy: .public) for a move failed: \(error.localizedDescription, privacy: .public)")
+                return
+            }
+            if (try? await api.moveDoc(id: noteId, toNotebook: notebookId)) != nil {
+                core.moveDelivered(noteId, toNotebook: notebookId)
+            }
+        } catch {
+            ServerConnection.log.error("PATCH /docs/\(noteId, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

@@ -10,9 +10,7 @@ public protocol HTTPTransport: Sendable {
 
 extension URLSession: HTTPTransport {
     public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse("not HTTP") }
-        return (data, http)
+        try await URLSessionTransport(session: self).send(request)
     }
 }
 
@@ -45,7 +43,24 @@ public struct SecretSessionStore: SessionStore {
 ///
 /// Keeps the session, adds `Authorization`, refreshes the access token shortly before expiry
 /// or after a 401 (refresh tokens rotate; refreshes are serialized by the actor).
+///
+/// Unreliable networks (handshakes that hang on some connections): each attempt has a short
+/// idle timeout, and failed attempts are retried with jittered backoff — any request when it
+/// certainly was not sent (`TransportFailure.notSent`), idempotent ones (GET/PUT/DELETE and
+/// the POST/PATCH that are idempotent by id) also after timeouts and 502/503/504. Requests that
+/// may have reached the server and are not idempotent — sign-in, password change, the one-time
+/// token refresh — are not repeated.
 public actor APIClient {
+    /// Idle timeout of attempt 1, 2, …; a stuck connection fails fast and the next attempt
+    /// opens a new one.
+    var attemptTimeouts: [TimeInterval] = [5, 8, 12, 15]
+    var retryBaseDelay: Duration = .milliseconds(300)
+
+    func setRetryTiming(timeouts: [TimeInterval], baseDelay: Duration) {
+        attemptTimeouts = timeouts
+        retryBaseDelay = baseDelay
+    }
+
     public let baseURL: URL
     private let transport: any HTTPTransport
     private let sessionStore: any SessionStore
@@ -57,7 +72,7 @@ public actor APIClient {
     private var onSessionChange: (@Sendable (AuthSession?) -> Void)?
 
     /// - Parameter baseURL: server root, e.g. `https://notes.example.com` (`/v1` is appended).
-    public init(baseURL: URL, transport: any HTTPTransport = URLSession.shared, sessionStore: any SessionStore,
+    public init(baseURL: URL, transport: any HTTPTransport = URLSessionTransport(), sessionStore: any SessionStore,
                 now: @escaping @Sendable () -> Date = Date.init) {
         self.baseURL = baseURL.appendingPathComponent("v1")
         self.transport = transport
@@ -82,7 +97,7 @@ public actor APIClient {
     // MARK: Auth
 
     public func prelogin(email: String) async throws -> PreloginResponse {
-        try await call("POST", "/auth/prelogin", body: PreloginRequest(email: email), auth: false)
+        try await call("POST", "/auth/prelogin", body: PreloginRequest(email: email), auth: false, idempotent: true)
     }
 
     /// Signs up and stores the session.
@@ -107,7 +122,7 @@ public actor APIClient {
     /// Revokes the refresh token on the server (best effort) and forgets the session.
     public func logout() async throws {
         if let s = session {
-            _ = try? await send("POST", "/auth/logout", body: ["refreshToken": s.refreshToken], auth: false)
+            _ = try? await send("POST", "/auth/logout", body: ["refreshToken": s.refreshToken], auth: false, idempotent: true)
         }
         try setSession(nil)
     }
@@ -157,7 +172,7 @@ public actor APIClient {
 
     /// `notebookKey` only for `mode = .agent` (crypto.md §8).
     public func createNotebook(id: String, mode: NotebookMode, wrappedKey: Data, notebookKey: Data? = nil) async throws -> NotebookInfo {
-        try await call("POST", "/notebooks", body: CreateNotebookRequest(notebookId: id, mode: mode, wrappedKey: wrappedKey, notebookKey: notebookKey))
+        try await call("POST", "/notebooks", body: CreateNotebookRequest(notebookId: id, mode: mode, wrappedKey: wrappedKey, notebookKey: notebookKey), idempotent: true)
     }
 
     public func notebooks() async throws -> [NotebookInfo] { try await call("GET", "/notebooks") }
@@ -170,20 +185,20 @@ public actor APIClient {
 
     public func setNotebookMode(id: String, mode: NotebookMode, notebookKey: Data? = nil) async throws {
         struct Body: Encodable { var mode: NotebookMode; var notebookKey: Base64URLData? }
-        try await send("PATCH", "/notebooks/\(id)/mode", body: Body(mode: mode, notebookKey: notebookKey.map(Base64URLData.init)))
+        try await send("PATCH", "/notebooks/\(id)/mode", body: Body(mode: mode, notebookKey: notebookKey.map(Base64URLData.init)), idempotent: true)
     }
 
     public func deleteNotebook(id: String) async throws { try await send("DELETE", "/notebooks/\(id)") }
 
     /// Registers a document before its first push (`notebookId` nil only for the account doc).
     public func registerDoc(docId: String, kind: DocKind, notebookId: String?) async throws {
-        try await send("POST", "/docs", body: RegisterDocRequest(docId: docId, kind: kind, notebookId: notebookId))
+        try await send("POST", "/docs", body: RegisterDocRequest(docId: docId, kind: kind, notebookId: notebookId), idempotent: true)
     }
 
     /// Moves a note document to another notebook (api.md «Перенос заметки»). Use
     /// `AccountService.moveNote`, which also rewraps the note key and moves its `NoteMeta`.
     public func moveDoc(id: String, toNotebook notebookId: String) async throws {
-        try await send("PATCH", "/docs/\(id)", body: MoveDocRequest(notebookId: notebookId))
+        try await send("PATCH", "/docs/\(id)", body: MoveDocRequest(notebookId: notebookId), idempotent: true)
     }
 
     public func deleteDoc(id: String) async throws { try await send("DELETE", "/docs/\(id)") }
@@ -201,7 +216,7 @@ public actor APIClient {
 
     public func createAttachment(id: String, noteId: String, size: Int64, chunkCount: Int, mime: String) async throws {
         struct Body: Encodable { var attachmentId: String; var noteId: String; var size: Int64; var chunkCount: Int; var mime: String }
-        try await send("POST", "/attachments", body: Body(attachmentId: id, noteId: noteId, size: size, chunkCount: chunkCount, mime: mime))
+        try await send("POST", "/attachments", body: Body(attachmentId: id, noteId: noteId, size: size, chunkCount: chunkCount, mime: mime), idempotent: true)
     }
 
     public func uploadChunk(attachmentId: String, index: Int, data: Data) async throws {
@@ -219,7 +234,7 @@ public actor APIClient {
     // MARK: Sharing
 
     public func createShare(id: String, target: ShareTarget, permission: SharePermission, expiresAt: Date? = nil) async throws -> Share {
-        try await call("POST", "/shares", body: CreateShareRequest(shareId: id, target: target, permission: permission, expiresAt: expiresAt))
+        try await call("POST", "/shares", body: CreateShareRequest(shareId: id, target: target, permission: permission, expiresAt: expiresAt), idempotent: true)
     }
 
     public func shares() async throws -> [Share] { try await call("GET", "/shares") }
@@ -284,8 +299,8 @@ public actor APIClient {
         try await call(method, path, body: Optional<[String: String]>.none, auth: auth)
     }
 
-    private func call<B: Encodable, R: Decodable>(_ method: String, _ path: String, body: B?, auth: Bool = true) async throws -> R {
-        let data = try await send(method, path, body: body, auth: auth)
+    private func call<B: Encodable, R: Decodable>(_ method: String, _ path: String, body: B?, auth: Bool = true, idempotent: Bool? = nil) async throws -> R {
+        let data = try await send(method, path, body: body, auth: auth, idempotent: idempotent)
         do {
             return try JSONDecoder().decode(R.self, from: data)
         } catch {
@@ -300,15 +315,25 @@ public actor APIClient {
     }
 
     @discardableResult
-    private func send<B: Encodable>(_ method: String, _ path: String, body: B?, auth: Bool = true) async throws -> Data {
+    private func send<B: Encodable>(_ method: String, _ path: String, body: B?, auth: Bool = true, idempotent: Bool? = nil) async throws -> Data {
         let encoded = try body.map { try JSONEncoder().encode($0) }
-        return try await raw(method, path, body: encoded, contentType: encoded == nil ? nil : "application/json", auth: auth)
+        return try await raw(method, path, body: encoded, contentType: encoded == nil ? nil : "application/json", auth: auth, idempotent: idempotent)
     }
 
-    private func raw(_ method: String, _ path: String, body: Data?, contentType: String?, auth: Bool = true) async throws -> Data {
+    /// Delay before retry `n` (1-based): base · 2ⁿ⁻¹ ± 30 %.
+    private func retryDelay(_ n: Int) -> Duration {
+        retryBaseDelay * (pow(2, Double(n - 1)) * Double.random(in: 0.7...1.3))
+    }
+
+    /// - Parameter idempotent: repeating the request has the same effect; default by method
+    ///   (GET, PUT, DELETE, HEAD).
+    private func raw(_ method: String, _ path: String, body: Data?, contentType: String?, auth: Bool = true, idempotent: Bool? = nil) async throws -> Data {
+        let idempotent = idempotent ?? ["GET", "PUT", "DELETE", "HEAD"].contains(method)
         var retried = false
+        var attempt = 0
         while true {
             var request = URLRequest(url: baseURL.appendingPathComponent(String(path.dropFirst())))
+            request.timeoutInterval = attemptTimeouts[min(attempt, attemptTimeouts.count - 1)]
             request.httpMethod = method
             request.httpBody = body
             if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
@@ -322,8 +347,20 @@ public actor APIClient {
                 (data, response) = try await transport.send(request)
             } catch let e as APIError {
                 throw e
+            } catch let failure as TransportFailure {
+                attempt += 1
+                guard attempt < attemptTimeouts.count, failure.notSent || idempotent, !Task.isCancelled else {
+                    throw APIError.transport(failure.message)
+                }
+                try await Task.sleep(for: retryDelay(attempt))
+                continue
             } catch {
                 throw APIError.transport(String(describing: error))
+            }
+            if [502, 503, 504].contains(response.statusCode), idempotent, attempt + 1 < attemptTimeouts.count {
+                attempt += 1
+                try await Task.sleep(for: retryDelay(attempt))
+                continue
             }
             if (200..<300).contains(response.statusCode) { return data }
             if response.statusCode == 401, auth, !retried {

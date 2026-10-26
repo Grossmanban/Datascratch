@@ -42,6 +42,43 @@ final class NativeEditorModel {
             DispatchQueue.main.async { self?.changed() }
         }
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
+        // A literal [[Title]] (an agent's link, or one typed without autocomplete).
+        editor.onOpenNoteTitled = { [weak app] title in app?.pendingRoute = .noteTitled(title) }
+        // D-45: «Создано агентом» strip until the person acknowledges it.
+        editor.onAcknowledgeCreatedByAgent = { [weak self] in
+            guard let self, let core = self.app?.core else { return }
+            try? core.notebookDocument(self.notebookId).clearCreatedByAgent(noteId: self.noteId)
+            self.editor.createdByAgent = nil
+        }
+        refreshCreatedByAgent()
+        // «Hide Keyboard» is offered only while an on-screen keyboard is up (not with a
+        // hardware keyboard, where there is nothing to hide).
+        keyboardObservers = [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillHideNotification].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue ?? .zero
+                let shown = name == UIResponder.keyboardWillShowNotification && frame.height > 120
+                MainActor.assumeIsolated {
+                    guard let self, self.isSoftwareKeyboardShown != shown else { return }
+                    self.isSoftwareKeyboardShown = shown
+                }
+            }
+        }
+    }
+
+    /// An on-screen keyboard is showing.
+    var isSoftwareKeyboardShown = false
+    @ObservationIgnored private var keyboardObservers: [NSObjectProtocol] = []
+
+    isolated deinit {
+        for observer in keyboardObservers { NotificationCenter.default.removeObserver(observer) }
+    }
+
+    /// The agent that created this note (`NoteMeta.createdByAgent`, D-45); follows the index,
+    /// so a strip acknowledged on another device goes here too.
+    func refreshCreatedByAgent() {
+        let meta = try? app?.core?.notebookDocument(notebookId).note(id: noteId)
+        let name = meta?.createdByAgent?.agentName
+        if editor.createdByAgent != name { editor.createdByAgent = name }
     }
 
     private func changed() {
@@ -68,6 +105,9 @@ final class NativeEditorModel {
         host.view.backgroundColor = .clear
         headerHost = host
         editor.headerView = host.view
+        // «Посмотреть историю» in the agent-edits banner: the note's version history.
+        let noteId = self.noteId
+        editor.onShowHistory = { [weak scene] in scene?.sheet = .versions(noteId: noteId) }
     }
 
     /// Switches the pen tool; leaving text mode hides the keyboard once, with its own animation.
@@ -102,7 +142,35 @@ struct NativeDocumentScreen: View {
     @Environment(SceneModel.self) private var scene
     @State private var model: NativeEditorModel?
     @State private var failed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let noteId: String
+
+    private func setPaletteCollapsed(_ collapsed: Bool) {
+        withAnimation(reduceMotion ? nil : Theme.Motion.snappy) {
+            app.settings.penPaletteCollapsed = collapsed
+        }
+    }
+
+    /// The palette with its fold button at the trailing end.
+    private func paletteRow(_ model: NativeEditorModel, isCompact: Bool) -> some View {
+        HStack(spacing: isCompact ? Theme.Space.s1 : Theme.Space.s2) {
+            HideKeyboardButton(model: model, isCompact: isCompact)
+                .padding(.leading, Theme.Space.s3)
+            PenPalette(model: model, isCompact: isCompact)
+            Button { setPaletteCollapsed(true) } label: {
+                Image(systemName: "chevron.down.right")
+                    .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                    .frame(width: isCompact ? 22 : 28, height: isCompact ? 22 : 28)
+            }
+            // A system glass button: a plain button over interactive glass missed taps.
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Hide Pen Tools")
+            .accessibilityIdentifier("penPalette.collapse")
+            .padding(.trailing, Theme.Space.s3)
+        }
+    }
 
     var body: some View {
         Group {
@@ -122,19 +190,39 @@ struct NativeDocumentScreen: View {
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         // Inline when it fits the column, else the compact row: it never runs past
                         // the column's edges (iPad split view with three columns).
-                        ViewThatFits(in: .horizontal) {
-                            PenPalette(model: model, isCompact: false)
-                            PenPalette(model: model, isCompact: true)
+                        Group {
+                            if app.settings.penPaletteCollapsed {
+                                // Folded to a button at the trailing edge: the editor gets the
+                                // room, the current tool keeps working (Pencil still draws).
+                                HStack(spacing: Theme.Space.s2) {
+                                    Spacer(minLength: 0)
+                                    HideKeyboardButton(model: model, isCompact: true)
+                                    CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
+                                        .padding(.trailing, Theme.Space.s4)
+                                }
+                                // A thin strip: the folded button takes less height than the palette.
+                                .padding(.bottom, Theme.Space.s1)
+                                .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
+                            } else {
+                                ViewThatFits(in: .horizontal) {
+                                    paletteRow(model, isCompact: false)
+                                    paletteRow(model, isCompact: true)
+                                }
+                                .padding(.top, Theme.Space.s2)
+                                .padding(.bottom, Theme.Space.s3)
+                                .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
+                            }
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.top, Theme.Space.s2)
-                            .padding(.bottom, Theme.Space.s3)
                     }
                     .onAppear { model.header.containerHeight = proxy.size.height }
                     .onChange(of: proxy.size.height) { _, height in model.header.containerHeight = height }
                 }
                 .onChange(of: note.style, initial: true) { _, style in model.apply(style: style) }
-                .onChange(of: note, initial: true) { _, note in model.header.note = note }
+                .onChange(of: note, initial: true) { _, note in
+                    model.header.note = note
+                    model.refreshCreatedByAgent()
+                }
                 .onChange(of: app.settings.fingerDrawing) { _, _ in
                     model.editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
                 }
@@ -198,7 +286,13 @@ struct NativeEditorToolbar: ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             Menu {
                 Button("Task", systemImage: "checkmark.circle") { model.editor.perform(.taskList) }
-                Button("Heading", systemImage: "textformat") { model.editor.perform(.heading2) }
+                Menu {
+                    Button("Heading 1") { model.editor.perform(.heading1) }
+                    Button("Heading 2") { model.editor.perform(.heading2) }
+                    Button("Heading 3") { model.editor.perform(.heading3) }
+                } label: {
+                    Label("Heading", systemImage: "textformat")
+                }
                 Button("Bulleted List", systemImage: "list.bullet") { model.editor.perform(.bulletList) }
                 Button("Quote", systemImage: "text.quote") { model.editor.perform(.quote) }
                 Divider()
@@ -314,6 +408,68 @@ struct NativeDocumentHeader: View {
 /// The pen palette: `DSPenToolbar` over the editor's `InkToolState`. Narrow (iPhone, iPad
 /// portrait or split view): the compact row (44 pt targets) with colour, width and finger
 /// drawing under «More». Wide: everything inline.
+/// Hides the keyboard while text is being edited (iPhone has no other way). The slot stays put
+/// when there is no keyboard — only its opacity changes — so nothing moves under the finger.
+struct HideKeyboardButton: View {
+    let model: NativeEditorModel
+    let isCompact: Bool
+
+    var body: some View {
+        let _ = model.revision
+        let editing = model.editor.isEditingText && model.isSoftwareKeyboardShown
+        Button {
+            model.editor.dismissKeyboard()
+            // On iPad resigning the text view alone left the keyboard up; ending editing on the
+            // whole editor (as switching to a pen does) takes it down.
+            model.editor.endEditing(true)
+            // With a hardware keyboard nothing else reports the end of editing: refresh the bar.
+            DispatchQueue.main.async { model.revision &+= 1 }
+        } label: {
+            Image(systemName: "keyboard.chevron.compact.down")
+                .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
+                .foregroundStyle(Theme.Palette.textSecondary)
+                .frame(width: isCompact ? 22 : 28, height: isCompact ? 22 : 28)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .opacity(editing ? 1 : 0)
+        .disabled(!editing)
+        .accessibilityHidden(!editing)
+        .accessibilityLabel("Hide Keyboard")
+        .accessibilityIdentifier("editor.hideKeyboard")
+    }
+}
+
+/// The folded pen palette: the current tool's nib in its ink colour; a tap brings the palette back.
+struct CollapsedPenButton: View {
+    let model: NativeEditorModel
+    let expand: () -> Void
+
+    var body: some View {
+        let _ = model.revision
+        let selection = PenPalette.selection(from: model.editor.tools)
+        Button(action: expand) {
+            Group {
+                if let tool = selection.tool, tool != .lasso {
+                    DSPenNib(tool: tool, color: tool == .eraser ? Color.dsTint(.pink) : selection.color.color)
+                        .frame(width: 12, height: 24)
+                } else {
+                    Image(systemName: selection.tool == .lasso ? "lasso" : "character.cursor.ibeam")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.Palette.textPrimary)
+                }
+            }
+            .frame(width: 26, height: 26)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.small)
+        .accessibilityLabel("Show Pen Tools")
+        .accessibilityValue(Text(verbatim: "mode \(model.editor.tools.mode.rawValue)"))
+        .accessibilityIdentifier("penPalette.collapsed")
+    }
+}
+
 struct PenPalette: View {
     let model: NativeEditorModel
     let isCompact: Bool
@@ -325,7 +481,6 @@ struct PenPalette: View {
                      tools: isCompact ? [.pen, .pencil, .marker, .highlighter, .eraser]
                          : [.pen, .pencil, .marker, .highlighter, .eraser, .lasso],
                      compact: isCompact)
-            .padding(.horizontal, Theme.Space.s3)
             .accessibilityElement(children: .contain)
             // UI tests read the editor's state here (it changes with the mode, not the animation).
             .accessibilityValue(Text(verbatim: "editor \(model.serial), mode \(tools.mode.rawValue), color \(tools.currentPaint?.color ?? "none"), finger \(tools.allowsFingerDrawing ? "on" : "off")"))

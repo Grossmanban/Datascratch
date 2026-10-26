@@ -25,4 +25,18 @@ struct SyncCenterTests {
         #expect(retries == 1)
         #expect(sync.phase == .syncing)
     }
+
+    @Test func anEndedSessionIsNotOverwrittenByTheEngine() {
+        let sync = SyncCenter(serverURL: URL(string: "https://example.com"), monitorNetwork: false)
+        sync.markSessionEnded()
+        #expect(sync.phase == .sessionEnded && sync.showsSessionEnded)
+        // Network flaps and stale engine updates do not hide it.
+        sync.apply(summary: .synced, pending: 0)
+        sync.setOnline(false)
+        sync.setOnline(true)
+        #expect(sync.phase == .sessionEnded)
+        sync.markSessionRestored()
+        #expect(!sync.isSessionEnded && !sync.showsSessionEnded)
+        #expect(sync.phase == .syncing)
+    }
 }

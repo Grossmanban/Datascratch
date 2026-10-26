@@ -418,4 +418,236 @@ final class EditorViewTests: XCTestCase {
         // Target on device: 300 ms (`11-nfr.md`). CI simulators are slower and noisy, so the hard limit here is loose.
         XCTAssertLessThan(elapsed, 2.0)
     }
+
+    // MARK: - Build 10 feedback
+
+    /// Mermaid diagrams must be clearly visible: the snapshot carried the web view's near-zero
+    /// alpha and the diagrams looked like empty grey boxes.
+    func testMermaidRendersAnOpaqueDiagram() throws {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("M"), .paragraph("x")]))
+        MermaidRenderer.shared.host = editor
+        let done = expectation(description: "mermaid rendered")
+        var image: UIImage?
+        MermaidRenderer.shared.render("flowchart LR\n  A[Идея] --> B[Черновик] --> C[Готово]", dark: false) { img in
+            image = img
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 60)
+        let img = try XCTUnwrap(image, "Mermaid rendered nothing")
+        XCTAssertGreaterThan(img.size.width, 100)
+        XCTAssertGreaterThan(maxAlpha(of: img), 0.9, "the diagram is (nearly) transparent")
+    }
+
+    private func maxAlpha(of image: UIImage) -> CGFloat {
+        guard let cg = image.cgImage else { return 0 }
+        let w = cg.width, h = cg.height
+        var pixels = [UInt8](repeating: 0, count: w * h * 4)
+        let ctx = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        var best: UInt8 = 0
+        for i in stride(from: 3, to: pixels.count, by: 4) where pixels[i] > best { best = pixels[i] }
+        return CGFloat(best) / 255
+    }
+
+    func testAgentEditsBannerAcceptsAll() {
+        let agent = MarkSet([MarkName.agentEdit: .object(["agent": "claude"])])
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph([.text("Написал агент", agent)]), .paragraph("моё")])
+        let editor = host(doc)
+        XCTAssertTrue(editor.hasAgentEdits)
+        let banner = editor.textView.subviews.first { $0.accessibilityIdentifier == "agentEdits.banner" }
+        XCTAssertEqual(banner?.isHidden, false, "the banner shows while there are agent edits")
+        let deco = editor.textView.textStorage.attribute(.dsDecoration, at: flatRange(editor, of: "Написал").lowerBound,
+                                                         effectiveRange: nil) as? ParagraphDecoration
+        XCTAssertEqual(deco?.hasAgentEdit, true)
+        XCTAssertNil(editor.textView.textStorage.attribute(.backgroundColor, at: flatRange(editor, of: "Написал").lowerBound,
+                                                           effectiveRange: nil), "no tint on the text itself")
+        editor.acceptAgentEdits()
+        drainMainQueue()
+        settle(editor)
+        XCTAssertFalse(editor.hasAgentEdits)
+        XCTAssertEqual(banner?.isHidden, true)
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "Написал агент")
+        editor.undo()
+        drainMainQueue()
+        XCTAssertTrue(editor.hasAgentEdits, "accepting is undoable")
+    }
+
+    func testTypingInsideAgentTextIsNotMarkedAsAgent() {
+        let agent = MarkSet([MarkName.agentEdit: .object(["agent": "claude"])])
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph([.text("агент", agent)])]))
+        let r = flatRange(editor, of: "агент")
+        editor.textView.selectedRange = NSRange(location: r.lowerBound + 2, length: 0)
+        let marks = (editor.textView.typingAttributes[.dsMarks] as? MarksBox)?.marks
+        XCTAssertEqual(marks?.contains(MarkName.agentEdit), false)
+    }
+
+    func testLiteralWikiLinkIsTappableByTitle() throws {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("См. [[Тест форматирования]] ниже")]))
+        editor.onOpenNoteTitled = { _ in }
+        let r = flatRange(editor, of: "форматирования")
+        XCTAssertEqual(editor.textView.textStorage.attribute(.dsWikiLink, at: r.lowerBound, effectiveRange: nil) as? String,
+                       "Тест форматирования")
+        let frame = try XCTUnwrap(editor.geometry.segmentFrame(r.lowerBound..<(r.lowerBound + 3)))
+        XCTAssertEqual(editor.noteLink(at: CGPoint(x: frame.midX, y: frame.midY)), .title("Тест форматирования"))
+        let plain = try XCTUnwrap(editor.geometry.segmentFrame(flatRange(editor, of: "ниже")))
+        XCTAssertNil(editor.noteLink(at: CGPoint(x: plain.midX, y: plain.midY)))
+    }
+
+    func testDismissKeyboardEndsEditing() {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("текст")]))
+        editor.textView.becomeFirstResponder()
+        XCTAssertTrue(editor.isEditingText)
+        editor.dismissKeyboard()
+        XCTAssertFalse(editor.isEditingText)
+    }
+
+    /// D-45: a note an agent created says so once, with «Понятно», instead of line-by-line marks.
+    func testCreatedByAgentBannerAcknowledges() throws {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Заметка агента")]))
+        var acknowledged = false
+        editor.onAcknowledgeCreatedByAgent = { acknowledged = true }
+        editor.createdByAgent = "Claude"
+        settle(editor)
+        let banner = try XCTUnwrap(editor.textView.subviews.first { $0.accessibilityIdentifier == "agentEdits.banner" })
+        XCTAssertFalse(banner.isHidden)
+        let label = banner.subviews.compactMap { $0 as? UILabel }.first
+        XCTAssertEqual(label?.text, "Создано агентом Claude")
+        let ok = try XCTUnwrap(banner.subviews.compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "agentCreated.acknowledge" })
+        ok.sendActions(for: .primaryActionTriggered)
+        settle(editor)
+        XCTAssertTrue(acknowledged)
+        XCTAssertNil(editor.createdByAgent)
+        XCTAssertTrue(banner.isHidden)
+    }
+
+    // MARK: - Build 11: touch formatting
+
+    /// What the keyboard does at the caret (programmatic `insertText` skips the delegate here).
+    func typeAtCaret(_ editor: EditorView, _ text: String) {
+        let tv = editor.textView
+        let at = tv.selectedRange
+        if editor.textView(tv, shouldChangeTextIn: at, replacementText: text) {
+            tv.textStorage.replaceCharacters(in: at, with: text)
+            tv.selectedRange = NSRange(location: at.location + text.utf16.count, length: 0)
+            editor.textViewDidChange(tv)
+        }
+    }
+
+    func testBoldAtCaretAppliesToTheNextTypedText() {
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("ab")])
+        let editor = host(doc)
+        let r = flatRange(editor, of: "ab")
+        editor.textView.selectedRange = NSRange(location: r.upperBound, length: 0)
+        XCTAssertFalse(editor.formatState.has(MarkName.bold))
+        editor.perform(.bold)
+        XCTAssertTrue(editor.formatState.has(MarkName.bold), "the bar shows bold as on before anything is typed")
+        typeAtCaret(editor, "C")
+        let last = doc.inline(of: doc.blocks[1].id, range: 2..<3).first
+        XCTAssertEqual(last?.marks.contains(MarkName.bold), true)
+    }
+
+    func testFormatStateForSelectionAndHeadingToggle() {
+        let bold = MarkSet([MarkName.bold: MarkSet.plain])
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph([.text("жирный", bold), .text(" нет", .empty)])])
+        let editor = host(doc)
+        let r = flatRange(editor, of: "жирный")
+        editor.textView.selectedRange = NSRange(location: r.lowerBound, length: r.count)
+        XCTAssertTrue(editor.formatState.has(MarkName.bold))
+        XCTAssertTrue(editor.formatState.hasSelection)
+        XCTAssertEqual(editor.formatState.block, .paragraph)
+        editor.perform(.heading2)
+        XCTAssertEqual(editor.formatState.block, .heading2)
+        editor.perform(.heading2)
+        XCTAssertEqual(editor.formatState.block, .paragraph, "the same heading button turns it back into text")
+    }
+
+    func testSlashMenuOpensFiltersAndApplies() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("")])
+        let editor = host(doc)
+        var menus: [SlashMenuState?] = []
+        editor.onSlashMenu = { menus.append($0) }
+        editor.textView.selectedRange = NSRange(location: editor.textView.textStorage.length, length: 0)
+        typeAtCaret(editor, "/")
+        XCTAssertEqual(menus.last??.query, "")
+        typeAtCaret(editor, "заг")
+        let menu = try XCTUnwrap(menus.last ?? nil)
+        XCTAssertEqual(menu.items.map(\.id), ["heading1", "heading2", "heading3"])
+        editor.applySlashCommand("heading2")
+        XCTAssertNil(menus.last ?? nil, "the menu closes")
+        XCTAssertEqual(doc.blocks[1].type, NodeType.heading)
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "", "the typed /query is removed")
+    }
+
+    func testTypedTextNextToAgentTextIsNotAgentMarkedInTheDocument() {
+        let agent = MarkSet([MarkName.agentEdit: .object(["agent": "claude"])])
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph([.text("агент", agent)])])
+        let editor = host(doc)
+        editor.textView.selectedRange = NSRange(location: flatRange(editor, of: "агент").upperBound, length: 0)
+        typeAtCaret(editor, "я")
+        let typed = doc.inline(of: doc.blocks[1].id, range: 5..<6).first
+        XCTAssertEqual(typed?.marks.contains(MarkName.agentEdit), false)
+    }
+
+    // MARK: - Keyboard: no double counting (iPad report, build 9)
+
+    private func keyboardDoc() -> InMemoryEditorDocument {
+        let bold = MarkSet([MarkName.bold: MarkSet.plain])
+        return InMemoryEditorDocument(blocks: [
+            .title("Заметка"), .paragraph("Первый абзац заметки."), .heading("Раздел", level: 2),
+            .taskList([.taskItem("Раз"), .taskItem("Два"), .taskItem("Три")]),
+            .drawing(height: 200), .paragraph([.text("привет", bold)]),
+        ])
+    }
+
+    private func postKeyboard(_ name: Notification.Name, top: CGFloat, in window: UIWindow) {
+        let frame = CGRect(x: 0, y: top, width: window.bounds.width, height: window.bounds.height - top)
+        let screen = window.convert(frame, to: window.screen.coordinateSpace)
+        NotificationCenter.default.post(name: name, object: nil, userInfo: [UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: screen)])
+    }
+
+    /// The app shrinks the editor for the keyboard: the editor must not add the keyboard again,
+    /// and a caret that is still visible must not move.
+    func testShrinkingHostGetsNoKeyboardInsetAndNoScroll() throws {
+        let editor = host(keyboardDoc(), width: 820, height: 1180)
+        let r = flatRange(editor, of: "привет")
+        editor.textView.selectedRange = NSRange(location: r.upperBound, length: 0)
+        settle(editor)
+        let before = editor.textView.contentOffset.y
+        let keyboardTop: CGFloat = 820
+        // Same order as SwiftUI keyboard avoidance: "will" → the host shrinks the editor → "did".
+        postKeyboard(UIResponder.keyboardWillChangeFrameNotification, top: keyboardTop, in: window)
+        editor.frame.size.height = keyboardTop
+        settle(editor)
+        postKeyboard(UIResponder.keyboardDidChangeFrameNotification, top: keyboardTop, in: window)
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.contentInset.bottom, 0, accuracy: 1, "the keyboard is not counted twice")
+        let caret = editor.textView.caretRect(for: try XCTUnwrap(editor.textView.selectedTextRange).end)
+        let visible = editor.textView.bounds.inset(by: editor.textView.adjustedContentInset)
+        XCTAssertTrue(visible.contains(caret), "the caret line stays visible")
+        XCTAssertEqual(editor.textView.contentOffset.y, before, accuracy: 1, "no scroll: the caret was already above the keyboard")
+    }
+
+    /// A full-height host: the editor insets itself and scrolls the least needed to show the caret.
+    func testFullHeightHostScrollsTheCaretMinimally() throws {
+        let editor = host(keyboardDoc(), width: 820, height: 1180)
+        let r = flatRange(editor, of: "привет")
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder(), "editing (the inset logic scrolls only while editing)")
+        editor.textView.selectedRange = NSRange(location: r.upperBound, length: 0)
+        settle(editor)
+        let caretBefore = editor.textView.caretRect(for: try XCTUnwrap(editor.textView.selectedTextRange).end)
+        let keyboardTop = min(1100, caretBefore.maxY - editor.textView.contentOffset.y - 40)
+        postKeyboard(UIResponder.keyboardDidChangeFrameNotification, top: keyboardTop, in: window)
+        drainMainQueue()
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.contentInset.bottom, 1180 - keyboardTop, accuracy: 2)
+        let caret = editor.textView.caretRect(for: try XCTUnwrap(editor.textView.selectedTextRange).end)
+        let visible = editor.textView.bounds.inset(by: editor.textView.adjustedContentInset)
+        XCTAssertTrue(visible.contains(caret), "the caret line is above the keyboard")
+        XCTAssertLessThan(visible.maxY - caret.maxY, 80,
+                          "only the needed amount: the caret stays just above the keyboard, not at the top")
+    }
 }

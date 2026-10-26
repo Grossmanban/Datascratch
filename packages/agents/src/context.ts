@@ -21,6 +21,8 @@ export interface AgentNotebook {
    */
   name: string | null;
   icon: string | null;
+  /** Colour token (`tint.blue`, `blue`) or `#RRGGBB`; optional, else taken from the notebook document. */
+  color?: string | null;
   space: { id: string; name: string; icon: string | null } | null;
   createdAt: string;
 }
@@ -41,6 +43,12 @@ export interface LoadedDoc {
   doc: Y.Doc;
   /** Last server seq included in `doc`; used as a cache key. */
   seq: number;
+  /**
+   * Updates the server could not decrypt or apply and left out (logged with
+   * docId, seq and deviceId). The rest of the document is still returned, so
+   * one bad update never hides a whole notebook or note.
+   */
+  skipped?: { seq: number; deviceId: string | null; reason: string }[];
 }
 
 /**

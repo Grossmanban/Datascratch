@@ -229,6 +229,45 @@ describe('snapshots, compaction and history', () => {
     expect(sub3.pages).toEqual([{ type: 'updates', docId: noteId, snapshot: null, items: [], upToDate: true }]);
     for (const x of [a, b, c]) x.close();
   });
+
+  // sync-protocol §5: a client behind the newest snapshot gets that snapshot and only the
+  // updates after it, even when the updates in between are still stored. A client that
+  // cannot read some of those updates (sealed with a wrong key) heals from the snapshot.
+  it('sends the newest snapshot to a client behind it even when nothing was compacted', async () => {
+    const seqsOf = (sub: any) => sub.pages.flatMap((p: any) => p.items.map((i: any) => i.seq));
+    const a = await SyncClient.user(s, u);
+
+    // Fast path: short tail after the snapshot.
+    const shortId = await createNote(s, u, notebookId);
+    for (let i = 0; i < 5; i++) await a.push(shortId, rnd(10));
+    const snap = b64(rnd(100));
+    a.send({ type: 'snapshot', docId: shortId, clientMsgId: 'snap-short', baseSeq: 4, payload: snap });
+    expect(await a.next((m) => m.clientMsgId === 'snap-short')).toMatchObject({ type: 'ack', seq: 4 });
+    const b = await SyncClient.user(s, u);
+    const sub = await b.subscribe(shortId, 3);
+    expect(sub.pages[0].snapshot).toEqual({ seq: 4, payload: snap });
+    expect(seqsOf(sub)).toEqual([5]);
+
+    // General path: a long tail after the snapshot, `since` just before it.
+    const longId = await createNote(s, u, notebookId);
+    for (let i = 0; i < 230; i++) await a.push(longId, rnd(10));
+    a.send({ type: 'snapshot', docId: longId, clientMsgId: 'snap-long', baseSeq: 120, payload: snap });
+    expect(await a.next((m) => m.clientMsgId === 'snap-long')).toMatchObject({ type: 'ack', seq: 120 });
+    const sub2 = await b.subscribe(longId, 110);
+    expect(sub2.pages[0].snapshot).toEqual({ seq: 120, payload: snap });
+    const seqs = seqsOf(sub2);
+    expect(seqs[0]).toBe(121);
+    expect(seqs).toHaveLength(110);
+    expect(sub2.pages.at(-1).upToDate).toBe(true);
+    // Updates in between are still stored (nothing was compacted).
+    const kept = await s.ctx.database.db.select({ seq: docUpdates.seq }).from(docUpdates).where(sql`doc_id = ${longId}`);
+    expect(kept).toHaveLength(230);
+    // A client at or after the snapshot gets no snapshot, only the newer updates.
+    const sub3 = await b.subscribe(longId, 120);
+    expect(sub3.pages[0].snapshot).toBeNull();
+    expect(seqsOf(sub3)[0]).toBe(121);
+    for (const x of [a, b]) x.close();
+  });
 });
 
 describe('deletion', () => {

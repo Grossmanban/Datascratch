@@ -14,6 +14,7 @@ import { AgentError } from "../errors.js";
 import type { RateLimiter } from "../http/rate-limit.js";
 import { hmac, randomToken, safeEqual, sha256Base64url, sha256Hex, uuidv7 } from "../util.js";
 import { ACCESS_PREFIX, REFRESH_PREFIX, SCOPE_READ, SCOPE_WRITE, scopeFor, type GrantService } from "./grants.js";
+import { describeAgentNotebooks } from "../service/notebook-meta.js";
 import { consentPage, errorPage, signInPage } from "./pages.js";
 
 export interface OAuthConfig {
@@ -387,7 +388,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
       const login = ctx.users.loginUrl?.(returnTo) ?? null;
       return login ? noStore(reply).redirect(login, 302) : html(reply, 200, signInPage(cfg.appUrl));
     }
-    const notebooks = await ctx.data.listAgentNotebooks(user.userId);
+    const notebooks = await describeAgentNotebooks(ctx, user.userId);
     const pending = seal(cfg.secret, {
       clientId: client.clientId,
       redirectUri: q.redirect_uri,
@@ -418,7 +419,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
           return u.host || u.protocol;
         })(),
         userEmail: user.email ?? null,
-        notebooks: notebooks.map((n) => ({ id: n.id, name: n.name ?? "Без названия", space: n.space?.name ?? null })),
+        notebooks: notebooks.map((n) => ({ id: n.id, name: n.name, space: n.space?.name ?? null, icon: n.icon, color: n.color ?? null, unavailable: n.unavailable })),
         writeRequested: requested.includes(SCOPE_WRITE),
         request: pending,
         action: "/oauth/authorize",

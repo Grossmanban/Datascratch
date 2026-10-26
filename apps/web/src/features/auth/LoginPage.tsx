@@ -12,6 +12,7 @@ export function LoginPage() {
   const router = useRouter();
   const search = useSearch({ strict: false }) as { next?: string };
   const revoked = useAuth((s) => s.revoked);
+  const restoreFailed = useAuth((s) => s.restoreFailed);
   const [email, setEmail] = useState(revoked?.email ?? "");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,6 +38,11 @@ export function LoginPage() {
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" data-testid="login-form">
       {revoked && <RevokedNotice unsent={revoked.unsent} />}
+      {!revoked && restoreFailed && (
+        <p role="status" className="rounded-lg bg-[var(--ds-tint-yellow-bg)] px-3.5 py-3 text-[13.5px] text-ink" data-testid="restore-failed">
+          {t("app.restoreFailed")}
+        </p>
+      )}
       <Field label={t("auth.email")}>
         {(id) => <Input id={id} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />}
       </Field>

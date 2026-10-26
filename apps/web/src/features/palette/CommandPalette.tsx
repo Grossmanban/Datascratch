@@ -12,6 +12,7 @@ import { toggleSidebar, useUi } from "@/hooks/useUi";
 import { today } from "@/lib/dates";
 import { toggleTheme, useTheme } from "@/lib/theme";
 import { Kbd } from "@/ui";
+import { iconGlyph, withIcon } from "@/lib/glyph";
 
 export function CommandPalette() {
   const { t } = useTranslation();
@@ -111,7 +112,7 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
         {results.length > 0 && (
           <Command.Group heading={t("palette.docs")} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[12.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-ink-2">
             {results.map((r) => (
-              <Item key={r.noteId} value={`note-${r.noteId}`} onSelect={() => openNote(r.noteId)} icon={notes[r.noteId]?.icon ?? <FileText className="size-4" />}>
+              <Item key={r.noteId} value={`note-${r.noteId}`} onSelect={() => openNote(r.noteId)} icon={iconGlyph(notes[r.noteId]?.icon) || <FileText className="size-4" />}>
                 <span className="truncate font-medium">{r.title}</span>
                 {r.snippet && <span className="ml-2 truncate text-[13px] text-ink-2">{r.snippet}</span>}
               </Item>
@@ -164,7 +165,7 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
             .filter((s) => s.id !== spaceId)
             .map((s) => (
               <Item key={s.id} value={`space-${s.id}`} icon={<Layers className="size-4" />} onSelect={() => go(() => setActiveSpace(s.id))}>
-                {t("palette.switchSpace", { name: `${s.icon} ${s.name}` })}
+                {t("palette.switchSpace", { name: withIcon(s.icon, s.name) })}
               </Item>
             ))}
         </Command.Group>

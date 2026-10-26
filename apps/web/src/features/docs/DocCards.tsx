@@ -14,6 +14,7 @@ import { runtime } from "@/data/runtime";
 import { useAttachmentUrl } from "@/features/doc/Cover";
 import { cn, ContextMenu, UIDocCard } from "@/ui";
 import { noteMenuItems } from "./menus";
+import { iconGlyph } from "@/lib/glyph";
 
 // Snippets are read from the index only for rows on screen; results are kept so that
 // scrolling back does not flash empty text.
@@ -156,7 +157,7 @@ const DocCard = memo(function DocCard({ note, snippet, delay }: { note: NoteEntr
           title={noteTitle(note, t("app.untitled"))}
           subtitle={<span className="line-clamp-3 min-h-[3.6em] block">{snippet ?? ""}</span>}
           cover={coverUrl}
-          icon={note.icon ?? null}
+          icon={iconGlyph(note.icon) || null}
           meta={
             <span className="flex min-w-0 items-center gap-2 text-ink-2">
               <span className="truncate">{formatRelative(note.updatedAt)}</span>
@@ -201,7 +202,7 @@ const DocRow = memo(function DocRow({ note, snippet, first }: { note: NoteEntry;
         data-testid="doc-row"
       >
         <span className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-ink/[0.045] text-[17px]">
-          {note.coverThumb ? <CardThumb noteId={note.id} attachmentId={note.coverThumb} /> : (note.icon ?? <FileText className="size-4 text-ink-2" />)}
+          {note.coverThumb ? <CardThumb noteId={note.id} attachmentId={note.coverThumb} /> : (iconGlyph(note.icon) || <FileText className="size-4 text-ink-2" />)}
         </span>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[14.5px] font-medium text-ink">{noteTitle(note, t("app.untitled"))}</div>

@@ -11,6 +11,7 @@ import { useUi } from "@/hooks/useUi";
 import { formatDay, localDate } from "@/lib/dates";
 import { toBase64Url, uuidv7, type Share, type SharePermission } from "@/lib/shared";
 import { Button, Dialog, IconButton, SegmentedControl, Spinner, toast } from "@/ui";
+import { withIcon } from "@/lib/glyph";
 
 type Expiry = "never" | "1d" | "7d" | "30d";
 const EXPIRY_DAYS: Record<Expiry, number | null> = { never: null, "1d": 1, "7d": 7, "30d": 30 };
@@ -80,7 +81,7 @@ function ShareDialogInner() {
     setTimeout(() => setCopied(null), 1600);
   }
 
-  const name = target?.kind === "note" ? noteTitle(note, t("app.untitled")) : nb ? `${nb.icon} ${nb.name}` : "";
+  const name = target?.kind === "note" ? noteTitle(note, t("app.untitled")) : nb ? withIcon(nb.icon, nb.name) : "";
 
   return (
     <Dialog

@@ -10,6 +10,7 @@ import { tintFg } from "@/lib/tokens";
 import { Button, DropdownMenu, EmptyState, IconButton, SegmentedControl } from "@/ui";
 import { DocCollection } from "./DocCards";
 import { newNoteAndOpen } from "./menus";
+import { iconGlyph, withIcon } from "@/lib/glyph";
 
 function sortNotes(notes: NoteEntry[], sort: "updated" | "created" | "title"): NoteEntry[] {
   const out = [...notes];
@@ -119,7 +120,7 @@ export function AllDocsPage() {
   return (
     <ListPage
       title={t("nav.allDocs")}
-      crumbs={space ? <span className="truncate">{`${space.icon} ${space.name}`}</span> : null}
+      crumbs={space ? <span className="truncate">{withIcon(space.icon, space.name)}</span> : null}
       notes={list}
       empty={{ icon: <Layers className="size-7" />, title: t("docs.emptyTitle"), text: t("docs.emptyText") }}
       newIn={firstNb ? { notebookId: firstNb.id, folderId: null } : null}
@@ -142,7 +143,7 @@ export function NotebookPage() {
   return (
     <ListPage
       title={nb.name}
-      icon={nb.icon}
+      icon={iconGlyph(nb.icon) || undefined}
       notes={list}
       empty={{ icon: <FolderIcon className="size-7" />, title: t("docs.emptyFolder") }}
       newIn={{ notebookId, folderId: null }}
@@ -168,11 +169,11 @@ export function FolderPage() {
   return (
     <ListPage
       title={folder.name}
-      icon={folder.icon || <FolderIcon className="size-8" style={{ color: tintFg(folder.color) }} fill="currentColor" fillOpacity={0.18} />}
+      icon={iconGlyph(folder.icon) || <FolderIcon className="size-8" style={{ color: tintFg(folder.color) }} fill="currentColor" fillOpacity={0.18} />}
       crumbs={
         <nav className="flex min-w-0 items-center gap-1">
           <Link to="/notebook/$notebookId" params={{ notebookId: nb.id }} className="truncate hover:text-ink">
-            {nb.icon} {nb.name}
+            {withIcon(nb.icon, nb.name)}
           </Link>
           {path.slice(0, -1).map((p) => (
             <span key={p.id} className="flex items-center gap-1">
@@ -203,7 +204,7 @@ function FolderChips({ folders }: { folders: { id: string; name: string; color: 
           params={{ folderId: f.id }}
           className="flex h-9 items-center gap-2 rounded-lg bg-surface px-3 text-[13.5px] font-medium text-ink shadow-[0_1px_2px_rgb(40_30_10/0.06)] ring-1 ring-line transition hover:ring-ink/20"
         >
-          {f.icon ? <span>{f.icon}</span> : <FolderIcon className="size-4" style={{ color: tintFg(f.color) }} fill="currentColor" fillOpacity={0.2} />}
+          {iconGlyph(f.icon) ? <span>{iconGlyph(f.icon)}</span> : <FolderIcon className="size-4" style={{ color: tintFg(f.color) }} fill="currentColor" fillOpacity={0.2} />}
           {f.name}
         </Link>
       ))}

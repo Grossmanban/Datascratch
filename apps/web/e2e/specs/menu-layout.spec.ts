@@ -24,11 +24,11 @@ test("menu rows: icon | name | ✓ on one line, the check right-aligned and cent
     await page.getByTestId("space-switcher").click();
     const menu = page.getByRole("menu");
     await expect(menu).toBeVisible();
-    const checked = menu.getByRole("menuitem").filter({ has: page.getByTestId("menu-check") });
+    const checked = menu.getByRole("menuitem").filter({ has: page.locator("[data-menu-trailing] svg:not(.invisible)") });
     await expect(checked).toHaveCount(1);
     const row = (await checked.boundingBox())!;
-    const check = (await checked.getByTestId("menu-check").boundingBox())!;
-    const name = (await checked.getByTestId("menu-row").locator("span").first().boundingBox())!;
+    const check = (await checked.locator("[data-menu-trailing] svg").boundingBox())!;
+    const name = (await checked.locator("[data-menu-label]").boundingBox())!;
     // Same line, vertically centred, on the right of the name, inside the row.
     expect(Math.abs(check.y + check.height / 2 - (row.y + row.height / 2))).toBeLessThan(3);
     expect(Math.abs(name.y + name.height / 2 - (row.y + row.height / 2))).toBeLessThan(3);
@@ -37,7 +37,7 @@ test("menu rows: icon | name | ✓ on one line, the check right-aligned and cent
     expect(row.height).toBeLessThan(44);
     // The other spaces line up with it: the same check column.
     const plain = menu.getByRole("menuitem").filter({ hasText: "Личное" });
-    const plainName = (await plain.getByTestId("menu-row").locator("span").first().boundingBox())!;
+    const plainName = (await plain.locator("[data-menu-label]").boundingBox())!;
     expect(Math.abs(plainName.x - name.x)).toBeLessThan(3);
     await page.keyboard.press("Escape");
     await expect(menu).toHaveCount(0);

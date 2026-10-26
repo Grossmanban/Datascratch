@@ -72,7 +72,7 @@ final class EditorDemoUITests: XCTestCase {
         app.buttons["tool.marker"].tap()
         sleep(1)
         XCTAssertTrue(app.textViews["editor.text"].waitForExistence(timeout: 5), "app alive after switching to the marker")
-        XCTAssertTrue(app.buttons["tool.marker"].isSelected, "the palette button really switches the tool")
+        XCTAssertTrue(becomesSelected(app.buttons["tool.marker"]), "the palette button really switches the tool")
         app.buttons["tool.lasso"].tap()
         sleep(1)
         XCTAssertTrue(app.textViews["editor.text"].waitForExistence(timeout: 5), "app alive after switching to the lasso")
@@ -106,7 +106,7 @@ final class EditorDemoUITests: XCTestCase {
         let offset = offsetLabel.label
         for id in ["tool.pen", "tool.text", "tool.marker", "tool.lasso", "tool.text"] {
             app.buttons[id].tap()
-            XCTAssertTrue(app.buttons[id].isSelected, "\(id) responds to the first tap")
+            XCTAssertTrue(becomesSelected(app.buttons[id]), "\(id) responds to the first tap")
             XCTAssertEqual(offsetLabel.label, offset, "tapping \(id) does not scroll the note")
         }
         XCTAssertEqual(app.state, .runningForeground)
@@ -121,5 +121,20 @@ final class EditorDemoUITests: XCTestCase {
         measure(metrics: [XCTApplicationLaunchMetric()], options: options) {
             app.launch()
         }
+    }
+
+    /// The tool switch is applied on the next main-queue turn and the palette re-renders after it:
+    /// wait for the selected state instead of reading it once (slow CI simulators).
+    @MainActor
+    private func becomesSelected(_ button: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isSelected == true"), object: button)
+        let ok = XCTWaiter.wait(for: [selected], timeout: timeout) == .completed
+        if !ok {
+            let tree = XCTAttachment(string: XCUIApplication().debugDescription)
+            tree.name = "hierarchy when \(button.identifier) was not selected"
+            tree.lifetime = .keepAlways
+            XCTContext.runActivity(named: "palette state") { $0.add(tree) }
+        }
+        return ok
     }
 }

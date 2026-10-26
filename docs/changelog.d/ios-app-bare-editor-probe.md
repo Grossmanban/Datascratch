@@ -1,1 +1,0 @@
-- iOS: эксперимент для ios-editor — launch-аргумент `-bareEditorProbe` открывает голый `EditorView` и UI-тест «тап → ввод → 3 с».

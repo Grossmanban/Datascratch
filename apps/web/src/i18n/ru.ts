@@ -107,6 +107,9 @@ const ru = {
     pending_few: "{{count}} изменения ждут отправки",
     pending_many: "{{count}} изменений ждут отправки",
     pending_other: "{{count}} изменения ждут отправки",
+    notSent: "Не отправлено: {{count}}",
+    notSentHint: "Сервер не принял изменения. Они сохранены на этом устройстве.",
+    retry: "Повторить",
   },
   docs: {
     emptyTitle: "Здесь пока пусто",

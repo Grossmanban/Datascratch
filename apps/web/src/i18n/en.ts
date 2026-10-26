@@ -111,6 +111,9 @@ const en: Loose<Messages> = {
     pending_few: "{{count}} changes waiting to sync",
     pending_many: "{{count}} changes waiting to sync",
     pending_other: "{{count}} changes waiting to sync",
+    notSent: "Not sent: {{count}}",
+    notSentHint: "The server did not accept these changes. They are saved on this device.",
+    retry: "Retry",
   },
   docs: {
     emptyTitle: "Nothing here yet",

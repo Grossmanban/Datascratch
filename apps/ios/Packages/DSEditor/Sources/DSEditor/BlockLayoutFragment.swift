@@ -19,6 +19,9 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
         return p.attributedString.attribute(.dsDecoration, at: 0, effectiveRange: nil) as? ParagraphDecoration
     }
 
+    static let agentBarWidth: CGFloat = 3
+    static let agentBarGap: CGFloat = 10
+
     private var containerWidth: CGFloat {
         textLayoutManager?.textContainer?.size.width ?? layoutFragmentFrame.width
     }
@@ -26,8 +29,9 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
     override var renderingSurfaceBounds: CGRect {
         let base = super.renderingSurfaceBounds
         guard let d = decoration else { return base }
-        if d.callout != nil || d.isCode || d.quoteDepth > 0 || d.marker != nil {
-            let frame = CGRect(x: -layoutFragmentFrame.minX, y: -16, width: containerWidth + 8,
+        if d.callout != nil || d.isCode || d.quoteDepth > 0 || d.marker != nil || d.hasAgentEdit {
+            let left = d.hasAgentEdit ? Self.agentBarGap + Self.agentBarWidth + 2 : 0
+            let frame = CGRect(x: -layoutFragmentFrame.minX - left, y: -16, width: containerWidth + 8 + left,
                                height: layoutFragmentFrame.height + 32)
             return base.union(frame)
         }
@@ -81,6 +85,15 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
             let rect = CGRect(x: x0, y: top - 8, width: width - x0, height: bottom - top + 16)
             ctx.addPath(UIBezierPath(roundedRect: rect, cornerRadius: 8).cgPath)
             ctx.setFillColor(d.codeColor.cgColor)
+            ctx.fillPath()
+        }
+        if d.hasAgentEdit {
+            // Agent edits (D-10): a soft rounded bar in the margin, left of the column (and of
+            // list markers), along the paragraph's lines.
+            let x = -layoutFragmentFrame.minX - Self.agentBarGap - Self.agentBarWidth
+            let rect = CGRect(x: x, y: top + 2, width: Self.agentBarWidth, height: max(4, bottom - top - 4))
+            ctx.addPath(UIBezierPath(roundedRect: rect, cornerRadius: Self.agentBarWidth / 2).cgPath)
+            ctx.setFillColor(d.agentEditColor.cgColor)
             ctx.fillPath()
         }
         if d.quoteDepth > 0 {

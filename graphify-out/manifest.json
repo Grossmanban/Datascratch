@@ -30,9 +30,9 @@
     "semantic_hash": "d1435529f6ee4b58d207e25cdb4fa840"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793010097.0154924,
-    "seen": 1793010158.828197,
-    "ast_hash": "cb7c2ed8ea72ae7de65c6e21589e8b5e",
+    "mtime": 1793011636.036368,
+    "seen": 1793011696.457812,
+    "ast_hash": "8e096ba83114fe64ad6c1d9109e5b510",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -246,16 +246,16 @@
     "semantic_hash": "0728fde2578fa216331a27c3d3a1f049"
   },
   "docs/decisions/README.md": {
-    "mtime": 1793004754.1342852,
-    "seen": 1793005641.0171995,
-    "ast_hash": "bf81a53a4245d5241787336bc7128540",
-    "semantic_hash": "bf81a53a4245d5241787336bc7128540"
+    "mtime": 1793011636.0383904,
+    "seen": 1793011696.459067,
+    "ast_hash": "639bf88c34597477ab45664bc6652d14",
+    "semantic_hash": ""
   },
   "docs/development.md": {
-    "mtime": 1792927372.4280927,
-    "seen": 1793005703.1792698,
-    "ast_hash": "18da5d9b74ea131eaeba28d7d1c1af52",
-    "semantic_hash": "18da5d9b74ea131eaeba28d7d1c1af52"
+    "mtime": 1793011636.0383904,
+    "seen": 1793011696.4590695,
+    "ast_hash": "626c7c1ac58ed2cf1e8859dce9678786",
+    "semantic_hash": ""
   },
   "docs/glossary.md": {
     "mtime": 1792926987.832682,
@@ -528,10 +528,10 @@
     "semantic_hash": "08b0e870b4ae76cc400d010b0fa0a3d0"
   },
   ".github/workflows/design.yml": {
-    "mtime": 1792948534.6069908,
-    "seen": 1793005641.016129,
-    "ast_hash": "aa631aac552ceb00599143c3488ce251",
-    "semantic_hash": "aa631aac552ceb00599143c3488ce251"
+    "mtime": 1793011636.0315838,
+    "seen": 1793011696.4380596,
+    "ast_hash": "07269553dfe3fdb143acbbf6eccbe086",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Package.swift": {
     "mtime": 1792950256.7736752,
@@ -2448,10 +2448,10 @@
     "semantic_hash": "d99a8d7f3dc82ee7d93aab7835223664"
   },
   ".github/workflows/ios-core.yml": {
-    "mtime": 1792939085.1320353,
-    "seen": 1793005641.016136,
-    "ast_hash": "bb14102326be2e3ca3b711d8ab115da2",
-    "semantic_hash": "bb14102326be2e3ca3b711d8ab115da2"
+    "mtime": 1793011636.036368,
+    "seen": 1793011696.4380665,
+    "ast_hash": "f14360880adb80eb338d59362f24dece",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSCore/Package.swift": {
     "mtime": 1792939085.1320353,
@@ -2802,10 +2802,10 @@
     "semantic_hash": "a0d7798eda0c19c434eb763417922a27"
   },
   ".github/workflows/ios-app.yml": {
-    "mtime": 1792946950.6559358,
-    "seen": 1793005641.0161328,
-    "ast_hash": "d1751b04feef840ee28914dfec1a5c4d",
-    "semantic_hash": "d1751b04feef840ee28914dfec1a5c4d"
+    "mtime": 1793011636.0315838,
+    "seen": 1793011696.4380634,
+    "ast_hash": "4a1c0445c1ec1f4d3c6e4bfee07d8ff8",
+    "semantic_hash": ""
   },
   ".github/workflows/ios-release.yml": {
     "mtime": 1792946950.6599357,
@@ -4020,10 +4020,10 @@
     "semantic_hash": "3dd5418f2905d28bba1b40623f5d28bc"
   },
   ".github/workflows/ios-editor.yml": {
-    "mtime": 1792986416.105656,
-    "seen": 1793005641.0161386,
-    "ast_hash": "b28eacd48960d9679f44a5dc1bdf66ef",
-    "semantic_hash": "b28eacd48960d9679f44a5dc1bdf66ef"
+    "mtime": 1793011636.036368,
+    "seen": 1793011696.4380686,
+    "ast_hash": "8f955183320b4f8f3c6eba20472504f8",
+    "semantic_hash": ""
   },
   "apps/ios/Datascratch/Features/Document/CoverViews.swift": {
     "mtime": 1792964170.2416222,
@@ -4791,6 +4791,24 @@
     "mtime": 1793008140.9953244,
     "seen": 1793008206.972924,
     "ast_hash": "9bf66c105560a3b3762c29d0c233cdda",
+    "semantic_hash": ""
+  },
+  ".github/scripts/already-tested.sh": {
+    "mtime": 1793011636.0315838,
+    "seen": 1793011696.4379392,
+    "ast_hash": "8ed5ea815c922d10241dff6213dc8744",
+    "semantic_hash": ""
+  },
+  "tools/ci/wait-release-gate.sh": {
+    "mtime": 1793011636.0383904,
+    "seen": 1793011696.4574673,
+    "ast_hash": "34b3ca7241c7cde8ea40fc90489cfffb",
+    "semantic_hash": ""
+  },
+  "docs/decisions/0046-faster-ios-ci.md": {
+    "mtime": 1793011636.0383904,
+    "seen": 1793011696.4590645,
+    "ast_hash": "c1c61563aff2e9896e5321af4546485a",
     "semantic_hash": ""
   }
 }

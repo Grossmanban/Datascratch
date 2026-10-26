@@ -230,6 +230,34 @@ import Testing
         await b.stop()
     }
 
+    /// An outbox item of a document without its key cannot be sent: it is held, not pending, so
+    /// the engine is idle (no endless «Синхронизация…»); once the key is there it goes out.
+    @Test func itemsWaitingForAKeyAreHeldNotPending() async throws {
+        let server = FakeSyncServer()
+        let docId = EntityID.make()
+        let key = Locked<Data?>(nil)
+        let keyValue = DSCrypto.newKey()
+        var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: "A", clientVersion: "test")
+        config.minBackoff = .milliseconds(10)
+        let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
+        let a = SyncEngine(store: try LocalStore.inMemory(), client: client, keyFor: { _ in key.withLock { $0 } },
+                           register: { await server.register($0.docId) })
+        let note = NoteDocument(noteId: docId)
+        try note.initialize(title: "Waits")
+        try a.store.ensureDocument(docId: docId, kind: .note, notebookId: "nb")
+        try a.store.appendLocalUpdate(docId: docId, update: try note.crdt.encodeStateAsUpdate(), origin: .local)
+        await a.start()
+        #expect(try await eventually { await a.status().summary == .synced })
+        let status = await a.status()
+        #expect(status.pending == 0 && status.held == 1 && status.isIdle)
+
+        key.withLock { $0 = keyValue }
+        await a.resumeDocumentsWaitingForKeys()
+        #expect(try await eventually { await server.docs[docId]?.isEmpty == false })
+        #expect(try await eventually { let s = await a.status(); return s.held == 0 && s.pending == 0 && s.summary == .synced })
+        await a.stop()
+    }
+
     /// Device B wrote a notebook document with its own key. After adopting the canonical key and
     /// `rekey`, it reads everything (its old updates through the retired key) and uploads a
     /// canonical snapshot: a fresh device with the canonical key sees both devices' edits.

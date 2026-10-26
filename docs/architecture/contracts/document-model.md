@@ -27,15 +27,17 @@ Y.Map "meta"        { formatVersion: 1 }
 Y.Map "spaces"      spaceId -> Y.Map Space
 Y.Map "notebooks"   notebookId -> Y.Map NotebookRef
 Y.Map "settings"    ключ -> значение (JSON)
-Y.Array "starred"   [ { kind: "note"|"folder"|"notebook", id } ]
-Y.Array "tabs"      [ { noteId } ]  (открытые вкладки; последняя активная — settings.activeTab)
+Y.Array "starred"   [ { kind: "note"|"folder"|"notebook", id } ]  (показывается только избранное текущего пространства, D-48)
+Y.Array "tabs"      [ { noteId, pinned?: boolean, openedAt?: ISO-дата } ]  (открытые вкладки всех пространств; клиент показывает только вкладки текущего пространства — по блокноту документа, D-48; активная — settings.activeTabBySpace)
 ```
 
 `Space`: `{ id, name, icon (emoji или SF-символ), color (токен цвета), order (число с плавающей точкой для сортировки), createdAt }`.
 
 `NotebookRef`: `{ id, spaceId, name, icon, color, order, mode: "private"|"agent", createdAt }`. Ключ блокнота **не** хранится здесь — он лежит в `notebook_keys` на сервере, обёрнутый мастер-ключом (`crypto.md`).
 
-Известные ключи `settings` (остальные — свободный JSON): `dailyNotebookId` (блокнот ежедневных заметок и «Входящих»), `activeTab` (noteId активной вкладки), `recoveryKeyConfirmed: boolean` — пользователь подтвердил, что сохранил текущий ключ восстановления; сбрасывается в `false` при его ротации (`POST /v1/auth/recovery-key`, `api.md`). Уточнение 2026-10-25 (по поручению координатора).
+Вкладки (`spec/12` §12.6, уточнение координатора 2026-10-26): `pinned` — закреплённая вкладка; `openedAt` — когда вкладку последний раз делали активной (пишется не чаще раза в час на вкладку, чтобы документ аккаунта не «шумел»). Оба поля необязательны, старые клиенты их игнорируют. Тихая уборка переносит вкладки с `openedAt` старше `settings.tabTidyDays` дней в «Недавно закрытые»; закреплённые и активную не трогает; вкладка без `openedAt` считается открытой в момент первого запуска новой версии. «Недавно закрытые» — **локально на устройстве** (последние 20 на пространство), в документ аккаунта не пишутся.
+
+Известные ключи `settings` (остальные — свободный JSON): `tabTidyDays` (`1 | 7 | 30 | null`, по умолчанию 7; `null` — никогда), `dailyNotebookBySpace` (`{ spaceId: notebookId }` — блокнот ежедневных заметок и «Входящих» каждого пространства, D-48), `activeTabBySpace` (`{ spaceId: noteId }` — активная вкладка каждого пространства, D-48); устаревшие `dailyNotebookId` и `activeTab` читаются один раз при переходе и относятся к пространству своего блокнота/документа, новые клиенты их не пишут; `recoveryKeyConfirmed: boolean` — пользователь подтвердил, что сохранил текущий ключ восстановления; сбрасывается в `false` при его ротации (`POST /v1/auth/recovery-key`, `api.md`). Уточнение 2026-10-25 (по поручению координатора).
 
 ## 3. Документ `notebook` (индекс блокнота)
 
@@ -68,7 +70,7 @@ Y.Map "tags"     tagName -> Y.Map { color, icon }   (необязательны�
 | `order` | number | ручная сортировка |
 | `createdByAgent` | `{ agentId, agentName, at }` \| null | заметку целиком создал агент (D-45): клиенты показывают полоску «Создано агентом», «Понятно» ставит `null`. Поле может отсутствовать (= null) |
 
-Ежедневные заметки и «Входящие» живут в блокноте, выбранном в `settings.dailyNotebookId` аккаунта.
+Ежедневные заметки и «Входящие» живут в блокноте, выбранном для текущего пространства в `settings.dailyNotebookBySpace` аккаунта (D-48; раньше — общий `settings.dailyNotebookId`).
 
 ## 4. Документ `note`
 

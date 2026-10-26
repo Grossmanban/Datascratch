@@ -34,6 +34,13 @@ final class MermaidRenderer: NSObject {
         (images[Key(source: source, dark: false)] ?? images[Key(source: source, dark: true)])?.size
     }
 
+    /// Puts a rendered image in the cache and announces it, as a finished render does (tests use
+    /// it to land a "late" render at a chosen moment).
+    func store(_ image: UIImage, for source: String, dark: Bool) {
+        images[Key(source: source, dark: dark)] = image
+        NotificationCenter.default.post(name: Self.didRender, object: source)
+    }
+
     func render(_ source: String, dark: Bool, completion: @escaping (UIImage?) -> Void) {
         let key = Key(source: source, dark: dark)
         if let img = images[key] { return completion(img) }
@@ -58,6 +65,10 @@ final class MermaidRenderer: NSObject {
         // from when it hid inside the editor's window, gave empty-looking diagrams). The window
         // itself is off screen and below everything.
         wv.isUserInteractionEnabled = false
+        // Snapshot rects are in page coordinates: no safe-area inset may shift the page (on
+        // iPhone it moved the diagram under the snapshot rect and cut its top off).
+        wv.scrollView.contentInsetAdjustmentBehavior = .never
+        wv.scrollView.contentInset = .zero
         wv.navigationDelegate = self
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: -5000, y: 0, width: 900, height: 1200)
@@ -69,7 +80,7 @@ final class MermaidRenderer: NSObject {
         wv.frame = window.bounds
         offscreenWindow = window
         EditorDiagnostics.log("mermaid web view created in its own window")
-        wv.loadHTMLString("<html><head><meta name='viewport' content='width=900'><style>body{margin:0;background:transparent}#c{display:inline-block;padding:8px}</style></head><body><div id='c'></div></body></html>", baseURL: nil)
+        wv.loadHTMLString("<html><head><meta name='viewport' content='width=900'><style>body{margin:0;background:transparent}#c{position:absolute;left:0;top:0}#c svg{display:block}</style></head><body><div id='c'></div></body></html>", baseURL: nil)
         webView = wv
         return true
     }
@@ -90,17 +101,44 @@ final class MermaidRenderer: NSObject {
         const r = await mermaid.render('m' + Date.now(), src);
         const c = document.getElementById('c');
         c.innerHTML = r.svg;
-        const b = c.getBoundingClientRect();
-        return [b.width, b.height];
+        const svg = c.querySelector('svg');
+        if (!svg) return [0, 0, 0, 0];
+        // The drawing's real extent: the union of Mermaid's viewBox and the content's bounding
+        // box (some diagrams draw past their viewBox), with a margin. The SVG is then shown at
+        // that size (scaled down to the page width), so the snapshot holds all of it.
+        const pad = 8;
+        const bb = svg.getBBox();
+        const vb = svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width > 0 ? svg.viewBox.baseVal : bb;
+        const x0 = Math.min(vb.x, bb.x) - pad, y0 = Math.min(vb.y, bb.y) - pad;
+        const x1 = Math.max(vb.x + vb.width, bb.x + bb.width) + pad, y1 = Math.max(vb.y + vb.height, bb.y + bb.height) + pad;
+        const w = x1 - x0, h = y1 - y0;
+        const scale = Math.min(1, 900 / w);
+        svg.setAttribute('viewBox', `${x0} ${y0} ${w} ${h}`);
+        svg.removeAttribute('style');
+        svg.setAttribute('width', w * scale);
+        svg.setAttribute('height', h * scale);
+        window.scrollTo(0, 0);
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const b = svg.getBoundingClientRect();
+        return [b.left, b.top, b.width, b.height];
         """
         wv.callAsyncJavaScript(js, arguments: ["src": key.source, "dark": key.dark], in: nil, in: .page) { [weak self] result in
             guard let self else { return }
             switch result {
             case .success(let value):
                 let dims = (value as? [Any])?.compactMap { ($0 as? NSNumber)?.doubleValue } ?? []
-                guard dims.count == 2, dims[0] > 1, dims[1] > 1 else { return self.finish(key, nil, completion) }
+                guard dims.count == 4, dims[2] > 1, dims[3] > 1 else { return self.finish(key, nil, completion) }
+                let rect = CGRect(x: dims[0], y: dims[1], width: dims[2], height: dims[3])
+                // A diagram taller than the web view would be blank below its bottom edge.
+                if rect.maxY > wv.bounds.height {
+                    let size = CGSize(width: wv.bounds.width, height: ceil(rect.maxY) + 16)
+                    self.offscreenWindow?.frame.size = size
+                    wv.frame = CGRect(origin: .zero, size: size)
+                    wv.layoutIfNeeded()
+                }
                 let snap = WKSnapshotConfiguration()
-                snap.rect = CGRect(x: 0, y: 0, width: dims[0], height: dims[1])
+                snap.rect = rect
+                snap.afterScreenUpdates = true
                 wv.takeSnapshot(with: snap) { image, _ in
                     MainActor.assumeIsolated { self.finish(key, image, completion) }
                 }

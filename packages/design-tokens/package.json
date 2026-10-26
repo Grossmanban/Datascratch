@@ -1,6 +1,7 @@
 {
   "name": "@datascratch/design-tokens",
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "Quiet Paper design tokens: single source for web (CSS, Tailwind v4) and iOS (Swift).",
   "type": "module",

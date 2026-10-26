@@ -208,11 +208,19 @@ public final class EditorView: UIView {
             // Palm rejection comes from the recognizer itself: it begins on touch down and
             // prevents the scroll recognizer for that touch, so a resting hand does not draw.
             self.ink.penBegan(s)
+            self.penDown = true
+            self.showContactIndicator(at: s.location)
         }
-        inkInput.onMoved = { [weak self] c, p in self?.ink.penMoved(c, predicted: p) }
+        inkInput.onMoved = { [weak self] c, p in
+            guard let self else { return }
+            self.ink.penMoved(c, predicted: p)
+            if let last = c.last { self.showContactIndicator(at: last.location) }
+        }
         inkInput.onEnded = { [weak self] cancelled in
             guard let self else { return }
             self.ink.penEnded(cancelled: cancelled)
+            self.penDown = false
+            self.setIndicator(nil)
             self.notifyStateChange()
         }
         inkInput.onEstimatedUpdate = { [weak self] s in self?.ink.penEstimatedUpdate(s) }
@@ -305,8 +313,12 @@ public final class EditorView: UIView {
         ink.invalidateLayout()
         if bounds.width > 0 {
             layoutIfNeeded()
-            if let viewport = textView.textLayoutManager?.textViewportLayoutController {
-                viewport.layoutViewport()
+            if let tlm = textView.textLayoutManager {
+                // A note of ordinary length is laid out whole on open: with TextKit 2's estimated
+                // heights the content size kept changing under the first swipes and the text view
+                // pulled the note back (build 15). Long notes keep the lazy layout (open time).
+                if text.length <= Self.fullLayoutLimit { tlm.ensureLayout(for: tlm.documentRange) }
+                tlm.textViewportLayoutController.layoutViewport()
             }
         }
         lastOpenDuration = CACurrentMediaTime() - start
@@ -610,14 +622,61 @@ public final class EditorView: UIView {
         setNeedsInkRefresh()
     }
 
+    /// Notes up to this many characters are laid out whole when opened.
+    static let fullLayoutLimit = 40_000
+    /// Block types whose height changed (a late Mermaid render) while the person was scrolling.
+    private var pendingAtomRelayout: Set<String> = []
+
+    private var userIsScrolling: Bool { textView.isTracking || textView.isDragging || textView.isDecelerating }
+
+    /// Lays blocks of `type` out again after their height changed. Never while the person is
+    /// scrolling (it is applied when the scroll ends), and the text at the top of the screen
+    /// stays where it is: blocks above it that grow or shrink do not move what is being read.
     private func rerenderAtoms(of type: String) {
         guard let tlm = textView.textLayoutManager else { return }
+        if userIsScrolling {
+            pendingAtomRelayout.insert(type)
+            return
+        }
+        let anchor = visibleAnchor()
         for (i, p) in projection.paragraphs.enumerated() where p.kind == .atom(type) {
             if let r = geometry.textRange(projection.starts[i]..<(projection.starts[i] + 1)) { tlm.invalidateLayout(for: r) }
+        }
+        if let anchor {
+            if textView.text.utf16.count <= Self.fullLayoutLimit { tlm.ensureLayout(for: tlm.documentRange) }
+            tlm.textViewportLayoutController.layoutViewport()
+            restore(anchor)
         }
         textView.setNeedsLayout()
         ink.invalidateLayout()
         setNeedsInkRefresh()
+    }
+
+    private func flushPendingAtomRelayout() {
+        guard !pendingAtomRelayout.isEmpty, !userIsScrolling else { return }
+        let types = pendingAtomRelayout
+        pendingAtomRelayout = []
+        for type in types { rerenderAtoms(of: type) }
+    }
+
+    /// The first fragment at the top of the visible area and its distance from that edge.
+    private func visibleAnchor() -> (location: NSTextLocation, offset: CGFloat)? {
+        guard let tlm = textView.textLayoutManager else { return nil }
+        let top = textView.contentOffset.y + textView.adjustedContentInset.top
+        // Nothing to keep at the very top of the note.
+        guard top > textView.textContainerInset.top + 1 else { return nil }
+        let point = CGPoint(x: textView.textContainer.size.width / 2, y: top - textView.textContainerInset.top)
+        guard let fragment = tlm.textLayoutFragment(for: point) else { return nil }
+        return (fragment.rangeInElement.location, fragment.layoutFragmentFrame.minY - point.y)
+    }
+
+    private func restore(_ anchor: (location: NSTextLocation, offset: CGFloat)) {
+        guard let tlm = textView.textLayoutManager, let fragment = tlm.textLayoutFragment(for: anchor.location) else { return }
+        let wantedTop = fragment.layoutFragmentFrame.minY - anchor.offset + textView.textContainerInset.top
+        let y = wantedTop - textView.adjustedContentInset.top
+        guard abs(y - textView.contentOffset.y) > 0.5 else { return }
+        textView.layoutIfNeeded()
+        textView.contentOffset.y = y
     }
 
     /// Re-applies rendered attributes of a paragraph without touching its characters.
@@ -855,18 +914,39 @@ public final class EditorView: UIView {
         // is false), so fingers type and scroll and the Pencil writes through Scribble. Disabling
         // it instead made UIKit's gesture environment throw on the next tap into the text.
         if tools.mode != .lasso { ink.clearSelection() }
-        hoverLayer.path = nil
+        setIndicator(nil)
         notifyStateChange()
     }
 
+    /// The pen is on the glass (the ink recognizer is tracking a touch).
+    private var penDown = false
+    /// Centre of the tool indicator circle in text view content coordinates, nil when hidden.
+    private(set) var indicatorCenter: CGPoint?
+
     @objc private func hovered(_ g: UIHoverGestureRecognizer) {
+        // While the pen touches the glass the hover recognizer stops moving (it kept reporting the
+        // touch-down point, so the eraser circle stuck there): the pen's own touches drive the
+        // indicator then.
+        guard !penDown else { return }
         let point = g.location(in: textView)
         let active = (g.state == .began || g.state == .changed) && g.zOffset > 0 && tools.mode.capturesPen
-        guard active, let preview = ink.hoverPreview(at: point) else {
+        setIndicator(active ? point : nil)
+    }
+
+    /// Indicator under a touching pen: the eraser's circle follows every move (what it erases);
+    /// ink tools hide it, the stroke itself shows where they draw.
+    private func showContactIndicator(at point: CGPoint) {
+        setIndicator(tools.mode.isEraser ? point : nil)
+    }
+
+    private func setIndicator(_ point: CGPoint?) {
+        guard let point, let preview = ink.hoverPreview(at: point) else {
             hoverLayer.path = nil
+            indicatorCenter = nil
             return
         }
         let r = preview.radius
+        indicatorCenter = preview.center
         hoverLayer.path = UIBezierPath(ovalIn: CGRect(x: preview.center.x - r, y: preview.center.y - r, width: r * 2, height: r * 2)).cgPath
         hoverLayer.strokeColor = preview.color.resolvedColor(with: traitCollection).cgColor
         hoverLayer.fillColor = preview.color.withAlphaComponent(tools.mode.isEraser ? 0.08 : 0.25).resolvedColor(with: traitCollection).cgColor
@@ -1130,6 +1210,14 @@ extension EditorView: UITextViewDelegate {
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
         onScroll?(scrollView.contentOffset.y + scrollView.adjustedContentInset.top)
+    }
+
+    public func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate { DispatchQueue.main.async { [weak self] in self?.flushPendingAtomRelayout() } }
+    }
+
+    public func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        DispatchQueue.main.async { [weak self] in self?.flushPendingAtomRelayout() }
     }
 
     public func textViewDidBeginEditing(_ textView: UITextView) { notifyStateChange() }

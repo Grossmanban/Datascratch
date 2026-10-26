@@ -126,7 +126,9 @@ final class EditorDemoUITests: XCTestCase {
     /// The tool switch is applied on the next main-queue turn and the palette re-renders after it:
     /// wait for the selected state instead of reading it once (slow CI simulators).
     @MainActor
-    private func becomesSelected(_ button: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+    /// The CI simulator can take ~4 s per accessibility snapshot: a 5 s wait then checked the
+    /// button once, before it re-rendered (its hierarchy at failure showed it selected).
+    private func becomesSelected(_ button: XCUIElement, timeout: TimeInterval = 15) -> Bool {
         let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isSelected == true"), object: button)
         let ok = XCTWaiter.wait(for: [selected], timeout: timeout) == .completed
         if !ok {

@@ -3,7 +3,8 @@ import Foundation
 /// Overall sync state for the UI.
 public struct SyncStatus: Equatable, Sendable {
     public var connection: SyncConnectionState
-    /// Outgoing messages not yet acknowledged (failed ones not included).
+    /// Outgoing messages the engine can send now and that are not acknowledged yet (failed
+    /// ones and ones held for a key not included).
     public var pending: Int
     /// Documents still catching up after (re)connect.
     public var catchingUp: Int
@@ -14,6 +15,10 @@ public struct SyncStatus: Equatable, Sendable {
     /// aside, the rest is synced. A calm per-notebook warning, not part of `summary`;
     /// `SyncEngine.retryUnreadable` after a key repair.
     public var unreadable: [UnreadableSync] = []
+    /// Outgoing messages held until their document's key is on this device (a notebook from
+    /// another device before `reconcileNotebookKeys`, a note before its `NoteMeta`); sent by
+    /// themselves once it is. A calm note, not a spinner: they do not count in `pending`.
+    public var held = 0
     /// Not connected and the quick retries are used up (several attempts failed in a row).
     /// Until then a lost or stuck connection counts as syncing, not offline.
     public var connectionTrouble = false
@@ -276,8 +281,20 @@ public actor SyncEngine: SyncClientDelegate {
     public func status() -> SyncStatus { currentStatus() }
 
     private func currentStatus() -> SyncStatus {
-        var s = SyncStatus(connection: connection, pending: (try? store.outboxCount()) ?? 0, catchingUp: catchingUp.count,
+        // Messages of documents without a key cannot be sent: they are held, not pending.
+        var pending = 0
+        var held = 0
+        for (docId, count) in (try? store.pendingOutboxCounts()) ?? [:] {
+            let record = known[docId] ?? (try? store.document(docId))
+            if waitingForKey.contains(docId) || record.map({ (try? keyFor($0)) == nil }) ?? true {
+                held += count
+            } else {
+                pending += count
+            }
+        }
+        var s = SyncStatus(connection: connection, pending: pending, catchingUp: catchingUp.count,
                            failed: (try? store.failedOutbox()) ?? [], connectionTrouble: connectionTrouble)
+        s.held = held
         s.unreadable = (try? store.unreadable()) ?? []
         return s
     }

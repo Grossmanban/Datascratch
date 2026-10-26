@@ -234,6 +234,10 @@ struct ToolPalette: View {
     var body: some View {
         let _ = model.revision
         let tools = model.editor.tools
+        // The rows read the mode as a value: reading it through the `tools` reference (the same
+        // object every time) let SwiftUI keep the old rows — the body ran with the new tool while
+        // the buttons still showed the previous one selected (CI UI test, iOS 26.2 simulator).
+        let current = tools.mode
         // UI-test diagnostics: does the palette re-render after a tool change (iOS 26.2 simulator)?
         let _ = model.isUITesting ? NSLog("DIAG palette body mode=%@ revision=%d", tools.mode.rawValue, model.revision) : ()
         HStack(spacing: 6) {
@@ -249,12 +253,12 @@ struct ToolPalette: View {
                         .frame(width: 40, height: 40)
                         // Selected like `bg.selected` in the design system: a quiet tint, not accent.
                         .foregroundStyle(Color.primary)
-                        .background(tools.mode == mode ? Color.primary.opacity(0.08) : Color.clear, in: Circle())
+                        .background(current == mode ? Color.primary.opacity(0.08) : Color.clear, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("tool.\(mode.rawValue)")
                 .accessibilityLabel(mode.title)
-                .accessibilityAddTraits(tools.mode == mode ? .isSelected : [])
+                .accessibilityAddTraits(current == mode ? .isSelected : [])
             }
             // The swatch row is always present (dimmed when the tool has no ink) so the palette never
             // changes its structure under the finger: removing buttons while a tool button's touch

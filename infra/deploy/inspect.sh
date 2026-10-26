@@ -187,3 +187,12 @@ SELECT left(dv.id::text, 13) AS id,
 SQL
   end
 fi
+
+# Per-item decrypt/apply check of agent-mode documents named in DS_DIAG_DOCS (space-separated ids;
+# metadata only: seq, device, time, size, ok/FAIL). Owner-approved diagnostics, 2026-10-26.
+DS_DIAG_DOCS=$(printf '%s' "${DS_DIAG_DOCS:-}" | tr -cd '0-9a-f\- ')
+if [ -n "${srv:-}" ] && [ -n "$DS_DIAG_DOCS" ]; then
+  section "Agent document items: $DS_DIAG_DOCS"
+  $SUDO docker exec "$srv" node dist/diag-agent-doc-cli.js $DS_DIAG_DOCS 2>&1 | tail -80
+  end
+fi

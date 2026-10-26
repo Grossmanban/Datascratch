@@ -34,6 +34,7 @@ public actor AccountService {
         let accountDocId = EntityID.make()
         let material = try await Task.detached { try SignupMaterial.make(password: password, userId: userId) }.value
         let session = try await api.signup(email: email, material: material, userId: userId, accountDocId: accountDocId)
+        try keys.resolveKeptKeys(signingInAs: userId)
         try keys.setMasterKey(material.masterKey)
         let account = AccountDocument(accountDocId: accountDocId)
         try account.initialize()
@@ -47,6 +48,7 @@ public actor AccountService {
         let pre = try await api.prelogin(email: email)
         let derived = try await Task.detached { try DSCrypto.deriveKeys(password: password, salt: pre.salt.data, params: pre.kdf) }.value
         let session = try await api.login(email: email, loginKey: derived.loginKey, deviceName: deviceName)
+        try keys.resolveKeptKeys(signingInAs: session.userId)
         try keys.unlock(wrappedMasterKey: session.wrappedMasterKeyPassword.data, passwordKey: derived.passwordKey, userId: session.userId)
         try store.ensureDocument(docId: session.accountDocId, kind: .account, notebookId: nil)
         return session
@@ -60,6 +62,7 @@ public actor AccountService {
         let master = try DSCrypto.unwrapKey(start.wrappedMasterKeyRecovery.data, with: recoveryKey, ad: CryptoAD.masterByRecovery(userId: start.userId))
         let material = try await Task.detached { try PasswordChangeMaterial.make(newPassword: newPassword, masterKey: master, userId: start.userId) }.value
         let session = try await api.recoveryFinish(recoveryToken: start.recoveryToken, material: material)
+        try keys.resolveKeptKeys(signingInAs: session.userId)
         try keys.setMasterKey(master)
         return session
     }
@@ -89,8 +92,27 @@ public actor AccountService {
     public func securityEvents() async throws -> [SecurityEvent] { try await api.securityEvents() }
 
     /// Signs out and forgets all keys on this device.
-    public func logout() async throws {
+    ///
+    /// Keys of notebooks not on the server yet survive (spec/07): signing in to the same account
+    /// uploads them; another account or `eraseDeviceKeys()` removes them. Returns their ids.
+    /// Other keys come back from the server at the next sign-in. Show
+    /// `LocalStore.unsentChangeCount()` before signing out.
+    @discardableResult
+    public func logout() async throws -> [String] {
+        let owner = await api.currentSession?.userId
+        let unsent = (try? store.unsentNotebookIds()) ?? []
         try await api.logout()
+        if let owner, !unsent.isEmpty {
+            try keys.clear(keepingNotebooks: unsent, owner: owner)
+            return keys.keptNotebookKeys?.notebookIds ?? []
+        }
+        try keys.clear()
+        return []
+    }
+
+    /// «Удалить данные с этого устройства»: forgets every key, kept ones too (the app deletes
+    /// the local database).
+    public nonisolated func eraseDeviceKeys() throws {
         try keys.clear()
     }
 

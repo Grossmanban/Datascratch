@@ -533,10 +533,12 @@ final class LibraryStore {
     func closeTab(_ noteId: String) {
         mutate { snapshot in
             snapshot.tabs.removeAll { $0 == noteId }
-            for (space, id) in snapshot.activeTabBySpace ?? [:] where id == noteId {
+            var map = snapshot.activeTabBySpace ?? [:]
+            for (space, id) in map where id == noteId {
                 // The space's last other tab becomes active.
-                snapshot.activeTabBySpace?[space] = snapshot.tabs.last { snapshot.spaceId(ofNote: $0) == space }
+                map[space] = snapshot.tabs.last { snapshot.spaceId(ofNote: $0) == space }
             }
+            snapshot.activeTabBySpace = map
         }
     }
 

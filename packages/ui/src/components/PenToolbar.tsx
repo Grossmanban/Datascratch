@@ -614,10 +614,11 @@ export function PenToolbar({
                 family === "highlight"
                   ? {
                       width: 14,
-                      height: d,
+                      height: [6, 10, 14][i],
                       borderRadius: 2,
                       backgroundColor: current,
-                      opacity: 0.85,
+                      boxShadow:
+                        "inset 0 0 0 0.75px color-mix(in oklab, var(--ds-text-primary) 25%, transparent)",
                     }
                   : { width: d, height: d, borderRadius: 9999, backgroundColor: current }
               }

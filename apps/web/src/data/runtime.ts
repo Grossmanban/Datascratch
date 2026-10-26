@@ -21,6 +21,9 @@ import { DexieSyncStorage } from "./syncStorage";
  * (@datascratch/shared/sync) with IndexedDB storage, the REST op queue, the indexer and the
  * observers that mirror Y.Docs into the workspace store.
  */
+/** Server refusals of a push that leave the change undelivered. */
+const REFUSED = new Set(["forbidden", "doc_not_found", "bad_request", "internal"]);
+
 export class AccountRuntime {
   readonly store = new DocStore();
   readonly indexer: Indexer;
@@ -90,6 +93,8 @@ export class AccountRuntime {
       this.client.on("error", (e) => {
         if (e.code === "unauthorized") void refreshSession().then((s) => s && this.client.reconnect());
         useSyncStatus.setState({ error: `${e.code}: ${e.message}` });
+        // A push the server refused (`ref` is its clientMsgId): the change has not reached the server.
+        if (e.docId && e.ref && e.ref !== e.docId && REFUSED.has(e.code)) void this.markFailed(e.docId, e.code, e.message);
       }),
     );
 
@@ -150,7 +155,7 @@ export class AccountRuntime {
     this.cleanups = [];
     this.observedNotebooks.clear();
     await this.client?.stop().catch(() => undefined);
-    useSyncStatus.setState({ status: "offline", pending: 0 });
+    useSyncStatus.setState({ status: "offline", pending: 0, failed: {} });
     this.store.destroyAll();
     clearKeys();
     resetWorkspace();
@@ -224,6 +229,41 @@ export class AccountRuntime {
     const [o, p] = await Promise.all([this.storage.count(), db.ops.count()]);
     useSyncStatus.setState({ pending: o + p });
     this.updateStatus();
+    await this.clearDelivered();
+  }
+
+  private async markFailed(docId: string, code: string, reason: string) {
+    // Not registered yet: SyncClient resends once POST /docs went through (reattach).
+    if ((await this.store.row(docId))?.registered === 0) return;
+    const failed = useSyncStatus.getState().failed;
+    if (failed[docId]?.reason === reason) return;
+    useSyncStatus.setState({ failed: { ...failed, [docId]: { code, reason } } });
+  }
+
+  /** A refused document counts as sent again once nothing of it waits in the outbox. */
+  private async clearDelivered() {
+    const failed = useSyncStatus.getState().failed;
+    const ids = Object.keys(failed).filter((id) => failed[id]!.code !== "forbidden");
+    if (!ids.length) return;
+    const waiting = new Set((await this.storage.listOutbox()).map((i) => i.docId));
+    const delivered = ids.filter((id) => !waiting.has(id));
+    if (!delivered.length) return;
+    const next = { ...useSyncStatus.getState().failed };
+    for (const id of delivered) delete next[id];
+    useSyncStatus.setState({ failed: next });
+  }
+
+  /** «Повторить»: send everything that is still waiting again. */
+  async retryFailed() {
+    const ids = Object.keys(useSyncStatus.getState().failed);
+    // A refused change that was dropped (forbidden) cannot be resent; retrying clears the notice.
+    const keep = Object.fromEntries(Object.entries(useSyncStatus.getState().failed).filter(([, f]) => f.code !== "forbidden"));
+    useSyncStatus.setState({ failed: keep });
+    await flushOps().catch(() => false);
+    for (const id of ids) if (this.attached.has(id)) await this.client.resubscribe(id).catch(() => undefined);
+    await this.client.resendOutbox().catch(() => undefined);
+    void uploadPending();
+    void this.updatePending();
   }
 
   /** Bump NoteMeta.updatedAt after local edits (throttled). */

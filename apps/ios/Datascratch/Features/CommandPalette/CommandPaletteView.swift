@@ -187,7 +187,7 @@ struct CommandPaletteView: View {
             items.append(PaletteItem(id: "space-\(space.id)", kind: .command,
                                      title: String(localized: "Switch to \(space.name)"), subtitle: nil,
                                      symbol: space.icon, keywords: ["space", space.name], shortcut: nil) {
-                library.activateSpace(space.id)
+                scene.switchSpace(to: space.id)
                 scene.sidebar = .allDocuments
             })
         }

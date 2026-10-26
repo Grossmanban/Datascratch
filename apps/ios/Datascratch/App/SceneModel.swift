@@ -145,6 +145,10 @@ final class SceneModel {
     }
 
     func open(_ noteId: String) {
+        // D-48: a document of another space (an old link) opens in its own space.
+        if let space = library.data.spaceId(ofNote: noteId), space != library.activeSpace?.id {
+            switchSpace(to: space, restoringTab: false)
+        }
         withAnimation(Theme.Motion.snappy) {
             selectedNoteId = noteId
             preferredCompactColumn = .detail
@@ -183,6 +187,23 @@ final class SceneModel {
         }
     }
 
+    /// D-48: another space — its own tabs, its own active tab (restored), its own lists.
+    func switchSpace(to id: String, restoringTab: Bool = true) {
+        guard id != library.activeSpace?.id else { return }
+        library.activateSpace(id)
+        withAnimation(Theme.Motion.snappy) {
+            switch sidebar {
+            case .notebook, .folder, .tag: sidebar = .allDocuments
+            default: break
+            }
+            selectedNoteId = restoringTab ? library.activeTab : nil
+            if selectedNoteId == nil {
+                padLevel = .list
+                preferredCompactColumn = .content
+            }
+        }
+    }
+
     func show(_ item: SidebarItem) {
         withAnimation(Theme.Motion.snappy) {
             if fullScreen == .content { fullScreen = nil }
@@ -216,9 +237,11 @@ final class SceneModel {
             if library.note(id) != nil { open(id) }
         case .noteTitled(let title):
             let key = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if let note = library.data.notes.first(where: {
-                !$0.isTrashed && $0.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == key
-            }) {
+            let matches = { (note: NoteMeta) in
+                !note.isTrashed && note.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == key
+            }
+            // This space first (D-48); an old link to another space's document still opens it there.
+            if let note = library.activeSpaceNotes.first(where: matches) ?? library.data.notes.first(where: matches) {
                 open(note.id)
             } else {
                 missingNoteTitle = title

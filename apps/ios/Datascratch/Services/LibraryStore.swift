@@ -13,8 +13,48 @@ nonisolated struct LibrarySnapshot: Codable, Sendable {
     var starred: [StarRef] = []
     var tabs: [String] = []
     var activeSpaceId: String?
+    /// Legacy account-wide daily notebook (read once, D-48); new code uses `dailyNotebookBySpace`.
     var dailyNotebookId: String?
     var tagColors: [String: Tint] = [:]
+    /// D-48: each space has its own daily notebook (with its Inbox) and its own active tab.
+    var dailyNotebookBySpace: [String: String]?
+    var activeTabBySpace: [String: String]?
+}
+
+/// D-48: everything shown belongs to one space; membership is note → notebook → space.
+extension LibrarySnapshot {
+    func spaceId(ofNotebook id: String) -> String? { notebooks.first { $0.id == id }?.spaceId }
+
+    func spaceId(ofNote id: String) -> String? {
+        notes.first { $0.id == id }.flatMap { spaceId(ofNotebook: $0.notebookId) }
+    }
+
+    /// The space's daily notebook: its own entry, else the legacy one if it lives in that space.
+    func dailyNotebookId(inSpace spaceId: String?) -> String? {
+        guard let spaceId else { return dailyNotebookId }
+        if let id = dailyNotebookBySpace?[spaceId], self.spaceId(ofNotebook: id) == spaceId { return id }
+        if let legacy = dailyNotebookId, self.spaceId(ofNotebook: legacy) == spaceId { return legacy }
+        return nil
+    }
+
+    func isDailyNotebook(_ id: String) -> Bool {
+        dailyNotebookId == id || (dailyNotebookBySpace?.values.contains(id) ?? false)
+    }
+
+    mutating func setDailyNotebook(_ id: String?, inSpace spaceId: String) {
+        var map = dailyNotebookBySpace ?? [:]
+        map[spaceId] = id
+        dailyNotebookBySpace = map
+    }
+
+    /// A notebook stopped being daily: its space falls back to its first remaining notebook.
+    mutating func dropDailyNotebook(_ id: String) {
+        guard isDailyNotebook(id) else { return }
+        if dailyNotebookId == id { dailyNotebookId = nil }
+        for (space, notebook) in dailyNotebookBySpace ?? [:] where notebook == id {
+            setDailyNotebook(notebooks.filter { $0.spaceId == space && $0.id != id }.min { $0.order < $1.order }?.id, inSpace: space)
+        }
+    }
 }
 
 /// Where the snapshot lives. `nil` file = in memory only (previews, UI tests).
@@ -160,12 +200,23 @@ final class LibraryStore {
         documents.filter { note in note.tags.contains { $0 == tag || $0.hasPrefix(tag + "/") } }
     }
 
+    /// Notebooks of the active space (D-48: what the app shows is this space's only).
+    var activeNotebookIds: Set<String> { Set(notebooks(in: activeSpace?.id).map(\.id)) }
+
+    /// Notes of the active space, trashed ones included.
+    var activeSpaceNotes: [NoteMeta] {
+        let ids = activeNotebookIds
+        return data.notes.filter { ids.contains($0.notebookId) }
+    }
+
     var starredNotes: [NoteMeta] {
-        data.starred.filter { $0.kind == .note }.compactMap { ref in note(ref.id) }.filter { !$0.isTrashed }
+        let ids = activeNotebookIds
+        return data.starred.filter { $0.kind == .note }.compactMap { ref in note(ref.id) }
+            .filter { !$0.isTrashed && ids.contains($0.notebookId) }
     }
 
     var trashed: [NoteMeta] {
-        data.notes.filter(\.isTrashed).sorted { ($0.trashedAt ?? .distantPast) > ($1.trashedAt ?? .distantPast) }
+        activeSpaceNotes.filter(\.isTrashed).sorted { ($0.trashedAt ?? .distantPast) > ($1.trashedAt ?? .distantPast) }
     }
 
     /// Tag name → number of documents, nested tags included.
@@ -203,14 +254,25 @@ final class LibraryStore {
         return max(0, Self.trashRetentionDays - elapsed)
     }
 
-    var openTabs: [NoteMeta] { data.tabs.compactMap { note($0) }.filter { !$0.isTrashed } }
+    /// Open tabs of the active space (each space keeps its own set, D-48).
+    var openTabs: [NoteMeta] {
+        let ids = activeNotebookIds
+        return data.tabs.compactMap { note($0) }.filter { !$0.isTrashed && ids.contains($0.notebookId) }
+    }
+
+    /// The active space's active tab, if it is still open.
+    var activeTab: String? {
+        guard let space = activeSpace?.id, let id = data.activeTabBySpace?[space] else { return nil }
+        return openTabs.contains { $0.id == id } ? id : nil
+    }
 
     var dailyNotebook: Notebook? {
-        data.dailyNotebookId.flatMap { notebook($0) } ?? notebooks(in: activeSpace?.id).first
+        data.dailyNotebookId(inSpace: activeSpace?.id).flatMap { notebook($0) } ?? notebooks(in: activeSpace?.id).first
     }
 
     func dailyNote(for day: String) -> NoteMeta? {
-        data.notes.first { $0.kind == .daily && $0.dailyDate == day && !$0.isTrashed }
+        let ids = activeNotebookIds
+        return data.notes.first { $0.kind == .daily && $0.dailyDate == day && !$0.isTrashed && ids.contains($0.notebookId) }
     }
 
     func versions(of noteId: String) -> [NoteVersion] {
@@ -261,7 +323,7 @@ final class LibraryStore {
                                 mode: mode, createdAt: now())
         mutate {
             $0.notebooks.append(notebook)
-            if $0.dailyNotebookId == nil { $0.dailyNotebookId = notebook.id }
+            if $0.dailyNotebookId(inSpace: spaceId) == nil { $0.setDailyNotebook(notebook.id, inSpace: spaceId) }
         }
         return notebook
     }
@@ -289,7 +351,7 @@ final class LibraryStore {
             }
             snapshot.starred.removeAll { $0.id == id || noteIds.contains($0.id) }
             snapshot.tabs.removeAll { noteIds.contains($0) }
-            if snapshot.dailyNotebookId == id { snapshot.dailyNotebookId = snapshot.notebooks.first?.id }
+            snapshot.dropDailyNotebook(id)
         }
     }
 
@@ -454,13 +516,28 @@ final class LibraryStore {
         }
     }
 
+    /// Opens a tab in the note's space and makes it that space's active tab.
     func openTab(_ noteId: String) {
-        guard !data.tabs.contains(noteId) else { return }
-        mutate { $0.tabs.append(noteId) }
+        let space = data.spaceId(ofNote: noteId)
+        guard !data.tabs.contains(noteId) || (space.map { data.activeTabBySpace?[$0] != noteId } ?? false) else { return }
+        mutate { snapshot in
+            if !snapshot.tabs.contains(noteId) { snapshot.tabs.append(noteId) }
+            if let space {
+                var map = snapshot.activeTabBySpace ?? [:]
+                map[space] = noteId
+                snapshot.activeTabBySpace = map
+            }
+        }
     }
 
     func closeTab(_ noteId: String) {
-        mutate { $0.tabs.removeAll { $0 == noteId } }
+        mutate { snapshot in
+            snapshot.tabs.removeAll { $0 == noteId }
+            for (space, id) in snapshot.activeTabBySpace ?? [:] where id == noteId {
+                // The space's last other tab becomes active.
+                snapshot.activeTabBySpace?[space] = snapshot.tabs.last { snapshot.spaceId(ofNote: $0) == space }
+            }
+        }
     }
 
     func setTagColor(_ color: Tint?, for tag: String) {
@@ -608,9 +685,11 @@ final class LibraryStore {
         for space in empty {
             for notebook in notebooks(in: space.id) {
                 // The daily notebook moves to the kept space's first notebook.
-                let wasDaily = data.dailyNotebookId == notebook.id
+                let wasDaily = data.isDailyNotebook(notebook.id)
                 deleteNotebook(notebook.id)
-                if wasDaily, let replacement = notebooks(in: kept.id).first { mutate { $0.dailyNotebookId = replacement.id } }
+                if wasDaily, let replacement = notebooks(in: kept.id).first {
+                    mutate { $0.setDailyNotebook(replacement.id, inSpace: replacement.spaceId) }
+                }
             }
             mutate { snapshot in
                 snapshot.spaces.removeAll { $0.id == space.id }
@@ -626,7 +705,7 @@ final class LibraryStore {
         let named = twins[0].name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard anyName || [firstRunName, "notes", "заметки"].contains(named) else { return }
         let count = { (id: String) in self.data.notes.filter { $0.notebookId == id }.count }
-        let kept = twins.first { $0.id == data.dailyNotebookId }
+        let kept = twins.first { data.isDailyNotebook($0.id) }
             ?? twins.max { (count($0.id), $1.id) < (count($1.id), $0.id) }!
         for other in twins where other.id != kept.id && !data.folders.contains(where: { $0.notebookId == other.id }) {
             for note in data.notes where note.notebookId == other.id {
@@ -641,9 +720,9 @@ final class LibraryStore {
                 }
             }
             if !data.notes.contains(where: { $0.notebookId == other.id }) {
-                let wasDaily = data.dailyNotebookId == other.id
+                let wasDaily = data.isDailyNotebook(other.id)
                 deleteNotebook(other.id)
-                if wasDaily { mutate { $0.dailyNotebookId = kept.id } }
+                if wasDaily { mutate { $0.setDailyNotebook(kept.id, inSpace: kept.spaceId) } }
             }
         }
     }
@@ -684,14 +763,14 @@ final class LibraryStore {
                 var disposable = group.filter { holdsOnlyFirstRunContent($0.id) }
                 // Keep one: the daily notebook if it is among them.
                 if disposable.count == group.count {
-                    let keep = disposable.first { $0.id == data.dailyNotebookId } ?? disposable[0]
+                    let keep = disposable.first { data.isDailyNotebook($0.id) } ?? disposable[0]
                     disposable.removeAll { $0.id == keep.id }
                 }
                 let kept = group.first { candidate in !disposable.contains { $0.id == candidate.id } }
                 for notebook in disposable {
-                    let wasDaily = data.dailyNotebookId == notebook.id
+                    let wasDaily = data.isDailyNotebook(notebook.id)
                     deleteNotebook(notebook.id)
-                    if wasDaily, let kept { mutate { $0.dailyNotebookId = kept.id } }
+                    if wasDaily, let kept { mutate { $0.setDailyNotebook(kept.id, inSpace: kept.spaceId) } }
                 }
                 mergeNotebooks(group.filter { candidate in !disposable.contains { $0.id == candidate.id } },
                                anyName: anyName, firstRunName: key(String(localized: "Notes")))

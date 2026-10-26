@@ -310,9 +310,13 @@ final class CoreLibrary: LibraryBackend {
             }
             let haveStarred = Set(account.starred())
             for item in local.starred() where !haveStarred.contains(item) { try account.star(item) }
-            if account.dailyNotebookId == nil, let daily = local.dailyNotebookId {
-                try account.setSetting("dailyNotebookId", .string(value: daily))
+            // D-48: the carried spaces bring their daily notebooks along.
+            var daily = Self.stringMap(account.setting(Self.dailyBySpaceKey))
+            for (space, notebook) in Self.stringMap(local.setting(Self.dailyBySpaceKey)) where daily[space] == nil { daily[space] = notebook }
+            if let legacy = local.dailyNotebookId, let space = local.notebook(id: legacy)?.spaceId, daily[space] == nil {
+                daily[space] = legacy
             }
+            if !daily.isEmpty { try account.setSetting(Self.dailyBySpaceKey, Self.yObject(daily)) }
             try store.deleteDocument(record.docId)
         }
         return carried
@@ -473,6 +477,9 @@ final class CoreLibrary: LibraryBackend {
         snapshot.starred = account.starred().map { StarRef(kind: StarRef.Kind(rawValue: $0.kind.rawValue) ?? .note, id: $0.id) }
         snapshot.tabs = account.tabs()
         snapshot.dailyNotebookId = account.dailyNotebookId
+        snapshot.dailyNotebookBySpace = Self.stringMap(account.setting(Self.dailyBySpaceKey))
+        snapshot.activeTabBySpace = Self.stringMap(account.setting(Self.activeTabBySpaceKey))
+        migrateToSpaceSettings(&snapshot)
         snapshot.activeSpaceId = overlay.activeSpaceId
         snapshot.versions = overlay.versions
         return snapshot
@@ -820,8 +827,12 @@ final class CoreLibrary: LibraryBackend {
             for id in new.tabs where !old.tabs.contains(id) { try account.openTab(noteId: id) }
             for id in old.tabs where !new.tabs.contains(id) { try account.closeTab(noteId: id) }
         }
-        if old.dailyNotebookId != new.dailyNotebookId {
-            try account.setSetting("dailyNotebookId", .optionalString(new.dailyNotebookId))
+        // D-48: per-space keys only; the legacy `dailyNotebookId`/`activeTab` are not written.
+        if (old.dailyNotebookBySpace ?? [:]) != (new.dailyNotebookBySpace ?? [:]) {
+            try account.setSetting(Self.dailyBySpaceKey, Self.yObject(new.dailyNotebookBySpace ?? [:]))
+        }
+        if (old.activeTabBySpace ?? [:]) != (new.activeTabBySpace ?? [:]) {
+            try account.setSetting(Self.activeTabBySpaceKey, Self.yObject(new.activeTabBySpace ?? [:]))
         }
         if old.tagColors != new.tagColors {
             let changed = Set(old.tagColors.keys).union(new.tagColors.keys).filter { old.tagColors[$0] != new.tagColors[$0] }
@@ -831,6 +842,35 @@ final class CoreLibrary: LibraryBackend {
                     try doc.setTagProperties(TagProperties(name: tag, color: new.tagColors[tag]?.rawValue))
                 }
             }
+        }
+    }
+
+    // MARK: D-48 per-space settings
+
+    static let dailyBySpaceKey = "dailyNotebookBySpace"
+    static let activeTabBySpaceKey = "activeTabBySpace"
+
+    static func stringMap(_ value: YValue?) -> [String: String] {
+        guard case .object(let entries)? = value else { return [:] }
+        return entries.compactMapValues { if case .string(let text) = $0 { text } else { nil } }
+    }
+
+    static func yObject(_ map: [String: String]) -> YValue {
+        .object(entries: map.mapValues { .string(value: $0) })
+    }
+
+    /// Once per account: the legacy account-wide `dailyNotebookId` and `activeTab` go to the space
+    /// of their notebook/note (contract `document-model.md` §2); the legacy keys stay untouched.
+    private func migrateToSpaceSettings(_ snapshot: inout LibrarySnapshot) {
+        if Self.stringMap(account.setting(Self.dailyBySpaceKey)).isEmpty, let legacy = account.dailyNotebookId,
+           let space = snapshot.spaceId(ofNotebook: legacy) {
+            snapshot.dailyNotebookBySpace = [space: legacy]
+            try? account.setSetting(Self.dailyBySpaceKey, Self.yObject([space: legacy]))
+        }
+        if Self.stringMap(account.setting(Self.activeTabBySpaceKey)).isEmpty, let legacy = account.activeTab,
+           let space = snapshot.spaceId(ofNote: legacy) {
+            snapshot.activeTabBySpace = [space: legacy]
+            try? account.setSetting(Self.activeTabBySpaceKey, Self.yObject([space: legacy]))
         }
     }
 

@@ -158,6 +158,62 @@ struct CoreLibraryTests {
         #expect(reloaded.body(note.id).blocks.map(\.text) == ["Kept locally"])
     }
 
+    /// D-48: starred, tabs (with the active one), daily notebook, Inbox and tasks belong to one
+    /// space; switching back restores them, and the per-space settings survive a reload.
+    @Test func spacesAreIsolated() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let library = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        let a = library.createSpace(name: "A")
+        let b = library.createSpace(name: "B")
+        let notebookA = library.createNotebook(in: a.id, name: "NA", mode: .private)
+        let notebookB = library.createNotebook(in: b.id, name: "NB", mode: .private)
+        library.activateSpace(a.id)
+        let noteA = library.createNote(in: notebookA.id, title: "A1")
+        library.toggleStar(.note, noteA.id)
+        library.openTab(noteA.id)
+        library.addInboxTask("Task in A")
+        #expect(library.starredNotes.map(\.id) == [noteA.id])
+        #expect(library.openTabs.map(\.id) == [noteA.id])
+        #expect(library.activeTab == noteA.id)
+        #expect(library.dailyNotebook?.id == notebookA.id)
+        #expect(library.taskEntries.contains { $0.text == "Task in A" })
+
+        library.activateSpace(b.id)
+        #expect(library.starredNotes.isEmpty)
+        #expect(library.openTabs.isEmpty)
+        #expect(library.activeTab == nil)
+        #expect(library.dailyNotebook?.id == notebookB.id)
+        #expect(!library.taskEntries.contains { $0.text == "Task in A" })
+        #expect(library.ensureInboxIfPossible() == nil)
+        let inboxB = try #require(library.ensureInbox())
+        #expect(inboxB.notebookId == notebookB.id)
+
+        library.activateSpace(a.id)
+        #expect(library.activeTab == noteA.id)
+        #expect(library.ensureInboxIfPossible()?.notebookId == notebookA.id)
+
+        let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        #expect(reloaded.data.dailyNotebookBySpace?[a.id] == notebookA.id)
+        #expect(reloaded.data.dailyNotebookBySpace?[b.id] == notebookB.id)
+        #expect(reloaded.data.activeTabBySpace?[a.id] == noteA.id)
+    }
+
+    /// D-48 migration: the legacy account-wide `dailyNotebookId` goes to its notebook's space.
+    @Test func legacyDailyNotebookMovesToItsSpace() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        let a = library.createSpace(name: "A")
+        let notebook = library.createNotebook(in: a.id, name: "NA", mode: .private)
+        try core.account.setSetting(CoreLibrary.dailyBySpaceKey, CoreLibrary.yObject([:]))
+        try core.account.setSetting("dailyNotebookId", .string(value: notebook.id))
+
+        let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        #expect(reloaded.data.dailyNotebookBySpace == [a.id: notebook.id])
+    }
+
     /// The user's cover image lives in `meta.cover` and its thumbnail in `NoteMeta.coverThumb`.
     @Test func coverImageAndThumbnailPersist() throws {
         let keys = KeyRing(store: InMemorySecretStore())

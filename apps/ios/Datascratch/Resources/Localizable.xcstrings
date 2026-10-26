@@ -2781,6 +2781,26 @@
         }
       }
     },
+    "Send First": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сначала отправить"
+          }
+        }
+      }
+    },
+    "Sending changes…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправляем изменения…"
+          }
+        }
+      }
+    },
     "Serif": {
       "localizations": {
         "ru": {
@@ -3577,6 +3597,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Неотправленные изменения сохранены на этом устройстве: %lld"
+          }
+        }
+      }
+    },
+    "Unsent changes on this device: %lld. They will be sent after you sign in to this same account.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неотправленных изменений на этом устройстве: %lld. Они отправятся после входа в этот же аккаунт."
           }
         }
       }

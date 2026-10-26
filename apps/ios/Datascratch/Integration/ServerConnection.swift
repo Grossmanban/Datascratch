@@ -455,8 +455,26 @@ final class ServerAccountService: AccountService {
     func signOut() async {
         sessionResumed()
         await connection.stop()
+        // Keys of notebooks still only on this device survive: signing in to the same account
+        // uploads them; another account or «Delete data» removes them with the library (spec/07).
+        let kept = connection.core.unsentNotebookKeys()
         try? await connection.accounts.logout()
+        connection.core.restoreNotebookKeys(kept)
         account = nil
+    }
+
+    var unsentChanges: Int { connection.core.unsentChangeCount }
+
+    /// «Send first»: waits (up to `timeout`) until nothing is left to send.
+    func sendPending(timeout: Duration) async -> Bool {
+        connection.reconnect()
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
+            if unsentChanges == 0 { return true }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        return unsentChanges == 0
     }
 
     private static func map(_ error: APIError, recovering: Bool = false) -> AccountError {

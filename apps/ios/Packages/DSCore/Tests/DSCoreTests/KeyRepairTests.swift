@@ -120,6 +120,55 @@ import Testing
         await b.stop()
     }
 
+    /// With a key the server confirmed, the device that met unreadable items uploads a snapshot
+    /// of what it can read: a fresh device catches up from it and never meets the bad items.
+    /// Without that confirmation nothing is uploaded (a device with a wrong key must not).
+    @Test func canonicalDeviceCoversUnreadableItemsWithASnapshot() async throws {
+        for canonical in [false, true] {
+            let server = FakeSyncServer()
+            let nbId = EntityID.make()
+            let key = DSCrypto.newKey()
+            let ad = CryptoAD.doc(nbId)
+            func update(_ folder: String) throws -> Data {
+                let d = NotebookDocument(notebookId: nbId)
+                try d.putFolder(Folder(id: folder, parentId: nil, name: folder, order: 1))
+                return try d.crdt.encodeStateAsUpdate()
+            }
+            await server.register(nbId)
+            await server.seed(docId: nbId, payload: try DSCrypto.seal(try update("one"), key: key, ad: ad))
+            await server.seed(docId: nbId, payload: try DSCrypto.seal(try update("bad"), key: DSCrypto.newKey(), ad: ad))
+            await server.seed(docId: nbId, payload: try DSCrypto.seal(try update("three"), key: key, ad: ad))
+
+            func device(_ name: String) throws -> SyncEngine {
+                var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: name, clientVersion: "test")
+                config.minBackoff = .milliseconds(10)
+                let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
+                return SyncEngine(store: try LocalStore.inMemory(), client: client, keyFor: { _ in key },
+                                  register: { await server.register($0.docId) }, isKeyCanonical: { _ in canonical })
+            }
+            let b = try device("B")
+            await b.start()
+            let doc = NotebookDocument(notebookId: nbId)
+            try await b.open(doc.crdt, notebookId: nbId)
+            #expect(try await eventually { doc.folders().count == 2 })
+            if canonical {
+                #expect(try await eventually { let snap = await server.snapshots[nbId]; return snap?.seq == 3 })
+                let c = try device("C")
+                await c.start()
+                let docC = NotebookDocument(notebookId: nbId)
+                try await c.open(docC.crdt, notebookId: nbId)
+                #expect(try await eventually { docC.folders().map(\.id).sorted() == ["one", "three"] })
+                #expect(await c.status().unreadable.isEmpty)
+                await c.stop()
+            } else {
+                try await Task.sleep(for: .milliseconds(200))
+                let snap = await server.snapshots[nbId]
+                #expect(snap == nil)
+            }
+            await b.stop()
+        }
+    }
+
     /// Device B wrote a notebook document with its own key. After adopting the canonical key and
     /// `rekey`, it reads everything (its old updates through the retired key) and uploads a
     /// canonical snapshot: a fresh device with the canonical key sees both devices' edits.

@@ -208,7 +208,10 @@ for change in try await accounts.reconcileNotebookKeys() {
 // Ключ для записи в блокнот (заметка, перенос): свой или с сервера; nil — блокнота на сервере нет.
 let key = try await accounts.notebookKeyForWriting(notebookId)
 // Движку — отставные ключи, чтобы прочитать уже записанное ими:
-SyncEngine(store:client:keyFor: keys.key(for:), register:, retiredKeysFor: keys.retiredKeys(for:))
+SyncEngine(store:client:keyFor: keys.key(for:), register:, retiredKeysFor: keys.retiredKeys(for:),
+           isKeyCanonical: keys.isCanonical)
+// Свой POST /notebooks прошёл — ключ канонический:
+keys.markNotebookKeyVerified(notebookId)
 ```
 
 `reconcileNotebookKeys` заполняет недостающие ключи и заменяет отличающиеся на серверные;
@@ -227,6 +230,12 @@ SyncEngine(store:client:keyFor: keys.key(for:), register:, retiredKeysFor: keys.
 deviceIds, reason }]` — спокойное предупреждение у блокнота («часть изменений с другого
 устройства не прочитана»), на `summary` не влияет. После того как ключи поменялись
 (`reconcileNotebookKeys`) — `engine.retryUnreadable()`: отложенное скачивается заново.
+
+Если ключ документа подтверждён сервером в этой сессии (`SyncEngine(isKeyCanonical:
+keys.isCanonical)`: ключ блокнота пришёл из `reconcileNotebookKeys`, создан `createNotebook` или
+отмечен `KeyRing.markNotebookKeyVerified` после успешного `POST /notebooks`), устройство,
+отложившее элементы, выгружает снимок того, что прочитало: остальные устройства догоняют с него
+и битых элементов больше не встречают. Устройство с неподтверждённым ключом снимок не выгружает.
 
 ### Ненадёжная сеть
 

@@ -76,6 +76,7 @@ public actor SyncEngine: SyncClientDelegate {
     public nonisolated let client: SyncClient
     private let keyFor: KeyLookup
     private let retiredKeysFor: (@Sendable (DocumentRecord) -> [Data])?
+    private let isKeyCanonical: (@Sendable (DocumentRecord) -> Bool)?
     private let register: Registrar?
     private var awarenessHandler: AwarenessHandler?
 
@@ -122,13 +123,19 @@ public actor SyncEngine: SyncClientDelegate {
     ///     guests (their documents already exist).
     /// - Parameter retiredKeysFor: keys a document had on this device before its canonical one
     ///   (`KeyRing.retiredNotebookKeys`); used only to read what was written with them.
+    /// - Parameter isKeyCanonical: the document's key is confirmed by the server
+    ///   (`KeyRingDocumentKeys.isCanonical`). Only then does a document with set-aside items get
+    ///   a fresh snapshot from this device, which covers the bad items for everyone else; a device
+    ///   with a wrong key must never publish one.
     public init(store: LocalStore, client: SyncClient, keyFor: @escaping KeyLookup, register: Registrar?,
-                retiredKeysFor: (@Sendable (DocumentRecord) -> [Data])? = nil) {
+                retiredKeysFor: (@Sendable (DocumentRecord) -> [Data])? = nil,
+                isKeyCanonical: (@Sendable (DocumentRecord) -> Bool)? = nil) {
         self.store = store
         self.client = client
         self.keyFor = keyFor
         self.register = register
         self.retiredKeysFor = retiredKeysFor
+        self.isKeyCanonical = isKeyCanonical
     }
 
     // MARK: Key repair
@@ -576,6 +583,7 @@ public actor SyncEngine: SyncClientDelegate {
             }
         case .update(let docId, let item):
             receive(docId: docId, snapshot: nil, items: [item])
+            if live.contains(docId) { await finishRekey(docId: docId) }
             await snapshotIfNeeded(docId: docId)
         case .ack(let docId, let clientMsgId, let seq):
             inFlight.remove(clientMsgId)
@@ -651,7 +659,12 @@ public actor SyncEngine: SyncClientDelegate {
             // One by one, so that a single update the document rejects does not hold back the rest.
             for update in added { try? doc.applyUpdate(update.data, origin: .remote) }
         }
-        if !quarantine.isEmpty { publish() }
+        if !quarantine.isEmpty {
+            // Our readable state, re-uploaded as a snapshot, covers the bad items for other
+            // devices (they catch up from it) — only with a key the server confirmed.
+            if isKeyCanonical?(record) == true { try? store.setValue(Data([1]), for: Self.rekeyFlag(docId)) }
+            publish()
+        }
     }
 }
 
@@ -676,6 +689,16 @@ public struct KeyRingDocumentKeys: Sendable {
         case .note:
             guard let nb = record.notebookId, let wrapped = wrappedNoteKey(record.docId, nb) else { return nil }
             return try keyRing.noteKey(noteId: record.docId, wrappedKey: wrapped, notebookId: nb)
+        }
+    }
+
+    /// The document's key is the server's (`SyncEngine(isKeyCanonical:)`): the master key for the
+    /// account document; a notebook key confirmed in this session (`reconcileNotebookKeys`,
+    /// `createNotebook`) for a notebook and its notes.
+    public func isCanonical(_ record: DocumentRecord) -> Bool {
+        switch record.kind {
+        case .account: true
+        case .notebook, .note: record.notebookId.map(keyRing.isNotebookKeyVerified) ?? keyRing.isNotebookKeyVerified(record.docId)
         }
     }
 

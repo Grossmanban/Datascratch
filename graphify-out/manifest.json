@@ -426,10 +426,10 @@
     "semantic_hash": "e2a852424e2a15840b29c5d76061b4df"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Crypto/KeyStore.swift": {
-    "mtime": 1793017232.9249787,
-    "seen": 1793017378.5674343,
-    "ast_hash": "2e18135d4f9c97ff9623d8d194f8471f",
-    "semantic_hash": "2e18135d4f9c97ff9623d8d194f8471f"
+    "mtime": 1793018101.5498471,
+    "seen": 1793018277.0694618,
+    "ast_hash": "b373e6a6f4863cd4068d98085729d413",
+    "semantic_hash": "b373e6a6f4863cd4068d98085729d413"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Model/Blocks.swift": {
     "mtime": 1792930333.2928438,
@@ -504,10 +504,10 @@
     "semantic_hash": "67454a3531500cdedce422e269b58610"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Sync/AccountService.swift": {
-    "mtime": 1793016654.419742,
-    "seen": 1793017378.567466,
-    "ast_hash": "0c7c6bb48b0ba07860d52e9bd180353a",
-    "semantic_hash": "0c7c6bb48b0ba07860d52e9bd180353a"
+    "mtime": 1793018101.5512595,
+    "seen": 1793018277.0694976,
+    "ast_hash": "e0681da9f19ff93a87b11db3cf6475c0",
+    "semantic_hash": "e0681da9f19ff93a87b11db3cf6475c0"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Sync/AttachmentManager.swift": {
     "mtime": 1792934008.5369747,
@@ -522,10 +522,10 @@
     "semantic_hash": "d437cafddb83bbba93773bdc3ccdab18"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Sync/SyncEngine.swift": {
-    "mtime": 1793017232.9255884,
-    "seen": 1793017378.5674725,
-    "ast_hash": "06265c5e51dbe8e1a84249f8f62c7819",
-    "semantic_hash": "06265c5e51dbe8e1a84249f8f62c7819"
+    "mtime": 1793018101.5527875,
+    "seen": 1793018277.0695045,
+    "ast_hash": "11fb8b30ceab78c956dafaa7cc79859b",
+    "semantic_hash": "11fb8b30ceab78c956dafaa7cc79859b"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Sync/SyncMessages.swift": {
     "mtime": 1792932081.050541,
@@ -1387,19 +1387,19 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792932059.0039732,
-    "seen": 1793017378.5677998,
+    "seen": 1793018277.069782,
     "ast_hash": "24098989e922515ff0fa0aac07aa956f",
     "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792932059.0039732,
-    "seen": 1793017378.5678017,
+    "seen": 1793018277.069789,
     "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
     "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792944522.955019,
-    "seen": 1793017378.567803,
+    "seen": 1793018277.069792,
     "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
     "semantic_hash": "a66fd1a5c043c1420b26f520d2b23c56"
   },
@@ -2635,7 +2635,7 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792965497.9521906,
-    "seen": 1793017378.5681727,
+    "seen": 1793018277.070148,
     "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
     "semantic_hash": "c9f780dd0f9b83af1132086b539b65c4"
   },
@@ -4230,10 +4230,10 @@
     "semantic_hash": "d8ab15974e62a09734f07fc0ccf93e11"
   },
   "apps/ios/Packages/DSCore/README.md": {
-    "mtime": 1793017232.924496,
-    "seen": 1793017378.568587,
-    "ast_hash": "442b0a775b9811dfad907138a8115322",
-    "semantic_hash": "442b0a775b9811dfad907138a8115322"
+    "mtime": 1793018176.7076528,
+    "seen": 1793018277.070536,
+    "ast_hash": "ef2a0d2db8df68bb8a0a803e3045d5bc",
+    "semantic_hash": "ef2a0d2db8df68bb8a0a803e3045d5bc"
   },
   "apps/ios/Packages/DSDesign/README.md": {
     "mtime": 1793006199.8112197,
@@ -4848,10 +4848,10 @@
     "semantic_hash": "ba27820f4e86c7c0f8ea9a23cac47ee0"
   },
   "apps/ios/Packages/DSCore/Tests/DSCoreTests/KeyRepairTests.swift": {
-    "mtime": 1793017232.9259057,
-    "seen": 1793017378.567492,
-    "ast_hash": "196c66269b1903c6a342eda3dcdd94f3",
-    "semantic_hash": "196c66269b1903c6a342eda3dcdd94f3"
+    "mtime": 1793018141.5518868,
+    "seen": 1793018277.0695262,
+    "ast_hash": "994ed15b49485ea7edd8762bc682e478",
+    "semantic_hash": "994ed15b49485ea7edd8762bc682e478"
   },
   "apps/ios/Packages/DSCore/Tests/DSCoreTests/NetworkTests.swift": {
     "mtime": 1793015975.1987534,

@@ -23,7 +23,7 @@ final class SessionEndedUITests: XCTestCase {
                       || app.cells.firstMatch.waitForExistence(timeout: 2), "the library is gone")
         let signIn = app.buttons["sync.signIn"].firstMatch
         if !signIn.exists {
-            let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar'")).firstMatch
+            let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
             if toggle.exists { toggle.tap() }
             let back = app.navigationBars.buttons.firstMatch
             if !signIn.waitForExistence(timeout: 2), back.exists { back.tap() }

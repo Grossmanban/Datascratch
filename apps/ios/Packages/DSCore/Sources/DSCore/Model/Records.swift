@@ -143,6 +143,32 @@ public struct Folder: MapRecord {
 
 public enum NoteKind: String, Codable, Sendable { case note, daily, inbox }
 
+/// The agent that created a note as a whole (`NoteMeta.createdByAgent`, D-45).
+public struct AgentAuthor: Hashable, Sendable, Decodable {
+    /// Grant id of the agent.
+    public var agentId: String
+    public var agentName: String
+    /// ISO date-time.
+    public var at: String
+
+    public init(agentId: String, agentName: String, at: String) {
+        self.agentId = agentId
+        self.agentName = agentName
+        self.at = at
+    }
+
+    /// Absent, null or malformed → nil.
+    init?(_ value: YValue?) {
+        guard let e = value?.entries, let id = e["agentId"]?.stringValue, let name = e["agentName"]?.stringValue,
+              let at = e["at"]?.stringValue else { return nil }
+        self.init(agentId: id, agentName: name, at: at)
+    }
+
+    var value: YValue {
+        .object(entries: ["agentId": .string(value: agentId), "agentName": .string(value: agentName), "at": .string(value: at)])
+    }
+}
+
 /// `NoteMeta` in the notebook document (document-model.md §3).
 public struct NoteMeta: MapRecord {
     public var id: String
@@ -160,10 +186,14 @@ public struct NoteMeta: MapRecord {
     public var updatedAt: String
     public var trashedAt: String?
     public var order: Double
+    /// Set when an agent created the whole note (D-45): clients show «Создано агентом» until
+    /// the user dismisses it (`NotebookDocument.clearCreatedByAgent`).
+    public var createdByAgent: AgentAuthor?
 
     public init(id: String = EntityID.make(), folderId: String? = nil, parentNoteId: String? = nil, title: String = "", kind: NoteKind = .note,
                 dailyDate: String? = nil, tags: [String] = [], icon: String? = nil, coverThumb: String? = nil, wrappedKey: String,
-                createdAt: String = DSDate.iso(Date()), updatedAt: String? = nil, trashedAt: String? = nil, order: Double = 0) {
+                createdAt: String = DSDate.iso(Date()), updatedAt: String? = nil, trashedAt: String? = nil, order: Double = 0,
+                createdByAgent: AgentAuthor? = nil) {
         self.id = id
         self.folderId = folderId
         self.parentNoteId = parentNoteId
@@ -178,16 +208,20 @@ public struct NoteMeta: MapRecord {
         self.updatedAt = updatedAt ?? createdAt
         self.trashedAt = trashedAt
         self.order = order
+        self.createdByAgent = createdByAgent
     }
 
+    /// `createdByAgent` is written only when set (absent = null, as other clients write it).
     public var fields: [String: YValue] {
-        [
+        var f: [String: YValue] = [
             "id": .string(value: id), "folderId": .optionalString(folderId), "parentNoteId": .optionalString(parentNoteId),
             "title": .string(value: title), "kind": .string(value: kind.rawValue), "dailyDate": .optionalString(dailyDate),
             "tags": .list(items: tags.map { .string(value: $0) }), "icon": .optionalString(icon), "coverThumb": .optionalString(coverThumb),
             "wrappedKey": .string(value: wrappedKey), "createdAt": .string(value: createdAt), "updatedAt": .string(value: updatedAt),
             "trashedAt": .optionalString(trashedAt), "order": .number(value: order),
         ]
+        if let createdByAgent { f["createdByAgent"] = createdByAgent.value }
+        return f
     }
 
     public init?(id: String, fields f: [String: YValue]) {
@@ -195,7 +229,7 @@ public struct NoteMeta: MapRecord {
                   kind: str(f, "kind").flatMap(NoteKind.init(rawValue:)) ?? .note, dailyDate: str(f, "dailyDate"),
                   tags: f["tags"]?.items?.compactMap(\.stringValue) ?? [], icon: str(f, "icon"), coverThumb: str(f, "coverThumb"),
                   wrappedKey: str(f, "wrappedKey") ?? "", createdAt: str(f, "createdAt") ?? "", updatedAt: str(f, "updatedAt"),
-                  trashedAt: str(f, "trashedAt"), order: num(f, "order") ?? 0)
+                  trashedAt: str(f, "trashedAt"), order: num(f, "order") ?? 0, createdByAgent: AgentAuthor(f["createdByAgent"]))
     }
 
     public var isTrashed: Bool { trashedAt != nil }
@@ -269,6 +303,8 @@ struct RecordJSON {
     func str(_ k: String) -> String? { (try? c.decodeIfPresent(String.self, forKey: AnyKey(stringValue: k))) ?? nil }
     func num(_ k: String) -> Double? { (try? c.decodeIfPresent(Double.self, forKey: AnyKey(stringValue: k))) ?? nil }
     func strings(_ k: String) -> [String] { ((try? c.decodeIfPresent([String].self, forKey: AnyKey(stringValue: k))) ?? nil) ?? [] }
+    /// Absent, null or not decodable → nil.
+    func object<T: Decodable>(_ k: String, as type: T.Type = T.self) -> T? { (try? c.decodeIfPresent(T.self, forKey: AnyKey(stringValue: k))) ?? nil }
 }
 
 extension Space: Decodable {
@@ -300,7 +336,8 @@ extension NoteMeta: Decodable {
         self.init(id: r.id, folderId: r.str("folderId"), parentNoteId: r.str("parentNoteId"), title: r.str("title") ?? "",
                   kind: r.str("kind").flatMap(NoteKind.init(rawValue:)) ?? .note, dailyDate: r.str("dailyDate"), tags: r.strings("tags"),
                   icon: r.str("icon"), coverThumb: r.str("coverThumb"), wrappedKey: r.str("wrappedKey") ?? "",
-                  createdAt: r.str("createdAt") ?? "", updatedAt: r.str("updatedAt"), trashedAt: r.str("trashedAt"), order: r.num("order") ?? 0)
+                  createdAt: r.str("createdAt") ?? "", updatedAt: r.str("updatedAt"), trashedAt: r.str("trashedAt"), order: r.num("order") ?? 0,
+                  createdByAgent: r.object("createdByAgent"))
     }
 }
 

@@ -12,6 +12,7 @@ import { InlineMath } from "./inlineMath";
 import { Callout, Drawing, FileBlock, Image, MathBlock, Mermaid, NoteLink, PageCard, Tag } from "./blocks";
 import { AgentEdit, DocumentNode, DsHorizontalRule, DsLink, Highlight, TableCellAlign, TextAlign, TextColor, Title } from "./core";
 import { TaskItem, TaskList } from "./tasks";
+import { TitleBehavior } from "./title";
 import { UnsupportedFallback, UnsupportedMarkFallback } from "./unknown";
 
 export const lowlight = createLowlight(common);
@@ -27,6 +28,7 @@ export function createSchemaExtensions({ host, placeholders = { title: "Без �
   const exts: AnyExtension[] = [
     DocumentNode,
     Title,
+    TitleBehavior.configure({ host }),
     StarterKit.configure({
       document: false,
       codeBlock: false,

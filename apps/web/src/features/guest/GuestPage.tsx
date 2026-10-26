@@ -17,6 +17,7 @@ import { usePresence } from "@/features/doc/usePresence";
 import { Logo } from "@/features/shell/Splash";
 import type { NoteMeta } from "@/lib/shared";
 import { cn, EmptyState, Spinner } from "@/ui";
+import { iconGlyph } from "@/lib/glyph";
 
 function keyFromHash(): string | null {
   const m = /[#&]k=([A-Za-z0-9_-]+)/.exec(location.hash);
@@ -229,7 +230,7 @@ function GuestNotebook({ session }: { session: GuestSession }) {
                     n.id === current ? "bg-surface font-medium text-ink shadow-[0_1px_2px_rgb(40_30_10/0.08)] ring-1 ring-line" : "text-ink-2 hover:bg-ink/[0.04]",
                   )}
                 >
-                  <span className="text-[13px]">{n.icon ?? <FileText className="size-3.5 text-ink-3" />}</span>
+                  <span className="text-[13px]">{iconGlyph(n.icon) || <FileText className="size-3.5 text-ink-3" />}</span>
                   <span className="truncate">{n.title || t("app.untitled")}</span>
                 </button>
               ))}

@@ -91,6 +91,16 @@
         }
       }
     },
+    "Account & Security": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Аккаунт и безопасность"
+          }
+        }
+      }
+    },
     "Actions of this agent will appear here.": {
       "localizations": {
         "ru": {
@@ -207,6 +217,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Любой, у кого есть ссылка, откроет её в браузере без аккаунта. Ключ шифрования — часть ссылки после «#», он никогда не отправляется на сервер. Ссылка действует, пока вы её не отзовёте."
+          }
+        }
+      }
+    },
+    "App": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приложение"
           }
         }
       }
@@ -337,6 +357,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сменить пароль"
+          }
+        }
+      }
+    },
+    "Check": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверить"
           }
         }
       }
@@ -1551,16 +1581,6 @@
         }
       }
     },
-    "Member since": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "С нами с"
-          }
-        }
-      }
-    },
     "Mono": {
       "localizations": {
         "ru": {
@@ -2637,6 +2657,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Найдите документ или введите команду"
+          }
+        }
+      }
+    },
+    "Security": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Безопасность"
           }
         }
       }

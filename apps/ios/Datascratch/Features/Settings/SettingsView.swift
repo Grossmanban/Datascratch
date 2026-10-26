@@ -6,70 +6,69 @@ import DSDesign
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @State private var path: [SettingsRoute] = []
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    NavigationLink {
-                        AccountSettings()
-                    } label: {
-                        HStack(spacing: Theme.Space.s3) {
-                            Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 40))
-                                .foregroundStyle(Theme.Palette.accent)
-                            VStack(alignment: .leading) {
-                                Text(app.accounts.account?.email ?? String(localized: "Account"))
-                                    .font(.headline)
-                                SyncStatusBadge()
-                            }
-                        }
-                    }
-                    .accessibilityIdentifier("settings.account")
-                    if !app.isRecoveryKeyConfirmed {
-                        NavigationLink { RecoveryKeySettings() } label: {
-                            Label {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Check your recovery key")
-                                    Text("It's the only way back to your notes if you forget the password.")
-                                        .font(Theme.Typography.footnote)
-                                        .foregroundStyle(Theme.Palette.textSecondary)
-                                }
-                            } icon: {
-                                Image(systemName: "key.horizontal")
-                                    .foregroundStyle(Theme.Palette.warning)
-                            }
-                        }
-                        .accessibilityIdentifier("settings.recoveryKeyReminder")
-                    }
+        NavigationStack(path: $path) {
+            SettingsPage(title: String(localized: "Settings")) {
+                NavigationLink(value: SettingsRoute.account) {
+                    DSProfileHeader(name: nil, email: app.accounts.account?.email ?? String(localized: "Account"),
+                                    sync: app.sync.dsState, linkTitle: String(localized: "Account & Security"))
+                        .contentShape(Rectangle())
                 }
-                Section {
-                    NavigationLink { DevicesSettings() } label: {
-                        Label("Devices", systemImage: "ipad.and.iphone")
+                .buttonStyle(.plain)
+                .padding(.vertical, -DSSpace.s4)
+                .accessibilityIdentifier("settings.account")
+                if !app.isRecoveryKeyConfirmed {
+                    DSCallout(tone: .warning, title: String(localized: "Check your recovery key"),
+                              message: String(localized: "It's the only way back to your notes if you forget the password."),
+                              systemImage: "key", actionTitle: String(localized: "Check")) {
+                        path.append(.recoveryKey)
                     }
-                    NavigationLink { AgentTokensSettings() } label: {
-                        Label("Agent Access", systemImage: "sparkles")
+                    .accessibilityIdentifier("settings.recoveryKeyReminder")
+                }
+                DSSettingsSection(String(localized: "Access")) {
+                    NavigationLink(value: SettingsRoute.devices) {
+                        DSSettingsRow(String(localized: "Devices"), systemImage: "ipad.and.iphone",
+                                      value: app.access.devices.isEmpty ? nil : "\(app.access.devices.count)", accessory: .chevron)
+                    }
+                    NavigationLink(value: SettingsRoute.agents) {
+                        DSSettingsRow(String(localized: "Agent Access"), systemImage: "sparkles", accessory: .chevron)
                     }
                     .accessibilityIdentifier("settings.agents")
                 }
-                Section {
-                    NavigationLink { DrawingSettings() } label: {
-                        Label("Pencil & Drawing", systemImage: "pencil.tip")
+                .buttonStyle(.dsSettingsRow)
+                DSSettingsSection(String(localized: "App")) {
+                    NavigationLink(value: SettingsRoute.drawing) {
+                        DSSettingsRow(String(localized: "Pencil & Drawing"), systemImage: "pencil.tip", accessory: .chevron)
                     }
                     .accessibilityIdentifier("settings.drawing")
-                    NavigationLink { AppearanceSettings() } label: {
-                        Label("Appearance", systemImage: "circle.lefthalf.filled")
+                    NavigationLink(value: SettingsRoute.appearance) {
+                        DSSettingsRow(String(localized: "Appearance"), systemImage: "circle.lefthalf.filled",
+                                      value: app.settings.appearance.title, accessory: .chevron)
                     }
                 }
-                Section {
-                    NavigationLink { AboutView() } label: {
-                        Label("About Datascratch", systemImage: "info.circle")
+                .buttonStyle(.dsSettingsRow)
+                DSSettingsSection {
+                    NavigationLink(value: SettingsRoute.about) {
+                        DSSettingsRow(String(localized: "About Datascratch"), systemImage: "info.circle", accessory: .chevron)
                     }
+                }
+                .buttonStyle(.dsSettingsRow)
+            }
+            .navigationDestination(for: SettingsRoute.self) { route in
+                switch route {
+                case .account: AccountSettings()
+                case .recoveryKey: RecoveryKeySettings()
+                case .devices: DevicesSettings()
+                case .agents: AgentTokensSettings()
+                case .drawing: DrawingSettings()
+                case .appearance: AppearanceSettings()
+                case .about: AboutView()
+                case .changePassword: ChangePasswordView()
+                case .securityLog: SecurityLogView()
                 }
             }
-            .navigationTitle("Settings")
-            .settingsNavigationBar()
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -80,68 +79,123 @@ struct SettingsView: View {
     }
 }
 
+enum SettingsRoute: Hashable {
+    case account, recoveryKey, devices, agents, drawing, appearance, about, changePassword, securityLog
+}
+
+/// A settings screen on the paper (design-system spec): serif title in the scroll, sections as
+/// cards, at most 640 pt wide and centred; the bar shows the title only once scrolled.
+struct SettingsPage<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DSSpace.s6) {
+                Text(title)
+                    .dsFont(.title)
+                    .foregroundStyle(Color.dsPrimary)
+                    .padding(.leading, DSSpace.s1)
+                    .accessibilityAddTraits(.isHeader)
+                content
+            }
+            .padding(.horizontal, DSSpace.s5)
+            .padding(.top, DSSpace.s6)
+            .padding(.bottom, DSSpace.s10)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+        }
+        .background(Color.dsCanvas.ignoresSafeArea())
+        .navigationTitle(title)
+        .toolbarTitleDisplayMode(.inline)
+        .settingsNavigationBar()
+    }
+}
+
 struct AccountSettings: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var confirmSignOut = false
 
     var body: some View {
-        Form {
-            Section("Account") {
-                LabeledContent("Email", value: app.accounts.account?.email ?? "—")
-                if let created = app.accounts.account?.createdAt {
-                    LabeledContent("Member since", value: created.formatted(date: .long, time: .omitted))
+        SettingsPage(title: String(localized: "Account")) {
+            DSProfileHeader(name: nil, email: app.accounts.account?.email ?? "—", sync: app.sync.dsState)
+                .padding(.vertical, -DSSpace.s4)
+            DSSettingsSection(String(localized: "Sync"),
+                              footer: app.sync.isLocalOnly
+                                ? String(localized: "Notes are stored only on this device until the Datascratch server is connected.")
+                                : nil) {
+                DSSettingsRow(String(localized: "Status"), systemImage: "arrow.triangle.2.circlepath",
+                              accessory: .custom(AnyView(DSSyncChip(app.sync.dsState).accessibilityIdentifier("sync.status"))))
+                DSSettingsRow(String(localized: "Server"), systemImage: "server.rack",
+                              value: app.sync.serverURL?.host() ?? String(localized: "Not connected"))
+                if case .notSent = app.sync.phase {
+                    Button { app.sync.retryFailed() } label: {
+                        DSSettingsRow(String(localized: "Retry"), systemImage: "arrow.clockwise", accessory: .chevron)
+                    }
+                    .buttonStyle(.dsSettingsRow)
+                    .accessibilityIdentifier("sync.retry")
                 }
             }
-            Section {
-                NavigationLink { RecoveryKeySettings() } label: {
-                    LabeledContent("Recovery Key") {
-                        if !app.isRecoveryKeyConfirmed {
-                            Text("Not checked").foregroundStyle(Theme.Palette.warning)
-                        }
-                    }
+            DSSettingsSection(String(localized: "Security"),
+                              footer: String(localized: "Your password also protects the encryption key. Your recovery key keeps working after a password change.")) {
+                NavigationLink(value: SettingsRoute.recoveryKey) {
+                    DSSettingsRow(String(localized: "Recovery Key"), systemImage: "key",
+                                  accessory: app.isRecoveryKeyConfirmed ? .chevron : .badgeLink(String(localized: "Not checked"), .warning))
                 }
                 .accessibilityIdentifier("settings.recoveryKey")
-                NavigationLink("Security Log") { SecurityLogView() }
-                    .accessibilityIdentifier("settings.securityLog")
-            }
-            Section {
-                NavigationLink("Change Password") { ChangePasswordView() }
-            } footer: {
-                Text("Your password also protects the encryption key. Your recovery key keeps working after a password change.")
-            }
-            Section("Sync") {
-                // Badge on its own line: beside the label it got a sliver of width and the
-                // status wrapped letter by letter into a row hundreds of points tall.
-                VStack(alignment: .leading, spacing: Theme.Space.s1) {
-                    Text("Status")
-                    SyncStatusBadge()
+                NavigationLink(value: SettingsRoute.changePassword) {
+                    DSSettingsRow(String(localized: "Change Password"), systemImage: "lock", accessory: .chevron)
                 }
-                .padding(.vertical, 2)
-                LabeledContent("Server", value: app.sync.serverURL?.host() ?? String(localized: "Not connected"))
-                if app.sync.isLocalOnly {
-                    Text("Notes are stored only on this device until the Datascratch server is connected.")
-                        .font(Theme.Typography.footnote)
-                        .foregroundStyle(Theme.Palette.textSecondary)
+                NavigationLink(value: SettingsRoute.securityLog) {
+                    DSSettingsRow(String(localized: "Security Log"), systemImage: "list.bullet.rectangle", accessory: .chevron)
                 }
+                .accessibilityIdentifier("settings.securityLog")
             }
-            Section {
-                Button("Sign Out", role: .destructive) { confirmSignOut = true }
-                    .confirmationDialog("Sign out of Datascratch?", isPresented: $confirmSignOut,
-                                        titleVisibility: .visible) {
-                        Button("Sign Out", role: .destructive) {
-                            Task {
-                                await app.signOut()
-                                dismiss()
-                            }
-                        }
-                    } message: {
-                        Text("You will need your password to sign in again.")
+            .buttonStyle(.dsSettingsRow)
+            DSSettingsSection(footer: String(localized: "You will need your password to sign in again.")) {
+                Button { confirmSignOut = true } label: {
+                    DSSettingsRow(String(localized: "Sign Out"), systemImage: "rectangle.portrait.and.arrow.right", role: .destructive)
+                }
+                .accessibilityIdentifier("settings.signOut")
+            }
+            .buttonStyle(.dsSettingsRow)
+            .confirmationDialog("Sign out of Datascratch?", isPresented: $confirmSignOut, titleVisibility: .visible) {
+                Button("Sign Out", role: .destructive) {
+                    Task {
+                        await app.signOut()
+                        dismiss()
                     }
+                }
+            } message: {
+                Text("You will need your password to sign in again.")
             }
         }
-        .navigationTitle("Account")
-        .settingsNavigationBar()
+    }
+}
+
+extension SyncCenter {
+    /// The sync phase as the design system's chip shows it.
+    var dsState: DSSyncState {
+        switch phase {
+        case .localOnly: .localOnly
+        case .offline: .offline
+        case .syncing: .syncing
+        case .upToDate(let date): .synced(date)
+        case .failed(let message): .error(message)
+        case .notSent(let documents, _): .error(String(localized: "Not sent: \(documents)"))
+        case .sessionEnded: .error(String(localized: "Signed out"))
+        }
+    }
+}
+
+extension AppSettings.Appearance {
+    var title: String {
+        switch self {
+        case .system: String(localized: "System")
+        case .light: String(localized: "Light")
+        case .dark: String(localized: "Dark")
+        }
     }
 }
 

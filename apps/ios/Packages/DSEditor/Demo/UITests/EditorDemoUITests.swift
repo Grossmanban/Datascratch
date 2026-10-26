@@ -163,6 +163,7 @@ final class EditorDemoUITests: XCTestCase {
         XCTAssertEqual(app.keyboards.count, 0, "the tap opened the link instead of starting to type")
 
         let title = try XCTUnwrap(find("title"), "the [[Title]] link is on screen (links: \(links.label))")
+        XCTAssertTrue(app.links["Новая заметка"].exists, "the [[Title]] link is an accessibility element (VoiceOver, spec/05)")
         tap(title)
         XCTAssertTrue(app.alerts["Заметки «Новая заметка» нет"].waitForExistence(timeout: 10),
                       "a missing [[Title]] offers to create the note")
@@ -198,6 +199,8 @@ final class EditorDemoUITests: XCTestCase {
             sleep(1)
         }
         let point = try XCTUnwrap(chip, "a date chip is on screen (targets: \(targets.label))")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Дата: ' OR label BEGINSWITH 'Дедлайн: '")).firstMatch.exists,
+                      "date chips are accessibility elements")
         app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: point.x, dy: point.y)).tap()
         let nextWeek = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'След. неделя'")).firstMatch
         XCTAssertTrue(nextWeek.waitForExistence(timeout: 10), "the reschedule menu opens")

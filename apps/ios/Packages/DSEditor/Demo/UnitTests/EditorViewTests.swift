@@ -773,6 +773,27 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(editor.textView.textStorage.length, Projection.build(doc.blocks).length)
     }
 
+    /// Links and date chips are accessibility elements that act like a tap (VoiceOver, UI tests).
+    func testLinksAndDateChipsAreAccessibleAndActivate() throws {
+        let doc = InMemoryEditorDocument(blocks: [
+            .title("A11y"),
+            .paragraph("См. [[Целевая заметка]] здесь"),
+            .taskList([.taskItem("Задача с датой", scheduled: EditorView.isoDay(offset: 1))]),
+        ])
+        let editor = host(doc)
+        var openedTitle: String?
+        editor.onOpenNoteTitled = { openedTitle = $0 }
+        let elements = try XCTUnwrap(editor.accessibilityElements)
+        XCTAssertTrue(elements.first as AnyObject === editor.textView, "the text view stays the first element")
+        let link = try XCTUnwrap(elements.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel == "Целевая заметка" })
+        XCTAssertTrue(link.accessibilityTraits.contains(.link))
+        XCTAssertTrue(link.accessibilityActivate())
+        XCTAssertEqual(openedTitle, "Целевая заметка", "activating the element opens the link like a tap")
+        let chip = try XCTUnwrap(elements.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel?.hasPrefix("Дата: ") == true })
+        XCTAssertTrue(chip.accessibilityTraits.contains(.button))
+        XCTAssertGreaterThan(chip.accessibilityFrame.width, 0)
+    }
+
     // MARK: - Block rendering (build 16 feedback)
 
     static let clippedFormulas = [

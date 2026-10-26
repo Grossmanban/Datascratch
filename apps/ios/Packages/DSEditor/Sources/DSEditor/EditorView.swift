@@ -1110,6 +1110,65 @@ public final class EditorView: UIView {
         return out
     }
 
+    // MARK: - Accessibility of tap targets
+
+    /// One accessibility element per note link and task date chip on screen, after the text view:
+    /// VoiceOver (and UI tests) find them by title and activate them like a tap (`spec/05`).
+    public override var accessibilityElements: [Any]? {
+        get { [textView] + tapTargetElements() }
+        set {}
+    }
+
+    private func tapTargetElements() -> [UIAccessibilityElement] {
+        guard let tlm = textView.textLayoutManager else { return [] }
+        let storage = textView.textStorage
+        let visible = textView.bounds
+        var out: [UIAccessibilityElement] = []
+        func add(_ label: String, frame: CGRect, traits: UIAccessibilityTraits, hint: String?, action: @escaping () -> Void) {
+            guard frame.intersects(visible) else { return }
+            let e = TapTargetAccessibilityElement(accessibilityContainer: self)
+            e.accessibilityLabel = label
+            e.accessibilityTraits = traits
+            e.accessibilityHint = hint
+            e.accessibilityFrameInContainerSpace = textView.convert(frame, to: self)
+            e.activate = action
+            out.append(e)
+        }
+        storage.enumerateAttribute(.dsWikiLink, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard let title = value as? String, let f = geometry.segmentFrame(range.location..<(range.location + range.length)) else { return }
+            add(title, frame: f, traits: .link, hint: "Открыть заметку") { [weak self] in self?.onOpenNoteTitled?(title) }
+        }
+        storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard let chip = value as? InlineAtomAttachment, let atom = chip.atom, atom.type == NodeType.noteLink,
+                  let id = atom.attrs["noteId"]?.stringValue,
+                  let f = geometry.segmentFrame(range.location..<(range.location + 1)) else { return }
+            let title = attachmentResolver?.noteTitle(for: id) ?? atom.attrs["label"]?.stringValue ?? "Заметка"
+            add(title, frame: f, traits: .link, hint: "Открыть заметку") { [weak self] in self?.onOpenNote?(id) }
+        }
+        let origin = geometry.origin
+        tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: []) { frag in
+            guard let block = frag as? BlockLayoutFragment, let d = block.decoration, let item = d.itemBlockId,
+                  case .task(let state, let scheduled, let deadline) = d.marker else { return true }
+            var kinds: [Bool] = []
+            if scheduled != nil { kinds.append(false) }
+            if deadline != nil { kinds.append(true) }
+            let chips = BlockLayoutFragment.dateChips(scheduled: scheduled, deadline: deadline,
+                                                      completed: state == "done" || state == "cancelled", fontSize: d.fontSize)
+            for ((local, isDeadline), chip) in zip(zip(block.dateChipFrames(), kinds), chips) {
+                let rect = local.offsetBy(dx: frag.layoutFragmentFrame.minX + origin.x, dy: frag.layoutFragmentFrame.minY + origin.y)
+                let label = (isDeadline ? "Дедлайн: " : "Дата: ") + chip.text.string
+                add(label, frame: rect, traits: .button, hint: "Перенести") { [weak self] in
+                    guard let self else { return }
+                    self.dateMenuTarget = (item, isDeadline, rect)
+                    self.editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: "taskDate",
+                                                                                sourcePoint: CGPoint(x: rect.midX, y: rect.minY)))
+                }
+            }
+            return true
+        }
+        return out
+    }
+
     /// The date chip whose menu is showing.
     private var dateMenuTarget: (item: BlockID, deadline: Bool, rect: CGRect)?
 
@@ -1523,6 +1582,16 @@ extension EditorView {
         }
         picker.sheetPresentationController?.detents = [.medium()]
         top.present(picker, animated: true)
+    }
+}
+
+/// Accessibility element of a link or chip: activating it does what a tap does.
+final class TapTargetAccessibilityElement: UIAccessibilityElement {
+    var activate: (() -> Void)?
+
+    override func accessibilityActivate() -> Bool {
+        activate?()
+        return activate != nil
     }
 }
 

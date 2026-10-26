@@ -146,7 +146,14 @@ describe("NoteMeta.createdByAgent (D-45)", () => {
     const { noteMetaSchema } = await import("../src/contracts/document.js");
     expect(noteMetaSchema.safeParse(base).success).toBe(true);
     expect(noteMetaSchema.safeParse({ ...base, createdByAgent: null }).success).toBe(true);
-    expect(noteMetaSchema.safeParse({ ...base, createdByAgent: { agentId: ID, agentName: "Claude", at: "2026-10-26T09:00:00.000Z" } }).success).toBe(true);
-    expect(noteMetaSchema.safeParse({ ...base, createdByAgent: { agentId: ID } }).success).toBe(false);
+    expect(
+      noteMetaSchema.safeParse({
+        ...base,
+        createdByAgent: { agentId: ID, agentName: "Claude", at: "2026-10-26T09:00:00.000Z" },
+      }).success,
+    ).toBe(true);
+    expect(noteMetaSchema.safeParse({ ...base, createdByAgent: { agentId: ID } }).success).toBe(
+      false,
+    );
   });
 });

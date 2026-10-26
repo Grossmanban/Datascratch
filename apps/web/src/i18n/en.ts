@@ -94,6 +94,7 @@ const en: Loose<Messages> = {
     newNotebook: "New notebook",
     newSpace: "New space",
     spaces: "Spaces",
+    fromSpace: "From the space “{{name}}”",
     addToNotebook: "Add to notebook",
     fullScreen: "Full screen",
     exitFullScreen: "Exit full screen",

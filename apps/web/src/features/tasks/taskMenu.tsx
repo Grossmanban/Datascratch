@@ -6,6 +6,7 @@ import { deleteTask, findInbox, getOrCreateInbox, moveTask, openTab, patchTask }
 import { noteTitle, useWorkspace } from "@/domain/workspace";
 import { nextWeek, today, tomorrow } from "@/lib/dates";
 import type { MenuItem } from "@/ui";
+import { iconGlyph } from "@/lib/glyph";
 
 type Nav = ReturnType<typeof useNavigate>;
 
@@ -79,7 +80,7 @@ export function taskMenuItems(
           : []),
         ...recent.map((n) => ({
           label: noteTitle(n, t("app.untitled")),
-          icon: n.icon ? <span>{n.icon}</span> : <FileText className="size-3.5" />,
+          icon: iconGlyph(n.icon) ? <span>{iconGlyph(n.icon)}</span> : <FileText className="size-3.5" />,
           onSelect: () => void moveTask(task.noteId, task.taskId, n.id),
         })),
       ],

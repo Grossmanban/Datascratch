@@ -6,7 +6,8 @@
  * A written word is several strokes whose points are anchored to whatever
  * characters happen to be nearest — often in different words, cells or
  * paragraphs. So text strokes are grouped by *time* (one writing run) within
- * one top-level block, never by anchor; anchors only name the place.
+ * one top-level block, and strokes written close together on one line join
+ * the same group whatever the pause; anchors only name the place.
  */
 import * as Y from "yjs";
 import { attr, blockIdOf, childElements, contentOf, findBlock, flatten } from "./model.js";
@@ -143,19 +144,63 @@ function describeGroup(group: TextStrokePlacement[]): { description: string; mar
   return { description: parts.join("; "), marks };
 }
 
+/** Strokes closer than this (in em, horizontally on one line) belong to one handwritten fragment. */
+export const GROUP_GAP_EM = 1.5;
+/** Average advance of a character in em: turns anchor offsets into an approximate x without a text layout. */
+const CHAR_EM = 0.55;
+
+/** Approximate horizontal and vertical extent of a stroke in em, in its main block (null: no point there). */
+function emSpan(p: TextStrokePlacement): { minX: number; maxX: number; minY: number; maxY: number } | null {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const pt of p.stroke.points) {
+    const a = p.anchors[Math.round(pt.a)];
+    if (!a || a.block !== p.main) continue;
+    const x = a.offset * CHAR_EM + pt.x;
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, pt.y);
+    maxY = Math.max(maxY, pt.y);
+  }
+  return minX === Infinity ? null : { minX, maxX, minY, maxY };
+}
+
+type EmSpan = ReturnType<typeof emSpan>;
+
+function spatiallyClose(a: TextStrokePlacement, sa: EmSpan, b: TextStrokePlacement, sb: EmSpan): boolean {
+  if (a.main !== b.main || !sa || !sb) return false;
+  const gapX = Math.max(0, Math.max(sa.minX, sb.minX) - Math.min(sa.maxX, sb.maxX));
+  const gapY = Math.max(0, Math.max(sa.minY, sb.minY) - Math.min(sa.maxY, sb.maxY));
+  return gapX < GROUP_GAP_EM && gapY < 1;
+}
+
 export function collectHandwriting(doc: Y.Doc): HandwritingItem[] {
   const strokes = readStrokes(doc);
   const items: HandwritingItem[] = [];
 
-  // Text-anchored strokes: writing runs (consecutive in time) within one top-level block.
+  // Text-anchored strokes: a writing run (consecutive in time within one top-level block) is one item,
+  // and strokes close to each other on the same line of the same block join it whatever the pause between them.
   const placed = placeTextStrokes(doc, strokes).sort((a, b) => a.stroke.createdAt - b.stroke.createdAt);
-  const groups: TextStrokePlacement[][] = [];
-  for (const p of placed) {
-    const g = groups[groups.length - 1];
-    const last = g?.[g.length - 1];
-    if (g && last && p.top === last.top && p.stroke.createdAt - last.stroke.createdAt <= GROUP_PAUSE_MS) g.push(p);
-    else groups.push([p]);
+  const parent = placed.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i]!)));
+  const join = (a: number, b: number) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[Math.max(ra, rb)] = Math.min(ra, rb);
+  };
+  for (let i = 1; i < placed.length; i++) {
+    const a = placed[i - 1]!;
+    const b = placed[i]!;
+    if (a.top === b.top && b.stroke.createdAt - a.stroke.createdAt <= GROUP_PAUSE_MS) join(i - 1, i);
   }
+  const spans = placed.map(emSpan);
+  for (let i = 0; i < placed.length; i++)
+    for (let j = i + 1; j < placed.length; j++) if (spatiallyClose(placed[i]!, spans[i]!, placed[j]!, spans[j]!)) join(i, j);
+  const byRoot = new Map<number, TextStrokePlacement[]>();
+  placed.forEach((p, i) => byRoot.set(find(i), [...(byRoot.get(find(i)) ?? []), p]));
+  const groups = [...byRoot.values()];
   for (const g of groups) {
     const { description, marks } = describeGroup(g);
     const counts = new Map<Y.XmlElement, number>();

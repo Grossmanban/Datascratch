@@ -53,6 +53,23 @@ describe("REST /v1/agent", () => {
     expect(created.status).toBe(200);
   });
 
+  it("organises folders and moves notes", async () => {
+    const { call } = await setup();
+    const a = await call(`/v1/agent/folders`, { method: "POST", body: JSON.stringify({ notebookId: NB_WORK, name: "Проекты" }) }).then((x) => x.json());
+    const b = await call(`/v1/agent/folders`, { method: "POST", body: JSON.stringify({ notebookId: NB_WORK, name: "Запуск", parentFolderId: a.folder.id }) }).then((x) => x.json());
+    expect(b.folder.path).toBe("Проекты / Запуск");
+    const renamed = await call(`/v1/agent/folders/${a.folder.id}`, { method: "PATCH", body: JSON.stringify({ name: "Работа" }) }).then((x) => x.json());
+    expect(renamed.folder.name).toBe("Работа");
+    const moved = await call(`/v1/agent/notes/${NOTE_PLAN}/move`, { method: "POST", body: JSON.stringify({ folderId: b.folder.id }) }).then((x) => x.json());
+    expect(moved.note.folderPath).toEqual(["Работа", "Запуск"]);
+    const up = await call(`/v1/agent/folders/${b.folder.id}/move`, { method: "POST", body: JSON.stringify({ parentFolderId: null }) }).then((x) => x.json());
+    expect(up.folder.path).toBe("Запуск");
+    const refused = await call(`/v1/agent/folders/${b.folder.id}`, { method: "DELETE" });
+    expect(refused.status).toBe(409);
+    const del = await call(`/v1/agent/folders/${b.folder.id}?contents=move_to_parent`, { method: "DELETE" }).then((x) => x.json());
+    expect(del).toMatchObject({ movedNotes: 1, movedTo: null });
+  });
+
   it("returns clear validation and permission errors", async () => {
     const { call, s } = await setup("read");
     const bad = await call(`/v1/agent/notes/not-a-uuid`);

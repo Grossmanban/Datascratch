@@ -106,6 +106,8 @@ export class InMemoryDataSource implements AgentDataSource {
   readonly skippedFor = new Map<string, NonNullable<LoadedDoc["skipped"]>>();
   /** grantId of every agent call, as the server would use it for RLS. */
   readonly grantCalls: (string | undefined)[] = [];
+  /** Makes the next moveNoteDoc fail after building the updates (atomicity tests). */
+  failNextMove = false;
 
   addNotebook(userId: string, nb: Partial<AgentNotebook> & { id: string; mode?: "private" | "agent" }, doc: Y.Doc): void {
     this.notebooks.set(nb.id, {
@@ -192,6 +194,27 @@ export class InMemoryDataSource implements AgentDataSource {
     if (!nb || nb.userId !== userId || nb.mode !== "agent") throw new Error("notebook not writable");
     this.docs.set(noteId, { userId, notebookId, doc: new Y.Doc({ gc: false }), seq: 0, history: [] });
     return { wrappedKey: `wrapped-${noteId}` };
+  }
+
+  async moveNoteDoc(
+    userId: string,
+    move: Parameters<NonNullable<AgentDataSource["moveNoteDoc"]>>[1],
+  ): Promise<{ fromSeq: number; toSeq: number }> {
+    this.grantCalls.push(move.origin.grantId);
+    const note = this.readable(userId, move.noteId);
+    const from = this.readable(userId, move.fromNotebookId);
+    const to = this.readable(userId, move.toNotebookId);
+    if (!note || note.notebookId !== move.fromNotebookId || !from || !to) throw new Error("note or notebook not writable");
+    // Stand-in for re-wrapping the note key with the target notebook key.
+    const { from: fromUpdate, to: toUpdate } = move.indexUpdates(`wrapped-${move.noteId}@${move.toNotebookId}`);
+    if (this.failNextMove) {
+      this.failNextMove = false;
+      throw new Error("simulated failure: nothing stored");
+    }
+    note.notebookId = move.toNotebookId;
+    const toSeq = (await this.applyUpdate(userId, move.toNotebookId, toUpdate, move.origin)).seq;
+    const fromSeq = (await this.applyUpdate(userId, move.fromNotebookId, fromUpdate, move.origin)).seq;
+    return { fromSeq, toSeq };
   }
 }
 

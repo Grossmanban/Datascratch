@@ -265,7 +265,7 @@ class Importer {
           const align = node.align?.[c] ?? null;
           return {
             type: r === 0 ? "tableHeader" : "tableCell",
-            attrs: { colspan: 1, rowspan: 1, colwidth: null, align },
+            attrs: align ? { colspan: 1, rowspan: 1, colwidth: null, align } : { colspan: 1, rowspan: 1, colwidth: null },
             children: [{ type: "paragraph", attrs: {}, inline: this.inline(cell.children) }],
           };
         }),

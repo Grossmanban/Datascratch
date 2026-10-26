@@ -17,7 +17,8 @@ struct MainSplitView: View {
                 .navigationSplitViewColumnWidth(min: 320, ideal: 400, max: 560)
         } detail: {
             NavigationStack {
-                if scene.isContentFullScreen {
+                // Only when the list really has the whole width: never a second copy beside it.
+                if scene.isContentFullScreen, scene.columnVisibility == .detailOnly {
                     ContentColumn()
                 } else if let noteId = scene.selectedNoteId, app.library.note(noteId) != nil {
                     DocumentScreen(noteId: noteId)

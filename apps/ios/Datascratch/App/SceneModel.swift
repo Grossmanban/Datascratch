@@ -59,6 +59,9 @@ final class SceneModel {
     /// the calendar, a list) is a passing state and is not remembered.
     var columnVisibility: NavigationSplitViewVisibility = .all {
         didSet {
+            // Columns shown again (sidebar button, swipe): full-screen content is over, or the
+            // list would show twice — in its column and in place of the document.
+            if columnVisibility != .detailOnly, isContentFullScreen { isContentFullScreen = false }
             guard !isContentFullScreen else { return }
             app.settings.columnLayout = Self.name(of: columnVisibility)
         }

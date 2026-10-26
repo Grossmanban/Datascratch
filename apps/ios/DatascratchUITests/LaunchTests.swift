@@ -469,6 +469,48 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["content.fullScreen"].firstMatch.exists, "the list is not on the whole width")
     }
 
+    /// iPad (build 8 feedback): after closing a document (list on the whole width), showing the
+    /// sidebar and picking a notebook shows the list once — never a second copy in place of the
+    /// document — and the sidebar's last row is not under the footer.
+    func testNotebookListShowsOnceOnIPad() throws {
+        try checkNotebookListShowsOnce(.portrait)
+    }
+
+    func testNotebookListShowsOnceOnIPadLandscape() throws {
+        try checkNotebookListShowsOnce(.landscapeLeft)
+    }
+
+    private func checkNotebookListShowsOnce(_ orientation: UIDeviceOrientation) throws {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
+        rotate(orientation)
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let close = app.buttons["document.close"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 3), "no Close Document button")
+        close.tap()
+        settle(1.5)
+
+        let notebook = sidebarElement(app, "sidebar.notebook")
+        XCTAssertTrue(notebook.exists, "no notebook in the sidebar; buttons: \(Self.buttons(app))")
+        notebook.tap()
+        settle(1.5)
+        let fullScreenButtons = app.buttons.matching(identifier: "content.fullScreen")
+        XCTAssertEqual(fullScreenButtons.count, 1, "the list shows more than once")
+        XCTAssertEqual(app.buttons.matching(identifier: "library.newNote").count, 1, "two list toolbars")
+        XCTAssertEqual(fullScreenButtons.firstMatch.label, "Full Screen", "«Show Columns» without full screen")
+
+        // The last sidebar row stays clear of the footer.
+        let trash = sidebarElement(app, "sidebar.trash")
+        let footer = app.descendants(matching: .any)["sidebar.footer"].firstMatch
+        XCTAssertTrue(trash.exists && footer.exists, "no Trash or footer")
+        if !trash.isHittable { app.swipeUp() }
+        XCTAssertLessThanOrEqual(trash.frame.maxY, footer.frame.minY + 1, "Trash is under the footer")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "notebook-list-once-\(orientation == .portrait ? "portrait" : "landscape")"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     /// Tabs close with their own button.
     func testClosingATab() throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad: sidebar beside the document") }

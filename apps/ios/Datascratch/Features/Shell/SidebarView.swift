@@ -146,11 +146,11 @@ struct SidebarView: View {
         .navigationTitle(library.activeSpace?.name ?? "Datascratch")
         // The space tile in the toolbar names the space; no SF large title.
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(removing: .title)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 SpaceSwitcher()
             }
-            ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     scene.isCommandPalettePresented = true

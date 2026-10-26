@@ -1441,6 +1441,16 @@
         }
       }
     },
+    "Later": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Позже"
+          }
+        }
+      }
+    },
     "Layout": {
       "localizations": {
         "ru": {
@@ -2821,6 +2831,16 @@
         }
       }
     },
+    "Signed out": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Устройство отключено"
+          }
+        }
+      }
+    },
     "Signing a device out removes its access immediately.": {
       "localizations": {
         "ru": {
@@ -3161,6 +3181,16 @@
         }
       }
     },
+    "The session was ended from another device or in your account settings. Your notes stay on this device; changes made here will sync once you sign in again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сеанс завершён с другого устройства или в настройках аккаунта. Заметки остаются на этом устройстве; изменения, сделанные здесь, синхронизируются, как только вы снова войдёте."
+          }
+        }
+      }
+    },
     "Theme": {
       "localizations": {
         "ru": {
@@ -3197,6 +3227,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Это устройство"
+          }
+        }
+      }
+    },
+    "This device was signed out": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это устройство отключено от аккаунта"
           }
         }
       }

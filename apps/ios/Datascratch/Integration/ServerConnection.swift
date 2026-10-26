@@ -261,10 +261,13 @@ final class ServerConnection: CoreLibraryRemote {
     /// replaced notebooks, notes whose key only an invented (lost) notebook key opened, and
     /// once per device every notebook (build 12, prod 2026-10-26) — then fetch set-aside items.
     private func repairKeys(_ changes: [DSCore.AccountService.NotebookKeyChange], engine: SyncEngine) async {
+        // Documents that waited for a key (a notebook from another device) start syncing now.
+        await engine.resumeDocumentsWaitingForKeys()
         var docs = changes.map(\.notebookId)
         docs += core.healUnreadableNotes()
         docs += core.takeOneTimeNotebookRekey()
         for docId in Set(docs) { await engine.rekey(docId: docId) }
+        await engine.resumeDocumentsWaitingForKeys()
         await engine.retryUnreadable()
     }
 

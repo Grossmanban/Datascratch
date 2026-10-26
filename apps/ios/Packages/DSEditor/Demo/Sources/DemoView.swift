@@ -40,9 +40,12 @@ struct DemoView: View {
             EditorRepresentable(editor: model.editor)
                 .accessibilityIdentifier("editor")
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    ToolPalette(model: model)
-                        .padding(.top, 8)
-                        .padding(.bottom, 12)
+                    // UI-test bisection (temporary): `-noPalette`.
+                    if !model.hidesPalette {
+                        ToolPalette(model: model)
+                            .padding(.top, 8)
+                            .padding(.bottom, 12)
+                    }
                 }
             if model.showHUD {
                 HUDView(model: model)

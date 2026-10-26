@@ -112,9 +112,9 @@ final class FailingURLProtocol: URLProtocol, @unchecked Sendable {
         #expect(register.count == 2)
     }
 
-    /// Refresh tokens are one-time (reuse revokes the device): a refresh is retried only when
-    /// the request certainly did not leave, and a failed refresh keeps the session.
-    @Test func tokenRefreshIsRetriedOnlyWhenNotSent() async throws {
+    /// A lost refresh response is retried (the server answers a repeat of the same token within
+    /// 60 s with the same session, api.md); a refresh that keeps failing keeps the session.
+    @Test func tokenRefreshIsRetried() async throws {
         let ok = FlakyTransport(failures: [.notSent]) { req in
             req.url!.path == "/v1/auth/refresh" ? (200, Self.sessionJSON("t2")) : (200, Data("[]".utf8))
         }
@@ -123,11 +123,18 @@ final class FailingURLProtocol: URLProtocol, @unchecked Sendable {
         #expect(ok.requests.withLock { $0.map(\.url!.path) } == ["/v1/auth/refresh", "/v1/auth/refresh", "/v1/devices"])
         #expect(await api1.currentSession?.accessToken == "t2")
 
-        let lost = FlakyTransport(failures: [.maybeSent]) { _ in (200, Self.sessionJSON("t2")) }
+        let lost = FlakyTransport(failures: [.maybeSent]) { req in
+            req.url!.path == "/v1/auth/refresh" ? (200, Self.sessionJSON("t3")) : (200, Data("[]".utf8))
+        }
         let api2 = try await api(lost, signedIn: true, expired: true)
-        await #expect(throws: APIError.transport("timed out")) { _ = try await api2.devices() }
-        #expect(lost.count == 1)
-        #expect(await api2.isSignedIn)
+        _ = try await api2.devices()
+        #expect(lost.requests.withLock { $0.map(\.url!.path) } == ["/v1/auth/refresh", "/v1/auth/refresh", "/v1/devices"])
+        #expect(await api2.currentSession?.accessToken == "t3")
+
+        let down = FlakyTransport(failures: [.maybeSent, .maybeSent, .maybeSent, .maybeSent]) { _ in (200, Self.sessionJSON("t4")) }
+        let api3 = try await api(down, signedIn: true, expired: true)
+        await #expect(throws: APIError.transport("timed out")) { _ = try await api3.devices() }
+        #expect(await api3.isSignedIn)
     }
 
     /// The real URLSession path: a stub protocol fails the first handshakes.

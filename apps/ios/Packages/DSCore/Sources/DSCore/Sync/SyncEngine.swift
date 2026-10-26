@@ -109,6 +109,10 @@ public actor SyncEngine: SyncClientDelegate {
     private var subscribedAll = false
     /// Documents whose registration was refused: not tried again until `retryFailed`.
     private var refused: Set<String> = []
+    /// Documents without a key yet (a note whose `NoteMeta` has not arrived, a notebook before
+    /// its key is fetched): not subscribed — nothing is fetched or skipped — until the key is
+    /// there (`resumeDocumentsWaitingForKeys`, also after every notebook index update).
+    private var waitingForKey: Set<String> = []
     /// Retry of temporary failures (registration, server errors) with exponential backoff.
     private var retryTask: Task<Void, Never>?
     private var retryDelay: Duration?
@@ -160,6 +164,7 @@ public actor SyncEngine: SyncClientDelegate {
     /// Fetches set-aside items again (all documents, or one) — after keys changed, e.g.
     /// `AccountService.reconcileNotebookKeys` filled in or replaced a key.
     public func retryUnreadable(docId: String? = nil) async {
+        await resumeDocumentsWaitingForKeys()
         let ids = docId.map { [$0] } ?? Array(Set(((try? store.quarantined()) ?? []).map(\.docId)))
         var records: [DocumentRecord] = []
         for id in ids where (try? store.releaseQuarantine(docId: id)) == true {
@@ -465,7 +470,12 @@ public actor SyncEngine: SyncClientDelegate {
     private func subscribe(_ records: [DocumentRecord]) async throws -> Bool {
         var ready: [DocumentRecord] = []
         var temporaryFailure = false
-        for record in records where !refused.contains(record.docId) && (try? keyFor(record)) != nil {
+        for record in records where !refused.contains(record.docId) {
+            guard (try? keyFor(record)) != nil else {
+                waitingForKey.insert(record.docId)
+                continue
+            }
+            waitingForKey.remove(record.docId)
             if !record.registered {
                 do {
                     if let register { try await register(record) }
@@ -572,7 +582,8 @@ public actor SyncEngine: SyncClientDelegate {
         case .welcome:
             break
         case .updates(let docId, let snapshot, let items, let upToDate):
-            receive(docId: docId, snapshot: snapshot, items: items)
+            guard receive(docId: docId, snapshot: snapshot, items: items) else { return }
+            await resumeAfterIndexUpdate(docId)
             if upToDate {
                 catchingUp.remove(docId)
                 live.insert(docId)
@@ -582,7 +593,8 @@ public actor SyncEngine: SyncClientDelegate {
                 await snapshotIfNeeded(docId: docId)
             }
         case .update(let docId, let item):
-            receive(docId: docId, snapshot: nil, items: [item])
+            guard receive(docId: docId, snapshot: nil, items: [item]) else { return }
+            await resumeAfterIndexUpdate(docId)
             if live.contains(docId) { await finishRekey(docId: docId) }
             await snapshotIfNeeded(docId: docId)
         case .ack(let docId, let clientMsgId, let seq):
@@ -618,8 +630,23 @@ public actor SyncEngine: SyncClientDelegate {
     /// Decrypts, stores and applies remote data. Items that cannot be read (another key) or are
     /// not valid updates are set aside (`LocalStore.quarantined`, `SyncStatus.unreadable`) and
     /// skipped: one bad item must not stop a document for good.
-    private func receive(docId: String, snapshot: (seq: Int64, payload: Data)?, items: [UpdateItem]) {
-        guard let record = known[docId] ?? (try? store.document(docId)), let key = try? keyFor(record) else { return }
+    ///
+    /// No key (yet) is not «unreadable»: nothing is stored or skipped, `lastSeq` stays, and the
+    /// document waits for its key; returns false then.
+    @discardableResult
+    private func receive(docId: String, snapshot: (seq: Int64, payload: Data)?, items: [UpdateItem]) -> Bool {
+        guard var record = known[docId] ?? (try? store.document(docId)) else { return false }
+        var found = try? keyFor(record)
+        if found == nil, let fresh = try? store.document(docId) {
+            // The cached record may be stale (a note moved to another notebook).
+            record = fresh
+            known[docId] = fresh
+            found = try? keyFor(fresh)
+        }
+        guard let key = found else {
+            pauseForKey(docId)
+            return false
+        }
         let doc = open[docId]?.doc
         let ad = CryptoAD.doc(docId)
         let retired = retiredKeysFor?(record) ?? []
@@ -654,7 +681,7 @@ public actor SyncEngine: SyncClientDelegate {
             }
         }
         guard !readable.isEmpty || !quarantine.isEmpty,
-              let added = try? store.appendRemoteUpdates(docId: docId, items: readable, quarantine: quarantine) else { return }
+              let added = try? store.appendRemoteUpdates(docId: docId, items: readable, quarantine: quarantine) else { return true }
         if let doc, !added.isEmpty, (try? doc.applyUpdates(added.map(\.data), origin: .remote)) == nil {
             // One by one, so that a single update the document rejects does not hold back the rest.
             for update in added { try? doc.applyUpdate(update.data, origin: .remote) }
@@ -665,6 +692,33 @@ public actor SyncEngine: SyncClientDelegate {
             if isKeyCanonical?(record) == true { try? store.setValue(Data([1]), for: Self.rekeyFlag(docId)) }
             publish()
         }
+        return true
+    }
+
+    /// Stops following a document whose key went missing (e.g. a moved note before the target
+    /// notebook's index lists it): what the server sends meanwhile is not stored, so `lastSeq`
+    /// stays and the resubscription fetches it again.
+    private func pauseForKey(_ docId: String) {
+        waitingForKey.insert(docId)
+        live.remove(docId)
+        catchingUp.remove(docId)
+        publish()
+    }
+
+    /// Subscribes documents that were waiting for their key and have it now. Called after every
+    /// notebook index update (a `NoteMeta` with the note's key may have arrived); call it also
+    /// after `AccountService.reconcileNotebookKeys`.
+    public func resumeDocumentsWaitingForKeys() async {
+        guard !waitingForKey.isEmpty, await client.isConnected else { return }
+        let ready = waitingForKey.compactMap { try? store.document($0) }.filter { (try? keyFor($0)) != nil }
+        guard !ready.isEmpty else { return }
+        for r in ready { known[r.docId] = r }
+        try? await subscribe(ready)
+    }
+
+    private func resumeAfterIndexUpdate(_ docId: String) async {
+        guard !waitingForKey.isEmpty, (known[docId] ?? (try? store.document(docId)))?.kind == .notebook else { return }
+        await resumeDocumentsWaitingForKeys()
     }
 }
 

@@ -178,6 +178,19 @@ public final class LocalStore: Sendable {
             try db.execute(sql: "DELETE FROM outbox WHERE docId NOT IN (SELECT docId FROM documents)")
             try db.execute(sql: "DELETE FROM docUpdates WHERE docId NOT IN (SELECT docId FROM documents)")
         }
+        m.registerMigration("v7-quarantine") { db in
+            // Remote items that could not be read (wrong key) or applied: kept aside so the
+            // document keeps syncing past them; retried after a key repair.
+            try db.create(table: "quarantine") { t in
+                t.column("docId", .text).notNull().indexed().references("documents", onDelete: .cascade)
+                t.column("seq", .integer).notNull()
+                t.column("deviceId", .text).notNull()
+                t.column("payload", .blob).notNull()
+                t.column("reason", .text).notNull()
+                t.column("at", .datetime).notNull()
+                t.primaryKey(["docId", "seq"])
+            }
+        }
         return m
     }
 }
@@ -236,6 +249,37 @@ public struct StoredUpdate: Codable, FetchableRecord, MutablePersistableRecord, 
 }
 
 /// A queued outgoing message (`push` or `snapshot`), kept until the server `ack`s it.
+/// A remote update or snapshot that could not be read (wrong key) or applied.
+public struct QuarantinedItem: Hashable, Sendable {
+    public var docId: String
+    public var seq: Int64
+    /// Who wrote it (`deviceId` of the update).
+    public var deviceId: String
+    /// Still encrypted, as received.
+    public var payload: Data
+    public var reason: String
+
+    public init(docId: String, seq: Int64, deviceId: String, payload: Data, reason: String) {
+        self.docId = docId
+        self.seq = seq
+        self.deviceId = deviceId
+        self.payload = payload
+        self.reason = reason
+    }
+}
+
+/// Unreadable remote data of one document, for a calm per-notebook warning.
+public struct UnreadableSync: Hashable, Sendable {
+    public var docId: String
+    /// The notebook it belongs to (the notebook itself for a notebook document).
+    public var notebookId: String?
+    public var count: Int
+    public var firstSeq: Int64
+    public var lastSeq: Int64
+    public var deviceIds: [String]
+    public var reason: String
+}
+
 /// Messages of one document that could not be delivered.
 public struct FailedSync: Hashable, Sendable {
     public var docId: String
@@ -321,16 +365,27 @@ extension LocalStore {
     /// Stores updates received from the server and advances `lastSeq`. `seq`s at or below
     /// `lastSeq` are ignored (duplicates after reconnect).
     /// Returns the items actually stored (new ones), in order.
+    ///
+    /// `quarantine`: items that could not be read or applied — set aside (`quarantined`), and
+    /// `lastSeq` moves past them so the rest of the document keeps syncing.
     @discardableResult
-    public func appendRemoteUpdates(docId: String, items: [(seq: Int64, data: Data)], now: Date = Date()) throws -> [(seq: Int64, data: Data)] {
+    public func appendRemoteUpdates(docId: String, items: [(seq: Int64, data: Data)], quarantine: [QuarantinedItem] = [],
+                                    now: Date = Date()) throws -> [(seq: Int64, data: Data)] {
         try db.write { db in
             guard var doc = try DocumentRecord.fetchOne(db, key: docId) else { return [] }
+            let from = doc.lastSeq
+            for q in quarantine where q.seq > from {
+                try db.execute(sql: """
+                    INSERT OR REPLACE INTO quarantine(docId, seq, deviceId, payload, reason, at) VALUES(?, ?, ?, ?, ?, ?)
+                    """, arguments: [docId, q.seq, q.deviceId, q.payload, q.reason, now])
+                doc.lastSeq = max(doc.lastSeq, q.seq)
+            }
             var added: [(seq: Int64, data: Data)] = []
-            for item in items where item.seq > doc.lastSeq {
+            for item in items where item.seq > from {
                 added.append(item)
                 var stored = StoredUpdate(id: nil, docId: docId, data: item.data, seq: item.seq, clientMsgId: nil, origin: "remote", createdAt: now)
                 try stored.insert(db)
-                doc.lastSeq = item.seq
+                doc.lastSeq = max(doc.lastSeq, item.seq)
                 doc.updatesSinceSnapshot += 1
                 doc.bytesSinceSnapshot += item.data.count
             }
@@ -385,10 +440,50 @@ extension LocalStore {
         }
     }
 
+    /// Remote items set aside, oldest first.
+    public func quarantined(docId: String? = nil) throws -> [QuarantinedItem] {
+        try db.read { db in
+            try Row.fetchAll(db, sql: "SELECT * FROM quarantine \(docId == nil ? "" : "WHERE docId = ?") ORDER BY docId, seq",
+                             arguments: docId.map { [$0] } ?? []).map {
+                QuarantinedItem(docId: $0["docId"], seq: $0["seq"], deviceId: $0["deviceId"], payload: $0["payload"], reason: $0["reason"])
+            }
+        }
+    }
+
+    /// Per document (and its notebook): what could not be read.
+    public func unreadable() throws -> [UnreadableSync] {
+        try db.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT q.docId, d.notebookId, d.kind, COUNT(*) AS n, MIN(q.seq) AS first, MAX(q.seq) AS last,
+                       GROUP_CONCAT(DISTINCT q.deviceId) AS devices, MAX(q.reason) AS reason
+                FROM quarantine q JOIN documents d ON d.docId = q.docId GROUP BY q.docId ORDER BY MIN(q.at)
+                """).map {
+                UnreadableSync(docId: $0["docId"], notebookId: $0["kind"] == DocKind.notebook.rawValue ? $0["docId"] : $0["notebookId"],
+                               count: $0["n"], firstSeq: $0["first"], lastSeq: $0["last"],
+                               deviceIds: ($0["devices"] as String? ?? "").split(separator: ",").map(String.init).sorted(), reason: $0["reason"])
+            }
+        }
+    }
+
+    /// Forgets the quarantine of a document and moves `lastSeq` back so that the items are
+    /// fetched again (after a key repair). Returns false when there was nothing.
+    @discardableResult
+    public func releaseQuarantine(docId: String) throws -> Bool {
+        try db.write { db in
+            guard let first = try Int64.fetchOne(db, sql: "SELECT MIN(seq) FROM quarantine WHERE docId = ?", arguments: [docId]) else { return false }
+            try db.execute(sql: "DELETE FROM quarantine WHERE docId = ?", arguments: [docId])
+            try db.execute(sql: "UPDATE documents SET lastSeq = MIN(lastSeq, ?) WHERE docId = ?", arguments: [first - 1, docId])
+            return true
+        }
+    }
+
     /// Fetch the document again from the start on the next subscription (key repair). Stored
     /// updates stay; seqs seen again are stored again, which is harmless for a CRDT.
     public func resetLastSeq(docId: String) throws {
-        try db.write { try $0.execute(sql: "UPDATE documents SET lastSeq = 0 WHERE docId = ?", arguments: [docId]) }
+        try db.write { db in
+            try db.execute(sql: "UPDATE documents SET lastSeq = 0 WHERE docId = ?", arguments: [docId])
+            try db.execute(sql: "DELETE FROM quarantine WHERE docId = ?", arguments: [docId])
+        }
     }
 
     /// Drops snapshots of a document still waiting to be sent (one built before a key repair's

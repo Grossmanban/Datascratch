@@ -176,6 +176,8 @@ public final class KeyRing: Sendable {
     }
 
     /// Creates a notebook key and its wrapping under the master key (for `POST /notebooks`).
+    /// Only for a notebook made on this device that is not on the server: a notebook from
+    /// another device has its key there (`AccountService.notebookKeyForWriting`).
     public func createNotebookKey(notebookId: String) throws -> (key: Data, wrapped: Data) {
         guard let master = try masterKey() else { throw CryptoError.decryptionFailed }
         let key = DSCrypto.newKey()

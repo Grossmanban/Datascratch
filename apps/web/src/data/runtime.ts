@@ -75,11 +75,9 @@ export class AccountRuntime {
         if (!s) throw new Error("signed out");
         return { kind: "user", accessToken: s.accessToken };
       },
-      keyFor: async (docId) => {
-        const key = await this.store.keyFor(docId);
-        if (!key) throw new Error(`no key for ${docId}`);
-        return key;
-      },
+      // null = «no key yet» (e.g. a moved note whose new index has not arrived): SyncClient pauses
+      // the document without skipping anything until keyAvailable(docId) (see resumeKeyed).
+      keyFor: (docId) => this.store.keyFor(docId),
       // Notes sync in stored mode: no Y.Doc unless open (10 000 notes stay on disk, not in memory).
       storedDocs: {
         onUpdates: async (docId, updates) => {
@@ -108,6 +106,11 @@ export class AccountRuntime {
         if ((e.code === "decrypt_failed" || e.code === "apply_failed") && e.docId) {
           const id = e.docId;
           void this.store.row(id).then((r) => console.warn(`[ds] sync ${e.code}`, r?.kind ?? "unknown", id, e.message));
+        }
+        // Waiting for a key for long: the indicator stops spinning for it (it resumes when the key comes).
+        if (e.code === "key_missing" && e.docId) {
+          this.longWaiting.add(e.docId);
+          this.updateStatus();
         }
         // A document the server does not know never becomes «synced»: it must not keep the spinner.
         if (e.code === "doc_not_found" && e.docId && e.ref === e.docId) {
@@ -140,7 +143,14 @@ export class AccountRuntime {
         void this.reattach(docId);
         void uploadPending();
       }),
+      this.client.on("keyMissing", (docId) => {
+        this.waitingForKey.add(docId);
+        this.updateStatus();
+        this.resumeKeyed(); // the index may have arrived between keyFor and the pause
+      }),
       this.store.onChange((docId, origin) => {
+        // A notebook index changed: a paused note may have its key now.
+        if (this.waitingForKey.size && this.store.rowKind(docId) === "notebook") this.resumeKeyed();
         if (!useWorkspace.getState().notes[docId]) return;
         this.indexer.schedule(docId);
         if (origin !== ORIGIN_REMOTE) this.touch(docId);
@@ -228,22 +238,38 @@ export class AccountRuntime {
     return this.reconciling;
   }
 
-  private rereading = new Set<string>();
-  private reread = new Set<string>();
   private covered = new Set<string>();
   private unknownOnServer = new Set<string>();
+  private waitingForKey = new Set<string>();
+  private longWaiting = new Set<string>();
+  private resuming = false;
+
+  /** Paused documents whose key is known now resume (SyncClient.keyAvailable). */
+  private resumeKeyed() {
+    if (this.resuming) return;
+    this.resuming = true;
+    setTimeout(async () => {
+      try {
+        for (const docId of [...this.waitingForKey]) {
+          if (!(await this.store.keyFor(docId).catch(() => null))) continue;
+          this.waitingForKey.delete(docId);
+          this.longWaiting.delete(docId);
+          await this.client.keyAvailable(docId).catch(() => undefined);
+        }
+      } finally {
+        this.resuming = false;
+        this.updateStatus();
+      }
+    }, 100);
+  }
 
   /**
-   * A server item this device could not read. With no key yet (an index listing the note had not
-   * arrived), the document is read again once the key is here — once. With the key present the item
-   * is unreadable for good (sealed with a key nobody holds): it stays skipped, is counted for a calm
-   * notice, and this device uploads a snapshot of what it did read so other clients stop meeting it.
+   * A server item this device could not read with the key it has (sealed with a key nobody
+   * holds, e.g. from a wiped device): SyncClient skips it and keeps going. It is counted for a calm
+   * note, and once this device's key is confirmed canonical it uploads a snapshot of what it did
+   * read, so other clients stop meeting the item.
    */
-  private onSkipped(item: { docId: string; seq: number; reason: string; message: string }) {
-    if (/no key for/.test(item.message)) {
-      this.rereadWhenKeyed(item.docId);
-      return;
-    }
+  private onSkipped(item: { docId: string }) {
     const skipped = useSyncStatus.getState().skipped;
     useSyncStatus.setState({ skipped: { ...skipped, [item.docId]: (skipped[item.docId] ?? 0) + 1 } });
     if (this.covered.has(item.docId)) return;
@@ -255,28 +281,6 @@ export class AccountRuntime {
     }, 3000);
   }
 
-  private rereadWhenKeyed(docId: string) {
-    // Once per document: a re-read that meets the same gap again must not loop.
-    if (this.rereading.has(docId) || this.reread.has(docId)) return;
-    this.rereading.add(docId);
-    this.reread.add(docId);
-    void (async () => {
-      try {
-        for (let i = 0; i < 60; i++) {
-          await new Promise((r) => setTimeout(r, 1000));
-          if (!this.attached.has(docId)) return;
-          if (await this.store.keyFor(docId).catch(() => null)) {
-            await this.rereadDoc(docId);
-            console.warn("[ds] re-read after a decrypt failure", docId);
-            return;
-          }
-        }
-      } finally {
-        this.rereading.delete(docId);
-      }
-    })();
-  }
-
   /** What keeps sync busy (console: `__dsSyncDebug()`); ids only, no content. */
   async syncDebug() {
     const outbox = await this.storage.listOutbox();
@@ -285,7 +289,7 @@ export class AccountRuntime {
     const rows = await Promise.all([...this.attached].map(async (id) => [id, (await this.store.row(id))?.kind] as const));
     return {
       status: this.client.status,
-      notSynced: rows.filter(([id]) => !this.client.isSynced(id) && !this.unknownOnServer.has(id)).map(([id, kind]) => ({ id, kind })),
+      notSynced: rows.filter(([id]) => !this.client.isSynced(id) && !this.unknownOnServer.has(id)).map(([id, kind]) => ({ id, kind, paused: this.client.isPaused(id) })),
       unknownOnServer: [...this.unknownOnServer],
       outbox: byDoc,
       ops: (await accountDb().ops.toArray()).map((o) => `${o.method} ${o.path}`),
@@ -314,7 +318,11 @@ export class AccountRuntime {
   private async adoptNotebookKey({ notebookId, oldKey, newKey }: ReplacedNotebookKey) {
     const doc = this.store.get(notebookId);
     if (!doc) return;
-    if (this.attached.has(notebookId)) await this.rereadDoc(notebookId);
+    if (this.attached.has(notebookId)) {
+      await this.rereadDoc(notebookId);
+      // Items skipped with the old key are fetched again (the old key is an alternate key now).
+      await this.client.retrySkipped(notebookId).catch(() => false);
+    }
     const notes = notebookMaps(doc).notes;
     const rewrapped: [Y.Map<unknown>, string][] = [];
     for (const [noteId, m] of notes) {
@@ -377,7 +385,7 @@ export class AccountRuntime {
   }
 
   private updateStatus() {
-    const allSynced = [...this.attached].every((id) => this.unknownOnServer.has(id) || this.client.isSynced(id));
+    const allSynced = [...this.attached].every((id) => this.unknownOnServer.has(id) || this.longWaiting.has(id) || this.client.isSynced(id));
     const status = uiStatus(this.client.status, allSynced);
     useSyncStatus.setState({ status, ...(status === "online" ? { lastSyncedAt: Date.now(), error: null } : {}) });
   }

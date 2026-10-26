@@ -447,6 +447,10 @@ struct HideKeyboardButton: View {
             // On iPad resigning the text view alone left the keyboard up; ending editing on the
             // whole editor (as switching to a pen does) takes it down.
             model.editor.endEditing(true)
+            // Whatever holds the keyboard (on the iPad simulator it stayed up after the two
+            // above, run 40325368506): the app-wide way, then the window.
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            model.editor.window?.endEditing(true)
             // The keyboard is going: drop the button now rather than wait for the notification.
             model.isSoftwareKeyboardShown = false
             // With a hardware keyboard nothing else reports the end of editing: refresh the bar.

@@ -227,11 +227,6 @@ final class LibraryUITests: XCTestCase {
     /// iPhone feedback: while typing, «Hide Keyboard» ends editing; without a keyboard the button
     /// is gone (its slot stays, so nothing moves).
     func testHidingTheKeyboard() throws {
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            // Run 40325368506: on the iPad simulator the keyboard stays up for seconds after the
-            // tap (screen recording). Under investigation; iPhone keeps the test.
-            throw XCTSkip("iPad simulator keyboard does not dismiss reliably — under investigation after build 12")
-        }
         let app = launchSignedIn()
         try openNewNoteInNativeEditor(app)
         let editor = app.descendants(matching: .any)["editor"].firstMatch
@@ -249,7 +244,9 @@ final class LibraryUITests: XCTestCase {
         hide.tap()
         settle(1)
         XCTAssertFalse(app.keyboards.firstMatch.exists, "the keyboard is still up")
-        XCTAssertFalse(app.buttons["editor.hideKeyboard"].firstMatch.isHittable, "Hide Keyboard is still offered")
+        let gone = NSPredicate(format: "isHittable == false")
+        let offered = XCTWaiter().wait(for: [expectation(for: gone, evaluatedWith: app.buttons["editor.hideKeyboard"].firstMatch)], timeout: 3)
+        XCTAssertEqual(offered, .completed, "Hide Keyboard is still offered; format bar shown: \(app.descendants(matching: .any)["formatBar"].firstMatch.exists)")
         XCTAssertEqual(palette.frame.minX, x, accuracy: 1, "the palette moved when the button went")
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
     }

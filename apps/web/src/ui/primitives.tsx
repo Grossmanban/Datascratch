@@ -145,6 +145,8 @@ const Ctx = {
 };
 
 function renderItems(P: typeof Drop | typeof Ctx, items: MenuItem[]): ReactNode {
+  // A menu with checkable rows keeps a fixed check column, so names line up and never shift.
+  const checkColumn = items.some((it) => (it.kind === undefined || it.kind === "item") && it.checked !== undefined);
   return items.map((it, i) => {
     if (it.kind === "separator") return <P.Separator key={i} />;
     if (it.kind === "label") return <P.Label key={i}>{it.label}</P.Label>;
@@ -164,8 +166,15 @@ function renderItems(P: typeof Drop | typeof Ctx, items: MenuItem[]): ReactNode 
         disabled={it.disabled}
         onSelect={it.onSelect}
       >
-        <span className="flex-1 truncate">{it.label}</span>
-        {it.checked ? <Check className="ml-2 size-3.5 text-accent" /> : null}
+        {/* One row: name (ellipsis) | ✓ on the right, never wrapping under the name. */}
+        <span className="flex w-full min-w-0 items-center gap-2" data-testid="menu-row">
+          <span className="min-w-0 flex-1 truncate">{it.label}</span>
+          {checkColumn && (
+            <span className="flex w-4 shrink-0 justify-end" aria-hidden={!it.checked}>
+              {it.checked ? <Check className="size-3.5 text-accent" aria-label="✓" data-testid="menu-check" /> : null}
+            </span>
+          )}
+        </span>
       </P.Item>
     );
   });

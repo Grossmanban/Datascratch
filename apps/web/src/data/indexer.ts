@@ -92,6 +92,10 @@ export class Indexer {
     for (const ix of batch) {
       const info = this.noteInfo(ix.noteId);
       if (!info) continue;
+      // Nothing of the note is here yet (made elsewhere, not downloaded or decrypted): an empty
+      // extraction must not become its index entry, and above all not its NoteMeta title and tags
+      // (that synced «Без названия» to every device). It is indexed when its content arrives.
+      if (!ix.title && !ix.plainText.trim() && !ix.tasks.length && !ix.tags.length && !ix.links.length) continue;
       // Trashed meanwhile: keep its search entry out and its tasks hidden.
       if (info.trashed) {
         trashed.push(ix.noteId);
@@ -140,6 +144,22 @@ export class Indexer {
       this.onExtracted(e.noteId, e.title, e.tags);
     }
     useIndexVersion.setState((s) => ({ v: s.v + 1 }));
+  }
+
+  /**
+   * Notes whose text (title included) contains every word of `q` — what a list filter needs: all
+   * matches, as you type, case-insensitive; plus the full-text hits (stems, fuzzy) on top.
+   */
+  matching(q: string): Set<string> {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const out = new Set<string>();
+    if (!words.length) return out;
+    for (const [id, text] of this.texts) {
+      const lower = text.toLowerCase();
+      if (words.every((w) => lower.includes(w))) out.add(id);
+    }
+    for (const hit of this.query(q, 1000)) out.add(hit.noteId);
+    return out;
   }
 
   query(q: string, limit = 30): SearchHit[] {

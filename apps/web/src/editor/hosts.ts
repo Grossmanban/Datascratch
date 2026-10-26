@@ -6,6 +6,7 @@ import { allTags, noteTitle, spaceOfNote, spaceOfNotebook, useWorkspace } from "
 import i18n from "@/i18n";
 import { defaultNoteTitle } from "@/domain/note";
 import { features } from "@/lib/features";
+import { isFreshNote } from "@/lib/freshNotes";
 import type { EditorHost, NoteSummary } from "./index";
 
 type Nav = ReturnType<typeof useNavigate>;
@@ -70,8 +71,9 @@ export function ownerEditorHost(noteId: string, nav: Nav): EditorHost {
     onTagClick: (name) => void nav({ to: "/tag/$", params: { _splat: name } }),
     // D-51: task dates belong to the extended mode; in a minimal build they are plain labels.
     taskDates: features.tasks ? "full" : "inert",
-    // spec/04: an empty title becomes «Заметка 26 октября 2026» (interface language, creation day).
-    defaultTitle: () => defaultNoteTitle(useWorkspace.getState().notes[noteId]?.createdAt ?? new Date(), i18n.language),
+    // spec/04: an empty title becomes «Заметка 26 октября 2026» (interface language, creation day) —
+    // only for a note the user created here in this session; an existing note is never renamed.
+    defaultTitle: () => (isFreshNote(noteId) ? defaultNoteTitle(useWorkspace.getState().notes[noteId]?.createdAt ?? new Date(), i18n.language) : ""),
     onTaskAction: async (action, task) => {
       if (!features.tasks) return;
       if (action === "open") return open(noteId);

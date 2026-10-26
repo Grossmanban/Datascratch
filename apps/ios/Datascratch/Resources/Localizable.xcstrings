@@ -751,12 +751,12 @@
         }
       }
     },
-    "Delete all documents in the trash?": {
+    "Delete documents forever: %lld?": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Удалить все документы из корзины?"
+            "value": "Удалить навсегда документы: %lld?"
           }
         }
       }
@@ -1327,6 +1327,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Свернуть инструменты пера"
+          }
+        }
+      }
+    },
+    "Hide Sidebar": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрыть боковую панель"
           }
         }
       }
@@ -2797,6 +2807,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Показать инструменты пера"
+          }
+        }
+      }
+    },
+    "Show Sidebar": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать боковую панель"
           }
         }
       }

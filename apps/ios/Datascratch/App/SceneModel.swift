@@ -44,30 +44,51 @@ final class SceneModel {
         didSet {
             guard oldValue != sidebar else { return }
             searchText = ""
-            // iPad: Tasks and the calendar get the whole width; a document opens beside them
-            // only from a task or a day.
-            if UIDevice.current.userInterfaceIdiom == .pad, !isNoteWindow, sidebar == .tasks || sidebar == .calendar {
+            // iPad: Tasks and the calendar take the list's place on their own; a document opens
+            // beside them only from a task or a day. The sidebar stays as it was.
+            if isPad, !isNoteWindow, sidebar == .tasks || sidebar == .calendar {
                 if let id = selectedNoteId { library.recordVersion(ofNote: id) }
                 selectedNoteId = nil
-                isContentFullScreen = true
-                columnVisibility = .detailOnly
+                fullScreen = nil
             }
         }
     }
     var selectedNoteId: String?
-    /// Which columns show; remembered between launches (iPad). Full-screen content (tasks,
-    /// the calendar, a list) is a passing state and is not remembered.
-    var columnVisibility: NavigationSplitViewVisibility = .all {
-        didSet {
-            // Columns shown again (sidebar button, swipe): full-screen content is over, or the
-            // list would show twice — in its column and in place of the document.
-            if columnVisibility != .detailOnly, isContentFullScreen { isContentFullScreen = false }
-            guard !isContentFullScreen else { return }
-            app.settings.columnLayout = Self.name(of: columnVisibility)
+
+    // MARK: iPad columns (D-15): Sidebar | List | Document
+    //
+    // Only the sidebar button (or the edge swipe) shows or hides the sidebar, and that choice is
+    // remembered. Opening a document leaves the sidebar alone; closing it leaves the list on the
+    // rest of the width. «Full Screen» is the one mode that hides the sidebar and the list, and
+    // leaving it brings back exactly what was there.
+
+    enum FullScreen { case document, content }
+
+    /// The sidebar is shown (iPad); remembered between launches.
+    var isSidebarShown = true {
+        didSet { app.settings.columnLayout = isSidebarShown ? "all" : "detailOnly" }
+    }
+    /// The document, or the list (tasks, calendar), alone on the screen.
+    var fullScreen: FullScreen?
+
+    var isDocumentFullScreen: Bool { fullScreen == .document }
+    var isContentFullScreen: Bool { fullScreen == .content }
+
+    /// What the iPad split view shows (sidebar | workspace).
+    var padColumnVisibility: NavigationSplitViewVisibility {
+        get { fullScreen != nil || !isSidebarShown ? .detailOnly : .all }
+        set {
+            // The sidebar button or a swipe: in full screen it brings the columns back.
+            if fullScreen != nil {
+                if newValue != .detailOnly { fullScreen = nil; isSidebarShown = true }
+                return
+            }
+            isSidebarShown = newValue != .detailOnly
         }
     }
-    /// The middle screen (tasks, calendar, a list) shown on the whole width in place of the document.
-    var isContentFullScreen = false
+
+    /// iPhone (and the compact width of a narrow window): the system's three-column stack.
+    var columnVisibility: NavigationSplitViewVisibility = .all
     var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
     var isCommandPalettePresented = false
     var sheet: SceneSheet?
@@ -93,29 +114,10 @@ final class SceneModel {
 
     init(app: AppModel) {
         self.app = app
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            // No document is open at launch: a remembered "document alone" would show an empty
-            // screen without the sidebar, so the columns come back instead.
-            let remembered = Self.visibility(named: app.settings.columnLayout)
-            columnVisibility = remembered == .detailOnly ? .all : remembered
-        }
+        if isPad { isSidebarShown = app.settings.columnLayout != "detailOnly" }
     }
 
-    private static func name(of visibility: NavigationSplitViewVisibility) -> String {
-        switch visibility {
-        case .detailOnly: "detailOnly"
-        case .doubleColumn: "doubleColumn"
-        default: "all"
-        }
-    }
-
-    private static func visibility(named name: String) -> NavigationSplitViewVisibility {
-        switch name {
-        case "detailOnly": .detailOnly
-        case "doubleColumn": .doubleColumn
-        default: .all
-        }
-    }
+    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
     var library: LibraryStore { app.library }
 
@@ -152,33 +154,26 @@ final class SceneModel {
         withAnimation(Theme.Motion.snappy) {
             selectedNoteId = noteId
             preferredCompactColumn = .detail
-            // iPad: opening a document hides the sidebar (list + document), as in Notes and Craft;
-            // from full-screen tasks or calendar the document opens beside them.
-            if UIDevice.current.userInterfaceIdiom == .pad, !isNoteWindow,
-               columnVisibility == .all || isContentFullScreen {
-                columnVisibility = .doubleColumn
-            }
-            isContentFullScreen = false
+            // The list alone on screen makes room for the document beside it; the sidebar stays.
+            if fullScreen == .content { fullScreen = nil }
         }
         library.openTab(noteId)
     }
 
-    var isDocumentFullScreen: Bool { columnVisibility == .detailOnly }
     /// A window showing one document (no columns to hide).
     var isNoteWindow = false
 
-    /// iPad: the document alone on screen, and back to list + document.
+    /// iPad: the document alone on screen, and back to what was there before.
     func toggleDocumentFullScreen() {
         withAnimation(Theme.Motion.smooth) {
-            columnVisibility = isDocumentFullScreen ? .doubleColumn : .detailOnly
+            fullScreen = fullScreen == .document ? nil : .document
         }
     }
 
-    /// iPad: tasks, the calendar or a list on the whole width, and back to the columns.
+    /// iPad: tasks, the calendar or a list alone on screen, and back.
     func toggleContentFullScreen() {
         withAnimation(Theme.Motion.smooth) {
-            isContentFullScreen.toggle()
-            columnVisibility = isContentFullScreen ? .detailOnly : .all
+            fullScreen = fullScreen == .content ? nil : .content
         }
     }
 
@@ -194,17 +189,14 @@ final class SceneModel {
         withAnimation(Theme.Motion.smooth) {
             selectedNoteId = nil
             preferredCompactColumn = .content
-            // iPad: what was beside the document (tasks, calendar, a list) takes the whole width.
-            if UIDevice.current.userInterfaceIdiom == .pad, !isNoteWindow {
-                isContentFullScreen = true
-                columnVisibility = .detailOnly
-            }
+            // Only the document goes: the list takes its width, the sidebar stays as it was.
+            if fullScreen == .document { fullScreen = nil }
         }
     }
 
     func show(_ item: SidebarItem) {
         withAnimation(Theme.Motion.snappy) {
-            if isContentFullScreen { isContentFullScreen = false; columnVisibility = .all }
+            if fullScreen == .content { fullScreen = nil }
             sidebar = item
             preferredCompactColumn = .content
         }
@@ -221,7 +213,11 @@ final class SceneModel {
 
     func toggleSidebar() {
         withAnimation(Theme.Motion.smooth) {
-            columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+            if isPad {
+                padColumnVisibility = padColumnVisibility == .detailOnly ? .all : .detailOnly
+            } else {
+                columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+            }
         }
     }
 

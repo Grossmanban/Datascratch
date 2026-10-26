@@ -208,11 +208,19 @@ public final class EditorView: UIView {
             // Palm rejection comes from the recognizer itself: it begins on touch down and
             // prevents the scroll recognizer for that touch, so a resting hand does not draw.
             self.ink.penBegan(s)
+            self.penDown = true
+            self.showContactIndicator(at: s.location)
         }
-        inkInput.onMoved = { [weak self] c, p in self?.ink.penMoved(c, predicted: p) }
+        inkInput.onMoved = { [weak self] c, p in
+            guard let self else { return }
+            self.ink.penMoved(c, predicted: p)
+            if let last = c.last { self.showContactIndicator(at: last.location) }
+        }
         inkInput.onEnded = { [weak self] cancelled in
             guard let self else { return }
             self.ink.penEnded(cancelled: cancelled)
+            self.penDown = false
+            self.setIndicator(nil)
             self.notifyStateChange()
         }
         inkInput.onEstimatedUpdate = { [weak self] s in self?.ink.penEstimatedUpdate(s) }
@@ -855,18 +863,39 @@ public final class EditorView: UIView {
         // is false), so fingers type and scroll and the Pencil writes through Scribble. Disabling
         // it instead made UIKit's gesture environment throw on the next tap into the text.
         if tools.mode != .lasso { ink.clearSelection() }
-        hoverLayer.path = nil
+        setIndicator(nil)
         notifyStateChange()
     }
 
+    /// The pen is on the glass (the ink recognizer is tracking a touch).
+    private var penDown = false
+    /// Centre of the tool indicator circle in text view content coordinates, nil when hidden.
+    private(set) var indicatorCenter: CGPoint?
+
     @objc private func hovered(_ g: UIHoverGestureRecognizer) {
+        // While the pen touches the glass the hover recognizer stops moving (it kept reporting the
+        // touch-down point, so the eraser circle stuck there): the pen's own touches drive the
+        // indicator then.
+        guard !penDown else { return }
         let point = g.location(in: textView)
         let active = (g.state == .began || g.state == .changed) && g.zOffset > 0 && tools.mode.capturesPen
-        guard active, let preview = ink.hoverPreview(at: point) else {
+        setIndicator(active ? point : nil)
+    }
+
+    /// Indicator under a touching pen: the eraser's circle follows every move (what it erases);
+    /// ink tools hide it, the stroke itself shows where they draw.
+    private func showContactIndicator(at point: CGPoint) {
+        setIndicator(tools.mode.isEraser ? point : nil)
+    }
+
+    private func setIndicator(_ point: CGPoint?) {
+        guard let point, let preview = ink.hoverPreview(at: point) else {
             hoverLayer.path = nil
+            indicatorCenter = nil
             return
         }
         let r = preview.radius
+        indicatorCenter = preview.center
         hoverLayer.path = UIBezierPath(ovalIn: CGRect(x: preview.center.x - r, y: preview.center.y - r, width: r * 2, height: r * 2)).cgPath
         hoverLayer.strokeColor = preview.color.resolvedColor(with: traitCollection).cgColor
         hoverLayer.fillColor = preview.color.withAlphaComponent(tools.mode.isEraser ? 0.08 : 0.25).resolvedColor(with: traitCollection).cgColor

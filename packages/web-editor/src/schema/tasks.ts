@@ -232,6 +232,8 @@ export const TaskItem = Node.create({
       chips.addEventListener("mousedown", (e) => e.preventDefault());
       chips.addEventListener("click", (e) => {
         e.preventDefault();
+        // D-51: without task dates the chips are plain labels.
+        if (!taskDatesEnabled(editor.view.dom)) return;
         openMenu(chips);
       });
 
@@ -279,6 +281,11 @@ export const TaskItem = Node.create({
     };
   },
 });
+
+/** Task dates are on unless the editor root says `data-task-dates="off"` (D-51 notes-only mode). */
+export function taskDatesEnabled(dom: Element): boolean {
+  return dom.closest(".ds-editor")?.getAttribute("data-task-dates") !== "off";
+}
 
 /** Opens a task context menu programmatically (used by tests and keyboard shortcuts). */
 export function requestTaskMenu(view: EditorView, pos: number, rect: DOMRect): void {

@@ -2,10 +2,11 @@ import type { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { getOrCreateDaily, openTab } from "@/domain/actions";
 import { useWorkspace } from "@/domain/workspace";
-import { closeDocTab, newNoteAndOpen } from "@/features/docs/menus";
+import { closeDocTab, newDocTarget, newNoteAndOpen } from "@/features/docs/menus";
 import { focusKindOf, toggleFocus, toggleSidebar, useUi } from "@/hooks/useUi";
 import { today } from "@/lib/dates";
 import { toggleTheme } from "@/lib/theme";
+import { features } from "@/lib/features";
 
 export function useShortcuts(navigate: ReturnType<typeof useNavigate>) {
   useEffect(() => {
@@ -17,6 +18,12 @@ export function useShortcuts(navigate: ReturnType<typeof useNavigate>) {
         useUi.setState((s) => ({ paletteOpen: !s.paletteOpen }));
         return;
       }
+      // ⌘⇧\ — the tab overview (spec/12 §12.6); the shifted key varies by layout, the code does not.
+      if (features.tabs && mod && e.shiftKey && e.code === "Backslash") {
+        e.preventDefault();
+        useUi.setState((s) => ({ tabOverviewOpen: !s.tabOverviewOpen }));
+        return;
+      }
       if (mod && key === "\\") {
         e.preventDefault();
         toggleSidebar();
@@ -24,12 +31,11 @@ export function useShortcuts(navigate: ReturnType<typeof useNavigate>) {
       }
       if (e.altKey && (e.code === "KeyN" || key === "n") && !mod) {
         e.preventDefault();
-        const st = useWorkspace.getState();
-        const nb = st.account.notebooks.find((n) => n.spaceId === st.activeSpaceId);
-        if (nb) void newNoteAndOpen(navigate, nb.id);
+        const to = newDocTarget(location.pathname);
+        if (to) void newNoteAndOpen(navigate, to.notebookId, to.folderId, to.tag);
         return;
       }
-      if (e.altKey && (e.code === "KeyT" || key === "t") && !mod) {
+      if (features.calendar && e.altKey && (e.code === "KeyT" || key === "t") && !mod) {
         e.preventDefault();
         void getOrCreateDaily(today()).then((id) => {
           openTab(id);
@@ -50,7 +56,7 @@ export function useShortcuts(navigate: ReturnType<typeof useNavigate>) {
         toggleFocus(kind);
         return;
       }
-      // ⌥W: close the open document's tab (⌘W closes the browser tab).
+      // ⌥W: close the open document (its tab in the extended mode; ⌘W closes the browser tab).
       if (e.altKey && !mod && (e.code === "KeyW" || key === "w")) {
         const m = location.pathname.match(/^\/doc\/([^/]+)/);
         if (!m) return;

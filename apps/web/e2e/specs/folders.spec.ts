@@ -41,7 +41,8 @@ test("the sidebar section is «Блокноты»: notebooks with their folder t
 
   // Drag a note (its tab) into a folder.
   await newDoc(page, "В папку", "текст");
-  await sidebar.getByRole("link", { name: /В папку/ }).first().dragTo(projects);
+  await page.goto("/all");
+  await page.getByTestId("doc-card").filter({ hasText: "В папку" }).dragTo(projects);
   await expect(page.getByText("Перемещено", { exact: true }).first()).toBeVisible();
   await projects.click();
   await expect(page.getByRole("main").getByRole("link", { name: /В папку/ })).toBeVisible();
@@ -50,7 +51,7 @@ test("the sidebar section is «Блокноты»: notebooks with their folder t
   const strip = page.getByTestId("folder-strip");
   await expect(strip.getByTestId("folder-card")).toHaveCount(1);
   await expect(strip.getByTestId("folder-card")).toContainText("Клиенты");
-  await expect(strip.getByTestId("folder-card")).toContainText("В папке нет документов");
+  await expect(strip.getByTestId("folder-card")).toContainText("Пусто");
   // The notebook's top level lists its own folders (count included); the context menu is the sidebar's.
   await page.getByRole("main").getByRole("link", { name: /Заметки/ }).first().click();
   await expect(page).toHaveURL(/\/notebook\//);

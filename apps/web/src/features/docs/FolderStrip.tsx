@@ -59,7 +59,7 @@ function FolderCard({ folder, tint }: { folder: FolderEntry; tint: string | null
         ) : (
           <span className="truncate text-[14px] font-semibold text-ink">{folder.name}</span>
         )}
-        <span className="truncate text-[12.5px] text-ink-2">{meta || t("docs.emptyFolder")}</span>
+        <span className="truncate text-[12.5px] text-ink-2">{meta || t("docs.emptyShort")}</span>
       </span>
     </>
   );

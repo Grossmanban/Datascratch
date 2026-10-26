@@ -95,6 +95,8 @@ export class AccountRuntime {
       this.client.on("status", () => this.updateStatus()),
       this.client.on("synced", (docId) => {
         if (docId === this.accountDocId) useWorkspace.setState({ accountSynced: true });
+        // A notebook index caught up: its meta copy can be checked now (copyNotebookNames).
+        if (this.store.rowKind(docId) === "notebook") this.copyNotebookNames();
         this.updateStatus();
       }),
       this.client.on("awareness", (docId, payload) => receivePresence(docId, payload)),
@@ -279,6 +281,11 @@ export class AccountRuntime {
       await this.reconciling?.catch(() => undefined);
       if (this.attached.has(item.docId)) await this.client.requestSnapshot(item.docId).catch(() => false);
     }, 3000);
+  }
+
+  /** The client is caught up with the server for this document (nothing more to receive). */
+  isDocSynced(docId: string): boolean {
+    return this.client.isSynced(docId);
   }
 
   /** What keeps sync busy (console: `__dsSyncDebug()`); ids only, no content. */
@@ -479,6 +486,9 @@ export class AccountRuntime {
     for (const ref of account.notebooks) {
       const doc = this.store.get(ref.id);
       if (!doc) continue;
+      // Only into a notebook doc whose server state is here: writing into one still loading is a
+      // blind write on every new device (and the copy is usually already there).
+      if (!this.client.isSynced(ref.id)) continue;
       const space = account.spaces.find((s) => s.id === ref.spaceId) ?? null;
       syncNotebookMetaCopy(doc, ref, space);
     }

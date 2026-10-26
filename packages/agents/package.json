@@ -1,6 +1,7 @@
 {
   "name": "@datascratch/agents",
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "MCP server, agent REST API, OAuth 2.1 and handwriting PNG rendering for Datascratch (Fastify plugin)",
   "type": "module",

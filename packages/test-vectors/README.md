@@ -24,6 +24,7 @@
 | `strokes/width.json` | Кривая нажима и толщина |
 | `document/note.json` | Эталонная заметка **со всеми узлами и метками**, записанная через y-prosemirror (как пишет веб): байты обновления Yjs + ожидаемый канонический JSON, мета, штрихи, комментарии и производные данные (заголовок, текст для поиска, задачи, ссылки, теги, Markdown) |
 | `document/notebook.json`, `document/account.json` | Индекс блокнота и документ аккаунта |
+| `agents/create-note.json` | Заметка ровно так, как её пишет API агентов (`create_note`: заголовок, выноска, таблица с выравниванием, списки, задачи с датами, код, формулы, mermaid, `[[ссылка]]`, тег) и дельта `edit_note replace_text` по заголовку с меткой `agentEdit`. Открытие такой заметки клиентом не должно ничего записывать. Файл генерирует и проверяет тест `packages/agents/test/agent-vectors.test.ts` (`UPDATE_VECTORS=1 pnpm --filter @datascratch/agents test agent-vectors`), а не `generate.ts` |
 | `sync/messages.json` | Кадры протокола синхронизации: `valid` обязаны разбираться, `invalid` — отклоняться |
 
 ### Канонический JSON содержимого заметки

@@ -5,6 +5,8 @@ import { toYMap } from "./ymap";
 
 const account = new Y.Doc();
 vi.mock("@/data/runtime", () => ({ runtime: () => ({ account }) }));
+// These are extended-mode features (D-51); the flag is off in the default build.
+vi.mock("@/lib/features", () => ({ extendedMode: true, features: { tasks: true, calendar: true, tabs: true } }));
 
 const { activeTabOf, closeTab, dailyNotebookId, migrateSpaceSettings, openTab } = await import("./actions");
 const { tabsInSpace, useWorkspace } = await import("./workspace");

@@ -36,7 +36,7 @@ import {
   type ButtonProps as UIButtonProps,
   type ToastOptions,
 } from "@datascratch/ui";
-import { Check, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { forwardRef, useEffect, type ReactNode } from "react";
 import { cn } from "@datascratch/ui";
 
@@ -145,6 +145,8 @@ const Ctx = {
 };
 
 function renderItems(P: typeof Drop | typeof Ctx, items: MenuItem[]): ReactNode {
+  // A menu with checkable rows keeps a fixed check column, so names line up and never shift.
+  const checkColumn = items.some((it) => (it.kind === undefined || it.kind === "item") && it.checked !== undefined);
   return items.map((it, i) => {
     if (it.kind === "separator") return <P.Separator key={i} />;
     if (it.kind === "label") return <P.Label key={i}>{it.label}</P.Label>;
@@ -163,9 +165,10 @@ function renderItems(P: typeof Drop | typeof Ctx, items: MenuItem[]): ReactNode 
         danger={it.danger}
         disabled={it.disabled}
         onSelect={it.onSelect}
+        // The library's menu row: name (ellipsis) | ✓ in a fixed column (kept when false), one line.
+        checked={checkColumn ? !!it.checked : undefined}
       >
-        <span className="flex-1 truncate">{it.label}</span>
-        {it.checked ? <Check className="ml-2 size-3.5 text-accent" /> : null}
+        {it.label}
       </P.Item>
     );
   });

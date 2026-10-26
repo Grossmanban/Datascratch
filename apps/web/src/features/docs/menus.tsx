@@ -37,6 +37,9 @@ import { TINTS, tintFg } from "@/lib/tokens";
 import { useUi } from "@/hooks/useUi";
 import { confirmDialog, toast, type MenuItem } from "@/ui";
 import { iconGlyph } from "@/lib/glyph";
+import { features } from "@/lib/features";
+import { markFreshNote } from "@/lib/freshNotes";
+import { lastNotebookOf, rememberNotebook } from "@/lib/lastNotebook";
 
 type Nav = ReturnType<typeof useNavigate>;
 
@@ -47,8 +50,34 @@ export function closeDocTab(noteId: string, nav: Nav) {
   else void nav({ to: "/all" });
 }
 
-export async function newNoteAndOpen(nav: Nav, notebookId: string, folderId: string | null = null) {
-  const id = await createNote({ notebookId, folderId });
+
+export type NewDocTarget = { notebookId: string; folderId: string | null; tag: string | null };
+
+/**
+ * Where «Новый документ» puts a note (spec/05): the open notebook or folder (or the open
+ * document's), else the notebook last used in this space, else its first; a tag page adds its tag.
+ */
+export function newDocTarget(pathname: string): NewDocTarget | null {
+  const st = useWorkspace.getState();
+  const inSpace = st.account.notebooks.filter((n) => n.spaceId === st.activeSpaceId);
+  const [, kind, raw] = pathname.split("/");
+  const id = raw ? decodeURIComponent(pathname.slice(kind!.length + 2)) : "";
+  if (kind === "notebook" && inSpace.some((n) => n.id === id)) return { notebookId: id, folderId: null, tag: null };
+  if (kind === "folder" && st.folders[id] && inSpace.some((n) => n.id === st.folders[id]!.notebookId))
+    return { notebookId: st.folders[id]!.notebookId, folderId: id, tag: null };
+  const note = kind === "doc" ? st.notes[id] : undefined;
+  if (note && inSpace.some((n) => n.id === note.notebookId)) return { notebookId: note.notebookId, folderId: note.folderId ?? null, tag: null };
+  const last = lastNotebookOf(st.activeSpaceId);
+  const nb = inSpace.find((n) => n.id === last) ?? inSpace[0];
+  if (!nb) return null;
+  return { notebookId: nb.id, folderId: null, tag: kind === "tag" && id ? id : null };
+}
+
+export async function newNoteAndOpen(nav: Nav, notebookId: string, folderId: string | null = null, tag: string | null = null) {
+  rememberNotebook(useWorkspace.getState().account.notebooks.find((n) => n.id === notebookId)?.spaceId ?? null, notebookId);
+  // In a tag's list the note starts with that tag (its text is where tags live).
+  const id = await createNote({ notebookId, folderId, ...(tag ? { body: [`#${tag} `] } : {}) });
+  markFreshNote(id);
   openTab(id);
   await nav({ to: "/doc/$noteId", params: { noteId: id } });
   return id;
@@ -168,7 +197,7 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
   const starred = isStarred(st, { kind: "note", id: noteId });
   const spaceOf = st.account.notebooks.find((nb) => nb.id === n.notebookId)?.spaceId;
   return [
-    ...(!opts.inDoc
+    ...(!opts.inDoc && features.tabs
       ? [
           {
             label: t("docs.openInTab"),

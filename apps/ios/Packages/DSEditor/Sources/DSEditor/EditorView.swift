@@ -32,6 +32,15 @@ public final class EditorView: UIView {
     public var onShowHistory: (() -> Void)? {
         didSet { agentBanner.onShowHistory = onShowHistory }
     }
+    /// Name of the agent that created this note (`NoteMeta.createdByAgent`, D-45), or nil. Such a
+    /// note shows "Создано агентом {name} · Понятно" instead of line-by-line highlighting; the host
+    /// clears the field in `onAcknowledgeCreatedByAgent` and then sets this to nil.
+    public var createdByAgent: String? {
+        didSet { updateAgentBanner() }
+    }
+    /// "Понятно" on the created-by-agent banner (D-45): the host sets `createdByAgent = null` in
+    /// the notebook index. The banner hides right away.
+    public var onAcknowledgeCreatedByAgent: (() -> Void)?
     /// Tools, undo availability, selection or editing (`isEditingText`) changed (refresh toolbars).
     public var onStateChange: (() -> Void)?
     private var stateChangePending = false
@@ -147,6 +156,12 @@ public final class EditorView: UIView {
         textView.addSubview(inkOver)
         agentBanner.isHidden = true
         agentBanner.onAcceptAll = { [weak self] in self?.acceptAgentEdits() }
+        agentBanner.onAcknowledge = { [weak self] in
+            guard let self else { return }
+            let acknowledge = self.onAcknowledgeCreatedByAgent
+            self.createdByAgent = nil
+            acknowledge?()
+        }
         textView.addSubview(agentBanner)
         inkOver.accessibilityIdentifier = "editor.ink"
         hoverLayer.fillColor = nil
@@ -742,8 +757,18 @@ public final class EditorView: UIView {
         AgentEdits.accept(block: block, in: document)
     }
 
+    /// Edits to accept come first; otherwise a note an agent created says so once (D-45).
     private func updateAgentBanner() {
-        let visible = hasAgentEdits
+        let mode: AgentEditsBanner.Mode?
+        if hasAgentEdits {
+            mode = .edits
+        } else if let name = createdByAgent {
+            mode = .createdBy(name)
+        } else {
+            mode = nil
+        }
+        if let mode, agentBanner.mode != mode { agentBanner.mode = mode }
+        let visible = mode != nil
         guard visible != agentBannerVisible else { return }
         agentBannerVisible = visible
         setNeedsLayout()

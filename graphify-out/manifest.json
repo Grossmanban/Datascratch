@@ -1388,19 +1388,19 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793051037.8771362,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793051037.8771386,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793051037.87714,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2636,7 +2636,7 @@
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792967462.0829601,
     "seen": 1793051037.8773744,
-    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "infra/deploy/docker-compose.yml": {
@@ -4896,9 +4896,9 @@
     "semantic_hash": "77c45c24929f43ed18784b2fa2acea40"
   },
   "apps/ios/Packages/DSEditor/CoreAdapter/Tests/DSEditorCoreTests/AgentRoundTripTests.swift": {
-    "mtime": 1793050963.6975055,
-    "seen": 1793051018.7115762,
-    "ast_hash": "7e0d381288e103179e0960f580474e97",
+    "mtime": 1793051215.404686,
+    "seen": 1793051276.690364,
+    "ast_hash": "e969c48502f46808b04d262445cfe26b",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSPenColors.swift": {

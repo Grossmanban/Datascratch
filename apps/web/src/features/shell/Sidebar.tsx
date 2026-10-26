@@ -37,6 +37,7 @@ import {
   deleteSpace,
   moveFolder,
   moveNote,
+  moveNotebookToSpace,
   openTab,
   updateFolder,
   updateNotebook,
@@ -515,6 +516,7 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
   });
   const active = pathname === `/notebook/${nb.id}`;
   const unreadable = useUnreadable(nb.id);
+  const spaces = useWorkspace((s) => s.account.spaces);
   const menu: MenuItem[] = [
     { label: t("nav.newDoc"), icon: <FileText className="size-3.5" />, onSelect: () => void newNoteAndOpen(navigate, nb.id) },
     {
@@ -530,6 +532,25 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
       icon: nb.mode === "agent" ? <Sparkles className="size-3.5" /> : <Lock className="size-3.5" />,
       onSelect: () => void navigate({ to: "/settings/$section", params: { section: "notebooks" } }),
     },
+    ...(spaces.length > 1
+      ? [
+          {
+            kind: "sub" as const,
+            label: t("docs.moveToSpace"),
+            icon: <Layers className="size-3.5" />,
+            items: spaces
+              .filter((s) => s.id !== nb.spaceId)
+              .map((s) => ({
+                label: s.name,
+                icon: <SpaceTile icon={spaceGlyph(s)} tint={tintName(s.color)} size={16} />,
+                onSelect: () => {
+                  moveNotebookToSpace(nb.id, s.id);
+                  toast(t("docs.movedTo", { name: s.name }));
+                },
+              })),
+          },
+        ]
+      : []),
     ...(unreadable.has
       ? [
           {

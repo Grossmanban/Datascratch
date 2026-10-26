@@ -59,13 +59,18 @@ test("an item nobody can read is skipped: sync settles (no endless spinner), a c
   expect(debug.skipped.filter((s) => s.docId === notebookId).length).toBe(2);
 
   // The notebook says so calmly, can be dismissed, stays dismissed, and returns only for new items.
-  await page.goto(`/notebook/${notebookId}`);
+  // (Within this run of the app: skipped items are known since sync started, as in SyncClient.)
+  const sidebar = page.getByTestId("sidebar");
+  const openNotebook = () => sidebar.getByRole("link", { name: /Заметки/ }).first().click();
+  await openNotebook();
+  await expect(page).toHaveURL(new RegExp(`/notebook/${notebookId}`));
   const note = page.getByTestId("unreadable-note");
   await expect(note).toContainText("Часть изменений здесь пока не читается");
   await page.getByTestId("unreadable-dismiss").click();
   await expect(note).toHaveCount(0);
-  await page.reload();
-  await expect(page.getByTestId("folder-strip").or(page.getByText("В папке нет документов")).or(page.getByTestId("doc-card")).first()).toBeVisible();
+  await sidebar.getByRole("link", { name: "Все документы" }).click();
+  await openNotebook();
+  await expect(page.getByRole("main").getByRole("heading", { name: /Заметки/ })).toBeVisible();
   await expect(note).toHaveCount(0);
   // Still reachable from the notebook's menu.
   await page.getByTestId("sidebar").getByRole("link", { name: /Заметки/ }).first().click({ button: "right" });

@@ -51,6 +51,17 @@ test("spaces are isolated (D-48): a starred note and a tab of one space are not 
   await page.goto(noteUrl);
   await expect(page.locator(".ds-prose")).toContainText("Рабочий план");
   await expect(page.getByTestId("space-switcher")).toContainText("Личное");
+
+  // Moving to another space is an explicit command; the note leaves this space's tabs and starred.
+  await sidebar.getByRole("link", { name: /Рабочий план/ }).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Переместить в пространство…" }).hover();
+  await page.getByRole("menuitem", { name: "Новое пространство" }).last().hover();
+  await page.getByRole("menuitem", { name: /Новый блокнот/ }).hover();
+  await page.getByRole("menuitem", { name: "Корень блокнота" }).click();
+  await expect(page.getByText("Перемещено в «Новый блокнот»").first()).toBeVisible({ timeout: 15_000 });
+  await expect(inSidebar).toHaveCount(0);
+  await switchSpace(page, /Новое пространство/);
+  await expect(inSidebar).toHaveCount(2);
 });
 
 test("spaces with the same name are told apart by their document count", async ({ page }) => {

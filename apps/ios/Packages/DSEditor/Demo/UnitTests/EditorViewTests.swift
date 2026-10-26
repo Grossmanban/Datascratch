@@ -355,6 +355,45 @@ final class EditorViewTests: XCTestCase {
         }
     }
 
+    /// Build 13 feedback (iPad, Pencil): the eraser circle stuck at the touch-down point. Driven
+    /// through the ink recognizer's callbacks, as UIKit delivers a drag, in a scrolled note.
+    func testEraserIndicatorFollowsThePenAndHidesOnLift() throws {
+        let doc = SampleDocument.make()
+        let editor = host(doc, width: 700, height: 600)
+        editor.textView.setContentOffset(CGPoint(x: 0, y: 300), animated: false)
+        settle(editor)
+        editor.tools.mode = .strokeEraser
+        drainMainQueue()
+        let input = try XCTUnwrap(editor.inkInput)
+        let t0 = CACurrentMediaTime()
+        func sample(_ p: CGPoint, _ i: Int) -> PenSample {
+            PenSample(location: p, pressure: 0.5, altitude: 1, azimuth: 0, roll: 0, timestamp: t0 + Double(i) * 0.008, estimationIndex: nil)
+        }
+        let points = line(from: CGPoint(x: 100, y: 420), to: CGPoint(x: 400, y: 560), steps: 12)
+        input.onBegan?(sample(points[0], 0))
+        XCTAssertEqual(editor.indicatorCenter, points[0], "shown where the pen touches")
+        for i in stride(from: 1, to: points.count, by: 3) {
+            // Coalesced samples: the indicator sits at the latest one.
+            let batch = (i..<min(i + 3, points.count)).map { sample(points[$0], $0) }
+            input.onMoved?(batch, [])
+            XCTAssertEqual(editor.indicatorCenter, batch.last?.location, "follows the pen, not stuck at the first point")
+        }
+        input.onEnded?(false)
+        XCTAssertNil(editor.indicatorCenter, "hidden once the pen lifts")
+
+        input.onBegan?(sample(points[0], 0))
+        input.onMoved?([sample(points[5], 1)], [])
+        input.onEnded?(true)
+        XCTAssertNil(editor.indicatorCenter, "hidden when the touch is cancelled")
+
+        editor.tools.mode = .pen
+        drainMainQueue()
+        input.onBegan?(sample(points[0], 0))
+        input.onMoved?([sample(points[3], 1)], [])
+        XCTAssertNil(editor.indicatorCenter, "ink tools show the stroke itself, no circle stuck under the pen")
+        input.onEnded?(false)
+    }
+
     func testStrokeFarBelowTheTextIsKeptAsFreeDrawing() {
         let pencilSeen = EditorView.pencilSeen
         EditorView.pencilSeen = true // the screen of room below the text is there once a Pencil was used

@@ -9,6 +9,7 @@ export function SyncIndicator({ compact }: { compact?: boolean }) {
   const status = useSyncStatus((s) => s.status);
   const pending = useSyncStatus((s) => s.pending);
   const notSent = useSyncStatus((s) => Object.keys(s.failed).length);
+  const unreadable = useSyncStatus((s) => Object.keys(s.skipped).length);
   // Undelivered changes are an alert: shown with text even in the compact sidebar footer (as on iOS).
   if (notSent > 0) return <NotSent count={notSent} />;
   const label =
@@ -20,7 +21,9 @@ export function SyncIndicator({ compact }: { compact?: boolean }) {
           ? t("sync.syncing")
           : pending > 0
             ? t("sync.pending", { count: pending })
-            : t("sync.online");
+            : unreadable > 0
+              ? `${t("sync.online")} · ${t("sync.unreadable", { count: unreadable })}`
+              : t("sync.online");
   const dot =
     status === "online" && pending === 0
       ? "bg-success"

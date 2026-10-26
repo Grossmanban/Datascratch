@@ -47,7 +47,8 @@ final class EditorDemoUITests: XCTestCase {
     }
 
     // Temporary bisection of the demo-only crash. The app's UI test (testPaletteWorksWithKeyboardOpen)
-    // types without crashing; these variants copy its steps, then its new empty note.
+    // types without crashing; these variants copy its steps, then one more difference each: a new
+    // empty note, an editor created in text mode, the app's document model (Yrs).
     @MainActor
     func testTypingBisectAppSteps() throws {
         try appStyleTyping(extraArguments: [])
@@ -56,6 +57,16 @@ final class EditorDemoUITests: XCTestCase {
     @MainActor
     func testTypingBisectAppStepsEmptyNote() throws {
         try appStyleTyping(extraArguments: ["-sampleEmpty"])
+    }
+
+    @MainActor
+    func testTypingBisectAppStepsStartInText() throws {
+        try appStyleTyping(extraArguments: ["-startInText"])
+    }
+
+    @MainActor
+    func testTypingBisectAppStepsCoreDocument() throws {
+        try appStyleTyping(extraArguments: ["-coreDocument"])
     }
 
     /// The app test's steps: no tool switch, a tap in the middle of the text view, typing, 3 s wait.

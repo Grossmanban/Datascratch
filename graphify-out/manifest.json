@@ -1045,15 +1045,15 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
-    "seen": 1792973902.1221642,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1792974033.631174,
+    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
-    "seen": 1792973902.1221657,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1792974033.6311767,
+    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1792948578.3941054,
@@ -4009,9 +4009,9 @@
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
-    "seen": 1792973902.1221683,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1792974033.631179,
+    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "semantic_hash": "a66fd1a5c043c1420b26f520d2b23c56"
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
     "mtime": 1792948578.7650733,
@@ -4057,15 +4057,15 @@
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoModel.swift": {
     "mtime": 1792973803.0328724,
-    "seen": 1792973878.4444828,
+    "seen": 1792974033.6310356,
     "ast_hash": "01f300e42cba308fd1d1d16b160add0e",
-    "semantic_hash": ""
+    "semantic_hash": "01f300e42cba308fd1d1d16b160add0e"
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoView.swift": {
     "mtime": 1792973803.031744,
-    "seen": 1792973878.4444864,
+    "seen": 1792974033.6310387,
     "ast_hash": "2b5e452ef71f8bca5cf49d51134dee0e",
-    "semantic_hash": ""
+    "semantic_hash": "2b5e452ef71f8bca5cf49d51134dee0e"
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/EditorDemoApp.swift": {
     "mtime": 1792929845.1587236,
@@ -4075,9 +4075,9 @@
   },
   "apps/ios/Packages/DSEditor/Demo/UITests/EditorDemoUITests.swift": {
     "mtime": 1792973803.0343626,
-    "seen": 1792973878.4445271,
+    "seen": 1792974033.631043,
     "ast_hash": "fc1278eb716c405707d1ecead99539c7",
-    "semantic_hash": ""
+    "semantic_hash": "fc1278eb716c405707d1ecead99539c7"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
     "mtime": 1792969718.9427896,
@@ -4159,9 +4159,9 @@
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/InkController.swift": {
     "mtime": 1792973896.749214,
-    "seen": 1792973902.122085,
+    "seen": 1792974033.6310759,
     "ast_hash": "c8c99da73d0aad5bd1e10c3d15694c3e",
-    "semantic_hash": ""
+    "semantic_hash": "c8c99da73d0aad5bd1e10c3d15694c3e"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/InkInput.swift": {
     "mtime": 1792944674.9337115,
@@ -4435,9 +4435,9 @@
   },
   "apps/ios/Packages/DSEditor/Demo/README.md": {
     "mtime": 1792973896.7497566,
-    "seen": 1792973902.1229084,
+    "seen": 1792974033.6319144,
     "ast_hash": "af7e430534b621b3d0edb53fc0a3488d",
-    "semantic_hash": ""
+    "semantic_hash": "af7e430534b621b3d0edb53fc0a3488d"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/Resources/mermaid-LICENSE.txt": {
     "mtime": 1792929109.659992,
@@ -4507,9 +4507,9 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792967462.0829601,
-    "seen": 1792973902.1224728,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1792974033.6314967,
+    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "semantic_hash": "c9f780dd0f9b83af1132086b539b65c4"
   },
   "infra/deploy/inspect.sh": {
     "mtime": 1792967462.0829601,
@@ -4543,15 +4543,15 @@
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorDiagnostics.swift": {
     "mtime": 1792973803.033568,
-    "seen": 1792973878.4447825,
+    "seen": 1792974033.63106,
     "ast_hash": "fd62abb58d8fc5a0844aa1df8b7b9081",
-    "semantic_hash": ""
+    "semantic_hash": "fd62abb58d8fc5a0844aa1df8b7b9081"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/Signposts.swift": {
     "mtime": 1792973920.4548624,
-    "seen": 1792973989.0207615,
+    "seen": 1792974033.6310892,
     "ast_hash": "01a106cd4033ea438ad62c1291255088",
-    "semantic_hash": ""
+    "semantic_hash": "01a106cd4033ea438ad62c1291255088"
   },
   "apps/ios/Packages/DSEditor/Sources/DSInk/LiveInkOutline.swift": {
     "mtime": 1792949345.7731187,

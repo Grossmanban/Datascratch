@@ -27,7 +27,23 @@ const y = 2;</code></pre>
 <div data-type="drawing" data-height="130"></div>
 <p>Last paragraph.</p>`;
 
-export function PaperEditor({ paper, font, width }: { paper: "lines" | "grid" | "dots" | "plain"; font: "serif" | "sans" | "mono"; width: number }) {
+/** What users actually write (the welcome note and beyond): inline chips and nested blocks. */
+const RICH = `<h1 data-type=title>Добро пожаловать</h1>
+<p>Это ваш первый документ. Пишите, ставьте задачи с [ ] и рисуйте прямо поверх текста, — абзац переносится на вторую строку.</p>
+<p>Теги <span data-type="tag" data-name="работа">#работа</span> и <span data-type="tag" data-name="идеи">#идеи</span> в строке текста, которая тоже переносится на следующую строку колонки.</p>
+<p>Ссылка <span data-type="noteLink" data-note-id="0192f3c4-0000-7000-8000-000000000001" data-label="Другая заметка">Другая заметка</span>, <code>инлайн-код</code>, <strong>жирный</strong>, <em>курсив</em>, <mark>маркер</mark>, <a href="https://example.com">ссылка</a>.</p>
+<p>Строчная формула $x^2 + y^2$ и дробь $\\frac{a}{b}$ в тексте.</p>
+<h2>Заголовок с тегом <span data-type="tag" data-name="план">#план</span></h2>
+<p>Текст под заголовком.</p>
+<h3>Заголовок три с <code>кодом</code></h3>
+<ul data-type="taskList"><li data-type="taskItem" data-state="open" data-scheduled="2026-10-27"><p>Задача с датой и тегом <span data-type="tag" data-name="дом">#дом</span></p></li><li data-type="taskItem" data-state="done" data-deadline="2026-10-20"><p>Сделанная задача с дедлайном</p></li><li data-type="taskItem" data-state="open"><p>Длинная задача, которая не помещается в одну строку и переносится на следующую строку колонки текста.</p></li></ul>
+<blockquote><p>Цитата из двух абзацев, первый достаточно длинный, чтобы перенестись на вторую строку колонки.</p><p>Второй абзац цитаты с тегом <span data-type="tag" data-name="мысли">#мысли</span>.</p><h3>Заголовок в цитате</h3><p>И ещё абзац.</p></blockquote>
+<ul><li><p>Пункт списка</p><ul><li><p>Вложенный пункт с <code>кодом</code></p></li></ul></li><li><p>Второй пункт</p></li></ul>
+<ol><li><p>Первый</p></li><li><p>Второй с <span data-type="tag" data-name="тег">#тег</span></p></li></ol>
+<aside data-type="callout" data-tone="info"><p>Выноска из двух абзацев.</p><p>Второй абзац выноски.</p></aside>
+<p>Последний абзац.</p>`;
+
+export function PaperEditor({ paper, font, width, content = "basic" }: { paper: "lines" | "grid" | "dots" | "plain"; font: "serif" | "sans" | "mono"; width: number; content?: "basic" | "rich" }) {
   const doc = useMemo(() => {
     const d = new Y.Doc();
     setNoteStyle(d, { paper, font });
@@ -42,7 +58,7 @@ export function PaperEditor({ paper, font, width }: { paper: "lines" | "grid" | 
         onReady={(api) =>
           setTimeout(() => {
             if (api.editor.isDestroyed) return;
-            if (doc.getXmlFragment("content").length === 0) api.editor.commands.setContent(CONTENT);
+            if (doc.getXmlFragment("content").length === 0) api.editor.commands.setContent(content === "rich" ? RICH : CONTENT);
             window.__paper = { api, ready: true };
           }, 0)
         }

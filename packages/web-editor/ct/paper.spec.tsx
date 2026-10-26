@@ -14,7 +14,9 @@ async function misalignments(page: Page) {
     const sel = ".ds-prose > p, .ds-prose > h2, .ds-prose > h3, .ds-task-body > p, .ds-prose blockquote p, .ds-prose li > p, .ds-callout-content p, .ds-prose pre, .ds-prose td p, .ds-prose th p";
     for (const el of document.querySelectorAll<HTMLElement>(sel)) {
       const s = getComputedStyle(el);
-      const top = el.getBoundingClientRect().top + parseFloat(s.paddingTop) + parseFloat(s.borderTopWidth) - origin;
+      // Headings are shifted onto their rule visually (position: relative); the grid is the layout box.
+      const shift = s.position === "relative" ? parseFloat(s.top) || 0 : 0;
+      const top = el.getBoundingClientRect().top - shift + parseFloat(s.paddingTop) + parseFloat(s.borderTopWidth) - origin;
       const off = ((top % pitch) + pitch) % pitch;
       const d = Math.min(off, pitch - off);
       if (d > 1) bad.push(`${el.tagName}:${(el.textContent ?? "").slice(0, 20)} off ${d.toFixed(1)}`);
@@ -25,10 +27,60 @@ async function misalignments(page: Page) {
   });
 }
 
-async function ready(page: Page) {
+async function ready(page: Page, math = 1) {
   await page.waitForFunction(() => window.__paper?.ready === true);
-  await expect(page.locator(".ds-math .katex")).toHaveCount(1);
+  if (math) await expect(page.locator(".ds-math .katex")).toHaveCount(math);
+  await page.evaluate(() => document.fonts.ready);
+  // alignPaper runs after layout (rAF, fonts, resize): wait until the paper is measured.
+  await page.waitForFunction(() => {
+    const e = document.querySelector<HTMLElement>(".ds-editor");
+    return !!e && parseFloat(getComputedStyle(e).getPropertyValue("--ds-pitch")) > 0;
+  });
   await page.waitForTimeout(300);
+}
+
+/**
+ * Every text block, nested ones included (quotes, lists, tasks, callouts), starts on the grid and
+ * is a whole number of pitches tall: an inline chip (tag, link, code, formula) that makes one line
+ * taller shifts every line below it off the rules.
+ */
+async function lineDrift(page: Page) {
+  return page.evaluate(() => {
+    const prose = document.querySelector<HTMLElement>(".ds-prose")!;
+    const editor = document.querySelector<HTMLElement>(".ds-editor")!;
+    const pitch = parseFloat(getComputedStyle(editor).getPropertyValue("--ds-pitch"));
+    const origin = prose.getBoundingClientRect().top + parseFloat(getComputedStyle(prose).paddingTop);
+    const bad: string[] = [];
+    let checked = 0;
+    for (const el of document.querySelectorAll<HTMLElement>(".ds-prose :is(p, h2, h3)")) {
+      const s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      const shift = s.position === "relative" ? parseFloat(s.top) || 0 : 0;
+      const top = r.top - shift + parseFloat(s.paddingTop) + parseFloat(s.borderTopWidth) - origin;
+      const h = r.height - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom) - parseFloat(s.borderTopWidth) - parseFloat(s.borderBottomWidth);
+      const dist = (v: number) => {
+        const o = ((v % pitch) + pitch) % pitch;
+        return Math.min(o, pitch - o);
+      };
+      checked++;
+      if (dist(top) > 0.75 || dist(h) > 0.75) bad.push(`${el.parentElement!.tagName}>${el.tagName} «${(el.textContent ?? "").slice(0, 24)}» top ${dist(top).toFixed(2)} h ${h.toFixed(2)}`);
+    }
+    // The title and headings (bigger fonts) sit with their baseline on a rule, not crossed by one.
+    const root = document.querySelector<HTMLElement>(".ds-editor-root")!;
+    const ruleY = parseFloat(getComputedStyle(editor).getPropertyValue("--ds-paper-y"));
+    const headings: string[] = [];
+    for (const h of document.querySelectorAll<HTMLElement>(".ds-prose :is(.ds-title, h1, h2, h3)")) {
+      const probe = document.createElement("span");
+      probe.style.cssText = "display:inline-block;width:0;height:0;vertical-align:baseline";
+      h.prepend(probe);
+      const baseline = probe.getBoundingClientRect().top - root.getBoundingClientRect().top;
+      probe.remove();
+      const off = (((baseline + 1 - ruleY) % pitch) + pitch) % pitch;
+      const d = Math.min(off, pitch - off);
+      if (d > 1) headings.push(`${h.tagName}.${h.className} «${(h.textContent ?? "").slice(0, 20)}» baseline off ${d.toFixed(2)}`);
+    }
+    return { pitch, bad, checked, headings };
+  });
 }
 
 for (const font of ["sans", "serif", "mono"] as const) {
@@ -39,6 +91,20 @@ for (const font of ["sans", "serif", "mono"] as const) {
     expect(r.pitch).toBeGreaterThanOrEqual(25);
     expect(r.bad).toEqual([]);
     await info.attach(`lines-${font}`, { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+  });
+}
+
+for (const font of ["sans", "serif", "mono"] as const) {
+  test(`lines paper: chips, inline code/math and nested blocks keep every line on the rules (${font})`, async ({ mount, page }, info) => {
+    await mount(<PaperEditor paper="lines" font={font} width={760} content="rich" />);
+    await ready(page, 0);
+    await expect(page.locator(".ds-inline-math .katex").first()).toBeVisible();
+    await page.waitForTimeout(300);
+    const r = await lineDrift(page);
+    await info.attach(`rich-${font}`, { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+    expect(r.checked).toBeGreaterThan(20);
+    expect(r.bad).toEqual([]);
+    expect(r.headings).toEqual([]);
   });
 }
 

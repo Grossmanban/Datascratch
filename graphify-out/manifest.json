@@ -30,9 +30,9 @@
     "semantic_hash": "34c4f3a3c380290d8f8e95eec4f64db4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793006667.4681125,
-    "seen": 1793006716.7332237,
-    "ast_hash": "3f34cc19a426da22de0b609e75a704f4",
+    "mtime": 1793006791.6984682,
+    "seen": 1793006844.4364924,
+    "ast_hash": "01813281432dc02ec34e7a2a6f0d81ba",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -1422,10 +1422,10 @@
     "semantic_hash": "b950f9a660d8105725d9ae96e3d5a5fa"
   },
   "packages/shared/src/contracts/document.ts": {
-    "mtime": 1792953411.69526,
-    "seen": 1793005641.016937,
-    "ast_hash": "0b125ec7560fd0911f2f071c2432ef70",
-    "semantic_hash": "0b125ec7560fd0911f2f071c2432ef70"
+    "mtime": 1793006787.0039444,
+    "seen": 1793006844.4305513,
+    "ast_hash": "cd1e1996f597050a9615d9e1f121acc6",
+    "semantic_hash": ""
   },
   "packages/shared/src/contracts/index.ts": {
     "mtime": 1792929828.4068303,
@@ -1620,10 +1620,10 @@
     "semantic_hash": "6ffe10910af6c9c87403dfa6ebfa1b80"
   },
   "packages/shared/test/contracts.test.ts": {
-    "mtime": 1792934697.384882,
-    "seen": 1793005641.016986,
-    "ast_hash": "b8e090bbf5918c8df3365c510be56e08",
-    "semantic_hash": "b8e090bbf5918c8df3365c510be56e08"
+    "mtime": 1793006787.0039444,
+    "seen": 1793006844.4316342,
+    "ast_hash": "830198fc60cf5f72829d00e7798e916a",
+    "semantic_hash": ""
   },
   "packages/shared/test/crypto.test.ts": {
     "mtime": 1792934697.384882,
@@ -2232,10 +2232,10 @@
     "semantic_hash": "0ed7f84bd1143878a1862367a7312d84"
   },
   "packages/agents/src/service/agent-service.ts": {
-    "mtime": 1793006058.3599012,
-    "seen": 1793006392.0612037,
-    "ast_hash": "ed52a0f3f337801c526e2ae60eadb950",
-    "semantic_hash": "ed52a0f3f337801c526e2ae60eadb950"
+    "mtime": 1793006787.0039444,
+    "seen": 1793006844.4295857,
+    "ast_hash": "95d3a0fb90b1dd2f1bcb460cf0e283fd",
+    "semantic_hash": ""
   },
   "packages/agents/src/service/note-index.ts": {
     "mtime": 1792930769.1526484,
@@ -2316,10 +2316,10 @@
     "semantic_hash": "a27957f082e5b41ac7800f0a5f81c7b2"
   },
   "packages/agents/test/service.test.ts": {
-    "mtime": 1792930769.1566486,
-    "seen": 1793005641.0169077,
-    "ast_hash": "c277ff2d156abe0b5f65bfb43391d066",
-    "semantic_hash": "c277ff2d156abe0b5f65bfb43391d066"
+    "mtime": 1793006787.0039444,
+    "seen": 1793006844.4300394,
+    "ast_hash": "db3f0cf4502843126afcda348399e324",
+    "semantic_hash": ""
   },
   "packages/agents/test/world.ts": {
     "mtime": 1792930769.1600492,

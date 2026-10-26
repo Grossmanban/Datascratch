@@ -419,7 +419,7 @@ public final class EditorView: UIView {
         let caret = textView.caretRect(for: range.end).insetBy(dx: 0, dy: -8)
         let visible = textView.bounds.inset(by: textView.adjustedContentInset)
         guard !visible.contains(caret) else { return }
-        textView.scrollRectToVisible(caret, animated: true)
+        textView.scrollRectToVisible(caret, animated: false)
     }
 
     private func layoutHeader() {

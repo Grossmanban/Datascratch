@@ -5,6 +5,7 @@ import { APP_VERSION, syncUrl } from "@/config";
 import { ad, fromBase64Url, sodiumReady, unwrapKey, uuidv7, type GuestGrant } from "@/lib/shared";
 import { createSyncStatusStore, uiStatus } from "@/sync/engine";
 import { receivePresence } from "./presence";
+import { connectWithTimeout } from "@/sync/socket";
 
 /**
  * A guest's view of a shared note or notebook (spec/08-sharing.md, D-13, D-37), synced with
@@ -29,6 +30,7 @@ export class GuestSession {
   ) {
     this.keys.set(grant.target.id, rootKey);
     this.client = new SyncClient({
+      createSocket: connectWithTimeout,
       url: syncUrl(),
       deviceId: guestDeviceId(),
       client: { platform: "web", version: APP_VERSION },

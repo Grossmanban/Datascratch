@@ -33,11 +33,63 @@ export function setTokenSource(source: TokenSource | null) {
 
 type RequestOptions = { auth?: boolean; body?: unknown; signal?: AbortSignal; raw?: boolean };
 
+/**
+ * From some networks a share of new HTTPS connections hangs in the TLS handshake. A request that
+ * gets no response in time is abandoned (NetworkError, so writes stay queued in the outbox/ops),
+ * and idempotent reads are retried at once with a short backoff.
+ */
+const RESPONSE_TIMEOUT_MS = 15_000;
+const UPLOAD_TIMEOUT_MS = 60_000;
+const READ_RETRY_DELAYS_MS = [300, 1200];
+
+class TimeoutError extends Error {
+  constructor() {
+    super("No response in time");
+    this.name = "TimeoutError";
+  }
+}
+
 async function doFetch(method: string, path: string, opts: RequestOptions, accessToken?: string): Promise<Response> {
+  const idempotent = method === "GET" || method === "HEAD";
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetchOnce(method, path, opts, accessToken);
+    } catch (e) {
+      const delay = READ_RETRY_DELAYS_MS[attempt];
+      if (!idempotent || delay === undefined || !(e instanceof NetworkError) || opts.signal?.aborted) throw e;
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
+
+/** `fetch` with the same response timeout (and retries for GET) as API requests. */
+export async function timedFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const timeout = init.body instanceof Uint8Array ? UPLOAD_TIMEOUT_MS : RESPONSE_TIMEOUT_MS;
+  for (let attempt = 0; ; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new TimeoutError()), timeout);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } catch (e) {
+      const delay = READ_RETRY_DELAYS_MS[attempt];
+      if (method !== "GET" || delay === undefined) throw e;
+      await new Promise((r) => setTimeout(r, delay));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function fetchOnce(method: string, path: string, opts: RequestOptions, accessToken?: string): Promise<Response> {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined && !(opts.body instanceof Uint8Array)) headers["content-type"] = "application/json";
   if (opts.body instanceof Uint8Array) headers["content-type"] = "application/octet-stream";
   if (accessToken) headers.authorization = `Bearer ${accessToken}`;
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(opts.signal?.reason);
+  opts.signal?.addEventListener("abort", onAbort, { once: true });
+  const timer = setTimeout(() => controller.abort(new TimeoutError()), opts.body instanceof Uint8Array ? UPLOAD_TIMEOUT_MS : RESPONSE_TIMEOUT_MS);
   try {
     return await fetch(`${apiBase()}${path}`, {
       method,
@@ -48,11 +100,15 @@ async function doFetch(method: string, path: string, opts: RequestOptions, acces
           : opts.body instanceof Uint8Array
             ? (opts.body as BodyInit)
             : JSON.stringify(opts.body),
-      signal: opts.signal,
+      signal: controller.signal,
     });
   } catch (e) {
-    if ((e as Error).name === "AbortError") throw e;
+    // The caller's own abort stays an abort; our timeout is a network failure.
+    if (opts.signal?.aborted) throw e;
     throw new NetworkError(e);
+  } finally {
+    clearTimeout(timer);
+    opts.signal?.removeEventListener("abort", onAbort);
   }
 }
 

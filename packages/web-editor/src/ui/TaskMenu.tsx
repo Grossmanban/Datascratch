@@ -11,7 +11,7 @@ function parseDate(s: string): Date {
 }
 
 /** Context menu of a task (spec/12 §12.1): reschedule, deadline, complete, cancel, open, move, delete. */
-export function TaskMenu({ editor, request, host, onClose }: { editor: Editor; request: TaskMenuRequest; host: EditorHost; onClose: () => void }) {
+export function TaskMenu({ editor, request, host, dates = true, onClose }: { editor: Editor; request: TaskMenuRequest; host: EditorHost; dates?: boolean; onClose: () => void }) {
   const [picker, setPicker] = useState<null | "scheduled" | "deadline">(null);
   const node = editor.state.doc.nodeAt(request.pos);
   if (!node || node.type.name !== "taskItem") return null;
@@ -51,15 +51,20 @@ export function TaskMenu({ editor, request, host, onClose }: { editor: Editor; r
   return (
     <Floating rect={request.rect} className="ds-menu ds-task-menu" onDismiss={onClose}>
       <div className="ds-menu-list">
-        <div className="ds-menu-group">Перенести</div>
-        {item("Сегодня", run(() => setDates({ scheduled: today })), { active: a.scheduled === today })}
-        {item("Завтра", run(() => setDates({ scheduled: addDays(today, 1) })), { active: a.scheduled === addDays(today, 1) })}
-        {item("След. неделя", run(() => setDates({ scheduled: nextWeek(today) })), { hint: dateChipLabel(nextWeek(today), today) })}
-        {item("Дата…", () => setPicker("scheduled"), { hint: a.scheduled ? dateChipLabel(a.scheduled, today) : undefined })}
-        {a.scheduled && item("Без даты", run(() => setDates({ scheduled: null })))}
-        <div className="ds-menu-sep" />
-        {item("Дедлайн…", () => setPicker("deadline"), { hint: a.deadline ? dateChipLabel(a.deadline, today) : undefined })}
-        <div className="ds-menu-sep" />
+        {/* D-51: dates belong to the extended mode. */}
+        {dates && (
+          <>
+            <div className="ds-menu-group">Перенести</div>
+            {item("Сегодня", run(() => setDates({ scheduled: today })), { active: a.scheduled === today })}
+            {item("Завтра", run(() => setDates({ scheduled: addDays(today, 1) })), { active: a.scheduled === addDays(today, 1) })}
+            {item("След. неделя", run(() => setDates({ scheduled: nextWeek(today) })), { hint: dateChipLabel(nextWeek(today), today) })}
+            {item("Дата…", () => setPicker("scheduled"), { hint: a.scheduled ? dateChipLabel(a.scheduled, today) : undefined })}
+            {a.scheduled && item("Без даты", run(() => setDates({ scheduled: null })))}
+            <div className="ds-menu-sep" />
+            {item("Дедлайн…", () => setPicker("deadline"), { hint: a.deadline ? dateChipLabel(a.deadline, today) : undefined })}
+            <div className="ds-menu-sep" />
+          </>
+        )}
         {a.state !== "done" ? item("Выполнить", run(() => editor.chain().setTaskState("done", request.pos).run())) : item("Вернуть в работу", run(() => editor.chain().setTaskState("open", request.pos).run()))}
         {a.state !== "cancelled" ? item("Отменить", run(() => editor.chain().setTaskState("cancelled", request.pos).run())) : item("Вернуть в работу", run(() => editor.chain().setTaskState("open", request.pos).run()))}
         {host.onTaskAction && (

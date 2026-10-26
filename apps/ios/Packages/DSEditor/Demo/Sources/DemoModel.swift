@@ -22,6 +22,7 @@ final class DemoModel {
 
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
     let selectedTraits = !ProcessInfo.processInfo.arguments.contains("-noSelectedTraits")
+    let hidesPalette = ProcessInfo.processInfo.arguments.contains("-noPalette")
     /// UI-test bisection (temporary): `-splitView`, `-noNavigation`.
     enum Navigation { case stack, split, none }
     let navigation: Navigation = {

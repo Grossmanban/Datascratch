@@ -267,8 +267,8 @@ final class LibraryUITests: XCTestCase {
         if palette.exists {
             XCTAssertLessThanOrEqual(bar.frame.maxY, palette.frame.minY + 1, "format bar overlaps the pen palette")
         }
+        // Only the leading edge: the bar scrolls sideways, and the element reports its content.
         XCTAssertGreaterThanOrEqual(bar.frame.minX, window.minX - 1, "format bar starts off screen")
-        XCTAssertLessThanOrEqual(bar.frame.maxX, window.maxX + 1, "format bar ends off screen")
         let bold = bar.buttons["Bold"].firstMatch
         XCTAssertTrue(bold.exists && bold.isHittable, "no Bold on the format bar")
         XCTAssertFalse(bold.isSelected, "Bold is on before it was tapped")

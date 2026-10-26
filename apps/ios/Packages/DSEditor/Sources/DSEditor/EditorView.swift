@@ -41,7 +41,15 @@ public final class EditorView: UIView {
     /// "Понятно" on the created-by-agent banner (D-45): the host sets `createdByAgent = null` in
     /// the notebook index. The banner hides right away.
     public var onAcknowledgeCreatedByAgent: (() -> Void)?
-    /// Tools, undo availability, selection or editing (`isEditingText`) changed (refresh toolbars).
+    /// "/" was typed at the start of a paragraph or after a space: the host shows the block menu
+    /// (`DSSuggestionList`) near `caretRect` with `items`, and calls `applySlashCommand(_:)` on a
+    /// pick. Called again as the query changes, and with nil when the menu should close.
+    public var onSlashMenu: ((SlashMenuState?) -> Void)?
+    /// "Ссылка" in the format menu or bar with no URL on the pasteboard: the host asks for a URL and
+    /// calls `setLink(_:)` (the selection is kept until then).
+    public var onLinkRequest: (() -> Void)?
+    /// Tools, undo availability, selection, editing (`isEditingText`) or formatting (`formatState`)
+    /// changed (refresh toolbars and the format bar).
     public var onStateChange: (() -> Void)?
     private var stateChangePending = false
 
@@ -253,7 +261,12 @@ public final class EditorView: UIView {
             self.dynamicTypeChanged()
         }
 
-        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
+        // The overlap is measured once the keyboard is in place (`did`, not `will`): a host that
+        // shrinks the editor for the keyboard does so in the same animation, and measuring the
+        // still full-height editor against the incoming keyboard counted the keyboard twice — the
+        // visible area collapsed for a moment, UIKit scrolled the caret to the very top, and a
+        // screen of empty space stayed under it (iPad, build 9).
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
             let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
             MainActor.assumeIsolated { self?.keyboardFrameChanged(frame) }
         }
@@ -391,9 +404,22 @@ public final class EditorView: UIView {
             guard let pending = self.pendingBottomInset else { return }
             self.pendingBottomInset = nil
             guard abs(self.textView.contentInset.bottom - pending.bottom) > 1 else { return }
+            let grows = pending.bottom > self.textView.contentInset.bottom
             self.textView.contentInset.bottom = pending.bottom
             self.textView.verticalScrollIndicatorInsets.bottom = pending.overlap
+            // Full-height host: the keyboard now covers the bottom; bring the caret into view with
+            // the smallest scroll (nothing moves if it is already visible).
+            if grows, pending.overlap > 0 { self.scrollCaretIntoView() }
         }
+    }
+
+    /// Scrolls the least needed to show the caret line above the bottom inset.
+    func scrollCaretIntoView() {
+        guard textView.isFirstResponder, let range = textView.selectedTextRange else { return }
+        let caret = textView.caretRect(for: range.end).insetBy(dx: 0, dy: -8)
+        let visible = textView.bounds.inset(by: textView.adjustedContentInset)
+        guard !visible.contains(caret) else { return }
+        textView.scrollRectToVisible(caret, animated: false)
     }
 
     private func layoutHeader() {
@@ -639,9 +665,10 @@ public final class EditorView: UIView {
         case .strike: mark(MarkName.strike)
         case .code: mark(MarkName.code)
         case .highlight: mark(MarkName.highlight, .object(["color": .string("highlight.yellow")]))
-        case .heading1: select(cmd.setBlockKind(.heading(1), at: pos))
-        case .heading2: select(cmd.setBlockKind(.heading(2), at: pos))
-        case .heading3: select(cmd.setBlockKind(.heading(3), at: pos))
+        // A heading button on a heading of that level turns it back into text (format bar toggles).
+        case .heading1: select(cmd.setBlockKind(BlockStyle(para) == .heading1 ? .paragraph : .heading(1), at: pos))
+        case .heading2: select(cmd.setBlockKind(BlockStyle(para) == .heading2 ? .paragraph : .heading(2), at: pos))
+        case .heading3: select(cmd.setBlockKind(BlockStyle(para) == .heading3 ? .paragraph : .heading(3), at: pos))
         case .paragraph: select(cmd.setBlockKind(.paragraph, at: pos))
         case .bulletList: select(cmd.setBlockKind(.bulletList, at: pos))
         case .orderedList: select(cmd.setBlockKind(.orderedList(start: 1), at: pos))
@@ -662,9 +689,107 @@ public final class EditorView: UIView {
                 select(pos)
             }
         case .link:
-            if !range.isEmpty, let s = UIPasteboard.general.string, let url = URL(string: s), url.scheme != nil {
-                cmd.setMark(MarkName.link, value: .object(["href": .string(s)]), range: range)
+            guard !range.isEmpty else { break }
+            if cmd.marks(at: range).contains(MarkName.link) {
+                cmd.setMark(MarkName.link, value: nil, range: range)
+            } else if let request = onLinkRequest {
+                // The host asks for the address (reading the pasteboard here would show the system
+                // paste prompt on every tap; the host can offer the pasteboard in its prompt).
+                linkRange = range
+                request()
+            } else if UIPasteboard.general.hasURLs, let url = UIPasteboard.general.url, url.scheme != nil {
+                cmd.setMark(MarkName.link, value: .object(["href": .string(url.absoluteString)]), range: range)
             }
+        }
+        notifyStateChange()
+    }
+
+    // MARK: - Formatting state (format bar)
+
+    /// Marks on at the selection (all of it) or caret (what the next typed text gets), and the
+    /// block style of the paragraph with the caret.
+    public var formatState: FormatState {
+        let range = selectionRange
+        let (i, _) = projection.position(at: range.lowerBound)
+        guard projection.paragraphs.indices.contains(i) else { return FormatState() }
+        let marks = range.isEmpty ? (pendingMarks ?? commands.marks(at: range)) : commands.marks(at: range)
+        return FormatState(marks: Set(marks.names).subtracting([MarkName.agentEdit]),
+                           block: BlockStyle(projection.paragraphs[i]), hasSelection: !range.isEmpty)
+    }
+
+    private var linkRange: Range<Int>?
+
+    /// Sets (or with nil removes) a link on the selection, or on the range saved when
+    /// `onLinkRequest` was called.
+    public func setLink(_ url: URL?) {
+        let range = linkRange ?? selectionRange
+        linkRange = nil
+        guard !range.isEmpty else { return }
+        commands.setMark(MarkName.link, value: url.map { .object(["href": .string($0.absoluteString)]) }, range: range)
+        textView.selectedRange = NSRange(location: range.lowerBound, length: range.count)
+        notifyStateChange()
+    }
+
+    // MARK: - "/" block menu
+
+    private var slashMenu: SlashMenuState?
+
+    /// Opens, updates or closes the "/" menu for the text before the caret.
+    private func updateSlashMenu() {
+        let range = selectionRange
+        var state: SlashMenuState?
+        let (i, o) = projection.position(at: range.lowerBound)
+        if range.isEmpty, onSlashMenu != nil, projection.paragraphs.indices.contains(i), projection.paragraphs[i].kind.isText,
+           projection.paragraphs[i].kind.type != NodeType.codeBlock, o > 0 {
+            let para = projection.paragraphs[i]
+            let before = document.inline(of: para.blockId, range: 0..<o).map { el -> String in
+                if case .text(let t, _) = el { return t } else { return "\u{FFFC}" }
+            }.joined()
+            if let hit = SlashCommands.trigger(in: before) {
+                let start = projection.starts[i] + hit.slashOffset
+                let caret = textView.selectedTextRange.map { textView.caretRect(for: $0.start) } ?? .zero
+                state = SlashMenuState(query: hit.query, items: SlashCommands.matching(hit.query),
+                                       range: start..<range.lowerBound, caretRect: textView.convert(caret, to: self))
+            }
+        }
+        guard state != slashMenu else { return }
+        slashMenu = state
+        onSlashMenu?(state)
+    }
+
+    /// Closes the "/" menu without applying anything (the typed text stays).
+    public func dismissSlashMenu() {
+        guard slashMenu != nil else { return }
+        slashMenu = nil
+        onSlashMenu?(nil)
+    }
+
+    /// Applies a "/" menu entry: removes the typed "/query" and turns the paragraph into that
+    /// block, or inserts the block after it.
+    public func applySlashCommand(_ id: String) {
+        guard let menu = slashMenu else { return }
+        slashMenu = nil
+        onSlashMenu?(nil)
+        select(commands.replace(menu.range, with: ""))
+        let (i, o) = projection.position(at: selectionRange.lowerBound)
+        guard projection.paragraphs.indices.contains(i) else { return }
+        let pos = TextPosition(block: projection.paragraphs[i].blockId, offset: o)
+        switch id {
+        case "paragraph": select(commands.setBlockKind(.paragraph, at: pos))
+        case "heading1": select(commands.setBlockKind(.heading(1), at: pos))
+        case "heading2": select(commands.setBlockKind(.heading(2), at: pos))
+        case "heading3": select(commands.setBlockKind(.heading(3), at: pos))
+        case "quote": select(commands.setBlockKind(.blockquote, at: pos))
+        case "bulletList": select(commands.setBlockKind(.bulletList, at: pos))
+        case "orderedList": select(commands.setBlockKind(.orderedList(start: 1), at: pos))
+        case "taskList": select(commands.setBlockKind(.taskList(done: false), at: pos))
+        case "code": select(commands.setBlockKind(.codeBlock(language: nil), at: pos))
+        case "math": insertBlock(.math(""))
+        case "mermaid": insertBlock(.mermaid("flowchart LR\n  A --> B"))
+        case "table": insertBlock(EditorCommands.table(rows: 3, columns: 3))
+        case "drawing": insertBlock(.drawing(height: 260))
+        case "rule": insertBlock(.rule())
+        default: break
         }
         notifyStateChange()
     }
@@ -932,7 +1057,7 @@ extension EditorView: UITextViewDelegate {
         // Plain typing inside one text paragraph: let the text view apply it, mirror to the model.
         if si == ei, start.kind.isText, !text.contains("\n"), !text.contains("\u{FFFC}"), !text.contains("\u{2028}") || start.kind.type == NodeType.codeBlock {
             let isCode = start.kind.type == NodeType.codeBlock
-            let marks: MarkSet = isCode ? .empty : (pendingMarks ?? cmd.marks(at: lo..<lo))
+            let marks: MarkSet = isCode ? .empty : (pendingMarks ?? cmd.marks(at: lo..<lo)).setting(MarkName.agentEdit, nil)
             let modelText = isCode ? text.replacingOccurrences(of: "\u{2028}", with: "\n") : text
             cmd.typeText(modelText, marks: marks, at: TextPosition(block: start.blockId, offset: so), replacing: hi - lo)
             if text.utf16.count == 1 { pendingShortcut = (lo + 1, text) }
@@ -940,7 +1065,7 @@ extension EditorView: UITextViewDelegate {
         }
         // Everything else is structural.
         let clean = text.replacingOccurrences(of: "\u{FFFC}", with: "").replacingOccurrences(of: "\u{2028}", with: "\n")
-        select(cmd.replace(lo..<hi, with: clean, marks: pendingMarks ?? .empty))
+        select(cmd.replace(lo..<hi, with: clean, marks: (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil)))
         return false
     }
 
@@ -964,6 +1089,7 @@ extension EditorView: UITextViewDelegate {
         }
         normalizeParagraph(i)
         ink.invalidateLayout()
+        updateSlashMenu()
         notifyStateChange()
     }
 
@@ -972,12 +1098,16 @@ extension EditorView: UITextViewDelegate {
     }
 
     public func textViewDidBeginEditing(_ textView: UITextView) { notifyStateChange() }
-    public func textViewDidEndEditing(_ textView: UITextView) { notifyStateChange() }
+    public func textViewDidEndEditing(_ textView: UITextView) {
+        dismissSlashMenu()
+        notifyStateChange()
+    }
 
     public func textViewDidChangeSelection(_ tv: UITextView) {
         if suppressDelegate { return }
         pendingMarks = nil
         updateTypingAttributes()
+        updateSlashMenu()
         notifyStateChange()
     }
 
@@ -994,6 +1124,9 @@ extension EditorView: UITextViewDelegate {
         }
         if let item = para.context.itemBlockId, let node = document.block(item), node.type == NodeType.taskItem {
             extra.append(taskMenu(item: item, node: node))
+        }
+        if para.kind.isText, para.kind.type != NodeType.codeBlock, para.kind.type != NodeType.title {
+            extra.append(contentsOf: formatMenu())
         }
         guard !extra.isEmpty else { return nil }
         return UIMenu(children: extra + suggestedActions)

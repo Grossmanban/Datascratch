@@ -14,8 +14,8 @@ describe("access", () => {
     const { svc } = setup();
     const r = await svc.listNotebooks(principal());
     expect(r.notebooks.map((n) => n.name)).toEqual(["Работа"]);
-    expect(r.notebooks[0]!.noteCount).toBe(2);
-    expect(r.notebooks[0]!.folders[0]!.path).toBe("Черновики");
+    expect((r.notebooks[0] as { noteCount: number }).noteCount).toBe(2);
+    expect((r.notebooks[0] as { folders: { path: string }[] }).folders[0]!.path).toBe("Черновики");
     const spaces = await svc.listSpaces(principal());
     expect(spaces.spaces).toEqual([{ id: "s1", name: "Основное", icon: "🏠", notebooks: [{ id: NB_WORK, name: "Работа" }] }]);
   });
@@ -50,6 +50,22 @@ describe("access", () => {
     await svc.readNote(principal(), { noteId: NOTE_PLAN, includeImages: false });
     expect(ctx.data.grantCalls.length).toBeGreaterThan(0);
     expect(new Set(ctx.data.grantCalls)).toEqual(new Set([principal().grant.id]));
+  });
+
+  it("lists a notebook that cannot be loaded as unavailable instead of hiding it", async () => {
+    const { ctx, svc } = setup();
+    ctx.data.broken.add(NB_WORK);
+    const r = await svc.listNotebooks(principal());
+    expect(r.notebooks).toMatchObject([{ id: NB_WORK, unavailable: true, reason: expect.stringContaining("could not decrypt") }]);
+    await expect(svc.readNote(principal(), { noteId: NOTE_PLAN, includeImages: false })).rejects.toThrow(/temporarily unavailable \(0192f3c4-0000-7000-8000-0000000000a1\)/);
+    await expect(svc.listNotes(principal(), { notebookId: NB_WORK, limit: 10, offset: 0 })).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("warns about notebook updates the server had to skip", async () => {
+    const { ctx, svc } = setup();
+    ctx.data.skippedFor.set(NB_WORK, [{ seq: 7, deviceId: "ios:abc", reason: "decrypt failed" }]);
+    const r = await svc.listNotebooks(principal());
+    expect(r.notebooks[0]).toMatchObject({ id: NB_WORK, name: "Работа", warning: expect.stringContaining("1 recent change") });
   });
 
   it("stops access when a notebook is switched to private", async () => {

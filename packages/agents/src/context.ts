@@ -43,6 +43,12 @@ export interface LoadedDoc {
   doc: Y.Doc;
   /** Last server seq included in `doc`; used as a cache key. */
   seq: number;
+  /**
+   * Updates the server could not decrypt or apply and left out (logged with
+   * docId, seq and deviceId). The rest of the document is still returned, so
+   * one bad update never hides a whole notebook or note.
+   */
+  skipped?: { seq: number; deviceId: string | null; reason: string }[];
 }
 
 /**

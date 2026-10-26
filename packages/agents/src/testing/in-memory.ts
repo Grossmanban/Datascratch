@@ -100,6 +100,10 @@ export class InMemoryDataSource implements AgentDataSource {
   readonly docs = new Map<string, StoredDoc>();
   readonly notebooks = new Map<string, StoredNotebook>();
   loads = 0;
+  /** Docs the "server" fails to decrypt (loadDoc → null), to test degraded paths. */
+  readonly broken = new Set<string>();
+  /** Updates reported as skipped by loadDoc, per doc. */
+  readonly skippedFor = new Map<string, NonNullable<LoadedDoc["skipped"]>>();
   /** grantId of every agent call, as the server would use it for RLS. */
   readonly grantCalls: (string | undefined)[] = [];
 
@@ -155,12 +159,14 @@ export class InMemoryDataSource implements AgentDataSource {
 
   async loadDoc(userId: string, docId: string, grantId?: string): Promise<LoadedDoc | null> {
     this.grantCalls.push(grantId);
+    if (this.broken.has(docId)) return null;
     const d = this.readable(userId, docId);
     if (!d) return null;
     this.loads++;
     const doc = new Y.Doc({ gc: false });
     Y.applyUpdate(doc, Y.encodeStateAsUpdate(d.doc));
-    return { doc, seq: d.seq };
+    const skipped = this.skippedFor.get(docId);
+    return skipped ? { doc, seq: d.seq, skipped } : { doc, seq: d.seq };
   }
 
   async docSeqs(userId: string, docIds: string[]): Promise<Record<string, number>> {

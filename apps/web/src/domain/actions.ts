@@ -25,6 +25,7 @@ import { accountMaps } from "./account";
 import { initNotebookDoc, notebookMaps } from "./notebook";
 import { appendTask, initNoteDoc, removeTask, setTaskText, setTitle, updateTask, type TaskPatch } from "./note";
 import { bySpace, spaceOfNote, spaceOfNotebook, tabsInSpace, useWorkspace } from "./workspace";
+import { forgetClosedTab, recordClosedTabs } from "@/lib/closedTabs";
 import { orderBetween, patchYMap, toYMap } from "./ymap";
 
 const now = () => new Date().toISOString();
@@ -433,6 +434,7 @@ export function openTab(noteId: string) {
     if (!a.tabs.toArray().some((t) => t.noteId === noteId)) a.tabs.push([{ noteId }]);
     if (spaceId) setBySpace("activeTabBySpace", spaceId, noteId);
   });
+  if (spaceId) forgetClosedTab(spaceId, noteId);
 }
 
 /** Close a tab; returns the tab of the same space to show next (tabs are per space, D-48). */
@@ -450,7 +452,23 @@ export function closeTab(noteId: string): string | null {
     a.tabs.delete(idx, 1);
     if (spaceId && bySpace(st, "activeTabBySpace")[spaceId] === noteId) setBySpace("activeTabBySpace", spaceId, next);
   });
+  if (spaceId) recordClosedTabs(spaceId, [noteId]);
   return next;
+}
+
+/** «Закрыть остальные»: every other tab of the space goes to «Недавно закрытые». */
+export function closeOtherTabs(keepId: string) {
+  const a = acc();
+  const st = useWorkspace.getState();
+  const spaceId = spaceOfNote(st, keepId);
+  if (!spaceId) return;
+  const others = new Set(tabsInSpace(st, spaceId).map((t) => t.noteId).filter((id) => id !== keepId));
+  if (!others.size) return;
+  runtime().account.transact(() => {
+    for (let i = a.tabs.length - 1; i >= 0; i--) if (others.has(a.tabs.get(i).noteId)) a.tabs.delete(i, 1);
+    setBySpace("activeTabBySpace", spaceId, keepId);
+  });
+  recordClosedTabs(spaceId, [...others]);
 }
 
 /** The tab a space was left on, if it is still open (restored when switching back, D-48). */

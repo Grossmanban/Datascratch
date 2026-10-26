@@ -35,8 +35,10 @@ test("flexible layout: hide the sidebar, full screen per screen, close a documen
   await page.goto("/all");
   await page.getByTestId("doc-card").filter({ hasText: "Во весь экран" }).click();
   await page.getByTestId("focus-toggle").click(); // leave full screen to see the tabs
-  await expect(sidebar.getByText("Во весь экран")).toBeVisible();
+  const tab = page.getByTestId("tab-strip").getByTestId("tab").filter({ hasText: "Во весь экран" });
+  await expect(tab).toBeVisible();
   await page.getByTestId("close-tab").click();
   await page.waitForURL("**/all");
+  await expect(tab).toHaveCount(0);
   await expect(sidebar.getByRole("link", { name: "Во весь экран" })).toHaveCount(0);
 });

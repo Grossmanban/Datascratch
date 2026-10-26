@@ -169,7 +169,6 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
           <NavLink to="/calendar" icon={<Calendar className="size-4" />} label={t("nav.calendar")} />
         </div>
 
-        <TabsSection />
         <StarredSection />
 
         <Section
@@ -363,54 +362,6 @@ function SpaceSwitcher() {
         </button>
       }
     />
-  );
-}
-
-function TabsSection() {
-  const { t } = useTranslation();
-  // Only the tabs of the current space (D-48); the others come back when switching back.
-  const visible = useWorkspace(useShallow((s) => tabsInSpace(s, s.activeSpaceId)));
-  const notes = useWorkspace((s) => s.notes);
-  const navigate = useNavigate();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  if (!visible.length) return null;
-  return (
-    <Section id="tabs" title={t("nav.tabs")}>
-      {visible.map((tab) => {
-        const n = notes[tab.noteId]!;
-        const active = pathname === `/doc/${tab.noteId}`;
-        return (
-          <ContextMenu key={tab.noteId} items={() => noteMenuItems(tab.noteId, t, navigate)}>
-            <div
-              className={cn(
-                "group flex h-8 items-center gap-2 rounded-md pl-2 pr-1",
-                active ? "bg-surface font-medium text-ink shadow-[0_1px_2px_rgb(40_30_10/0.08)] ring-1 ring-line" : "text-ink-2 hover:bg-ink/[0.04]",
-              )}
-              draggable
-              onDragStart={(e) => dragNote(e, tab.noteId)}
-            >
-              <Link to="/doc/$noteId" params={{ noteId: tab.noteId }} className="flex min-w-0 flex-1 items-center gap-2">
-                <span className="shrink-0 text-[13px] leading-none">{iconGlyph(n.icon) || <FileText className="size-3.5 text-ink-3" />}</span>
-                <span className="truncate">{noteTitle(n, t("app.untitled"))}</span>
-              </Link>
-              <button
-                aria-label={t("common.close")}
-                className="flex size-6 items-center justify-center rounded text-ink-3 opacity-0 focus-visible:opacity-100 hover:bg-ink/10 hover:text-ink group-hover:opacity-100"
-                onClick={() => {
-                  const next = closeTab(tab.noteId);
-                  if (active) {
-                    if (next) void navigate({ to: "/doc/$noteId", params: { noteId: next } });
-                    else void navigate({ to: "/all" });
-                  }
-                }}
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
-          </ContextMenu>
-        );
-      })}
-    </Section>
   );
 }
 

@@ -2,6 +2,7 @@ import { Maximize2, Menu, Minimize2, PanelLeftOpen } from "lucide-react";
 import { useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { tabsInSpace, useWorkspace } from "@/domain/workspace";
 import { useIsMobile } from "@/hooks/useMedia";
 import { focusKindOf, toggleFocus, toggleSidebar, useUi } from "@/hooks/useUi";
 import { cn, IconButton } from "@/ui";
@@ -17,6 +18,7 @@ export function TopBar({ children, actions, className }: { children?: ReactNode;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const focusKind = focusKindOf(pathname);
   const focused = useUi((s) => !!focusKind && s.focus[focusKind]);
+  const tabCount = useWorkspace((s) => tabsInSpace(s, s.activeSpaceId).length);
   const ref = useRef<HTMLElement>(null);
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -62,6 +64,20 @@ export function TopBar({ children, actions, className }: { children?: ReactNode;
           </IconButton>
         )}
         {actions}
+        {/* A phone has no tab strip: the tab count opens the same overview (as in Safari). */}
+        {isMobile && tabCount > 0 && (
+          <button
+            type="button"
+            onClick={() => useUi.setState({ tabOverviewOpen: true })}
+            aria-label={`${t("tabs.overview")} · ${t("tabs.count", { count: tabCount })}`}
+            className="ml-0.5 flex size-8 items-center justify-center"
+            data-testid="tab-count"
+          >
+            <span className="flex size-[22px] items-center justify-center rounded-[6px] border-[1.5px] border-ink-2 text-[11px] font-semibold tabular-nums text-ink">
+              {tabCount > 99 ? "∞" : tabCount}
+            </span>
+          </button>
+        )}
       </div>
     </header>
   );

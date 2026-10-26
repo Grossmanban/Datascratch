@@ -488,18 +488,13 @@ final class CoreLibrary: LibraryBackend {
     }
 
     /// `meta.name/icon/space` of the notebook document (agents cannot read the account document).
+    /// Name, icon, colour and space copied into the notebook document for agents and the server
+    /// (document-model §3); no write when nothing changed.
     private func writeNotebookMeta(_ notebook: Notebook, in snapshot: LibrarySnapshot) throws {
-        let doc = try notebookDocument(notebook.id)
         let space = snapshot.spaces.first { $0.id == notebook.spaceId }
-        try doc.crdt.transact(origin: .local) { txn in
-            txn.set("meta", key: "name", .string(value: notebook.name))
-            txn.set("meta", key: "icon", .string(value: notebook.icon))
-            txn.set("meta", key: "space", .object(entries: [
-                "id": .string(value: notebook.spaceId),
-                "name": .string(value: space?.name ?? ""),
-                "icon": .optionalString(space?.icon),
-            ]))
-        }
+        try notebookDocument(notebook.id).setMetaCopy(.init(
+            name: notebook.name, icon: notebook.icon, color: notebook.color.rawValue,
+            spaceId: notebook.spaceId, spaceName: space?.name ?? "", spaceIcon: space?.icon))
     }
 
     private func persistFolders(_ old: LibrarySnapshot, _ new: LibrarySnapshot) throws {

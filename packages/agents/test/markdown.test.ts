@@ -114,6 +114,7 @@ describe("review 2026-10-26", () => {
     const firstRow = table.toArray()[0] as Y.XmlElement;
     expect((firstRow.toArray() as Y.XmlElement[]).map((c) => c.getAttribute("align"))).toEqual(["left", "center", "right"]);
     expect(md).toContain("| :--- | :---: | ---: |");
+    expect(((firstRow.toArray()[0] as Y.XmlElement).toArray()[0] as Y.XmlElement).getAttribute("textAlign")).toBeUndefined();
     expect((await roundTrip(md)).md).toBe(md);
   });
 

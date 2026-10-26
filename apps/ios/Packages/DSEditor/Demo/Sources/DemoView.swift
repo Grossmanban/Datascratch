@@ -158,6 +158,8 @@ struct ToolPalette: View {
     var body: some View {
         let _ = model.revision
         let tools = model.editor.tools
+        // UI-test diagnostics: does the palette re-render after a tool change (iOS 26.2 simulator)?
+        let _ = model.isUITesting ? NSLog("DIAG palette body mode=%@ revision=%d", tools.mode.rawValue, model.revision) : ()
         HStack(spacing: 6) {
             ForEach(modes, id: \.self) { mode in
                 Button {

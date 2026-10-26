@@ -1,4 +1,4 @@
-import { PenToolbar, type PenSelection, type PenWidth } from "@datascratch/ui";
+import { PenToolbar, penColorToken, type PenSelection, type PenWidth } from "@datascratch/ui";
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
 import { TOOL_DEFAULTS, type PenLayer, type PenSettings } from "../pen/PenLayer";
@@ -24,17 +24,36 @@ function toSettings(v: PenSelection): Partial<PenSettings> {
   const strokeTool = v.tool && v.tool !== "eraser" && v.tool !== "lasso" ? v.tool : null;
   const patch: Partial<PenSettings> = { tool: v.tool, eraserMode: v.eraserMode, drawWithAnyPointer: v.drawWithAnyPointer };
   if (strokeTool) {
-    // Named inks map to tokens; a custom colour (#RRGGBB) is stored as is (strokes.md §2).
-    const color = String(v.color);
-    patch.color = color.startsWith("#") ? color : `${strokeTool === "highlighter" ? "highlight" : "ink"}.${color}`;
+    // Named inks map to tokens, a custom colour to #RRGGBB (strokes.md §1).
+    patch.color = penColorToken(v.color, strokeTool === "highlighter" ? "highlight" : "ink");
     patch.width = TOOL_DEFAULTS[strokeTool].width * WIDTH_STEPS[v.width];
   }
   return patch;
 }
 
+const COLLAPSED_KEY = "ds.pen.palette.collapsed";
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 /** The design-system pen palette (D-38) bound to the pen layer and the shared undo manager. */
 export function PenPalette({ pen, undoManager }: { pen: PenLayer; undoManager: Y.UndoManager }) {
   const [s, setS] = useState<PenSettings>(pen.getSettings());
+  // Collapsed into one round button; remembered per viewer.
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const onCollapsedChange = (v: boolean) => {
+    setCollapsed(v);
+    try {
+      localStorage.setItem(COLLAPSED_KEY, v ? "1" : "0");
+    } catch {
+      // Storage unavailable (private window): keep the state in memory only.
+    }
+  };
   const [canUndo, setCanUndo] = useState(undoManager.canUndo());
   const [canRedo, setCanRedo] = useState(undoManager.canRedo());
   useEffect(() => pen.subscribe(setS), [pen]);
@@ -60,6 +79,8 @@ export function PenPalette({ pen, undoManager }: { pen: PenLayer; undoManager: Y
         onChange={(v) => pen.setSettings(toSettings(v))}
         tools={["pen", "pencil", "marker", "highlighter", "eraser", "lasso"]}
         textMode
+        collapsed={collapsed}
+        onCollapsedChange={onCollapsedChange}
         canUndo={canUndo}
         canRedo={canRedo}
         onUndo={() => undoManager.undo()}

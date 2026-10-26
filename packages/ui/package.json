@@ -1,6 +1,7 @@
 {
   "name": "@datascratch/ui",
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "Quiet Paper web components: React + Radix + Tailwind v4 + Motion.",
   "type": "module",

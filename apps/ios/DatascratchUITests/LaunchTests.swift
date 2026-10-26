@@ -273,6 +273,31 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
     }
 
+    /// spec/04: "/" opens the block menu at the caret; typing narrows it, a tap applies the entry.
+    func testSlashMenuMakesAHeading() throws {
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        let text = editor.textViews.firstMatch.exists ? editor.textViews.firstMatch : editor
+        text.tap()
+        text.typeText("Slash\nPlan")
+        text.typeText(" /")
+        let menu = app.descendants(matching: .any)["slashMenu"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 5), "no slash menu after typing /")
+        text.typeText("h")
+        let heading = app.buttons["slash.heading2"].firstMatch
+        XCTAssertTrue(heading.waitForExistence(timeout: 3) && heading.isHittable, "no «Заголовок 2» for /h")
+        heading.tap()
+        XCTAssertTrue(menu.waitForNonExistence(timeout: 3), "the slash menu stays after applying an entry")
+        let bar = app.descendants(matching: .any)["formatBar"].firstMatch
+        if bar.waitForExistence(timeout: 3) {
+            let lit = bar.buttons["Heading 2"].firstMatch
+            if !lit.isHittable { bar.swipeLeft() }
+            XCTAssertTrue(showsSelected(lit), "the paragraph is not a heading 2")
+        }
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
+    }
+
     /// D-15: the palette folds into a button at the trailing edge (the editor gets the room, the
     /// tool keeps working) and unfolds with a tap.
     func testCollapsingThePenPalette() throws {

@@ -221,6 +221,42 @@ final class LibraryUITests: XCTestCase {
     }
 
     /// Finger drawing off (the iPad default): switching tools in the palette must not crash.
+    /// D-15: the palette folds into a button at the trailing edge (the editor gets the room, the
+    /// tool keeps working) and unfolds with a tap.
+    func testCollapsingThePenPalette() throws {
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        let palette = app.descendants(matching: .any)["penPalette"].firstMatch
+        XCTAssertTrue(palette.waitForExistence(timeout: 5), "palette not found")
+        let pen = app.buttons["tool.pen"].firstMatch
+        pen.tap()
+        XCTAssertTrue(becomesSelected(pen), "Pen is not selected; \(paletteState(app))")
+        settle(1)
+        let tall = editor.frame.height
+
+        let collapse = app.buttons["penPalette.collapse"].firstMatch
+        XCTAssertTrue(collapse.waitForExistence(timeout: 3) && collapse.isHittable, "no fold button; buttons: \(Self.buttons(app))")
+        collapse.tap()
+        let button = app.buttons["penPalette.collapsed"].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 3), "no folded button")
+        settle(1)
+        XCTAssertFalse(palette.exists, "the palette is still shown")
+        XCTAssertGreaterThan(editor.frame.height, tall + 10, "the editor did not get the room")
+        XCTAssertTrue((button.value as? String ?? "").contains("mode pen"), "the tool changed: \(button.value ?? "")")
+        let window = app.windows.firstMatch.frame
+        XCTAssertGreaterThan(button.frame.midX, window.midX, "the button is not at the trailing edge")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "pen-palette-collapsed"
+        shot.lifetime = .keepAlways
+        add(shot)
+
+        button.tap()
+        XCTAssertTrue(palette.waitForExistence(timeout: 3), "the palette did not come back")
+        XCTAssertFalse(button.exists, "the folded button is still shown")
+        XCTAssertTrue(becomesSelected(pen), "the tool changed while folded; \(paletteState(app))")
+    }
+
     func testPenPaletteWithoutFingerDrawing() throws {
         let app = launchSignedIn(["-ui-testing-no-finger"])
         try openNewNoteInNativeEditor(app)

@@ -1321,6 +1321,16 @@
         }
       }
     },
+    "Hide Pen Tools": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свернуть инструменты пера"
+          }
+        }
+      }
+    },
     "I saved the key somewhere safe — in a password manager or on paper.": {
       "localizations": {
         "ru": {
@@ -2777,6 +2787,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Показать ключ"
+          }
+        }
+      }
+    },
+    "Show Pen Tools": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать инструменты пера"
           }
         }
       }

@@ -71,6 +71,8 @@ final class ParagraphDecoration: NSObject, @unchecked Sendable {
     /// Width reserved for the list marker in front of the text.
     static let markerWidth: CGFloat = 28
     static let calloutPadding: CGFloat = 14
+    /// Width kept for the callout's icon between the box's left padding and the text.
+    static let calloutIconSlot: CGFloat = 30
 
     var taskState: String? {
         if case .task(let state, _, _) = marker { return state }
@@ -164,7 +166,7 @@ struct AttributedRenderer {
 
         let quoteStep: CGFloat = 20
         var indent = CGFloat(ctx.listDepth) * ParagraphDecoration.markerWidth + CGFloat(ctx.quoteDepth) * quoteStep
-        if ctx.callout != nil { indent += ParagraphDecoration.calloutPadding + 26 }
+        if ctx.callout != nil { indent += ParagraphDecoration.calloutPadding + ParagraphDecoration.calloutIconSlot }
         if isCode { indent += 14 }
 
         func sameCallout(_ j: Int) -> Bool {

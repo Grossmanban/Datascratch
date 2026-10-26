@@ -9,6 +9,8 @@ import { setDocView, useUi } from "@/hooks/useUi";
 import { tintFg } from "@/lib/tokens";
 import { Button, DropdownMenu, EmptyState, IconButton, SegmentedControl } from "@/ui";
 import { DocCollection } from "./DocCards";
+import { FolderStrip } from "./FolderStrip";
+import { UnreadableNote } from "./UnreadableNote";
 import { newNoteAndOpen } from "./menus";
 import { iconGlyph, withIcon } from "@/lib/glyph";
 
@@ -147,7 +149,12 @@ export function NotebookPage() {
       notes={list}
       empty={{ icon: <FolderIcon className="size-7" />, title: t("docs.emptyFolder") }}
       newIn={{ notebookId, folderId: null }}
-      extra={<FolderChips folders={subfolders} />}
+      extra={
+        <>
+          <UnreadableNote notebookId={notebookId} />
+          <FolderStrip folders={subfolders} tint={nb.color} />
+        </>
+      }
     />
   );
 }
@@ -188,27 +195,13 @@ export function FolderPage() {
       notes={list}
       empty={{ icon: <FolderIcon className="size-7" />, title: t("docs.emptyFolder") }}
       newIn={{ notebookId: folder.notebookId, folderId }}
-      extra={<FolderChips folders={subfolders} />}
+      extra={
+        <>
+          <UnreadableNote notebookId={nb.id} />
+          <FolderStrip folders={subfolders} tint={nb.color} />
+        </>
+      }
     />
-  );
-}
-
-function FolderChips({ folders }: { folders: { id: string; name: string; color: string | null; icon: string | null }[] }) {
-  if (!folders.length) return null;
-  return (
-    <div className="-mt-1 flex flex-wrap gap-2 px-5 pb-6 sm:px-10">
-      {folders.map((f) => (
-        <Link
-          key={f.id}
-          to="/folder/$folderId"
-          params={{ folderId: f.id }}
-          className="flex h-9 items-center gap-2 rounded-lg bg-surface px-3 text-[13.5px] font-medium text-ink shadow-[0_1px_2px_rgb(40_30_10/0.06)] ring-1 ring-line transition hover:ring-ink/20"
-        >
-          {iconGlyph(f.icon) ? <span>{iconGlyph(f.icon)}</span> : <FolderIcon className="size-4" style={{ color: tintFg(f.color) }} fill="currentColor" fillOpacity={0.2} />}
-          {f.name}
-        </Link>
-      ))}
-    </div>
   );
 }
 
@@ -242,10 +235,12 @@ export function StarredPage() {
   const { t } = useTranslation();
   const starred = useWorkspace((s) => s.account.starred);
   const notes = useWorkspace((s) => s.notes);
-  const list = useMemo(
-    () => visibleNotes(starred.filter((s) => s.kind === "note" && notes[s.id]).map((s) => notes[s.id]!)),
-    [starred, notes],
-  );
+  const spaceId = useWorkspace((s) => s.activeSpaceId);
+  const notebooks = useWorkspace((s) => s.account.notebooks);
+  const list = useMemo(() => {
+    const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
+    return visibleNotes(starred.filter((s) => s.kind === "note" && notes[s.id] && nbs.has(notes[s.id]!.notebookId)).map((s) => notes[s.id]!));
+  }, [starred, notes, notebooks, spaceId]);
   return (
     <ListPage
       title={t("nav.starred")}

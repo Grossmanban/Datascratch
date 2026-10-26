@@ -8,6 +8,7 @@ import { fromB64, toB64 } from '../lib/encoding.js';
 import { ApiError, forbidden, notFound } from '../lib/errors.js';
 import { AD, getSodium, open, seal } from '../lib/sodium.js';
 import { chunkKey } from '../storage/index.js';
+import { topics } from '../sync/hub.js';
 import type { AgentDataSource, AgentEditOrigin, AgentNotebook } from './agents-context.js';
 
 /** Server-side snapshot of agent-mode documents (the server holds the key there). */
@@ -180,31 +181,65 @@ export class PgAgentDataSource implements AgentDataSource {
       const dk = await this.#docAndKey(tx, docId);
       if (!dk) throw notFound('document not found');
       await this.#requireWritable(tx, docId);
-      const deviceId = `agent:${origin.grantId}`;
-      const payload = await seal(dk.key, update, AD.doc(docId));
-      // RLS rejects the insert when the grant is read-only.
-      const r = await this.ctx.documents.append(tx, { docId, payload, deviceId });
-      after.push(() => this.ctx.documents.publishUpdate(docId, r.seq, payload, deviceId, null));
-      this.ctx.metrics.syncUpdates.inc({ source: 'agent' });
-      if (r.updatesSinceSnapshot >= SNAPSHOT_AFTER_UPDATES || r.bytesSinceSnapshot >= SNAPSHOT_AFTER_BYTES) {
-        const { doc, seq, skipped } = await this.#state(tx, docId, dk.key);
-        if (skipped.length > 0) {
-          // A snapshot would let compaction delete the unreadable updates for good: leave them for a client to fix.
-          doc.destroy();
-          this.ctx.log.warn({ docId, skipped }, 'agent: no server snapshot while the document has unreadable updates');
-          return { seq: r.seq };
-        }
-        const state = Y.encodeStateAsUpdate(doc);
+      return this.#append(tx, after, docId, dk.key, update, origin);
+    });
+  }
+
+  /** Encrypts and stores one update, broadcasts it after commit, snapshots when due. */
+  async #append(tx: Tx, after: (() => unknown)[], docId: string, key: Uint8Array, update: Uint8Array, origin: AgentEditOrigin) {
+    const deviceId = `agent:${origin.grantId}`;
+    const payload = await seal(key, update, AD.doc(docId));
+    // RLS rejects the insert when the grant is read-only.
+    const r = await this.ctx.documents.append(tx, { docId, payload, deviceId });
+    after.push(() => this.ctx.documents.publishUpdate(docId, r.seq, payload, deviceId, null));
+    this.ctx.metrics.syncUpdates.inc({ source: 'agent' });
+    if (r.updatesSinceSnapshot >= SNAPSHOT_AFTER_UPDATES || r.bytesSinceSnapshot >= SNAPSHOT_AFTER_BYTES) {
+      const { doc, seq, skipped } = await this.#state(tx, docId, key);
+      if (skipped.length > 0) {
+        // A snapshot would let compaction delete the unreadable updates for good: leave them for a client to fix.
         doc.destroy();
-        await this.ctx.documents.storeSnapshot(tx, {
-          docId,
-          baseSeq: seq,
-          payload: await seal(dk.key, state, AD.doc(docId)),
-          deviceId,
-        });
-        after.push(() => this.ctx.jobs.enqueue(COMPACT_JOB, { docId }, { singletonKey: docId, startAfterSec: 30 }));
+        this.ctx.log.warn({ docId, skipped }, 'agent: no server snapshot while the document has unreadable updates');
+        return { seq: r.seq };
       }
-      return { seq: r.seq };
+      const state = Y.encodeStateAsUpdate(doc);
+      doc.destroy();
+      await this.ctx.documents.storeSnapshot(tx, {
+        docId,
+        baseSeq: seq,
+        payload: await seal(key, state, AD.doc(docId)),
+        deviceId,
+      });
+      after.push(() => this.ctx.jobs.enqueue(COMPACT_JOB, { docId }, { singletonKey: docId, startAfterSec: 30 }));
+    }
+    return { seq: r.seq };
+  }
+
+  /**
+   * Moves a note to another agent-mode notebook in one transaction: the note
+   * key is re-wrapped with the target notebook key (key, history and
+   * attachments stay), both index updates are stored and the document's
+   * notebook changes — as `PATCH /v1/docs/:id` plus the client-side index
+   * edits do for the apps (shared `moveNoteToNotebook`).
+   */
+  async moveNoteDoc(userId: string, move: Parameters<NonNullable<AgentDataSource['moveNoteDoc']>>[1]) {
+    const { noteId, fromNotebookId, toNotebookId, origin } = move;
+    if (origin.userId !== userId) throw forbidden('origin does not match user');
+    return this.#scope(userId, origin.grantId, async (tx, after) => {
+      const note = await this.#docAndKey(tx, noteId);
+      if (!note || note.doc.kind !== 'note' || note.doc.notebookId !== fromNotebookId) throw notFound('note not found');
+      const from = await this.#docAndKey(tx, fromNotebookId);
+      const to = await this.#docAndKey(tx, toNotebookId);
+      if (!from || !to || to.doc.kind !== 'notebook') throw notFound('notebook not found');
+      for (const id of [noteId, fromNotebookId, toNotebookId]) await this.#requireWritable(tx, id);
+      const wrapped = await seal(to.key, note.key, AD.note(noteId));
+      const updates = move.indexUpdates(toB64(wrapped));
+      // Target first: if anything below fails the transaction rolls back and nothing moved.
+      const toSeq = (await this.#append(tx, after, toNotebookId, to.key, updates.to, origin)).seq;
+      // RLS (agent_update on docs) allows this only between notebooks the grant may write.
+      await tx.update(docs).set({ notebookId: toNotebookId, updatedAt: sql`now()` }).where(eq(docs.id, noteId));
+      const fromSeq = (await this.#append(tx, after, fromNotebookId, from.key, updates.from, origin)).seq;
+      after.push(() => this.ctx.hub.publish(topics.doc(noteId), { type: 'doc_moved', docId: noteId }));
+      return { fromSeq, toSeq };
     });
   }
 

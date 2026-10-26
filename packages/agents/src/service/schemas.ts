@@ -109,6 +109,47 @@ export const updateTaskInput = z.object({
   deadline: date.nullable().optional().describe("Deadline; null clears it."),
 });
 
+/** Agents organise inside notebooks; they cannot create notebooks (needs the user's master key, end-to-end encryption). */
+export const NO_NOTEBOOKS_HINT =
+  "Agents cannot create, rename or delete notebooks: notebooks are end-to-end encrypted with the user's master key, which the server never has. Ask the user to create a notebook in the app and switch it to “for agents” mode, then organise inside it with folders.";
+
+const folderIcon = z.string().min(1).max(16).describe("Optional emoji for the folder, e.g. 📁.");
+const folderName = z.string().trim().min(1).max(200);
+
+export const createFolderInput = z.object({
+  notebookId: id.describe("Notebook to create the folder in (from list_notebooks)."),
+  name: folderName.describe("Folder name."),
+  parentFolderId: id.nullable().optional().describe("Parent folder for a nested folder; omit or null = notebook root."),
+  icon: folderIcon.optional(),
+});
+
+export const renameFolderInput = z.object({
+  folderId: id,
+  name: folderName.describe("New folder name."),
+  icon: folderIcon.nullable().optional().describe("New emoji; null removes it; omit to keep."),
+});
+
+export const moveFolderInput = z.object({
+  folderId: id,
+  parentFolderId: id.nullable().describe("New parent folder in the same notebook; null = notebook root. A folder cannot be moved into itself or its subfolders."),
+});
+
+export const deleteFolderInput = z.object({
+  folderId: id,
+  contents: z
+    .enum(["refuse", "move_to_parent"])
+    .default("refuse")
+    .describe("refuse (default): delete only an empty folder. move_to_parent: move its notes and subfolders to the parent folder (or the root) first. Notes are never deleted."),
+});
+
+export const moveNoteInput = z.object({
+  noteId: id,
+  folderId: id.nullable().describe("Target folder; null = root of the target notebook."),
+  notebookId: id
+    .optional()
+    .describe("Target notebook (another notebook of this agent, from list_notebooks); omit to move within the current notebook."),
+});
+
 export type ListNotesInput = z.infer<typeof listNotesInput>;
 export type SearchNotesInput = z.infer<typeof searchNotesInput>;
 export type ReadNoteInput = z.infer<typeof readNoteInput>;
@@ -119,3 +160,8 @@ export type AddCommentInput = z.infer<typeof addCommentInput>;
 export type BacklinksInput = z.infer<typeof backlinksInput>;
 export type ListTasksInput = z.infer<typeof listTasksInput>;
 export type UpdateTaskInput = z.infer<typeof updateTaskInput>;
+export type CreateFolderInput = z.infer<typeof createFolderInput>;
+export type RenameFolderInput = z.infer<typeof renameFolderInput>;
+export type MoveFolderInput = z.infer<typeof moveFolderInput>;
+export type DeleteFolderInput = z.infer<typeof deleteFolderInput>;
+export type MoveNoteInput = z.infer<typeof moveNoteInput>;

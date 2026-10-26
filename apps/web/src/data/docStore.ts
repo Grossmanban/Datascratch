@@ -289,7 +289,9 @@ export class DocStore {
     if (!existing) {
       await this.ensureRow(docId, kind, notebookId, kind === "account" ? 1 : 0);
       if (kind !== "account") {
-        await enqueueOp({ method: "POST", path: "/docs", body: { docId, kind, notebookId }, registersDoc: docId });
+        // A notebook index belongs to its own notebook (api.md: notebook docId = notebookId).
+        const owner = kind === "notebook" ? docId : notebookId;
+        await enqueueOp({ method: "POST", path: "/docs", body: { docId, kind, notebookId: owner }, registersDoc: docId });
         // Online: register before SyncClient subscribes. Offline: re-attached after registering.
         await Promise.race([flushOps().catch(() => false), new Promise((r) => setTimeout(r, 3000))]);
       }

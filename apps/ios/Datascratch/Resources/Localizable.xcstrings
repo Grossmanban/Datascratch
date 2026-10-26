@@ -1421,16 +1421,6 @@
         }
       }
     },
-    "Hide Sidebar": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Скрыть боковую панель"
-          }
-        }
-      }
-    },
     "I saved the key somewhere safe — in a password manager or on paper.": {
       "localizations": {
         "ru": {
@@ -2887,16 +2877,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Поделиться…"
-          }
-        }
-      }
-    },
-    "Show Columns": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Показать колонки"
           }
         }
       }

@@ -44,6 +44,12 @@ import Testing
             el("codeBlock", ["language": .string(value: "python")], [text("def hello():\n    print(\"hi\")\n")]),
             el("codeBlock", ["language": .string(value: "typescript")], [text("const x: number = 1;")]),
             el("codeBlock", [:], [text("plain text block\nsecond line")]),
+            // Not valid for the editor's schema, kept as is (document-model.md: never delete or
+            // rewrite on open): a mark inside code, an unknown attribute, an unknown node.
+            el("codeBlock", ["language": .string(value: "swift"), "futureAttr": .string(value: "x")],
+               [text("let ", ["bold": .object(entries: [:])]), text("y = 2")]),
+            el("futureBlock", ["kind": .string(value: "chart")], [para("inside an unknown block")]),
+            el("paragraph", ["futureAttr": .number(value: 3)], [text("абзац с неизвестным атрибутом")]),
             el("table", [:], [
                 el("tableRow", [:], [cell("tableHeader", "Слева"), cell("tableHeader", "По центру"), cell("tableHeader", "Справа")]),
                 el("tableRow", [:], [cell("tableCell", "a"), cell("tableCell", "b"), cell("tableCell", "c")]),
@@ -96,6 +102,27 @@ import Testing
             #expect(a.json == b.json, "block \(b.id) changed: \(b.json) → \(a.json)")
         }
         #expect(doc.flatText(of: first.id).hasSuffix("Правка на iPhone."))
+    }
+
+    /// Editing next to schema-invalid nodes leaves them byte-identical (and opening wrote nothing).
+    @Test func invalidNodesSurviveEditsElsewhere() throws {
+        let note = try Self.agentNote()
+        let before = try Self.blocks(note)
+        let doc = CoreEditorDocument(note: note)
+        let cmd = EditorCommands(document: doc)
+        let last = try #require(doc.blocks.last)
+        cmd.typeText("!", marks: .empty, at: TextPosition(block: last.id, offset: doc.textLength(of: last.id)))
+        _ = cmd.splitParagraph(at: TextPosition(block: last.id, offset: 0))
+        let after = try Self.blocks(note)
+        let changed = Set(after.map(\.id)).symmetricDifference(before.map(\.id))
+        #expect(changed.count == 1, "only the new paragraph from the split appears")
+        let afterById = Dictionary(after.map { ($0.id, $0.json) }, uniquingKeysWith: { a, _ in a })
+        for b in before where b.id != last.id {
+            #expect(afterById[b.id] == b.json, "block \(b.id) changed")
+        }
+        #expect(after.contains { $0.json.contains("futureBlock") }, "the unknown node is kept")
+        #expect(after.contains { $0.json.contains("futureAttr") }, "unknown attributes are kept")
+        #expect(after.contains { $0.json.contains("\"bold\"") && $0.json.contains("codeBlock") }, "bold inside code is kept")
     }
 
     @Test func codeBlocksKeepLanguageAndTextWhenEdited() throws {

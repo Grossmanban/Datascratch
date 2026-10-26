@@ -388,8 +388,18 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
     static let rowHeight: CGFloat = 38
     static let controlsHeight: CGFloat = 28
 
-    static func rows(_ node: BlockNode) -> [[(text: String, header: Bool)]] {
-        node.children.map { row in row.children.map { cell in (cell.plainText, cell.type == NodeType.tableHeader) } }
+    static func rows(_ node: BlockNode) -> [[(text: String, header: Bool, align: NSTextAlignment)]] {
+        node.children.map { row in
+            row.children.map { cell in
+                // Column alignment from Markdown `:---` / `:---:` / `---:` (document-model.md).
+                let align: NSTextAlignment = switch cell.attrs["align"]?.stringValue ?? "" {
+                case "center": .center
+                case "right": .right
+                default: .natural
+                }
+                return (cell.plainText, cell.type == NodeType.tableHeader, align)
+            }
+        }
     }
 
     static func height(for node: BlockNode) -> CGFloat {
@@ -427,6 +437,9 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
             for (c, cell) in row.enumerated() {
                 let f = UITextField()
                 f.text = cell.text
+                f.textAlignment = cell.align
+                f.rightView = UIView(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+                f.rightViewMode = cell.align == .right ? .always : .never
                 f.font = theme.font(size: 15, weight: cell.header ? .semibold : .regular)
                 f.textColor = EditorTheme.text
                 f.backgroundColor = cell.header ? EditorTheme.codeBackground : .clear

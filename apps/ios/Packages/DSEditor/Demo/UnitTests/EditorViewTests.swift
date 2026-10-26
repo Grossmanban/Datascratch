@@ -748,7 +748,7 @@ final class EditorViewTests: XCTestCase {
         let at = flatRange(editor, of: "абзац здесь").lowerBound
         editor.textView.selectedRange = NSRange(location: at, length: 0)
         let length = editor.textView.textStorage.length
-        let placeholder = editor.textView.insertDictationResultPlaceholder()
+        let placeholder = editor.textView.insertDictationResultPlaceholder
         drainMainQueue()
         XCTAssertEqual(editor.textView.textStorage.length, length, "no placeholder character in the text")
         XCTAssertEqual(editor.textView.selectedRange.location, at, "the caret stays")

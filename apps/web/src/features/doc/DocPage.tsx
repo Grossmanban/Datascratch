@@ -6,19 +6,20 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/session";
 import { colorFor } from "@/data/presence";
 import { runtime } from "@/data/runtime";
-import { acknowledgeAgentCreated, agentCreatedOf, openTab, restoreNote, toggleStar, updateNote } from "@/domain/actions";
+import { acknowledgeAgentCreated, agentCreatedOf, deleteNoteForever, openTab, restoreNote, setTitleOf, toggleStar, updateNote } from "@/domain/actions";
 import { folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
-import { closeDocTab, noteMenuItems } from "@/features/docs/menus";
+import { closeDocTab, isFreshNote, noteMenuItems } from "@/features/docs/menus";
 import { TopBar } from "@/features/shell/PageHeader";
 import { useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
 import { useUi } from "@/hooks/useUi";
 import { FORMAT_VERSION } from "@/lib/shared";
 import { EMOJI_CHOICES } from "@/lib/tokens";
 import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner } from "@/ui";
-import { setNoteMeta } from "@/domain/note";
+import { defaultNoteTitle, hasBody, isNoteEmpty, setNoteMeta } from "@/domain/note";
+import i18n from "@/i18n";
 import { Backlinks } from "./Backlinks";
 import { CoverImage, coverError, removeCover, setCoverImage } from "./Cover";
-import type { EditorApi } from "@/editor";
+import { readTitle, type EditorApi } from "@/editor";
 import { ownerEditorHost } from "@/editor/hosts";
 import { DocView } from "./DocView";
 import { PenPaletteToggle } from "./PenPaletteToggle";
@@ -97,6 +98,46 @@ function DocScreen({ noteId }: { noteId: string }) {
   const readOnlyNewer = (meta?.formatVersion ?? 1) > FORMAT_VERSION;
   const trashed = !!note.trashedAt;
   const editable = !readOnlyNewer && !trashed;
+
+  // spec/04 «Название новой заметки»: an empty title gets «Заметка 26 октября 2026» when the
+  // cursor leaves it (Enter, a click into the text) or when the note is closed with text in it;
+  // a note created here and closed fully empty is not kept.
+  const titleFor = () => defaultNoteTitle(useWorkspace.getState().notes[noteId]?.createdAt ?? new Date(), i18n.language);
+  useEffect(() => {
+    if (!editorApi || !doc || !editable) return;
+    const ed = editorApi.editor;
+    const inTitle = () => ed.state.selection.$from.parent.type.name === "title";
+    const fill = () => {
+      if (readTitle(doc).trim() || ed.isDestroyed) return;
+      ed.chain().insertContentAt(1, titleFor(), { updateSelection: false }).run();
+    };
+    let wasInTitle = inTitle();
+    const onSelection = () => {
+      const now = inTitle();
+      if (wasInTitle && !now) fill();
+      wasInTitle = now;
+    };
+    const onBlur = () => {
+      if (wasInTitle && hasBody(doc)) fill();
+    };
+    ed.on("selectionUpdate", onSelection);
+    ed.on("blur", onBlur);
+    return () => {
+      ed.off("selectionUpdate", onSelection);
+      ed.off("blur", onBlur);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorApi, doc, editable]);
+  useEffect(() => {
+    if (!doc || !editable) return;
+    return () => {
+      if (readTitle(doc).trim()) return;
+      if (isNoteEmpty(doc)) {
+        if (isFreshNote(noteId)) void deleteNoteForever(noteId);
+      } else void setTitleOf(noteId, titleFor());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, editable, noteId]);
 
   const keyFor = () => runtime().store.keyFor(noteId);
   const openCoverDialog = () => useUi.setState({ coverFor: noteId });

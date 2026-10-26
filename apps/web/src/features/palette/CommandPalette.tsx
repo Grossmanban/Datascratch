@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useIndexVersion } from "@/data/indexer";
 import { runtime } from "@/data/runtime";
 import { createNote, getOrCreateDaily, openTab } from "@/domain/actions";
+import { markFreshNote } from "@/features/docs/menus";
 import { noteTitle, setActiveSpace, useWorkspace } from "@/domain/workspace";
 import { toggleSidebar, useUi } from "@/hooks/useUi";
 import { today } from "@/lib/dates";
@@ -131,6 +132,7 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
               onSelect={() =>
                 go(async () => {
                   const id = await createNote({ notebookId: nb.id, title: q.trim() || undefined });
+                  if (!q.trim()) markFreshNote(id);
                   openNote(id);
                 })
               }

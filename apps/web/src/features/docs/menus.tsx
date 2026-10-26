@@ -48,8 +48,14 @@ export function closeDocTab(noteId: string, nav: Nav) {
   else void nav({ to: "/all" });
 }
 
+/** Notes created empty on this device in this session: closed still empty, they are not kept (spec/04). */
+const freshNotes = new Set<string>();
+export const isFreshNote = (noteId: string) => freshNotes.has(noteId);
+export const markFreshNote = (noteId: string) => void freshNotes.add(noteId);
+
 export async function newNoteAndOpen(nav: Nav, notebookId: string, folderId: string | null = null) {
   const id = await createNote({ notebookId, folderId });
+  freshNotes.add(id);
   openTab(id);
   await nav({ to: "/doc/$noteId", params: { noteId: id } });
   return id;

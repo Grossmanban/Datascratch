@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-10-26)
 
 ## Corpus Check
-- 831 files · ~580,821 words
+- 831 files · ~580,960 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 37 file(s) not represented in the graph (top: (none) 18, .css 6, .example 4)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d9be96f0`
+- Built from commit: `e10baedc`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1989,7 +1989,7 @@ Nodes (3): agents: create/rename/move/delete_folder and move_note in one server 
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `packages/design-tokens/tokens.json — источник значений; генерирует CSS-переменные и Swift` connect `design-tokens.md` to `DSColorToken`, `scripts/generate.mjs`, `0003-platforms.md`, `05-organization-design.md`?**
-  _High betweenness centrality (0.101) - this node is a cross-community bridge._
+  _High betweenness centrality (0.098) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `.body`, `onboarding`, `ready` to the rest of the system?**
@@ -1997,7 +1997,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Data` be split into smaller, more focused modules?**
   _Cohesion score 0.0034853527411037558 - nodes in this community are weakly interconnected._
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `tokens.test.mjs`, `DSDesign Swift package (iOS 26, Swift 6) — «Тихая бумага» design system for iOS`, `12-craft-features.md`, `ui/src/index.ts`, `DSDesign`, `DSDateChip`?**
-  _High betweenness centrality (0.094) - this node is a cross-community bridge._
+  _High betweenness centrality (0.096) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._

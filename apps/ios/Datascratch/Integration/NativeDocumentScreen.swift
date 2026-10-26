@@ -549,18 +549,10 @@ struct PenPalette: View {
     }
 
     /// `ink.blue` / `highlight.yellow` (contracts/strokes.md) ⇄ design-system colours.
-    static func color(for token: String) -> DSPenColor {
-        let name = token.split(separator: ".").last.map(String.init) ?? "black"
-        if token.hasPrefix("highlight."), let highlight = DSHighlightToken(rawValue: name) { return .highlight(highlight) }
-        return .ink(DSInkToken(rawValue: name) ?? .black)
-    }
+    /// `ink.blue`, `highlight.yellow` or a custom `#RRGGBB` (the editor parses all three).
+    static func color(for token: String) -> DSPenColor { DSPenColor(tokenValue: token) ?? .ink(.black) }
 
-    static func token(for color: DSPenColor) -> String {
-        switch color {
-        case .ink(let ink): "ink.\(ink.rawValue)"
-        case .highlight(let highlight): "highlight.\(highlight.rawValue)"
-        }
-    }
+    static func token(for color: DSPenColor) -> String { color.tokenValue }
 
     static func factor(_ width: DSPenWidth) -> Double {
         switch width {

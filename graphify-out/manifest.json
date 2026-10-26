@@ -672,10 +672,10 @@
     "semantic_hash": "6bdd10afe46892097c865f4371656dac"
   },
   "apps/ios/Packages/DSDesign/Tests/DSDesignTests/SnapshotTests.swift": {
-    "mtime": 1792928816.3532948,
-    "seen": 1793001423.4052477,
-    "ast_hash": "cfe547b4ee3703fa9c45e13df8b7cf20",
-    "semantic_hash": "cfe547b4ee3703fa9c45e13df8b7cf20"
+    "mtime": 1793001503.5052605,
+    "seen": 1793001602.6125965,
+    "ast_hash": "065200aa075af8473cebfb2a39c51d3a",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Tests/DSDesignTests/TokenTests.swift": {
     "mtime": 1792929513.0207202,
@@ -1008,10 +1008,10 @@
     "semantic_hash": "fccab16de24f4fe52c4f6ffc09589734"
   },
   "apps/ios/Packages/DSDesign/README.md": {
-    "mtime": 1792960287.7412395,
-    "seen": 1793001423.4061966,
-    "ast_hash": "74c3182c6eee87aca03f872d7c55a6b9",
-    "semantic_hash": "74c3182c6eee87aca03f872d7c55a6b9"
+    "mtime": 1793001509.3406515,
+    "seen": 1793001602.641532,
+    "ast_hash": "aedf1456d2ce76bbf5ed6b5356fca56f",
+    "semantic_hash": ""
   },
   ".github/workflows/server.yml": {
     "mtime": 1792948026.5115213,
@@ -4654,5 +4654,17 @@
     "seen": 1793001423.4056494,
     "ast_hash": "b2aee0331c9b0a6b5e6d7fe126f86b1e",
     "semantic_hash": "b2aee0331c9b0a6b5e6d7fe126f86b1e"
+  },
+  "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSSettings.swift": {
+    "mtime": 1793001479.3569362,
+    "seen": 1793001602.6112912,
+    "ast_hash": "f1844432430630a192b3fe523e9583bc",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSDesign/Sources/DSDesign/Showcase/DSSettingsShowcase.swift": {
+    "mtime": 1793001503.484243,
+    "seen": 1793001602.612267,
+    "ast_hash": "5cbf00099609751a1778b0c28d8f0c9d",
+    "semantic_hash": ""
   }
 }

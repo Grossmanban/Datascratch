@@ -328,3 +328,47 @@ export function restoreFrom(target: Y.Doc, source: Y.Doc) {
     for (const k of [...t.strokes.keys()]) if (!keep.has(k)) t.strokes.delete(k);
   });
 }
+
+/** Plain text of a block (and its children). */
+function blockText(node: Y.XmlElement | Y.XmlText): string {
+  if (node instanceof Y.XmlText) return node.toString().replace(/<[^>]*>/g, "");
+  return node.toArray().map((c) => blockText(c as Y.XmlElement | Y.XmlText)).join("");
+}
+
+/**
+ * Nothing but an empty title and empty paragraphs, and no drawing (spec/04 «Название новой
+ * заметки»: such a note is not kept when it is closed).
+ */
+export function isNoteEmpty(doc: Y.Doc, allowedTitle = ""): boolean {
+  const { content, strokes } = noteMaps(doc);
+  if (strokes.size > 0) return false;
+  return content
+    .toArray()
+    .every(
+      (n) =>
+        n instanceof Y.XmlElement &&
+        (n.nodeName === "title" ? !blockText(n).trim() || blockText(n).trim() === allowedTitle : n.nodeName === "paragraph" && !blockText(n).trim()),
+    );
+}
+
+/** Body of a note (everything after the title) has text or anything else but empty paragraphs. */
+export function hasBody(doc: Y.Doc): boolean {
+  const { content, strokes } = noteMaps(doc);
+  if (strokes.size > 0) return true;
+  return content
+    .toArray()
+    .some((n) => !(n instanceof Y.XmlElement) || (n.nodeName !== "title" && (n.nodeName !== "paragraph" || !!blockText(n).trim())));
+}
+
+/**
+ * The title an untitled note gets (spec/04): «Заметка 26 октября 2026» / «Note Oct 26, 2026» —
+ * the word and the date format follow the interface language, the date is the note's creation day.
+ */
+export function defaultNoteTitle(createdAt: string | Date, lang: string): string {
+  const d = new Date(createdAt);
+  if (lang.startsWith("en")) return `Note ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(d)}`;
+  // Russian Intl adds « г.» after the year; the title is without it.
+  const date = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(d).replace(/\s*г\.?$/, "");
+  return `Заметка ${date}`;
+}
+

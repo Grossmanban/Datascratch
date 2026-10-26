@@ -2,15 +2,8 @@ import { Check, ChevronRight } from "lucide-react";
 import { ContextMenu as M } from "radix-ui";
 import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { cn } from "../lib/cn";
-import { shortcutLabel } from "./Kbd";
-import {
-  menuContent,
-  menuItem,
-  menuItemDanger,
-  menuLabel,
-  menuSeparator,
-  menuShortcut,
-} from "./menu-styles";
+import { MenuRow } from "./menu-row";
+import { menuContent, menuItem, menuItemDanger, menuLabel, menuSeparator } from "./menu-styles";
 
 /** Right-click / long-press menu: the primary way to act on things (D-38). */
 export const ContextMenu = M.Root;
@@ -39,15 +32,22 @@ export interface ContextMenuItemProps extends ComponentPropsWithoutRef<typeof M.
   icon?: ReactNode;
   shortcut?: string;
   danger?: boolean;
+  /** Trailing element (badge, count); stays on the row and never wraps. */
+  trailing?: ReactNode;
+  /** Check mark in the trailing slot; `false` keeps the space so rows align. */
+  checked?: boolean;
 }
 
 export const ContextMenuItem = forwardRef<HTMLDivElement, ContextMenuItemProps>(
-  function ContextMenuItem({ icon, shortcut, danger, className, children, ...rest }, ref) {
+  function ContextMenuItem(
+    { icon, shortcut, danger, trailing, checked, className, children, ...rest },
+    ref,
+  ) {
     return (
       <M.Item ref={ref} className={cn(menuItem, danger && menuItemDanger, className)} {...rest}>
-        {icon}
-        <span className="flex-1 truncate">{children}</span>
-        {shortcut && <span className={menuShortcut}>{shortcutLabel(shortcut)}</span>}
+        <MenuRow icon={icon} trailing={trailing} checked={checked} shortcut={shortcut}>
+          {children}
+        </MenuRow>
       </M.Item>
     );
   },

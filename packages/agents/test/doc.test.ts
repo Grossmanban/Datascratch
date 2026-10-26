@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
-import { applyEdits } from "../src/doc/edits.js";
+import { applyEdits, initNoteContent } from "../src/doc/edits.js";
 import { collectHandwriting } from "../src/doc/handwriting.js";
 import { noteToMarkdown } from "../src/doc/markdown-export.js";
 import { findBlock, plainText } from "../src/doc/model.js";
-import { addTextStroke, blockIdAt, makeNoteDoc } from "../src/testing/fixtures.js";
+import { addTextStroke, blockIdAt, makeNoteDoc, titleBlockId } from "../src/testing/fixtures.js";
 
 const agentEdit = { agentId: "grant-1", at: "2026-10-25T12:00:00.000Z" };
 
@@ -122,5 +122,53 @@ describe("y-prosemirror conventions (document-model.md §4.1)", () => {
     expect(delta[2].attributes).toEqual({ code: {} });
     const task = (findBlock(doc, blockIdAt(doc, 1))!.el.toArray()[0] as Y.XmlElement).getAttributes();
     expect(Object.keys(task).sort()).toEqual(["blockId", "state", "taskId"]);
+  });
+});
+
+describe("replace_text (regression: offsets inside marked runs)", () => {
+  const cases: [string, string, string, string][] = [
+    ["end", "неделю", "месяц", "План на месяц"],
+    ["start", "План", "Планы", "Планы на неделю"],
+    ["middle", " на ", " до ", "План до неделю"],
+    ["whole", "План на неделю", "Итоги", "Итоги"],
+  ];
+  for (const withMark of [false, true]) {
+    const ctx = { agentEdit: withMark ? agentEdit : null };
+    for (const [where, find, replace, expected] of cases) {
+      it(`title, ${where}, ${withMark ? "agentEdit-marked" : "unmarked"}`, () => {
+        const doc = new Y.Doc();
+        initNoteContent(doc, "План на неделю", "Текст", ctx);
+        const id = titleBlockId(doc);
+        applyEdits(doc, [{ op: "replace_text", blockId: id, find, replace }], ctx);
+        expect(plainText(findBlock(doc, id)!.el)).toBe(expected);
+      });
+      it(`paragraph, ${where}, ${withMark ? "agentEdit-marked" : "unmarked"}`, () => {
+        const doc = new Y.Doc();
+        initNoteContent(doc, "Заметка", "План на неделю", ctx);
+        const id = blockIdAt(doc, 0);
+        applyEdits(doc, [{ op: "replace_text", blockId: id, find, replace }], ctx);
+        expect(plainText(findBlock(doc, id)!.el)).toBe(expected);
+      });
+    }
+  }
+
+  it("replaces the chosen occurrence inside bold and agentEdit-marked text", () => {
+    const doc = new Y.Doc();
+    initNoteContent(doc, "Заметка", "раз **два** раз два раз", { agentEdit });
+    const id = blockIdAt(doc, 0);
+    expect(() => applyEdits(doc, [{ op: "replace_text", blockId: id, find: "раз", replace: "три" }], { agentEdit })).toThrow(/occurs 3 times/);
+    applyEdits(doc, [{ op: "replace_text", blockId: id, find: "раз", replace: "три", occurrence: 3 }], { agentEdit });
+    applyEdits(doc, [{ op: "replace_text", blockId: id, find: "два", replace: "2", occurrence: 2 }], { agentEdit: null });
+    expect(plainText(findBlock(doc, id)!.el)).toBe("раз два раз 2 три");
+    // Formatting of untouched text is kept.
+    expect(noteToMarkdown(doc)).toContain("раз **два** раз 2 три");
+  });
+
+  it("finds text after a bold run in agentEdit-marked text", () => {
+    const doc = new Y.Doc();
+    initNoteContent(doc, "Заметка", "Сроки **запуска** сдвигаются", { agentEdit });
+    const id = blockIdAt(doc, 0);
+    applyEdits(doc, [{ op: "replace_text", blockId: id, find: "сдвигаются", replace: "сдвинуты" }], { agentEdit });
+    expect(plainText(findBlock(doc, id)!.el)).toBe("Сроки запуска сдвинуты");
   });
 });

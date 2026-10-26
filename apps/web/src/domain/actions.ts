@@ -25,6 +25,8 @@ import { accountMaps } from "./account";
 import { initNotebookDoc, notebookMaps } from "./notebook";
 import { appendTask, initNoteDoc, removeTask, setTaskText, setTitle, updateTask, type TaskPatch } from "./note";
 import { bySpace, spaceOfNote, spaceOfNotebook, tabsInSpace, useWorkspace } from "./workspace";
+import { forgetClosedTab, recordClosedTabs, tabsEpoch } from "@/lib/closedTabs";
+import { features } from "@/lib/features";
 import { orderBetween, patchYMap, toYMap } from "./ymap";
 
 const now = () => new Date().toISOString();
@@ -95,7 +97,7 @@ export async function createNotebook(input: {
   };
   acc().notebooks.set(id, toYMap(ref));
   // The first notebook of a space keeps that space's daily notes and Inbox (D-48).
-  if (!bySpace(useWorkspace.getState(), "dailyNotebookBySpace")[input.spaceId]) setBySpace("dailyNotebookBySpace", input.spaceId, id);
+  if ((features.calendar || features.tasks) && !bySpace(useWorkspace.getState(), "dailyNotebookBySpace")[input.spaceId]) setBySpace("dailyNotebookBySpace", input.spaceId, id);
   return id;
 }
 
@@ -426,17 +428,34 @@ function setBySpace(key: "activeTabBySpace" | "dailyNotebookBySpace", spaceId: s
   acc().settings.set(key, cur);
 }
 
+const OPENED_AT_EVERY_MS = 60 * 60 * 1000;
+
 export function openTab(noteId: string) {
+  // A minimal build (D-51) has no tabs and never writes the tab keys of the account document.
+  if (!features.tabs) return;
   const a = acc();
   const spaceId = spaceOfNote(useWorkspace.getState(), noteId);
+  const items = a.tabs.toArray();
+  const idx = items.findIndex((t) => t.noteId === noteId);
+  const nowIso = new Date().toISOString();
   runtime().account.transact(() => {
-    if (!a.tabs.toArray().some((t) => t.noteId === noteId)) a.tabs.push([{ noteId }]);
+    if (idx < 0) a.tabs.push([{ noteId, openedAt: nowIso }]);
+    else {
+      // When the tab was last made active, for the quiet tidy-up; at most once an hour (document-model §2).
+      const cur = items[idx]!;
+      if (!cur.openedAt || Date.now() - Date.parse(cur.openedAt) > OPENED_AT_EVERY_MS) {
+        a.tabs.delete(idx, 1);
+        a.tabs.insert(idx, [{ ...cur, openedAt: nowIso }]);
+      }
+    }
     if (spaceId) setBySpace("activeTabBySpace", spaceId, noteId);
   });
+  if (spaceId) forgetClosedTab(spaceId, noteId);
 }
 
 /** Close a tab; returns the tab of the same space to show next (tabs are per space, D-48). */
 export function closeTab(noteId: string): string | null {
+  if (!features.tabs) return null;
   const a = acc();
   const st = useWorkspace.getState();
   const spaceId = spaceOfNote(st, noteId);
@@ -450,11 +469,83 @@ export function closeTab(noteId: string): string | null {
     a.tabs.delete(idx, 1);
     if (spaceId && bySpace(st, "activeTabBySpace")[spaceId] === noteId) setBySpace("activeTabBySpace", spaceId, next);
   });
+  if (spaceId) recordClosedTabs(spaceId, [noteId]);
   return next;
+}
+
+/** «Закрыть остальные»: every other tab of the space goes to «Недавно закрытые». */
+export function closeOtherTabs(keepId: string) {
+  if (!features.tabs) return;
+  const a = acc();
+  const st = useWorkspace.getState();
+  const spaceId = spaceOfNote(st, keepId);
+  if (!spaceId) return;
+  // Pinned tabs stay (spec/12 §12.6).
+  const others = new Set(tabsInSpace(st, spaceId).filter((t) => !t.pinned && t.noteId !== keepId).map((t) => t.noteId));
+  if (!others.size) return;
+  runtime().account.transact(() => {
+    for (let i = a.tabs.length - 1; i >= 0; i--) if (others.has(a.tabs.get(i).noteId)) a.tabs.delete(i, 1);
+    setBySpace("activeTabBySpace", spaceId, keepId);
+  });
+  recordClosedTabs(spaceId, [...others]);
+}
+
+/** Pin or unpin a tab: pinned tabs sit compact on the left and are never tidied or closed with the others. */
+export function setTabPinned(noteId: string, pinned: boolean) {
+  if (!features.tabs) return;
+  const a = acc();
+  const items = a.tabs.toArray();
+  const idx = items.findIndex((t) => t.noteId === noteId);
+  if (idx < 0) return;
+  const { pinned: _, ...rest } = items[idx]!;
+  void _;
+  runtime().account.transact(() => {
+    a.tabs.delete(idx, 1);
+    a.tabs.insert(idx, [pinned ? { ...rest, pinned: true } : rest]);
+  });
+}
+
+export const TAB_TIDY_DEFAULT = 7;
+
+/** `settings.tabTidyDays`: 1 | 7 | 30, or null for never (default 7). */
+export function tabTidyDays(): number | null {
+  const v = useWorkspace.getState().account.settings.tabTidyDays;
+  return v === null ? null : typeof v === "number" && v > 0 ? v : TAB_TIDY_DEFAULT;
+}
+
+/**
+ * Quiet tidy-up (spec/12 §12.6): tabs not opened for `tabTidyDays` go to «Недавно закрытые».
+ * Never pinned tabs, a space's active tab, or the document on screen. A tab without `openedAt`
+ * counts as opened when this version first ran on this device.
+ */
+export function tidyTabs(shownNoteId: string | null, now = Date.now()) {
+  if (!features.tabs) return;
+  const days = tabTidyDays();
+  if (days === null) return;
+  const st = useWorkspace.getState();
+  const active = new Set(Object.values(bySpace(st, "activeTabBySpace")));
+  const epoch = tabsEpoch();
+  const cutoff = now - days * 86_400_000;
+  const stale = st.account.tabs.filter(
+    (t) => !t.pinned && t.noteId !== shownNoteId && !active.has(t.noteId) && (t.openedAt ? Date.parse(t.openedAt) : epoch) < cutoff,
+  );
+  if (!stale.length) return;
+  const ids = new Set(stale.map((t) => t.noteId));
+  const a = acc();
+  runtime().account.transact(() => {
+    for (let i = a.tabs.length - 1; i >= 0; i--) if (ids.has(a.tabs.get(i).noteId)) a.tabs.delete(i, 1);
+  });
+  const bySpaceIds = new Map<string, string[]>();
+  for (const t of stale) {
+    const sp = spaceOfNote(st, t.noteId);
+    if (sp) bySpaceIds.set(sp, [...(bySpaceIds.get(sp) ?? []), t.noteId]);
+  }
+  for (const [sp, list] of bySpaceIds) recordClosedTabs(sp, list);
 }
 
 /** The tab a space was left on, if it is still open (restored when switching back, D-48). */
 export function activeTabOf(spaceId: string): string | null {
+  if (!features.tabs) return null;
   const st = useWorkspace.getState();
   const id = bySpace(st, "activeTabBySpace")[spaceId];
   return id && tabsInSpace(st, spaceId).some((t) => t.noteId === id) ? id : (tabsInSpace(st, spaceId)[0]?.noteId ?? null);
@@ -466,6 +557,8 @@ export function activeTabOf(spaceId: string): string | null {
  * the legacy keys are left for older clients and never written again.
  */
 export function migrateSpaceSettings() {
+  // Only the extended mode uses (and writes) these keys (D-51: a minimal build changes no data).
+  if (!features.tabs && !features.calendar) return;
   const st = useWorkspace.getState();
   const legacyDaily = st.account.settings.dailyNotebookId as string | undefined;
   const dailySpace = legacyDaily ? spaceOfNotebook(st, legacyDaily) : null;

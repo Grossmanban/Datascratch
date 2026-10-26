@@ -20,7 +20,7 @@ import { iconGlyph } from "@/lib/glyph";
 // scrolling back does not flash empty text.
 const snippetCache = new Map<string, string>();
 
-function useSnippets(ids: string[]) {
+export function useSnippets(ids: string[]) {
   const key = ids.join(",");
   const fresh = useLiveQuery(
     async () => {
@@ -217,7 +217,7 @@ const DocRow = memo(function DocRow({ note, snippet, first }: { note: NoteEntry;
 // Keeps the cover strip's place while the encrypted thumbnail is decrypted (no layout jump).
 const PLACEHOLDER = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
-function useCardThumb(noteId: string, attachmentId: string | null | undefined): string | null {
+export function useCardThumb(noteId: string, attachmentId: string | null | undefined): string | null {
   const { url } = useAttachmentUrl(attachmentId, () => runtime().store.keyFor(noteId));
   return attachmentId ? (url ?? PLACEHOLDER) : null;
 }

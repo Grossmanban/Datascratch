@@ -2,6 +2,7 @@ import { Editor, getSchema, type AnyExtension } from "@tiptap/core";
 import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 import { Collaboration, createNoteUndoManager } from "./collab/collaboration";
+import { TitleRepair } from "./collab/repairTitle";
 import { Reanchor } from "./collab/reanchor";
 import type { HostRef } from "./host";
 import { createSchemaExtensions, type SchemaOptions } from "./schema";
@@ -31,6 +32,8 @@ export function buildExtensions(opts: CoreOptions): { extensions: AnyExtension[]
     ...createUnknownExtensions(scan),
     ...(opts.extensions ?? []),
     Reanchor.configure({ doc: opts.doc }),
+    // Heal damaged note starts (duplicate empty titles, a demoted title): document-model.md «Один title».
+    TitleRepair.configure({ doc: opts.doc }),
     Collaboration.configure({ doc: opts.doc, undoManager, awareness: opts.awareness ?? null, user: opts.user ?? null }),
   ];
   return { extensions, undoManager };

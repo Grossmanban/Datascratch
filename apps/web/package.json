@@ -2,6 +2,7 @@
   "name": "@datascratch/web",
   "private": true,
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +13,7 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "mock-server": "node e2e/mock-server/server.mjs",
-    "e2e:build": "VITE_DS_SERVER_URL=http://localhost:8787 VITE_DS_TEST_HOOKS=1 vite build && playwright test"
+    "e2e:build": "VITE_DS_SERVER_URL=http://localhost:8787 VITE_DS_TEST_HOOKS=1 vite build && VITE_DS_SERVER_URL=http://localhost:8787 VITE_DS_TEST_HOOKS=1 VITE_DS_EXTENDED_MODE=1 vite build --outDir dist-ext && playwright test"
   },
   "dependencies": {
     "@datascratch/design-tokens": "workspace:^",

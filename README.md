@@ -27,3 +27,7 @@
 ## For non-Russian readers
 
 Project documentation is written in Russian (the owner's language); code, identifiers and commit messages are in English. Start with `docs/README.md`.
+
+## Лицензия
+
+GNU AGPL-3.0-only — см. `LICENSE` (решение D-50). Можно свободно ставить на свой сервер и менять; если вы предоставляете изменённую версию как сервис, исходники изменений нужно открыть. Участие — `CONTRIBUTING.md`.

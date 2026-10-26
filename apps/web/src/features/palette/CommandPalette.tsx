@@ -7,12 +7,15 @@ import { useTranslation } from "react-i18next";
 import { useIndexVersion } from "@/data/indexer";
 import { runtime } from "@/data/runtime";
 import { createNote, getOrCreateDaily, openTab } from "@/domain/actions";
+import { markFreshNote } from "@/lib/freshNotes";
+import { newDocTarget } from "@/features/docs/menus";
 import { noteTitle, setActiveSpace, useWorkspace } from "@/domain/workspace";
 import { toggleSidebar, useUi } from "@/hooks/useUi";
 import { today } from "@/lib/dates";
 import { toggleTheme, useTheme } from "@/lib/theme";
 import { Kbd } from "@/ui";
 import { iconGlyph, withIcon } from "@/lib/glyph";
+import { features } from "@/lib/features";
 
 export function CommandPalette() {
   const { t } = useTranslation();
@@ -87,7 +90,8 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
       openTab(id);
       return navigate({ to: "/doc/$noteId", params: { noteId: id } });
     });
-  const nb = notebooks.find((n) => n.spaceId === spaceId);
+  // Where «Новый документ» goes, as in the sidebar (spec/05).
+  const target = newDocTarget(window.location.pathname);
 
   return (
     <Command
@@ -122,14 +126,15 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
           </Command.Group>
         )}
         <Command.Group heading={t("palette.commands")} className="mt-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[12.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-ink-2">
-          {nb && (
+          {target && (
             <Item
               value="new-doc"
               icon={<FilePlus2 className="size-4" />}
               shortcut="⌥N"
               onSelect={() =>
                 go(async () => {
-                  const id = await createNote({ notebookId: nb.id, title: q.trim() || undefined });
+                  const id = await createNote({ notebookId: target.notebookId, folderId: target.folderId, title: q.trim() || undefined, ...(target.tag ? { body: [`#${target.tag} `] } : {}) });
+                  if (!q.trim()) markFreshNote(id);
                   openNote(id);
                 })
               }
@@ -137,23 +142,31 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
               {q.trim() ? t("palette.newDocTitled", { title: q.trim() }) : t("palette.newDoc")}
             </Item>
           )}
-          <Item
-            value="today"
-            icon={<Sun className="size-4" />}
-            shortcut="⌥T"
-            onSelect={() => go(async () => openNote(await getOrCreateDaily(today())))}
-          >
-            {t("palette.goToday")}
-          </Item>
-          <Item value="tasks" icon={<SquareCheck className="size-4" />} onSelect={() => go(() => navigate({ to: "/tasks/$view", params: { view: "today" } }))}>
-            {t("palette.goTasks")}
-          </Item>
-          <Item value="inbox" icon={<Inbox className="size-4" />} onSelect={() => go(() => navigate({ to: "/tasks/$view", params: { view: "inbox" } }))}>
-            {t("palette.newTask")}
-          </Item>
-          <Item value="calendar" icon={<Calendar className="size-4" />} onSelect={() => go(() => navigate({ to: "/calendar" }))}>
-            {t("palette.goCalendar")}
-          </Item>
+          {features.calendar && (
+            <Item
+              value="today"
+              icon={<Sun className="size-4" />}
+              shortcut="⌥T"
+              onSelect={() => go(async () => openNote(await getOrCreateDaily(today())))}
+            >
+              {t("palette.goToday")}
+            </Item>
+          )}
+          {features.tasks && (
+            <>
+              <Item value="tasks" icon={<SquareCheck className="size-4" />} onSelect={() => go(() => navigate({ to: "/tasks/$view", params: { view: "today" } }))}>
+                {t("palette.goTasks")}
+              </Item>
+              <Item value="inbox" icon={<Inbox className="size-4" />} onSelect={() => go(() => navigate({ to: "/tasks/$view", params: { view: "inbox" } }))}>
+                {t("palette.newTask")}
+              </Item>
+            </>
+          )}
+          {features.calendar && (
+            <Item value="calendar" icon={<Calendar className="size-4" />} onSelect={() => go(() => navigate({ to: "/calendar" }))}>
+              {t("palette.goCalendar")}
+            </Item>
+          )}
           <Item value="settings" icon={<Settings className="size-4" />} onSelect={() => go(() => navigate({ to: "/settings/$section", params: { section: "account" } }))}>
             {t("palette.goSettings")}
           </Item>

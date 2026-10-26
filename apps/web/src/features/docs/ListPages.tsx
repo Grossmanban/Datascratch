@@ -1,7 +1,9 @@
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ArrowDownUp, ChevronRight, FilePlus2, Folder as FolderIcon, Hash, LayoutGrid, Layers, List, Star, Trash2 } from "lucide-react";
-import { useMemo, useRef, type ReactNode } from "react";
+import { ArrowDownUp, ChevronRight, FilePlus2, Folder as FolderIcon, Hash, LayoutGrid, Layers, List, Search, Star, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { runtime } from "@/data/runtime";
+import { useIndexVersion } from "@/data/indexer";
 import { useTranslation } from "react-i18next";
 import { folderPath, notesInSpace, useWorkspace, visibleNotes, type NoteEntry } from "@/domain/workspace";
 import { TopBar, PageTitle } from "@/features/shell/PageHeader";
@@ -11,7 +13,7 @@ import { Button, DropdownMenu, EmptyState, IconButton, SegmentedControl } from "
 import { DocCollection } from "./DocCards";
 import { FolderStrip } from "./FolderStrip";
 import { UnreadableNote } from "./UnreadableNote";
-import { newNoteAndOpen } from "./menus";
+import { newDocTarget, newNoteAndOpen } from "./menus";
 import { iconGlyph, withIcon } from "@/lib/glyph";
 
 function sortNotes(notes: NoteEntry[], sort: "updated" | "created" | "title"): NoteEntry[] {
@@ -46,6 +48,18 @@ function ListPage({
   const view = useUi((s) => s.docView);
   const sort = useUi((s) => s.sort);
   const sorted = useMemo(() => (sortable ? sortNotes(notes, sort) : notes), [notes, sort, sortable]);
+  // The list's own filter (title and text, as you type); the space's global search stays in ⌘K.
+  const [q, setQ] = useState("");
+  const indexV = useIndexVersion((s) => s.v);
+  const shown = useMemo(() => {
+    const query = q.trim();
+    if (!query) return sorted;
+    const ids = runtime().indexer.matching(query);
+    const lower = query.toLowerCase();
+    return sorted.filter((n) => ids.has(n.id) || n.title.toLowerCase().includes(lower));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted, q, indexV]);
+  const filtering = !!q.trim();
   const create = newIn ? () => void newNoteAndOpen(navigate, newIn.notebookId, newIn.folderId) : undefined;
   const scrollRef = useRef<HTMLDivElement>(null);
   return (
@@ -87,9 +101,12 @@ function ListPage({
         {crumbs}
       </TopBar>
       <PageTitle icon={icon} title={title} subtitle={notes.length ? t("docs.count", { count: notes.length }) : undefined} />
-      {extra}
-      {sorted.length ? (
-        <DocCollection notes={sorted} view={view} scrollRef={scrollRef} />
+      {notes.length > 0 && <ListFilter value={q} onChange={setQ} found={filtering ? shown.length : null} />}
+      {!filtering && extra}
+      {shown.length ? (
+        <DocCollection notes={shown} view={view} scrollRef={scrollRef} />
+      ) : filtering ? (
+        <EmptyState icon={<Search className="size-7" />} title={t("docs.noMatches")} description={t("docs.noMatchesHint")} />
       ) : (
         <EmptyState
           icon={empty.icon}
@@ -108,6 +125,75 @@ function ListPage({
   );
 }
 
+/**
+ * Filters the list on screen by title and text as you type (current space only, like the list).
+ * «/» or ⌘F focuses it while no text field has the focus; Esc or × clears it.
+ */
+function ListFilter({ value, onChange, found }: { value: string; onChange: (v: string) => void; found: number | null }) {
+  const { t } = useTranslation();
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing = !!target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+      const mod = e.metaKey || e.ctrlKey;
+      // Only while the list has the focus: never steal keys from a text field (the filter included).
+      if (typing) return;
+      if ((e.key === "/" && !mod && !e.altKey) || (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f")) {
+        e.preventDefault();
+        ref.current?.focus();
+        ref.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  return (
+    <div className="px-5 pb-6 sm:px-10">
+      <div className="relative max-w-[560px] text-ink-2" data-testid="list-filter">
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2" aria-hidden />
+        {/* The field itself carries the focus ring (keyboard users see where they are). */}
+        <input
+          ref={ref}
+          type="search"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Escape") return;
+            e.stopPropagation();
+            if (value) onChange("");
+            else e.currentTarget.blur();
+          }}
+          placeholder={t("docs.filterPlaceholder")}
+          aria-label={t("docs.filterPlaceholder")}
+          className="h-10 w-full rounded-xl bg-ink/[0.045] pl-10 pr-28 text-[14.5px] text-ink outline-none transition placeholder:text-ink-3 focus:bg-surface focus:shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(40_30_10/0.06)] focus-visible:shadow-[0_0_0_2px_color-mix(in_srgb,var(--color-accent)_45%,transparent)] [&::-webkit-search-cancel-button]:hidden"
+        />
+        <div className="absolute inset-y-0 right-2 flex items-center gap-2">
+          {found !== null && <span className="text-[12.5px] tabular-nums text-ink-2">{t("docs.count", { count: found })}</span>}
+          {value ? (
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                ref.current?.focus();
+              }}
+              aria-label={t("docs.filterClear")}
+              className="flex size-6 items-center justify-center rounded-md text-ink-2 transition hover:bg-ink/10 hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+              data-testid="list-filter-clear"
+            >
+              <X className="size-3.5" />
+            </button>
+          ) : (
+            <kbd className="mr-1 hidden rounded border border-line px-1.5 text-[11px] text-ink-2 sm:inline" aria-hidden>
+              /
+            </kbd>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AllDocsPage() {
   const { t } = useTranslation();
   const spaceId = useWorkspace((s) => s.activeSpaceId);
@@ -118,14 +204,15 @@ export function AllDocsPage() {
     () => visibleNotes(notesInSpace({ ...useWorkspace.getState(), notes, account: { ...useWorkspace.getState().account, notebooks } }, spaceId)),
     [notes, notebooks, spaceId],
   );
-  const firstNb = notebooks.find((n) => n.spaceId === spaceId);
+  // The same place as the sidebar's «Новый документ»: the notebook last used in this space.
+  const target = useMemo(() => newDocTarget("/all"), [notebooks, spaceId]);
   return (
     <ListPage
       title={t("nav.allDocs")}
       crumbs={space ? <span className="truncate">{withIcon(space.icon, space.name)}</span> : null}
       notes={list}
       empty={{ icon: <Layers className="size-7" />, title: t("docs.emptyTitle"), text: t("docs.emptyText") }}
-      newIn={firstNb ? { notebookId: firstNb.id, folderId: null } : null}
+      newIn={target ? { notebookId: target.notebookId, folderId: null } : null}
     />
   );
 }

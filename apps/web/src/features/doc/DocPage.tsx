@@ -6,19 +6,22 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/session";
 import { colorFor } from "@/data/presence";
 import { runtime } from "@/data/runtime";
-import { acknowledgeAgentCreated, agentCreatedOf, openTab, restoreNote, toggleStar, updateNote } from "@/domain/actions";
+import { acknowledgeAgentCreated, agentCreatedOf, deleteNoteForever, openTab, restoreNote, setTitleOf, toggleStar, updateNote } from "@/domain/actions";
 import { folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
 import { closeDocTab, noteMenuItems } from "@/features/docs/menus";
+import { isFreshNote } from "@/lib/freshNotes";
+import { rememberNotebook } from "@/lib/lastNotebook";
 import { TopBar } from "@/features/shell/PageHeader";
-import { useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
+import { useNoteContentReady, useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
 import { useUi } from "@/hooks/useUi";
 import { FORMAT_VERSION } from "@/lib/shared";
 import { EMOJI_CHOICES } from "@/lib/tokens";
 import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner } from "@/ui";
-import { setNoteMeta } from "@/domain/note";
+import { defaultNoteTitle, hasBody, isNoteEmpty, setNoteMeta } from "@/domain/note";
+import i18n from "@/i18n";
 import { Backlinks } from "./Backlinks";
 import { CoverImage, coverError, removeCover, setCoverImage } from "./Cover";
-import type { EditorApi } from "@/editor";
+import { readTitle, type EditorApi } from "@/editor";
 import { ownerEditorHost } from "@/editor/hosts";
 import { DocView } from "./DocView";
 import { PenPaletteToggle } from "./PenPaletteToggle";
@@ -26,6 +29,7 @@ import { PresenceStack } from "./PresenceStack";
 import { StylePopover } from "./StylePopover";
 import { usePresence } from "./usePresence";
 import { iconGlyph, withIcon } from "@/lib/glyph";
+import { features } from "@/lib/features";
 
 export function DocPage() {
   const { t } = useTranslation();
@@ -39,6 +43,8 @@ export function DocPage() {
     const space = spaceOfNote(useWorkspace.getState(), noteId);
     if (space && space !== useWorkspace.getState().activeSpaceId) setActiveSpace(space);
     if (!note.trashedAt) openTab(noteId);
+    // «Новый документ» elsewhere goes to the notebook last opened or created in (spec/05).
+    rememberNotebook(space, note.notebookId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId, !!note]);
 
@@ -68,6 +74,7 @@ function DocScreen({ noteId }: { noteId: string }) {
   const email = useAuth((s) => s.email) ?? "";
   const doc = useNoteDoc(noteId);
   const meta = useNoteMeta(doc);
+  const contentReady = useNoteContentReady(noteId, doc);
   const edits = useRef(0);
   const [editorApi, setEditorApi] = useState<EditorApi | null>(null);
   const paletteCollapsed = useUi((s) => s.penPaletteCollapsed);
@@ -96,6 +103,25 @@ function DocScreen({ noteId }: { noteId: string }) {
   const readOnlyNewer = (meta?.formatVersion ?? 1) > FORMAT_VERSION;
   const trashed = !!note.trashedAt;
   const editable = !readOnlyNewer && !trashed;
+
+  // spec/04 «Название новой заметки»: the editor names an empty title (host.defaultTitle) on Enter,
+  // when the caret leaves it and on blur; on close a note with text gets it too, and a note created
+  // here that is still empty (nothing but, at most, its default title) is not kept.
+  const titleFor = () => defaultNoteTitle(useWorkspace.getState().notes[noteId]?.createdAt ?? new Date(), i18n.language);
+  useEffect(() => {
+    if (!doc || !editable) return;
+    return () => {
+      const title = readTitle(doc).trim();
+      if (!hasBody(doc)) {
+        if (isFreshNote(noteId) && (!title || title === titleFor()) && isNoteEmpty(doc, title)) void deleteNoteForever(noteId);
+        return;
+      }
+      // The editor is gone by now (fillEmptyTitleIfNeeded needs it): write the same name into the
+      // document — only for a note created here in this session, never an existing one.
+      if (!title && isFreshNote(noteId)) void setTitleOf(noteId, titleFor());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, editable, noteId]);
 
   const keyFor = () => runtime().store.keyFor(noteId);
   const openCoverDialog = () => useUi.setState({ coverFor: noteId });
@@ -132,7 +158,7 @@ function DocScreen({ noteId }: { noteId: string }) {
                 </IconButton>
               }
             />
-            <IconButton label={`${t("docs.closeTab")} (⌥W)`} onClick={() => closeDocTab(noteId, navigate)} data-testid="close-tab">
+            <IconButton label={`${features.tabs ? t("docs.closeTab") : t("common.close")} (⌥W)`} onClick={() => closeDocTab(noteId, navigate)} data-testid="close-tab">
               <X className="size-4" />
             </IconButton>
           </>
@@ -169,7 +195,7 @@ function DocScreen({ noteId }: { noteId: string }) {
       )}
 
       {/* Mount the editor once presence exists: changing `awareness` later recreates the editor. */}
-      {!doc || !meta || !awareness ? (
+      {!doc || !meta || !awareness || !contentReady ? (
         <div className="flex h-64 items-center justify-center text-ink-2">
           <Spinner className="size-5" />
         </div>
@@ -186,7 +212,8 @@ function DocScreen({ noteId }: { noteId: string }) {
           onAcknowledgeAgentCreated={editable ? () => acknowledgeAgentCreated(noteId) : undefined}
           onEditor={(api) => {
             setEditorApi(api);
-            if (editable && !note.title) api.editor.commands.focus("start");
+            if (editable && isFreshNote(noteId)) api.focusTitle();
+            else if (editable && !note.title) api.editor.commands.focus("start");
           }}
           cover={
             meta.cover ? (

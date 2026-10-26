@@ -1,6 +1,7 @@
 {
   "name": "@datascratch/ui",
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "Quiet Paper web components: React + Radix + Tailwind v4 + Motion.",
   "type": "module",
@@ -17,7 +18,8 @@
     "showcase:build": "ladle build --outDir showcase-dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:layout": "playwright test"
   },
   "dependencies": {
     "@datascratch/design-tokens": "workspace:*",
@@ -51,6 +53,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^8.3.5",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "@playwright/test": "1.63.0"
   }
 }

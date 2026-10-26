@@ -58,18 +58,20 @@ import {
   type FolderEntry,
 } from "@/domain/workspace";
 import { useRecoveryUnconfirmed } from "@/auth/recovery";
-import { folderMenuItems, newNoteAndOpen, noteMenuItems } from "@/features/docs/menus";
+import { folderMenuItems, newDocTarget, newNoteAndOpen, noteMenuItems } from "@/features/docs/menus";
 import { useUi } from "@/hooks/useUi";
 import { DND_FOLDER, DND_NOTE, dragFolder, dragNote, dropKind } from "@/lib/dnd";
 import { today } from "@/lib/dates";
 import { tintFg, tintName } from "@/lib/tokens";
-import { cn, confirmDialog, ContextMenu, DropdownMenu, IconButton, Kbd, SpaceTile, toast, Tooltip, type MenuItem } from "@/ui";
+import { cn, confirmDialog, ContextMenu, DropdownMenu, IconButton, SpaceTile, toast, Tooltip, type MenuItem } from "@/ui";
 import type { NotebookRef } from "@/lib/shared";
 import { InlineRename } from "./InlineRename";
+import { AllTagsDialog, MoreList, TagRow, useSpaceCollapsed, useTagTree } from "./SidebarLists";
 import { unreadableMenuState, useUnreadable } from "@/features/docs/UnreadableNote";
 import { SyncIndicator } from "./SyncIndicator";
 import { createSpaceInteractive } from "./spaces";
-import { iconGlyph } from "@/lib/glyph";
+import { iconGlyph, withIcon } from "@/lib/glyph";
+import { features } from "@/lib/features";
 
 function useCollapsed(key: string, def = false) {
   const storageKey = `ds.collapsed.${key}`;
@@ -103,6 +105,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   const recoveryUnconfirmed = useRecoveryUnconfirmed();
   const todayCount = useLiveQuery(
     async () => {
+      if (!features.tasks) return 0;
       const d = today();
       const rows = await accountDb().tasks.where("state").equals("open").toArray();
       return rows.filter((r) => (r.scheduled && r.scheduled <= d) || (r.deadline && r.deadline <= d)).length;
@@ -111,9 +114,24 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
     0,
   );
 
-  const newDoc = () => {
-    const nb = nbs[0];
-    if (nb) void newNoteAndOpen(navigate, nb.id);
+  // The open notebook stays visible even when folded behind «Ещё N».
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const openNotebook = useWorkspace((s) => {
+    const [, kind, id] = pathname.split("/");
+    if (!id) return null;
+    if (kind === "notebook") return id;
+    if (kind === "folder") return s.folders[id]?.notebookId ?? null;
+    if (kind === "doc") return s.notes[id]?.notebookId ?? null;
+    return null;
+  });
+
+  // Where a new note goes (spec/05): the open notebook/folder, else the last used one in this space.
+  const target = newDocTarget(pathname);
+  const targetNb = nbs.find((n) => n.id === target?.notebookId);
+  const newDoc = (notebookId = target?.notebookId, sameFolder = true) => {
+    if (!notebookId || !target) return;
+    const same = notebookId === target.notebookId;
+    void newNoteAndOpen(navigate, notebookId, same && sameFolder ? target.folderId : null, target.tag);
   };
 
   return (
@@ -136,28 +154,49 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
       </div>
 
       <div className="px-3 pb-2">
-        <button
-          onClick={newDoc}
-          className="group flex h-8 w-full items-center gap-2 rounded-md bg-surface px-2.5 text-[13.5px] font-medium text-ink shadow-[0_1px_2px_rgb(40_30_10/0.06)] ring-1 ring-line transition hover:ring-ink/15 active:scale-[0.99]"
-          data-testid="new-doc"
-        >
-          <Plus className="size-4 text-ink-2" />
-          <span className="flex-1 text-left">{t("nav.newDoc")}</span>
-          <span className="hidden gap-0.5 group-hover:flex">
-            <Kbd>⌥</Kbd>
-            <Kbd>N</Kbd>
-          </span>
-        </button>
+        <div className="flex h-8 w-full items-stretch rounded-md bg-surface text-[13.5px] shadow-[0_1px_2px_rgb(40_30_10/0.06)] ring-1 ring-line transition hover:ring-ink/15">
+          <button
+            onClick={() => newDoc()}
+            className={cn("group flex shrink-0 items-center gap-2 rounded-l-md px-2.5 font-medium text-ink transition active:scale-[0.99]", !(targetNb && nbs.length > 1) && "flex-1")}
+            data-testid="new-doc"
+            title={`${t("nav.newDoc")} · ⌥N`}
+          >
+            <Plus className="size-4 shrink-0 text-ink-2" />
+            <span className="whitespace-nowrap text-left">{t("nav.newDoc")}</span>
+          </button>
+          {/* Shows where it goes and lets another notebook be picked. */}
+          {targetNb && nbs.length > 1 && (
+            <DropdownMenu
+              align="end"
+              items={nbs.map((nb) => ({
+                label: withIcon(nb.icon, nb.name),
+                checked: nb.id === targetNb.id,
+                onSelect: () => newDoc(nb.id),
+              }))}
+              trigger={
+                <button
+                  className="flex min-w-0 flex-1 items-center justify-end gap-0.5 rounded-r-md border-l border-line pl-2 pr-1.5 text-[12px] text-ink-2 transition hover:bg-ink/[0.04] hover:text-ink"
+                  aria-label={t("nav.newDocIn", { name: targetNb.name })}
+                  data-testid="new-doc-target"
+                >
+                  <span className="truncate">{t("nav.newDocInShort", { name: targetNb.name })}</span>
+                  <ChevronDown className="size-3 shrink-0" />
+                </button>
+              }
+            />
+          )}
+        </div>
       </div>
 
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 pb-4">
         <div className="flex flex-col gap-px">
           <NavLink to="/all" icon={<Layers className="size-4" />} label={t("nav.allDocs")} />
-          <NavLink to="/tasks/today" match="/tasks" icon={<SquareCheck className="size-4" />} label={t("nav.tasks")} badge={todayCount || undefined} />
-          <NavLink to="/calendar" icon={<Calendar className="size-4" />} label={t("nav.calendar")} />
+          {features.tasks && (
+            <NavLink to="/tasks/today" match="/tasks" icon={<SquareCheck className="size-4" />} label={t("nav.tasks")} badge={todayCount || undefined} />
+          )}
+          {features.calendar && <NavLink to="/calendar" icon={<Calendar className="size-4" />} label={t("nav.calendar")} />}
         </div>
 
-        <TabsSection />
         <StarredSection />
 
         <Section
@@ -174,9 +213,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
             </IconButton>
           }
         >
-          {nbs.map((nb) => (
-            <NotebookNode key={nb.id} nb={nb} />
-          ))}
+          <MoreList testId="notebooks" rows={nbs.map((nb) => ({ key: nb.id, node: <NotebookNode nb={nb} />, keep: nb.id === openNotebook }))} />
           {!nbs.length && space && (
             <button
               className="mx-2 my-1 text-left text-[12.5px] text-ink-2 hover:text-ink"
@@ -250,7 +287,8 @@ function NavLink({
 }
 
 function Section({ id, title, action, children }: { id: string; title: string; action?: ReactNode; children: ReactNode }) {
-  const [collapsed, toggle] = useCollapsed(id);
+  // Kept per space on this device (spec/12 §12.6, D-48).
+  const [collapsed, toggle] = useSpaceCollapsed(id);
   return (
     <section className="mt-5">
       <div className="group flex h-7 items-center px-2">
@@ -355,54 +393,6 @@ function SpaceSwitcher() {
   );
 }
 
-function TabsSection() {
-  const { t } = useTranslation();
-  // Only the tabs of the current space (D-48); the others come back when switching back.
-  const visible = useWorkspace(useShallow((s) => tabsInSpace(s, s.activeSpaceId)));
-  const notes = useWorkspace((s) => s.notes);
-  const navigate = useNavigate();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  if (!visible.length) return null;
-  return (
-    <Section id="tabs" title={t("nav.tabs")}>
-      {visible.map((tab) => {
-        const n = notes[tab.noteId]!;
-        const active = pathname === `/doc/${tab.noteId}`;
-        return (
-          <ContextMenu key={tab.noteId} items={() => noteMenuItems(tab.noteId, t, navigate)}>
-            <div
-              className={cn(
-                "group flex h-8 items-center gap-2 rounded-md pl-2 pr-1",
-                active ? "bg-surface font-medium text-ink shadow-[0_1px_2px_rgb(40_30_10/0.08)] ring-1 ring-line" : "text-ink-2 hover:bg-ink/[0.04]",
-              )}
-              draggable
-              onDragStart={(e) => dragNote(e, tab.noteId)}
-            >
-              <Link to="/doc/$noteId" params={{ noteId: tab.noteId }} className="flex min-w-0 flex-1 items-center gap-2">
-                <span className="shrink-0 text-[13px] leading-none">{iconGlyph(n.icon) || <FileText className="size-3.5 text-ink-3" />}</span>
-                <span className="truncate">{noteTitle(n, t("app.untitled"))}</span>
-              </Link>
-              <button
-                aria-label={t("common.close")}
-                className="flex size-6 items-center justify-center rounded text-ink-3 opacity-0 focus-visible:opacity-100 hover:bg-ink/10 hover:text-ink group-hover:opacity-100"
-                onClick={() => {
-                  const next = closeTab(tab.noteId);
-                  if (active) {
-                    if (next) void navigate({ to: "/doc/$noteId", params: { noteId: next } });
-                    else void navigate({ to: "/all" });
-                  }
-                }}
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
-          </ContextMenu>
-        );
-      })}
-    </Section>
-  );
-}
-
 function StarredSection() {
   const { t } = useTranslation();
   const starred = useWorkspace((s) => s.account.starred);
@@ -419,7 +409,11 @@ function StarredSection() {
   if (!items.length) return null;
   return (
     <Section id="starred" title={t("nav.starred")}>
-      {items.map((s) => {
+      <MoreList testId="starred" rows={items.map((s) => ({ key: `${s.kind}:${s.id}`, node: starredRow(s) }))} />
+    </Section>
+  );
+
+  function starredRow(s: (typeof items)[number]) {
         if (s.kind === "note") {
           const n = notes[s.id]!;
           return (
@@ -462,9 +456,7 @@ function StarredSection() {
             <span className="truncate">{nb.name}</span>
           </Link>
         );
-      })}
-    </Section>
-  );
+  }
 }
 
 function useDropTarget(onDrop: (kind: "note" | "folder", id: string) => void) {
@@ -744,38 +736,22 @@ function FolderNode({ folder, depth }: { folder: FolderEntry; depth: number }) {
 
 function TagsSection() {
   const { t } = useTranslation();
-  const spaceId = useWorkspace((s) => s.activeSpaceId);
-  const notes = useWorkspace((s) => s.notes);
-  const notebooks = useWorkspace((s) => s.account.notebooks);
-  const tagProps = useWorkspace((s) => s.tagProps);
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const tags = useMemo(
-    () => allTags({ ...useWorkspace.getState(), notes, account: { ...useWorkspace.getState().account, notebooks } }, spaceId),
-    [notes, notebooks, spaceId],
-  );
-  if (!tags.length) return null;
+  const { roots, flat } = useTagTree();
+  const [all, setAll] = useState(false);
+  if (!roots.length) return null;
   return (
     <Section id="tags" title={t("nav.tags")}>
-      <div className="flex flex-wrap gap-1 px-2 pt-1">
-        {tags.map((tag) => {
-          const active = decodeURIComponent(pathname) === `/tag/${tag.name}`;
-          const color = tagProps[tag.name]?.color;
-          return (
-            <Link
-              key={tag.name}
-              to="/tag/$"
-              params={{ _splat: tag.name }}
-              className={cn(
-                "inline-flex h-6 items-center gap-1 rounded-full px-2 text-[12px] font-medium transition-colors",
-                active ? "bg-ink text-canvas" : "bg-ink/[0.05] text-ink-2 hover:bg-ink/[0.09] hover:text-ink",
-              )}
-            >
-              <Hash className="size-3" style={color && !active ? { color: tintFg(color) } : undefined} />
-              {tag.name}
-            </Link>
-          );
-        })}
-      </div>
+      <MoreList testId="tags" rows={roots.map((n) => ({ key: n.path, node: <TagRow node={n} /> }))} />
+      <button
+        type="button"
+        onClick={() => setAll(true)}
+        className="flex h-7 items-center gap-2 rounded-md px-2 text-left text-[12.5px] text-ink-2 transition-colors hover:bg-ink/[0.04] hover:text-ink"
+        data-testid="all-tags-open"
+      >
+        <Hash className="size-3" aria-hidden />
+        {t("nav.allTags")}
+      </button>
+      <AllTagsDialog open={all} onOpenChange={setAll} tags={flat} />
     </Section>
   );
 }

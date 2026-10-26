@@ -5,9 +5,21 @@ struct DatascratchApp: App {
     @State private var app = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 
+    @ViewBuilder private var mainContent: some View {
+        #if canImport(DSEditor)
+        if BareEditorProbe.isRequested {
+            BareEditorProbe().ignoresSafeArea(.container)
+        } else {
+            RootView()
+        }
+        #else
+        RootView()
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup(id: "main") {
-            RootView()
+            mainContent
                 .environment(app)
                 .onAppear { app.mainWindowCount += 1 }
                 .onDisappear { app.mainWindowCount -= 1 }

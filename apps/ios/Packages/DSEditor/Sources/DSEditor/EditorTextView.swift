@@ -71,11 +71,11 @@ final class EditorTextView: UITextView {
         init(range: NSRange) { self.range = range }
     }
 
-    @objc func insertDictationResultPlaceholder() -> Any {
+    override func insertDictationResultPlaceholder() -> Any {
         DictationPlaceholder(range: selectedRange)
     }
 
-    @objc func frame(forDictationResultPlaceholder placeholder: Any) -> CGRect {
+    override func frame(forDictationResultPlaceholder placeholder: Any) -> CGRect {
         guard let range = selectedTextRange else { return .zero }
         return caretRect(for: range.end)
     }

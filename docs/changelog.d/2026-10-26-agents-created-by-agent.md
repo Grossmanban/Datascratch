@@ -1,0 +1,1 @@
+- **agents, shared:** D-45 — `create_note` больше не ставит метки `agentEdit` на содержимое новой заметки, а пишет `NoteMeta.createdByAgent = { agentId, agentName, at }`; поле добавлено в схему `NoteMeta` (`@datascratch/shared`, необязательное и допускающее null). `edit_note` по-прежнему помечает вставленный текст `agentEdit`.

@@ -11,6 +11,8 @@ import UIKit
 /// is set; without a server the app works on this device only.
 final class ServerConnection: CoreLibraryRemote {
     nonisolated private static let log = Logger(subsystem: "com.datascratch.app", category: "Server")
+    /// Sync timing (connect, subscribe order, catch-up) for Instruments.
+    nonisolated private static let signposter = OSSignposter(subsystem: "com.datascratch.app", category: "Sync")
 
     let serverURL: URL
     let webHost: String
@@ -98,6 +100,8 @@ final class ServerConnection: CoreLibraryRemote {
                 }
             }, retiredKeysFor: keys.retiredKeys(for:), isKeyCanonical: keys.isCanonical)
             self.engine = engine
+            let signposter = Self.signposter
+            await engine.setTraceHandler { event in signposter.emitEvent("sync", "\(String(describing: event), privacy: .public)") }
             core.remote = self
             await engine.start()
             await repairKeys(changes, engine: engine)
@@ -138,6 +142,19 @@ final class ServerConnection: CoreLibraryRemote {
         await engine?.stop()
         engine = nil
         core.remote = nil
+    }
+
+    /// App back in the foreground: a socket that died silently while suspended is replaced at
+    /// once, a live one is kept (DSCore pings it).
+    func checkConnection() {
+        guard let engine else { return }
+        Task { await engine.client.checkConnection() }
+    }
+
+    /// The person opened a note: it is caught up before the other documents.
+    func focus(_ noteId: String) {
+        guard let engine else { return }
+        Task { await engine.focus(noteId) }
     }
 
     /// Network came back: reconnect right away instead of waiting for the back-off.
@@ -294,6 +311,11 @@ final class ServerConnection: CoreLibraryRemote {
 
     /// The account document brought notebooks whose keys this device lacks (made on another
     /// device): fetch them, then let the engine pick their documents up.
+    func noteKeysLearned() {
+        guard let engine else { return }
+        Task { await engine.resumeDocumentsWaitingForKeys() }
+    }
+
     func notebookKeysMissing() {
         guard engine != nil, !isFetchingKeys else { return }
         isFetchingKeys = true

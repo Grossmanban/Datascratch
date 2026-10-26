@@ -17,15 +17,28 @@ protocol CoreLibraryRemote: AnyObject {
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?)
     /// The account lists notebooks whose keys this device does not hold.
     func notebookKeysMissing()
+    /// Note keys (`NoteMeta.wrappedKey`) arrived with a notebook index: documents that waited
+    /// for them can be subscribed.
+    func noteKeysLearned()
 }
 
 /// `NoteMeta.wrappedKey` by note id, readable from the sync engine's actor.
 nonisolated final class WrappedKeyIndex: @unchecked Sendable {
     private let lock = NSLock()
     private var keys: [String: (notebookId: String, wrapped: String)] = [:]
+    private var changed = false
 
     func set(noteId: String, notebookId: String, wrapped: String) {
-        lock.withLock { keys[noteId] = (notebookId, wrapped) }
+        lock.withLock {
+            guard keys[noteId]?.notebookId != notebookId || keys[noteId]?.wrapped != wrapped else { return }
+            keys[noteId] = (notebookId, wrapped)
+            changed = true
+        }
+    }
+
+    /// Whether a key was added or replaced since the last call.
+    func takeChanged() -> Bool {
+        lock.withLock { defer { changed = false }; return changed }
     }
 
     func wrapped(noteId: String, notebookId: String) -> String? {
@@ -486,6 +499,7 @@ final class CoreLibrary: LibraryBackend {
         migrateToSpaceSettings(&snapshot)
         snapshot.activeSpaceId = overlay.activeSpaceId
         snapshot.versions = overlay.versions
+        if wrappedKeys.takeChanged() { remote?.noteKeysLearned() }
         return snapshot
     }
 

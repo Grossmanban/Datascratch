@@ -50,7 +50,6 @@ export interface RetentionPolicy {
 const PAGE_ITEMS = 500;
 const PAGE_BYTES = 4 * 1024 * 1024;
 const DAY = 86_400_000;
-const SNAPSHOT_PREFERRED_AFTER = 100;
 
 function isUniqueViolation(e: unknown): boolean {
   let cur: unknown = e;
@@ -188,8 +187,8 @@ export class DocumentService {
   }
 
   /**
-   * Catch-up for `subscribe { since }`, yielded in pages. If the updates right
-   * after `since` were compacted away, the newest snapshot comes first.
+   * Catch-up for `subscribe { since }`, yielded in pages. If `since` is older than the
+   * newest snapshot, that snapshot comes first and the pages continue after it.
    */
   async *catchUp(db: DbOrTx, docId: string, since: number): AsyncGenerator<CatchUpPage> {
     const [doc] = await db.select().from(docs).where(eq(docs.id, docId));
@@ -197,26 +196,19 @@ export class DocumentService {
     // A client ahead of the server (e.g. restored from another backup) starts over.
     let cursor = since > doc.lastSeq ? 0 : since;
     let snapshot: CatchUpPage['snapshot'] = null;
-    if (cursor < doc.lastSeq) {
-      const [first] = await db
-        .select({ seq: docUpdates.seq })
-        .from(docUpdates)
-        .where(and(eq(docUpdates.docId, docId), gt(docUpdates.seq, cursor)))
-        .orderBy(asc(docUpdates.seq))
+    // A client behind the newest snapshot always gets it first, then the updates after it
+    // (not the updates in between): if some of those updates cannot be decrypted, the client
+    // still heals from a later snapshot (sync-protocol §5).
+    if (doc.snapshotSeq > cursor) {
+      const [snap] = await db
+        .select({ seq: docSnapshots.seq, payload: docSnapshots.payload })
+        .from(docSnapshots)
+        .where(eq(docSnapshots.docId, docId))
+        .orderBy(desc(docSnapshots.seq))
         .limit(1);
-      const gap = !first || first.seq > cursor + 1;
-      // Prefer the snapshot when the updates are gone or replaying them would be long.
-      if (doc.snapshotSeq > cursor && (gap || doc.snapshotSeq - cursor > SNAPSHOT_PREFERRED_AFTER)) {
-        const [snap] = await db
-          .select({ seq: docSnapshots.seq, payload: docSnapshots.payload })
-          .from(docSnapshots)
-          .where(eq(docSnapshots.docId, docId))
-          .orderBy(desc(docSnapshots.seq))
-          .limit(1);
-        if (snap) {
-          snapshot = snap;
-          cursor = snap.seq;
-        }
+      if (snap) {
+        snapshot = snap;
+        cursor = snap.seq;
       }
     }
     for (;;) {

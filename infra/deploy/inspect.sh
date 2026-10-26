@@ -170,6 +170,14 @@ SELECT u.seq, left(u.device_id, 13) AS device,
        octet_length(u.payload) AS bytes, encode(substring(u.payload from 1 for 4), 'hex') AS head
   FROM doc_updates u JOIN notebooks n ON n.id = u.doc_id AND n.mode = 'agent'
   ORDER BY u.seq DESC LIMIT 14;
+\echo Snapshots of agent notebooks and their notes: doc prefix | base seq | device prefix | device kind | created | bytes
+SELECT left(sn.doc_id::text, 13) AS doc, sn.seq, left(sn.device_id, 13) AS device,
+       CASE WHEN sn.device_id LIKE 'agent:%' THEN 'agent'
+            ELSE coalesce((SELECT CASE WHEN dv.name ILIKE '%ipad%' THEN 'iPad' WHEN dv.name ILIKE '%iphone%' THEN 'iPhone' ELSE 'web/other' END
+                             FROM devices dv WHERE dv.id::text = sn.device_id), 'unknown') END AS kind,
+       sn.created_at, octet_length(sn.payload) AS bytes
+  FROM doc_snapshots sn JOIN docs d ON d.id = sn.doc_id JOIN notebooks n ON n.id = d.notebook_id AND n.mode = 'agent'
+  ORDER BY sn.created_at DESC LIMIT 12;
 SQL
   end
 fi

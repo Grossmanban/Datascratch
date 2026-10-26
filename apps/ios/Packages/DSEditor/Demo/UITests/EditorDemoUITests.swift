@@ -112,6 +112,60 @@ final class EditorDemoUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground)
     }
 
+    /// Build 14 feedback (iPhone): a single tap on a note link did nothing. Real taps, keyboard
+    /// not shown: the chip opens its note, a literal [[Title]] of a missing note offers to create it.
+    @MainActor
+    func testTappingNoteLinksOpensThem() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-hud"]
+        app.launch()
+        let editor = app.textViews["editor.text"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        app.buttons["tool.text"].tap()
+        let links = app.staticTexts["hud.links"]
+        XCTAssertTrue(links.waitForExistence(timeout: 5))
+
+        func centre(of kind: String) -> CGPoint? {
+            let visible = editor.frame.insetBy(dx: 0, dy: 60)
+            for part in links.label.split(separator: ";") {
+                let fields = part.split(separator: ":")
+                guard fields.count == 2, fields[0] == kind else { continue }
+                let xy = fields[1].split(separator: ",").compactMap { Double($0) }
+                guard xy.count == 2 else { continue }
+                let p = CGPoint(x: xy[0], y: xy[1])
+                if visible.contains(p) { return p }
+            }
+            return nil
+        }
+        func tap(_ p: CGPoint) {
+            app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: p.x, dy: p.y)).tap()
+        }
+        func find(_ kind: String) -> CGPoint? {
+            for _ in 0..<6 {
+                if let p = centre(of: kind) { return p }
+                // Scrolling also refreshes the HUD's link positions.
+                editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+                    .press(forDuration: 0.05, thenDragTo: editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
+                sleep(1)
+            }
+            return nil
+        }
+
+        let chip = try XCTUnwrap(find("note"), "the note link chip is on screen (links: \(links.label))")
+        tap(chip)
+        let opened = app.staticTexts["hud.openedNote"]
+        XCTAssertTrue(opened.waitForExistence(timeout: 5))
+        let openedChip = expectation(for: NSPredicate(format: "label CONTAINS '0192f3c4'"), evaluatedWith: opened)
+        wait(for: [openedChip], timeout: 10)
+        XCTAssertEqual(app.keyboards.count, 0, "the tap opened the link instead of starting to type")
+
+        let title = try XCTUnwrap(find("title"), "the [[Title]] link is on screen (links: \(links.label))")
+        tap(title)
+        XCTAssertTrue(app.alerts["Заметки «Новая заметка» нет"].waitForExistence(timeout: 10),
+                      "a missing [[Title]] offers to create the note")
+        XCTAssertEqual(app.state, .runningForeground)
+    }
+
     @MainActor
     func testOpenLargeNotePerformance() throws {
         let app = XCUIApplication()

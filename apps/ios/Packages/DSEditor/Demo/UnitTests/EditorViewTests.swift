@@ -710,6 +710,69 @@ final class EditorViewTests: XCTestCase {
                           "only the needed amount: the caret stays just above the keyboard, not at the top")
     }
 
+    // MARK: - Dictation (build 16 feedback)
+
+    private func dictationDoc() -> InMemoryEditorDocument {
+        InMemoryEditorDocument(blocks: [.title("Диктовка"), .paragraph("Первый абзац здесь"), .paragraph("Второй абзац")])
+    }
+
+    /// Dictation and input methods stream text as marked text: it lands at the caret, in the
+    /// caret's paragraph, and the next paragraph is untouched.
+    func testMarkedTextStreamedLikeDictationLandsAtTheCaret() throws {
+        let doc = dictationDoc()
+        let editor = host(doc)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        let at = flatRange(editor, of: "абзац здесь").lowerBound
+        editor.textView.selectedRange = NSRange(location: at, length: 0)
+        drainMainQueue()
+        for chunk in ["При", "Привет", "Привет мир", "Привет мир, "] {
+            editor.textView.setMarkedText(chunk, selectedRange: NSRange(location: chunk.utf16.count, length: 0))
+            drainMainQueue()
+            XCTAssertEqual(doc.flatText(of: doc.blocks[2].id), "Второй абзац", "the next paragraph is untouched while streaming")
+        }
+        editor.textView.unmarkText()
+        drainMainQueue()
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "Первый Привет мир, абзац здесь")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[2].id), "Второй абзац")
+        XCTAssertEqual(editor.textView.selectedRange.location, at + "Привет мир, ".utf16.count, "the caret follows the text")
+        XCTAssertEqual(editor.textView.textStorage.length, Projection.build(doc.blocks).length, "text view and document agree")
+    }
+
+    /// Dictation's placeholder puts nothing into the text; the result is inserted at the caret.
+    func testDictationPlaceholderKeepsTheCaretAndTheResultLandsThere() throws {
+        let doc = dictationDoc()
+        let editor = host(doc)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        let at = flatRange(editor, of: "абзац здесь").lowerBound
+        editor.textView.selectedRange = NSRange(location: at, length: 0)
+        let length = editor.textView.textStorage.length
+        let placeholder = editor.textView.insertDictationResultPlaceholder()
+        drainMainQueue()
+        XCTAssertEqual(editor.textView.textStorage.length, length, "no placeholder character in the text")
+        XCTAssertEqual(editor.textView.selectedRange.location, at, "the caret stays")
+        XCTAssertGreaterThan(editor.textView.frame(forDictationResultPlaceholder: placeholder).height, 0)
+        editor.textView.removeDictationResultPlaceholder(placeholder, willInsertResult: true)
+        editor.textView.insertText("продиктованный ")
+        drainMainQueue()
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "Первый продиктованный абзац здесь")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[2].id), "Второй абзац")
+    }
+
+    /// Text the text view changed without asking the editor is mirrored into the document.
+    func testEditTheTextViewDidNotReportIsMirrored() throws {
+        let doc = dictationDoc()
+        let editor = host(doc)
+        let at = flatRange(editor, of: "здесь").lowerBound
+        editor.textView.textStorage.replaceCharacters(in: NSRange(location: at, length: 0), with: "сказано ")
+        editor.textView.selectedRange = NSRange(location: at + 8, length: 0)
+        editor.textViewDidChange(editor.textView)
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "Первый абзац сказано здесь")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[2].id), "Второй абзац")
+        XCTAssertEqual(editor.textView.textStorage.length, Projection.build(doc.blocks).length)
+    }
+
     // MARK: - Block rendering (build 16 feedback)
 
     static let clippedFormulas = [

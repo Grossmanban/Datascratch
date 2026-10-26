@@ -9,6 +9,8 @@ final class DemoModel {
     let editor: EditorView
     private(set) var document: InMemoryEditorDocument
     var status = ""
+    /// Id of the last note link tapped (shown in the HUD for UI tests).
+    var openedNote = ""
     var showHUD = false
     var showPalette = false
     /// Title of a `[[Title]]` link that was tapped (the demo has one note: it offers to create it).
@@ -56,7 +58,10 @@ final class DemoModel {
         }
         editor.onScroll = { [weak self] y in self?.scrollOffset = y }
         editor.onPaletteRequest = { [weak self] _ in self?.showPalette = true }
-        editor.onOpenNote = { [weak self] id in self?.status = "Ссылка на заметку \(id.prefix(8))…" }
+        editor.onOpenNote = { [weak self] id in
+            self?.status = "Ссылка на заметку \(id.prefix(8))…"
+            self?.openedNote = id
+        }
         editor.onOpenNoteTitled = { [weak self] title in self?.pendingNoteTitle = title }
         editor.onSlashMenu = { [weak self] menu in
             self?.slashMenu = menu

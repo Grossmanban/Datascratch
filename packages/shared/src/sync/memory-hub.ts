@@ -29,6 +29,11 @@ export interface MemorySyncHubOptions {
   catchUpChunk?: number;
   /** Server clock (default Date.now). */
   now?: () => number;
+  /**
+   * Send the latest snapshot whenever `since` is below its seq (sync-protocol
+   * §5, default); false = only when older updates were compacted away.
+   */
+  preferSnapshot?: boolean;
 }
 
 interface HubDoc {
@@ -52,7 +57,13 @@ export class MemorySyncHub {
     MemorySyncHubOptions;
 
   constructor(options: MemorySyncHubOptions = {}) {
-    this.opts = { autoCreateDocs: true, catchUpChunk: 100, now: Date.now, ...options };
+    this.opts = {
+      autoCreateDocs: true,
+      catchUpChunk: 100,
+      now: Date.now,
+      preferSnapshot: true,
+      ...options,
+    };
   }
 
   /** Register a document (the equivalent of `POST /v1/docs`). */
@@ -263,7 +274,10 @@ export class MemorySyncHub {
 
   private catchUp(conn: Connection, docId: string, d: HubDoc, since: number): void {
     const oldest = d.items[0]?.seq ?? d.seq + 1;
-    const useSnapshot = d.snapshot !== null && since < d.snapshot.seq && since < oldest - 1;
+    const useSnapshot =
+      d.snapshot !== null &&
+      since < d.snapshot.seq &&
+      (this.opts.preferSnapshot || since < oldest - 1);
     const from = useSnapshot ? d.snapshot!.seq : since;
     const items = d.items.filter((i) => i.seq > from);
     const chunk = this.opts.catchUpChunk;

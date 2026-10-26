@@ -153,7 +153,10 @@ DSCore
   `changePassword`, `rotateRecoveryKey(email:currentPassword:account:)` (новый ключ восстановления,
   подтверждение паролем; возвращает текст ключа — показать один раз; сбрасывает
   `AccountDocument.recoveryKeyConfirmed`, подтверждение — `setRecoveryKeyConfirmed(true)`),
-  `securityEvents()` (журнал безопасности), `logout`, `createNotebook(name:spaceId:mode:...in:)`
+  `securityEvents()` (журнал безопасности), `logout` (ключи блокнотов, ещё не дошедших до сервера,
+  сохраняются — spec/07; возвращает их id; перед выходом показать `LocalStore.unsentChangeCount()`),
+  `eraseDeviceKeys()` («Удалить данные с этого устройства»; ключи при входе в другой аккаунт
+  удаляются сами — `KeyRing.resolveKeptKeys`), `createNotebook(name:spaceId:mode:...in:)`
   (ключ, `POST /notebooks`, `POST /docs`, документ блокнота, `NotebookRef`), `loadNotebookKeys()`
   (новое устройство), `setMode` (режим «для агентов»), `createNote(in:...)` (ключ заметки,
   `NoteMeta`), `moveNote(id:from:to:)` (перенос в другой блокнот), `dailyNote(for:in:)`, `inbox(in:)`.

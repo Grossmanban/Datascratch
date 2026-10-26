@@ -281,6 +281,11 @@ export class AccountRuntime {
     }, 3000);
   }
 
+  /** The client is caught up with the server for this document (nothing more to receive). */
+  isDocSynced(docId: string): boolean {
+    return this.client.isSynced(docId);
+  }
+
   /** What keeps sync busy (console: `__dsSyncDebug()`); ids only, no content. */
   async syncDebug() {
     const outbox = await this.storage.listOutbox();

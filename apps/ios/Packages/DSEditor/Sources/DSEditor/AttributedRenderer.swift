@@ -38,10 +38,13 @@ final class ParagraphDecoration: NSObject, @unchecked Sendable {
     /// The paragraph has unaccepted agent edits (D-10): a bar in the left margin.
     let hasAgentEdit: Bool
     let agentEditColor: UIColor
+    /// Task date chips are actionable (pills) or quiet labels (D-51, `EditorTheme.taskDatesEnabled`).
+    let datesInteractive: Bool
 
     init(blockId: BlockID, kind: ParagraphKind, marker: ListMarker?, itemBlockId: BlockID?, indent: CGFloat, quoteDepth: Int,
          quoteIndentStep: CGFloat, callout: CalloutInfo?, calloutIsFirst: Bool, calloutIsLast: Bool, isCode: Bool,
-         codeIsFirst: Bool, codeIsLast: Bool, markerFont: UIFont, fontSize: CGFloat, hasAgentEdit: Bool = false) {
+         codeIsFirst: Bool, codeIsLast: Bool, markerFont: UIFont, fontSize: CGFloat, hasAgentEdit: Bool = false,
+         datesInteractive: Bool = true) {
         self.blockId = blockId
         self.kind = kind
         self.marker = marker
@@ -66,6 +69,7 @@ final class ParagraphDecoration: NSObject, @unchecked Sendable {
         self.fontSize = fontSize
         self.hasAgentEdit = hasAgentEdit
         self.agentEditColor = EditorTheme.agentEdit
+        self.datesInteractive = datesInteractive
     }
 
     /// Width reserved for the list marker in front of the text.
@@ -218,7 +222,8 @@ struct AttributedRenderer {
             calloutIsFirst: !sameCallout(i - 1), calloutIsLast: !sameCallout(i + 1), isCode: isCode,
             codeIsFirst: true, codeIsLast: true,
             markerFont: theme.font(size: size, weight: .regular, design: .default), fontSize: size,
-            hasAgentEdit: para.inline.contains { $0.marks.contains(MarkName.agentEdit) })
+            hasAgentEdit: para.inline.contains { $0.marks.contains(MarkName.agentEdit) },
+            datesInteractive: theme.taskDatesEnabled)
 
         if case .task(let state, let scheduled, let deadline) = ctx.marker {
             // Keep every line short of the column by the chips' width, so the date chips drawn

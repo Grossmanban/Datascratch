@@ -1071,7 +1071,7 @@ public final class EditorView: UIView {
     /// Whether a single tap at `point` acts on something (a note link, a task box or date chip):
     /// the text view's own taps (caret placement) do not begin there.
     func hasTapTarget(at point: CGPoint) -> Bool {
-        noteLink(at: point) != nil || taskCheckbox(at: point) != nil || taskDateChip(at: point) != nil
+        noteLink(at: point) != nil || taskCheckbox(at: point) != nil || (taskDatesEnabled && taskDateChip(at: point) != nil)
     }
 
     /// The task date chip under a point (text view coordinates): its item, whether it is the
@@ -1157,6 +1157,14 @@ public final class EditorView: UIView {
             for ((local, isDeadline), chip) in zip(zip(block.dateChipFrames(), kinds), chips) {
                 let rect = local.offsetBy(dx: frag.layoutFragmentFrame.minX + origin.x, dy: frag.layoutFragmentFrame.minY + origin.y)
                 let label = (isDeadline ? "Дедлайн: " : "Дата: ") + chip.text.string
+                guard self.taskDatesEnabled else {
+                    let e = UIAccessibilityElement(accessibilityContainer: self)
+                    e.accessibilityLabel = label
+                    e.accessibilityTraits = .staticText
+                    e.accessibilityFrameInContainerSpace = self.textView.convert(rect, to: self)
+                    if rect.intersects(visible) { out.append(e) }
+                    continue
+                }
                 add(label, frame: rect, traits: .button, hint: "Перенести") { [weak self] in
                     guard let self else { return }
                     self.dateMenuTarget = (item, isDeadline, rect)
@@ -1167,6 +1175,19 @@ public final class EditorView: UIView {
             return true
         }
         return out
+    }
+
+    /// Task dates are actionable (D-51). The notes-only app turns this off: date chips become quiet
+    /// labels without a tap or menu and menus offer no dates; check boxes still toggle and the dates
+    /// stay in the document. On by default.
+    public var taskDatesEnabled: Bool {
+        get { theme.taskDatesEnabled }
+        set {
+            guard newValue != theme.taskDatesEnabled else { return }
+            theme.taskDatesEnabled = newValue
+            applyTheme()
+            rerenderAll()
+        }
     }
 
     /// The date chip whose menu is showing.
@@ -1182,7 +1203,7 @@ public final class EditorView: UIView {
             }
             return
         }
-        if let chip = taskDateChip(at: point) {
+        if taskDatesEnabled, let chip = taskDateChip(at: point) {
             // Same choices as the task context menu (`spec/12`): reschedule or remove the date.
             DSHaptics.selection()
             dateMenuTarget = chip
@@ -1463,7 +1484,8 @@ extension EditorView: UITextViewDelegate {
         let cancel = UIAction(title: state == "cancelled" ? "Восстановить" : "Отменить задачу", image: UIImage(systemName: "xmark.circle")) { [weak self] _ in
             self?.document.setAttributes(item, ["state": .string(state == "cancelled" ? "open" : "cancelled"), "completedAt": nil])
         }
-        return UIMenu(title: "Задача", image: UIImage(systemName: "checklist"), options: .displayInline, children: [toggle, schedule, due, cancel])
+        let children: [UIMenuElement] = taskDatesEnabled ? [toggle, schedule, due, cancel] : [toggle, cancel]
+        return UIMenu(title: "Задача", image: UIImage(systemName: "checklist"), options: .displayInline, children: children)
     }
 
     public func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem, defaultAction: UIAction) -> UIAction? {

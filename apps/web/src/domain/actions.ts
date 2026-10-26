@@ -276,6 +276,21 @@ export function updateNote(noteId: string, patch: Partial<Pick<NoteMeta, "icon" 
   if (m) patchYMap(m, patch);
 }
 
+/** D-45: who created the note, when an agent did it entirely (NoteMeta.createdByAgent). */
+export type AgentCreated = { agentId: string; agentName: string; at: string };
+
+export function agentCreatedOf(note: object | undefined): AgentCreated | null {
+  const v = (note as { createdByAgent?: AgentCreated | null } | undefined)?.createdByAgent;
+  return v && typeof v.agentName === "string" ? v : null;
+}
+
+/** «Понятно» on the «Создано агентом» strip: cleared for every device (D-45). */
+export function acknowledgeAgentCreated(noteId: string) {
+  const n = useWorkspace.getState().notes[noteId];
+  if (!n) return;
+  nbMaps(n.notebookId).notes.get(noteId)?.set("createdByAgent", null);
+}
+
 export function moveNote(noteId: string, folderId: string | null) {
   const st = useWorkspace.getState();
   const n = st.notes[noteId];

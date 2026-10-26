@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { newDoc, signUp, uniqueEmail } from "./helpers";
+import { extendedScreens, newDoc, signUp, uniqueEmail } from "./helpers";
 
 /**
  * Large visible surfaces whose background does not match the theme (a light panel in the dark
@@ -41,7 +41,7 @@ test("the theme switches instantly on every screen", async ({ page }) => {
   await signUp(page, uniqueEmail("theme"));
   await newDoc(page, "Тема", "Текст");
   const docUrl = page.url();
-  for (const path of ["/all", "/tasks", "/calendar", "/settings/appearance", new URL(docUrl).pathname]) {
+  for (const path of ["/all", ...extendedScreens(), "/settings/appearance", new URL(docUrl).pathname]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");
     for (const theme of ["dark", "light"] as const) {

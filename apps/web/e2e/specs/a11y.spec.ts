@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { signUp, uniqueEmail } from "./helpers";
+import { extendedScreens, signUp, uniqueEmail } from "./helpers";
 
 /** Serious and critical WCAG 2.1 AA violations on the current page. */
 async function violations(page: Page) {
@@ -22,7 +22,7 @@ for (const [scheme, phone] of [["light", false], ["dark", false], ["light", true
     await page.goto("/login");
     const found: Record<string, string[]> = { login: await violations(page) };
     await signUp(page, uniqueEmail(`a11y-${scheme}${phone ? "-phone" : ""}`));
-    for (const path of ["/all", "/tasks", "/calendar", "/settings"]) {
+    for (const path of ["/all", ...extendedScreens(), "/settings"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       found[path] = await violations(page);

@@ -5,7 +5,7 @@ test("sign up, write a note, sign in on another device and see it", async ({ pag
   const email = uniqueEmail("smoke");
   await signUp(page, email);
   await newDoc(page, "Первая заметка", "Чернила на тёплой бумаге");
-  await expect(page.locator("[data-testid=sidebar]")).toContainText("Первая заметка");
+  await expect(page.locator(".ds-prose")).toContainText("Первая заметка");
   await expectSynced(page);
 
   const other = await browser.newContext();

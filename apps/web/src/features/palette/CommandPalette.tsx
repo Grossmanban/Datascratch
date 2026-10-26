@@ -7,12 +7,14 @@ import { useTranslation } from "react-i18next";
 import { useIndexVersion } from "@/data/indexer";
 import { runtime } from "@/data/runtime";
 import { createNote, getOrCreateDaily, openTab } from "@/domain/actions";
+import { markFreshNote } from "@/features/docs/menus";
 import { noteTitle, setActiveSpace, useWorkspace } from "@/domain/workspace";
 import { toggleSidebar, useUi } from "@/hooks/useUi";
 import { today } from "@/lib/dates";
 import { toggleTheme, useTheme } from "@/lib/theme";
 import { Kbd } from "@/ui";
 import { iconGlyph, withIcon } from "@/lib/glyph";
+import { features } from "@/lib/features";
 
 export function CommandPalette() {
   const { t } = useTranslation();
@@ -130,6 +132,7 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
               onSelect={() =>
                 go(async () => {
                   const id = await createNote({ notebookId: nb.id, title: q.trim() || undefined });
+                  if (!q.trim()) markFreshNote(id);
                   openNote(id);
                 })
               }
@@ -137,23 +140,31 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
               {q.trim() ? t("palette.newDocTitled", { title: q.trim() }) : t("palette.newDoc")}
             </Item>
           )}
-          <Item
-            value="today"
-            icon={<Sun className="size-4" />}
-            shortcut="⌥T"
-            onSelect={() => go(async () => openNote(await getOrCreateDaily(today())))}
-          >
-            {t("palette.goToday")}
-          </Item>
-          <Item value="tasks" icon={<SquareCheck className="size-4" />} onSelect={() => go(() => navigate({ to: "/tasks/$view", params: { view: "today" } }))}>
-            {t("palette.goTasks")}
-          </Item>
-          <Item value="inbox" icon={<Inbox className="size-4" />} onSelect={() => go(() => navigate({ to: "/tasks/$view", params: { view: "inbox" } }))}>
-            {t("palette.newTask")}
-          </Item>
-          <Item value="calendar" icon={<Calendar className="size-4" />} onSelect={() => go(() => navigate({ to: "/calendar" }))}>
-            {t("palette.goCalendar")}
-          </Item>
+          {features.calendar && (
+            <Item
+              value="today"
+              icon={<Sun className="size-4" />}
+              shortcut="⌥T"
+              onSelect={() => go(async () => openNote(await getOrCreateDaily(today())))}
+            >
+              {t("palette.goToday")}
+            </Item>
+          )}
+          {features.tasks && (
+            <>
+              <Item value="tasks" icon={<SquareCheck className="size-4" />} onSelect={() => go(() => navigate({ to: "/tasks/$view", params: { view: "today" } }))}>
+                {t("palette.goTasks")}
+              </Item>
+              <Item value="inbox" icon={<Inbox className="size-4" />} onSelect={() => go(() => navigate({ to: "/tasks/$view", params: { view: "inbox" } }))}>
+                {t("palette.newTask")}
+              </Item>
+            </>
+          )}
+          {features.calendar && (
+            <Item value="calendar" icon={<Calendar className="size-4" />} onSelect={() => go(() => navigate({ to: "/calendar" }))}>
+              {t("palette.goCalendar")}
+            </Item>
+          )}
           <Item value="settings" icon={<Settings className="size-4" />} onSelect={() => go(() => navigate({ to: "/settings/$section", params: { section: "account" } }))}>
             {t("palette.goSettings")}
           </Item>

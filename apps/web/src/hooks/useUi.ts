@@ -13,6 +13,8 @@ type UiState = {
   sidebarOpen: boolean;
   mobileNavOpen: boolean;
   paletteOpen: boolean;
+  /** The tab overview (spec/12 §12.6): «+N», ⌘⇧\\ or the tab count on a phone. */
+  tabOverviewOpen: boolean;
   shareFor: { kind: "note" | "notebook"; id: string } | null;
   historyFor: string | null;
   /** Note whose cover dialog is open (spec/12 §12.7). */
@@ -33,6 +35,7 @@ export const useUi = create<UiState>(() => ({
   sidebarOpen: readBool("ds.sidebar", true),
   mobileNavOpen: false,
   paletteOpen: false,
+  tabOverviewOpen: false,
   shareFor: null,
   historyFor: null,
   coverFor: null,

@@ -44,3 +44,22 @@ test("a mode change that fails once still reaches the server", async ({ page }) 
   await expect(page.locator("[data-testid^=mode-]").first()).toContainText(/Сделать приватным|Make private/, { timeout: 15_000 });
   expect(patches).toBe(2);
 });
+
+test("a mode change the network keeps failing: clear message, mode unchanged, «Повторить» works later", async ({ page }) => {
+  await signUp(page, uniqueEmail("nbmode-fail"));
+  let blocked = true;
+  await page.route(/\/v1\/notebooks\/[^/]+\/mode$/, (route) =>
+    route.request().method() === "PATCH" && blocked ? route.abort("connectionreset") : route.continue(),
+  );
+  await page.goto("/settings/notebooks");
+  const button = page.locator("[data-testid^=mode-]").first();
+  await button.click();
+  await page.getByTestId("confirm-mode").click();
+  const toastMsg = page.getByText("Сервер не ответил — режим не изменён. Попробуйте ещё раз.").first();
+  await expect(toastMsg).toBeVisible({ timeout: 30_000 });
+  await expect(button).toContainText(/Открыть агентам/);
+  blocked = false;
+  // The confirmation stays open: pressing it again is the retry.
+  await page.getByTestId("confirm-mode").click();
+  await expect(button).toContainText(/Сделать приватным/, { timeout: 15_000 });
+});

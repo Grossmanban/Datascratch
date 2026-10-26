@@ -9,6 +9,7 @@ on:
       - "packages/ui/**"
       - "packages/design-tokens/**"
       - "packages/agents/src/doc/**"
+      - "packages/test-vectors/vectors/agents/**"
       - ".github/workflows/web-editor.yml"
       - "pnpm-lock.yaml"
   pull_request:

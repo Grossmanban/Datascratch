@@ -86,16 +86,18 @@ test("agent code blocks, lists and inline math render (and code survives an edit
   expect(await page.evaluate(() => document.querySelector(".ds-pen-room"))).toBeNull();
 });
 
-test("table column alignment (paragraph.textAlign in cells) is shown and kept on edit", async ({ mount, page }) => {
+test("table column alignment (the `align` attribute of a cell) is shown and kept on edit", async ({ mount, page }) => {
   await mount(<AgentNoteEditor />);
   await page.waitForFunction(() => window.__fx?.ready === true);
-  const cell = page.locator(".ds-prose td p", { hasText: "42" });
+  await expect(page.locator(".ds-prose th", { hasText: "Значение" })).toHaveCSS("text-align", "right");
+  const cell = page.locator(".ds-prose td", { hasText: "42" });
   await expect(cell).toHaveCSS("text-align", "right");
   await cell.click();
   await page.keyboard.press("End");
   await page.keyboard.type("0");
-  await expect(page.locator(".ds-prose td p", { hasText: "420" })).toHaveCSS("text-align", "right");
-  // The alignment stays on the cell paragraph in the Y.Doc after the edit (agent-marked "42" + typed "0").
+  await expect(page.locator(".ds-prose td", { hasText: "420" })).toHaveCSS("text-align", "right");
+  // The alignment stays on the cell in the Y.Doc after the edit.
   const y = await page.evaluate(() => window.__fx!.doc.getXmlFragment("content").toString());
-  expect(y).toMatch(/<paragraph[^>]*textAlign="right"[^>]*>(?:(?!<\/paragraph>).)*42(?:(?!<\/paragraph>).)*0<\/paragraph>/);
+  // The typed "0" lands outside the agent-marked "42", so the cell holds `42</agentEdit>0`.
+  expect(y).toMatch(/<tablecell[^>]*align="right"[^>]*>(?:(?!<\/tablecell>)[\s\S])*42<\/agentEdit>0/);
 });

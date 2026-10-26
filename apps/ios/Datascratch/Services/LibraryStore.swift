@@ -556,6 +556,35 @@ final class LibraryStore {
         } && !data.folders.contains { $0.notebookId == notebookId }
     }
 
+    /// Twins of one name that both hold notes: the notes move into the one with the most (the
+    /// daily notebook first), Inboxes become one, the emptied twins go. Twins with folders stay.
+    private func mergeNotebooks(_ twins: [Notebook], anyName: Bool, firstRunName: String) {
+        guard twins.count > 1 else { return }
+        let named = twins[0].name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard anyName || [firstRunName, "notes", "заметки"].contains(named) else { return }
+        let count = { (id: String) in self.data.notes.filter { $0.notebookId == id }.count }
+        let kept = twins.first { $0.id == data.dailyNotebookId }
+            ?? twins.max { (count($0.id), $1.id) < (count($1.id), $0.id) }!
+        for other in twins where other.id != kept.id && !data.folders.contains(where: { $0.notebookId == other.id }) {
+            for note in data.notes where note.notebookId == other.id {
+                if note.kind == .inbox, let inbox = data.notes.first(where: { $0.kind == .inbox && $0.notebookId == kept.id && !$0.isTrashed }) {
+                    // One Inbox: its tasks join the kept one.
+                    var target = body(inbox.id)
+                    target.blocks += body(note.id).blocks.filter { !$0.text.isEmpty }
+                    setBody(target, ofNote: inbox.id)
+                    deleteForever(note.id)
+                } else {
+                    move(note: note.id, toNotebook: kept.id, folder: nil)
+                }
+            }
+            if !data.notes.contains(where: { $0.notebookId == other.id }) {
+                let wasDaily = data.dailyNotebookId == other.id
+                deleteNotebook(other.id)
+                if wasDaily { mutate { $0.dailyNotebookId = kept.id } }
+            }
+        }
+    }
+
     /// After the library made on this device was carried into the account (D-43) on top of the
     /// first-run content the account got at sign-up: one space per name (notebooks move into
     /// it), no second notebook of a name that holds only first-run content, one welcome note.
@@ -594,6 +623,8 @@ final class LibraryStore {
                     deleteNotebook(notebook.id)
                     if wasDaily, let kept { mutate { $0.dailyNotebookId = kept.id } }
                 }
+                mergeNotebooks(group.filter { candidate in !disposable.contains { $0.id == candidate.id } },
+                               anyName: anyName, firstRunName: key(String(localized: "Notes")))
             }
         }
         let welcomes = data.notes.filter { !$0.isTrashed && isUntouchedWelcome($0) }

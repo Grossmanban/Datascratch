@@ -2640,10 +2640,10 @@
     "semantic_hash": ""
   },
   "infra/deploy/docker-compose.yml": {
-    "mtime": 1793018583.276155,
-    "seen": 1793019939.7873938,
-    "ast_hash": "41f51696b53bbfd711836d1bfd322f23",
-    "semantic_hash": "41f51696b53bbfd711836d1bfd322f23"
+    "mtime": 1793020055.703437,
+    "seen": 1793020219.8714838,
+    "ast_hash": "cfecc5f2e9a7a96f2d8d783e56c32f81",
+    "semantic_hash": ""
   },
   "infra/deploy/inspect.sh": {
     "mtime": 1793018583.276155,
@@ -2688,16 +2688,16 @@
     "semantic_hash": "18aaef9dd6cdbf08e89099f98b02c643"
   },
   "infra/docker-compose.yml": {
-    "mtime": 1792928998.8346734,
-    "seen": 1793019939.7874033,
-    "ast_hash": "782815c41af0453339e3e44cd997af78",
-    "semantic_hash": "782815c41af0453339e3e44cd997af78"
+    "mtime": 1793020055.7025762,
+    "seen": 1793020219.8717089,
+    "ast_hash": "bbabb28e3e03a1f953ef8d82da772af7",
+    "semantic_hash": ""
   },
   "infra/restore.sh": {
-    "mtime": 1792929027.7005377,
-    "seen": 1793019939.7874043,
-    "ast_hash": "ab18ec3a0215132f99a2aa807f8c27ec",
-    "semantic_hash": "ab18ec3a0215132f99a2aa807f8c27ec"
+    "mtime": 1793020055.7246132,
+    "seen": 1793020219.8717115,
+    "ast_hash": "45ac414c1120973810e34662f4071e9a",
+    "semantic_hash": ""
   },
   "infra/smoke-test.sh": {
     "mtime": 1792932883.4497132,

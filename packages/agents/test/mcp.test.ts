@@ -34,7 +34,25 @@ describe("MCP over Streamable HTTP", () => {
     const client = await connect(s.base, token);
     const tools = await client.listTools();
     expect(tools.tools.map((t) => t.name).sort()).toEqual(
-      ["add_comment", "create_note", "edit_note", "get_backlinks", "get_handwriting_image", "list_notebooks", "list_notes", "list_spaces", "list_tasks", "read_note", "search_notes", "update_task"].sort(),
+      [
+        "add_comment",
+        "create_folder",
+        "create_note",
+        "delete_folder",
+        "edit_note",
+        "get_backlinks",
+        "get_handwriting_image",
+        "list_notebooks",
+        "list_notes",
+        "list_spaces",
+        "list_tasks",
+        "move_folder",
+        "move_note",
+        "read_note",
+        "rename_folder",
+        "search_notes",
+        "update_task",
+      ].sort(),
     );
     const nb = await client.callTool({ name: "list_notebooks", arguments: {} });
     expect(JSON.parse((nb.content as { text: string }[])[0]!.text).notebooks[0].name).toBe("Работа");

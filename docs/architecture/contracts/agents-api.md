@@ -74,6 +74,13 @@
 | `edit_note` | `POST /v1/agent/notes/:noteId/edit` | read_write | Операции над блоками (раздел 5) |
 | `add_comment` | `POST /v1/agent/notes/:noteId/comments` | read_write | Комментарий к блоку, можно привязать к цитате |
 | `update_task` | `PATCH /v1/agent/tasks/:taskId` | read_write | Состояние, дата, дедлайн задачи |
+| `create_folder` | `POST /v1/agent/folders` | read_write | Папка в блокноте `{ notebookId, name, parentFolderId?, icon? }`; вложенность любой глубины |
+| `rename_folder` | `PATCH /v1/agent/folders/:folderId` | read_write | Новое имя `{ name, icon? }` (`icon: null` убирает эмодзи) |
+| `move_folder` | `POST /v1/agent/folders/:folderId/move` | read_write | `{ parentFolderId \| null }` — под другую папку того же блокнота или в корень; в себя и в свои подпапки нельзя |
+| `delete_folder` | `DELETE /v1/agent/folders/:folderId?contents=refuse\|move_to_parent` | read_write | По умолчанию только пустую; `move_to_parent` — сначала заметки и подпапки уходят в родительскую папку (или корень). Заметки агент не удаляет никогда |
+| `move_note` | `POST /v1/agent/notes/:noteId/move` | read_write | `{ folderId \| null, notebookId? }` — в папку того же блокнота или в другой блокнот разрешения (раздел 5.1) |
+
+**Блокноты агент не создаёт, не переименовывает и не удаляет:** блокнот шифруется мастер-ключом пользователя, которого у сервера нет (E2E). Это сказано в описаниях инструментов, в инструкциях MCP-сервера и в ответе `list_notebooks` (поле `hint`).
 
 MCP возвращает JSON в текстовом блоке (кроме `read_note` — Markdown + картинки, и `get_handwriting_image` — описание + картинка). Ошибка инструмента — `isError: true`, текст `<code>: <сообщение>`. REST-ошибки — формат `api.md`: `{ "error": { "code", "message" } }`, коды `bad_request`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `rate_limited` (+ `Retry-After`), `payload_too_large`, `internal`. Сообщения написаны для модели: что не так и что сделать.
 
@@ -117,6 +124,13 @@ MCP возвращает JSON в текстовом блоке (кроме `read
 - Правка = обычное обновление Yjs: плагин меняет копию документа и передаёт серверу только разницу (`context.data.applyUpdate` с `origin: { kind: "agent", grantId, userId, agentName, action }`); сервер шифрует, присваивает `seq`, хранит в истории версий и рассылает клиентам. Откат — через историю версий.
 - Новая заметка: `context.data.createNoteDoc` (сервер создаёт ключ заметки и возвращает его обёртку ключом блокнота) → содержимое **без** меток `agentEdit` → `NoteMeta` в индексе блокнота с `createdByAgent: { agentId: <grantId>, agentName, at }` (D-45).
 
+### 5.1. Папки и перенос заметок
+
+- Папки — записи `Folder` в `folders` индекса блокнота (`document-model.md` §3): `{ id, parentId, name, icon, color: null, order, createdAt }`, `order` — после соседей. Два одноимённых соседа не создаются: ошибка `conflict` с `folderId` существующей папки.
+- `delete_folder` с `move_to_parent` переносит и заметки из корзины (чтобы восстановленная заметка не ссылалась на несуществующую папку); одна правка индекса.
+- `move_note` внутри блокнота меняет `folderId` (и `order`), вложенность в другую заметку (`parentNoteId`) снимается.
+- `move_note` в другой блокнот разрешения — одной транзакцией сервера (`context.data.moveNoteDoc`, раздел 9): ключ заметки переобёртывается ключом целевого блокнота (сам ключ, история, рукопись и вложения не меняются), в целевой индекс пишется `NoteMeta` с новым `wrappedKey`, из исходного индекса запись удаляется, у документа меняется блокнот — как `PATCH /v1/docs/:id` + `moveNoteToNotebook` у приложений. Либо всё, либо ничего. `parentNoteId` переносимой заметки и ссылки на неё как на родителя в исходном блокноте сбрасываются в `null`. Ежедневные заметки и «Входящие» между блокнотами не переносятся. Оба блокнота должны быть в разрешении с правом записи (RLS проверяет и старый, и новый блокнот).
+
 ## 6. Рендер рукописи в PNG
 
 - `@napi-rs/canvas`, шрифты в комплекте (Inter для текста, Newsreader для заголовков) — картинка одинакова на любой машине.
@@ -154,6 +168,7 @@ MCP возвращает JSON в текстовом блоке (кроме `read
 - `data.docSeqs?(userId, docIds)` — текущие `seq` без расшифровки (для кэша поиска);
 - `data.applyUpdate(userId, docId, update, origin)` → `{ seq }`;
 - `data.createNoteDoc(userId, notebookId, noteId)` → `{ wrappedKey }`;
+- `data.moveNoteDoc?(userId, { noteId, fromNotebookId, toNotebookId, origin, indexUpdates(wrappedKey) → { from, to } })` → `{ fromSeq, toSeq }` — перенос заметки между блокнотами одной транзакцией (раздел 5.1); без него `move_note` работает только внутри блокнота;
 - `data.loadAttachmentImage?(userId, attachmentId)`;
 - `users.authenticate(request)` — Bearer пользователя или сессия браузера (для экрана согласия нужна cookie-сессия веба); `users.loginUrl?(returnTo)`;
 - `store.listAudit(grantId, { limit, before })` — `before` = ISO-время, записи с `at` строго раньше, новые сверху;

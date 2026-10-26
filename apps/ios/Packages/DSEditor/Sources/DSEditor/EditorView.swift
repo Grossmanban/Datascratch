@@ -261,7 +261,12 @@ public final class EditorView: UIView {
             self.dynamicTypeChanged()
         }
 
-        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
+        // The overlap is measured once the keyboard is in place (`did`, not `will`): a host that
+        // shrinks the editor for the keyboard does so in the same animation, and measuring the
+        // still full-height editor against the incoming keyboard counted the keyboard twice — the
+        // visible area collapsed for a moment, UIKit scrolled the caret to the very top, and a
+        // screen of empty space stayed under it (iPad, build 9).
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
             let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
             MainActor.assumeIsolated { self?.keyboardFrameChanged(frame) }
         }
@@ -399,9 +404,22 @@ public final class EditorView: UIView {
             guard let pending = self.pendingBottomInset else { return }
             self.pendingBottomInset = nil
             guard abs(self.textView.contentInset.bottom - pending.bottom) > 1 else { return }
+            let grows = pending.bottom > self.textView.contentInset.bottom
             self.textView.contentInset.bottom = pending.bottom
             self.textView.verticalScrollIndicatorInsets.bottom = pending.overlap
+            // Full-height host: the keyboard now covers the bottom; bring the caret into view with
+            // the smallest scroll (nothing moves if it is already visible).
+            if grows, pending.overlap > 0 { self.scrollCaretIntoView() }
         }
+    }
+
+    /// Scrolls the least needed to show the caret line above the bottom inset.
+    func scrollCaretIntoView() {
+        guard textView.isFirstResponder, let range = textView.selectedTextRange else { return }
+        let caret = textView.caretRect(for: range.end).insetBy(dx: 0, dy: -8)
+        let visible = textView.bounds.inset(by: textView.adjustedContentInset)
+        guard !visible.contains(caret) else { return }
+        textView.scrollRectToVisible(caret, animated: true)
     }
 
     private func layoutHeader() {

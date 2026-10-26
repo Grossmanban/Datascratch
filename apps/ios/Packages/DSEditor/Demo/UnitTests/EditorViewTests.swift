@@ -588,4 +588,65 @@ final class EditorViewTests: XCTestCase {
         let typed = doc.inline(of: doc.blocks[1].id, range: 5..<6).first
         XCTAssertEqual(typed?.marks.contains(MarkName.agentEdit), false)
     }
+
+    // MARK: - Keyboard: no double counting (iPad report, build 9)
+
+    private func keyboardDoc() -> InMemoryEditorDocument {
+        let bold = MarkSet([MarkName.bold: MarkSet.plain])
+        return InMemoryEditorDocument(blocks: [
+            .title("Заметка"), .paragraph("Первый абзац заметки."), .heading("Раздел", level: 2),
+            .taskList([.taskItem("Раз"), .taskItem("Два"), .taskItem("Три")]),
+            .drawing(height: 200), .paragraph([.text("привет", bold)]),
+        ])
+    }
+
+    private func postKeyboard(_ name: Notification.Name, top: CGFloat, in window: UIWindow) {
+        let frame = CGRect(x: 0, y: top, width: window.bounds.width, height: window.bounds.height - top)
+        let screen = window.convert(frame, to: window.screen.coordinateSpace)
+        NotificationCenter.default.post(name: name, object: nil, userInfo: [UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: screen)])
+    }
+
+    /// The app shrinks the editor for the keyboard: the editor must not add the keyboard again,
+    /// and a caret that is still visible must not move.
+    func testShrinkingHostGetsNoKeyboardInsetAndNoScroll() throws {
+        let editor = host(keyboardDoc(), width: 820, height: 1180)
+        let r = flatRange(editor, of: "привет")
+        editor.textView.selectedRange = NSRange(location: r.upperBound, length: 0)
+        settle(editor)
+        let before = editor.textView.contentOffset.y
+        let keyboardTop: CGFloat = 820
+        // Same order as SwiftUI keyboard avoidance: "will" → the host shrinks the editor → "did".
+        postKeyboard(UIResponder.keyboardWillChangeFrameNotification, top: keyboardTop, in: window)
+        editor.frame.size.height = keyboardTop
+        settle(editor)
+        postKeyboard(UIResponder.keyboardDidChangeFrameNotification, top: keyboardTop, in: window)
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.contentInset.bottom, 0, accuracy: 1, "the keyboard is not counted twice")
+        let caret = editor.textView.caretRect(for: try XCTUnwrap(editor.textView.selectedTextRange).end)
+        let visible = editor.textView.bounds.inset(by: editor.textView.adjustedContentInset)
+        XCTAssertTrue(visible.contains(caret), "the caret line stays visible")
+        XCTAssertEqual(editor.textView.contentOffset.y, before, accuracy: 1, "no scroll: the caret was already above the keyboard")
+    }
+
+    /// A full-height host: the editor insets itself and scrolls the least needed to show the caret.
+    func testFullHeightHostScrollsTheCaretMinimally() throws {
+        let editor = host(keyboardDoc(), width: 820, height: 1180)
+        let r = flatRange(editor, of: "привет")
+        editor.textView.becomeFirstResponder()
+        editor.textView.selectedRange = NSRange(location: r.upperBound, length: 0)
+        settle(editor)
+        let caretBefore = editor.textView.caretRect(for: try XCTUnwrap(editor.textView.selectedTextRange).end)
+        let keyboardTop = min(1100, caretBefore.maxY - editor.textView.contentOffset.y - 40)
+        postKeyboard(UIResponder.keyboardDidChangeFrameNotification, top: keyboardTop, in: window)
+        drainMainQueue()
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.contentInset.bottom, 1180 - keyboardTop, accuracy: 2)
+        let caret = editor.textView.caretRect(for: try XCTUnwrap(editor.textView.selectedTextRange).end)
+        let visible = editor.textView.bounds.inset(by: editor.textView.adjustedContentInset)
+        XCTAssertTrue(visible.contains(caret), "the caret line is above the keyboard")
+        XCTAssertLessThan(visible.maxY - caret.maxY, 80,
+                          "only the needed amount: the caret stays just above the keyboard, not at the top")
+    }
 }

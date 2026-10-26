@@ -559,9 +559,26 @@ final class LibraryStore {
 
     /// The welcome note exactly as `seedIfEmpty` wrote it (text and kinds; ids and dates differ).
     private func isUntouchedWelcome(_ note: NoteMeta) -> Bool {
-        guard note.kind == .note, note.title == Self.welcomeTitle else { return false }
+        note.kind == .note && Self.isFirstRunWelcome(title: note.title, body: body(note.id), seed: welcomeBody())
+    }
+
+    /// A welcome note as first-run seeding wrote it (`seed` is the current welcome body).
+    static func isFirstRunWelcome(title: String, body: NoteBody, seed: NoteBody? = nil) -> Bool {
+        guard title == welcomeTitle else { return false }
         let shape = { (body: NoteBody) in body.blocks.map { "\($0.kind.rawValue):\($0.text):\($0.task?.state == .done)" } }
-        return shape(body(note.id)) == shape(welcomeBody())
+        return shape(body) == shape(seed ?? LibraryStore(persistence: .inMemory).welcomeBody())
+    }
+
+    /// First-run names in either language, as one key: «Personal» and «Личное» are the same space
+    /// (a library seeded in English next to one seeded in Russian doubled them, prod 2026-10-26).
+    static func firstRunKey(_ name: String) -> String {
+        let key = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch key {
+        case "personal", "личное", String(localized: "Personal").lowercased(): return "first-run.personal"
+        case "work", "работа", String(localized: "Work").lowercased(): return "first-run.work"
+        case "notes", "заметки", String(localized: "Notes").lowercased(): return "first-run.notes"
+        default: return key
+        }
     }
 
     /// Only first-run content: untouched welcome notes and an empty Inbox, nothing else.
@@ -608,8 +625,8 @@ final class LibraryStore {
     /// carry (`anyName == false`) only spaces named like the first-run ones merge, so spaces a
     /// person named alike on purpose stay apart.
     func mergeCarriedDuplicates(anyName: Bool = true) {
-        let key = { (name: String) in name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-        let firstRunNames = Set([String(localized: "Personal"), String(localized: "Work"), "Personal", "Work", "Личное", "Работа"].map(key))
+        let key = Self.firstRunKey
+        let firstRunNames: Set<String> = ["first-run.personal", "first-run.work"]
         for (name, spaces) in Dictionary(grouping: data.spaces, by: { key($0.name) })
         where spaces.count > 1 && (anyName || firstRunNames.contains(name)) {
             // Keep the space holding the most notebooks: the fewest moves.

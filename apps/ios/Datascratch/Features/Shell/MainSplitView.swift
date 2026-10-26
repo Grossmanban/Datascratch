@@ -85,7 +85,9 @@ struct PadWorkspace: View {
             // Too narrow for both (portrait with the sidebar): the document alone, the list comes
             // back when it closes.
             let showsList = !(showsDocument && (scene.isDocumentFullScreen || proxy.size.width < 640))
-            let listWidth = min(420, max(320, proxy.size.width * 0.38))
+            // 300 at the least: on an iPad mini in portrait the document beside it then has
+            // room for the pen palette's narrowest row (with 320 it ran 9 pt off screen).
+            let listWidth = min(420, max(300, proxy.size.width * 0.38))
             HStack(spacing: 0) {
                 if showsList {
                     NavigationStack {

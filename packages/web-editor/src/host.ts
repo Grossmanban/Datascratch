@@ -38,6 +38,11 @@ export interface EditorHost {
    * and / menus; checkboxes still toggle and the attributes stay in the document. Default "full".
    */
   taskDates?: "full" | "inert";
+  /**
+   * The name an empty title gets (spec/04 «Название новой заметки»): «Заметка 26 октября 2026» —
+   * localized and dated by the note's creation day. Without it empty titles stay empty.
+   */
+  defaultTitle?: () => string;
 }
 
 export interface HostRef {

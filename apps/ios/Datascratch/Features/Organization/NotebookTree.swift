@@ -129,24 +129,34 @@ struct FolderRow: View {
             }
             return !ids.isEmpty
         }
-        .contextMenu {
-            Button("New Note", systemImage: "square.and.pencil") {
-                scene.sidebar = .folder(folder.id)
-                scene.newNote()
-            }
-            Button("New Subfolder", systemImage: "folder.badge.plus") {
-                scene.sheet = .newFolder(notebookId: folder.notebookId, parentId: folder.id)
-            }
-            Button("Edit Folder…", systemImage: "pencil") { scene.sheet = .editFolder(folder.id) }
-            Button(library.isStarred(.folder, folder.id) ? LocalizedStringKey("Remove from Starred") : "Add to Starred",
-                   systemImage: "star") {
-                library.toggleStar(.folder, folder.id)
-            }
-            Divider()
-            Button("Delete Folder", systemImage: "trash", role: .destructive) {
-                if scene.sidebar == .folder(folder.id) { scene.sidebar = .notebook(folder.notebookId) }
-                library.deleteFolder(folder.id)
-            }
+        .contextMenu { FolderMenuItems(folder: folder) }
+    }
+}
+
+/// The folder's menu, the same in the sidebar tree and on the folder strip of a list.
+struct FolderMenuItems: View {
+    @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
+    let folder: Folder
+
+    var body: some View {
+        let library = app.library
+        Button("New Note", systemImage: "square.and.pencil") {
+            scene.sidebar = .folder(folder.id)
+            scene.newNote()
+        }
+        Button("New Subfolder", systemImage: "folder.badge.plus") {
+            scene.sheet = .newFolder(notebookId: folder.notebookId, parentId: folder.id)
+        }
+        Button("Edit Folder…", systemImage: "pencil") { scene.sheet = .editFolder(folder.id) }
+        Button(library.isStarred(.folder, folder.id) ? LocalizedStringKey("Remove from Starred") : "Add to Starred",
+               systemImage: "star") {
+            library.toggleStar(.folder, folder.id)
+        }
+        Divider()
+        Button("Delete Folder", systemImage: "trash", role: .destructive) {
+            if scene.sidebar == .folder(folder.id) { scene.sidebar = .notebook(folder.notebookId) }
+            library.deleteFolder(folder.id)
         }
     }
 }

@@ -1,6 +1,7 @@
 {
   "%lld d": "%lld дн.",
   "%lld days left": "Осталось дней: %lld",
+  "%lld documents": "Документов: %lld",
   "%lld of 4": "%lld из 4",
   "(copy)": "(копия)",
   "AI agents with a token can read and edit it. The key is kept on the server, so the server can technically read these notes.": "ИИ-агенты с токеном могут читать и править его. Ключ хранится на сервере, поэтому сервер технически может прочитать эти заметки.",
@@ -90,6 +91,7 @@
   "Design System": "Дизайн-система",
   "Devices": "Устройства",
   "Diagram": "Диаграмма",
+  "Dismiss": "Скрыть",
   "Divider": "Разделитель",
   "Document Style": "Стиль документа",
   "Document not found": "Документ не найден",

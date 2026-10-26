@@ -23,6 +23,7 @@ RU = pathlib.Path(__file__).with_name("ru.json")
 INTERPOLATIONS = {
     r"Offline · \(pending) waiting": "Offline · %lld waiting",
     r"Not sent: \(documents)": "Not sent: %lld",
+    r"\(count) documents": "%lld documents",
     r"Unsent changes on this device: \(unsent). They will be sent after you sign in to this same account.": "Unsent changes on this device: %lld. They will be sent after you sign in to this same account.",
     r"No note called “\(title)”": "No note called “%@”",
     r"Unsent changes kept on this device: \(app.sync.pendingChanges)": "Unsent changes kept on this device: %lld",
@@ -40,6 +41,7 @@ INTERPOLATIONS = {
 
 # Literals that look like text but are not translated (names, formats, prefixes).
 IGNORE = {
+    "Projects", "Drafts", "Plan", "Draft",
     "* ", ", ", " · ", " : ", "> ", "[ ] ", "[] ", "☐ ", "DS1", "DS1-XXXX-XXXX-…", "Datascratch", "Library.json",
     "CFBundleShortVersionString", "CFBundleVersion", "DSServerURL", "DSWebHost",
     "XChaCha20-Poly1305 · Argon2id", "Quiet paper", "next week", "open to agents", "CoreLibrary", "Library", "Attachments", "a^2 + b^2 = c^2", "graph TD\n  A --> B",

@@ -179,6 +179,13 @@ final class ServerConnection: CoreLibraryRemote {
                 sync.apply(summary: summary, pending: status.pending)
                 let unreadable = Set(status.unreadable.compactMap { $0.notebookId ?? nil })
                 if sync.unreadableNotebookIds != unreadable { sync.unreadableNotebookIds = unreadable }
+                var signatures: [String: String] = [:]
+                for (notebook, items) in Dictionary(grouping: status.unreadable, by: { $0.notebookId ?? $0.docId }) {
+                    let count = items.reduce(0) { $0 + $1.count }
+                    let newest = items.map(\.lastSeq).max() ?? 0
+                    signatures[notebook] = "\(count)-\(newest)-\(items.count)"
+                }
+                if sync.unreadableSignatures != signatures { sync.unreadableSignatures = signatures }
             }
         }
     }

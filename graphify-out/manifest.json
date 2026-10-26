@@ -294,10 +294,10 @@
     "semantic_hash": "d2501667ca3d8315d6cf840a970cfeed"
   },
   "docs/spec/03-pencil.md": {
-    "mtime": 1792986416.113656,
-    "seen": 1793005703.1792872,
-    "ast_hash": "7c48b24ba8a8d8b84e24b41652967e2b",
-    "semantic_hash": "7c48b24ba8a8d8b84e24b41652967e2b"
+    "mtime": 1793011889.244241,
+    "seen": 1793012202.759454,
+    "ast_hash": "463a4dee02213b5e2106078e96b10dff",
+    "semantic_hash": "463a4dee02213b5e2106078e96b10dff"
   },
   "docs/spec/04-editor.md": {
     "mtime": 1793011712.927673,

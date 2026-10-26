@@ -9,6 +9,7 @@ import type { NotebookMode, NotebookRef } from "@/lib/shared";
 import { Button, Dialog, DialogActions, DropdownMenu, toast } from "@/ui";
 import { Card, Row } from "./SettingsPage";
 import { iconGlyph, withIcon } from "@/lib/glyph";
+import { features } from "@/lib/features";
 
 export function NotebooksSection() {
   const { t } = useTranslation();
@@ -73,27 +74,29 @@ export function NotebooksSection() {
         );
       })}
 
-      <Card title={t("settings.dailyNotebook")} description={t("notebook.dailyHere")}>
-        {spaces.map((space) => {
-          const list = notebooks.filter((n) => n.spaceId === space.id);
-          if (!list.length) return null;
-          void settings;
-          const dailyId = dailyNotebookId(space.id);
-          const daily = list.find((n) => n.id === dailyId);
-          return (
-            <Row key={space.id} label={withIcon(space.icon, space.name)}>
-              <DropdownMenu
-                items={list.map((nb) => ({
-                  label: withIcon(nb.icon, nb.name),
-                  checked: nb.id === dailyId,
-                  onSelect: () => setDailyNotebook(nb.id),
-                }))}
-                trigger={<Button size="sm">{daily ? withIcon(daily.icon, daily.name) : "—"}</Button>}
-              />
-            </Row>
-          );
-        })}
-      </Card>
+      {(features.calendar || features.tasks) && (
+        <Card title={t("settings.dailyNotebook")} description={t("notebook.dailyHere")}>
+          {spaces.map((space) => {
+            const list = notebooks.filter((n) => n.spaceId === space.id);
+            if (!list.length) return null;
+            void settings;
+            const dailyId = dailyNotebookId(space.id);
+            const daily = list.find((n) => n.id === dailyId);
+            return (
+              <Row key={space.id} label={withIcon(space.icon, space.name)}>
+                <DropdownMenu
+                  items={list.map((nb) => ({
+                    label: withIcon(nb.icon, nb.name),
+                    checked: nb.id === dailyId,
+                    onSelect: () => setDailyNotebook(nb.id),
+                  }))}
+                  trigger={<Button size="sm">{daily ? withIcon(daily.icon, daily.name) : "—"}</Button>}
+                />
+              </Row>
+            );
+          })}
+        </Card>
+      )}
 
       <Dialog
         open={!!switching}

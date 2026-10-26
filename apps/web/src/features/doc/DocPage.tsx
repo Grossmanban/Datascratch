@@ -26,6 +26,7 @@ import { PresenceStack } from "./PresenceStack";
 import { StylePopover } from "./StylePopover";
 import { usePresence } from "./usePresence";
 import { iconGlyph, withIcon } from "@/lib/glyph";
+import { features } from "@/lib/features";
 
 export function DocPage() {
   const { t } = useTranslation();
@@ -132,7 +133,7 @@ function DocScreen({ noteId }: { noteId: string }) {
                 </IconButton>
               }
             />
-            <IconButton label={`${t("docs.closeTab")} (⌥W)`} onClick={() => closeDocTab(noteId, navigate)} data-testid="close-tab">
+            <IconButton label={`${features.tabs ? t("docs.closeTab") : t("common.close")} (⌥W)`} onClick={() => closeDocTab(noteId, navigate)} data-testid="close-tab">
               <X className="size-4" />
             </IconButton>
           </>

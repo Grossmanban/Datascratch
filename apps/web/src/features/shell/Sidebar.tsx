@@ -71,6 +71,7 @@ import { unreadableMenuState, useUnreadable } from "@/features/docs/UnreadableNo
 import { SyncIndicator } from "./SyncIndicator";
 import { createSpaceInteractive } from "./spaces";
 import { iconGlyph } from "@/lib/glyph";
+import { features } from "@/lib/features";
 
 function useCollapsed(key: string, def = false) {
   const storageKey = `ds.collapsed.${key}`;
@@ -104,6 +105,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   const recoveryUnconfirmed = useRecoveryUnconfirmed();
   const todayCount = useLiveQuery(
     async () => {
+      if (!features.tasks) return 0;
       const d = today();
       const rows = await accountDb().tasks.where("state").equals("open").toArray();
       return rows.filter((r) => (r.scheduled && r.scheduled <= d) || (r.deadline && r.deadline <= d)).length;
@@ -165,8 +167,10 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 pb-4">
         <div className="flex flex-col gap-px">
           <NavLink to="/all" icon={<Layers className="size-4" />} label={t("nav.allDocs")} />
-          <NavLink to="/tasks/today" match="/tasks" icon={<SquareCheck className="size-4" />} label={t("nav.tasks")} badge={todayCount || undefined} />
-          <NavLink to="/calendar" icon={<Calendar className="size-4" />} label={t("nav.calendar")} />
+          {features.tasks && (
+            <NavLink to="/tasks/today" match="/tasks" icon={<SquareCheck className="size-4" />} label={t("nav.tasks")} badge={todayCount || undefined} />
+          )}
+          {features.calendar && <NavLink to="/calendar" icon={<Calendar className="size-4" />} label={t("nav.calendar")} />}
         </div>
 
         <StarredSection />

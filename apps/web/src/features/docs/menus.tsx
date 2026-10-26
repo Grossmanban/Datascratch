@@ -37,6 +37,7 @@ import { TINTS, tintFg } from "@/lib/tokens";
 import { useUi } from "@/hooks/useUi";
 import { confirmDialog, toast, type MenuItem } from "@/ui";
 import { iconGlyph } from "@/lib/glyph";
+import { features } from "@/lib/features";
 
 type Nav = ReturnType<typeof useNavigate>;
 
@@ -168,7 +169,7 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
   const starred = isStarred(st, { kind: "note", id: noteId });
   const spaceOf = st.account.notebooks.find((nb) => nb.id === n.notebookId)?.spaceId;
   return [
-    ...(!opts.inDoc
+    ...(!opts.inDoc && features.tabs
       ? [
           {
             label: t("docs.openInTab"),

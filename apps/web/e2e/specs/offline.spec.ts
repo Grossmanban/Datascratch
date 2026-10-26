@@ -32,8 +32,6 @@ test("offline: edits are kept locally, survive reload and sync when back online"
   await page.waitForTimeout(800);
 
   await page.reload();
-  await expect(page.getByTestId("tab-strip")).toContainText("Записано без сети");
-  await page.getByTestId("tab-strip").getByText("Записано без сети").click();
   await expect(page.locator(".ds-prose")).toContainText("Поезд, тоннель");
 
   await context.setOffline(false);

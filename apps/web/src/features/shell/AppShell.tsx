@@ -20,6 +20,7 @@ import { TabOverview } from "./TabOverview";
 import { TabStrip } from "./TabStrip";
 import { Splash } from "./Splash";
 import { useShortcuts } from "./shortcuts";
+import { features } from "@/lib/features";
 
 export function AppShell() {
   const { t } = useTranslation();
@@ -175,7 +176,7 @@ export function AppShell() {
       )}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Tabs of the current space above the screen; full screen hides them like the sidebar. */}
-        {!isMobile && !(focusKind && focused) && <TabStrip />}
+        {features.tabs && !isMobile && !(focusKind && focused) && <TabStrip />}
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {/* A short fade when the screen changes (tabs inside a screen keep their own motion). */}
           <motion.div
@@ -190,7 +191,7 @@ export function AppShell() {
         </main>
       </div>
       <CommandPalette />
-      <TabOverview />
+      {features.tabs && <TabOverview />}
       <ShareDialog />
       <HistoryDialog />
       <CoverDialog />

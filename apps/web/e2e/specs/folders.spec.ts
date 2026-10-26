@@ -41,7 +41,8 @@ test("the sidebar section is «Блокноты»: notebooks with their folder t
 
   // Drag a note (its tab) into a folder.
   await newDoc(page, "В папку", "текст");
-  await page.getByTestId("tab-strip").getByTestId("tab").filter({ hasText: "В папку" }).dragTo(projects);
+  await page.goto("/all");
+  await page.getByTestId("doc-card").filter({ hasText: "В папку" }).dragTo(projects);
   await expect(page.getByText("Перемещено", { exact: true }).first()).toBeVisible();
   await projects.click();
   await expect(page.getByRole("main").getByRole("link", { name: /В папку/ })).toBeVisible();

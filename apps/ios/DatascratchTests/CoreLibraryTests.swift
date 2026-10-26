@@ -369,9 +369,9 @@ struct CoreLibraryTests {
         #expect(library.data.spaces == before.spaces && library.data.notebooks == before.notebooks)
     }
 
-    /// Both «Notes» twins hold the person's notes (some written in the account after build 5):
-    /// the notes move into one notebook, one Inbox stays.
-    @Test func twinNotebooksWithNotesBecomeOne() throws {
+    /// Both «Personal» twins hold the person's notes (some written in the account after build 5):
+    /// without a fresh carry nothing of theirs moves or goes (spec/02, «Стартовые пространства»).
+    @Test func twinSpacesWithNotesStayApart() throws {
         let keys = KeyRing(store: InMemorySecretStore())
         let store = try LocalStore.inMemory()
         let core = try CoreLibrary(store: store, keys: keys)
@@ -395,16 +395,37 @@ struct CoreLibraryTests {
         core.needsCarriedMerge = false
 
         library.mergeCarriedDuplicates(anyName: false)
-        let personal = try #require(library.spaces.first { $0.name == String(localized: "Personal") })
-        let notebooks = library.notebooks(in: personal.id).filter { $0.name == String(localized: "Notes") }
-        #expect(notebooks.count == 1)
-        let kept = try #require(notebooks.first)
         let live = library.data.notes.filter { !$0.isTrashed }
-        #expect(live.first { $0.id == early }?.notebookId == kept.id)
-        #expect(live.first { $0.id == later }?.notebookId == kept.id)
-        #expect(live.filter { $0.kind == .inbox }.count == 1)
-        #expect(live.filter { $0.title == LibraryStore.welcomeTitle }.count == 1)
-        #expect(library.dailyNotebook?.id == kept.id)
+        #expect(live.first { $0.id == early }?.notebookId == localNotes.id)
+        #expect(live.first { $0.id == later }?.notebookId == accountNotes.id)
+        #expect(library.spaces.contains { $0.id == localSpace.id } && library.spaces.contains { $0.id == accountSpace.id })
+    }
+
+    /// Prod, build 14 (owner's iPhone): «Личное» with the person's notebooks next to an English
+    /// «Personal» that holds only the seeded «Notes», and «Work» next to «Работа», both empty.
+    /// Once the account has synced the empty twins go; nothing with content is touched.
+    @Test func emptyFirstRunTwinsGoAfterSync() throws {
+        let library = LibraryStore(backend: try CoreLibrary.inMemory())
+        let russian = library.createSpace(name: "Личное")
+        let mine = library.createNotebook(in: russian.id, name: "Заметки", mode: .private)
+        let test = library.createNotebook(in: russian.id, name: "Тест", mode: .private)
+        let note = library.createNote(in: test.id, folder: nil, title: "Моя заметка")
+        let english = library.createSpace(name: "Personal")
+        let seeded = library.createNotebook(in: english.id, name: "Notes", mode: .private)
+        _ = library.createNote(in: seeded.id, title: LibraryStore.welcomeTitle, body: LibraryStore(persistence: .inMemory).firstRunWelcomeBody())
+        let work = library.createSpace(name: "Work")
+        let rabota = library.createSpace(name: "Работа")
+        let other = library.createSpace(name: "Personal")
+        let kept = library.createNotebook(in: other.id, name: "Идеи", mode: .private)
+        _ = library.createNote(in: kept.id, folder: nil, title: "Идея")
+
+        library.mergeCarriedDuplicates(anyName: false)
+        #expect(!library.spaces.contains { $0.id == english.id })
+        #expect(library.notebook(seeded.id) == nil)
+        #expect([work.id, rabota.id].filter { id in library.spaces.contains { $0.id == id } }.count == 1)
+        #expect(library.spaces.contains { $0.id == russian.id } && library.spaces.contains { $0.id == other.id })
+        #expect(library.notebook(mine.id) != nil && library.note(note.id)?.notebookId == test.id)
+        #expect(library.notebook(kept.id) != nil)
     }
 
     /// spec/07: «Delete data from this device» (and signing in to another account) leaves an

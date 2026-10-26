@@ -160,8 +160,16 @@ final class ServerConnection: CoreLibraryRemote {
 
     private func observeStatus(_ engine: SyncEngine) {
         statusTask?.cancel()
-        statusTask = Task { [sync] in
+        statusTask = Task { [weak self, sync] in
+            var catching = false, caughtUp = false
             for await status in await engine.statusUpdates() {
+                // Once the account has caught up with the server: first-run twins are judged on
+                // what it really holds, not on what this device had before the first sync.
+                if status.catchingUp > 0 { catching = true }
+                if !caughtUp, catching, status.catchingUp == 0, case .connected = status.connection {
+                    caughtUp = true
+                    self?.onLibraryCarried?(false)
+                }
                 let summary: SyncCenter.Summary = switch status.summary {
                 case .offline: .offline
                 case .syncing: .syncing

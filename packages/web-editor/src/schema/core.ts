@@ -17,29 +17,7 @@ export const Title = Node.create({
   defining: true,
   parseHTML: () => [{ tag: "h1[data-type=title]" }],
   renderHTML: ({ HTMLAttributes }) => ["h1", mergeAttributes(HTMLAttributes, { "data-type": "title", class: "ds-title" }), 0],
-  addKeyboardShortcuts() {
-    return {
-      // Enter at the end of the title jumps into the body instead of splitting the title.
-      Enter: ({ editor }) => {
-        const { $from, empty } = editor.state.selection;
-        if (!empty || $from.parent.type.name !== "title") return false;
-        const after = $from.after();
-        return editor
-          .chain()
-          .command(({ tr, state }) => {
-            const next = tr.doc.resolve(after).nodeAfter;
-            if (!next || next.type.name !== "paragraph" || next.content.size > 0 || $from.parentOffset < $from.parent.content.size) {
-              const rest = $from.parent.content.cut($from.parentOffset);
-              tr.delete($from.pos, $from.end());
-              tr.insert(tr.mapping.map(after), state.schema.nodes.paragraph!.create(null, rest));
-            }
-            return true;
-          })
-          .setTextSelection(after + 1)
-          .run();
-      },
-    };
-  },
+  // Enter in the title (no split, move to the text, default name): schema/title.ts.
 });
 
 /** Optional `textAlign` on paragraphs and headings (null = natural alignment). */

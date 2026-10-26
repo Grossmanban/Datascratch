@@ -96,6 +96,8 @@ final class SceneModel {
     var taskBucket: TaskIndex.Bucket = .today
     var calendarDay: String = DayKey.from(Date())
     var pendingModeChange: (notebookId: String, mode: NotebookMode)?
+    /// A `[[Title]]` with no note behind it: the document offers to create one.
+    var missingNoteTitle: String?
     /// A cover picker or the reposition sheet requested from a document menu.
     var coverAction: CoverAction?
     /// Open native editors by note id (`NativeEditorModel`), so a document screen that SwiftUI
@@ -225,6 +227,15 @@ final class SceneModel {
         switch route {
         case .note(let id):
             if library.note(id) != nil { open(id) }
+        case .noteTitled(let title):
+            let key = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if let note = library.data.notes.first(where: {
+                !$0.isTrashed && $0.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == key
+            }) {
+                open(note.id)
+            } else {
+                missingNoteTitle = title
+            }
         case .today:
             openToday()
         case .share(let shareId, let key):

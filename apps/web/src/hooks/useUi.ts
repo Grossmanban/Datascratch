@@ -22,6 +22,8 @@ type UiState = {
   sort: "updated" | "created" | "title";
   /** Full-screen ("focus") per kind of screen: no sidebar; remembered on this device. */
   focus: Record<FocusKind, boolean>;
+  /** The pen palette is folded into a round button at the edge (as on iOS); remembered. */
+  penPaletteCollapsed: boolean;
 };
 
 export type FocusKind = "doc" | "calendar" | "tasks";
@@ -44,7 +46,18 @@ export const useUi = create<UiState>(() => ({
   })(),
   sort: "updated",
   focus: Object.fromEntries(FOCUS_KINDS.map((k) => [k, readBool(`ds.focus.${k}`, false)])) as Record<FocusKind, boolean>,
+  penPaletteCollapsed: readBool("ds.penPalette.collapsed", false),
 }));
+
+export function togglePenPalette() {
+  const next = !useUi.getState().penPaletteCollapsed;
+  try {
+    localStorage.setItem("ds.penPalette.collapsed", next ? "1" : "0");
+  } catch {
+    // ignore
+  }
+  useUi.setState({ penPaletteCollapsed: next });
+}
 
 /** Which full-screen-capable screen a path is, if any. */
 export function focusKindOf(pathname: string): FocusKind | null {

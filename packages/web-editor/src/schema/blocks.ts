@@ -677,10 +677,9 @@ export const NoteLink = Node.create<HostOptions>({
         dom.dataset.noteId = current.attrs.noteId ?? "";
       };
       render();
+      // A link is an atom: a single click or tap opens the note (touch has no ⌘-click).
       dom.addEventListener("click", (e) => {
-        if (current.attrs.noteId && (e.metaKey || e.ctrlKey || !dom.closest("[contenteditable=true]"))) host.current.onOpenNote?.(current.attrs.noteId);
-      });
-      dom.addEventListener("dblclick", () => {
+        e.preventDefault();
         if (current.attrs.noteId) host.current.onOpenNote?.(current.attrs.noteId);
       });
       return {
@@ -739,7 +738,8 @@ export const Tag = Node.create<HostOptions>({
       dom.contentEditable = "false";
       dom.textContent = `#${node.attrs.name}`;
       dom.addEventListener("click", (e) => {
-        if (e.metaKey || e.ctrlKey || !dom.closest("[contenteditable=true]")) host.current.onTagClick?.(node.attrs.name);
+        e.preventDefault();
+        host.current.onTagClick?.(node.attrs.name);
       });
       return { dom, ignoreMutation: () => true };
     };

@@ -106,6 +106,9 @@ jobs:
           # and a clear error if the app record (step 3, not possible via the API) is missing.
           python3 scripts/asc.py ensure-bundle-id com.datascratch.app "Datascratch"
           python3 scripts/asc.py check-app com.datascratch.app
+          # Development certificates left by earlier runs (Apple caps them; the owner agreed
+          # that CI clears its own). Runs are serialized by the concurrency group above.
+          python3 scripts/asc.py prune-ci-certs
 
       # Optional (plan B in RELEASE.md): a distribution certificate exported as .p12.
       - name: Import distribution certificate (optional)

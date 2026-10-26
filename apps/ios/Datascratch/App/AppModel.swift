@@ -129,6 +129,15 @@ final class AppModel {
             library.seedIfEmpty()
             signedInForTesting = true
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-cover") { seedCoverForTesting() }
+            if ProcessInfo.processInfo.arguments.contains("-ui-testing-folders"),
+               let notebook = library.notebooks(in: library.activeSpace?.id).first {
+                // A folder with a subfolder and a note in each (folder strip, breadcrumb).
+                let projects = library.createFolder(in: notebook.id, parent: nil, name: "Projects", icon: "folder", color: .blue)
+                let drafts = library.createFolder(in: notebook.id, parent: projects.id, name: "Drafts", icon: "folder", color: .orange)
+                _ = library.createNote(in: notebook.id, folder: projects.id, title: "Plan")
+                _ = library.createNote(in: notebook.id, folder: drafts.id, title: "Draft")
+                notebookForTesting = notebook.id
+            }
             // The server ended this device's session (revoked elsewhere).
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-session-ended") { sync.markSessionEnded() }
         }
@@ -141,6 +150,8 @@ final class AppModel {
     }
 
     private var signedInForTesting = false
+    /// `-ui-testing-folders`: the notebook a new scene starts on.
+    @ObservationIgnored var notebookForTesting: String?
 
     /// `-ui-testing-cover`: the first document gets an image cover (screenshots, layout tests).
     private func seedCoverForTesting() {

@@ -251,6 +251,24 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
     }
 
+    /// spec/05: a notebook's folders show as a strip above its documents; a tap opens the folder,
+    /// whose own subfolders and breadcrumb then show.
+    func testFolderStripNavigates() throws {
+        let app = launchSignedIn(["-ui-testing-folders"])
+        let strip = app.descendants(matching: .any)["library.folderStrip"].firstMatch
+        // The seeded scene starts on the notebook's list (iPhone too).
+        XCTAssertTrue(strip.waitForExistence(timeout: 5), "no folder strip; buttons: \(Self.buttons(app))")
+        let projects = app.buttons["folderCard.Projects"].firstMatch
+        XCTAssertTrue(projects.exists && projects.isHittable, "no Projects card")
+        projects.tap()
+        let drafts = app.buttons["folderCard.Drafts"].firstMatch
+        XCTAssertTrue(drafts.waitForExistence(timeout: 3), "the strip did not show Projects' subfolder")
+        drafts.tap()
+        let crumb = app.descendants(matching: .any)["library.breadcrumb"].firstMatch
+        XCTAssertTrue(crumb.waitForExistence(timeout: 3), "no breadcrumb inside a nested folder")
+        XCTAssertFalse(app.descendants(matching: .any)["library.folderStrip"].firstMatch.exists, "a strip without subfolders")
+    }
+
     /// D-48: spaces are isolated — the starred note and the open tab of «Personal» are not shown
     /// in «Work» and come back with «Personal».
     func testSpacesKeepTheirStarredAndTabs() throws {

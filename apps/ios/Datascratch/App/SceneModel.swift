@@ -108,7 +108,11 @@ final class SceneModel {
 
     init(app: AppModel) {
         self.app = app
-
+        // `-ui-testing-folders`: start on the seeded notebook (its folder strip).
+        if let id = app.notebookForTesting {
+            sidebar = .notebook(id)
+            preferredCompactColumn = .content
+        }
     }
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }

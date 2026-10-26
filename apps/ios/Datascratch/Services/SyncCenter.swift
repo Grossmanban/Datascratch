@@ -25,6 +25,9 @@ final class SyncCenter {
     /// Notebooks with changes from other devices this device could not read (another key):
     /// set aside, everything else syncs. A calm note on the notebook, not a global state.
     var unreadableNotebookIds: Set<String> = []
+    /// Per notebook, what is set aside right now (item count and newest seq): the banner's
+    /// dismissal is keyed by it, so only new unreadable items bring it back.
+    var unreadableSignatures: [String: String] = [:]
     let serverURL: URL?
 
     @ObservationIgnored private var monitor: NWPathMonitor?

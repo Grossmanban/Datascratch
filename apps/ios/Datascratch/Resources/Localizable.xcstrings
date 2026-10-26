@@ -21,6 +21,16 @@
         }
       }
     },
+    "%lld documents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Документов: %lld"
+          }
+        }
+      }
+    },
     "%lld of 4": {
       "localizations": {
         "ru": {
@@ -907,6 +917,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Диаграмма"
+          }
+        }
+      }
+    },
+    "Dismiss": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрыть"
           }
         }
       }

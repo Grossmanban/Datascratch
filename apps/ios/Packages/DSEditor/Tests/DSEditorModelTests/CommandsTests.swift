@@ -273,9 +273,8 @@ func resolved(_ doc: EditorDocument, _ s: Stroke) -> [TextPosition?] { s.anchors
     @Test func tableCellEditKeepsMarksOfUntouchedText() {
         let bold = MarkSet([MarkName.bold: MarkSet.plain])
         let agent = MarkSet([MarkName.agentEdit: .object(["agentId": "a"])])
-        var para = BlockNode.paragraph([.text("жирный", bold), .text(" и агент", agent)])
-        para.attrs["textAlign"] = "center"
-        let cell = BlockNode(type: NodeType.tableCell, attrs: ["colspan": 1, "rowspan": 1], children: [para])
+        let cell = BlockNode(type: NodeType.tableCell, attrs: ["colspan": 1, "rowspan": 1, "align": "center"],
+                             children: [.paragraph([.text("жирный", bold), .text(" и агент", agent)])])
         let table = BlockNode(type: NodeType.table, children: [BlockNode(type: NodeType.tableRow, children: [cell])])
         let doc = InMemoryEditorDocument(blocks: [.title("T"), table])
         let cmd = EditorCommands(document: doc)
@@ -285,6 +284,6 @@ func resolved(_ doc: EditorDocument, _ s: Stroke) -> [TextPosition?] { s.anchors
         #expect(doc.inline(of: edited.id, range: 0..<6).first?.marks.contains(MarkName.bold) == true)
         #expect(doc.inline(of: edited.id, range: 7..<14).first?.marks.contains(MarkName.agentEdit) == true)
         #expect(doc.inline(of: edited.id, range: 14..<15).first?.marks.contains(MarkName.agentEdit) == false, "typed text is the person's")
-        #expect(edited.attrs["textAlign"]?.stringValue == "center", "the column alignment stays")
+        #expect(doc.blocks[1].children[0].children[0].attrs["align"]?.stringValue == "center", "the column alignment stays")
     }
 }

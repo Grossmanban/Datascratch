@@ -1008,9 +1008,9 @@
     "semantic_hash": "6e8d0fe14401882676cc26ca99f3bc7f"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/Attachments.swift": {
-    "mtime": 1793023208.8819208,
-    "seen": 1793023273.0006123,
-    "ast_hash": "490e6c9a6feed072ec1d423320d30681",
+    "mtime": 1793023612.8269193,
+    "seen": 1793023670.7456577,
+    "ast_hash": "a3b14e6529a8d93778305ad06c1efd2a",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/AttributedRenderer.swift": {
@@ -1278,9 +1278,9 @@
     "semantic_hash": "ccec2cb1d1e8eb0f1ed6760af2627023"
   },
   "apps/ios/Packages/DSEditor/Tests/DSEditorModelTests/CommandsTests.swift": {
-    "mtime": 1793023208.8831792,
-    "seen": 1793023273.0024962,
-    "ast_hash": "7bb2112af061f31165ca4592331c8c51",
+    "mtime": 1793023612.8274055,
+    "seen": 1793023670.7471967,
+    "ast_hash": "1aa4a7a8bae37497f4f6e20d3b8f4d5a",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Tests/DSEditorModelTests/DocumentTests.swift": {
@@ -1388,19 +1388,19 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793023486.4322495,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793023486.432253,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793023486.4322543,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2636,7 +2636,7 @@
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792967462.0829601,
     "seen": 1793023486.432607,
-    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "infra/deploy/docker-compose.yml": {
@@ -4710,9 +4710,9 @@
     "semantic_hash": ""
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1793023218.864209,
-    "seen": 1793023273.022341,
-    "ast_hash": "0b50b92067f90d40b7f2ef8b5f8988bf",
+    "mtime": 1793023612.8319466,
+    "seen": 1793023670.763541,
+    "ast_hash": "7978257bf5a1f086579df26c009e3687",
     "semantic_hash": ""
   },
   "docs/spec/05-organization-design.md": {

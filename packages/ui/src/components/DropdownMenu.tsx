@@ -2,15 +2,8 @@ import { Check, ChevronRight } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { cn } from "../lib/cn";
-import { shortcutLabel } from "./Kbd";
-import {
-  menuContent,
-  menuItem,
-  menuItemDanger,
-  menuLabel,
-  menuSeparator,
-  menuShortcut,
-} from "./menu-styles";
+import { MenuRow } from "./menu-row";
+import { menuContent, menuItem, menuItemDanger, menuLabel, menuSeparator } from "./menu-styles";
 
 export const DropdownMenu = M.Root;
 export const DropdownMenuTrigger = M.Trigger;
@@ -43,17 +36,21 @@ export interface MenuItemProps extends ComponentPropsWithoutRef<typeof M.Item> {
   icon?: ReactNode;
   shortcut?: string;
   danger?: boolean;
+  /** Trailing element (badge, count); stays on the row and never wraps. */
+  trailing?: ReactNode;
+  /** Check mark in the trailing slot; `false` keeps the space so rows align. */
+  checked?: boolean;
 }
 
 export const DropdownMenuItem = forwardRef<HTMLDivElement, MenuItemProps>(function DropdownMenuItem(
-  { icon, shortcut, danger, className, children, ...rest },
+  { icon, shortcut, danger, trailing, checked, className, children, ...rest },
   ref,
 ) {
   return (
     <M.Item ref={ref} className={cn(menuItem, danger && menuItemDanger, className)} {...rest}>
-      {icon}
-      <span className="flex-1 truncate">{children}</span>
-      {shortcut && <span className={menuShortcut}>{shortcutLabel(shortcut)}</span>}
+      <MenuRow icon={icon} trailing={trailing} checked={checked} shortcut={shortcut}>
+        {children}
+      </MenuRow>
     </M.Item>
   );
 });

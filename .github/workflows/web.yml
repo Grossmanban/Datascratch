@@ -56,6 +56,14 @@ jobs:
           VITE_DS_SERVER_URL: http://localhost:8787
           # Exposes the runtime to the e2e performance test (10 000 notes).
           VITE_DS_TEST_HOOKS: "1"
+      # D-51: the default build is notes only; tasks, calendar and tabs are tested in this one
+      # (Playwright project «extended», served from dist-ext).
+      - name: Build the extended mode
+        run: pnpm exec vite build --outDir dist-ext
+        env:
+          VITE_DS_SERVER_URL: http://localhost:8787
+          VITE_DS_TEST_HOOKS: "1"
+          VITE_DS_EXTENDED_MODE: "1"
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
       - name: E2E (mock server + production build with service worker)

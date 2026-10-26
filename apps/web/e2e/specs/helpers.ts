@@ -1,4 +1,14 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+/** The Playwright project «extended» runs the build with VITE_DS_EXTENDED_MODE=1 (D-51). */
+export function isExtended(): boolean {
+  return test.info().project.name === "extended";
+}
+
+/** Screens of the extended mode (tasks, calendar), for specs that visit every screen. */
+export function extendedScreens(): string[] {
+  return isExtended() ? ["/tasks", "/calendar"] : [];
+}
 
 export const PASSWORD = "correct horse battery staple";
 

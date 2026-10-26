@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { newDoc, signUp, uniqueEmail } from "./helpers";
+import { isExtended, newDoc, signUp, uniqueEmail } from "./helpers";
 
 async function switchSpace(page: Page, name: RegExp | string) {
   await page.getByTestId("space-switcher").click();
@@ -14,9 +14,10 @@ test("spaces are isolated (D-48): a starred note and a tab of one space are not 
   const sidebar = page.getByTestId("sidebar");
   const strip = page.getByTestId("tab-strip");
   const tabOf = (name: RegExp) => strip.getByTestId("tab").filter({ hasText: name });
-  // Shown twice: as a tab in the strip and in «Избранное».
+  // In «Избранное», and as a tab in the strip in the extended mode (the minimal one has no tabs, D-51).
+  const shown = isExtended() ? 2 : 1;
   const inSidebar = sidebar.getByRole("link", { name: /Рабочий план/ }).or(tabOf(/Рабочий план/));
-  await expect(inSidebar).toHaveCount(2);
+  await expect(inSidebar).toHaveCount(shown);
 
   // A second space (with its own notebook) becomes the active one: nothing of the first is shown.
   await page.getByTestId("space-switcher").click();
@@ -38,19 +39,21 @@ test("spaces are isolated (D-48): a starred note and a tab of one space are not 
 
   // A document of the second space has its own tab.
   await newDoc(page, "Личный список");
-  await expect(tabOf(/Личный список/)).toHaveCount(1);
+  await expect(tabOf(/Личный список/)).toHaveCount(isExtended() ? 1 : 0);
   await expect(inSidebar).toHaveCount(0);
 
   // Back in the first space: its tab (opened again) and its starred note return; the other's tab hides.
   await switchSpace(page, /Личное/);
-  await expect(page).toHaveURL(noteUrl);
-  await expect(page.locator(".ds-prose")).toContainText("Рабочий план");
-  await expect(inSidebar).toHaveCount(2);
+  if (isExtended()) {
+    await expect(page).toHaveURL(noteUrl);
+    await expect(page.locator(".ds-prose")).toContainText("Рабочий план");
+  } else await expect(page).toHaveURL(/\/all$/);
+  await expect(inSidebar).toHaveCount(shown);
   await expect(tabOf(/Личный список/)).toHaveCount(0);
 
   // A link to a document of the other space (older links) opens it and switches to its space.
   await switchSpace(page, /Новое пространство/);
-  await expect(page.locator(".ds-prose")).toContainText("Личный список");
+  if (isExtended()) await expect(page.locator(".ds-prose")).toContainText("Личный список");
   await page.goto(noteUrl);
   await expect(page.locator(".ds-prose")).toContainText("Рабочий план");
   await expect(page.getByTestId("space-switcher")).toContainText("Личное");
@@ -64,7 +67,7 @@ test("spaces are isolated (D-48): a starred note and a tab of one space are not 
   await expect(page.getByText("Перемещено в «Новый блокнот»").first()).toBeVisible({ timeout: 15_000 });
   await expect(inSidebar).toHaveCount(0);
   await switchSpace(page, /Новое пространство/);
-  await expect(inSidebar).toHaveCount(2);
+  await expect(inSidebar).toHaveCount(shown);
 });
 
 test("spaces with the same name are told apart by their document count", async ({ page }) => {

@@ -6,6 +6,7 @@ import { setSetting, TAB_TIDY_DEFAULT } from "@/domain/actions";
 import { useWorkspace } from "@/domain/workspace";
 import { SegmentedControl } from "@/ui";
 import { Card, Row } from "./SettingsPage";
+import { features } from "@/lib/features";
 
 export function AppearanceSection() {
   const { t, i18n } = useTranslation();
@@ -39,18 +40,20 @@ export function AppearanceSection() {
           ]}
         />
       </Row>
-      <Row label={t("tabs.tidy")} hint={t("tabs.tidyHint")}>
-        <SegmentedControl
-          value={String(tidy)}
-          onChange={(v) => setSetting("tabTidyDays", v === "null" ? null : Number(v))}
-          options={[
-            { value: "1", label: t("tabs.tidy1") },
-            { value: "7", label: t("tabs.tidy7") },
-            { value: "30", label: t("tabs.tidy30") },
-            { value: "null", label: t("tabs.tidyNever") },
-          ]}
-        />
-      </Row>
+      {features.tabs && (
+        <Row label={t("tabs.tidy")} hint={t("tabs.tidyHint")}>
+          <SegmentedControl
+            value={String(tidy)}
+            onChange={(v) => setSetting("tabTidyDays", v === "null" ? null : Number(v))}
+            options={[
+              { value: "1", label: t("tabs.tidy1") },
+              { value: "7", label: t("tabs.tidy7") },
+              { value: "30", label: t("tabs.tidy30") },
+              { value: "null", label: t("tabs.tidyNever") },
+            ]}
+          />
+        </Row>
+      )}
     </Card>
   );
 }

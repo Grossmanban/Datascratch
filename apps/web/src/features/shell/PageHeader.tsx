@@ -6,6 +6,7 @@ import { tabsInSpace, useWorkspace } from "@/domain/workspace";
 import { useIsMobile } from "@/hooks/useMedia";
 import { focusKindOf, toggleFocus, toggleSidebar, useUi } from "@/hooks/useUi";
 import { cn, IconButton } from "@/ui";
+import { features } from "@/lib/features";
 
 /**
  * Top bar of every page: sidebar toggle, breadcrumbs/title, actions. It is part of the paper
@@ -65,7 +66,7 @@ export function TopBar({ children, actions, className }: { children?: ReactNode;
         )}
         {actions}
         {/* A phone has no tab strip: the tab count opens the same overview (as in Safari). */}
-        {isMobile && tabCount > 0 && (
+        {features.tabs && isMobile && tabCount > 0 && (
           <button
             type="button"
             onClick={() => useUi.setState({ tabOverviewOpen: true })}

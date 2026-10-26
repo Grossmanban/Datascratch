@@ -26,6 +26,7 @@ import { initNotebookDoc, notebookMaps } from "./notebook";
 import { appendTask, initNoteDoc, removeTask, setTaskText, setTitle, updateTask, type TaskPatch } from "./note";
 import { bySpace, spaceOfNote, spaceOfNotebook, tabsInSpace, useWorkspace } from "./workspace";
 import { forgetClosedTab, recordClosedTabs, tabsEpoch } from "@/lib/closedTabs";
+import { features } from "@/lib/features";
 import { orderBetween, patchYMap, toYMap } from "./ymap";
 
 const now = () => new Date().toISOString();
@@ -96,7 +97,7 @@ export async function createNotebook(input: {
   };
   acc().notebooks.set(id, toYMap(ref));
   // The first notebook of a space keeps that space's daily notes and Inbox (D-48).
-  if (!bySpace(useWorkspace.getState(), "dailyNotebookBySpace")[input.spaceId]) setBySpace("dailyNotebookBySpace", input.spaceId, id);
+  if ((features.calendar || features.tasks) && !bySpace(useWorkspace.getState(), "dailyNotebookBySpace")[input.spaceId]) setBySpace("dailyNotebookBySpace", input.spaceId, id);
   return id;
 }
 
@@ -430,6 +431,8 @@ function setBySpace(key: "activeTabBySpace" | "dailyNotebookBySpace", spaceId: s
 const OPENED_AT_EVERY_MS = 60 * 60 * 1000;
 
 export function openTab(noteId: string) {
+  // A minimal build (D-51) has no tabs and never writes the tab keys of the account document.
+  if (!features.tabs) return;
   const a = acc();
   const spaceId = spaceOfNote(useWorkspace.getState(), noteId);
   const items = a.tabs.toArray();
@@ -452,6 +455,7 @@ export function openTab(noteId: string) {
 
 /** Close a tab; returns the tab of the same space to show next (tabs are per space, D-48). */
 export function closeTab(noteId: string): string | null {
+  if (!features.tabs) return null;
   const a = acc();
   const st = useWorkspace.getState();
   const spaceId = spaceOfNote(st, noteId);
@@ -471,6 +475,7 @@ export function closeTab(noteId: string): string | null {
 
 /** «Закрыть остальные»: every other tab of the space goes to «Недавно закрытые». */
 export function closeOtherTabs(keepId: string) {
+  if (!features.tabs) return;
   const a = acc();
   const st = useWorkspace.getState();
   const spaceId = spaceOfNote(st, keepId);
@@ -487,6 +492,7 @@ export function closeOtherTabs(keepId: string) {
 
 /** Pin or unpin a tab: pinned tabs sit compact on the left and are never tidied or closed with the others. */
 export function setTabPinned(noteId: string, pinned: boolean) {
+  if (!features.tabs) return;
   const a = acc();
   const items = a.tabs.toArray();
   const idx = items.findIndex((t) => t.noteId === noteId);
@@ -513,6 +519,7 @@ export function tabTidyDays(): number | null {
  * counts as opened when this version first ran on this device.
  */
 export function tidyTabs(shownNoteId: string | null, now = Date.now()) {
+  if (!features.tabs) return;
   const days = tabTidyDays();
   if (days === null) return;
   const st = useWorkspace.getState();
@@ -538,6 +545,7 @@ export function tidyTabs(shownNoteId: string | null, now = Date.now()) {
 
 /** The tab a space was left on, if it is still open (restored when switching back, D-48). */
 export function activeTabOf(spaceId: string): string | null {
+  if (!features.tabs) return null;
   const st = useWorkspace.getState();
   const id = bySpace(st, "activeTabBySpace")[spaceId];
   return id && tabsInSpace(st, spaceId).some((t) => t.noteId === id) ? id : (tabsInSpace(st, spaceId)[0]?.noteId ?? null);
@@ -549,6 +557,8 @@ export function activeTabOf(spaceId: string): string | null {
  * the legacy keys are left for older clients and never written again.
  */
 export function migrateSpaceSettings() {
+  // Only the extended mode uses (and writes) these keys (D-51: a minimal build changes no data).
+  if (!features.tabs && !features.calendar) return;
   const st = useWorkspace.getState();
   const legacyDaily = st.account.settings.dailyNotebookId as string | undefined;
   const dailySpace = legacyDaily ? spaceOfNotebook(st, legacyDaily) : null;

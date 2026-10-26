@@ -266,7 +266,13 @@ struct NativeEditorToolbar: ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             Menu {
                 Button("Task", systemImage: "checkmark.circle") { model.editor.perform(.taskList) }
-                Button("Heading", systemImage: "textformat") { model.editor.perform(.heading2) }
+                Menu {
+                    Button("Heading 1") { model.editor.perform(.heading1) }
+                    Button("Heading 2") { model.editor.perform(.heading2) }
+                    Button("Heading 3") { model.editor.perform(.heading3) }
+                } label: {
+                    Label("Heading", systemImage: "textformat")
+                }
                 Button("Bulleted List", systemImage: "list.bullet") { model.editor.perform(.bulletList) }
                 Button("Quote", systemImage: "text.quote") { model.editor.perform(.quote) }
                 Divider()

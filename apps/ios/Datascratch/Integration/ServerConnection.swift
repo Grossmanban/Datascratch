@@ -186,8 +186,19 @@ final class ServerConnection: CoreLibraryRemote {
         let api = self.api
         Task {
             await notebookCreation[id]?.value
+            // Agents get the key the server holds, never this device's own copy: one an earlier
+            // build invented would lock everyone else out of the notebook.
+            var agentKey: Data?
+            if mode == .agent {
+                guard let canonical = await serverKey(id) else {
+                    ServerConnection.log.error("PATCH mode \(id, privacy: .public) postponed: the server's key is not available")
+                    return
+                }
+                if canonical != key { core.adoptServerNotebookKeys([id: canonical]) }
+                agentKey = canonical
+            }
             do {
-                try await api.setNotebookMode(id: id, mode: mode == .agent ? .agent : .private, notebookKey: key)
+                try await api.setNotebookMode(id: id, mode: mode == .agent ? .agent : .private, notebookKey: agentKey)
             } catch {
                 ServerConnection.log.error("PATCH mode \(id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             }
@@ -226,6 +237,7 @@ final class ServerConnection: CoreLibraryRemote {
                 keys[notebook.id] = key
             }
         }
+        serverKeys = keys
         let repaired = core.adoptServerNotebookKeys(keys)
         if !repaired.isEmpty { Self.log.error("repaired notebook keys: \(repaired.joined(separator: ","), privacy: .public)") }
     }
@@ -243,13 +255,21 @@ final class ServerConnection: CoreLibraryRemote {
     }
 
     private var isFetchingKeys = false
+    /// Notebook keys as the server holds them (unwrapped), from the last `GET /notebooks`.
+    private var serverKeys: [String: Data] = [:]
+
+    /// The key the server holds for a notebook (`GET /notebooks/:id/key`), unwrapped.
+    private func serverKey(_ id: String) async -> Data? {
+        guard let wrapped = try? await api.notebookKey(id: id), let master = try? core.keys.masterKey() else { return nil }
+        return try? DSCrypto.unwrapKey(wrapped, with: master, ad: CryptoAD.notebookKey(id))
+    }
 
     private func reconcileNotebookModes() async {
         guard let server = try? await api.notebooks() else { return }
         let modes = Dictionary(server.map { ($0.id, $0.mode) }, uniquingKeysWith: { a, _ in a })
         for ref in core.account.notebooks() {
             guard let serverMode = modes[ref.id], serverMode != ref.mode else { continue }
-            let key = ref.mode == .agent ? (try? core.keys.notebookKey(ref.id)) ?? nil : nil
+            let key = ref.mode == .agent ? serverKeys[ref.id] : nil
             if ref.mode == .agent, key == nil { continue }
             do {
                 try await api.setNotebookMode(id: ref.id, mode: ref.mode, notebookKey: key)

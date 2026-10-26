@@ -306,6 +306,8 @@ final class CoreLibrary: LibraryBackend {
         return carried
     }
 
+    var lockedNotebookIds: Set<String> { Set(notebooksWithoutKey) }
+
     /// Notebooks of the account whose key this device does not hold (made on another device
     /// after this one signed in): their documents can't be read or written until it arrives.
     var notebooksWithoutKey: [String] {
@@ -343,7 +345,50 @@ final class CoreLibrary: LibraryBackend {
             }
             repaired.append(id)
         }
+        healUnreadableNotes(server)
+        resendNotebookStatesOnce()
+        onExternalChange?(loadSnapshot())
         return repaired
+    }
+
+    /// Notes whose key no device can unwrap any more (wrapped by a notebook key an earlier build
+    /// invented, lost at sign-out) but whose content this device still holds: they get a new
+    /// note key wrapped by the server's notebook key, and their whole state is sent again.
+    /// Returns how many notes were healed.
+    @discardableResult
+    func healUnreadableNotes(_ server: [String: Data]) -> Int {
+        var healed = 0
+        for (notebookId, serverKey) in server where account.notebook(id: notebookId) != nil {
+            guard let notebook = try? notebookDocument(notebookId) else { continue }
+            for meta in notebook.notes(includeTrashed: true) {
+                if let wrapped = DSCore.Base64URL.decode(meta.wrappedKey),
+                   (try? DSCrypto.unwrapKey(wrapped, with: serverKey, ad: CryptoAD.noteKey(meta.id))) != nil { continue }
+                guard let updates = try? store.updates(docId: meta.id), !updates.isEmpty,
+                      let wrapped = try? keys.createNoteKey(noteId: meta.id, notebookId: notebookId).wrappedKey else { continue }
+                try? notebook.updateNote(id: meta.id, ["wrappedKey": .string(value: wrapped)])
+                wrappedKeys.set(noteId: meta.id, notebookId: notebookId, wrapped: wrapped)
+                if let doc = try? noteDocument(meta.id, notebookId: notebookId), let state = try? doc.crdt.encodeStateAsUpdate() {
+                    try? store.appendLocalUpdate(docId: meta.id, update: state, origin: .local)
+                }
+                CoreLibrary.log.error("note \(meta.id, privacy: .public) re-keyed: its key was wrapped by a key the server does not know")
+                healed += 1
+            }
+        }
+        return healed
+    }
+
+    private static let resentNotebookStatesKey = "repair.notebookStates.v1"
+
+    /// Once per device (build 12): every notebook's whole state goes to the server again, sealed
+    /// with the server's key — what an earlier build sealed with an invented key becomes
+    /// readable again from this device's copy.
+    private func resendNotebookStatesOnce() {
+        guard (try? store.string(Self.resentNotebookStatesKey)) ?? nil == nil else { return }
+        for ref in account.notebooks() where (try? keys.notebookKey(ref.id)) ?? nil != nil {
+            guard let crdt = (try? notebookDocument(ref.id))?.crdt, let state = try? crdt.encodeStateAsUpdate() else { continue }
+            try? store.appendLocalUpdate(docId: ref.id, update: state, origin: .local)
+        }
+        try? store.setString("done", for: Self.resentNotebookStatesKey)
     }
 
     /// Notebooks of the account that never reached the server (their documents are not registered).

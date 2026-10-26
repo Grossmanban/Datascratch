@@ -1271,6 +1271,16 @@
         }
       }
     },
+    "Getting this notebook ready": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Блокнот готовится"
+          }
+        }
+      }
+    },
     "Give a task a date to see it here.": {
       "localizations": {
         "ru": {
@@ -1507,6 +1517,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Вставить"
+          }
+        }
+      }
+    },
+    "It was made on another device. You can write here once its key arrives.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Он создан на другом устройстве. Писать в него можно, как только придёт его ключ."
           }
         }
       }

@@ -135,6 +135,30 @@ struct CoreLibraryTests {
         #expect(core.adoptServerNotebookKeys([notebook.id: serverKey]).isEmpty)
     }
 
+    /// The invented key is gone (signed out) but this device still holds the note: it gets a new
+    /// key wrapped by the server's notebook key, so every device can read it again.
+    @Test func noteWrappedByALostKeyIsReKeyed() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "Ии", mode: .private)
+        let serverKey = try #require(try keys.notebookKey(notebook.id))
+        try keys.setNotebookKey(DSCrypto.newKey(), notebookId: notebook.id)
+        let note = library.createNote(in: notebook.id, title: "Only on this iPad")
+        library.setBody(NoteBody(blocks: [.paragraph("Kept locally")]), ofNote: note.id)
+        try keys.setNotebookKey(serverKey, notebookId: notebook.id)
+
+        #expect(core.healUnreadableNotes([notebook.id: serverKey]) == 1)
+        let meta = try #require(try core.notebookDocument(notebook.id).note(id: note.id))
+        let wrapped = try #require(DSCore.Base64URL.decode(meta.wrappedKey))
+        #expect((try? DSCrypto.unwrapKey(wrapped, with: serverKey, ad: CryptoAD.noteKey(note.id))) != nil)
+        #expect(core.healUnreadableNotes([notebook.id: serverKey]) == 0)
+        let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: KeyRing(store: InMemorySecretStore())))
+        #expect(reloaded.body(note.id).blocks.map(\.text) == ["Kept locally"])
+    }
+
     /// The user's cover image lives in `meta.cover` and its thumbnail in `NoteMeta.coverThumb`.
     @Test func coverImageAndThumbnailPersist() throws {
         let keys = KeyRing(store: InMemorySecretStore())

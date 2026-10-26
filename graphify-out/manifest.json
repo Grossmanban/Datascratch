@@ -3270,10 +3270,10 @@
     "semantic_hash": "48c83cecc9bb79cd9a1aef9d5a6fc323"
   },
   "packages/shared/src/sync/client.ts": {
-    "mtime": 1793019554.1160545,
-    "seen": 1793029796.7695282,
-    "ast_hash": "70b8434cf4e2275b8bdfeee4b0ea91f2",
-    "semantic_hash": "70b8434cf4e2275b8bdfeee4b0ea91f2"
+    "mtime": 1793029876.9006681,
+    "seen": 1793029932.4753368,
+    "ast_hash": "fd364c7086ee20b7ca4b5fa552f0a43c",
+    "semantic_hash": ""
   },
   "packages/shared/src/sync/index.ts": {
     "mtime": 1792929828.4110403,
@@ -3324,10 +3324,10 @@
     "semantic_hash": "cef907fac83aa86560529fdcb7c85f17"
   },
   "packages/shared/test/sync.test.ts": {
-    "mtime": 1793019554.1200545,
-    "seen": 1793029796.7695491,
-    "ast_hash": "610295050d9dee1fbf574f07caa6ac0e",
-    "semantic_hash": "610295050d9dee1fbf574f07caa6ac0e"
+    "mtime": 1793029876.9006681,
+    "seen": 1793029932.4756434,
+    "ast_hash": "bfe0976907eb84e434457e9bf9e57b74",
+    "semantic_hash": ""
   },
   "packages/shared/test/vectors.test.ts": {
     "mtime": 1792944383.6470327,
@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793029749.4607751,
-    "seen": 1793029796.7699764,
-    "ast_hash": "0252006e3250536df43fd91d2a7439c1",
+    "mtime": 1793029877.4362552,
+    "seen": 1793029932.4811914,
+    "ast_hash": "1251383c2dc48a4ee36ce2ed7da9171b",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -4788,10 +4788,10 @@
     "semantic_hash": "465af7ea82c8877732cebfe1735b7e64"
   },
   "packages/shared/README.md": {
-    "mtime": 1793019554.1160545,
-    "seen": 1793029796.770155,
-    "ast_hash": "e57c5d7c6189af883ab8c1a5f81d46a4",
-    "semantic_hash": "e57c5d7c6189af883ab8c1a5f81d46a4"
+    "mtime": 1793029876.9006681,
+    "seen": 1793029932.4832923,
+    "ast_hash": "b757b624995ead23bb5da2804c216a03",
+    "semantic_hash": ""
   },
   "packages/test-vectors/README.md": {
     "mtime": 1792934697.384882,

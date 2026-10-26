@@ -9,6 +9,8 @@ export interface SuggestionState<T> {
   selected: number;
   query: string;
   rect: DOMRect | null;
+  /** Live caret rect (follows scrolling); `rect` is its value at the last update. */
+  rectFn: (() => DOMRect | null) | null;
   pick: (item: T) => void;
 }
 
@@ -28,7 +30,7 @@ export class Store<S> {
 }
 
 export function createSuggestionStore<T>(): Store<SuggestionState<T>> {
-  return new Store<SuggestionState<T>>({ open: false, items: [], selected: 0, query: "", rect: null, pick: () => {} });
+  return new Store<SuggestionState<T>>({ open: false, items: [], selected: 0, query: "", rect: null, rectFn: null, pick: () => {} });
 }
 
 export interface SuggestionMenuOptions<T> {
@@ -64,7 +66,7 @@ export function createSuggestionExtension<T>(opts: SuggestionMenuOptions<T>) {
             return {
               onStart: (props) => {
                 commandFn = props.command;
-                store.set({ open: true, items: props.items, selected: 0, query: props.query, rect: props.clientRect?.() ?? null, pick: (item) => commandFn?.(item) });
+                store.set({ open: true, items: props.items, selected: 0, query: props.query, rect: props.clientRect?.() ?? null, rectFn: props.clientRect ?? null, pick: (item) => commandFn?.(item) });
               },
               onUpdate: (props) => {
                 commandFn = props.command;
@@ -74,6 +76,7 @@ export function createSuggestionExtension<T>(opts: SuggestionMenuOptions<T>) {
                   query: props.query,
                   selected: prev.query === props.query ? Math.min(prev.selected, Math.max(0, props.items.length - 1)) : 0,
                   rect: props.clientRect?.() ?? null,
+                  rectFn: props.clientRect ?? null,
                   pick: (item) => commandFn?.(item),
                 });
               },
@@ -102,7 +105,7 @@ export function createSuggestionExtension<T>(opts: SuggestionMenuOptions<T>) {
               },
               onExit: () => {
                 commandFn = null;
-                store.set({ open: false, items: [], rect: null });
+                store.set({ open: false, items: [], rect: null, rectFn: null });
               },
             };
           },

@@ -99,6 +99,10 @@ final class ServerConnection: CoreLibraryRemote {
             // Every start: build 6 carried libraries without merging the duplicates.
             onLibraryCarried?(core.needsCarriedMerge)
             core.needsCarriedMerge = false
+            // Notebook modes changed while sync was stopped (signed out, signed out by the server,
+            // offline at the switch) never reached the server: agents would not see a notebook
+            // the app shows as open to them.
+            Task { await reconcileNotebookModes() }
             // Moves made offline or before a restart.
             let moves = core.pendingMoves
             Task { for (noteId, notebookId) in moves { await deliverMove(noteId, to: notebookId) } }
@@ -203,6 +207,25 @@ final class ServerConnection: CoreLibraryRemote {
         Task {
             await pending?.value
             await deliverMove(noteId, to: notebookId)
+        }
+    }
+
+    /// Brings the server's notebook modes in line with the account document (what the apps
+    /// show and the person chose); a notebook the server does not have yet is created by the
+    /// registration of its documents.
+    private func reconcileNotebookModes() async {
+        guard let server = try? await api.notebooks() else { return }
+        let modes = Dictionary(server.map { ($0.id, $0.mode) }, uniquingKeysWith: { a, _ in a })
+        for ref in core.account.notebooks() {
+            guard let serverMode = modes[ref.id], serverMode != ref.mode else { continue }
+            let key = ref.mode == .agent ? (try? core.keys.notebookKey(ref.id)) ?? nil : nil
+            if ref.mode == .agent, key == nil { continue }
+            do {
+                try await api.setNotebookMode(id: ref.id, mode: ref.mode, notebookKey: key)
+                ServerConnection.log.info("notebook \(ref.id, privacy: .public) mode set to \(ref.mode.rawValue, privacy: .public) on the server")
+            } catch {
+                ServerConnection.log.error("PATCH mode \(ref.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 

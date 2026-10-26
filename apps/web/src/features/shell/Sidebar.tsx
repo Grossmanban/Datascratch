@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Calendar,
@@ -22,6 +23,7 @@ import {
   X,
   Pencil,
   FileText,
+  LockKeyhole,
 } from "lucide-react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { AnimatePresence, motion } from "motion/react";
@@ -35,6 +37,7 @@ import {
   deleteSpace,
   moveFolder,
   moveNote,
+  moveNotebookToSpace,
   openTab,
   updateFolder,
   updateNotebook,
@@ -48,6 +51,8 @@ import {
   setActiveSpace,
   notesInSpace,
   spaceNotebooks,
+  starredInSpace,
+  tabsInSpace,
   useWorkspace,
   visibleNotes,
   type FolderEntry,
@@ -61,6 +66,7 @@ import { tintFg, tintName } from "@/lib/tokens";
 import { cn, confirmDialog, ContextMenu, DropdownMenu, IconButton, Kbd, SpaceTile, toast, Tooltip, type MenuItem } from "@/ui";
 import type { NotebookRef } from "@/lib/shared";
 import { InlineRename } from "./InlineRename";
+import { unreadableMenuState, useUnreadable } from "@/features/docs/UnreadableNote";
 import { SyncIndicator } from "./SyncIndicator";
 import { createSpaceInteractive } from "./spaces";
 import { iconGlyph } from "@/lib/glyph";
@@ -349,34 +355,13 @@ function SpaceSwitcher() {
   );
 }
 
-/**
- * Tabs and Favourites span all spaces (account doc, as on iOS); a note from another space than the
- * one shown carries that space's tile, so it is not mistaken for part of this one.
- */
-function OtherSpaceMark({ notebookId }: { notebookId: string }) {
-  const { t } = useTranslation();
-  const space = useWorkspace((s) => {
-    const nb = s.account.notebooks.find((n) => n.id === notebookId);
-    return nb && nb.spaceId !== s.activeSpaceId ? s.account.spaces.find((x) => x.id === nb.spaceId) : undefined;
-  });
-  if (!space) return null;
-  const label = t("nav.fromSpace", { name: space.name });
-  return (
-    <Tooltip content={label} side="right">
-      <span className="ml-auto shrink-0 opacity-70" aria-label={label} role="img" data-testid="other-space-mark">
-        <SpaceTile icon={spaceGlyph(space)} tint={tintName(space.color)} size={14} />
-      </span>
-    </Tooltip>
-  );
-}
-
 function TabsSection() {
   const { t } = useTranslation();
-  const tabs = useWorkspace((s) => s.account.tabs);
+  // Only the tabs of the current space (D-48); the others come back when switching back.
+  const visible = useWorkspace(useShallow((s) => tabsInSpace(s, s.activeSpaceId)));
   const notes = useWorkspace((s) => s.notes);
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const visible = tabs.filter((tab) => notes[tab.noteId] && !notes[tab.noteId]!.trashedAt);
   if (!visible.length) return null;
   return (
     <Section id="tabs" title={t("nav.tabs")}>
@@ -396,7 +381,6 @@ function TabsSection() {
               <Link to="/doc/$noteId" params={{ noteId: tab.noteId }} className="flex min-w-0 flex-1 items-center gap-2">
                 <span className="shrink-0 text-[13px] leading-none">{iconGlyph(n.icon) || <FileText className="size-3.5 text-ink-3" />}</span>
                 <span className="truncate">{noteTitle(n, t("app.untitled"))}</span>
-                <OtherSpaceMark notebookId={n.notebookId} />
               </Link>
               <button
                 aria-label={t("common.close")}
@@ -426,8 +410,11 @@ function StarredSection() {
   const folders = useWorkspace((s) => s.folders);
   const notebooks = useWorkspace((s) => s.account.notebooks);
   const navigate = useNavigate();
-  const items = starred.filter((s) =>
-    s.kind === "note" ? notes[s.id] && !notes[s.id]!.trashedAt : s.kind === "folder" ? folders[s.id] : notebooks.some((n) => n.id === s.id),
+  const spaceId = useWorkspace((s) => s.activeSpaceId);
+  const items = starred.filter(
+    (s) =>
+      (s.kind === "note" ? notes[s.id] && !notes[s.id]!.trashedAt : s.kind === "folder" ? folders[s.id] : notebooks.some((n) => n.id === s.id)) &&
+      starredInSpace(useWorkspace.getState(), s, spaceId),
   );
   if (!items.length) return null;
   return (
@@ -445,7 +432,6 @@ function StarredSection() {
               >
                 <span className="shrink-0 text-[13px] leading-none">{iconGlyph(n.icon) || <Star className="size-3.5 text-[var(--ds-tint-yellow-fg)]" />}</span>
                 <span className="truncate">{noteTitle(n, t("app.untitled"))}</span>
-                <OtherSpaceMark notebookId={n.notebookId} />
               </Link>
             </ContextMenu>
           );
@@ -529,6 +515,8 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
     if (kind === "folder" && st.folders[id]?.notebookId === nb.id) moveFolder(id, null);
   });
   const active = pathname === `/notebook/${nb.id}`;
+  const unreadable = useUnreadable(nb.id);
+  const spaces = useWorkspace((s) => s.account.spaces);
   const menu: MenuItem[] = [
     { label: t("nav.newDoc"), icon: <FileText className="size-3.5" />, onSelect: () => void newNoteAndOpen(navigate, nb.id) },
     {
@@ -544,6 +532,37 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
       icon: nb.mode === "agent" ? <Sparkles className="size-3.5" /> : <Lock className="size-3.5" />,
       onSelect: () => void navigate({ to: "/settings/$section", params: { section: "notebooks" } }),
     },
+    ...(spaces.length > 1
+      ? [
+          {
+            kind: "sub" as const,
+            label: t("docs.moveToSpace"),
+            icon: <Layers className="size-3.5" />,
+            items: spaces
+              .filter((s) => s.id !== nb.spaceId)
+              .map((s) => ({
+                label: s.name,
+                icon: <SpaceTile icon={spaceGlyph(s)} tint={tintName(s.color)} size={16} />,
+                onSelect: () => {
+                  moveNotebookToSpace(nb.id, s.id);
+                  toast(t("docs.movedTo", { name: s.name }));
+                },
+              })),
+          },
+        ]
+      : []),
+    ...(unreadable.has
+      ? [
+          {
+            label: t("sync.unreadableShow"),
+            icon: <LockKeyhole className="size-3.5" />,
+            onSelect: () => {
+              unreadableMenuState(nb.id).showAgain();
+              void navigate({ to: "/notebook/$notebookId", params: { notebookId: nb.id } });
+            },
+          },
+        ]
+      : []),
     { kind: "separator" },
     {
       label: t("common.delete"),

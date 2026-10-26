@@ -710,6 +710,112 @@ final class EditorViewTests: XCTestCase {
                           "only the needed amount: the caret stays just above the keyboard, not at the top")
     }
 
+    // MARK: - Block rendering (build 16 feedback)
+
+    static let clippedFormulas = [
+        "\\int_0^{\\infty} e^{-x^2}\\,dx = \\frac{\\sqrt{\\pi}}{2}",
+        "\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}",
+    ]
+
+    /// Block math showed without its limits and numerators: the block was as tall as SwiftMath's
+    /// ascent + descent. Now the whole formula is inside the block with a margin.
+    func testBlockMathShowsTheWholeFormula() throws {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("M"), .paragraph("x")]))
+        let width: CGFloat = 600
+        for latex in Self.clippedFormulas {
+            let view = MathBlockView()
+            view.configure(node: .math(latex), resolver: nil, theme: editor.theme)
+            view.frame = CGRect(x: 0, y: 0, width: width, height: MathBlockView.height(latex: latex, width: width))
+            view.layoutIfNeeded()
+            let ink = try XCTUnwrap(InkBounds.of(layer: view.layer, size: view.bounds.size), "\(latex): nothing drawn")
+            XCTAssertGreaterThanOrEqual(ink.minY, 4, "\(latex): cut at the top (ink \(ink) in \(view.bounds))")
+            XCTAssertLessThanOrEqual(ink.maxY, view.bounds.height - 4, "\(latex): cut at the bottom (ink \(ink) in \(view.bounds))")
+            // Drawn with all the room it wants, the formula is no taller: nothing was lost.
+            let free = MathBlockView.makeLabel(latex: latex)
+            free.frame = CGRect(x: 0, y: 0, width: width, height: 1000)
+            free.layoutIfNeeded()
+            let full = try XCTUnwrap(InkBounds.of(layer: free.layer, size: free.bounds.size))
+            XCTAssertEqual(ink.height, full.height, accuracy: 1, "\(latex): the block shows the whole formula")
+        }
+    }
+
+    /// Mermaid snapshots cut the top of a flowchart and the bottom of a sequence diagram.
+    func testMermaidSnapshotsHoldTheWholeDiagram() throws {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("M"), .paragraph("x")]))
+        MermaidRenderer.shared.host = editor
+        let sources = [
+            "flowchart TD\n  A[Начало] --> B{Есть идея?}\n  B -->|Да| C[Записать]\n  B -->|Нет| D[Подумать]\n  C --> E[Готово]\n  D --> B",
+            "sequenceDiagram\n  participant U as Пользователь\n  participant S as Сервер\n  U->>S: Запрос\n  S-->>U: Ответ\n  Note over U,S: Синхронизация",
+        ]
+        for source in sources {
+            let done = expectation(description: "rendered")
+            var image: UIImage?
+            MermaidRenderer.shared.render(source, dark: false) { img in
+                image = img
+                done.fulfill()
+            }
+            wait(for: [done], timeout: 60)
+            let img = try XCTUnwrap(image, "Mermaid rendered nothing for \(source)")
+            let ink = try XCTUnwrap(InkBounds.of(image: img), "empty diagram")
+            let w = CGFloat(img.cgImage?.width ?? 0), h = CGFloat(img.cgImage?.height ?? 0)
+            let line = source.split(separator: "\n").first ?? ""
+            XCTAssertGreaterThan(ink.minY, 2, "\(line): the top is cut (ink \(ink) in \(w)x\(h))")
+            XCTAssertLessThan(ink.maxY, h - 3, "\(line): the bottom is cut (ink \(ink) in \(w)x\(h))")
+            XCTAssertGreaterThan(ink.minX, 2, "\(line): the left edge is cut")
+            XCTAssertLessThan(ink.maxX, w - 3, "\(line): the right edge is cut")
+            XCTAssertGreaterThan(ink.height, h * 0.6, "\(line): the diagram fills its snapshot (not a mostly empty box)")
+        }
+    }
+
+    /// The callout's icon sat left of its box and the text touched the box's edge.
+    func testCalloutIconSitsInsideTheBoxBeforeTheText() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("C"), .callout("Выноска от агента с текстом", tone: "info", emoji: "💡"), .paragraph("после")])
+        let editor = host(doc)
+        let tlm = try XCTUnwrap(editor.textView.textLayoutManager)
+        var checked = false
+        tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: [.ensuresLayout]) { frag in
+            guard let block = frag as? BlockLayoutFragment, let geo = block.calloutGeometry, let icon = geo.icon,
+                  let line = frag.textLineFragments.first else { return true }
+            let dx = frag.layoutFragmentFrame.minX
+            let box = geo.box.offsetBy(dx: dx, dy: 0), iconRect = icon.offsetBy(dx: dx, dy: 0)
+            let textX = dx + line.typographicBounds.minX + line.glyphOrigin.x
+            XCTAssertEqual(box.minX, 0, accuracy: 1, "the box starts at the column edge")
+            XCTAssertGreaterThanOrEqual(iconRect.minX - box.minX, 12, "the icon is inside the box with padding")
+            XCTAssertGreaterThanOrEqual(textX - iconRect.maxX, 4, "the text comes after the icon")
+            XCTAssertGreaterThanOrEqual(textX - box.minX, 36, "the text keeps clear of the box's edge")
+            XCTAssertLessThanOrEqual(iconRect.maxY, box.maxY)
+            XCTAssertGreaterThanOrEqual(iconRect.minY, box.minY)
+            checked = true
+            return false
+        }
+        XCTAssertTrue(checked, "found the callout")
+    }
+
+    /// Right after opening, a late Mermaid render grew a block above the screen and the note
+    /// jumped under the reader's finger. The text being read stays put.
+    func testLateRenderAboveTheScreenKeepsTheVisibleText() throws {
+        let source = "flowchart TD\n  A[Late] --> B[Render]"
+        var blocks: [BlockNode] = [.title("Скролл"), .paragraph("Вступление"), .mermaid(source),
+                                   .math(Self.clippedFormulas[1])]
+        for i in 1...60 { blocks.append(.paragraph("Абзац номер \(i) с текстом, который надо читать.")) }
+        let editor = host(InMemoryEditorDocument(blocks: blocks), width: 700, height: 600)
+        editor.textView.setContentOffset(CGPoint(x: 0, y: 1400), animated: false)
+        settle(editor)
+        let probe = flatRange(editor, of: "Абзац номер 40 ").lowerBound
+        let before = try XCTUnwrap(editor.geometry.placement(at: probe)).origin.y - editor.textView.contentOffset.y
+        let tall = UIGraphicsImageRenderer(size: CGSize(width: 600, height: 520)).image { ctx in
+            UIColor.gray.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 600, height: 520))
+        }
+        MermaidRenderer.shared.store(tall, for: source, dark: false)
+        MermaidRenderer.shared.store(tall, for: source, dark: true)
+        drainMainQueue()
+        settle(editor)
+        let after = try XCTUnwrap(editor.geometry.placement(at: probe)).origin.y - editor.textView.contentOffset.y
+        XCTAssertGreaterThan(editor.textView.contentOffset.y, 1000, "not reset to the top")
+        XCTAssertEqual(after, before, accuracy: 1, "the text on screen did not move")
+    }
+
     // MARK: - Ruled paper follows the text (build 13 check)
 
     /// Bottoms of every laid-out line (text lines and block attachments), in text container coordinates.

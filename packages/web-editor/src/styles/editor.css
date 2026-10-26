@@ -1300,6 +1300,73 @@ span.ds-unsupported {
   color: var(--ds-muted);
 }
 
+/* Touch: one quiet grip at the caret's block (never on scroll or touch-move). */
+.ds-block-handle.is-touch {
+  animation: ds-fade 220ms var(--ds-ease);
+}
+.ds-block-handle.is-touch .ds-handle-grip {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  color: color-mix(in srgb, var(--ds-faint) 80%, transparent);
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  transition:
+    transform 180ms var(--ds-ease),
+    color 180ms var(--ds-ease),
+    background 180ms var(--ds-ease);
+}
+/* A finger-sized target around the small grip. */
+.ds-block-handle.is-touch .ds-handle-grip::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+.ds-block-handle.is-lifted .ds-handle-grip {
+  transform: scale(1.15);
+  color: var(--ds-accent-c);
+  background: color-mix(in srgb, var(--ds-accent-c) 10%, transparent);
+}
+.ds-block-lifted-source {
+  opacity: 0.35;
+  transition: opacity 160ms var(--ds-ease);
+}
+.ds-block-ghost {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  padding: 0;
+  margin: 0;
+  border-radius: 10px;
+  background: var(--ds-paper);
+  box-shadow:
+    0 18px 40px -12px rgb(0 0 0 / 0.28),
+    0 2px 8px rgb(0 0 0 / 0.08);
+  opacity: 0.96;
+  transform-origin: 30% 50%;
+  transform: scale(1.02);
+  animation: ds-lift 180ms var(--ds-ease);
+}
+.ds-block-ghost > * {
+  margin: 0 !important;
+}
+@keyframes ds-lift {
+  from {
+    transform: scale(1);
+    box-shadow: none;
+  }
+}
+.ds-drop-indicator {
+  position: absolute;
+  z-index: 5;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ds-accent-c);
+  pointer-events: none;
+}
+
 /* ---------- floating glass UI ---------- */
 .ds-glass {
   background: var(--ds-glass-bg);

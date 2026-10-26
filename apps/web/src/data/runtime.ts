@@ -11,7 +11,7 @@ import { uploadPending } from "./attachments";
 import { accountDb } from "./db";
 import { DocStore, ORIGIN_REMOTE } from "./docStore";
 import { Indexer } from "./indexer";
-import { checkNotebookKeys, clearKeys, onNotebookKeyReplaced, type ReplacedNotebookKey } from "./keys";
+import { checkNotebookKeys, clearKeys, onNotebookKeyReplaced, retiredKeysFor, type ReplacedNotebookKey } from "./keys";
 import { notebooksApi } from "@/api/endpoints";
 import { pushNotebookMode } from "@/domain/actions";
 import { ad, unwrapKey, wrapKey } from "@/lib/shared";
@@ -65,6 +65,10 @@ export class AccountRuntime {
       client: { platform: "web", version: APP_VERSION },
       storage: this.storage,
       createSocket: connectWithTimeout,
+      // Items sealed with a key this device used before switching to the server's stay readable.
+      alternateKeysFor: (docId) => retiredKeysFor(docId),
+      // After skipping unreadable items, ask once for the server's latest snapshot (it may cover them).
+      recoverSkippedFromSnapshot: true,
       auth: async () => {
         let s = getSession();
         if (s && Date.parse(s.accessExpiresAt) - Date.now() < 60_000) s = await refreshSession();
@@ -96,6 +100,7 @@ export class AccountRuntime {
         this.updateStatus();
       }),
       this.client.on("awareness", (docId, payload) => receivePresence(docId, payload)),
+      this.client.on("skipped", (item) => this.onSkipped(item)),
       this.client.on("error", (e) => {
         if (e.code === "unauthorized") void refreshSession().then((s) => s && this.client.reconnect());
         useSyncStatus.setState({ error: `${e.code}: ${e.message}` });
@@ -104,8 +109,11 @@ export class AccountRuntime {
           const id = e.docId;
           void this.store.row(id).then((r) => console.warn(`[ds] sync ${e.code}`, r?.kind ?? "unknown", id, e.message));
         }
-        // The skipped update is not lost: once the key is here, the document is read again from the start.
-        if (e.code === "decrypt_failed" && e.docId) this.rereadWhenKeyed(e.docId);
+        // A document the server does not know never becomes «synced»: it must not keep the spinner.
+        if (e.code === "doc_not_found" && e.docId && e.ref === e.docId) {
+          this.unknownOnServer.add(e.docId);
+          this.updateStatus();
+        }
         // A push the server refused (`ref` is its clientMsgId): the change has not reached the server.
         if (e.docId && e.ref && e.ref !== e.docId && REFUSED.has(e.code)) void this.markFailed(e.docId, e.code, e.message);
       }),
@@ -221,10 +229,37 @@ export class AccountRuntime {
   }
 
   private rereading = new Set<string>();
+  private reread = new Set<string>();
+  private covered = new Set<string>();
+  private unknownOnServer = new Set<string>();
+
+  /**
+   * A server item this device could not read. With no key yet (an index listing the note had not
+   * arrived), the document is read again once the key is here — once. With the key present the item
+   * is unreadable for good (sealed with a key nobody holds): it stays skipped, is counted for a calm
+   * notice, and this device uploads a snapshot of what it did read so other clients stop meeting it.
+   */
+  private onSkipped(item: { docId: string; seq: number; reason: string; message: string }) {
+    if (/no key for/.test(item.message)) {
+      this.rereadWhenKeyed(item.docId);
+      return;
+    }
+    const skipped = useSyncStatus.getState().skipped;
+    useSyncStatus.setState({ skipped: { ...skipped, [item.docId]: (skipped[item.docId] ?? 0) + 1 } });
+    if (this.covered.has(item.docId)) return;
+    this.covered.add(item.docId);
+    // Only with the server's key (reconciliation done): a snapshot sealed otherwise would add to the problem.
+    setTimeout(async () => {
+      await this.reconciling?.catch(() => undefined);
+      if (this.attached.has(item.docId)) await this.client.requestSnapshot(item.docId).catch(() => false);
+    }, 3000);
+  }
 
   private rereadWhenKeyed(docId: string) {
-    if (this.rereading.has(docId)) return;
+    // Once per document: a re-read that meets the same gap again must not loop.
+    if (this.rereading.has(docId) || this.reread.has(docId)) return;
     this.rereading.add(docId);
+    this.reread.add(docId);
     void (async () => {
       try {
         for (let i = 0; i < 60; i++) {
@@ -240,6 +275,23 @@ export class AccountRuntime {
         this.rereading.delete(docId);
       }
     })();
+  }
+
+  /** What keeps sync busy (console: `__dsSyncDebug()`); ids only, no content. */
+  async syncDebug() {
+    const outbox = await this.storage.listOutbox();
+    const byDoc: Record<string, number> = {};
+    for (const i of outbox) byDoc[i.docId] = (byDoc[i.docId] ?? 0) + 1;
+    const rows = await Promise.all([...this.attached].map(async (id) => [id, (await this.store.row(id))?.kind] as const));
+    return {
+      status: this.client.status,
+      notSynced: rows.filter(([id]) => !this.client.isSynced(id) && !this.unknownOnServer.has(id)).map(([id, kind]) => ({ id, kind })),
+      unknownOnServer: [...this.unknownOnServer],
+      outbox: byDoc,
+      ops: (await accountDb().ops.toArray()).map((o) => `${o.method} ${o.path}`),
+      skipped: this.client.getSkipped().map((s) => ({ docId: s.docId, seq: s.seq, reason: s.reason })),
+      failed: useSyncStatus.getState().failed,
+    };
   }
 
   /** Read a document again from seq 0 (updates that could not be decrypted were skipped). */
@@ -325,7 +377,7 @@ export class AccountRuntime {
   }
 
   private updateStatus() {
-    const allSynced = [...this.attached].every((id) => this.client.isSynced(id));
+    const allSynced = [...this.attached].every((id) => this.unknownOnServer.has(id) || this.client.isSynced(id));
     const status = uiStatus(this.client.status, allSynced);
     useSyncStatus.setState({ status, ...(status === "online" ? { lastSyncedAt: Date.now(), error: null } : {}) });
   }
@@ -514,6 +566,12 @@ export async function startRuntime(accountDocId: string) {
   if (current?.accountDocId === accountDocId) return current;
   void current?.stop();
   current = new AccountRuntime(accountDocId);
+  // Support readout in the browser console (ids and counts only).
+  (window as unknown as { __dsSyncDebug?: () => Promise<unknown> }).__dsSyncDebug = async () => {
+    const d = await current?.syncDebug();
+    console.log("[ds] sync debug", d);
+    return d;
+  };
   // Dev tools and e2e performance tests (a build with VITE_DS_TEST_HOOKS=1) reach the runtime here.
   if (import.meta.env.DEV || import.meta.env.VITE_DS_TEST_HOOKS) {
     const w = window as unknown as { __ds?: unknown; __dsTest?: unknown };

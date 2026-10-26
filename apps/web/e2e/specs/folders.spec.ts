@@ -7,6 +7,9 @@ test("the sidebar section is «Блокноты»: notebooks with their folder t
   await expect(sidebar.getByText("Блокноты", { exact: true })).toBeVisible();
   await expect(sidebar.getByText("Папки", { exact: true })).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => "__dsTest" in window)).toBe(true);
+  // No folders yet: no chevron to unfold the notebook (nothing would appear).
+  const notebookChevron = sidebar.getByRole("button", { name: /(Развернуть|Свернуть) «Заметки»/ });
+  await expect(notebookChevron).toHaveCount(0);
 
   // Folders as an agent's create_folder writes them into the notebook index (document-model §3).
   await page.evaluate(() => {
@@ -26,6 +29,7 @@ test("the sidebar section is «Блокноты»: notebooks with their folder t
   });
   const projects = sidebar.getByTestId("folder-node").filter({ hasText: "Проекты" });
   await expect(projects).toBeVisible();
+  await expect(notebookChevron).toHaveCount(1);
   await expect(sidebar.getByTestId("folder-node").filter({ hasText: "Клиенты" })).toHaveCount(0);
   await projects.getByRole("button", { name: /Развернуть «Проекты»/ }).click();
   await expect(sidebar.getByTestId("folder-node").filter({ hasText: "Клиенты" })).toBeVisible();

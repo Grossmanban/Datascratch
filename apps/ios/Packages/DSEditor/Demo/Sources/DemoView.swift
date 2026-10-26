@@ -322,8 +322,10 @@ struct HUDView: View {
     /// "note:x,y;title:x,y" — centres of the note links in window points.
     private var linkCentres: String {
         guard let window = model.editor.window else { return "" }
-        return model.editor.noteLinkFrames(in: window)
-            .map { "\($0.kind.rawValue):\(Int($0.frame.midX)),\(Int($0.frame.midY))" }
+        let links = model.editor.noteLinkFrames(in: window).map { ($0.kind.rawValue, $0.frame) }
+        let chips = model.editor.taskDateChipFrames(in: window).map { ("date", $0) }
+        return (links + chips)
+            .map { "\($0.0):\(Int($0.1.midX)),\(Int($0.1.midY))" }
             .joined(separator: ";")
     }
 

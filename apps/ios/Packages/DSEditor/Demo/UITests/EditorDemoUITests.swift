@@ -166,6 +166,41 @@ final class EditorDemoUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground)
     }
 
+    /// Build 14 feedback (iPhone): task date chips did nothing on a tap. A real tap opens the
+    /// reschedule menu (spec/12: Сегодня / Завтра / След. неделя / Дата…).
+    @MainActor
+    func testTappingATaskDateChipOpensTheRescheduleMenu() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-hud"]
+        app.launch()
+        let editor = app.textViews["editor.text"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        app.buttons["tool.text"].tap()
+        let targets = app.staticTexts["hud.links"]
+        XCTAssertTrue(targets.waitForExistence(timeout: 5))
+        var chip: CGPoint?
+        for _ in 0..<6 {
+            let visible = editor.frame.insetBy(dx: 0, dy: 60)
+            chip = targets.label.split(separator: ";").compactMap { part -> CGPoint? in
+                let fields = part.split(separator: ":")
+                guard fields.count == 2, fields[0] == "date" else { return nil }
+                let xy = fields[1].split(separator: ",").compactMap { Double($0) }
+                return xy.count == 2 ? CGPoint(x: xy[0], y: xy[1]) : nil
+            }.first { visible.contains($0) }
+            if chip != nil { break }
+            editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+                .press(forDuration: 0.05, thenDragTo: editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65)))
+            sleep(1)
+        }
+        let point = try XCTUnwrap(chip, "a date chip is on screen (targets: \(targets.label))")
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: point.x, dy: point.y)).tap()
+        let nextWeek = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'След. неделя'")).firstMatch
+        XCTAssertTrue(nextWeek.waitForExistence(timeout: 10), "the reschedule menu opens")
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Дата…'")).firstMatch.exists)
+        XCTAssertEqual(app.keyboards.count, 0, "the tap opened the menu instead of starting to type")
+        XCTAssertEqual(app.state, .runningForeground)
+    }
+
     @MainActor
     func testOpenLargeNotePerformance() throws {
         let app = XCUIApplication()

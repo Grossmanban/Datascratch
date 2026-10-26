@@ -241,7 +241,7 @@ public final class EditorView: UIView {
         tap.delaysTouchesEnded = false
         textView.addGestureRecognizer(tap)
         textView.editorTap = tap
-        textView.tapTargetAt = { [weak self] point in self?.noteLink(at: point) != nil }
+        textView.tapTargetAt = { [weak self] point in self?.hasTapTarget(at: point) ?? false }
 
         textView.addInteraction(UIScribbleInteraction(delegate: self))
         addInteraction(UIPencilInteraction(delegate: self))
@@ -1068,13 +1068,67 @@ public final class EditorView: UIView {
         return rect.insetBy(dx: -10, dy: -8).contains(point) ? (item, rect, state) : nil
     }
 
+    /// Whether a single tap at `point` acts on something (a note link, a task box or date chip):
+    /// the text view's own taps (caret placement) do not begin there.
+    func hasTapTarget(at point: CGPoint) -> Bool {
+        noteLink(at: point) != nil || taskCheckbox(at: point) != nil || taskDateChip(at: point) != nil
+    }
+
+    /// The task date chip under a point (text view coordinates): its item, whether it is the
+    /// deadline chip, and its frame.
+    func taskDateChip(at point: CGPoint) -> (item: BlockID, deadline: Bool, rect: CGRect)? {
+        guard let tlm = textView.textLayoutManager else { return nil }
+        let origin = geometry.origin
+        let local = CGPoint(x: point.x - origin.x, y: point.y - origin.y)
+        guard let frag = tlm.textLayoutFragment(for: local) as? BlockLayoutFragment, let d = frag.decoration,
+              let item = d.itemBlockId, case .task(_, let scheduled, let deadline) = d.marker else { return nil }
+        var kinds: [Bool] = []
+        if scheduled != nil { kinds.append(false) }
+        if deadline != nil { kinds.append(true) }
+        let frames = frag.dateChipFrames()
+        for (frame, isDeadline) in zip(frames, kinds) {
+            let rect = frame.offsetBy(dx: frag.layoutFragmentFrame.minX + origin.x, dy: frag.layoutFragmentFrame.minY + origin.y)
+            if rect.insetBy(dx: -6, dy: -8).contains(point) { return (item, isDeadline, rect) }
+        }
+        return nil
+    }
+
+    /// Frames of the task date chips in `view`'s coordinates (hosts and UI tests).
+    public func taskDateChipFrames(in view: UIView) -> [CGRect] {
+        guard let tlm = textView.textLayoutManager else { return [] }
+        var out: [CGRect] = []
+        let origin = geometry.origin
+        tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: []) { frag in
+            if let block = frag as? BlockLayoutFragment {
+                for f in block.dateChipFrames() {
+                    let r = f.offsetBy(dx: frag.layoutFragmentFrame.minX + origin.x, dy: frag.layoutFragmentFrame.minY + origin.y)
+                    out.append(textView.convert(r, to: view))
+                }
+            }
+            return true
+        }
+        return out
+    }
+
+    /// The date chip whose menu is showing.
+    private var dateMenuTarget: (item: BlockID, deadline: Bool, rect: CGRect)?
+
     @objc private func tapped(_ g: UITapGestureRecognizer) {
-        if let link = noteLink(at: g.location(in: textView)) {
+        let point = g.location(in: textView)
+        if let link = noteLink(at: point) {
             DSHaptics.selection()
             switch link {
             case .id(let id): onOpenNote?(id)
             case .title(let title): onOpenNoteTitled?(title)
             }
+            return
+        }
+        if let chip = taskDateChip(at: point) {
+            // Same choices as the task context menu (`spec/12`): reschedule or remove the date.
+            DSHaptics.selection()
+            dateMenuTarget = chip
+            editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: "taskDate",
+                                                                   sourcePoint: CGPoint(x: chip.rect.midX, y: chip.rect.minY)))
             return
         }
         guard let box = taskCheckbox(at: g.location(in: textView)) else { return }
@@ -1420,9 +1474,105 @@ extension EditorView: @preconcurrency UIPencilInteractionDelegate {
     }
 }
 
+extension EditorView {
+    /// A day as stored in task attributes ("2026-10-27"), `offset` days from today or a given date.
+    static func isoDay(_ date: Date) -> String {
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", c.year ?? 2026, c.month ?? 1, c.day ?? 1)
+    }
+
+    static func isoDay(offset: Int) -> String {
+        isoDay(Calendar.current.date(byAdding: .day, value: offset, to: Date()) ?? Date())
+    }
+
+    /// Menu of a tapped date chip: move the date (or deadline) or remove it.
+    func dateMenu() -> UIMenu? {
+        guard let target = dateMenuTarget, let node = document.block(target.item) else { return nil }
+        let cmd = commands
+        let item = target.item
+        let scheduled = node.attrs["scheduled"]?.stringValue
+        let deadline = node.attrs["deadline"]?.stringValue
+        func set(_ day: String?) {
+            if target.deadline {
+                cmd.setTaskDates(item, scheduled: scheduled, deadline: day)
+            } else {
+                cmd.setTaskDates(item, scheduled: day, deadline: deadline)
+            }
+        }
+        let current = (target.deadline ? deadline : scheduled).flatMap(BlockLayoutFragment.date) ?? Date()
+        return UIMenu(title: target.deadline ? "Дедлайн" : "Перенести", children: [
+            UIAction(title: "Сегодня") { _ in set(Self.isoDay(offset: 0)) },
+            UIAction(title: "Завтра") { _ in set(Self.isoDay(offset: 1)) },
+            UIAction(title: "След. неделя") { _ in set(Self.isoDay(offset: 7)) },
+            UIAction(title: "Дата…") { [weak self] _ in
+                self?.pickDate(initial: current, from: target.rect) { set(Self.isoDay($0)) }
+            },
+            UIAction(title: target.deadline ? "Убрать дедлайн" : "Убрать дату", attributes: .destructive) { _ in set(nil) },
+        ])
+    }
+
+    /// A calendar for "Дата…": a sheet on iPhone, a popover from the chip on iPad.
+    private func pickDate(initial: Date, from rect: CGRect, done: @escaping (Date) -> Void) {
+        guard var top = window?.rootViewController else { return }
+        while let presented = top.presentedViewController { top = presented }
+        let picker = TaskDatePickerController(date: initial, onPick: done)
+        picker.modalPresentationStyle = traitCollection.horizontalSizeClass == .regular ? .popover : .pageSheet
+        if let popover = picker.popoverPresentationController {
+            popover.sourceView = textView
+            popover.sourceRect = rect
+        }
+        picker.sheetPresentationController?.detents = [.medium()]
+        top.present(picker, animated: true)
+    }
+}
+
+/// Inline calendar with "Готово" for picking a task date.
+final class TaskDatePickerController: UIViewController {
+    private let picker = UIDatePicker()
+    private let onPick: (Date) -> Void
+
+    init(date: Date, onPick: @escaping (Date) -> Void) {
+        self.onPick = onPick
+        super.init(nibName: nil, bundle: nil)
+        picker.date = date
+        preferredContentSize = CGSize(width: 340, height: 400)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .systemBackground
+        picker.datePickerMode = .date
+        picker.preferredDatePickerStyle = .inline
+        picker.accessibilityIdentifier = "taskDate.picker"
+        let done = UIButton(type: .system)
+        var config = UIButton.Configuration.filled()
+        config.title = "Готово"
+        done.configuration = config
+        done.accessibilityIdentifier = "taskDate.done"
+        done.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.onPick(self.picker.date)
+            self.dismiss(animated: true)
+        }, for: .primaryActionTriggered)
+        let stack = UIStackView(arrangedSubviews: [picker, done])
+        stack.axis = .vertical
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: view.layoutMarginsGuide.topAnchor, constant: 8),
+        ])
+    }
+}
+
 extension EditorView: @preconcurrency UIEditMenuInteractionDelegate {
     public func editMenuInteraction(_ interaction: UIEditMenuInteraction, menuFor configuration: UIEditMenuConfiguration,
                                     suggestedActions: [UIMenuElement]) -> UIMenu? {
+        if configuration.identifier as? String == "taskDate" { return dateMenu() }
         guard configuration.identifier as? String == "lasso" else { return UIMenu(children: suggestedActions) }
         var items: [UIMenuElement] = [
             UIAction(title: "Удалить", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in

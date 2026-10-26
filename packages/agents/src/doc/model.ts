@@ -182,6 +182,17 @@ export interface FlatText {
   charMarks: Marks[];
 }
 
+/**
+ * Text of one run with indices as Yjs counts them (an embed = one "￼").
+ * Never use `Y.XmlText.toString()` for offsets: it renders formatting marks as
+ * XML tags (`<agentEdit …>text</agentEdit>`), which shifts every index.
+ */
+export function runText(t: Y.XmlText): string {
+  let s = "";
+  for (const op of t.toDelta() as { insert: unknown }[]) s += typeof op.insert === "string" ? op.insert : "￼";
+  return s;
+}
+
 export function flatten(block: Y.XmlElement): FlatText {
   let text = "";
   const runStart = new Map<Y.XmlText, number>();

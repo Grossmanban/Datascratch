@@ -26,6 +26,28 @@ defaults:
     working-directory: apps/ios/Packages/DSCore
 
 jobs:
+  # D-46: on main, skip the macOS jobs when the same files already passed this workflow
+  # (usually the branch tip that was just merged) — the result cannot differ.
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - id: check
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: .github/scripts/already-tested.sh ios-core.yml apps/ios/Packages/DSCore packages/test-vectors .github/workflows/ios-core.yml
+
   rust:
     name: yrs-ffi (Rust tests, Yjs compatibility)
     runs-on: ubuntu-latest
@@ -49,6 +71,8 @@ jobs:
           git diff --exit-code -- Sources/YrsFFI Sources/yrs_ffiFFI
 
   ios:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
     name: DSCore tests (iPad simulator, iOS 26)
     runs-on: macos-26
     timeout-minutes: 60

@@ -7,6 +7,8 @@ extension NSAttributedString.Key {
     static let dsDecoration = NSAttributedString.Key("ds.decoration")
     /// Marks of a text run (`MarkSet`, boxed) — lets typing attributes round-trip to the model.
     static let dsMarks = NSAttributedString.Key("ds.marks")
+    /// Title of a literal `[[Title]]` in the text (a note link the host resolves by title).
+    static let dsWikiLink = NSAttributedString.Key("ds.wikiLink")
 }
 
 /// Immutable description of how a paragraph is decorated; read by `BlockLayoutFragment` when drawing.
@@ -33,10 +35,13 @@ final class ParagraphDecoration: NSObject, @unchecked Sendable {
     let chipColor: UIColor
     let secondaryColor: UIColor
     let fontSize: CGFloat
+    /// The paragraph has unaccepted agent edits (D-10): a bar in the left margin.
+    let hasAgentEdit: Bool
+    let agentEditColor: UIColor
 
     init(blockId: BlockID, kind: ParagraphKind, marker: ListMarker?, itemBlockId: BlockID?, indent: CGFloat, quoteDepth: Int,
          quoteIndentStep: CGFloat, callout: CalloutInfo?, calloutIsFirst: Bool, calloutIsLast: Bool, isCode: Bool,
-         codeIsFirst: Bool, codeIsLast: Bool, markerFont: UIFont, fontSize: CGFloat) {
+         codeIsFirst: Bool, codeIsLast: Bool, markerFont: UIFont, fontSize: CGFloat, hasAgentEdit: Bool = false) {
         self.blockId = blockId
         self.kind = kind
         self.marker = marker
@@ -59,6 +64,8 @@ final class ParagraphDecoration: NSObject, @unchecked Sendable {
         self.chipColor = EditorTheme.chipBackground
         self.secondaryColor = EditorTheme.secondaryText
         self.fontSize = fontSize
+        self.hasAgentEdit = hasAgentEdit
+        self.agentEditColor = EditorTheme.agentEdit
     }
 
     /// Width reserved for the list marker in front of the text.
@@ -124,8 +131,25 @@ struct AttributedRenderer {
                     }
                 }
             }
-            if isCode { highlight(out, language: para.attrs["language"]?.stringValue) }
+            if isCode {
+                highlight(out, language: para.attrs["language"]?.stringValue)
+            } else {
+                styleWikiLinks(out)
+            }
             return out
+        }
+    }
+
+    /// Literal `[[Title]]` (outside inline code) looks like a link: the title in the accent colour,
+    /// the brackets quieter. Tapping it asks the host to open the note by title.
+    func styleWikiLinks(_ s: NSMutableAttributedString) {
+        for m in WikiLinks.matches(in: s.string) {
+            let range = NSRange(location: m.range.lowerBound, length: m.range.count)
+            let marks = (s.attribute(.dsMarks, at: range.location, effectiveRange: nil) as? MarksBox)?.marks
+            if marks?.contains(MarkName.code) == true { continue }
+            s.addAttributes([.dsWikiLink: m.title, .foregroundColor: EditorTheme.accent], range: range)
+            s.addAttribute(.foregroundColor, value: EditorTheme.tertiaryText, range: NSRange(location: range.location, length: 2))
+            s.addAttribute(.foregroundColor, value: EditorTheme.tertiaryText, range: NSRange(location: NSMaxRange(range) - 2, length: 2))
         }
     }
 
@@ -177,7 +201,8 @@ struct AttributedRenderer {
             quoteDepth: ctx.quoteDepth, quoteIndentStep: quoteStep, callout: ctx.callout,
             calloutIsFirst: !sameCallout(i - 1), calloutIsLast: !sameCallout(i + 1), isCode: isCode,
             codeIsFirst: true, codeIsLast: true,
-            markerFont: theme.font(size: size, weight: .regular, design: .default), fontSize: size)
+            markerFont: theme.font(size: size, weight: .regular, design: .default), fontSize: size,
+            hasAgentEdit: para.inline.contains { $0.marks.contains(MarkName.agentEdit) })
 
         if case .task(let state, let scheduled, let deadline) = ctx.marker {
             // Keep every line short of the column by the chips' width, so the date chips drawn
@@ -226,11 +251,7 @@ struct AttributedRenderer {
         if let tc = marks[MarkName.textColor]?.objectValue?["color"]?.stringValue {
             a[.foregroundColor] = EditorTheme.color(token: tc)
         }
-        if marks.contains(MarkName.agentEdit) {
-            a[.backgroundColor] = EditorTheme.agentEdit
-            a[.underlineStyle] = NSUnderlineStyle.single.union(.patternDot).rawValue
-            a[.underlineColor] = EditorTheme.accent
-        }
+        // `agentEdit` is shown per paragraph (a margin bar, `BlockLayoutFragment`), not on the text.
         return a
     }
 

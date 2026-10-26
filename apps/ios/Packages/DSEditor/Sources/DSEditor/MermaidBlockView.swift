@@ -32,11 +32,29 @@ final class MermaidBlockView: BlockContentView {
         }
         isAccessibilityElement = true
         accessibilityLabel = "Диаграмма Mermaid"
-        if let img = MermaidRenderer.shared.cachedImage(for: source) {
+        if traitObservation == nil {
+            traitObservation = registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: MermaidBlockView, _) in
+                view.loadImage()
+            }
+        }
+        loadImage()
+    }
+
+    private var traitObservation: (any UITraitChangeRegistration)?
+
+    /// Shows the diagram for the current appearance (rendering it if needed); the source text
+    /// stays visible until then, or if Mermaid cannot render it.
+    private func loadImage() {
+        let source = node?.attrs["source"]?.stringValue ?? ""
+        let dark = traitCollection.userInterfaceStyle == .dark
+        if let img = MermaidRenderer.shared.cachedImage(for: source, dark: dark) {
             show(img)
         } else {
-            MermaidRenderer.shared.render(source) { [weak self] img in
-                guard let self, let img, self.node?.attrs["source"]?.stringValue == source else { return }
+            imageView.image = nil
+            sourceLabel.isHidden = false
+            MermaidRenderer.shared.render(source, dark: dark) { [weak self] img in
+                guard let self, let img, self.node?.attrs["source"]?.stringValue == source,
+                      (self.traitCollection.userInterfaceStyle == .dark) == dark else { return }
                 self.show(img)
             }
         }

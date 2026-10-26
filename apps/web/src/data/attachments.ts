@@ -1,4 +1,4 @@
-import { ApiError, NetworkError, request } from "@/api/client";
+import { ApiError, NetworkError, request, timedFetch } from "@/api/client";
 import { apiBase } from "@/config";
 import { getSession } from "@/auth/session";
 import { ad, open, seal, uuidv7 } from "@/lib/shared";
@@ -50,7 +50,7 @@ async function putChunk(id: string, index: number, data: Uint8Array) {
   const session = getSession();
   let res: Response;
   try {
-    res = await fetch(`${apiBase()}/attachments/${id}/chunks/${index}`, {
+    res = await timedFetch(`${apiBase()}/attachments/${id}/chunks/${index}`, {
       method: "PUT",
       headers: { "content-type": "application/octet-stream", ...(session ? { authorization: `Bearer ${session.accessToken}` } : {}) },
       body: data as BodyInit,
@@ -118,7 +118,7 @@ async function runUploads(): Promise<boolean> {
 async function fetchChunk(id: string, index: number, auth: string | null): Promise<Uint8Array> {
   let res: Response;
   try {
-    res = await fetch(`${apiBase()}/attachments/${id}/chunks/${index}`, { headers: auth ? { authorization: `Bearer ${auth}` } : {} });
+    res = await timedFetch(`${apiBase()}/attachments/${id}/chunks/${index}`, { headers: auth ? { authorization: `Bearer ${auth}` } : {} });
   } catch (e) {
     throw new NetworkError(e);
   }
@@ -160,7 +160,7 @@ async function loadAttachment(id: string, key: Uint8Array, opts: { mime?: string
     let meta: Meta;
     if (opts.auth === undefined) meta = await request<Meta>("GET", `/attachments/${id}`);
     else {
-      const res = await fetch(`${apiBase()}/attachments/${id}`, { headers: opts.auth ? { authorization: `Bearer ${opts.auth}` } : {} }).catch((e) => {
+      const res = await timedFetch(`${apiBase()}/attachments/${id}`, { headers: opts.auth ? { authorization: `Bearer ${opts.auth}` } : {} }).catch((e) => {
         throw new NetworkError(e);
       });
       if (!res.ok) throw new ApiError(res.status, "not_found", res.statusText);

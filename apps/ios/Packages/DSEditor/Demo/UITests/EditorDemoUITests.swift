@@ -141,11 +141,14 @@ final class EditorDemoUITests: XCTestCase {
             app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: p.x, dy: p.y)).tap()
         }
         func find(_ kind: String) -> CGPoint? {
-            for _ in 0..<6 {
+            for attempt in 0..<10 {
                 if let p = centre(of: kind) { return p }
-                // Scrolling also refreshes the HUD's link positions.
-                editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
-                    .press(forDuration: 0.05, thenDragTo: editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
+                // Scrolling refreshes the HUD's link positions: first a pull toward the top (the
+                // links are near it; at the top it only bounces), then small steps down so a link
+                // never jumps past the screen (off-screen links are not laid out).
+                let (from, to): (CGFloat, CGFloat) = attempt < 2 ? (0.4, 0.6) : (0.6, 0.45)
+                editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: from))
+                    .press(forDuration: 0.05, thenDragTo: editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
                 sleep(1)
             }
             return nil
@@ -179,7 +182,7 @@ final class EditorDemoUITests: XCTestCase {
         let targets = app.staticTexts["hud.links"]
         XCTAssertTrue(targets.waitForExistence(timeout: 5))
         var chip: CGPoint?
-        for _ in 0..<6 {
+        for attempt in 0..<10 {
             let visible = editor.frame.insetBy(dx: 0, dy: 60)
             chip = targets.label.split(separator: ";").compactMap { part -> CGPoint? in
                 let fields = part.split(separator: ":")
@@ -188,8 +191,10 @@ final class EditorDemoUITests: XCTestCase {
                 return xy.count == 2 ? CGPoint(x: xy[0], y: xy[1]) : nil
             }.first { visible.contains($0) }
             if chip != nil { break }
-            editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
-                .press(forDuration: 0.05, thenDragTo: editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65)))
+            // Pull toward the top first (refreshes the HUD), then small steps down.
+            let (from, to): (CGFloat, CGFloat) = attempt < 2 ? (0.4, 0.6) : (0.6, 0.45)
+            editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: from))
+                .press(forDuration: 0.05, thenDragTo: editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
             sleep(1)
         }
         let point = try XCTUnwrap(chip, "a date chip is on screen (targets: \(targets.label))")

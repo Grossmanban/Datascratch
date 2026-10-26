@@ -731,13 +731,20 @@ final class CoreLibrary: LibraryBackend {
     private func write(body: NoteBody, title: String, previous: NoteBody?, to doc: NoteDocument,
                        resolve: NoteBodyCodec.LinkResolver) throws {
         let current = try doc.blocks()
+        // A document that has not arrived yet (made elsewhere, not synced): nothing is written
+        // into it — writing would race the real content (prod 2026-10-26, a lost title).
+        guard !current.isEmpty else {
+            Self.log.notice("skipped writing \(doc.noteId, privacy: .public): its document has not arrived yet")
+            return
+        }
         if let titleIndex = current.firstIndex(where: { $0.type == BlockType.title }) {
-            if current[titleIndex].text != title {
+            // Never blank a title: an empty one here is a stale index value, not an edit.
+            if current[titleIndex].text != title, !title.isEmpty {
                 var block = current[titleIndex]
-                block.inline = title.isEmpty ? [] : [.text(title, marks: [])]
+                block.inline = [.text(title, marks: [])]
                 try doc.replaceBlock(at: [UInt32(titleIndex)], with: block)
             }
-        } else {
+        } else if !title.isEmpty {
             try doc.insertBlocks([.title(title)], at: 0)
         }
 
@@ -807,17 +814,11 @@ final class CoreLibrary: LibraryBackend {
         }
     }
 
-    /// Full rewrite, only when every body block is one the stand-in editor represents.
+    /// A reorder or kind change from the list-level body (the stand-in editor): no longer written
+    /// by deleting every block and appending them again — that whole-document rewrite raced
+    /// other devices' edits (prod 2026-10-26). The native editor writes such changes itself.
     private func rewriteIfRepresentable(_ doc: NoteDocument, body: NoteBody, resolve: NoteBodyCodec.LinkResolver) throws {
-        let current = try doc.blocks()
-        guard current.allSatisfy({ $0.type == BlockType.title || NoteBodyCodec.isRepresentable($0) }) else {
-            Self.log.notice("skipped rewriting \(doc.noteId, privacy: .public): it has blocks the stand-in editor cannot show")
-            return
-        }
-        for (index, block) in current.enumerated().reversed() where block.type != BlockType.title {
-            try doc.deleteBlock(at: [UInt32(index)])
-        }
-        try doc.appendBlocks(NoteBodyCodec.blocks(from: body, resolveLink: resolve))
+        Self.log.notice("skipped rewriting \(doc.noteId, privacy: .public): reorders are written by the editor")
     }
 
     private func persistAccountLists(_ old: LibrarySnapshot, _ new: LibrarySnapshot) throws {

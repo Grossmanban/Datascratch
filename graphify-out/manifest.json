@@ -1046,13 +1046,13 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792973902.1221642,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792973902.1221657,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -4010,7 +4010,7 @@
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1792973902.1221683,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
@@ -4508,7 +4508,7 @@
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792967462.0829601,
     "seen": 1792973902.1224728,
-    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "infra/deploy/inspect.sh": {
@@ -4548,10 +4548,10 @@
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/Signposts.swift": {
-    "mtime": 1792949504.4743292,
-    "seen": 1792967677.261993,
-    "ast_hash": "3a0a81787b802d410e450b617529bcb1",
-    "semantic_hash": "3a0a81787b802d410e450b617529bcb1"
+    "mtime": 1792973920.4548624,
+    "seen": 1792973989.0207615,
+    "ast_hash": "01a106cd4033ea438ad62c1291255088",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSInk/LiveInkOutline.swift": {
     "mtime": 1792949345.7731187,

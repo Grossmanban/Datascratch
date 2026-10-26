@@ -332,6 +332,8 @@ final class InkController {
     /// is re-outlined each event (`LiveInkOutline`), so long strokes stay at full frame rate.
     private func updateLive() {
         guard var s = session else { return }
+        let signpost = EditorSignpost.log.beginInterval("LiveStroke", id: EditorSignpost.log.makeSignpostID())
+        defer { EditorSignpost.log.endInterval("LiveStroke", signpost) }
         let committed = smoothed(s.samples)
         let all = committed + s.predicted
         let sc = scale(for: s.target)

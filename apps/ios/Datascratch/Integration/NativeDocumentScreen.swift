@@ -419,6 +419,9 @@ struct HideKeyboardButton: View {
         let editing = model.editor.isEditingText && model.isSoftwareKeyboardShown
         Button {
             model.editor.dismissKeyboard()
+            // On iPad resigning the text view alone left the keyboard up; ending editing on the
+            // whole editor (as switching to a pen does) takes it down.
+            model.editor.endEditing(true)
             // With a hardware keyboard nothing else reports the end of editing: refresh the bar.
             DispatchQueue.main.async { model.revision &+= 1 }
         } label: {

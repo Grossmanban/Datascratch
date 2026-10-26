@@ -51,6 +51,26 @@ final class NativeEditorModel {
             self.editor.createdByAgent = nil
         }
         refreshCreatedByAgent()
+        // «Hide Keyboard» is offered only while an on-screen keyboard is up (not with a
+        // hardware keyboard, where there is nothing to hide).
+        keyboardObservers = [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillHideNotification].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue ?? .zero
+                let shown = name == UIResponder.keyboardWillShowNotification && frame.height > 120
+                MainActor.assumeIsolated {
+                    guard let self, self.isSoftwareKeyboardShown != shown else { return }
+                    self.isSoftwareKeyboardShown = shown
+                }
+            }
+        }
+    }
+
+    /// An on-screen keyboard is showing.
+    var isSoftwareKeyboardShown = false
+    @ObservationIgnored private var keyboardObservers: [NSObjectProtocol] = []
+
+    isolated deinit {
+        for observer in keyboardObservers { NotificationCenter.default.removeObserver(observer) }
     }
 
     /// The agent that created this note (`NoteMeta.createdByAgent`, D-45); follows the index,
@@ -396,7 +416,7 @@ struct HideKeyboardButton: View {
 
     var body: some View {
         let _ = model.revision
-        let editing = model.editor.isEditingText
+        let editing = model.editor.isEditingText && model.isSoftwareKeyboardShown
         Button {
             model.editor.dismissKeyboard()
             // With a hardware keyboard nothing else reports the end of editing: refresh the bar.

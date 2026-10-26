@@ -8,6 +8,7 @@ import { useIndexVersion } from "@/data/indexer";
 import { runtime } from "@/data/runtime";
 import { createNote, getOrCreateDaily, openTab } from "@/domain/actions";
 import { markFreshNote } from "@/lib/freshNotes";
+import { newDocTarget } from "@/features/docs/menus";
 import { noteTitle, setActiveSpace, useWorkspace } from "@/domain/workspace";
 import { toggleSidebar, useUi } from "@/hooks/useUi";
 import { today } from "@/lib/dates";
@@ -89,7 +90,8 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
       openTab(id);
       return navigate({ to: "/doc/$noteId", params: { noteId: id } });
     });
-  const nb = notebooks.find((n) => n.spaceId === spaceId);
+  // Where «Новый документ» goes, as in the sidebar (spec/05).
+  const target = newDocTarget(window.location.pathname);
 
   return (
     <Command
@@ -124,14 +126,14 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
           </Command.Group>
         )}
         <Command.Group heading={t("palette.commands")} className="mt-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[12.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-ink-2">
-          {nb && (
+          {target && (
             <Item
               value="new-doc"
               icon={<FilePlus2 className="size-4" />}
               shortcut="⌥N"
               onSelect={() =>
                 go(async () => {
-                  const id = await createNote({ notebookId: nb.id, title: q.trim() || undefined });
+                  const id = await createNote({ notebookId: target.notebookId, folderId: target.folderId, title: q.trim() || undefined, ...(target.tag ? { body: [`#${target.tag} `] } : {}) });
                   if (!q.trim()) markFreshNote(id);
                   openNote(id);
                 })

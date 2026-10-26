@@ -105,6 +105,8 @@ const ru = {
     settings: "Настройки",
     search: "Поиск",
     newDoc: "Новый документ",
+    newDocIn: "Новый документ — в «{{name}}». Выбрать другой блокнот",
+    newDocInShort: "в «{{name}}»",
     newFolder: "Новая папка",
     newNotebook: "Новый блокнот",
     newSpace: "Новое пространство",

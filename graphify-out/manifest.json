@@ -1044,15 +1044,15 @@
     "semantic_hash": "b6fbc14b557b993ed9e884d8574ac5e0"
   },
   "apps/server/drizzle/0000_init.sql": {
-    "mtime": 1792932379.6981456,
-    "seen": 1793001927.3692641,
-    "ast_hash": "",
+    "mtime": 1792932377.575155,
+    "seen": 1793002335.5984018,
+    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
-    "mtime": 1792932379.6981456,
-    "seen": 1793001927.369268,
-    "ast_hash": "",
+    "mtime": 1792932377.575155,
+    "seen": 1793002335.598403,
+    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -3084,9 +3084,9 @@
     "semantic_hash": ""
   },
   "apps/ios/scripts/l10n/ru.json": {
-    "mtime": 1793001611.3996284,
-    "seen": 1793002302.4489362,
-    "ast_hash": "0c5839183ffa806d6f23a7e397af695e",
+    "mtime": 1793002310.6178613,
+    "seen": 1793002335.5983937,
+    "ast_hash": "85448e4303a8b7ca50871155c8a99756",
     "semantic_hash": ""
   },
   "apps/ios/scripts/make_placeholder_icon.py": {
@@ -4008,9 +4008,9 @@
     "semantic_hash": "b2fbfd7a4df97f681d1a6f5c36ec9a53"
   },
   "apps/server/drizzle/0002_security_events.sql": {
-    "mtime": 1792948026.52702,
-    "seen": 1793001927.3692706,
-    "ast_hash": "",
+    "mtime": 1792946964.3743534,
+    "seen": 1793002335.5984046,
+    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
@@ -4506,9 +4506,9 @@
     "semantic_hash": "452e674a62c6b1c94c435e2246d1176e"
   },
   "infra/deploy/docker-compose.edge.yml": {
-    "mtime": 1792959345.7137249,
-    "seen": 1793001927.3696725,
-    "ast_hash": "",
+    "mtime": 1792959668.5251646,
+    "seen": 1793002335.5986428,
+    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
     "semantic_hash": ""
   },
   "infra/deploy/inspect.sh": {

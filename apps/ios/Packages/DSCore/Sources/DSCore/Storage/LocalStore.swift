@@ -492,6 +492,17 @@ extension LocalStore {
         try db.write { try $0.execute(sql: "DELETE FROM outbox WHERE docId = ? AND kind = 'snapshot'", arguments: [docId]) }
     }
 
+    /// Notebooks that never reached the server (their documents are not registered).
+    public func unsentNotebookIds() throws -> [String] {
+        try db.read { try String.fetchAll($0, sql: "SELECT docId FROM documents WHERE kind = 'notebook' AND NOT registered ORDER BY createdAt") }
+    }
+
+    /// What signing out would leave unsent: queued messages (failed ones too) plus notebooks
+    /// not on the server yet (spec/07, the warning before signing out).
+    public func unsentChangeCount() throws -> Int {
+        try db.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM outbox") ?? 0 } + (try unsentNotebookIds().count)
+    }
+
     /// Local edits needed to snapshot a document when it is closed (sync-protocol.md §5).
     public static let snapshotOnCloseEdits = 30
 

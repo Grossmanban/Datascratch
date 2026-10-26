@@ -614,6 +614,7 @@ public struct EditorCommands {
     /// Returns whether anything changed.
     @discardableResult
     public func repairTitles() -> Bool {
+        guard !document.isReadOnly else { return false }
         let titles = document.blocks.filter { $0.type == NodeType.title }
         var emptyExtras: [BlockID] = []
         if titles.count > 1 {
@@ -631,9 +632,8 @@ public struct EditorCommands {
         guard !emptyExtras.isEmpty || demoted != nil else { return false }
         let re = demoted.map { StrokeReanchoring(document: document, blocks: [$0.paragraph]) }
         let inline = demoted.map { document.inline(of: $0.paragraph, range: nil) } ?? []
-        document.stopCapturing()
-        // One transaction for the whole repair.
-        document.transact(origin: .local) {
+        // One transaction for the whole repair, synced but not undoable.
+        document.transact(origin: .system) {
             for id in emptyExtras { document.deleteBlock(id) }
             if let d = demoted {
                 let title = d.title, para = d.paragraph
@@ -650,7 +650,6 @@ public struct EditorCommands {
                           mapBlock: { $0 == para ? title : nil })
             }
         }
-        document.stopCapturing()
         return true
     }
 

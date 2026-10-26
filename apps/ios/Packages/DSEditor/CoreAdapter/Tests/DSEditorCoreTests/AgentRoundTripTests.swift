@@ -211,6 +211,26 @@ import Testing
         let repaired = try note.crdt.encodeStateAsUpdate()
         #expect(!EditorCommands(document: doc).repairTitles())
         #expect(try note.crdt.encodeStateAsUpdate() == repaired)
+        #expect(!doc.canUndo, "the repair is not in undo")
+    }
+
+    /// A note in a newer format (read-only, R-03) is shown as it is, never repaired.
+    @Test func readOnlyNotesAreNotRepaired() throws {
+        let note = NoteDocument(noteId: "01a17993-3956-77ff-8066-d911b8668e4f")
+        let nodes: [XmlNode] = [
+            .element(name: "title", attributes: ["blockId": .string(value: "01a179ea-5a5a-7e49-ab53-d3acec118201")], children: []),
+            .element(name: "title", attributes: ["blockId": .string(value: "01a17993-3967-77ca-99ea-592f9d133060")],
+                     children: [Self.text("Название")]),
+        ]
+        try note.crdt.transact(origin: .remote) { txn in
+            txn.set("meta", key: "formatVersion", .number(value: 999))
+            txn.insertNodes(nodes, into: [], at: 0)
+        }
+        let before = try note.crdt.encodeStateAsUpdate()
+        let doc = CoreEditorDocument(note: note)
+        #expect(doc.isReadOnly)
+        #expect(!EditorCommands(document: doc).repairTitles())
+        #expect(try note.crdt.encodeStateAsUpdate() == before)
     }
 
     /// Two clients repairing the same merged document at once converge on one title.

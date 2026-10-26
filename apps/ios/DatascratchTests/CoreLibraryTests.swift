@@ -314,6 +314,11 @@ struct CoreLibraryTests {
         library.updateNotebook(notebook.id) { $0.name = "Papers" }
         #expect(doc.crdt.mapValue("meta", ["name"])?.stringValue == "Papers")
         #expect(core.account.notebook(id: notebook.id)?.mode == .agent)
+        // The colour is copied too (document-model §3), and a space rename reaches the copy.
+        library.updateNotebook(notebook.id) { $0.color = .green }
+        #expect(doc.metaCopy?.color == Datascratch.Tint.green.rawValue)
+        library.updateSpace(space.id) { $0.name = "Job" }
+        #expect(doc.metaCopy?.spaceName == "Job")
     }
 
     @Test func trashAndDeleteForever() throws {

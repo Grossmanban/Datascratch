@@ -9,6 +9,7 @@ import { formatDateTime, formatRelative } from "@/lib/dates";
 import type { AgentPermission, AgentGrant } from "@/lib/shared";
 import { Button, cn, Dialog, DialogActions, EmptyState, Field, IconButton, Input, SegmentedControl, Spinner } from "@/ui";
 import { Card, Row } from "./SettingsPage";
+import { withIcon } from "@/lib/glyph";
 
 export function AgentsSection() {
   const { t } = useTranslation();
@@ -148,7 +149,7 @@ function NewTokenDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
                       on ? "border-accent/60 bg-accent/[0.08] text-ink" : "border-line text-ink-2 hover:border-ink/20",
                     )}
                   >
-                    {nb.icon} {nb.name}
+                    {withIcon(nb.icon, nb.name)}
                   </button>
                 );
               })}

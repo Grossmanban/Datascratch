@@ -21,6 +21,8 @@ const ConfigSchema = z
     APP_URL: z.string().url().optional(),
     /** Comma-separated list of allowed CORS origins (web client). Empty = same origin only. */
     CORS_ORIGINS: z.string().default(''),
+    /** Advertise OAuth Client ID Metadata Documents to MCP clients; off when the server cannot reach their hosts. */
+    OAUTH_CLIENT_METADATA_DOCUMENTS: bool.default(true),
 
     DATABASE_URL: z.string().min(1),
     DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),

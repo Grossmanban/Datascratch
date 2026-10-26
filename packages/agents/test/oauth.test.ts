@@ -97,6 +97,14 @@ describe("OAuth 2.1 for MCP clients", () => {
     });
   });
 
+  it("can stop advertising Client ID Metadata Documents (server cannot reach client hosts)", async () => {
+    const s = await startServer({ clientIdMetadataDocuments: false });
+    close = s.close;
+    const meta = await fetch(`${s.base}/.well-known/oauth-authorization-server`).then((r) => r.json());
+    expect(meta.client_id_metadata_document_supported).toBe(false);
+    expect(meta.registration_endpoint).toBe(`${s.base}/oauth/register`);
+  });
+
   it("runs the full flow with dynamic registration, consent and refresh", async () => {
     const s = await startServer();
     close = s.close;

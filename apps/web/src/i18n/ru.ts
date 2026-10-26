@@ -90,6 +90,7 @@ const ru = {
     newNotebook: "Новый блокнот",
     newSpace: "Новое пространство",
     spaces: "Пространства",
+    fromSpace: "Из пространства «{{name}}»",
     addToNotebook: "Добавить в блокнот",
     fullScreen: "На весь экран",
     exitFullScreen: "Выйти из полноэкранного режима",

@@ -8,6 +8,7 @@ import { AgentWarning } from "@/features/shell/ModeChoice";
 import type { NotebookMode, NotebookRef } from "@/lib/shared";
 import { Button, Dialog, DialogActions, DropdownMenu, toast } from "@/ui";
 import { Card, Row } from "./SettingsPage";
+import { iconGlyph, withIcon } from "@/lib/glyph";
 
 export function NotebooksSection() {
   const { t } = useTranslation();
@@ -37,13 +38,13 @@ export function NotebooksSection() {
         const list = notebooks.filter((n) => n.spaceId === space.id);
         if (!list.length) return null;
         return (
-          <Card key={space.id} title={`${space.icon} ${space.name}`}>
+          <Card key={space.id} title={withIcon(space.icon, space.name)}>
             {list.map((nb) => (
               <Row
                 key={nb.id}
                 label={
                   <span className="flex items-center gap-2">
-                    <span>{nb.icon}</span>
+                    <span>{iconGlyph(nb.icon)}</span>
                     {nb.name}
                   </span>
                 }
@@ -71,11 +72,11 @@ export function NotebooksSection() {
       <Card title={t("settings.dailyNotebook")} description={t("notebook.dailyHere")}>
         <DropdownMenu
           items={notebooks.map((nb) => ({
-            label: `${nb.icon} ${nb.name}`,
+            label: withIcon(nb.icon, nb.name),
             checked: nb.id === dailyId,
             onSelect: () => setSetting("dailyNotebookId", nb.id),
           }))}
-          trigger={<Button size="sm">{daily ? `${daily.icon} ${daily.name}` : "—"}</Button>}
+          trigger={<Button size="sm">{daily ? withIcon(daily.icon, daily.name) : "—"}</Button>}
         />
       </Card>
 
@@ -83,7 +84,7 @@ export function NotebooksSection() {
         open={!!switching}
         onOpenChange={(o) => !o && setSwitching(null)}
         title={switching?.to === "agent" ? t("notebook.switchToAgent") : t("notebook.switchToPrivate")}
-        description={switching ? `${switching.nb.icon} ${switching.nb.name}` : undefined}
+        description={switching ? withIcon(switching.nb.icon, switching.nb.name) : undefined}
       >
         {switching?.to === "agent" ? (
           <div className="flex flex-col gap-3">

@@ -177,9 +177,10 @@ final class EditorDemoUITests: XCTestCase {
         let chip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Дата: ' OR label BEGINSWITH 'Дедлайн: '")).firstMatch
         XCTAssertTrue(scrollIntoView(chip, in: editor), "a date chip is on screen and accessible")
         touch(chip, in: app)
-        let nextWeek = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'След. неделя'")).firstMatch
-        XCTAssertTrue(nextWeek.waitForExistence(timeout: 10), "the reschedule menu opens")
-        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Дата…'")).firstMatch.exists)
+        // The edit menu may page its items: the first ones are always shown.
+        let menuItem = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label IN {'Сегодня', 'Завтра', 'След. неделя', 'Дата…'}")).firstMatch
+        XCTAssertTrue(menuItem.waitForExistence(timeout: 10), "the reschedule menu opens")
         XCTAssertEqual(app.keyboards.count, 0, "the tap opened the menu instead of starting to type")
         XCTAssertEqual(app.state, .runningForeground)
     }

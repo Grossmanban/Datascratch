@@ -199,6 +199,32 @@ describe('data source', () => {
     client.close();
   });
 
+  it('refuses to switch to agent mode with a key that does not open the notebook data', async () => {
+    const { notebookId, notebookKey, client } = await setupNotebook();
+    const t = u.session.accessToken;
+    await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, { token: t, body: { mode: 'private' } });
+    const wrong = await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, {
+      token: t,
+      body: { mode: 'agent', notebookKey: b64(rnd(32)) },
+    });
+    expect(wrong.status).toBe(409);
+    expect(wrong.body.error.message).toContain('key mismatch');
+    const right = await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, {
+      token: t,
+      body: { mode: 'agent', notebookKey: b64(notebookKey) },
+    });
+    expect(right.status).toBe(200);
+    expect(right.body.mode).toBe('agent');
+    // A brand-new notebook without data accepts any key.
+    const { notebookId: empty } = await createNotebook(s, u, { mode: 'private', notebookKey: rnd(32) });
+    const fresh = await api(s, 'PATCH', `/notebooks/${empty}/mode`, {
+      token: t,
+      body: { mode: 'agent', notebookKey: b64(rnd(32)) },
+    });
+    expect(fresh.status).toBe(200);
+    client.close();
+  });
+
   it('diag CLI names the unreadable items of a document', async () => {
     const { notebookId, client } = await setupNotebook();
     await client.push(notebookId, await seal(rnd(32), new Uint8Array([1, 2, 3]), AD.doc(notebookId)));

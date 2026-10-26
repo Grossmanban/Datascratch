@@ -1,12 +1,14 @@
-import { and, asc, eq, inArray, or, sql } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { requireUser } from '../auth/guard.js';
 import type { AppContext } from '../context.js';
 import type { DbOrTx } from '../db/client.js';
-import { agentGrants, docs, notebooks, shares, users } from '../db/schema.js';
+import { agentGrants, docSnapshots, docUpdates, docs, notebooks, shares, users } from '../db/schema.js';
 import { fromB64, safeEqual, toB64 } from '../lib/encoding.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { AD, open } from '../lib/sodium.js';
 import { topics } from '../sync/hub.js';
 import { CLEANUP_JOB } from '../jobs/index.js';
 import { Key32, WrappedKey, errorResponses, id } from './schemas.js';
@@ -48,6 +50,39 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       if (!nb) throw notFound('notebook not found');
       return nb;
     }
+
+    /**
+     * How many of the notebook document's latest stored items (snapshot + up to
+     * 50 updates) a candidate notebook key opens. A key that opens none of them
+     * is not this notebook's key (e.g. a device holding a different key).
+     */
+    async function keyFits(notebookId: string, key: Uint8Array): Promise<{ checked: number; readable: number }> {
+      const [snap] = await db
+        .select({ payload: docSnapshots.payload })
+        .from(docSnapshots)
+        .where(eq(docSnapshots.docId, notebookId))
+        .orderBy(desc(docSnapshots.seq))
+        .limit(1);
+      const rows = await db
+        .select({ payload: docUpdates.payload })
+        .from(docUpdates)
+        .where(eq(docUpdates.docId, notebookId))
+        .orderBy(desc(docUpdates.seq))
+        .limit(50);
+      const items = [...(snap ? [snap.payload] : []), ...rows.map((r) => r.payload)];
+      let readable = 0;
+      for (const payload of items) {
+        try {
+          await open(key, payload, AD.doc(notebookId));
+          readable++;
+        } catch {
+          // not sealed with this key
+        }
+      }
+      return { checked: items.length, readable };
+    }
+
+    const fingerprint = (key: Uint8Array) => createHash('sha256').update(key).digest('hex').slice(0, 8);
 
     app.post(
       '/notebooks',
@@ -133,10 +168,36 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req) => {
         const p = await requireUser(ctx, req);
-        await ownNotebook(p.userId, req.params.id);
+        const current = await ownNotebook(p.userId, req.params.id);
         const { mode, notebookKey } = req.body;
         if (mode === 'agent' && !notebookKey) throw badRequest('notebookKey is required for mode=agent');
         if (mode === 'private' && notebookKey) throw badRequest('notebookKey must not be sent for mode=private');
+        if (notebookKey) {
+          // Never replace the server's copy with a key that does not open the notebook's data:
+          // agents would lose everything written with the right key (prod incident 2026-10-26).
+          const key = fromB64(notebookKey);
+          const fit = await keyFits(req.params.id, key);
+          if (fit.checked > 0 && fit.readable === 0) {
+            req.log.warn(
+              { notebookId: req.params.id, checked: fit.checked, newKey: fingerprint(key) },
+              'notebook mode: rejected a notebookKey that does not decrypt the notebook document',
+            );
+            throw conflict('key mismatch: this notebook key does not decrypt the notebook data; reload the notebook key from the server');
+          }
+          if (fit.readable < fit.checked)
+            req.log.warn(
+              { notebookId: req.params.id, checked: fit.checked, readable: fit.readable },
+              'notebook mode: the notebook document holds items sealed with different keys',
+            );
+          if (current.serverWrappedKey) {
+            const old = await ctx.keys.unwrapNotebookKey(req.params.id, current.serverWrappedKey).catch(() => null);
+            if (!old || !safeEqual(old, key))
+              req.log.warn(
+                { notebookId: req.params.id, oldKey: old ? fingerprint(old) : null, newKey: fingerprint(key) },
+                'notebook mode: server copy of the notebook key changes',
+              );
+          }
+        }
         const serverWrappedKey = notebookKey
           ? Buffer.from(await ctx.keys.wrapNotebookKey(req.params.id, fromB64(notebookKey)))
           : null;

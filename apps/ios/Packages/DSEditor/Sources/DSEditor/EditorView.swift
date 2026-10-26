@@ -563,6 +563,7 @@ public final class EditorView: UIView {
     // MARK: - Document → view
 
     private func documentChanged(_ change: DocumentChange) {
+        tapTargetElementsDirty = true
         if change.styleChanged {
             theme.style = document.style
             applyTheme()
@@ -660,6 +661,7 @@ public final class EditorView: UIView {
     }
 
     private func rerenderAll() {
+        tapTargetElementsDirty = true
         let text = renderer.render(projection, paragraphs: 0..<projection.paragraphs.count)
         let selection = textView.selectedRange
         suppressDelegate = true
@@ -1249,6 +1251,7 @@ public final class EditorView: UIView {
             theme.taskDatesEnabled = newValue
             applyTheme()
             rerenderAll()
+            tapTargetElementsDirty = true
         }
     }
 

@@ -778,17 +778,27 @@ final class EditorViewTests: XCTestCase {
         let doc = InMemoryEditorDocument(blocks: [
             .title("A11y"),
             .paragraph("См. [[Целевая заметка]] здесь"),
+            .paragraph([.text("Чип: ", .empty), .atom(.noteLink(noteId: "note-42", label: "Чип-заметка"), .empty)]),
             .taskList([.taskItem("Задача с датой", scheduled: EditorView.isoDay(offset: 1))]),
         ])
         let editor = host(doc)
         var openedTitle: String?
+        var openedId: String?
         editor.onOpenNoteTitled = { openedTitle = $0 }
+        editor.onOpenNote = { openedId = $0 }
+        XCTAssertTrue(editor.noteLinkFrames(in: editor).contains { $0.kind == .note }, "the chip is found as a note link")
         let elements = try XCTUnwrap(editor.accessibilityElements)
         XCTAssertTrue(elements.first as AnyObject === editor.textView, "the text view stays the first element")
         let link = try XCTUnwrap(elements.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel == "Целевая заметка" })
         XCTAssertTrue(link.accessibilityTraits.contains(.link))
         XCTAssertTrue(link.accessibilityActivate())
         XCTAssertEqual(openedTitle, "Целевая заметка", "activating the element opens the link like a tap")
+        let chipLink = try XCTUnwrap(elements.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel == "Чип-заметка" })
+        XCTAssertTrue(chipLink.accessibilityActivate())
+        XCTAssertEqual(openedId, "note-42")
+        let chipRange = flatRange(editor, of: "Чип: ").upperBound
+        let chipFrame = try XCTUnwrap(editor.geometry.segmentFrame(chipRange..<(chipRange + 1)))
+        XCTAssertNotNil(editor.noteLink(at: CGPoint(x: chipFrame.midX, y: chipFrame.midY)), "a tap on the chip finds the link")
         let chip = try XCTUnwrap(elements.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel?.hasPrefix("Дата: ") == true })
         XCTAssertTrue(chip.accessibilityTraits.contains(.button))
         XCTAssertGreaterThan(chip.accessibilityFrame.width, 0)
@@ -932,11 +942,17 @@ final class EditorViewTests: XCTestCase {
         XCTAssertTrue(editor.textView.becomeFirstResponder())
         editor.textView.setContentOffset(CGPoint(x: 0, y: 900), animated: false)
         settle(editor)
+        // A selection reaching far below the screen (UIKit moves the handle; the editor reacts).
+        let start = flatRange(editor, of: "Абзац 30 ").lowerBound
+        editor.textView.selectedRange = NSRange(location: start, length: 600)
+        settle(editor)
+        drainMainQueue()
+        drainMainQueue()
+        editor.textView.setContentOffset(CGPoint(x: 0, y: 900), animated: false)
+        settle(editor)
         editor.touchObserver.setTouchingForTesting(true)
         let before = editor.textView.contentOffset.y
-        let start = flatRange(editor, of: "Абзац 30 ").lowerBound
-        for end in stride(from: start + 5, to: start + 400, by: 40) {
-            editor.textView.selectedRange = NSRange(location: start, length: end - start)
+        for _ in 0..<10 {
             editor.textViewDidChangeSelection(editor.textView)
             editor.scrollCaretIntoView()
             drainMainQueue()

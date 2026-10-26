@@ -62,9 +62,13 @@ async function doFetch(method: string, path: string, opts: RequestOptions, acces
   }
 }
 
-/** `fetch` with the same response timeout (and retries for GET) as API requests. */
-export async function timedFetch(url: string, init: RequestInit = {}): Promise<Response> {
+/**
+ * `fetch` with the same response timeout as API requests; GETs (and requests the caller marks
+ * `retry`, i.e. safe to repeat) are retried after a network failure.
+ */
+export async function timedFetch(url: string, init: RequestInit = {}, opts: { retry?: boolean } = {}): Promise<Response> {
   const method = (init.method ?? "GET").toUpperCase();
+  const retry = opts.retry ?? method === "GET";
   const timeout = init.body instanceof Uint8Array ? UPLOAD_TIMEOUT_MS : RESPONSE_TIMEOUT_MS;
   for (let attempt = 0; ; attempt++) {
     const controller = new AbortController();
@@ -73,7 +77,7 @@ export async function timedFetch(url: string, init: RequestInit = {}): Promise<R
       return await fetch(url, { ...init, signal: controller.signal });
     } catch (e) {
       const delay = READ_RETRY_DELAYS_MS[attempt];
-      if (method !== "GET" || delay === undefined) throw e;
+      if (!retry || delay === undefined) throw e;
       await new Promise((r) => setTimeout(r, delay));
     } finally {
       clearTimeout(timer);

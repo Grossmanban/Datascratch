@@ -4,6 +4,7 @@ import { ApiError, setTokenSource } from "@/api/client";
 import { accountDb, closeAccountDb, deleteAccountDb, hasAccountDb, kvDelete, kvGet, kvSet, openAccountDb } from "@/data/db";
 import type { Session } from "@/lib/shared";
 import { openLocal, sealLocal, type SealedBlob } from "./deviceKey";
+import { StageTimeout, withTimeout } from "@/lib/timeout";
 
 type StoredAccount = { userId: string; email: string; session: Session; masterKey: SealedBlob };
 
@@ -31,6 +32,11 @@ type AuthState = {
   recoveryOnDevice: boolean;
   /** Set on the login screen after a revocation (see RevokedInfo). */
   revoked: RevokedInfo | null;
+  /**
+   * Opening the saved session did not finish (device storage or key unsealing hung, e.g. in an
+   * in-app browser): the stage that hung. The saved session is kept; signing in works anyway.
+   */
+  restoreFailed: string | null;
 };
 
 export const useAuth = create<AuthState>(() => ({
@@ -41,6 +47,7 @@ export const useAuth = create<AuthState>(() => ({
   recoveryStep: false,
   recoveryOnDevice: false,
   revoked: null,
+  restoreFailed: null,
 }));
 
 // Secrets live only in module memory (and sealed in IndexedDB), never in React state.
@@ -64,6 +71,15 @@ export function onSignedOut(fn: () => void): () => void {
 }
 
 async function persist(who: { userId: string | null; email: string | null } = useAuth.getState()) {
+  try {
+    await persistNow(who);
+  } catch (e) {
+    // Device storage unavailable or hung: this tab keeps working with the session in memory.
+    console.warn("[ds] could not store the session on this device", e);
+  }
+}
+
+async function persistNow(who: { userId: string | null; email: string | null }) {
   if (!session || !masterKey || !who.userId || !who.email) return;
   const stored: StoredAccount = {
     userId: who.userId,
@@ -127,7 +143,7 @@ export async function establish(params: {
   masterKey = params.masterKey;
   // Data left by a revoked session: kept for the same account (its unsent changes go out now),
   // deleted for another one.
-  const revoked = await kvGet<RevokedInfo>("revoked");
+  const revoked = await kvGet<RevokedInfo>("revoked").catch(() => undefined);
   if (revoked) {
     if (revoked.userId !== params.userId) await forgetLocalData(revoked.userId);
     await kvDelete("revoked");
@@ -221,18 +237,52 @@ export async function updateSession(next: Session) {
   await persist();
 }
 
+/** Opening the saved session gives up after this, instead of an endless splash. */
+const RESTORE_TIMEOUT_MS = 6_000;
+let restoreAttempt = 0;
+
 export async function restore(): Promise<void> {
+  const attempt = ++restoreAttempt;
+  let stage = "start";
+  const step = <T,>(name: string, p: Promise<T>) => {
+    stage = name;
+    return p;
+  };
   try {
-    const stored = await kvGet<StoredAccount>("account");
+    await withTimeout(restoreSteps(step, () => attempt === restoreAttempt), RESTORE_TIMEOUT_MS, "restore");
+  } catch (e) {
+    if (attempt !== restoreAttempt) return;
+    const hung = e instanceof StageTimeout ? stage : `${stage}: ${(e as Error)?.message ?? e}`;
+    console.error(`[ds] restoring the session failed at «${hung}»`, e);
+    restoreAttempt++; // a late finish of the abandoned attempt must not flip the state back
+    session = null;
+    masterKey = null;
+    useAuth.setState({ status: "signedOut", restoreFailed: hung });
+  }
+}
+
+/** «Войти заново» on the splash: stop waiting and show the login screen (the saved session stays). */
+export function abandonRestore(stage = "splash") {
+  if (useAuth.getState().status !== "loading") return;
+  restoreAttempt++;
+  useAuth.setState({ status: "signedOut", restoreFailed: stage });
+}
+
+async function restoreSteps(step: <T>(name: string, p: Promise<T>) => Promise<T>, current: () => boolean): Promise<void> {
+  {
+    const stored = await step("device storage", kvGet<StoredAccount>("account"));
+    if (!current()) return;
     if (!stored) {
-      useAuth.setState({ status: "signedOut", revoked: (await kvGet<RevokedInfo>("revoked")) ?? null });
+      useAuth.setState({ status: "signedOut", revoked: (await kvGet<RevokedInfo>("revoked").catch(() => undefined)) ?? null });
       return;
     }
-    masterKey = await openLocal(stored.masterKey);
+    const key = await step("device key", openLocal(stored.masterKey));
+    if (!current()) return;
+    masterKey = key;
     session = stored.session;
     openAccountDb(stored.userId);
     // Before the key became optional to confirm it was kept only while pending.
-    const legacy = await kvGet<SealedBlob>("pendingRecovery");
+    const legacy = await step("recovery key", kvGet<SealedBlob>("pendingRecovery"));
     if (legacy) {
       await kvSet("recoveryKey", legacy);
       await kvSet("recoveryConfirmed", false);
@@ -240,17 +290,17 @@ export async function restore(): Promise<void> {
       await kvDelete("pendingRecovery");
     }
     const hasKey = !!(await kvGet<SealedBlob>("recoveryKey"));
+    const recoveryStep = hasKey && !!(await kvGet<boolean>("recoveryStep"));
+    if (!current()) return;
     useAuth.setState({
       status: "ready",
       userId: stored.userId,
       email: stored.email,
       accountDocId: stored.session.accountDocId,
-      recoveryStep: hasKey && !!(await kvGet<boolean>("recoveryStep")),
+      recoveryStep,
       recoveryOnDevice: hasKey,
+      restoreFailed: null,
     });
-  } catch (e) {
-    console.error("Failed to restore session", e);
-    useAuth.setState({ status: "signedOut" });
   }
 }
 

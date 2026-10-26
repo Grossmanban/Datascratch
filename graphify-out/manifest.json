@@ -474,10 +474,10 @@
     "semantic_hash": "47cc8aa3991063bda56de3456e299144"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Network/APIClient.swift": {
-    "mtime": 1793019749.6520662,
-    "seen": 1793029796.7683775,
-    "ast_hash": "7c6a06edd737e1cf8810c1a8ef5505c1",
-    "semantic_hash": "7c6a06edd737e1cf8810c1a8ef5505c1"
+    "mtime": 1793031068.700739,
+    "seen": 1793031147.6747296,
+    "ast_hash": "aa8959b3635332b68e1fee1e5b3d9f41",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Network/APITypes.swift": {
     "mtime": 1792939085.1389618,
@@ -522,10 +522,10 @@
     "semantic_hash": "d437cafddb83bbba93773bdc3ccdab18"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Sync/SyncEngine.swift": {
-    "mtime": 1793019749.6520662,
-    "seen": 1793029796.768398,
-    "ast_hash": "11fb8b30ceab78c956dafaa7cc79859b",
-    "semantic_hash": "11fb8b30ceab78c956dafaa7cc79859b"
+    "mtime": 1793031068.7040844,
+    "seen": 1793031147.6751578,
+    "ast_hash": "4e901de5cbc9ca9360af78c019d6550a",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Sync/SyncMessages.swift": {
     "mtime": 1792932913.5940447,
@@ -4230,10 +4230,10 @@
     "semantic_hash": "d8ab15974e62a09734f07fc0ccf93e11"
   },
   "apps/ios/Packages/DSCore/README.md": {
-    "mtime": 1793022241.2362142,
-    "seen": 1793029796.7699537,
-    "ast_hash": "aba2bda916bf5bb536ecb17d7c34875f",
-    "semantic_hash": "aba2bda916bf5bb536ecb17d7c34875f"
+    "mtime": 1793031068.696739,
+    "seen": 1793031147.702991,
+    "ast_hash": "2a4bb45021a64ae1d468ac217d8c3b2f",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/README.md": {
     "mtime": 1793022328.1707149,
@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793029877.4362552,
-    "seen": 1793029932.4811914,
-    "ast_hash": "1251383c2dc48a4ee36ce2ed7da9171b",
+    "mtime": 1793031079.9878316,
+    "seen": 1793031147.7033238,
+    "ast_hash": "8e64d9b43761fc3df1256db534ac1a49",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -4884,16 +4884,16 @@
     "semantic_hash": "ba27820f4e86c7c0f8ea9a23cac47ee0"
   },
   "apps/ios/Packages/DSCore/Tests/DSCoreTests/KeyRepairTests.swift": {
-    "mtime": 1793019749.6520662,
-    "seen": 1793029796.7684212,
-    "ast_hash": "994ed15b49485ea7edd8762bc682e478",
-    "semantic_hash": "994ed15b49485ea7edd8762bc682e478"
+    "mtime": 1793031068.7040844,
+    "seen": 1793031147.6757255,
+    "ast_hash": "02949c65aef70172dbb6f12de0846e7c",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSCore/Tests/DSCoreTests/NetworkTests.swift": {
-    "mtime": 1793019749.6520662,
-    "seen": 1793029796.7684262,
-    "ast_hash": "77c45c24929f43ed18784b2fa2acea40",
-    "semantic_hash": "77c45c24929f43ed18784b2fa2acea40"
+    "mtime": 1793031068.7040844,
+    "seen": 1793031147.675779,
+    "ast_hash": "4008894b7e20e84db3a7f6bfea33dea8",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/Sources/DSDesign/Components/DSPenColors.swift": {
     "mtime": 1793022328.1707149,

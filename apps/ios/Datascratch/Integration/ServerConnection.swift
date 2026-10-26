@@ -50,15 +50,17 @@ final class ServerConnection: CoreLibraryRemote {
                 do {
                     _ = try await api.createNotebook(id: notebook.id, mode: notebook.mode, wrappedKey: notebook.wrappedKey,
                                                      notebookKey: notebook.mode == .agent ? notebook.key : nil)
+                    core.keys.markNotebookKeyVerified(notebook.id)
                 } catch APIError.server(409, _, _) {
-                    // Already there (an earlier attempt).
+                    // Already there (an earlier attempt, or another device): its key is the
+                    // server's — reconcileNotebookKeys below takes it.
                 } catch {
                     Self.log.error("carrying notebook \(notebook.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
                 }
             }
             // The server's notebook keys are the truth: fetch the ones this device lacks and
-            // replace (and repair) any it invented, before anything is sealed.
-            await adoptServerNotebookKeys()
+            // replace any it invented, before anything is sealed.
+            let changes = await reconcileNotebookKeys()
             let client = SyncClient(
                 configuration: .init(url: SyncClient.Configuration.url(forServer: serverURL),
                                      deviceId: try core.store.deviceId(),
@@ -76,7 +78,8 @@ final class ServerConnection: CoreLibraryRemote {
             let keys = KeyRingDocumentKeys(keyRing: core.keys) { noteId, notebookId in
                 wrappedKeys.wrapped(noteId: noteId, notebookId: notebookId)
             }
-            let engine = SyncEngine(store: core.store, client: client, keyFor: keys.key(for:)) { [core] record in
+            let keyRing = core.keys
+            let engine = SyncEngine(store: core.store, client: client, keyFor: keys.key(for:), register: { [core] record in
                 do {
                     try await api.registerDoc(docId: record.docId, kind: record.kind, notebookId: record.notebookId)
                 } catch {
@@ -87,15 +90,17 @@ final class ServerConnection: CoreLibraryRemote {
                     do {
                         _ = try await api.createNotebook(id: notebook.id, mode: notebook.mode, wrappedKey: notebook.wrappedKey,
                                                          notebookKey: notebook.mode == .agent ? notebook.key : nil)
+                        keyRing.markNotebookKeyVerified(notebook.id)
                     } catch APIError.server(409, _, _) {
-                        // Created meanwhile.
+                        // Created meanwhile; the next reconcile settles whose key it is.
                     }
                     try await api.registerDoc(docId: record.docId, kind: record.kind, notebookId: record.notebookId)
                 }
-            }
+            }, retiredKeysFor: keys.retiredKeys(for:), isKeyCanonical: keys.isCanonical)
             self.engine = engine
             core.remote = self
             await engine.start()
+            await repairKeys(changes, engine: engine)
             observeStatus(engine)
             sync.onRetry = { Task { await engine.retryFailed() } }
             // With the engine running, removing duplicates reaches the server too.
@@ -164,6 +169,8 @@ final class ServerConnection: CoreLibraryRemote {
                 case .failed(let documents, let reason): .failed(documents: documents, reason: reason)
                 }
                 sync.apply(summary: summary, pending: status.pending)
+                let unreadable = Set(status.unreadable.compactMap { $0.notebookId ?? nil })
+                if sync.unreadableNotebookIds != unreadable { sync.unreadableNotebookIds = unreadable }
             }
         }
     }
@@ -176,6 +183,10 @@ final class ServerConnection: CoreLibraryRemote {
             do {
                 _ = try await api.createNotebook(id: id, mode: mode == .agent ? .agent : .private,
                                                  wrappedKey: wrappedKey, notebookKey: mode == .agent ? key : nil)
+                core.keys.markNotebookKeyVerified(id)
+            } catch APIError.server(409, _, _) {
+                // The id is taken on the server: its key there is the notebook's key.
+                await reconcileAndRepair()
             } catch {
                 ServerConnection.log.error("POST /notebooks \(id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             }
@@ -190,11 +201,11 @@ final class ServerConnection: CoreLibraryRemote {
             // build invented would lock everyone else out of the notebook.
             var agentKey: Data?
             if mode == .agent {
-                guard let canonical = await serverKey(id) else {
+                if !core.keys.isNotebookKeyVerified(id) { await reconcileAndRepair() }
+                guard core.keys.isNotebookKeyVerified(id), let canonical = (try? core.keys.notebookKey(id)) ?? nil else {
                     ServerConnection.log.error("PATCH mode \(id, privacy: .public) postponed: the server's key is not available")
                     return
                 }
-                if canonical != key { core.adoptServerNotebookKeys([id: canonical]) }
                 agentKey = canonical
             }
             do {
@@ -227,19 +238,39 @@ final class ServerConnection: CoreLibraryRemote {
     /// Brings the server's notebook modes in line with the account document (what the apps
     /// show and the person chose); a notebook the server does not have yet is created by the
     /// registration of its documents.
-    /// `GET /notebooks`: keys this device lacks are stored, a key that differs from the
-    /// server's is replaced (`CoreLibrary.adoptServerNotebookKeys`).
-    private func adoptServerNotebookKeys() async {
-        guard let server = try? await api.notebooks(), let master = try? core.keys.masterKey() else { return }
-        var keys: [String: Data] = [:]
-        for notebook in server {
-            if let key = try? DSCrypto.unwrapKey(notebook.wrappedKey.data, with: master, ad: CryptoAD.notebookKey(notebook.id)) {
-                keys[notebook.id] = key
-            }
+    /// `AccountService.reconcileNotebookKeys`: keys this device lacks are stored, a key that
+    /// differs from the server's is replaced (the old one kept as retired, for reading) and the
+    /// note keys it wrapped are re-wrapped. Returns the replaced keys.
+    private func reconcileNotebookKeys() async -> [DSCore.AccountService.NotebookKeyChange] {
+        let changes: [DSCore.AccountService.NotebookKeyChange]
+        do {
+            changes = try await accounts.reconcileNotebookKeys()
+        } catch {
+            Self.log.error("reconciling notebook keys failed: \(error.localizedDescription, privacy: .public)")
+            return []
         }
-        serverKeys = keys
-        let repaired = core.adoptServerNotebookKeys(keys)
-        if !repaired.isEmpty { Self.log.error("repaired notebook keys: \(repaired.joined(separator: ","), privacy: .public)") }
+        for change in changes {
+            Self.log.error("notebook \(change.notebookId, privacy: .public) held a key the server does not know; replaced")
+            _ = try? core.notebookDocument(change.notebookId).rewrapNoteKeys(from: change.previousKey, to: change.key)
+        }
+        core.notebookKeysChanged()
+        return changes
+    }
+
+    /// After the keys are right: re-read and re-upload what was sealed with a wrong key — the
+    /// replaced notebooks, notes whose key only an invented (lost) notebook key opened, and
+    /// once per device every notebook (build 12, prod 2026-10-26) — then fetch set-aside items.
+    private func repairKeys(_ changes: [DSCore.AccountService.NotebookKeyChange], engine: SyncEngine) async {
+        var docs = changes.map(\.notebookId)
+        docs += core.healUnreadableNotes()
+        docs += core.takeOneTimeNotebookRekey()
+        for docId in Set(docs) { await engine.rekey(docId: docId) }
+        await engine.retryUnreadable()
+    }
+
+    private func reconcileAndRepair() async {
+        let changes = await reconcileNotebookKeys()
+        if let engine { await repairKeys(changes, engine: engine) }
     }
 
     /// The account document brought notebooks whose keys this device lacks (made on another
@@ -248,28 +279,20 @@ final class ServerConnection: CoreLibraryRemote {
         guard engine != nil, !isFetchingKeys else { return }
         isFetchingKeys = true
         Task {
-            await adoptServerNotebookKeys()
+            await reconcileAndRepair()
             isFetchingKeys = false
             reconnect()
         }
     }
 
     private var isFetchingKeys = false
-    /// Notebook keys as the server holds them (unwrapped), from the last `GET /notebooks`.
-    private var serverKeys: [String: Data] = [:]
-
-    /// The key the server holds for a notebook (`GET /notebooks/:id/key`), unwrapped.
-    private func serverKey(_ id: String) async -> Data? {
-        guard let wrapped = try? await api.notebookKey(id: id), let master = try? core.keys.masterKey() else { return nil }
-        return try? DSCrypto.unwrapKey(wrapped, with: master, ad: CryptoAD.notebookKey(id))
-    }
 
     private func reconcileNotebookModes() async {
         guard let server = try? await api.notebooks() else { return }
         let modes = Dictionary(server.map { ($0.id, $0.mode) }, uniquingKeysWith: { a, _ in a })
         for ref in core.account.notebooks() {
             guard let serverMode = modes[ref.id], serverMode != ref.mode else { continue }
-            let key = ref.mode == .agent ? serverKeys[ref.id] : nil
+            let key = ref.mode == .agent && core.keys.isNotebookKeyVerified(ref.id) ? (try? core.keys.notebookKey(ref.id)) ?? nil : nil
             if ref.mode == .agent, key == nil { continue }
             do {
                 try await api.setNotebookMode(id: ref.id, mode: ref.mode, notebookKey: key)

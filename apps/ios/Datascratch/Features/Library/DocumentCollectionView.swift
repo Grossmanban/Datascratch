@@ -128,8 +128,22 @@ struct DocumentCollectionView: View {
                           message: String(localized: "It was made on another device. You can write here once its key arrives."),
                           systemImage: "key")
                     .accessibilityIdentifier("library.notebookLocked")
+            } else if let id = notebookId, app.sync.unreadableNotebookIds.contains(id) {
+                DSCallout(tone: .note, title: String(localized: "Some changes can't be read here yet"),
+                          message: String(localized: "They were saved with another key. The rest of the notebook is up to date."),
+                          systemImage: "lock.trianglebadge.exclamationmark")
+                    .accessibilityIdentifier("library.notebookUnreadable")
             }
             #endif
+        }
+    }
+
+    /// The notebook this list shows (a folder's notebook too).
+    private var notebookId: String? {
+        switch source {
+        case .notebook(let id): id
+        case .folder(let id): library.folder(id)?.notebookId
+        default: nil
         }
     }
 

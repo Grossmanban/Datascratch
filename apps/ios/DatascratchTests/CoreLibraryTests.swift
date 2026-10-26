@@ -110,12 +110,11 @@ struct CoreLibraryTests {
         #expect(core.notebooksWithoutKey == [notebook.id])
     }
 
-    /// A key an earlier build invented is replaced by the server's; the notes it wrapped are
-    /// re-wrapped, so they open with the server's key, and the notebook's state is sent again.
+    /// A key an earlier build invented is replaced by the server's (DSCore `adoptNotebookKey`,
+    /// `rewrapNoteKeys`): the notes open with the server's key and nothing needs healing.
     @Test func serverNotebookKeyReplacesAnInventedOne() throws {
         let keys = KeyRing(store: InMemorySecretStore())
-        let store = try LocalStore.inMemory()
-        let core = try CoreLibrary(store: store, keys: keys)
+        let core = try CoreLibrary(store: try LocalStore.inMemory(), keys: keys)
         let library = LibraryStore(backend: core)
         let space = library.createSpace(name: "S")
         let notebook = library.createNotebook(in: space.id, name: "Ии", mode: .agent)
@@ -123,16 +122,15 @@ struct CoreLibraryTests {
         let invented = DSCrypto.newKey()
         try keys.setNotebookKey(invented, notebookId: notebook.id)
         let note = library.createNote(in: notebook.id, title: "Sealed with the invented key")
-        let before = try store.outboxCount()
 
-        #expect(core.adoptServerNotebookKeys([notebook.id: serverKey]) == [notebook.id])
-        #expect(try keys.notebookKey(notebook.id) == serverKey)
+        let previous = try #require(try keys.adoptNotebookKey(serverKey, notebookId: notebook.id))
+        #expect(previous == invented)
+        #expect(try core.notebookDocument(notebook.id).rewrapNoteKeys(from: previous, to: serverKey) == 1)
         let meta = try #require(try core.notebookDocument(notebook.id).note(id: note.id))
         let wrapped = try #require(DSCore.Base64URL.decode(meta.wrappedKey))
         #expect((try? DSCrypto.unwrapKey(wrapped, with: serverKey, ad: CryptoAD.noteKey(note.id))) != nil)
-        #expect(try store.outboxCount() > before)
-        // Matching keys: nothing to do.
-        #expect(core.adoptServerNotebookKeys([notebook.id: serverKey]).isEmpty)
+        #expect(core.healUnreadableNotes().isEmpty)
+        #expect(keys.retiredNotebookKeys(notebook.id) == [invented])
     }
 
     /// The invented key is gone (signed out) but this device still holds the note: it gets a new
@@ -149,12 +147,13 @@ struct CoreLibraryTests {
         let note = library.createNote(in: notebook.id, title: "Only on this iPad")
         library.setBody(NoteBody(blocks: [.paragraph("Kept locally")]), ofNote: note.id)
         try keys.setNotebookKey(serverKey, notebookId: notebook.id)
+        keys.markNotebookKeyVerified(notebook.id)
 
-        #expect(core.healUnreadableNotes([notebook.id: serverKey]) == 1)
+        #expect(core.healUnreadableNotes() == [note.id])
         let meta = try #require(try core.notebookDocument(notebook.id).note(id: note.id))
         let wrapped = try #require(DSCore.Base64URL.decode(meta.wrappedKey))
         #expect((try? DSCrypto.unwrapKey(wrapped, with: serverKey, ad: CryptoAD.noteKey(note.id))) != nil)
-        #expect(core.healUnreadableNotes([notebook.id: serverKey]) == 0)
+        #expect(core.healUnreadableNotes().isEmpty)
         let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: KeyRing(store: InMemorySecretStore())))
         #expect(reloaded.body(note.id).blocks.map(\.text) == ["Kept locally"])
     }

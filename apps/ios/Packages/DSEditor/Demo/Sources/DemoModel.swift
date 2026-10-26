@@ -11,6 +11,8 @@ final class DemoModel {
     var status = ""
     var showHUD = false
     var showPalette = false
+    /// Title of a `[[Title]]` link that was tapped (the demo has one note: it offers to create it).
+    var pendingNoteTitle: String?
     /// Bumped whenever the editor reports a change, so SwiftUI refreshes toolbar state.
     var revision = 0
     /// Editor scroll position (for the HUD and UI tests).
@@ -48,6 +50,8 @@ final class DemoModel {
         }
         editor.onScroll = { [weak self] y in self?.scrollOffset = y }
         editor.onPaletteRequest = { [weak self] _ in self?.showPalette = true }
+        editor.onOpenNote = { [weak self] id in self?.status = "Ссылка на заметку \(id.prefix(8))…" }
+        editor.onOpenNoteTitled = { [weak self] title in self?.pendingNoteTitle = title }
     }
 
     func save() {

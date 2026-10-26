@@ -15,20 +15,30 @@ final class MermaidRenderer: NSObject {
     /// crashed UIKit's gesture environment depending on when the diagram finished loading.
     private var offscreenWindow: UIWindow?
     private var ready = false
-    private var queue: [(String, (UIImage?) -> Void)] = []
+    private var queue: [(Key, (UIImage?) -> Void)] = []
     private var busy = false
-    private var images: [String: UIImage] = [:]
-    private var failed: Set<String> = []
+    /// A diagram in one appearance: dark mode uses Mermaid's dark theme (dark text on the dark
+    /// card would be invisible).
+    struct Key: Hashable {
+        var source: String
+        var dark: Bool
+    }
+    private var images: [Key: UIImage] = [:]
+    private var failed: Set<Key> = []
     /// A view of the editor; only its window scene is used (snapshots need a window).
     weak var host: UIView?
 
-    func cachedImage(for source: String) -> UIImage? { images[source] }
-    func cachedSize(for source: String) -> CGSize? { images[source]?.size }
+    func cachedImage(for source: String, dark: Bool) -> UIImage? { images[Key(source: source, dark: dark)] }
+    /// Size of the diagram in either appearance (the layout does not depend on the theme).
+    func cachedSize(for source: String) -> CGSize? {
+        (images[Key(source: source, dark: false)] ?? images[Key(source: source, dark: true)])?.size
+    }
 
-    func render(_ source: String, completion: @escaping (UIImage?) -> Void) {
-        if let img = images[source] { return completion(img) }
-        if failed.contains(source) { return completion(nil) }
-        queue.append((source, completion))
+    func render(_ source: String, dark: Bool, completion: @escaping (UIImage?) -> Void) {
+        let key = Key(source: source, dark: dark)
+        if let img = images[key] { return completion(img) }
+        if failed.contains(key) { return completion(nil) }
+        queue.append((key, completion))
         pump()
     }
 
@@ -38,13 +48,15 @@ final class MermaidRenderer: NSObject {
               let url = Bundle.module.url(forResource: "mermaid.min", withExtension: "js"),
               let script = try? String(contentsOf: url, encoding: .utf8) else { return false }
         let config = WKWebViewConfiguration()
-        let user = WKUserScript(source: script + "\nmermaid.initialize({startOnLoad:false, theme:'neutral', securityLevel:'strict', fontFamily:'-apple-system, Helvetica'});",
+        let user = WKUserScript(source: script,
                                 injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         config.userContentController.addUserScript(user)
         let wv = WKWebView(frame: CGRect(x: -4000, y: 0, width: 900, height: 1200), configuration: config)
         wv.isOpaque = false
         wv.backgroundColor = .clear
-        wv.alpha = 0.011
+        // Fully opaque: snapshots carry the view's alpha (a near-transparent web view, left over
+        // from when it hid inside the editor's window, gave empty-looking diagrams). The window
+        // itself is off screen and below everything.
         wv.isUserInteractionEnabled = false
         wv.navigationDelegate = self
         let window = UIWindow(windowScene: scene)
@@ -71,37 +83,39 @@ final class MermaidRenderer: NSObject {
         }
         guard ready, let wv = webView else { return }
         busy = true
-        let (source, completion) = queue.removeFirst()
+        let (key, completion) = queue.removeFirst()
         let js = """
+        mermaid.initialize({startOnLoad: false, theme: dark ? 'dark' : 'neutral', securityLevel: 'strict',
+                            fontFamily: '-apple-system, Helvetica', themeVariables: {background: 'transparent'}});
         const r = await mermaid.render('m' + Date.now(), src);
         const c = document.getElementById('c');
         c.innerHTML = r.svg;
         const b = c.getBoundingClientRect();
         return [b.width, b.height];
         """
-        wv.callAsyncJavaScript(js, arguments: ["src": source], in: nil, in: .page) { [weak self] result in
+        wv.callAsyncJavaScript(js, arguments: ["src": key.source, "dark": key.dark], in: nil, in: .page) { [weak self] result in
             guard let self else { return }
             switch result {
             case .success(let value):
                 let dims = (value as? [Any])?.compactMap { ($0 as? NSNumber)?.doubleValue } ?? []
-                guard dims.count == 2, dims[0] > 1, dims[1] > 1 else { return self.finish(source, nil, completion) }
+                guard dims.count == 2, dims[0] > 1, dims[1] > 1 else { return self.finish(key, nil, completion) }
                 let snap = WKSnapshotConfiguration()
                 snap.rect = CGRect(x: 0, y: 0, width: dims[0], height: dims[1])
                 wv.takeSnapshot(with: snap) { image, _ in
-                    MainActor.assumeIsolated { self.finish(source, image, completion) }
+                    MainActor.assumeIsolated { self.finish(key, image, completion) }
                 }
             case .failure:
-                self.finish(source, nil, completion)
+                self.finish(key, nil, completion)
             }
         }
     }
 
-    private func finish(_ source: String, _ image: UIImage?, _ completion: (UIImage?) -> Void) {
+    private func finish(_ key: Key, _ image: UIImage?, _ completion: (UIImage?) -> Void) {
         if let image {
-            images[source] = image
-            NotificationCenter.default.post(name: Self.didRender, object: source)
+            images[key] = image
+            NotificationCenter.default.post(name: Self.didRender, object: key.source)
         } else {
-            failed.insert(source)
+            failed.insert(key)
         }
         completion(image)
         busy = false

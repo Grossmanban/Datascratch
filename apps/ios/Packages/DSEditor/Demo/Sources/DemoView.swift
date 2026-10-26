@@ -13,6 +13,13 @@ struct DemoView: View {
             .navigationTitle("Живой штрих")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            .alert("Заметки «\(model.pendingNoteTitle ?? "")» нет",
+                   isPresented: Binding(get: { model.pendingNoteTitle != nil }, set: { if !$0 { model.pendingNoteTitle = nil } })) {
+                Button("Создать заметку") { model.status = "Создана «\(model.pendingNoteTitle ?? "")» (демо)" }
+                Button("Отмена", role: .cancel) {}
+            } message: {
+                Text("В приложении ссылка откроет заметку с этим названием или предложит её создать.")
+            }
             .sheet(isPresented: Binding(get: { model.showPalette }, set: { model.showPalette = $0 })) {
                 PaletteSheet(model: model)
                     .presentationDetents([.height(300)])
@@ -44,6 +51,11 @@ struct DemoView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarLeading) {
             let _ = model.revision
+            // iPhone keyboards have no "hide" key: the toolbar always has one (disabled when not typing).
+            Button { model.editor.dismissKeyboard() } label: { Image(systemName: "keyboard.chevron.compact.down") }
+                .disabled(!model.editor.isEditingText)
+                .accessibilityIdentifier("hideKeyboard")
+                .accessibilityLabel("Скрыть клавиатуру")
             Button { model.editor.undo() } label: { Image(systemName: "arrow.uturn.backward") }
                 .disabled(!model.editor.canUndo)
                 .accessibilityIdentifier("undo")

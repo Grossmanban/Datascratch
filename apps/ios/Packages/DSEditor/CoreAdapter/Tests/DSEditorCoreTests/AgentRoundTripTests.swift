@@ -175,8 +175,37 @@ import Testing
         let ids = try Self.blocks(note).map(\.id)
         let doc = CoreEditorDocument(note: note)
         _ = Projection.build(doc.blocks)
-        #expect(try note.crdt.encodeStateAsUpdate() == before, "opening writes nothing")
-        #expect(try Self.blocks(note).map(\.id) == ids, "no block is removed or replaced")
+        #expect(try note.crdt.encodeStateAsUpdate() == before, "reading the document writes nothing")
+        #expect(try Self.blocks(note).map(\.id) == ids)
+
+        // The repair the editor runs on open: the agent's title stays, the stray empty one goes.
+        let agentTitle = try #require(try Self.agentNote().title())
+        #expect(EditorCommands(document: doc).repairTitles())
+        let titles = try Self.blocks(note).filter { $0.json.contains("\"type\":\"title\"") }
+        #expect(titles.count == 1)
+        #expect(try note.title() == agentTitle, "the note keeps the agent's title")
+        let repaired = try note.crdt.encodeStateAsUpdate()
+        #expect(!EditorCommands(document: doc).repairTitles())
+        #expect(try note.crdt.encodeStateAsUpdate() == repaired, "a second repair writes nothing")
+    }
+
+    /// Two clients repairing the same merged document at once converge on one title.
+    @Test func concurrentRepairsConverge() throws {
+        let agent = try Self.agentNote()
+        let stray = NoteDocument(noteId: agent.noteId)
+        try stray.initialize()
+        try agent.crdt.applyUpdate(try stray.crdt.encodeStateAsUpdate())
+        let state = try agent.crdt.encodeStateAsUpdate()
+        let a = NoteDocument(noteId: agent.noteId)
+        let b = NoteDocument(noteId: agent.noteId)
+        try a.crdt.applyUpdate(state)
+        try b.crdt.applyUpdate(state)
+        EditorCommands(document: CoreEditorDocument(note: a)).repairTitles()
+        EditorCommands(document: CoreEditorDocument(note: b)).repairTitles()
+        try a.crdt.applyUpdate(try b.crdt.encodeStateAsUpdate())
+        try b.crdt.applyUpdate(try a.crdt.encodeStateAsUpdate())
+        #expect(try Self.blocks(a).map(\.json) == Self.blocks(b).map(\.json))
+        #expect(try Self.blocks(a).filter { $0.json.contains("\"type\":\"title\"") }.count == 1)
     }
 
     /// The shared reference note (every node and mark of document-model.md §4.2) survives an edit.

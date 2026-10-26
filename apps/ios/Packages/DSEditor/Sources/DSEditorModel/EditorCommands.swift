@@ -604,6 +604,37 @@ public struct EditorCommands {
         }
     }
 
+    /// Repair of a document with more than one top-level title (two clients each created one
+    /// before they synced): the first non-empty title stays, empty extra titles are deleted, and
+    /// extra non-empty titles become paragraphs (same blockId and content) right after the kept
+    /// one, in document order. Nothing is ever created, so repairs made by several clients at
+    /// once converge; a document with one title or none is left alone (`document-model.md`).
+    /// Returns whether anything changed.
+    @discardableResult
+    public func repairTitles() -> Bool {
+        let titles = document.blocks.filter { $0.type == NodeType.title }
+        guard titles.count > 1 else { return false }
+        let keep = titles.first { $0.textLength > 0 } ?? titles[0]
+        let extras = titles.filter { $0.id != keep.id }
+        document.stopCapturing()
+        document.transact(origin: .local) {
+            for t in extras where t.textLength == 0 { document.deleteBlock(t.id) }
+            var offset = 1
+            for t in extras where t.textLength > 0 {
+                guard let node = document.block(t.id) else { continue }
+                let re = StrokeReanchoring(document: document, blocks: [t.id])
+                document.deleteBlock(t.id)
+                guard let at = document.location(of: keep.id) else { continue }
+                document.insertBlock(BlockNode(id: t.id, type: NodeType.paragraph, inline: node.inline ?? []),
+                                     parent: at.parent, at: at.index + offset)
+                re.apply(to: document, map: { $0 })
+                offset += 1
+            }
+        }
+        document.stopCapturing()
+        return true
+    }
+
     /// Re-creates a textblock as another type with the same blockId and content.
     func convertTextblock(_ id: BlockID, to type: String, attrs: [String: JSONValue]) {
         guard let node = document.block(id), let loc = document.location(of: id) else { return }

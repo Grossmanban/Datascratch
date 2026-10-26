@@ -306,6 +306,9 @@ public final class EditorView: UIView {
         let signpost = EditorSignpost.log.beginInterval("OpenNote", id: EditorSignpost.log.makeSignpostID())
         defer { EditorSignpost.log.endInterval("OpenNote", signpost) }
         let start = CACurrentMediaTime()
+        // Duplicate titles from a merge are repaired; an empty document gets nothing (its content
+        // may still be on its way: nothing is created on open).
+        EditorCommands(document: document).repairTitles()
         observation = document.observe { [weak self] change in self?.documentChanged(change) }
         projection = Projection.build(document.blocks)
         theme.style = document.style
@@ -564,6 +567,16 @@ public final class EditorView: UIView {
 
     private func documentChanged(_ change: DocumentChange) {
         tapTargetElementsDirty = true
+        if change.origin == .remote, change.structureChanged, !titleRepairScheduled {
+            // Content that arrived (first sync of an empty note, another client's merge) may
+            // bring a second title: repaired once the remote transaction is over.
+            titleRepairScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.titleRepairScheduled = false
+                EditorCommands(document: self.document).repairTitles()
+            }
+        }
         if change.styleChanged {
             theme.style = document.style
             applyTheme()
@@ -1261,6 +1274,7 @@ public final class EditorView: UIView {
     /// supplies it, localized and dated by the note's creation day. Nil (or nil returned) leaves
     /// empty titles alone.
     public var defaultTitle: (() -> String?)?
+    private var titleRepairScheduled = false
     /// The caret was in the title at the last selection change (to notice it leaving).
     private var caretWasInTitle = false
 

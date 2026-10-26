@@ -385,6 +385,18 @@ extension LocalStore {
         }
     }
 
+    /// Fetch the document again from the start on the next subscription (key repair). Stored
+    /// updates stay; seqs seen again are stored again, which is harmless for a CRDT.
+    public func resetLastSeq(docId: String) throws {
+        try db.write { try $0.execute(sql: "UPDATE documents SET lastSeq = 0 WHERE docId = ?", arguments: [docId]) }
+    }
+
+    /// Drops snapshots of a document still waiting to be sent (one built before a key repair's
+    /// catch-up would miss what the catch-up brought).
+    public func discardQueuedSnapshots(docId: String) throws {
+        try db.write { try $0.execute(sql: "DELETE FROM outbox WHERE docId = ? AND kind = 'snapshot'", arguments: [docId]) }
+    }
+
     /// Local edits needed to snapshot a document when it is closed (sync-protocol.md §5).
     public static let snapshotOnCloseEdits = 30
 

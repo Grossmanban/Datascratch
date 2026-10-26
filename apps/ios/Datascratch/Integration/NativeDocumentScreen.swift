@@ -157,18 +157,20 @@ struct NativeDocumentScreen: View {
                                     CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
                                         .padding(.trailing, Theme.Space.s4)
                                 }
+                                // A thin strip: the folded button takes less height than the palette.
+                                .padding(.bottom, Theme.Space.s1)
                                 .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
                             } else {
                                 ViewThatFits(in: .horizontal) {
                                     paletteRow(model, isCompact: false)
                                     paletteRow(model, isCompact: true)
                                 }
+                                .padding(.top, Theme.Space.s2)
+                                .padding(.bottom, Theme.Space.s3)
                                 .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.top, Theme.Space.s2)
-                            .padding(.bottom, Theme.Space.s3)
                     }
                     .onAppear { model.header.containerHeight = proxy.size.height }
                     .onChange(of: proxy.size.height) { _, height in model.header.containerHeight = height }
@@ -366,17 +368,18 @@ struct CollapsedPenButton: View {
             Group {
                 if let tool = selection.tool, tool != .lasso {
                     DSPenNib(tool: tool, color: tool == .eraser ? Color.dsTint(.pink) : selection.color.color)
-                        .frame(width: 14, height: 28)
+                        .frame(width: 12, height: 24)
                 } else {
                     Image(systemName: selection.tool == .lasso ? "lasso" : "character.cursor.ibeam")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Theme.Palette.textPrimary)
                 }
             }
-            .frame(width: 40, height: 40)
+            .frame(width: 26, height: 26)
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
+        .controlSize(.small)
         .accessibilityLabel("Show Pen Tools")
         .accessibilityValue(Text(verbatim: "mode \(model.editor.tools.mode.rawValue)"))
         .accessibilityIdentifier("penPalette.collapsed")

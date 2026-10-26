@@ -534,6 +534,14 @@ extension LocalStore {
         }
     }
 
+    /// Messages still to be sent (failed ones not included), per document.
+    public func pendingOutboxCounts() throws -> [String: Int] {
+        try db.read { db in
+            Dictionary(uniqueKeysWithValues: try Row.fetchAll(db, sql: "SELECT docId, COUNT(*) AS n FROM outbox WHERE NOT failed GROUP BY docId")
+                .map { ($0["docId"] as String, $0["n"] as Int) })
+        }
+    }
+
     /// Messages still to be sent (failed ones not included).
     public func outboxCount() throws -> Int {
         try db.read { try OutboxItem.filter(Column("failed") == false).fetchCount($0) }

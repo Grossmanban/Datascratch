@@ -7,6 +7,7 @@ struct MainSplitView: View {
 
     var body: some View {
         @Bindable var scene = scene
+        @Bindable var sync = app.sync
         NavigationSplitView(columnVisibility: $scene.columnVisibility,
                             preferredCompactColumn: $scene.preferredCompactColumn) {
             SidebarView()
@@ -45,6 +46,11 @@ struct MainSplitView: View {
                 .tint(Theme.Palette.accent)
         }
         .modifier(ModeChangeConfirmation())
+        // The server ended this device's session: say so, and offer to sign in again.
+        .sheet(isPresented: $sync.showsSessionEnded) {
+            SessionEndedView()
+                .tint(Theme.Palette.accent)
+        }
         .background(Theme.Palette.canvas)
     }
 }

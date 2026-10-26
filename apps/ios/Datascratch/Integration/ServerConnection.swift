@@ -17,7 +17,7 @@ final class ServerConnection: CoreLibraryRemote {
     let api: APIClient
     let core: CoreLibrary
     let accounts: DSCore.AccountService
-    private let sync: SyncCenter
+    let sync: SyncCenter
     private var engine: SyncEngine?
     private var statusTask: Task<Void, Never>?
     /// `POST /notebooks` in flight; notebook and note documents are registered after it.
@@ -60,8 +60,14 @@ final class ServerConnection: CoreLibraryRemote {
                 configuration: .init(url: SyncClient.Configuration.url(forServer: serverURL),
                                      deviceId: try core.store.deviceId(),
                                      clientVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")
-            ) {
-                .user(accessToken: try await api.accessToken())
+            ) { [weak self] in
+                do {
+                    return .user(accessToken: try await api.accessToken())
+                } catch APIError.notAuthenticated {
+                    // The refresh token was refused: the session was ended on the server.
+                    await self?.sessionEnded()
+                    throw APIError.notAuthenticated
+                }
             }
             let wrappedKeys = core.wrappedKeys
             let keys = KeyRingDocumentKeys(keyRing: core.keys) { noteId, notebookId in
@@ -101,6 +107,17 @@ final class ServerConnection: CoreLibraryRemote {
             Self.log.error("starting sync failed: \(error.localizedDescription, privacy: .public)")
             sync.markFailed(error.localizedDescription)
         }
+    }
+
+    /// The server ended this device's session (revoked from another device or the web, or the
+    /// refresh token expired). Sync stops; the library and the keys stay on the device, and
+    /// signing in again picks up where it stopped.
+    func sessionEnded() async {
+        guard !sync.isSessionEnded else { return }
+        sync.markSessionEnded()
+        let email = (try? core.store.string(ServerAccountService.emailKey)) ?? nil
+        try? core.store.setString(email ?? "", for: ServerAccountService.sessionEndedKey)
+        await stop()
     }
 
     func stop() async {
@@ -278,7 +295,10 @@ final class ServerAccountService: AccountService {
     private(set) var account: Account?
     var isServerBacked: Bool { true }
     @ObservationIgnored private let connection: ServerConnection
-    private static let emailKey = "app.email"
+    static let emailKey = "app.email"
+    /// Set when the server ended the session, cleared by signing in or out: the next launch
+    /// shows «signed out on this device» instead of the welcome screen.
+    static let sessionEndedKey = "app.sessionEnded"
 
     init(connection: ServerConnection) {
         self.connection = connection
@@ -287,7 +307,13 @@ final class ServerAccountService: AccountService {
 
     /// A stored session survives restarts: resume syncing without asking for the password.
     private func restore() async {
-        guard let session = await connection.api.currentSession else { return }
+        guard let session = await connection.api.currentSession else {
+            if let email = try? connection.core.store.string(Self.sessionEndedKey) {
+                account = Account(userId: "", email: email, createdAt: Date())
+                connection.sync.markSessionEnded()
+            }
+            return
+        }
         let email = (try? connection.core.store.string(Self.emailKey)) ?? ""
         account = Account(userId: session.userId, email: email, createdAt: Date())
         await connection.start(session: session, isNewAccount: false)
@@ -316,10 +342,16 @@ final class ServerAccountService: AccountService {
             try await connection.accounts.loadNotebookKeys()
             try? connection.core.store.setString(email, for: Self.emailKey)
             account = Account(userId: session.userId, email: email, createdAt: Date())
+            sessionResumed()
             await connection.start(session: session, isNewAccount: false)
         } catch let error as APIError {
             throw Self.map(error)
         }
+    }
+
+    private func sessionResumed() {
+        try? connection.core.store.setString(nil, for: Self.sessionEndedKey)
+        if connection.sync.isSessionEnded { connection.sync.markSessionRestored() }
     }
 
     func recover(email: String, recoveryKey: RecoveryKey, newPassword: String) async throws {
@@ -331,6 +363,7 @@ final class ServerAccountService: AccountService {
             try await connection.accounts.loadNotebookKeys()
             try? connection.core.store.setString(email, for: Self.emailKey)
             account = Account(userId: session.userId, email: email, createdAt: Date())
+            sessionResumed()
             await connection.start(session: session, isNewAccount: false)
         } catch let error as APIError {
             throw Self.map(error, recovering: true)
@@ -376,6 +409,7 @@ final class ServerAccountService: AccountService {
     }
 
     func signOut() async {
+        sessionResumed()
         await connection.stop()
         try? await connection.accounts.logout()
         account = nil

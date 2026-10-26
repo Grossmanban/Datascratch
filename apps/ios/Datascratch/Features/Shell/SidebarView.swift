@@ -339,6 +339,18 @@ struct SyncStatusBadge: View {
     var body: some View {
         if case .notSent(let documents, let reason) = app.sync.phase {
             notSent(documents: documents, reason: reason)
+        } else if app.sync.phase == .sessionEnded {
+            HStack(spacing: Theme.Space.s2) {
+                let (icon, text, color) = describe(app.sync.phase)
+                label(icon: icon, text: text, color: color)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("sync.status")
+                Button("Sign In") { app.sync.showsSessionEnded = true }
+                    .font(Theme.Typography.footnote.weight(.semibold))
+                    .buttonStyle(.borderless)
+                    .tint(Theme.Palette.accent)
+                    .accessibilityIdentifier("sync.signIn")
+            }
         } else {
             let (icon, text, color) = describe(app.sync.phase)
             label(icon: icon, text: text, color: color)
@@ -393,6 +405,8 @@ struct SyncStatusBadge: View {
             return ("checkmark.icloud", "Up to date", Theme.Palette.success)
         case .failed:
             return ("exclamationmark.icloud", "Sync problem", Theme.Palette.danger)
+        case .sessionEnded:
+            return ("person.crop.circle.badge.exclamationmark", "Signed out", Theme.Palette.danger)
         case .notSent(let documents, _):
             let text: LocalizedStringKey = "Not sent: \(documents)"
             return ("exclamationmark.icloud", text, Theme.Palette.danger)

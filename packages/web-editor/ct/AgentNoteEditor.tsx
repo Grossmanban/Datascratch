@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import * as Y from "yjs";
 import { DatascratchEditor, type EditorApi, type NoteSummary } from "../src";
 import { buildAgentNote, EXISTING_NOTE_ID } from "./agentFixture";
@@ -39,6 +39,17 @@ export function AgentNoteEditor() {
           setTimeout(() => (window.__fx!.ready = true), 0);
         }}
       />
+    </div>
+  );
+}
+
+/** D-45: an agent-created note — no marks, a strip with «Понятно». */
+export function AgentCreatedEditor() {
+  const doc = useMemo(() => new Y.Doc(), []);
+  const [meta, setMeta] = useState<{ agentId: string; agentName: string; at: string } | null>({ agentId: "a", agentName: "Claude", at: "2026-10-26T08:00:00.000Z" });
+  return (
+    <div style={{ width: 700 }}>
+      <DatascratchEditor doc={doc} showPalette={false} createdByAgent={meta} onAcknowledgeAgentCreated={() => setMeta(null)} />
     </div>
   );
 }

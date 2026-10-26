@@ -68,7 +68,6 @@ struct DocumentCollectionView: View {
         .searchable(text: $scene.searchText, prompt: Text("Search documents"))
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                ContentFullScreenButton()
                 Menu {
                     Picker("Layout", selection: $settings.libraryLayout) {
                         Label("Cards", systemImage: "square.grid.2x2").tag(AppSettings.LibraryLayout.grid)
@@ -115,13 +114,46 @@ struct DocumentCollectionView: View {
     }
 
     private var header: some View {
-        Text(title)
-            .font(Theme.Typography.title)
-            .foregroundStyle(Theme.Palette.textPrimary)
-            .lineLimit(2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, Theme.Space.s2)
-            .accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: Theme.Space.s3) {
+            Text(title)
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.Palette.textPrimary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Theme.Space.s2)
+                .accessibilityAddTraits(.isHeader)
+            #if canImport(DSDesign)
+            if isLocked {
+                DSCallout(tone: .info, title: String(localized: "Getting this notebook ready"),
+                          message: String(localized: "It was made on another device. You can write here once its key arrives."),
+                          systemImage: "key")
+                    .accessibilityIdentifier("library.notebookLocked")
+            } else if let id = notebookId, app.sync.unreadableNotebookIds.contains(id) {
+                DSCallout(tone: .note, title: String(localized: "Some changes can't be read here yet"),
+                          message: String(localized: "They were saved with another key. The rest of the notebook is up to date."),
+                          systemImage: "lock.trianglebadge.exclamationmark")
+                    .accessibilityIdentifier("library.notebookUnreadable")
+            }
+            #endif
+        }
+    }
+
+    /// The notebook this list shows (a folder's notebook too).
+    private var notebookId: String? {
+        switch source {
+        case .notebook(let id): id
+        case .folder(let id): library.folder(id)?.notebookId
+        default: nil
+        }
+    }
+
+    /// A notebook from another device whose key has not arrived yet.
+    private var isLocked: Bool {
+        switch source {
+        case .notebook(let id): library.isLocked(notebook: id)
+        case .folder(let id): library.folder(id).map { library.isLocked(notebook: $0.notebookId) } ?? false
+        default: false
+        }
     }
 
     private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
@@ -129,7 +161,7 @@ struct DocumentCollectionView: View {
     private var canCreate: Bool {
         switch source {
         case .starred: false
-        default: true
+        default: !isLocked
         }
     }
 
@@ -162,6 +194,10 @@ struct DocumentCollectionView: View {
     @ViewBuilder private var emptyState: some View {
         if !scene.searchText.isEmpty {
             ContentUnavailableView.search(text: scene.searchText)
+        } else if isLocked {
+            ContentUnavailableView("Getting this notebook ready", systemImage: "key",
+                                   description: Text("It was made on another device. You can write here once its key arrives."))
+                .accessibilityIdentifier("library.notebookLocked")
         } else {
             ContentUnavailableView {
                 Label(emptyTitle, systemImage: source == .starred ? "star" : "doc.text")

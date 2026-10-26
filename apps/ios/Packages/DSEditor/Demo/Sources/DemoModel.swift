@@ -46,7 +46,7 @@ final class DemoModel {
         editor.onStateChange = { [weak self] in
             guard let self else { return }
             self.revision &+= 1
-            if self.isUITesting { NSLog("DIAG state mode=%@", self.editor.tools.mode.rawValue) }
+            if self.isUITesting { NSLog("DIAG state mode=%@ revision=%d", self.editor.tools.mode.rawValue, self.revision) }
         }
         editor.onScroll = { [weak self] y in self?.scrollOffset = y }
         editor.onPaletteRequest = { [weak self] _ in self?.showPalette = true }

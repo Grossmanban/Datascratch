@@ -128,6 +128,13 @@ final class EditorDemoUITests: XCTestCase {
     @MainActor
     private func becomesSelected(_ button: XCUIElement, timeout: TimeInterval = 5) -> Bool {
         let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isSelected == true"), object: button)
-        return XCTWaiter.wait(for: [selected], timeout: timeout) == .completed
+        let ok = XCTWaiter.wait(for: [selected], timeout: timeout) == .completed
+        if !ok {
+            let tree = XCTAttachment(string: XCUIApplication().debugDescription)
+            tree.name = "hierarchy when \(button.identifier) was not selected"
+            tree.lifetime = .keepAlways
+            XCTContext.runActivity(named: "palette state") { $0.add(tree) }
+        }
+        return ok
     }
 }

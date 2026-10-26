@@ -55,6 +55,10 @@ DSHaptics.taskComplete()                          // тактильная отд
 | `DSSuggestionList`, `DSSuggestionGroup`, `DSSuggestionItem` | Меню «/» и `[[ ]]` (как `SuggestionMenu` в вебе): группы, плитки иконок, подсказки сокращений, прокрутка к выбранному; клавиатуру ведёт редактор |
 | `DSCalloutTone` | Тона выносок note / info / success / warning / danger → `tint` gray / blue / green / yellow / red, цвета и SF Symbol |
 
+| `DSSettingsSection`, `DSSettingsRow`, `.dsSettingsRow` | Экраны настроек «Тихая бумага»: карточка-секция с волосяными разделителями, строка с нейтральной иконкой-плиткой, значение, шеврон / переключатель / бейдж / своя вьюшка, деструктивная роль |
+| `DSProfileHeader`, `DSSyncChip`, `DSSyncState` | Шапка профиля (аватар, имя, почта) и чип статуса синхронизации |
+| `DSCallout` | Тонированное предупреждение с действием (например, «Проверьте ключ восстановления») |
+| `DSSettingsSampleScreen` | Образцы экранов «Настройки» и «Аккаунт» (снимки в CI: `settings-*.png`, `account-*.png`) |
 | `DSShowcase` | Все компоненты на одном экране (превью, отладочный экран, снимки в CI) |
 
 У каждого компонента есть превью (`#Preview`) в светлой и тёмной теме.

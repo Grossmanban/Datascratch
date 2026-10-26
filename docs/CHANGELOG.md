@@ -4,6 +4,7 @@
 
 ## 2026-10-25 (вторая половина дня)
 
+- 2026-10-26 (ios-core) — DSCore: `NoteMeta.createdByAgent` (D-45; терпимое чтение, `clearCreatedByAgent` для «Понятно»), копия `meta` блокнота с цветом (`NotebookDocument.setMetaCopy`, `AccountService.refreshNotebookMeta` — при создании блокнота и включении режима «для агентов»).
 - 2026-10-26 · web · D-45: заметка, созданная агентом, показывает «Создано агентом …»; «Понятно» убирает полоску на всех устройствах.
 - 2026-10-26 · web · В `meta` документа блокнота теперь копируется и цвет блокнота (document-model.md §3) — экран согласия агента рисует им иконку.
 - **agents, shared:** D-45 — `create_note` больше не ставит метки `agentEdit` на содержимое новой заметки, а пишет `NoteMeta.createdByAgent = { agentId, agentName, at }`; поле добавлено в схему `NoteMeta` (`@datascratch/shared`, необязательное и допускающее null). `edit_note` по-прежнему помечает вставленный текст `agentEdit`.

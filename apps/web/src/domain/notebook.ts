@@ -32,6 +32,21 @@ export function readNotebook(doc: Y.Doc): NotebookSnapshot {
   };
 }
 
+function plain(v: unknown): unknown {
+  if (v && typeof v === "object" && typeof (v as { toJSON?: unknown }).toJSON === "function") return (v as { toJSON(): unknown }).toJSON();
+  return v ?? null;
+}
+
+function sameMetaValue(key: string, current: unknown, want: unknown): boolean {
+  const a = plain(current);
+  if (key !== "space") return a === (want ?? null);
+  const s = (a ?? null) as { id?: string; name?: string; icon?: string | null } | null;
+  const w = want as { id: string; name: string; icon: string | null } | null;
+  const empty = !s || !s.id;
+  if (!w) return empty;
+  return !empty && s.id === w.id && (s.name ?? "") === w.name && (s.icon ?? null) === (w.icon ?? null);
+}
+
 export function initNotebookDoc(doc: Y.Doc, notebookId: string) {
   const m = notebookMaps(doc);
   m.meta.set("formatVersion", FORMAT_VERSION);
@@ -55,7 +70,9 @@ export function syncNotebookMetaCopy(
     color: ref.color ?? null,
     space: space ? { id: space.id, name: space.name, icon: space.icon ?? null } : null,
   };
-  const changed = Object.entries(want).filter(([k, v]) => JSON.stringify(meta.get(k) ?? null) !== JSON.stringify(v));
+  // Semantic comparison: another client (iOS) may store the same values differently (key order,
+  // a missing field vs null, an empty space object); rewriting those would fight it forever.
+  const changed = Object.entries(want).filter(([k, v]) => !sameMetaValue(k, meta.get(k), v));
   if (!changed.length) return;
   doc.transact(() => {
     for (const [k, v] of changed) meta.set(k, v);

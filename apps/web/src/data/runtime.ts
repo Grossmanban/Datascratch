@@ -11,8 +11,12 @@ import { uploadPending } from "./attachments";
 import { accountDb } from "./db";
 import { DocStore, ORIGIN_REMOTE } from "./docStore";
 import { Indexer } from "./indexer";
-import { clearKeys, prefetchNotebookKeys } from "./keys";
-import { flushOps, onDocRegistered, onOpsChanged } from "./ops";
+import { checkNotebookKeys, clearKeys, onNotebookKeyReplaced, type ReplacedNotebookKey } from "./keys";
+import { notebooksApi } from "@/api/endpoints";
+import { pushNotebookMode } from "@/domain/actions";
+import { ad, unwrapKey, wrapKey } from "@/lib/shared";
+import { enqueueOp } from "./ops";
+import { flushOps, onDocRegistered, onNotebookConflict, onOpsChanged } from "./ops";
 import { connectWithTimeout } from "@/sync/socket";
 import { receivePresence } from "./presence";
 import { DexieSyncStorage } from "./syncStorage";
@@ -143,8 +147,17 @@ export class AccountRuntime {
 
     await this.indexer.loadFromDisk();
     void this.indexer.reconcile(Object.keys(useWorkspace.getState().notes));
-    void prefetchNotebookKeys();
+    this.cleanups.push(
+      onNotebookKeyReplaced((r) => void this.adoptNotebookKey(r)),
+      onNotebookConflict(() => void this.reconcileNotebooks()),
+      // Back online after a drop: whatever did not reach the server meanwhile is reconciled.
+      this.client.on("status", (s) => {
+        if (s === "online" && this.wasOffline) void this.reconcileNotebooks();
+        this.wasOffline = s !== "online";
+      }),
+    );
     this.client.start();
+    void this.reconcileNotebooks();
     this.scheduleFlush();
     this.pendingTimer = setInterval(() => void this.updatePending(), 2000);
   }
@@ -161,6 +174,73 @@ export class AccountRuntime {
     this.store.destroyAll();
     clearKeys();
     resetWorkspace();
+  }
+
+  private reconciling: Promise<void> | null = null;
+  private wasOffline = false;
+
+  /**
+   * Make the server agree with this device (on every sync start and reconnect, and after a
+   * notebook registration conflict): notebook keys are the server's (see checkNotebookKeys);
+   * a notebook the account lists but the server lacks is registered; the server's mode follows
+   * the account doc's NotebookRef.mode (a mode change may not have reached it).
+   */
+  reconcileNotebooks(): Promise<void> {
+    this.reconciling ??= (async () => {
+      try {
+        const list = await notebooksApi.list();
+        for (const r of await checkNotebookKeys(list)) await this.adoptNotebookKey(r);
+        const onServer = new Map(list.map((n) => [n.id, n]));
+        const pending = new Set((await accountDb().ops.toArray()).filter((o) => o.path === "/notebooks").map((o) => (o.body as { notebookId?: string })?.notebookId));
+        for (const ref of useWorkspace.getState().account.notebooks) {
+          const server = onServer.get(ref.id);
+          if (!server) {
+            // Registration lost (dropped op): register the key this device holds.
+            const wrapped = (await accountDb().kv.get(`nbkey:${ref.id}`))?.value as string | undefined;
+            if (wrapped && !pending.has(ref.id)) await enqueueOp({ method: "POST", path: "/notebooks", body: { notebookId: ref.id, mode: "private", wrappedKey: wrapped } });
+            continue;
+          }
+          if (server.mode !== ref.mode) {
+            await pushNotebookMode(ref.id, ref.mode).catch((e) => console.warn("[ds] notebook mode not synced to the server yet", ref.id, e));
+          }
+        }
+      } catch (e) {
+        console.warn("[ds] notebook reconciliation postponed", e);
+      } finally {
+        this.reconciling = null;
+      }
+    })();
+    return this.reconciling;
+  }
+
+  /**
+   * This device sealed a notebook's index with a key the server (and other devices) don't use.
+   * Note keys wrapped with the old key are rewrapped with the server's, the index is re-read from
+   * the start (others' updates were unreadable here) and re-uploaded whole with the right key.
+   */
+  private async adoptNotebookKey({ notebookId, oldKey, newKey }: ReplacedNotebookKey) {
+    const doc = this.store.get(notebookId);
+    if (!doc) return;
+    if (this.attached.has(notebookId)) {
+      await this.client.removeDoc(notebookId).catch(() => undefined);
+      const st = await this.storage.getDocState(notebookId);
+      if (st) await this.storage.setDocState(notebookId, { ...st, lastSeq: 0 });
+      this.attached.delete(notebookId);
+      await this.attach([notebookId]);
+    }
+    const notes = notebookMaps(doc).notes;
+    const rewrapped: [Y.Map<unknown>, string][] = [];
+    for (const [noteId, m] of notes) {
+      const wrapped = m.get("wrappedKey") as string | undefined;
+      if (!wrapped) continue;
+      const ok = await unwrapKey(newKey, wrapped, ad.noteKey(noteId)).then(() => true, () => false);
+      if (ok) continue;
+      const key = await unwrapKey(oldKey, wrapped, ad.noteKey(noteId)).catch(() => null);
+      if (key) rewrapped.push([m, await wrapKey(newKey, key, ad.noteKey(noteId))]);
+    }
+    if (rewrapped.length) doc.transact(() => rewrapped.forEach(([m, w]) => m.set("wrappedKey", w)));
+    await this.client.requestSnapshot(notebookId).catch(() => false);
+    console.warn(`[ds] notebook ${notebookId}: switched to the server's key, ${rewrapped.length} note key(s) rewrapped`);
   }
 
   /** Version snapshot (history) when leaving a document after many own edits (sync-protocol.md §5). */
@@ -403,7 +483,18 @@ export async function startRuntime(accountDocId: string) {
   if (import.meta.env.DEV || import.meta.env.VITE_DS_TEST_HOOKS) {
     const w = window as unknown as { __ds?: unknown; __dsTest?: unknown };
     w.__ds = current;
-    w.__dsTest = { Y: await import("yjs"), db: accountDb, refresh: refreshSession };
+    w.__dsTest = {
+      Y: await import("yjs"),
+      db: accountDb,
+      refresh: refreshSession,
+      // e2e: this device holds its own key for a notebook (as after a POST /notebooks that got 409).
+      corruptNotebookKey: async (notebookId: string) => {
+        const { getMasterKey } = await import("@/auth/session");
+        const { randomKey } = await import("@/lib/shared");
+        const wrapped = await wrapKey(getMasterKey(), randomKey(), ad.notebookKey(notebookId));
+        await accountDb().kv.put({ key: `nbkey:${notebookId}`, value: wrapped });
+      },
+    };
   }
   await current.start();
   return current;

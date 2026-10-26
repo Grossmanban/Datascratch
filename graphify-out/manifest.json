@@ -4600,5 +4600,17 @@
     "seen": 1792982444.2715037,
     "ast_hash": "503f3f493169c7f2b29323357c1449ed",
     "semantic_hash": ""
+  },
+  "apps/ios/Datascratch/Integration/BareEditorProbe.swift": {
+    "mtime": 1792982442.7968524,
+    "seen": 1792982586.6998632,
+    "ast_hash": "cedcf26cd4dbe0ac59c9f1b94a89d612",
+    "semantic_hash": ""
+  },
+  "apps/ios/DatascratchUITests/BareEditorProbeTests.swift": {
+    "mtime": 1792982456.7208533,
+    "seen": 1792982586.6999125,
+    "ast_hash": "e3d361e42a40b512bc8743a2f90d9c0f",
+    "semantic_hash": ""
   }
 }

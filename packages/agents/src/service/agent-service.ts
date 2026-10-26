@@ -15,6 +15,7 @@ import { AgentError } from "../errors.js";
 import { renderHandwriting, type RenderedImage } from "../render/handwriting-png.js";
 import { base64url, uuidv7 } from "../util.js";
 import { requireWrite, type Principal } from "./access.js";
+import { mergeNotebookMeta, readNotebookMeta, type NotebookDocMeta } from "./notebook-meta.js";
 import { buildNoteIndex, matchNote, NoteIndexCache, searchTerms, type NoteIndex, type TaskInfo } from "./note-index.js";
 import type {
   AddCommentInput,
@@ -56,24 +57,6 @@ interface NotebookView {
 
 function str(v: unknown): string | null {
   return typeof v === "string" ? v : null;
-}
-
-interface NotebookDocMeta {
-  name: string | null;
-  icon: string | null;
-  space: AgentNotebook["space"];
-}
-
-/** Notebook name, icon and space mirrored by clients into the notebook document (document-model.md, `meta`). */
-function readNotebookMeta(doc: Y.Doc): NotebookDocMeta {
-  const meta = doc.getMap("meta");
-  const raw = meta.get("space");
-  const spaceObj = raw instanceof Y.Map ? (raw.toJSON() as Record<string, unknown>) : (raw as Record<string, unknown> | null | undefined);
-  const space =
-    spaceObj && typeof spaceObj.id === "string" && typeof spaceObj.name === "string"
-      ? { id: spaceObj.id, name: spaceObj.name, icon: str(spaceObj.icon) }
-      : null;
-  return { name: str(meta.get("name")), icon: str(meta.get("icon")), space };
 }
 
 function readNotebookDoc(doc: Y.Doc): { meta: NotebookDocMeta; notes: Map<string, NoteMetaView>; folders: Map<string, FolderView> } {
@@ -165,8 +148,8 @@ export class AgentService {
       const loaded = await this.ctx.data.loadDoc(p.grant.userId, info.id, p.grant.id);
       if (!loaded) continue;
       const parsed = readNotebookDoc(loaded.doc);
-      const merged: AgentNotebook = { ...info, icon: info.icon ?? parsed.meta.icon, space: info.space ?? parsed.meta.space };
-      views.push({ info: merged, name: info.name ?? parsed.meta.name ?? "Без названия", doc: loaded.doc, notes: parsed.notes, folders: parsed.folders });
+      const merged = mergeNotebookMeta(info, parsed.meta);
+      views.push({ info: merged, name: merged.name, doc: loaded.doc, notes: parsed.notes, folders: parsed.folders });
     }
     return views;
   }
@@ -426,7 +409,8 @@ export class AgentService {
     const noteId = uuidv7(this.now().getTime());
     const { wrappedKey } = await this.ctx.data.createNoteDoc(p.grant.userId, nb.info.id, noteId, p.grant.id);
     const doc = new Y.Doc();
-    initNoteContent(doc, input.title, input.markdown, { agentEdit: this.mark(p), resolveNoteLink: this.resolver(views) });
+    // D-45: a note created by an agent is marked as a whole in NoteMeta.createdByAgent, not with agentEdit marks.
+    initNoteContent(doc, input.title, input.markdown, { agentEdit: null, resolveNoteLink: this.resolver(views) });
     await this.ctx.data.applyUpdate(p.grant.userId, noteId, Y.encodeStateAsUpdate(doc), this.origin(p, "create_note"));
     const index = buildNoteIndex(noteId, 0, doc);
     const at = this.now().toISOString();
@@ -453,6 +437,7 @@ export class AgentService {
           updatedAt: at,
           trashedAt: null,
           order,
+          createdByAgent: { agentId: p.grant.id, agentName: p.agentName, at },
         };
         for (const [k, v] of Object.entries(fields)) m.set(k, v);
       },

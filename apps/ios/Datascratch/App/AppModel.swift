@@ -129,6 +129,8 @@ final class AppModel {
             library.seedIfEmpty()
             signedInForTesting = true
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-cover") { seedCoverForTesting() }
+            // The server ended this device's session (revoked elsewhere).
+            if ProcessInfo.processInfo.arguments.contains("-ui-testing-session-ended") { sync.markSessionEnded() }
         }
         library.purgeExpiredTrash()
         pendingRecoveryKey = secureStore.data(for: Self.pendingKeyItem).flatMap { RecoveryKey(bytes: [UInt8]($0)) }

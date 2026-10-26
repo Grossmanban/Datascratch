@@ -68,6 +68,7 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .settingsNavigationBar()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -110,7 +111,13 @@ struct AccountSettings: View {
                 Text("Your password also protects the encryption key. Your recovery key keeps working after a password change.")
             }
             Section("Sync") {
-                LabeledContent("Status") { SyncStatusBadge() }
+                // Badge on its own line: beside the label it got a sliver of width and the
+                // status wrapped letter by letter into a row hundreds of points tall.
+                VStack(alignment: .leading, spacing: Theme.Space.s1) {
+                    Text("Status")
+                    SyncStatusBadge()
+                }
+                .padding(.vertical, 2)
                 LabeledContent("Server", value: app.sync.serverURL?.host() ?? String(localized: "Not connected"))
                 if app.sync.isLocalOnly {
                     Text("Notes are stored only on this device until the Datascratch server is connected.")
@@ -134,6 +141,7 @@ struct AccountSettings: View {
             }
         }
         .navigationTitle("Account")
+        .settingsNavigationBar()
     }
 }
 
@@ -195,6 +203,7 @@ struct RecoveryKeySettings: View {
             }
         }
         .navigationTitle("Recovery Key")
+        .settingsNavigationBar()
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $isRotating) {
             RotateRecoveryKeySheet { isRevealed = true }
@@ -267,6 +276,7 @@ struct RotateRecoveryKeySheet: View {
                 }
             }
             .navigationTitle("New Recovery Key")
+            .settingsNavigationBar()
             .navigationBarTitleDisplayMode(.inline)
             .interactiveDismissDisabled(newKey != nil && !saved)
             .toolbar {
@@ -352,6 +362,7 @@ struct SecurityLogView: View {
             }
         }
         .navigationTitle("Security Log")
+        .settingsNavigationBar()
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .refreshable { await load() }
@@ -427,6 +438,7 @@ struct ChangePasswordView: View {
             }
         }
         .navigationTitle("Change Password")
+        .settingsNavigationBar()
         .alert("Password changed", isPresented: $done) {
             Button("OK") { dismiss() }
         }
@@ -484,6 +496,7 @@ struct DevicesSettings: View {
             }
         }
         .navigationTitle("Devices")
+        .settingsNavigationBar()
         .task { await app.access.refresh() }
     }
 }
@@ -505,6 +518,7 @@ struct DrawingSettings: View {
             }
         }
         .navigationTitle("Pencil & Drawing")
+        .settingsNavigationBar()
     }
 }
 
@@ -537,6 +551,7 @@ struct AppearanceSettings: View {
             }
         }
         .navigationTitle("Appearance")
+        .settingsNavigationBar()
     }
 }
 
@@ -572,5 +587,15 @@ struct AboutView: View {
             }
         }
         .navigationTitle("About")
+        .settingsNavigationBar()
+    }
+}
+
+extension View {
+    /// An opaque bar over settings screens: under the translucent default the rows showed
+    /// through the title and the round back button sat on the content.
+    func settingsNavigationBar() -> some View {
+        toolbarBackgroundVisibility(.visible, for: .navigationBar)
+            .toolbarBackground(Theme.Palette.canvas, for: .navigationBar)
     }
 }

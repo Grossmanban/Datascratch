@@ -5,9 +5,10 @@
  * No JavaScript and no external resources.
  */
 
-export function esc(text: string): string {
-  return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-}
+import { ICON_STYLE, notebookIcon } from "./notebook-icon.js";
+import { esc } from "./pages-escape.js";
+
+export { esc };
 
 const STYLE = `
 :root{--canvas:#FAF8F4;--surface:#FFFFFF;--text:#1D1C1A;--text2:#6B6862;--text3:#9C978E;--line:#E6E1D8;--accent:#2E5BDB;--accent-soft:rgba(46,91,219,.08);--warning:#C98A1B;--warning-soft:rgba(201,138,27,.10);--danger:#D2453B;--on-accent:#FFFFFF;
@@ -47,6 +48,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .secondary{background:transparent;color:var(--text);border:1px solid var(--line)}
 .fine{margin-top:20px;font-size:12px;color:var(--text3)}
 code{font-size:13px;background:var(--accent-soft);padding:1px 6px;border-radius:6px}
+${ICON_STYLE}
 `;
 
 function layout(title: string, body: string): string {
@@ -57,6 +59,8 @@ export interface ConsentNotebook {
   id: string;
   name: string;
   space: string | null;
+  icon: string | null;
+  color: string | null;
 }
 
 export interface ConsentPageInput {
@@ -81,7 +85,7 @@ export function consentPage(i: ConsentPageInput): string {
     ? i.notebooks
         .map(
           (n, k) =>
-            `<label class="nb"><input type="checkbox" name="notebook" value="${esc(n.id)}"${i.notebooks.length === 1 || k === 0 ? " checked" : ""}><span>${esc(n.name)}</span>${n.space ? `<small>${esc(n.space)}</small>` : ""}</label>`,
+            `<label class="nb"><input type="checkbox" name="notebook" value="${esc(n.id)}"${i.notebooks.length === 1 || k === 0 ? " checked" : ""}>${notebookIcon(n.icon, n.color)}<span>${esc(n.name)}</span>${n.space ? `<small>${esc(n.space)}</small>` : ""}</label>`,
         )
         .join("")
     : `<div class="empty">Нет блокнотов в режиме «для агентов». Включите этот режим у блокнота в Datascratch${i.appUrl ? ` (<a href="${esc(i.appUrl)}">открыть</a>)` : ""} и вернитесь сюда.</div>`;

@@ -102,7 +102,33 @@ struct NativeDocumentScreen: View {
     @Environment(SceneModel.self) private var scene
     @State private var model: NativeEditorModel?
     @State private var failed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let noteId: String
+
+    private func setPaletteCollapsed(_ collapsed: Bool) {
+        withAnimation(reduceMotion ? nil : Theme.Motion.snappy) {
+            app.settings.penPaletteCollapsed = collapsed
+        }
+    }
+
+    /// The palette with its fold button at the trailing end.
+    private func paletteRow(_ model: NativeEditorModel, isCompact: Bool) -> some View {
+        HStack(spacing: isCompact ? Theme.Space.s1 : Theme.Space.s2) {
+            PenPalette(model: model, isCompact: isCompact)
+            Button { setPaletteCollapsed(true) } label: {
+                Image(systemName: "chevron.down.right")
+                    .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                    .frame(width: isCompact ? 22 : 28, height: isCompact ? 22 : 28)
+            }
+            // A system glass button: a plain button over interactive glass missed taps.
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Hide Pen Tools")
+            .accessibilityIdentifier("penPalette.collapse")
+            .padding(.trailing, Theme.Space.s3)
+        }
+    }
 
     var body: some View {
         Group {
@@ -122,13 +148,29 @@ struct NativeDocumentScreen: View {
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         // Inline when it fits the column, else the compact row: it never runs past
                         // the column's edges (iPad split view with three columns).
-                        ViewThatFits(in: .horizontal) {
-                            PenPalette(model: model, isCompact: false)
-                            PenPalette(model: model, isCompact: true)
+                        Group {
+                            if app.settings.penPaletteCollapsed {
+                                // Folded to a button at the trailing edge: the editor gets the
+                                // room, the current tool keeps working (Pencil still draws).
+                                HStack {
+                                    Spacer(minLength: 0)
+                                    CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
+                                        .padding(.trailing, Theme.Space.s4)
+                                }
+                                // A thin strip: the folded button takes less height than the palette.
+                                .padding(.bottom, Theme.Space.s1)
+                                .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
+                            } else {
+                                ViewThatFits(in: .horizontal) {
+                                    paletteRow(model, isCompact: false)
+                                    paletteRow(model, isCompact: true)
+                                }
+                                .padding(.top, Theme.Space.s2)
+                                .padding(.bottom, Theme.Space.s3)
+                                .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
+                            }
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.top, Theme.Space.s2)
-                            .padding(.bottom, Theme.Space.s3)
                     }
                     .onAppear { model.header.containerHeight = proxy.size.height }
                     .onChange(of: proxy.size.height) { _, height in model.header.containerHeight = height }
@@ -314,6 +356,36 @@ struct NativeDocumentHeader: View {
 /// The pen palette: `DSPenToolbar` over the editor's `InkToolState`. Narrow (iPhone, iPad
 /// portrait or split view): the compact row (44 pt targets) with colour, width and finger
 /// drawing under «More». Wide: everything inline.
+/// The folded pen palette: the current tool's nib in its ink colour; a tap brings the palette back.
+struct CollapsedPenButton: View {
+    let model: NativeEditorModel
+    let expand: () -> Void
+
+    var body: some View {
+        let _ = model.revision
+        let selection = PenPalette.selection(from: model.editor.tools)
+        Button(action: expand) {
+            Group {
+                if let tool = selection.tool, tool != .lasso {
+                    DSPenNib(tool: tool, color: tool == .eraser ? Color.dsTint(.pink) : selection.color.color)
+                        .frame(width: 12, height: 24)
+                } else {
+                    Image(systemName: selection.tool == .lasso ? "lasso" : "character.cursor.ibeam")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.Palette.textPrimary)
+                }
+            }
+            .frame(width: 26, height: 26)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.small)
+        .accessibilityLabel("Show Pen Tools")
+        .accessibilityValue(Text(verbatim: "mode \(model.editor.tools.mode.rawValue)"))
+        .accessibilityIdentifier("penPalette.collapsed")
+    }
+}
+
 struct PenPalette: View {
     let model: NativeEditorModel
     let isCompact: Bool

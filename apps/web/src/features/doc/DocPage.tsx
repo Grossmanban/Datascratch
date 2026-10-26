@@ -99,42 +99,20 @@ function DocScreen({ noteId }: { noteId: string }) {
   const trashed = !!note.trashedAt;
   const editable = !readOnlyNewer && !trashed;
 
-  // spec/04 «Название новой заметки»: an empty title gets «Заметка 26 октября 2026» when the
-  // cursor leaves it (Enter, a click into the text) or when the note is closed with text in it;
-  // a note created here and closed fully empty is not kept.
+  // spec/04 «Название новой заметки»: the editor names an empty title (host.defaultTitle) on Enter,
+  // when the caret leaves it and on blur; on close a note with text gets it too, and a note created
+  // here that is still empty (nothing but, at most, its default title) is not kept.
   const titleFor = () => defaultNoteTitle(useWorkspace.getState().notes[noteId]?.createdAt ?? new Date(), i18n.language);
-  useEffect(() => {
-    if (!editorApi || !doc || !editable) return;
-    const ed = editorApi.editor;
-    const inTitle = () => ed.state.selection.$from.parent.type.name === "title";
-    const fill = () => {
-      if (readTitle(doc).trim() || ed.isDestroyed) return;
-      ed.chain().insertContentAt(1, titleFor(), { updateSelection: false }).run();
-    };
-    let wasInTitle = inTitle();
-    const onSelection = () => {
-      const now = inTitle();
-      if (wasInTitle && !now) fill();
-      wasInTitle = now;
-    };
-    const onBlur = () => {
-      if (wasInTitle && hasBody(doc)) fill();
-    };
-    ed.on("selectionUpdate", onSelection);
-    ed.on("blur", onBlur);
-    return () => {
-      ed.off("selectionUpdate", onSelection);
-      ed.off("blur", onBlur);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editorApi, doc, editable]);
   useEffect(() => {
     if (!doc || !editable) return;
     return () => {
-      if (readTitle(doc).trim()) return;
-      if (isNoteEmpty(doc)) {
-        if (isFreshNote(noteId)) void deleteNoteForever(noteId);
-      } else void setTitleOf(noteId, titleFor());
+      const title = readTitle(doc).trim();
+      if (!hasBody(doc)) {
+        if (isFreshNote(noteId) && (!title || title === titleFor()) && isNoteEmpty(doc, title)) void deleteNoteForever(noteId);
+        return;
+      }
+      // The editor is gone by now (fillEmptyTitleIfNeeded needs it): write the same name into the document.
+      if (!title) void setTitleOf(noteId, titleFor());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, editable, noteId]);
@@ -228,7 +206,8 @@ function DocScreen({ noteId }: { noteId: string }) {
           onAcknowledgeAgentCreated={editable ? () => acknowledgeAgentCreated(noteId) : undefined}
           onEditor={(api) => {
             setEditorApi(api);
-            if (editable && !note.title) api.editor.commands.focus("start");
+            if (editable && isFreshNote(noteId)) api.focusTitle();
+            else if (editable && !note.title) api.editor.commands.focus("start");
           }}
           cover={
             meta.cover ? (

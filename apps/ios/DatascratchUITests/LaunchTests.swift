@@ -233,12 +233,17 @@ final class LibraryUITests: XCTestCase {
         let text = editor.textViews.firstMatch.exists ? editor.textViews.firstMatch : editor
         text.tap()
         text.typeText("Keyboard")
+        // The button is for the on-screen keyboard; a simulator with a hardware keyboard has none.
+        guard app.keyboards.firstMatch.waitForExistence(timeout: 3) else {
+            throw XCTSkip("no on-screen keyboard (hardware keyboard connected)")
+        }
         let hide = app.buttons["editor.hideKeyboard"].firstMatch
         XCTAssertTrue(hide.waitForExistence(timeout: 5) && hide.isHittable, "no Hide Keyboard while typing; buttons: \(Self.buttons(app))")
         let palette = app.descendants(matching: .any)["penPalette"].firstMatch
         let x = palette.frame.minX
         hide.tap()
         settle(1)
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "the keyboard is still up")
         XCTAssertFalse(app.buttons["editor.hideKeyboard"].firstMatch.isHittable, "Hide Keyboard is still offered")
         XCTAssertEqual(palette.frame.minX, x, accuracy: 1, "the palette moved when the button went")
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")

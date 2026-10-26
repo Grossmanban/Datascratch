@@ -751,12 +751,12 @@
         }
       }
     },
-    "Delete all documents in the trash?": {
+    "Delete documents forever: %lld?": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Удалить все документы из корзины?"
+            "value": "Удалить навсегда документы: %lld?"
           }
         }
       }
@@ -1321,6 +1321,26 @@
         }
       }
     },
+    "Hide Pen Tools": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свернуть инструменты пера"
+          }
+        }
+      }
+    },
+    "Hide Sidebar": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрыть боковую панель"
+          }
+        }
+      }
+    },
     "I saved the key somewhere safe — in a password manager or on paper.": {
       "localizations": {
         "ru": {
@@ -1437,6 +1457,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Использовался %@"
+          }
+        }
+      }
+    },
+    "Later": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Позже"
           }
         }
       }
@@ -2771,6 +2801,26 @@
         }
       }
     },
+    "Show Pen Tools": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать инструменты пера"
+          }
+        }
+      }
+    },
+    "Show Sidebar": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать боковую панель"
+          }
+        }
+      }
+    },
     "Sign In": {
       "localizations": {
         "ru": {
@@ -2817,6 +2867,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Вход по ключу восстановления"
+          }
+        }
+      }
+    },
+    "Signed out": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Устройство отключено"
           }
         }
       }
@@ -3161,6 +3221,16 @@
         }
       }
     },
+    "The session was ended from another device or in your account settings. Your notes stay on this device; changes made here will sync once you sign in again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сеанс завершён с другого устройства или в настройках аккаунта. Заметки остаются на этом устройстве; изменения, сделанные здесь, синхронизируются, как только вы снова войдёте."
+          }
+        }
+      }
+    },
     "Theme": {
       "localizations": {
         "ru": {
@@ -3197,6 +3267,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Это устройство"
+          }
+        }
+      }
+    },
+    "This device was signed out": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это устройство отключено от аккаунта"
           }
         }
       }

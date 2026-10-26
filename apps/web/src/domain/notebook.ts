@@ -39,18 +39,20 @@ export function initNotebookDoc(doc: Y.Doc, notebookId: string) {
 }
 
 /**
- * Copy names into the notebook doc's meta (document-model.md §3): the server can't read the
+ * Copy names (and the notebook colour) into the notebook doc's meta (document-model.md §3): the server can't read the
  * account doc, so agents (for-agents notebooks) learn notebook/space names from here.
  */
 export function syncNotebookMetaCopy(
   doc: Y.Doc,
-  ref: { name: string; icon: string | null },
+  ref: { name: string; icon: string | null; color?: string | null },
   space: { id: string; name: string; icon: string | null } | null,
 ) {
   const meta = notebookMaps(doc).meta;
   const want: Record<string, unknown> = {
     name: ref.name,
     icon: ref.icon ?? null,
+    // The agent consent page paints the notebook icon with it (document-model.md §3).
+    color: ref.color ?? null,
     space: space ? { id: space.id, name: space.name, icon: space.icon ?? null } : null,
   };
   const changed = Object.entries(want).filter(([k, v]) => JSON.stringify(meta.get(k) ?? null) !== JSON.stringify(v));

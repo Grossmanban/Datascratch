@@ -23,6 +23,8 @@ export function DocView({
   compact,
   showPalette = true,
   onEditor,
+  createdByAgent = null,
+  onAcknowledgeAgentCreated,
 }: {
   doc: Y.Doc;
   backdrop: NoteBackdrop;
@@ -36,6 +38,9 @@ export function DocView({
   compact?: boolean;
   showPalette?: boolean;
   onEditor?: (api: EditorApi) => void;
+  /** D-45: the «Создано агентом» strip (editor), cleared by «Понятно». */
+  createdByAgent?: { agentId: string; agentName: string; at: string } | null;
+  onAcknowledgeAgentCreated?: () => void;
 }) {
   const hasBackdrop = !!backdrop;
   const bg = useMemo(
@@ -72,6 +77,8 @@ export function DocView({
             bottomPadding={compact ? 40 : 160}
             className={compact ? "" : "ds-editor-fill"}
             onReady={onEditor}
+            createdByAgent={createdByAgent}
+            onAcknowledgeAgentCreated={onAcknowledgeAgentCreated}
           />
           {footer && <div className="mx-auto w-full max-w-[720px] px-6 pb-16 sm:px-8">{footer}</div>}
         </article>

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/session";
 import { colorFor } from "@/data/presence";
 import { runtime } from "@/data/runtime";
-import { openTab, restoreNote, toggleStar, updateNote } from "@/domain/actions";
+import { acknowledgeAgentCreated, agentCreatedOf, openTab, restoreNote, toggleStar, updateNote } from "@/domain/actions";
 import { folderPath, isStarred, noteTitle, useWorkspace } from "@/domain/workspace";
 import { closeDocTab, noteMenuItems } from "@/features/docs/menus";
 import { TopBar } from "@/features/shell/PageHeader";
@@ -178,6 +178,8 @@ function DocScreen({ noteId }: { noteId: string }) {
           user={editorUser}
           host={host}
           showPalette={!paletteCollapsed}
+          createdByAgent={agentCreatedOf(note)}
+          onAcknowledgeAgentCreated={editable ? () => acknowledgeAgentCreated(noteId) : undefined}
           onEditor={(api) => {
             setEditorApi(api);
             if (editable && !note.title) api.editor.commands.focus("start");

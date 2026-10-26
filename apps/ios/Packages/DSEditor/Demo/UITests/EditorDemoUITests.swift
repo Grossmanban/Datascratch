@@ -46,8 +46,29 @@ final class EditorDemoUITests: XCTestCase {
         try typing(extraArguments: [])
     }
 
+    // Temporary bisection of the demo-only crash (one difference from the app per variant).
     @MainActor
-    private func typing(extraArguments: [String]) throws {
+    func testTypingBisectSplitView() throws {
+        try typing(extraArguments: ["-splitView"])
+    }
+
+    @MainActor
+    func testTypingBisectNoNavigation() throws {
+        try typing(extraArguments: ["-noNavigation"], undo: false)
+    }
+
+    @MainActor
+    func testTypingBisectNoDiagnostics() throws {
+        try typing(extraArguments: ["-noEditorDiag", "-noDiagDump"])
+    }
+
+    @MainActor
+    func testTypingBisectTextOnlySample() throws {
+        try typing(extraArguments: ["-sampleTextOnly"])
+    }
+
+    @MainActor
+    private func typing(extraArguments: [String], undo: Bool = true) throws {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting"] + extraArguments
         app.launch()
@@ -62,7 +83,7 @@ final class EditorDemoUITests: XCTestCase {
         editor.typeText("Inkwell")
         XCTAssertTrue((editor.value as? String ?? "").contains("Inkwell"))
         // The software keyboard has its own "undo" key: use the editor's toolbar button.
-        app.navigationBars.buttons["undo"].tap()
+        if undo { app.navigationBars.buttons["undo"].tap() }
         XCTAssertEqual(app.state, .runningForeground)
     }
 

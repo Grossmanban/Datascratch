@@ -5,35 +5,50 @@ struct DemoView: View {
     let model: DemoModel
 
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .bottom) {
-                // The editor ends above the palette (as in the app): extended under it, the editor's
-                // recognizers saw the palette's touches. The palette sits in the bottom safe area,
-                // so it rides up with the keyboard in one layout pass.
-                // As in the app: the palette sits in the bottom safe area and the editor shrinks for
-                // it and for the keyboard. Laid over the editor, the palette's taps reached the
-                // text view instead of its buttons; kept full height under the keyboard, the
-                // editor crashed UIKit on a tap into the text under XCUITest.
-                EditorRepresentable(editor: model.editor)
-                    .accessibilityIdentifier("editor")
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        ToolPalette(model: model)
-                            .padding(.top, 8)
-                            .padding(.bottom, 12)
-                    }
-                if model.showHUD {
-                    HUDView(model: model)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                        .padding(12)
-                        .allowsHitTesting(false)
-                }
+        switch model.navigation {
+        case .stack:
+            NavigationStack { content }
+        case .split:
+            // UI-test bisection (temporary): the app shows the editor in a split view's detail.
+            NavigationSplitView {
+                List { Text("Заметки") }
+            } detail: {
+                NavigationStack { content }
             }
+        case .none:
+            // UI-test bisection (temporary): no navigation container and no toolbar.
+            editorAndPalette
+        }
+    }
+
+    private var content: some View {
+        editorAndPalette
             .navigationTitle("Живой штрих")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
             .sheet(isPresented: Binding(get: { model.showPalette }, set: { model.showPalette = $0 })) {
                 PaletteSheet(model: model)
                     .presentationDetents([.height(300)])
+            }
+    }
+
+    private var editorAndPalette: some View {
+        ZStack(alignment: .bottom) {
+            // As in the app: the palette sits in the bottom safe area and the editor shrinks for
+            // it and for the keyboard. Laid over the editor, the palette's taps reached the text
+            // view instead of its buttons.
+            EditorRepresentable(editor: model.editor)
+                .accessibilityIdentifier("editor")
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    ToolPalette(model: model)
+                        .padding(.top, 8)
+                        .padding(.bottom, 12)
+                }
+            if model.showHUD {
+                HUDView(model: model)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(12)
+                    .allowsHitTesting(false)
             }
         }
     }

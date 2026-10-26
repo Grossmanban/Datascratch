@@ -2,15 +2,27 @@
 import DSDesign
 import UIKit
 
-/// Calm banner above the first block while the note has unaccepted agent edits (D-10,
-/// `spec/04-editor.md`): "Правки агента · Принять все", plus "Посмотреть историю" when the host
-/// can show the note's history. Scrolls with the text, like the header.
+/// Calm banner above the first block (`spec/04-editor.md`), scrolled with the text like the header:
+/// - unaccepted agent edits (D-10): "Правки агента · Принять все", plus "Посмотреть историю" when
+///   the host can show the note's history;
+/// - a note an agent created (D-45): "Создано агентом {name} · Понятно".
 final class AgentEditsBanner: UIView {
     static let height: CGFloat = 44
 
+    enum Mode: Equatable {
+        case edits
+        case createdBy(String)
+    }
+
+    var mode: Mode = .edits {
+        didSet { applyMode() }
+    }
+
     var onAcceptAll: (() -> Void)?
+    /// "Понятно" on a note an agent created.
+    var onAcknowledge: (() -> Void)?
     var onShowHistory: (() -> Void)? {
-        didSet { historyButton.isHidden = onShowHistory == nil }
+        didSet { applyMode() }
     }
 
     private let dot = UIView()
@@ -45,7 +57,10 @@ final class AgentEditsBanner: UIView {
         accept.baseForegroundColor = DSTintToken.green.value.fg.uiColor
         accept.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
         acceptButton.configuration = accept
-        acceptButton.addAction(UIAction { [weak self] _ in self?.onAcceptAll?() }, for: .primaryActionTriggered)
+        acceptButton.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            if case .createdBy = self.mode { self.onAcknowledge?() } else { self.onAcceptAll?() }
+        }, for: .primaryActionTriggered)
         acceptButton.accessibilityIdentifier = "agentEdits.acceptAll"
 
         for v in [dot, label, historyButton, acceptButton] { addSubview(v) }
@@ -53,6 +68,22 @@ final class AgentEditsBanner: UIView {
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
+
+    private func applyMode() {
+        switch mode {
+        case .edits:
+            label.text = "Правки агента"
+            acceptButton.configuration?.title = "Принять все"
+            acceptButton.accessibilityIdentifier = "agentEdits.acceptAll"
+            historyButton.isHidden = onShowHistory == nil
+        case .createdBy(let name):
+            label.text = name.isEmpty ? "Создано агентом" : "Создано агентом \(name)"
+            acceptButton.configuration?.title = "Понятно"
+            acceptButton.accessibilityIdentifier = "agentCreated.acknowledge"
+            historyButton.isHidden = true
+        }
+        setNeedsLayout()
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()

@@ -31,9 +31,9 @@
   },
   "docs/CHANGELOG.md": {
     "mtime": 1793005246.7590885,
-    "seen": 1793005302.8776896,
+    "seen": 1793005601.4709678,
     "ast_hash": "b1c77a507d66a6d95bf862075ace288a",
-    "semantic_hash": ""
+    "semantic_hash": "b1c77a507d66a6d95bf862075ace288a"
   },
   "docs/README.md": {
     "mtime": 1792931667.762832,
@@ -115,9 +115,9 @@
   },
   "docs/decisions/0010-agent-edits.md": {
     "mtime": 1793005246.7640858,
-    "seen": 1793005302.8782022,
+    "seen": 1793005601.470975,
     "ast_hash": "f170922e21359cc837d0735103e4c09b",
-    "semantic_hash": ""
+    "semantic_hash": "f170922e21359cc837d0735103e4c09b"
   },
   "docs/decisions/0011-handwriting-for-agents.md": {
     "mtime": 1792927481.4039857,
@@ -247,9 +247,9 @@
   },
   "docs/decisions/README.md": {
     "mtime": 1793005246.7640858,
-    "seen": 1793005302.8790243,
+    "seen": 1793005601.470979,
     "ast_hash": "bf81a53a4245d5241787336bc7128540",
-    "semantic_hash": ""
+    "semantic_hash": "bf81a53a4245d5241787336bc7128540"
   },
   "docs/development.md": {
     "mtime": 1792927481.4039857,
@@ -301,9 +301,9 @@
   },
   "docs/spec/04-editor.md": {
     "mtime": 1793005247.0244105,
-    "seen": 1793005302.879342,
+    "seen": 1793005601.4709818,
     "ast_hash": "107df51c2a521057919774b860ea0189",
-    "semantic_hash": ""
+    "semantic_hash": "107df51c2a521057919774b860ea0189"
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1792927481.4072206,
@@ -331,9 +331,9 @@
   },
   "docs/spec/09-agents-api.md": {
     "mtime": 1793005246.7645888,
-    "seen": 1793005302.8794632,
+    "seen": 1793005601.4709837,
     "ast_hash": "2f92caab0b1bf92695089cd181a905d2",
-    "semantic_hash": ""
+    "semantic_hash": "2f92caab0b1bf92695089cd181a905d2"
   },
   "docs/spec/10-sync.md": {
     "mtime": 1792948578.4210732,
@@ -421,9 +421,9 @@
   },
   "docs/architecture/contracts/document-model.md": {
     "mtime": 1793005246.7630885,
-    "seen": 1793005302.877824,
+    "seen": 1793005601.4709718,
     "ast_hash": "c8b8eac8f1bce55679327697e4efb700",
-    "semantic_hash": ""
+    "semantic_hash": "c8b8eac8f1bce55679327697e4efb700"
   },
   "docs/architecture/contracts/strokes.md": {
     "mtime": 1792967461.8993397,
@@ -1045,15 +1045,15 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
-    "seen": 1793005095.5154862,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1793005601.4700751,
+    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
-    "seen": 1793005095.5154898,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1793005601.470077,
+    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1792948578.3941054,
@@ -2347,9 +2347,9 @@
   },
   "docs/architecture/contracts/agents-api.md": {
     "mtime": 1793005246.7630885,
-    "seen": 1793005302.877743,
+    "seen": 1793005601.4709694,
     "ast_hash": "e48c108f1b9e31640dbbde426a84d819",
-    "semantic_hash": ""
+    "semantic_hash": "e48c108f1b9e31640dbbde426a84d819"
   },
   "docs/guides/connect-ai-agents.md": {
     "mtime": 1793004365.227776,
@@ -4009,9 +4009,9 @@
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
-    "seen": 1793005095.5154922,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1793005601.4700787,
+    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "semantic_hash": "a66fd1a5c043c1420b26f520d2b23c56"
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
     "mtime": 1792948578.7650733,
@@ -4081,9 +4081,9 @@
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
     "mtime": 1793005247.0233088,
-    "seen": 1793005302.8612688,
+    "seen": 1793005601.4699624,
     "ast_hash": "3780d119c15e71a18a1bead3240f4411",
-    "semantic_hash": ""
+    "semantic_hash": "3780d119c15e71a18a1bead3240f4411"
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
     "mtime": 1792984751.649971,
@@ -4135,9 +4135,9 @@
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
     "mtime": 1793005247.0236232,
-    "seen": 1793005302.8615713,
+    "seen": 1793005601.4699872,
     "ast_hash": "428b1850dd8fad13330c79eb31e33749",
-    "semantic_hash": ""
+    "semantic_hash": "428b1850dd8fad13330c79eb31e33749"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormulaViews.swift": {
     "mtime": 1792929059.610677,
@@ -4507,9 +4507,9 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792967462.0829601,
-    "seen": 1793005095.5158155,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1793005601.4705377,
+    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "semantic_hash": "c9f780dd0f9b83af1132086b539b65c4"
   },
   "infra/deploy/inspect.sh": {
     "mtime": 1792967462.0829601,
@@ -4693,9 +4693,9 @@
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/AgentEditsBanner.swift": {
     "mtime": 1793005247.0234547,
-    "seen": 1793005302.8613427,
+    "seen": 1793005601.469971,
     "ast_hash": "6e8d0fe14401882676cc26ca99f3bc7f",
-    "semantic_hash": ""
+    "semantic_hash": "6e8d0fe14401882676cc26ca99f3bc7f"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditorModel/AgentEdits.swift": {
     "mtime": 1793004906.5024047,
@@ -4711,8 +4711,8 @@
   },
   "docs/decisions/0045-agent-created-notes.md": {
     "mtime": 1793005246.7640858,
-    "seen": 1793005302.8790216,
+    "seen": 1793005601.4709768,
     "ast_hash": "15e7968def7598e29336e7e4db6340a9",
-    "semantic_hash": ""
+    "semantic_hash": "15e7968def7598e29336e7e4db6340a9"
   }
 }

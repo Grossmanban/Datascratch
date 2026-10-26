@@ -227,11 +227,6 @@ final class LibraryUITests: XCTestCase {
     /// iPhone feedback: while typing, «Hide Keyboard» ends editing; without a keyboard the button
     /// is gone (its slot stays, so nothing moves).
     func testHidingTheKeyboard() throws {
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            // Run 40325368506: on the iPad simulator the keyboard stays up for seconds after the
-            // tap (screen recording). Under investigation; iPhone keeps the test.
-            throw XCTSkip("iPad simulator keyboard does not dismiss reliably — under investigation after build 12")
-        }
         let app = launchSignedIn()
         try openNewNoteInNativeEditor(app)
         let editor = app.descendants(matching: .any)["editor"].firstMatch
@@ -249,7 +244,9 @@ final class LibraryUITests: XCTestCase {
         hide.tap()
         settle(1)
         XCTAssertFalse(app.keyboards.firstMatch.exists, "the keyboard is still up")
-        XCTAssertFalse(app.buttons["editor.hideKeyboard"].firstMatch.isHittable, "Hide Keyboard is still offered")
+        let gone = NSPredicate(format: "isHittable == false")
+        let offered = XCTWaiter().wait(for: [expectation(for: gone, evaluatedWith: app.buttons["editor.hideKeyboard"].firstMatch)], timeout: 3)
+        XCTAssertEqual(offered, .completed, "Hide Keyboard is still offered; format bar shown: \(app.descendants(matching: .any)["formatBar"].firstMatch.exists)")
         XCTAssertEqual(palette.frame.minX, x, accuracy: 1, "the palette moved when the button went")
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
     }
@@ -264,6 +261,14 @@ final class LibraryUITests: XCTestCase {
         text.typeText("Format")
         let bar = app.descendants(matching: .any)["formatBar"].firstMatch
         XCTAssertTrue(bar.waitForExistence(timeout: 5), "no format bar while typing; buttons: \(Self.buttons(app))")
+        // The bar sits above the palette, never over it, and stays inside the window.
+        let palette = app.descendants(matching: .any)["penPalette"].firstMatch
+        let window = app.windows.firstMatch.frame
+        if palette.exists {
+            XCTAssertLessThanOrEqual(bar.frame.maxY, palette.frame.minY + 1, "format bar overlaps the pen palette")
+        }
+        // Only the leading edge: the bar scrolls sideways, and the element reports its content.
+        XCTAssertGreaterThanOrEqual(bar.frame.minX, window.minX - 1, "format bar starts off screen")
         let bold = bar.buttons["Bold"].firstMatch
         XCTAssertTrue(bold.exists && bold.isHittable, "no Bold on the format bar")
         XCTAssertFalse(bold.isSelected, "Bold is on before it was tapped")

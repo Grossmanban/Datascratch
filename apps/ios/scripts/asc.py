@@ -3,6 +3,7 @@
 
     asc.py ensure-bundle-id com.datascratch.app "Datascratch"   # register if missing, enable Associated Domains
     asc.py check-app com.datascratch.app                        # fail with a clear message if no app record
+    asc.py prune-ci-certs                                       # revoke development certificates made by earlier CI runs
 
 Credentials come from the environment: KEY_ID, ISSUER_ID, KEY_PATH (the .p8 file).
 The JWT (ES256) is signed with the `openssl` command line tool.
@@ -98,12 +99,39 @@ def check_app(identifier: str) -> None:
     print(f"App record: {apps[0]['attributes'].get('name')} ({identifier}).")
 
 
+# Every release run starts on a fresh runner, so cloud signing makes a new development
+# certificate through the API key each time; Apple caps their number per account.
+# Those certificates are useless once the runner is gone. Only certificates the API
+# key created are touched: ones made in Xcode on a Mac carry the person's name.
+CI_CERT_MARK = "Created via API"
+DEVELOPMENT_TYPES = {"DEVELOPMENT", "IOS_DEVELOPMENT"}
+
+
+def prune_ci_certs() -> None:
+    certificates = call("GET", "/certificates?limit=200")["data"]
+    revoked = 0
+    for cert in certificates:
+        attributes = cert["attributes"]
+        name = attributes.get("displayName") or attributes.get("name") or ""
+        until = (attributes.get("expirationDate") or "")[:10]
+        if attributes.get("certificateType") in DEVELOPMENT_TYPES and CI_CERT_MARK in f"{name} {attributes.get('name') or ''}":
+            call("DELETE", f"/certificates/{cert['id']}")
+            revoked += 1
+            print(f"revoked: {attributes.get('certificateType')} | {name} | until {until}")
+        else:
+            # The log is public: never print the name of a person's certificate.
+            print(f"kept:    {attributes.get('certificateType')} | (not made by CI) | until {until}")
+    print(f"Revoked {revoked} CI development certificate(s); {len(certificates) - revoked} kept.")
+
+
 if __name__ == "__main__":
     command, *args = sys.argv[1:] or ["help"]
     if command == "ensure-bundle-id":
         ensure_bundle_id(args[0], args[1] if len(args) > 1 else args[0])
     elif command == "check-app":
         check_app(args[0])
+    elif command == "prune-ci-certs":
+        prune_ci_certs()
     else:
         print(__doc__)
         sys.exit(2)

@@ -13,10 +13,12 @@ type SyncState = {
   lastSyncedAt: number | null;
   error: string | null;
   failed: Record<string, SyncFailure>;
+  /** Server items this device could not read, per document (skipped; the rest keeps syncing). */
+  skipped: Record<string, number>;
 };
 
 export function createSyncStatusStore() {
-  return create<SyncState>(() => ({ status: "offline", pending: 0, lastSyncedAt: null, error: null, failed: {} }));
+  return create<SyncState>(() => ({ status: "offline", pending: 0, lastSyncedAt: null, error: null, failed: {}, skipped: {} }));
 }
 export type SyncStatusStore = ReturnType<typeof createSyncStatusStore>;
 

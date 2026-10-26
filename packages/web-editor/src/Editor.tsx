@@ -52,6 +52,12 @@ export interface DatascratchEditorProps {
   onRequestCover?: () => void;
   showPalette?: boolean;
   penSettings?: Partial<PenSettings>;
+  /**
+   * D-45: `NoteMeta.createdByAgent` of this note. Shows the strip «Создано агентом {agentName}» with
+   * «Понятно»; the app clears the field in `onAcknowledgeAgentCreated`.
+   */
+  createdByAgent?: { agentId: string; agentName: string; at: string } | null;
+  onAcknowledgeAgentCreated?: () => void;
   /** Plain-text title, after each change (the app copies it into NoteMeta.title). */
   onTitleChange?: (title: string) => void;
   onReady?: (api: EditorApi) => void;
@@ -284,6 +290,17 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       {meta.formatVersion > SUPPORTED_FORMAT_VERSION && (
         <div className="ds-readonly-banner" role="status">
           Заметка создана в более новой версии приложения и открыта только для чтения. Обновите приложение, чтобы редактировать.
+        </div>
+      )}
+      {props.createdByAgent && (
+        <div className="ds-agent-banner ds-agent-created" role="status">
+          <span className="ds-agent-banner-dot" aria-hidden="true" />
+          <span className="ds-agent-banner-text">Создано агентом {props.createdByAgent.agentName}</span>
+          {props.onAcknowledgeAgentCreated && (
+            <button type="button" className="ds-agent-banner-accept" onClick={props.onAcknowledgeAgentCreated}>
+              Понятно
+            </button>
+          )}
         </div>
       )}
       {api && agentBlocks > 0 && !readOnly && (

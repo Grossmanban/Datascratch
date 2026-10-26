@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/experimental-ct-react";
-import { AgentNoteEditor } from "./AgentNoteEditor";
+import { AgentCreatedEditor, AgentNoteEditor } from "./AgentNoteEditor";
 import { EXISTING_NOTE_ID } from "./agentFixture";
 
 test.beforeEach(async ({ page }) => {
@@ -54,4 +54,12 @@ test("agent edits: quiet highlight, per-block accept and accept all", async ({ m
   const stillMarked = await page.evaluate(() => JSON.stringify(window.__fx!.doc.getXmlFragment("content").toJSON()).includes("agentEdit"));
   expect(stillMarked).toBe(false);
   expect(await page.locator(".ds-prose").innerText()).toContain("Тест форматирования");
+});
+
+test("D-45: an agent-created note shows «Создано агентом» until acknowledged", async ({ mount, page }) => {
+  await mount(<AgentCreatedEditor />);
+  const strip = page.getByRole("status").filter({ hasText: "Создано агентом Claude" });
+  await expect(strip).toBeVisible();
+  await strip.getByRole("button", { name: "Понятно" }).click();
+  await expect(strip).toHaveCount(0);
 });

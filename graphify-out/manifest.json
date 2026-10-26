@@ -30,10 +30,10 @@
     "semantic_hash": "34c4f3a3c380290d8f8e95eec4f64db4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793004994.4429822,
-    "seen": 1793005641.0171897,
-    "ast_hash": "f4514103199112f8ab2030e00c58c2ad",
-    "semantic_hash": "f4514103199112f8ab2030e00c58c2ad"
+    "mtime": 1793005791.9930465,
+    "seen": 1793005850.667936,
+    "ast_hash": "4bfa73c925fcbe909532ca65c9325ba1",
+    "semantic_hash": ""
   },
   "docs/README.md": {
     "mtime": 1792930436.611198,
@@ -300,10 +300,10 @@
     "semantic_hash": "7c48b24ba8a8d8b84e24b41652967e2b"
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1793004994.441511,
-    "seen": 1793005641.017202,
-    "ast_hash": "209b381717497914a685552f660954dd",
-    "semantic_hash": "209b381717497914a685552f660954dd"
+    "mtime": 1793005791.9044397,
+    "seen": 1793005850.6700826,
+    "ast_hash": "a15a68e98d4aae931b5a7c9943d0aba0",
+    "semantic_hash": ""
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1792927372.4280927,
@@ -1026,10 +1026,10 @@
     "semantic_hash": "816affa54765b863153380cef09669f2"
   },
   ".github/workflows/web-editor.yml": {
-    "mtime": 1792931313.3606808,
-    "seen": 1793005641.0161495,
-    "ast_hash": "b57a172a267dd7dbb7fd7d8c4c500e76",
-    "semantic_hash": "b57a172a267dd7dbb7fd7d8c4c500e76"
+    "mtime": 1793005785.1278849,
+    "seen": 1793005850.6402102,
+    "ast_hash": "5001ec8584db32789f7ae79f4313527f",
+    "semantic_hash": ""
   },
   ".prettierrc.json": {
     "mtime": 1792929828.3525927,
@@ -1866,10 +1866,10 @@
     "semantic_hash": "426239795750cdc09be391e876fb19ea"
   },
   "packages/web-editor/src/Editor.tsx": {
-    "mtime": 1793004985.6725125,
-    "seen": 1793005641.0171301,
-    "ast_hash": "b5a0426cd503db7a457304781dea6771",
-    "semantic_hash": "b5a0426cd503db7a457304781dea6771"
+    "mtime": 1793005785.207885,
+    "seen": 1793005850.6659014,
+    "ast_hash": "a3bbc62d21ae1118de927e09061998b6",
+    "semantic_hash": ""
   },
   "packages/web-editor/src/collab/collaboration.ts": {
     "mtime": 1792934201.3768525,
@@ -4698,9 +4698,9 @@
     "semantic_hash": "15e7968def7598e29336e7e4db6340a9"
   },
   "packages/web-editor/ct/AgentNoteEditor.tsx": {
-    "mtime": 1793004985.6678374,
-    "seen": 1793005703.1775432,
-    "ast_hash": "0602a8ed14c48e14937e2b2393bea9d9",
+    "mtime": 1793005785.207885,
+    "seen": 1793005850.6655233,
+    "ast_hash": "baccd6b74a2e0d0d431c6dfa3ca44d63",
     "semantic_hash": ""
   },
   "packages/web-editor/ct/agentFixture.ts": {
@@ -4710,9 +4710,9 @@
     "semantic_hash": ""
   },
   "packages/web-editor/ct/agentNote.spec.tsx": {
-    "mtime": 1793004985.6678374,
-    "seen": 1793005703.1776042,
-    "ast_hash": "d7c18a6f6df71c4130203ca191762fbc",
+    "mtime": 1793005785.207885,
+    "seen": 1793005850.665629,
+    "ast_hash": "a2e09ee6133c968b40409782809225e2",
     "semantic_hash": ""
   },
   "packages/web-editor/src/schema/agentReview.ts": {

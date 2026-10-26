@@ -2772,15 +2772,15 @@
     "semantic_hash": ""
   },
   "packages/agents/src/doc/markdown-export.ts": {
-    "mtime": 1793022824.700249,
-    "seen": 1793022882.0244114,
-    "ast_hash": "edb3521ba815fce967f988ffc28d82f5",
+    "mtime": 1793023511.8442898,
+    "seen": 1793023572.8791778,
+    "ast_hash": "b43fc464644be4c96e3067293f1011fb",
     "semantic_hash": ""
   },
   "packages/agents/src/doc/markdown-import.ts": {
-    "mtime": 1793022824.700249,
-    "seen": 1793022882.0244136,
-    "ast_hash": "0dc51fb8a33a394c307ac54da2f3f302",
+    "mtime": 1793023511.8442898,
+    "seen": 1793023572.879183,
+    "ast_hash": "dc98be3f2b1372fe3d4392d35b000ae3",
     "semantic_hash": ""
   },
   "packages/agents/src/doc/model.ts": {
@@ -2922,9 +2922,9 @@
     "semantic_hash": "d7c4bfb36708373b51bb3b9175ed7a08"
   },
   "packages/agents/test/markdown.test.ts": {
-    "mtime": 1793022824.704249,
-    "seen": 1793022882.024993,
-    "ast_hash": "5d27b358ce71370b112a485d115f4ca7",
+    "mtime": 1793023511.8442898,
+    "seen": 1793023572.8803535,
+    "ast_hash": "36ad312cd4b60507be1e5aa65e48fe8e",
     "semantic_hash": ""
   },
   "packages/agents/test/mcp.test.ts": {
@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793023387.7192764,
-    "seen": 1793023444.6245432,
-    "ast_hash": "7624aa574740d921b5223a3994080cd8",
+    "mtime": 1793023512.2722197,
+    "seen": 1793023572.89089,
+    "ast_hash": "4cac30b2a34dbb41c4f073e25348959f",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -4302,9 +4302,9 @@
     "semantic_hash": "4e12d508cbe83842d35667ec3683e82b"
   },
   "docs/architecture/contracts/agents-api.md": {
-    "mtime": 1793022824.624249,
-    "seen": 1793022882.0325093,
-    "ast_hash": "abd04bbeb9e2e80f1635b7c444460a0a",
+    "mtime": 1793023511.7722898,
+    "seen": 1793023572.8909695,
+    "ast_hash": "28e08a42347cfe422968809ec754d26a",
     "semantic_hash": ""
   },
   "docs/architecture/contracts/api.md": {
@@ -4326,9 +4326,9 @@
     "semantic_hash": "4ac1df3269effc7a1afe18500a423d82"
   },
   "docs/architecture/contracts/document-model.md": {
-    "mtime": 1793022825.2241197,
-    "seen": 1793022882.0325863,
-    "ast_hash": "db105279ac6f6ef8f1c15e61cd24df31",
+    "mtime": 1793023512.2617462,
+    "seen": 1793023572.8910875,
+    "ast_hash": "ae60619f38b40f7496f62b7c5a59d30d",
     "semantic_hash": ""
   },
   "docs/architecture/contracts/strokes.md": {

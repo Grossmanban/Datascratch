@@ -150,11 +150,10 @@ final class EditorDemoUITests: XCTestCase {
         let chip = app.links["Идеи"]
         XCTAssertTrue(scrollIntoView(chip, in: editor), "the note link chip is on screen and accessible")
         touch(chip, in: app)
-        let opened = app.staticTexts["hud.openedNote"]
-        XCTAssertTrue(opened.waitForExistence(timeout: 5))
-        let openedChip = expectation(for: NSPredicate(format: "label CONTAINS '0192f3c4'"), evaluatedWith: opened)
-        wait(for: [openedChip], timeout: 10)
+        let opened = app.alerts["Открыть «Идеи»"]
+        XCTAssertTrue(opened.waitForExistence(timeout: 10), "the chip opens its note")
         XCTAssertEqual(app.keyboards.count, 0, "the tap opened the link instead of starting to type")
+        opened.buttons["OK"].tap()
 
         let title = app.links["Новая заметка"]
         XCTAssertTrue(scrollIntoView(title, in: editor), "the [[Title]] link is on screen and accessible")

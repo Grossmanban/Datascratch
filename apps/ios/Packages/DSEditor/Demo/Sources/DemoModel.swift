@@ -11,6 +11,8 @@ final class DemoModel {
     var status = ""
     /// Id of the last note link tapped (shown in the HUD for UI tests).
     var openedNote = ""
+    /// Title of a note link that was tapped: the demo shows it in an alert (UI tests wait for it).
+    var openedNoteTitle: String?
     var showHUD = false
     var showPalette = false
     /// Title of a `[[Title]]` link that was tapped (the demo has one note: it offers to create it).
@@ -61,6 +63,7 @@ final class DemoModel {
         editor.onOpenNote = { [weak self] id in
             self?.status = "Ссылка на заметку \(id.prefix(8))…"
             self?.openedNote = id
+            self?.openedNoteTitle = self?.noteTitle(for: id) ?? id
         }
         editor.onOpenNoteTitled = { [weak self] title in self?.pendingNoteTitle = title }
         editor.onSlashMenu = { [weak self] menu in

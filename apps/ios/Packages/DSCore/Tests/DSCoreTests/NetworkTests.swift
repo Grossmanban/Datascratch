@@ -185,12 +185,13 @@ struct StuckFirstFactory: WebSocketFactory {
 
 @Suite struct SyncHandshakeTests {
     /// Two stuck handshakes: the client drops them after the handshake timeout and reconnects
-    /// at once (well before the 10 s backoff), and the status never says offline meanwhile.
-    /// The timeout leaves the real handshake room even on a loaded CI simulator.
+    /// at once instead of waiting out the backoff, and the status never says offline meanwhile.
+    /// The backoff (60 s) is far beyond the bound (30 s), so the test proves the quick retries
+    /// without depending on how fast a loaded CI simulator is.
     @Test func stuckHandshakesAreRetriedQuicklyAndShowAsSyncing() async throws {
         let server = FakeSyncServer()
         var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: "A", clientVersion: "test")
-        config.minBackoff = .seconds(10)
+        config.minBackoff = .seconds(60)
         config.handshakeTimeout = .seconds(1)
         config.quickRetryDelay = .milliseconds(20)
         let client = SyncClient(configuration: config, factory: StuckFirstFactory(server: server, stuck: Locked(2))) { .user(accessToken: "t") }
@@ -201,8 +202,8 @@ struct StuckFirstFactory: WebSocketFactory {
         }
         let start = ContinuousClock.now
         await engine.start()
-        #expect(try await eventually(timeout: .seconds(8)) { await client.isConnected })
-        #expect(ContinuousClock.now - start < .seconds(5))
+        #expect(try await eventually(timeout: .seconds(30)) { await client.isConnected })
+        #expect(ContinuousClock.now - start < .seconds(30))
         try await Task.sleep(for: .milliseconds(50))
         watcher.cancel()
         let summaries = seen.withLock { $0 }

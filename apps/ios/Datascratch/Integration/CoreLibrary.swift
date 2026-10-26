@@ -326,81 +326,47 @@ final class CoreLibrary: LibraryBackend {
         account.notebooks().map(\.id).filter { (try? keys.notebookKey($0)) ?? nil == nil }
     }
 
-    /// Takes the notebook keys the server holds (`GET /notebooks`, unwrapped) as the truth.
-    /// A missing key is stored. A different local key (one an earlier build invented for a
-    /// notebook whose key it lacked) is replaced: the notes' keys it wrapped are re-wrapped by
-    /// the server's key and the notebook's whole state is queued again, so what was sealed with
-    /// the wrong key reaches the server readable. Returns the notebooks that were repaired.
-    @discardableResult
-    func adoptServerNotebookKeys(_ server: [String: Data]) -> [String] {
-        var repaired: [String] = []
-        for (id, serverKey) in server {
-            guard let local = (try? keys.notebookKey(id)) ?? nil else {
-                try? keys.setNotebookKey(serverKey, notebookId: id)
-                continue
-            }
-            guard local != serverKey else { continue }
-            CoreLibrary.log.error("notebook \(id, privacy: .public) held a key the server does not know; repairing")
-            if account.notebook(id: id) != nil, let notebook = try? notebookDocument(id) {
-                for meta in notebook.notes(includeTrashed: true) {
-                    guard let wrapped = DSCore.Base64URL.decode(meta.wrappedKey),
-                          let noteKey = try? DSCrypto.unwrapKey(wrapped, with: local, ad: CryptoAD.noteKey(meta.id)),
-                          let rewrapped = try? DSCrypto.wrapKey(noteKey, with: serverKey, ad: CryptoAD.noteKey(meta.id)) else { continue }
-                    let encoded = DSCore.Base64URL.encode(rewrapped)
-                    try? notebook.updateNote(id: meta.id, ["wrappedKey": .string(value: encoded)])
-                    wrappedKeys.set(noteId: meta.id, notebookId: id, wrapped: encoded)
-                }
-            }
-            try? keys.setNotebookKey(serverKey, notebookId: id)
-            if let crdt = notebookDocs[id]?.crdt, let state = try? crdt.encodeStateAsUpdate() {
-                try? store.appendLocalUpdate(docId: id, update: state, origin: .local)
-            }
-            repaired.append(id)
-        }
-        healUnreadableNotes(server)
-        resendNotebookStatesOnce()
-        onExternalChange?(loadSnapshot())
-        return repaired
-    }
-
     /// Notes whose key no device can unwrap any more (wrapped by a notebook key an earlier build
     /// invented, lost at sign-out) but whose content this device still holds: they get a new
-    /// note key wrapped by the server's notebook key, and their whole state is sent again.
-    /// Returns how many notes were healed.
+    /// note key wrapped by the notebook's canonical key. Call after
+    /// `AccountService.reconcileNotebookKeys` and `rewrapNoteKeys`; each returned note needs
+    /// `SyncEngine.rekey` so its state goes up sealed with the new key.
     @discardableResult
-    func healUnreadableNotes(_ server: [String: Data]) -> Int {
-        var healed = 0
-        for (notebookId, serverKey) in server where account.notebook(id: notebookId) != nil {
-            guard let notebook = try? notebookDocument(notebookId) else { continue }
+    func healUnreadableNotes() -> [String] {
+        var healed: [String] = []
+        for ref in account.notebooks() where keys.isNotebookKeyVerified(ref.id) {
+            guard let key = (try? keys.notebookKey(ref.id)) ?? nil, let notebook = try? notebookDocument(ref.id) else { continue }
             for meta in notebook.notes(includeTrashed: true) {
                 if let wrapped = DSCore.Base64URL.decode(meta.wrappedKey),
-                   (try? DSCrypto.unwrapKey(wrapped, with: serverKey, ad: CryptoAD.noteKey(meta.id))) != nil { continue }
+                   (try? DSCrypto.unwrapKey(wrapped, with: key, ad: CryptoAD.noteKey(meta.id))) != nil { continue }
                 guard let updates = try? store.updates(docId: meta.id), !updates.isEmpty,
-                      let wrapped = try? keys.createNoteKey(noteId: meta.id, notebookId: notebookId).wrappedKey else { continue }
+                      let wrapped = try? keys.createNoteKey(noteId: meta.id, notebookId: ref.id).wrappedKey else { continue }
                 try? notebook.updateNote(id: meta.id, ["wrappedKey": .string(value: wrapped)])
-                wrappedKeys.set(noteId: meta.id, notebookId: notebookId, wrapped: wrapped)
-                if let doc = try? noteDocument(meta.id, notebookId: notebookId), let state = try? doc.crdt.encodeStateAsUpdate() {
-                    try? store.appendLocalUpdate(docId: meta.id, update: state, origin: .local)
-                }
+                wrappedKeys.set(noteId: meta.id, notebookId: ref.id, wrapped: wrapped)
+                _ = try? noteDocument(meta.id, notebookId: ref.id)
                 CoreLibrary.log.error("note \(meta.id, privacy: .public) re-keyed: its key was wrapped by a key the server does not know")
-                healed += 1
+                healed.append(meta.id)
             }
         }
         return healed
     }
 
-    private static let resentNotebookStatesKey = "repair.notebookStates.v1"
+    private static let rekeyedNotebooksKey = "repair.notebookStates.v1"
 
-    /// Once per device (build 12): every notebook's whole state goes to the server again, sealed
-    /// with the server's key — what an earlier build sealed with an invented key becomes
-    /// readable again from this device's copy.
-    private func resendNotebookStatesOnce() {
-        guard (try? store.string(Self.resentNotebookStatesKey)) ?? nil == nil else { return }
-        for ref in account.notebooks() where (try? keys.notebookKey(ref.id)) ?? nil != nil {
-            guard let crdt = (try? notebookDocument(ref.id))?.crdt, let state = try? crdt.encodeStateAsUpdate() else { continue }
-            try? store.appendLocalUpdate(docId: ref.id, update: state, origin: .local)
-        }
-        try? store.setString("done", for: Self.resentNotebookStatesKey)
+    /// Once per device (build 12): every notebook with a canonical key, for `SyncEngine.rekey` —
+    /// what an earlier build sealed with an invented key goes up again readable from this
+    /// device's copy. Empty after the first call.
+    func takeOneTimeNotebookRekey() -> [String] {
+        guard (try? store.string(Self.rekeyedNotebooksKey)) ?? nil == nil else { return [] }
+        let ids = account.notebooks().map(\.id).filter(keys.isNotebookKeyVerified)
+        guard !ids.isEmpty else { return [] }
+        try? store.setString("done", for: Self.rekeyedNotebooksKey)
+        return ids
+    }
+
+    /// Keys changed (fetched or replaced): the UI re-reads what is readable and writable.
+    func notebookKeysChanged() {
+        onExternalChange?(loadSnapshot())
     }
 
     /// Only what first-run seeding writes: no folders, untouched welcome notes, empty Inboxes.

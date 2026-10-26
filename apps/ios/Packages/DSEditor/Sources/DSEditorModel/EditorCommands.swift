@@ -479,9 +479,26 @@ public struct EditorCommands {
         guard para.plainText != text else { return }
         document.stopCapturing()
         document.transact {
-            let len = document.textLength(of: para.id)
-            if len > 0 { document.deleteText(block: para.id, range: 0..<len) }
-            if !text.isEmpty { document.insertText(text, marks: .empty, block: para.id, at: 0) }
+            let old = Array(para.plainText.utf16), new = Array(text.utf16)
+            let hasAtoms = para.inline?.contains { if case .atom = $0 { true } else { false } } ?? false
+            if hasAtoms {
+                // Atoms show as their text in the cell field; offsets differ, so replace it all.
+                let len = document.textLength(of: para.id)
+                if len > 0 { document.deleteText(block: para.id, range: 0..<len) }
+                if !text.isEmpty { document.insertText(text, marks: .empty, block: para.id, at: 0) }
+            } else {
+                // Only the changed middle is replaced: marks (bold, agentEdit, links) of the
+                // untouched text stay.
+                var prefix = 0
+                while prefix < min(old.count, new.count), old[prefix] == new[prefix] { prefix += 1 }
+                var suffix = 0
+                while suffix < min(old.count, new.count) - prefix, old[old.count - 1 - suffix] == new[new.count - 1 - suffix] { suffix += 1 }
+                let removed = prefix..<(old.count - suffix)
+                let inserted = String(utf16CodeUnits: Array(new[prefix..<(new.count - suffix)]), count: new.count - suffix - prefix)
+                let marks = prefix > 0 ? (document.inline(of: para.id, range: (prefix - 1)..<prefix).first?.marks ?? .empty) : .empty
+                if !removed.isEmpty { document.deleteText(block: para.id, range: removed) }
+                if !inserted.isEmpty { document.insertText(inserted, marks: marks.setting(MarkName.agentEdit, nil), block: para.id, at: prefix) }
+            }
         }
         document.stopCapturing()
     }

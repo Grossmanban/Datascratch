@@ -44,31 +44,23 @@ final class SceneModel {
         didSet {
             guard oldValue != sidebar else { return }
             searchText = ""
-            // iPad: Tasks and the calendar take the list's place on their own; a document opens
-            // beside them only from a task or a day. The sidebar stays as it was.
-            if isPad, !isNoteWindow, sidebar == .tasks || sidebar == .calendar {
-                if let id = selectedNoteId { library.recordVersion(ofNote: id) }
-                selectedNoteId = nil
-                fullScreen = nil
-            }
         }
     }
     var selectedNoteId: String?
 
-    // MARK: iPad columns (D-15): Sidebar | List | Document
+    // MARK: iPad levels (D-47): 1 sidebar → 2 list (Tasks, Calendar) → 3 document
     //
-    // Only the sidebar button (or the edge swipe) shows or hides the sidebar, and that choice is
-    // remembered. Opening a document leaves the sidebar alone; closing it leaves the list on the
-    // rest of the width. «Full Screen» is the one mode that hides the sidebar and the list, and
-    // leaving it brings back exactly what was there.
+    // At most two neighbouring levels on screen: sidebar | list, or list | document — never the
+    // sidebar with a document. Opening a document slides the sidebar away; the sidebar button
+    // slides it back (the document stays open and returns when picked); × closes the document;
+    // «Full Screen» belongs to the document alone.
 
+    enum PadLevel { case list, document }
     enum FullScreen { case document, content }
 
-    /// The sidebar is shown (iPad); remembered between launches.
-    var isSidebarShown = true {
-        didSet { app.settings.columnLayout = isSidebarShown ? "all" : "detailOnly" }
-    }
-    /// The document, or the list (tasks, calendar), alone on the screen.
+    /// The rightmost level shown: `.list` = sidebar | list, `.document` = list | document.
+    var padLevel: PadLevel = .list
+    /// The document alone on the screen.
     var fullScreen: FullScreen?
 
     var isDocumentFullScreen: Bool { fullScreen == .document }
@@ -76,14 +68,14 @@ final class SceneModel {
 
     /// What the iPad split view shows (sidebar | workspace).
     var padColumnVisibility: NavigationSplitViewVisibility {
-        get { fullScreen != nil || !isSidebarShown ? .detailOnly : .all }
+        get { fullScreen != nil || (padLevel == .document && selectedNoteId != nil) ? .detailOnly : .all }
         set {
-            // The sidebar button or a swipe: in full screen it brings the columns back.
+            // The sidebar button or the edge swipe.
             if fullScreen != nil {
-                if newValue != .detailOnly { fullScreen = nil; isSidebarShown = true }
+                if newValue != .detailOnly { fullScreen = nil; padLevel = .list }
                 return
             }
-            isSidebarShown = newValue != .detailOnly
+            padLevel = newValue == .detailOnly && selectedNoteId != nil ? .document : .list
         }
     }
 
@@ -116,7 +108,7 @@ final class SceneModel {
 
     init(app: AppModel) {
         self.app = app
-        if isPad { isSidebarShown = app.settings.columnLayout != "detailOnly" }
+
     }
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
@@ -156,8 +148,9 @@ final class SceneModel {
         withAnimation(Theme.Motion.snappy) {
             selectedNoteId = noteId
             preferredCompactColumn = .detail
-            // The list alone on screen makes room for the document beside it; the sidebar stays.
+            // List | document: the sidebar slides away (D-47).
             if fullScreen == .content { fullScreen = nil }
+            padLevel = .document
         }
         library.openTab(noteId)
     }
@@ -169,13 +162,6 @@ final class SceneModel {
     func toggleDocumentFullScreen() {
         withAnimation(Theme.Motion.smooth) {
             fullScreen = fullScreen == .document ? nil : .document
-        }
-    }
-
-    /// iPad: tasks, the calendar or a list alone on screen, and back.
-    func toggleContentFullScreen() {
-        withAnimation(Theme.Motion.smooth) {
-            fullScreen = fullScreen == .content ? nil : .content
         }
     }
 
@@ -191,8 +177,9 @@ final class SceneModel {
         withAnimation(Theme.Motion.smooth) {
             selectedNoteId = nil
             preferredCompactColumn = .content
-            // Only the document goes: the list takes its width, the sidebar stays as it was.
-            if fullScreen == .document { fullScreen = nil }
+            // Back to sidebar | list.
+            fullScreen = nil
+            padLevel = .list
         }
     }
 

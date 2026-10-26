@@ -68,7 +68,6 @@ struct DocumentCollectionView: View {
         .searchable(text: $scene.searchText, prompt: Text("Search documents"))
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                ContentFullScreenButton()
                 Menu {
                     Picker("Layout", selection: $settings.libraryLayout) {
                         Label("Cards", systemImage: "square.grid.2x2").tag(AppSettings.LibraryLayout.grid)

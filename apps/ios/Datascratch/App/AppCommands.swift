@@ -41,10 +41,10 @@ struct AppCommands: Commands {
                 .keyboardShortcut("s", modifiers: [.command, .control])
             Button("Full Screen") {
                 guard let scene else { return }
-                if scene.selectedNoteId != nil { scene.toggleDocumentFullScreen() } else { scene.toggleContentFullScreen() }
+                if scene.selectedNoteId != nil { scene.toggleDocumentFullScreen() }
             }
             .keyboardShortcut("f", modifiers: [.command, .control])
-            .disabled(scene == nil)
+            .disabled(scene?.selectedNoteId == nil)
             Button("Close Tab") { scene?.closeTab() }
                 .keyboardShortcut("w", modifiers: .command)
             Button("Close Document") { scene?.closeDocument() }

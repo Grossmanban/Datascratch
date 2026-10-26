@@ -307,11 +307,10 @@ class Writer {
     if (rows.length === 0) return [`|  |${idc}`];
     const width = Math.max(...rows.map((r) => r.length));
     const line = (r: string[]) => "| " + Array.from({ length: width }, (_, i) => r[i] ?? "").join(" | ") + " |";
-    // Column alignment: `textAlign` of the first paragraph in each cell of the first row.
+    // Column alignment: the `align` attribute of the cells of the first row.
     const firstRow = childElements(childElements(el)[0]!);
     const align = Array.from({ length: width }, (_, i) => {
-      const p = firstRow[i] ? childElements(firstRow[i]!)[0] : undefined;
-      const a = p ? attr<string>(p, "textAlign") : undefined;
+      const a = firstRow[i] ? attr<string>(firstRow[i]!, "align") : undefined;
       return a === "center" ? " :---: |" : a === "right" ? " ---: |" : a === "left" ? " :--- |" : " --- |";
     });
     const out = [line(rows[0]!), "|" + align.join("")];

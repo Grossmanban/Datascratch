@@ -10,7 +10,7 @@ import { BlockId } from "./blockId";
 import { MissingLinks } from "./missingLinks";
 import { InlineMath } from "./inlineMath";
 import { Callout, Drawing, FileBlock, Image, MathBlock, Mermaid, NoteLink, PageCard, Tag } from "./blocks";
-import { AgentEdit, DocumentNode, DsHorizontalRule, DsLink, Highlight, TextAlign, TextColor, Title } from "./core";
+import { AgentEdit, DocumentNode, DsHorizontalRule, DsLink, Highlight, TableCellAlign, TextAlign, TextColor, Title } from "./core";
 import { TaskItem, TaskList } from "./tasks";
 import { UnsupportedFallback, UnsupportedMarkFallback } from "./unknown";
 
@@ -54,6 +54,7 @@ export function createSchemaExtensions({ host, placeholders = { title: "Без �
     TableRow,
     TableHeader,
     TableCell,
+    TableCellAlign,
     Image.configure({ host }),
     FileBlock.configure({ host }),
     Drawing,

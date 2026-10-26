@@ -461,6 +461,8 @@ final class ServerAccountService: AccountService {
     /// app starts over at the welcome screen.
     func deleteLocalData() async {
         await connection.stop()
+        // Every key, kept ones of unsent notebooks too; then the database.
+        try? connection.accounts.eraseDeviceKeys()
         try? connection.core.wipeLocalData()
         try? connection.core.store.setString(nil, for: Self.emailKey)
         sessionResumed()
@@ -529,11 +531,9 @@ final class ServerAccountService: AccountService {
     func signOut() async {
         sessionResumed()
         await connection.stop()
-        // Keys of notebooks still only on this device survive: signing in to the same account
-        // uploads them; another account or «Delete data» removes them with the library (spec/07).
-        let kept = connection.core.unsentNotebookKeys()
-        try? await connection.accounts.logout()
-        connection.core.restoreNotebookKeys(kept)
+        // DSCore keeps the keys of notebooks still only on this device: signing in to the same
+        // account uploads them; another account or «Delete data» removes them (spec/07).
+        _ = try? await connection.accounts.logout()
         account = nil
     }
 

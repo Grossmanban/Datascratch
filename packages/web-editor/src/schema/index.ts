@@ -8,6 +8,7 @@ import type { HostRef } from "../host";
 import { AgentReview } from "./agentReview";
 import { BlockId } from "./blockId";
 import { MissingLinks } from "./missingLinks";
+import { InlineMath } from "./inlineMath";
 import { Callout, Drawing, FileBlock, Image, MathBlock, Mermaid, NoteLink, PageCard, Tag } from "./blocks";
 import { AgentEdit, DocumentNode, DsHorizontalRule, DsLink, Highlight, TextAlign, TextColor, Title } from "./core";
 import { TaskItem, TaskList } from "./tasks";
@@ -37,7 +38,8 @@ export function createSchemaExtensions({ host, placeholders = { title: "Без �
       dropcursor: { color: "var(--ds-accent, #2E5BDB)", width: 2 },
     }),
     TextAlign,
-    CodeBlockLowlight.configure({ lowlight, defaultLanguage: null }),
+    // Agents mark their text everywhere, code included (D-10); a code block allows only that mark.
+    CodeBlockLowlight.extend({ marks: "agentEdit" }).configure({ lowlight, defaultLanguage: null }),
     DsHorizontalRule,
     DsLink,
     Highlight,
@@ -63,6 +65,7 @@ export function createSchemaExtensions({ host, placeholders = { title: "Без �
     BlockId,
     AgentReview,
     MissingLinks.configure({ host }),
+    InlineMath,
   ];
   if (placeholders) {
     exts.push(

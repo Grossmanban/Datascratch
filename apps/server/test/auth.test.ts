@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { KDF, SyncClient, api, b64, newId, rnd, signup, startServer, type TestServer } from './helpers.js';
 
@@ -90,19 +91,65 @@ describe('signup and login', () => {
 });
 
 describe('refresh tokens', () => {
+  const refresh = (refreshToken: string) => api(s, 'POST', '/auth/refresh', { body: { refreshToken } });
+  const ageUsed = (seconds: number) =>
+    s.ctx.database.db.execute(
+      sql`UPDATE refresh_tokens SET used_at = used_at - make_interval(secs => ${seconds}) WHERE used_at IS NOT NULL`,
+    );
+
   it('rotates and detects reuse', async () => {
     const u = await signup(s);
     const r1 = await api(s, 'POST', '/auth/refresh', { body: { refreshToken: u.session.refreshToken } });
     expect(r1.status).toBe(200);
     expect(r1.body.refreshToken).not.toBe(u.session.refreshToken);
     expect(r1.body.deviceId).toBe(u.session.deviceId);
-    // Reusing the old token revokes the session entirely.
+    // Reusing the old token after the grace window revokes the session entirely.
+    await ageUsed(61);
     const reuse = await api(s, 'POST', '/auth/refresh', { body: { refreshToken: u.session.refreshToken } });
     expect(reuse.status).toBe(401);
     const after = await api(s, 'POST', '/auth/refresh', { body: { refreshToken: r1.body.refreshToken } });
     expect(after.status).toBe(401);
     const me = await api(s, 'GET', '/me', { token: r1.body.accessToken });
     expect(me.status).toBe(401);
+  });
+
+  it('returns the same new refresh token for a retry within the grace window', async () => {
+    const u = await signup(s);
+    const r1 = await refresh(u.session.refreshToken);
+    expect(r1.status).toBe(200);
+    // The response was lost: the client retries with the same token.
+    const r2 = await refresh(u.session.refreshToken);
+    expect(r2.status).toBe(200);
+    expect(r2.body.refreshToken).toBe(r1.body.refreshToken);
+    expect(r2.body.deviceId).toBe(u.session.deviceId);
+    expect((await api(s, 'GET', '/me', { token: r2.body.accessToken })).status).toBe(200);
+    // Concurrent retries all get the same token.
+    const many = await Promise.all([1, 2, 3].map(() => refresh(u.session.refreshToken)));
+    expect(many.map((r) => r.status)).toEqual([200, 200, 200]);
+    expect(new Set(many.map((r) => r.body.refreshToken))).toEqual(new Set([r1.body.refreshToken]));
+    // The chain goes on from the new token; the retried one does not fork it.
+    const r3 = await refresh(r1.body.refreshToken);
+    expect(r3.status).toBe(200);
+    expect(r3.body.refreshToken).not.toBe(r1.body.refreshToken);
+    expect((await api(s, 'GET', '/me', { token: r3.body.accessToken })).status).toBe(200);
+  });
+
+  it('treats a retry as reuse once the new token was used, or after the window', async () => {
+    // The new token was already used: the old one presented again (even quickly) is theft.
+    const u = await signup(s);
+    const r1 = await refresh(u.session.refreshToken);
+    const r2 = await refresh(r1.body.refreshToken);
+    expect(r2.status).toBe(200);
+    expect((await refresh(u.session.refreshToken)).status).toBe(401);
+    expect((await refresh(r2.body.refreshToken)).status).toBe(401);
+    expect((await api(s, 'GET', '/me', { token: r2.body.accessToken })).status).toBe(401);
+
+    // Outside the window.
+    const v = await signup(s);
+    const v1 = await refresh(v.session.refreshToken);
+    await ageUsed(61);
+    expect((await refresh(v.session.refreshToken)).status).toBe(401);
+    expect((await refresh(v1.body.refreshToken)).status).toBe(401);
   });
 
   it('logout revokes the device', async () => {

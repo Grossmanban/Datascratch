@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-10-26)
 
 ## Corpus Check
-- 829 files · ~574,047 words
+- 829 files · ~574,102 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 37 file(s) not represented in the graph (top: (none) 18, .css 6, .example 4)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e3dfa874`
+- Built from commit: `4a6d2814`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1907,7 +1907,7 @@ Nodes (7): Ключевые архитектурные идеи, Обзор ар
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Integration/CoreLibrary.swift over DSCore: account/notebook/note documents on Yrs, LocalStore (GRDB) with send queue, KeyRing keys, notebook meta name/icon/space for agents, one-time JSON migration` connect `Пакеты и временные замены` to `LocalStore`, `sync/client.ts`, `server/README.md`, `development.md`?**
-  _High betweenness centrality (0.225) - this node is a cross-community bridge._
+  _High betweenness centrality (0.244) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `RFC-4648`, `.allowsFingerDrawing`, `.mode` to the rest of the system?**
@@ -1915,7 +1915,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Data` be split into smaller, more focused modules?**
   _Cohesion score 0.0034853527411037558 - nodes in this community are weakly interconnected._
 - **Why does `@datascratch/shared/crypto (libsodium, Argon2id, envelope v1, recovery key DS1-, 1 MiB chunks, share links)` connect `contracts/README.md` to `DSRGBA`, `sync/client.ts`, `AttachmentFactory`, `LibraryUITests`?**
-  _High betweenness centrality (0.191) - this node is a cross-community bridge._
+  _High betweenness centrality (0.202) - this node is a cross-community bridge._
 - **Are the 115 inferred relationships involving `r()` (e.g. with `mermaid.min.js` and `_4()`) actually correct?**
   _`r()` has 115 INFERRED edges - model-reasoned connections that need verification._
 - **Should `r` be split into smaller, more focused modules?**

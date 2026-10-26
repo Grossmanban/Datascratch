@@ -2,7 +2,8 @@ import { Link, useNavigate, useRouter, useSearch } from "@tanstack/react-router"
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { signIn } from "@/auth/flows";
-import { Button, Field, Input } from "@/ui";
+import { forgetRevokedData, useAuth } from "@/auth/session";
+import { Button, confirmDialog, Field, Input } from "@/ui";
 import { authErrorMessage } from "./errors";
 
 export function LoginPage() {
@@ -10,7 +11,8 @@ export function LoginPage() {
   const navigate = useNavigate();
   const router = useRouter();
   const search = useSearch({ strict: false }) as { next?: string };
-  const [email, setEmail] = useState("");
+  const revoked = useAuth((s) => s.revoked);
+  const [email, setEmail] = useState(revoked?.email ?? "");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +36,7 @@ export function LoginPage() {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" data-testid="login-form">
+      {revoked && <RevokedNotice unsent={revoked.unsent} />}
       <Field label={t("auth.email")}>
         {(id) => <Input id={id} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />}
       </Field>
@@ -57,5 +60,30 @@ export function LoginPage() {
         </span>
       </div>
     </form>
+  );
+}
+
+/** The session was ended from another device (spec/07): say so plainly, keep local data until sign-in. */
+function RevokedNotice({ unsent }: { unsent: number }) {
+  const { t } = useTranslation();
+  async function forget() {
+    const ok = await confirmDialog({
+      title: t("auth.revokedForget"),
+      description: t("auth.revokedForgetConfirm", { unsent: unsent ? t("auth.revokedForgetUnsent") : "" }),
+      confirmLabel: t("common.delete"),
+      cancelLabel: t("common.cancel"),
+      danger: true,
+    });
+    if (ok) await forgetRevokedData();
+  }
+  return (
+    <div role="alert" className="rounded-lg bg-[var(--ds-tint-yellow-bg)] px-3.5 py-3 text-[13.5px] text-ink" data-testid="revoked-notice">
+      <p className="font-semibold">{t("auth.revokedTitle")}</p>
+      <p className="mt-0.5 text-ink-2">{t("auth.revokedText")}</p>
+      {unsent > 0 && <p className="mt-1.5 text-ink-2">{t("auth.revokedUnsent", { count: unsent })}</p>}
+      <button type="button" onClick={() => void forget()} className="mt-2 text-[12.5px] font-medium text-ink-2 underline-offset-2 hover:text-ink hover:underline">
+        {t("auth.revokedForget")}
+      </button>
+    </div>
   );
 }

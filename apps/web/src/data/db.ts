@@ -188,6 +188,12 @@ export function hasAccountDb(): boolean {
   return current !== null;
 }
 
+/** Close without deleting (a revoked session keeps unsent changes until the next sign-in). */
+export function closeAccountDb() {
+  current?.close();
+  current = null;
+}
+
 export async function deleteAccountDb(userId: string): Promise<void> {
   if (current?.name === `ds-account-${userId}`) {
     current.close();

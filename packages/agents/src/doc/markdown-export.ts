@@ -24,14 +24,48 @@ export interface MarkdownOptions {
 
 const MARK_ORDER = ["link", "bold", "italic", "strike", "underline", "highlight"] as const;
 
-function wrapMarks(text: string, marks: Marks): string {
+const WORD = /[\p{L}\p{N}]/u;
+
+/**
+ * Backslash-escapes characters that would otherwise turn plain text into
+ * Markdown syntax (emphasis, code, links, tags, highlights, math, HTML), so
+ * that read_note → edit/create_note round-trips literally. `lineStart`
+ * additionally escapes block markers (`>`, `#`, `-`, `1.`) at the start of a line.
+ */
+export function escapeText(text: string, lineStart: boolean): string {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    const prev = text[i - 1];
+    const next = text[i + 1];
+    if ("\\`*[]<".includes(c)) out += "\\" + c;
+    else if (c === "_" && !(prev && WORD.test(prev) && next && WORD.test(next))) out += "\\_";
+    else if ((c === "~" || c === "=" || c === "$") && (next === c || prev === c)) out += "\\" + c;
+    else if (c === "#" && next && /[\p{L}\p{N}_]/u.test(next) && (!prev || /[\s(]/.test(prev))) out += "\\#";
+    else if (c === "&" && /^&#?\w+;/.test(text.slice(i))) out += "\\&";
+    else out += c;
+  }
+  if (lineStart) {
+    out = out
+      .replace(/^(\s*)([>#+-])(?=\s|$)/, "$1\\$2")
+      .replace(/^(\s*)(\d+)([.)])(?=\s|$)/, "$1$2\\$3");
+  }
+  return out;
+}
+
+function codeSpan(text: string): string {
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((r) => r.length));
+  const fence = "`".repeat(longest + 1);
+  const pad = text.startsWith("`") || text.endsWith("`") ? " " : "";
+  return `${fence}${pad}${text}${pad}${fence}`;
+}
+
+function wrapMarks(text: string, marks: Marks, lineStart: boolean): string {
   if (text.length === 0) return "";
   const names = new Map<string, unknown>();
   for (const [k, v] of Object.entries(marks)) if (v !== null && v !== undefined && v !== false) names.set(markName(k), v);
-  if (names.has("code")) {
-    const fence = text.includes("`") ? "``" : "`";
-    return `${fence}${text}${fence}`;
-  }
+  if (names.has("code")) return codeSpan(text);
+  text = escapeText(text, lineStart);
   // Keep surrounding whitespace outside of emphasis markers (`** bold**` is not bold in Markdown).
   const m = /^(\s*)(.*?)(\s*)$/s.exec(text)!;
   let core = m[2]!;
@@ -65,13 +99,20 @@ function wrapMarks(text: string, marks: Marks): string {
   return m[1]! + core + m[3]!;
 }
 
-export function inlineMarkdown(block: Y.XmlElement): string {
+/** Inline content; hard breaks become `\\` + newline. `lineStart` = the text starts a Markdown line. */
+export function inlineMarkdown(block: Y.XmlElement, lineStart = false): string {
   let out = "";
+  let atStart = lineStart;
   for (const item of inlineOf(block)) {
-    if (item.kind === "text") out += wrapMarks(item.text, item.marks);
+    if (item.kind === "text") out += wrapMarks(item.text, item.marks, atStart);
     else if (item.name === "noteLink") out += `[[${String(item.attrs.label ?? "")}]]`;
     else if (item.name === "tag") out += `#${String(item.attrs.name ?? "")}`;
-    else if (item.name === "hardBreak") out += "  \n";
+    else if (item.name === "hardBreak") {
+      out += "\\\n";
+      atStart = true;
+      continue;
+    }
+    atStart = false;
   }
   return out;
 }
@@ -100,15 +141,19 @@ class Writer {
     return list.map((h) => `![✍️ ${h.description}](handwriting:${h.id})`);
   }
 
-  /** Lines of a block (without trailing blank line). */
+  /** Lines of a block (without trailing blank line); multi-line strings are split. */
   block(el: Y.XmlElement): string[] {
+    return this.blockLines(el).flatMap((l) => l.split("\n"));
+  }
+
+  private blockLines(el: Y.XmlElement): string[] {
     const name = el.nodeName;
     const idc = this.idComment(el);
     switch (name) {
       case "title":
         return [`# ${inlineMarkdown(el)}`];
       case "paragraph":
-        return [inlineMarkdown(el) + idc, ...this.handwritingLines(el)];
+        return [inlineMarkdown(el, true) + idc, ...this.handwritingLines(el)];
       case "heading": {
         const level = Math.min(3, Math.max(1, Number(attr(el, "level") ?? 1)));
         return ["#".repeat(level) + " " + inlineMarkdown(el) + idc, ...this.handwritingLines(el)];
@@ -201,9 +246,11 @@ class Writer {
       if (scheduled) dates.push(`⏳ ${scheduled}`);
       if (deadline) dates.push(`📅 ${deadline}`);
     }
-    const head = `${prefix} ${firstText}${dates.length ? " " + dates.join(" ") : ""}${this.idComment(item, extra)}`;
     const indent = " ".repeat(marker.length + 1);
-    const rest: string[] = [];
+    // A hard break inside the first paragraph continues the item on an indented line.
+    const [firstLine, ...moreLines] = firstText.split("\n");
+    const head = `${prefix} ${firstLine}${dates.length ? " " + dates.join(" ") : ""}${this.idComment(item, extra)}`;
+    const rest: string[] = [...moreLines];
     if (first && first.nodeName === "paragraph") rest.push(...this.handwritingLines(first));
     const tail = first && first.nodeName === "paragraph" ? kids.slice(1) : kids;
     for (const c of tail) rest.push(...this.block(c));
@@ -214,7 +261,7 @@ class Writer {
     const rows = childElements(el).map((row) =>
       childElements(row).map((cell) =>
         childElements(cell)
-          .map((p) => inlineMarkdown(p))
+          .map((p) => inlineMarkdown(p).replace(/\\\n/g, "<br>"))
           .join("<br>")
           .replace(/\|/g, "\\|"),
       ),

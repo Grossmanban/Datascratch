@@ -86,6 +86,7 @@ struct AgentTokensSettings: View {
             }
         }
         .navigationTitle("Agent Access")
+        .settingsNavigationBar()
         .toolbar {
             Button {
                 isCreating = true
@@ -167,6 +168,7 @@ struct NewAgentTokenSheet: View {
                 }
             }
             .navigationTitle("New Token")
+            .settingsNavigationBar()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if secret == nil {
@@ -239,6 +241,7 @@ struct AgentAuditView: View {
         }
         .overlay { if isLoading { ProgressView() } }
         .navigationTitle(token.name)
+        .settingsNavigationBar()
         .refreshable { await load() }
         .task { await load() }
     }

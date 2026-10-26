@@ -46,15 +46,23 @@ struct TrashView: View {
         .background(Theme.Palette.canvas)
         .navigationTitle("Trash")
         .toolbar {
-            if !library.trashed.isEmpty {
-                Button("Empty", role: .destructive) { confirmEmpty = true }
-                    .confirmationDialog("Delete all documents in the trash?", isPresented: $confirmEmpty,
-                                        titleVisibility: .visible) {
-                        Button("Empty Trash", role: .destructive) { library.emptyTrash() }
-                    } message: {
-                        Text("This cannot be undone.")
-                    }
-            }
+            // «Empty Trash» as a verb with the bin, not a bare «Empty» (read as the adjective).
+            Button("Empty Trash", systemImage: "trash", role: .destructive) { confirmEmpty = true }
+                .labelStyle(.titleAndIcon)
+                .tint(Theme.Palette.danger)
+                .disabled(library.trashed.isEmpty)
+                .accessibilityIdentifier("trash.empty")
+                .confirmationDialog(deleteTitle, isPresented: $confirmEmpty, titleVisibility: .visible) {
+                    Button("Delete Forever", role: .destructive) { library.emptyTrash() }
+                } message: {
+                    Text("This cannot be undone.")
+                }
         }
+    }
+
+    private var deleteTitle: LocalizedStringKey {
+        let count = app.library.trashed.count
+        let title: LocalizedStringKey = "Delete documents forever: \(count)?"
+        return title
     }
 }

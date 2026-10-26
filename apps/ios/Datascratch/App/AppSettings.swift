@@ -34,6 +34,8 @@ final class AppSettings {
     var hapticsEnabled: Bool { didSet { defaults.set(hapticsEnabled, forKey: "haptics") } }
     /// Which columns the main window showed last ("all", "doubleColumn", "detailOnly").
     var columnLayout: String { didSet { defaults.set(columnLayout, forKey: "columnLayout") } }
+    /// The pen palette folded into a small button at the bottom edge.
+    var penPaletteCollapsed: Bool { didSet { defaults.set(penPaletteCollapsed, forKey: "penPaletteCollapsed") } }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -45,6 +47,7 @@ final class AppSettings {
         libraryLayout = LibraryLayout(rawValue: defaults.string(forKey: "libraryLayout") ?? "") ?? .grid
         hapticsEnabled = defaults.object(forKey: "haptics") as? Bool ?? true
         columnLayout = defaults.string(forKey: "columnLayout") ?? "all"
+        penPaletteCollapsed = defaults.bool(forKey: "penPaletteCollapsed")
     }
 
     var interfaceStyle: UIUserInterfaceStyle {

@@ -63,7 +63,8 @@ struct DocumentCollectionView: View {
         .navigationTitle(title)
         // The title is set in the serif face in the content (Quiet paper), not as an SF large title.
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) } }
+        // No system title in the bar (an empty principal item showed «Empty» behind sheets).
+        .toolbar(removing: .title)
         .searchable(text: $scene.searchText, prompt: Text("Search documents"))
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {

@@ -40,13 +40,13 @@ Y.Array "tabs"      [ { noteId } ]  (открытые вкладки; после
 ## 3. Документ `notebook` (индекс блокнота)
 
 ```
-Y.Map "meta"     { formatVersion: 1, notebookId, name, icon, space: { id, name, icon } }
+Y.Map "meta"     { formatVersion: 1, notebookId, name, icon, color, space: { id, name, icon } }
 Y.Map "folders"  folderId -> Y.Map Folder
 Y.Map "notes"    noteId -> Y.Map NoteMeta
 Y.Map "tags"     tagName -> Y.Map { color, icon }   (необязательные свойства тегов)
 ```
 
-`meta.name`, `meta.icon`, `meta.space` — **копия** названий из документа `account` (его сервер не видит), чтобы агенты в режиме «для агентов» видели названия блокнота и пространства. Клиенты обновляют копию при создании блокнота, переименовании блокнота/пространства и включении режима «для агентов» (уточнение потока agents, 2026-10-25).
+`meta.name`, `meta.icon`, `meta.color`, `meta.space` — **копия** названий из документа `account` (его сервер не видит), чтобы агенты в режиме «для агентов» видели названия блокнота и пространства. Клиенты обновляют копию при создании блокнота, переименовании блокнота/пространства, смене иконки или цвета и включении режима «для агентов» (уточнение потока agents, 2026-10-25; `color` — токен цвета как в `NotebookRef`, 2026-10-26: экран согласия агента рисует иконку блокнота его цветом).
 
 `Folder`: `{ id, parentId (null = корень блокнота), name, icon, color, order, createdAt }`. Вложенность без ограничения глубины.
 

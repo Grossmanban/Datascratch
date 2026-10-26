@@ -119,10 +119,11 @@ struct NativeDocumentScreen: View {
                 Image(systemName: "chevron.down.right")
                     .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
                     .foregroundStyle(Theme.Palette.textSecondary)
-                    .frame(width: isCompact ? 32 : 40, height: isCompact ? 32 : 40)
-                    .glassEffect(.regular.interactive(), in: .circle)
+                    .frame(width: isCompact ? 22 : 28, height: isCompact ? 22 : 28)
             }
-            .buttonStyle(.plain)
+            // A system glass button: a plain button over interactive glass missed taps.
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
             .accessibilityLabel("Hide Pen Tools")
             .accessibilityIdentifier("penPalette.collapse")
             .padding(.trailing, Theme.Space.s3)
@@ -372,10 +373,10 @@ struct CollapsedPenButton: View {
                         .foregroundStyle(Theme.Palette.textPrimary)
                 }
             }
-            .frame(width: 52, height: 52)
-            .glassEffect(.regular.interactive(), in: .circle)
+            .frame(width: 40, height: 40)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
         .accessibilityLabel("Show Pen Tools")
         .accessibilityValue(Text(verbatim: "mode \(model.editor.tools.mode.rawValue)"))
         .accessibilityIdentifier("penPalette.collapsed")

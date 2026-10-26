@@ -4602,9 +4602,9 @@
     "semantic_hash": ""
   },
   "apps/ios/Datascratch/Integration/BareEditorProbe.swift": {
-    "mtime": 1792982442.7968524,
-    "seen": 1792982586.6998632,
-    "ast_hash": "cedcf26cd4dbe0ac59c9f1b94a89d612",
+    "mtime": 1792982778.222514,
+    "seen": 1792982803.540215,
+    "ast_hash": "b51dd511391fee5411afe89ffa84d308",
     "semantic_hash": ""
   },
   "apps/ios/DatascratchUITests/BareEditorProbeTests.swift": {

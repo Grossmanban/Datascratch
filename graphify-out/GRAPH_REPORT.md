@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-10-26)
 
 ## Corpus Check
-- 762 files · ~494,240 words
+- 762 files · ~494,249 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 37 file(s) not represented in the graph (top: (none) 18, .css 6, .example 4)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `68997cde`
+- Built from commit: `0935641f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -411,10 +411,10 @@
   docs/architecture/contracts/strokes.md → packages/shared/src/strokes/store.ts
 - `History retention: covered updates kept 7 days; snapshots all for 7 days, daily to 30 days, weekly to 1 year, monthly after; HISTORY_* env` --implements--> `RetentionPolicy`  [INFERRED]
   docs/spec/06-data-server.md → apps/server/src/services/documents.ts
-- `Правило ref в error: для ошибок push/snapshot ref = их clientMsgId, иначе — docId при наличии` --references--> `ErrorMessage`  [INFERRED]
-  docs/architecture/contracts/sync-protocol.md → packages/shared/src/contracts/sync.ts
 - `SessionDto` --implements--> `Session.deviceId — идентификатор устройства (сессии), выдаётся при входе и используется в hello синхронизации`  [INFERRED]
   apps/server/src/services/sessions.ts → docs/architecture/contracts/api.md
+- `Правило ref в error: для ошибок push/snapshot ref = их clientMsgId, иначе — docId при наличии` --references--> `ErrorMessage`  [INFERRED]
+  docs/architecture/contracts/sync-protocol.md → packages/shared/src/contracts/sync.ts
 - `deviceName при регистрации устройства: обязательно в /auth/login, необязательно в signup и recovery/finish (уточнение потока server)` --references--> `LoginRequest`  [INFERRED]
   docs/architecture/contracts/api.md → packages/shared/src/contracts/api.ts
 
@@ -1803,10 +1803,10 @@ Nodes (4): name, runs-on, timeout-minutes, deploy-e2e
 ## Ambiguous Edges - Review These
 - `0008-pdf-annotations.md` → `Схема блоков: doc = title block+ (paragraph, heading, списки, taskList, callout, codeBlock, mathBlock, mermaid, table, image, file, drawing, pageCard)`  [AMBIGUOUS]
   docs/architecture/contracts/document-model.md · relation: conceptually_related_to
+- `Document style: font (serif/sans/mono), width, paper (smooth/dots/grid/ruled), backdrop color or gradient, text color; style gallery after MVP` → `Cover is only the user's own image (gallery, file, screenshot, paste); no preset gradients`  [AMBIGUOUS]
+  docs/spec/12-craft-features.md · relation: conceptually_related_to
 - `OPEN (before stage 3): server hosting and domain (D-40)` → `Update: server deployed at https://ds.777400777.xyz next to Sinhron (deploy workflow, edge mode behind Caddy, infra/DEPLOY.md)`  [AMBIGUOUS]
   docs/open-questions.md · relation: conceptually_related_to
-- `Cover is only the user's own image (gallery, file, screenshot, paste); no preset gradients` → `Document style: font (serif/sans/mono), width, paper (smooth/dots/grid/ruled), backdrop color or gradient, text color; style gallery after MVP`  [AMBIGUOUS]
-  docs/spec/12-craft-features.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
 - **1271 isolated node(s):** `.isRequested`, `.body`, `.body`, `.isPhone`, `.library` (+1266 more)
@@ -1817,7 +1817,7 @@ Nodes (4): name, runs-on, timeout-minutes, deploy-e2e
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `L` connect `X8` to `Data`, `stack.md`, `scripts/generate.mjs`, `PenToolbar.tsx`, `Data (2)`?**
-  _High betweenness centrality (0.200) - this node is a cross-community bridge._
+  _High betweenness centrality (0.202) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `.isRequested`, `.body`, `.body` to the rest of the system?**
@@ -1825,12 +1825,12 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Data` be split into smaller, more focused modules?**
   _Cohesion score 0.0035022014905847967 - nodes in this community are weakly interconnected._
 - **Why does `PenToolbar()` connect `PenToolbar.tsx` to `ref_lucide_react`, `cn`, `X8 (3)`, `02-platforms.md`, `agents-users.ts`, `DSDesign Swift package (iOS 26, Swift 6) — «Тихая бумага»`, `Design system v2: text.onAccent token; list/editor components on web and iOS — TaskRow/DSTaskRow, DocRow/DocGrid/DSDocRow/DSDocGrid, PenToolbar/DSPenToolbar, FormatToolbar/DSFormatBar; .ds-prose and data-paper for web editor`, `ui/src/index.ts`, `components/CommandPalette.tsx`?**
-  _High betweenness centrality (0.199) - this node is a cross-community bridge._
+  _High betweenness centrality (0.184) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
 
 - **What is the exact relationship between `0008-pdf-annotations.md` and `Схема блоков: doc = title block+ (paragraph, heading, списки, taskList, callout, codeBlock, mathBlock, mermaid, table, image, file, drawing, pageCard)`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **What is the exact relationship between `OPEN (before stage 3): server hosting and domain (D-40)` and `Update: server deployed at https://ds.777400777.xyz next to Sinhron (deploy workflow, edge mode behind Caddy, infra/DEPLOY.md)`?**
+- **What is the exact relationship between `Document style: font (serif/sans/mono), width, paper (smooth/dots/grid/ruled), backdrop color or gradient, text color; style gallery after MVP` and `Cover is only the user's own image (gallery, file, screenshot, paste); no preset gradients`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._

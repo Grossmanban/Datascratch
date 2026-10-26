@@ -1,14 +1,17 @@
 // Repair of damaged note starts (document-model.md «Один title», 2026-10-26). Clients that seeded
-// an empty title into a note they had not fetched yet left documents with two titles, or with the
-// real title demoted to a paragraph behind a new empty one. The rule is deterministic and only
-// removes what is provably a stray, so clients repairing the same document concurrently converge
-// (the iOS editor applies the identical rule):
-//   (a) several top-level titles → delete the EMPTY ones except the first title if all are empty;
-//       non-empty extra titles stay untouched (converting them concurrently would duplicate ids);
-//   (b) the document starts with an EMPTY title immediately followed by a PARAGRAPH whose blockId is
-//       OLDER (UUIDv7 time) than the title's → the paragraph was the original title: its inline
-//       content moves into the title and the paragraph is deleted;
-//   (c) an empty document is left alone (nothing is written on open).
+// an empty title and an empty paragraph into a note they had not fetched yet left documents with
+// two titles, empty paragraphs before the real title, or the real title demoted to a paragraph
+// behind a new empty one. The rule is deterministic and only deletes empties or merges as below, so
+// clients repairing the same document concurrently converge (the iOS editor applies the identical
+// rule). Applied in this order (numbered as in the contract):
+//   1. several top-level titles → delete the EMPTY ones (all empty: keep the first); non-empty extra
+//      titles stay untouched (converting them concurrently would duplicate ids);
+//   2. EMPTY paragraphs before the first title are deleted;
+//   3. the document starts with an EMPTY title T: skip the EMPTY paragraphs after it; if the first
+//      non-empty block is a PARAGRAPH P whose blockId is OLDER (UUIDv7 time) than T's, P was the
+//      original title — its inline content moves into T, P and the skipped empty paragraphs are
+//      deleted;
+//   4. an empty document is left alone (nothing is written on open).
 // One Y transaction, idempotent; the origin is not tracked by the undo manager.
 import { Extension } from "@tiptap/core";
 import * as Y from "yjs";
@@ -39,51 +42,64 @@ function cloneInline(node: Y.XmlElement | Y.XmlText): Y.XmlElement | Y.XmlText {
   return e;
 }
 
-/** What the repair would do (for tests and logs). */
+/** What the repair did (for tests and logs). */
 export interface TitleRepair {
   deletedEmptyTitles: number;
+  deletedEmptyParagraphs: number;
   restoredFromParagraph: boolean;
 }
 
-/** Applies rules (a) and (b) to `content`; returns what changed (nothing → no Y transaction). */
+/** Applies rules 1–3 in order to `content`; returns what changed (nothing → no Y transaction). */
 export function repairTitles(content: Y.XmlFragment): TitleRepair {
-  const result: TitleRepair = { deletedEmptyTitles: 0, restoredFromParagraph: false };
+  const result: TitleRepair = { deletedEmptyTitles: 0, deletedEmptyParagraphs: 0, restoredFromParagraph: false };
   const doc = content.doc;
   if (!doc || content.length === 0) return result;
-  const top = () => content.toArray().filter((n): n is Y.XmlElement => n instanceof Y.XmlElement);
 
-  // Decide first, write once.
-  const titles = top().filter((e) => e.nodeName === "title");
-  const emptyExtras = titles.length > 1 ? titles.filter((t, i) => isEmpty(t) && !(i === 0 && titles.every(isEmpty))) : [];
-  const remaining = top().filter((e) => !emptyExtras.includes(e));
-  const [first, second] = remaining;
-  const restore =
-    !!first &&
-    !!second &&
-    first.nodeName === "title" &&
-    isEmpty(first) &&
-    second.nodeName === "paragraph" &&
-    (() => {
-      const t = uuidv7Time(first.getAttribute("blockId"));
-      const p = uuidv7Time(second.getAttribute("blockId"));
-      return t !== null && p !== null && p < t;
-    })();
-  if (!emptyExtras.length && !restore) return result;
+  // Decide on a copy of the top level, then write once.
+  let blocks = content.toArray().filter((n): n is Y.XmlElement => n instanceof Y.XmlElement);
+  const isTitle = (e: Y.XmlElement) => e.nodeName === "title";
+  const isEmptyParagraph = (e: Y.XmlElement) => e.nodeName === "paragraph" && isEmpty(e);
+
+  // Rule 1: duplicate titles — only empty ones go.
+  const titles = blocks.filter(isTitle);
+  const emptyTitles = titles.length > 1 ? titles.filter((t, i) => isEmpty(t) && !(i === 0 && titles.every(isEmpty))) : [];
+  blocks = blocks.filter((b) => !emptyTitles.includes(b));
+
+  // Rule 2: empty paragraphs before the first title.
+  const firstTitle = blocks.findIndex(isTitle);
+  const emptyBefore = firstTitle > 0 ? blocks.slice(0, firstTitle).filter(isEmptyParagraph) : [];
+  blocks = blocks.filter((b) => !emptyBefore.includes(b));
+
+  // Rule 3: an empty title, (empty paragraphs), then an older paragraph = the demoted title.
+  let restore: { title: Y.XmlElement; from: Y.XmlElement; skipped: Y.XmlElement[] } | null = null;
+  const head = blocks[0];
+  if (head && isTitle(head) && isEmpty(head)) {
+    let i = 1;
+    while (i < blocks.length && isEmptyParagraph(blocks[i]!)) i++;
+    const next = blocks[i];
+    if (next && next.nodeName === "paragraph") {
+      const t = uuidv7Time(head.getAttribute("blockId"));
+      const p = uuidv7Time(next.getAttribute("blockId"));
+      if (t !== null && p !== null && p < t) restore = { title: head, from: next, skipped: blocks.slice(1, i) };
+    }
+  }
+
+  const deletions = [...emptyTitles, ...emptyBefore, ...(restore ? [restore.from, ...restore.skipped] : [])];
+  if (!deletions.length) return result;
 
   doc.transact(() => {
-    for (const t of emptyExtras) {
-      const i = content.toArray().indexOf(t);
-      if (i >= 0) content.delete(i, 1);
-    }
-    result.deletedEmptyTitles = emptyExtras.length;
     if (restore) {
-      first!.delete(0, first!.length);
-      first!.insert(0, second!.toArray().map((c) => cloneInline(c as Y.XmlElement | Y.XmlText)));
-      const i = content.toArray().indexOf(second!);
+      restore.title.delete(0, restore.title.length);
+      restore.title.insert(0, restore.from.toArray().map((c) => cloneInline(c as Y.XmlElement | Y.XmlText)));
+    }
+    for (const el of deletions) {
+      const i = content.toArray().indexOf(el);
       if (i >= 0) content.delete(i, 1);
-      result.restoredFromParagraph = true;
     }
   }, REPAIR_ORIGIN);
+  result.deletedEmptyTitles = emptyTitles.length;
+  result.deletedEmptyParagraphs = emptyBefore.length + (restore ? restore.skipped.length : 0);
+  result.restoredFromParagraph = !!restore;
   return result;
 }
 

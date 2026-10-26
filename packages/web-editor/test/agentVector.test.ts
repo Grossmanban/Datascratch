@@ -41,7 +41,7 @@ describe("agents test vector: create_note + edit_note(replace_text on the title)
       const doc = new Y.Doc();
       Y.applyUpdate(doc, b64(vector.createNote.update));
       if (step === "editTitle") Y.applyUpdate(doc, b64(vector.editTitle.update));
-      expect(repairTitles(doc.getXmlFragment("content"))).toEqual({ deletedEmptyTitles: 0, restoredFromParagraph: false });
+      expect(repairTitles(doc.getXmlFragment("content"))).toEqual({ deletedEmptyTitles: 0, deletedEmptyParagraphs: 0, restoredFromParagraph: false });
       const { editor, updates } = await open(doc);
       expect(updates()).toBe(0);
       const expected = vector[step].expected.content as Json;

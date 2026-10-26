@@ -66,12 +66,6 @@ export interface DatascratchEditorProps {
   className?: string;
   /** Extra vertical space under the last block (px), so the palette never covers text. */
   bottomPadding?: number;
-  /**
-   * Task dates (D-51: notes-only by default, dates are the extended mode). When false, date and
-   * deadline chips are inert labels and the date entries of the task menu are hidden; checkboxes
-   * still toggle and the attributes stay in the document. Default true.
-   */
-  taskDates?: boolean;
 }
 
 function plural(n: number, one: string, few: string, many: string): string {
@@ -100,9 +94,8 @@ function useHostRef(host: EditorHost | undefined): HostRef {
  * Everything is stored in the Y.Doc; the component never owns document state.
  */
 export function DatascratchEditor(props: DatascratchEditorProps) {
-  const { doc, awareness = null, user, editable = true, showPalette = true, showCover = true, className = "", bottomPadding = 160, taskDates = true } = props;
-  const taskDatesRef = useRef(taskDates);
-  taskDatesRef.current = taskDates;
+  const { doc, awareness = null, user, editable = true, showPalette = true, showCover = true, className = "", bottomPadding = 160 } = props;
+  const taskDates = (props.host?.taskDates ?? "full") === "full";
   const host = useHostRef(props.host);
   const meta = useNoteMeta(doc);
   const readOnly = !editable || meta.formatVersion > SUPPORTED_FORMAT_VERSION;
@@ -132,7 +125,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
         const $from = state.doc.resolve(range.from);
         return $from.parent.type.name !== "title" && !$from.parent.type.spec.code;
       },
-      items: (q) => filterBlocks(q, host.current).map((b) => (b.id === "task" && !taskDatesRef.current ? { ...b, hint: "Чек-бокс" } : b)),
+      items: (q) => filterBlocks(q, host.current).map((b) => (b.id === "task" && host.current.taskDates === "inert" ? { ...b, hint: "Чек-бокс" } : b)),
       command: ({ editor, range, item }) => item.run(editor, range, host.current),
     });
     const links = createSuggestionExtension<LinkItem>({

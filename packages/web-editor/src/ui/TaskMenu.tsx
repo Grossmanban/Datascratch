@@ -71,7 +71,8 @@ export function TaskMenu({ editor, request, host, dates = true, onClose }: { edi
           <>
             <div className="ds-menu-sep" />
             {item("Открыть документ", run(() => host.onTaskAction!("open", { taskId: a.taskId, blockId: a.blockId })))}
-            {item("Переместить…", run(() => host.onTaskAction!("move", { taskId: a.taskId, blockId: a.blockId })))}
+            {/* Moving a task (to the Inbox, another note) is part of the extended mode too. */}
+            {dates && item("Переместить…", run(() => host.onTaskAction!("move", { taskId: a.taskId, blockId: a.blockId })))}
           </>
         )}
         <div className="ds-menu-sep" />

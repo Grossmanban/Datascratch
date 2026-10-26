@@ -391,8 +391,10 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
     static func rows(_ node: BlockNode) -> [[(text: String, header: Bool, align: NSTextAlignment)]] {
         node.children.map { row in
             row.children.map { cell in
-                // Column alignment from Markdown `:---` / `:---:` / `---:` (document-model.md).
-                let align: NSTextAlignment = switch cell.attrs["align"]?.stringValue ?? "" {
+                // Column alignment (Markdown `:---` / `:---:` / `---:`) is the `textAlign` of the
+                // cell's paragraph (document-model.md).
+                let paragraph = cell.children.first(where: \.isTextblock)
+                let align: NSTextAlignment = switch paragraph?.attrs["textAlign"]?.stringValue ?? "" {
                 case "center": .center
                 case "right": .right
                 default: .natural

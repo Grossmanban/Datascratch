@@ -11,6 +11,9 @@ struct SidebarView: View {
     private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
 
     private var library: LibraryStore { app.library }
+    /// Height of the floating footer: the list ends above it (a safe-area inset alone left the
+    /// last row, Trash, under the footer on iPad).
+    @State private var footerHeight: CGFloat = 0
 
     var body: some View {
         @Bindable var scene = scene
@@ -102,6 +105,7 @@ struct SidebarView: View {
                 Section {
                     ForEach(library.notebooks(in: library.activeSpace?.id)) { notebook in
                         NotebookRow(notebook: notebook)
+                            .accessibilityIdentifier("sidebar.notebook")
                     }
                 } header: {
                     HStack {
@@ -157,8 +161,10 @@ struct SidebarView: View {
                 .accessibilityIdentifier("sidebar.commandPalette")
             }
         }
-        .safeAreaInset(edge: .bottom) {
+        .contentMargins(.bottom, footerHeight, for: .scrollContent)
+        .overlay(alignment: .bottom) {
             SidebarFooter()
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { footerHeight = $0 }
         }
         .onChange(of: scene.sidebar) { _, _ in
             if app.settings.hapticsEnabled { Haptics.selection() }
@@ -328,6 +334,8 @@ struct SidebarFooter: View {
         .padding(.horizontal, Theme.Space.s4)
         .padding(.vertical, Theme.Space.s3)
         .glassEffect(.regular, in: .capsule)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sidebar.footer")
         .padding(.horizontal, Theme.Space.s3)
         .padding(.bottom, Theme.Space.s2)
     }

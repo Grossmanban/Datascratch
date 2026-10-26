@@ -37,7 +37,7 @@ export function LoginPage() {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" data-testid="login-form">
-      {revoked && <RevokedNotice unsent={revoked.unsent} />}
+      {revoked && <RevokedNotice unsent={revoked.unsent} signedOut={revoked.reason === "signedOut"} />}
       {!revoked && restoreFailed && (
         <p role="status" className="rounded-lg bg-[var(--ds-tint-yellow-bg)] px-3.5 py-3 text-[13.5px] text-ink" data-testid="restore-failed">
           {t("app.restoreFailed")}
@@ -70,7 +70,7 @@ export function LoginPage() {
 }
 
 /** The session was ended from another device (spec/07): say so plainly, keep local data until sign-in. */
-function RevokedNotice({ unsent }: { unsent: number }) {
+function RevokedNotice({ unsent, signedOut }: { unsent: number; signedOut?: boolean }) {
   const { t } = useTranslation();
   async function forget() {
     const ok = await confirmDialog({
@@ -84,8 +84,8 @@ function RevokedNotice({ unsent }: { unsent: number }) {
   }
   return (
     <div role="alert" className="rounded-lg bg-[var(--ds-tint-yellow-bg)] px-3.5 py-3 text-[13.5px] text-ink" data-testid="revoked-notice">
-      <p className="font-semibold">{t("auth.revokedTitle")}</p>
-      <p className="mt-0.5 text-ink-2">{t("auth.revokedText")}</p>
+      <p className="font-semibold">{signedOut ? t("auth.keptTitle") : t("auth.revokedTitle")}</p>
+      <p className="mt-0.5 text-ink-2">{signedOut ? t("auth.keptText") : t("auth.revokedText")}</p>
       {unsent > 0 && <p className="mt-1.5 text-ink-2">{t("auth.revokedUnsent", { count: unsent })}</p>}
       <button type="button" onClick={() => void forget()} className="mt-2 text-[12.5px] font-medium text-ink-2 underline-offset-2 hover:text-ink hover:underline">
         {t("auth.revokedForget")}

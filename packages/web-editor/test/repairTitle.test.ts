@@ -66,7 +66,7 @@ describe("title repair (document-model.md «Один title»)", () => {
     const original = blocks(doc, true);
     await later();
     doc.getXmlFragment("content").insert(0, [emptyBlock("title")]);
-    expect(repairTitles(doc.getXmlFragment("content"))).toEqual({ deletedEmptyTitles: 1, restoredFromParagraph: false });
+    expect(repairTitles(doc.getXmlFragment("content"))).toEqual({ deletedEmptyTitles: 1, deletedEmptyParagraphs: 0, restoredFromParagraph: false });
     expect(blocks(doc, true)).toEqual(original);
   });
 
@@ -91,7 +91,7 @@ describe("title repair (document-model.md «Один title»)", () => {
   it("(b) an empty title followed by an OLDER paragraph gets that paragraph's text back (marks kept)", () => {
     const doc = demoted();
     expect(blocks(doc).slice(0, 2)).toEqual(["title:", "paragraph:План на неделю"]);
-    expect(repairTitles(doc.getXmlFragment("content"))).toEqual({ deletedEmptyTitles: 0, restoredFromParagraph: true });
+    expect(repairTitles(doc.getXmlFragment("content"))).toEqual({ deletedEmptyTitles: 0, deletedEmptyParagraphs: 0, restoredFromParagraph: true });
     expect(blocks(doc)).toEqual(["title:План на неделю", "paragraph:Первый абзац.", "bulletList:"]);
     const title = doc.getXmlFragment("content").get(0) as Y.XmlElement;
     expect((title.get(0) as Y.XmlText).toDelta()[0].attributes).toEqual({ agentEdit });
@@ -103,11 +103,59 @@ describe("title repair (document-model.md «Один title»)", () => {
     const title = emptyBlock("title");
     await later();
     frag.insert(0, [title, emptyBlock("paragraph")]);
-    expect(repairTitles(frag)).toEqual({ deletedEmptyTitles: 0, restoredFromParagraph: false });
+    expect(repairTitles(frag)).toEqual({ deletedEmptyTitles: 0, deletedEmptyParagraphs: 0, restoredFromParagraph: false });
     const agent = agentNote();
     const before = blocks(agent, true);
     repairTitles(agent.getXmlFragment("content"));
     expect(blocks(agent, true)).toEqual(before);
+  });
+
+  it("(i) the race seeds an empty title AND an empty paragraph before the agent's title: both go", async () => {
+    const doc = agentNote();
+    const original = blocks(doc, true);
+    await later();
+    doc.getXmlFragment("content").insert(0, [emptyBlock("title"), emptyBlock("paragraph")]);
+    expect(repairTitles(doc.getXmlFragment("content"))).toEqual({ deletedEmptyTitles: 1, deletedEmptyParagraphs: 1, restoredFromParagraph: false });
+    expect(blocks(doc, true)).toEqual(original);
+  });
+
+  it("(ii) web demotion with a seeded empty paragraph: [empty title, empty paragraph, older demoted title, …] heals", () => {
+    const doc = demoted();
+    const frag = doc.getXmlFragment("content");
+    // The race also seeded an empty paragraph next to the empty title.
+    frag.insert(1, [emptyBlock("paragraph")]);
+    expect(blocks(doc).slice(0, 3)).toEqual(["title:", "paragraph:", "paragraph:План на неделю"]);
+    expect(repairTitles(frag)).toEqual({ deletedEmptyTitles: 0, deletedEmptyParagraphs: 1, restoredFromParagraph: true });
+    expect(blocks(doc)).toEqual(["title:План на неделю", "paragraph:Первый абзац.", "bulletList:"]);
+  });
+
+  it("rule 1 runs before rule 2: [empty title, older non-title paragraph, the real (second) title] keeps the real title", async () => {
+    // Live note 01a17944…: read_note hides the second title, so it looked like an empty title
+    // followed by an older paragraph «2026-10-26 · план…».
+    const doc = agentNote();
+    const frag = doc.getXmlFragment("content");
+    const older = new Y.XmlElement("paragraph");
+    // A UUIDv7 from 2024: older than the seeded empty title.
+    older.setAttribute("blockId", "0192f3c4-0000-7000-8000-000000000001");
+    const t = new Y.XmlText();
+    t.insert(0, "2026-10-26 · план");
+    older.insert(0, [t]);
+    await later();
+    frag.insert(0, [emptyBlock("title"), older]);
+    expect(blocks(doc).slice(0, 3)).toEqual(["title:", "paragraph:2026-10-26 · план", "title:План на неделю"]);
+    expect(repairTitles(frag)).toEqual({ deletedEmptyTitles: 1, deletedEmptyParagraphs: 0, restoredFromParagraph: false });
+    expect(blocks(doc).slice(0, 2)).toEqual(["paragraph:2026-10-26 · план", "title:План на неделю"]);
+  });
+
+  it("rule 2: empty paragraphs before the first title go; non-empty ones and those without any title stay", () => {
+    const doc = agentNote();
+    const frag = doc.getXmlFragment("content");
+    frag.insert(0, [emptyBlock("paragraph"), emptyBlock("paragraph")]);
+    expect(repairTitles(frag).deletedEmptyParagraphs).toBe(2);
+    expect(blocks(doc)[0]).toBe("title:План на неделю");
+    const noTitle = new Y.Doc();
+    noTitle.getXmlFragment("content").insert(0, [emptyBlock("paragraph"), emptyBlock("paragraph")]);
+    expect(repairTitles(noTitle.getXmlFragment("content")).deletedEmptyParagraphs).toBe(0);
   });
 
   it("(c) an empty document is left alone; the repair is idempotent (a second run writes nothing)", () => {
@@ -120,7 +168,7 @@ describe("title repair (document-model.md «Один title»)", () => {
     repairTitles(doc.getXmlFragment("content"));
     let m = 0;
     doc.on("update", () => m++);
-    expect(repairTitles(doc.getXmlFragment("content"))).toEqual({ deletedEmptyTitles: 0, restoredFromParagraph: false });
+    expect(repairTitles(doc.getXmlFragment("content"))).toEqual({ deletedEmptyTitles: 0, deletedEmptyParagraphs: 0, restoredFromParagraph: false });
     expect(m).toBe(0);
   });
 

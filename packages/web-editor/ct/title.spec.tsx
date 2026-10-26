@@ -97,9 +97,13 @@ test("blurring an empty title names the note", async ({ mount, page }) => {
   await expect.poll(async () => (await blocks(page))[0]).toBe("title:Заметка");
 });
 
-test("fillEmptyTitleIfNeeded (on close) fills only an empty title, once, as one undo step", async ({ mount, page }) => {
+test("fillEmptyTitleIfNeeded (on close) fills only a new note's empty title, once, as one undo step", async ({ mount, page }) => {
   await mount(<TestEditor width={700} html="<h1 data-type=title></h1><p>текст</p>" defaultTitle={NAME} />);
   await ready(page);
+  // Not a new note yet (the app did not call focusTitle): nothing is named.
+  expect(await page.evaluate(() => window.__ct!.api.fillEmptyTitleIfNeeded())).toBe(false);
+  await focusTitle(page);
+  await page.evaluate(() => window.__ct!.api.undoManager.stopCapturing());
   expect(await page.evaluate(() => window.__ct!.api.fillEmptyTitleIfNeeded())).toBe(true);
   expect((await blocks(page))[0]).toBe(`title:${NAME}`);
   expect(await page.evaluate(() => window.__ct!.api.fillEmptyTitleIfNeeded())).toBe(false);

@@ -55,7 +55,13 @@ test("touch: a tap that places the caret shows one quiet handle at that block", 
   await expect(handle.locator("button")).toHaveCount(0);
   const h = (await handle.boundingBox())!;
   expect(h.x + h.width).toBeLessThanOrEqual(b.x + 2);
-  expect(Math.abs(h.y + h.height / 2 - (b.y + Math.min(b.height, 27) / 2))).toBeLessThan(14);
+  // Beside the caret's line (the tap may land on either line of a wrapped paragraph).
+  const line = await page.evaluate(() => {
+    const ed = window.__ct!.api.editor;
+    const c = ed.view.coordsAtPos(ed.state.selection.from);
+    return (c.top + c.bottom) / 2;
+  });
+  expect(Math.abs(h.y + h.height / 2 - line)).toBeLessThan(10);
   // Typing hides it; the next tap brings it back.
   await page.keyboard.type("x");
   await expect(handle).toHaveCount(0);

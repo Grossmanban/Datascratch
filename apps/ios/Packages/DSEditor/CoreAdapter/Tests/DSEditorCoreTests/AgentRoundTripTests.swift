@@ -189,6 +189,30 @@ import Testing
         #expect(try note.crdt.encodeStateAsUpdate() == repaired, "a second repair writes nothing")
     }
 
+    /// The damaged note from the server: an empty title created on a device's first open (newer
+    /// id) before the agent's title, demoted to a paragraph (older id, agent-marked text). The
+    /// repair puts the text back into the title and deletes the paragraph; a second one is a no-op.
+    @Test func demotedAgentTitleIsRestored() throws {
+        let note = NoteDocument(noteId: "01a17993-3956-77ff-8066-d911b8668e4f")
+        let nodes: [XmlNode] = [
+            .element(name: "title", attributes: ["blockId": .string(value: "01a179ea-5a5a-7e49-ab53-d3acec118201")], children: []),
+            .element(name: "paragraph", attributes: ["blockId": .string(value: "01a17993-3967-77ca-99ea-592f9d133060")],
+                     children: [Self.text("Стратегия продукта — черновик")]),
+            Self.para("Первый абзац тела"),
+        ]
+        try note.crdt.transact(origin: .remote) { $0.insertNodes(nodes, into: [], at: 0) }
+        let doc = CoreEditorDocument(note: note)
+        #expect(EditorCommands(document: doc).repairTitles())
+        #expect(try note.title() == "Стратегия продукта — черновик")
+        let blocks = try Self.blocks(note)
+        #expect(blocks.map(\.id).prefix(1) == ["01a179ea-5a5a-7e49-ab53-d3acec118201"])
+        #expect(!blocks.map(\.id).contains("01a17993-3967-77ca-99ea-592f9d133060"), "the demoted paragraph is gone")
+        #expect(blocks[0].json.contains("agentEdit"), "the agent mark moves with the text")
+        let repaired = try note.crdt.encodeStateAsUpdate()
+        #expect(!EditorCommands(document: doc).repairTitles())
+        #expect(try note.crdt.encodeStateAsUpdate() == repaired)
+    }
+
     /// Two clients repairing the same merged document at once converge on one title.
     @Test func concurrentRepairsConverge() throws {
         let agent = try Self.agentNote()

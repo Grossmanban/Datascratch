@@ -303,6 +303,31 @@ final class CoreLibrary: LibraryBackend {
         return carried
     }
 
+    /// Removes everything this device holds — documents, keys, pending work — and starts over
+    /// with an empty device library (spec/07: «Delete data from this device», and signing in to a
+    /// different account after this device was signed out).
+    func wipeLocalData() throws {
+        notebookDocs.removeAll()
+        noteDocs.removeAll()
+        subscriptions.removeAll()
+        remoteSubscriptions.removeAll()
+        notebookIdOfNote.removeAll()
+        for record in try store.documents() { try store.deleteDocument(record.docId) }
+        pendingMoves = [:]
+        needsCarriedMerge = false
+        overlay = Overlay()
+        try store.setValue(nil, for: Self.overlayKey)
+        try keys.clear()
+        try keys.setMasterKey(DSCrypto.newKey())
+        let accountId = DSCore.EntityID.make()
+        account = AccountDocument(try Self.open(.account, docId: accountId, notebookId: nil, store: store))
+        subscriptions[accountId] = observe(account.crdt, notebookId: nil)
+        remoteSubscriptions[accountId] = observeRemote(account.crdt)
+        try account.initialize()
+        try store.setString(accountId, for: Self.accountDocKey)
+        onExternalChange?(loadSnapshot())
+    }
+
     /// What `POST /notebooks` needs for a notebook of the account whose key this device holds
     /// (one carried in while offline never reached the server).
     func serverNotebook(_ id: String) -> CarriedNotebook? {
@@ -463,18 +488,13 @@ final class CoreLibrary: LibraryBackend {
     }
 
     /// `meta.name/icon/space` of the notebook document (agents cannot read the account document).
+    /// Name, icon, colour and space copied into the notebook document for agents and the server
+    /// (document-model §3); no write when nothing changed.
     private func writeNotebookMeta(_ notebook: Notebook, in snapshot: LibrarySnapshot) throws {
-        let doc = try notebookDocument(notebook.id)
         let space = snapshot.spaces.first { $0.id == notebook.spaceId }
-        try doc.crdt.transact(origin: .local) { txn in
-            txn.set("meta", key: "name", .string(value: notebook.name))
-            txn.set("meta", key: "icon", .string(value: notebook.icon))
-            txn.set("meta", key: "space", .object(entries: [
-                "id": .string(value: notebook.spaceId),
-                "name": .string(value: space?.name ?? ""),
-                "icon": .optionalString(space?.icon),
-            ]))
-        }
+        try notebookDocument(notebook.id).setMetaCopy(.init(
+            name: notebook.name, icon: notebook.icon, color: notebook.color.rawValue,
+            spaceId: notebook.spaceId, spaceName: space?.name ?? "", spaceIcon: space?.icon))
     }
 
     private func persistFolders(_ old: LibrarySnapshot, _ new: LibrarySnapshot) throws {

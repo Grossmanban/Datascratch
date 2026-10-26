@@ -2580,9 +2580,9 @@
     "semantic_hash": "c40fffbe7a6644c223d7d5022f0b2b55"
   },
   "apps/web/src/ui/primitives.tsx": {
-    "mtime": 1793053513.9642997,
-    "seen": 1793053568.8677464,
-    "ast_hash": "410c8ed8748a6aa1362de722a0b37ce7",
+    "mtime": 1793055777.7928207,
+    "seen": 1793055832.8880944,
+    "ast_hash": "70c1c7b74038cbbca16e794192a8ee5a",
     "semantic_hash": ""
   },
   "apps/web/tsconfig.json": {
@@ -4272,9 +4272,9 @@
     "semantic_hash": "c0be97949300b0a640f0d459c6a5d9ea"
   },
   "apps/web/README.md": {
-    "mtime": 1793054575.8555753,
-    "seen": 1793054635.0957816,
-    "ast_hash": "6b325da93a444661aee0031758eb7a2c",
+    "mtime": 1793055777.7928207,
+    "seen": 1793055832.897173,
+    "ast_hash": "4e77902b6b9b6dba770a637eaee7207d",
     "semantic_hash": ""
   },
   "apps/web/index.html": {
@@ -5244,9 +5244,9 @@
     "semantic_hash": ""
   },
   "apps/web/e2e/specs/menu-layout.spec.ts": {
-    "mtime": 1793053513.9602997,
-    "seen": 1793053568.8642757,
-    "ast_hash": "3d3a9f9b0ed1c71fe0f0e33f3de42b4c",
+    "mtime": 1793055777.7928207,
+    "seen": 1793055832.8830214,
+    "ast_hash": "77ba257b1f35885cd2720ac8cb96f85d",
     "semantic_hash": ""
   },
   "apps/web/e2e/specs/no-writes-on-open.spec.ts": {

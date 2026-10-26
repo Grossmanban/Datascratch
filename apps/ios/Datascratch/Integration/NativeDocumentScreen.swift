@@ -52,14 +52,21 @@ final class NativeEditorModel {
         }
         refreshCreatedByAgent()
         // «Hide Keyboard» is offered only while an on-screen keyboard is up (not with a
-        // hardware keyboard, where there is nothing to hide).
-        keyboardObservers = [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillHideNotification].map { name in
+        // hardware keyboard, where there is nothing to hide). Judged by how much of the screen
+        // the keyboard's end frame covers: on iPad the frame changes without a matching
+        // will-hide (the keyboard folds into the shortcuts bar), so every change counts.
+        let names = [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillChangeFrameNotification,
+                     UIResponder.keyboardWillHideNotification, UIResponder.keyboardDidHideNotification]
+        keyboardObservers = names.map { name in
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
                 let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue ?? .zero
-                let shown = name == UIResponder.keyboardWillShowNotification && frame.height > 120
+                let hiding = name == UIResponder.keyboardWillHideNotification || name == UIResponder.keyboardDidHideNotification
+                let screen = (note.object as? UIScreen)?.bounds
                 MainActor.assumeIsolated {
-                    guard let self, self.isSoftwareKeyboardShown != shown else { return }
-                    self.isSoftwareKeyboardShown = shown
+                    guard let self else { return }
+                    let bounds = screen ?? self.editor.window?.screen.bounds ?? .zero
+                    let shown = !hiding && frame.intersection(bounds).height > 120
+                    if self.isSoftwareKeyboardShown != shown { self.isSoftwareKeyboardShown = shown }
                 }
             }
         }
@@ -422,6 +429,8 @@ struct HideKeyboardButton: View {
             // On iPad resigning the text view alone left the keyboard up; ending editing on the
             // whole editor (as switching to a pen does) takes it down.
             model.editor.endEditing(true)
+            // The keyboard is going: drop the button now rather than wait for the notification.
+            model.isSoftwareKeyboardShown = false
             // With a hardware keyboard nothing else reports the end of editing: refresh the bar.
             DispatchQueue.main.async { model.revision &+= 1 }
         } label: {

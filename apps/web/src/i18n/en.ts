@@ -196,6 +196,8 @@ const en: Loose<Messages> = {
     deleteConfirm: "The folder will be deleted; its documents and subfolders move one level up.",
   },
   notebook: {
+    modeNotChangedOffline: "The server didn't answer — the mode is unchanged. Please try again.",
+    modeNotChanged: "The server didn't accept the mode change: {{reason}}",
     name: "Name",
     newName: "New notebook",
     mode: "Mode",

@@ -1140,20 +1140,27 @@ public final class EditorView: UIView {
     /// The task date chip under a point (text view coordinates): its item, whether it is the
     /// deadline chip, and its frame.
     func taskDateChip(at point: CGPoint) -> (item: BlockID, deadline: Bool, rect: CGRect)? {
+        // By the chips' own frames: they are drawn right of the last line, outside the fragment's
+        // frame, so looking up the fragment under the point missed them (taps did nothing).
         guard let tlm = textView.textLayoutManager else { return nil }
         let origin = geometry.origin
-        let local = CGPoint(x: point.x - origin.x, y: point.y - origin.y)
-        guard let frag = tlm.textLayoutFragment(for: local) as? BlockLayoutFragment, let d = frag.decoration,
-              let item = d.itemBlockId, case .task(_, let scheduled, let deadline) = d.marker else { return nil }
-        var kinds: [Bool] = []
-        if scheduled != nil { kinds.append(false) }
-        if deadline != nil { kinds.append(true) }
-        let frames = frag.dateChipFrames()
-        for (frame, isDeadline) in zip(frames, kinds) {
-            let rect = frame.offsetBy(dx: frag.layoutFragmentFrame.minX + origin.x, dy: frag.layoutFragmentFrame.minY + origin.y)
-            if rect.insetBy(dx: -6, dy: -8).contains(point) { return (item, isDeadline, rect) }
+        var hit: (item: BlockID, deadline: Bool, rect: CGRect)?
+        tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: []) { frag in
+            guard let block = frag as? BlockLayoutFragment, let d = block.decoration, let item = d.itemBlockId,
+                  case .task(_, let scheduled, let deadline) = d.marker else { return true }
+            var kinds: [Bool] = []
+            if scheduled != nil { kinds.append(false) }
+            if deadline != nil { kinds.append(true) }
+            for (frame, isDeadline) in zip(block.dateChipFrames(), kinds) {
+                let rect = frame.offsetBy(dx: frag.layoutFragmentFrame.minX + origin.x, dy: frag.layoutFragmentFrame.minY + origin.y)
+                if rect.insetBy(dx: -6, dy: -8).contains(point) {
+                    hit = (item, isDeadline, rect)
+                    return false
+                }
+            }
+            return true
         }
-        return nil
+        return hit
     }
 
     /// Frames of the task date chips in `view`'s coordinates (hosts and UI tests).

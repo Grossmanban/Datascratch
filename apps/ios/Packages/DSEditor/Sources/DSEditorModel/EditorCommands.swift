@@ -604,15 +604,16 @@ public struct EditorCommands {
         }
     }
 
-    /// Title repair on load (`document-model.md`, same rule as web-editor), deterministic and
-    /// idempotent, creating nothing, in this order:
-    /// 1. several top-level `title` nodes: the first non-empty one stays and the EMPTY ones are
-    ///    deleted (all empty: the first stays);
-    /// 2. the note starts with an empty title, then possibly empty paragraphs, then a paragraph
-    ///    whose blockId is older (UUIDv7 time) than the title's: that paragraph was the original
-    ///    title, demoted by the empty-document race — its inline content (marks, strokes) moves
-    ///    into the title, and it and the skipped empty paragraphs are deleted;
-    /// 4. empty paragraphs before the first title are deleted.
+    /// Title repair on load (`document-model.md` §4 «Один title», same rule and order as
+    /// web-editor), deterministic and idempotent, creating nothing:
+    /// 1. several top-level `title` nodes: only EMPTY titles are deleted (all empty: the first
+    ///    stays); non-empty extras are untouched;
+    /// 2. EMPTY paragraphs before the first title are deleted;
+    /// 3. the note starts with an empty title T: the empty paragraphs after it are skipped; if the
+    ///    first non-empty block is a paragraph whose blockId is older (UUIDv7 time) than T's, it
+    ///    was the original title, demoted by the empty-document race — its inline content (marks,
+    ///    strokes) moves into T, and it and the skipped empty paragraphs are deleted;
+    /// 4. an empty document is never written.
     /// One transaction, not undoable; read-only notes are left alone. Returns whether anything changed.
     @discardableResult
     public func repairTitles() -> Bool {
@@ -627,6 +628,12 @@ public struct EditorCommands {
         var top = document.blocks.filter { !deletions.contains($0.id) }
         func isEmptyParagraph(_ b: BlockNode) -> Bool { b.type == NodeType.paragraph && b.textLength == 0 }
         // 2.
+        if let firstTitle = top.firstIndex(where: { $0.type == NodeType.title }) {
+            let leading = top[..<firstTitle].filter(isEmptyParagraph).map(\.id)
+            deletions += leading
+            top.removeAll { leading.contains($0.id) }
+        }
+        // 3.
         var demoted: (title: BlockID, paragraph: BlockID)?
         if let first = top.first, first.type == NodeType.title, first.textLength == 0 {
             var i = 1
@@ -635,12 +642,7 @@ public struct EditorCommands {
                let titleTime = Self.uuidV7Time(first.id), let paraTime = Self.uuidV7Time(top[i].id), paraTime < titleTime {
                 demoted = (first.id, top[i].id)
                 deletions += top[1..<i].map(\.id)
-                top.removeSubrange(1...i)
             }
-        }
-        // 4.
-        if let firstTitle = top.firstIndex(where: { $0.type == NodeType.title }) {
-            deletions += top[..<firstTitle].filter(isEmptyParagraph).map(\.id)
         }
         guard !deletions.isEmpty || demoted != nil else { return false }
         let re = demoted.map { StrokeReanchoring(document: document, blocks: [$0.paragraph]) }

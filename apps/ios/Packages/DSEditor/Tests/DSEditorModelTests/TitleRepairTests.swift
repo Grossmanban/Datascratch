@@ -94,6 +94,30 @@ import Testing
         #expect(!EditorCommands(document: doc).repairTitles())
     }
 
+    /// An empty paragraph before the empty title (rule 2 first): the demotion repair still
+    /// happens in the same pass.
+    @Test func emptyParagraphBeforeTheTitleThenDemotionInOnePass() {
+        let doc = InMemoryEditorDocument(blocks: [
+            BlockNode(id: "01a179ea-5a5a-7e49-ab53-d3acec118203", type: NodeType.paragraph, inline: []),
+            BlockNode(id: Self.newer, type: NodeType.title, inline: []),
+            BlockNode(id: "01a179ea-5a5a-7e49-ab53-d3acec118202", type: NodeType.paragraph, inline: []),
+            BlockNode(id: Self.older, type: NodeType.paragraph, inline: [.text("Название", .empty)]),
+        ])
+        #expect(EditorCommands(document: doc).repairTitles())
+        #expect(doc.blocks.map(\.id) == [Self.newer])
+        #expect(doc.flatText(of: Self.newer) == "Название")
+        #expect(!EditorCommands(document: doc).repairTitles())
+    }
+
+    /// Non-empty blocks before the title, and notes without a title, are untouched.
+    @Test func nonEmptyBlocksBeforeTheTitleAndTitlelessNotesStay() {
+        let before = InMemoryEditorDocument(blocks: [.paragraph("до"), .title("T")])
+        #expect(!EditorCommands(document: before).repairTitles())
+        let titleless = InMemoryEditorDocument(blocks: [.paragraph(""), .paragraph("текст")])
+        #expect(!EditorCommands(document: titleless).repairTitles())
+        #expect(titleless.blocks.count == 2)
+    }
+
     /// Note 01a17944…: [empty title, agent title, older paragraph]. Rule 1 runs first and resolves
     /// it; the paragraph is not promoted.
     @Test func ruleOneRunsBeforeRuleTwo() {

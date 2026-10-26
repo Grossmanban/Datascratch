@@ -138,3 +138,29 @@ else
   echo "not deployed yet"
 fi
 end
+
+# Agent access diagnostics (read-only; the owner allowed it 2026-10-26). Prints only ids, modes,
+# flags, times and error messages — no names, emails, keys, tokens or note content.
+srv=$($SUDO docker ps --format '{{.Names}} {{.Image}}' 2> /dev/null | awk '/datascratch-server/ {print $1; exit}')
+pg=$($SUDO docker ps --format '{{.Names}} {{.Image}}' 2> /dev/null | awk '/datascratch-postgres/ {print $1; exit}')
+if [ -n "$srv" ]; then
+  section "Server log: agent read failures (last 6 h)"
+  $SUDO docker logs --since 6h "$srv" 2>&1 | grep -E 'could not be decrypted|decrypt|agent:' |
+    sed -E 's/"(email|token|authorization|cookie|ip|remoteAddress|userAgent)":"[^"]*"/"\1":"…"/g' | tail -40
+  end
+fi
+if [ -n "$pg" ]; then
+  section "Agent access (metadata only)"
+  $SUDO docker exec -i "$pg" sh -c 'psql -X -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -P pager=off' 2>&1 << 'SQL' | head -80
+\echo Grants: kind | permission | created | revoked | expires | last used | notebooks (id prefix : mode : server key)
+SELECT g.kind, g.permission, g.created_at, g.revoked_at, g.expires_at, g.last_used_at,
+       (SELECT string_agg(left(gid::text, 13) || ':' || coalesce(n.mode::text, 'MISSING') || ':' || coalesce((n.server_wrapped_key IS NOT NULL)::text, '-'), ', ')
+          FROM unnest(g.notebook_ids) AS gid LEFT JOIN notebooks n ON n.id = gid) AS notebooks
+  FROM agent_grants g ORDER BY g.created_at DESC LIMIT 6;
+\echo Agent-mode notebooks: id prefix | server key | last update seq | update devices (last 10)
+SELECT left(n.id::text, 13) AS id, n.server_wrapped_key IS NOT NULL AS server_key, d.last_seq,
+       (SELECT string_agg(x.dev || '@' || x.seq, ' ') FROM (SELECT left(u.device_id, 18) AS dev, u.seq FROM doc_updates u WHERE u.doc_id = n.id ORDER BY u.seq DESC LIMIT 10) x) AS recent
+  FROM notebooks n LEFT JOIN docs d ON d.id = n.id WHERE n.mode = 'agent';
+SQL
+  end
+fi

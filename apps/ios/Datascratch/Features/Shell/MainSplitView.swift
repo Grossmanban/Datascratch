@@ -104,6 +104,9 @@ struct PadWorkspace: View {
                         DocumentScreen(noteId: noteId)
                             .id(noteId)
                     }
+                    // Takes the width that is left, never more: its content (toolbar, format bar)
+                    // must not push the column past the screen edge (iPad mini portrait).
+                    .frame(minWidth: 0, maxWidth: .infinity)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("workspace.document")
                 }

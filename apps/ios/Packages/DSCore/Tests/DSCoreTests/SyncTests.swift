@@ -431,9 +431,10 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
 
         #expect(try await eventually { await server.docs[good.noteId]?.isEmpty == false })
         #expect(try await eventually { await a.status().failed.map(\.docId) == [bad.noteId] })
+        // The refusal can come before the other document's messages are acknowledged.
+        #expect(try await eventually { let s = await a.status(); return s.pending == 0 && s.isIdle })
         let status = await a.status()
         #expect(status.failed.first?.reason == "register: not_found (404)")
-        #expect(status.pending == 0 && status.isIdle)
         #expect(status.summary == .failed(documents: 1, reason: "register: not_found (404)"))
         // Refused registrations are not retried on their own.
         try await Task.sleep(for: .milliseconds(200))

@@ -42,6 +42,12 @@ final class NativeEditorModel {
             DispatchQueue.main.async { self?.changed() }
         }
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
+        // «Link» on the format bar: the screen asks for the address.
+        editor.onLinkRequest = { [weak self] in self?.isAskingForLink = true }
+        // The "/" block menu: the screen shows it at the caret (spec/04).
+        editor.onSlashMenu = { [weak self] menu in
+            DispatchQueue.main.async { self?.slashMenu = menu }
+        }
         // A literal [[Title]] (an agent's link, or one typed without autocomplete).
         editor.onOpenNoteTitled = { [weak app] title in app?.pendingRoute = .noteTitled(title) }
         // D-45: «Создано агентом» strip until the person acknowledges it.
@@ -52,14 +58,21 @@ final class NativeEditorModel {
         }
         refreshCreatedByAgent()
         // «Hide Keyboard» is offered only while an on-screen keyboard is up (not with a
-        // hardware keyboard, where there is nothing to hide).
-        keyboardObservers = [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillHideNotification].map { name in
+        // hardware keyboard, where there is nothing to hide). Judged by how much of the screen
+        // the keyboard's end frame covers: on iPad the frame changes without a matching
+        // will-hide (the keyboard folds into the shortcuts bar), so every change counts.
+        let names = [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillChangeFrameNotification,
+                     UIResponder.keyboardWillHideNotification, UIResponder.keyboardDidHideNotification]
+        keyboardObservers = names.map { name in
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
                 let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue ?? .zero
-                let shown = name == UIResponder.keyboardWillShowNotification && frame.height > 120
+                let hiding = name == UIResponder.keyboardWillHideNotification || name == UIResponder.keyboardDidHideNotification
+                let screen = (note.object as? UIScreen)?.bounds
                 MainActor.assumeIsolated {
-                    guard let self, self.isSoftwareKeyboardShown != shown else { return }
-                    self.isSoftwareKeyboardShown = shown
+                    guard let self else { return }
+                    let bounds = screen ?? self.editor.window?.screen.bounds ?? .zero
+                    let shown = !hiding && frame.intersection(bounds).height > 120
+                    if self.isSoftwareKeyboardShown != shown { self.isSoftwareKeyboardShown = shown }
                 }
             }
         }
@@ -67,6 +80,10 @@ final class NativeEditorModel {
 
     /// An on-screen keyboard is showing.
     var isSoftwareKeyboardShown = false
+    /// The format bar's «Link» wants an address.
+    var isAskingForLink = false
+    /// The open "/" menu, if any.
+    var slashMenu: SlashMenuState?
     @ObservationIgnored private var keyboardObservers: [NSObjectProtocol] = []
 
     isolated deinit {
@@ -184,36 +201,43 @@ struct NativeDocumentScreen: View {
                         // variant that stays full height and insets itself crashed (ios-editor bisect).
                         NativeEditorRepresentable(editor: model.editor)
                             .accessibilityIdentifier("editor")
+                        if let menu = model.slashMenu, !menu.items.isEmpty {
+                            SlashMenuView(menu: menu, bounds: proxy.size) { id in model.editor.applySlashCommand(id) }
+                        }
                     }
                     // The palette sits in the bottom safe area: the text scrolls clear of it, and it
                     // rides up with the keyboard in one animation (no second layout pass).
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         // Inline when it fits the column, else the compact row: it never runs past
                         // the column's edges (iPad split view with three columns).
-                        Group {
-                            if app.settings.penPaletteCollapsed {
-                                // Folded to a button at the trailing edge: the editor gets the
-                                // room, the current tool keeps working (Pencil still draws).
-                                HStack(spacing: Theme.Space.s2) {
-                                    Spacer(minLength: 0)
-                                    HideKeyboardButton(model: model, isCompact: true)
-                                    CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
-                                        .padding(.trailing, Theme.Space.s4)
+                        VStack(spacing: 0) {
+                            // While text is being written: marks and block styles above the palette.
+                            FormatBarRow(model: model)
+                            Group {
+                                if app.settings.penPaletteCollapsed {
+                                    // Folded to a button at the trailing edge: the editor gets the
+                                    // room, the current tool keeps working (Pencil still draws).
+                                    HStack(spacing: Theme.Space.s2) {
+                                        Spacer(minLength: 0)
+                                        HideKeyboardButton(model: model, isCompact: true)
+                                        CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
+                                            .padding(.trailing, Theme.Space.s4)
+                                    }
+                                    // A thin strip: the folded button takes less height than the palette.
+                                    .padding(.bottom, Theme.Space.s1)
+                                    .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
+                                } else {
+                                    ViewThatFits(in: .horizontal) {
+                                        paletteRow(model, isCompact: false)
+                                        paletteRow(model, isCompact: true)
+                                    }
+                                    .padding(.top, Theme.Space.s2)
+                                    .padding(.bottom, Theme.Space.s3)
+                                    .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
                                 }
-                                // A thin strip: the folded button takes less height than the palette.
-                                .padding(.bottom, Theme.Space.s1)
-                                .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
-                            } else {
-                                ViewThatFits(in: .horizontal) {
-                                    paletteRow(model, isCompact: false)
-                                    paletteRow(model, isCompact: true)
-                                }
-                                .padding(.top, Theme.Space.s2)
-                                .padding(.bottom, Theme.Space.s3)
-                                .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
                             }
+                            .frame(maxWidth: .infinity)
                         }
-                        .frame(maxWidth: .infinity)
                     }
                     .onAppear { model.header.containerHeight = proxy.size.height }
                     .onChange(of: proxy.size.height) { _, height in model.header.containerHeight = height }
@@ -227,6 +251,7 @@ struct NativeDocumentScreen: View {
                     model.editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
                 }
                 .toolbar { NativeEditorToolbar(model: model, note: note) }
+                .modifier(LinkPrompt(model: model))
                 .coverPickers()
             } else if failed {
                 // Opening the document failed: fall back to the stand-in editor.
@@ -422,6 +447,8 @@ struct HideKeyboardButton: View {
             // On iPad resigning the text view alone left the keyboard up; ending editing on the
             // whole editor (as switching to a pen does) takes it down.
             model.editor.endEditing(true)
+            // The keyboard is going: drop the button now rather than wait for the notification.
+            model.isSoftwareKeyboardShown = false
             // With a hardware keyboard nothing else reports the end of editing: refresh the bar.
             DispatchQueue.main.async { model.revision &+= 1 }
         } label: {
@@ -437,6 +464,140 @@ struct HideKeyboardButton: View {
         .accessibilityHidden(!editing)
         .accessibilityLabel("Hide Keyboard")
         .accessibilityIdentifier("editor.hideKeyboard")
+    }
+}
+
+/// DSFormatBar over the editor's `perform`/`formatState` (spec/04): marks, link, lists, quote and
+/// headings, with the current ones lit. Shown only while text is being written; scrolls sideways
+/// when the column is narrower than the bar.
+struct FormatBarRow: View {
+    let model: NativeEditorModel
+
+    var body: some View {
+        let _ = model.revision
+        if model.editor.isEditingText, model.editor.tools.mode == .text {
+            let state = model.editor.formatState
+            ScrollView(.horizontal, showsIndicators: false) {
+                DSFormatBar(items: items(state))
+                    .padding(.horizontal, Theme.Space.s3)
+                    .padding(.vertical, Theme.Space.s1)
+            }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .accessibilityIdentifier("formatBar")
+            .transition(.opacity)
+        }
+    }
+
+    private func items(_ state: FormatState) -> [DSFormatBarElement] {
+        func item(_ id: String, _ image: String, _ label: String, _ on: Bool, _ action: EditorAction) -> DSFormatBarElement {
+            .item(DSFormatBarItem(id: id, systemImage: image, label: label, isActive: on) {
+                model.editor.perform(action)
+                model.revision &+= 1
+            })
+        }
+        var elements: [DSFormatBarElement] = [
+            item("bold", "bold", String(localized: "Bold"), state.has(MarkName.bold), .bold),
+            item("italic", "italic", String(localized: "Italic"), state.has(MarkName.italic), .italic),
+            item("underline", "underline", String(localized: "Underline"), state.has(MarkName.underline), .underline),
+            item("strike", "strikethrough", String(localized: "Strikethrough"), state.has(MarkName.strike), .strike),
+            item("highlight", "highlighter", String(localized: "Highlight"), state.has(MarkName.highlight), .highlight),
+        ]
+        if state.hasSelection || state.has(MarkName.link) {
+            elements.append(item("link", "link", String(localized: "Link"), state.has(MarkName.link), .link))
+        }
+        elements += [
+            .separator(id: "lists"),
+            item("bulletList", "list.bullet", String(localized: "Bulleted List"), state.block == .bulletList, .bulletList),
+            item("orderedList", "list.number", String(localized: "Numbered List"), state.block == .orderedList, .orderedList),
+            item("taskList", "checkmark.circle", String(localized: "Task"), state.block == .taskList, .taskList),
+            item("quote", "text.quote", String(localized: "Quote"), state.block == .quote, .quote),
+            .separator(id: "headings"),
+            item("heading1", "1.square", String(localized: "Heading 1"), state.block == .heading1, .heading1),
+            item("heading2", "2.square", String(localized: "Heading 2"), state.block == .heading2, .heading2),
+            item("heading3", "3.square", String(localized: "Heading 3"), state.block == .heading3, .heading3),
+        ]
+        return elements
+    }
+}
+
+/// The "/" block menu at the caret: entries grouped as on the web («Текст», «Списки», «Вставка»);
+/// typing narrows it, a tap applies the entry.
+struct SlashMenuView: View {
+    let menu: SlashMenuState
+    let bounds: CGSize
+    let apply: (String) -> Void
+    private let width: CGFloat = 260
+    private let maxHeight: CGFloat = 300
+
+    var body: some View {
+        let groups = Dictionary(grouping: menu.items, by: \.group)
+        let order = menu.items.map(\.group).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        let height = min(maxHeight, CGFloat(menu.items.count) * 44 + CGFloat(order.count) * 28 + 16)
+        // Below the caret when it fits, else above it.
+        let below = menu.caretRect.maxY + 6
+        let y = below + height <= bounds.height ? below : max(8, menu.caretRect.minY - 6 - height)
+        let x = min(max(8, menu.caretRect.minX), max(8, bounds.width - width - 8))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(order, id: \.self) { group in
+                    Text(group)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .padding(.horizontal, Theme.Space.s3)
+                        .padding(.top, Theme.Space.s2)
+                        .padding(.bottom, Theme.Space.s1)
+                    ForEach(groups[group] ?? [], id: \.id) { command in
+                        Button { apply(command.id) } label: {
+                            HStack(spacing: Theme.Space.s3) {
+                                Image(systemName: command.systemImage)
+                                    .frame(width: 22)
+                                    .foregroundStyle(Theme.Palette.textSecondary)
+                                Text(command.title).foregroundStyle(Theme.Palette.textPrimary)
+                                Spacer(minLength: 0)
+                                if let hint = command.hint {
+                                    Text(verbatim: hint)
+                                        .font(Theme.Typography.caption.monospaced())
+                                        .foregroundStyle(Theme.Palette.textSecondary)
+                                }
+                            }
+                            .padding(.horizontal, Theme.Space.s3)
+                            .frame(height: 44)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("slash.\(command.id)")
+                    }
+                }
+            }
+            .padding(.vertical, Theme.Space.s1)
+        }
+        .frame(width: width, height: height)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .position(x: x + width / 2, y: y + height / 2)
+        .accessibilityIdentifier("slashMenu")
+        .transition(.opacity)
+    }
+}
+
+/// Asks for the address of a link on the selection (the format bar's «Link»).
+struct LinkPrompt: ViewModifier {
+    @Bindable var model: NativeEditorModel
+    @State private var address = ""
+
+    func body(content: Content) -> some View {
+        content.alert("Add Link", isPresented: $model.isAskingForLink) {
+            TextField("https://", text: $address)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button("Add") {
+                let text = address.trimmingCharacters(in: .whitespaces)
+                let url = URL(string: text.contains("://") ? text : "https://" + text)
+                if !text.isEmpty, let url { model.editor.setLink(url) }
+                address = ""
+            }
+            Button("Cancel", role: .cancel) { address = "" }
+        }
     }
 }
 
@@ -549,18 +710,10 @@ struct PenPalette: View {
     }
 
     /// `ink.blue` / `highlight.yellow` (contracts/strokes.md) ⇄ design-system colours.
-    static func color(for token: String) -> DSPenColor {
-        let name = token.split(separator: ".").last.map(String.init) ?? "black"
-        if token.hasPrefix("highlight."), let highlight = DSHighlightToken(rawValue: name) { return .highlight(highlight) }
-        return .ink(DSInkToken(rawValue: name) ?? .black)
-    }
+    /// `ink.blue`, `highlight.yellow` or a custom `#RRGGBB` (the editor parses all three).
+    static func color(for token: String) -> DSPenColor { DSPenColor(tokenValue: token) ?? .ink(.black) }
 
-    static func token(for color: DSPenColor) -> String {
-        switch color {
-        case .ink(let ink): "ink.\(ink.rawValue)"
-        case .highlight(let highlight): "highlight.\(highlight.rawValue)"
-        }
-    }
+    static func token(for color: DSPenColor) -> String { color.tokenValue }
 
     static func factor(_ width: DSPenWidth) -> Double {
         switch width {

@@ -29,9 +29,40 @@ public struct DSGlassPanel<Content: View>: View {
     }
 }
 
-extension View {
-    /// Liquid Glass background in a continuous rounded rectangle.
-    public func dsGlass(cornerRadius: CGFloat = DSRadius.xl, tint: Color? = nil, interactive: Bool = false) -> some View {
+private struct DSGlassFallbackKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// Draw `.dsGlass` as a solid elevated surface instead of Liquid Glass.
+    /// `ImageRenderer` (snapshot tests) cannot render glass, so snapshots set this.
+    public var dsGlassFallback: Bool {
+        get { self[DSGlassFallbackKey.self] }
+        set { self[DSGlassFallbackKey.self] = newValue }
+    }
+}
+
+struct DSGlassModifier: ViewModifier {
+    let cornerRadius: CGFloat
+    let tint: Color?
+    let interactive: Bool
+    @Environment(\.dsGlassFallback) private var fallback
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if fallback {
+            content
+                .background(shape.fill(Color.dsElevated))
+                .background(shape.fill(Color.dsSurface.opacity(0.6)))
+                .overlay(shape.strokeBorder(Color.dsSeparator, lineWidth: 0.5))
+                .dsShadow(.popover)
+        } else {
+            content.glassEffect(glass, in: shape)
+        }
+    }
+
+    private var glass: Glass {
         var glass = Glass.regular
         if let tint {
             glass = glass.tint(tint)
@@ -39,7 +70,15 @@ extension View {
         if interactive {
             glass = glass.interactive()
         }
-        return glassEffect(glass, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        return glass
+    }
+}
+
+extension View {
+    /// Liquid Glass background in a continuous rounded rectangle
+    /// (solid elevated surface when `\.dsGlassFallback` is on).
+    public func dsGlass(cornerRadius: CGFloat = DSRadius.xl, tint: Color? = nil, interactive: Bool = false) -> some View {
+        modifier(DSGlassModifier(cornerRadius: cornerRadius, tint: tint, interactive: interactive))
     }
 }
 

@@ -259,6 +259,7 @@ export class PenLayer {
     this.cleanups.push(() => window.removeEventListener("keydown", onKey, true));
 
     this.attachInput();
+    this.updateDrawingRoom();
     this.schedule();
   }
 
@@ -272,6 +273,7 @@ export class PenLayer {
     this.settings = { ...this.settings, ...patch };
     if (patch.tool !== undefined && patch.tool !== "lasso") this.clearLasso();
     this.root.classList.toggle("ds-pen-draw-any", Boolean(this.settings.tool && this.settings.drawWithAnyPointer));
+    this.updateDrawingRoom();
     for (const l of this.listeners) l(this.settings);
   }
 
@@ -642,8 +644,21 @@ export class PenLayer {
     return this.surfaceAt(target)?.kind === "drawing";
   }
 
+  /** Room to draw below the text exists while drawing is possible (strokes.md §4). */
+  private stylusSeen = false;
+  private updateDrawingRoom(): void {
+    const canDraw = Boolean(this.settings.tool) && (this.stylusSeen || this.settings.drawWithAnyPointer);
+    this.root.classList.toggle("ds-pen-room", canDraw && this.editor.isEditable);
+  }
+
   private onPointerDown(e: PointerEvent): void {
-    if (e.pointerType === "pen") this.lastPenAt = performance.now();
+    if (e.pointerType === "pen") {
+      this.lastPenAt = performance.now();
+      if (!this.stylusSeen) {
+        this.stylusSeen = true;
+        this.updateDrawingRoom();
+      }
+    }
     if (this.active) {
       // A second finger/palm while drawing: ignore it, don't let it reach the editor either.
       if (e.pointerId !== this.active.pointerId) {
@@ -690,7 +705,14 @@ export class PenLayer {
   }
 
   private onPointerMove(e: PointerEvent): void {
-    if (e.pointerType === "pen") this.lastPenAt = performance.now();
+    if (e.pointerType === "pen") {
+      this.lastPenAt = performance.now();
+      // Pencil hover reaches us before the first touch: make room to draw right away.
+      if (!this.stylusSeen) {
+        this.stylusSeen = true;
+        this.updateDrawingRoom();
+      }
+    }
     const a = this.active;
     if (!a || e.pointerId !== a.pointerId) return;
     e.preventDefault();
@@ -1087,7 +1109,7 @@ export class PenLayer {
     this.under.remove();
     this.over.remove();
     this.live.remove();
-    this.root.classList.remove("ds-pen-root", "ds-pen-draw-any");
+    this.root.classList.remove("ds-pen-root", "ds-pen-draw-any", "ds-pen-room");
     this.root.style.minHeight = "";
   }
 }

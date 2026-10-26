@@ -32,6 +32,12 @@ export interface EditorHost {
   onTagClick?: (name: string) => void;
   /** Opens the note that a task belongs to, moves a task, … (task context menu actions not handled in-editor). */
   onTaskAction?: (action: "open" | "move", task: { taskId: string; blockId: string }) => void;
+  /**
+   * Task dates (D-51: notes-only by default, dates belong to the extended mode). "inert": date and
+   * deadline chips are plain labels, the date entries and «Переместить…» are hidden from the task
+   * and / menus; checkboxes still toggle and the attributes stay in the document. Default "full".
+   */
+  taskDates?: "full" | "inert";
 }
 
 export interface HostRef {

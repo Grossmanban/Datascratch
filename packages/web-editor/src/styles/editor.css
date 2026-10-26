@@ -486,6 +486,15 @@
   background: color-mix(in srgb, var(--ds-ink) 4%, transparent);
 }
 
+/* D-51 notes-only mode: date chips are quiet, inert labels. */
+.ds-editor[data-task-dates="off"] .ds-task-chips {
+  cursor: default;
+}
+.ds-editor[data-task-dates="off"] .ds-chip {
+  cursor: default;
+  pointer-events: none;
+}
+
 /* ---------- callout ---------- */
 .ds-callout {
   --ds-callout-bg: var(--ds-tint-yellow-bg, #fbf3d6);

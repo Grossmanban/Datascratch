@@ -165,7 +165,7 @@ import Testing
         }
     }
 
-    static let vector = URL(fileURLWithPath: #filePath)
+    nonisolated static let vector = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent() // DSEditorCoreTests
         .deletingLastPathComponent() // Tests
         .deletingLastPathComponent() // CoreAdapter

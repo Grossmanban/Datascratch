@@ -18,6 +18,10 @@ final class EditorViewTests: XCTestCase {
 
     func host(_ doc: EditorDocument, width: CGFloat = 700, height: CGFloat = 900) -> EditorView {
         let editor = EditorView(document: doc)
+        // A test that hosts several editors (the ruled paper matrix) releases each one before the
+        // next: dozens of live editors kept the main queue busy into the following test.
+        window?.isHidden = true
+        window?.rootViewController = nil
         if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
             window = UIWindow(windowScene: scene)
         } else {
@@ -37,7 +41,8 @@ final class EditorViewTests: XCTestCase {
     func drainMainQueue() {
         let done = expectation(description: "main queue drained")
         DispatchQueue.main.async { done.fulfill() }
-        wait(for: [done], timeout: 2)
+        // Generous: the CI simulator can be busy for seconds (it is a wait, not a measurement).
+        wait(for: [done], timeout: 10)
     }
 
     func settle(_ editor: EditorView) {

@@ -27,3 +27,13 @@ describe("empty notes", () => {
     expect(hasBody(doc)).toBe(true);
   });
 });
+
+describe("a new note left with only its default title", () => {
+  it("still counts as empty when that title is allowed", () => {
+    const doc = new Y.Doc();
+    initNoteDoc(doc, { body: [""] });
+    setTitle(doc, "Заметка 26 октября 2026");
+    expect(isNoteEmpty(doc)).toBe(false);
+    expect(isNoteEmpty(doc, "Заметка 26 октября 2026")).toBe(true);
+  });
+});

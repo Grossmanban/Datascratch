@@ -339,10 +339,16 @@ function blockText(node: Y.XmlElement | Y.XmlText): string {
  * Nothing but an empty title and empty paragraphs, and no drawing (spec/04 «Название новой
  * заметки»: such a note is not kept when it is closed).
  */
-export function isNoteEmpty(doc: Y.Doc): boolean {
+export function isNoteEmpty(doc: Y.Doc, allowedTitle = ""): boolean {
   const { content, strokes } = noteMaps(doc);
   if (strokes.size > 0) return false;
-  return content.toArray().every((n) => n instanceof Y.XmlElement && (n.nodeName === "title" || n.nodeName === "paragraph") && !blockText(n).trim());
+  return content
+    .toArray()
+    .every(
+      (n) =>
+        n instanceof Y.XmlElement &&
+        (n.nodeName === "title" ? !blockText(n).trim() || blockText(n).trim() === allowedTitle : n.nodeName === "paragraph" && !blockText(n).trim()),
+    );
 }
 
 /** Body of a note (everything after the title) has text or anything else but empty paragraphs. */

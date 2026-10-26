@@ -169,6 +169,67 @@ import Testing
         }
     }
 
+    /// «No key yet» is not «unreadable» (moved-note race): a note whose key B does not have yet
+    /// waits — nothing is skipped or quarantined, `lastSeq` stays — and catches up once the key
+    /// is there: automatically after a notebook index update, or via
+    /// `resumeDocumentsWaitingForKeys`. Also when the key goes missing while following it.
+    @Test func noteWithoutKeyYetWaitsInsteadOfSkipping() async throws {
+        let server = FakeSyncServer()
+        let nbId = EntityID.make()
+        let noteId = EntityID.make()
+        let (nbKey, noteKey) = (DSCrypto.newKey(), DSCrypto.newKey())
+        let bHasNoteKey = Locked(false)
+        func device(_ name: String, hasNoteKey: Locked<Bool>) throws -> SyncEngine {
+            var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: name, clientVersion: "test")
+            config.minBackoff = .milliseconds(10)
+            let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
+            return SyncEngine(store: try LocalStore.inMemory(), client: client, keyFor: { record in
+                record.kind == .notebook ? nbKey : (hasNoteKey.withLock { $0 } ? noteKey : nil)
+            }, register: { await server.register($0.docId) })
+        }
+        let a = try device("A", hasNoteKey: Locked(true))
+        await a.start()
+        let nbA = NotebookDocument(notebookId: nbId)
+        try await a.open(nbA.crdt, notebookId: nbId)
+        try nbA.initialize()
+        let noteA = NoteDocument(noteId: noteId)
+        try await a.open(noteA.crdt, notebookId: nbId)
+        try noteA.initialize(title: "Moved")
+        try noteA.insertText("one ", at: 0, inBlock: [1])
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+
+        let b = try device("B", hasNoteKey: bHasNoteKey)
+        await b.start()
+        let nbB = NotebookDocument(notebookId: nbId)
+        try await b.open(nbB.crdt, notebookId: nbId)
+        let noteB = NoteDocument(noteId: noteId)
+        try await b.open(noteB.crdt, notebookId: nbId)
+        #expect(try await eventually { nbB.formatVersion == 1 && (try? b.store.document(nbId)?.lastSeq) ?? 0 > 0 })
+        try noteA.insertText("two ", at: 0, inBlock: [1])
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(try b.store.document(noteId)?.lastSeq == 0)
+        #expect(try b.store.quarantined().isEmpty)
+
+        // The note's key arrives with the notebook index: B resumes by itself.
+        bHasNoteKey.withLock { $0 = true }
+        try nbA.putFolder(Folder(id: "f", parentId: nil, name: "Index update", order: 1))
+        #expect(try await eventually { (try? noteB.block(at: [1])?.text) == "two one " })
+
+        // The key goes missing while B follows the note (index lagging after a move).
+        bHasNoteKey.withLock { $0 = false }
+        let before = try b.store.document(noteId)?.lastSeq
+        try noteA.insertText("three ", at: 0, inBlock: [1])
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(try b.store.document(noteId)?.lastSeq == before)
+        bHasNoteKey.withLock { $0 = true }
+        await b.resumeDocumentsWaitingForKeys()
+        #expect(try await eventually { (try? noteB.block(at: [1])?.text) == "three two one " })
+        #expect(try b.store.quarantined().isEmpty)
+        #expect(await b.status().unreadable.isEmpty)
+        await a.stop()
+        await b.stop()
+    }
+
     /// Device B wrote a notebook document with its own key. After adopting the canonical key and
     /// `rekey`, it reads everything (its old updates through the retired key) and uploads a
     /// canonical snapshot: a fresh device with the canonical key sees both devices' edits.

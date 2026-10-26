@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import DSDesign
 import DSEditorModel
 import DSInk
 import UIKit
@@ -153,6 +154,9 @@ public final class EditorView: UIView {
         inkInput = InkInputRecognizer(target: nil, action: nil)
         inkInput.shouldTrack = { [weak self] touch in
             guard let self, self.tools.mode.capturesPen else { return false }
+            // Controls the host lays over the editor (a floating palette) keep their touches.
+            let p = touch.location(in: self)
+            if p.y > self.bounds.maxY - self.overlayInsets.bottom || p.y < self.bounds.minY + self.overlayInsets.top { return false }
             if let header = self.headerView, header.bounds.contains(touch.location(in: header)) { return false }
             return touch.type == .pencil || (self.tools.allowsFingerDrawing && touch.type == .direct)
         }
@@ -235,6 +239,8 @@ public final class EditorView: UIView {
     }
 
     private func load() {
+        let signpost = EditorSignpost.log.beginInterval("OpenNote", id: EditorSignpost.log.makeSignpostID())
+        defer { EditorSignpost.log.endInterval("OpenNote", signpost) }
         let start = CACurrentMediaTime()
         observation = document.observe { [weak self] change in self?.documentChanged(change) }
         projection = Projection.build(document.blocks)
@@ -304,12 +310,21 @@ public final class EditorView: UIView {
 
     // MARK: - Keyboard
 
-    /// Keyboard overlap is handled inside the editor: the bottom scroll inset grows so the caret
-    /// stays visible, while the view keeps its size. Hosts should not shrink the editor for the
-    /// keyboard (SwiftUI: `.ignoresSafeArea(.keyboard)`): resizing it while a tap into the text was
-    /// still being delivered re-laid out the whole document and crashed UIKit's gesture environment.
-    /// If the host does shrink it anyway, the overlap is zero and nothing changes.
+    /// Keyboard overlap fallback: when the host keeps the editor full height under the keyboard,
+    /// the bottom scroll inset grows by the overlap. Hosts should let the editor shrink for the
+    /// keyboard (the SwiftUI default) — then the overlap is zero and this does nothing. In the demo
+    /// under XCUITest, a full-height editor under the keyboard crashed UIKit on a tap into the text.
     private var keyboardFrame: CGRect?
+    private var pendingBottomInset: (bottom: CGFloat, overlap: CGFloat)?
+    private var insetApplyScheduled = false
+    /// Bands along the editor's edges covered by the host's own controls (a floating tool palette):
+    /// the pen does not start strokes there, so taps on those controls are never taken for ink.
+    public var overlayInsets: UIEdgeInsets = .zero
+
+    /// Whether the editor adds the keyboard overlap to its bottom scroll inset (see above).
+    public var adjustsForKeyboard = true {
+        didSet { applyKeyboardInset() }
+    }
 
     private func keyboardFrameChanged(_ frame: CGRect?) {
         keyboardFrame = frame
@@ -318,7 +333,7 @@ public final class EditorView: UIView {
 
     private func applyKeyboardInset() {
         var overlap: CGFloat = 0
-        if let screenFrame = keyboardFrame, let window {
+        if adjustsForKeyboard, let screenFrame = keyboardFrame, let window {
             let frame = window.convert(screenFrame, from: window.screen.coordinateSpace)
             let mine = convert(bounds, to: window)
             overlap = max(0, mine.maxY - frame.minY)
@@ -327,14 +342,20 @@ public final class EditorView: UIView {
         // Free drawings may reach below the text: keep them reachable by scrolling.
         let inkBeyond = max(0, (ink?.inkExtentMaxY ?? 0) + 40 - textView.contentSize.height)
         let bottom = overlap + inkBeyond
-        guard textView.contentInset.bottom != bottom else { return }
-        textView.contentInset.bottom = bottom
-        textView.verticalScrollIndicatorInsets.bottom = overlap
-        if overlap > 0, textView.isFirstResponder {
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.textView.scrollRangeToVisible(self.textView.selectedRange)
-            }
+        guard abs(textView.contentInset.bottom - bottom) > 1 else { return }
+        pendingBottomInset = (bottom, overlap)
+        guard !insetApplyScheduled else { return }
+        insetApplyScheduled = true
+        // Applied on the next main-queue turn (never while a touch is being delivered), coalesced,
+        // without forcing a scroll: the text view keeps the caret visible itself.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.insetApplyScheduled = false
+            guard let pending = self.pendingBottomInset else { return }
+            self.pendingBottomInset = nil
+            guard abs(self.textView.contentInset.bottom - pending.bottom) > 1 else { return }
+            self.textView.contentInset.bottom = pending.bottom
+            self.textView.verticalScrollIndicatorInsets.bottom = pending.overlap
         }
     }
 
@@ -425,6 +446,8 @@ public final class EditorView: UIView {
     /// - Returns: flattened range of the new text that was re-rendered.
     @discardableResult
     private func reproject() -> Range<Int>? {
+        let signpost = EditorSignpost.log.beginInterval("Reproject", id: EditorSignpost.log.makeSignpostID())
+        defer { EditorSignpost.log.endInterval("Reproject", signpost) }
         let new = Projection.build(document.blocks)
         let old = projection
         let oldP = old.paragraphs, newP = new.paragraphs
@@ -629,6 +652,9 @@ public final class EditorView: UIView {
         // tool button's touch is being dispatched made UIKit's gesture environment throw.
         // Finger drawing (D-06) only changes how many fingers scroll, applied after this event.
         textView.panGestureRecognizer.minimumNumberOfTouches = tools.mode.capturesPen && tools.allowsFingerDrawing ? 2 : 1
+        // The pen recognizer stays enabled in the text tool: it never begins there (`shouldTrack`
+        // is false), so fingers type and scroll and the Pencil writes through Scribble. Disabling
+        // it instead made UIKit's gesture environment throw on the next tap into the text.
         if tools.mode != .lasso { ink.clearSelection() }
         hoverLayer.path = nil
         notifyStateChange()
@@ -650,20 +676,78 @@ public final class EditorView: UIView {
     // MARK: - Task check boxes
 
     /// Task item whose check box is at `point` (content coordinates).
-    private func taskItem(at point: CGPoint) -> BlockID? {
+    private func taskItem(at point: CGPoint) -> BlockID? { taskCheckbox(at: point)?.item }
+
+    /// The task check box under a point: its item, box in text view coordinates and state.
+    private func taskCheckbox(at point: CGPoint) -> (item: BlockID, rect: CGRect, state: String)? {
         guard let off = geometry.paragraphOffset(at: point), let frag = geometry.fragment(at: off) as? BlockLayoutFragment,
-              let d = frag.decoration, d.taskState != nil, d.itemBlockId != nil, let first = frag.textLineFragments.first else { return nil }
+              let d = frag.decoration, let state = d.taskState, let item = d.itemBlockId,
+              let first = frag.textLineFragments.first else { return nil }
         let baseline = first.typographicBounds.minY + first.glyphOrigin.y
         let local = frag.checkboxRect(d, baseline: baseline)
         let origin = frag.layoutFragmentFrame.origin
-        let rect = local.offsetBy(dx: origin.x + geometry.origin.x, dy: origin.y + geometry.origin.y).insetBy(dx: -10, dy: -8)
-        return rect.contains(point) ? d.itemBlockId : nil
+        let rect = local.offsetBy(dx: origin.x + geometry.origin.x, dy: origin.y + geometry.origin.y)
+        return rect.insetBy(dx: -10, dy: -8).contains(point) ? (item, rect, state) : nil
     }
 
     @objc private func tapped(_ g: UITapGestureRecognizer) {
-        guard let item = taskItem(at: g.location(in: textView)) else { return }
-        commands.toggleTask(item)
-        UISelectionFeedbackGenerator().selectionChanged()
+        guard let box = taskCheckbox(at: g.location(in: textView)) else { return }
+        commands.toggleTask(box.item)
+        if box.state == "done" {
+            DSHaptics.selection()
+        } else {
+            DSHaptics.taskComplete()
+            animateCheck(in: box.rect)
+        }
+    }
+
+    /// Completion flourish over the freshly drawn check box (`DSTaskCheckbox` motion): the fill
+    /// grows with a slight overshoot, then the check mark draws itself. Skipped with Reduce Motion.
+    private func animateCheck(in rect: CGRect) {
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        let box = rect.insetBy(dx: 0.75, dy: 0.75)
+        let container = CALayer()
+        container.frame = rect.insetBy(dx: -2, dy: -2)
+        let local = box.offsetBy(dx: -container.frame.minX, dy: -container.frame.minY)
+        // Hide the already drawn final state until the animation reaches it.
+        let cover = CAShapeLayer()
+        cover.path = UIBezierPath(ovalIn: local.insetBy(dx: -1.5, dy: -1.5)).cgPath
+        cover.fillColor = (paper.backgroundColor ?? EditorTheme.paper).resolvedColor(with: traitCollection).cgColor
+        let fill = CAShapeLayer()
+        fill.frame = local
+        fill.path = UIBezierPath(ovalIn: CGRect(origin: .zero, size: local.size)).cgPath
+        fill.fillColor = EditorTheme.accent.resolvedColor(with: traitCollection).cgColor
+        let check = CAShapeLayer()
+        let path = UIBezierPath()
+        path.move(to: CGPoint(x: local.minX + local.width * 0.27, y: local.midY + local.height * 0.02))
+        path.addLine(to: CGPoint(x: local.minX + local.width * 0.44, y: local.maxY - local.height * 0.28))
+        path.addLine(to: CGPoint(x: local.maxX - local.width * 0.24, y: local.minY + local.height * 0.3))
+        check.path = path.cgPath
+        check.strokeColor = UIColor.white.cgColor
+        check.fillColor = nil
+        check.lineWidth = max(1.6, local.width * 0.12)
+        check.lineCap = .round
+        check.lineJoin = .round
+        check.strokeEnd = 0
+        [cover, fill, check].forEach(container.addSublayer)
+        textView.layer.addSublayer(container)
+
+        let now = CACurrentMediaTime()
+        let grow = CABasicAnimation(keyPath: "transform.scale")
+        grow.fromValue = 0
+        grow.toValue = 1
+        grow.duration = 0.3
+        grow.timingFunction = CAMediaTimingFunction(controlPoints: 0.3, 1.3, 0.5, 1)
+        fill.add(grow, forKey: "grow")
+        let draw = CABasicAnimation(keyPath: "strokeEnd")
+        draw.fromValue = 0
+        draw.toValue = 1
+        draw.beginTime = now + 0.05
+        draw.duration = 0.25
+        draw.fillMode = .both
+        draw.isRemovedOnCompletion = false
+        check.add(draw, forKey: "draw")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { container.removeFromSuperlayer() }
     }
 
     // MARK: - Lasso

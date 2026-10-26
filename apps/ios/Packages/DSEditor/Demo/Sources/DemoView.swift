@@ -5,28 +5,37 @@ struct DemoView: View {
     let model: DemoModel
 
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .bottom) {
-                // The editor keeps its size when the keyboard appears and insets its own scrolling:
-                // resizing it during a tap into the text crashed UIKit.
-                EditorRepresentable(editor: model.editor)
-                    .ignoresSafeArea(.all, edges: .bottom)
-                    .accessibilityIdentifier("editor")
-                ToolPalette(model: model)
-                    .padding(.bottom, 12)
-                if model.showHUD {
-                    HUDView(model: model)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                        .padding(12)
-                        .allowsHitTesting(false)
-                }
-            }
+        NavigationStack { content }
+    }
+
+    private var content: some View {
+        editorAndPalette
             .navigationTitle("Живой штрих")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
             .sheet(isPresented: Binding(get: { model.showPalette }, set: { model.showPalette = $0 })) {
                 PaletteSheet(model: model)
                     .presentationDetents([.height(300)])
+            }
+    }
+
+    private var editorAndPalette: some View {
+        ZStack(alignment: .bottom) {
+            // As in the app: the palette sits in the bottom safe area and the editor shrinks for
+            // it and for the keyboard. Laid over the editor, the palette's taps reached the text
+            // view instead of its buttons.
+            EditorRepresentable(editor: model.editor)
+                .accessibilityIdentifier("editor")
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    ToolPalette(model: model)
+                        .padding(.top, 8)
+                        .padding(.bottom, 12)
+                }
+            if model.showHUD {
+                HUDView(model: model)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(12)
+                    .allowsHitTesting(false)
             }
         }
     }
@@ -148,12 +157,14 @@ struct ToolPalette: View {
                     Image(systemName: mode.symbolName)
                         .font(.system(size: 18, weight: .medium))
                         .frame(width: 40, height: 40)
-                        .foregroundStyle(tools.mode == mode ? Color.white : Color.primary)
-                        .background(tools.mode == mode ? Color.accentColor : Color.clear, in: Circle())
+                        // Selected like `bg.selected` in the design system: a quiet tint, not accent.
+                        .foregroundStyle(Color.primary)
+                        .background(tools.mode == mode ? Color.primary.opacity(0.08) : Color.clear, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("tool.\(mode.rawValue)")
                 .accessibilityLabel(mode.title)
+                .accessibilityAddTraits(tools.mode == mode ? .isSelected : [])
             }
             // The swatch row is always present (dimmed when the tool has no ink) so the palette never
             // changes its structure under the finger: removing buttons while a tool button's touch
@@ -222,6 +233,8 @@ struct HUDView: View {
             Text("штрихов: \(model.document.strokes.count)")
                 .accessibilityIdentifier("hud.strokes")
             Text("кадров/с: \(fps.fps)")
+            Text("прокрутка: \(Int(model.scrollOffset.rounded()))")
+                .accessibilityIdentifier("hud.offset")
         }
         .font(.caption.monospacedDigit())
         .padding(8)

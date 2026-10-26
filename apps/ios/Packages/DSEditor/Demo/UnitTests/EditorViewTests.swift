@@ -256,6 +256,57 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(pan.minimumNumberOfTouches, 1)
     }
 
+    func testRefreshReusesOutlinesOfStrokesThatDidNotMove() {
+        let p = BlockNode.paragraph("Hello brave new world")
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), p, .paragraph("Second paragraph here")])
+        let editor = host(doc)
+        let moving = underline(editor, range: flatRange(editor, of: "brave"))
+        let still = underline(editor, range: flatRange(editor, of: "Second"))
+        let built = editor.ink.outlinesBuilt
+        let movingPath = editor.ink.renderedPath(of: moving.id)
+        let stillPath = editor.ink.renderedPath(of: still.id)
+        editor.ink.invalidateLayout()
+        editor.ink.refresh()
+        XCTAssertEqual(editor.ink.outlinesBuilt, built, "nothing moved: both outlines come from the cache")
+        // Typing at the start of the first paragraph moves the stroke on "brave"; the one in the
+        // second paragraph stays where it is and keeps its outline.
+        // (Not `EditorCommands.typeText`: it reports keyboard input the text view already shows.)
+        doc.insertText("Oh ", marks: .empty, block: p.id, at: 0)
+        settle(editor)
+        XCTAssertTrue(editor.ink.renderedPath(of: still.id) === stillPath, "the unmoved stroke reuses its outline")
+        XCTAssertFalse(editor.ink.renderedPath(of: moving.id) === movingPath, "the moved stroke is outlined again")
+    }
+
+    func testTextToolLeavesFingerTouchesAlone() {
+        let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello")]))
+        editor.tools.allowsFingerDrawing = true
+        editor.tools.mode = .text
+        drainMainQueue()
+        XCTAssertTrue(editor.inkInput.isEnabled, "stays enabled (disabling it crashed UIKit), but never begins")
+        XCTAssertEqual(editor.inkInput.state, .possible)
+        XCTAssertEqual(editor.textView.panGestureRecognizer.minimumNumberOfTouches, 1, "one finger scrolls in the text tool")
+        editor.tools.mode = .pen
+        drainMainQueue()
+        XCTAssertEqual(editor.textView.panGestureRecognizer.minimumNumberOfTouches, 2)
+    }
+
+    func testButtonOverTheEditorGetsItsTouchAndNothingScrolls() {
+        let editor = host(SampleDocument.make())
+        let button = UIButton(type: .system)
+        button.frame = CGRect(x: 40, y: editor.bounds.maxY - 60, width: 44, height: 44)
+        window.addSubview(button)
+        var tapped = false
+        button.addAction(UIAction { _ in tapped = true }, for: .touchUpInside)
+        let center = button.convert(CGPoint(x: 22, y: 22), to: window)
+        XCTAssertTrue(window.hitTest(center, with: nil) === button, "the overlay, not the editor, receives the touch")
+        let offset = editor.textView.contentOffset
+        button.sendActions(for: .touchUpInside)
+        editor.tools.mode = .text
+        drainMainQueue()
+        XCTAssertTrue(tapped)
+        XCTAssertEqual(editor.textView.contentOffset, offset, "switching tools does not scroll")
+    }
+
     func testTouchesOnTextGoToTheTextViewNotTextKitInternals() {
         let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello brave new world")]))
         let r = flatRange(editor, of: "brave")
@@ -337,17 +388,24 @@ final class EditorViewTests: XCTestCase {
     }
 
     func testDateChipStaysInsideTheColumn() {
-        let task = BlockNode.taskItem("Нажмите ⌘K, чтобы открыть палитру команд и найти всё что угодно", scheduled: "2026-11-14")
+        let iso = { (d: Date) -> String in
+            let c = Calendar.current.dateComponents([.year, .month, .day], from: d)
+            return String(format: "%04d-%02d-%02d", c.year!, c.month!, c.day!)
+        }
+        let task = BlockNode.taskItem("Нажмите ⌘K, чтобы открыть палитру команд и найти всё что угодно",
+                                      scheduled: iso(Date().addingTimeInterval(86_400 * 20)))
         let doc = InMemoryEditorDocument(blocks: [.title("T"), .taskList([task])])
         for width in [360, 420, 520, 760] as [CGFloat] {
             let editor = host(doc, width: width)
             let off = flatRange(editor, of: "Нажмите").lowerBound
-            guard let frag = editor.geometry.fragment(at: off) as? BlockLayoutFragment, let last = frag.textLineFragments.last,
-                  let d = frag.decoration else { return XCTFail("no task fragment") }
-            let chips = BlockLayoutFragment.dateChipsWidth(scheduled: "2026-11-14", deadline: nil, fontSize: d.fontSize)
-            let right = frag.layoutFragmentFrame.minX + editor.geometry.origin.x + last.typographicBounds.minX
-                + BlockLayoutFragment.usedWidth(of: last) + chips
-            XCTAssertLessThanOrEqual(right, editor.geometry.columnFrame.maxX + 0.5, "chip inside the column at width \(width)")
+            guard let frag = editor.geometry.fragment(at: off) as? BlockLayoutFragment else { return XCTFail("no task fragment") }
+            let frames = frag.dateChipFrames()
+            XCTAssertFalse(frames.isEmpty)
+            let column = editor.geometry.columnFrame
+            for f in frames {
+                let right = f.maxX + frag.layoutFragmentFrame.minX + editor.geometry.origin.x
+                XCTAssertLessThanOrEqual(right, column.maxX + 0.5, "chip inside the column at width \(width)")
+            }
         }
     }
 

@@ -135,7 +135,8 @@ struct AttributedRenderer {
         let ctx = para.context
         let size = theme.fontSize(for: para.kind, attrs: para.attrs)
         let isCode = para.kind.type == NodeType.codeBlock
-        let font = isCode ? theme.font(size: size, design: .monospaced) : theme.font(size: size, weight: theme.weight(for: para.kind))
+        let font = isCode ? theme.font(size: size, design: .monospaced)
+            : theme.font(size: size, weight: theme.weight(for: para.kind, attrs: para.attrs), design: theme.design(for: para.kind, attrs: para.attrs))
 
         let quoteStep: CGFloat = 20
         var indent = CGFloat(ctx.listDepth) * ParagraphDecoration.markerWidth + CGFloat(ctx.quoteDepth) * quoteStep
@@ -178,10 +179,11 @@ struct AttributedRenderer {
             codeIsFirst: true, codeIsLast: true,
             markerFont: theme.font(size: size, weight: .regular, design: .default), fontSize: size)
 
-        if case .task(_, let scheduled, let deadline) = ctx.marker {
+        if case .task(let state, let scheduled, let deadline) = ctx.marker {
             // Keep every line short of the column by the chips' width, so the date chips drawn
             // after the last line never run past the column edge.
-            let chips = BlockLayoutFragment.dateChipsWidth(scheduled: scheduled, deadline: deadline, fontSize: size)
+            let chips = BlockLayoutFragment.dateChipsWidth(scheduled: scheduled, deadline: deadline,
+                                                           completed: state == "done" || state == "cancelled", fontSize: size)
             if chips > 0 { style.tailIndent = min(style.tailIndent, -chips) }
         }
 
@@ -192,6 +194,7 @@ struct AttributedRenderer {
             .font: font, .paragraphStyle: style, .foregroundColor: color, .dsDecoration: deco,
         ]
         if deco.taskState == "cancelled" { attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+        if let kern = theme.tracking(for: para.kind, attrs: para.attrs) { attrs[.kern] = kern }
         return attrs
     }
 
@@ -207,8 +210,9 @@ struct AttributedRenderer {
             a[.font] = theme.font(size: size * 0.9, design: .monospaced)
             a[.backgroundColor] = EditorTheme.codeBackground
         } else if bold || italic {
-            let w: UIFont.Weight = bold ? (theme.weight(for: kind) == .regular ? .bold : .heavy) : theme.weight(for: kind)
-            a[.font] = theme.font(size: size, weight: w, italic: italic)
+            let base = theme.weight(for: kind, attrs: attrs)
+            let w: UIFont.Weight = bold ? (base == .regular ? .bold : .heavy) : base
+            a[.font] = theme.font(size: size, weight: w, italic: italic, design: theme.design(for: kind, attrs: attrs))
         }
         if marks.contains(MarkName.underline) { a[.underlineStyle] = NSUnderlineStyle.single.rawValue }
         if marks.contains(MarkName.strike) { a[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }

@@ -99,6 +99,8 @@ export class AccountRuntime {
       this.client.on("error", (e) => {
         if (e.code === "unauthorized") void refreshSession().then((s) => s && this.client.reconnect());
         useSyncStatus.setState({ error: `${e.code}: ${e.message}` });
+        // An update that cannot be decrypted or applied is otherwise invisible (it is skipped).
+        if (e.code === "decrypt_failed" || e.code === "apply_failed") console.warn(`[ds] sync ${e.code}`, e.docId, e.message);
         // A push the server refused (`ref` is its clientMsgId): the change has not reached the server.
         if (e.docId && e.ref && e.ref !== e.docId && REFUSED.has(e.code)) void this.markFailed(e.docId, e.code, e.message);
       }),

@@ -1046,13 +1046,13 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1793004480.1294332,
     "seen": 1793015701.2548158,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1793004480.1294332,
     "seen": 1793015701.2548194,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -1302,9 +1302,9 @@
     "semantic_hash": "5eeb5cd772c86009d2fdcac006ae0d0f"
   },
   "apps/server/test/agents.test.ts": {
-    "mtime": 1793015566.1269999,
-    "seen": 1793015673.343463,
-    "ast_hash": "39f4cb19ba0c01eb5becb80acbfe433f",
+    "mtime": 1793016083.1658463,
+    "seen": 1793016189.8121672,
+    "ast_hash": "689b9266705045f46173033d62150453",
     "semantic_hash": ""
   },
   "apps/server/test/auth.test.ts": {
@@ -4010,7 +4010,7 @@
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1793004480.1294332,
     "seen": 1793015701.2548227,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
@@ -4508,7 +4508,7 @@
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1793004480.6963804,
     "seen": 1793015701.2554867,
-    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "infra/deploy/inspect.sh": {
@@ -4815,6 +4815,12 @@
     "mtime": 1793015286.493573,
     "seen": 1793015356.8127894,
     "ast_hash": "3a9c1d8bea912f6c04856a817fca33fb",
+    "semantic_hash": ""
+  },
+  "apps/server/src/diag-agent-doc-cli.ts": {
+    "mtime": 1793016027.2655144,
+    "seen": 1793016189.810764,
+    "ast_hash": "d088d2d79944982807ecd868aad0deb5",
     "semantic_hash": ""
   }
 }

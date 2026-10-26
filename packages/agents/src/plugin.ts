@@ -104,6 +104,14 @@ export const agentsPlugin: FastifyPluginAsync<AgentsPluginOptions> = async (app:
     },
   };
 
+  // Agent HTTP clients often send `content-type: application/json` with an empty body (DELETE): treat it as no body.
+  const json = app.getDefaultJsonParser("error", "error");
+  app.removeContentTypeParser("application/json");
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
+    if ((body as string).trim() === "") return done(null, undefined);
+    json(req, body as string, done);
+  });
+
   app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string", bodyLimit: 64 * 1024 }, (_req, body, done) => {
     try {
       done(null, parseForm(body as string));

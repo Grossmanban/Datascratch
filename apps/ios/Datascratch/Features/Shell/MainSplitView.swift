@@ -60,6 +60,7 @@ struct MainSplitView: View {
                 .tint(Theme.Palette.accent)
         }
         .modifier(ModeChangeConfirmation())
+        .modifier(MissingNoteAlert())
         // The server ended this device's session: say so, and offer to sign in again.
         .sheet(isPresented: $sync.showsSessionEnded) {
             SessionEndedView()
@@ -69,15 +70,17 @@ struct MainSplitView: View {
     }
 }
 
-/// iPad workspace beside the sidebar: the list (or Tasks, Calendar) and the open document side by
-/// side. Without a document the list takes the whole width; «Full Screen» shows one of them alone.
+/// iPad workspace beside the sidebar (D-47): the list (or Tasks, Calendar) alone at level 2, the
+/// list and the document at level 3, the document alone in full screen.
 struct PadWorkspace: View {
     @Environment(AppModel.self) private var app
     @Environment(SceneModel.self) private var scene
 
     var body: some View {
         let noteId = scene.selectedNoteId.flatMap { app.library.note($0) != nil ? $0 : nil }
-        let showsDocument = noteId != nil && !scene.isContentFullScreen
+        // D-47: the document shows at level 3 (list | document) or alone in full screen; at level 2
+        // (sidebar | list) it stays open off screen and comes back when picked.
+        let showsDocument = noteId != nil && (scene.padLevel == .document || scene.isDocumentFullScreen)
         GeometryReader { proxy in
             // Too narrow for both (portrait with the sidebar): the document alone, the list comes
             // back when it closes.
@@ -110,18 +113,20 @@ struct PadWorkspace: View {
     }
 }
 
-/// Shows or hides the sidebar — the only thing that does (D-15). In full screen it brings the
-/// columns back.
+/// Back to sidebar | list (D-47); an open document stays open and returns when picked. In full
+/// screen it brings the columns back.
 struct SidebarToggleButton: View {
     @Environment(SceneModel.self) private var scene
 
     var body: some View {
-        let shown = scene.padColumnVisibility != .detailOnly
-        Button { scene.toggleSidebar() } label: {
-            Image(systemName: "sidebar.left")
+        // Only where the sidebar is off screen (list | document, or the document alone).
+        if scene.padColumnVisibility == .detailOnly {
+            Button { scene.toggleSidebar() } label: {
+                Image(systemName: "sidebar.left")
+            }
+            .accessibilityLabel(Text("Show Sidebar"))
+            .accessibilityIdentifier("workspace.sidebar")
         }
-        .accessibilityLabel(shown ? Text("Hide Sidebar") : Text("Show Sidebar"))
-        .accessibilityIdentifier("workspace.sidebar")
     }
 }
 
@@ -176,6 +181,25 @@ struct EmptyDetailView: View {
                 .padding(.top, Theme.Space.s2)
             }
             .padding(Theme.Space.s8)
+        }
+    }
+}
+
+/// A `[[Title]]` was tapped and there is no such note: offer to create it (spec/04).
+struct MissingNoteAlert: ViewModifier {
+    @Environment(SceneModel.self) private var scene
+
+    func body(content: Content) -> some View {
+        let title = scene.missingNoteTitle ?? ""
+        let isPresented = Binding(get: { scene.missingNoteTitle != nil },
+                                  set: { if !$0 { scene.missingNoteTitle = nil } })
+        content.alert(Text("No note called “\(title)”"), isPresented: isPresented) {
+            Button("Create Note") {
+                scene.missingNoteTitle = nil
+                scene.newNote(title: title)
+            }
+            .accessibilityIdentifier("missingNote.create")
+            Button("Cancel", role: .cancel) { scene.missingNoteTitle = nil }
         }
     }
 }

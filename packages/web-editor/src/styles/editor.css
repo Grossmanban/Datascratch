@@ -47,20 +47,117 @@
   min-height: 100%;
 }
 
-.ds-editor[data-paper="dots"] .ds-editor-root {
-  background-image: radial-gradient(circle, var(--ds-paper-dot) 1.1px, transparent 1.3px);
-  background-size: 24px 24px;
+/* Paper (spec/12 §12.3): rules, grid and dots on the text's own line pitch, anchored to the first
+   baseline of the text column (--ds-paper-x/y are measured by paper.ts). */
+.ds-editor[data-paper="lines"] .ds-editor-root {
+  background-image: linear-gradient(to bottom, var(--ds-paper-rule) 1px, transparent 1px);
+  background-size: 100% var(--ds-pitch, 26px);
+  background-position: 0 var(--ds-paper-y, 0px);
 }
 .ds-editor[data-paper="grid"] .ds-editor-root {
   background-image:
-    linear-gradient(var(--ds-paper-dot) 1px, transparent 1px),
-    linear-gradient(90deg, var(--ds-paper-dot) 1px, transparent 1px);
-  background-size: 24px 24px;
+    linear-gradient(to bottom, var(--ds-paper-grid) 1px, transparent 1px),
+    linear-gradient(to right, var(--ds-paper-grid) 1px, transparent 1px);
+  background-size: var(--ds-pitch, 26px) var(--ds-pitch, 26px);
+  background-position: var(--ds-paper-x, 0px) var(--ds-paper-y, 0px);
 }
-.ds-editor[data-paper="lines"] .ds-editor-root {
-  background-image: linear-gradient(transparent calc(1.5em * 1 - 1px), var(--ds-paper-dot) 1px);
-  background-size: 100% 1.5em;
-  background-position: 0 0.35em;
+.ds-editor[data-paper="dots"] .ds-editor-root {
+  background-image: radial-gradient(circle at 0.5px 0.5px, var(--ds-paper-dot) 1.2px, transparent 1.6px);
+  background-size: var(--ds-pitch, 26px) var(--ds-pitch, 26px);
+  background-position: var(--ds-paper-x, 0px) var(--ds-paper-y, 0px);
+}
+.ds-editor {
+  --ds-paper-rule: color-mix(in srgb, var(--ds-accent, #2e5bdb) 16%, transparent);
+  --ds-paper-grid: color-mix(in srgb, var(--ds-ink) 9%, transparent);
+}
+
+/* ---------- ruled typesetting: every line on the pitch, every block on the grid ---------- */
+.ds-editor[data-ruled] .ds-prose {
+  display: flex;
+  flex-direction: column;
+  line-height: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose > * {
+  --ds-mb: 0px;
+  margin-top: 0;
+  margin-bottom: calc(var(--ds-mb) + var(--ds-snap, 0px));
+}
+.ds-editor[data-ruled] .ds-prose > .ds-title {
+  --ds-mb: var(--ds-pitch, 26px);
+  line-height: calc(2 * var(--ds-pitch, 26px));
+}
+.ds-editor[data-ruled] .ds-prose > h1:not(.ds-title) {
+  margin-top: var(--ds-pitch, 26px);
+  line-height: calc(2 * var(--ds-pitch, 26px));
+}
+.ds-editor[data-ruled] .ds-prose > h2,
+.ds-editor[data-ruled] .ds-prose > h3 {
+  margin-top: var(--ds-pitch, 26px);
+  line-height: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose :is(p, li, h2, h3, blockquote, td, th) {
+  line-height: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose :is(ul, ol, blockquote) {
+  margin-block: 0;
+  padding-block: 0;
+}
+.ds-editor[data-ruled] .ds-task-control,
+.ds-editor[data-ruled] .ds-task-chips {
+  height: var(--ds-pitch, 26px);
+}
+/* Boxed blocks keep text on the rules: their background reaches half a pitch above and below the
+   text with shadows (no layout), and a pitch of space separates them from the neighbours. */
+.ds-editor[data-ruled] .ds-prose > :is(.ds-callout, pre) {
+  --ds-mb: var(--ds-pitch, 26px);
+  margin-top: var(--ds-pitch, 26px);
+  padding-block: 0;
+  border: 0;
+  line-height: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose > .ds-callout {
+  box-shadow:
+    0 calc(var(--ds-pitch, 26px) / -2) 0 0 var(--ds-callout-bg, var(--ds-tint-yellow-bg, #fbf3d6)),
+    0 calc(var(--ds-pitch, 26px) / 2) 0 0 var(--ds-callout-bg, var(--ds-tint-yellow-bg, #fbf3d6));
+}
+.ds-editor[data-ruled] .ds-prose > pre {
+  --ds-pre-bg: color-mix(in srgb, var(--ds-ink) 5%, var(--ds-paper));
+  box-shadow:
+    0 calc(var(--ds-pitch, 26px) / -2) 0 0 var(--ds-pre-bg),
+    0 calc(var(--ds-pitch, 26px) / 2) 0 0 var(--ds-pre-bg);
+}
+.ds-editor[data-ruled] .ds-callout-icon {
+  height: var(--ds-pitch, 26px);
+  line-height: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose > .tableWrapper,
+.ds-editor[data-ruled] .ds-prose > table {
+  --ds-mb: var(--ds-pitch, 26px);
+  margin-top: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose table {
+  margin-block: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.ds-editor[data-ruled] .ds-prose :is(td, th) {
+  padding-block: 0;
+  border: 0;
+  box-shadow: inset -1px 0 0 var(--ds-rule), inset 0 -1px 0 var(--ds-rule);
+}
+.ds-editor[data-ruled] .ds-prose > .ds-hr {
+  padding: 0;
+  height: var(--ds-pitch, 26px);
+  display: flex;
+  align-items: center;
+}
+.ds-editor[data-ruled] .ds-prose > .ds-hr hr {
+  flex: 1;
+}
+/* Blocks without lines start a pitch below the text; paper.ts rounds their height up (--ds-snap). */
+.ds-editor[data-ruled] .ds-prose > :is(.ds-atom, .ds-image, .ds-file, .ds-drawing, .ds-page-card, .ds-unsupported) {
+  --ds-mb: var(--ds-pitch, 26px);
+  margin-top: var(--ds-pitch, 26px);
 }
 
 .ds-prose {
@@ -69,17 +166,13 @@
   box-sizing: border-box;
   max-width: var(--ds-doc-width, 720px);
   margin: 0 auto;
-  /* strokes.md §4: free room to draw below the last paragraph — at least the visible height. */
-  padding: 24px 56px max(var(--ds-doc-bottom, 160px), 100vh);
+  padding: 24px 56px var(--ds-doc-bottom, 160px);
   outline: none;
   font-size: 17px;
   line-height: 1.5;
   caret-color: var(--ds-accent-c);
   word-wrap: break-word;
   white-space: pre-wrap;
-}
-.ds-editor[data-paper="lines"] .ds-prose {
-  font-size: 17px;
 }
 .ds-editor[data-font="serif"] .ds-prose {
   font-size: 18px;
@@ -210,6 +303,14 @@
   font-weight: 600;
   cursor: pointer;
 }
+/* Inline $…$ math: the source is hidden (not removed) while its KaTeX rendering is shown. */
+.ds-prose .ds-inline-math-src {
+  display: none;
+}
+.ds-prose .ds-inline-math {
+  padding: 0 1px;
+  cursor: text;
+}
 .ds-prose .ds-missing-link {
   color: var(--ds-accent-c);
   text-decoration: underline dashed color-mix(in srgb, var(--ds-accent-c) 45%, transparent);
@@ -221,6 +322,366 @@
 .ds-prose ol {
   padding-left: 1.5em;
   margin: 0.25em 0;
+}
+/* Explicit markers: CSS resets (Tailwind preflight in the design system) set list-style: none. */
+.ds-prose ul:not([data-type="taskList"]) {
+  list-style: disc;
+}
+.ds-prose ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
+  list-style: circle;
+}
+.ds-prose ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
+  list-style: square;
+}
+.ds-prose ol {
+  list-style: decimal;
+}
+.ds-prose ol ol {
+  list-style: lower-alpha;
+}
+.ds-prose li::marker {
+  color: var(--ds-muted);
+}
+.ds-prose li > p {
+  margin: 0;
+}
+.ds-prose blockquote {
+  margin: 0.6em 0;
+  padding: 0.1em 0 0.1em 1em;
+  border-left: 3px solid var(--ds-rule);
+  color: var(--ds-muted);
+  font-style: italic;
+}
+
+/* hr styles */
+.ds-prose .ds-hr {
+  padding: 0.9em 0;
+}
+.ds-prose .ds-hr hr {
+  border: 0;
+  height: 1px;
+  background: var(--ds-rule);
+  margin: 0;
+}
+.ds-prose .ds-hr[data-style="dots"] hr {
+  height: 6px;
+  background: radial-gradient(circle, var(--ds-faint) 1.6px, transparent 2px) center / 18px 6px repeat-x;
+  max-width: 90px;
+  margin: 0 auto;
+}
+.ds-prose .ds-hr[data-style="wave"] hr {
+  height: 8px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='8'%3E%3Cpath d='M0 4 Q6 0 12 4 T24 4' fill='none' stroke='%239C978E' stroke-width='1.3'/%3E%3C/svg%3E") repeat-x center;
+}
+.ds-prose .ProseMirror-selectednode.ds-hr hr,
+.ds-prose .ds-hr.ProseMirror-selectednode {
+  outline: 2px solid color-mix(in srgb, var(--ds-accent-c) 40%, transparent);
+  border-radius: 4px;
+}
+
+/* ---------- tasks ---------- */
+.ds-prose ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+.ds-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55em;
+}
+.ds-task-control {
+  flex: none;
+  display: flex;
+  height: 1.5em;
+  align-items: center;
+}
+/* The checkbox itself is the design system's `.ds-task-check` (@datascratch/ui/styles.css). */
+.ds-task-check {
+  --ds-task-size: 18px;
+}
+
+.ds-task-body {
+  flex: 1;
+  min-width: 0;
+}
+.ds-task[data-state="done"] > .ds-task-body > p:first-child,
+.ds-task[data-state="cancelled"] > .ds-task-body > p:first-child {
+  color: var(--ds-faint);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--ds-faint) 60%, transparent);
+}
+.ds-task-chips {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  height: 1.5em;
+  align-items: center;
+  cursor: pointer;
+}
+.ds-chip {
+  font-family: var(--ds-font-text, "Inter", system-ui, sans-serif);
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ds-ink) 6%, transparent);
+  color: var(--ds-muted);
+  white-space: nowrap;
+}
+.ds-chip[data-tone="today"] {
+  color: var(--ds-accent-c);
+  background: color-mix(in srgb, var(--ds-accent-c) 12%, transparent);
+}
+.ds-chip[data-tone="soon"] {
+  color: var(--ds-warning, #c98a1b);
+  background: color-mix(in srgb, var(--ds-warning, #c98a1b) 14%, transparent);
+}
+.ds-chip[data-tone="overdue"] {
+  color: var(--ds-danger, #d2453b);
+  background: color-mix(in srgb, var(--ds-danger, #d2453b) 12%, transparent);
+}
+.ds-chip[data-tone="done"] {
+  color: var(--ds-faint);
+  background: color-mix(in srgb, var(--ds-ink) 4%, transparent);
+}
+
+/* ---------- callout ---------- */
+.ds-callout {
+  --ds-callout-bg: var(--ds-tint-yellow-bg, #fbf3d6);
+  display: flex;
+  gap: 0.6em;
+  padding: 0.8em 1em;
+  border-radius: var(--ds-radius-lg, 14px);
+  background: var(--ds-callout-bg);
+  margin: 0.6em 0;
+}
+.ds-callout[data-tone="info"] {
+  --ds-callout-bg: var(--ds-tint-blue-bg, #e5ecfb);
+}
+.ds-callout[data-tone="success"] {
+  --ds-callout-bg: var(--ds-tint-green-bg, #e5f2e8);
+}
+.ds-callout[data-tone="warning"] {
+  --ds-callout-bg: var(--ds-tint-orange-bg, #fceedf);
+}
+.ds-callout[data-tone="danger"] {
+  --ds-callout-bg: var(--ds-tint-red-bg, #fbe7e3);
+}
+.ds-callout-icon {
+  height: var(--ds-pitch, 26px);
+  line-height: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose > .tableWrapper,
+.ds-editor[data-ruled] .ds-prose > table {
+  --ds-mb: var(--ds-pitch, 26px);
+  margin-top: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose table {
+  margin-block: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.ds-editor[data-ruled] .ds-prose :is(td, th) {
+  padding-block: 0;
+  border: 0;
+  box-shadow: inset -1px 0 0 var(--ds-rule), inset 0 -1px 0 var(--ds-rule);
+}
+.ds-editor[data-ruled] .ds-prose > .ds-hr {
+  padding: 0;
+  height: var(--ds-pitch, 26px);
+  display: flex;
+  align-items: center;
+}
+.ds-editor[data-ruled] .ds-prose > .ds-hr hr {
+  flex: 1;
+}
+/* Blocks without lines start a pitch below the text; paper.ts rounds their height up (--ds-snap). */
+.ds-editor[data-ruled] .ds-prose > :is(.ds-atom, .ds-image, .ds-file, .ds-drawing, .ds-page-card, .ds-unsupported) {
+  --ds-mb: var(--ds-pitch, 26px);
+  margin-top: var(--ds-pitch, 26px);
+}
+
+.ds-prose {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  max-width: var(--ds-doc-width, 720px);
+  margin: 0 auto;
+  padding: 24px 56px var(--ds-doc-bottom, 160px);
+  outline: none;
+  font-size: 17px;
+  line-height: 1.5;
+  caret-color: var(--ds-accent-c);
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+.ds-editor[data-font="serif"] .ds-prose {
+  font-size: 18px;
+}
+
+.ds-prose > * + * {
+  margin-top: 0.5em;
+}
+.ds-prose :where(p) {
+  margin: 0;
+}
+
+.ds-prose .ds-title {
+  font-family: var(--ds-font-display, "Newsreader", "New York", Georgia, serif);
+  font-size: 34px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.5em;
+}
+.ds-prose h1,
+.ds-prose h2,
+.ds-prose h3 {
+  font-family: var(--ds-font-display, "Newsreader", "New York", Georgia, serif);
+  line-height: 1.2;
+  font-weight: 600;
+  margin: 1.1em 0 0.25em;
+}
+.ds-prose h1:not(.ds-title) {
+  font-size: 28px;
+}
+.ds-prose h2 {
+  font-size: 22px;
+}
+.ds-prose h3 {
+  font-size: 19px;
+}
+
+.ds-prose p.is-empty::before,
+.ds-prose .ds-title.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--ds-faint);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.ds-prose a {
+  color: var(--ds-accent-c);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--ds-accent-c) 35%, transparent);
+  text-underline-offset: 2px;
+}
+.ds-prose code {
+  font-family: var(--ds-font-mono, "JetBrains Mono", ui-monospace, monospace);
+  font-size: 0.88em;
+  padding: 0.1em 0.3em;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ds-ink) 7%, transparent);
+}
+.ds-prose mark.ds-highlight {
+  background: var(--ds-mark-bg, #ffe36e80);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+/* Agent edits (D-10): a quiet wash, not a marker — readable at a glance, calm when there are many. */
+.ds-prose .ds-agent-edit {
+  background: color-mix(in srgb, var(--ds-accent-c) 7%, transparent);
+  border-radius: 2px;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--ds-accent-c) 28%, transparent);
+}
+.ds-agent-accept {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.5em;
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, var(--ds-accent-c) 30%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ds-accent-c) 8%, var(--ds-paper));
+  color: var(--ds-accent-c);
+  font-family: var(--ds-font-text, "Inter", system-ui, sans-serif);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  vertical-align: 0.1em;
+  cursor: pointer;
+  user-select: none;
+}
+.ds-agent-accept:hover {
+  background: color-mix(in srgb, var(--ds-accent-c) 16%, var(--ds-paper));
+}
+.ds-agent-banner {
+  position: sticky;
+  top: 8px;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  margin: 8px auto 0;
+  padding: 6px 6px 6px 14px;
+  border-radius: 999px;
+  background: var(--ds-glass-bg);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border: 1px solid color-mix(in srgb, var(--ds-line-strong, #cfc8bc) 55%, transparent);
+  box-shadow: var(--ds-shadow-pop);
+  font-family: var(--ds-font-text, "Inter", system-ui, sans-serif);
+  font-size: 13px;
+  color: var(--ds-ink);
+  animation: ds-pop 180ms var(--ds-ease);
+}
+.ds-agent-banner-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ds-accent-c);
+}
+.ds-agent-banner-accept {
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: var(--ds-accent-c);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* Inline $…$ math: the source is hidden (not removed) while its KaTeX rendering is shown. */
+.ds-prose .ds-inline-math-src {
+  display: none;
+}
+.ds-prose .ds-inline-math {
+  padding: 0 1px;
+  cursor: text;
+}
+.ds-prose .ds-missing-link {
+  color: var(--ds-accent-c);
+  text-decoration: underline dashed color-mix(in srgb, var(--ds-accent-c) 45%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.ds-prose ul,
+.ds-prose ol {
+  padding-left: 1.5em;
+  margin: 0.25em 0;
+}
+/* Explicit markers: CSS resets (Tailwind preflight in the design system) set list-style: none. */
+.ds-prose ul:not([data-type="taskList"]) {
+  list-style: disc;
+}
+.ds-prose ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
+  list-style: circle;
+}
+.ds-prose ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
+  list-style: square;
+}
+.ds-prose ol {
+  list-style: decimal;
+}
+.ds-prose ol ol {
+  list-style: lower-alpha;
+}
+.ds-prose li::marker {
+  color: var(--ds-muted);
 }
 .ds-prose li > p {
   margin: 0;
@@ -797,6 +1258,11 @@ span.ds-unsupported {
 .ds-pen-live {
   z-index: 3;
 }
+/* strokes.md §4: free room to draw below the last paragraph (at least the visible height) whenever
+   drawing is possible — finger/mouse drawing on, or a stylus seen. Otherwise the note ends normally. */
+.ds-pen-room .ds-prose {
+  padding-bottom: max(var(--ds-doc-bottom, 160px), 100vh);
+}
 .ds-pen-draw-any .ds-prose {
   touch-action: none;
   cursor: crosshair;
@@ -832,6 +1298,73 @@ span.ds-unsupported {
 .ds-handle-btn:hover {
   background: color-mix(in srgb, var(--ds-ink) 7%, transparent);
   color: var(--ds-muted);
+}
+
+/* Touch: one quiet grip at the caret's block (never on scroll or touch-move). */
+.ds-block-handle.is-touch {
+  animation: ds-fade 220ms var(--ds-ease);
+}
+.ds-block-handle.is-touch .ds-handle-grip {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  color: color-mix(in srgb, var(--ds-faint) 80%, transparent);
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  transition:
+    transform 180ms var(--ds-ease),
+    color 180ms var(--ds-ease),
+    background 180ms var(--ds-ease);
+}
+/* A finger-sized target around the small grip. */
+.ds-block-handle.is-touch .ds-handle-grip::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+.ds-block-handle.is-lifted .ds-handle-grip {
+  transform: scale(1.15);
+  color: var(--ds-accent-c);
+  background: color-mix(in srgb, var(--ds-accent-c) 10%, transparent);
+}
+.ds-block-lifted-source {
+  opacity: 0.35;
+  transition: opacity 160ms var(--ds-ease);
+}
+.ds-block-ghost {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  padding: 0;
+  margin: 0;
+  border-radius: 10px;
+  background: var(--ds-paper);
+  box-shadow:
+    0 18px 40px -12px rgb(0 0 0 / 0.28),
+    0 2px 8px rgb(0 0 0 / 0.08);
+  opacity: 0.96;
+  transform-origin: 30% 50%;
+  transform: scale(1.02);
+  animation: ds-lift 180ms var(--ds-ease);
+}
+.ds-block-ghost > * {
+  margin: 0 !important;
+}
+@keyframes ds-lift {
+  from {
+    transform: scale(1);
+    box-shadow: none;
+  }
+}
+.ds-drop-indicator {
+  position: absolute;
+  z-index: 5;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ds-accent-c);
+  pointer-events: none;
 }
 
 /* ---------- floating glass UI ---------- */

@@ -93,9 +93,12 @@ public final class KeychainSecretStore: SecretStore {
 public final class KeyRing: Sendable {
     private let store: any SecretStore
     private let cache = Locked<[String: Data]>([:])
+    /// Notebooks whose key was confirmed by the server in this session (`adoptNotebookKey`).
+    private let verified = Locked<Set<String>>([])
 
     static let masterKeyName = "masterKey"
     static func notebookKeyName(_ id: String) -> String { "notebookKey.\(id)" }
+    static func retiredNotebookKeysName(_ id: String) -> String { "retiredNotebookKeys.\(id)" }
 
     public init(store: any SecretStore) {
         self.store = store
@@ -134,12 +137,45 @@ public final class KeyRing: Sendable {
     }
 
     /// Unwraps a notebook key (from `GET /notebooks/:id/key`) with the master key and keeps it.
+    /// The server's wrapping is canonical: a different local key is retired (`adoptNotebookKey`).
     @discardableResult
     public func addNotebookKey(wrapped: Data, notebookId: String) throws -> Data {
         guard let master = try masterKey() else { throw CryptoError.decryptionFailed }
         let key = try DSCrypto.unwrapKey(wrapped, with: master, ad: CryptoAD.notebookKey(notebookId))
-        try setNotebookKey(key, notebookId: notebookId)
+        try adoptNotebookKey(key, notebookId: notebookId)
         return key
+    }
+
+    /// Makes `key` the notebook's key — the canonical one from the server. A different key this
+    /// device had is kept as retired (only to read what was already written with it) and
+    /// returned.
+    @discardableResult
+    public func adoptNotebookKey(_ key: Data, notebookId: String) throws -> Data? {
+        defer { verified.withLock { _ = $0.insert(notebookId) } }
+        let previous = try notebookKey(notebookId)
+        if let previous, previous != key {
+            let name = Self.retiredNotebookKeysName(notebookId)
+            var retired = try store.data(for: name) ?? Data()
+            if !retiredNotebookKeys(in: retired).contains(previous) { retired.append(previous) }
+            try store.set(retired, for: name)
+        }
+        try setNotebookKey(key, notebookId: notebookId)
+        return previous == key ? nil : previous
+    }
+
+    /// The notebook's key came from (or was confirmed by) the server in this session.
+    public func isNotebookKeyVerified(_ notebookId: String) -> Bool { verified.withLock { $0.contains(notebookId) } }
+
+    /// Marks a key as the server's — after `POST /notebooks` accepted it.
+    public func markNotebookKeyVerified(_ notebookId: String) { verified.withLock { _ = $0.insert(notebookId) } }
+
+    /// Keys this notebook had on this device before the canonical one (`adoptNotebookKey`).
+    public func retiredNotebookKeys(_ notebookId: String) -> [Data] {
+        retiredNotebookKeys(in: (try? store.data(for: Self.retiredNotebookKeysName(notebookId))) ?? Data())
+    }
+
+    private func retiredNotebookKeys(in data: Data) -> [Data] {
+        stride(from: 0, to: data.count - data.count % 32, by: 32).map { data.subdata(in: data.startIndex + $0 ..< data.startIndex + $0 + 32) }
     }
 
     public func setNotebookKey(_ key: Data, notebookId: String) throws {
@@ -149,6 +185,8 @@ public final class KeyRing: Sendable {
     }
 
     /// Creates a notebook key and its wrapping under the master key (for `POST /notebooks`).
+    /// Only for a notebook made on this device that is not on the server: a notebook from
+    /// another device has its key there (`AccountService.notebookKeyForWriting`).
     public func createNotebookKey(notebookId: String) throws -> (key: Data, wrapped: Data) {
         guard let master = try masterKey() else { throw CryptoError.decryptionFailed }
         let key = DSCrypto.newKey()
@@ -164,7 +202,12 @@ public final class KeyRing: Sendable {
         let name = "noteKey.\(noteId)"
         if let k = cache.withLock({ $0[name] }) { return k }
         guard let nbKey = try notebookKey(notebookId), let wrapped = Base64URL.decode(wrappedKey) else { throw CryptoError.decryptionFailed }
-        let key = try DSCrypto.unwrapKey(wrapped, with: nbKey, ad: CryptoAD.noteKey(noteId))
+        // A wrapping made with a key this notebook had before its canonical one still opens
+        // (until `NotebookDocument.rewrapNoteKeys` fixes it).
+        let candidates = [nbKey] + retiredNotebookKeys(notebookId)
+        guard let key = candidates.lazy.compactMap({ try? DSCrypto.unwrapKey(wrapped, with: $0, ad: CryptoAD.noteKey(noteId)) }).first else {
+            throw CryptoError.decryptionFailed
+        }
         cache.withLock { $0[name] = key }
         return key
     }
@@ -183,10 +226,58 @@ public final class KeyRing: Sendable {
         cache.withLock { $0[name] = key }
     }
 
-    /// Forgets all keys (sign-out).
+    /// Forgets all keys («Удалить данные с этого устройства», another account).
     public func clear() throws {
         cache.withLock { $0.removeAll() }
+        verified.withLock { $0.removeAll() }
         try store.removeAll()
+    }
+
+    static let keptOwnerName = "keptKeys.owner"
+    static let keptNotebooksName = "keptKeys.notebooks"
+
+    /// Sign-out that keeps the keys of `notebookIds` (data not on the server yet, spec/07),
+    /// marked as belonging to `owner` (userId). Everything else is forgotten.
+    public func clear(keepingNotebooks notebookIds: [String], owner: String) throws {
+        var kept: [(String, Data, Data?)] = []
+        for id in notebookIds {
+            guard let key = try notebookKey(id) else { continue }
+            kept.append((id, key, try store.data(for: Self.retiredNotebookKeysName(id))))
+        }
+        try clear()
+        guard !kept.isEmpty else { return }
+        for (id, key, retired) in kept {
+            try store.set(key, for: Self.notebookKeyName(id))
+            if let retired { try store.set(retired, for: Self.retiredNotebookKeysName(id)) }
+        }
+        try store.set(Data(owner.utf8), for: Self.keptOwnerName)
+        try store.set(Data(kept.map(\.0).joined(separator: ",").utf8), for: Self.keptNotebooksName)
+    }
+
+    /// Notebooks whose keys survived a sign-out (`clear(keepingNotebooks:owner:)`), and whose.
+    public var keptNotebookKeys: (owner: String, notebookIds: [String])? {
+        guard let owner = (try? store.data(for: Self.keptOwnerName)).flatMap({ $0 }).map({ String(decoding: $0, as: UTF8.self) }) else { return nil }
+        let ids = (try? store.data(for: Self.keptNotebooksName)).flatMap { $0 }.map { String(decoding: $0, as: UTF8.self) } ?? ""
+        return (owner, ids.split(separator: ",").map(String.init))
+    }
+
+    /// On sign-in: kept keys of the same account become ordinary keys again; those of another
+    /// account are removed (its data must not mix with this one). Returns the removed notebooks.
+    @discardableResult
+    public func resolveKeptKeys(signingInAs userId: String) throws -> [String] {
+        guard let kept = keptNotebookKeys else { return [] }
+        var removed: [String] = []
+        if kept.owner != userId {
+            for id in kept.notebookIds {
+                try store.remove(Self.notebookKeyName(id))
+                try store.remove(Self.retiredNotebookKeysName(id))
+                cache.withLock { $0[Self.notebookKeyName(id)] = nil }
+            }
+            removed = kept.notebookIds
+        }
+        try store.remove(Self.keptOwnerName)
+        try store.remove(Self.keptNotebooksName)
+        return removed
     }
 }
 

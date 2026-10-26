@@ -18,7 +18,8 @@ fi
 
 docker compose up -d postgres
 docker compose stop server || true
-until docker compose exec -T postgres pg_isready -U "$PGUSER" -d "$PGDB" > /dev/null 2>&1; do sleep 1; done
+# Over TCP: the temporary server of the first start (initdb) listens on the socket only.
+until docker compose exec -T postgres pg_isready -h 127.0.0.1 -U "$PGUSER" -d "$PGDB" > /dev/null 2>&1; do sleep 1; done
 
 docker compose exec -T postgres psql -U "$PGUSER" -d postgres -v ON_ERROR_STOP=1 \
   -c "DROP DATABASE IF EXISTS \"$PGDB\" WITH (FORCE)" -c "CREATE DATABASE \"$PGDB\"" \

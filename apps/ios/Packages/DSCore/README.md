@@ -153,7 +153,10 @@ DSCore
   `changePassword`, `rotateRecoveryKey(email:currentPassword:account:)` (новый ключ восстановления,
   подтверждение паролем; возвращает текст ключа — показать один раз; сбрасывает
   `AccountDocument.recoveryKeyConfirmed`, подтверждение — `setRecoveryKeyConfirmed(true)`),
-  `securityEvents()` (журнал безопасности), `logout`, `createNotebook(name:spaceId:mode:...in:)`
+  `securityEvents()` (журнал безопасности), `logout` (ключи блокнотов, ещё не дошедших до сервера,
+  сохраняются — spec/07; возвращает их id; перед выходом показать `LocalStore.unsentChangeCount()`),
+  `eraseDeviceKeys()` («Удалить данные с этого устройства»; ключи при входе в другой аккаунт
+  удаляются сами — `KeyRing.resolveKeptKeys`), `createNotebook(name:spaceId:mode:...in:)`
   (ключ, `POST /notebooks`, `POST /docs`, документ блокнота, `NotebookRef`), `loadNotebookKeys()`
   (новое устройство), `setMode` (режим «для агентов»), `createNote(in:...)` (ключ заметки,
   `NoteMeta`), `moveNote(id:from:to:)` (перенос в другой блокнот), `dailyNote(for:in:)`, `inbox(in:)`.
@@ -193,6 +196,71 @@ for await status in await engine.statusUpdates() { /* connection, pending, catch
 `Y.mergeUpdates`), обход осиротевших штрихов — при снимке открытой заметки, в том числе при её
 закрытии. `close` сначала отцепляет документ и лишь потом ждёт отправки снимка, поэтому `open`
 той же заметки во время закрытия получает свежий экземпляр из хранилища со всеми правками.
+### Ключи блокнотов: канонический — с сервера
+
+Ключ блокнота один на все устройства — тот, что обёрнут мастер-ключом на сервере
+(`GET /v1/notebooks` → `wrappedKey`). Новый ключ создаётся **только** для блокнота, которого на
+сервере ещё нет; блокнот, пришедший с другого устройства, получает ключ с сервера.
+
+```swift
+// При каждом запуске до engine.start() и когда в аккаунте появился блокнот без ключа:
+for change in try await accounts.reconcileNotebookKeys() {
+    try notebookDocument(change.notebookId).rewrapNoteKeys(from: change.previousKey, to: change.key)
+    await engine.rekey(docId: change.notebookId)
+}
+// Ключ для записи в блокнот (заметка, перенос): свой или с сервера; nil — блокнота на сервере нет.
+let key = try await accounts.notebookKeyForWriting(notebookId)
+// Движку — отставные ключи, чтобы прочитать уже записанное ими:
+SyncEngine(store:client:keyFor: keys.key(for:), register:, retiredKeysFor: keys.retiredKeys(for:),
+           isKeyCanonical: keys.isCanonical)
+// Свой POST /notebooks прошёл — ключ канонический:
+keys.markNotebookKeyVerified(notebookId)
+```
+
+`reconcileNotebookKeys` заполняет недостающие ключи и заменяет отличающиеся на серверные;
+прежний ключ остаётся «отставным» (`KeyRing.retiredNotebookKeys`) — им читаются только уже
+записанные данные, писать им нельзя. `rewrapNoteKeys` переобёртывает ключи заметок, обёрнутые
+отставным ключом. `SyncEngine.rekey(docId:)` скачивает документ заново с начала (старое — через
+отставной ключ) и выгружает снимок каноническим ключом, чтобы все устройства снова читали весь
+документ; переживает перезапуск.
+
+### Нечитаемые данные (карантин)
+
+Чужое обновление или снимок, который не расшифровывается (другой ключ) или не является
+обновлением Yrs, не останавливает документ: он откладывается (`LocalStore.quarantined` —
+документ, seq, устройство, причина), остальное применяется, `lastSeq` идёт дальше.
+`SyncStatus.unreadable: [UnreadableSync { docId, notebookId, count, firstSeq, lastSeq,
+deviceIds, reason }]` — спокойное предупреждение у блокнота («часть изменений с другого
+устройства не прочитана»), на `summary` не влияет. После того как ключи поменялись
+(`reconcileNotebookKeys`) — `engine.retryUnreadable()`: отложенное скачивается заново.
+
+Если ключ документа подтверждён сервером в этой сессии (`SyncEngine(isKeyCanonical:
+keys.isCanonical)`: ключ блокнота пришёл из `reconcileNotebookKeys`, создан `createNotebook` или
+отмечен `KeyRing.markNotebookKeyVerified` после успешного `POST /notebooks`), устройство,
+отложившее элементы, выгружает снимок того, что прочитало: остальные устройства догоняют с него
+и битых элементов больше не встречают. Устройство с неподтверждённым ключом снимок не выгружает.
+
+### Ненадёжная сеть
+
+Один `URLSession` (`DSNetwork.session`) на REST и WebSocket: соединения переиспользуются (HTTP/2
+keep-alive), новых TLS-рукопожатий меньше; `waitsForConnectivity = false`, тайм-ауты — по простою.
+
+- REST (`APIClient`, транспорт `URLSessionTransport`): у каждой попытки короткий тайм-аут простоя
+  (5, 8, 12, 15 с), неудачные попытки повторяются с задержкой 0,3 с · 2ⁿ ± 30 %. Любой запрос
+  повторяется, если он точно не ушёл (`TransportFailure.notSent`: нет соединения, рукопожатие не
+  прошло или не закончилось — по метрикам задачи); идемпотентные (GET/PUT/DELETE и POST/PATCH,
+  идемпотентные по id: регистрация документа, создание блокнота/вложения/ссылки, перенос
+  заметки, смена режима) — ещё и после тайм-аута и 502/503/504. Вход, смена пароля и **обновление
+  токена** после тайм-аута не повторяются: refresh-токен одноразовый, повторное предъявление
+  отзывает устройство (`sessions.ts`), а неудачное обновление сессию не стирает.
+- WebSocket (`SyncClient`): от открытия до `welcome` — не дольше `handshakeTimeout` (6 с);
+  зависшее рукопожатие закрывается, первые `quickRetries` (2) повтора идут почти сразу
+  (≈ 0,3 с), потом — экспоненциальная задержка. Рабочее соединение, которое оборвалось,
+  восстанавливается сразу.
+- Статус: пока идут быстрые повторы, `summary` — `.syncing`, а не `.offline`
+  (`SyncStatus.connectionTrouble` — только после нескольких неудач подряд). Сеть ничего не
+  удаляет из базы: библиотека остаётся на месте при любом состоянии связи.
+
 ### Статус и ошибки отправки
 
 `engine.status()` / `statusUpdates()` → `SyncStatus { connection, pending, catchingUp, failed }`,

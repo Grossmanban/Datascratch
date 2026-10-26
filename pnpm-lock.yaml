@@ -316,6 +316,9 @@ importers:
       '@expo-google-fonts/newsreader':
         specifier: ^0.4.1
         version: 0.4.1
+      '@expo-google-fonts/noto-emoji':
+        specifier: ^0.4.8
+        version: 0.4.8
       '@modelcontextprotocol/server':
         specifier: ^2.4.0
         version: 2.4.0
@@ -2008,6 +2011,9 @@ packages:
 
   '@expo-google-fonts/newsreader@0.4.1':
     resolution: {integrity: sha512-j96W112+mj/VYP06DCq00w+twyw42w0MY7eHB/XXioNK80BcG0cIk/zogjOENZSY7qejzIFbHE/PZYqlh/6VKQ==}
+
+  '@expo-google-fonts/noto-emoji@0.4.8':
+    resolution: {integrity: sha512-zuq8xBS8nfdgqHXIwfdotQNObA22aMLdPJbFmzJt1AUjbBE4hP/K3az/GftD3e2/JTzRnX30C5lmpuNkVewRlA==}
 
   '@fastify/accept-negotiator@2.1.2':
     resolution: {integrity: sha512-LV7MZqTwXTEt3GxBT6BU8ACztWnv++hSkMEsP3usIHiI0tA4F5EO4THhDCOr5J/ginM9DCnLCmZ6u3JLA9x8Iw==}
@@ -9631,6 +9637,8 @@ snapshots:
   '@expo-google-fonts/inter@0.4.2': {}
 
   '@expo-google-fonts/newsreader@0.4.1': {}
+
+  '@expo-google-fonts/noto-emoji@0.4.8': {}
 
   '@fastify/accept-negotiator@2.1.2': {}
 

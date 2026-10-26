@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
@@ -19,6 +21,8 @@ import {
   type TestServer,
   type TestUser,
 } from './helpers.js';
+
+const execFileAsync = promisify(execFile);
 
 let s: TestServer;
 let u: TestUser;
@@ -178,6 +182,69 @@ describe('data source', () => {
     priv.client.close();
   });
 
+  it('skips an undecryptable update instead of hiding the whole document', async () => {
+    const { notebookId, noteId, client } = await setupNotebook();
+    const g = grant([notebookId], 'read_write');
+    await agents.store.insertGrant(g);
+    // A client seals an update of the notebook index with a wrong key.
+    await client.push(notebookId, await seal(rnd(32), new Uint8Array([1, 2, 3]), AD.doc(notebookId)));
+    const nb = (await agents.data.loadDoc(u.userId, notebookId, g.id))!;
+    expect(nb).not.toBeNull();
+    expect(nb.skipped).toEqual([{ seq: 2, deviceId: expect.any(String), reason: 'decrypt' }]);
+    expect((nb.doc.getMap('notes').get(noteId) as Y.Map<unknown>).get('title')).toBe('Hello');
+    // The note still loads: its key comes from the partly readable notebook index.
+    const note = (await agents.data.loadDoc(u.userId, noteId, g.id))!;
+    expect(note.doc.getText('t').toString()).toBe('from user');
+    expect(note.skipped).toBeUndefined();
+    client.close();
+  });
+
+  it('refuses to switch to agent mode with a key that does not open the notebook data', async () => {
+    const { notebookId, notebookKey, client } = await setupNotebook();
+    const t = u.session.accessToken;
+    await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, { token: t, body: { mode: 'private' } });
+    const wrong = await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, {
+      token: t,
+      body: { mode: 'agent', notebookKey: b64(rnd(32)) },
+    });
+    expect(wrong.status).toBe(409);
+    expect(wrong.body.error.message).toContain('key mismatch');
+    const right = await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, {
+      token: t,
+      body: { mode: 'agent', notebookKey: b64(notebookKey) },
+    });
+    expect(right.status).toBe(200);
+    expect(right.body.mode).toBe('agent');
+    // A brand-new notebook without data accepts any key.
+    const { notebookId: empty } = await createNotebook(s, u, { mode: 'private', notebookKey: rnd(32) });
+    const fresh = await api(s, 'PATCH', `/notebooks/${empty}/mode`, {
+      token: t,
+      body: { mode: 'agent', notebookKey: b64(rnd(32)) },
+    });
+    expect(fresh.status).toBe(200);
+    client.close();
+  });
+
+  it('diag CLI names the unreadable items of a document', async () => {
+    const { notebookId, client } = await setupNotebook();
+    await client.push(notebookId, await seal(rnd(32), new Uint8Array([1, 2, 3]), AD.doc(notebookId)));
+    const env = {
+      ...process.env,
+      NODE_ENV: 'test',
+      LOG_LEVEL: 'silent',
+      DATABASE_URL: s.ctx.config.DATABASE_URL,
+      DS_JWT_SECRET: s.ctx.config.DS_JWT_SECRET,
+      DS_KMS_KEY: s.ctx.config.DS_KMS_KEY,
+      STORAGE_DIR: s.ctx.config.STORAGE_DIR,
+    };
+    const { stdout } = await execFileAsync('npx', ['tsx', 'src/diag-agent-doc-cli.ts', notebookId], { env, cwd: process.cwd() });
+    expect(stdout).toContain(`kind=notebook`);
+    expect(stdout).toMatch(/update\s+seq=1 .*decrypt=ok\s+apply=ok/);
+    expect(stdout).toMatch(/update\s+seq=2 .*decrypt=FAIL/);
+    expect(stdout).toContain('UNREADABLE items: seq 2');
+    client.close();
+  });
+
   it('creates notes whose wrapped key the notebook key opens', async () => {
     const { notebookId, notebookKey, client } = await setupNotebook();
     const g = grant([notebookId], 'read_write');
@@ -198,6 +265,54 @@ describe('data source', () => {
     expect(back.getText('t').toString()).toBe('agent note');
     await expect(agents.data.createNoteDoc(u.userId, notebookId, noteId, g.id)).rejects.toThrow(/exists/);
     client.close();
+  });
+
+  it('moves a note to another granted notebook atomically, re-wrapping its key', async () => {
+    const a = await setupNotebook();
+    const b = await setupNotebook();
+    const c = await setupNotebook();
+    const g = grant([a.notebookId, b.notebookId], 'read_write');
+    await agents.store.insertGrant(g);
+    const build = (src: Y.Doc, dst: Y.Doc) => (wrappedKey: string) => {
+      const sb = Y.encodeStateVector(src);
+      const db = Y.encodeStateVector(dst);
+      const m = new Y.Map();
+      dst.getMap('notes').set(a.noteId, m);
+      m.set('title', 'Hello');
+      m.set('wrappedKey', wrappedKey);
+      src.getMap('notes').delete(a.noteId);
+      return { from: Y.encodeStateAsUpdate(src, sb), to: Y.encodeStateAsUpdate(dst, db) };
+    };
+    const load = async (id: string) => (await agents.data.loadDoc(u.userId, id, g.id))!.doc;
+    // Outside the grant: refused, nothing changes.
+    const outside = grant([a.notebookId, c.notebookId], 'read');
+    await agents.store.insertGrant(outside);
+    await expect(
+      agents.data.moveNoteDoc!(u.userId, {
+        noteId: a.noteId,
+        fromNotebookId: a.notebookId,
+        toNotebookId: c.notebookId,
+        origin: origin(outside.id),
+        indexUpdates: build(await load(a.notebookId), new Y.Doc()),
+      }),
+    ).rejects.toThrow(/does not allow writing/);
+
+    await agents.data.moveNoteDoc!(u.userId, {
+      noteId: a.noteId,
+      fromNotebookId: a.notebookId,
+      toNotebookId: b.notebookId,
+      origin: { ...origin(g.id), action: 'move_note' },
+      indexUpdates: build(await load(a.notebookId), await load(b.notebookId)),
+    });
+    const [row] = await s.ctx.database.db.select().from(docs).where(sql`${docs.id} = ${a.noteId}`);
+    expect(row!.notebookId).toBe(b.notebookId);
+    expect((await load(a.notebookId)).getMap('notes').has(a.noteId)).toBe(false);
+    const meta = (await load(b.notebookId)).getMap('notes').get(a.noteId) as Y.Map<unknown>;
+    // The owner's device opens the same note key with the target notebook key.
+    const key = await open(b.notebookKey, Buffer.from(meta.get('wrappedKey') as string, 'base64url'), AD.note(a.noteId));
+    expect(Buffer.from(key).equals(Buffer.from(a.noteKey))).toBe(true);
+    expect((await load(a.noteId)).getText('t').toString()).toBe('from user');
+    for (const x of [a, b, c]) x.client.close();
   });
 
   it('decrypts image attachments', async () => {

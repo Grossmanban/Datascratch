@@ -30,7 +30,8 @@ describe("Markdown escapes and verbatim content", () => {
     const { doc, md, tags } = await roundTrip("\\#не тег, \\*не курсив\\*, \\`не код\\`, \\[\\[не ссылка\\]\\], \\=\\=не маркер\\=\\=, а #тег — настоящий.");
     expect(tags).toEqual(["тег"]);
     expect(plainText(bodyBlocks(doc)[0]!)).toBe("#не тег, *не курсив*, `не код`, [[не ссылка]], ==не маркер==, а #тег — настоящий.");
-    expect(md).toBe("\\#не тег, \\*не курсив\\*, \\`не код\\`, \\[\\[не ссылка\\]\\], \\=\\=не маркер\\=\\=, а #тег — настоящий.\n");
+    // [[…]] stays as written: it is the link syntax agents use (an unknown title remains plain text).
+    expect(md).toBe("\\#не тег, \\*не курсив\\*, \\`не код\\`, [[не ссылка]], \\=\\=не маркер\\=\\=, а #тег — настоящий.\n");
     // read_note output imports back to the same document
     const again = await roundTrip(md);
     expect(again.md).toBe(md);
@@ -88,5 +89,39 @@ describe("structure", () => {
     expect(bodyBlocks(doc).map((b) => b.getAttribute("tone"))).toEqual(["success", "warning", "danger", "note"]);
     expect(md).toContain("> [!success] 💡\n> Совет");
     expect(md).toContain("> [!warning]\n> Свёрнуто");
+  });
+});
+
+describe("review 2026-10-26", () => {
+  it("keeps inline math verbatim in both directions", async () => {
+    const src = "Корень: $\\sqrt{a^2+b^2}\\,dx$ и $$\\frac{1}{2}$$, цена $5.";
+    const { doc, md } = await roundTrip(src);
+    expect(plainText(bodyBlocks(doc)[0]!)).toBe("Корень: $\\sqrt{a^2+b^2}\\,dx$ и $$\\frac{1}{2}$$, цена $5.");
+    expect(md).toBe(src + "\n");
+    expect((await roundTrip(md)).md).toBe(md);
+  });
+
+  it("does not escape [[wiki links]] and footnote references", async () => {
+    const { md } = await roundTrip("См. [[Несуществующая заметка]] и сноску[^1].\n\n[^1]: Текст сноски.");
+    expect(md).toContain("См. [[Несуществующая заметка]] и сноску[^1].");
+    expect(md).toContain("[^1]: Текст сноски.");
+  });
+
+  it("keeps table column alignment", async () => {
+    const src = "| Лево | Центр | Право |\n| :--- | :---: | ---: |\n| a | b | c |";
+    const { doc, md } = await roundTrip(src);
+    const table = bodyBlocks(doc)[0]!;
+    const firstRow = table.toArray()[0] as Y.XmlElement;
+    expect((firstRow.toArray() as Y.XmlElement[]).map((c) => c.getAttribute("align"))).toEqual(["left", "center", "right"]);
+    expect(md).toContain("| :--- | :---: | ---: |");
+    expect(((firstRow.toArray()[0] as Y.XmlElement).toArray()[0] as Y.XmlElement).getAttribute("textAlign")).toBeUndefined();
+    expect((await roundTrip(md)).md).toBe(md);
+  });
+
+  it("drops a leading H1 that repeats the title", async () => {
+    const { doc } = await roundTrip("# Тест\n\nТекст.");
+    expect(bodyBlocks(doc).map((b) => b.nodeName)).toEqual(["paragraph"]);
+    const other = await roundTrip("# Другой заголовок\n\nТекст.");
+    expect(bodyBlocks(other.doc).map((b) => b.nodeName)).toEqual(["heading", "paragraph"]);
   });
 });

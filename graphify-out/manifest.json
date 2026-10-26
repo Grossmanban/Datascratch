@@ -984,10 +984,10 @@
     "semantic_hash": "3dea35c775f09087714986bde6104a8c"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1793034825.3889623,
-    "seen": 1793035868.3885853,
-    "ast_hash": "8dc4bf49356a48d6cb9f5cfb28c41ca6",
-    "semantic_hash": "8dc4bf49356a48d6cb9f5cfb28c41ca6"
+    "mtime": 1793040543.2479618,
+    "seen": 1793040607.141433,
+    "ast_hash": "44734d48457afeee02bef9bb6c5b527c",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
     "mtime": 1793015652.3078227,
@@ -1014,16 +1014,16 @@
     "semantic_hash": "de1cc975ee613f5d91f2c0521ad9982c"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/AttributedRenderer.swift": {
-    "mtime": 1793028110.2005632,
-    "seen": 1793032886.9620094,
-    "ast_hash": "10d81260cc6fdfdbbc0f6dfb1d907ec8",
-    "semantic_hash": "10d81260cc6fdfdbbc0f6dfb1d907ec8"
+    "mtime": 1793040543.2479618,
+    "seen": 1793040607.1416326,
+    "ast_hash": "a9f1db9dda38cf8c5ffdab728d93e6cd",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/BlockLayoutFragment.swift": {
-    "mtime": 1793008140.9913244,
-    "seen": 1793032886.962012,
-    "ast_hash": "1f55826614009d3e8c0692cee6c15607",
-    "semantic_hash": "1f55826614009d3e8c0692cee6c15607"
+    "mtime": 1793040543.25312,
+    "seen": 1793040607.1416368,
+    "ast_hash": "93b54f6057128cadecf19724d1885021",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/DSEditor.swift": {
     "mtime": 1792948617.4762218,
@@ -1050,10 +1050,10 @@
     "semantic_hash": "b6b0a0337289428c08bd8c5c9ce9db2e"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1793034825.3889623,
-    "seen": 1793035868.3889472,
-    "ast_hash": "31425089113db716abedf1ec95465d63",
-    "semantic_hash": "31425089113db716abedf1ec95465d63"
+    "mtime": 1793040543.2537835,
+    "seen": 1793040607.1418505,
+    "ast_hash": "48dec007602912b60efe141c99836bde",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormatMenu.swift": {
     "mtime": 1793015652.3078227,
@@ -1062,10 +1062,10 @@
     "semantic_hash": "9371e282bcc94ad25011567b2326871a"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormulaViews.swift": {
-    "mtime": 1792948617.4776258,
-    "seen": 1793032886.96203,
-    "ast_hash": "8eab0356973d6adc722d378c7f9572c3",
-    "semantic_hash": "8eab0356973d6adc722d378c7f9572c3"
+    "mtime": 1793040543.2537835,
+    "seen": 1793040607.1419456,
+    "ast_hash": "0a08f13b25326c6dc953bde777f8894e",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FrameRateBoost.swift": {
     "mtime": 1792948617.4776258,
@@ -1104,10 +1104,10 @@
     "semantic_hash": "f437ed22533045b8ea5e09610c65246d"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/MermaidRenderer.swift": {
-    "mtime": 1793008140.9953244,
-    "seen": 1793032886.9620469,
-    "ast_hash": "1ab8a1a97928da506e60dd7ba972723f",
-    "semantic_hash": "1ab8a1a97928da506e60dd7ba972723f"
+    "mtime": 1793040543.2537835,
+    "seen": 1793040607.1422596,
+    "ast_hash": "9b1f92a09ff68f50d5aeca2eec544b8c",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/Resources/mermaid.min.js": {
     "mtime": 1792948617.4869957,
@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793040116.2546847,
-    "seen": 1793040179.0926821,
-    "ast_hash": "1141fdb42c9a196e4fe46dcc2694b15c",
+    "mtime": 1793040549.1028621,
+    "seen": 1793040607.1648436,
+    "ast_hash": "ff2ee18aaf345fedd1991c68c4cbce4f",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -4710,10 +4710,10 @@
     "semantic_hash": "7de253f465da0a90057780f1b151d4db"
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1793029749.18378,
-    "seen": 1793032886.9636805,
-    "ast_hash": "5a353fe44c039e74fc70c6cc750f3bd9",
-    "semantic_hash": "5a353fe44c039e74fc70c6cc750f3bd9"
+    "mtime": 1793040543.2553048,
+    "seen": 1793040607.1668859,
+    "ast_hash": "2225fc3ab899bea06327ba7a6dafd616",
+    "semantic_hash": ""
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1793035322.6003256,

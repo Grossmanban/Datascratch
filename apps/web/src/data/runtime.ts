@@ -296,7 +296,7 @@ export class AccountRuntime {
     });
   }
 
-  /** Keep name/icon/space copies in each notebook doc's meta up to date (for agents). */
+  /** Keep name/icon/colour/space copies in each notebook doc's meta up to date (for agents). */
   private copyNotebookNames() {
     const { account } = useWorkspace.getState();
     for (const ref of account.notebooks) {

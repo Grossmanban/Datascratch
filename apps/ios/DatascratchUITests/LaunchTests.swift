@@ -576,7 +576,11 @@ final class LibraryUITests: XCTestCase {
         let trash = sidebarElement(app, "sidebar.trash")
         let footer = app.descendants(matching: .any)["sidebar.footer"].firstMatch
         XCTAssertTrue(trash.exists && footer.exists, "no Trash or footer")
-        if !trash.isHittable { app.swipeUp() }
+        // Scroll the sidebar to its end: the last row must stop above the footer.
+        let firstRow = app.cells.containing(.any, identifier: "sidebar.allDocuments").firstMatch
+        firstRow.swipeUp()
+        firstRow.swipeUp()
+        settle(1)
         XCTAssertLessThanOrEqual(trash.frame.maxY, footer.frame.minY + 1, "Trash is under the footer")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = "notebook-list-once-\(orientation == .portrait ? "portrait" : "landscape")"
@@ -593,6 +597,7 @@ final class LibraryUITests: XCTestCase {
         palette.tap()
         let field = app.textFields["palette.field"]
         XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
+        field.tap()
         field.typeText("Settings\n")
         let account = app.descendants(matching: .any)["settings.account"].firstMatch
         XCTAssertTrue(account.waitForExistence(timeout: 5), "no Account row")

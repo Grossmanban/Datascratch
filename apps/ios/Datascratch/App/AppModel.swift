@@ -138,6 +138,15 @@ final class AppModel {
                 _ = library.createNote(in: notebook.id, folder: drafts.id, title: "Draft")
                 notebookForTesting = notebook.id
             }
+            if ProcessInfo.processInfo.arguments.contains("-ui-testing-links"),
+               let notebook = library.notebooks(in: library.activeSpace?.id).first {
+                // A note linking to an existing note (a chip) and to a missing one (literal).
+                _ = library.createNote(in: notebook.id, folder: nil, title: "Target",
+                                       body: NoteBody(blocks: [.paragraph("Target body")]))
+                let links = library.createNote(in: notebook.id, folder: nil, title: "Links",
+                                               body: NoteBody(blocks: [.paragraph("Go to [[Target]] or [[Nowhere]].")]))
+                noteForTesting = links.id
+            }
             // The server ended this device's session (revoked elsewhere).
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-session-ended") { sync.markSessionEnded() }
         }
@@ -152,6 +161,8 @@ final class AppModel {
     private var signedInForTesting = false
     /// `-ui-testing-folders`: the notebook a new scene starts on.
     @ObservationIgnored var notebookForTesting: String?
+    /// `-ui-testing-links`: the note a new scene opens.
+    @ObservationIgnored var noteForTesting: String?
 
     /// `-ui-testing-cover`: the first document gets an image cover (screenshots, layout tests).
     private func seedCoverForTesting() {

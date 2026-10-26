@@ -113,6 +113,11 @@ final class SceneModel {
             sidebar = .notebook(id)
             preferredCompactColumn = .content
         }
+        if let id = app.noteForTesting {
+            selectedNoteId = id
+            padLevel = .document
+            preferredCompactColumn = .detail
+        }
     }
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }

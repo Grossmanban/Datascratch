@@ -251,6 +251,42 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
     }
 
+    /// Note links open notes (owner, build 14: nothing happened on iPhone): the chip of an
+    /// existing note opens it; a literal [[Title]] of a missing note offers to create it.
+    func testNoteLinksOpenNotes() throws {
+        let app = launchSignedIn(["-ui-testing-links"])
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "the Links note did not open")
+        let text = editor.textViews.firstMatch
+        XCTAssertTrue(text.waitForExistence(timeout: 5), "no text view")
+        settle(1)
+
+        func linkElement(_ title: String) -> XCUIElement {
+            let candidates = [text.links[title].firstMatch, editor.links[title].firstMatch,
+                              editor.buttons[title].firstMatch,
+                              editor.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", title)).firstMatch]
+            return candidates.first { $0.exists } ?? candidates[0]
+        }
+        let chip = linkElement("Target")
+        XCTAssertTrue(chip.waitForExistence(timeout: 3),
+                      "no element for the Target link; editor: \(editor.debugDescription.prefix(3000))")
+        chip.tap()
+        let opened = NSPredicate(format: "value CONTAINS 'Target body'")
+        let navigated = XCTWaiter().wait(for: [expectation(for: opened, evaluatedWith: editor.textViews.firstMatch)], timeout: 5)
+        XCTAssertEqual(navigated, .completed, "tapping the note link did not open «Target»")
+
+        // Back to Links: the literal link to a missing note offers to create it.
+        let back = app.navigationBars.buttons.firstMatch
+        if UIDevice.current.userInterfaceIdiom == .phone, back.exists { back.tap() }
+        let links = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Links'")).firstMatch
+        if links.waitForExistence(timeout: 3) { links.tap() }
+        let literal = linkElement("Nowhere")
+        XCTAssertTrue(literal.waitForExistence(timeout: 5), "no element for the [[Nowhere]] link")
+        literal.tap()
+        XCTAssertTrue(app.buttons["Create Note"].waitForExistence(timeout: 5) || app.alerts.firstMatch.waitForExistence(timeout: 2),
+                      "a link to a missing note did not offer to create it")
+    }
+
     /// spec/05: a notebook's folders show as a strip above its documents; a tap opens the folder,
     /// whose own subfolders and breadcrumb then show.
     func testFolderStripNavigates() throws {

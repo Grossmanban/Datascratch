@@ -12,6 +12,16 @@
 {$DS_SITE} {
 	encode zstd gzip
 
+	# Security headers (same values as apps/web/src/lib/securityHeaders.ts, which the web e2e
+	# suite runs under; a unit test there keeps both in step). HSTS also holds in edge mode:
+	# the outer proxy serves the site over HTTPS.
+	header {
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' wss://{http.request.hostport}; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
 	# Internal only: never exposed to the internet.
 	@internal path /metrics /metrics/*
 	handle @internal {

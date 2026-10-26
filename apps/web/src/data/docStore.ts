@@ -11,6 +11,8 @@ export const ORIGIN_REMOTE = REMOTE_ORIGIN;
 export const ORIGIN_LOAD = Symbol("load");
 
 const COMPACT_LOCAL_AFTER = 200;
+/** How long a held doc waits for its row before loading unsynced (see open()). */
+const ROW_WAIT_MS = 15_000;
 
 type Listener = (docId: string, origin: unknown) => void;
 
@@ -41,6 +43,7 @@ export class DocStore {
   private createdListeners = new Set<(docId: string) => Promise<void>>();
   private rows = new Map<string, DocRow>();
   private closing = new Map<string, Promise<void>>();
+  private rowWaiters = new Map<string, Set<() => void>>();
   private noteSync: NoteSync | null = null;
 
   /** Set by the runtime once SyncClient runs; until then notes load straight from disk. */
@@ -100,6 +103,8 @@ export class DocStore {
     const row: DocRow = { docId, kind, notebookId, registered };
     await accountDb().docs.put(row);
     this.rows.set(docId, row);
+    for (const fn of this.rowWaiters.get(docId) ?? []) fn();
+    this.rowWaiters.delete(docId);
     return row;
   }
 
@@ -165,9 +170,26 @@ export class DocStore {
 
   private async open(docId: string): Promise<Y.Doc> {
     await this.closing.get(docId);
-    const row = await this.row(docId);
+    let row = await this.row(docId);
+    // A note opened by a link on a fresh device can be listed by its notebook a moment before its
+    // row is stored; without the row it would load as a plain doc that never syncs.
+    if (!row && !this.pinned.has(docId)) row = await this.waitForRow(docId, ROW_WAIT_MS);
     if (row?.kind === "note" && this.noteSync) return this.noteSync.open(docId, () => this.loadFromDisk(docId));
     return this.loadFromDisk(docId);
+  }
+
+  private waitForRow(docId: string, ms: number): Promise<DocRow | undefined> {
+    return new Promise((resolve) => {
+      const waiters = this.rowWaiters.get(docId) ?? new Set<() => void>();
+      this.rowWaiters.set(docId, waiters);
+      const done = () => {
+        clearTimeout(timer);
+        waiters.delete(done);
+        resolve(this.rows.get(docId));
+      };
+      const timer = setTimeout(done, ms);
+      waiters.add(done);
+    });
   }
 
   /**

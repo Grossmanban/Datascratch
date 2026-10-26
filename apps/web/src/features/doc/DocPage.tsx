@@ -1,6 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ChevronRight, FileQuestion, MoreHorizontal, Share2, Smile, Star, Undo2 } from "lucide-react";
+import { ChevronRight, FileQuestion, MoreHorizontal, Share2, Smile, Star, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/session";
@@ -8,7 +8,7 @@ import { colorFor } from "@/data/presence";
 import { runtime } from "@/data/runtime";
 import { openTab, restoreNote, toggleStar, updateNote } from "@/domain/actions";
 import { folderPath, isStarred, noteTitle, useWorkspace } from "@/domain/workspace";
-import { noteMenuItems } from "@/features/docs/menus";
+import { closeDocTab, noteMenuItems } from "@/features/docs/menus";
 import { TopBar } from "@/features/shell/PageHeader";
 import { useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
 import { useUi } from "@/hooks/useUi";
@@ -123,6 +123,9 @@ function DocScreen({ noteId }: { noteId: string }) {
                 </IconButton>
               }
             />
+            <IconButton label={`${t("docs.closeTab")} (⌥W)`} onClick={() => closeDocTab(noteId, navigate)} data-testid="close-tab">
+              <X className="size-4" />
+            </IconButton>
           </>
         }
       >

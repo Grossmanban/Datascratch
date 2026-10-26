@@ -22,6 +22,7 @@ RU = pathlib.Path(__file__).with_name("ru.json")
 # Swift literal with interpolation -> catalog key
 INTERPOLATIONS = {
     r"Offline · \(pending) waiting": "Offline · %lld waiting",
+    r"Not sent: \(documents)": "Not sent: %lld",
     r"\(library.daysLeftInTrash(note)) d": "%lld d",
     r"\(library.daysLeftInTrash(note)) days left": "%lld days left",
     r"until \(expiresAt.formatted(date: .abbreviated, time: .omitted))": "until %@",
@@ -35,7 +36,7 @@ INTERPOLATIONS = {
 
 # Literals that look like text but are not translated (names, formats, prefixes).
 IGNORE = {
-    "* ", ", ", "> ", "[ ] ", "[] ", "☐ ", "DS1", "DS1-XXXX-XXXX-…", "Datascratch", "Library.json",
+    "* ", ", ", " · ", " : ", "> ", "[ ] ", "[] ", "☐ ", "DS1", "DS1-XXXX-XXXX-…", "Datascratch", "Library.json",
     "CFBundleShortVersionString", "CFBundleVersion", "DSServerURL", "DSWebHost",
     "XChaCha20-Poly1305 · Argon2id", "Quiet paper", "next week", "open to agents", "CoreLibrary", "Library", "Attachments", "a^2 + b^2 = c^2", "graph TD\n  A --> B",
 }

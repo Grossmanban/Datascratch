@@ -69,6 +69,7 @@ struct CalendarView: View {
         .background(Theme.Palette.canvas)
         .navigationTitle("Calendar")
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { ContentFullScreenButton() }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Today") {
                     withAnimation(Theme.Motion.snappy) { scene.calendarDay = today }

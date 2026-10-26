@@ -10,6 +10,8 @@ on:
       - "package.json"
       - "packages/**"
       - "apps/server/**"
+      - "infra/deploy/Caddyfile"
+      - "infra/deploy/web.Dockerfile"
   pull_request:
     paths:
       - "apps/web/**"
@@ -17,6 +19,8 @@ on:
       - "pnpm-lock.yaml"
       - "packages/**"
       - "apps/server/**"
+      - "infra/deploy/Caddyfile"
+      - "infra/deploy/web.Dockerfile"
 
 concurrency:
   group: web-${{ github.ref }}
@@ -130,3 +134,32 @@ jobs:
       - name: Server log
         if: failure()
         run: tail -200 /tmp/server.log
+
+  # The production web image (infra/deploy/web.Dockerfile: the app + Caddy) sends the security
+  # headers the e2e suite runs under (apps/web/src/lib/securityHeaders.ts).
+  web-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the web image
+        run: docker build -f infra/deploy/web.Dockerfile -t datascratch-web:ci .
+      - name: Headers of the running image (edge mode, plain HTTP behind a proxy)
+        run: |
+          docker run -d --name web -e DS_SITE=http://:8480 -p 8480:8480 --add-host server:127.0.0.1 datascratch-web:ci
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:8480/ && break; sleep 1; done
+          check() {
+            headers=$(curl -sSI "http://localhost:8480$1")
+            echo "--- $1"; echo "$headers"
+            echo "$headers" | grep -qi '^HTTP/1.1 200' || { echo "not 200: $1"; exit 1; }
+            for h in "content-security-policy: default-src 'self'" "frame-ancestors 'none'" "connect-src 'self' wss://localhost:8480" \
+                     "strict-transport-security: max-age=31536000" "x-content-type-options: nosniff" "referrer-policy: strict-origin-when-cross-origin"; do
+              echo "$headers" | grep -qiF "$h" || { echo "missing on $1: $h"; exit 1; }
+            done
+          }
+          check /
+          check /login
+          check /theme-init.js
+      - name: Caddy log
+        if: failure()
+        run: docker logs web

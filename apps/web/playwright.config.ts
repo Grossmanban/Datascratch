@@ -39,6 +39,8 @@ export default defineConfig({
     {
       command: `pnpm exec vite preview --port ${WEB_PORT} --strictPort`,
       port: WEB_PORT,
+      // The preview sends the production CSP; its connect-src must allow the test server.
+      env: { VITE_DS_SERVER_URL: realServer ?? `http://localhost:${MOCK_PORT}` },
       reuseExistingServer: !process.env.CI,
     },
   ],

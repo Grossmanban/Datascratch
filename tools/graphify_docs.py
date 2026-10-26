@@ -192,8 +192,12 @@ def finish():
     kept_labels = {_norm_label(n.get("label", n["id"])) for n in extraction["nodes"]}
     lost = [n for n in old["nodes"] if n["id"] not in kept]
     # Source-less nodes left without edges are pruned by build_merge itself.
+    # A document's page node comes from the AST pass, which only re-reads changed documents;
+    # an unchanged document whose other nodes survive keeps its content, so its page node may go.
+    surviving_sources = {n.get("source_file") for n in extraction["nodes"]}
     foreign = [n["id"] for n in lost if n.get("source_file") and n.get("source_file") not in touched
-               and _norm_label(n.get("label", n["id"])) not in kept_labels]
+               and _norm_label(n.get("label", n["id"])) not in kept_labels
+               and not (n.get("node_kind") == "page" and n.get("source_file") in surviving_sources)]
     if foreign:
         sys.exit(f"Refusing to write: nodes from unchanged files would be lost: {foreign[:20]}")
 

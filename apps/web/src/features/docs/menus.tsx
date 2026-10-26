@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import {
   createFolder,
+  closeTab,
   createNote,
   deleteFolder,
   deleteNoteForever,
@@ -36,6 +37,13 @@ import { useUi } from "@/hooks/useUi";
 import { confirmDialog, toast, type MenuItem } from "@/ui";
 
 type Nav = ReturnType<typeof useNavigate>;
+
+/** Close a document's tab and show the next tab (or all documents). */
+export function closeDocTab(noteId: string, nav: Nav) {
+  const next = closeTab(noteId);
+  if (next) void nav({ to: "/doc/$noteId", params: { noteId: next } });
+  else void nav({ to: "/all" });
+}
 
 export async function newNoteAndOpen(nav: Nav, notebookId: string, folderId: string | null = null) {
   const id = await createNote({ notebookId, folderId });

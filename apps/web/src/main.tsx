@@ -1,3 +1,4 @@
+import "./lib/zodConfig";
 import "@datascratch/ui/fonts.css";
 import "./styles/index.css";
 import "./i18n";

@@ -2,8 +2,8 @@ import type { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { getOrCreateDaily, openTab } from "@/domain/actions";
 import { useWorkspace } from "@/domain/workspace";
-import { newNoteAndOpen } from "@/features/docs/menus";
-import { toggleSidebar, useUi } from "@/hooks/useUi";
+import { closeDocTab, newNoteAndOpen } from "@/features/docs/menus";
+import { focusKindOf, toggleFocus, toggleSidebar, useUi } from "@/hooks/useUi";
 import { today } from "@/lib/dates";
 import { toggleTheme } from "@/lib/theme";
 
@@ -40,6 +40,22 @@ export function useShortcuts(navigate: ReturnType<typeof useNavigate>) {
       if (mod && e.shiftKey && key === "l") {
         e.preventDefault();
         toggleTheme();
+        return;
+      }
+      // ⌘⇧F: full screen for the document, calendar or tasks.
+      if (mod && e.shiftKey && (key === "f" || e.code === "KeyF")) {
+        const kind = focusKindOf(location.pathname);
+        if (!kind) return;
+        e.preventDefault();
+        toggleFocus(kind);
+        return;
+      }
+      // ⌥W: close the open document's tab (⌘W closes the browser tab).
+      if (e.altKey && !mod && (e.code === "KeyW" || key === "w")) {
+        const m = location.pathname.match(/^\/doc\/([^/]+)/);
+        if (!m) return;
+        e.preventDefault();
+        closeDocTab(m[1]!, navigate);
       }
     };
     window.addEventListener("keydown", onKey);

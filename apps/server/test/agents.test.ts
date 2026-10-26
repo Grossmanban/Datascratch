@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
@@ -19,6 +21,8 @@ import {
   type TestServer,
   type TestUser,
 } from './helpers.js';
+
+const execFileAsync = promisify(execFile);
 
 let s: TestServer;
 let u: TestUser;
@@ -192,6 +196,26 @@ describe('data source', () => {
     const note = (await agents.data.loadDoc(u.userId, noteId, g.id))!;
     expect(note.doc.getText('t').toString()).toBe('from user');
     expect(note.skipped).toBeUndefined();
+    client.close();
+  });
+
+  it('diag CLI names the unreadable items of a document', async () => {
+    const { notebookId, client } = await setupNotebook();
+    await client.push(notebookId, await seal(rnd(32), new Uint8Array([1, 2, 3]), AD.doc(notebookId)));
+    const env = {
+      ...process.env,
+      NODE_ENV: 'test',
+      LOG_LEVEL: 'silent',
+      DATABASE_URL: s.ctx.config.DATABASE_URL,
+      DS_JWT_SECRET: s.ctx.config.DS_JWT_SECRET,
+      DS_KMS_KEY: s.ctx.config.DS_KMS_KEY,
+      STORAGE_DIR: s.ctx.config.STORAGE_DIR,
+    };
+    const { stdout } = await execFileAsync('npx', ['tsx', 'src/diag-agent-doc-cli.ts', notebookId], { env, cwd: process.cwd() });
+    expect(stdout).toContain(`kind=notebook`);
+    expect(stdout).toMatch(/update\s+seq=1 .*decrypt=ok\s+apply=ok/);
+    expect(stdout).toMatch(/update\s+seq=2 .*decrypt=FAIL/);
+    expect(stdout).toContain('UNREADABLE items: seq 2');
     client.close();
   });
 

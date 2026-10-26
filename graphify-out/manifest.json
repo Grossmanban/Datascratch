@@ -1386,21 +1386,21 @@
     "semantic_hash": "b6fbc14b557b993ed9e884d8574ac5e0"
   },
   "apps/server/drizzle/0000_init.sql": {
-    "mtime": 1792932268.6020067,
-    "seen": 1793052027.7017238,
-    "ast_hash": "",
+    "mtime": 1792932379.6981456,
+    "seen": 1793053004.1762176,
+    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
-    "mtime": 1792932268.6020067,
-    "seen": 1793052027.701727,
-    "ast_hash": "",
+    "mtime": 1792932379.6981456,
+    "seen": 1793053004.1762207,
+    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0002_security_events.sql": {
-    "mtime": 1792966167.5460184,
-    "seen": 1793052027.701729,
-    "ast_hash": "",
+    "mtime": 1792948026.52702,
+    "seen": 1793053004.1762226,
+    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2634,9 +2634,9 @@
     "semantic_hash": "39b029ec81e890bb1a2997fda7955acd"
   },
   "infra/deploy/docker-compose.edge.yml": {
-    "mtime": 1792966167.910989,
-    "seen": 1793052027.702361,
-    "ast_hash": "",
+    "mtime": 1792959345.7137249,
+    "seen": 1793053004.176647,
+    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
     "semantic_hash": ""
   },
   "infra/deploy/docker-compose.yml": {
@@ -4992,9 +4992,9 @@
     "semantic_hash": "a2902c2fb49f1b10b8fb66d5ca4e1ea2"
   },
   "apps/server/drizzle/0003_agent_move_note.sql": {
-    "mtime": 1793029386.0167296,
-    "seen": 1793052027.7017334,
-    "ast_hash": "",
+    "mtime": 1793052572.632575,
+    "seen": 1793053004.1762245,
+    "ast_hash": "dc7975f711d91ebab97fb9b5b28fc1d1",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0003_snapshot.json": {

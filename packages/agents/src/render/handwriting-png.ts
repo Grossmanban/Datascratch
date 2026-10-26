@@ -422,11 +422,12 @@ function drawSegment(ctx: SKRSContext2D, stroke: Stroke, pts: Pt[]): void {
  * Text stroke → segments via the shared layout rules; anchors may point into
  * any laid-out text block of the region (a word written across cells).
  */
-function regionSegments(doc: Y.Doc, stroke: Stroke, region: Region, anchorLines?: { top: number; bottom: number }[]): Pt[][] {
+function regionSegments(doc: Y.Doc, stroke: Stroke, region: Region, anchorLines?: { top: number; bottom: number }[], keepShape = true): Pt[][] {
   const starts = new Map<Y.XmlElement, Map<Y.XmlText, number>>();
   const anchors = resolveAnchors(doc, stroke.anchors);
-  return toPts(
-    layoutTextStroke(stroke, stroke.points, anchors, (anchor) => {
+  // `t` carries the point index through the shared layout, to know each drawn point's anchor.
+  const indexed = stroke.points.map((p, i) => ({ ...p, t: i }));
+  const segments = layoutTextStroke(stroke, indexed, anchors, (anchor) => {
       const block = anchor.text.parent;
       if (!(block instanceof Y.XmlElement)) return null;
       const placed = region.texts.get(block);
@@ -439,13 +440,50 @@ function regionSegments(doc: Y.Doc, stroke: Stroke, region: Region, anchorLines?
       const line = placed.layout.lines[g.line]!;
       anchorLines?.push({ top: placed.dy + line.top, bottom: placed.dy + line.bottom });
       return { x: g.x, baseline: placed.dy + line.baseline, fontSize: placed.layout.fontSize, line: `${placed.key}:${g.line}` };
+  });
+  const rigidShape = keepShape && RIGID_HINTS.has(stroke.hint);
+  return toPts(
+    segments.map((seg) => {
+      const out = rigidShape ? rigid(seg, (k) => stroke.points[seg[k]!.t]!.a) : seg;
+      return out.map((p) => ({ ...p, t: stroke.points[p.t]!.t }));
     }),
   );
 }
 
-/** Single-block variant used by the shared stroke vectors test. @internal */
-export function textSegments(doc: Y.Doc, stroke: Stroke, block: Y.XmlElement, layout: Layout, dy: number): Pt[][] {
-  return regionSegments(doc, stroke, { texts: new Map([[block, { layout, dy, key: 0 }]]), decor: [], height: 0 });
+/** Handwritten words and symbols keep their own shape; underlines, circles and highlights follow the text. */
+const RIGID_HINTS = new Set<Stroke["hint"]>(["free", "scribble", "arrow"]);
+
+/**
+ * Each point of a text stroke is stored relative to its own anchor character,
+ * so one handwritten letter spans several anchors. Our font's advances differ
+ * slightly from the editor's, which would shift the parts of a letter against
+ * each other at every anchor change (a crisp «g» smeared into its «e»). Within
+ * one anchor the motion is exact; across a change we take the motion of the
+ * neighbouring samples instead, then centre the stroke where the text puts it.
+ */
+function rigid(seg: Segment, anchorAt: (k: number) => number): Segment {
+  if (seg.length < 3) return seg;
+  const dx = (k: number) => seg[k]!.x - seg[k - 1]!.x;
+  const same = (k: number) => k >= 1 && k < seg.length && anchorAt(k) === anchorAt(k - 1);
+  const xs = [seg[0]!.x];
+  for (let k = 1; k < seg.length; k++) {
+    let step = dx(k);
+    if (!same(k)) {
+      const around = [k - 1, k + 1].filter(same).map(dx);
+      step = around.length ? around.reduce((a, b) => a + b, 0) / around.length : 0;
+    }
+    xs.push(xs[k - 1]! + step);
+  }
+  const shift = seg.reduce((sum, p, k) => sum + p.x - xs[k]!, 0) / seg.length;
+  return seg.map((p, k) => ({ ...p, x: xs[k]! + shift }));
+}
+
+/**
+ * Single-block variant used by tests. `keepShape: false` gives the pure contract layout
+ * (shared stroke vectors); the default is what the PNG draws. @internal
+ */
+export function textSegments(doc: Y.Doc, stroke: Stroke, block: Y.XmlElement, layout: Layout, dy: number, keepShape = true): Pt[][] {
+  return regionSegments(doc, stroke, { texts: new Map([[block, { layout, dy, key: 0 }]]), decor: [], height: 0 }, undefined, keepShape);
 }
 
 function boxOf(segments: Pt[][]): { minY: number; maxY: number; minX: number; maxX: number } | null {
@@ -460,7 +498,7 @@ function boxOf(segments: Pt[][]): { minY: number; maxY: number; minX: number; ma
 }
 
 export interface RenderOptions {
-  /** Pixels per point (default 2). */
+  /** Pixels per point (default: 3 for small fragments, 2 otherwise — autoScale). */
   scale?: number;
   /** Lines of surrounding text above and below the marked lines (default 1). */
   contextLines?: number;
@@ -474,8 +512,14 @@ export interface RenderedImage {
   height: number;
 }
 
-async function paint(widthPt: number, top: number, bottom: number, scale: number, painters: Painter[], left = 0): Promise<RenderedImage> {
+/** Small fragments (a word in a cell) are drawn denser so thin strokes stay crisp. */
+export function autoScale(heightPt: number): number {
+  return heightPt <= 200 ? 3 : 2;
+}
+
+async function paint(widthPt: number, top: number, bottom: number, requested: number | undefined, painters: Painter[], left = 0): Promise<RenderedImage> {
   const height = Math.max(1, bottom - top);
+  const scale = requested ?? autoScale(height);
   const canvas = createCanvas(Math.ceil(widthPt * scale), Math.ceil(height * scale));
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = BG;
@@ -491,7 +535,7 @@ const measureCanvas = () => createCanvas(4, 4).getContext("2d");
 
 export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, options: RenderOptions = {}): Promise<RenderedImage> {
   ensureFonts();
-  const scale = options.scale ?? 2;
+  const scale = options.scale;
   const ctxLines = options.contextLines ?? 1;
   const wanted = new Set(item.strokeIds);
   const strokes = readStrokes(doc).filter((s) => wanted.has(s.id));

@@ -49,7 +49,7 @@ describe("handwriting PNG", () => {
     addTextStroke(doc, { id: "s2", blockId: p, start: 61, end: 67, hint: "circle", color: "ink.red", createdAt: 2 });
     const [item] = collectHandwriting(doc);
     expect(item!.description).toBe("подчёркнуто от руки: «сроки запуска»; обведено от руки: «бюджет»");
-    compare("text-underline-circle", (await renderHandwriting(doc, item!)).png);
+    compare("text-underline-circle", (await renderHandwriting(doc, item!, { scale: 2 })).png);
   });
 
   it("highlighter under text and a stroke split across lines", async () => {
@@ -59,7 +59,7 @@ describe("handwriting PNG", () => {
     addTextStroke(doc, { id: "s4", blockId: p, start: 140, end: 158, hint: "highlight", createdAt: 2 });
     const items = collectHandwriting(doc);
     expect(items).toHaveLength(1);
-    compare("text-highlight-multiline", (await renderHandwriting(doc, items[0]!)).png);
+    compare("text-highlight-multiline", (await renderHandwriting(doc, items[0]!, { scale: 2 })).png);
   });
 
   it("skips points on deleted text (D-35)", async () => {
@@ -69,7 +69,7 @@ describe("handwriting PNG", () => {
     applyEdits(doc, [{ op: "replace_text", blockId: p, find: " вся фраза", replace: "" }], { agentEdit: null });
     const [item] = collectHandwriting(doc);
     expect(item!.description).toBe("подчёркнуто от руки: «Подчёркнута целиком»");
-    compare("text-deleted-anchors", (await renderHandwriting(doc, item!)).png);
+    compare("text-deleted-anchors", (await renderHandwriting(doc, item!, { scale: 2 })).png);
     applyEdits(doc, [{ op: "delete", blockId: p }], { agentEdit: null });
     expect(collectHandwriting(doc)).toHaveLength(0);
   });
@@ -90,7 +90,7 @@ describe("handwriting PNG", () => {
     const items = collectHandwriting(doc);
     expect(items.map((i) => i.description)).toEqual(["заметка от руки на полях: «Короткий абзац с заметкой на полях.»", "рисунок от руки"]);
     expect(findBlock(doc, "0192f3c4-0000-7000-8000-00000000d0d0")).not.toBeNull();
-    compare("margin-note", (await renderHandwriting(doc, items[0]!)).png);
-    compare("drawing", (await renderHandwriting(doc, items[1]!)).png);
+    compare("margin-note", (await renderHandwriting(doc, items[0]!, { scale: 2 })).png);
+    compare("drawing", (await renderHandwriting(doc, items[1]!, { scale: 2 })).png);
   });
 });

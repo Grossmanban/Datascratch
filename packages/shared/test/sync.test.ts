@@ -7,6 +7,9 @@ import {
   SyncClient,
   generateKey,
   initCrypto,
+  encryptDocUpdate,
+  toBase64Url,
+  type SkippedUpdate,
   type SyncClientError,
   type SyncClientOptions,
   type SyncStatus,
@@ -474,5 +477,148 @@ describe("stored documents", () => {
     await fresh.client.addDoc(DOC, df);
     fresh.client.start();
     await until(() => df.getText("t").toString() === "xxxxxx");
+  });
+});
+
+describe("undecryptable items", () => {
+  /** Push an item sealed with `sealKey` straight into the hub (a buggy device). */
+  function pushRaw(
+    hub: MemorySyncHub,
+    sealKey: Uint8Array,
+    update: Uint8Array,
+    deviceId = "buggy-ios",
+  ) {
+    const d = hub.docs.get(DOC)!;
+    d.items.push({
+      seq: ++d.seq,
+      payload: toBase64Url(encryptDocUpdate(sealKey, DOC, update)),
+      deviceId,
+    });
+    return d.seq;
+  }
+  function updateOf(fn: (d: Y.Doc) => void, base?: Y.Doc): Uint8Array {
+    const d = new Y.Doc();
+    if (base) Y.applyUpdate(d, Y.encodeStateAsUpdate(base));
+    const sv = Y.encodeStateVector(d);
+    fn(d);
+    return Y.encodeStateAsUpdate(d, sv);
+  }
+
+  it("skips one bad item, applies the rest and advances the cursor", async () => {
+    const hub = new MemorySyncHub();
+    hub.registerDoc(DOC);
+    const src = new Y.Doc();
+    pushRaw(
+      hub,
+      key,
+      updateOf((d) => d.getText("a").insert(0, "one"), src),
+    );
+    const badSeq = pushRaw(
+      hub,
+      generateKey(),
+      updateOf((d) => d.getText("b").insert(0, "lost")),
+    );
+    pushRaw(
+      hub,
+      key,
+      updateOf((d) => d.getText("c").insert(0, "three")),
+    );
+    const r = makeClient(hub, "dev-r");
+    const skipped: SkippedUpdate[] = [];
+    r.client.on("skipped", (s) => skipped.push(s));
+    const dr = new Y.Doc();
+    await r.client.addDoc(DOC, dr);
+    r.client.start();
+    await until(() => r.client.isSynced(DOC));
+    expect(dr.getText("a").toString()).toBe("one");
+    expect(dr.getText("c").toString()).toBe("three");
+    expect(skipped).toEqual([
+      expect.objectContaining({
+        docId: DOC,
+        seq: badSeq,
+        deviceId: "buggy-ios",
+        kind: "update",
+        reason: "decrypt_failed",
+      }),
+    ]);
+    expect(r.client.getSkipped(DOC)).toHaveLength(1);
+    await r.client.flush();
+    expect((await r.storage.getDocState(DOC))!.lastSeq).toBe(3);
+    // Live updates after the bad one keep flowing.
+    const w = makeClient(hub, "dev-w");
+    const dw = new Y.Doc();
+    await w.client.addDoc(DOC, dw);
+    w.client.start();
+    await until(() => w.client.isSynced(DOC));
+    dw.getText("c").insert(0, ">");
+    await until(() => dr.getText("c").toString() === ">three");
+  });
+
+  it("tries alternate keys before skipping", async () => {
+    const hub = new MemorySyncHub();
+    hub.registerDoc(DOC);
+    const retired = generateKey();
+    pushRaw(
+      hub,
+      retired,
+      updateOf((d) => d.getText("t").insert(0, "old key")),
+    );
+    const r = makeClient(hub, "dev-r", { alternateKeysFor: () => [generateKey(), retired] });
+    const dr = new Y.Doc();
+    await r.client.addDoc(DOC, dr);
+    r.client.start();
+    await until(() => r.client.isSynced(DOC));
+    expect(dr.getText("t").toString()).toBe("old key");
+    expect(r.client.getSkipped()).toEqual([]);
+  });
+
+  it("skips corrupt updates of stored documents without touching the saved state", async () => {
+    const hub = new MemorySyncHub();
+    hub.registerDoc(DOC);
+    pushRaw(hub, key, new Uint8Array([1, 2, 3, 4, 5])); // decrypts, but is not a Yjs update
+    pushRaw(
+      hub,
+      key,
+      updateOf((d) => d.getText("t").insert(0, "ok")),
+    );
+    let saved: Uint8Array | null = null;
+    const r = makeClient(hub, "dev-r", {
+      storedDocs: {
+        onUpdates: (_id, ups) => {
+          saved = Y.mergeUpdates(saved ? [saved, ...ups] : ups);
+        },
+        loadState: () => saved,
+      },
+    });
+    await r.client.addStoredDocs([DOC]);
+    r.client.start();
+    await until(() => r.client.isSynced(DOC));
+    const d = new Y.Doc();
+    Y.applyUpdate(d, saved!);
+    expect(d.getText("t").toString()).toBe("ok");
+    expect(r.client.getSkipped(DOC)[0]).toMatchObject({ seq: 1, reason: "apply_failed" });
+  });
+
+  it("recovers skipped content from the server's latest snapshot", async () => {
+    const hub = new MemorySyncHub({ preferSnapshot: true });
+    hub.registerDoc(DOC);
+    const truth = new Y.Doc();
+    const good = updateOf((d) => d.getText("t").insert(0, "hello"), truth);
+    Y.applyUpdate(truth, good);
+    pushRaw(hub, generateKey(), good); // the only copy the reader sees first is unreadable
+    const r = makeClient(hub, "dev-r", { recoverSkippedFromSnapshot: true });
+    // Meanwhile a healthy device uploads a snapshot covering the bad seq.
+    r.client.on("skipped", () => {
+      const d = hub.docs.get(DOC)!;
+      d.snapshot = {
+        seq: d.seq,
+        payload: toBase64Url(encryptDocUpdate(key, DOC, Y.encodeStateAsUpdate(truth))),
+      };
+    });
+    const dr = new Y.Doc();
+    await r.client.addDoc(DOC, dr);
+    r.client.start();
+    await until(() => dr.getText("t").toString() === "hello");
+    expect(r.client.getSkipped(DOC)).toHaveLength(1);
   });
 });

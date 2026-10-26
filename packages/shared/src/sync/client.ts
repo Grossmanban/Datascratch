@@ -52,7 +52,7 @@ const WS_OPEN = 1;
 export type SyncStatus = "idle" | "connecting" | "online" | "offline" | "unauthorized" | "stopped";
 
 export interface SyncClientError {
-  code: SyncErrorCode | "decrypt_failed" | "apply_failed" | "too_large";
+  code: SyncErrorCode | "decrypt_failed" | "apply_failed" | "too_large" | "key_missing";
   message: string;
   docId?: string;
   ref?: string;
@@ -67,7 +67,14 @@ export interface SyncClientOptions {
   client: { platform: ClientPlatform; version: string };
   storage: SyncStorage;
   /** Encryption key of a document (masterKey / notebookKey / noteKey). */
-  keyFor: (docId: string) => Uint8Array | Promise<Uint8Array>;
+  /**
+   * Encryption key of a document. Return null (or throw KeyUnavailableError)
+   * when the key is not known yet: the document then pauses without losing
+   * anything, until `keyAvailable(docId)`.
+   */
+  keyFor: (docId: string) => Uint8Array | null | Promise<Uint8Array | null>;
+  /** Report `key_missing` when a paused document waits longer than this. Default 30 s. */
+  missingKeyReportMs?: number;
   /**
    * Retired or alternate keys tried when `keyFor` cannot decrypt an item
    * (e.g. after a key rotation or a client that sealed with a wrong key).
@@ -96,6 +103,23 @@ export interface SyncClientOptions {
   random?: () => number;
 }
 
+/**
+ * Thrown (or signalled by returning null) from `keyFor` when the key of a
+ * document is not known *yet* — e.g. a note moved into a notebook whose index
+ * has not synced. The document pauses instead of skipping; call
+ * `keyAvailable(docId)` once the key is there.
+ */
+export class KeyUnavailableError extends Error {
+  override readonly name = "KeyUnavailableError";
+  constructor(readonly docId: string) {
+    super(`key of ${docId} is not available yet`);
+  }
+}
+
+class MissingKey {}
+
+const PAUSED = Symbol("paused");
+
 /** A server item this client could not use (wrong key, corrupt data). */
 export interface SkippedUpdate {
   docId: string;
@@ -110,6 +134,8 @@ export interface SkippedUpdate {
 
 interface Listeners {
   status: (status: SyncStatus) => void;
+  /** A document paused because its key is not available yet. */
+  keyMissing: (docId: string) => void;
   /** An item was skipped; the rest of the document keeps syncing. */
   skipped: (item: SkippedUpdate) => void;
   synced: (docId: string) => void;
@@ -138,6 +164,8 @@ interface DocEntry {
   doc: Y.Doc | null;
   /** Remote updates of a stored document not yet handed to the app. */
   stored: Uint8Array[];
+  /** Waiting for its key: nothing is applied or skipped, the cursor stays. */
+  paused: { since: number; timer: ReturnType<typeof setTimeout> | null } | null;
   state: DocSyncState;
   synced: boolean;
   pending: Uint8Array[];
@@ -169,6 +197,7 @@ export class SyncClient {
     awareness: new Set(),
     remoteUpdate: new Set(),
     skipped: new Set(),
+    keyMissing: new Set(),
   };
   private readonly skippedLog = new Map<string, SkippedUpdate[]>();
   private readonly recoveryTried = new Set<string>();
@@ -190,6 +219,7 @@ export class SyncClient {
   constructor(options: SyncClientOptions) {
     this.opts = {
       batchMs: 30,
+      missingKeyReportMs: 30_000,
       stateFlushMs: 200,
       maxAuthFailures: 3,
       random: Math.random,
@@ -339,6 +369,7 @@ export class SyncClient {
       const entry: DocEntry = {
         doc: null,
         stored: [],
+        paused: null,
         state: states.get(docId) ?? { ...EMPTY_DOC_STATE },
         synced: false,
         pending: [],
@@ -385,6 +416,49 @@ export class SyncClient {
     if (this.welcomed) this.send({ type: "unsubscribe", docIds: [docId] });
   }
 
+  /**
+   * The key of a paused document is now available: resume from the last
+   * applied seq (nothing was skipped while it waited). Queued local edits are
+   * sent too. Safe to call for documents that are not paused.
+   */
+  async keyAvailable(docId: string): Promise<void> {
+    const entry = this.docs.get(docId);
+    if (!entry) return;
+    await this.serial(async () => {
+      if (entry.paused) {
+        if (entry.paused.timer) clearTimeout(entry.paused.timer);
+        entry.paused = null;
+        if (this.welcomed) {
+          this.send({ type: "subscribe", docs: [{ docId, since: entry.state.lastSeq }] });
+        }
+      }
+      await this.enqueuePending(docId, entry);
+    });
+  }
+
+  /**
+   * Fetch skipped items of a document again (e.g. after the host learned a
+   * retired key and returns it from `alternateKeysFor`). Returns false when
+   * nothing was skipped. Items that fail again are logged again.
+   */
+  async retrySkipped(docId: string): Promise<boolean> {
+    const entry = this.docs.get(docId);
+    const log = this.skippedLog.get(docId);
+    if (!entry || !log || log.length === 0) return false;
+    const since = Math.max(0, Math.min(...log.map((s) => s.seq)) - 1);
+    this.skippedLog.delete(docId);
+    this.recoveryTried.delete(docId);
+    await this.serial(async () => {
+      // Re-applying already applied updates is harmless (CRDT).
+      if (this.welcomed) this.send({ type: "subscribe", docs: [{ docId, since }] });
+    });
+    return true;
+  }
+
+  isPaused(docId: string): boolean {
+    return this.docs.get(docId)?.paused != null;
+  }
+
   /** Items skipped for a document (or all documents) since this client started. */
   getSkipped(docId?: string): SkippedUpdate[] {
     if (docId) return [...(this.skippedLog.get(docId) ?? [])];
@@ -399,7 +473,8 @@ export class SyncClient {
   async sendAwareness(docId: string, update: Uint8Array): Promise<void> {
     // Presence only makes sense for documents open on this device.
     if (!this.welcomed || !this.docs.get(docId)?.doc) return;
-    const key = await this.opts.keyFor(docId);
+    const key = await this.getKey(docId);
+    if (!key) return;
     this.send({
       type: "awareness",
       docId,
@@ -651,23 +726,38 @@ export class SyncClient {
       }
       case "updates": {
         const entry = this.docs.get(msg.docId);
-        if (!entry) return;
+        // Paused documents ignore the stream; it is re-read from lastSeq on resume.
+        if (!entry || entry.paused) return;
         const skippedBefore = this.skippedLog.get(msg.docId)?.length ?? 0;
+        let paused = false;
         if (msg.snapshot) {
           const ref = { seq: msg.snapshot.seq, deviceId: null, kind: "snapshot" as const };
-          if (await this.applyRemote(msg.docId, entry, msg.snapshot.payload, ref)) {
-            entry.state.updatesSinceSnapshot = 0;
-            entry.state.bytesSinceSnapshot = 0;
+          const r = await this.applyRemote(msg.docId, entry, msg.snapshot.payload, ref);
+          if (r === PAUSED) paused = true;
+          else {
+            if (r) {
+              entry.state.updatesSinceSnapshot = 0;
+              entry.state.bytesSinceSnapshot = 0;
+            }
+            entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.snapshot.seq);
           }
-          entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.snapshot.seq);
         }
         for (const item of msg.items) {
+          if (paused) break;
           const ref = { seq: item.seq, deviceId: item.deviceId, kind: "update" as const };
           const size = await this.applyRemote(msg.docId, entry, item.payload, ref);
+          if (size === PAUSED) {
+            paused = true;
+            break;
+          }
           this.count(entry, size);
           entry.state.lastSeq = Math.max(entry.state.lastSeq, item.seq);
         }
         await this.flushStored(msg.docId, entry);
+        if (paused) {
+          this.markDirty(msg.docId);
+          return;
+        }
         this.markDirty(msg.docId);
         if (msg.upToDate && !entry.synced) {
           entry.synced = true;
@@ -689,9 +779,10 @@ export class SyncClient {
       }
       case "update": {
         const entry = this.docs.get(msg.docId);
-        if (!entry) return;
+        if (!entry || entry.paused) return;
         const ref = { seq: msg.seq, deviceId: msg.deviceId, kind: "update" as const };
         const size = await this.applyRemote(msg.docId, entry, msg.payload, ref);
+        if (size === PAUSED) return;
         this.count(entry, size);
         entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.seq);
         await this.flushStored(msg.docId, entry);
@@ -719,7 +810,8 @@ export class SyncClient {
       case "awareness": {
         if (!this.docs.get(msg.docId)?.doc) return;
         try {
-          const key = await this.opts.keyFor(msg.docId);
+          const key = await this.getKey(msg.docId);
+          if (!key) return;
           const payload = decryptAwareness(key, msg.docId, fromBase64Url(msg.payload));
           for (const fn of this.listeners.awareness) fn(msg.docId, payload, msg.deviceId);
         } catch {
@@ -782,11 +874,16 @@ export class SyncClient {
     entry: DocEntry,
     payload: string,
     ref: { seq: number; deviceId: string | null; kind: "update" | "snapshot" },
-  ): Promise<number> {
+  ): Promise<number | typeof PAUSED> {
     let update: Uint8Array;
     try {
       update = await this.decrypt(docId, payload);
     } catch (e) {
+      if (e instanceof MissingKey) {
+        // No key yet is not corruption: wait for it instead of losing the update.
+        this.pause(docId, entry);
+        return PAUSED;
+      }
       this.skip(docId, ref, "decrypt_failed", e);
       return 0;
     }
@@ -812,10 +909,37 @@ export class SyncClient {
     return update.length;
   }
 
+  /** keyFor, with "not available yet" normalized to null. */
+  private async getKey(docId: string): Promise<Uint8Array | null> {
+    try {
+      return (await this.opts.keyFor(docId)) ?? null;
+    } catch (e) {
+      if (e instanceof KeyUnavailableError) return null;
+      throw e;
+    }
+  }
+
+  private pause(docId: string, entry: DocEntry): void {
+    if (entry.paused) return;
+    const timer = setTimeout(() => {
+      if (entry.paused) {
+        this.emitError({
+          code: "key_missing",
+          message: `waiting for the key of ${docId} for over ${this.opts.missingKeyReportMs} ms`,
+          docId,
+        });
+      }
+    }, this.opts.missingKeyReportMs);
+    entry.paused = { since: Date.now(), timer };
+    for (const fn of this.listeners.keyMissing) fn(docId);
+  }
+
   private async decrypt(docId: string, payload: string): Promise<Uint8Array> {
     const envelope = fromBase64Url(payload);
+    const key = await this.getKey(docId);
     try {
-      return decryptDocUpdate(await this.opts.keyFor(docId), docId, envelope);
+      if (!key) throw new MissingKey();
+      return decryptDocUpdate(key, docId, envelope);
     } catch (first) {
       for (const key of (await this.opts.alternateKeysFor?.(docId)) ?? []) {
         try {
@@ -898,7 +1022,14 @@ export class SyncClient {
         await this.enqueueSnapshot(docId, entry, true);
         return;
       }
-      const key = await this.opts.keyFor(docId);
+      const key = await this.getKey(docId);
+      if (!key) {
+        // Keep local edits until the key is known (keyAvailable flushes them).
+        entry.pending = [update, ...entry.pending];
+        entry.pendingBytes += update.length;
+        this.pause(docId, entry);
+        return;
+      }
       const item: OutboxItem = {
         clientMsgId: uuidv7(),
         docId,
@@ -942,7 +1073,8 @@ export class SyncClient {
       this.emitError({ code: "too_large", message: "document exceeds the snapshot limit", docId });
       return;
     }
-    const key = await this.opts.keyFor(docId);
+    const key = await this.getKey(docId);
+    if (!key) return;
     const item: OutboxItem = {
       clientMsgId: uuidv7(),
       docId,

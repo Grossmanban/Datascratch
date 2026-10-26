@@ -287,6 +287,18 @@ final class CoreLibrary: LibraryBackend {
         var carried: [CarriedNotebook] = []
         for record in orphans {
             let local = AccountDocument(try Self.open(.account, docId: record.docId, notebookId: nil, store: store))
+            // A device library with nothing but untouched first-run content is not carried: it
+            // would add a second «Personal»/«Work» to an account that has its own (prod 2026-10-26).
+            if holdsOnlyFirstRunContent(local) {
+                for ref in local.notebooks() where account.notebook(id: ref.id) == nil {
+                    let notebook = NotebookDocument(try Self.open(.notebook, docId: ref.id, notebookId: ref.id, store: store))
+                    for meta in notebook.notes(includeTrashed: true) { try store.deleteDocument(meta.id) }
+                    try store.deleteDocument(ref.id)
+                    notebookDocs[ref.id] = nil
+                }
+                try store.deleteDocument(record.docId)
+                continue
+            }
             let haveSpaces = Set(account.spaces().map(\.id))
             for space in local.spaces() where !haveSpaces.contains(space.id) { try account.putSpace(space) }
             let haveNotebooks = Set(account.notebooks().map(\.id))
@@ -389,6 +401,26 @@ final class CoreLibrary: LibraryBackend {
             try? store.appendLocalUpdate(docId: ref.id, update: state, origin: .local)
         }
         try? store.setString("done", for: Self.resentNotebookStatesKey)
+    }
+
+    /// Only what first-run seeding writes: no folders, untouched welcome notes, empty Inboxes.
+    private func holdsOnlyFirstRunContent(_ local: AccountDocument) -> Bool {
+        guard local.spaces().allSatisfy({ LibraryStore.firstRunKey($0.name).hasPrefix("first-run.") }),
+              local.notebooks().allSatisfy({ LibraryStore.firstRunKey($0.name) == "first-run.notes" }) else { return false }
+        for ref in local.notebooks() {
+            guard let notebook = try? NotebookDocument(Self.open(.notebook, docId: ref.id, notebookId: ref.id, store: store)),
+                  notebook.folders().isEmpty else { return false }
+            for meta in notebook.notes(includeTrashed: true) {
+                guard let note = try? NoteDocument(Self.open(.note, docId: meta.id, notebookId: ref.id, store: store)) else { return false }
+                let body = NoteBodyCodec.body(from: (try? note.blocks()) ?? [])
+                switch meta.kind {
+                case .inbox: if body.blocks.contains(where: { !$0.text.isEmpty }) { return false }
+                case .note: if meta.isTrashed || !LibraryStore.isFirstRunWelcome(title: meta.title, body: body) { return false }
+                case .daily: return false
+                }
+            }
+        }
+        return true
     }
 
     /// Notebooks of the account that never reached the server (their documents are not registered).

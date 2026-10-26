@@ -247,6 +247,42 @@ struct CoreLibraryTests {
         #expect(Set(library.data.notes.map(\.id)) == notes)
     }
 
+    /// Prod 2026-10-26: a device library with only untouched first-run content added a second
+    /// «Personal»/«Work» to the account on sign-in. It is no longer carried.
+    @Test func untouchedFirstRunLibraryIsNotCarried() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        library.seedIfEmpty()
+        let localAccount = core.account.accountDocId
+        let seeded = library.data.notebooks.map(\.id)
+
+        try keys.setMasterKey(DSCrypto.newKey())
+        let carried = try core.adoptAccount(docId: DSCore.EntityID.make(), isNew: false)
+        #expect(carried.isEmpty)
+        #expect(library.spaces.isEmpty)
+        #expect(try store.document(localAccount) == nil)
+        for id in seeded { #expect(try store.document(id) == nil) }
+    }
+
+    /// The same first-run spaces seeded in English and in Russian are one space.
+    @Test func firstRunSpacesMergeAcrossLanguages() throws {
+        let library = LibraryStore(backend: try CoreLibrary.inMemory())
+        let russian = library.createSpace(name: "Личное")
+        let mine = library.createNotebook(in: russian.id, name: "Заметки", mode: .private)
+        let note = library.createNote(in: mine.id, folder: nil, title: "Моя заметка")
+        let english = library.createSpace(name: "Personal")
+        let twin = library.createNotebook(in: english.id, name: "Notes", mode: .private)
+        _ = library.createSpace(name: "Работа")
+        _ = library.createSpace(name: "Work")
+
+        library.mergeCarriedDuplicates(anyName: false)
+        #expect(library.spaces.count == 2, "spaces: \(library.spaces.map(\.name))")
+        #expect(library.notebook(twin.id) == nil)
+        #expect(library.note(note.id)?.notebookId == mine.id)
+    }
+
     /// Build 5 signed up without carrying: the new account got first-run content of its own, the
     /// device library stayed behind. The next launch carries it in and merges what doubled up.
     @Test func carryingAfterAnEarlierSignUpLeavesNoDuplicates() throws {

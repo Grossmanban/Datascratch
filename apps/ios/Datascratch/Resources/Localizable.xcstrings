@@ -91,6 +91,16 @@
         }
       }
     },
+    "Account & Security": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Аккаунт и безопасность"
+          }
+        }
+      }
+    },
     "Actions of this agent will appear here.": {
       "localizations": {
         "ru": {
@@ -207,6 +217,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Любой, у кого есть ссылка, откроет её в браузере без аккаунта. Ключ шифрования — часть ссылки после «#», он никогда не отправляется на сервер. Ссылка действует, пока вы её не отзовёте."
+          }
+        }
+      }
+    },
+    "App": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приложение"
           }
         }
       }
@@ -337,6 +357,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сменить пароль"
+          }
+        }
+      }
+    },
+    "Check": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверить"
           }
         }
       }
@@ -601,6 +631,16 @@
         }
       }
     },
+    "Create Note": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создать заметку"
+          }
+        }
+      }
+    },
     "Create a notebook for work": {
       "localizations": {
         "ru": {
@@ -691,6 +731,26 @@
         }
       }
     },
+    "Delete Data": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить данные"
+          }
+        }
+      }
+    },
+    "Delete Data from This Device": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить данные с этого устройства"
+          }
+        }
+      }
+    },
     "Delete Folder": {
       "localizations": {
         "ru": {
@@ -757,6 +817,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Удалить навсегда документы: %lld?"
+          }
+        }
+      }
+    },
+    "Delete everything on this device?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить всё с этого устройства?"
           }
         }
       }
@@ -1141,6 +1211,16 @@
         }
       }
     },
+    "Font for New Documents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Шрифт новых документов"
+          }
+        }
+      }
+    },
     "For example, Claude on my Mac": {
       "localizations": {
         "ru": {
@@ -1317,6 +1397,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Заголовок 3"
+          }
+        }
+      }
+    },
+    "Hide Keyboard": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрыть клавиатуру"
           }
         }
       }
@@ -1551,16 +1641,6 @@
         }
       }
     },
-    "Member since": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "С нами с"
-          }
-        }
-      }
-    },
     "Mono": {
       "localizations": {
         "ru": {
@@ -1701,16 +1781,6 @@
         }
       }
     },
-    "New documents": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Новые документы"
-          }
-        }
-      }
-    },
     "New password": {
       "localizations": {
         "ru": {
@@ -1777,6 +1847,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Документов пока нет"
+          }
+        }
+      }
+    },
+    "No note called “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заметки «%@» нет"
           }
         }
       }
@@ -1967,6 +2047,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Заметки, где перо живёт прямо в тексте.\nПомечайте слова Apple Pencil — чернила едут вместе с ними."
+          }
+        }
+      }
+    },
+    "Notes, keys and unsent changes are removed from this device. What reached the server stays in your account.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заметки, ключи и неотправленные изменения будут удалены с этого устройства. То, что уже дошло до сервера, останется в аккаунте."
           }
         }
       }
@@ -2177,6 +2267,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Бумага"
+          }
+        }
+      }
+    },
+    "Paper for New Documents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Бумага новых документов"
           }
         }
       }
@@ -2471,6 +2571,16 @@
         }
       }
     },
+    "Remove and Sign In": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить и войти"
+          }
+        }
+      }
+    },
     "Remove from Starred": {
       "localizations": {
         "ru": {
@@ -2637,6 +2747,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Найдите документ или введите команду"
+          }
+        }
+      }
+    },
+    "Security": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Безопасность"
           }
         }
       }
@@ -2841,6 +2961,16 @@
         }
       }
     },
+    "Sign in to another account?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войти в другой аккаунт?"
+          }
+        }
+      }
+    },
     "Sign in with your email and password.": {
       "localizations": {
         "ru": {
@@ -2887,6 +3017,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Выход на устройстве сразу отключает его доступ."
+          }
+        }
+      }
+    },
+    "Signing in to another account removes this device's notes of the previous account.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вход в другой аккаунт удалит с этого устройства заметки прежнего аккаунта."
           }
         }
       }
@@ -3201,6 +3341,16 @@
         }
       }
     },
+    "The notes of the previous account, including unsent changes, will be removed from this device.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заметки прежнего аккаунта, включая неотправленные изменения, будут удалены с этого устройства."
+          }
+        }
+      }
+    },
     "The old key no longer works. Save this one in a password manager or on paper.": {
       "localizations": {
         "ru": {
@@ -3437,6 +3587,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Отменить"
+          }
+        }
+      }
+    },
+    "Unsent changes kept on this device: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неотправленные изменения сохранены на этом устройстве: %lld"
           }
         }
       }

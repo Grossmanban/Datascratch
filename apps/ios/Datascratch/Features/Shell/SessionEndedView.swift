@@ -9,6 +9,14 @@ struct SessionEndedView: View {
     @State private var password = ""
     @State private var error: String?
     @State private var isWorking = false
+    @State private var confirmOtherAccount = false
+    @State private var confirmDelete = false
+
+    /// The typed e-mail is not the account this device was signed out of.
+    private var isOtherAccount: Bool {
+        guard let previous = app.accounts.signedOutEmail, !email.isEmpty else { return false }
+        return Credentials.normalizedEmail(email) != previous
+    }
 
     var body: some View {
         NavigationStack {
@@ -38,9 +46,32 @@ struct SessionEndedView: View {
                             .onSubmit(submit)
                             .accessibilityIdentifier("sessionEnded.password")
                     }
+                    if app.sync.pendingChanges > 0 {
+                        Label {
+                            Text("Unsent changes kept on this device: \(app.sync.pendingChanges)")
+                        } icon: {
+                            Image(systemName: "tray.full")
+                        }
+                        .font(Theme.Typography.footnote)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .accessibilityIdentifier("sessionEnded.unsent")
+                    }
+                    if isOtherAccount {
+                        Text("Signing in to another account removes this device's notes of the previous account.")
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Palette.danger)
+                            .accessibilityIdentifier("sessionEnded.otherAccount")
+                    }
                     ErrorText(message: error)
-                    PrimaryButton(title: "Sign In", isWorking: isWorking, isDisabled: email.isEmpty || password.isEmpty) { submit() }
-                        .accessibilityIdentifier("sessionEnded.signIn")
+                    PrimaryButton(title: "Sign In", isWorking: isWorking, isDisabled: email.isEmpty || password.isEmpty) {
+                        if isOtherAccount { confirmOtherAccount = true } else { submit() }
+                    }
+                    .accessibilityIdentifier("sessionEnded.signIn")
+                    Button("Delete Data from This Device", role: .destructive) { confirmDelete = true }
+                        .font(Theme.Typography.footnote)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, Theme.Space.s4)
+                        .accessibilityIdentifier("sessionEnded.deleteData")
                 }
                 .padding(Theme.Space.s5)
             }
@@ -52,6 +83,21 @@ struct SessionEndedView: View {
             }
         }
         .onAppear { if email.isEmpty { email = app.accounts.account?.email ?? "" } }
+        .confirmationDialog("Sign in to another account?", isPresented: $confirmOtherAccount, titleVisibility: .visible) {
+            Button("Remove and Sign In", role: .destructive) { submit() }
+        } message: {
+            Text("The notes of the previous account, including unsent changes, will be removed from this device.")
+        }
+        .confirmationDialog("Delete everything on this device?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete Data", role: .destructive) {
+                Task {
+                    await app.accounts.deleteLocalData()
+                    dismiss()
+                }
+            }
+        } message: {
+            Text("Notes, keys and unsent changes are removed from this device. What reached the server stays in your account.")
+        }
     }
 
     private func submit() {

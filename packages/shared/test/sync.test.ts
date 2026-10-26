@@ -600,7 +600,7 @@ describe("undecryptable items", () => {
   });
 
   it("recovers skipped content from the server's latest snapshot", async () => {
-    const hub = new MemorySyncHub({ preferSnapshot: true });
+    const hub = new MemorySyncHub();
     hub.registerDoc(DOC);
     const truth = new Y.Doc();
     const good = updateOf((d) => d.getText("t").insert(0, "hello"), truth);

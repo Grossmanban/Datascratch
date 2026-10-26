@@ -84,6 +84,8 @@ final class NativeEditorModel {
     var isAskingForLink = false
     /// The open "/" menu, if any.
     var slashMenu: SlashMenuState?
+    /// A pen palette tap not yet applied to the editor's tools (they change a turn later).
+    var pendingPenSelection: DSPenSelection?
     @ObservationIgnored private var keyboardObservers: [NSObjectProtocol] = []
 
     isolated deinit {
@@ -680,12 +682,17 @@ struct PenPalette: View {
             .accessibilityIdentifier("penPalette")
     }
 
+    /// The toolbar reads a value, not the tool object: right after a tap the editor's tools
+    /// change on the next run-loop turn, so the tapped selection is shown until they have.
     private func selection(_ tools: InkToolState) -> Binding<DSPenSelection> {
-        Binding(get: { Self.selection(from: tools) }, set: { new in apply(new, to: tools) })
+        let current = model.pendingPenSelection ?? Self.selection(from: tools)
+        return Binding(get: { current }, set: { new in apply(new, to: tools) })
     }
 
     private func apply(_ new: DSPenSelection, to tools: InkToolState) {
         let old = Self.selection(from: tools)
+        model.pendingPenSelection = new
+        DispatchQueue.main.async { DispatchQueue.main.async { model.pendingPenSelection = nil } }
         let mode = Self.mode(for: new)
         if mode != tools.mode { model.select(mode) }
         if new.drawWithFinger != old.drawWithFinger {

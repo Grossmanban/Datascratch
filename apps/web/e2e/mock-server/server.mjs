@@ -109,6 +109,13 @@ const route = (method, pattern, handler) => {
 
 route("GET", "/v1/health", (_q, res) => json(res, 200, { ok: true, version: "mock" }));
 
+// Test control: refuse every push with `internal` (the sync indicator's «Не отправлено» state).
+let refusePushes = false;
+route("POST", "/v1/__test/refuse-pushes", (_q, res, { body }) => {
+  refusePushes = !!body.on;
+  json(res, 200, { refusePushes });
+});
+
 route("POST", "/v1/auth/prelogin", (_q, res, { body }) => {
   const u = db.users.get(String(body.email ?? "").toLowerCase());
   if (u) return json(res, 200, { salt: u.salt, kdf: u.kdf });
@@ -502,6 +509,7 @@ wss.on("connection", (ws) => {
         const d = db.docs.get(m.docId);
         if (!canAccess(d)) return send({ type: "error", code: "doc_not_found", message: "unknown doc", ref: m.clientMsgId });
         if (c.shareId && c.permission !== "edit") return send({ type: "error", code: "forbidden", message: "view only", ref: m.clientMsgId });
+        if (refusePushes) return send({ type: "error", code: "internal", message: "refused by the test", ref: m.clientMsgId });
         const seq = (d.items[d.items.length - 1]?.seq ?? d.snapshot?.seq ?? 0) + 1;
         if (m.type === "snapshot") {
           d.snapshot = { seq: m.baseSeq, payload: m.payload };

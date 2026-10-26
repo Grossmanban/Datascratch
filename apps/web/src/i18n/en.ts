@@ -168,6 +168,10 @@ const en: Loose<Messages> = {
     count_other: "{{count}} tabs",
   },
   docs: {
+    filterPlaceholder: "Search this list",
+    filterClear: "Clear search",
+    noMatches: "Nothing found",
+    noMatchesHint: "Try other words, or search the whole space with ⌘K.",
     emptyTitle: "Nothing here yet",
     emptyText: "Create your first document — write, draw, add tasks.",
     emptyFolder: "This folder is empty",

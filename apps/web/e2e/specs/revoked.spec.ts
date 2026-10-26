@@ -70,3 +70,43 @@ test("after a revocation the local data can be deleted from the login screen", a
   await expect(page.getByTestId("login-form")).toBeVisible();
   await expect(page.getByTestId("revoked-notice")).toHaveCount(0);
 });
+
+test("signing out with unsent changes warns, keeps them, and sends them after signing in again (spec/07)", async ({ page, browser, request }) => {
+  test.skip(!!process.env.E2E_SERVER_URL, "mock server only (it refuses pushes on request)");
+  const email = uniqueEmail("signout-unsent");
+  await signUp(page, email);
+  await newDoc(page, "Перед выходом", "Первая строка");
+  await expectSynced(page);
+  const noteUrl = page.url();
+
+  await request.post(`${MOCK}/v1/__test/refuse-pushes`, { data: { on: true } });
+  try {
+    await page.keyboard.type(" и правка до выхода");
+    await expect(page.getByTestId("sync-status")).toHaveAttribute("data-status", "not-sent", { timeout: 15_000 });
+    await page.goto("/settings/account");
+    await page.getByTestId("sign-out").click();
+    const dialog = page.getByRole("alertdialog").or(page.getByRole("dialog"));
+    await expect(dialog).toContainText(/неотправленн.*отправ.* после входа в этот же аккаунт/);
+    // «Сначала отправить» keeps the session.
+    await dialog.getByRole("button", { name: "Сначала отправить" }).click();
+    await expect(page.getByTestId("sign-out")).toBeVisible();
+    await page.getByTestId("sign-out").click();
+    await page.getByRole("alertdialog").or(page.getByRole("dialog")).getByRole("button", { name: "Выйти" }).click();
+  } finally {
+    await request.post(`${MOCK}/v1/__test/refuse-pushes`, { data: { on: false } });
+  }
+
+  await page.waitForURL("**/login**", { timeout: 20_000 });
+  await expect(page.getByTestId("revoked-notice")).toContainText("Неотправленные изменения сохранены");
+  await page.getByTestId("login-form").locator("input[type=password]").fill("correct horse battery staple");
+  await page.getByTestId("login-form").locator("button[type=submit]").click();
+  await page.waitForURL("**/all", { timeout: 20_000 });
+  await expectSynced(page);
+
+  const other = await browser.newContext();
+  const q = await other.newPage();
+  await signIn(q, email);
+  await q.goto(noteUrl.replace(/^https?:\/\/[^/]+/, ""));
+  await expect(q.locator(".ds-prose")).toContainText("Первая строка и правка до выхода", { timeout: 20_000 });
+  await other.close();
+});

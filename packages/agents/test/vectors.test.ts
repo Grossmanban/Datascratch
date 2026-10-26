@@ -58,7 +58,7 @@ describe("stroke layout vectors", () => {
     it(`matches the reference layout, ${c.perLine} chars per line`, () => {
       const { doc, block, stroke } = setup();
       expect(block.toString()).toContain(v.textBefore);
-      const segs = textSegments(doc, stroke, block, referenceLayout(v.textBefore.length, c.perLine), 0);
+      const segs = textSegments(doc, stroke, block, referenceLayout(v.textBefore.length, c.perLine), 0, false);
       expect(round(segs)).toEqual(c.segments);
     });
   }
@@ -66,7 +66,7 @@ describe("stroke layout vectors", () => {
   it("drops points on a deleted character", () => {
     const { doc, block, stroke } = setup();
     (block.get(0) as Y.XmlText).delete(4, 1);
-    const segs = textSegments(doc, stroke, block, referenceLayout(v.textBefore.length - 1, 1000), 0);
+    const segs = textSegments(doc, stroke, block, referenceLayout(v.textBefore.length - 1, 1000), 0, false);
     expect(round(segs)).toEqual(v.afterDeletingIndex4.segments);
   });
 });

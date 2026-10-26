@@ -31,7 +31,18 @@ export function setTokenSource(source: TokenSource | null) {
   tokens = source;
 }
 
-type RequestOptions = { auth?: boolean; body?: unknown; signal?: AbortSignal; raw?: boolean };
+type RequestOptions = {
+  auth?: boolean;
+  body?: unknown;
+  signal?: AbortSignal;
+  raw?: boolean;
+  /**
+   * The write is safe to repeat (it sets a state, e.g. a notebook's mode): retried after a network
+   * failure like a GET. Safari does not repeat a write itself when it went out on a connection the
+   * server had already closed, and reports «Load failed».
+   */
+  retry?: boolean;
+};
 
 /**
  * From some networks a share of new HTTPS connections hangs in the TLS handshake. A request that
@@ -50,7 +61,7 @@ class TimeoutError extends Error {
 }
 
 async function doFetch(method: string, path: string, opts: RequestOptions, accessToken?: string): Promise<Response> {
-  const idempotent = method === "GET" || method === "HEAD";
+  const idempotent = method === "GET" || method === "HEAD" || !!opts.retry;
   for (let attempt = 0; ; attempt++) {
     try {
       return await fetchOnce(method, path, opts, accessToken);
@@ -109,6 +120,7 @@ async function fetchOnce(method: string, path: string, opts: RequestOptions, acc
   } catch (e) {
     // The caller's own abort stays an abort; our timeout is a network failure.
     if (opts.signal?.aborted) throw e;
+    console.warn(`[ds] ${method} ${path} failed:`, (e as Error)?.name, (e as Error)?.message ?? e);
     throw new NetworkError(e);
   } finally {
     clearTimeout(timer);

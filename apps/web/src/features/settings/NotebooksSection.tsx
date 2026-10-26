@@ -26,7 +26,11 @@ export function NotebooksSection() {
       await setNotebookMode(switching.nb.id, switching.to);
       setSwitching(null);
     } catch (e) {
-      toast(e instanceof NetworkError ? t("common.requiresOnline") : String((e as Error).message), { tone: "danger" });
+      console.warn("[ds] notebook mode change failed", e, (e as { cause?: unknown }).cause);
+      // The confirmation stays open: its button is the retry.
+      toast(e instanceof NetworkError ? t("notebook.modeNotChangedOffline") : t("notebook.modeNotChanged", { reason: (e as Error).message }), {
+        tone: "danger",
+      });
     } finally {
       setBusy(false);
     }

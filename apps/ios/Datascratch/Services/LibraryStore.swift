@@ -559,10 +559,18 @@ final class LibraryStore {
     /// After the library made on this device was carried into the account (D-43) on top of the
     /// first-run content the account got at sign-up: one space per name (notebooks move into
     /// it), no second notebook of a name that holds only first-run content, one welcome note.
-    func mergeCarriedDuplicates() {
+    /// Idempotent; runs on every start, since build 6 carried without merging. Without a fresh
+    /// carry (`anyName == false`) only spaces named like the first-run ones merge, so spaces a
+    /// person named alike on purpose stay apart.
+    func mergeCarriedDuplicates(anyName: Bool = true) {
         let key = { (name: String) in name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-        for (_, spaces) in Dictionary(grouping: data.spaces, by: { key($0.name) }) where spaces.count > 1 {
-            let ordered = spaces.sorted { ($0.order, $0.id) < ($1.order, $1.id) }
+        let firstRunNames = Set([String(localized: "Personal"), String(localized: "Work"), "Personal", "Work", "Личное", "Работа"].map(key))
+        for (name, spaces) in Dictionary(grouping: data.spaces, by: { key($0.name) })
+        where spaces.count > 1 && (anyName || firstRunNames.contains(name)) {
+            // Keep the space holding the most notebooks: the fewest moves.
+            let ordered = spaces.sorted {
+                (-notebooks(in: $0.id).count, $0.order, $0.id) < (-notebooks(in: $1.id).count, $1.order, $1.id)
+            }
             let kept = ordered[0]
             for other in ordered.dropFirst() {
                 for notebook in notebooks(in: other.id) { updateNotebook(notebook.id) { $0.spaceId = kept.id } }

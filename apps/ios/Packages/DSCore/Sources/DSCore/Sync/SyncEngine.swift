@@ -118,6 +118,11 @@ public actor SyncEngine: SyncClientDelegate {
     /// its key is fetched): not subscribed — nothing is fetched or skipped — until the key is
     /// there (`resumeDocumentsWaitingForKeys`, also after every notebook index update).
     private var waitingForKey: Set<String> = []
+    /// Documents the person is looking at, most recent first: subscribed ahead of the rest.
+    private var focused: [String] = []
+    /// Registrations in progress after `doc_not_found` (a document made on this device).
+    private var registering: Set<String> = []
+    private var traceHandler: (@Sendable (SyncTraceEvent) -> Void)?
     /// Retry of temporary failures (registration, server errors) with exponential backoff.
     private var retryTask: Task<Void, Never>?
     private var retryDelay: Duration?
@@ -364,6 +369,37 @@ public actor SyncEngine: SyncClientDelegate {
         publish()
     }
 
+    // MARK: Priority and tracing
+
+    /// The person opened `docId` (a note in the editor): it is caught up before the other
+    /// documents — subscribed at once in its own frame, and first after every reconnect.
+    public func focus(_ docId: String) async {
+        focused.removeAll { $0 == docId }
+        focused.insert(docId, at: 0)
+        if focused.count > 8 { focused.removeLast() }
+        guard !live.contains(docId), !catchingUp.contains(docId), await client.isConnected,
+              let record = try? store.document(docId) else { return }
+        try? await subscribe([record])
+    }
+
+    /// Timing events of the sync (for `os_signpost` / a debug log in the app).
+    public func setTraceHandler(_ handler: (@Sendable (SyncTraceEvent) -> Void)?) {
+        traceHandler = handler
+    }
+
+    private func trace(_ event: SyncTraceEvent) { traceHandler?(event) }
+
+    /// Account, notebook indexes and focused documents first (the list and the open note),
+    /// then the rest.
+    private func priority(_ record: DocumentRecord) -> Int {
+        if let i = focused.firstIndex(of: record.docId) { return 2 + i }
+        switch record.kind {
+        case .account: return 0
+        case .notebook: return 1
+        case .note: return 100
+        }
+    }
+
     // MARK: Failed messages
 
     /// Puts failed messages (of one document or all) back into the queue and tries again:
@@ -480,48 +516,69 @@ public actor SyncEngine: SyncClientDelegate {
         publish()
     }
 
-    /// Registers (if needed) and subscribes documents whose key is known. A document must be
-    /// subscribed and caught up before the first push (sync-protocol.md §4). Returns false
-    /// when a registration failed temporarily (a retry is scheduled).
+    /// Subscribes documents whose key is known, all at once and without registering them first:
+    /// most were made on other devices and exist on the server, and a `POST /docs` per document
+    /// before subscribing cost a REST round trip each (seconds for a library, far more on a
+    /// flaky network). A document the server does not know answers `doc_not_found` and is
+    /// registered then (`registerMissing`); a document whose catch-up finishes is marked
+    /// registered. A document must be caught up before its first push (sync-protocol.md §4).
+    /// Order: account and notebook indexes, focused documents, then notes — the first frame
+    /// holds what the list and the open note need. Returns false when a registration failed
+    /// temporarily (a retry is scheduled).
     @discardableResult
     private func subscribe(_ records: [DocumentRecord]) async throws -> Bool {
         var ready: [DocumentRecord] = []
-        var temporaryFailure = false
         for record in records where !refused.contains(record.docId) {
             guard (try? keyFor(record)) != nil else {
                 waitingForKey.insert(record.docId)
+                trace(.keyMissing(docId: record.docId))
                 continue
             }
             waitingForKey.remove(record.docId)
-            if !record.registered {
-                do {
-                    if let register { try await register(record) }
-                    try store.setRegistered(record.docId)
-                } catch {
-                    // Refused: its messages show up as failed (retryFailed tries again).
-                    // Anything else is retried with backoff.
-                    if Self.isPermanent(error) {
-                        refused.insert(record.docId)
-                        try? store.failOutbox(docId: record.docId, reason: "register: \(Self.describe(error))")
-                    } else {
-                        temporaryFailure = true
-                        scheduleRetry()
-                    }
-                    continue
-                }
-            }
             ready.append(record)
         }
         for r in ready { known[r.docId] = r }
-        let entries = ready.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }
-        guard !entries.isEmpty else { return !temporaryFailure }
-        for e in entries { catchingUp.insert(e.docId) }
-        // Keep frames reasonably small.
-        for chunk in stride(from: 0, to: entries.count, by: 100).map({ Array(entries[$0..<min($0 + 100, entries.count)]) }) {
-            try await client.send(.subscribe(docs: chunk))
+        ready.sort { (priority($0), $0.docId) < (priority($1), $1.docId) }
+        guard !ready.isEmpty else { return true }
+        for r in ready { catchingUp.insert(r.docId) }
+        // What the list and the open note need goes in a frame of its own, ahead of the notes.
+        let urgentCount = ready.prefix { priority($0) < 100 }.count
+        var frames: [[DocumentRecord]] = urgentCount > 0 && urgentCount < ready.count ? [Array(ready[..<urgentCount])] : []
+        let rest = urgentCount > 0 && urgentCount < ready.count ? Array(ready[urgentCount...]) : ready
+        frames += stride(from: 0, to: rest.count, by: 100).map { Array(rest[$0..<min($0 + 100, rest.count)]) }
+        for frame in frames {
+            try await client.send(.subscribe(docs: frame.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }))
+            trace(.subscribed(docIds: frame.map(\.docId)))
         }
         publish()
-        return !temporaryFailure
+        return true
+    }
+
+    /// `doc_not_found` for the subscription of a document never registered from here: the
+    /// server does not have it (made on this device). Registers it, then subscribes again. A
+    /// document the server knew (registered) and now does not was deleted: it is not brought
+    /// back.
+    private func registerMissing(_ docId: String) async {
+        guard !registering.contains(docId), let record = try? store.document(docId), !record.registered else { return }
+        registering.insert(docId)
+        defer { registering.remove(docId) }
+        do {
+            if let register { try await register(record) }
+            try store.setRegistered(docId)
+            trace(.registered(docId: docId))
+        } catch {
+            // Refused: its messages show up as failed (retryFailed tries again). Anything else
+            // is retried with backoff.
+            if Self.isPermanent(error) {
+                refused.insert(docId)
+                try? store.failOutbox(docId: docId, reason: "register: \(Self.describe(error))")
+            } else {
+                scheduleRetry()
+            }
+            publish()
+            return
+        }
+        if await client.isConnected, let fresh = try? store.document(docId) { try? await subscribe([fresh]) }
     }
 
     // MARK: Snapshots
@@ -576,6 +633,7 @@ public actor SyncEngine: SyncClientDelegate {
         catchingUp.removeAll()
         live.removeAll()
         subscribedAll = false
+        trace(.connected)
         if let records = try? store.documents() {
             try? await subscribe(records)
         }
@@ -604,6 +662,12 @@ public actor SyncEngine: SyncClientDelegate {
             if upToDate {
                 catchingUp.remove(docId)
                 live.insert(docId)
+                // The server has it: no `POST /docs` needed before pushing.
+                if known[docId]?.registered == false || (try? store.document(docId))?.registered == false {
+                    try? store.setRegistered(docId)
+                    known[docId]?.registered = true
+                }
+                trace(.caughtUp(docId: docId))
                 publish()
                 await flush()
                 await finishRekey(docId: docId)
@@ -637,6 +701,9 @@ public actor SyncEngine: SyncClientDelegate {
                     // Registration was lost: register again on the next flush.
                     try? store.setRegistered(item.docId, false)
                 }
+            } else if code == .docNotFound, catchingUp.contains(ref), (try? store.document(ref))?.registered == false {
+                catchingUp.remove(ref)
+                await registerMissing(ref)
             } else if code == .forbidden || code == .docNotFound {
                 catchingUp.remove(ref)
             }

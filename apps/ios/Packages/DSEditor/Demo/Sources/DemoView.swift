@@ -319,6 +319,14 @@ struct HUDView: View {
     let model: DemoModel
     @State private var fps = FPSCounter()
 
+    /// "note:x,y;title:x,y" — centres of the note links in window points.
+    private var linkCentres: String {
+        guard let window = model.editor.window else { return "" }
+        return model.editor.noteLinkFrames(in: window)
+            .map { "\($0.kind.rawValue):\(Int($0.frame.midX)),\(Int($0.frame.midY))" }
+            .joined(separator: ";")
+    }
+
     var body: some View {
         let _ = model.revision
         VStack(alignment: .trailing, spacing: 2) {
@@ -329,6 +337,12 @@ struct HUDView: View {
             Text("кадров/с: \(fps.fps)")
             Text("прокрутка: \(Int(model.scrollOffset.rounded()))")
                 .accessibilityIdentifier("hud.offset")
+            // UI tests: the last tapped note link, and where the links are on screen (window points).
+            Text("ссылка: \(model.openedNote)")
+                .accessibilityIdentifier("hud.openedNote")
+            Text(linkCentres)
+                .accessibilityIdentifier("hud.links")
+                .opacity(0.01)
         }
         .font(.caption.monospacedDigit())
         .padding(8)

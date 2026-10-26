@@ -240,6 +240,8 @@ public final class EditorView: UIView {
         tap.delaysTouchesBegan = false
         tap.delaysTouchesEnded = false
         textView.addGestureRecognizer(tap)
+        textView.editorTap = tap
+        textView.tapTargetAt = { [weak self] point in self?.noteLink(at: point) != nil }
 
         textView.addInteraction(UIScribbleInteraction(delegate: self))
         addInteraction(UIPencilInteraction(delegate: self))
@@ -961,6 +963,30 @@ public final class EditorView: UIView {
 
     /// The note link under a point (content coordinates): a `noteLink` chip, or a literal
     /// `[[Title]]` in the text. Only when the host handles that kind of link.
+    /// Frames of the note links (chips and literal `[[Title]]`) in `view`'s coordinates, for
+    /// hosts and UI tests that need to find them on screen.
+    public func noteLinkFrames(in view: UIView) -> [(kind: NoteLinkKind, frame: CGRect)] {
+        let storage = textView.textStorage
+        var out: [(kind: NoteLinkKind, frame: CGRect)] = []
+        storage.enumerateAttribute(.dsWikiLink, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard value != nil, let f = geometry.segmentFrame(range.location..<(range.location + range.length)) else { return }
+            out.append((.title, textView.convert(f, to: view)))
+        }
+        storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard let chip = value as? InlineAtomAttachment, chip.atom?.type == NodeType.noteLink,
+                  let f = geometry.segmentFrame(range.location..<(range.location + 1)) else { return }
+            out.append((.note, textView.convert(f, to: view)))
+        }
+        return out
+    }
+
+    public enum NoteLinkKind: String, Sendable {
+        /// A noteLink chip (opens by id).
+        case note
+        /// A literal `[[Title]]` (resolved by title).
+        case title
+    }
+
     func noteLink(at point: CGPoint) -> NoteLinkTarget? {
         guard onOpenNote != nil || onOpenNoteTitled != nil,
               let pos = textView.closestPosition(to: point) else { return nil }
@@ -1175,7 +1201,9 @@ extension EditorView: UITextViewDelegate {
             let marks: MarkSet = isCode ? .empty : (pendingMarks ?? cmd.marks(at: lo..<lo)).setting(MarkName.agentEdit, nil)
             let modelText = isCode ? text.replacingOccurrences(of: "\u{2028}", with: "\n") : text
             cmd.typeText(modelText, marks: marks, at: TextPosition(block: start.blockId, offset: so), replacing: hi - lo)
-            if text.utf16.count == 1 { pendingShortcut = (lo + 1, text) }
+            // Markdown shortcuts never fire on marked text (dictation and input methods stream
+            // their text through it; acting on it moved the caret under them).
+            if text.utf16.count == 1, tv.markedTextRange == nil { pendingShortcut = (lo + 1, text) }
             return true
         }
         // Everything else is structural.
@@ -1185,6 +1213,7 @@ extension EditorView: UITextViewDelegate {
     }
 
     public func textViewDidChange(_ tv: UITextView) {
+        mirrorUnreportedEdit()
         let caret = tv.selectedRange.location
         let (i, o) = projection.position(at: caret)
         if let shortcut = pendingShortcut, projection.paragraphs.indices.contains(i) {
@@ -1208,6 +1237,43 @@ extension EditorView: UITextViewDelegate {
         notifyStateChange()
     }
 
+    /// Safety net for text the text view changed without asking `shouldChangeTextIn` (some
+    /// dictation and input-method paths): the change inside the caret's paragraph is mirrored into
+    /// the document; anything else is undone by re-rendering from the document, so the text view
+    /// and the document never drift apart (a drift put the caret in the wrong paragraph).
+    private func mirrorUnreportedEdit() {
+        let storage = textView.textStorage
+        let delta = storage.length - projection.length
+        guard delta != 0, !projection.paragraphs.isEmpty else { return }
+        let caret = textView.selectedRange.location
+        let (i, _) = projection.position(at: max(0, min(projection.length, caret - max(0, delta))))
+        let para = projection.paragraphs[i]
+        let start = projection.starts[i]
+        let old = Array(renderer.paragraph(projection, index: i).string.utf16.prefix(para.length))
+        let newLength = para.length + delta
+        guard para.kind.isText, newLength >= 0, start + newLength <= storage.length else {
+            EditorDiagnostics.log("unreported edit outside a text paragraph: re-render")
+            return rerenderAll()
+        }
+        let new = Array((storage.string as NSString).substring(with: NSRange(location: start, length: newLength)).utf16)
+        var prefix = 0
+        while prefix < old.count, prefix < new.count, old[prefix] == new[prefix] { prefix += 1 }
+        var suffix = 0
+        while suffix < old.count - prefix, suffix < new.count - prefix,
+              old[old.count - 1 - suffix] == new[new.count - 1 - suffix] { suffix += 1 }
+        let inserted = String(utf16CodeUnits: Array(new[prefix..<(new.count - suffix)]), count: new.count - suffix - prefix)
+        if inserted.contains("\n") || inserted.contains("\u{FFFC}") || inserted.contains("\u{2029}") {
+            EditorDiagnostics.log("unreported structural edit: re-render")
+            return rerenderAll()
+        }
+        EditorDiagnostics.log("mirroring an unreported edit of \(inserted.utf16.count) characters")
+        let marks = (pendingMarks ?? commands.marks(at: (start + prefix)..<(start + prefix))).setting(MarkName.agentEdit, nil)
+        suppressDelegate = true
+        commands.typeText(inserted, marks: marks, at: TextPosition(block: para.blockId, offset: prefix),
+                          replacing: old.count - suffix - prefix)
+        suppressDelegate = false
+    }
+
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
         onScroll?(scrollView.contentOffset.y + scrollView.adjustedContentInset.top)
     }
@@ -1229,7 +1295,8 @@ extension EditorView: UITextViewDelegate {
     public func textViewDidChangeSelection(_ tv: UITextView) {
         if suppressDelegate { return }
         pendingMarks = nil
-        updateTypingAttributes()
+        // Typing attributes are left alone while text is marked (dictation, input methods).
+        if tv.markedTextRange == nil { updateTypingAttributes() }
         updateSlashMenu()
         notifyStateChange()
     }
@@ -1307,7 +1374,9 @@ extension EditorView: UIGestureRecognizerDelegate {
     }
 
     public func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-        false
+        // The editor's tap fires alongside the text view's own recognizers: a link or task box tap
+        // must not be swallowed by caret placement (note links did nothing on iPhone, build 14).
+        g === textView.editorTap && other.view === textView && !(other is UIPanGestureRecognizer)
     }
 
     /// The pen recognizer receives every touch and follows only those it draws with (it never

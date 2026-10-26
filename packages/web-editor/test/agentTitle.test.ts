@@ -62,13 +62,16 @@ describe("agent titles and unusual note starts open and edit without rewriting t
   for (const [name, build] of Object.entries(variants)) {
     it(name, async () => {
       const doc = build();
-      const before = blocks(doc);
+      const seeded = blocks(doc);
+      // Two titles: the stray EMPTY one is removed on open (document-model.md «Один title»); any
+      // other start opens without a single write.
+      const before = name.startsWith("two titles") ? seeded.slice(1) : seeded;
       let updates = 0;
       doc.on("update", () => updates++);
       const { editor } = makeEditor(doc);
       await tick();
       await tick();
-      expect(updates, "opening writes nothing").toBe(0);
+      if (!name.startsWith("two titles")) expect(updates, "opening writes nothing").toBe(0);
       expect(blocks(doc)).toEqual(before);
       // The user types at the end of the last paragraph: only that paragraph changes.
       let end = 0;

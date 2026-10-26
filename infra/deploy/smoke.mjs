@@ -68,6 +68,12 @@ try {
     const t = await r.text();
     if (!r.ok || !t.includes('<div id="root"')) throw new Error(`status ${r.status}`);
   });
+  await retry('agent consent page keeps its own CSP', async () => {
+    // The web app's CSP (form-action 'self') on top of the server's blocks the redirect back to the agent.
+    const r = await fetch(`${base}/oauth/authorize`);
+    const csp = r.headers.get('content-security-policy') ?? '';
+    if (!csp.startsWith("default-src 'none'") || csp.includes("default-src 'self'")) throw new Error(`CSP: ${csp}`);
+  });
   await retry('sync WebSocket', wsCheck);
   await retry('metrics hidden', async () => {
     const r = await fetch(`${base}/metrics`);

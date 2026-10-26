@@ -42,6 +42,15 @@ const en: Loose<Messages> = {
     requiresOnline: "Requires a connection to the server",
   },
   auth: {
+    revokedTitle: "This browser was disconnected from the account",
+    revokedText: "The session was ended from another device. Please sign in again.",
+    revokedUnsent_one: "{{count}} unsent change is kept here and will be sent after you sign in.",
+    revokedUnsent_few: "{{count}} unsent changes are kept here and will be sent after you sign in.",
+    revokedUnsent_many: "{{count}} unsent changes are kept here and will be sent after you sign in.",
+    revokedUnsent_other: "{{count}} unsent changes are kept here and will be sent after you sign in.",
+    revokedForget: "Delete data from this device",
+    revokedForgetConfirm: "Delete all of this account's data from this device{{unsent}}? Nothing changes on the server or other devices.",
+    revokedForgetUnsent: ", unsent changes included",
     tagline: "Notes where handwriting lives in the text.",
     signIn: "Sign in",
     signUp: "Create account",
@@ -309,6 +318,11 @@ const en: Loose<Messages> = {
     removeCover: "Remove cover",
     icon: "Icon",
     addIcon: "Add icon",
+  },
+  pen: {
+    showPalette: "Pen palette ({{tool}}) — expand",
+    hidePalette: "Collapse the pen palette",
+    tool: { text: "text", pen: "pen", pencil: "pencil", marker: "marker", highlighter: "highlighter", eraser: "eraser", lasso: "lasso" },
   },
   cover: {
     description: "Your own image: a photo, a screenshot or a picture file.",

@@ -9,6 +9,7 @@ import { buildExtensions } from "./editorCore";
 import type { EditorHost, HostRef } from "./host";
 import { readNoteMeta, readTitle, setNoteCover, SUPPORTED_FORMAT_VERSION, useNoteMeta } from "./meta";
 import { PenLayer, type PenSettings } from "./pen/PenLayer";
+import { acceptAll, blocksWithAgentEdits } from "./schema/agentReview";
 import { guardSchema } from "./schema/unknown";
 import { TASK_MENU_EVENT, type TaskMenuRequest } from "./schema/tasks";
 import type { NoteStyle, StrokeAuthor } from "@datascratch/shared/contracts";
@@ -51,12 +52,26 @@ export interface DatascratchEditorProps {
   onRequestCover?: () => void;
   showPalette?: boolean;
   penSettings?: Partial<PenSettings>;
+  /**
+   * D-45: `NoteMeta.createdByAgent` of this note. Shows the strip «Создано агентом {agentName}» with
+   * «Понятно»; the app clears the field in `onAcknowledgeAgentCreated`.
+   */
+  createdByAgent?: { agentId: string; agentName: string; at: string } | null;
+  onAcknowledgeAgentCreated?: () => void;
   /** Plain-text title, after each change (the app copies it into NoteMeta.title). */
   onTitleChange?: (title: string) => void;
   onReady?: (api: EditorApi) => void;
   className?: string;
   /** Extra vertical space under the last block (px), so the palette never covers text. */
   bottomPadding?: number;
+}
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
 }
 
 const FONT_VARS: Record<NoteStyle["font"], string> = {
@@ -86,6 +101,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
   const [api, setApi] = useState<EditorApi | null>(null);
   const [schemaGen, setSchemaGen] = useState(0);
   const [taskMenu, setTaskMenu] = useState<TaskMenuRequest | null>(null);
+  const [agentBlocks, setAgentBlocks] = useState(0);
   const slashStore = useMemo(() => createSuggestionStore<BlockItem>(), []);
   const linkStore = useMemo(() => createSuggestionStore<LinkItem>(), []);
   const awarenessRef = useRef(awareness);
@@ -114,6 +130,8 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       char: "[[",
       allowSpaces: true,
       store: linkStore,
+      // A closed `[[Title]]` (typed or written by an agent) is a link, not an open query.
+      allow: ({ state, range }) => !state.doc.textBetween(range.from, range.to).includes("]]"),
       items: async (q) => {
         const found = (await host.current.searchNotes?.(q.replace(/\]+$/, ""))) ?? [];
         const items: LinkItem[] = found.slice(0, 8);
@@ -220,6 +238,28 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
     api?.editor.setEditable(!readOnly);
   }, [api, readOnly]);
 
+  // Agent edits pending review (D-10): drives the "Правки агента · Принять все" banner.
+  useEffect(() => {
+    if (!api) return;
+    const { editor } = api;
+    let frame = 0;
+    const count = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => !editor.isDestroyed && setAgentBlocks(blocksWithAgentEdits(editor.state.doc).length));
+    };
+    count();
+    editor.on("update", count);
+    editor.on("create", count);
+    const onTr = ({ transaction }: { transaction: { docChanged: boolean } }) => transaction.docChanged && count();
+    editor.on("transaction", onTr);
+    return () => {
+      cancelAnimationFrame(frame);
+      editor.off("update", count);
+      editor.off("create", count);
+      editor.off("transaction", onTr);
+    };
+  }, [api]);
+
   useEffect(() => {
     if (api && props.penSettings) api.pen.setSettings(props.penSettings);
   }, [api, props.penSettings]);
@@ -250,6 +290,35 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       {meta.formatVersion > SUPPORTED_FORMAT_VERSION && (
         <div className="ds-readonly-banner" role="status">
           Заметка создана в более новой версии приложения и открыта только для чтения. Обновите приложение, чтобы редактировать.
+        </div>
+      )}
+      {props.createdByAgent && (
+        <div className="ds-agent-banner ds-agent-created" role="status">
+          <span className="ds-agent-banner-dot" aria-hidden="true" />
+          <span className="ds-agent-banner-text">Создано агентом {props.createdByAgent.agentName}</span>
+          {props.onAcknowledgeAgentCreated && (
+            <button type="button" className="ds-agent-banner-accept" onClick={props.onAcknowledgeAgentCreated}>
+              Понятно
+            </button>
+          )}
+        </div>
+      )}
+      {api && agentBlocks > 0 && !readOnly && (
+        <div className="ds-agent-banner" role="status">
+          <span className="ds-agent-banner-dot" aria-hidden="true" />
+          <span className="ds-agent-banner-text">
+            Правки агента · {agentBlocks} {plural(agentBlocks, "блок", "блока", "блоков")}
+          </span>
+          <button
+            type="button"
+            className="ds-agent-banner-accept"
+            onClick={() => {
+              const tr = acceptAll(api.editor.state);
+              if (tr) api.editor.view.dispatch(tr);
+            }}
+          >
+            Принять все
+          </button>
         </div>
       )}
       <div ref={rootRef} className="ds-editor-root">

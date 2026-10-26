@@ -1,7 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { ChevronRight, FileQuestion, MoreHorizontal, Share2, Smile, Star, Undo2, X } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/session";
 import { colorFor } from "@/data/presence";
@@ -18,8 +18,10 @@ import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner } fr
 import { setNoteMeta } from "@/domain/note";
 import { Backlinks } from "./Backlinks";
 import { CoverImage, coverError, removeCover, setCoverImage } from "./Cover";
+import type { EditorApi } from "@/editor";
 import { ownerEditorHost } from "@/editor/hosts";
 import { DocView } from "./DocView";
+import { PenPaletteToggle } from "./PenPaletteToggle";
 import { PresenceStack } from "./PresenceStack";
 import { StylePopover } from "./StylePopover";
 import { usePresence } from "./usePresence";
@@ -63,6 +65,8 @@ function DocScreen({ noteId }: { noteId: string }) {
   const doc = useNoteDoc(noteId);
   const meta = useNoteMeta(doc);
   const edits = useRef(0);
+  const [editorApi, setEditorApi] = useState<EditorApi | null>(null);
+  const paletteCollapsed = useUi((s) => s.penPaletteCollapsed);
 
   const user = useMemo(() => ({ name: email.split("@")[0] || "Me", color: colorFor(email), kind: "user" as const }), [email]);
   const { awareness, others } = usePresence(
@@ -173,7 +177,9 @@ function DocScreen({ noteId }: { noteId: string }) {
           awareness={awareness}
           user={editorUser}
           host={host}
+          showPalette={!paletteCollapsed}
           onEditor={(api) => {
+            setEditorApi(api);
             if (editable && !note.title) api.editor.commands.focus("start");
           }}
           cover={
@@ -197,6 +203,7 @@ function DocScreen({ noteId }: { noteId: string }) {
           footer={<Backlinks noteId={noteId} />}
         />
       )}
+      {editable && editorApi && <PenPaletteToggle pen={editorApi.pen} />}
     </div>
   );
 }

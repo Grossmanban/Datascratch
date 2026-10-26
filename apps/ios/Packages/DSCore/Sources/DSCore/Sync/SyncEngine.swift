@@ -10,12 +10,20 @@ public struct SyncStatus: Equatable, Sendable {
     /// Documents whose messages could not be delivered and are no longer retried on their own
     /// (`retryFailed`, `discardFailed`). Everything else keeps syncing.
     public var failed: [FailedSync] = []
+    /// Documents with remote data this device could not read (another key) or apply: set
+    /// aside, the rest is synced. A calm per-notebook warning, not part of `summary`;
+    /// `SyncEngine.retryUnreadable` after a key repair.
+    public var unreadable: [UnreadableSync] = []
+    /// Not connected and the quick retries are used up (several attempts failed in a row).
+    /// Until then a lost or stuck connection counts as syncing, not offline.
+    public var connectionTrouble = false
 
-    public init(connection: SyncConnectionState, pending: Int, catchingUp: Int, failed: [FailedSync] = []) {
+    public init(connection: SyncConnectionState, pending: Int, catchingUp: Int, failed: [FailedSync] = [], connectionTrouble: Bool = false) {
         self.connection = connection
         self.pending = pending
         self.catchingUp = catchingUp
         self.failed = failed
+        self.connectionTrouble = connectionTrouble
     }
 
     /// Nothing left to send or fetch (failed messages aside).
@@ -23,7 +31,8 @@ public struct SyncStatus: Equatable, Sendable {
 
     /// One state for the sync indicator.
     public enum Summary: Equatable, Sendable {
-        /// Not connected (`pending` changes wait for the connection).
+        /// No connection for a while (`pending` changes wait for it); a single failed or stuck
+        /// handshake shows as `.syncing` while it is retried.
         case offline
         case syncing
         case synced
@@ -32,7 +41,11 @@ public struct SyncStatus: Equatable, Sendable {
     }
 
     public var summary: Summary {
-        guard case .connected = connection else { return .offline }
+        switch connection {
+        case .connected: break
+        case .connecting, .waiting: return connectionTrouble ? .offline : .syncing
+        case .disconnected, .stopped: return .offline
+        }
         if !isIdle { return .syncing }
         if let first = failed.first { return .failed(documents: failed.count, reason: first.reason) }
         return .synced
@@ -62,6 +75,8 @@ public actor SyncEngine: SyncClientDelegate {
     public nonisolated let store: LocalStore
     public nonisolated let client: SyncClient
     private let keyFor: KeyLookup
+    private let retiredKeysFor: (@Sendable (DocumentRecord) -> [Data])?
+    private let isKeyCanonical: (@Sendable (DocumentRecord) -> Bool)?
     private let register: Registrar?
     private var awarenessHandler: AwarenessHandler?
 
@@ -87,6 +102,7 @@ public actor SyncEngine: SyncClientDelegate {
     /// Records of subscribed documents (kind/notebook for key lookup without a DB read).
     private var known: [String: DocumentRecord] = [:]
     private var connection: SyncConnectionState = .disconnected
+    private var connectionTrouble = false
     /// `start()` was called and `stop()` was not.
     private var running = false
     /// Every known document was subscribed on the current connection.
@@ -105,11 +121,63 @@ public actor SyncEngine: SyncClientDelegate {
     ///     key for `note`); nil while unknown — the document is skipped until it is.
     ///   - register: registers a document on the server (`APIClient.registerDoc`); nil for
     ///     guests (their documents already exist).
-    public init(store: LocalStore, client: SyncClient, keyFor: @escaping KeyLookup, register: Registrar?) {
+    /// - Parameter retiredKeysFor: keys a document had on this device before its canonical one
+    ///   (`KeyRing.retiredNotebookKeys`); used only to read what was written with them.
+    /// - Parameter isKeyCanonical: the document's key is confirmed by the server
+    ///   (`KeyRingDocumentKeys.isCanonical`). Only then does a document with set-aside items get
+    ///   a fresh snapshot from this device, which covers the bad items for everyone else; a device
+    ///   with a wrong key must never publish one.
+    public init(store: LocalStore, client: SyncClient, keyFor: @escaping KeyLookup, register: Registrar?,
+                retiredKeysFor: (@Sendable (DocumentRecord) -> [Data])? = nil,
+                isKeyCanonical: (@Sendable (DocumentRecord) -> Bool)? = nil) {
         self.store = store
         self.client = client
         self.keyFor = keyFor
         self.register = register
+        self.retiredKeysFor = retiredKeysFor
+        self.isKeyCanonical = isKeyCanonical
+    }
+
+    // MARK: Key repair
+
+    static func rekeyFlag(_ docId: String) -> String { "sync.rekey.\(docId)" }
+
+    /// Repairs a document after its key was replaced by the canonical one
+    /// (`AccountService.reconcileNotebookKeys`): fetches it again from the start — reading what
+    /// was written with the old key through `retiredKeysFor` — and then uploads a snapshot with
+    /// the canonical key, so every device can read the whole document again. Survives restarts.
+    public func rekey(docId: String) async {
+        guard (try? store.document(docId)) != nil else { return }
+        try? store.setValue(Data([1]), for: Self.rekeyFlag(docId))
+        try? store.resetLastSeq(docId: docId)
+        known[docId] = nil
+        live.remove(docId)
+        catchingUp.remove(docId)
+        if await client.isConnected, let record = try? store.document(docId) { try? await subscribe([record]) }
+        publish()
+    }
+
+    /// Fetches set-aside items again (all documents, or one) — after keys changed, e.g.
+    /// `AccountService.reconcileNotebookKeys` filled in or replaced a key.
+    public func retryUnreadable(docId: String? = nil) async {
+        let ids = docId.map { [$0] } ?? Array(Set(((try? store.quarantined()) ?? []).map(\.docId)))
+        var records: [DocumentRecord] = []
+        for id in ids where (try? store.releaseQuarantine(docId: id)) == true {
+            known[id] = nil
+            live.remove(id)
+            catchingUp.remove(id)
+            if let record = try? store.document(id) { records.append(record) }
+        }
+        if !records.isEmpty, await client.isConnected { try? await subscribe(records) }
+        publish()
+    }
+
+    /// After the catch-up of a re-keyed document: the canonical snapshot.
+    private func finishRekey(docId: String) async {
+        guard (try? store.value(Self.rekeyFlag(docId))) != nil else { return }
+        try? store.discardQueuedSnapshots(docId: docId)
+        await snapshot(docId: docId, now: Date())
+        try? store.setValue(nil, for: Self.rekeyFlag(docId))
     }
 
     /// Connects and starts syncing every document known to the store.
@@ -203,8 +271,10 @@ public actor SyncEngine: SyncClientDelegate {
     public func status() -> SyncStatus { currentStatus() }
 
     private func currentStatus() -> SyncStatus {
-        SyncStatus(connection: connection, pending: (try? store.outboxCount()) ?? 0, catchingUp: catchingUp.count,
-                   failed: (try? store.failedOutbox()) ?? [])
+        var s = SyncStatus(connection: connection, pending: (try? store.outboxCount()) ?? 0, catchingUp: catchingUp.count,
+                           failed: (try? store.failedOutbox()) ?? [], connectionTrouble: connectionTrouble)
+        s.unreadable = (try? store.unreadable()) ?? []
+        return s
     }
 
     private func publish() {
@@ -488,6 +558,7 @@ public actor SyncEngine: SyncClientDelegate {
 
     public func syncClient(_ client: SyncClient, didChangeState state: SyncConnectionState) async {
         connection = state
+        connectionTrouble = await client.consecutiveFailures > client.configuration.quickRetries
         if case .connected = state {} else {
             inFlight.removeAll()
             live.removeAll()
@@ -507,10 +578,12 @@ public actor SyncEngine: SyncClientDelegate {
                 live.insert(docId)
                 publish()
                 await flush()
+                await finishRekey(docId: docId)
                 await snapshotIfNeeded(docId: docId)
             }
         case .update(let docId, let item):
             receive(docId: docId, snapshot: nil, items: [item])
+            if live.contains(docId) { await finishRekey(docId: docId) }
             await snapshotIfNeeded(docId: docId)
         case .ack(let docId, let clientMsgId, let seq):
             inFlight.remove(clientMsgId)
@@ -542,25 +615,56 @@ public actor SyncEngine: SyncClientDelegate {
         }
     }
 
-    /// Decrypts, stores and applies remote data. Stops at the first item it cannot decrypt so
-    /// that `lastSeq` never skips it.
+    /// Decrypts, stores and applies remote data. Items that cannot be read (another key) or are
+    /// not valid updates are set aside (`LocalStore.quarantined`, `SyncStatus.unreadable`) and
+    /// skipped: one bad item must not stop a document for good.
     private func receive(docId: String, snapshot: (seq: Int64, payload: Data)?, items: [UpdateItem]) {
         guard let record = known[docId] ?? (try? store.document(docId)), let key = try? keyFor(record) else { return }
         let doc = open[docId]?.doc
         let ad = CryptoAD.doc(docId)
+        let retired = retiredKeysFor?(record) ?? []
+        func decrypt(_ payload: Data) -> Data? {
+            if let plain = try? DSCrypto.open(payload, key: key, ad: ad) { return plain }
+            return retired.lazy.compactMap { try? DSCrypto.open(payload, key: $0, ad: ad) }.first
+        }
+        /// Readable and a valid update.
+        func check(_ payload: Data) -> (data: Data?, reason: String) {
+            guard let plain = decrypt(payload) else { return (nil, "cannot decrypt") }
+            guard (try? CRDTUpdates.stateVector(of: plain)) != nil else { return (nil, "not a valid update") }
+            return (plain, "")
+        }
+        var quarantine: [QuarantinedItem] = []
         if let snapshot {
-            guard let state = try? DSCrypto.open(snapshot.payload, key: key, ad: ad) else { return }
-            if (try? store.applyRemoteSnapshot(docId: docId, seq: snapshot.seq, state: state)) == true {
-                try? doc?.applyUpdate(state, origin: .remote)
+            let (state, reason) = check(snapshot.payload)
+            if let state {
+                if (try? store.applyRemoteSnapshot(docId: docId, seq: snapshot.seq, state: state)) == true {
+                    try? doc?.applyUpdate(state, origin: .remote)
+                }
+            } else {
+                quarantine.append(QuarantinedItem(docId: docId, seq: snapshot.seq, deviceId: "snapshot", payload: snapshot.payload, reason: "snapshot: \(reason)"))
             }
         }
-        var decrypted: [(seq: Int64, data: Data)] = []
+        var readable: [(seq: Int64, data: Data)] = []
         for item in items.sorted(by: { $0.seq < $1.seq }) {
-            guard let plain = try? DSCrypto.open(item.payload, key: key, ad: ad) else { break }
-            decrypted.append((item.seq, plain))
+            let (plain, reason) = check(item.payload)
+            if let plain {
+                readable.append((item.seq, plain))
+            } else {
+                quarantine.append(QuarantinedItem(docId: docId, seq: item.seq, deviceId: item.deviceId, payload: item.payload, reason: reason))
+            }
         }
-        guard !decrypted.isEmpty, let added = try? store.appendRemoteUpdates(docId: docId, items: decrypted), !added.isEmpty else { return }
-        try? doc?.applyUpdates(added.map(\.data), origin: .remote)
+        guard !readable.isEmpty || !quarantine.isEmpty,
+              let added = try? store.appendRemoteUpdates(docId: docId, items: readable, quarantine: quarantine) else { return }
+        if let doc, !added.isEmpty, (try? doc.applyUpdates(added.map(\.data), origin: .remote)) == nil {
+            // One by one, so that a single update the document rejects does not hold back the rest.
+            for update in added { try? doc.applyUpdate(update.data, origin: .remote) }
+        }
+        if !quarantine.isEmpty {
+            // Our readable state, re-uploaded as a snapshot, covers the bad items for other
+            // devices (they catch up from it) — only with a key the server confirmed.
+            if isKeyCanonical?(record) == true { try? store.setValue(Data([1]), for: Self.rekeyFlag(docId)) }
+            publish()
+        }
     }
 }
 
@@ -586,5 +690,20 @@ public struct KeyRingDocumentKeys: Sendable {
             guard let nb = record.notebookId, let wrapped = wrappedNoteKey(record.docId, nb) else { return nil }
             return try keyRing.noteKey(noteId: record.docId, wrappedKey: wrapped, notebookId: nb)
         }
+    }
+
+    /// The document's key is the server's (`SyncEngine(isKeyCanonical:)`): the master key for the
+    /// account document; a notebook key confirmed in this session (`reconcileNotebookKeys`,
+    /// `createNotebook`) for a notebook and its notes.
+    public func isCanonical(_ record: DocumentRecord) -> Bool {
+        switch record.kind {
+        case .account: true
+        case .notebook, .note: record.notebookId.map(keyRing.isNotebookKeyVerified) ?? keyRing.isNotebookKeyVerified(record.docId)
+        }
+    }
+
+    /// Retired keys of a notebook document (`SyncEngine(retiredKeysFor:)`).
+    public func retiredKeys(for record: DocumentRecord) -> [Data] {
+        record.kind == .notebook ? keyRing.retiredNotebookKeys(record.notebookId ?? record.docId) : []
     }
 }

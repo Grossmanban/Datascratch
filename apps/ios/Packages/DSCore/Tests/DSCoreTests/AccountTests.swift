@@ -89,6 +89,10 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
             state.withLock { $0.attachments[id] = (b["chunkCount"] as! Int, [:]) }
             return (204, nil)
         default:
+            if parts.count == 4, parts[1] == "notebooks", parts[3] == "key", method == "GET" {
+                guard let nb = state.withLock({ $0.notebooks[parts[2]] }) else { return error(404, "not_found") }
+                return (200, ["wrappedKey": nb["wrappedKey"]!])
+            }
             if parts.count >= 3, parts[1] == "notebooks", method == "PATCH" {
                 state.withLock { $0.notebooks[parts[2]]?["mode"] = b["mode"] }
                 return (204, nil)

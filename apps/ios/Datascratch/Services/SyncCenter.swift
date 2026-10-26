@@ -15,6 +15,8 @@ final class SyncCenter {
         case failed(String)
         /// Idle, but changes of `documents` documents could not be delivered.
         case notSent(documents: Int, reason: String)
+        /// The server ended this device's session (from another device or the web).
+        case sessionEnded
     }
 
     private(set) var isOnline = true
@@ -56,8 +58,27 @@ final class SyncCenter {
         }
     }
 
+    /// The server ended this device's session (revoked from another device or the web): sync
+    /// stops until the person signs in again. Nothing on the device is removed.
+    private(set) var isSessionEnded = false
+    /// The «signed out on this device» sheet is up (closed with «Later», reopened from the badge).
+    var showsSessionEnded = false
+
+    func markSessionEnded() {
+        isSessionEnded = true
+        showsSessionEnded = true
+        phase = .sessionEnded
+    }
+
+    func markSessionRestored() {
+        isSessionEnded = false
+        showsSessionEnded = false
+        phase = .syncing
+    }
+
     /// Summary reported by the sync engine (`SyncStatus.summary`).
     func apply(summary: Summary, pending: Int) {
+        guard !isSessionEnded else { return }
         pendingChanges = pending
         switch summary {
         case .offline: phase = .offline(pending: pending)
@@ -99,6 +120,7 @@ final class SyncCenter {
     }
 
     private func refreshPhase() {
+        guard !isSessionEnded else { return }
         guard !isLocalOnly else {
             phase = .localOnly
             return

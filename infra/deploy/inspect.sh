@@ -187,3 +187,21 @@ SELECT left(dv.id::text, 13) AS id,
 SQL
   end
 fi
+
+# Per-item decrypt/apply check of agent-mode documents named in DS_DIAG_DOCS (space-separated ids;
+# metadata only: seq, device, time, size, ok/FAIL). Owner-approved diagnostics, 2026-10-26.
+DS_DIAG_DOCS=$(printf '%s' "${DS_DIAG_DOCS:-}" | tr -cd '0-9a-f\- ')
+if [ -n "${srv:-}" ] && [ -n "$DS_DIAG_DOCS" ]; then
+  section "Agent document items: $DS_DIAG_DOCS"
+  $SUDO docker exec "$srv" node dist/diag-agent-doc-cli.js $DS_DIAG_DOCS 2>&1 | tail -80
+  end
+fi
+
+# Recent server warnings/errors and 4xx/5xx responses (last 30 min): message, route, status, docId only.
+if [ -n "${srv:-}" ]; then
+  section "Server warnings and errors (last 30 min)"
+  $SUDO docker logs --since 30m "$srv" 2>&1 | grep -E '"level":(40|50|60)|"statusCode":(4|5)[0-9][0-9]' |
+    sed -E 's/"(email|token|authorization|cookie|remoteAddress|remotePort|userAgent|hostname|ip)":"[^"]*"/"\1":"…"/g' |
+    grep -oE '"(level|msg|statusCode|url|method|docId|seq|deviceId|code|reason)":("[^"]*"|[0-9]+)' | paste -sd' ' | sed 's/"level"/\n"level"/g' | sort | uniq -c | sort -rn | head -40
+  end
+fi

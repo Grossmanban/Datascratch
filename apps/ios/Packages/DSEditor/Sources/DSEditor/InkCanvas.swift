@@ -143,7 +143,14 @@ final class InkCanvas: UIView {
 /// Paper background (plain / dots / grid / lines) that scrolls with the text.
 @MainActor
 final class PaperView: UIView {
-    var paper: DocumentStylePaper = .plain { didSet { updatePattern() } }
+    var paper: DocumentStylePaper = .plain { didSet { if paper != oldValue { updatePattern() } } }
+    /// Distance between rules: the editor's line pitch (`EditorTheme.paperPitch`).
+    var pitch: CGFloat = 24 { didSet { if pitch != oldValue { updatePattern() } } }
+    /// Where a line box ends, in this view's coordinates modulo `pitch` (y), and where the text
+    /// column starts (x): rules run under the text lines, grid columns start at the column edge.
+    var phase: CGPoint = .zero { didSet { if phase != oldValue { updatePattern() } } }
+    /// Rule height above the end of a line box: just under the baseline of body text.
+    var ruleLift: CGFloat = 3 { didSet { if ruleLift != oldValue { updatePattern() } } }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -158,23 +165,32 @@ final class PaperView: UIView {
         updatePattern()
     }
 
+    /// Rows of the pattern tile, in tile coordinates, where a rule (or dot row) is drawn.
+    static func ruleY(pitch: CGFloat, phaseY: CGFloat, lift: CGFloat) -> CGFloat {
+        let y = (phaseY - lift).truncatingRemainder(dividingBy: pitch)
+        return y < 0 ? y + pitch : y
+    }
+
     private func updatePattern() {
-        let step: CGFloat = 24
+        let step = max(8, pitch)
         let size = CGSize(width: step, height: step)
         let paperColor = EditorTheme.paper.resolvedColor(with: traitCollection)
         let ink = EditorTheme.paperPattern.resolvedColor(with: traitCollection)
         let paper = self.paper
+        let rowY = Self.ruleY(pitch: step, phaseY: phase.y, lift: ruleLift)
+        var colX = phase.x.truncatingRemainder(dividingBy: step)
+        if colX < 0 { colX += step }
         let image = UIGraphicsImageRenderer(size: size).image { ctx in
             paperColor.setFill()
             ctx.fill(CGRect(origin: .zero, size: size))
             ink.setFill()
             switch paper {
             case .plain: break
-            case .dots: UIBezierPath(ovalIn: CGRect(x: step / 2 - 1, y: step / 2 - 1, width: 2, height: 2)).fill()
+            case .dots: UIBezierPath(ovalIn: CGRect(x: colX - 1, y: rowY - 1, width: 2, height: 2)).fill()
             case .grid:
-                ctx.fill(CGRect(x: 0, y: 0, width: step, height: 0.5))
-                ctx.fill(CGRect(x: 0, y: 0, width: 0.5, height: step))
-            case .lines: ctx.fill(CGRect(x: 0, y: step - 0.5, width: step, height: 0.5))
+                ctx.fill(CGRect(x: 0, y: rowY - 0.25, width: step, height: 0.5))
+                ctx.fill(CGRect(x: colX - 0.25, y: 0, width: 0.5, height: step))
+            case .lines: ctx.fill(CGRect(x: 0, y: rowY - 0.25, width: step, height: 0.5))
             }
         }
         backgroundColor = UIColor(patternImage: image)

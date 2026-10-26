@@ -204,7 +204,7 @@ function sourceAtomView(
 }
 
 let katexPromise: Promise<typeof import("katex")> | null = null;
-function loadKatex() {
+export function loadKatex() {
   katexPromise ??= import("katex");
   return katexPromise;
 }

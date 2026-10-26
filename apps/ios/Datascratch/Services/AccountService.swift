@@ -52,11 +52,17 @@ protocol AccountService: AnyObject {
     var signedOutEmail: String? { get }
     /// Removes the library, keys and session from this device (spec/07).
     func deleteLocalData() async
+    /// Changes and notebooks not yet on the server (spec/07, before signing out).
+    var unsentChanges: Int { get }
+    /// Waits until everything is sent; false when time ran out.
+    func sendPending(timeout: Duration) async -> Bool
 }
 
 extension AccountService {
     var signedOutEmail: String? { nil }
     func deleteLocalData() async {}
+    var unsentChanges: Int { 0 }
+    func sendPending(timeout: Duration) async -> Bool { true }
 }
 
 /// One entry of the account security log (`GET /me/security-events`).

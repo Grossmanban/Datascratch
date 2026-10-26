@@ -6,6 +6,7 @@ import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 import { setEditorAwareness } from "./collab/collaboration";
 import { buildExtensions } from "./editorCore";
+import { alignPaper, clearPaper, PaperSnap } from "./paper";
 import type { EditorHost, HostRef } from "./host";
 import { readNoteMeta, readTitle, setNoteCover, SUPPORTED_FORMAT_VERSION, useNoteMeta } from "./meta";
 import { PenLayer, type PenSettings } from "./pen/PenLayer";
@@ -15,6 +16,7 @@ import { TASK_MENU_EVENT, type TaskMenuRequest } from "./schema/tasks";
 import type { NoteStyle, StrokeAuthor } from "@datascratch/shared/contracts";
 import { filterBlocks, type BlockItem } from "./ui/blockItems";
 import { BubbleToolbar } from "./ui/BubbleToolbar";
+import { BlockLift } from "./ui/blockLift";
 import { DragHandle } from "./ui/DragHandle";
 import { PenPalette } from "./ui/PenPalette";
 import { NoteLinkMenu, SlashMenu, type LinkItem } from "./ui/Popups";
@@ -156,7 +158,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       host,
       awareness: awarenessRef.current,
       user: user ? { name: user.name, color: user.color } : null,
-      extensions: [slash, links],
+      extensions: [slash, links, PaperSnap, BlockLift],
     });
     let remountQueued = false;
     let lastTitle = readTitle(doc);
@@ -275,6 +277,40 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
     api?.pen.invalidate();
   }, [api, style.font, style.width, style.paper]);
 
+  // Ruled paper: keep the rules under the text after any relayout (paper.ts).
+  const ruled = style.paper !== "plain";
+  const editorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = editorRef.current;
+    const root = rootRef.current;
+    if (!api || !el || !root) return;
+    const { editor } = api;
+    if (!ruled) {
+      clearPaper(editor.view, el);
+      return;
+    }
+    let frame = 0;
+    const align = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => !editor.isDestroyed && alignPaper(editor.view, el, root));
+    };
+    align();
+    const ro = new ResizeObserver(align);
+    ro.observe(editor.view.dom);
+    ro.observe(root);
+    editor.on("update", align);
+    root.addEventListener("ds-layout", align);
+    document.fonts?.addEventListener("loadingdone", align);
+    void document.fonts?.ready.then(align);
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      editor.off("update", align);
+      root.removeEventListener("ds-layout", align);
+      document.fonts?.removeEventListener("loadingdone", align);
+    };
+  }, [api, ruled, style.font, style.width, style.paper]);
+
   const cssVars = {
     "--ds-doc-font": FONT_VARS[style.font],
     "--ds-doc-width": WIDTHS[style.width],
@@ -285,7 +321,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
   return (
     // Design-system popovers use Radix tooltips; a local provider keeps the editor usable without UIProvider.
     <TooltipProvider delayDuration={500} skipDelayDuration={200}>
-    <div className={`ds-editor ${className}`} data-paper={style.paper} data-font={style.font} data-width={style.width} data-readonly={readOnly || undefined} style={cssVars}>
+    <div ref={editorRef} className={`ds-editor ${className}`} data-paper={style.paper} data-ruled={ruled || undefined} data-font={style.font} data-width={style.width} data-readonly={readOnly || undefined} style={cssVars}>
       {showCover && meta.cover && <Cover doc={doc} host={host.current} editable={!readOnly} onRequestCover={props.onRequestCover} />}
       {meta.formatVersion > SUPPORTED_FORMAT_VERSION && (
         <div className="ds-readonly-banner" role="status">

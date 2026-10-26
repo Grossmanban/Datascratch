@@ -152,8 +152,9 @@ class Importer {
         return [this.table(node)];
       case "html":
         return [{ type: "paragraph", attrs: {}, inline: [{ text: node.value, marks: {} }] }];
-      case "definition":
       case "footnoteDefinition":
+        return this.footnote(node);
+      case "definition":
       case "yaml" as never:
         return [];
       default:
@@ -252,6 +253,7 @@ class Importer {
     };
   }
 
+  /** Column alignment (`:---`, `:---:`, `---:`) is the cell's `align` attribute (document-model.md, tableHeader/tableCell). */
   private table(node: Mdast.Table): BlockSpec {
     return {
       type: "table",
@@ -259,13 +261,24 @@ class Importer {
       children: node.children.map((row, r) => ({
         type: "tableRow",
         attrs: {},
-        children: row.children.map((cell) => ({
-          type: r === 0 ? "tableHeader" : "tableCell",
-          attrs: { colspan: 1, rowspan: 1, colwidth: null },
-          children: [{ type: "paragraph", attrs: {}, inline: this.inline(cell.children) }],
-        })),
+        children: row.children.map((cell, c) => {
+          const align = node.align?.[c] ?? null;
+          return {
+            type: r === 0 ? "tableHeader" : "tableCell",
+            attrs: align ? { colspan: 1, rowspan: 1, colwidth: null, align } : { colspan: 1, rowspan: 1, colwidth: null },
+            children: [{ type: "paragraph", attrs: {}, inline: this.inline(cell.children) }],
+          };
+        }),
       })),
     };
+  }
+
+  /** Footnotes have no node in the schema: keep the definition as a paragraph «[^1]: …». */
+  private footnote(node: Mdast.FootnoteDefinition): BlockSpec[] {
+    const [first, ...rest] = this.blocks(node.children);
+    const head: InlineSpec = { text: `[^${node.label ?? node.identifier}]: `, marks: {} };
+    if (first && first.type === "paragraph") return [{ ...first, inline: [head, ...(first.inline ?? [])] }, ...rest];
+    return [{ type: "paragraph", attrs: {}, inline: [head] }, ...(first ? [first] : []), ...rest];
   }
 
   inline(nodes: Mdast.PhrasingContent[], marks: Record<string, unknown> = {}): InlineSpec[] {
@@ -274,7 +287,11 @@ class Importer {
       switch (n.type) {
         case "text": {
           const raw = this.raw(n);
-          out.push(...this.text(n.value, marks, raw === null ? null : escapeMask(raw, n.value)));
+          const mask = raw === null ? null : escapeMask(raw, n.value);
+          if (raw !== null && mask !== null && raw.includes("$")) {
+            const m = withVerbatimMath(raw);
+            out.push(...this.text(m.value, marks, m.escaped));
+          } else out.push(...this.text(n.value, marks, mask));
           break;
         }
         case "strong":
@@ -291,6 +308,9 @@ class Importer {
           break;
         case "break":
           out.push({ atom: "hardBreak", attrs: {} });
+          break;
+        case "footnoteReference":
+          out.push({ text: `[^${n.label ?? n.identifier}]`, marks });
           break;
         case "link": {
           const m = /^note:([0-9a-f-]{36})$/.exec(n.url);
@@ -350,6 +370,39 @@ class Importer {
     if (last < value.length) out.push({ text: value.slice(last), marks });
     return out;
   }
+}
+
+const INLINE_MATH_RE = /\$\$[^$]+?\$\$|\$(?=[^\s$])[^$\n]*?[^\s$\\]\$|\$[^\s$]\$/y;
+
+/**
+ * Decodes Markdown escapes of a text node's source but keeps inline math
+ * (`$…$`, `$$…$$`) verbatim: `$\sqrt{x}\,dx$` must keep its backslashes.
+ * Math characters are flagged as escaped so no tag/link/highlight is made inside.
+ */
+function withVerbatimMath(raw: string): { value: string; escaped: boolean[] } {
+  let value = "";
+  const escaped: boolean[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === "$" && (i === 0 || raw[i - 1] !== "\\")) {
+      INLINE_MATH_RE.lastIndex = i;
+      const m = INLINE_MATH_RE.exec(raw);
+      if (m) {
+        value += m[0];
+        for (let k = 0; k < m[0].length; k++) escaped.push(true);
+        i += m[0].length - 1;
+        continue;
+      }
+    }
+    if (raw[i] === "\\" && i + 1 < raw.length && ASCII_PUNCT.test(raw[i + 1]!)) {
+      value += raw[i + 1];
+      escaped.push(true);
+      i++;
+    } else {
+      value += raw[i];
+      escaped.push(false);
+    }
+  }
+  return { value, escaped };
 }
 
 /**

@@ -40,7 +40,7 @@ export function registerRestRoutes(app: FastifyInstance, ctx: AgentsContext, rt:
   const svc = rt.service;
 
   type Handler = (p: Principal, req: FastifyRequest) => Promise<unknown>;
-  const route = (method: "GET" | "POST" | "PATCH", url: string, action: string, input: (req: FastifyRequest) => unknown, run: Handler, raw?: "png") => {
+  const route = (method: "GET" | "POST" | "PATCH" | "DELETE", url: string, action: string, input: (req: FastifyRequest) => unknown, run: Handler, raw?: "png") => {
     app.route({
       method,
       url,
@@ -119,6 +119,35 @@ export function registerRestRoutes(app: FastifyInstance, ctx: AgentsContext, rt:
     "add_comment",
     (r) => params(r),
     (p, r) => svc.addComment(p, parse(S.addCommentInput, { ...body(r), noteId: params(r).noteId })),
+  );
+  route("POST", "/v1/agent/folders", "create_folder", body, (p, r) => svc.createFolder(p, parse(S.createFolderInput, body(r))));
+  route(
+    "PATCH",
+    "/v1/agent/folders/:folderId",
+    "rename_folder",
+    (r) => ({ ...body(r), folderId: params(r).folderId }),
+    (p, r) => svc.renameFolder(p, parse(S.renameFolderInput, { ...body(r), folderId: params(r).folderId })),
+  );
+  route(
+    "POST",
+    "/v1/agent/folders/:folderId/move",
+    "move_folder",
+    (r) => ({ ...body(r), folderId: params(r).folderId }),
+    (p, r) => svc.moveFolder(p, parse(S.moveFolderInput, { ...body(r), folderId: params(r).folderId })),
+  );
+  route(
+    "DELETE",
+    "/v1/agent/folders/:folderId",
+    "delete_folder",
+    (r) => ({ ...query(r), folderId: params(r).folderId }),
+    (p, r) => svc.deleteFolder(p, parse(S.deleteFolderInput, { ...query(r), folderId: params(r).folderId })),
+  );
+  route(
+    "POST",
+    "/v1/agent/notes/:noteId/move",
+    "move_note",
+    (r) => ({ ...body(r), noteId: params(r).noteId }),
+    (p, r) => svc.moveNote(p, parse(S.moveNoteInput, { ...body(r), noteId: params(r).noteId })),
   );
   route(
     "PATCH",

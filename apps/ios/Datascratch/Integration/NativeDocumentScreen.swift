@@ -84,6 +84,8 @@ final class NativeEditorModel {
     var isAskingForLink = false
     /// The open "/" menu, if any.
     var slashMenu: SlashMenuState?
+    /// A pen palette tap not yet applied to the editor's tools (they change a turn later).
+    var pendingPenSelection: DSPenSelection?
     @ObservationIgnored private var keyboardObservers: [NSObjectProtocol] = []
 
     isolated deinit {
@@ -150,6 +152,13 @@ struct NativeEditorRepresentable: UIViewRepresentable {
     let editor: EditorView
     func makeUIView(context: Context) -> EditorView { editor }
     func updateUIView(_ uiView: EditorView, context: Context) {}
+
+    /// Exactly the space it is given: the editor's own preferred width (its text column) must
+    /// not push the document past the screen edge next to the list (iPad mini portrait, D-47).
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: EditorView, context: Context) -> CGSize? {
+        guard let width = proposal.width, let height = proposal.height else { return nil }
+        return CGSize(width: width, height: height)
+    }
 }
 
 /// The document screen with the native editor: full-height editor, floating glass
@@ -169,10 +178,12 @@ struct NativeDocumentScreen: View {
     }
 
     /// The palette with its fold button at the trailing end.
-    private func paletteRow(_ model: NativeEditorModel, isCompact: Bool) -> some View {
-        HStack(spacing: isCompact ? Theme.Space.s1 : Theme.Space.s2) {
+    /// `isTight`: the narrowest column (beside the list on an iPad mini in portrait, 18 pt short
+    /// with the regular margins) — slim margins and spacing, so the row fits.
+    private func paletteRow(_ model: NativeEditorModel, isCompact: Bool, isTight: Bool = false) -> some View {
+        HStack(spacing: isTight ? 2 : isCompact ? Theme.Space.s1 : Theme.Space.s2) {
             HideKeyboardButton(model: model, isCompact: isCompact)
-                .padding(.leading, Theme.Space.s3)
+                .padding(.leading, isTight ? Theme.Space.s1 : Theme.Space.s3)
             PenPalette(model: model, isCompact: isCompact)
             Button { setPaletteCollapsed(true) } label: {
                 Image(systemName: "chevron.down.right")
@@ -185,7 +196,7 @@ struct NativeDocumentScreen: View {
             .buttonBorderShape(.circle)
             .accessibilityLabel("Hide Pen Tools")
             .accessibilityIdentifier("penPalette.collapse")
-            .padding(.trailing, Theme.Space.s3)
+            .padding(.trailing, isTight ? Theme.Space.s1 : Theme.Space.s3)
         }
     }
 
@@ -202,9 +213,15 @@ struct NativeDocumentScreen: View {
                         NativeEditorRepresentable(editor: model.editor)
                             .accessibilityIdentifier("editor")
                         if let menu = model.slashMenu, !menu.items.isEmpty {
-                            SlashMenuView(menu: menu, bounds: proxy.size) { id in model.editor.applySlashCommand(id) }
+                            SlashMenuView(menu: menu, bounds: proxy.size) { id in
+                                model.editor.applySlashCommand(id)
+                                model.slashMenu = nil
+                            }
                         }
                     }
+                    // The column's width, never the editor's own: next to the list on an iPad mini
+                    // in portrait it ran 18 pt past the screen edge.
+                    .frame(width: proxy.size.width)
                     // The palette sits in the bottom safe area: the text scrolls clear of it, and it
                     // rides up with the keyboard in one animation (no second layout pass).
                     .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -230,6 +247,7 @@ struct NativeDocumentScreen: View {
                                     ViewThatFits(in: .horizontal) {
                                         paletteRow(model, isCompact: false)
                                         paletteRow(model, isCompact: true)
+                                        paletteRow(model, isCompact: true, isTight: true)
                                     }
                                     .padding(.top, Theme.Space.s2)
                                     .padding(.bottom, Theme.Space.s3)
@@ -291,8 +309,32 @@ struct NativeEditorToolbar: ToolbarContent {
     @Environment(AppModel.self) private var app
     @Environment(SceneModel.self) private var scene
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.isNarrowDocumentColumn) private var isNarrowColumn
     let model: NativeEditorModel
     let note: NoteMeta
+
+    @ViewBuilder private var insertItems: some View {
+        Button("Task", systemImage: "checkmark.circle") { model.editor.perform(.taskList) }
+        Menu {
+            Button("Heading 1") { model.editor.perform(.heading1) }
+            Button("Heading 2") { model.editor.perform(.heading2) }
+            Button("Heading 3") { model.editor.perform(.heading3) }
+        } label: {
+            Label("Heading", systemImage: "textformat")
+        }
+        Button("Bulleted List", systemImage: "list.bullet") { model.editor.perform(.bulletList) }
+        Button("Quote", systemImage: "text.quote") { model.editor.perform(.quote) }
+        Divider()
+        Button("Drawing", systemImage: "scribble") { model.editor.insertBlock(.drawing(height: 260)) }
+        Button("Formula", systemImage: "function") { model.editor.insertBlock(.math("a^2 + b^2 = c^2")) }
+        Button("Diagram", systemImage: "point.3.connected.trianglepath.dotted") {
+            model.editor.insertBlock(.mermaid("graph TD\n  A --> B"))
+        }
+        Button("Table", systemImage: "tablecells") {
+            model.editor.insertBlock(EditorCommands.table(rows: 3, columns: 3, header: ["", "", ""]))
+        }
+        Button("Divider", systemImage: "minus") { model.editor.insertBlock(.rule("line")) }
+    }
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarLeading) {
@@ -309,41 +351,31 @@ struct NativeEditorToolbar: ToolbarContent {
                 .keyboardShortcut("z", modifiers: [.command, .shift])
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
-            Menu {
-                Button("Task", systemImage: "checkmark.circle") { model.editor.perform(.taskList) }
-                Menu {
-                    Button("Heading 1") { model.editor.perform(.heading1) }
-                    Button("Heading 2") { model.editor.perform(.heading2) }
-                    Button("Heading 3") { model.editor.perform(.heading3) }
+            // A narrow column (next to the list on an iPad mini in portrait): Insert and Share go
+            // into «…» so the bar fits the column (D-47).
+            if !isNarrowColumn {
+                Menu { insertItems } label: {
+                    Image(systemName: "plus.circle")
+                }
+                .accessibilityLabel("Insert")
+                .accessibilityIdentifier("editor.insert")
+
+                Button {
+                    scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
                 } label: {
-                    Label("Heading", systemImage: "textformat")
+                    Image(systemName: "square.and.arrow.up")
                 }
-                Button("Bulleted List", systemImage: "list.bullet") { model.editor.perform(.bulletList) }
-                Button("Quote", systemImage: "text.quote") { model.editor.perform(.quote) }
-                Divider()
-                Button("Drawing", systemImage: "scribble") { model.editor.insertBlock(.drawing(height: 260)) }
-                Button("Formula", systemImage: "function") { model.editor.insertBlock(.math("a^2 + b^2 = c^2")) }
-                Button("Diagram", systemImage: "point.3.connected.trianglepath.dotted") {
-                    model.editor.insertBlock(.mermaid("graph TD\n  A --> B"))
-                }
-                Button("Table", systemImage: "tablecells") {
-                    model.editor.insertBlock(EditorCommands.table(rows: 3, columns: 3, header: ["", "", ""]))
-                }
-                Button("Divider", systemImage: "minus") { model.editor.insertBlock(.rule("line")) }
-            } label: {
-                Image(systemName: "plus.circle")
+                .accessibilityLabel("Share")
             }
-            .accessibilityLabel("Insert")
-            .accessibilityIdentifier("editor.insert")
-
-            Button {
-                scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-            }
-            .accessibilityLabel("Share")
 
             Menu {
+                if isNarrowColumn {
+                    Menu("Insert", systemImage: "plus.circle") { insertItems }
+                    Button("Share", systemImage: "square.and.arrow.up") {
+                        scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
+                    }
+                    Divider()
+                }
                 Button("Style…", systemImage: "textformat") { scene.sheet = .documentStyle(noteId: note.id) }
                 Menu("Cover", systemImage: "photo") { CoverMenuItems(note: note) }
                 Button("Version History", systemImage: "clock.arrow.circlepath") {
@@ -434,7 +466,7 @@ struct NativeDocumentHeader: View {
 /// portrait or split view): the compact row (44 pt targets) with colour, width and finger
 /// drawing under «More». Wide: everything inline.
 /// Hides the keyboard while text is being edited (iPhone has no other way). The slot stays put
-/// when there is no keyboard — only its opacity changes — so nothing moves under the finger.
+/// when there is no keyboard (the button is hidden in it) so nothing moves under the finger.
 struct HideKeyboardButton: View {
     let model: NativeEditorModel
     let isCompact: Bool
@@ -442,11 +474,15 @@ struct HideKeyboardButton: View {
     var body: some View {
         let _ = model.revision
         let editing = model.editor.isEditingText && model.isSoftwareKeyboardShown
-        Button {
+        let side: CGFloat = isCompact ? 22 : 28
+        let button = Button {
             model.editor.dismissKeyboard()
             // On iPad resigning the text view alone left the keyboard up; ending editing on the
             // whole editor (as switching to a pen does) takes it down.
             model.editor.endEditing(true)
+            // Whatever else holds the keyboard: the app-wide way, then the window.
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            model.editor.window?.endEditing(true)
             // The keyboard is going: drop the button now rather than wait for the notification.
             model.isSoftwareKeyboardShown = false
             // With a hardware keyboard nothing else reports the end of editing: refresh the bar.
@@ -455,15 +491,19 @@ struct HideKeyboardButton: View {
             Image(systemName: "keyboard.chevron.compact.down")
                 .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
                 .foregroundStyle(Theme.Palette.textSecondary)
-                .frame(width: isCompact ? 22 : 28, height: isCompact ? 22 : 28)
+                .frame(width: side, height: side)
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
-        .opacity(editing ? 1 : 0)
-        .disabled(!editing)
-        .accessibilityHidden(!editing)
         .accessibilityLabel("Hide Keyboard")
         .accessibilityIdentifier("editor.hideKeyboard")
+        if editing {
+            button
+        } else {
+            // The slot keeps its size (nothing moves under the finger) but holds no button: an
+            // invisible disabled one still counted as offered on iPad (run 40331980802).
+            button.hidden().disabled(true)
+        }
     }
 }
 
@@ -648,12 +688,17 @@ struct PenPalette: View {
             .accessibilityIdentifier("penPalette")
     }
 
+    /// The toolbar reads a value, not the tool object: right after a tap the editor's tools
+    /// change on the next run-loop turn, so the tapped selection is shown until they have.
     private func selection(_ tools: InkToolState) -> Binding<DSPenSelection> {
-        Binding(get: { Self.selection(from: tools) }, set: { new in apply(new, to: tools) })
+        let current = model.pendingPenSelection ?? Self.selection(from: tools)
+        return Binding(get: { current }, set: { new in apply(new, to: tools) })
     }
 
     private func apply(_ new: DSPenSelection, to tools: InkToolState) {
         let old = Self.selection(from: tools)
+        model.pendingPenSelection = new
+        DispatchQueue.main.async { DispatchQueue.main.async { model.pendingPenSelection = nil } }
         let mode = Self.mode(for: new)
         if mode != tools.mode { model.select(mode) }
         if new.drawWithFinger != old.drawWithFinger {
@@ -723,4 +768,5 @@ struct PenPalette: View {
         }
     }
 }
+
 #endif

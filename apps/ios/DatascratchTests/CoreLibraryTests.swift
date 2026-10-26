@@ -76,13 +76,13 @@ struct CoreLibraryTests {
         let note = library.createNote(in: notebook.id, folder: nil, title: "Offline")
         library.setBody(NoteBody(blocks: [.paragraph("Written before sign-out")]), ofNote: note.id)
 
-        #expect(core.unsentNotebookIds.contains(notebook.id))
+        #expect(try store.unsentNotebookIds().contains(notebook.id))
         #expect(core.unsentChangeCount > 0)
-        let kept = core.unsentNotebookKeys()
-        let key = try #require(kept[notebook.id])
+        let key = try #require(try keys.notebookKey(notebook.id))
 
-        try keys.clear()
-        core.restoreNotebookKeys(kept)
+        // What `AccountService.logout` does with unsent notebooks, then signing in again.
+        try keys.clear(keepingNotebooks: try store.unsentNotebookIds(), owner: "user-1")
+        #expect(try keys.resolveKeptKeys(signingInAs: "user-1").isEmpty)
 
         let fresh = KeyRing(store: secrets)
         #expect(try fresh.notebookKey(notebook.id) == key)

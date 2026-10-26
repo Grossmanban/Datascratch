@@ -85,6 +85,9 @@ struct PadWorkspace: View {
             // Too narrow for both (portrait with the sidebar): the document alone, the list comes
             // back when it closes.
             let showsList = !(showsDocument && (scene.isDocumentFullScreen || proxy.size.width < 640))
+            // 300 at the least: on an iPad mini in portrait the document beside it then has
+            // room for the pen palette's narrowest row (with 320 it ran 9 pt off screen).
+            let listWidth = min(420, max(300, proxy.size.width * 0.38))
             HStack(spacing: 0) {
                 if showsList {
                     NavigationStack {
@@ -93,7 +96,7 @@ struct PadWorkspace: View {
                                 ToolbarItem(placement: .topBarLeading) { SidebarToggleButton() }
                             }
                     }
-                    .frame(width: showsDocument ? min(420, max(320, proxy.size.width * 0.38)) : nil)
+                    .frame(width: showsDocument ? listWidth : nil)
                     .frame(maxWidth: showsDocument ? nil : .infinity)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("workspace.list")
@@ -104,6 +107,12 @@ struct PadWorkspace: View {
                         DocumentScreen(noteId: noteId)
                             .id(noteId)
                     }
+                    // Takes the width that is left, never more: its content (toolbar, format bar)
+                    // must not push the column past the screen edge (iPad mini portrait).
+                    .frame(minWidth: 0, maxWidth: .infinity)
+                    // Beside the list on an iPad mini in portrait the column is ~420 pt: the
+                    // document's toolbar folds Insert and Share into «…» to fit it.
+                    .environment(\.isNarrowDocumentColumn, showsList && proxy.size.width - listWidth < 480)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("workspace.document")
                 }
@@ -229,4 +238,10 @@ struct ModeChangeConfirmation: ViewModifier {
             }
         }
     }
+}
+
+extension EnvironmentValues {
+    /// The document column is narrow (beside the list on an iPad mini in portrait): its toolbar
+    /// folds secondary actions into «…».
+    @Entry var isNarrowDocumentColumn = false
 }

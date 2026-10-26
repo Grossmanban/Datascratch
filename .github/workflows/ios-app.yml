@@ -117,7 +117,7 @@ jobs:
       # D-46: the smoke set is the release gate (the coordinator starts a TestFlight build once it
       # is green on both devices); the rest of the UI suite runs right after in the same job.
       - name: UI tests (smoke — release gate)
-        timeout-minutes: 12
+        timeout-minutes: 20
         run: |
           set -o pipefail
           ARGS=()

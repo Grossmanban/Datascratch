@@ -57,4 +57,22 @@ test("an item nobody can read is skipped: sync settles (no endless spinner), a c
   };
   expect(debug.notSynced).toEqual([]);
   expect(debug.skipped.filter((s) => s.docId === notebookId).length).toBe(2);
+
+  // The notebook says so calmly, can be dismissed, stays dismissed, and returns only for new items.
+  await page.goto(`/notebook/${notebookId}`);
+  const note = page.getByTestId("unreadable-note");
+  await expect(note).toContainText("Часть изменений здесь пока не читается");
+  await page.getByTestId("unreadable-dismiss").click();
+  await expect(note).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId("folder-strip").or(page.getByText("В папке нет документов")).or(page.getByTestId("doc-card")).first()).toBeVisible();
+  await expect(note).toHaveCount(0);
+  // Still reachable from the notebook's menu.
+  await page.getByTestId("sidebar").getByRole("link", { name: /Заметки/ }).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Нечитаемые изменения" }).click();
+  await expect(note).toBeVisible();
+  await page.getByTestId("unreadable-dismiss").click();
+  await expect(note).toHaveCount(0);
+  await request.post(`${MOCK}/v1/__test/inject-unreadable`, { data: { docId: notebookId } });
+  await expect(note).toBeVisible({ timeout: 15_000 });
 });

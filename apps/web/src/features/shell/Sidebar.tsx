@@ -23,6 +23,7 @@ import {
   X,
   Pencil,
   FileText,
+  LockKeyhole,
 } from "lucide-react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { AnimatePresence, motion } from "motion/react";
@@ -64,6 +65,7 @@ import { tintFg, tintName } from "@/lib/tokens";
 import { cn, confirmDialog, ContextMenu, DropdownMenu, IconButton, Kbd, SpaceTile, toast, Tooltip, type MenuItem } from "@/ui";
 import type { NotebookRef } from "@/lib/shared";
 import { InlineRename } from "./InlineRename";
+import { unreadableMenuState, useUnreadable } from "@/features/docs/UnreadableNote";
 import { SyncIndicator } from "./SyncIndicator";
 import { createSpaceInteractive } from "./spaces";
 import { iconGlyph } from "@/lib/glyph";
@@ -512,6 +514,7 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
     if (kind === "folder" && st.folders[id]?.notebookId === nb.id) moveFolder(id, null);
   });
   const active = pathname === `/notebook/${nb.id}`;
+  const unreadable = useUnreadable(nb.id);
   const menu: MenuItem[] = [
     { label: t("nav.newDoc"), icon: <FileText className="size-3.5" />, onSelect: () => void newNoteAndOpen(navigate, nb.id) },
     {
@@ -527,6 +530,18 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
       icon: nb.mode === "agent" ? <Sparkles className="size-3.5" /> : <Lock className="size-3.5" />,
       onSelect: () => void navigate({ to: "/settings/$section", params: { section: "notebooks" } }),
     },
+    ...(unreadable.has
+      ? [
+          {
+            label: t("sync.unreadableShow"),
+            icon: <LockKeyhole className="size-3.5" />,
+            onSelect: () => {
+              unreadableMenuState(nb.id).showAgain();
+              void navigate({ to: "/notebook/$notebookId", params: { notebookId: nb.id } });
+            },
+          },
+        ]
+      : []),
     { kind: "separator" },
     {
       label: t("common.delete"),

@@ -1,3 +1,4 @@
+import DSDesign
 import DSEditor
 import SwiftUI
 
@@ -13,6 +14,21 @@ struct DemoView: View {
             .navigationTitle("Живой штрих")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            .alert("Заметки «\(model.pendingNoteTitle ?? "")» нет",
+                   isPresented: Binding(get: { model.pendingNoteTitle != nil }, set: { if !$0 { model.pendingNoteTitle = nil } })) {
+                Button("Создать заметку") { model.status = "Создана «\(model.pendingNoteTitle ?? "")» (демо)" }
+                Button("Отмена", role: .cancel) {}
+            } message: {
+                Text("В приложении ссылка откроет заметку с этим названием или предложит её создать.")
+            }
+            .alert("Ссылка", isPresented: Binding(get: { model.askingForLink }, set: { model.askingForLink = $0 })) {
+                TextField("https://", text: Binding(get: { model.linkText }, set: { model.linkText = $0 }))
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                Button("Готово") { model.editor.setLink(URL(string: model.linkText)) }
+                Button("Отмена", role: .cancel) {}
+            }
+            .overlay(alignment: .topLeading) { SlashMenuOverlay(model: model) }
             .sheet(isPresented: Binding(get: { model.showPalette }, set: { model.showPalette = $0 })) {
                 PaletteSheet(model: model)
                     .presentationDetents([.height(300)])
@@ -27,9 +43,15 @@ struct DemoView: View {
             EditorRepresentable(editor: model.editor)
                 .accessibilityIdentifier("editor")
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    ToolPalette(model: model)
-                        .padding(.top, 8)
-                        .padding(.bottom, 12)
+                    VStack(spacing: 8) {
+                        // While typing: the format bar above the palette (`spec/04-editor.md`).
+                        if model.editor.isEditingText {
+                            FormatBar(model: model)
+                        }
+                        ToolPalette(model: model)
+                    }
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
                 }
             if model.showHUD {
                 HUDView(model: model)
@@ -44,6 +66,11 @@ struct DemoView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarLeading) {
             let _ = model.revision
+            // iPhone keyboards have no "hide" key: the toolbar always has one (disabled when not typing).
+            Button { model.editor.dismissKeyboard() } label: { Image(systemName: "keyboard.chevron.compact.down") }
+                .disabled(!model.editor.isEditingText)
+                .accessibilityIdentifier("hideKeyboard")
+                .accessibilityLabel("Скрыть клавиатуру")
             Button { model.editor.undo() } label: { Image(systemName: "arrow.uturn.backward") }
                 .disabled(!model.editor.canUndo)
                 .accessibilityIdentifier("undo")
@@ -137,6 +164,67 @@ struct EditorRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: EditorView, context: Context) {}
 }
 
+/// Format bar over the keyboard (DSDesign `DSFormatBar`): marks act on the selection, or on the
+/// next typed text at a caret; headings toggle.
+struct FormatBar: View {
+    let model: DemoModel
+
+    private func item(_ id: String, _ image: String, _ label: String, _ action: EditorAction, _ on: Bool) -> DSFormatBarElement {
+        let editor = model.editor
+        return .item(DSFormatBarItem(id: id, systemImage: image, label: label, isActive: on) {
+            // After the button's touch is delivered (same rule as the tool palette).
+            DispatchQueue.main.async { editor.perform(action) }
+        })
+    }
+
+    var body: some View {
+        let _ = model.revision
+        let state = model.editor.formatState
+        DSFormatBar(items: [
+            item("bold", "bold", "Жирный", .bold, state.has(MarkName.bold)),
+            item("italic", "italic", "Курсив", .italic, state.has(MarkName.italic)),
+            item("underline", "underline", "Подчёркнутый", .underline, state.has(MarkName.underline)),
+            item("strike", "strikethrough", "Зачёркнутый", .strike, state.has(MarkName.strike)),
+            item("highlight", "highlighter", "Выделение", .highlight, state.has(MarkName.highlight)),
+            .separator(id: "blocks"),
+            item("h1", "textformat.size.larger", "Заголовок 1", .heading1, state.block == .heading1),
+            item("h2", "textformat.size", "Заголовок 2", .heading2, state.block == .heading2),
+            item("list", "list.bullet", "Список", .bulletList, state.block == .bulletList),
+            item("task", "checkmark.circle", "Задача", .taskList, state.block == .taskList),
+            .separator(id: "link"),
+            item("link", "link", "Ссылка", .link, state.has(MarkName.link)),
+        ])
+        .accessibilityIdentifier("formatBar")
+    }
+}
+
+/// The "/" block menu under the caret (DSDesign `DSSuggestionList`).
+struct SlashMenuOverlay: View {
+    let model: DemoModel
+
+    var body: some View {
+        if let menu = model.slashMenu {
+            let groups = Dictionary(grouping: menu.items, by: \.group)
+            let order = ["Текст", "Списки", "Вставка"]
+            DSSuggestionList(
+                groups: order.compactMap { name in
+                    groups[name].map { cmds in
+                        DSSuggestionGroup(heading: name, items: cmds.map {
+                            DSSuggestionItem(id: $0.id, title: $0.title, systemImage: $0.systemImage, hint: $0.hint)
+                        })
+                    }
+                },
+                selectedID: Binding(get: { model.slashSelection }, set: { model.slashSelection = $0 }),
+                onPick: { item in DispatchQueue.main.async { model.editor.applySlashCommand(item.id) } }
+            )
+            .frame(width: 280)
+            .frame(maxHeight: 320)
+            .offset(x: max(8, menu.caretRect.minX), y: menu.caretRect.maxY + 6)
+            .accessibilityIdentifier("slashMenu")
+        }
+    }
+}
+
 /// Floating glass tool palette.
 struct ToolPalette: View {
     let model: DemoModel
@@ -146,6 +234,8 @@ struct ToolPalette: View {
     var body: some View {
         let _ = model.revision
         let tools = model.editor.tools
+        // UI-test diagnostics: does the palette re-render after a tool change (iOS 26.2 simulator)?
+        let _ = model.isUITesting ? NSLog("DIAG palette body mode=%@ revision=%d", tools.mode.rawValue, model.revision) : ()
         HStack(spacing: 6) {
             ForEach(modes, id: \.self) { mode in
                 Button {

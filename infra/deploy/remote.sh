@@ -30,7 +30,7 @@ q() { printf '%q' "$1"; }
 case "${1:-}" in
   inspect)
     # Read-only: the script runs as the SSH user; it uses sudo -n only to read.
-    remote 'bash -s' < "$HERE/inspect.sh"
+    remote "DS_DIAG_DOCS=$(q "${DS_DIAG_DOCS:-}") bash -s" < "$HERE/inspect.sh"
     ;;
   deploy)
     echo "::group::Upload deployment files"

@@ -15,6 +15,7 @@ import { AgentError } from "../errors.js";
 import { renderHandwriting, type RenderedImage } from "../render/handwriting-png.js";
 import { base64url, uuidv7 } from "../util.js";
 import { requireWrite, type Principal } from "./access.js";
+import { mergeNotebookMeta, readNotebookMeta, type NotebookDocMeta } from "./notebook-meta.js";
 import { buildNoteIndex, matchNote, NoteIndexCache, searchTerms, type NoteIndex, type TaskInfo } from "./note-index.js";
 import type {
   AddCommentInput,
@@ -46,7 +47,15 @@ interface FolderView {
   name: string;
 }
 
+/** A granted notebook whose document could not be loaded: listed, never silently dropped. */
+interface UnavailableNotebook {
+  info: AgentNotebook & { name: string };
+  reason: string;
+}
+
 interface NotebookView {
+  /** Updates of the notebook index the server had to skip (partly readable notebook). */
+  skippedUpdates: number;
   info: AgentNotebook;
   name: string;
   doc: Y.Doc;
@@ -56,24 +65,6 @@ interface NotebookView {
 
 function str(v: unknown): string | null {
   return typeof v === "string" ? v : null;
-}
-
-interface NotebookDocMeta {
-  name: string | null;
-  icon: string | null;
-  space: AgentNotebook["space"];
-}
-
-/** Notebook name, icon and space mirrored by clients into the notebook document (document-model.md, `meta`). */
-function readNotebookMeta(doc: Y.Doc): NotebookDocMeta {
-  const meta = doc.getMap("meta");
-  const raw = meta.get("space");
-  const spaceObj = raw instanceof Y.Map ? (raw.toJSON() as Record<string, unknown>) : (raw as Record<string, unknown> | null | undefined);
-  const space =
-    spaceObj && typeof spaceObj.id === "string" && typeof spaceObj.name === "string"
-      ? { id: spaceObj.id, name: spaceObj.name, icon: str(spaceObj.icon) }
-      : null;
-  return { name: str(meta.get("name")), icon: str(meta.get("icon")), space };
 }
 
 function readNotebookDoc(doc: Y.Doc): { meta: NotebookDocMeta; notes: Map<string, NoteMetaView>; folders: Map<string, FolderView> } {
@@ -155,28 +146,51 @@ export class AgentService {
   // -------------------------------------------------------------------------
 
   /** Agent-mode notebooks the grant may use, loaded. Private or unlisted notebooks never appear. */
-  private async notebooks(p: Principal, only?: string): Promise<NotebookView[]> {
+  /** Granted agent-mode notebooks, loaded; the ones that fail to load are reported, not dropped. */
+  private async notebookStates(p: Principal, only?: string): Promise<{ views: NotebookView[]; unavailable: UnavailableNotebook[] }> {
     const all = await this.ctx.data.listAgentNotebooks(p.grant.userId, p.grant.id);
     const allowed = all.filter((n) => p.grant.notebookIds.includes(n.id) && (!only || n.id === only));
     if (only && allowed.length === 0)
       throw new AgentError("not_found", `Notebook ${only} is not available to this agent. Call list_notebooks to see the notebooks you can access.`);
     const views: NotebookView[] = [];
+    const unavailable: UnavailableNotebook[] = [];
     for (const info of allowed) {
-      const loaded = await this.ctx.data.loadDoc(p.grant.userId, info.id, p.grant.id);
-      if (!loaded) continue;
+      let loaded: Awaited<ReturnType<typeof this.ctx.data.loadDoc>>;
+      try {
+        loaded = await this.ctx.data.loadDoc(p.grant.userId, info.id, p.grant.id);
+      } catch {
+        loaded = null;
+      }
+      if (!loaded) {
+        unavailable.push({
+          info: mergeNotebookMeta(info, { name: null, icon: null, color: null, space: null }),
+          reason: "The server could not decrypt or load this notebook. Tell the user: the notebook is in “for agents” mode, but its data is not readable right now; reopening it in the app usually re-syncs it.",
+        });
+        continue;
+      }
       const parsed = readNotebookDoc(loaded.doc);
-      const merged: AgentNotebook = { ...info, icon: info.icon ?? parsed.meta.icon, space: info.space ?? parsed.meta.space };
-      views.push({ info: merged, name: info.name ?? parsed.meta.name ?? "Без названия", doc: loaded.doc, notes: parsed.notes, folders: parsed.folders });
+      const merged = mergeNotebookMeta(info, parsed.meta);
+      views.push({ info: merged, name: merged.name, doc: loaded.doc, notes: parsed.notes, folders: parsed.folders, skippedUpdates: loaded.skipped?.length ?? 0 });
     }
+    return { views, unavailable };
+  }
+
+  private async notebooks(p: Principal, only?: string): Promise<NotebookView[]> {
+    const { views, unavailable } = await this.notebookStates(p, only);
+    if (only && views.length === 0 && unavailable[0]) throw new AgentError("conflict", `Notebook ${only} is temporarily unavailable. ${unavailable[0].reason}`);
     return views;
   }
 
   private async locate(p: Principal, noteId: string): Promise<{ nb: NotebookView; meta: NoteMetaView }> {
-    for (const nb of await this.notebooks(p)) {
+    const { views, unavailable } = await this.notebookStates(p);
+    for (const nb of views) {
       const meta = nb.notes.get(noteId);
       if (meta && !meta.trashedAt) return { nb, meta };
     }
-    throw new AgentError("not_found", `Note ${noteId} not found or not available to this agent. Use search_notes or list_notes to find notes.`);
+    const hint = unavailable.length
+      ? ` ${unavailable.length} granted notebook(s) are temporarily unavailable (${unavailable.map((u) => u.info.id).join(", ")}): the note may be there. ${unavailable[0]!.reason}`
+      : "";
+    throw new AgentError("not_found", `Note ${noteId} not found or not available to this agent. Use search_notes or list_notes to find notes.${hint}`);
   }
 
   private async loadNote(p: Principal, noteId: string): Promise<{ doc: Y.Doc; seq: number }> {
@@ -256,7 +270,8 @@ export class AgentService {
   // -------------------------------------------------------------------------
 
   async listSpaces(p: Principal) {
-    const views = await this.notebooks(p);
+    const { views: loaded, unavailable } = await this.notebookStates(p);
+    const views = [...loaded.map((v) => ({ info: v.info, name: v.name })), ...unavailable.map((u) => ({ info: u.info, name: u.info.name }))];
     const spaces = new Map<string, { id: string | null; name: string; icon: string | null; notebooks: { id: string; name: string }[] }>();
     for (const nb of views) {
       const s = nb.info.space;
@@ -269,17 +284,31 @@ export class AgentService {
   }
 
   async listNotebooks(p: Principal) {
-    const views = await this.notebooks(p);
+    const { views, unavailable } = await this.notebookStates(p);
     return {
-      notebooks: views.map((nb) => ({
-        id: nb.info.id,
-        name: nb.name,
-        icon: nb.info.icon,
-        space: nb.info.space ? { id: nb.info.space.id, name: nb.info.space.name } : null,
-        permission: p.grant.permission,
-        noteCount: [...nb.notes.values()].filter((n) => !n.trashedAt).length,
-        folders: [...nb.folders.values()].map((f) => ({ id: f.id, parentId: f.parentId, name: f.name, path: folderPath(nb, f.id).join(" / ") })),
-      })),
+      notebooks: [
+        ...views.map((nb) => ({
+          id: nb.info.id,
+          name: nb.name,
+          icon: nb.info.icon,
+          space: nb.info.space ? { id: nb.info.space.id, name: nb.info.space.name } : null,
+          permission: p.grant.permission,
+          noteCount: [...nb.notes.values()].filter((n) => !n.trashedAt).length,
+          folders: [...nb.folders.values()].map((f) => ({ id: f.id, parentId: f.parentId, name: f.name, path: folderPath(nb, f.id).join(" / ") })),
+          ...(nb.skippedUpdates
+            ? { warning: `${nb.skippedUpdates} recent change(s) of this notebook could not be read by the server and are not shown.` }
+            : {}),
+        })),
+        ...unavailable.map((u) => ({
+          id: u.info.id,
+          name: u.info.name,
+          icon: u.info.icon,
+          space: u.info.space ? { id: u.info.space.id, name: u.info.space.name } : null,
+          permission: p.grant.permission,
+          unavailable: true as const,
+          reason: u.reason,
+        })),
+      ],
     };
   }
 
@@ -426,7 +455,8 @@ export class AgentService {
     const noteId = uuidv7(this.now().getTime());
     const { wrappedKey } = await this.ctx.data.createNoteDoc(p.grant.userId, nb.info.id, noteId, p.grant.id);
     const doc = new Y.Doc();
-    initNoteContent(doc, input.title, input.markdown, { agentEdit: this.mark(p), resolveNoteLink: this.resolver(views) });
+    // D-45: a note created by an agent is marked as a whole in NoteMeta.createdByAgent, not with agentEdit marks.
+    initNoteContent(doc, input.title, input.markdown, { agentEdit: null, resolveNoteLink: this.resolver(views) });
     await this.ctx.data.applyUpdate(p.grant.userId, noteId, Y.encodeStateAsUpdate(doc), this.origin(p, "create_note"));
     const index = buildNoteIndex(noteId, 0, doc);
     const at = this.now().toISOString();
@@ -453,6 +483,7 @@ export class AgentService {
           updatedAt: at,
           trashedAt: null,
           order,
+          createdByAgent: { agentId: p.grant.id, agentName: p.agentName, at },
         };
         for (const [k, v] of Object.entries(fields)) m.set(k, v);
       },

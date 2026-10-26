@@ -245,7 +245,8 @@ struct CoreLibraryTests {
         let core = try CoreLibrary(store: store, keys: keys)
         let library = LibraryStore(backend: core)
         library.seedIfEmpty()
-        let localNotes = try #require(library.notebooks(in: try #require(library.spaces.first).id).first)
+        let localSpace = try #require(library.spaces.first)
+        let localNotes = try #require(library.notebooks(in: localSpace.id).first)
         let early = library.createNote(in: localNotes.id, folder: nil, title: "До входа").id
         let localAccount = core.account.accountDocId
 
@@ -254,7 +255,8 @@ struct CoreLibraryTests {
         let accountId = DSCore.EntityID.make()
         _ = try core.adoptAccount(docId: accountId, isNew: true)
         library.seedIfEmpty()
-        let accountNotes = try #require(library.notebooks(in: try #require(library.spaces.first).id).first)
+        let accountSpace = try #require(library.spaces.first)
+        let accountNotes = try #require(library.notebooks(in: accountSpace.id).first)
         let later = library.createNote(in: accountNotes.id, folder: nil, title: "После входа").id
         try store.setRegistered(localAccount, false)
         _ = try core.adoptAccount(docId: accountId, isNew: false)
@@ -273,6 +275,34 @@ struct CoreLibraryTests {
         #expect(library.dailyNotebook?.id == kept.id)
     }
 
+    /// spec/07: «Delete data from this device» (and signing in to another account) leaves an
+    /// empty library, new keys and nothing to send.
+    @Test func wipingLocalDataLeavesNothingBehind() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        library.seedIfEmpty()
+        let space = try #require(library.spaces.first)
+        let notebook = try #require(library.notebooks(in: space.id).first)
+        let note = library.createNote(in: notebook.id, folder: nil, title: "Секрет")
+        let oldAccount = core.account.accountDocId
+        let oldMaster = try keys.masterKey()
+
+        try core.wipeLocalData()
+        #expect(library.data.notes.isEmpty)
+        #expect(library.data.spaces.isEmpty)
+        #expect(try store.document(note.id) == nil)
+        #expect(try store.document(notebook.id) == nil)
+        #expect(try store.document(oldAccount) == nil)
+        #expect(core.account.accountDocId != oldAccount)
+        #expect(try keys.notebookKey(notebook.id) == nil)
+        #expect(try keys.masterKey() != oldMaster)
+        #expect(core.pendingMoves.isEmpty)
+        // Nothing of the old library is carried into the next account.
+        #expect(try core.carryDeviceLibraries().isEmpty)
+    }
+
     @Test func notebookMetaCarriesNamesForAgents() throws {
         let core = try CoreLibrary.inMemory()
         let library = LibraryStore(backend: core)
@@ -284,6 +314,11 @@ struct CoreLibraryTests {
         library.updateNotebook(notebook.id) { $0.name = "Papers" }
         #expect(doc.crdt.mapValue("meta", ["name"])?.stringValue == "Papers")
         #expect(core.account.notebook(id: notebook.id)?.mode == .agent)
+        // The colour is copied too (document-model §3), and a space rename reaches the copy.
+        library.updateNotebook(notebook.id) { $0.color = .green }
+        #expect(doc.metaCopy?.color == Datascratch.Tint.green.rawValue)
+        library.updateSpace(space.id) { $0.name = "Job" }
+        #expect(doc.metaCopy?.spaceName == "Job")
     }
 
     @Test func trashAndDeleteForever() throws {

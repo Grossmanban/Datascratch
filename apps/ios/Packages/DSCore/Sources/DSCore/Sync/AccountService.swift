@@ -103,25 +103,72 @@ public actor AccountService {
         let id = EntityID.make()
         let (key, wrapped) = try keys.createNotebookKey(notebookId: id)
         _ = try await api.createNotebook(id: id, mode: mode, wrappedKey: wrapped, notebookKey: mode == .agent ? key : nil)
+        keys.markNotebookKeyVerified(id)
         try await api.registerDoc(docId: id, kind: .notebook, notebookId: id)
         try store.ensureDocument(docId: id, kind: .notebook, notebookId: id)
         try store.setRegistered(id)
         let notebook = NotebookDocument(notebookId: id)
         try notebook.initialize()
         try account.putNotebook(NotebookRef(id: id, spaceId: spaceId, name: name, icon: icon, color: color, order: order, mode: mode))
+        try refreshNotebookMeta(notebook, in: account)
         return notebook
+    }
+
+    /// Copies the notebook's name, icon, colour and space from the account document into the
+    /// notebook's `meta` (agents read it there). Call after renaming, changing icon or colour,
+    /// moving to another space or renaming the space; mode switches do it themselves.
+    public nonisolated func refreshNotebookMeta(_ notebook: NotebookDocument, in account: AccountDocument) throws {
+        guard let ref = account.notebook(id: notebook.notebookId) else { return }
+        try notebook.setMetaCopy(.init(ref, space: account.spaces().first { $0.id == ref.spaceId }))
     }
 
     /// Unwraps the keys of all notebooks of the account (after sign-in on a new device).
     public func loadNotebookKeys() async throws {
+        _ = try await reconcileNotebookKeys()
+    }
+
+    /// A notebook whose local key differed from the server's and was replaced.
+    public struct NotebookKeyChange: Hashable, Sendable {
+        public var notebookId: String
+        public var previousKey: Data
+        public var key: Data
+    }
+
+    /// Makes every notebook key match the server's — `GET /notebooks`, the canonical wrapping:
+    /// fills in keys this device lacks (notebooks created on other devices) and replaces local
+    /// keys that differ. Call on every start before syncing and when the account document lists
+    /// a notebook this device has no key for. Each change needs repair:
+    /// `NotebookDocument.rewrapNoteKeys(from:to:)` and `SyncEngine.rekey(docId:)`.
+    public func reconcileNotebookKeys() async throws -> [NotebookKeyChange] {
+        var changes: [NotebookKeyChange] = []
         for nb in try await api.notebooks() {
-            try keys.addNotebookKey(wrapped: nb.wrappedKey.data, notebookId: nb.id)
+            guard let master = try keys.masterKey() else { throw AccountError.notSignedIn }
+            let key = try DSCrypto.unwrapKey(nb.wrappedKey.data, with: master, ad: CryptoAD.notebookKey(nb.id))
+            if let previous = try keys.adoptNotebookKey(key, notebookId: nb.id) {
+                changes.append(NotebookKeyChange(notebookId: nb.id, previousKey: previous, key: key))
+            }
+        }
+        return changes
+    }
+
+    /// The notebook's key for writing: this device's, else the server's (`GET /notebooks/:id/key`).
+    /// `nil` when the notebook is not on the server — only then may a new key be created
+    /// (`KeyRing.createNotebookKey` + `POST /notebooks`). Never create a key for a notebook that
+    /// came from another device.
+    public func notebookKeyForWriting(_ notebookId: String) async throws -> Data? {
+        if let key = try keys.notebookKey(notebookId) { return key }
+        do {
+            return try keys.addNotebookKey(wrapped: try await api.notebookKey(id: notebookId), notebookId: notebookId)
+        } catch APIError.server(404, _, _) {
+            return nil
         }
     }
 
     /// Switches a notebook between private and agent mode (crypto.md §8).
-    public func setMode(_ mode: NotebookMode, notebookId: String, in account: AccountDocument) async throws {
+    /// Pass the notebook document so that its `meta` copy is fresh when agents get access.
+    public func setMode(_ mode: NotebookMode, notebookId: String, in account: AccountDocument, notebook: NotebookDocument? = nil) async throws {
         guard let key = try keys.notebookKey(notebookId) else { throw AccountError.missingKey(notebookId) }
+        if mode == .agent, let notebook { try refreshNotebookMeta(notebook, in: account) }
         try await api.setNotebookMode(id: notebookId, mode: mode, notebookKey: mode == .agent ? key : nil)
         try account.updateNotebook(id: notebookId, ["mode": .string(value: mode.rawValue)])
     }

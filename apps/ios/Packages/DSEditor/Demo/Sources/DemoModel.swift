@@ -11,6 +11,14 @@ final class DemoModel {
     var status = ""
     var showHUD = false
     var showPalette = false
+    /// Title of a `[[Title]]` link that was tapped (the demo has one note: it offers to create it).
+    var pendingNoteTitle: String?
+    /// The "/" block menu while it is open.
+    var slashMenu: SlashMenuState?
+    var slashSelection: String?
+    /// URL prompt for «Ссылка» (no URL on the pasteboard).
+    var askingForLink = false
+    var linkText = ""
     /// Bumped whenever the editor reports a change, so SwiftUI refreshes toolbar state.
     var revision = 0
     /// Editor scroll position (for the HUD and UI tests).
@@ -44,10 +52,20 @@ final class DemoModel {
         editor.onStateChange = { [weak self] in
             guard let self else { return }
             self.revision &+= 1
-            if self.isUITesting { NSLog("DIAG state mode=%@", self.editor.tools.mode.rawValue) }
+            if self.isUITesting { NSLog("DIAG state mode=%@ revision=%d", self.editor.tools.mode.rawValue, self.revision) }
         }
         editor.onScroll = { [weak self] y in self?.scrollOffset = y }
         editor.onPaletteRequest = { [weak self] _ in self?.showPalette = true }
+        editor.onOpenNote = { [weak self] id in self?.status = "Ссылка на заметку \(id.prefix(8))…" }
+        editor.onOpenNoteTitled = { [weak self] title in self?.pendingNoteTitle = title }
+        editor.onSlashMenu = { [weak self] menu in
+            self?.slashMenu = menu
+            self?.slashSelection = menu?.items.first?.id
+        }
+        editor.onLinkRequest = { [weak self] in
+            self?.linkText = ""
+            self?.askingForLink = true
+        }
     }
 
     func save() {

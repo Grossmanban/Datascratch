@@ -338,16 +338,19 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
                 try await Task.sleep(for: .milliseconds(3))
             }
         }
+        // Generous waits: on a loaded CI simulator (all suites run in parallel) a round can
+        // take seconds; the test is about losing nothing, not about speed.
+        let wait = Duration.seconds(20)
         let rounds = 5
         await server.setSnapshotDelay(.milliseconds(50))
         for _ in 0..<rounds {
             for _ in 0..<LocalStore.snapshotOnCloseEdits { try current.insertText("a", at: 0, inBlock: [1]) }
             // Edits (and the previous snapshot) acknowledged: the close uploads its snapshot itself.
-            #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+            #expect(try await eventually(timeout: wait) { (try? a.store.outboxCount()) == 0 })
             let before = await server.snapshotsReceived(docId)
             let closing = Task { await a.close(docId: docId) }
             // The close is now waiting on the server inside its snapshot upload.
-            #expect(try await eventually { await server.snapshotsReceived(docId) > before })
+            #expect(try await eventually(timeout: wait) { await server.snapshotsReceived(docId) > before })
             let next = NoteDocument(noteId: docId)
             try await a.open(next.crdt, notebookId: "nb")
             await closing.value
@@ -361,7 +364,7 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
             return (text.filter { $0 == "a" }.count, text.filter { $0 == "b" }.count)
         }
         let expected = (rounds * LocalStore.snapshotOnCloseEdits, writes)
-        #expect(try await eventually { counts(current) == expected && counts(remote) == expected })
+        #expect(try await eventually(timeout: wait) { counts(current) == expected && counts(remote) == expected })
         await a.stop()
         await b.stop()
     }

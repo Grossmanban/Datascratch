@@ -312,11 +312,15 @@ final class LibraryUITests: XCTestCase {
         // A tab in «Personal»; first-run seeding starred the welcome note there.
         try openNewNoteInNativeEditor(app)
         let switcher = app.descendants(matching: .any)["sidebar.spaceSwitcher"].firstMatch
-        for _ in 0..<3 where !(switcher.exists && switcher.isHittable) {
-            let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
-            if toggle.exists && toggle.isHittable { toggle.tap() } else if app.navigationBars.buttons.firstMatch.exists { app.navigationBars.buttons.firstMatch.tap() }
-            settle(1)
+        // iPhone: choosing a space shows its documents; come back to the sidebar each time.
+        func showSidebar() {
+            for _ in 0..<3 where !(switcher.exists && switcher.isHittable) {
+                let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
+                if toggle.exists && toggle.isHittable { toggle.tap() } else if app.navigationBars.buttons.firstMatch.exists { app.navigationBars.buttons.firstMatch.tap() }
+                settle(1)
+            }
         }
+        showSidebar()
         XCTAssertTrue(switcher.waitForExistence(timeout: 5) && switcher.isHittable, "no space switcher; buttons: \(Self.buttons(app))")
         let starred = app.descendants(matching: .any)["sidebar.starredNote"].firstMatch
         let tab = app.descendants(matching: .any)["sidebar.tab"].firstMatch
@@ -324,11 +328,13 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(tab.exists, "no tab in Personal")
 
         func choose(_ name: String) {
+            showSidebar()
             switcher.tap()
             let item = app.buttons[name].firstMatch
             XCTAssertTrue(item.waitForExistence(timeout: 3), "no \(name) in the space menu; buttons: \(Self.buttons(app))")
             item.tap()
             settle(1)
+            showSidebar()
         }
         choose("Work")
         XCTAssertFalse(starred.exists, "Personal's starred note shows in Work")

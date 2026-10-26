@@ -294,6 +294,7 @@ struct NativeDocumentScreen: View {
             if app.core == nil { failed = true }
             return
         }
+        app.connection?.focus(noteId)
         if let kept = scene.editor(for: noteId) as? NativeEditorModel, kept.notebookId == note.notebookId {
             model = kept
             return

@@ -750,10 +750,33 @@ final class RecordingRemote: CoreLibraryRemote {
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?) { opened.append(crdt.docId) }
     var keysMissing = 0
     func notebookKeysMissing() { keysMissing += 1 }
+    var keysLearned = 0
+    func noteKeysLearned() { keysLearned += 1 }
 }
 
 @MainActor
 struct CoreLibraryRemoteTests {
+    /// A note key that arrives with a notebook index lets the documents waiting for it be
+    /// subscribed — once, not on every reload.
+    @Test func newNoteKeysWakeTheDocumentsWaitingForThem() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let core = try CoreLibrary(store: try LocalStore.inMemory(), keys: keys)
+        let library = LibraryStore(backend: core)
+        let notebook = library.createNotebook(in: library.createSpace(name: "S").id, name: "N", mode: .private)
+        let remote = RecordingRemote()
+        core.remote = remote
+        _ = core.loadSnapshot()
+        let learned = remote.keysLearned
+
+        let noteId = DSCore.EntityID.make()
+        let wrapped = try keys.createNoteKey(noteId: noteId, notebookId: notebook.id).wrappedKey
+        try core.notebookDocument(notebook.id).putNote(DSCore.NoteMeta(id: noteId, title: "From the web", wrappedKey: wrapped), origin: .remote)
+        _ = core.loadSnapshot()
+        #expect(remote.keysLearned == learned + 1)
+        _ = core.loadSnapshot()
+        #expect(remote.keysLearned == learned + 1)
+    }
+
     @Test func notebooksAndDocumentsReachTheServerSide() throws {
         let core = try CoreLibrary.inMemory()
         let remote = RecordingRemote()

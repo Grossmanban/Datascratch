@@ -10,12 +10,16 @@ public struct SyncStatus: Equatable, Sendable {
     /// Documents whose messages could not be delivered and are no longer retried on their own
     /// (`retryFailed`, `discardFailed`). Everything else keeps syncing.
     public var failed: [FailedSync] = []
+    /// Not connected and the quick retries are used up (several attempts failed in a row).
+    /// Until then a lost or stuck connection counts as syncing, not offline.
+    public var connectionTrouble = false
 
-    public init(connection: SyncConnectionState, pending: Int, catchingUp: Int, failed: [FailedSync] = []) {
+    public init(connection: SyncConnectionState, pending: Int, catchingUp: Int, failed: [FailedSync] = [], connectionTrouble: Bool = false) {
         self.connection = connection
         self.pending = pending
         self.catchingUp = catchingUp
         self.failed = failed
+        self.connectionTrouble = connectionTrouble
     }
 
     /// Nothing left to send or fetch (failed messages aside).
@@ -23,7 +27,8 @@ public struct SyncStatus: Equatable, Sendable {
 
     /// One state for the sync indicator.
     public enum Summary: Equatable, Sendable {
-        /// Not connected (`pending` changes wait for the connection).
+        /// No connection for a while (`pending` changes wait for it); a single failed or stuck
+        /// handshake shows as `.syncing` while it is retried.
         case offline
         case syncing
         case synced
@@ -32,7 +37,11 @@ public struct SyncStatus: Equatable, Sendable {
     }
 
     public var summary: Summary {
-        guard case .connected = connection else { return .offline }
+        switch connection {
+        case .connected: break
+        case .connecting, .waiting: return connectionTrouble ? .offline : .syncing
+        case .disconnected, .stopped: return .offline
+        }
         if !isIdle { return .syncing }
         if let first = failed.first { return .failed(documents: failed.count, reason: first.reason) }
         return .synced
@@ -87,6 +96,7 @@ public actor SyncEngine: SyncClientDelegate {
     /// Records of subscribed documents (kind/notebook for key lookup without a DB read).
     private var known: [String: DocumentRecord] = [:]
     private var connection: SyncConnectionState = .disconnected
+    private var connectionTrouble = false
     /// `start()` was called and `stop()` was not.
     private var running = false
     /// Every known document was subscribed on the current connection.
@@ -204,7 +214,7 @@ public actor SyncEngine: SyncClientDelegate {
 
     private func currentStatus() -> SyncStatus {
         SyncStatus(connection: connection, pending: (try? store.outboxCount()) ?? 0, catchingUp: catchingUp.count,
-                   failed: (try? store.failedOutbox()) ?? [])
+                   failed: (try? store.failedOutbox()) ?? [], connectionTrouble: connectionTrouble)
     }
 
     private func publish() {
@@ -488,6 +498,7 @@ public actor SyncEngine: SyncClientDelegate {
 
     public func syncClient(_ client: SyncClient, didChangeState state: SyncConnectionState) async {
         connection = state
+        connectionTrouble = await client.consecutiveFailures > client.configuration.quickRetries
         if case .connected = state {} else {
             inFlight.removeAll()
             live.removeAll()

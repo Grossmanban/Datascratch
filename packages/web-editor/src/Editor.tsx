@@ -13,6 +13,7 @@ import { PenLayer, type PenSettings } from "./pen/PenLayer";
 import { acceptAll, blocksWithAgentEdits } from "./schema/agentReview";
 import { guardSchema } from "./schema/unknown";
 import { TASK_MENU_EVENT, type TaskMenuRequest } from "./schema/tasks";
+import { fillEmptyTitleIfNeeded, focusTitle } from "./schema/title";
 import type { NoteStyle, StrokeAuthor } from "@datascratch/shared/contracts";
 import { filterBlocks, type BlockItem } from "./ui/blockItems";
 import { BubbleToolbar } from "./ui/BubbleToolbar";
@@ -35,6 +36,10 @@ export interface EditorApi {
   editor: Editor;
   pen: PenLayer;
   undoManager: Y.UndoManager;
+  /** Caret at the end of the title, editor focused (a new note). */
+  focusTitle(): void;
+  /** Fills an empty title with `host.defaultTitle()` (call when the note closes); true if it did. */
+  fillEmptyTitleIfNeeded(): boolean;
 }
 
 export interface DatascratchEditorProps {
@@ -216,7 +221,13 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
     const onTaskMenu = (e: Event) => setTaskMenu((e as CustomEvent<TaskMenuRequest>).detail);
     editor.view.dom.addEventListener(TASK_MENU_EVENT, onTaskMenu);
     attachedAwareness.current.set(editor, awarenessRef.current);
-    const next = { editor, pen, undoManager };
+    const next: EditorApi = {
+      editor,
+      pen,
+      undoManager,
+      focusTitle: () => focusTitle(editor),
+      fillEmptyTitleIfNeeded: () => fillEmptyTitleIfNeeded(editor, host, undoManager),
+    };
     setApi(next);
     callbacks.current.onReady?.(next);
     return () => {

@@ -107,16 +107,18 @@ iOS (Yrs) **обязан** читать и писать именно этот ф
 | `taskItem` | `taskId`, `state: "open"\|"done"\|"cancelled"`, `scheduled: YYYY-MM-DD\|null`, `deadline: YYYY-MM-DD\|null`, `completedAt: ISO\|null` | `paragraph block*` | MVP |
 | `blockquote` | — | `block+` | MVP |
 | `callout` | `tone: "note"\|"info"\|"success"\|"warning"\|"danger"`, `emoji: string\|null` | `block+` | MVP |
-| `codeBlock` | `language: string\|null` | text* (без меток) | MVP |
+| `codeBlock` | `language: string\|null` | text* (без меток, кроме `agentEdit`) | MVP |
 | `mathBlock` | `latex: string` | — (атом) | MVP |
 | `mermaid` | `source: string` | — (атом) | MVP |
 | `horizontalRule` | `style: "line"\|"dots"\|"wave"` | — | MVP |
-| `table` / `tableRow` / `tableHeader` / `tableCell` | `colspan`, `rowspan`, `colwidth` (как в TipTap) | | MVP |
+| `table` / `tableRow` / `tableHeader` / `tableCell` | `colspan`, `rowspan`, `colwidth` (как в TipTap); выравнивание столбца (Markdown `:---`, `:---:`, `---:`) хранится как `textAlign` абзацев внутри ячеек (атрибут `paragraph`), отдельного атрибута у ячейки нет | | MVP |
 | `image` | `attachmentId`, `width: number\|null` (доля ширины 0..1), `alt`, `caption` | — | MVP |
 | `file` | `attachmentId`, `name`, `size`, `mime` | — | MVP |
 | `drawing` | `height: number` — отображаемая высота = `height × ширинаБлока / 600` (опорная ширина 600, как в формуле толщины штриха) | — (штрихи — в `strokes`) | MVP |
 | `pageCard` | `noteId`, `style: "card"\|"link"` | — | MVP |
 | `collection` | (после MVP) | | После MVP |
+
+**Никогда не удалять «непонятное» (правило для всех клиентов, 2026-10-26).** Узел или элемент, не прошедший проверку схемы клиента (недопустимая метка, неожиданное содержимое, неизвестный атрибут), **не удаляется и не переписывается** при открытии документа: клиент показывает его без недопустимых меток или заглушкой и сохраняет как есть. Повод: веб-редактор при открытии удалял блоки кода, созданные агентом (текст с меткой `agentEdit` в `codeBlock`), и удаление синхронизировалось — потеря данных.
 
 Inline-узлы и метки:
 

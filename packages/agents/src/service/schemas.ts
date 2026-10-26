@@ -8,7 +8,8 @@ import * as z from "zod/v4";
 export const MARKDOWN_DIALECT =
   "Body in Markdown: headings (#..###); lists; task lists (- [ ] open, - [x] done, - [-] cancelled; optional ⏳ YYYY-MM-DD scheduled and 📅 YYYY-MM-DD deadline at the end); > quotes; " +
   "callouts > [!note|info|success|warning|danger] optional-emoji (Obsidian names map to the closest tone: tip/hint/done→success, important/abstract/todo/question→info, caution/attention→warning, error/failure/bug→danger, example/quote→note); " +
-  "tables; ``` code ```; $$ LaTeX $$ blocks (verbatim); ```mermaid; [[Note title]] links; #tags; ==highlight==; <u>underline</u>. " +
+  "tables (column alignment :---: / ---: is kept); ``` code ```; $$ LaTeX $$ blocks and inline $…$ math (verbatim, backslashes kept); ```mermaid; [[Note title]] links; #tags; ==highlight==; <u>underline</u>; footnotes [^1] are kept as text. " +
+  "Do not repeat the note title as a leading # heading (it is dropped). " +
   "A line break inside a paragraph is kept as a line break. Backslash-escape characters you want literally (\\# \\* \\_ \\` \\[ \\=\\=); read_note escapes them the same way.";
 
 const id = z.string().regex(/^[0-9a-f-]{36}$/, "must be a UUID");

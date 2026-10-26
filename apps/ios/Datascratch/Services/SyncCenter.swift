@@ -28,6 +28,22 @@ final class SyncCenter {
     /// Per notebook, what is set aside right now (item count and newest seq): the banner's
     /// dismissal is keyed by it, so only new unreadable items bring it back.
     var unreadableSignatures: [String: String] = [:]
+    /// Changes waiting for a key (a notebook from another device): not a spinner — they go out
+    /// by themselves once the key arrives. Since when, for a calm hint if it lasts.
+    private(set) var heldChanges = 0
+    private(set) var heldSince: Date?
+
+    func setHeld(_ count: Int, now: Date = Date()) {
+        guard count != heldChanges else { return }
+        heldChanges = count
+        heldSince = count > 0 ? (heldSince ?? now) : nil
+    }
+
+    /// Held for a while (a minute): worth a quiet line, never an alarm.
+    func showsHeldHint(now: Date = Date()) -> Bool {
+        guard heldChanges > 0, let since = heldSince else { return false }
+        return now.timeIntervalSince(since) > 60
+    }
     let serverURL: URL?
 
     @ObservationIgnored private var monitor: NWPathMonitor?

@@ -186,6 +186,7 @@ final class ServerConnection: CoreLibraryRemote {
                     signatures[notebook] = "\(count)-\(newest)-\(items.count)"
                 }
                 if sync.unreadableSignatures != signatures { sync.unreadableSignatures = signatures }
+                sync.setHeld(status.held)
             }
         }
     }

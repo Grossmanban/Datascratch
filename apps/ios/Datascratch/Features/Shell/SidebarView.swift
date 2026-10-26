@@ -362,10 +362,21 @@ struct SyncStatusBadge: View {
                     .accessibilityIdentifier("sync.signIn")
             }
         } else {
-            let (icon, text, color) = describe(app.sync.phase)
-            label(icon: icon, text: text, color: color)
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("sync.status")
+            VStack(alignment: .leading, spacing: 2) {
+                let (icon, text, color) = describe(app.sync.phase)
+                label(icon: icon, text: text, color: color)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("sync.status")
+                // Changes waiting for a key: a quiet line once it lasts, no spinner.
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    if app.sync.showsHeldHint(now: context.date) {
+                        Text("\(app.sync.heldChanges) changes wait for a key")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                            .accessibilityIdentifier("sync.held")
+                    }
+                }
+            }
         }
     }
 

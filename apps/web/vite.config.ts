@@ -38,16 +38,10 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Precache the app shell only; heavy lazy editor modules (Mermaid diagrams, layout
-        // engines) are cached on first use so the service worker installs quickly.
-        globPatterns: [
-          "index.html",
-          "assets/{index,editor,react,sodium,kdf.worker,katex,workbox-window}*.{js,css}",
-          "assets/*.woff2",
-          "*.{svg,png}",
-          "theme-init.js",
-          "icons/*.png",
-        ],
+        // Precache the shell and every hashed asset (lazy editor modules included, ~3 MB over
+        // the wire): from networks where new connections sometimes hang, a reload then needs no
+        // asset downloads at all. Hashed names never change content, so cache-first is safe.
+        globPatterns: ["index.html", "assets/*.{js,css,woff2}", "*.{svg,png}", "theme-init.js", "boot-guard.js", "icons/*.png"],
         runtimeCaching: [
           {
             urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith("/assets/"),

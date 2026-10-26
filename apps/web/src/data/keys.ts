@@ -50,15 +50,57 @@ export async function notebookKey(notebookId: string): Promise<Uint8Array | null
   }
 }
 
-/** Prefetch wrapped notebook keys in one request (new device, first sync). */
-export async function prefetchNotebookKeys(): Promise<void> {
-  try {
-    const list = await notebooksApi.list();
-    const db = accountDb();
-    await db.kv.bulkPut(list.map((n) => ({ key: `nbkey:${n.id}`, value: n.wrappedKey })));
-  } catch {
-    // offline — cached keys are used
+/** The notebook key as the server holds it (canonical), refreshing the cache; null if unreachable. */
+export async function serverNotebookKey(notebookId: string): Promise<Uint8Array | null> {
+  const { wrappedKey } = await notebooksApi.key(notebookId);
+  const [replaced] = await checkNotebookKeys([{ id: notebookId, wrappedKey }]);
+  if (replaced) for (const fn of replacedListeners) fn(replaced);
+  return notebookKeys.get(notebookId) ?? null;
+}
+
+const replacedListeners = new Set<(r: ReplacedNotebookKey) => void>();
+/** The runtime re-reads and re-uploads a notebook whose key was replaced outside its own check. */
+export function onNotebookKeyReplaced(fn: (r: ReplacedNotebookKey) => void) {
+  replacedListeners.add(fn);
+  return () => replacedListeners.delete(fn);
+}
+
+/** A notebook whose key here differed from the server's (which is now used). */
+export type ReplacedNotebookKey = { notebookId: string; oldKey: Uint8Array; newKey: Uint8Array };
+
+const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+/**
+ * The server's wrapped notebook key (GET /v1/notebooks) is the only canonical one: the server never
+ * replaces it, and another device that registered the notebook first may hold a different key than
+ * this one generated (e.g. our POST /notebooks waited offline and then got 409). Every cached key
+ * is checked against it — after unwrapping: two wrappings of one key differ — and a differing one
+ * is replaced. The caller re-reads and re-uploads what was sealed with the old key.
+ */
+export async function checkNotebookKeys(list: { id: string; wrappedKey: string }[]): Promise<ReplacedNotebookKey[]> {
+  const db = accountDb();
+  const replaced: ReplacedNotebookKey[] = [];
+  for (const n of list) {
+    let serverKey: Uint8Array;
+    try {
+      serverKey = await unwrapKey(getMasterKey(), n.wrappedKey, ad.notebookKey(n.id));
+    } catch (e) {
+      console.error("[ds] cannot unwrap the server's notebook key", n.id, e);
+      continue;
+    }
+    let local = notebookKeys.get(n.id);
+    if (!local) {
+      const cached = (await db.kv.get(`nbkey:${n.id}`))?.value as string | undefined;
+      if (cached && cached !== n.wrappedKey) local = await unwrapKey(getMasterKey(), cached, ad.notebookKey(n.id)).catch(() => undefined);
+    }
+    if (local && !sameBytes(local, serverKey)) {
+      console.warn("[ds] notebook key differed from the server's; switching to the server's", n.id);
+      replaced.push({ notebookId: n.id, oldKey: local, newKey: serverKey });
+    }
+    notebookKeys.set(n.id, serverKey);
+    await db.kv.put({ key: `nbkey:${n.id}`, value: n.wrappedKey });
   }
+  return replaced;
 }
 
 export async function noteKey(noteId: string, notebookId: string, wrappedKey: string | undefined): Promise<Uint8Array | null> {

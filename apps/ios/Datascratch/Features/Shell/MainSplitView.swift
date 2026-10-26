@@ -60,6 +60,7 @@ struct MainSplitView: View {
                 .tint(Theme.Palette.accent)
         }
         .modifier(ModeChangeConfirmation())
+        .modifier(MissingNoteAlert())
         // The server ended this device's session: say so, and offer to sign in again.
         .sheet(isPresented: $sync.showsSessionEnded) {
             SessionEndedView()
@@ -176,6 +177,25 @@ struct EmptyDetailView: View {
                 .padding(.top, Theme.Space.s2)
             }
             .padding(Theme.Space.s8)
+        }
+    }
+}
+
+/// A `[[Title]]` was tapped and there is no such note: offer to create it (spec/04).
+struct MissingNoteAlert: ViewModifier {
+    @Environment(SceneModel.self) private var scene
+
+    func body(content: Content) -> some View {
+        let title = scene.missingNoteTitle ?? ""
+        let isPresented = Binding(get: { scene.missingNoteTitle != nil },
+                                  set: { if !$0 { scene.missingNoteTitle = nil } })
+        content.alert(Text("No note called “\(title)”"), isPresented: isPresented) {
+            Button("Create Note") {
+                scene.missingNoteTitle = nil
+                scene.newNote(title: title)
+            }
+            .accessibilityIdentifier("missingNote.create")
+            Button("Cancel", role: .cancel) { scene.missingNoteTitle = nil }
         }
     }
 }

@@ -18,6 +18,10 @@ on:
         type: choice
         options: [inspect, deploy]
         default: inspect
+      diag_docs:
+        description: "inspect only: agent-mode document ids to check item by item (space-separated; metadata only)"
+        type: string
+        default: ""
   push:
     branches: [main]
     paths:
@@ -93,6 +97,8 @@ jobs:
           KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
         run: infra/deploy/ssh-setup.sh
       - name: Survey (changes nothing on the server)
+        env:
+          DS_DIAG_DOCS: ${{ inputs.diag_docs }}
         run: |
           infra/deploy/remote.sh inspect | tee "$RUNNER_TEMP/inspect.md"
           cat "$RUNNER_TEMP/inspect.md" >> "$GITHUB_STEP_SUMMARY"

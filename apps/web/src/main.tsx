@@ -14,3 +14,5 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </StrictMode>,
 );
+// Every module of the app shell arrived: the boot watchdog (public/boot-guard.js) stands down.
+(window as unknown as { __dsBootOk?: () => void }).__dsBootOk?.();

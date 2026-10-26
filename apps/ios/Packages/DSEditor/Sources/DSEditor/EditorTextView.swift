@@ -71,7 +71,7 @@ final class EditorTextView: UITextView {
         init(range: NSRange) { self.range = range }
     }
 
-    override func insertDictationResultPlaceholder() -> Any {
+    override var insertDictationResultPlaceholder: Any {
         DictationPlaceholder(range: selectedRange)
     }
 
@@ -80,7 +80,7 @@ final class EditorTextView: UITextView {
         return caretRect(for: range.end)
     }
 
-    @objc func removeDictationResultPlaceholder(_ placeholder: Any, willInsertResult: Bool) {}
+    override func removeDictationResultPlaceholder(_ placeholder: Any, willInsertResult: Bool) {}
 
     /// Touches that land on TextKit's internal drawing views (layout fragment and canvas views)
     /// are addressed to the text view itself. TextKit 2 recycles those views on any relayout or

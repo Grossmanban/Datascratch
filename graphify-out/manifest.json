@@ -984,10 +984,10 @@
     "semantic_hash": "ef7ca4b71f076612ce8f58b28e665b64"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1793038309.7288244,
-    "seen": 1793038494.0337243,
-    "ast_hash": "7ab60e16ab5b09b159d8f874cfa9a217",
-    "semantic_hash": "7ab60e16ab5b09b159d8f874cfa9a217"
+    "mtime": 1793040421.2525792,
+    "seen": 1793040481.7314825,
+    "ast_hash": "a253d67109130252ac95a54373a0a442",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
     "mtime": 1793011608.2055936,
@@ -1038,9 +1038,9 @@
     "semantic_hash": "fd62abb58d8fc5a0844aa1df8b7b9081"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorTextView.swift": {
-    "mtime": 1793039310.1279414,
-    "seen": 1793039380.799002,
-    "ast_hash": "724ac0beba787c718510c4a357d9039e",
+    "mtime": 1793040421.251422,
+    "seen": 1793040481.7317162,
+    "ast_hash": "ae99daf0c0c61528259eb9d1b861c1db",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorTheme.swift": {
@@ -1388,19 +1388,19 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793039406.1993132,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793039406.199316,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793039406.1993177,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2636,7 +2636,7 @@
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792967462.0829601,
     "seen": 1793039406.1996377,
-    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "infra/deploy/docker-compose.yml": {

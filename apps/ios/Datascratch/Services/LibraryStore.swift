@@ -545,6 +545,9 @@ final class LibraryStore {
 
     static var welcomeTitle: String { String(localized: "Welcome to Datascratch") }
 
+    /// The welcome note's body as first-run seeding writes it (tests, twin repair).
+    func firstRunWelcomeBody() -> NoteBody { welcomeBody() }
+
     private func welcomeBody() -> NoteBody {
         NoteBody(blocks: [
             NoteBlock(id: UUIDv7.make(), kind: .paragraph,
@@ -589,6 +592,33 @@ final class LibraryStore {
         } && !data.folders.contains { $0.notebookId == notebookId }
     }
 
+    /// First-run spaces of one kind («Personal»/«Личное», «Work»/«Работа»): those holding only
+    /// untouched first-run content (no notebooks, or notebooks with just the welcome note and
+    /// an empty Inbox) are removed, keeping at least one space; a space with content is never
+    /// touched.
+    private func removeEmptyFirstRunTwins(_ twins: [Space]) {
+        let isEmpty = { (space: Space) in self.notebooks(in: space.id).allSatisfy { self.holdsOnlyFirstRunContent($0.id) } }
+        var empty = twins.filter(isEmpty)
+        if empty.count == twins.count {
+            // All empty: keep the one listed first (the active one if it is among them).
+            let keep = empty.first { $0.id == data.activeSpaceId } ?? empty.min { ($0.order, $0.id) < ($1.order, $1.id) }!
+            empty.removeAll { $0.id == keep.id }
+        }
+        guard let kept = twins.first(where: { candidate in !empty.contains { $0.id == candidate.id } }) else { return }
+        for space in empty {
+            for notebook in notebooks(in: space.id) {
+                // The daily notebook moves to the kept space's first notebook.
+                let wasDaily = data.dailyNotebookId == notebook.id
+                deleteNotebook(notebook.id)
+                if wasDaily, let replacement = notebooks(in: kept.id).first { mutate { $0.dailyNotebookId = replacement.id } }
+            }
+            mutate { snapshot in
+                snapshot.spaces.removeAll { $0.id == space.id }
+                if snapshot.activeSpaceId == space.id { snapshot.activeSpaceId = kept.id }
+            }
+        }
+    }
+
     /// Twins of one name that both hold notes: the notes move into the one with the most (the
     /// daily notebook first), Inboxes become one, the emptied twins go. Twins with folders stay.
     private func mergeNotebooks(_ twins: [Notebook], anyName: Bool, firstRunName: String) {
@@ -629,6 +659,13 @@ final class LibraryStore {
         let firstRunNames: Set<String> = ["first-run.personal", "first-run.work"]
         for (name, spaces) in Dictionary(grouping: data.spaces, by: { key($0.name) })
         where spaces.count > 1 && (anyName || firstRunNames.contains(name)) {
+            // Without a fresh carry (every start, and once the account has synced): only a twin
+            // holding nothing but first-run content goes; spaces with anything of the person's
+            // stay as they are, even when named alike (spec/02, «Стартовые пространства»).
+            guard anyName else {
+                removeEmptyFirstRunTwins(spaces)
+                continue
+            }
             // Keep the space holding the most notebooks: the fewest moves.
             let ordered = spaces.sorted {
                 (-notebooks(in: $0.id).count, $0.order, $0.id) < (-notebooks(in: $1.id).count, $1.order, $1.id)

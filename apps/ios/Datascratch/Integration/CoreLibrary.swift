@@ -514,7 +514,12 @@ final class CoreLibrary: LibraryBackend {
         else { return nil }
         // A document that has not arrived yet (no blocks) says nothing about the title: never
         // copy its empty title over the one the index already has.
-        if let blocks = try? note.blocks(), !blocks.isEmpty, let derived = try? note.derived() {
+        if let blocks = try? note.blocks(), !blocks.isEmpty, var derived = try? note.derived() {
+            // Two title blocks can meet after a sync (an empty one from an older build): the
+            // index takes the first non-empty title; the editors remove the empty duplicates.
+            if let title = blocks.first(where: { $0.type == BlockType.title && !$0.text.isEmpty })?.text {
+                derived.title = title
+            }
             try? notebook.syncDerived(derived)
             try? store.index(derived, notebookId: notebookId)
         }

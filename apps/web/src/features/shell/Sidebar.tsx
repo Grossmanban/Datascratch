@@ -46,8 +46,10 @@ import {
   folderCounts,
   noteTitle,
   setActiveSpace,
+  notesInSpace,
   spaceNotebooks,
   useWorkspace,
+  visibleNotes,
   type FolderEntry,
 } from "@/domain/workspace";
 import { useRecoveryUnconfirmed } from "@/auth/recovery";
@@ -56,11 +58,12 @@ import { useUi } from "@/hooks/useUi";
 import { DND_FOLDER, DND_NOTE, dragFolder, dragNote, dropKind } from "@/lib/dnd";
 import { today } from "@/lib/dates";
 import { tintFg, tintName } from "@/lib/tokens";
-import { cn, confirmDialog, ContextMenu, DropdownMenu, IconButton, Kbd, SpaceTile, toast, type MenuItem } from "@/ui";
+import { cn, confirmDialog, ContextMenu, DropdownMenu, IconButton, Kbd, SpaceTile, toast, Tooltip, type MenuItem } from "@/ui";
 import type { NotebookRef } from "@/lib/shared";
 import { InlineRename } from "./InlineRename";
 import { SyncIndicator } from "./SyncIndicator";
 import { createSpaceInteractive } from "./spaces";
+import { iconGlyph } from "@/lib/glyph";
 
 function useCollapsed(key: string, def = false) {
   const storageKey = `ds.collapsed.${key}`;
@@ -278,11 +281,9 @@ function Section({ id, title, action, children }: { id: string; title: string; a
   );
 }
 
-/** Emoji of a space, or its first letter (iOS may store an SF Symbol name, which the web can't draw). */
+/** Emoji of a space (or a stand-in for an iOS SF Symbol), else its first letter. */
 function spaceGlyph(space: { icon: string | null; name: string } | undefined): string {
-  const icon = space?.icon ?? "";
-  if (icon && !/^[a-z0-9.]+$/i.test(icon)) return icon;
-  return space?.name?.[0]?.toUpperCase() ?? "✦";
+  return iconGlyph(space?.icon) || space?.name?.[0]?.toUpperCase() || "✦";
 }
 
 function SpaceSwitcher() {
@@ -290,10 +291,14 @@ function SpaceSwitcher() {
   const spaces = useWorkspace((s) => s.account.spaces);
   const current = useWorkspace(activeSpace);
   const [renaming, setRenaming] = useState(false);
+  // Spaces with the same name (e.g. after a migration) are told apart by their document count.
+  const sameName = new Set(spaces.filter((s, i) => spaces.some((o, j) => j !== i && o.name === s.name)).map((s) => s.id));
   const items: MenuItem[] = [
     { kind: "label", label: t("nav.spaces") },
     ...spaces.map((s) => ({
-      label: s.name,
+      label: sameName.has(s.id)
+        ? `${s.name} · ${t("docs.count", { count: visibleNotes(notesInSpace(useWorkspace.getState(), s.id)).length })}`
+        : s.name,
       icon: <SpaceTile icon={spaceGlyph(s)} tint={tintName(s.color)} size={18} />,
       checked: s.id === current?.id,
       onSelect: () => setActiveSpace(s.id),
@@ -344,6 +349,27 @@ function SpaceSwitcher() {
   );
 }
 
+/**
+ * Tabs and Favourites span all spaces (account doc, as on iOS); a note from another space than the
+ * one shown carries that space's tile, so it is not mistaken for part of this one.
+ */
+function OtherSpaceMark({ notebookId }: { notebookId: string }) {
+  const { t } = useTranslation();
+  const space = useWorkspace((s) => {
+    const nb = s.account.notebooks.find((n) => n.id === notebookId);
+    return nb && nb.spaceId !== s.activeSpaceId ? s.account.spaces.find((x) => x.id === nb.spaceId) : undefined;
+  });
+  if (!space) return null;
+  const label = t("nav.fromSpace", { name: space.name });
+  return (
+    <Tooltip content={label} side="right">
+      <span className="ml-auto shrink-0 opacity-70" aria-label={label} role="img" data-testid="other-space-mark">
+        <SpaceTile icon={spaceGlyph(space)} tint={tintName(space.color)} size={14} />
+      </span>
+    </Tooltip>
+  );
+}
+
 function TabsSection() {
   const { t } = useTranslation();
   const tabs = useWorkspace((s) => s.account.tabs);
@@ -368,8 +394,9 @@ function TabsSection() {
               onDragStart={(e) => dragNote(e, tab.noteId)}
             >
               <Link to="/doc/$noteId" params={{ noteId: tab.noteId }} className="flex min-w-0 flex-1 items-center gap-2">
-                <span className="shrink-0 text-[13px] leading-none">{n.icon ?? <FileText className="size-3.5 text-ink-3" />}</span>
+                <span className="shrink-0 text-[13px] leading-none">{iconGlyph(n.icon) || <FileText className="size-3.5 text-ink-3" />}</span>
                 <span className="truncate">{noteTitle(n, t("app.untitled"))}</span>
+                <OtherSpaceMark notebookId={n.notebookId} />
               </Link>
               <button
                 aria-label={t("common.close")}
@@ -416,8 +443,9 @@ function StarredSection() {
                 onClick={() => openTab(s.id)}
                 className="flex h-8 items-center gap-2 rounded-md px-2 text-ink-2 hover:bg-ink/[0.04] hover:text-ink [&.active]:bg-ink/[0.07] [&.active]:text-ink"
               >
-                <span className="shrink-0 text-[13px] leading-none">{n.icon ?? <Star className="size-3.5 text-[var(--ds-tint-yellow-fg)]" />}</span>
+                <span className="shrink-0 text-[13px] leading-none">{iconGlyph(n.icon) || <Star className="size-3.5 text-[var(--ds-tint-yellow-fg)]" />}</span>
                 <span className="truncate">{noteTitle(n, t("app.untitled"))}</span>
+                <OtherSpaceMark notebookId={n.notebookId} />
               </Link>
             </ContextMenu>
           );
@@ -444,7 +472,7 @@ function StarredSection() {
             params={{ notebookId: s.id }}
             className="flex h-8 items-center gap-2 rounded-md px-2 text-ink-2 hover:bg-ink/[0.04] hover:text-ink"
           >
-            <span className="text-[13px] leading-none">{nb.icon}</span>
+            <span className="text-[13px] leading-none">{iconGlyph(nb.icon)}</span>
             <span className="truncate">{nb.name}</span>
           </Link>
         );
@@ -567,7 +595,7 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
               className="flex min-w-0 flex-1 items-center gap-2 font-medium"
               onDoubleClick={() => setRenaming(true)}
             >
-              <span className="text-[14px] leading-none">{nb.icon}</span>
+              <span className="text-[14px] leading-none">{iconGlyph(nb.icon)}</span>
               <span className="truncate">{nb.name}</span>
               {nb.mode === "agent" && <Sparkles className="size-3 shrink-0 text-[var(--ds-tint-purple-fg)]" aria-label={t("notebook.agent")} />}
             </Link>
@@ -650,8 +678,8 @@ function FolderNode({ folder, depth }: { folder: FolderEntry; depth: number }) {
           >
             <ChevronRight className={cn("size-3 transition-transform", !collapsed && "rotate-90")} />
           </button>
-          {folder.icon ? (
-            <span className="text-[13px] leading-none">{folder.icon}</span>
+          {iconGlyph(folder.icon) ? (
+            <span className="text-[13px] leading-none">{iconGlyph(folder.icon)}</span>
           ) : (
             <FolderIcon className="size-3.5 shrink-0" style={{ color: tintFg(folder.color) }} fill="currentColor" fillOpacity={0.2} />
           )}

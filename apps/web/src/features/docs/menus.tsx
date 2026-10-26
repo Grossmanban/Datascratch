@@ -35,6 +35,7 @@ import { isStarred, useWorkspace, type FolderEntry } from "@/domain/workspace";
 import { TINTS, tintFg } from "@/lib/tokens";
 import { useUi } from "@/hooks/useUi";
 import { confirmDialog, toast, type MenuItem } from "@/ui";
+import { iconGlyph } from "@/lib/glyph";
 
 type Nav = ReturnType<typeof useNavigate>;
 
@@ -95,7 +96,7 @@ function notebookTargets(noteId: string, fromNotebookId: string, t: TFunction): 
       items.push({
         kind: "sub",
         label: nb.name,
-        icon: nb.icon ? <span className="text-[12px] leading-none">{nb.icon}</span> : <BookCopy className="size-3.5" />,
+        icon: iconGlyph(nb.icon) ? <span className="text-[12px] leading-none">{iconGlyph(nb.icon)}</span> : <BookCopy className="size-3.5" />,
         items: folderTargets(nb.id, (folderId) => void moveToNotebook(noteId, fromNotebookId, nb.id, folderId, t), t),
       });
     }

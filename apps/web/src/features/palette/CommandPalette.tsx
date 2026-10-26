@@ -58,7 +58,9 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
 
   const results = useMemo(() => {
     void v;
-    const visible = Object.values(notes).filter((n) => !n.trashedAt && n.kind !== "inbox");
+    // Search and recents cover the current space only (D-48).
+    const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
+    const visible = Object.values(notes).filter((n) => !n.trashedAt && n.kind !== "inbox" && nbs.has(n.notebookId));
     if (!q.trim()) {
       return visible
         .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
@@ -69,12 +71,12 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
     const seen = new Set(hits.map((h) => h.noteId));
     const lower = q.toLowerCase();
     const byTitle = visible.filter((n) => !seen.has(n.id) && n.title.toLowerCase().includes(lower)).map((n) => ({ noteId: n.id, title: n.title, snippet: "" }));
-    return [...hits.filter((h) => notes[h.noteId] && !notes[h.noteId]!.trashedAt), ...byTitle].slice(0, 20).map((h) => ({
+    return [...hits.filter((h) => notes[h.noteId] && !notes[h.noteId]!.trashedAt && nbs.has(notes[h.noteId]!.notebookId)), ...byTitle].slice(0, 20).map((h) => ({
       noteId: h.noteId,
       title: noteTitle(notes[h.noteId], t("app.untitled")),
       snippet: h.snippet,
     }));
-  }, [q, notes, v, t]);
+  }, [q, notes, notebooks, spaceId, v, t]);
 
   const go = (fn: () => void | Promise<void>) => {
     onClose();

@@ -56,6 +56,9 @@ final class ServerConnection: CoreLibraryRemote {
                     Self.log.error("carrying notebook \(notebook.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
                 }
             }
+            // The server's notebook keys are the truth: fetch the ones this device lacks and
+            // replace (and repair) any it invented, before anything is sealed.
+            await adoptServerNotebookKeys()
             let client = SyncClient(
                 configuration: .init(url: SyncClient.Configuration.url(forServer: serverURL),
                                      deviceId: try core.store.deviceId(),
@@ -213,6 +216,34 @@ final class ServerConnection: CoreLibraryRemote {
     /// Brings the server's notebook modes in line with the account document (what the apps
     /// show and the person chose); a notebook the server does not have yet is created by the
     /// registration of its documents.
+    /// `GET /notebooks`: keys this device lacks are stored, a key that differs from the
+    /// server's is replaced (`CoreLibrary.adoptServerNotebookKeys`).
+    private func adoptServerNotebookKeys() async {
+        guard let server = try? await api.notebooks(), let master = try? core.keys.masterKey() else { return }
+        var keys: [String: Data] = [:]
+        for notebook in server {
+            if let key = try? DSCrypto.unwrapKey(notebook.wrappedKey.data, with: master, ad: CryptoAD.notebookKey(notebook.id)) {
+                keys[notebook.id] = key
+            }
+        }
+        let repaired = core.adoptServerNotebookKeys(keys)
+        if !repaired.isEmpty { Self.log.error("repaired notebook keys: \(repaired.joined(separator: ","), privacy: .public)") }
+    }
+
+    /// The account document brought notebooks whose keys this device lacks (made on another
+    /// device): fetch them, then let the engine pick their documents up.
+    func notebookKeysMissing() {
+        guard engine != nil, !isFetchingKeys else { return }
+        isFetchingKeys = true
+        Task {
+            await adoptServerNotebookKeys()
+            isFetchingKeys = false
+            reconnect()
+        }
+    }
+
+    private var isFetchingKeys = false
+
     private func reconcileNotebookModes() async {
         guard let server = try? await api.notebooks() else { return }
         let modes = Dictionary(server.map { ($0.id, $0.mode) }, uniquingKeysWith: { a, _ in a })

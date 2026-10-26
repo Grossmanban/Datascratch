@@ -90,6 +90,51 @@ struct CoreLibraryTests {
         #expect(reloaded.body(note.id).blocks.map(\.text) == ["Written before sign-out"])
     }
 
+    /// Prod, 2026-10-26: a notebook made on another device reached the iPad without its key; the
+    /// first note written there made the app invent a key the server never saw, and the notebook
+    /// got sealed with it. Now no key is invented for an existing notebook.
+    @Test func noKeyIsInventedForANotebookWithoutOne() throws {
+        let secrets = InMemorySecretStore()
+        let keys = KeyRing(store: secrets)
+        let core = try CoreLibrary(store: try LocalStore.inMemory(), keys: keys)
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "Ии", mode: .private)
+        let master = try #require(try keys.masterKey())
+        try keys.clear()
+        try keys.setMasterKey(master)
+        #expect(core.notebooksWithoutKey == [notebook.id])
+
+        _ = library.createNote(in: notebook.id, title: "Written without the key")
+        #expect(try keys.notebookKey(notebook.id) == nil)
+        #expect(core.notebooksWithoutKey == [notebook.id])
+    }
+
+    /// A key an earlier build invented is replaced by the server's; the notes it wrapped are
+    /// re-wrapped, so they open with the server's key, and the notebook's state is sent again.
+    @Test func serverNotebookKeyReplacesAnInventedOne() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "Ии", mode: .agent)
+        let serverKey = try #require(try keys.notebookKey(notebook.id))
+        let invented = DSCrypto.newKey()
+        try keys.setNotebookKey(invented, notebookId: notebook.id)
+        let note = library.createNote(in: notebook.id, title: "Sealed with the invented key")
+        let before = try store.outboxCount()
+
+        #expect(core.adoptServerNotebookKeys([notebook.id: serverKey]) == [notebook.id])
+        #expect(try keys.notebookKey(notebook.id) == serverKey)
+        let meta = try #require(try core.notebookDocument(notebook.id).note(id: note.id))
+        let wrapped = try #require(DSCore.Base64URL.decode(meta.wrappedKey))
+        #expect((try? DSCrypto.unwrapKey(wrapped, with: serverKey, ad: CryptoAD.noteKey(note.id))) != nil)
+        #expect(try store.outboxCount() > before)
+        // Matching keys: nothing to do.
+        #expect(core.adoptServerNotebookKeys([notebook.id: serverKey]).isEmpty)
+    }
+
     /// The user's cover image lives in `meta.cover` and its thumbnail in `NoteMeta.coverThumb`.
     @Test func coverImageAndThumbnailPersist() throws {
         let keys = KeyRing(store: InMemorySecretStore())
@@ -458,6 +503,8 @@ final class RecordingRemote: CoreLibraryRemote {
     var moved: [(noteId: String, notebookId: String)] = []
     func noteMoved(_ noteId: String, toNotebook notebookId: String) { moved.append((noteId, notebookId)) }
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?) { opened.append(crdt.docId) }
+    var keysMissing = 0
+    func notebookKeysMissing() { keysMissing += 1 }
 }
 
 @MainActor

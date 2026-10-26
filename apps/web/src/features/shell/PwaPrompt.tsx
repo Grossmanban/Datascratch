@@ -2,6 +2,20 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/ui";
 
+/**
+ * A toast that appears while a dialog or menu is open becomes the top layer and takes Escape away
+ * from it; informational toasts wait until nothing modal is open.
+ */
+function whenNothingModal(fn: () => void) {
+  const busy = () => !!document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]');
+  if (!busy()) return fn();
+  const timer = setInterval(() => {
+    if (busy()) return;
+    clearInterval(timer);
+    fn();
+  }, 500);
+}
+
 export function PwaPrompt() {
   const { t } = useTranslation();
   useEffect(() => {
@@ -11,10 +25,10 @@ export function PwaPrompt() {
       if (cancelled) return;
       const update = registerSW({
         onNeedRefresh() {
-          toast(t("pwa.update"), { duration: 60_000, action: { label: t("pwa.reload"), run: () => void update(true) } });
+          whenNothingModal(() => toast(t("pwa.update"), { duration: 60_000, action: { label: t("pwa.reload"), run: () => void update(true) } }));
         },
         onOfflineReady() {
-          toast(t("pwa.offlineReady"));
+          whenNothingModal(() => toast(t("pwa.offlineReady")));
         },
       });
     });

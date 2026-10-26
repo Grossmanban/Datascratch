@@ -15,7 +15,14 @@ export type AuthStatus = "loading" | "signedOut" | "ready";
  * data — unsent changes included — stays until the next sign-in, which sends it (same account)
  * or deletes it (another account), or until the user deletes it from the login screen.
  */
-export type RevokedInfo = { userId: string; email: string; at: string; unsent: number };
+export type RevokedInfo = {
+  userId: string;
+  email: string;
+  at: string;
+  unsent: number;
+  /** "signedOut": the user signed out with unsent changes (spec/07 «Выход из аккаунта»). */
+  reason?: "revoked" | "signedOut";
+};
 
 type AuthState = {
   status: AuthStatus;
@@ -110,7 +117,7 @@ async function refresh(): Promise<Session | null> {
       } catch (e) {
         if (e instanceof ApiError && (e.status === 401 || e.code === "unauthorized")) {
           // Refresh token revoked (session ended from another device): leave, keeping local data.
-          await endRevoked();
+          await endKeepingData("revoked");
           return null;
         }
         return session;
@@ -304,14 +311,21 @@ async function restoreSteps(step: <T>(name: string, p: Promise<T>) => Promise<T>
   }
 }
 
-async function endRevoked() {
+/** Changes on this device that have not reached the server (sync outbox + queued REST ops). */
+export async function unsentCount(): Promise<number> {
+  if (!hasAccountDb()) return 0;
+  const db = accountDb();
+  return Promise.all([db.syncOutbox.count(), db.ops.count()]).then(([a, b]) => a + b, () => 0);
+}
+
+/**
+ * Leave the account but keep its local data (unsent changes and the notebook keys they need)
+ * until the next sign-in: revoked from elsewhere, or signed out with unsent changes (spec/07).
+ */
+async function endKeepingData(reason: "revoked" | "signedOut") {
   const { userId, email } = useAuth.getState();
-  let unsent = 0;
-  if (hasAccountDb()) {
-    const db = accountDb();
-    unsent = await Promise.all([db.syncOutbox.count(), db.ops.count()]).then(([a, b]) => a + b, () => 0);
-  }
-  const info: RevokedInfo | null = userId && email ? { userId, email, at: new Date().toISOString(), unsent } : null;
+  const unsent = await unsentCount();
+  const info: RevokedInfo | null = userId && email ? { userId, email, at: new Date().toISOString(), unsent, reason } : null;
   for (const fn of signedOutListeners) fn();
   session = null;
   masterKey?.fill(0);
@@ -346,14 +360,19 @@ async function signOutLocal() {
   useAuth.setState({ status: "signedOut", userId: null, email: null, accountDocId: null, recoveryStep: false, recoveryOnDevice: false, revoked: null });
 }
 
-export async function signOut() {
+/**
+ * Sign out. With unsent changes on this device they stay (spec/07): they go out after signing in
+ * to the same account again. `wipe` (account deleted) removes everything regardless.
+ */
+export async function signOut(opts: { wipe?: boolean } = {}) {
   const token = session?.refreshToken;
   if (token) {
     try {
       await authApi.logout(token);
     } catch {
-      // Offline logout still wipes local data; the server session expires on its own.
+      // Offline logout still ends the session here; the server session expires on its own.
     }
   }
+  if (!opts.wipe && (await unsentCount()) > 0) return endKeepingData("signedOut");
   await signOutLocal();
 }

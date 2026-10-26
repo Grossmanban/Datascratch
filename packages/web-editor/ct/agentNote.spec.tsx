@@ -63,3 +63,41 @@ test("D-45: an agent-created note shows «Создано агентом» until 
   await strip.getByRole("button", { name: "Понятно" }).click();
   await expect(strip).toHaveCount(0);
 });
+
+test("agent code blocks, lists and inline math render (and code survives an edit)", async ({ mount, page }) => {
+  // The design system's Tailwind preflight resets list markers; the editor must restore them.
+  await page.addStyleTag({ content: "ul, ol { list-style: none; }" });
+  await mount(<AgentNoteEditor />);
+  await page.waitForFunction(() => window.__fx?.ready === true);
+  await expect(page.locator(".ds-prose pre")).toHaveCount(3);
+  const styles = await page.evaluate(() => [...document.querySelectorAll(".ds-prose ul:not([data-type=taskList]), .ds-prose ol")].map((l) => getComputedStyle(l).listStyleType));
+  expect(styles).toEqual(["disc", "decimal"]);
+  await expect(page.locator(".ds-inline-math .katex")).toHaveCount(1);
+  await expect(page.locator(".ds-inline-math-src")).toBeHidden();
+  // An edit elsewhere must not drop the agent's code blocks from the document.
+  await page.evaluate(() => {
+    const e = window.__fx!.api.editor;
+    e.chain().focus().setTextSelection(e.state.doc.content.size - 2).insertContent(" ok").run();
+  });
+  await page.waitForTimeout(100);
+  const codeInY = await page.evaluate(() => (window.__fx!.doc.getXmlFragment("content").toArray() as { nodeName?: string }[]).filter((e) => e.nodeName === "codeBlock").length);
+  expect(codeInY).toBe(3);
+  // No drawing room below the note unless drawing is possible (no stylus, finger drawing off).
+  expect(await page.evaluate(() => document.querySelector(".ds-pen-room"))).toBeNull();
+});
+
+test("table column alignment (the `align` attribute of a cell) is shown and kept on edit", async ({ mount, page }) => {
+  await mount(<AgentNoteEditor />);
+  await page.waitForFunction(() => window.__fx?.ready === true);
+  await expect(page.locator(".ds-prose th", { hasText: "Значение" })).toHaveCSS("text-align", "right");
+  const cell = page.locator(".ds-prose td", { hasText: "42" });
+  await expect(cell).toHaveCSS("text-align", "right");
+  await cell.click();
+  await page.keyboard.press("End");
+  await page.keyboard.type("0");
+  await expect(page.locator(".ds-prose td", { hasText: "420" })).toHaveCSS("text-align", "right");
+  // The alignment stays on the cell in the Y.Doc after the edit.
+  const y = await page.evaluate(() => window.__fx!.doc.getXmlFragment("content").toString());
+  // The typed "0" lands outside the agent-marked "42", so the cell holds `42</agentEdit>0`.
+  expect(y).toMatch(/<tablecell[^>]*align="right"[^>]*>(?:(?!<\/tablecell>)[\s\S])*42<\/agentEdit>0/);
+});

@@ -95,6 +95,14 @@ public struct EditorTheme: Sendable {
 
     public var bodyFont: UIFont { font(size: baseFontSize) }
 
+    /// Line pitch of ruled, grid and dot paper: the body line height, so text sits on the rules.
+    /// Every text line, paragraph spacing and block height is a whole number of pitches on such
+    /// paper (`spec/03-pencil.md`, «Бумага»). Nil on plain paper.
+    public var paperPitch: CGFloat? {
+        style.paper == .plain ? nil : (bodyFont.lineHeight * Self.bodyLineHeightMultiple).rounded()
+    }
+    static let bodyLineHeightMultiple: CGFloat = 1.22
+
     /// Type token of a paragraph kind (`design-tokens.md`: title, h1–h3), nil for body text.
     static func typeToken(for kind: ParagraphKind, attrs: [String: JSONValue]) -> DSTypeToken? {
         switch kind.type {

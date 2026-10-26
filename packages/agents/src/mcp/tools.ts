@@ -16,7 +16,8 @@ export const SERVER_INSTRUCTIONS = `Datascratch is a notes app with Apple Pencil
 You can access only notebooks the user switched to "for agents" mode and granted to you.
 Workflow: list_notebooks or search_notes → read_note (Markdown; every block has a <!-- block:ID --> marker) → edit_note with those block ids.
 Handwriting appears as ![✍️ description](handwriting:ID) with attached images; call get_handwriting_image for a closer look.
-Your edits apply immediately, are highlighted for the user and can be undone from version history. Prefer small, targeted edits (replace_text, insert) over replacing whole blocks: untouched text keeps the user's handwritten marks.`;
+Your edits apply immediately, are highlighted for the user and can be undone from version history. Prefer small, targeted edits (replace_text, insert) over replacing whole blocks: untouched text keeps the user's handwritten marks.
+Organise with folders (create_folder, nested via parentFolderId; rename_folder, move_folder, delete_folder) and move_note, also between your notebooks. You cannot create notebooks: they are end-to-end encrypted with the user's master key — ask the user to create one in the app and switch it to "for agents" mode.`;
 
 function json(data: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
@@ -68,7 +69,7 @@ export function buildMcpServer(ctx: AgentsContext, service: AgentService, p: Pri
 
   tool(
     "list_notebooks",
-    { title: "List notebooks", description: "Notebooks available to you with their folders, note counts and your permission (read or read_write).", inputSchema: z.object({}) },
+    { title: "List notebooks", description: "Notebooks available to you with their folders (nested: parentId, path), note counts and your permission (read or read_write). Agents cannot create notebooks (end-to-end encrypted with the user's master key): use folders inside these notebooks instead.", inputSchema: z.object({}) },
     async () => json(await service.listNotebooks(p)),
   );
 
@@ -165,6 +166,60 @@ export function buildMcpServer(ctx: AgentsContext, service: AgentService, p: Pri
     "update_task",
     { title: "Update task", description: "Marks a task done/open/cancelled or changes its scheduled date or deadline. Requires read_write access.", inputSchema: S.updateTaskInput, write: true },
     async (a) => json(await service.updateTask(p, a)),
+  );
+
+  tool(
+    "create_folder",
+    {
+      title: "Create folder",
+      description:
+        "Creates a folder in a notebook, nested inside parentFolderId when given (folders nest to any depth). Use it to organise notes; notebooks themselves cannot be created by agents. Requires read_write access.",
+      inputSchema: S.createFolderInput,
+      write: true,
+    },
+    async (a) => json(await service.createFolder(p, a)),
+  );
+
+  tool(
+    "rename_folder",
+    { title: "Rename folder", description: "Renames a folder and optionally changes its emoji. Requires read_write access.", inputSchema: S.renameFolderInput, write: true },
+    async (a) => json(await service.renameFolder(p, a)),
+  );
+
+  tool(
+    "move_folder",
+    {
+      title: "Move folder",
+      description: "Moves a folder (with everything inside) under another folder of the same notebook or to the notebook root. Requires read_write access.",
+      inputSchema: S.moveFolderInput,
+      write: true,
+    },
+    async (a) => json(await service.moveFolder(p, a)),
+  );
+
+  tool(
+    "delete_folder",
+    {
+      title: "Delete folder",
+      description:
+        "Deletes a folder. By default only an empty one; with contents: \"move_to_parent\" its notes and subfolders move to the parent folder first. Never deletes notes. Requires read_write access.",
+      inputSchema: S.deleteFolderInput,
+      write: true,
+      destructive: true,
+    },
+    async (a) => json(await service.deleteFolder(p, a)),
+  );
+
+  tool(
+    "move_note",
+    {
+      title: "Move note",
+      description:
+        "Moves a note to a folder (null = root), in the same notebook or — with notebookId — in another notebook available to you. The note keeps its content, history, handwriting and attachments. Requires read_write access.",
+      inputSchema: S.moveNoteInput,
+      write: true,
+    },
+    async (a) => json(await service.moveNote(p, a)),
   );
 
   return server;

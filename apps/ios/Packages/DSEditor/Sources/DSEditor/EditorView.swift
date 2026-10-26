@@ -486,6 +486,7 @@ public final class EditorView: UIView {
     }
 
     private func textViewDidLayout() {
+        tapTargetElementsDirty = true
         let size = CGSize(width: max(textView.contentSize.width, textView.bounds.width),
                           height: max(textView.contentSize.height, textView.bounds.height) + 400)
         let frame = CGRect(origin: CGPoint(x: 0, y: -200), size: size)
@@ -1115,9 +1116,20 @@ public final class EditorView: UIView {
     /// One accessibility element per note link and task date chip on screen, after the text view:
     /// VoiceOver (and UI tests) find them by title and activate them like a tap (`spec/05`).
     public override var accessibilityElements: [Any]? {
-        get { [textView] + tapTargetElements() }
+        get {
+            // Rebuilt after layout or scrolling, never while a touch is being tracked (UI tests and
+            // VoiceOver query this often; rebuilding mid-stroke measured text under the pen).
+            if tapTargetElementsDirty, !penDown, !textView.isTracking {
+                tapTargetElementsDirty = false
+                cachedTapTargetElements = tapTargetElements()
+            }
+            return [textView] + cachedTapTargetElements
+        }
         set {}
     }
+
+    private var tapTargetElementsDirty = true
+    private var cachedTapTargetElements: [UIAccessibilityElement] = []
 
     private func tapTargetElements() -> [UIAccessibilityElement] {
         guard let tlm = textView.textLayoutManager else { return [] }
@@ -1130,7 +1142,7 @@ public final class EditorView: UIView {
             e.accessibilityLabel = label
             e.accessibilityTraits = traits
             e.accessibilityHint = hint
-            e.accessibilityFrameInContainerSpace = textView.convert(frame, to: self)
+            e.accessibilityFrame = UIAccessibility.convertToScreenCoordinates(frame, in: textView)
             e.activate = action
             out.append(e)
         }
@@ -1161,7 +1173,7 @@ public final class EditorView: UIView {
                     let e = UIAccessibilityElement(accessibilityContainer: self)
                     e.accessibilityLabel = label
                     e.accessibilityTraits = .staticText
-                    e.accessibilityFrameInContainerSpace = self.textView.convert(rect, to: self)
+                    e.accessibilityFrame = UIAccessibility.convertToScreenCoordinates(rect, in: self.textView)
                     if rect.intersects(visible) { out.append(e) }
                     continue
                 }
@@ -1193,8 +1205,9 @@ public final class EditorView: UIView {
     // MARK: - Title (Apple Notes style, spec/04 «Название новой заметки»)
 
     /// The title a new note gets when it is left empty («Заметка 26 октября 2026»): the host
-    /// supplies it, localized and dated by the note's creation day. Nil leaves empty titles alone.
-    public var defaultTitle: (() -> String)?
+    /// supplies it, localized and dated by the note's creation day. Nil (or nil returned) leaves
+    /// empty titles alone.
+    public var defaultTitle: (() -> String?)?
     /// The caret was in the title at the last selection change (to notice it leaving).
     private var caretWasInTitle = false
 
@@ -1213,11 +1226,22 @@ public final class EditorView: UIView {
         caretWasInTitle = true
     }
 
-    /// Fills an empty title with `defaultTitle`; returns whether it did. The editor calls it on
-    /// Return in the title and when the caret leaves it; hosts call it when the note closes.
+    /// Fills an empty title with `defaultTitle`; returns whether it did. Always on Return in the
+    /// title; when the caret leaves the title and when the host calls it before closing the note,
+    /// only if the note has text (an empty note stays empty, the host drops it).
     @discardableResult
-    public func fillEmptyTitleIfNeeded() -> Bool {
-        guard let i = titleIndex, projection.paragraphs[i].length == 0, let title = defaultTitle?(), !title.isEmpty else { return false }
+    public func commitDefaultTitleIfNeeded() -> Bool {
+        commitDefaultTitle(requireText: true)
+    }
+
+    private var noteHasText: Bool {
+        projection.paragraphs.dropFirst().contains { $0.length > 0 || !$0.kind.isText }
+    }
+
+    @discardableResult
+    private func commitDefaultTitle(requireText: Bool) -> Bool {
+        guard let i = titleIndex, projection.paragraphs[i].length == 0, !requireText || noteHasText,
+              let title = defaultTitle?() ?? nil, !title.isEmpty else { return false }
         let caret = textView.selectedRange.location
         let start = projection.starts[i]
         let block = projection.paragraphs[i].blockId
@@ -1231,7 +1255,7 @@ public final class EditorView: UIView {
     /// Return in the title: no split — the caret goes to the start of the text (a new empty
     /// paragraph if the note has none yet), after filling an empty title.
     private func returnInTitle() {
-        fillEmptyTitleIfNeeded()
+        commitDefaultTitle(requireText: false)
         let p = projection
         caretWasInTitle = false
         if p.paragraphs.count > 1, p.paragraphs[1].kind.isText {
@@ -1470,6 +1494,7 @@ extension EditorView: UITextViewDelegate {
     }
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        tapTargetElementsDirty = true
         onScroll?(scrollView.contentOffset.y + scrollView.adjustedContentInset.top)
     }
 
@@ -1494,7 +1519,7 @@ extension EditorView: UITextViewDelegate {
         let inTitle = caretIsInTitle(tv.selectedRange.location)
         if caretWasInTitle, !inTitle, tv.markedTextRange == nil {
             caretWasInTitle = false
-            if fillEmptyTitleIfNeeded() {
+            if commitDefaultTitleIfNeeded() {
                 notifyStateChange()
                 return
             }

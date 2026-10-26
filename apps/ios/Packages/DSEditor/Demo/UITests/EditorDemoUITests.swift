@@ -112,8 +112,32 @@ final class EditorDemoUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground)
     }
 
+    /// Scrolls the editor until `element` is on screen (pulling toward the top first, then small
+    /// steps down so nothing jumps past the screen).
+    @MainActor
+    private func scrollIntoView(_ element: XCUIElement, in editor: XCUIElement) -> Bool {
+        for attempt in 0..<10 {
+            if element.exists, editor.frame.insetBy(dx: 0, dy: 60).contains(CGPoint(x: element.frame.midX, y: element.frame.midY)) {
+                return true
+            }
+            let (from, to): (CGFloat, CGFloat) = attempt < 2 ? (0.4, 0.6) : (0.6, 0.45)
+            editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: from))
+                .press(forDuration: 0.05, thenDragTo: editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
+            sleep(1)
+        }
+        return false
+    }
+
+    /// A real touch at the centre of an element's frame (not an accessibility activation).
+    @MainActor
+    private func touch(_ element: XCUIElement, in app: XCUIApplication) {
+        let f = element.frame
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: f.midX, dy: f.midY)).tap()
+    }
+
     /// Build 14 feedback (iPhone): a single tap on a note link did nothing. Real taps, keyboard
     /// not shown: the chip opens its note, a literal [[Title]] of a missing note offers to create it.
+    /// The links are found through their accessibility elements (VoiceOver, spec/05).
     @MainActor
     func testTappingNoteLinksOpensThem() throws {
         let app = XCUIApplication()
@@ -122,49 +146,19 @@ final class EditorDemoUITests: XCTestCase {
         let editor = app.textViews["editor.text"]
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
         app.buttons["tool.text"].tap()
-        let links = app.staticTexts["hud.links"]
-        XCTAssertTrue(links.waitForExistence(timeout: 5))
 
-        func centre(of kind: String) -> CGPoint? {
-            let visible = editor.frame.insetBy(dx: 0, dy: 60)
-            for part in links.label.split(separator: ";") {
-                let fields = part.split(separator: ":")
-                guard fields.count == 2, fields[0] == kind else { continue }
-                let xy = fields[1].split(separator: ",").compactMap { Double($0) }
-                guard xy.count == 2 else { continue }
-                let p = CGPoint(x: xy[0], y: xy[1])
-                if visible.contains(p) { return p }
-            }
-            return nil
-        }
-        func tap(_ p: CGPoint) {
-            app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: p.x, dy: p.y)).tap()
-        }
-        func find(_ kind: String) -> CGPoint? {
-            for attempt in 0..<10 {
-                if let p = centre(of: kind) { return p }
-                // Scrolling refreshes the HUD's link positions: first a pull toward the top (the
-                // links are near it; at the top it only bounces), then small steps down so a link
-                // never jumps past the screen (off-screen links are not laid out).
-                let (from, to): (CGFloat, CGFloat) = attempt < 2 ? (0.4, 0.6) : (0.6, 0.45)
-                editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: from))
-                    .press(forDuration: 0.05, thenDragTo: editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
-                sleep(1)
-            }
-            return nil
-        }
-
-        let chip = try XCTUnwrap(find("note"), "the note link chip is on screen (links: \(links.label))")
-        tap(chip)
+        let chip = app.links["Идеи"]
+        XCTAssertTrue(scrollIntoView(chip, in: editor), "the note link chip is on screen and accessible")
+        touch(chip, in: app)
         let opened = app.staticTexts["hud.openedNote"]
         XCTAssertTrue(opened.waitForExistence(timeout: 5))
         let openedChip = expectation(for: NSPredicate(format: "label CONTAINS '0192f3c4'"), evaluatedWith: opened)
         wait(for: [openedChip], timeout: 10)
         XCTAssertEqual(app.keyboards.count, 0, "the tap opened the link instead of starting to type")
 
-        let title = try XCTUnwrap(find("title"), "the [[Title]] link is on screen (links: \(links.label))")
-        XCTAssertTrue(app.links["Новая заметка"].exists, "the [[Title]] link is an accessibility element (VoiceOver, spec/05)")
-        tap(title)
+        let title = app.links["Новая заметка"]
+        XCTAssertTrue(scrollIntoView(title, in: editor), "the [[Title]] link is on screen and accessible")
+        touch(title, in: app)
         XCTAssertTrue(app.alerts["Заметки «Новая заметка» нет"].waitForExistence(timeout: 10),
                       "a missing [[Title]] offers to create the note")
         XCTAssertEqual(app.state, .runningForeground)
@@ -180,28 +174,9 @@ final class EditorDemoUITests: XCTestCase {
         let editor = app.textViews["editor.text"]
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
         app.buttons["tool.text"].tap()
-        let targets = app.staticTexts["hud.links"]
-        XCTAssertTrue(targets.waitForExistence(timeout: 5))
-        var chip: CGPoint?
-        for attempt in 0..<10 {
-            let visible = editor.frame.insetBy(dx: 0, dy: 60)
-            chip = targets.label.split(separator: ";").compactMap { part -> CGPoint? in
-                let fields = part.split(separator: ":")
-                guard fields.count == 2, fields[0] == "date" else { return nil }
-                let xy = fields[1].split(separator: ",").compactMap { Double($0) }
-                return xy.count == 2 ? CGPoint(x: xy[0], y: xy[1]) : nil
-            }.first { visible.contains($0) }
-            if chip != nil { break }
-            // Pull toward the top first (refreshes the HUD), then small steps down.
-            let (from, to): (CGFloat, CGFloat) = attempt < 2 ? (0.4, 0.6) : (0.6, 0.45)
-            editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: from))
-                .press(forDuration: 0.05, thenDragTo: editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
-            sleep(1)
-        }
-        let point = try XCTUnwrap(chip, "a date chip is on screen (targets: \(targets.label))")
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Дата: ' OR label BEGINSWITH 'Дедлайн: '")).firstMatch.exists,
-                      "date chips are accessibility elements")
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: point.x, dy: point.y)).tap()
+        let chip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Дата: ' OR label BEGINSWITH 'Дедлайн: '")).firstMatch
+        XCTAssertTrue(scrollIntoView(chip, in: editor), "a date chip is on screen and accessible")
+        touch(chip, in: app)
         let nextWeek = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'След. неделя'")).firstMatch
         XCTAssertTrue(nextWeek.waitForExistence(timeout: 10), "the reschedule menu opens")
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Дата…'")).firstMatch.exists)

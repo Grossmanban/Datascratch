@@ -126,6 +126,8 @@ struct DemoView: View {
                 Toggle("Жесты пером", isOn: Binding(get: { model.editor.tools.gesturesEnabled },
                                                     set: { model.editor.tools.gesturesEnabled = $0 }))
                 Toggle("Замеры", isOn: Binding(get: { model.showHUD }, set: { model.showHUD = $0 }))
+                Toggle("Даты задач", isOn: Binding(get: { model.editor.taskDatesEnabled },
+                                                   set: { model.editor.taskDatesEnabled = $0 }))
                 if !model.status.isEmpty { Text(model.status) }
             } label: { Image(systemName: "ellipsis.circle") }
                 .accessibilityIdentifier("more")

@@ -794,6 +794,35 @@ final class EditorViewTests: XCTestCase {
         XCTAssertGreaterThan(chip.accessibilityFrame.width, 0)
     }
 
+    /// D-51 notes-only mode: date chips are quiet labels (no tap, no menu, not a button), the dates
+    /// stay in the document; switching back makes them actionable again.
+    func testTaskDatesSwitchMakesChipsInertOrActionable() throws {
+        let day = EditorView.isoDay(offset: 1)
+        let doc = InMemoryEditorDocument(blocks: [.title("D"), .taskList([.taskItem("Задача с датой", scheduled: day)])])
+        let editor = host(doc)
+        func chipCentre() throws -> CGPoint {
+            let f = try XCTUnwrap(editor.taskDateChipFrames(in: editor.textView).first, "the chip is drawn")
+            return CGPoint(x: f.midX, y: f.midY)
+        }
+        func chipElement() -> UIAccessibilityElement? {
+            editor.accessibilityElements?.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel?.hasPrefix("Дата: ") == true }
+        }
+        XCTAssertTrue(editor.hasTapTarget(at: try chipCentre()), "on by default: the chip is tappable")
+        XCTAssertEqual(chipElement()?.accessibilityTraits.contains(.button), true)
+
+        editor.taskDatesEnabled = false
+        settle(editor)
+        XCTAssertFalse(editor.hasTapTarget(at: try chipCentre()), "off: a tap on the chip is an ordinary tap in the text")
+        XCTAssertEqual(chipElement()?.accessibilityTraits.contains(.button), false, "off: a label, not a button")
+        XCTAssertEqual(chipElement()?.accessibilityTraits.contains(.staticText), true)
+        let item = doc.blocks[1].children[0].id
+        XCTAssertEqual(doc.block(item)?.attrs["scheduled"]?.stringValue, day, "the date stays in the document")
+
+        editor.taskDatesEnabled = true
+        settle(editor)
+        XCTAssertTrue(editor.hasTapTarget(at: try chipCentre()))
+    }
+
     // MARK: - Block rendering (build 16 feedback)
 
     static let clippedFormulas = [

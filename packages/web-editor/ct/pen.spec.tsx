@@ -309,3 +309,50 @@ test("drawing in an empty note anchors to its only block", async ({ mount, page 
   await expect.poll(() => strokeCount(page)).toBe(1);
   expect((await onlyStroke(page)).kind).toBe("block");
 });
+
+/** Alpha of the live (in-progress) layer in a small box around a client point. */
+async function liveAlpha(page: Page, x: number, y: number) {
+  return page.evaluate(({ x, y }) => {
+    const c = document.querySelector<HTMLCanvasElement>(".ds-pen-live")!;
+    const r = c.getBoundingClientRect();
+    const dpr = c.width / r.width;
+    const d = c.getContext("2d")!.getImageData(Math.round((x - r.left) * dpr) - 3, Math.round((y - r.top) * dpr) - 3, 7, 7).data;
+    let alpha = 0;
+    for (let i = 3; i < d.length; i += 4) alpha = Math.max(alpha, d[i]!);
+    return alpha;
+  }, { x, y });
+}
+
+for (const tool of ["eraser", "lasso"] as const) {
+  test(`the ${tool} indicator follows an Apple Pencil (pointerType pen) while dragging`, async ({ mount, page }) => {
+    await mount(<TestEditor width={700} html={TEXT} />);
+    await ready(page);
+    const r = 14;
+    await page.evaluate(({ tool, r }) => window.__ct!.api.pen.setSettings({ tool, eraserSize: r, drawWithAnyPointer: false }), { tool, r });
+    const { box } = await wordRect(page, "Second");
+    const cdp = await page.context().newCDPSession(page);
+    const pen = (type: "mousePressed" | "mouseMoved" | "mouseReleased", x: number, y: number) =>
+      cdp.send("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons: type === "mouseReleased" ? 0 : 1, clickCount: 1, pointerType: "pen", force: 0.5 });
+    const x0 = box.left;
+    const y0 = box.bottom + 30;
+    await pen("mousePressed", x0, y0);
+    let x = x0;
+    for (let i = 1; i <= 6; i++) {
+      x = x0 + i * 40;
+      await pen("mouseMoved", x, y0 + i * 4);
+      await page.waitForTimeout(40);
+      const y = y0 + i * 4;
+      if (tool === "eraser") {
+        // The ring is drawn around the pen's current position, not where it first touched.
+        expect(await liveAlpha(page, x + r, y)).toBeGreaterThan(40);
+        expect(await liveAlpha(page, x0 + r, y0)).toBe(0);
+      } else {
+        // The (dashed) lasso path reaches the pen's current position and nothing is drawn beyond it.
+        const near = Math.max(await liveAlpha(page, x, y), await liveAlpha(page, x - 6, y - 0.6), await liveAlpha(page, x - 12, y - 1.2));
+        expect(near).toBeGreaterThan(40);
+        expect(await liveAlpha(page, x + 30, y + 3)).toBe(0);
+      }
+    }
+    await pen("mouseReleased", x, y0 + 24);
+  });
+}

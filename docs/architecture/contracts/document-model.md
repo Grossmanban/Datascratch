@@ -68,7 +68,7 @@ Y.Map "tags"     tagName -> Y.Map { color, icon }   (необязательны�
 | `order` | number | ручная сортировка |
 | `createdByAgent` | `{ agentId, agentName, at }` \| null | заметку целиком создал агент (D-45): клиенты показывают полоску «Создано агентом», «Понятно» ставит `null`. Поле может отсутствовать (= null) |
 
-Ежедневные заметки и «Входящие» живут в блокноте, выбранном в `settings.dailyNotebookId` аккаунта.
+Ежедневные заметки и «Входящие» живут в блокноте, выбранном для текущего пространства в `settings.dailyNotebookBySpace` аккаунта (D-48; раньше — общий `settings.dailyNotebookId`).
 
 ## 4. Документ `note`
 

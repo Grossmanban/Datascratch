@@ -121,6 +121,26 @@
         }
       }
     },
+    "Add": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить"
+          }
+        }
+      }
+    },
+    "Add Link": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить ссылку"
+          }
+        }
+      }
+    },
     "Add a task for this day": {
       "localizations": {
         "ru": {
@@ -267,6 +287,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Синий"
+          }
+        }
+      }
+    },
+    "Bold": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Жирный"
           }
         }
       }
@@ -1431,6 +1461,16 @@
         }
       }
     },
+    "Highlight": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выделение"
+          }
+        }
+      }
+    },
     "I saved the key somewhere safe — in a password manager or on paper.": {
       "localizations": {
         "ru": {
@@ -1541,6 +1581,16 @@
         }
       }
     },
+    "Italic": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Курсив"
+          }
+        }
+      }
+    },
     "Key checked": {
       "localizations": {
         "ru": {
@@ -1597,6 +1647,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Линейка"
+          }
+        }
+      }
+    },
+    "Link": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка"
           }
         }
       }
@@ -2107,6 +2167,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "В избранном пусто"
+          }
+        }
+      }
+    },
+    "Numbered List": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нумерованный список"
           }
         }
       }
@@ -3161,6 +3231,16 @@
         }
       }
     },
+    "Strikethrough": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зачёркнутый"
+          }
+        }
+      }
+    },
     "Style": {
       "localizations": {
         "ru": {
@@ -3597,6 +3677,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Введите две группы из ключа восстановления, чтобы убедиться, что он сохранён верно."
+          }
+        }
+      }
+    },
+    "Underline": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подчёркнутый"
           }
         }
       }

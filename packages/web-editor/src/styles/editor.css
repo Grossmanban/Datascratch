@@ -154,6 +154,47 @@
 .ds-editor[data-ruled] .ds-prose > .ds-hr hr {
   flex: 1;
 }
+/* Nested blocks (quotes, lists, tasks, callouts, cells) stack without fractional margins: every
+   line inside stays one pitch tall. */
+.ds-editor[data-ruled] .ds-prose * > :is(p, h1, h2, h3, ul, ol, blockquote, pre) {
+  margin-block: 0;
+}
+.ds-editor[data-ruled] .ds-prose :is(blockquote, li, .ds-callout-content, td, th) h1 {
+  line-height: calc(2 * var(--ds-pitch, 26px));
+}
+/* Inline chips and marks with their own font or size (tags, note links, code, highlights…) must
+   not make their line taller than the pitch: a line-height of 0 keeps their box inside the line's
+   strut while their background still covers the glyphs. */
+.ds-editor[data-ruled] .ds-prose :is(code, mark, a, sub, sup, .ds-tag, .ds-note-link, .ds-missing-link, .ds-agent-edit, .ds-unsupported) {
+  line-height: 0;
+}
+/* Inline formulas: KaTeX struts are taller than a line; a zero-height box aligned on the baseline
+   keeps the line one pitch tall and lets the formula overhang it. */
+.ds-editor[data-ruled] .ds-prose .ds-inline-math {
+  display: inline-flex;
+  align-items: baseline;
+  height: 0;
+  overflow: visible;
+  vertical-align: baseline;
+}
+/* Headings and the title use a bigger font: paper.ts measures how far their baseline sits from
+   the rule and shifts the text onto it (visual only, the grid does not move). */
+.ds-editor[data-ruled] .ds-prose .ds-title {
+  position: relative;
+  top: var(--ds-shift-title, 0px);
+}
+.ds-editor[data-ruled] .ds-prose h1:not(.ds-title) {
+  position: relative;
+  top: var(--ds-shift-h1, 0px);
+}
+.ds-editor[data-ruled] .ds-prose h2 {
+  position: relative;
+  top: var(--ds-shift-h2, 0px);
+}
+.ds-editor[data-ruled] .ds-prose h3 {
+  position: relative;
+  top: var(--ds-shift-h3, 0px);
+}
 /* Blocks without lines start a pitch below the text; paper.ts rounds their height up (--ds-snap). */
 .ds-editor[data-ruled] .ds-prose > :is(.ds-atom, .ds-image, .ds-file, .ds-drawing, .ds-page-card, .ds-unsupported) {
   --ds-mb: var(--ds-pitch, 26px);
@@ -466,346 +507,6 @@
 }
 .ds-callout[data-tone="danger"] {
   --ds-callout-bg: var(--ds-tint-red-bg, #fbe7e3);
-}
-.ds-callout-icon {
-  height: var(--ds-pitch, 26px);
-  line-height: var(--ds-pitch, 26px);
-}
-.ds-editor[data-ruled] .ds-prose > .tableWrapper,
-.ds-editor[data-ruled] .ds-prose > table {
-  --ds-mb: var(--ds-pitch, 26px);
-  margin-top: var(--ds-pitch, 26px);
-}
-.ds-editor[data-ruled] .ds-prose table {
-  margin-block: 0;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-.ds-editor[data-ruled] .ds-prose :is(td, th) {
-  padding-block: 0;
-  border: 0;
-  box-shadow: inset -1px 0 0 var(--ds-rule), inset 0 -1px 0 var(--ds-rule);
-}
-.ds-editor[data-ruled] .ds-prose > .ds-hr {
-  padding: 0;
-  height: var(--ds-pitch, 26px);
-  display: flex;
-  align-items: center;
-}
-.ds-editor[data-ruled] .ds-prose > .ds-hr hr {
-  flex: 1;
-}
-/* Blocks without lines start a pitch below the text; paper.ts rounds their height up (--ds-snap). */
-.ds-editor[data-ruled] .ds-prose > :is(.ds-atom, .ds-image, .ds-file, .ds-drawing, .ds-page-card, .ds-unsupported) {
-  --ds-mb: var(--ds-pitch, 26px);
-  margin-top: var(--ds-pitch, 26px);
-}
-
-.ds-prose {
-  position: relative;
-  z-index: 1;
-  box-sizing: border-box;
-  max-width: var(--ds-doc-width, 720px);
-  margin: 0 auto;
-  padding: 24px 56px var(--ds-doc-bottom, 160px);
-  outline: none;
-  font-size: 17px;
-  line-height: 1.5;
-  caret-color: var(--ds-accent-c);
-  word-wrap: break-word;
-  white-space: pre-wrap;
-}
-.ds-editor[data-font="serif"] .ds-prose {
-  font-size: 18px;
-}
-
-.ds-prose > * + * {
-  margin-top: 0.5em;
-}
-.ds-prose :where(p) {
-  margin: 0;
-}
-
-.ds-prose .ds-title {
-  font-family: var(--ds-font-display, "Newsreader", "New York", Georgia, serif);
-  font-size: 34px;
-  line-height: 1.2;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  margin: 0 0 0.5em;
-}
-.ds-prose h1,
-.ds-prose h2,
-.ds-prose h3 {
-  font-family: var(--ds-font-display, "Newsreader", "New York", Georgia, serif);
-  line-height: 1.2;
-  font-weight: 600;
-  margin: 1.1em 0 0.25em;
-}
-.ds-prose h1:not(.ds-title) {
-  font-size: 28px;
-}
-.ds-prose h2 {
-  font-size: 22px;
-}
-.ds-prose h3 {
-  font-size: 19px;
-}
-
-.ds-prose p.is-empty::before,
-.ds-prose .ds-title.is-empty::before {
-  content: attr(data-placeholder);
-  color: var(--ds-faint);
-  float: left;
-  height: 0;
-  pointer-events: none;
-}
-
-.ds-prose a {
-  color: var(--ds-accent-c);
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--ds-accent-c) 35%, transparent);
-  text-underline-offset: 2px;
-}
-.ds-prose code {
-  font-family: var(--ds-font-mono, "JetBrains Mono", ui-monospace, monospace);
-  font-size: 0.88em;
-  padding: 0.1em 0.3em;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--ds-ink) 7%, transparent);
-}
-.ds-prose mark.ds-highlight {
-  background: var(--ds-mark-bg, #ffe36e80);
-  color: inherit;
-  border-radius: 3px;
-  padding: 0 1px;
-}
-/* Agent edits (D-10): a quiet wash, not a marker — readable at a glance, calm when there are many. */
-.ds-prose .ds-agent-edit {
-  background: color-mix(in srgb, var(--ds-accent-c) 7%, transparent);
-  border-radius: 2px;
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--ds-accent-c) 28%, transparent);
-}
-.ds-agent-accept {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 0.5em;
-  padding: 1px 8px;
-  border: 1px solid color-mix(in srgb, var(--ds-accent-c) 30%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ds-accent-c) 8%, var(--ds-paper));
-  color: var(--ds-accent-c);
-  font-family: var(--ds-font-text, "Inter", system-ui, sans-serif);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-  vertical-align: 0.1em;
-  cursor: pointer;
-  user-select: none;
-}
-.ds-agent-accept:hover {
-  background: color-mix(in srgb, var(--ds-accent-c) 16%, var(--ds-paper));
-}
-.ds-agent-banner {
-  position: sticky;
-  top: 8px;
-  z-index: 15;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: fit-content;
-  max-width: calc(100% - 32px);
-  margin: 8px auto 0;
-  padding: 6px 6px 6px 14px;
-  border-radius: 999px;
-  background: var(--ds-glass-bg);
-  backdrop-filter: blur(24px) saturate(1.6);
-  -webkit-backdrop-filter: blur(24px) saturate(1.6);
-  border: 1px solid color-mix(in srgb, var(--ds-line-strong, #cfc8bc) 55%, transparent);
-  box-shadow: var(--ds-shadow-pop);
-  font-family: var(--ds-font-text, "Inter", system-ui, sans-serif);
-  font-size: 13px;
-  color: var(--ds-ink);
-  animation: ds-pop 180ms var(--ds-ease);
-}
-.ds-agent-banner-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ds-accent-c);
-}
-.ds-agent-banner-accept {
-  border: 0;
-  border-radius: 999px;
-  padding: 5px 12px;
-  background: var(--ds-accent-c);
-  color: #fff;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-/* Inline $…$ math: the source is hidden (not removed) while its KaTeX rendering is shown. */
-.ds-prose .ds-inline-math-src {
-  display: none;
-}
-.ds-prose .ds-inline-math {
-  padding: 0 1px;
-  cursor: text;
-}
-.ds-prose .ds-missing-link {
-  color: var(--ds-accent-c);
-  text-decoration: underline dashed color-mix(in srgb, var(--ds-accent-c) 45%, transparent);
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.ds-prose ul,
-.ds-prose ol {
-  padding-left: 1.5em;
-  margin: 0.25em 0;
-}
-/* Explicit markers: CSS resets (Tailwind preflight in the design system) set list-style: none. */
-.ds-prose ul:not([data-type="taskList"]) {
-  list-style: disc;
-}
-.ds-prose ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
-  list-style: circle;
-}
-.ds-prose ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
-  list-style: square;
-}
-.ds-prose ol {
-  list-style: decimal;
-}
-.ds-prose ol ol {
-  list-style: lower-alpha;
-}
-.ds-prose li::marker {
-  color: var(--ds-muted);
-}
-.ds-prose li > p {
-  margin: 0;
-}
-.ds-prose blockquote {
-  margin: 0.6em 0;
-  padding: 0.1em 0 0.1em 1em;
-  border-left: 3px solid var(--ds-rule);
-  color: var(--ds-muted);
-  font-style: italic;
-}
-
-/* hr styles */
-.ds-prose .ds-hr {
-  padding: 0.9em 0;
-}
-.ds-prose .ds-hr hr {
-  border: 0;
-  height: 1px;
-  background: var(--ds-rule);
-  margin: 0;
-}
-.ds-prose .ds-hr[data-style="dots"] hr {
-  height: 6px;
-  background: radial-gradient(circle, var(--ds-faint) 1.6px, transparent 2px) center / 18px 6px repeat-x;
-  max-width: 90px;
-  margin: 0 auto;
-}
-.ds-prose .ds-hr[data-style="wave"] hr {
-  height: 8px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='8'%3E%3Cpath d='M0 4 Q6 0 12 4 T24 4' fill='none' stroke='%239C978E' stroke-width='1.3'/%3E%3C/svg%3E") repeat-x center;
-}
-.ds-prose .ProseMirror-selectednode.ds-hr hr,
-.ds-prose .ds-hr.ProseMirror-selectednode {
-  outline: 2px solid color-mix(in srgb, var(--ds-accent-c) 40%, transparent);
-  border-radius: 4px;
-}
-
-/* ---------- tasks ---------- */
-.ds-prose ul[data-type="taskList"] {
-  list-style: none;
-  padding-left: 0;
-}
-.ds-task {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.55em;
-}
-.ds-task-control {
-  flex: none;
-  display: flex;
-  height: 1.5em;
-  align-items: center;
-}
-/* The checkbox itself is the design system's `.ds-task-check` (@datascratch/ui/styles.css). */
-.ds-task-check {
-  --ds-task-size: 18px;
-}
-
-.ds-task-body {
-  flex: 1;
-  min-width: 0;
-}
-.ds-task[data-state="done"] > .ds-task-body > p:first-child,
-.ds-task[data-state="cancelled"] > .ds-task-body > p:first-child {
-  color: var(--ds-faint);
-  text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, var(--ds-faint) 60%, transparent);
-}
-.ds-task-chips {
-  flex: none;
-  display: flex;
-  gap: 4px;
-  height: 1.5em;
-  align-items: center;
-  cursor: pointer;
-}
-.ds-chip {
-  font-family: var(--ds-font-text, "Inter", system-ui, sans-serif);
-  font-size: 12px;
-  line-height: 1;
-  padding: 4px 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ds-ink) 6%, transparent);
-  color: var(--ds-muted);
-  white-space: nowrap;
-}
-.ds-chip[data-tone="today"] {
-  color: var(--ds-accent-c);
-  background: color-mix(in srgb, var(--ds-accent-c) 12%, transparent);
-}
-.ds-chip[data-tone="soon"] {
-  color: var(--ds-warning, #c98a1b);
-  background: color-mix(in srgb, var(--ds-warning, #c98a1b) 14%, transparent);
-}
-.ds-chip[data-tone="overdue"] {
-  color: var(--ds-danger, #d2453b);
-  background: color-mix(in srgb, var(--ds-danger, #d2453b) 12%, transparent);
-}
-.ds-chip[data-tone="done"] {
-  color: var(--ds-faint);
-  background: color-mix(in srgb, var(--ds-ink) 4%, transparent);
-}
-
-/* ---------- callout ---------- */
-.ds-callout {
-  display: flex;
-  gap: 0.6em;
-  padding: 0.8em 1em;
-  border-radius: var(--ds-radius-lg, 14px);
-  background: var(--ds-tint-yellow-bg, #fbf3d6);
-  margin: 0.6em 0;
-}
-.ds-callout[data-tone="info"] {
-  background: var(--ds-tint-blue-bg, #e5ecfb);
-}
-.ds-callout[data-tone="success"] {
-  background: var(--ds-tint-green-bg, #e5f2e8);
-}
-.ds-callout[data-tone="warning"] {
-  background: var(--ds-tint-orange-bg, #fceedf);
-}
-.ds-callout[data-tone="danger"] {
-  background: var(--ds-tint-red-bg, #fbe7e3);
 }
 .ds-callout-icon {
   flex: none;

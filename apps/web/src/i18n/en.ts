@@ -319,6 +319,11 @@ const en: Loose<Messages> = {
     icon: "Icon",
     addIcon: "Add icon",
   },
+  pen: {
+    showPalette: "Pen palette ({{tool}}) — expand",
+    hidePalette: "Collapse the pen palette",
+    tool: { text: "text", pen: "pen", pencil: "pencil", marker: "marker", highlighter: "highlighter", eraser: "eraser", lasso: "lasso" },
+  },
   cover: {
     description: "Your own image: a photo, a screenshot or a picture file.",
     hint: "Drop an image here or paste it (⌘V)",

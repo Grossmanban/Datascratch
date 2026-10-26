@@ -8,7 +8,8 @@ import { colorFor } from "@/data/presence";
 import { runtime } from "@/data/runtime";
 import { acknowledgeAgentCreated, agentCreatedOf, deleteNoteForever, openTab, restoreNote, setTitleOf, toggleStar, updateNote } from "@/domain/actions";
 import { folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
-import { closeDocTab, isFreshNote, noteMenuItems } from "@/features/docs/menus";
+import { closeDocTab, noteMenuItems } from "@/features/docs/menus";
+import { isFreshNote } from "@/lib/freshNotes";
 import { TopBar } from "@/features/shell/PageHeader";
 import { useNoteContentReady, useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
 import { useUi } from "@/hooks/useUi";
@@ -112,8 +113,9 @@ function DocScreen({ noteId }: { noteId: string }) {
         if (isFreshNote(noteId) && (!title || title === titleFor()) && isNoteEmpty(doc, title)) void deleteNoteForever(noteId);
         return;
       }
-      // The editor is gone by now (fillEmptyTitleIfNeeded needs it): write the same name into the document.
-      if (!title) void setTitleOf(noteId, titleFor());
+      // The editor is gone by now (fillEmptyTitleIfNeeded needs it): write the same name into the
+      // document — only for a note created here in this session, never an existing one.
+      if (!title && isFreshNote(noteId)) void setTitleOf(noteId, titleFor());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, editable, noteId]);

@@ -92,6 +92,10 @@ export class Indexer {
     for (const ix of batch) {
       const info = this.noteInfo(ix.noteId);
       if (!info) continue;
+      // Nothing of the note is here yet (made elsewhere, not downloaded or decrypted): an empty
+      // extraction must not become its index entry, and above all not its NoteMeta title and tags
+      // (that synced «Без названия» to every device). It is indexed when its content arrives.
+      if (!ix.title && !ix.plainText.trim() && !ix.tasks.length && !ix.tags.length && !ix.links.length) continue;
       // Trashed meanwhile: keep its search entry out and its tasks hidden.
       if (info.trashed) {
         trashed.push(ix.noteId);

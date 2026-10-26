@@ -4,6 +4,13 @@
  */
 import * as z from "zod/v4";
 
+/** The Markdown dialect agents write (create_note, edit_note) and read (read_note). */
+export const MARKDOWN_DIALECT =
+  "Body in Markdown: headings (#..###); lists; task lists (- [ ] open, - [x] done, - [-] cancelled; optional ⏳ YYYY-MM-DD scheduled and 📅 YYYY-MM-DD deadline at the end); > quotes; " +
+  "callouts > [!note|info|success|warning|danger] optional-emoji (Obsidian names map to the closest tone: tip/hint/done→success, important/abstract/todo/question→info, caution/attention→warning, error/failure/bug→danger, example/quote→note); " +
+  "tables; ``` code ```; $$ LaTeX $$ blocks (verbatim); ```mermaid; [[Note title]] links; #tags; ==highlight==; <u>underline</u>. " +
+  "A line break inside a paragraph is kept as a line break. Backslash-escape characters you want literally (\\# \\* \\_ \\` \\[ \\=\\=); read_note escapes them the same way.";
+
 const id = z.string().regex(/^[0-9a-f-]{36}$/, "must be a UUID");
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
 
@@ -42,7 +49,7 @@ export const createNoteInput = z.object({
     .string()
     .max(200_000)
     .default("")
-    .describe("Body in Markdown: headings (#..###), lists, task lists (- [ ] / - [x], optional ⏳ YYYY-MM-DD scheduled, 📅 YYYY-MM-DD deadline), > quotes, > [!note] callouts, tables, code, $$math$$, ```mermaid, [[Note title]] links, #tags."),
+    .describe(MARKDOWN_DIALECT),
   folderId: id.nullable().optional(),
 });
 

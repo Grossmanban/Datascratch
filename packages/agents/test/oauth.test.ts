@@ -244,4 +244,32 @@ describe("OAuth 2.1 for MCP clients", () => {
     expect(text).toContain('"serverInfo"');
     expect(text).toContain("datascratch");
   });
+
+  it("shows notebook names, icons and spaces from the notebook document on the consent page", async () => {
+    const s = await startServer();
+    close = s.close;
+    const nb = s.ctx.data.notebooks.get(NB_WORK)!;
+    nb.name = null; // the server does not know names (account doc is end-to-end encrypted)
+    nb.icon = null;
+    nb.space = null;
+    const doc = s.ctx.data.current(NB_WORK);
+    doc.transact(() => {
+      doc.getMap("meta").set("icon", "globe");
+      doc.getMap("meta").set("color", "tint.teal");
+      doc.getMap("meta").set("space", { id: "s1", name: "Основное", icon: null });
+    });
+    const reg = await fetch(`${s.base}/oauth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ client_name: "Claude", redirect_uris: [REDIRECT] }),
+    }).then((r) => r.json());
+    const u = new URL(`${s.base}/oauth/authorize`);
+    const challenge = createHash("sha256").update(randomBytes(32).toString("base64url")).digest("base64url");
+    for (const [k, v] of Object.entries({ response_type: "code", client_id: reg.client_id, redirect_uri: REDIRECT, code_challenge: challenge, code_challenge_method: "S256" }))
+      u.searchParams.set(k, v);
+    const html = await fetch(u, { headers: { cookie: `ds_session=${USER}` } }).then((r) => r.text());
+    expect(html).not.toContain("Без названия");
+    expect(html).toMatch(/<span class="ico" style="[^"]*"><svg viewBox="0 0 24 24"[^>]*><circle cx="12" cy="12" r="9"\/>/);
+    expect(html).toContain("<span>Работа</span><small>Основное</small>");
+  });
 });

@@ -11,6 +11,9 @@ struct SidebarView: View {
     private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
 
     private var library: LibraryStore { app.library }
+    /// Height of the floating footer: the list ends above it (a safe-area inset alone left the
+    /// last row, Trash, under the footer on iPad).
+    @State private var footerHeight: CGFloat = 0
 
     var body: some View {
         @Bindable var scene = scene
@@ -102,6 +105,7 @@ struct SidebarView: View {
                 Section {
                     ForEach(library.notebooks(in: library.activeSpace?.id)) { notebook in
                         NotebookRow(notebook: notebook)
+                            .accessibilityIdentifier("sidebar.notebook")
                     }
                 } header: {
                     HStack {
@@ -142,11 +146,11 @@ struct SidebarView: View {
         .navigationTitle(library.activeSpace?.name ?? "Datascratch")
         // The space tile in the toolbar names the space; no SF large title.
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(removing: .title)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 SpaceSwitcher()
             }
-            ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     scene.isCommandPalettePresented = true
@@ -157,8 +161,10 @@ struct SidebarView: View {
                 .accessibilityIdentifier("sidebar.commandPalette")
             }
         }
-        .safeAreaInset(edge: .bottom) {
+        .contentMargins(.bottom, footerHeight, for: .scrollContent)
+        .overlay(alignment: .bottom) {
             SidebarFooter()
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { footerHeight = $0 }
         }
         .onChange(of: scene.sidebar) { _, _ in
             if app.settings.hapticsEnabled { Haptics.selection() }
@@ -328,6 +334,8 @@ struct SidebarFooter: View {
         .padding(.horizontal, Theme.Space.s4)
         .padding(.vertical, Theme.Space.s3)
         .glassEffect(.regular, in: .capsule)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sidebar.footer")
         .padding(.horizontal, Theme.Space.s3)
         .padding(.bottom, Theme.Space.s2)
     }
@@ -339,6 +347,18 @@ struct SyncStatusBadge: View {
     var body: some View {
         if case .notSent(let documents, let reason) = app.sync.phase {
             notSent(documents: documents, reason: reason)
+        } else if app.sync.phase == .sessionEnded {
+            HStack(spacing: Theme.Space.s2) {
+                let (icon, text, color) = describe(app.sync.phase)
+                label(icon: icon, text: text, color: color)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("sync.status")
+                Button("Sign In") { app.sync.showsSessionEnded = true }
+                    .font(Theme.Typography.footnote.weight(.semibold))
+                    .buttonStyle(.borderless)
+                    .tint(Theme.Palette.accent)
+                    .accessibilityIdentifier("sync.signIn")
+            }
         } else {
             let (icon, text, color) = describe(app.sync.phase)
             label(icon: icon, text: text, color: color)
@@ -393,6 +413,8 @@ struct SyncStatusBadge: View {
             return ("checkmark.icloud", "Up to date", Theme.Palette.success)
         case .failed:
             return ("exclamationmark.icloud", "Sync problem", Theme.Palette.danger)
+        case .sessionEnded:
+            return ("person.crop.circle.badge.exclamationmark", "Signed out", Theme.Palette.danger)
         case .notSent(let documents, _):
             let text: LocalizedStringKey = "Not sent: \(documents)"
             return ("exclamationmark.icloud", text, Theme.Palette.danger)

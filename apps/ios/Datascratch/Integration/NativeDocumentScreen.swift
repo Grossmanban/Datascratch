@@ -186,7 +186,8 @@ struct NativeDocumentScreen: View {
                 .padding(.leading, isTight ? Theme.Space.s1 : Theme.Space.s3)
             PenPalette(model: model, isCompact: isCompact)
             Button { setPaletteCollapsed(true) } label: {
-                Image(systemName: "chevron.down.right")
+                // A clear «fold» glyph (the earlier one drew an empty circle on iPhone).
+                Image(systemName: "chevron.down")
                     .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
                     .foregroundStyle(Theme.Palette.textSecondary)
                     .frame(width: isCompact ? 22 : 28, height: isCompact ? 22 : 28)
@@ -257,8 +258,11 @@ struct NativeDocumentScreen: View {
                             .frame(maxWidth: .infinity)
                         }
                     }
+                    // The cover's height follows the document area on appear and when its width
+                    // changes (rotation, split view) — not when the keyboard or palette resizes
+                    // it: a cover resizing then relaid the text out and the scroll fought back.
                     .onAppear { model.header.containerHeight = proxy.size.height }
-                    .onChange(of: proxy.size.height) { _, height in model.header.containerHeight = height }
+                    .onChange(of: proxy.size.width) { _, _ in model.header.containerHeight = proxy.size.height }
                 }
                 .onChange(of: note.style, initial: true) { _, style in model.apply(style: style) }
                 .onChange(of: note, initial: true) { _, note in

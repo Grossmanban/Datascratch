@@ -147,6 +147,25 @@ public final class NotebookDocument: Sendable {
         try updateNote(id: id, ["trashedAt": .null], origin: origin)
     }
 
+    /// Re-wraps note keys that were wrapped with `oldKey` by `newKey` — after this notebook's key
+    /// was replaced by the server's (`AccountService.reconcileNotebookKeys`). Notes already
+    /// readable with `newKey` are left alone. Returns how many were re-wrapped.
+    @discardableResult
+    public func rewrapNoteKeys(from oldKey: Data, to newKey: Data, origin: TransactionOrigin = .local) throws -> Int {
+        var fields: [String: String] = [:]
+        for meta in notes() {
+            guard let wrapped = Base64URL.decode(meta.wrappedKey),
+                  (try? DSCrypto.unwrapKey(wrapped, with: newKey, ad: CryptoAD.noteKey(meta.id))) == nil,
+                  let noteKey = try? DSCrypto.unwrapKey(wrapped, with: oldKey, ad: CryptoAD.noteKey(meta.id)) else { continue }
+            fields[meta.id] = Base64URL.encode(try DSCrypto.wrapKey(noteKey, with: newKey, ad: CryptoAD.noteKey(meta.id)))
+        }
+        guard !fields.isEmpty else { return 0 }
+        try crdt.transact(origin: origin) { txn in
+            for (id, wrapped) in fields { txn.update("notes", id: id, ["wrappedKey": .string(value: wrapped)]) }
+        }
+        return fields.count
+    }
+
     /// «Понятно» on the «Создано агентом» strip (D-45): `createdByAgent = null`, the strip goes
     /// away on every device.
     public func clearCreatedByAgent(noteId: String, origin: TransactionOrigin = .local) throws {

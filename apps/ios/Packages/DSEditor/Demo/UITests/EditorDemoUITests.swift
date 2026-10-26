@@ -80,14 +80,26 @@ final class EditorDemoUITests: XCTestCase {
         try appStyleTyping(extraArguments: ["-noPalette", "-noNavigation"])
     }
 
+    @MainActor
+    func testTypingBisectAppStepsHeader() throws {
+        try appStyleTyping(extraArguments: ["-header"])
+    }
+
+    /// The app's test taps long after launch (sign-in, navigation); the demo's right after it.
+    @MainActor
+    func testTypingBisectAppStepsLateTap() throws {
+        try appStyleTyping(extraArguments: [], settleBeforeTap: 8)
+    }
+
     /// The app test's steps: no tool switch, a tap in the middle of the text view, typing, 3 s wait.
     @MainActor
-    private func appStyleTyping(extraArguments: [String]) throws {
+    private func appStyleTyping(extraArguments: [String], settleBeforeTap: UInt32 = 0) throws {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting"] + extraArguments
         app.launch()
         let editor = app.textViews["editor.text"]
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        sleep(settleBeforeTap)
         editor.tap()
         editor.typeText("Keyboard")
         _ = app.keyboards.firstMatch.waitForExistence(timeout: 5)

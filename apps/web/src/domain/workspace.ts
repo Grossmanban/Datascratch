@@ -130,6 +130,35 @@ export function activeSpace(st: WorkspaceState): Space | undefined {
   return st.account.spaces.find((s) => s.id === st.activeSpaceId);
 }
 
+/** The space a notebook belongs to (D-48: membership is derived from the notebook). */
+export function spaceOfNotebook(st: WorkspaceState, notebookId: string | undefined): string | null {
+  return st.account.notebooks.find((n) => n.id === notebookId)?.spaceId ?? null;
+}
+
+export function spaceOfNote(st: WorkspaceState, noteId: string): string | null {
+  return spaceOfNotebook(st, st.notes[noteId]?.notebookId);
+}
+
+/** Whether a starred item belongs to a space (D-48: everything shown is of the current space). */
+export function starredInSpace(st: WorkspaceState, ref: StarredRef, spaceId: string | null): boolean {
+  const nb = ref.kind === "note" ? st.notes[ref.id]?.notebookId : ref.kind === "folder" ? st.folders[ref.id]?.notebookId : ref.id;
+  return !!nb && spaceOfNotebook(st, nb) === spaceId;
+}
+
+/** Open tabs of a space, in order (the account keeps one list for all spaces). */
+export function tabsInSpace(st: WorkspaceState, spaceId: string | null): { noteId: string }[] {
+  return st.account.tabs.filter((t) => {
+    const n = st.notes[t.noteId];
+    return n && !n.trashedAt && spaceOfNotebook(st, n.notebookId) === spaceId;
+  });
+}
+
+/** `settings` map keyed by space (`activeTabBySpace`, `dailyNotebookBySpace`; document-model.md §2). */
+export function bySpace(st: WorkspaceState, key: "activeTabBySpace" | "dailyNotebookBySpace"): Record<string, string> {
+  const v = st.account.settings[key];
+  return v && typeof v === "object" ? (v as Record<string, string>) : {};
+}
+
 export function notesInSpace(st: WorkspaceState, spaceId: string | null): NoteEntry[] {
   const nbs = new Set(spaceNotebooks(st, spaceId).map((n) => n.id));
   return Object.values(st.notes).filter((n) => nbs.has(n.notebookId));

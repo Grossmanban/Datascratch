@@ -40,7 +40,8 @@ export function TasksPage() {
     const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
     return (all ?? []).filter((r) => {
       const n = notes[r.noteId];
-      return n && !n.trashedAt && (r.noteKind === "inbox" || nbs.has(r.notebookId));
+      // Every space has its own Inbox (D-48): an Inbox note counts in its notebook's space like any note.
+      return n && !n.trashedAt && nbs.has(n.notebookId);
     });
   }, [all, notes, notebooks, spaceId]);
   // A just-completed task keeps its place in the list (shown done) until the view changes.

@@ -15,6 +15,7 @@ import {
   StarOff,
   Trash2,
   Undo2,
+  Layers,
 } from "lucide-react";
 import {
   createFolder,
@@ -84,24 +85,32 @@ function folderTargets(notebookId: string, onPick: (folderId: string | null) => 
   ];
 }
 
-/** Other notebooks (grouped by space), each with its folders as move targets. */
-function notebookTargets(noteId: string, fromNotebookId: string, t: TFunction): MenuItem[] {
+/** Other notebooks of one space, each with its folders as move targets. */
+function notebookTargets(noteId: string, fromNotebookId: string, spaceId: string | undefined, t: TFunction): MenuItem[] {
   const { account } = useWorkspace.getState();
-  const items: MenuItem[] = [];
-  for (const space of [...account.spaces].sort((a, b) => a.order - b.order)) {
-    const nbs = account.notebooks.filter((nb) => nb.spaceId === space.id && nb.id !== fromNotebookId).sort((a, b) => a.order - b.order);
-    if (!nbs.length) continue;
-    if (account.spaces.length > 1) items.push({ kind: "label", label: space.name });
-    for (const nb of nbs) {
-      items.push({
-        kind: "sub",
-        label: nb.name,
-        icon: iconGlyph(nb.icon) ? <span className="text-[12px] leading-none">{iconGlyph(nb.icon)}</span> : <BookCopy className="size-3.5" />,
-        items: folderTargets(nb.id, (folderId) => void moveToNotebook(noteId, fromNotebookId, nb.id, folderId, t), t),
-      });
-    }
-  }
-  return items;
+  return account.notebooks
+    .filter((nb) => nb.spaceId === spaceId && nb.id !== fromNotebookId)
+    .sort((a, b) => a.order - b.order)
+    .map((nb) => ({
+      kind: "sub" as const,
+      label: nb.name,
+      icon: iconGlyph(nb.icon) ? <span className="text-[12px] leading-none">{iconGlyph(nb.icon)}</span> : <BookCopy className="size-3.5" />,
+      items: folderTargets(nb.id, (folderId) => void moveToNotebook(noteId, fromNotebookId, nb.id, folderId, t), t),
+    }));
+}
+
+/** Moving to another space is its own explicit command (D-48): other spaces, then their notebooks. */
+function spaceTargets(noteId: string, fromNotebookId: string, fromSpaceId: string | undefined, t: TFunction): MenuItem[] {
+  const { account } = useWorkspace.getState();
+  return [...account.spaces]
+    .sort((a, b) => a.order - b.order)
+    .filter((s) => s.id !== fromSpaceId && account.notebooks.some((nb) => nb.spaceId === s.id))
+    .map((s) => ({
+      kind: "sub" as const,
+      label: s.name,
+      icon: <Layers className="size-3.5" />,
+      items: notebookTargets(noteId, fromNotebookId, s.id, t),
+    }));
 }
 
 async function moveToNotebook(noteId: string, fromNotebookId: string, toNotebookId: string, folderId: string | null, t: TFunction) {
@@ -157,6 +166,7 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
     ];
   }
   const starred = isStarred(st, { kind: "note", id: noteId });
+  const spaceOf = st.account.notebooks.find((nb) => nb.id === n.notebookId)?.spaceId;
   return [
     ...(!opts.inDoc
       ? [
@@ -193,13 +203,23 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
         t,
       ),
     },
-    ...(st.account.notebooks.length > 1
+    ...(notebookTargets(noteId, n.notebookId, spaceOf, t).length
       ? [
           {
             kind: "sub" as const,
             label: t("docs.moveToNotebook"),
             icon: <BookCopy className="size-3.5" />,
-            items: notebookTargets(noteId, n.notebookId, t),
+            items: notebookTargets(noteId, n.notebookId, spaceOf, t),
+          },
+        ]
+      : []),
+    ...(spaceTargets(noteId, n.notebookId, spaceOf, t).length
+      ? [
+          {
+            kind: "sub" as const,
+            label: t("docs.moveToSpace"),
+            icon: <Layers className="size-3.5" />,
+            items: spaceTargets(noteId, n.notebookId, spaceOf, t),
           },
         ]
       : []),

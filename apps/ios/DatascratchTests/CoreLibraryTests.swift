@@ -235,6 +235,30 @@ struct CoreLibraryTests {
         #expect(reloaded.data.dailyNotebookBySpace == [a.id: notebook.id])
     }
 
+    /// Prod 2026-10-26 (iPad, build 15): opening an agent's note whose document had not arrived
+    /// yet wrote an empty title over the agent's. Opening (and loading the library) must write
+    /// nothing: no outbox items, the title in the index unchanged.
+    @Test func openingANoteMadeElsewhereWritesNothing() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "Ии", mode: .agent)
+        // The agent's note: its meta came with the notebook index, its document did not.
+        let noteId = DSCore.EntityID.make()
+        let wrapped = try keys.createNoteKey(noteId: noteId, notebookId: notebook.id).wrappedKey
+        try core.notebookDocument(notebook.id).putNote(DSCore.NoteMeta(id: noteId, title: "Agent note", wrappedKey: wrapped), origin: .remote)
+        let before = try store.outboxCount()
+
+        _ = core.loadSnapshot()
+        let doc = try core.noteDocument(noteId, notebookId: notebook.id)
+        #expect(try doc.blocks().isEmpty)
+        _ = core.refreshNote(noteId, notebookId: notebook.id)
+        #expect(try store.outboxCount() == before)
+        #expect(try core.notebookDocument(notebook.id).note(id: noteId)?.title == "Agent note")
+    }
+
     /// The user's cover image lives in `meta.cover` and its thumbnail in `NoteMeta.coverThumb`.
     @Test func coverImageAndThumbnailPersist() throws {
         let keys = KeyRing(store: InMemorySecretStore())

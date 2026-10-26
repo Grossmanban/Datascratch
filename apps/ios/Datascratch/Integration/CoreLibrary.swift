@@ -206,13 +206,17 @@ final class CoreLibrary: LibraryBackend {
         return doc
     }
 
-    func noteDocument(_ id: String, notebookId: String) throws -> NoteDocument {
+    /// The note's document. Only a note created on this device (`creating`) gets the empty
+    /// title + paragraph structure: a note made elsewhere (an agent, another device) whose
+    /// document has not arrived yet stays empty until sync fills it — initializing it wrote a
+    /// second, empty title over the agent's (prod 2026-10-26, iPad build 15).
+    func noteDocument(_ id: String, notebookId: String, creating: Bool = false) throws -> NoteDocument {
         if let doc = noteDocs[id] { return doc }
         let isNew = try store.document(id) == nil
         let crdt = try Self.open(.note, docId: id, notebookId: notebookId, store: store)
         let doc = NoteDocument(crdt)
         attach(crdt, notebookId: notebookId)
-        if isNew { try doc.initialize() }
+        if isNew && creating { try doc.initialize() }
         noteDocs[id] = doc
         notebookIdOfNote[id] = notebookId
         remote?.documentOpened(crdt, notebookId: notebookId)
@@ -508,7 +512,9 @@ final class CoreLibrary: LibraryBackend {
     func refreshNote(_ noteId: String, notebookId: String) -> (NoteMeta, NoteBody)? {
         guard let notebook = try? notebookDocument(notebookId), let note = try? noteDocument(noteId, notebookId: notebookId)
         else { return nil }
-        if let derived = try? note.derived() {
+        // A document that has not arrived yet (no blocks) says nothing about the title: never
+        // copy its empty title over the one the index already has.
+        if let blocks = try? note.blocks(), !blocks.isEmpty, let derived = try? note.derived() {
             try? notebook.syncDerived(derived)
             try? store.index(derived, notebookId: notebookId)
         }
@@ -653,7 +659,7 @@ final class CoreLibrary: LibraryBackend {
         guard try keys.notebookKey(meta.notebookId) != nil else { throw DSCore.AccountError.missingKey(meta.notebookId) }
         let (_, wrapped) = try keys.createNoteKey(noteId: meta.id, notebookId: meta.notebookId)
         wrappedKeys.set(noteId: meta.id, notebookId: meta.notebookId, wrapped: wrapped)
-        let doc = try noteDocument(meta.id, notebookId: meta.notebookId)
+        let doc = try noteDocument(meta.id, notebookId: meta.notebookId, creating: true)
         try notebook.putNote(coreMeta(meta, wrappedKey: wrapped))
         try write(body: body, title: meta.title, previous: nil, to: doc, resolve: resolve)
         try writeStyle(meta, doc: doc)

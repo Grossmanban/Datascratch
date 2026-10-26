@@ -604,35 +604,60 @@ public struct EditorCommands {
         }
     }
 
-    /// Repair of a document with more than one top-level title (two clients each created one
-    /// before they synced): the first non-empty title stays, empty extra titles are deleted, and
-    /// extra non-empty titles become paragraphs (same blockId and content) right after the kept
-    /// one, in document order. Nothing is ever created, so repairs made by several clients at
-    /// once converge; a document with one title or none is left alone (`document-model.md`).
+    /// Title repair on load (`document-model.md`, same rule as web-editor), deterministic and
+    /// idempotent, creating nothing:
+    /// - several top-level `title` nodes: the first non-empty one stays and the EMPTY ones are
+    ///   deleted (all empty: the first stays);
+    /// - the note starts with an empty title followed by a paragraph whose blockId is older
+    ///   (UUIDv7 time) than the title's: that paragraph was the original title, demoted by the
+    ///   empty-document race — its text (marks, strokes) moves into the title and it is deleted.
     /// Returns whether anything changed.
     @discardableResult
     public func repairTitles() -> Bool {
+        var changed = false
         let titles = document.blocks.filter { $0.type == NodeType.title }
-        guard titles.count > 1 else { return false }
-        let keep = titles.first { $0.textLength > 0 } ?? titles[0]
-        let extras = titles.filter { $0.id != keep.id }
-        document.stopCapturing()
-        document.transact(origin: .local) {
-            for t in extras where t.textLength == 0 { document.deleteBlock(t.id) }
-            var offset = 1
-            for t in extras where t.textLength > 0 {
-                guard let node = document.block(t.id) else { continue }
-                let re = StrokeReanchoring(document: document, blocks: [t.id])
-                document.deleteBlock(t.id)
-                guard let at = document.location(of: keep.id) else { continue }
-                document.insertBlock(BlockNode(id: t.id, type: NodeType.paragraph, inline: node.inline ?? []),
-                                     parent: at.parent, at: at.index + offset)
-                re.apply(to: document, map: { $0 })
-                offset += 1
+        if titles.count > 1 {
+            let keep = titles.first { $0.textLength > 0 } ?? titles[0]
+            let empty = titles.filter { $0.id != keep.id && $0.textLength == 0 }
+            if !empty.isEmpty {
+                document.stopCapturing()
+                document.transact(origin: .local) { for t in empty { document.deleteBlock(t.id) } }
+                document.stopCapturing()
+                changed = true
             }
         }
-        document.stopCapturing()
-        return true
+        let top = document.blocks
+        if top.count >= 2, top[0].type == NodeType.title, top[0].textLength == 0,
+           top[1].type == NodeType.paragraph, top[1].textLength > 0,
+           let titleTime = Self.uuidV7Time(top[0].id), let paraTime = Self.uuidV7Time(top[1].id), paraTime < titleTime {
+            let title = top[0].id, para = top[1].id
+            let inline = document.inline(of: para, range: nil)
+            let re = StrokeReanchoring(document: document, blocks: [para])
+            document.stopCapturing()
+            document.transact(origin: .local) {
+                var offset = 0
+                for el in inline {
+                    switch el {
+                    case .text(let s, let marks): document.insertText(s, marks: marks, block: title, at: offset)
+                    case .atom(let atom, let marks): document.insertAtom(atom, marks: marks, block: title, at: offset)
+                    }
+                    offset += el.length
+                }
+                document.deleteBlock(para)
+                re.apply(to: document, map: { $0.block == para ? TextPosition(block: title, offset: $0.offset) : nil },
+                         mapBlock: { $0 == para ? title : nil })
+            }
+            document.stopCapturing()
+            changed = true
+        }
+        return changed
+    }
+
+    /// Millisecond time of a UUIDv7 block id (its first 48 bits); nil for other ids.
+    static func uuidV7Time(_ id: BlockID) -> UInt64? {
+        let hex = id.replacingOccurrences(of: "-", with: "")
+        guard hex.count == 32, hex[hex.index(hex.startIndex, offsetBy: 12)] == "7" else { return nil }
+        return UInt64(hex.prefix(12), radix: 16)
     }
 
     /// Re-creates a textblock as another type with the same blockId and content.

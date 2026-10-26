@@ -1843,9 +1843,9 @@
   },
   "apps/web/e2e/specs/layout.spec.ts": {
     "mtime": 1793040352.802525,
-    "seen": 1793042311.3447633,
+    "seen": 1793042367.2830415,
     "ast_hash": "c731b1e85afc2ac8db0a898fbd36412b",
-    "semantic_hash": ""
+    "semantic_hash": "c731b1e85afc2ac8db0a898fbd36412b"
   },
   "apps/web/e2e/specs/move.spec.ts": {
     "mtime": 1792940885.2042165,
@@ -1855,9 +1855,9 @@
   },
   "apps/web/e2e/specs/offline.spec.ts": {
     "mtime": 1793041689.4345357,
-    "seen": 1793042311.344777,
+    "seen": 1793042367.283048,
     "ast_hash": "557d74cedbd922e51d180f16f2ac6eef",
-    "semantic_hash": ""
+    "semantic_hash": "557d74cedbd922e51d180f16f2ac6eef"
   },
   "apps/web/e2e/specs/pen-palette.spec.ts": {
     "mtime": 1793002148.5655744,
@@ -1903,15 +1903,15 @@
   },
   "apps/web/e2e/specs/smoke.spec.ts": {
     "mtime": 1793041320.223331,
-    "seen": 1793042311.344794,
+    "seen": 1793042367.2830634,
     "ast_hash": "dfd7c522ddbaefcd7300bfcfa9ba69ec",
-    "semantic_hash": ""
+    "semantic_hash": "dfd7c522ddbaefcd7300bfcfa9ba69ec"
   },
   "apps/web/e2e/specs/spaces.spec.ts": {
     "mtime": 1793040352.802055,
-    "seen": 1793042311.3447962,
+    "seen": 1793042367.283065,
     "ast_hash": "2549f68ed66e7aceff6f902a46a3bc4e",
-    "semantic_hash": ""
+    "semantic_hash": "2549f68ed66e7aceff6f902a46a3bc4e"
   },
   "apps/web/e2e/specs/sync-status.spec.ts": {
     "mtime": 1793038350.212517,
@@ -2341,9 +2341,9 @@
   },
   "apps/web/src/features/shell/AppShell.tsx": {
     "mtime": 1793041345.1019232,
-    "seen": 1793042311.3449304,
+    "seen": 1793042367.2832012,
     "ast_hash": "151dfeb275b17f323e7043708cbd2ff3",
-    "semantic_hash": ""
+    "semantic_hash": "151dfeb275b17f323e7043708cbd2ff3"
   },
   "apps/web/src/features/shell/InlineRename.tsx": {
     "mtime": 1792928897.2529018,
@@ -2365,9 +2365,9 @@
   },
   "apps/web/src/features/shell/PageHeader.tsx": {
     "mtime": 1793040307.6878593,
-    "seen": 1793042311.3449361,
+    "seen": 1793042367.2832081,
     "ast_hash": "f53caf4440311d555ebc7f16b948753a",
-    "semantic_hash": ""
+    "semantic_hash": "f53caf4440311d555ebc7f16b948753a"
   },
   "apps/web/src/features/shell/PwaPrompt.tsx": {
     "mtime": 1793015446.8075585,
@@ -2377,9 +2377,9 @@
   },
   "apps/web/src/features/shell/Sidebar.tsx": {
     "mtime": 1793040274.527269,
-    "seen": 1793042311.3449388,
+    "seen": 1793042367.2832117,
     "ast_hash": "c608a4f5102cc2b2866b8554504f6e56",
-    "semantic_hash": ""
+    "semantic_hash": "c608a4f5102cc2b2866b8554504f6e56"
   },
   "apps/web/src/features/shell/Splash.tsx": {
     "mtime": 1793016692.5488567,
@@ -2395,9 +2395,9 @@
   },
   "apps/web/src/features/shell/shortcuts.ts": {
     "mtime": 1793040193.9451838,
-    "seen": 1793042311.344948,
+    "seen": 1793042367.2832215,
     "ast_hash": "b5006a90d429c7292cef5a063f6204c0",
-    "semantic_hash": ""
+    "semantic_hash": "b5006a90d429c7292cef5a063f6204c0"
   },
   "apps/web/src/features/shell/spaces.ts": {
     "mtime": 1792929012.242884,
@@ -2449,9 +2449,9 @@
   },
   "apps/web/src/i18n/en.ts": {
     "mtime": 1793040274.5265136,
-    "seen": 1793042311.3449636,
+    "seen": 1793042367.2832355,
     "ast_hash": "fb8c3d9ce4dd5a7d54bc295386a1b180",
-    "semantic_hash": ""
+    "semantic_hash": "fb8c3d9ce4dd5a7d54bc295386a1b180"
   },
   "apps/web/src/i18n/i18n.test.ts": {
     "mtime": 1792928680.9946198,
@@ -2467,9 +2467,9 @@
   },
   "apps/web/src/i18n/ru.ts": {
     "mtime": 1793040274.5259702,
-    "seen": 1793042311.3449686,
+    "seen": 1793042367.283241,
     "ast_hash": "e474051b16d01753aa7c78d2429ce782",
-    "semantic_hash": ""
+    "semantic_hash": "e474051b16d01753aa7c78d2429ce782"
   },
   "apps/web/src/lib/dates.ts": {
     "mtime": 1792949155.5735288,
@@ -4273,9 +4273,9 @@
   },
   "apps/web/README.md": {
     "mtime": 1793042286.0295372,
-    "seen": 1793042311.3455434,
+    "seen": 1793042367.283839,
     "ast_hash": "8a484be1af7e138ca2aafdbf2a7f5cff",
-    "semantic_hash": ""
+    "semantic_hash": "8a484be1af7e138ca2aafdbf2a7f5cff"
   },
   "apps/web/index.html": {
     "mtime": 1793014433.2680414,
@@ -5023,9 +5023,9 @@
   },
   "apps/web/e2e/specs/folders.spec.ts": {
     "mtime": 1793041320.226849,
-    "seen": 1793042311.3447545,
+    "seen": 1793042367.2830336,
     "ast_hash": "24102973bc01c14727fea9a56f2b1dcc",
-    "semantic_hash": ""
+    "semantic_hash": "24102973bc01c14727fea9a56f2b1dcc"
   },
   "docs/decisions/0048-isolated-spaces.md": {
     "mtime": 1793035392.3589787,
@@ -5065,26 +5065,26 @@
   },
   "apps/web/e2e/specs/tabs.spec.ts": {
     "mtime": 1793041313.0791893,
-    "seen": 1793042311.3448002,
+    "seen": 1793042367.2830694,
     "ast_hash": "b04935fae813daab9ca48d39e94678cc",
-    "semantic_hash": ""
+    "semantic_hash": "b04935fae813daab9ca48d39e94678cc"
   },
   "apps/web/src/features/shell/TabOverview.tsx": {
     "mtime": 1793040259.615268,
-    "seen": 1793042311.3449447,
+    "seen": 1793042367.283218,
     "ast_hash": "55121bd3884740de09a391baffcaa7ff",
-    "semantic_hash": ""
+    "semantic_hash": "55121bd3884740de09a391baffcaa7ff"
   },
   "apps/web/src/features/shell/TabStrip.tsx": {
     "mtime": 1793041351.660804,
-    "seen": 1793042311.3449461,
+    "seen": 1793042367.2832198,
     "ast_hash": "d4871c5bd1c0cf2e9a246c48644e2c4b",
-    "semantic_hash": ""
+    "semantic_hash": "d4871c5bd1c0cf2e9a246c48644e2c4b"
   },
   "apps/web/src/lib/closedTabs.ts": {
     "mtime": 1793040143.223261,
-    "seen": 1793042311.3449697,
+    "seen": 1793042367.2832425,
     "ast_hash": "7440350c70243f524ce30cf274301d5a",
-    "semantic_hash": ""
+    "semantic_hash": "7440350c70243f524ce30cf274301d5a"
   }
 }

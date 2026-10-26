@@ -3954,10 +3954,10 @@
     "semantic_hash": "426239795750cdc09be391e876fb19ea"
   },
   "packages/web-editor/src/Editor.tsx": {
-    "mtime": 1793005785.207885,
-    "seen": 1793019610.0914936,
-    "ast_hash": "a3bbc62d21ae1118de927e09061998b6",
-    "semantic_hash": "a3bbc62d21ae1118de927e09061998b6"
+    "mtime": 1793024080.1331446,
+    "seen": 1793024145.8497126,
+    "ast_hash": "908aea038fef54fcca9ad595e864a7be",
+    "semantic_hash": ""
   },
   "packages/web-editor/src/collab/collaboration.ts": {
     "mtime": 1792934201.3768525,
@@ -4110,10 +4110,10 @@
     "semantic_hash": ""
   },
   "packages/web-editor/src/ui/Popups.tsx": {
-    "mtime": 1792933237.0447953,
-    "seen": 1793019610.0915592,
-    "ast_hash": "434c03640280d5164421fba864f7dcf2",
-    "semantic_hash": "434c03640280d5164421fba864f7dcf2"
+    "mtime": 1793024080.1349065,
+    "seen": 1793024145.8504524,
+    "ast_hash": "f278a21d4ef48e183fcfc39b2b3b4bca",
+    "semantic_hash": ""
   },
   "packages/web-editor/src/ui/TaskMenu.tsx": {
     "mtime": 1792931313.3966653,
@@ -4128,10 +4128,10 @@
     "semantic_hash": "ffd6053bc356b4321ecf69898eb2641b"
   },
   "packages/web-editor/src/ui/suggestions.ts": {
-    "mtime": 1792929940.2599936,
-    "seen": 1793019610.0915668,
-    "ast_hash": "3846b3bded34ae389e2832165c5710db",
-    "semantic_hash": "3846b3bded34ae389e2832165c5710db"
+    "mtime": 1793024080.1349065,
+    "seen": 1793024145.8505087,
+    "ast_hash": "57746f476e94f2e72f189087519e9aa9",
+    "semantic_hash": ""
   },
   "packages/web-editor/test/anchors.test.ts": {
     "mtime": 1792931313.3966653,
@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793023512.2722197,
-    "seen": 1793023572.89089,
-    "ast_hash": "4cac30b2a34dbb41c4f073e25348959f",
+    "mtime": 1793024087.1769378,
+    "seen": 1793024145.8512712,
+    "ast_hash": "11a0361dff55b48fe66eebe61d53f181",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -4710,9 +4710,9 @@
     "semantic_hash": ""
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1793022450.4564872,
-    "seen": 1793022529.1942163,
-    "ast_hash": "d99d0fe4f654db5a682eb7018c6ca8a1",
+    "mtime": 1793024080.0575988,
+    "seen": 1793024145.8531606,
+    "ast_hash": "be4219cf4aaceb4e38ac214f9f2f4a1b",
     "semantic_hash": ""
   },
   "docs/spec/05-organization-design.md": {
@@ -4941,6 +4941,36 @@
     "mtime": 1793022824.704249,
     "seen": 1793022882.0249903,
     "ast_hash": "34f6e5382f0fc4761aa0578846af80e0",
+    "semantic_hash": ""
+  },
+  "packages/web-editor/ct/PaperEditor.tsx": {
+    "mtime": 1793024080.1331446,
+    "seen": 1793024145.8493998,
+    "ast_hash": "3325d001f804c95bafe49abaf5b0349b",
+    "semantic_hash": ""
+  },
+  "packages/web-editor/ct/paper.spec.tsx": {
+    "mtime": 1793024080.1331446,
+    "seen": 1793024145.8495092,
+    "ast_hash": "79a3d48c204f493d88f289c4da3e5f55",
+    "semantic_hash": ""
+  },
+  "packages/web-editor/ct/paperSanity.spec.tsx": {
+    "mtime": 1793024080.1331446,
+    "seen": 1793024145.849512,
+    "ast_hash": "5af52e1978a883d054af52cfcdc18ac3",
+    "semantic_hash": ""
+  },
+  "packages/web-editor/ct/slash.spec.tsx": {
+    "mtime": 1793024080.1331446,
+    "seen": 1793024145.8495414,
+    "ast_hash": "47d261cb5368f64eb66d1c7d7dbed056",
+    "semantic_hash": ""
+  },
+  "packages/web-editor/src/paper.ts": {
+    "mtime": 1793024080.1349065,
+    "seen": 1793024145.8498776,
+    "ast_hash": "40e68e982f5a76f94433c372edaa3155",
     "semantic_hash": ""
   }
 }

@@ -4272,10 +4272,10 @@
     "semantic_hash": "c0be97949300b0a640f0d459c6a5d9ea"
   },
   "apps/web/README.md": {
-    "mtime": 1793044492.8347294,
-    "seen": 1793045482.0142765,
-    "ast_hash": "23b18be5da66712a786174d613584eb1",
-    "semantic_hash": "23b18be5da66712a786174d613584eb1"
+    "mtime": 1793046138.5316174,
+    "seen": 1793046165.0012395,
+    "ast_hash": "4bc6db135c0e126aaf7b32c4cc5e71e0",
+    "semantic_hash": ""
   },
   "apps/web/index.html": {
     "mtime": 1793014433.2680414,
@@ -5134,5 +5134,17 @@
     "seen": 1793045482.0137384,
     "ast_hash": "77c78bbeabeae095255b99ac94b78b9e",
     "semantic_hash": "77c78bbeabeae095255b99ac94b78b9e"
+  },
+  "apps/web/e2e/specs/title.spec.ts": {
+    "mtime": 1793046102.5899682,
+    "seen": 1793046164.9997442,
+    "ast_hash": "06a03a4c7319cfa1fd231a4edcfcc221",
+    "semantic_hash": ""
+  },
+  "apps/web/src/domain/title.test.ts": {
+    "mtime": 1793045357.303571,
+    "seen": 1793046164.9998772,
+    "ast_hash": "77ae910209f2b37b325363559848a4ca",
+    "semantic_hash": ""
   }
 }

@@ -572,14 +572,19 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
             drop.over && "bg-accent/10 ring-1 ring-accent/40",
           )}
         >
-          <button
-            onClick={toggle}
-            aria-label={collapsed ? t("common.expand") : t("common.collapse")}
-            aria-expanded={!collapsed}
-            className="flex size-6 shrink-0 items-center justify-center rounded text-ink-3 hover:text-ink"
-          >
-            <ChevronRight className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
-          </button>
+          {/* Only a notebook with folders has something to unfold (no dead chevrons). */}
+          {roots.length ? (
+            <button
+              onClick={toggle}
+              aria-label={`${collapsed ? t("common.expand") : t("common.collapse")} «${nb.name}»`}
+              aria-expanded={!collapsed}
+              className="flex size-6 shrink-0 items-center justify-center rounded text-ink-3 hover:text-ink"
+            >
+              <ChevronRight className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
+            </button>
+          ) : (
+            <span className="size-6 shrink-0" aria-hidden />
+          )}
           {renaming ? (
             <InlineRename
               value={nb.name}
@@ -615,7 +620,7 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
         </div>
       </ContextMenu>
       <AnimatePresence initial={false}>
-        {!collapsed && (
+        {!collapsed && roots.length > 0 && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}

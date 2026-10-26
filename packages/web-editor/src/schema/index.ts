@@ -5,7 +5,9 @@ import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { Placeholder } from "@tiptap/extensions";
 import { common, createLowlight } from "lowlight";
 import type { HostRef } from "../host";
+import { AgentReview } from "./agentReview";
 import { BlockId } from "./blockId";
+import { MissingLinks } from "./missingLinks";
 import { Callout, Drawing, FileBlock, Image, MathBlock, Mermaid, NoteLink, PageCard, Tag } from "./blocks";
 import { AgentEdit, DocumentNode, DsHorizontalRule, DsLink, Highlight, TextAlign, TextColor, Title } from "./core";
 import { TaskItem, TaskList } from "./tasks";
@@ -59,6 +61,8 @@ export function createSchemaExtensions({ host, placeholders = { title: "Без �
     UnsupportedFallback,
     UnsupportedMarkFallback,
     BlockId,
+    AgentReview,
+    MissingLinks.configure({ host }),
   ];
   if (placeholders) {
     exts.push(

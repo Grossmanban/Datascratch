@@ -199,6 +199,27 @@ struct CoreLibraryTests {
         #expect(reloaded.data.activeTabBySpace?[a.id] == noteA.id)
     }
 
+    /// D-48: «Move to Space…» takes the notebook's starred notes and tabs along.
+    @Test func movingANotebookToAnotherSpaceTakesItsStarredAndTabs() throws {
+        let library = LibraryStore(backend: try CoreLibrary.inMemory())
+        let a = library.createSpace(name: "A")
+        let b = library.createSpace(name: "B")
+        let notebook = library.createNotebook(in: a.id, name: "Moves", mode: .private)
+        let stays = library.createNotebook(in: a.id, name: "Stays", mode: .private)
+        library.activateSpace(a.id)
+        let note = library.createNote(in: notebook.id, title: "Starred")
+        library.toggleStar(.note, note.id)
+        library.openTab(note.id)
+
+        library.moveNotebook(notebook.id, toSpace: b.id)
+        #expect(library.starredNotes.isEmpty && library.openTabs.isEmpty)
+        #expect(library.dailyNotebook?.id == stays.id)
+        library.activateSpace(b.id)
+        #expect(library.starredNotes.map(\.id) == [note.id])
+        #expect(library.openTabs.map(\.id) == [note.id])
+        #expect(library.dailyNotebook?.id == notebook.id)
+    }
+
     /// D-48 migration: the legacy account-wide `dailyNotebookId` goes to its notebook's space.
     @Test func legacyDailyNotebookMovesToItsSpace() throws {
         let keys = KeyRing(store: InMemorySecretStore())

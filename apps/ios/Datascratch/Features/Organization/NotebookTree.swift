@@ -70,6 +70,18 @@ struct NotebookRow: View {
                    systemImage: "star") {
                 library.toggleStar(.notebook, notebook.id)
             }
+            // D-48: the only way between spaces; its starred notes and tabs go with it.
+            let others = library.spaces.filter { $0.id != notebook.spaceId }
+            if !others.isEmpty {
+                Menu("Move to Space…", systemImage: "rectangle.stack") {
+                    ForEach(others) { space in
+                        Button(space.name) {
+                            if scene.sidebar == .notebook(notebook.id) { scene.sidebar = .allDocuments }
+                            library.moveNotebook(notebook.id, toSpace: space.id)
+                        }
+                    }
+                }
+            }
             Divider()
             Button("Delete Notebook", systemImage: "trash", role: .destructive) {
                 if scene.sidebar == .notebook(notebook.id) { scene.sidebar = .allDocuments }

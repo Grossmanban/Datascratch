@@ -1771,6 +1771,16 @@
         }
       }
     },
+    "Move to Space…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переместить в пространство…"
+          }
+        }
+      }
+    },
     "Move to Trash": {
       "localizations": {
         "ru": {

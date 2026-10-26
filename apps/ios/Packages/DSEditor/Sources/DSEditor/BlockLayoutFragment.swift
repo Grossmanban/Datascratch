@@ -61,17 +61,44 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
         return (f.typographicBounds.minY, l.typographicBounds.maxY)
     }
 
+    private func listIndent(_ d: ParagraphDecoration) -> CGFloat {
+        d.indent - CGFloat(d.quoteDepth) * d.quoteIndentStep
+            - (d.callout != nil ? ParagraphDecoration.calloutPadding + ParagraphDecoration.calloutIconSlot : 0) - (d.isCode ? 14 : 0)
+    }
+
+    /// The callout's box and, on its first paragraph, its icon, in fragment coordinates. The
+    /// fragment starts at the text's indent (iOS 26), so the box reaches left of it: clamping it at
+    /// the fragment's edge put the box under the text and the icon outside it (build 15).
+    var calloutGeometry: (box: CGRect, icon: CGRect?)? {
+        guard let d = decoration, d.callout != nil else { return nil }
+        let (top, bottom) = textBounds
+        let x0 = listIndent(d) - layoutFragmentFrame.minX
+        let y0 = d.calloutIsFirst ? top - 10 : 0
+        let y1 = d.calloutIsLast ? bottom + 10 : layoutFragmentFrame.height
+        let box = CGRect(x: x0, y: y0, width: containerWidth - layoutFragmentFrame.minX - x0, height: y1 - y0)
+        guard d.calloutIsFirst, let first = textLineFragments.first else { return (box, nil) }
+        let font = calloutIconFont(d)
+        let baseline = first.typographicBounds.minY + first.glyphOrigin.y
+        let size = calloutIcon(d).size()
+        let icon = CGRect(x: x0 + ParagraphDecoration.calloutPadding, y: baseline - font.ascender,
+                          width: size.width, height: size.height)
+        return (box, icon)
+    }
+
+    private func calloutIconFont(_ d: ParagraphDecoration) -> UIFont { UIFont.systemFont(ofSize: d.fontSize * 0.95) }
+
+    private func calloutIcon(_ d: ParagraphDecoration) -> NSAttributedString {
+        let emoji = d.callout?.emoji ?? defaultEmoji(d.callout?.tone ?? "info")
+        return NSAttributedString(string: emoji, attributes: [.font: calloutIconFont(d)])
+    }
+
     private func drawBackground(_ d: ParagraphDecoration, in ctx: CGContext) {
         let width = containerWidth - layoutFragmentFrame.minX
         let (top, bottom) = textBounds
-        let listIndent = d.indent - CGFloat(d.quoteDepth) * d.quoteIndentStep
-            - (d.callout != nil ? ParagraphDecoration.calloutPadding + 26 : 0) - (d.isCode ? 14 : 0)
+        let listIndent = self.listIndent(d)
 
-        if let color = d.calloutColor {
-            let y0 = d.calloutIsFirst ? top - 10 : 0
-            let y1 = d.calloutIsLast ? bottom + 10 : layoutFragmentFrame.height
-            let x0 = max(0, listIndent - layoutFragmentFrame.minX)
-            let rect = CGRect(x: x0, y: y0, width: width - x0, height: y1 - y0)
+        if let color = d.calloutColor, let box = calloutGeometry?.box {
+            let rect = box
             let radius: CGFloat = 12
             var corners: UIRectCorner = []
             if d.calloutIsFirst { corners.formUnion([.topLeft, .topRight]) }
@@ -81,7 +108,9 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
             ctx.fillPath()
         }
         if d.isCode {
-            let x0 = max(0, d.indent - 14 - layoutFragmentFrame.minX)
+            // In fragment coordinates, which start at the first line's indent on iOS 26: the
+            // background reaches left of the fragment (no clamping at 0, which glued it to the text).
+            let x0 = d.indent - 14 - layoutFragmentFrame.minX
             let rect = CGRect(x: x0, y: top - 8, width: width - x0, height: bottom - top + 16)
             ctx.addPath(UIBezierPath(roundedRect: rect, cornerRadius: 8).cgPath)
             ctx.setFillColor(d.codeColor.cgColor)
@@ -112,12 +141,8 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
         UIGraphicsPushContext(ctx)
         defer { UIGraphicsPopContext() }
 
-        if let callout = d.callout, d.calloutIsFirst {
-            let emoji = callout.emoji ?? defaultEmoji(callout.tone)
-            let font = UIFont.systemFont(ofSize: d.fontSize * 0.95)
-            let s = NSAttributedString(string: emoji, attributes: [.font: font])
-            let x = d.indent - 26 - layoutFragmentFrame.minX - 2
-            s.draw(at: CGPoint(x: x, y: baseline - font.ascender))
+        if let icon = calloutGeometry?.icon {
+            calloutIcon(d).draw(at: icon.origin)
         }
 
         switch d.marker {

@@ -1,6 +1,7 @@
 {
   "name": "@datascratch/test-vectors",
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "Shared test vectors (crypto, strokes, document, sync) for the TypeScript and Swift implementations",
   "type": "module",

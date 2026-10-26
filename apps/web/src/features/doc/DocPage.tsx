@@ -10,6 +10,7 @@ import { acknowledgeAgentCreated, agentCreatedOf, deleteNoteForever, openTab, re
 import { folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
 import { closeDocTab, noteMenuItems } from "@/features/docs/menus";
 import { isFreshNote } from "@/lib/freshNotes";
+import { rememberNotebook } from "@/lib/lastNotebook";
 import { TopBar } from "@/features/shell/PageHeader";
 import { useNoteContentReady, useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
 import { useUi } from "@/hooks/useUi";
@@ -42,6 +43,8 @@ export function DocPage() {
     const space = spaceOfNote(useWorkspace.getState(), noteId);
     if (space && space !== useWorkspace.getState().activeSpaceId) setActiveSpace(space);
     if (!note.trashedAt) openTab(noteId);
+    // «Новый документ» elsewhere goes to the notebook last opened or created in (spec/05).
+    rememberNotebook(space, note.notebookId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId, !!note]);
 

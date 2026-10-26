@@ -109,6 +109,8 @@ const en: Loose<Messages> = {
     settings: "Settings",
     search: "Search",
     newDoc: "New document",
+    newDocIn: "New document goes to “{{name}}”. Pick another notebook",
+    newDocInShort: "in “{{name}}”",
     newFolder: "New folder",
     newNotebook: "New notebook",
     newSpace: "New space",

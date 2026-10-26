@@ -30,8 +30,8 @@ export interface MemorySyncHubOptions {
   /** Server clock (default Date.now). */
   now?: () => number;
   /**
-   * Send the latest snapshot whenever `since` is below its seq (proposed
-   * sync-protocol rule), not only when older updates were compacted away.
+   * Send the latest snapshot whenever `since` is below its seq (sync-protocol
+   * §5, default); false = only when older updates were compacted away.
    */
   preferSnapshot?: boolean;
 }
@@ -61,7 +61,7 @@ export class MemorySyncHub {
       autoCreateDocs: true,
       catchUpChunk: 100,
       now: Date.now,
-      preferSnapshot: false,
+      preferSnapshot: true,
       ...options,
     };
   }

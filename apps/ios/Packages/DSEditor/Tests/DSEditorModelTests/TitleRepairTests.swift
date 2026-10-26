@@ -60,6 +60,12 @@ import Testing
         #expect(doc.blocks.filter { $0.type == NodeType.title }.count == 1)
     }
 
+    @Test func theRepairIsNotUndoable() {
+        let doc = InMemoryEditorDocument(blocks: [.title(""), .title("Название"), .paragraph("x")])
+        #expect(EditorCommands(document: doc).repairTitles())
+        #expect(!doc.canUndo, "a repair is not an edit of the person")
+    }
+
     @Test func oneTitleOrNoneIsLeftAlone() {
         let one = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("x")])
         #expect(!EditorCommands(document: one).repairTitles())

@@ -567,9 +567,9 @@ public final class EditorView: UIView {
 
     private func documentChanged(_ change: DocumentChange) {
         tapTargetElementsDirty = true
-        if change.origin == .remote, change.structureChanged, !titleRepairScheduled {
-            // Content that arrived (first sync of an empty note, another client's merge) may
-            // bring a second title: repaired once the remote transaction is over.
+        if change.structureChanged, change.origin != .system, !titleRepairScheduled {
+            // Any change of the top level (content arriving for an empty note, another client's
+            // merge, a structural edit) may leave a broken start: repaired once it is over.
             titleRepairScheduled = true
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }

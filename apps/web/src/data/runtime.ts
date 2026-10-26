@@ -100,7 +100,12 @@ export class AccountRuntime {
         if (e.code === "unauthorized") void refreshSession().then((s) => s && this.client.reconnect());
         useSyncStatus.setState({ error: `${e.code}: ${e.message}` });
         // An update that cannot be decrypted or applied is otherwise invisible (it is skipped).
-        if (e.code === "decrypt_failed" || e.code === "apply_failed") console.warn(`[ds] sync ${e.code}`, e.docId, e.message);
+        if ((e.code === "decrypt_failed" || e.code === "apply_failed") && e.docId) {
+          const id = e.docId;
+          void this.store.row(id).then((r) => console.warn(`[ds] sync ${e.code}`, r?.kind ?? "unknown", id, e.message));
+        }
+        // The skipped update is not lost: once the key is here, the document is read again from the start.
+        if (e.code === "decrypt_failed" && e.docId) this.rereadWhenKeyed(e.docId);
         // A push the server refused (`ref` is its clientMsgId): the change has not reached the server.
         if (e.docId && e.ref && e.ref !== e.docId && REFUSED.has(e.code)) void this.markFailed(e.docId, e.code, e.message);
       }),
@@ -215,6 +220,40 @@ export class AccountRuntime {
     return this.reconciling;
   }
 
+  private rereading = new Set<string>();
+
+  private rereadWhenKeyed(docId: string) {
+    if (this.rereading.has(docId)) return;
+    this.rereading.add(docId);
+    void (async () => {
+      try {
+        for (let i = 0; i < 60; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          if (!this.attached.has(docId)) return;
+          if (await this.store.keyFor(docId).catch(() => null)) {
+            await this.rereadDoc(docId);
+            console.warn("[ds] re-read after a decrypt failure", docId);
+            return;
+          }
+        }
+      } finally {
+        this.rereading.delete(docId);
+      }
+    })();
+  }
+
+  /** Read a document again from seq 0 (updates that could not be decrypted were skipped). */
+  private async rereadDoc(docId: string) {
+    await this.client.removeDoc(docId).catch(() => undefined);
+    const st = await this.storage.getDocState(docId);
+    if (st) await this.storage.setDocState(docId, { ...st, lastSeq: 0 });
+    this.attached.delete(docId);
+    await this.attach([docId]);
+    // An open note is live in the client again only through openDoc.
+    const live = this.store.get(docId);
+    if (live && (await this.store.row(docId))?.kind === "note") await this.client.openDoc(docId, () => live).catch(() => undefined);
+  }
+
   /**
    * This device sealed a notebook's index with a key the server (and other devices) don't use.
    * Note keys wrapped with the old key are rewrapped with the server's, the index is re-read from
@@ -223,13 +262,7 @@ export class AccountRuntime {
   private async adoptNotebookKey({ notebookId, oldKey, newKey }: ReplacedNotebookKey) {
     const doc = this.store.get(notebookId);
     if (!doc) return;
-    if (this.attached.has(notebookId)) {
-      await this.client.removeDoc(notebookId).catch(() => undefined);
-      const st = await this.storage.getDocState(notebookId);
-      if (st) await this.storage.setDocState(notebookId, { ...st, lastSeq: 0 });
-      this.attached.delete(notebookId);
-      await this.attach([notebookId]);
-    }
+    if (this.attached.has(notebookId)) await this.rereadDoc(notebookId);
     const notes = notebookMaps(doc).notes;
     const rewrapped: [Y.Map<unknown>, string][] = [];
     for (const [noteId, m] of notes) {

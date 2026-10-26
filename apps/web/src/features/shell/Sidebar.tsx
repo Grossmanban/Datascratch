@@ -674,6 +674,8 @@ function FolderNode({ folder, depth }: { folder: FolderEntry; depth: number }) {
         >
           <button
             onClick={toggle}
+            aria-label={`${collapsed ? t("common.expand") : t("common.collapse")} «${folder.name}»`}
+            aria-expanded={!collapsed}
             className={cn("flex size-5 shrink-0 items-center justify-center rounded text-ink-3 hover:text-ink", !children.length && "invisible")}
           >
             <ChevronRight className={cn("size-3 transition-transform", !collapsed && "rotate-90")} />

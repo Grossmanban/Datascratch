@@ -96,7 +96,7 @@ const ru = {
     tasks: "Задачи",
     calendar: "Календарь",
     starred: "Избранное",
-    folders: "Папки",
+    folders: "Блокноты",
     tags: "Теги",
     trash: "Корзина",
     settings: "Настройки",

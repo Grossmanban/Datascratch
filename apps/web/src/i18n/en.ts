@@ -100,7 +100,7 @@ const en: Loose<Messages> = {
     tasks: "Tasks",
     calendar: "Calendar",
     starred: "Starred",
-    folders: "Folders",
+    folders: "Notebooks",
     tags: "Tags",
     trash: "Trash",
     settings: "Settings",

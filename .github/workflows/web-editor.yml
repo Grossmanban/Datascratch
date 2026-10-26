@@ -56,13 +56,55 @@ jobs:
         timeout-minutes: 5
         run: pnpm exec playwright install chromium
       - name: Component tests (pen over text, reflow)
-        run: pnpm run test:ct
+        run: pnpm run test:ct --project=chromium
         env:
           CI: "true"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: web-editor-playwright
+          path: |
+            packages/web-editor/test-results
+            packages/web-editor/playwright-report
+          retention-days: 7
+
+  # Safari (iPad) lays text out differently from Chromium (font metrics, line-height rounding):
+  # the ruled paper is checked in WebKit too. macOS runs Playwright's WebKit without extra system
+  # packages.
+  webkit-paper:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/web-editor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: pnpm install --filter "@datascratch/web-editor..." --frozen-lockfile
+      - name: Build @datascratch/shared
+        run: pnpm --filter @datascratch/shared build
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-webkit-${{ runner.os }}-${{ hashFiles('packages/web-editor/package.json') }}
+      - name: Install WebKit
+        timeout-minutes: 8
+        run: pnpm exec playwright install webkit
+      - name: Paper alignment in WebKit (lines, grid, chips, nested blocks, headings)
+        run: pnpm run test:ct --project=webkit
+        env:
+          CI: "true"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: web-editor-webkit-paper
           path: |
             packages/web-editor/test-results
             packages/web-editor/playwright-report

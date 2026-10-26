@@ -130,3 +130,16 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* The pen palette unfolds smoothly (it is mounted again when expanded); none with reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .ds-palette-dock .ds-palette {
+    animation: ds-palette-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  }
+}
+@keyframes ds-palette-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+}

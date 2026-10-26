@@ -17,7 +17,7 @@ export function HandleEditor({ count = 30 }: { count?: number }) {
         onReady={(api) => {
           setTimeout(() => {
             if (api.editor.isDestroyed) return;
-            api.editor.commands.setContent(`<h1>Ручки</h1>${html}`);
+            api.editor.commands.setContent(`<h1 data-type=title>Ручки</h1>${html}`);
             api.undoManager.clear();
             window.__ct = { api, doc, ready: true };
           }, 0);

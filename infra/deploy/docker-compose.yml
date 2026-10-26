@@ -50,6 +50,8 @@ services:
       PUBLIC_URL: https://${DS_DOMAIN:-localhost}
       APP_URL: https://${DS_DOMAIN:-localhost}
       DS_VERSION: ${DS_TAG:-latest}
+      # claude.ai is unreachable from some server regions; MCP clients then register dynamically.
+      OAUTH_CLIENT_METADATA_DOCUMENTS: ${DS_OAUTH_CLIENT_METADATA_DOCUMENTS:-false}
       NODE_OPTIONS: --max-old-space-size=${DS_NODE_HEAP_MB:-768}
     deploy:
       resources:

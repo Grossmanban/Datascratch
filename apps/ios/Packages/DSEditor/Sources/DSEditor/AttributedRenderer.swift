@@ -175,7 +175,7 @@ struct AttributedRenderer {
         style.firstLineHeadIndent = indent
         style.headIndent = indent
         if ctx.callout != nil || isCode { style.tailIndent = -(isCode ? 14 : ParagraphDecoration.calloutPadding) }
-        style.lineHeightMultiple = isCode ? 1.15 : (para.kind.type == NodeType.title ? 1.05 : 1.22)
+        style.lineHeightMultiple = isCode ? 1.15 : (para.kind.type == NodeType.title ? 1.05 : EditorTheme.bodyLineHeightMultiple)
         switch para.kind.type {
         case NodeType.title:
             style.paragraphSpacing = 18
@@ -191,6 +191,20 @@ struct AttributedRenderer {
         if ctx.callout != nil {
             if !sameCallout(i - 1) { style.paragraphSpacingBefore = max(style.paragraphSpacingBefore, 14) }
             if !sameCallout(i + 1) { style.paragraphSpacing = max(style.paragraphSpacing, 18) }
+        }
+        if let pitch = theme.paperPitch {
+            // Ruled/grid/dot paper: lines and spacing in whole pitches keep the text on the rules
+            // all the way down (a heading takes two lines, a body line one).
+            func snap(_ v: CGFloat) -> CGFloat { (v / pitch).rounded() * pitch }
+            style.paragraphSpacing = snap(style.paragraphSpacing)
+            style.paragraphSpacingBefore = snap(style.paragraphSpacingBefore)
+            if para.kind.isText {
+                let natural = font.lineHeight * style.lineHeightMultiple
+                let height = max(1, (natural / pitch - 0.15).rounded(.up)) * pitch
+                style.minimumLineHeight = height
+                style.maximumLineHeight = height
+            }
+            style.lineHeightMultiple = 0
         }
         if let align = para.attrs["textAlign"]?.stringValue {
             style.alignment = align == "center" ? .center : align == "right" ? .right : align == "justify" ? .justified : .natural

@@ -62,7 +62,12 @@ final class AttachmentFactory {
         let chipFont = font.withSize(font.pointSize * 0.92)
         let attributed = NSAttributedString(string: text, attributes: [.font: chipFont, .foregroundColor: color])
         let textSize = attributed.size()
-        let size = CGSize(width: ceil(textSize.width) + 12, height: ceil(chipFont.lineHeight) + 2)
+        var size = CGSize(width: ceil(textSize.width) + 12, height: ceil(chipFont.lineHeight) + 2)
+        // On ruled paper the chip stays inside the font's line (no lower than the descender, no
+        // taller than the line height): a chip reaching below grew its line by a point and shifted
+        // every line after it off the rules.
+        let onPaper = theme.paperPitch != nil
+        if onPaper { size.height = min(size.height, floor(font.lineHeight)) }
         let format = UIGraphicsImageRendererFormat.preferred()
         let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in
             EditorTheme.chipBackground.setFill()
@@ -71,7 +76,7 @@ final class AttachmentFactory {
         }
         let a = InlineAtomAttachment(image: image)
         a.atom = atom
-        a.bounds = CGRect(x: 0, y: font.descender - 1, width: size.width, height: size.height)
+        a.bounds = CGRect(x: 0, y: onPaper ? font.descender : font.descender - 1, width: size.width, height: size.height)
         return a
     }
 
@@ -177,7 +182,20 @@ final class BlockAttachmentViewProvider: NSTextAttachmentViewProvider {
         let width = max(40, proposedLineFragment.width - 4)
         let node = attachment.node
         let factory = attachment.factory
-        let height: CGFloat = MainActor.assumeIsolated { factory?.height(for: node, width: width) ?? 48 }
+        let (height, pitch): (CGFloat, CGFloat?) = MainActor.assumeIsolated {
+            (factory?.height(for: node, width: width) ?? 48, factory?.theme.paperPitch)
+        }
+        // On ruled paper a block takes whole lines: its height is rounded up to the pitch and it
+        // reaches down to the descender, so the line it occupies is exactly that tall. The line
+        // adds the font's leading (non-zero for SF Mono) and is rounded up to whole points, so the
+        // block gives the leading back, minus a hair to stay under the next whole point.
+        if let pitch, pitch > 0 {
+            let font = attributes[.font] as? UIFont
+            let descent = abs(font?.descender ?? 0)
+            let leading = max(0, font?.leading ?? 0)
+            let lines = (height / pitch).rounded(.up) * pitch
+            return CGRect(x: 0, y: -descent, width: width, height: lines - leading - 0.01)
+        }
         return CGRect(x: 0, y: 0, width: width, height: height)
     }
 }
@@ -380,8 +398,21 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
     static let rowHeight: CGFloat = 38
     static let controlsHeight: CGFloat = 28
 
-    static func rows(_ node: BlockNode) -> [[(text: String, header: Bool)]] {
-        node.children.map { row in row.children.map { cell in (cell.plainText, cell.type == NodeType.tableHeader) } }
+    static func rows(_ node: BlockNode) -> [[(text: String, header: Bool, align: NSTextAlignment)]] {
+        node.children.map { row in
+            row.children.map { cell in
+                // Column alignment (Markdown `:---` / `:---:` / `---:`): the cell's `align`
+                // (document-model.md); a paragraph `textAlign` inside the cell also counts.
+                let paragraph = cell.children.first(where: \.isTextblock)
+                let value = cell.attrs["align"]?.stringValue ?? paragraph?.attrs["textAlign"]?.stringValue ?? ""
+                let align: NSTextAlignment = switch value {
+                case "center": .center
+                case "right": .right
+                default: .natural
+                }
+                return (cell.plainText, cell.type == NodeType.tableHeader, align)
+            }
+        }
     }
 
     static func height(for node: BlockNode) -> CGFloat {
@@ -419,6 +450,9 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
             for (c, cell) in row.enumerated() {
                 let f = UITextField()
                 f.text = cell.text
+                f.textAlignment = cell.align
+                f.rightView = UIView(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+                f.rightViewMode = cell.align == .right ? .always : .never
                 f.font = theme.font(size: 15, weight: cell.header ? .semibold : .regular)
                 f.textColor = EditorTheme.text
                 f.backgroundColor = cell.header ? EditorTheme.codeBackground : .clear

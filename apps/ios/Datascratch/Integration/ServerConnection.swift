@@ -35,8 +35,9 @@ final class ServerConnection: CoreLibraryRemote {
         attachments = try? AttachmentManager(api: api, store: core.store, directory: attachmentsDirectory)
     }
 
-    /// The device library was carried into the account: merge what doubled up.
-    var onLibraryCarried: (() -> Void)?
+    /// Merges what doubled up when the device library was carried into the account.
+    /// Called on every start; `true` right after the device library was carried in.
+    var onLibraryCarried: ((_ justCarried: Bool) -> Void)?
 
     /// Starts syncing for a signed-in account.
     func start(session: AuthSession, isNewAccount: Bool) async {
@@ -89,10 +90,9 @@ final class ServerConnection: CoreLibraryRemote {
             observeStatus(engine)
             sync.onRetry = { Task { await engine.retryFailed() } }
             // With the engine running, removing duplicates reaches the server too.
-            if core.needsCarriedMerge {
-                onLibraryCarried?()
-                core.needsCarriedMerge = false
-            }
+            // Every start: build 6 carried libraries without merging the duplicates.
+            onLibraryCarried?(core.needsCarriedMerge)
+            core.needsCarriedMerge = false
             uploadPendingAttachments()
         } catch {
             Self.log.error("starting sync failed: \(error.localizedDescription, privacy: .public)")

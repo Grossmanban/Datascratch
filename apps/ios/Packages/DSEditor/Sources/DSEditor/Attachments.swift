@@ -62,7 +62,12 @@ final class AttachmentFactory {
         let chipFont = font.withSize(font.pointSize * 0.92)
         let attributed = NSAttributedString(string: text, attributes: [.font: chipFont, .foregroundColor: color])
         let textSize = attributed.size()
-        let size = CGSize(width: ceil(textSize.width) + 12, height: ceil(chipFont.lineHeight) + 2)
+        var size = CGSize(width: ceil(textSize.width) + 12, height: ceil(chipFont.lineHeight) + 2)
+        // On ruled paper the chip stays inside the font's line (no lower than the descender, no
+        // taller than the line height): a chip reaching below grew its line by a point and shifted
+        // every line after it off the rules.
+        let onPaper = theme.paperPitch != nil
+        if onPaper { size.height = min(size.height, floor(font.lineHeight)) }
         let format = UIGraphicsImageRendererFormat.preferred()
         let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in
             EditorTheme.chipBackground.setFill()
@@ -71,7 +76,7 @@ final class AttachmentFactory {
         }
         let a = InlineAtomAttachment(image: image)
         a.atom = atom
-        a.bounds = CGRect(x: 0, y: font.descender - 1, width: size.width, height: size.height)
+        a.bounds = CGRect(x: 0, y: onPaper ? font.descender : font.descender - 1, width: size.width, height: size.height)
         return a
     }
 

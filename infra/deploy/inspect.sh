@@ -178,6 +178,12 @@ SELECT left(sn.doc_id::text, 13) AS doc, sn.seq, left(sn.device_id, 13) AS devic
        sn.created_at, octet_length(sn.payload) AS bytes
   FROM doc_snapshots sn JOIN docs d ON d.id = sn.doc_id JOIN notebooks n ON n.id = d.notebook_id AND n.mode = 'agent'
   ORDER BY sn.created_at DESC LIMIT 12;
+\echo Devices of this account: id prefix | kind | created (from UUIDv7) | last seen | revoked
+SELECT left(dv.id::text, 13) AS id,
+       CASE WHEN dv.name ILIKE '%ipad%' THEN 'iPad' WHEN dv.name ILIKE '%iphone%' THEN 'iPhone' ELSE 'web/other' END AS kind,
+       to_timestamp(('x' || replace(left(dv.id::text, 13), '-', ''))::bit(48)::bigint / 1000.0) AS created,
+       dv.last_seen_at, dv.revoked_at
+  FROM devices dv WHERE dv.user_id IN (SELECT user_id FROM agent_grants) ORDER BY dv.id;
 SQL
   end
 fi

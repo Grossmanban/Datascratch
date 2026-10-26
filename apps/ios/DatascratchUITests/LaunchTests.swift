@@ -249,6 +249,30 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
     }
 
+    /// spec/04: the format bar shows while text is written and lights the marks it switches on.
+    func testBoldViaFormatBar() throws {
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        let text = editor.textViews.firstMatch.exists ? editor.textViews.firstMatch : editor
+        text.tap()
+        text.typeText("Format")
+        let bar = app.descendants(matching: .any)["formatBar"].firstMatch
+        XCTAssertTrue(bar.waitForExistence(timeout: 5), "no format bar while typing; buttons: \(Self.buttons(app))")
+        let bold = bar.buttons["Bold"].firstMatch
+        XCTAssertTrue(bold.exists && bold.isHittable, "no Bold on the format bar")
+        XCTAssertFalse(bold.isSelected, "Bold is on before it was tapped")
+        bold.tap()
+        XCTAssertTrue(showsSelected(bold), "Bold is not lit after a tap")
+        text.typeText(" bold")
+        XCTAssertTrue(bold.isSelected, "Bold went off while typing bold text")
+        let heading = bar.buttons["Heading 1"].firstMatch
+        if !heading.isHittable { bar.swipeLeft() }
+        heading.tap()
+        XCTAssertTrue(showsSelected(heading), "Heading 1 is not lit on a heading")
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
+    }
+
     /// D-15: the palette folds into a button at the trailing edge (the editor gets the room, the
     /// tool keeps working) and unfolds with a tap.
     func testCollapsingThePenPalette() throws {

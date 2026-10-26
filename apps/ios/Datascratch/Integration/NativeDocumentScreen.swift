@@ -42,6 +42,8 @@ final class NativeEditorModel {
             DispatchQueue.main.async { self?.changed() }
         }
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
+        // «Link» on the format bar: the screen asks for the address.
+        editor.onLinkRequest = { [weak self] in self?.isAskingForLink = true }
         // A literal [[Title]] (an agent's link, or one typed without autocomplete).
         editor.onOpenNoteTitled = { [weak app] title in app?.pendingRoute = .noteTitled(title) }
         // D-45: «Создано агентом» strip until the person acknowledges it.
@@ -74,6 +76,8 @@ final class NativeEditorModel {
 
     /// An on-screen keyboard is showing.
     var isSoftwareKeyboardShown = false
+    /// The format bar's «Link» wants an address.
+    var isAskingForLink = false
     @ObservationIgnored private var keyboardObservers: [NSObjectProtocol] = []
 
     isolated deinit {
@@ -197,30 +201,34 @@ struct NativeDocumentScreen: View {
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         // Inline when it fits the column, else the compact row: it never runs past
                         // the column's edges (iPad split view with three columns).
-                        Group {
-                            if app.settings.penPaletteCollapsed {
-                                // Folded to a button at the trailing edge: the editor gets the
-                                // room, the current tool keeps working (Pencil still draws).
-                                HStack(spacing: Theme.Space.s2) {
-                                    Spacer(minLength: 0)
-                                    HideKeyboardButton(model: model, isCompact: true)
-                                    CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
-                                        .padding(.trailing, Theme.Space.s4)
+                        VStack(spacing: 0) {
+                            // While text is being written: marks and block styles above the palette.
+                            FormatBarRow(model: model)
+                            Group {
+                                if app.settings.penPaletteCollapsed {
+                                    // Folded to a button at the trailing edge: the editor gets the
+                                    // room, the current tool keeps working (Pencil still draws).
+                                    HStack(spacing: Theme.Space.s2) {
+                                        Spacer(minLength: 0)
+                                        HideKeyboardButton(model: model, isCompact: true)
+                                        CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
+                                            .padding(.trailing, Theme.Space.s4)
+                                    }
+                                    // A thin strip: the folded button takes less height than the palette.
+                                    .padding(.bottom, Theme.Space.s1)
+                                    .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
+                                } else {
+                                    ViewThatFits(in: .horizontal) {
+                                        paletteRow(model, isCompact: false)
+                                        paletteRow(model, isCompact: true)
+                                    }
+                                    .padding(.top, Theme.Space.s2)
+                                    .padding(.bottom, Theme.Space.s3)
+                                    .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
                                 }
-                                // A thin strip: the folded button takes less height than the palette.
-                                .padding(.bottom, Theme.Space.s1)
-                                .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
-                            } else {
-                                ViewThatFits(in: .horizontal) {
-                                    paletteRow(model, isCompact: false)
-                                    paletteRow(model, isCompact: true)
-                                }
-                                .padding(.top, Theme.Space.s2)
-                                .padding(.bottom, Theme.Space.s3)
-                                .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
                             }
+                            .frame(maxWidth: .infinity)
                         }
-                        .frame(maxWidth: .infinity)
                     }
                     .onAppear { model.header.containerHeight = proxy.size.height }
                     .onChange(of: proxy.size.height) { _, height in model.header.containerHeight = height }
@@ -234,6 +242,7 @@ struct NativeDocumentScreen: View {
                     model.editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
                 }
                 .toolbar { NativeEditorToolbar(model: model, note: note) }
+                .modifier(LinkPrompt(model: model))
                 .coverPickers()
             } else if failed {
                 // Opening the document failed: fall back to the stand-in editor.
@@ -446,6 +455,81 @@ struct HideKeyboardButton: View {
         .accessibilityHidden(!editing)
         .accessibilityLabel("Hide Keyboard")
         .accessibilityIdentifier("editor.hideKeyboard")
+    }
+}
+
+/// DSFormatBar over the editor's `perform`/`formatState` (spec/04): marks, link, lists, quote and
+/// headings, with the current ones lit. Shown only while text is being written; scrolls sideways
+/// when the column is narrower than the bar.
+struct FormatBarRow: View {
+    let model: NativeEditorModel
+
+    var body: some View {
+        let _ = model.revision
+        if model.editor.isEditingText, model.editor.tools.mode == .text {
+            let state = model.editor.formatState
+            ScrollView(.horizontal, showsIndicators: false) {
+                DSFormatBar(items: items(state))
+                    .padding(.horizontal, Theme.Space.s3)
+                    .padding(.vertical, Theme.Space.s1)
+            }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .accessibilityIdentifier("formatBar")
+            .transition(.opacity)
+        }
+    }
+
+    private func items(_ state: FormatState) -> [DSFormatBarElement] {
+        func item(_ id: String, _ image: String, _ label: String, _ on: Bool, _ action: EditorAction) -> DSFormatBarElement {
+            .item(DSFormatBarItem(id: id, systemImage: image, label: label, isActive: on) {
+                model.editor.perform(action)
+                model.revision &+= 1
+            })
+        }
+        var elements: [DSFormatBarElement] = [
+            item("bold", "bold", String(localized: "Bold"), state.has(MarkName.bold), .bold),
+            item("italic", "italic", String(localized: "Italic"), state.has(MarkName.italic), .italic),
+            item("underline", "underline", String(localized: "Underline"), state.has(MarkName.underline), .underline),
+            item("strike", "strikethrough", String(localized: "Strikethrough"), state.has(MarkName.strike), .strike),
+            item("highlight", "highlighter", String(localized: "Highlight"), state.has(MarkName.highlight), .highlight),
+        ]
+        if state.hasSelection || state.has(MarkName.link) {
+            elements.append(item("link", "link", String(localized: "Link"), state.has(MarkName.link), .link))
+        }
+        elements += [
+            .separator(id: "lists"),
+            item("bulletList", "list.bullet", String(localized: "Bulleted List"), state.block == .bulletList, .bulletList),
+            item("orderedList", "list.number", String(localized: "Numbered List"), state.block == .orderedList, .orderedList),
+            item("taskList", "checkmark.circle", String(localized: "Task"), state.block == .taskList, .taskList),
+            item("quote", "text.quote", String(localized: "Quote"), state.block == .quote, .quote),
+            .separator(id: "headings"),
+            item("heading1", "1.square", String(localized: "Heading 1"), state.block == .heading1, .heading1),
+            item("heading2", "2.square", String(localized: "Heading 2"), state.block == .heading2, .heading2),
+            item("heading3", "3.square", String(localized: "Heading 3"), state.block == .heading3, .heading3),
+        ]
+        return elements
+    }
+}
+
+/// Asks for the address of a link on the selection (the format bar's «Link»).
+struct LinkPrompt: ViewModifier {
+    @Bindable var model: NativeEditorModel
+    @State private var address = ""
+
+    func body(content: Content) -> some View {
+        content.alert("Add Link", isPresented: $model.isAskingForLink) {
+            TextField("https://", text: $address)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button("Add") {
+                let text = address.trimmingCharacters(in: .whitespaces)
+                let url = URL(string: text.contains("://") ? text : "https://" + text)
+                if !text.isEmpty, let url { model.editor.setLink(url) }
+                address = ""
+            }
+            Button("Cancel", role: .cancel) { address = "" }
+        }
     }
 }
 

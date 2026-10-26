@@ -1352,6 +1352,7 @@ public final class EditorView: UIView {
         EditorDiagnostics.log("tap at \(Int(point.x)),\(Int(point.y)): link \(noteLink(at: point) != nil), date chip \(taskDateChip(at: point) != nil)")
         if let link = noteLink(at: point) {
             DSHaptics.selection()
+            EditorDiagnostics.log("opening link \(link) (handlers: id \(onOpenNote != nil), title \(onOpenNoteTitled != nil))")
             switch link {
             case .id(let id): onOpenNote?(id)
             case .title(let title): onOpenNoteTitled?(title)
@@ -1673,10 +1674,14 @@ extension EditorView: UITextViewDelegate {
 // MARK: - Gestures, Scribble, Pencil, edit menu
 
 extension EditorView: UIGestureRecognizerDelegate {
+    /// The editor's tap begins only on something a tap acts on — a note link, a task box or a
+    /// task date chip (`hasTapTarget`; date chips were missing here, so their taps never began).
     public override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
         if g is UITapGestureRecognizer, g.view === textView, g.delegate === self {
             let p = g.location(in: textView)
-            return taskItem(at: p) != nil || noteLink(at: p) != nil
+            let target = hasTapTarget(at: p)
+            EditorDiagnostics.log("editor tap should begin at \(Int(p.x)),\(Int(p.y)): \(target)")
+            return target
         }
         return super.gestureRecognizerShouldBegin(g)
     }

@@ -28,6 +28,12 @@ export interface OAuthConfig {
   codeTtlSec: number;
   /** Fetches a Client ID Metadata Document. Default: HTTPS GET with SSRF guard. */
   fetchClientMetadata: (url: string) => Promise<unknown>;
+  /**
+   * Advertise Client ID Metadata Documents in the server metadata. Off on servers that cannot
+   * reach clients' hosts (e.g. claude.ai is unreachable from some regions): MCP clients then
+   * use dynamic registration, which needs no outbound request. URL client ids still work.
+   */
+  advertiseClientIdMetadataDocuments: boolean;
 }
 
 const SCOPES = [SCOPE_READ, SCOPE_WRITE];
@@ -57,7 +63,7 @@ export function authorizationServerMetadata(cfg: OAuthConfig) {
     token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
     revocation_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
     code_challenge_methods_supported: ["S256"],
-    client_id_metadata_document_supported: true,
+    client_id_metadata_document_supported: cfg.advertiseClientIdMetadataDocuments,
     authorization_response_iss_parameter_supported: true,
     service_documentation: `${cfg.issuer}/docs/agents`,
   };

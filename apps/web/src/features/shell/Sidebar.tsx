@@ -66,6 +66,7 @@ import { tintFg, tintName } from "@/lib/tokens";
 import { cn, confirmDialog, ContextMenu, DropdownMenu, IconButton, Kbd, SpaceTile, toast, Tooltip, type MenuItem } from "@/ui";
 import type { NotebookRef } from "@/lib/shared";
 import { InlineRename } from "./InlineRename";
+import { AllTagsDialog, MoreList, TagRow, useSpaceCollapsed, useTagTree } from "./SidebarLists";
 import { unreadableMenuState, useUnreadable } from "@/features/docs/UnreadableNote";
 import { SyncIndicator } from "./SyncIndicator";
 import { createSpaceInteractive } from "./spaces";
@@ -110,6 +111,17 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
     [],
     0,
   );
+
+  // The open notebook stays visible even when folded behind «Ещё N».
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const openNotebook = useWorkspace((s) => {
+    const [, kind, id] = pathname.split("/");
+    if (!id) return null;
+    if (kind === "notebook") return id;
+    if (kind === "folder") return s.folders[id]?.notebookId ?? null;
+    if (kind === "doc") return s.notes[id]?.notebookId ?? null;
+    return null;
+  });
 
   const newDoc = () => {
     const nb = nbs[0];
@@ -174,9 +186,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
             </IconButton>
           }
         >
-          {nbs.map((nb) => (
-            <NotebookNode key={nb.id} nb={nb} />
-          ))}
+          <MoreList testId="notebooks" rows={nbs.map((nb) => ({ key: nb.id, node: <NotebookNode nb={nb} />, keep: nb.id === openNotebook }))} />
           {!nbs.length && space && (
             <button
               className="mx-2 my-1 text-left text-[12.5px] text-ink-2 hover:text-ink"
@@ -250,7 +260,8 @@ function NavLink({
 }
 
 function Section({ id, title, action, children }: { id: string; title: string; action?: ReactNode; children: ReactNode }) {
-  const [collapsed, toggle] = useCollapsed(id);
+  // Kept per space on this device (spec/12 §12.6, D-48).
+  const [collapsed, toggle] = useSpaceCollapsed(id);
   return (
     <section className="mt-5">
       <div className="group flex h-7 items-center px-2">
@@ -419,7 +430,11 @@ function StarredSection() {
   if (!items.length) return null;
   return (
     <Section id="starred" title={t("nav.starred")}>
-      {items.map((s) => {
+      <MoreList testId="starred" rows={items.map((s) => ({ key: `${s.kind}:${s.id}`, node: starredRow(s) }))} />
+    </Section>
+  );
+
+  function starredRow(s: (typeof items)[number]) {
         if (s.kind === "note") {
           const n = notes[s.id]!;
           return (
@@ -462,9 +477,7 @@ function StarredSection() {
             <span className="truncate">{nb.name}</span>
           </Link>
         );
-      })}
-    </Section>
-  );
+  }
 }
 
 function useDropTarget(onDrop: (kind: "note" | "folder", id: string) => void) {
@@ -744,38 +757,22 @@ function FolderNode({ folder, depth }: { folder: FolderEntry; depth: number }) {
 
 function TagsSection() {
   const { t } = useTranslation();
-  const spaceId = useWorkspace((s) => s.activeSpaceId);
-  const notes = useWorkspace((s) => s.notes);
-  const notebooks = useWorkspace((s) => s.account.notebooks);
-  const tagProps = useWorkspace((s) => s.tagProps);
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const tags = useMemo(
-    () => allTags({ ...useWorkspace.getState(), notes, account: { ...useWorkspace.getState().account, notebooks } }, spaceId),
-    [notes, notebooks, spaceId],
-  );
-  if (!tags.length) return null;
+  const { roots, flat } = useTagTree();
+  const [all, setAll] = useState(false);
+  if (!roots.length) return null;
   return (
     <Section id="tags" title={t("nav.tags")}>
-      <div className="flex flex-wrap gap-1 px-2 pt-1">
-        {tags.map((tag) => {
-          const active = decodeURIComponent(pathname) === `/tag/${tag.name}`;
-          const color = tagProps[tag.name]?.color;
-          return (
-            <Link
-              key={tag.name}
-              to="/tag/$"
-              params={{ _splat: tag.name }}
-              className={cn(
-                "inline-flex h-6 items-center gap-1 rounded-full px-2 text-[12px] font-medium transition-colors",
-                active ? "bg-ink text-canvas" : "bg-ink/[0.05] text-ink-2 hover:bg-ink/[0.09] hover:text-ink",
-              )}
-            >
-              <Hash className="size-3" style={color && !active ? { color: tintFg(color) } : undefined} />
-              {tag.name}
-            </Link>
-          );
-        })}
-      </div>
+      <MoreList testId="tags" rows={roots.map((n) => ({ key: n.path, node: <TagRow node={n} /> }))} />
+      <button
+        type="button"
+        onClick={() => setAll(true)}
+        className="flex h-7 items-center gap-2 rounded-md px-2 text-left text-[12.5px] text-ink-2 transition-colors hover:bg-ink/[0.04] hover:text-ink"
+        data-testid="all-tags-open"
+      >
+        <Hash className="size-3" aria-hidden />
+        {t("nav.allTags")}
+      </button>
+      <AllTagsDialog open={all} onOpenChange={setAll} tags={flat} />
     </Section>
   );
 }

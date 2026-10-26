@@ -41,8 +41,10 @@ export async function expectSynced(page: Page) {
 
 /** Create a document from the sidebar and type a title and body. */
 export async function newDoc(page: Page, title: string, body?: string) {
+  const before = page.url();
   await page.getByTestId("new-doc").click();
-  await page.waitForURL("**/doc/**");
+  // From an open document the URL already matches «/doc/»: wait for the new one.
+  await page.waitForURL((url) => url.pathname.startsWith("/doc/") && url.href !== before);
   const editor = page.locator(".ds-prose");
   await expect(editor).toBeVisible();
   await page.keyboard.type(title);

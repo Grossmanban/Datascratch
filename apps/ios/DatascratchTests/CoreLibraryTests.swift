@@ -245,7 +245,8 @@ struct CoreLibraryTests {
         let core = try CoreLibrary(store: store, keys: keys)
         let library = LibraryStore(backend: core)
         library.seedIfEmpty()
-        let localNotes = try #require(library.notebooks(in: try #require(library.spaces.first).id).first)
+        let localSpace = try #require(library.spaces.first)
+        let localNotes = try #require(library.notebooks(in: localSpace.id).first)
         let early = library.createNote(in: localNotes.id, folder: nil, title: "До входа").id
         let localAccount = core.account.accountDocId
 
@@ -254,7 +255,8 @@ struct CoreLibraryTests {
         let accountId = DSCore.EntityID.make()
         _ = try core.adoptAccount(docId: accountId, isNew: true)
         library.seedIfEmpty()
-        let accountNotes = try #require(library.notebooks(in: try #require(library.spaces.first).id).first)
+        let accountSpace = try #require(library.spaces.first)
+        let accountNotes = try #require(library.notebooks(in: accountSpace.id).first)
         let later = library.createNote(in: accountNotes.id, folder: nil, title: "После входа").id
         try store.setRegistered(localAccount, false)
         _ = try core.adoptAccount(docId: accountId, isNew: false)

@@ -242,10 +242,12 @@ export function StarredPage() {
   const { t } = useTranslation();
   const starred = useWorkspace((s) => s.account.starred);
   const notes = useWorkspace((s) => s.notes);
-  const list = useMemo(
-    () => visibleNotes(starred.filter((s) => s.kind === "note" && notes[s.id]).map((s) => notes[s.id]!)),
-    [starred, notes],
-  );
+  const spaceId = useWorkspace((s) => s.activeSpaceId);
+  const notebooks = useWorkspace((s) => s.account.notebooks);
+  const list = useMemo(() => {
+    const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
+    return visibleNotes(starred.filter((s) => s.kind === "note" && notes[s.id] && nbs.has(notes[s.id]!.notebookId)).map((s) => notes[s.id]!));
+  }, [starred, notes, notebooks, spaceId]);
   return (
     <ListPage
       title={t("nav.starred")}

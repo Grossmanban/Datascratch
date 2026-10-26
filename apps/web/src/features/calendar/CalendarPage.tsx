@@ -31,13 +31,20 @@ export function CalendarPage() {
   const setDate = (d: string) => void navigate({ to: "/calendar", search: { date: d === today() ? undefined : d }, replace: true });
   const week = weekOf(date);
   const tasks = useLiveQuery(() => accountDb().tasks.toArray(), [], []);
-  const notes = useWorkspace((s) => s.notes);
+  const allNotes = useWorkspace((s) => s.notes);
+  const spaceId = useWorkspace((s) => s.activeSpaceId);
+  const notebooks = useWorkspace((s) => s.account.notebooks);
+  // Days show the tasks and notes of the current space only (D-48).
+  const notes = useMemo(() => {
+    const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
+    return Object.fromEntries(Object.entries(allNotes).filter(([, n]) => nbs.has(n.notebookId)));
+  }, [allNotes, notebooks, spaceId]);
   const dailyId = useWorkspace(() => findDaily(date));
 
   const marks = useMemo(() => {
     const m: Record<string, number> = {};
     for (const r of tasks) {
-      if (r.state !== "open" || notes[r.noteId]?.trashedAt) continue;
+      if (r.state !== "open" || !notes[r.noteId] || notes[r.noteId]!.trashedAt) continue;
       const key = r.scheduled ?? r.deadline;
       if (key) m[key] = (m[key] ?? 0) + 1;
     }
@@ -48,7 +55,7 @@ export function CalendarPage() {
   const dayTasks = useMemo(() => {
     const t0 = today();
     return tasks
-      .filter((r) => !notes[r.noteId]?.trashedAt)
+      .filter((r) => notes[r.noteId] && !notes[r.noteId]!.trashedAt)
       .filter(
         (r) =>
           r.scheduled === date ||

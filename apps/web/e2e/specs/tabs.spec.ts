@@ -33,17 +33,25 @@ test("many tabs: the strip folds into «+N», the overview opens, closes tabs an
   await expect(page.locator(".ds-prose")).toContainText("Вкладка 2");
   await expect(strip.getByTestId("tab").filter({ hasText: "Вкладка 2" })).toHaveAttribute("data-active", "true");
 
-  // ⌘⇧\ opens it too; «Закрыть остальные» leaves only the active tab.
+  // Pin a tab: it moves to the left, compact, and survives «Закрыть остальные».
+  await strip.getByTestId("tab").filter({ hasText: "Вкладка 1" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Закрепить вкладку" }).click();
+  const pinned = strip.locator('[data-testid=tab][data-pinned=true]');
+  await expect(pinned).toHaveCount(1);
+  await expect(pinned.getByRole("link")).toHaveAttribute("aria-label", /Вкладка 1/);
+
+  // ⌘⇧\ opens it too; «Закрыть остальные» leaves the active tab and the pinned one.
   await page.keyboard.press("ControlOrMeta+Shift+Backslash");
   await expect(overview).toBeVisible();
   await overview.getByTestId("tab-close-others").click();
-  await expect(overview.getByTestId("tab-card")).toHaveCount(1);
+  await expect(overview.getByTestId("tab-card")).toHaveCount(2);
   await page.keyboard.press("Escape");
-  await expect(strip.getByTestId("tab")).toHaveCount(1);
+  await expect(strip.getByTestId("tab")).toHaveCount(2);
+  await expect(pinned).toHaveCount(1);
   await expect(strip.getByTestId("tab-more")).toHaveCount(0);
 
-  // Closing the active tab from the strip moves to /all when it was the last one.
+  // Closing the active tab from the strip moves to the pinned one, the only tab left.
   await strip.getByTestId("tab-close").click();
-  await page.waitForURL("**/all");
-  await expect(strip).toHaveCount(0);
+  await expect(page.locator(".ds-prose")).toContainText("Вкладка 1");
+  await expect(strip.getByTestId("tab")).toHaveCount(1);
 });

@@ -4,13 +4,16 @@ import { readMapOfMaps } from "./ymap";
 
 // Account doc layout: document-model.md §2.
 
+/** An open tab (document-model.md §2): `openedAt` is written at most once an hour per tab. */
+export type TabEntry = { noteId: string; pinned?: boolean; openedAt?: string };
+
 export const accountMaps = (doc: Y.Doc) => ({
   meta: doc.getMap<unknown>("meta"),
   spaces: doc.getMap<Y.Map<unknown>>("spaces"),
   notebooks: doc.getMap<Y.Map<unknown>>("notebooks"),
   settings: doc.getMap<unknown>("settings"),
   starred: doc.getArray<StarredRef>("starred"),
-  tabs: doc.getArray<{ noteId: string }>("tabs"),
+  tabs: doc.getArray<TabEntry>("tabs"),
 });
 
 export type AccountSnapshot = {
@@ -19,7 +22,7 @@ export type AccountSnapshot = {
   notebooks: NotebookRef[];
   settings: Record<string, unknown>;
   starred: StarredRef[];
-  tabs: { noteId: string }[];
+  tabs: TabEntry[];
 };
 
 export function readAccount(doc: Y.Doc): AccountSnapshot {

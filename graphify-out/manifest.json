@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793024087.1769378,
-    "seen": 1793024145.8512712,
-    "ast_hash": "11a0361dff55b48fe66eebe61d53f181",
+    "mtime": 1793024459.0251474,
+    "seen": 1793024506.3507366,
+    "ast_hash": "ea873242dae6988a2ce0419b9c4932b2",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -4686,10 +4686,10 @@
     "semantic_hash": "7ec5762707a921ecf9d19d0c95ffa59b"
   },
   "docs/roadmap.md": {
-    "mtime": 1792970696.8228881,
-    "seen": 1793019610.0918446,
-    "ast_hash": "4f1bebc1592dc7b0168b6b3c8bc178c7",
-    "semantic_hash": "4f1bebc1592dc7b0168b6b3c8bc178c7"
+    "mtime": 1793024459.0232396,
+    "seen": 1793024506.3524492,
+    "ast_hash": "3eeab906509bd2accf395f0949194db7",
+    "semantic_hash": ""
   },
   "docs/spec/01-concept.md": {
     "mtime": 1792926987.8360698,
@@ -4734,10 +4734,10 @@
     "semantic_hash": "df9d0077439cb36d029be88cc3046141"
   },
   "docs/spec/08-sharing.md": {
-    "mtime": 1792927372.4280927,
-    "seen": 1793019610.0918674,
-    "ast_hash": "7f833f097e605846132e97fbd2c6ab3c",
-    "semantic_hash": "7f833f097e605846132e97fbd2c6ab3c"
+    "mtime": 1793024459.0236092,
+    "seen": 1793024506.352657,
+    "ast_hash": "08ba4bc67f79f68c057edebf4b10bc0f",
+    "semantic_hash": ""
   },
   "docs/spec/09-agents-api.md": {
     "mtime": 1793004754.1375995,

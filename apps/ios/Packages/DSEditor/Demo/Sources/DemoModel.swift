@@ -70,8 +70,10 @@ final class DemoModel {
 
     /// UI-test diagnostics: every gesture recognizer in the window that delays touches.
     /// The sample note, optionally without some block types (UI-test bisection switches:
-    /// `-sampleTextOnly`, `-sampleNoTable`, `-sampleNoMermaid`).
+    /// `-sampleTextOnly`, `-sampleNoTable`, `-sampleNoMermaid`; `-sampleEmpty` is a new note,
+    /// like the one the app's UI test types into).
     static func sample(_ args: [String]) -> InMemoryEditorDocument {
+        if args.contains("-sampleEmpty") { return InMemoryEditorDocument(blocks: [.title(""), .paragraph()]) }
         let doc = SampleDocument.make()
         let atoms: Set<String> = [NodeType.table, NodeType.mermaid, NodeType.mathBlock, NodeType.image, NodeType.drawing,
                                   NodeType.file, NodeType.pageCard, NodeType.horizontalRule]

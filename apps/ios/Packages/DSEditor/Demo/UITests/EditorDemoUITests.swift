@@ -46,25 +46,32 @@ final class EditorDemoUITests: XCTestCase {
         try typing(extraArguments: [])
     }
 
-    // Temporary bisection of the demo-only crash (one difference from the app per variant).
+    // Temporary bisection of the demo-only crash. The app's UI test (testPaletteWorksWithKeyboardOpen)
+    // types without crashing; these variants copy its steps, then its new empty note.
     @MainActor
-    func testTypingBisectSplitView() throws {
-        try typing(extraArguments: ["-splitView"])
+    func testTypingBisectAppSteps() throws {
+        try appStyleTyping(extraArguments: [])
     }
 
     @MainActor
-    func testTypingBisectNoNavigation() throws {
-        try typing(extraArguments: ["-noNavigation"], undo: false)
+    func testTypingBisectAppStepsEmptyNote() throws {
+        try appStyleTyping(extraArguments: ["-sampleEmpty"])
     }
 
+    /// The app test's steps: no tool switch, a tap in the middle of the text view, typing, 3 s wait.
     @MainActor
-    func testTypingBisectNoDiagnostics() throws {
-        try typing(extraArguments: ["-noEditorDiag", "-noDiagDump"])
-    }
-
-    @MainActor
-    func testTypingBisectTextOnlySample() throws {
-        try typing(extraArguments: ["-sampleTextOnly"])
+    private func appStyleTyping(extraArguments: [String]) throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting"] + extraArguments
+        app.launch()
+        let editor = app.textViews["editor.text"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        editor.tap()
+        editor.typeText("Keyboard")
+        _ = app.keyboards.firstMatch.waitForExistence(timeout: 5)
+        sleep(3)
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone after typing")
+        XCTAssertTrue((editor.value as? String ?? "").contains("Keyboard"))
     }
 
     @MainActor

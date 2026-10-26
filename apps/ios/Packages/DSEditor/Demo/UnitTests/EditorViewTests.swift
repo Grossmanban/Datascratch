@@ -524,7 +524,7 @@ final class EditorViewTests: XCTestCase {
     // MARK: - Build 11: touch formatting
 
     /// What the keyboard does at the caret (programmatic `insertText` skips the delegate here).
-    func type(_ editor: EditorView, _ text: String) {
+    func typeAtCaret(_ editor: EditorView, _ text: String) {
         let tv = editor.textView
         let at = tv.selectedRange
         if editor.textView(tv, shouldChangeTextIn: at, replacementText: text) {
@@ -542,7 +542,7 @@ final class EditorViewTests: XCTestCase {
         XCTAssertFalse(editor.formatState.has(MarkName.bold))
         editor.perform(.bold)
         XCTAssertTrue(editor.formatState.has(MarkName.bold), "the bar shows bold as on before anything is typed")
-        type(editor, "C")
+        typeAtCaret(editor, "C")
         let last = doc.inline(of: doc.blocks[1].id, range: 2..<3).first
         XCTAssertEqual(last?.marks.contains(MarkName.bold), true)
     }
@@ -568,9 +568,9 @@ final class EditorViewTests: XCTestCase {
         var menus: [SlashMenuState?] = []
         editor.onSlashMenu = { menus.append($0) }
         editor.textView.selectedRange = NSRange(location: editor.textView.textStorage.length, length: 0)
-        type(editor, "/")
+        typeAtCaret(editor, "/")
         XCTAssertEqual(menus.last??.query, "")
-        type(editor, "заг")
+        typeAtCaret(editor, "заг")
         let menu = try XCTUnwrap(menus.last ?? nil)
         XCTAssertEqual(menu.items.map(\.id), ["heading1", "heading2", "heading3"])
         editor.applySlashCommand("heading2")
@@ -584,7 +584,7 @@ final class EditorViewTests: XCTestCase {
         let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph([.text("агент", agent)])])
         let editor = host(doc)
         editor.textView.selectedRange = NSRange(location: flatRange(editor, of: "агент").upperBound, length: 0)
-        type(editor, "я")
+        typeAtCaret(editor, "я")
         let typed = doc.inline(of: doc.blocks[1].id, range: 5..<6).first
         XCTAssertEqual(typed?.marks.contains(MarkName.agentEdit), false)
     }

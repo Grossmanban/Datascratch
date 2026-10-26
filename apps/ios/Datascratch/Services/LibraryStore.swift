@@ -59,6 +59,12 @@ protocol LibraryBackend: AnyObject {
     func persist(from old: LibrarySnapshot, to new: LibrarySnapshot)
     /// Called with a fresh snapshot when documents change from outside (sync).
     var onExternalChange: ((LibrarySnapshot) -> Void)? { get set }
+    /// Notebooks this device can't write into yet (their key has not arrived).
+    var lockedNotebookIds: Set<String> { get }
+}
+
+extension LibraryBackend {
+    var lockedNotebookIds: Set<String> { [] }
 }
 
 /// The library as one observable value for the UI. All mutations go through
@@ -86,8 +92,18 @@ final class LibraryStore {
         self.persistence = .inMemory
         self.backend = backend
         self.data = backend.loadSnapshot()
-        backend.onExternalChange = { [weak self] snapshot in self?.data = snapshot }
+        self.lockedNotebookIds = backend.lockedNotebookIds
+        backend.onExternalChange = { [weak self, weak backend] snapshot in
+            self?.data = snapshot
+            self?.lockedNotebookIds = backend?.lockedNotebookIds ?? []
+        }
     }
+
+    /// Notebooks made on another device whose key this device is still fetching: shown, but
+    /// nothing can be written into them until the key is here.
+    private(set) var lockedNotebookIds: Set<String> = []
+
+    func isLocked(notebook id: String) -> Bool { lockedNotebookIds.contains(id) }
 
     // MARK: - Reading
 

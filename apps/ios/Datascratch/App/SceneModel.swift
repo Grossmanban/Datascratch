@@ -135,7 +135,7 @@ final class SceneModel {
         if newNoteDestination == nil, let space = library.activeSpace {
             library.createNotebook(in: space.id, name: String(localized: "Notes"), mode: .private)
         }
-        guard let destination = newNoteDestination else { return nil }
+        guard let destination = newNoteDestination, !library.isLocked(notebook: destination.notebookId) else { return nil }
         let note = library.createNote(in: destination.notebookId, folder: destination.folderId, title: title)
         if case .tag(let tag) = sidebar {
             library.setBody(NoteBody(blocks: [.paragraph("#\(tag) ")]), ofNote: note.id)

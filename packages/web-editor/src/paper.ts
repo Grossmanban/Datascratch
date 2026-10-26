@@ -49,20 +49,62 @@ export function snapMargins(blocks: readonly { height: number; marginTop: number
   });
 }
 
-/** Distance from a line box top to the text baseline, for the column's body font and pitch. */
-function measureBaseline(prose: HTMLElement, pitch: number): number {
-  const probe = document.createElement("div");
-  const cs = getComputedStyle(prose);
-  probe.style.cssText = `position:absolute;visibility:hidden;left:0;top:0;white-space:nowrap;font-family:${cs.fontFamily};font-size:${cs.fontSize};font-weight:${cs.fontWeight};line-height:${pitch}px`;
-  probe.textContent = "Hg";
-  const mark = document.createElement("span");
-  mark.style.cssText = "display:inline-block;width:0;height:0;vertical-align:baseline";
-  probe.append(mark);
-  prose.parentElement!.append(probe);
-  const baseline = mark.offsetTop;
-  probe.remove();
-  return baseline;
+type TextKind = "p" | "title" | "h1" | "h2" | "h3";
+const KINDS: { kind: TextKind; tag: string; className?: string }[] = [
+  { kind: "p", tag: "p" },
+  { kind: "title", tag: "h1", className: "ds-title" },
+  { kind: "h1", tag: "h1" },
+  { kind: "h2", tag: "h2" },
+  { kind: "h3", tag: "h3" },
+];
+
+/**
+ * Baseline (from the top of the first line box) and line height of each kind of text block, laid
+ * out by the editor's own CSS in a hidden sample column next to the text. Using the real styles
+ * keeps Chromium and Safari (different font metrics and rounding) on the same footing.
+ */
+function measureText(prose: HTMLElement): Record<TextKind, { baseline: number; lineHeight: number }> {
+  const box = document.createElement("div");
+  box.className = "ds-prose";
+  box.setAttribute("aria-hidden", "true");
+  box.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;left:0;top:0;width:600px;padding:0;margin:0;";
+  const items = KINDS.map(({ kind, tag, className }) => {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    el.textContent = "Hg";
+    const mark = document.createElement("span");
+    mark.style.cssText = "display:inline-block;width:0;height:0;vertical-align:baseline";
+    el.append(mark);
+    box.append(el);
+    return { kind, el, mark };
+  });
+  prose.parentElement!.append(box);
+  const out = {} as Record<TextKind, { baseline: number; lineHeight: number }>;
+  for (const { kind, el, mark } of items) {
+    const s = getComputedStyle(el);
+    const top = el.getBoundingClientRect().top + (parseFloat(s.paddingTop) || 0) + (parseFloat(s.borderTopWidth) || 0);
+    out[kind] = { baseline: mark.getBoundingClientRect().top - top, lineHeight: parseFloat(s.lineHeight) || 0 };
+  }
+  box.remove();
+  return out;
 }
+
+/**
+ * How far to move a bigger-font line (title, headings) so its baseline lands on a rule. Rules sit
+ * at `bodyBaseline + j·pitch` inside a line box of `lineHeight` (a whole number of pitches); the
+ * nearest one wins. Pure.
+ */
+export function baselineShift(bodyBaseline: number, baseline: number, lineHeight: number, pitch: number): number {
+  const rows = Math.max(1, Math.round(lineHeight / pitch));
+  let best = bodyBaseline - baseline;
+  for (let j = 1; j < rows; j++) {
+    const shift = bodyBaseline + j * pitch - baseline;
+    if (Math.abs(shift) < Math.abs(best)) best = shift;
+  }
+  return Math.round(best);
+}
+
+const textCache = new WeakMap<EditorView, { key: string; metrics: Record<TextKind, { baseline: number; lineHeight: number }> }>();
 
 const lastKeys = new WeakMap<EditorView, string>();
 
@@ -81,9 +123,20 @@ export function alignPaper(view: EditorView, editorEl: HTMLElement, root: HTMLEl
   const rootRect = root.getBoundingClientRect();
   const contentTop = proseRect.top - rootRect.top + (parseFloat(cs.paddingTop) || 0);
   const contentLeft = proseRect.left - rootRect.left + (parseFloat(cs.paddingLeft) || 0);
-  const baseline = measureBaseline(prose, pitch);
+  // Web fonts change the metrics when they finish loading: the font status is part of the key.
+  const textKey = `${pitch}|${cs.fontFamily}|${cs.fontSize}|${cs.fontWeight}|${editorEl.dataset.font ?? ""}|${document.fonts?.status ?? ""}`;
+  let cached = textCache.get(view);
+  if (!cached || cached.key !== textKey) {
+    cached = { key: textKey, metrics: measureText(prose) };
+    textCache.set(view, cached);
+  }
+  const m = cached.metrics;
+  const baseline = Math.round(m.p.baseline);
+  for (const kind of ["title", "h1", "h2", "h3"] as const) {
+    editorEl.style.setProperty(`--ds-shift-${kind}`, `${baselineShift(m.p.baseline, m[kind].baseline, m[kind].lineHeight, pitch)}px`);
+  }
   // The rule sits 1px under the baseline of every line; the grid's columns start at the text column.
-  const ruleY = contentTop + baseline + 1;
+  const ruleY = Math.round(contentTop) + baseline + 1;
   editorEl.style.setProperty("--ds-paper-y", `${((ruleY % pitch) + pitch) % pitch}px`);
   editorEl.style.setProperty("--ds-paper-x", `${((contentLeft % pitch) + pitch) % pitch}px`);
 
@@ -114,8 +167,10 @@ export function alignPaper(view: EditorView, editorEl: HTMLElement, root: HTMLEl
 /** Removes snap margins (plain paper). */
 export function clearPaper(view: EditorView, editorEl: HTMLElement): void {
   lastKeys.delete(view);
+  textCache.delete(view);
   editorEl.style.removeProperty("--ds-paper-y");
   editorEl.style.removeProperty("--ds-paper-x");
+  for (const kind of ["title", "h1", "h2", "h3"]) editorEl.style.removeProperty(`--ds-shift-${kind}`);
   if (!view.isDestroyed && paperKey.getState(view.state) !== DecorationSet.empty) {
     view.dispatch(view.state.tr.setMeta(paperKey, DecorationSet.empty));
   }

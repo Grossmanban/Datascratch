@@ -434,7 +434,7 @@ struct NativeDocumentHeader: View {
 /// portrait or split view): the compact row (44 pt targets) with colour, width and finger
 /// drawing under «More». Wide: everything inline.
 /// Hides the keyboard while text is being edited (iPhone has no other way). The slot stays put
-/// when there is no keyboard — only its opacity changes — so nothing moves under the finger.
+/// when there is no keyboard (the button is hidden in it) so nothing moves under the finger.
 struct HideKeyboardButton: View {
     let model: NativeEditorModel
     let isCompact: Bool
@@ -442,13 +442,13 @@ struct HideKeyboardButton: View {
     var body: some View {
         let _ = model.revision
         let editing = model.editor.isEditingText && model.isSoftwareKeyboardShown
-        Button {
+        let side: CGFloat = isCompact ? 22 : 28
+        let button = Button {
             model.editor.dismissKeyboard()
             // On iPad resigning the text view alone left the keyboard up; ending editing on the
             // whole editor (as switching to a pen does) takes it down.
             model.editor.endEditing(true)
-            // Whatever holds the keyboard (on the iPad simulator it stayed up after the two
-            // above, run 40325368506): the app-wide way, then the window.
+            // Whatever else holds the keyboard: the app-wide way, then the window.
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             model.editor.window?.endEditing(true)
             // The keyboard is going: drop the button now rather than wait for the notification.
@@ -459,15 +459,19 @@ struct HideKeyboardButton: View {
             Image(systemName: "keyboard.chevron.compact.down")
                 .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
                 .foregroundStyle(Theme.Palette.textSecondary)
-                .frame(width: isCompact ? 22 : 28, height: isCompact ? 22 : 28)
+                .frame(width: side, height: side)
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
-        .opacity(editing ? 1 : 0)
-        .disabled(!editing)
-        .accessibilityHidden(!editing)
         .accessibilityLabel("Hide Keyboard")
         .accessibilityIdentifier("editor.hideKeyboard")
+        if editing {
+            button
+        } else {
+            // The slot keeps its size (nothing moves under the finger) but holds no button: an
+            // invisible disabled one still counted as offered on iPad (run 40331980802).
+            button.hidden().disabled(true)
+        }
     }
 }
 

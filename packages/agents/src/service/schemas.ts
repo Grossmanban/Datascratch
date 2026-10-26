@@ -40,7 +40,7 @@ export const readNoteInput = z.object({
 export const handwritingImageInput = z.object({
   noteId: id,
   handwritingId: z.string().describe("Id from a ![✍️ …](handwriting:<id>) link in read_note output."),
-  scale: z.number().min(1).max(4).default(2).describe("Pixels per point."),
+  scale: z.number().min(1).max(4).optional().describe("Pixels per point; default 3 for small fragments, 2 for larger ones."),
 });
 
 export const createNoteInput = z.object({

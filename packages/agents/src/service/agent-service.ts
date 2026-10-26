@@ -391,7 +391,7 @@ export class AgentService {
     const images: ReadNoteResult["images"] = [];
     if (input.includeImages) {
       for (const item of handwriting.slice(0, this.options.maxImagesPerRead ?? 6)) {
-        const img = await this.image(p, input.noteId, seq, doc, item, 2);
+        const img = await this.image(p, input.noteId, seq, doc, item, undefined);
         images.push({ handwritingId: item.id, png: img.png });
       }
     }
@@ -404,8 +404,8 @@ export class AgentService {
     };
   }
 
-  private async image(p: Principal, noteId: string, seq: number, doc: Y.Doc, item: HandwritingItem, scale: number): Promise<RenderedImage> {
-    const key = `${p.grant.userId}:${noteId}:${seq}:${item.id}:${scale}`;
+  private async image(p: Principal, noteId: string, seq: number, doc: Y.Doc, item: HandwritingItem, scale: number | undefined): Promise<RenderedImage> {
+    const key = `${p.grant.userId}:${noteId}:${seq}:${item.id}:${scale ?? "auto"}`;
     const hit = this.images.get(key);
     if (hit) return hit;
     let attachment: Uint8Array | null = null;

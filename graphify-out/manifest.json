@@ -1429,27 +1429,27 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1793004480.1294332,
-    "seen": 1793024515.172691,
+    "seen": 1793025025.090201,
     "ast_hash": "24098989e922515ff0fa0aac07aa956f",
-    "semantic_hash": ""
+    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1793004480.1294332,
-    "seen": 1793024515.1726954,
+    "seen": 1793025025.0902042,
     "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
-    "semantic_hash": ""
+    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1793004480.1294332,
-    "seen": 1793024515.1726978,
+    "seen": 1793025025.0902057,
     "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
-    "semantic_hash": ""
+    "semantic_hash": "a66fd1a5c043c1420b26f520d2b23c56"
   },
   "apps/server/drizzle/0003_agent_move_note.sql": {
     "mtime": 1793024044.533317,
-    "seen": 1793024426.1054354,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1793025025.0902076,
+    "ast_hash": "dc7975f711d91ebab97fb9b5b28fc1d1",
+    "semantic_hash": "dc7975f711d91ebab97fb9b5b28fc1d1"
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1793004480.1294332,
@@ -2725,9 +2725,9 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1793004480.6963804,
-    "seen": 1793024515.1793525,
+    "seen": 1793025025.0905614,
     "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
-    "semantic_hash": ""
+    "semantic_hash": "c9f780dd0f9b83af1132086b539b65c4"
   },
   "infra/deploy/docker-compose.yml": {
     "mtime": 1793021975.275287,
@@ -2856,10 +2856,10 @@
     "semantic_hash": "d14ce0b735168ce17164d9b7bcd61d81"
   },
   "packages/agents/src/doc/handwriting.ts": {
-    "mtime": 1793022133.1592963,
-    "seen": 1793024426.1057289,
-    "ast_hash": "88c26bcb0f26ff0294176fe5abe21f49",
-    "semantic_hash": "88c26bcb0f26ff0294176fe5abe21f49"
+    "mtime": 1793024700.0971491,
+    "seen": 1793025025.0905912,
+    "ast_hash": "63fac4c0d747dda28827ca6fd37f278d",
+    "semantic_hash": "63fac4c0d747dda28827ca6fd37f278d"
   },
   "packages/agents/src/doc/markdown-export.ts": {
     "mtime": 1793023604.9906185,
@@ -2940,10 +2940,10 @@
     "semantic_hash": "21a70039ecadc3d6123e888ea6c2078f"
   },
   "packages/agents/src/render/handwriting-png.ts": {
-    "mtime": 1793022342.9063153,
-    "seen": 1793024426.1057463,
-    "ast_hash": "f0091196f786291c21063a7b388e9768",
-    "semantic_hash": "f0091196f786291c21063a7b388e9768"
+    "mtime": 1793024795.7575946,
+    "seen": 1793025025.0906107,
+    "ast_hash": "3fc46b7cfe9e8c4762d53292df8140d7",
+    "semantic_hash": "3fc46b7cfe9e8c4762d53292df8140d7"
   },
   "packages/agents/src/service/access.ts": {
     "mtime": 1792928452.15631,
@@ -2952,10 +2952,10 @@
     "semantic_hash": "0ed7f84bd1143878a1862367a7312d84"
   },
   "packages/agents/src/service/agent-service.ts": {
-    "mtime": 1793023820.2022932,
-    "seen": 1793024426.1057484,
-    "ast_hash": "1cfc550e4a90f8293dfa8bf25a3998cd",
-    "semantic_hash": "1cfc550e4a90f8293dfa8bf25a3998cd"
+    "mtime": 1793024758.4820008,
+    "seen": 1793025025.090614,
+    "ast_hash": "1158d4af1b2e81df2cd12437d9abe707",
+    "semantic_hash": "1158d4af1b2e81df2cd12437d9abe707"
   },
   "packages/agents/src/service/note-index.ts": {
     "mtime": 1792930313.0146263,
@@ -2970,10 +2970,10 @@
     "semantic_hash": "cd5b8086b25a2b372fe11ee3a50ab766"
   },
   "packages/agents/src/service/schemas.ts": {
-    "mtime": 1793023706.7986307,
-    "seen": 1793024426.105752,
-    "ast_hash": "6dd6a29da350d9c208a77d902021a0d7",
-    "semantic_hash": "6dd6a29da350d9c208a77d902021a0d7"
+    "mtime": 1793024749.801639,
+    "seen": 1793025025.0906184,
+    "ast_hash": "a103df9de0c390c4cda5988ac63d5983",
+    "semantic_hash": "a103df9de0c390c4cda5988ac63d5983"
   },
   "packages/agents/src/testing/fixtures.ts": {
     "mtime": 1792928213.4202957,
@@ -3012,10 +3012,10 @@
     "semantic_hash": "d7c4bfb36708373b51bb3b9175ed7a08"
   },
   "packages/agents/test/handwriting-table.test.ts": {
-    "mtime": 1793022323.4987586,
-    "seen": 1793024426.10576,
-    "ast_hash": "34f6e5382f0fc4761aa0578846af80e0",
-    "semantic_hash": "34f6e5382f0fc4761aa0578846af80e0"
+    "mtime": 1793024844.0246258,
+    "seen": 1793025025.0906284,
+    "ast_hash": "2839d30f6ddddbbd777d90a917defdc3",
+    "semantic_hash": "2839d30f6ddddbbd777d90a917defdc3"
   },
   "packages/agents/test/markdown.test.ts": {
     "mtime": 1793023608.5373201,
@@ -3042,10 +3042,10 @@
     "semantic_hash": "961e97548e4c95ddeabe49ba86d4cbc1"
   },
   "packages/agents/test/render.test.ts": {
-    "mtime": 1792929142.894376,
-    "seen": 1793024426.1057658,
-    "ast_hash": "bf634a2aa694f36c7f036b05b698d927",
-    "semantic_hash": "bf634a2aa694f36c7f036b05b698d927"
+    "mtime": 1793024795.7599447,
+    "seen": 1793025025.090636,
+    "ast_hash": "1634b051cb159594993703c8143f6f56",
+    "semantic_hash": "1634b051cb159594993703c8143f6f56"
   },
   "packages/agents/test/rest.test.ts": {
     "mtime": 1793023942.6174145,
@@ -3066,10 +3066,10 @@
     "semantic_hash": "08c2063c8968787193fcd639b16c3ea5"
   },
   "packages/agents/test/vectors.test.ts": {
-    "mtime": 1792930479.0648558,
-    "seen": 1793024426.1057703,
-    "ast_hash": "45b71c7f38024779da830d2fc3668fd0",
-    "semantic_hash": "45b71c7f38024779da830d2fc3668fd0"
+    "mtime": 1793024795.7589803,
+    "seen": 1793025025.0906441,
+    "ast_hash": "424fdd6249e24dcb926284e70eb1b648",
+    "semantic_hash": "424fdd6249e24dcb926284e70eb1b648"
   },
   "packages/agents/test/world.ts": {
     "mtime": 1792930364.316225,
@@ -4422,10 +4422,10 @@
     "semantic_hash": "4e12d508cbe83842d35667ec3683e82b"
   },
   "docs/architecture/contracts/agents-api.md": {
-    "mtime": 1793024156.2002625,
-    "seen": 1793024426.1060562,
-    "ast_hash": "f497fa9e135844a1fe9e7dc311f3537f",
-    "semantic_hash": "f497fa9e135844a1fe9e7dc311f3537f"
+    "mtime": 1793024869.7702353,
+    "seen": 1793025025.0909865,
+    "ast_hash": "75ff7f37187131b882c01fdaacec72a9",
+    "semantic_hash": "75ff7f37187131b882c01fdaacec72a9"
   },
   "docs/architecture/contracts/api.md": {
     "mtime": 1793021975.1592867,

@@ -10,7 +10,8 @@ import * as Y from "yjs";
 import { collectHandwriting } from "../src/doc/handwriting.js";
 import { childElements, contentOf } from "../src/doc/model.js";
 import { writeStroke, type StrokePoint } from "../src/doc/strokes.js";
-import { renderHandwriting } from "../src/render/handwriting-png.js";
+import { autoScale, renderHandwriting, textSegments, type Layout } from "../src/render/handwriting-png.js";
+import { readStrokes } from "../src/doc/strokes.js";
 import { makeNoteDoc } from "../src/testing/fixtures.js";
 
 function cellText(doc: Y.Doc, row: number, col: number): Y.XmlText {
@@ -117,6 +118,79 @@ describe("handwriting in tables", () => {
     const img = await renderHandwriting(doc, item!);
     writeFileSync(new URL("./__images__/_last-table-circle.png", import.meta.url), img.png);
     expect(inkPixels(img.png, [0xd2, 0x45, 0x3b])).toBeGreaterThan(100);
+  });
+
+  it("merges strokes written close together on one line even after a pause («+ O X –»)", () => {
+    const doc = makeNoteDoc("Таблица", md);
+    const c = cellText(doc, 1, 1); // "по центру код"
+    const t0 = 1_760_000_300_000;
+    // «+» after the cell text, then — 6 s later — «O X –» right next to it.
+    strokeAt(doc, "plus-h", t0, [
+      { t: c, i: 12, x: 0.9, y: -0.4 },
+      { t: c, i: 12, x: 1.5, y: -0.4 },
+    ]);
+    strokeAt(doc, "plus-v", t0 + 300, [
+      { t: c, i: 12, x: 1.2, y: -0.75 },
+      { t: c, i: 12, x: 1.2, y: -0.05 },
+    ]);
+    strokeAt(doc, "o", t0 + 6300, [
+      { t: c, i: 12, x: 2.2, y: -0.7 },
+      { t: c, i: 12, x: 2.6, y: -0.1 },
+      { t: c, i: 12, x: 2.2, y: -0.7 },
+    ]);
+    strokeAt(doc, "x", t0 + 7000, [
+      { t: c, i: 12, x: 3.0, y: -0.7 },
+      { t: c, i: 12, x: 3.5, y: -0.1 },
+    ]);
+    // Far away in the same cell and much later: a separate fragment.
+    strokeAt(doc, "far", t0 + 60_000, [
+      { t: c, i: 0, x: -6, y: -0.5 },
+      { t: c, i: 0, x: -5.5, y: -0.4 },
+    ]);
+    const items = collectHandwriting(doc);
+    expect(items.map((i) => i.strokeIds)).toEqual([["plus-h", "plus-v", "o", "x"], ["far"]]);
+  });
+
+  it("keeps every point and the shape of a handwritten letter across anchor changes («greg»)", () => {
+    const doc = makeNoteDoc("Слово", "abcdef");
+    const block = childElements(contentOf(doc)).find((e) => e.nodeName === "paragraph")!;
+    const t = block.toArray().find((x): x is Y.XmlText => x instanceof Y.XmlText)!;
+    // The editor's glyphs are 10 pt wide; a loop drawn in editor coordinates, each point stored
+    // relative to the character under it (x in em of 17 pt).
+    const fs = 17;
+    const editorX = Array.from({ length: 24 }, (_, k) => 5 + 18 * Math.sin((k / 23) * Math.PI * 2) + k);
+    const editorY = Array.from({ length: 24 }, (_, k) => -8 * Math.cos((k / 23) * Math.PI * 2));
+    const pts = editorX.map((x, k) => {
+      const i = Math.max(0, Math.min(5, Math.floor(x / 10)));
+      return { t, i, x: (x - i * 10) / fs, y: editorY[k]! / fs };
+    });
+    strokeAt(doc, "g", 1_760_000_400_000, pts);
+    const stroke = readStrokes(doc).find((s) => s.id === "g")!;
+    // Our font is narrower: 8 pt per character.
+    const layout: Layout = {
+      glyphs: Array.from({ length: 6 }, (_, i) => ({ ch: "abcdef"[i]!, x: i * 8, w: 8, line: 0, font: "", marks: {} })),
+      lines: [{ top: -20, baseline: 0, bottom: 6 }],
+      fontSize: fs,
+      height: 26,
+      left: 0,
+    };
+    const [seg, ...rest] = textSegments(doc, stroke, block, layout, 0);
+    expect(rest).toHaveLength(0);
+    expect(seg).toHaveLength(stroke.points.length);
+    // Same shape as in the editor (up to a shift): consecutive steps match within a fraction of a point.
+    const steps = (xs: number[]) => xs.slice(1).map((x, k) => x - xs[k]!);
+    const ours = steps(seg!.map((p) => p.x));
+    const editor = steps(editorX);
+    const worst = Math.max(...ours.map((d, k) => Math.abs(d - editor[k]!)));
+    expect(worst).toBeLessThan(1.5);
+    // The plain contract layout would jump by the advance difference at every anchor change.
+    const plain = steps(textSegments(doc, stroke, block, layout, 0, false)[0]!.map((p) => p.x));
+    expect(Math.max(...plain.map((d, k) => Math.abs(d - editor[k]!)))).toBeGreaterThan(1.5);
+  });
+
+  it("draws small fragments at a higher default scale", () => {
+    expect(autoScale(120)).toBe(3);
+    expect(autoScale(600)).toBe(2);
   });
 
   it("never reports a fragment without visible strokes", () => {

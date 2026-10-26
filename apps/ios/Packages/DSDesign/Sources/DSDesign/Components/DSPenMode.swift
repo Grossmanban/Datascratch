@@ -80,7 +80,9 @@ extension DSPenToolbar {
         tools: [DSPenTool] = [.pen, .pencil, .marker, .highlighter, .eraser],
         showsTextMode: Bool = true,
         axis: Axis = .horizontal,
-        compact: Bool = false
+        compact: Bool = false,
+        isCollapsed: Binding<Bool>? = nil,
+        recentColors: [String]? = nil
     ) {
         let selection = Binding<DSPenSelection>(
             get: {
@@ -108,7 +110,9 @@ extension DSPenToolbar {
             canRedo: canRedo,
             onUndo: onUndo,
             onRedo: onRedo,
-            compact: compact
+            compact: compact,
+            isCollapsed: isCollapsed,
+            recentColors: recentColors
         )
     }
 }

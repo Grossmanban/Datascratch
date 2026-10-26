@@ -29,7 +29,8 @@ import {
 } from "..";
 
 export const Document: Story = () => {
-  const [pen, setPen] = useState<PenSelection>(defaultPenSelection);
+  const [pen, setPen] = useState<PenSelection>({ ...defaultPenSelection, color: "blue" });
+  const [collapsed, setCollapsed] = useState(false);
   const [marks, setMarks] = useState<Record<string, boolean>>({ bold: true });
   const [panel, setPanel] = useState<null | "color" | "link">("color");
   const [text, setText] = useState<TintName | null>(null);
@@ -156,7 +157,16 @@ export const Document: Story = () => {
       />
 
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2">
-        <PenToolbar value={pen} onChange={setPen} canUndo onUndo={() => {}} onRedo={() => {}} />
+        <PenToolbar
+          value={pen}
+          onChange={setPen}
+          canUndo
+          onUndo={() => {}}
+          onRedo={() => {}}
+          tools={["pen", "pencil", "marker", "highlighter", "eraser", "lasso"]}
+          collapsed={collapsed}
+          onCollapsedChange={setCollapsed}
+        />
       </div>
     </div>
   );

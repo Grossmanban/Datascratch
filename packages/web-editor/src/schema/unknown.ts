@@ -1,5 +1,5 @@
 import { Mark, Node, type AnyExtension } from "@tiptap/core";
-import type { Schema } from "@tiptap/pm/model";
+import { Fragment, type Node as PMNode, type Schema } from "@tiptap/pm/model";
 import * as Y from "yjs";
 
 // Unknown nodes and marks (written by a newer client) must survive untouched (document-model.md §4.2).
@@ -118,7 +118,23 @@ export function guardSchema(schema: Schema, onUnknown: (name: string) => void): 
       onUnknown(type);
       return node(UNSUPPORTED_BLOCK, { originalName: type });
     }
-    return node(type, attrs, content, marks);
+    try {
+      return node(type, attrs, content, marks);
+    } catch {
+      // y-prosemirror deletes the Y element when node creation throws — a data loss for content
+      // another client wrote legitimately (e.g. agent text with marks in a code block, 2026-10-26).
+      // Never throw: drop marks the node does not allow, and as a last resort skip the check.
+      const nodeType = typeof type === "string" ? schema.nodes[type]! : type;
+      const children: PMNode[] = [];
+      Fragment.from(content as never).forEach((child) => {
+        children.push(child.isText ? child.mark(child.marks.filter((m) => nodeType.allowsMarkType(m.type))) : child);
+      });
+      try {
+        return nodeType.createChecked(attrs, children, marks);
+      } catch {
+        return nodeType.create(attrs, children, marks);
+      }
+    }
   }) as Schema["node"];
   schema.mark = ((type, attrs) => {
     if (typeof type === "string" && !schema.marks[type]) {

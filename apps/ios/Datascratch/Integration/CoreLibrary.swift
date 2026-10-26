@@ -15,6 +15,8 @@ protocol CoreLibraryRemote: AnyObject {
     func noteMoved(_ noteId: String, toNotebook notebookId: String)
     /// A document was opened; from now on the sync engine persists and sends its updates.
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?)
+    /// The account lists notebooks whose keys this device does not hold.
+    func notebookKeysMissing()
 }
 
 /// `NoteMeta.wrappedKey` by note id, readable from the sync engine's actor.
@@ -236,6 +238,7 @@ final class CoreLibrary: LibraryBackend {
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             onExternalChange?(loadSnapshot())
+            if !notebooksWithoutKey.isEmpty { remote?.notebookKeysMissing() }
         }
     }
 
@@ -284,6 +287,18 @@ final class CoreLibrary: LibraryBackend {
         var carried: [CarriedNotebook] = []
         for record in orphans {
             let local = AccountDocument(try Self.open(.account, docId: record.docId, notebookId: nil, store: store))
+            // A device library with nothing but untouched first-run content is not carried: it
+            // would add a second «Personal»/«Work» to an account that has its own (prod 2026-10-26).
+            if holdsOnlyFirstRunContent(local) {
+                for ref in local.notebooks() where account.notebook(id: ref.id) == nil {
+                    let notebook = NotebookDocument(try Self.open(.notebook, docId: ref.id, notebookId: ref.id, store: store))
+                    for meta in notebook.notes(includeTrashed: true) { try store.deleteDocument(meta.id) }
+                    try store.deleteDocument(ref.id)
+                    notebookDocs[ref.id] = nil
+                }
+                try store.deleteDocument(record.docId)
+                continue
+            }
             let haveSpaces = Set(account.spaces().map(\.id))
             for space in local.spaces() where !haveSpaces.contains(space.id) { try account.putSpace(space) }
             let haveNotebooks = Set(account.notebooks().map(\.id))
@@ -301,6 +316,99 @@ final class CoreLibrary: LibraryBackend {
             try store.deleteDocument(record.docId)
         }
         return carried
+    }
+
+    var lockedNotebookIds: Set<String> { Set(notebooksWithoutKey) }
+
+    /// Notebooks of the account whose key this device does not hold (made on another device
+    /// after this one signed in): their documents can't be read or written until it arrives.
+    var notebooksWithoutKey: [String] {
+        account.notebooks().map(\.id).filter { (try? keys.notebookKey($0)) ?? nil == nil }
+    }
+
+    /// Notes whose key no device can unwrap any more (wrapped by a notebook key an earlier build
+    /// invented, lost at sign-out) but whose content this device still holds: they get a new
+    /// note key wrapped by the notebook's canonical key. Call after
+    /// `AccountService.reconcileNotebookKeys` and `rewrapNoteKeys`; each returned note needs
+    /// `SyncEngine.rekey` so its state goes up sealed with the new key.
+    @discardableResult
+    func healUnreadableNotes() -> [String] {
+        var healed: [String] = []
+        for ref in account.notebooks() where keys.isNotebookKeyVerified(ref.id) {
+            guard let key = (try? keys.notebookKey(ref.id)) ?? nil, let notebook = try? notebookDocument(ref.id) else { continue }
+            for meta in notebook.notes(includeTrashed: true) {
+                if let wrapped = DSCore.Base64URL.decode(meta.wrappedKey),
+                   (try? DSCrypto.unwrapKey(wrapped, with: key, ad: CryptoAD.noteKey(meta.id))) != nil { continue }
+                guard let updates = try? store.updates(docId: meta.id), !updates.isEmpty,
+                      let wrapped = try? keys.createNoteKey(noteId: meta.id, notebookId: ref.id).wrappedKey else { continue }
+                try? notebook.updateNote(id: meta.id, ["wrappedKey": .string(value: wrapped)])
+                wrappedKeys.set(noteId: meta.id, notebookId: ref.id, wrapped: wrapped)
+                _ = try? noteDocument(meta.id, notebookId: ref.id)
+                CoreLibrary.log.error("note \(meta.id, privacy: .public) re-keyed: its key was wrapped by a key the server does not know")
+                healed.append(meta.id)
+            }
+        }
+        return healed
+    }
+
+    private static let rekeyedNotebooksKey = "repair.notebookStates.v1"
+
+    /// Once per device (build 12): every notebook with a canonical key, for `SyncEngine.rekey` —
+    /// what an earlier build sealed with an invented key goes up again readable from this
+    /// device's copy. Empty after the first call.
+    func takeOneTimeNotebookRekey() -> [String] {
+        guard (try? store.string(Self.rekeyedNotebooksKey)) ?? nil == nil else { return [] }
+        let ids = account.notebooks().map(\.id).filter(keys.isNotebookKeyVerified)
+        guard !ids.isEmpty else { return [] }
+        try? store.setString("done", for: Self.rekeyedNotebooksKey)
+        return ids
+    }
+
+    /// Keys changed (fetched or replaced): the UI re-reads what is readable and writable.
+    func notebookKeysChanged() {
+        onExternalChange?(loadSnapshot())
+    }
+
+    /// Only what first-run seeding writes: no folders, untouched welcome notes, empty Inboxes.
+    private func holdsOnlyFirstRunContent(_ local: AccountDocument) -> Bool {
+        guard local.spaces().allSatisfy({ LibraryStore.firstRunKey($0.name).hasPrefix("first-run.") }),
+              local.notebooks().allSatisfy({ LibraryStore.firstRunKey($0.name) == "first-run.notes" }) else { return false }
+        for ref in local.notebooks() {
+            guard let notebook = try? NotebookDocument(Self.open(.notebook, docId: ref.id, notebookId: ref.id, store: store)),
+                  notebook.folders().isEmpty else { return false }
+            for meta in notebook.notes(includeTrashed: true) {
+                guard let note = try? NoteDocument(Self.open(.note, docId: meta.id, notebookId: ref.id, store: store)) else { return false }
+                let body = NoteBodyCodec.body(from: (try? note.blocks()) ?? [])
+                switch meta.kind {
+                case .inbox: if body.blocks.contains(where: { !$0.text.isEmpty }) { return false }
+                case .note: if meta.isTrashed || !LibraryStore.isFirstRunWelcome(title: meta.title, body: body) { return false }
+                case .daily: return false
+                }
+            }
+        }
+        return true
+    }
+
+    /// Notebooks of the account that never reached the server (their documents are not registered).
+    var unsentNotebookIds: [String] {
+        account.notebooks().map(\.id).filter { id in (try? store.document(id))??.registered != true }
+    }
+
+    /// Changes waiting to be sent plus notebooks not yet on the server (spec/07, sign-out).
+    var unsentChangeCount: Int {
+        ((try? store.outboxCount()) ?? 0) + unsentNotebookIds.count
+    }
+
+    /// Keys of the notebooks that never reached the server: signing out keeps them, so the
+    /// notebooks can still be uploaded after signing in to the same account (spec/07).
+    func unsentNotebookKeys() -> [String: Data] {
+        var result: [String: Data] = [:]
+        for id in unsentNotebookIds { if let key = try? keys.notebookKey(id) { result[id] = key } }
+        return result
+    }
+
+    func restoreNotebookKeys(_ kept: [String: Data]) {
+        for (id, key) in kept { try? keys.setNotebookKey(key, notebookId: id) }
     }
 
     /// Removes everything this device holds — documents, keys, pending work — and starts over
@@ -552,7 +660,9 @@ final class CoreLibrary: LibraryBackend {
 
     private func createNote(_ meta: NoteMeta, body: NoteBody, resolve: NoteBodyCodec.LinkResolver) throws {
         let notebook = try notebookDocument(meta.notebookId)
-        if try keys.notebookKey(meta.notebookId) == nil { _ = try keys.createNotebookKey(notebookId: meta.notebookId) }
+        // Never invent a key for a notebook that exists (new notebooks got theirs in
+        // persistNotebooks): one the server does not know seals the notebook for good.
+        guard try keys.notebookKey(meta.notebookId) != nil else { throw DSCore.AccountError.missingKey(meta.notebookId) }
         let (_, wrapped) = try keys.createNoteKey(noteId: meta.id, notebookId: meta.notebookId)
         wrappedKeys.set(noteId: meta.id, notebookId: meta.notebookId, wrapped: wrapped)
         let doc = try noteDocument(meta.id, notebookId: meta.notebookId)
@@ -567,8 +677,7 @@ final class CoreLibrary: LibraryBackend {
         let source = try notebookDocument(oldNotebookId)
         guard let oldMeta = source.note(id: meta.id) else { return }
         let noteKey = try keys.noteKey(noteId: meta.id, wrappedKey: oldMeta.wrappedKey, notebookId: oldNotebookId)
-        if try keys.notebookKey(meta.notebookId) == nil { _ = try keys.createNotebookKey(notebookId: meta.notebookId) }
-        guard let targetKey = try keys.notebookKey(meta.notebookId) else { return }
+        guard let targetKey = try keys.notebookKey(meta.notebookId) else { throw DSCore.AccountError.missingKey(meta.notebookId) }
         let wrapped = try DSCrypto.wrapKey(noteKey, with: targetKey, ad: CryptoAD.noteKey(meta.id))
         try source.purgeNote(id: meta.id)
         let encoded = DSCore.Base64URL.encode(wrapped)

@@ -130,6 +130,14 @@ export const noteMetaSchema = z.object({
   updatedAt: isoDateTimeSchema,
   trashedAt: isoDateTimeSchema.nullable(),
   order: z.number(),
+  /**
+   * The whole note was created by an agent (D-45): clients show a "Created by
+   * agent" strip; "Got it" sets null. Optional — older documents lack it.
+   */
+  createdByAgent: z
+    .object({ agentId: z.string(), agentName: z.string(), at: isoDateTimeSchema })
+    .nullable()
+    .optional(),
 });
 export type NoteMeta = z.infer<typeof noteMetaSchema>;
 

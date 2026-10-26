@@ -409,7 +409,8 @@ export class AgentService {
     const noteId = uuidv7(this.now().getTime());
     const { wrappedKey } = await this.ctx.data.createNoteDoc(p.grant.userId, nb.info.id, noteId, p.grant.id);
     const doc = new Y.Doc();
-    initNoteContent(doc, input.title, input.markdown, { agentEdit: this.mark(p), resolveNoteLink: this.resolver(views) });
+    // D-45: a note created by an agent is marked as a whole in NoteMeta.createdByAgent, not with agentEdit marks.
+    initNoteContent(doc, input.title, input.markdown, { agentEdit: null, resolveNoteLink: this.resolver(views) });
     await this.ctx.data.applyUpdate(p.grant.userId, noteId, Y.encodeStateAsUpdate(doc), this.origin(p, "create_note"));
     const index = buildNoteIndex(noteId, 0, doc);
     const at = this.now().toISOString();
@@ -436,6 +437,7 @@ export class AgentService {
           updatedAt: at,
           trashedAt: null,
           order,
+          createdByAgent: { agentId: p.grant.id, agentName: p.agentName, at },
         };
         for (const [k, v] of Object.entries(fields)) m.set(k, v);
       },

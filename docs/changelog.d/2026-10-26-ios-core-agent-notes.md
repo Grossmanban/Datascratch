@@ -1,1 +1,0 @@
-- 2026-10-26 (ios-core) — DSCore: `NoteMeta.createdByAgent` (D-45; терпимое чтение, `clearCreatedByAgent` для «Понятно»), копия `meta` блокнота с цветом (`NotebookDocument.setMetaCopy`, `AccountService.refreshNotebookMeta` — при создании блокнота и включении режима «для агентов»).

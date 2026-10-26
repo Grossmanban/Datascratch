@@ -24,7 +24,24 @@ public final class EditorView: UIView {
     public var onPaletteRequest: ((CGPoint?) -> Void)?
     /// A note link chip was tapped.
     public var onOpenNote: ((String) -> Void)?
-    /// Tools, undo availability or selection changed (refresh toolbars).
+    /// A literal `[[Title]]` in the text was tapped (an agent's link to a note that did not exist
+    /// yet, or one typed without autocomplete). The host opens the note with that title, or offers
+    /// to create it (`spec/04-editor.md`).
+    public var onOpenNoteTitled: ((String) -> Void)?
+    /// Shows "Посмотреть историю" in the agent-edits banner when set.
+    public var onShowHistory: (() -> Void)? {
+        didSet { agentBanner.onShowHistory = onShowHistory }
+    }
+    /// Name of the agent that created this note (`NoteMeta.createdByAgent`, D-45), or nil. Such a
+    /// note shows "Создано агентом {name} · Понятно" instead of line-by-line highlighting; the host
+    /// clears the field in `onAcknowledgeCreatedByAgent` and then sets this to nil.
+    public var createdByAgent: String? {
+        didSet { updateAgentBanner() }
+    }
+    /// "Понятно" on the created-by-agent banner (D-45): the host sets `createdByAgent = null` in
+    /// the notebook index. The banner hides right away.
+    public var onAcknowledgeCreatedByAgent: (() -> Void)?
+    /// Tools, undo availability, selection or editing (`isEditingText`) changed (refresh toolbars).
     public var onStateChange: (() -> Void)?
     private var stateChangePending = false
 
@@ -60,6 +77,10 @@ public final class EditorView: UIView {
     }
     /// Current height of `headerView` (0 without one).
     public private(set) var headerHeight: CGFloat = 0
+    /// Banner above the first block while the note has unaccepted agent edits (D-10).
+    private let agentBanner = AgentEditsBanner()
+    private var agentBannerVisible = false
+    private var agentBannerSpace: CGFloat { agentBannerVisible ? AgentEditsBanner.height + 12 : 0 }
     /// Vertical scroll position: 0 when the top of the header (or of the text) is at the top of the
     /// visible area, positive when scrolled down. For collapsing navigation titles.
     public var onScroll: ((CGFloat) -> Void)?
@@ -133,6 +154,15 @@ public final class EditorView: UIView {
         textView.insertSubview(paper, at: 0)
         textView.insertSubview(inkUnder, aboveSubview: paper)
         textView.addSubview(inkOver)
+        agentBanner.isHidden = true
+        agentBanner.onAcceptAll = { [weak self] in self?.acceptAgentEdits() }
+        agentBanner.onAcknowledge = { [weak self] in
+            guard let self else { return }
+            let acknowledge = self.onAcknowledgeCreatedByAgent
+            self.createdByAgent = nil
+            acknowledge?()
+        }
+        textView.addSubview(agentBanner)
         inkOver.accessibilityIdentifier = "editor.ink"
         hoverLayer.fillColor = nil
         hoverLayer.lineWidth = 1.2
@@ -158,6 +188,7 @@ public final class EditorView: UIView {
             let p = touch.location(in: self)
             if p.y > self.bounds.maxY - self.overlayInsets.bottom || p.y < self.bounds.minY + self.overlayInsets.top { return false }
             if let header = self.headerView, header.bounds.contains(touch.location(in: header)) { return false }
+            if self.agentBannerVisible, self.agentBanner.bounds.contains(touch.location(in: self.agentBanner)) { return false }
             return touch.type == .pencil || (self.tools.allowsFingerDrawing && touch.type == .direct)
         }
         inkInput.onBegan = { [weak self] s in
@@ -253,6 +284,7 @@ public final class EditorView: UIView {
         suppressDelegate = false
         textView.selectedRange = NSRange(location: projection.paragraphs.count > 1 ? projection.starts[1] : 0, length: 0)
         updateTypingAttributes()
+        updateAgentBanner()
         ink.invalidateLayout()
         if bounds.width > 0 {
             layoutIfNeeded()
@@ -303,7 +335,12 @@ public final class EditorView: UIView {
         let side = max(theme.horizontalPadding, (bounds.width - column) / 2)
         layoutHeader()
         // Room to draw below the last paragraph: at least one screen (`strokes.md` §4, free drawing).
-        let inset = UIEdgeInsets(top: 32 + headerHeight, left: side, bottom: max(160, bounds.height), right: side)
+        agentBanner.isHidden = !agentBannerVisible
+        if agentBannerVisible {
+            let frame = CGRect(x: side, y: headerHeight + 16, width: bounds.width - side * 2, height: AgentEditsBanner.height)
+            if agentBanner.frame != frame { agentBanner.frame = frame }
+        }
+        let inset = UIEdgeInsets(top: 32 + headerHeight + agentBannerSpace, left: side, bottom: max(160, bounds.height), right: side)
         if textView.textContainerInset != inset { textView.textContainerInset = inset }
         applyKeyboardInset()
     }
@@ -423,6 +460,7 @@ public final class EditorView: UIView {
                 selectOffset(min(projection.length, r.upperBound))
             }
         }
+        updateAgentBanner()
         ink.invalidateLayout()
         if !change.strokesAdded.isEmpty || !change.strokesRemoved.isEmpty || change.origin != .textInput {
             setNeedsInkRefresh()
@@ -568,7 +606,8 @@ public final class EditorView: UIView {
     private func updateTypingAttributes() {
         let r = selectionRange
         let (i, _) = projection.position(at: r.lowerBound)
-        let marks = pendingMarks ?? commands.marks(at: r.lowerBound..<r.lowerBound)
+        // Text a person types is theirs: it never inherits the agent's mark from its neighbours.
+        let marks = (pendingMarks ?? commands.marks(at: r.lowerBound..<r.lowerBound)).setting(MarkName.agentEdit, nil)
         textView.typingAttributes = renderer.typingAttributes(projection, index: i, marks: marks)
     }
 
@@ -673,6 +712,79 @@ public final class EditorView: UIView {
         hoverLayer.fillColor = preview.color.withAlphaComponent(tools.mode.isEraser ? 0.08 : 0.25).resolvedColor(with: traitCollection).cgColor
     }
 
+    // MARK: - Note links
+
+    enum NoteLinkTarget: Equatable {
+        case id(String)
+        case title(String)
+    }
+
+    /// The note link under a point (content coordinates): a `noteLink` chip, or a literal
+    /// `[[Title]]` in the text. Only when the host handles that kind of link.
+    func noteLink(at point: CGPoint) -> NoteLinkTarget? {
+        guard onOpenNote != nil || onOpenNoteTitled != nil,
+              let pos = textView.closestPosition(to: point) else { return nil }
+        let storage = textView.textStorage
+        let near = textView.offset(from: textView.beginningOfDocument, to: pos)
+        for off in [near, near - 1] where off >= 0 && off < storage.length {
+            guard let frame = geometry.segmentFrame(off..<(off + 1)), frame.insetBy(dx: -4, dy: -6).contains(point) else { continue }
+            if onOpenNoteTitled != nil, let title = storage.attribute(.dsWikiLink, at: off, effectiveRange: nil) as? String {
+                return .title(title)
+            }
+            if onOpenNote != nil, let chip = storage.attribute(.attachment, at: off, effectiveRange: nil) as? InlineAtomAttachment,
+               let atom = chip.atom, atom.type == NodeType.noteLink, let id = atom.attrs["noteId"]?.stringValue {
+                return .id(id)
+            }
+        }
+        return nil
+    }
+
+    // MARK: - Agent edits (D-10)
+
+    /// The note has agent edits nobody has accepted yet.
+    public var hasAgentEdits: Bool {
+        projection.paragraphs.contains { p in p.inline.contains { $0.marks.contains(MarkName.agentEdit) } }
+    }
+
+    /// Accepts every agent edit: the marks go, the text stays (one undo step).
+    public func acceptAgentEdits() {
+        AgentEdits.acceptAll(in: document)
+        DSHaptics.selection()
+    }
+
+    /// Accepts the agent's edits in one block.
+    public func acceptAgentEdits(inBlock block: BlockID) {
+        AgentEdits.accept(block: block, in: document)
+    }
+
+    /// Edits to accept come first; otherwise a note an agent created says so once (D-45).
+    private func updateAgentBanner() {
+        let mode: AgentEditsBanner.Mode?
+        if hasAgentEdits {
+            mode = .edits
+        } else if let name = createdByAgent {
+            mode = .createdBy(name)
+        } else {
+            mode = nil
+        }
+        if let mode, agentBanner.mode != mode { agentBanner.mode = mode }
+        let visible = mode != nil
+        guard visible != agentBannerVisible else { return }
+        agentBannerVisible = visible
+        setNeedsLayout()
+    }
+
+    // MARK: - Hiding the keyboard
+
+    /// The text view is being edited (the keyboard is up or a hardware keyboard types into it).
+    public var isEditingText: Bool { textView.isFirstResponder }
+
+    /// Hides the keyboard (the host's "hide keyboard" control; iPhone keyboards have no such key).
+    /// Dragging the text down past the keyboard also hides it (`keyboardDismissMode = .interactive`).
+    public func dismissKeyboard() {
+        textView.resignFirstResponder()
+    }
+
     // MARK: - Task check boxes
 
     /// Task item whose check box is at `point` (content coordinates).
@@ -691,6 +803,14 @@ public final class EditorView: UIView {
     }
 
     @objc private func tapped(_ g: UITapGestureRecognizer) {
+        if let link = noteLink(at: g.location(in: textView)) {
+            DSHaptics.selection()
+            switch link {
+            case .id(let id): onOpenNote?(id)
+            case .title(let title): onOpenNoteTitled?(title)
+            }
+            return
+        }
         guard let box = taskCheckbox(at: g.location(in: textView)) else { return }
         commands.toggleTask(box.item)
         if box.state == "done" {
@@ -851,6 +971,9 @@ extension EditorView: UITextViewDelegate {
         onScroll?(scrollView.contentOffset.y + scrollView.adjustedContentInset.top)
     }
 
+    public func textViewDidBeginEditing(_ textView: UITextView) { notifyStateChange() }
+    public func textViewDidEndEditing(_ textView: UITextView) { notifyStateChange() }
+
     public func textViewDidChangeSelection(_ tv: UITextView) {
         if suppressDelegate { return }
         pendingMarks = nil
@@ -860,9 +983,20 @@ extension EditorView: UITextViewDelegate {
 
     public func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
         let (i, _) = projection.position(at: range.location)
-        guard projection.paragraphs.indices.contains(i), let item = projection.paragraphs[i].context.itemBlockId,
-              let node = document.block(item), node.type == NodeType.taskItem else { return nil }
-        return UIMenu(children: [taskMenu(item: item, node: node)] + suggestedActions)
+        guard projection.paragraphs.indices.contains(i) else { return nil }
+        let para = projection.paragraphs[i]
+        var extra: [UIMenuElement] = []
+        if para.inline.contains(where: { $0.marks.contains(MarkName.agentEdit) }) {
+            let block = para.blockId
+            extra.append(UIAction(title: "Принять правку агента", image: UIImage(systemName: "checkmark.seal")) { [weak self] _ in
+                self?.acceptAgentEdits(inBlock: block)
+            })
+        }
+        if let item = para.context.itemBlockId, let node = document.block(item), node.type == NodeType.taskItem {
+            extra.append(taskMenu(item: item, node: node))
+        }
+        guard !extra.isEmpty else { return nil }
+        return UIMenu(children: extra + suggestedActions)
     }
 
     /// Craft-like task menu: complete, schedule, deadline, cancel.
@@ -910,7 +1044,8 @@ extension EditorView: UITextViewDelegate {
 extension EditorView: UIGestureRecognizerDelegate {
     public override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
         if g is UITapGestureRecognizer, g.view === textView, g.delegate === self {
-            return taskItem(at: g.location(in: textView)) != nil
+            let p = g.location(in: textView)
+            return taskItem(at: p) != nil || noteLink(at: p) != nil
         }
         return super.gestureRecognizerShouldBegin(g)
     }
@@ -925,6 +1060,7 @@ extension EditorView: UIGestureRecognizerDelegate {
     public func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         if g === inkInput { return true }
         if let header = headerView, header.bounds.contains(touch.location(in: header)) { return false }
+        if agentBannerVisible, agentBanner.bounds.contains(touch.location(in: agentBanner)) { return false }
         return true
     }
 }

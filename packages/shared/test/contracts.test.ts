@@ -124,3 +124,36 @@ describe("canonical base64url", () => {
     expect(saltSchema.safeParse("B".repeat(21) + "A").success).toBe(true);
   });
 });
+
+describe("NoteMeta.createdByAgent (D-45)", () => {
+  const base = {
+    id: ID,
+    folderId: null,
+    parentNoteId: null,
+    title: "t",
+    kind: "note",
+    dailyDate: null,
+    tags: [],
+    icon: null,
+    coverThumb: null,
+    wrappedKey: KEY,
+    createdAt: "2026-10-26T09:00:00.000Z",
+    updatedAt: "2026-10-26T09:00:00.000Z",
+    trashedAt: null,
+    order: 0,
+  };
+  it("is optional and nullable, so older notes stay valid", async () => {
+    const { noteMetaSchema } = await import("../src/contracts/document.js");
+    expect(noteMetaSchema.safeParse(base).success).toBe(true);
+    expect(noteMetaSchema.safeParse({ ...base, createdByAgent: null }).success).toBe(true);
+    expect(
+      noteMetaSchema.safeParse({
+        ...base,
+        createdByAgent: { agentId: ID, agentName: "Claude", at: "2026-10-26T09:00:00.000Z" },
+      }).success,
+    ).toBe(true);
+    expect(noteMetaSchema.safeParse({ ...base, createdByAgent: { agentId: ID } }).success).toBe(
+      false,
+    );
+  });
+});

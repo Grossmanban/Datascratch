@@ -520,4 +520,72 @@ final class EditorViewTests: XCTestCase {
         XCTAssertNil(editor.createdByAgent)
         XCTAssertTrue(banner.isHidden)
     }
+
+    // MARK: - Build 11: touch formatting
+
+    /// What the keyboard does at the caret (programmatic `insertText` skips the delegate here).
+    func type(_ editor: EditorView, _ text: String) {
+        let tv = editor.textView
+        let at = tv.selectedRange
+        if editor.textView(tv, shouldChangeTextIn: at, replacementText: text) {
+            tv.textStorage.replaceCharacters(in: at, with: text)
+            tv.selectedRange = NSRange(location: at.location + text.utf16.count, length: 0)
+            editor.textViewDidChange(tv)
+        }
+    }
+
+    func testBoldAtCaretAppliesToTheNextTypedText() {
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("ab")])
+        let editor = host(doc)
+        let r = flatRange(editor, of: "ab")
+        editor.textView.selectedRange = NSRange(location: r.upperBound, length: 0)
+        XCTAssertFalse(editor.formatState.has(MarkName.bold))
+        editor.perform(.bold)
+        XCTAssertTrue(editor.formatState.has(MarkName.bold), "the bar shows bold as on before anything is typed")
+        type(editor, "C")
+        let last = doc.inline(of: doc.blocks[1].id, range: 2..<3).first
+        XCTAssertEqual(last?.marks.contains(MarkName.bold), true)
+    }
+
+    func testFormatStateForSelectionAndHeadingToggle() {
+        let bold = MarkSet([MarkName.bold: MarkSet.plain])
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph([.text("жирный", bold), .text(" нет", .empty)])])
+        let editor = host(doc)
+        let r = flatRange(editor, of: "жирный")
+        editor.textView.selectedRange = NSRange(location: r.lowerBound, length: r.count)
+        XCTAssertTrue(editor.formatState.has(MarkName.bold))
+        XCTAssertTrue(editor.formatState.hasSelection)
+        XCTAssertEqual(editor.formatState.block, .paragraph)
+        editor.perform(.heading2)
+        XCTAssertEqual(editor.formatState.block, .heading2)
+        editor.perform(.heading2)
+        XCTAssertEqual(editor.formatState.block, .paragraph, "the same heading button turns it back into text")
+    }
+
+    func testSlashMenuOpensFiltersAndApplies() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("")])
+        let editor = host(doc)
+        var menus: [SlashMenuState?] = []
+        editor.onSlashMenu = { menus.append($0) }
+        editor.textView.selectedRange = NSRange(location: editor.textView.textStorage.length, length: 0)
+        type(editor, "/")
+        XCTAssertEqual(menus.last??.query, "")
+        type(editor, "заг")
+        let menu = try XCTUnwrap(menus.last ?? nil)
+        XCTAssertEqual(menu.items.map(\.id), ["heading1", "heading2", "heading3"])
+        editor.applySlashCommand("heading2")
+        XCTAssertNil(menus.last ?? nil, "the menu closes")
+        XCTAssertEqual(doc.blocks[1].type, NodeType.heading)
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "", "the typed /query is removed")
+    }
+
+    func testTypedTextNextToAgentTextIsNotAgentMarkedInTheDocument() {
+        let agent = MarkSet([MarkName.agentEdit: .object(["agent": "claude"])])
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph([.text("агент", agent)])])
+        let editor = host(doc)
+        editor.textView.selectedRange = NSRange(location: flatRange(editor, of: "агент").upperBound, length: 0)
+        type(editor, "я")
+        let typed = doc.inline(of: doc.blocks[1].id, range: 5..<6).first
+        XCTAssertEqual(typed?.marks.contains(MarkName.agentEdit), false)
+    }
 }

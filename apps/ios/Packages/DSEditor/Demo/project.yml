@@ -7,6 +7,8 @@ options:
 packages:
   DSEditor:
     path: ..
+  DSDesign:
+    path: ../../DSDesign
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -24,6 +26,8 @@ targets:
     dependencies:
       - package: DSEditor
         product: DSEditor
+      - package: DSDesign
+        product: DSDesign
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.datascratch.app.editordemo

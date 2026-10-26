@@ -24,6 +24,10 @@ final class InkController {
     /// Lowest point of the drawn ink (content coordinates), so free drawings below the text can
     /// be scrolled to.
     private(set) var inkExtentMaxY: CGFloat = 0
+    /// Outlines computed so far (cache misses), for tests and the demo HUD.
+    private(set) var outlinesBuilt = 0
+    /// Current outline of a drawn stroke (tests).
+    func renderedPath(of id: String) -> CGPath? { renderedById[id]?.path }
 
     private enum Target {
         case text(scale: CGFloat)
@@ -40,6 +44,8 @@ final class InkController {
         var lastMoveTime: TimeInterval
         var holdAnchor: CGPoint
         var pendingGesture: StrokeHint?
+        /// Incremental outline of the live stroke (frozen chunks + tail).
+        var outline = LiveInkOutline()
     }
 
     private var session: Session?
@@ -53,6 +59,16 @@ final class InkController {
     /// Resolved segments of the strokes currently drawn (for hit testing).
     private(set) var resolved: [String: [[ResolvedInkPoint]]] = [:]
     private var renderedById: [String: RenderedStroke] = [:]
+    /// Outlines from the previous refresh: reused when a stroke lands on exactly the same points
+    /// (scrolling, edits elsewhere), since outlining is the expensive part of a refresh.
+    private var outlineCache: [String: (key: OutlineKey, rendered: RenderedStroke)] = [:]
+    private struct OutlineKey: Equatable {
+        var segments: [[ResolvedInkPoint]]
+        var tool: InkTool
+        var color: String
+        var width: Double
+        var opacity: Double
+    }
     private(set) var selectedStrokes: Set<String> = []
     private var generation = 0
     private var renderedGeneration = -1
@@ -95,6 +111,8 @@ final class InkController {
     }
 
     func refresh(window: Range<Int>? = nil) {
+        let signpost = EditorSignpost.log.beginInterval("InkRefresh", id: EditorSignpost.log.makeSignpostID())
+        defer { EditorSignpost.log.endInterval("InkRefresh", signpost) }
         let start = CACurrentMediaTime()
         let p = projection()
         let window = window ?? renderWindow()
@@ -103,15 +121,25 @@ final class InkController {
         resolved.removeAll(keepingCapacity: true)
         renderedById.removeAll(keepingCapacity: true)
         let column = geometry.columnFrame
+        var cache: [String: (key: OutlineKey, rendered: RenderedStroke)] = [:]
         for stroke in document.strokes where !stroke.hidden {
             guard let segments = place(stroke, projection: p, window: window, column: column), !segments.isEmpty else { continue }
             resolved[stroke.id] = segments
-            let r = render(stroke, segments: segments)
+            let key = OutlineKey(segments: segments, tool: stroke.tool, color: stroke.color, width: stroke.width, opacity: stroke.opacity)
+            let r: RenderedStroke
+            if let cached = outlineCache[stroke.id], cached.key == key {
+                r = cached.rendered
+            } else {
+                r = render(stroke, segments: segments)
+                outlinesBuilt += 1
+            }
+            cache[stroke.id] = (key, r)
             renderedById[stroke.id] = r
             if stroke.tool.drawsUnderText { underStrokes.append(r) } else { overStrokes.append(r) }
         }
         over.apply(overStrokes)
         under.apply(underStrokes)
+        outlineCache = cache
         renderedGeneration = generation
         renderedWindow = window
         renderedStrokeCount = overStrokes.count + underStrokes.count
@@ -125,10 +153,18 @@ final class InkController {
     private func place(_ stroke: Stroke, projection p: Projection, window: Range<Int>?, column: CGRect) -> [[ResolvedInkPoint]]? {
         switch stroke.anchorKind {
         case .text:
-            let offsets: [Int?] = stroke.anchors.map { a in
+            func offset(_ a: Data) -> Int? {
                 guard let pos = document.resolveAnchor(a) else { return nil }
                 return p.offset(block: pos.block, offset: pos.offset)
             }
+            // Cheap rejection before resolving every anchor: a stroke spans a few lines, so when
+            // both its first and last anchors are past the same edge of the window it is off screen.
+            if let window, let first = stroke.anchors.first, let last = stroke.anchors.last,
+               let a = offset(first), let b = offset(last),
+               (a < window.lowerBound && b < window.lowerBound) || (a >= window.upperBound && b >= window.upperBound) {
+                return nil
+            }
+            let offsets: [Int?] = stroke.anchors.map(offset)
             let live = offsets.compactMap { $0 }
             guard !live.isEmpty else { return nil }
             if let window, !live.contains(where: { window.contains($0) }) { return nil }
@@ -160,6 +196,7 @@ final class InkController {
     // MARK: - Pen input
 
     func penBegan(_ s: PenSample) {
+        EditorSignpost.event("PenDown")
         if tools.mode != .text { frameRate.begin() }
         switch tools.mode {
         case .text:
@@ -232,6 +269,7 @@ final class InkController {
     }
 
     func penEnded(cancelled: Bool) {
+        EditorSignpost.event("PenUp")
         holdTimer?.invalidate()
         frameRate.end()
         switch tools.mode {
@@ -289,16 +327,24 @@ final class InkController {
         }
     }
 
+    /// Redraws the live stroke. Committed samples are smoothed exactly as on commit, so the line
+    /// does not shift when the pen lifts; predicted samples extend it for latency. Only the tail
+    /// is re-outlined each event (`LiveInkOutline`), so long strokes stay at full frame rate.
     private func updateLive() {
-        guard let s = session else { return }
-        let all = s.samples + s.predicted
+        guard var s = session else { return }
+        let signpost = EditorSignpost.log.beginInterval("LiveStroke", id: EditorSignpost.log.makeSignpostID())
+        defer { EditorSignpost.log.endInterval("LiveStroke", signpost) }
+        let committed = smoothed(s.samples)
+        let all = committed + s.predicted
         let sc = scale(for: s.target)
         let pts = all.enumerated().map { i, p in
             ResolvedInkPoint(location: p.location, pressure: p.pressure, altitude: p.altitude, azimuth: p.azimuth, roll: p.roll,
                              scale: sc, sourceIndex: i)
         }
-        let poly = InkOutline.polygon(InkOutline.widthPoints(pts, tool: s.tool, baseWidth: s.paint.width))
-        let path = InkCanvas.path(from: [poly])
+        let widths = InkOutline.widthPoints(pts, tool: s.tool, baseWidth: s.paint.width)
+        let polygons = s.outline.update(widths, stableCount: committed.count - 2)
+        session = s
+        let path = InkCanvas.path(from: polygons)
         let canvas = s.tool.drawsUnderText ? under : over
         canvas.updateLive(path: path, color: EditorTheme.color(token: s.paint.color), opacity: Float(s.paint.opacity),
                           underText: s.tool.drawsUnderText)
@@ -316,6 +362,8 @@ final class InkController {
     }
 
     private func commitStroke(_ s: Session) {
+        let signpost = EditorSignpost.log.beginInterval("StrokeCommit", id: EditorSignpost.log.makeSignpostID())
+        defer { EditorSignpost.log.endInterval("StrokeCommit", signpost) }
         let samples = smoothed(s.samples)
         let p = projection()
         var stroke: Stroke?

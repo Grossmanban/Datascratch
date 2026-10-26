@@ -72,6 +72,7 @@ final class EditorDemoUITests: XCTestCase {
         app.buttons["tool.marker"].tap()
         sleep(1)
         XCTAssertTrue(app.textViews["editor.text"].waitForExistence(timeout: 5), "app alive after switching to the marker")
+        XCTAssertTrue(app.buttons["tool.marker"].isSelected, "the palette button really switches the tool")
         app.buttons["tool.lasso"].tap()
         sleep(1)
         XCTAssertTrue(app.textViews["editor.text"].waitForExistence(timeout: 5), "app alive after switching to the lasso")
@@ -86,6 +87,29 @@ final class EditorDemoUITests: XCTestCase {
         app.buttons["tool.text"].tap()
         sleep(1)
         XCTAssertTrue(app.textViews["editor.text"].waitForExistence(timeout: 5), "app alive after switching to text")
+    }
+
+    /// Build 4 feedback (iPhone, text tool, keyboard open): palette taps must hit the palette and
+    /// never move the text underneath.
+    @MainActor
+    func testPaletteTapsWithKeyboardOpenDoNotScroll() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-hud", "-fingerDrawing"]
+        app.launch()
+        let editor = app.textViews["editor.text"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        app.buttons["tool.text"].tap()
+        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        sleep(1)
+        let offsetLabel = app.staticTexts["hud.offset"]
+        XCTAssertTrue(offsetLabel.waitForExistence(timeout: 5))
+        let offset = offsetLabel.label
+        for id in ["tool.pen", "tool.text", "tool.marker", "tool.lasso", "tool.text"] {
+            app.buttons[id].tap()
+            XCTAssertTrue(app.buttons[id].isSelected, "\(id) responds to the first tap")
+            XCTAssertEqual(offsetLabel.label, offset, "tapping \(id) does not scroll the note")
+        }
+        XCTAssertEqual(app.state, .runningForeground)
     }
 
     @MainActor

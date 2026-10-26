@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import DSDesign
 import DSEditorModel
 import UIKit
 
@@ -121,7 +122,7 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
         case .task(let state, let scheduled, let deadline):
             let box = checkboxRect(d, baseline: baseline)
             drawCheckbox(state: state, rect: box, d: d, in: ctx)
-            drawDateChips(scheduled: scheduled, deadline: deadline, d: d, in: ctx)
+            drawDateChips(scheduled: scheduled, deadline: deadline, completed: state == "done" || state == "cancelled", d: d, in: ctx)
         case nil:
             break
         }
@@ -135,7 +136,8 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
     }
 
     private func drawCheckbox(state: String, rect: CGRect, d: ParagraphDecoration, in ctx: CGContext) {
-        let path = UIBezierPath(roundedRect: rect.insetBy(dx: 0.75, dy: 0.75), cornerRadius: rect.width * 0.28)
+        // Tasks are round ("Quiet paper", like `DSTaskCheckbox`).
+        let path = UIBezierPath(ovalIn: rect.insetBy(dx: 0.75, dy: 0.75))
         if state == "done" {
             ctx.setFillColor(d.accentColor.cgColor)
             ctx.addPath(path.cgPath)
@@ -151,7 +153,8 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
             ctx.addPath(check.cgPath)
             ctx.strokePath()
         } else {
-            ctx.setStrokeColor(d.markerColor.cgColor)
+            // Like `DSTaskCheckbox`: tertiary at 55 %, 1.5 pt.
+            ctx.setStrokeColor(DSColorToken.textTertiary.value.uiColor.withAlphaComponent(0.55).cgColor)
             ctx.setLineWidth(1.5)
             ctx.addPath(path.cgPath)
             ctx.strokePath()
@@ -163,48 +166,95 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
         }
     }
 
-    /// Room the date chips take after the text (gaps included); the renderer keeps every line of
-    /// a dated task this much short of the column so the chips always fit after the last line.
-    static func dateChipsWidth(scheduled: String?, deadline: String?, fontSize: CGFloat) -> CGFloat {
-        var texts: [String] = []
-        if let s = scheduled { texts.append("◷ " + shortDate(s)) }
-        if let dl = deadline { texts.append("⚑ " + shortDate(dl)) }
-        guard !texts.isEmpty else { return 0 }
-        let font = UIFont.systemFont(ofSize: max(11, fontSize * 0.7), weight: .medium)
-        return texts.reduce(8) { $0 + NSAttributedString(string: $1, attributes: [.font: font]).size().width + 12 + 6 }
+    /// One date chip after the task text, laid out (label and tone from `DSDateChipModel`, same
+    /// rules as the web: Сегодня / Завтра / Вчера / weekday / «12 ноя»).
+    struct DateChip {
+        let text: NSAttributedString
+        let icon: UIImage?
+        let color: UIColor
+        let size: CGSize
     }
 
-    private func drawDateChips(scheduled: String?, deadline: String?, d: ParagraphDecoration, in ctx: CGContext) {
+    static func dateChips(scheduled: String?, deadline: String?, completed: Bool, fontSize: CGFloat) -> [DateChip] {
+        var models: [(DSDateChipModel, Bool)] = []
+        if let s = scheduled, let date = date(s) { models.append((DSDateChipModel(date: date, isCompleted: completed), false)) }
+        if let dl = deadline, let date = date(dl) { models.append((DSDateChipModel(date: date, isDeadline: true, isCompleted: completed), true)) }
+        let font = UIFont.systemFont(ofSize: max(11, fontSize * 0.7), weight: .medium)
+        return models.map { model, isDeadline in
+            let color = color(for: model.tone)
+            let text = NSAttributedString(string: model.label, attributes: [.font: font, .foregroundColor: color])
+            let textSize = text.size()
+            let config = UIImage.SymbolConfiguration(pointSize: font.pointSize * 0.8, weight: .semibold)
+            let icon = UIImage(systemName: isDeadline ? "flag.fill" : "calendar", withConfiguration: config)?
+                .withTintColor(color, renderingMode: .alwaysOriginal)
+            let iconWidth = icon.map { $0.size.width + 4 } ?? 0
+            return DateChip(text: text, icon: icon, color: color,
+                            size: CGSize(width: iconWidth + textSize.width + 14, height: textSize.height + 4))
+        }
+    }
+
+    /// Room the chips take after the text (gaps included); the renderer keeps every line of a dated
+    /// task this much short of the column so the chips always fit after the last line.
+    static func dateChipsWidth(scheduled: String?, deadline: String?, completed: Bool, fontSize: CGFloat) -> CGFloat {
+        let chips = dateChips(scheduled: scheduled, deadline: deadline, completed: completed, fontSize: fontSize)
+        guard !chips.isEmpty else { return 0 }
+        return chips.reduce(8) { $0 + $1.size.width + 6 }
+    }
+
+    private func drawDateChips(scheduled: String?, deadline: String?, completed: Bool, d: ParagraphDecoration, in ctx: CGContext) {
         guard let last = textLineFragments.last else { return }
-        var chips: [(String, UIColor)] = []
-        if let s = scheduled { chips.append(("◷ " + Self.shortDate(s), d.accentColor)) }
-        if let dl = deadline { chips.append(("⚑ " + Self.shortDate(dl), UIColor.systemRed)) }
+        let chips = Self.dateChips(scheduled: scheduled, deadline: deadline, completed: completed, fontSize: d.fontSize)
         guard !chips.isEmpty else { return }
-        let font = UIFont.systemFont(ofSize: max(11, d.fontSize * 0.7), weight: .medium)
+        let ascender = UIFont.systemFont(ofSize: max(11, d.fontSize * 0.7), weight: .medium).ascender
         let baseline = last.typographicBounds.minY + last.glyphOrigin.y
         var x = last.typographicBounds.minX + Self.usedWidth(of: last) + 8
-        for (text, color) in chips {
-            let s = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
-            let size = s.size()
-            let rect = CGRect(x: x, y: baseline - font.ascender - 3, width: size.width + 12, height: size.height + 4)
-            ctx.setFillColor(d.chipColor.cgColor)
+        for chip in chips {
+            let rect = CGRect(x: x, y: baseline - ascender - 3, width: chip.size.width, height: chip.size.height)
+            ctx.setFillColor(chip.color.withAlphaComponent(0.12).cgColor)
             ctx.addPath(UIBezierPath(roundedRect: rect, cornerRadius: rect.height / 2).cgPath)
             ctx.fillPath()
-            s.draw(at: CGPoint(x: rect.minX + 6, y: rect.minY + 2))
+            let iconWidth = chip.icon.map { $0.size.width + 4 } ?? 0
+            if let icon = chip.icon {
+                icon.draw(at: CGPoint(x: rect.minX + 7, y: rect.midY - icon.size.height / 2))
+            }
+            chip.text.draw(at: CGPoint(x: rect.minX + 7 + iconWidth, y: rect.minY + 2))
             x = rect.maxX + 6
         }
+    }
+
+    /// Frames of the date chips in fragment coordinates (tests).
+    func dateChipFrames() -> [CGRect] {
+        guard let d = decoration, case .task(let state, let scheduled, let deadline) = d.marker, let last = textLineFragments.last else { return [] }
+        let chips = Self.dateChips(scheduled: scheduled, deadline: deadline, completed: state == "done" || state == "cancelled", fontSize: d.fontSize)
+        let ascender = UIFont.systemFont(ofSize: max(11, d.fontSize * 0.7), weight: .medium).ascender
+        let baseline = last.typographicBounds.minY + last.glyphOrigin.y
+        var x = last.typographicBounds.minX + Self.usedWidth(of: last) + 8
+        return chips.map { chip in
+            defer { x += chip.size.width + 6 }
+            return CGRect(x: x, y: baseline - ascender - 3, width: chip.size.width, height: chip.size.height)
+        }
+    }
+
+    static func color(for tone: DSDateChipModel.Tone) -> UIColor {
+        switch tone {
+        case .normal: DSColorToken.textSecondary.value.uiColor
+        case .today: DSColorToken.accent.value.uiColor
+        case .soon: DSColorToken.warning.value.uiColor
+        case .overdue: DSColorToken.danger.value.uiColor
+        case .done: DSColorToken.textTertiary.value.uiColor
+        }
+    }
+
+    /// `YYYY-MM-DD` as a local calendar date.
+    static func date(_ iso: String) -> Date? {
+        let parts = iso.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
     }
 
     static func usedWidth(of line: NSTextLineFragment) -> CGFloat {
         let end = line.characterRange.upperBound
         return line.locationForCharacter(at: end).x
-    }
-
-    static func shortDate(_ iso: String) -> String {
-        let parts = iso.split(separator: "-")
-        guard parts.count == 3, let m = Int(parts[1]), let day = Int(parts[2]) else { return iso }
-        let months = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
-        return "\(day) \(months[max(0, min(11, m - 1))])"
     }
 
     private func defaultEmoji(_ tone: String) -> String {

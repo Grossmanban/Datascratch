@@ -1201,6 +1201,16 @@
         }
       }
     },
+    "Font for New Documents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Шрифт новых документов"
+          }
+        }
+      }
+    },
     "For example, Claude on my Mac": {
       "localizations": {
         "ru": {
@@ -1751,16 +1761,6 @@
         }
       }
     },
-    "New documents": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Новые документы"
-          }
-        }
-      }
-    },
     "New password": {
       "localizations": {
         "ru": {
@@ -2237,6 +2237,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Бумага"
+          }
+        }
+      }
+    },
+    "Paper for New Documents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Бумага новых документов"
           }
         }
       }

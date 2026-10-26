@@ -18,6 +18,14 @@ final class DemoModel {
 
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
     let selectedTraits = !ProcessInfo.processInfo.arguments.contains("-noSelectedTraits")
+    /// UI-test bisection (temporary): `-splitView`, `-noNavigation`.
+    enum Navigation { case stack, split, none }
+    let navigation: Navigation = {
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-splitView") { return .split }
+        if args.contains("-noNavigation") { return .none }
+        return .stack
+    }()
     private let images = DemoImages()
 
     static var fileURL: URL {

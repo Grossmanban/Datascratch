@@ -21,7 +21,7 @@ public protocol WebSocketFactory: Sendable {
 public struct URLSessionWebSocketFactory: WebSocketFactory {
     let session: URLSession
 
-    public init(session: URLSession = .shared) { self.session = session }
+    public init(session: URLSession = DSNetwork.session) { self.session = session }
 
     public func connect(to url: URL) async throws -> any WebSocketConnection {
         let task = session.webSocketTask(with: url)
@@ -92,6 +92,13 @@ public actor SyncClient {
         public var clientVersion: String
         public var minBackoff: Duration = .seconds(1)
         public var maxBackoff: Duration = .seconds(30)
+        /// From opening the connection to `welcome`; a handshake that hangs longer is dropped
+        /// and retried on a new connection.
+        public var handshakeTimeout: Duration = .seconds(6)
+        /// Failed handshakes retried almost at once (a stuck connection is usually a one-off on
+        /// flaky networks) before the exponential backoff starts.
+        public var quickRetries = 2
+        public var quickRetryDelay: Duration = .milliseconds(300)
 
         public init(url: URL, deviceId: String, clientVersion: String) {
             self.url = url
@@ -118,6 +125,8 @@ public actor SyncClient {
     private var runTask: Task<Void, Never>?
     public private(set) var state: SyncConnectionState = .disconnected
     private var attempt = 0
+    /// Connection attempts that failed in a row (0 once connected).
+    public private(set) var consecutiveFailures = 0
 
     public init(configuration: Configuration, factory: any WebSocketFactory = URLSessionWebSocketFactory(),
                 auth: @escaping @Sendable () async throws -> SyncAuth) {
@@ -148,6 +157,7 @@ public actor SyncClient {
     public func reconnectNow() {
         connection?.close()
         attempt = 0
+        consecutiveFailures = 0
     }
 
     public var isConnected: Bool {
@@ -164,17 +174,32 @@ public actor SyncClient {
 
     private func run() async {
         while !Task.isCancelled {
+            var welcomedAt: ContinuousClock.Instant?
             do {
-                try await connectOnce()
+                try await connectOnce { welcomedAt = .now }
             } catch let SyncClientError.server(code, message) where code == .protocolMismatch {
                 await setState(.stopped(reason: message))
                 return
             } catch {
-                // Fall through to backoff.
+                // Fall through to the retry.
             }
             connection?.close()
             connection = nil
             if Task.isCancelled { break }
+            if let welcomedAt, ContinuousClock.now - welcomedAt > .seconds(5) {
+                // A working connection dropped: reconnect at once. (One dropped right after
+                // `welcome` counts as a failure, so a server closing at once is not hammered.)
+                consecutiveFailures = 0
+                attempt = 0
+                continue
+            }
+            consecutiveFailures += 1
+            if consecutiveFailures <= configuration.quickRetries {
+                // Stays `.connecting`: one stuck handshake is not "offline".
+                let quick = configuration.quickRetryDelay
+                try? await Task.sleep(for: quick * Double.random(in: 0.5...1.5))
+                continue
+            }
             let delay = backoff()
             await setState(.waiting(retryIn: delay))
             try? await Task.sleep(for: delay)
@@ -189,19 +214,28 @@ public actor SyncClient {
         return .milliseconds(Int(capped * 1000 * Double.random(in: 0.8...1.2)))
     }
 
-    private func connectOnce() async throws {
+    private func connectOnce(welcomed: () -> Void) async throws {
         await setState(.connecting)
         let conn = try await factory.connect(to: configuration.url)
         connection = conn
+        // The TLS/WebSocket handshake happens on the first send/receive; if it hangs, closing
+        // the connection makes them throw.
+        let timeout = configuration.handshakeTimeout
+        let watchdog = Task {
+            try await Task.sleep(for: timeout)
+            conn.close()
+        }
+        defer { watchdog.cancel() }
         let hello = ClientMessage.hello(auth: try await auth(), deviceId: configuration.deviceId,
                                         client: ClientInfo(platform: "ios", version: configuration.clientVersion))
         try await conn.send(try SyncFrame.encode(hello))
 
         // Until `welcome` nothing else is accepted (§3).
         guard let first = SyncFrame.decode(try await conn.receive()) else { throw SyncClientError.closed }
+        watchdog.cancel()
         switch first {
         case .welcome(let userId, _):
-            attempt = 0
+            welcomed()
             await setState(.connected(userId: userId))
             await delegate?.syncClientDidConnect(self, userId: userId)
         case .error(let code, let message, _):

@@ -17,7 +17,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # D-46: on main, skip the macOS jobs when the same files already passed this workflow
+  # (usually the branch tip that was just merged) — the result cannot differ.
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - id: check
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: .github/scripts/already-tested.sh ios-app.yml apps/ios .github/workflows/ios-app.yml
+
   build-test:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
     name: Build & test (${{ matrix.family }})
     runs-on: macos-26
     timeout-minutes: 60
@@ -25,6 +49,18 @@ jobs:
       fail-fast: false
       matrix:
         family: [iPad, iPhone]
+    env:
+      # Release-gate UI tests (D-46): launch + editor + pen palette + signed-out device + Russian UI.
+      SMOKE_UI_TESTS: >-
+        BareEditorProbeTests
+        SessionEndedUITests
+        LibraryUITests/testCreateNoteAndWriteTitle
+        LibraryUITests/testSwitchingPenToolsInEditor
+        LibraryUITests/testCollapsingThePenPalette
+        LibraryUITests/testPaletteWorksWithKeyboardOpen
+        LibraryUITests/testHidingTheKeyboard
+        LibraryUITests/testColumnRulesOnIPad
+        AppearanceUITests/testRussianInterface
     defaults:
       run:
         working-directory: apps/ios
@@ -78,15 +114,34 @@ jobs:
             -test-timeouts-enabled YES -default-test-execution-time-allowance 60 \
             CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
 
-      - name: UI tests
+      # D-46: the smoke set is the release gate (the coordinator starts a TestFlight build once it
+      # is green on both devices); the rest of the UI suite runs right after in the same job.
+      - name: UI tests (smoke — release gate)
         timeout-minutes: 20
         run: |
           set -o pipefail
+          ARGS=()
+          for t in $SMOKE_UI_TESTS; do ARGS+=("-only-testing:DatascratchUITests/$t"); done
           xcodebuild test-without-building \
             -project Datascratch.xcodeproj -scheme Datascratch \
             -destination "${{ steps.sim.outputs.destination }}" \
             -derivedDataPath build/DerivedData \
-            -only-testing:DatascratchUITests \
+            "${ARGS[@]}" \
+            -resultBundlePath build/UI-smoke-${{ matrix.family }}.xcresult \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
+
+      - name: UI tests (full)
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          ARGS=(-only-testing:DatascratchUITests)
+          for t in $SMOKE_UI_TESTS; do ARGS+=("-skip-testing:DatascratchUITests/$t"); done
+          xcodebuild test-without-building \
+            -project Datascratch.xcodeproj -scheme Datascratch \
+            -destination "${{ steps.sim.outputs.destination }}" \
+            -derivedDataPath build/DerivedData \
+            "${ARGS[@]}" \
             -resultBundlePath build/UI-${{ matrix.family }}.xcresult \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
             CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
@@ -100,8 +155,9 @@ jobs:
         if: always()
         run: |
           mkdir -p build/screenshots
-          xcrun xcresulttool export attachments --path build/UI-${{ matrix.family }}.xcresult \
-            --output-path build/screenshots || true
+          for r in build/UI-smoke-${{ matrix.family }}.xcresult build/UI-${{ matrix.family }}.xcresult; do
+            [ -d "$r" ] && xcrun xcresulttool export attachments --path "$r" --output-path build/screenshots || true
+          done
 
       - name: Upload screenshots
         if: always()

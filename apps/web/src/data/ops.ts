@@ -14,6 +14,12 @@ export function onDocRegistered(fn: (docId: string) => void) {
   registeredListeners.add(fn);
   return () => registeredListeners.delete(fn);
 }
+const notebookConflictListeners = new Set<() => void>();
+/** POST /notebooks answered 409: the server already holds a key for it (see checkNotebookKeys). */
+export function onNotebookConflict(fn: () => void) {
+  notebookConflictListeners.add(fn);
+  return () => notebookConflictListeners.delete(fn);
+}
 export function onOpsChanged(fn: () => void) {
   listeners.add(fn);
   return () => listeners.delete(fn);
@@ -47,6 +53,7 @@ async function runOps(): Promise<boolean> {
       // 409 for an idempotent create with the same id means it already exists — fine.
       // Other 4xx would block the queue forever; drop and log.
       if (!(e instanceof ApiError && e.code === "conflict")) console.warn("Dropping failed op", op, e);
+      else if (op.path === "/notebooks") for (const fn of notebookConflictListeners) fn();
     }
     await db.transaction("rw", db.ops, db.docs, async () => {
       await db.ops.delete(op.id!);

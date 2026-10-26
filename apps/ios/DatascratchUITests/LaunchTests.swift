@@ -511,6 +511,28 @@ final class LibraryUITests: XCTestCase {
         add(shot)
     }
 
+    /// Build 8 feedback: the sync status row in Account is one line high (the status no longer
+    /// wraps letter by letter beside its label).
+    func testAccountSyncStatusRowIsCompact() throws {
+        let app = launchSignedIn()
+        let palette = sidebarElement(app, "sidebar.commandPalette")
+        XCTAssertTrue(palette.waitForExistence(timeout: 5), "command palette button not found")
+        palette.tap()
+        let field = app.textFields["palette.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
+        field.typeText("Settings\n")
+        let account = app.descendants(matching: .any)["settings.account"].firstMatch
+        XCTAssertTrue(account.waitForExistence(timeout: 5), "no Account row")
+        account.tap()
+        let status = app.descendants(matching: .any).matching(identifier: "sync.status").element(boundBy: 0)
+        XCTAssertTrue(status.waitForExistence(timeout: 5), "no sync status in Account")
+        XCTAssertLessThan(status.frame.height, 60, "the status row is \(status.frame.height) pt tall")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "account-settings"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     /// Tabs close with their own button.
     func testClosingATab() throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad: sidebar beside the document") }

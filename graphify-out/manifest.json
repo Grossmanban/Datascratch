@@ -1388,19 +1388,19 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792932268.6020067,
     "seen": 1793022347.2596304,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792932268.6020067,
     "seen": 1793022347.2596333,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792966167.5460184,
     "seen": 1793022347.2596352,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2636,7 +2636,7 @@
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792966167.910989,
     "seen": 1793022347.259975,
-    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "infra/deploy/docker-compose.yml": {
@@ -3954,10 +3954,10 @@
     "semantic_hash": "426239795750cdc09be391e876fb19ea"
   },
   "packages/web-editor/src/Editor.tsx": {
-    "mtime": 1793005009.0026643,
-    "seen": 1793022024.6846697,
-    "ast_hash": "a3bbc62d21ae1118de927e09061998b6",
-    "semantic_hash": "a3bbc62d21ae1118de927e09061998b6"
+    "mtime": 1793022630.5513232,
+    "seen": 1793022860.3959236,
+    "ast_hash": "908aea038fef54fcca9ad595e864a7be",
+    "semantic_hash": ""
   },
   "packages/web-editor/src/collab/collaboration.ts": {
     "mtime": 1792933818.4804237,
@@ -4110,10 +4110,10 @@
     "semantic_hash": ""
   },
   "packages/web-editor/src/ui/Popups.tsx": {
-    "mtime": 1792932412.4286044,
-    "seen": 1793022024.6847029,
-    "ast_hash": "434c03640280d5164421fba864f7dcf2",
-    "semantic_hash": "434c03640280d5164421fba864f7dcf2"
+    "mtime": 1793022504.1282742,
+    "seen": 1793022860.3966315,
+    "ast_hash": "f278a21d4ef48e183fcfc39b2b3b4bca",
+    "semantic_hash": ""
   },
   "packages/web-editor/src/ui/TaskMenu.tsx": {
     "mtime": 1792929914.5253654,
@@ -4128,10 +4128,10 @@
     "semantic_hash": "ffd6053bc356b4321ecf69898eb2641b"
   },
   "packages/web-editor/src/ui/suggestions.ts": {
-    "mtime": 1792928601.1047847,
-    "seen": 1793022024.6847064,
-    "ast_hash": "3846b3bded34ae389e2832165c5710db",
-    "semantic_hash": "3846b3bded34ae389e2832165c5710db"
+    "mtime": 1793022504.1278627,
+    "seen": 1793022860.3966935,
+    "ast_hash": "57746f476e94f2e72f189087519e9aa9",
+    "semantic_hash": ""
   },
   "packages/web-editor/test/anchors.test.ts": {
     "mtime": 1792930640.8302913,
@@ -4710,9 +4710,9 @@
     "semantic_hash": ""
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1793022268.4848828,
-    "seen": 1793022324.0316203,
-    "ast_hash": "d99d0fe4f654db5a682eb7018c6ca8a1",
+    "mtime": 1793022804.945494,
+    "seen": 1793022860.399129,
+    "ast_hash": "be4219cf4aaceb4e38ac214f9f2f4a1b",
     "semantic_hash": ""
   },
   "docs/spec/05-organization-design.md": {
@@ -4905,6 +4905,30 @@
     "mtime": 1793022113.6725442,
     "seen": 1793022324.0286472,
     "ast_hash": "088d1eb66686dcf99c10bf3ba7197636",
+    "semantic_hash": ""
+  },
+  "packages/web-editor/ct/PaperEditor.tsx": {
+    "mtime": 1793022705.4773498,
+    "seen": 1793022860.3956673,
+    "ast_hash": "3325d001f804c95bafe49abaf5b0349b",
+    "semantic_hash": ""
+  },
+  "packages/web-editor/ct/paper.spec.tsx": {
+    "mtime": 1793022671.1369443,
+    "seen": 1793022860.3957705,
+    "ast_hash": "79a3d48c204f493d88f289c4da3e5f55",
+    "semantic_hash": ""
+  },
+  "packages/web-editor/ct/paperSanity.spec.tsx": {
+    "mtime": 1793022705.48036,
+    "seen": 1793022860.3957732,
+    "ast_hash": "5af52e1978a883d054af52cfcdc18ac3",
+    "semantic_hash": ""
+  },
+  "packages/web-editor/src/paper.ts": {
+    "mtime": 1793022608.9900348,
+    "seen": 1793022860.3960774,
+    "ast_hash": "40e68e982f5a76f94433c372edaa3155",
     "semantic_hash": ""
   }
 }

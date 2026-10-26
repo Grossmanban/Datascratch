@@ -150,6 +150,13 @@ struct NativeEditorRepresentable: UIViewRepresentable {
     let editor: EditorView
     func makeUIView(context: Context) -> EditorView { editor }
     func updateUIView(_ uiView: EditorView, context: Context) {}
+
+    /// Exactly the space it is given: the editor's own preferred width (its text column) must
+    /// not push the document past the screen edge next to the list (iPad mini portrait, D-47).
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: EditorView, context: Context) -> CGSize? {
+        guard let width = proposal.width, let height = proposal.height else { return nil }
+        return CGSize(width: width, height: height)
+    }
 }
 
 /// The document screen with the native editor: full-height editor, floating glass
@@ -205,6 +212,9 @@ struct NativeDocumentScreen: View {
                             SlashMenuView(menu: menu, bounds: proxy.size) { id in model.editor.applySlashCommand(id) }
                         }
                     }
+                    // The column's width, never the editor's own: next to the list on an iPad mini
+                    // in portrait it ran 18 pt past the screen edge.
+                    .frame(width: proxy.size.width)
                     // The palette sits in the bottom safe area: the text scrolls clear of it, and it
                     // rides up with the keyboard in one animation (no second layout pass).
                     .safeAreaInset(edge: .bottom, spacing: 0) {

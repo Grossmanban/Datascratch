@@ -267,6 +267,54 @@ describe('data source', () => {
     client.close();
   });
 
+  it('moves a note to another granted notebook atomically, re-wrapping its key', async () => {
+    const a = await setupNotebook();
+    const b = await setupNotebook();
+    const c = await setupNotebook();
+    const g = grant([a.notebookId, b.notebookId], 'read_write');
+    await agents.store.insertGrant(g);
+    const build = (src: Y.Doc, dst: Y.Doc) => (wrappedKey: string) => {
+      const sb = Y.encodeStateVector(src);
+      const db = Y.encodeStateVector(dst);
+      const m = new Y.Map();
+      dst.getMap('notes').set(a.noteId, m);
+      m.set('title', 'Hello');
+      m.set('wrappedKey', wrappedKey);
+      src.getMap('notes').delete(a.noteId);
+      return { from: Y.encodeStateAsUpdate(src, sb), to: Y.encodeStateAsUpdate(dst, db) };
+    };
+    const load = async (id: string) => (await agents.data.loadDoc(u.userId, id, g.id))!.doc;
+    // Outside the grant: refused, nothing changes.
+    const outside = grant([a.notebookId, c.notebookId], 'read');
+    await agents.store.insertGrant(outside);
+    await expect(
+      agents.data.moveNoteDoc!(u.userId, {
+        noteId: a.noteId,
+        fromNotebookId: a.notebookId,
+        toNotebookId: c.notebookId,
+        origin: origin(outside.id),
+        indexUpdates: build(await load(a.notebookId), new Y.Doc()),
+      }),
+    ).rejects.toThrow(/does not allow writing/);
+
+    await agents.data.moveNoteDoc!(u.userId, {
+      noteId: a.noteId,
+      fromNotebookId: a.notebookId,
+      toNotebookId: b.notebookId,
+      origin: { ...origin(g.id), action: 'move_note' },
+      indexUpdates: build(await load(a.notebookId), await load(b.notebookId)),
+    });
+    const [row] = await s.ctx.database.db.select().from(docs).where(sql`${docs.id} = ${a.noteId}`);
+    expect(row!.notebookId).toBe(b.notebookId);
+    expect((await load(a.notebookId)).getMap('notes').has(a.noteId)).toBe(false);
+    const meta = (await load(b.notebookId)).getMap('notes').get(a.noteId) as Y.Map<unknown>;
+    // The owner's device opens the same note key with the target notebook key.
+    const key = await open(b.notebookKey, Buffer.from(meta.get('wrappedKey') as string, 'base64url'), AD.note(a.noteId));
+    expect(Buffer.from(key).equals(Buffer.from(a.noteKey))).toBe(true);
+    expect((await load(a.noteId)).getText('t').toString()).toBe('from user');
+    for (const x of [a, b, c]) x.client.close();
+  });
+
   it('decrypts image attachments', async () => {
     const { notebookId, noteId, noteKey, client } = await setupNotebook();
     const img = rnd(5000);

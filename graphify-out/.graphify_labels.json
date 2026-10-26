@@ -7,8 +7,6 @@
   "14": "sync-protocol.md",
   "18": "handwriting-png.ts (2)",
   "19": "0039-parallel-sessions.md",
-  "23": "CalendarPage.tsx",
-  "24": "oauth.ts",
   "25": "InMemoryEditorDocument",
   "27": "CoreLibrary",
   "28": "AttachmentFactory",
@@ -17,6 +15,10 @@
   "31": "DSDesign Swift package (iOS 26, Swift 6) — «Тихая бумага» design system for iOS",
   "32": "0039-parallel-sessions.md (2)",
   "35": "packages/test-vectors (shared test vectors)",
+<<<<<<< HEAD
+=======
+  "36": "Sendable",
+>>>>>>> origin/main
   "39": "CodingKeys",
   "45": "AppShell.tsx",
   "51": "AppContext",
@@ -32,7 +34,11 @@
   "65": "shared/test/sync.test.ts (2)",
   "66": "NoteDocument",
   "71": "actions.ts",
+<<<<<<< HEAD
   "72": "BlockNode (2)",
+=======
+  "75": "design-tokens.md",
+>>>>>>> origin/main
   "76": "SwiftUI",
   "77": "server/src/index.ts",
   "80": "tn",
@@ -51,7 +57,6 @@
   "105": "Spec 6: Data Model and Server (2)",
   "107": "SyncEngine",
   "108": "Equatable",
-  "109": "steps",
   "110": "AccountService",
   "111": "CodingKeys (3) (2)",
   "113": "AppModel (2)",
@@ -106,7 +111,6 @@
   "205": "SyncCenter",
   "208": ".content (2) (2)",
   "209": "DSSyncState (3)",
-  "211": "DocumentUndoManager",
   "214": "D-29. Graphify: порядок работы, чтобы граф был всегда актуален",
   "215": "index.d.ts",
   "216": "shares.ts (2)",
@@ -166,7 +170,6 @@
   "317": "pen.spec.tsx",
   "318": "peerDependencies",
   "319": "compilerOptions (3) (2)",
-  "320": "D-34. Вход: email + пароль; пароль же даёт ключ шифрования; ключ восстановления",
   "328": "deploy-e2e",
   "329": "memory-check.ts (3)",
   "330": "secrets",

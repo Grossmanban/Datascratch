@@ -61,7 +61,7 @@ struct TrashView: View {
     }
 
     private var deleteTitle: LocalizedStringKey {
-        let count = library.trashed.count
+        let count = app.library.trashed.count
         let title: LocalizedStringKey = "Delete documents forever: \(count)?"
         return title
     }

@@ -178,10 +178,12 @@ struct NativeDocumentScreen: View {
     }
 
     /// The palette with its fold button at the trailing end.
-    private func paletteRow(_ model: NativeEditorModel, isCompact: Bool) -> some View {
-        HStack(spacing: isCompact ? Theme.Space.s1 : Theme.Space.s2) {
+    /// `isTight`: the narrowest column (beside the list on an iPad mini in portrait, 18 pt short
+    /// with the regular margins) — slim margins and spacing, so the row fits.
+    private func paletteRow(_ model: NativeEditorModel, isCompact: Bool, isTight: Bool = false) -> some View {
+        HStack(spacing: isTight ? 2 : isCompact ? Theme.Space.s1 : Theme.Space.s2) {
             HideKeyboardButton(model: model, isCompact: isCompact)
-                .padding(.leading, Theme.Space.s3)
+                .padding(.leading, isTight ? Theme.Space.s1 : Theme.Space.s3)
             PenPalette(model: model, isCompact: isCompact)
             Button { setPaletteCollapsed(true) } label: {
                 Image(systemName: "chevron.down.right")
@@ -194,7 +196,7 @@ struct NativeDocumentScreen: View {
             .buttonBorderShape(.circle)
             .accessibilityLabel("Hide Pen Tools")
             .accessibilityIdentifier("penPalette.collapse")
-            .padding(.trailing, Theme.Space.s3)
+            .padding(.trailing, isTight ? Theme.Space.s1 : Theme.Space.s3)
         }
     }
 
@@ -211,7 +213,10 @@ struct NativeDocumentScreen: View {
                         NativeEditorRepresentable(editor: model.editor)
                             .accessibilityIdentifier("editor")
                         if let menu = model.slashMenu, !menu.items.isEmpty {
-                            SlashMenuView(menu: menu, bounds: proxy.size) { id in model.editor.applySlashCommand(id) }
+                            SlashMenuView(menu: menu, bounds: proxy.size) { id in
+                                model.editor.applySlashCommand(id)
+                                model.slashMenu = nil
+                            }
                         }
                     }
                     // The column's width, never the editor's own: next to the list on an iPad mini
@@ -242,6 +247,7 @@ struct NativeDocumentScreen: View {
                                     ViewThatFits(in: .horizontal) {
                                         paletteRow(model, isCompact: false)
                                         paletteRow(model, isCompact: true)
+                                        paletteRow(model, isCompact: true, isTight: true)
                                     }
                                     .padding(.top, Theme.Space.s2)
                                     .padding(.bottom, Theme.Space.s3)

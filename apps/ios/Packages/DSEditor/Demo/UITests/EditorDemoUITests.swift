@@ -43,75 +43,8 @@ final class EditorDemoUITests: XCTestCase {
 
     @MainActor
     func testTypingGoesToDocument() throws {
-        try typing(extraArguments: [])
-    }
-
-    // Temporary bisection of the demo-only crash. The app's UI test (testPaletteWorksWithKeyboardOpen)
-    // types without crashing; these variants copy its steps, then one more difference each: a new
-    // empty note, an editor created in text mode, the app's document model (Yrs), no tool palette.
-    @MainActor
-    func testTypingBisectAppSteps() throws {
-        try appStyleTyping(extraArguments: [])
-    }
-
-    @MainActor
-    func testTypingBisectAppStepsEmptyNote() throws {
-        try appStyleTyping(extraArguments: ["-sampleEmpty"])
-    }
-
-    @MainActor
-    func testTypingBisectAppStepsStartInText() throws {
-        try appStyleTyping(extraArguments: ["-startInText"])
-    }
-
-    @MainActor
-    func testTypingBisectAppStepsCoreDocument() throws {
-        try appStyleTyping(extraArguments: ["-coreDocument"])
-    }
-
-    @MainActor
-    func testTypingBisectAppStepsNoPalette() throws {
-        try appStyleTyping(extraArguments: ["-noPalette"])
-    }
-
-    /// Only the editor in the window: no palette, no navigation bar.
-    @MainActor
-    func testTypingBisectAppStepsBareEditor() throws {
-        try appStyleTyping(extraArguments: ["-noPalette", "-noNavigation"])
-    }
-
-    @MainActor
-    func testTypingBisectAppStepsHeader() throws {
-        try appStyleTyping(extraArguments: ["-header"])
-    }
-
-    /// The app's test taps long after launch (sign-in, navigation); the demo's right after it.
-    @MainActor
-    func testTypingBisectAppStepsLateTap() throws {
-        try appStyleTyping(extraArguments: [], settleBeforeTap: 8)
-    }
-
-    /// The app test's steps: no tool switch, a tap in the middle of the text view, typing, 3 s wait.
-    @MainActor
-    private func appStyleTyping(extraArguments: [String], settleBeforeTap: UInt32 = 0) throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting"] + extraArguments
-        app.launch()
-        let editor = app.textViews["editor.text"]
-        XCTAssertTrue(editor.waitForExistence(timeout: 10))
-        sleep(settleBeforeTap)
-        editor.tap()
-        editor.typeText("Keyboard")
-        _ = app.keyboards.firstMatch.waitForExistence(timeout: 5)
-        sleep(3)
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone after typing")
-        XCTAssertTrue((editor.value as? String ?? "").contains("Keyboard"))
-    }
-
-    @MainActor
-    private func typing(extraArguments: [String], undo: Bool = true) throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting"] + extraArguments
+        app.launchArguments = ["-uiTesting"]
         app.launch()
         let editor = app.textViews["editor.text"]
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
@@ -124,7 +57,7 @@ final class EditorDemoUITests: XCTestCase {
         editor.typeText("Inkwell")
         XCTAssertTrue((editor.value as? String ?? "").contains("Inkwell"))
         // The software keyboard has its own "undo" key: use the editor's toolbar button.
-        if undo { app.navigationBars.buttons["undo"].tap() }
+        app.navigationBars.buttons["undo"].tap()
         XCTAssertEqual(app.state, .runningForeground)
     }
 

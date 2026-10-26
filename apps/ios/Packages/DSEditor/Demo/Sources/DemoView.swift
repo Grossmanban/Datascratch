@@ -5,20 +5,7 @@ struct DemoView: View {
     let model: DemoModel
 
     var body: some View {
-        switch model.navigation {
-        case .stack:
-            NavigationStack { content }
-        case .split:
-            // UI-test bisection (temporary): the app shows the editor in a split view's detail.
-            NavigationSplitView {
-                List { Text("Заметки") }
-            } detail: {
-                NavigationStack { content }
-            }
-        case .none:
-            // UI-test bisection (temporary): no navigation container and no toolbar.
-            editorAndPalette
-        }
+        NavigationStack { content }
     }
 
     private var content: some View {
@@ -40,12 +27,9 @@ struct DemoView: View {
             EditorRepresentable(editor: model.editor)
                 .accessibilityIdentifier("editor")
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    // UI-test bisection (temporary): `-noPalette`.
-                    if !model.hidesPalette {
-                        ToolPalette(model: model)
-                            .padding(.top, 8)
-                            .padding(.bottom, 12)
-                    }
+                    ToolPalette(model: model)
+                        .padding(.top, 8)
+                        .padding(.bottom, 12)
                 }
             if model.showHUD {
                 HUDView(model: model)
@@ -180,7 +164,7 @@ struct ToolPalette: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("tool.\(mode.rawValue)")
                 .accessibilityLabel(mode.title)
-                .accessibilityAddTraits(model.selectedTraits && tools.mode == mode ? .isSelected : [])
+                .accessibilityAddTraits(tools.mode == mode ? .isSelected : [])
             }
             // The swatch row is always present (dimmed when the tool has no ink) so the palette never
             // changes its structure under the finger: removing buttons while a tool button's touch

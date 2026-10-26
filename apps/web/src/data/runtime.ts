@@ -13,6 +13,7 @@ import { DocStore, ORIGIN_REMOTE } from "./docStore";
 import { Indexer } from "./indexer";
 import { clearKeys, prefetchNotebookKeys } from "./keys";
 import { flushOps, onDocRegistered, onOpsChanged } from "./ops";
+import { connectWithTimeout } from "@/sync/socket";
 import { receivePresence } from "./presence";
 import { DexieSyncStorage } from "./syncStorage";
 
@@ -59,6 +60,7 @@ export class AccountRuntime {
       deviceId: getSession()?.deviceId ?? (await deviceId()),
       client: { platform: "web", version: APP_VERSION },
       storage: this.storage,
+      createSocket: connectWithTimeout,
       auth: async () => {
         let s = getSession();
         if (s && Date.parse(s.accessExpiresAt) - Date.now() < 60_000) s = await refreshSession();

@@ -1,5 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import type { DocKind, TaskState } from "@/lib/shared";
+import { withTimeout } from "@/lib/timeout";
 
 // ---------- device-wide database (survives logout) ----------
 
@@ -14,15 +15,23 @@ class DeviceDB extends Dexie {
 }
 
 export const deviceDb = new DeviceDB();
+// Another tab holding an older version open: say so instead of hanging silently.
+deviceDb.on("blocked", () => console.warn("[ds] device database upgrade is blocked by another tab"));
+
+/**
+ * IndexedDB can hang in some browser contexts (an in-app browser, a blocked upgrade): every
+ * device-store operation gives up after KV_TIMEOUT_MS instead of leaving the app loading forever.
+ */
+const KV_TIMEOUT_MS = 4_000;
 
 export async function kvGet<T>(key: string): Promise<T | undefined> {
-  return (await deviceDb.kv.get(key))?.value as T | undefined;
+  return (await withTimeout(deviceDb.kv.get(key), KV_TIMEOUT_MS, `storage read ${key}`))?.value as T | undefined;
 }
 export async function kvSet(key: string, value: unknown): Promise<void> {
-  await deviceDb.kv.put({ key, value });
+  await withTimeout(deviceDb.kv.put({ key, value }), KV_TIMEOUT_MS, `storage write ${key}`);
 }
 export async function kvDelete(key: string): Promise<void> {
-  await deviceDb.kv.delete(key);
+  await withTimeout(deviceDb.kv.delete(key), KV_TIMEOUT_MS, `storage delete ${key}`);
 }
 
 // ---------- per-account database (wiped on logout) ----------

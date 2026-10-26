@@ -301,8 +301,32 @@ struct NativeEditorToolbar: ToolbarContent {
     @Environment(AppModel.self) private var app
     @Environment(SceneModel.self) private var scene
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.isNarrowDocumentColumn) private var isNarrowColumn
     let model: NativeEditorModel
     let note: NoteMeta
+
+    @ViewBuilder private var insertItems: some View {
+        Button("Task", systemImage: "checkmark.circle") { model.editor.perform(.taskList) }
+        Menu {
+            Button("Heading 1") { model.editor.perform(.heading1) }
+            Button("Heading 2") { model.editor.perform(.heading2) }
+            Button("Heading 3") { model.editor.perform(.heading3) }
+        } label: {
+            Label("Heading", systemImage: "textformat")
+        }
+        Button("Bulleted List", systemImage: "list.bullet") { model.editor.perform(.bulletList) }
+        Button("Quote", systemImage: "text.quote") { model.editor.perform(.quote) }
+        Divider()
+        Button("Drawing", systemImage: "scribble") { model.editor.insertBlock(.drawing(height: 260)) }
+        Button("Formula", systemImage: "function") { model.editor.insertBlock(.math("a^2 + b^2 = c^2")) }
+        Button("Diagram", systemImage: "point.3.connected.trianglepath.dotted") {
+            model.editor.insertBlock(.mermaid("graph TD\n  A --> B"))
+        }
+        Button("Table", systemImage: "tablecells") {
+            model.editor.insertBlock(EditorCommands.table(rows: 3, columns: 3, header: ["", "", ""]))
+        }
+        Button("Divider", systemImage: "minus") { model.editor.insertBlock(.rule("line")) }
+    }
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarLeading) {
@@ -319,41 +343,31 @@ struct NativeEditorToolbar: ToolbarContent {
                 .keyboardShortcut("z", modifiers: [.command, .shift])
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
-            Menu {
-                Button("Task", systemImage: "checkmark.circle") { model.editor.perform(.taskList) }
-                Menu {
-                    Button("Heading 1") { model.editor.perform(.heading1) }
-                    Button("Heading 2") { model.editor.perform(.heading2) }
-                    Button("Heading 3") { model.editor.perform(.heading3) }
+            // A narrow column (next to the list on an iPad mini in portrait): Insert and Share go
+            // into «…» so the bar fits the column (D-47).
+            if !isNarrowColumn {
+                Menu { insertItems } label: {
+                    Image(systemName: "plus.circle")
+                }
+                .accessibilityLabel("Insert")
+                .accessibilityIdentifier("editor.insert")
+
+                Button {
+                    scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
                 } label: {
-                    Label("Heading", systemImage: "textformat")
+                    Image(systemName: "square.and.arrow.up")
                 }
-                Button("Bulleted List", systemImage: "list.bullet") { model.editor.perform(.bulletList) }
-                Button("Quote", systemImage: "text.quote") { model.editor.perform(.quote) }
-                Divider()
-                Button("Drawing", systemImage: "scribble") { model.editor.insertBlock(.drawing(height: 260)) }
-                Button("Formula", systemImage: "function") { model.editor.insertBlock(.math("a^2 + b^2 = c^2")) }
-                Button("Diagram", systemImage: "point.3.connected.trianglepath.dotted") {
-                    model.editor.insertBlock(.mermaid("graph TD\n  A --> B"))
-                }
-                Button("Table", systemImage: "tablecells") {
-                    model.editor.insertBlock(EditorCommands.table(rows: 3, columns: 3, header: ["", "", ""]))
-                }
-                Button("Divider", systemImage: "minus") { model.editor.insertBlock(.rule("line")) }
-            } label: {
-                Image(systemName: "plus.circle")
+                .accessibilityLabel("Share")
             }
-            .accessibilityLabel("Insert")
-            .accessibilityIdentifier("editor.insert")
-
-            Button {
-                scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-            }
-            .accessibilityLabel("Share")
 
             Menu {
+                if isNarrowColumn {
+                    Menu("Insert", systemImage: "plus.circle") { insertItems }
+                    Button("Share", systemImage: "square.and.arrow.up") {
+                        scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
+                    }
+                    Divider()
+                }
                 Button("Style…", systemImage: "textformat") { scene.sheet = .documentStyle(noteId: note.id) }
                 Menu("Cover", systemImage: "photo") { CoverMenuItems(note: note) }
                 Button("Version History", systemImage: "clock.arrow.circlepath") {
@@ -741,4 +755,5 @@ struct PenPalette: View {
         }
     }
 }
+
 #endif

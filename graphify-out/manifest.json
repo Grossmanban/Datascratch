@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793034825.8662395,
-    "seen": 1793034885.6992006,
-    "ast_hash": "4c95edcd4c11cbe5c1012ef6337bee28",
+    "mtime": 1793035328.162338,
+    "seen": 1793035447.7103758,
+    "ast_hash": "a4272f868f4020b494a920b0caaab472",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -4326,10 +4326,10 @@
     "semantic_hash": "4ac1df3269effc7a1afe18500a423d82"
   },
   "docs/architecture/contracts/document-model.md": {
-    "mtime": 1793023512.2617462,
-    "seen": 1793032886.963497,
-    "ast_hash": "ae60619f38b40f7496f62b7c5a59d30d",
-    "semantic_hash": "ae60619f38b40f7496f62b7c5a59d30d"
+    "mtime": 1793035322.6014626,
+    "seen": 1793035447.7105308,
+    "ast_hash": "7686a9928cc62dab4bffdef9dba3df08",
+    "semantic_hash": ""
   },
   "docs/architecture/contracts/strokes.md": {
     "mtime": 1793022470.2832656,
@@ -4572,10 +4572,10 @@
     "semantic_hash": "0258da2cb813bbd102c03ec7c79cd1ec"
   },
   "docs/decisions/0036-space-notebook-folder.md": {
-    "mtime": 1792927372.4280927,
-    "seen": 1793032886.963627,
-    "ast_hash": "3024b1c1dbd4f051eccbd56f28714c5b",
-    "semantic_hash": "3024b1c1dbd4f051eccbd56f28714c5b"
+    "mtime": 1793035322.6000803,
+    "seen": 1793035447.7115803,
+    "ast_hash": "0e58c904ba343d69307c512387e52111",
+    "semantic_hash": ""
   },
   "docs/decisions/0037-guest-links.md": {
     "mtime": 1792927372.4280927,
@@ -4644,10 +4644,10 @@
     "semantic_hash": "3a9c1d8bea912f6c04856a817fca33fb"
   },
   "docs/decisions/README.md": {
-    "mtime": 1793014558.7300181,
-    "seen": 1793032886.9636564,
-    "ast_hash": "2eec524f2fe89740619be5eb2d584e53",
-    "semantic_hash": "2eec524f2fe89740619be5eb2d584e53"
+    "mtime": 1793035322.599607,
+    "seen": 1793035447.711886,
+    "ast_hash": "ed4eefafb2309847d49d670a5140c8bf",
+    "semantic_hash": ""
   },
   "docs/development.md": {
     "mtime": 1793011636.0383904,
@@ -4674,10 +4674,10 @@
     "semantic_hash": "a2b193ae4f4df24d897042798847fa67"
   },
   "docs/open-questions.md": {
-    "mtime": 1793014848.340852,
-    "seen": 1793032886.963667,
-    "ast_hash": "6dc4b7d590a7e598139f7ac99b7ee854",
-    "semantic_hash": "6dc4b7d590a7e598139f7ac99b7ee854"
+    "mtime": 1793035332.8138847,
+    "seen": 1793035447.711984,
+    "ast_hash": "6cdecab214fbe09542d1112dccf1643c",
+    "semantic_hash": ""
   },
   "docs/risks.md": {
     "mtime": 1792931632.8142712,
@@ -4716,10 +4716,10 @@
     "semantic_hash": "5a353fe44c039e74fc70c6cc750f3bd9"
   },
   "docs/spec/05-organization-design.md": {
-    "mtime": 1793014572.3715105,
-    "seen": 1793032886.963683,
-    "ast_hash": "428eeddc3cb55c60e98825ff60eb26e3",
-    "semantic_hash": "428eeddc3cb55c60e98825ff60eb26e3"
+    "mtime": 1793035322.6003256,
+    "seen": 1793035447.7121336,
+    "ast_hash": "c7b272f7720480f8150243762f00d85d",
+    "semantic_hash": ""
   },
   "docs/spec/06-data-server.md": {
     "mtime": 1793021394.2184982,
@@ -4758,10 +4758,10 @@
     "semantic_hash": "cf1ded2ae5a3b5b3a27adc671f778c1c"
   },
   "docs/spec/12-craft-features.md": {
-    "mtime": 1792940324.859649,
-    "seen": 1793032886.9636986,
-    "ast_hash": "cd4bf9925799e0f48a375e67a20a6723",
-    "semantic_hash": "cd4bf9925799e0f48a375e67a20a6723"
+    "mtime": 1793035322.6010387,
+    "seen": 1793035447.7122757,
+    "ast_hash": "4ba2d07e89931e50d9468e2291852e5e",
+    "semantic_hash": ""
   },
   "infra/DEPLOY.md": {
     "mtime": 1792953658.4392745,
@@ -5026,5 +5026,11 @@
     "seen": 1793032886.9623659,
     "ast_hash": "6fdcec18e3eba553218e14b0e6678568",
     "semantic_hash": "6fdcec18e3eba553218e14b0e6678568"
+  },
+  "docs/decisions/0048-isolated-spaces.md": {
+    "mtime": 1793035322.45519,
+    "seen": 1793035447.7118833,
+    "ast_hash": "082da1c8c26af78a954558776b1511c2",
+    "semantic_hash": ""
   }
 }

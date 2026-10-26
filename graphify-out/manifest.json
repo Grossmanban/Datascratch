@@ -1387,19 +1387,19 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792932268.6020067,
-    "seen": 1793024368.3457508,
+    "seen": 1793025033.2008643,
     "ast_hash": "24098989e922515ff0fa0aac07aa956f",
     "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792932268.6020067,
-    "seen": 1793024368.3457541,
+    "seen": 1793025033.2008672,
     "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
     "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792966167.5460184,
-    "seen": 1793024368.3457556,
+    "seen": 1793025033.2008688,
     "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
     "semantic_hash": "a66fd1a5c043c1420b26f520d2b23c56"
   },
@@ -2635,7 +2635,7 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792966167.910989,
-    "seen": 1793024368.3461063,
+    "seen": 1793025033.2012706,
     "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
     "semantic_hash": "c9f780dd0f9b83af1132086b539b65c4"
   },
@@ -3954,10 +3954,10 @@
     "semantic_hash": "426239795750cdc09be391e876fb19ea"
   },
   "packages/web-editor/src/Editor.tsx": {
-    "mtime": 1793022630.5513232,
-    "seen": 1793023853.0562801,
-    "ast_hash": "908aea038fef54fcca9ad595e864a7be",
-    "semantic_hash": "908aea038fef54fcca9ad595e864a7be"
+    "mtime": 1793024537.8534136,
+    "seen": 1793025033.2016394,
+    "ast_hash": "c2bcd4331b2a85d1ec90bb75ecba9341",
+    "semantic_hash": "c2bcd4331b2a85d1ec90bb75ecba9341"
   },
   "packages/web-editor/src/collab/collaboration.ts": {
     "mtime": 1792933818.4804237,
@@ -4098,10 +4098,10 @@
     "semantic_hash": "c37929cf981aeaedf666e575b0ec7438"
   },
   "packages/web-editor/src/ui/DragHandle.tsx": {
-    "mtime": 1792933830.8110871,
-    "seen": 1793023853.0563555,
-    "ast_hash": "5a9bea61d9fe3eb7b9f313faaf947b05",
-    "semantic_hash": "5a9bea61d9fe3eb7b9f313faaf947b05"
+    "mtime": 1793024803.6425378,
+    "seen": 1793025033.2016838,
+    "ast_hash": "79595d63926a67cabb7b1798e51134f1",
+    "semantic_hash": "79595d63926a67cabb7b1798e51134f1"
   },
   "packages/web-editor/src/ui/PenPalette.tsx": {
     "mtime": 1793023273.107941,
@@ -4710,10 +4710,10 @@
     "semantic_hash": "2c4b4170e151740548bae82480983f93"
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1793023829.984687,
-    "seen": 1793023853.056428,
-    "ast_hash": "44d70100b8632667f104b913e25eeceb",
-    "semantic_hash": "44d70100b8632667f104b913e25eeceb"
+    "mtime": 1793024875.3608406,
+    "seen": 1793025033.2017403,
+    "ast_hash": "daae5a78e70d1fbef57988982fc40661",
+    "semantic_hash": "daae5a78e70d1fbef57988982fc40661"
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1793021948.8103368,
@@ -4972,5 +4972,23 @@
     "seen": 1793023853.056295,
     "ast_hash": "40e68e982f5a76f94433c372edaa3155",
     "semantic_hash": "40e68e982f5a76f94433c372edaa3155"
+  },
+  "packages/web-editor/ct/HandleEditor.tsx": {
+    "mtime": 1793024607.864637,
+    "seen": 1793025033.2016149,
+    "ast_hash": "b8922573d69749b8ab40551cfdd9bc3e",
+    "semantic_hash": "b8922573d69749b8ab40551cfdd9bc3e"
+  },
+  "packages/web-editor/ct/touchHandles.spec.tsx": {
+    "mtime": 1793024707.363816,
+    "seen": 1793025033.2016313,
+    "ast_hash": "051cadff0c0f13e05d1fbab5b0efc4bb",
+    "semantic_hash": "051cadff0c0f13e05d1fbab5b0efc4bb"
+  },
+  "packages/web-editor/src/ui/blockLift.ts": {
+    "mtime": 1793024447.460348,
+    "seen": 1793025033.2016914,
+    "ast_hash": "a2902c2fb49f1b10b8fb66d5ca4e1ea2",
+    "semantic_hash": "a2902c2fb49f1b10b8fb66d5ca4e1ea2"
   }
 }

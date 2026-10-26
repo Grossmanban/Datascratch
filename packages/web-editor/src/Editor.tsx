@@ -16,6 +16,7 @@ import { TASK_MENU_EVENT, type TaskMenuRequest } from "./schema/tasks";
 import type { NoteStyle, StrokeAuthor } from "@datascratch/shared/contracts";
 import { filterBlocks, type BlockItem } from "./ui/blockItems";
 import { BubbleToolbar } from "./ui/BubbleToolbar";
+import { BlockLift } from "./ui/blockLift";
 import { DragHandle } from "./ui/DragHandle";
 import { PenPalette } from "./ui/PenPalette";
 import { NoteLinkMenu, SlashMenu, type LinkItem } from "./ui/Popups";
@@ -157,7 +158,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       host,
       awareness: awarenessRef.current,
       user: user ? { name: user.name, color: user.color } : null,
-      extensions: [slash, links, PaperSnap],
+      extensions: [slash, links, PaperSnap, BlockLift],
     });
     let remountQueued = false;
     let lastTitle = readTitle(doc);

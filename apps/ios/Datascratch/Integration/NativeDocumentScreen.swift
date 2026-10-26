@@ -44,6 +44,10 @@ final class NativeEditorModel {
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
         // «Link» on the format bar: the screen asks for the address.
         editor.onLinkRequest = { [weak self] in self?.isAskingForLink = true }
+        // The "/" block menu: the screen shows it at the caret (spec/04).
+        editor.onSlashMenu = { [weak self] menu in
+            DispatchQueue.main.async { self?.slashMenu = menu }
+        }
         // A literal [[Title]] (an agent's link, or one typed without autocomplete).
         editor.onOpenNoteTitled = { [weak app] title in app?.pendingRoute = .noteTitled(title) }
         // D-45: «Создано агентом» strip until the person acknowledges it.
@@ -78,6 +82,8 @@ final class NativeEditorModel {
     var isSoftwareKeyboardShown = false
     /// The format bar's «Link» wants an address.
     var isAskingForLink = false
+    /// The open "/" menu, if any.
+    var slashMenu: SlashMenuState?
     @ObservationIgnored private var keyboardObservers: [NSObjectProtocol] = []
 
     isolated deinit {
@@ -195,6 +201,9 @@ struct NativeDocumentScreen: View {
                         // variant that stays full height and insets itself crashed (ios-editor bisect).
                         NativeEditorRepresentable(editor: model.editor)
                             .accessibilityIdentifier("editor")
+                        if let menu = model.slashMenu, !menu.items.isEmpty {
+                            SlashMenuView(menu: menu, bounds: proxy.size) { id in model.editor.applySlashCommand(id) }
+                        }
                     }
                     // The palette sits in the bottom safe area: the text scrolls clear of it, and it
                     // rides up with the keyboard in one animation (no second layout pass).
@@ -508,6 +517,65 @@ struct FormatBarRow: View {
             item("heading3", "3.square", String(localized: "Heading 3"), state.block == .heading3, .heading3),
         ]
         return elements
+    }
+}
+
+/// The "/" block menu at the caret: entries grouped as on the web («Текст», «Списки», «Вставка»);
+/// typing narrows it, a tap applies the entry.
+struct SlashMenuView: View {
+    let menu: SlashMenuState
+    let bounds: CGSize
+    let apply: (String) -> Void
+    private let width: CGFloat = 260
+    private let maxHeight: CGFloat = 300
+
+    var body: some View {
+        let groups = Dictionary(grouping: menu.items, by: \.group)
+        let order = menu.items.map(\.group).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        let height = min(maxHeight, CGFloat(menu.items.count) * 44 + CGFloat(order.count) * 28 + 16)
+        // Below the caret when it fits, else above it.
+        let below = menu.caretRect.maxY + 6
+        let y = below + height <= bounds.height ? below : max(8, menu.caretRect.minY - 6 - height)
+        let x = min(max(8, menu.caretRect.minX), max(8, bounds.width - width - 8))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(order, id: \.self) { group in
+                    Text(group)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .padding(.horizontal, Theme.Space.s3)
+                        .padding(.top, Theme.Space.s2)
+                        .padding(.bottom, Theme.Space.s1)
+                    ForEach(groups[group] ?? [], id: \.id) { command in
+                        Button { apply(command.id) } label: {
+                            HStack(spacing: Theme.Space.s3) {
+                                Image(systemName: command.systemImage)
+                                    .frame(width: 22)
+                                    .foregroundStyle(Theme.Palette.textSecondary)
+                                Text(command.title).foregroundStyle(Theme.Palette.textPrimary)
+                                Spacer(minLength: 0)
+                                if let hint = command.hint {
+                                    Text(verbatim: hint)
+                                        .font(Theme.Typography.caption.monospaced())
+                                        .foregroundStyle(Theme.Palette.textSecondary)
+                                }
+                            }
+                            .padding(.horizontal, Theme.Space.s3)
+                            .frame(height: 44)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("slash.\(command.id)")
+                    }
+                }
+            }
+            .padding(.vertical, Theme.Space.s1)
+        }
+        .frame(width: width, height: height)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .position(x: x + width / 2, y: y + height / 2)
+        .accessibilityIdentifier("slashMenu")
+        .transition(.opacity)
     }
 }
 

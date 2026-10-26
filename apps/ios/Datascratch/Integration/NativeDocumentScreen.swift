@@ -42,6 +42,8 @@ final class NativeEditorModel {
             DispatchQueue.main.async { self?.changed() }
         }
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
+        // A literal [[Title]] (an agent's link, or one typed without autocomplete).
+        editor.onOpenNoteTitled = { [weak app] title in app?.pendingRoute = .noteTitled(title) }
     }
 
     private func changed() {
@@ -68,6 +70,9 @@ final class NativeEditorModel {
         host.view.backgroundColor = .clear
         headerHost = host
         editor.headerView = host.view
+        // «Посмотреть историю» in the agent-edits banner: the note's version history.
+        let noteId = self.noteId
+        editor.onShowHistory = { [weak scene] in scene?.sheet = .versions(noteId: noteId) }
     }
 
     /// Switches the pen tool; leaving text mode hides the keyboard once, with its own animation.
@@ -114,6 +119,8 @@ struct NativeDocumentScreen: View {
     /// The palette with its fold button at the trailing end.
     private func paletteRow(_ model: NativeEditorModel, isCompact: Bool) -> some View {
         HStack(spacing: isCompact ? Theme.Space.s1 : Theme.Space.s2) {
+            HideKeyboardButton(model: model, isCompact: isCompact)
+                .padding(.leading, Theme.Space.s3)
             PenPalette(model: model, isCompact: isCompact)
             Button { setPaletteCollapsed(true) } label: {
                 Image(systemName: "chevron.down.right")
@@ -152,8 +159,9 @@ struct NativeDocumentScreen: View {
                             if app.settings.penPaletteCollapsed {
                                 // Folded to a button at the trailing edge: the editor gets the
                                 // room, the current tool keeps working (Pencil still draws).
-                                HStack {
+                                HStack(spacing: Theme.Space.s2) {
                                     Spacer(minLength: 0)
+                                    HideKeyboardButton(model: model, isCompact: true)
                                     CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
                                         .padding(.trailing, Theme.Space.s4)
                                 }
@@ -356,6 +364,31 @@ struct NativeDocumentHeader: View {
 /// The pen palette: `DSPenToolbar` over the editor's `InkToolState`. Narrow (iPhone, iPad
 /// portrait or split view): the compact row (44 pt targets) with colour, width and finger
 /// drawing under «More». Wide: everything inline.
+/// Hides the keyboard while text is being edited (iPhone has no other way). The slot stays put
+/// when there is no keyboard — only its opacity changes — so nothing moves under the finger.
+struct HideKeyboardButton: View {
+    let model: NativeEditorModel
+    let isCompact: Bool
+
+    var body: some View {
+        let _ = model.revision
+        let editing = model.editor.isEditingText
+        Button { model.editor.dismissKeyboard() } label: {
+            Image(systemName: "keyboard.chevron.compact.down")
+                .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
+                .foregroundStyle(Theme.Palette.textSecondary)
+                .frame(width: isCompact ? 22 : 28, height: isCompact ? 22 : 28)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .opacity(editing ? 1 : 0)
+        .disabled(!editing)
+        .accessibilityHidden(!editing)
+        .accessibilityLabel("Hide Keyboard")
+        .accessibilityIdentifier("editor.hideKeyboard")
+    }
+}
+
 /// The folded pen palette: the current tool's nib in its ink colour; a tap brings the palette back.
 struct CollapsedPenButton: View {
     let model: NativeEditorModel

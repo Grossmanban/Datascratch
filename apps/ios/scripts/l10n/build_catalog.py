@@ -23,6 +23,7 @@ RU = pathlib.Path(__file__).with_name("ru.json")
 INTERPOLATIONS = {
     r"Offline · \(pending) waiting": "Offline · %lld waiting",
     r"Not sent: \(documents)": "Not sent: %lld",
+    r"No note called “\(title)”": "No note called “%@”",
     r"Unsent changes kept on this device: \(app.sync.pendingChanges)": "Unsent changes kept on this device: %lld",
     r"Delete documents forever: \(count)?": "Delete documents forever: %lld?",
     r"\(library.daysLeftInTrash(note)) d": "%lld d",

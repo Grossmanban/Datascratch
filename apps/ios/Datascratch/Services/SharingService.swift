@@ -32,6 +32,8 @@ nonisolated enum AppRoute: Equatable, Sendable {
     case note(String)
     /// `datascratch://today`
     case today
+    /// A `[[Title]]` tapped in a document: open the note with that title, or offer to create it.
+    case noteTitled(String)
 
     static func parse(_ url: URL, webHost: String) -> AppRoute? {
         let parts = url.pathComponents.filter { $0 != "/" }

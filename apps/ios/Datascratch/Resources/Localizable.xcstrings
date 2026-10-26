@@ -631,6 +631,16 @@
         }
       }
     },
+    "Create Note": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создать заметку"
+          }
+        }
+      }
+    },
     "Create a notebook for work": {
       "localizations": {
         "ru": {
@@ -1391,6 +1401,16 @@
         }
       }
     },
+    "Hide Keyboard": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрыть клавиатуру"
+          }
+        }
+      }
+    },
     "Hide Pen Tools": {
       "localizations": {
         "ru": {
@@ -1827,6 +1847,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Документов пока нет"
+          }
+        }
+      }
+    },
+    "No note called “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заметки «%@» нет"
           }
         }
       }

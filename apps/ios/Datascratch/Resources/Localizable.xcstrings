@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%lld changes wait for a key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменений ждут ключ: %lld"
+          }
+        }
+      }
+    },
     "%lld d": {
       "localizations": {
         "ru": {

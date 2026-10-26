@@ -38,8 +38,8 @@ export function buildAgentNote(doc: Y.Doc): void {
       para("Обычный абзац, написанный агентом."),
       ...(["note", "success", "warning", "danger"] as const).map((tone) => el("callout", { tone }, [para(`Выноска ${tone}`)])),
       el("table", {}, [
-        el("tableRow", {}, [el("tableHeader", {}, [para("Колонка")]), el("tableHeader", {}, [para("Значение")])]),
-        el("tableRow", {}, [el("tableCell", {}, [para("Ключ")]), el("tableCell", {}, [para("42")])]),
+        el("tableRow", {}, [el("tableHeader", {}, [para("Колонка")]), el("tableHeader", { align: "right" }, [para("Значение")])]),
+        el("tableRow", {}, [el("tableCell", {}, [para("Ключ")]), el("tableCell", { align: "right" }, [para("42")])]),
       ]),
       para("Python:"),
       el("codeBlock", { language: "python" }, text("print('привет')")),

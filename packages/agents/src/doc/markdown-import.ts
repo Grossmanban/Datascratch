@@ -253,7 +253,7 @@ class Importer {
     };
   }
 
-  /** Column alignment (`:---`, `:---:`, `---:`) is the `textAlign` of the paragraphs inside the cells (document-model.md, table). */
+  /** Column alignment (`:---`, `:---:`, `---:`) is the cell's `align` attribute (document-model.md, tableHeader/tableCell). */
   private table(node: Mdast.Table): BlockSpec {
     return {
       type: "table",
@@ -265,8 +265,8 @@ class Importer {
           const align = node.align?.[c] ?? null;
           return {
             type: r === 0 ? "tableHeader" : "tableCell",
-            attrs: { colspan: 1, rowspan: 1, colwidth: null },
-            children: [{ type: "paragraph", attrs: align ? { textAlign: align } : {}, inline: this.inline(cell.children) }],
+            attrs: align ? { colspan: 1, rowspan: 1, colwidth: null, align } : { colspan: 1, rowspan: 1, colwidth: null },
+            children: [{ type: "paragraph", attrs: {}, inline: this.inline(cell.children) }],
           };
         }),
       })),

@@ -85,3 +85,19 @@ test("agent code blocks, lists and inline math render (and code survives an edit
   // No drawing room below the note unless drawing is possible (no stylus, finger drawing off).
   expect(await page.evaluate(() => document.querySelector(".ds-pen-room"))).toBeNull();
 });
+
+test("table column alignment (the `align` attribute of a cell) is shown and kept on edit", async ({ mount, page }) => {
+  await mount(<AgentNoteEditor />);
+  await page.waitForFunction(() => window.__fx?.ready === true);
+  await expect(page.locator(".ds-prose th", { hasText: "Значение" })).toHaveCSS("text-align", "right");
+  const cell = page.locator(".ds-prose td", { hasText: "42" });
+  await expect(cell).toHaveCSS("text-align", "right");
+  await cell.click();
+  await page.keyboard.press("End");
+  await page.keyboard.type("0");
+  await expect(page.locator(".ds-prose td", { hasText: "420" })).toHaveCSS("text-align", "right");
+  // The alignment stays on the cell in the Y.Doc after the edit.
+  const y = await page.evaluate(() => window.__fx!.doc.getXmlFragment("content").toString());
+  // The typed "0" lands outside the agent-marked "42", so the cell holds `42</agentEdit>0`.
+  expect(y).toMatch(/<tablecell[^>]*align="right"[^>]*>(?:(?!<\/tablecell>)[\s\S])*42<\/agentEdit>0/);
+});

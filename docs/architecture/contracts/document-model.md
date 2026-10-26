@@ -111,7 +111,7 @@ iOS (Yrs) **обязан** читать и писать именно этот ф
 | `mathBlock` | `latex: string` | — (атом) | MVP |
 | `mermaid` | `source: string` | — (атом) | MVP |
 | `horizontalRule` | `style: "line"\|"dots"\|"wave"` | — | MVP |
-| `table` / `tableRow` / `tableHeader` / `tableCell` | `colspan`, `rowspan`, `colwidth` (как в TipTap); выравнивание столбца (Markdown `:---`, `:---:`, `---:`) хранится как `textAlign` абзацев внутри ячеек (атрибут `paragraph`), отдельного атрибута у ячейки нет | | MVP |
+| `table` / `tableRow` / `tableHeader` / `tableCell` | `colspan`, `rowspan`, `colwidth` (как в TipTap); у `tableHeader`/`tableCell` — `align: "left"\|"center"\|"right"` (выравнивание столбца из Markdown `:---`, `:---:`, `---:`; нет атрибута — по умолчанию) | | MVP |
 | `image` | `attachmentId`, `width: number\|null` (доля ширины 0..1), `alt`, `caption` | — | MVP |
 | `file` | `attachmentId`, `name`, `size`, `mime` | — | MVP |
 | `drawing` | `height: number` — отображаемая высота = `height × ширинаБлока / 600` (опорная ширина 600, как в формуле толщины штриха) | — (штрихи — в `strokes`) | MVP |

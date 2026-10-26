@@ -194,6 +194,49 @@ struct CoreLibraryTests {
         #expect(live.contains { $0.notebookId == daily.id && mine.contains($0.id) })
     }
 
+    /// Build 6 carried without merging; the next start (build 8) merges the first-run twins but
+    /// leaves spaces a person named alike on purpose.
+    @Test func startAfterABuild6CarryMergesTheTwins() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        library.seedIfEmpty()
+        let personal = try #require(library.spaces.first)
+        let notes = try #require(library.notebooks(in: personal.id).first)
+        let mine = ["Начало пути", "Идеи"].map { library.createNote(in: notes.id, folder: nil, title: $0).id }
+        let localAccount = core.account.accountDocId
+
+        // Build 5 sign-up seeded the account; build 6 carried the device library, no merge.
+        try store.setRegistered(localAccount)
+        try keys.setMasterKey(DSCrypto.newKey())
+        let accountId = DSCore.EntityID.make()
+        _ = try core.adoptAccount(docId: accountId, isNew: true)
+        library.seedIfEmpty()
+        let twinA = library.createSpace(name: "Проекты")
+        let twinB = library.createSpace(name: "Проекты")
+        try store.setRegistered(localAccount, false)
+        _ = try core.adoptAccount(docId: accountId, isNew: false)
+        core.needsCarriedMerge = false
+        #expect(library.spaces.filter { $0.name == String(localized: "Personal") }.count == 2)
+
+        // Build 8 start: not a fresh carry.
+        library.mergeCarriedDuplicates(anyName: false)
+        #expect(library.spaces.filter { $0.name == String(localized: "Personal") }.count == 1)
+        #expect(library.spaces.filter { $0.name == String(localized: "Work") }.count == 1)
+        #expect(library.spaces.contains { $0.id == twinA.id } && library.spaces.contains { $0.id == twinB.id })
+        let live = library.data.notes.filter { !$0.isTrashed }
+        #expect(Set(mine).isSubset(of: Set(live.map(\.id))))
+        #expect(live.filter { $0.title == LibraryStore.welcomeTitle }.count == 1)
+        let kept = try #require(library.spaces.first { $0.name == String(localized: "Personal") })
+        let notebookNames = library.notebooks(in: kept.id).map(\.name)
+        #expect(notebookNames.count == Set(notebookNames).count, "notebooks doubled: \(notebookNames)")
+        // Idempotent.
+        let before = library.data
+        library.mergeCarriedDuplicates(anyName: false)
+        #expect(library.data.spaces == before.spaces && library.data.notebooks == before.notebooks)
+    }
+
     @Test func notebookMetaCarriesNamesForAgents() throws {
         let core = try CoreLibrary.inMemory()
         let library = LibraryStore(backend: core)

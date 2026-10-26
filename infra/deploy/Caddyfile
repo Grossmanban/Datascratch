@@ -12,11 +12,17 @@
 {$DS_SITE} {
 	encode zstd gzip
 
+	# API, sync WebSocket, MCP and OAuth for AI agents: the server sets its own headers there.
+	@api path /v1/* /mcp /mcp/* /oauth/* /.well-known/oauth-*
+	@web not path /v1/* /mcp /mcp/* /oauth/* /.well-known/oauth-*
+
 	# Security headers (same values as apps/web/src/lib/securityHeaders.ts, which the web e2e
 	# suite runs under; a unit test there keeps both in step). HSTS also holds in edge mode:
 	# the outer proxy serves the site over HTTPS.
+	# The web app's CSP stays off the server's paths: a second CSP is enforced on top of the
+	# server's own, and its form-action 'self' blocked the OAuth consent redirect to the agent.
+	header @web Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' wss://{http.request.hostport}; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 	header {
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' wss://{http.request.hostport}; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
@@ -28,8 +34,6 @@
 		respond 404
 	}
 
-	# API, sync WebSocket, MCP and OAuth for AI agents.
-	@api path /v1/* /mcp /mcp/* /oauth/* /.well-known/oauth-*
 	handle @api {
 		reverse_proxy server:8080
 	}

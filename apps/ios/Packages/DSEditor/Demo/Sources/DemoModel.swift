@@ -63,7 +63,7 @@ final class DemoModel {
         editor.onOpenNote = { [weak self] id in
             self?.status = "Ссылка на заметку \(id.prefix(8))…"
             self?.openedNote = id
-            self?.openedNoteTitle = self?.noteTitle(for: id) ?? id
+            self?.openedNoteTitle = self?.editor.attachmentResolver?.noteTitle(for: id) ?? id
         }
         editor.onOpenNoteTitled = { [weak self] title in self?.pendingNoteTitle = title }
         editor.onSlashMenu = { [weak self] menu in

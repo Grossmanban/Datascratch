@@ -96,6 +96,7 @@ public final class KeyRing: Sendable {
 
     static let masterKeyName = "masterKey"
     static func notebookKeyName(_ id: String) -> String { "notebookKey.\(id)" }
+    static func retiredNotebookKeysName(_ id: String) -> String { "retiredNotebookKeys.\(id)" }
 
     public init(store: any SecretStore) {
         self.store = store
@@ -134,12 +135,38 @@ public final class KeyRing: Sendable {
     }
 
     /// Unwraps a notebook key (from `GET /notebooks/:id/key`) with the master key and keeps it.
+    /// The server's wrapping is canonical: a different local key is retired (`adoptNotebookKey`).
     @discardableResult
     public func addNotebookKey(wrapped: Data, notebookId: String) throws -> Data {
         guard let master = try masterKey() else { throw CryptoError.decryptionFailed }
         let key = try DSCrypto.unwrapKey(wrapped, with: master, ad: CryptoAD.notebookKey(notebookId))
-        try setNotebookKey(key, notebookId: notebookId)
+        try adoptNotebookKey(key, notebookId: notebookId)
         return key
+    }
+
+    /// Makes `key` the notebook's key — the canonical one from the server. A different key this
+    /// device had is kept as retired (only to read what was already written with it) and
+    /// returned.
+    @discardableResult
+    public func adoptNotebookKey(_ key: Data, notebookId: String) throws -> Data? {
+        let previous = try notebookKey(notebookId)
+        if let previous, previous != key {
+            let name = Self.retiredNotebookKeysName(notebookId)
+            var retired = try store.data(for: name) ?? Data()
+            if !retiredNotebookKeys(in: retired).contains(previous) { retired.append(previous) }
+            try store.set(retired, for: name)
+        }
+        try setNotebookKey(key, notebookId: notebookId)
+        return previous == key ? nil : previous
+    }
+
+    /// Keys this notebook had on this device before the canonical one (`adoptNotebookKey`).
+    public func retiredNotebookKeys(_ notebookId: String) -> [Data] {
+        retiredNotebookKeys(in: (try? store.data(for: Self.retiredNotebookKeysName(notebookId))) ?? Data())
+    }
+
+    private func retiredNotebookKeys(in data: Data) -> [Data] {
+        stride(from: 0, to: data.count - data.count % 32, by: 32).map { data.subdata(in: data.startIndex + $0 ..< data.startIndex + $0 + 32) }
     }
 
     public func setNotebookKey(_ key: Data, notebookId: String) throws {
@@ -164,7 +191,12 @@ public final class KeyRing: Sendable {
         let name = "noteKey.\(noteId)"
         if let k = cache.withLock({ $0[name] }) { return k }
         guard let nbKey = try notebookKey(notebookId), let wrapped = Base64URL.decode(wrappedKey) else { throw CryptoError.decryptionFailed }
-        let key = try DSCrypto.unwrapKey(wrapped, with: nbKey, ad: CryptoAD.noteKey(noteId))
+        // A wrapping made with a key this notebook had before its canonical one still opens
+        // (until `NotebookDocument.rewrapNoteKeys` fixes it).
+        let candidates = [nbKey] + retiredNotebookKeys(notebookId)
+        guard let key = candidates.lazy.compactMap({ try? DSCrypto.unwrapKey(wrapped, with: $0, ad: CryptoAD.noteKey(noteId)) }).first else {
+            throw CryptoError.decryptionFailed
+        }
         cache.withLock { $0[name] = key }
         return key
     }

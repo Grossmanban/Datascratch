@@ -71,6 +71,7 @@ public actor SyncEngine: SyncClientDelegate {
     public nonisolated let store: LocalStore
     public nonisolated let client: SyncClient
     private let keyFor: KeyLookup
+    private let retiredKeysFor: (@Sendable (DocumentRecord) -> [Data])?
     private let register: Registrar?
     private var awarenessHandler: AwarenessHandler?
 
@@ -115,11 +116,42 @@ public actor SyncEngine: SyncClientDelegate {
     ///     key for `note`); nil while unknown — the document is skipped until it is.
     ///   - register: registers a document on the server (`APIClient.registerDoc`); nil for
     ///     guests (their documents already exist).
-    public init(store: LocalStore, client: SyncClient, keyFor: @escaping KeyLookup, register: Registrar?) {
+    /// - Parameter retiredKeysFor: keys a document had on this device before its canonical one
+    ///   (`KeyRing.retiredNotebookKeys`); used only to read what was written with them.
+    public init(store: LocalStore, client: SyncClient, keyFor: @escaping KeyLookup, register: Registrar?,
+                retiredKeysFor: (@Sendable (DocumentRecord) -> [Data])? = nil) {
         self.store = store
         self.client = client
         self.keyFor = keyFor
         self.register = register
+        self.retiredKeysFor = retiredKeysFor
+    }
+
+    // MARK: Key repair
+
+    static func rekeyFlag(_ docId: String) -> String { "sync.rekey.\(docId)" }
+
+    /// Repairs a document after its key was replaced by the canonical one
+    /// (`AccountService.reconcileNotebookKeys`): fetches it again from the start — reading what
+    /// was written with the old key through `retiredKeysFor` — and then uploads a snapshot with
+    /// the canonical key, so every device can read the whole document again. Survives restarts.
+    public func rekey(docId: String) async {
+        guard (try? store.document(docId)) != nil else { return }
+        try? store.setValue(Data([1]), for: Self.rekeyFlag(docId))
+        try? store.resetLastSeq(docId: docId)
+        known[docId] = nil
+        live.remove(docId)
+        catchingUp.remove(docId)
+        if await client.isConnected, let record = try? store.document(docId) { try? await subscribe([record]) }
+        publish()
+    }
+
+    /// After the catch-up of a re-keyed document: the canonical snapshot.
+    private func finishRekey(docId: String) async {
+        guard (try? store.value(Self.rekeyFlag(docId))) != nil else { return }
+        try? store.discardQueuedSnapshots(docId: docId)
+        await snapshot(docId: docId, now: Date())
+        try? store.setValue(nil, for: Self.rekeyFlag(docId))
     }
 
     /// Connects and starts syncing every document known to the store.
@@ -518,6 +550,7 @@ public actor SyncEngine: SyncClientDelegate {
                 live.insert(docId)
                 publish()
                 await flush()
+                await finishRekey(docId: docId)
                 await snapshotIfNeeded(docId: docId)
             }
         case .update(let docId, let item):
@@ -559,15 +592,20 @@ public actor SyncEngine: SyncClientDelegate {
         guard let record = known[docId] ?? (try? store.document(docId)), let key = try? keyFor(record) else { return }
         let doc = open[docId]?.doc
         let ad = CryptoAD.doc(docId)
+        let retired = retiredKeysFor?(record) ?? []
+        func decrypt(_ payload: Data) -> Data? {
+            if let plain = try? DSCrypto.open(payload, key: key, ad: ad) { return plain }
+            return retired.lazy.compactMap { try? DSCrypto.open(payload, key: $0, ad: ad) }.first
+        }
         if let snapshot {
-            guard let state = try? DSCrypto.open(snapshot.payload, key: key, ad: ad) else { return }
+            guard let state = decrypt(snapshot.payload) else { return }
             if (try? store.applyRemoteSnapshot(docId: docId, seq: snapshot.seq, state: state)) == true {
                 try? doc?.applyUpdate(state, origin: .remote)
             }
         }
         var decrypted: [(seq: Int64, data: Data)] = []
         for item in items.sorted(by: { $0.seq < $1.seq }) {
-            guard let plain = try? DSCrypto.open(item.payload, key: key, ad: ad) else { break }
+            guard let plain = decrypt(item.payload) else { break }
             decrypted.append((item.seq, plain))
         }
         guard !decrypted.isEmpty, let added = try? store.appendRemoteUpdates(docId: docId, items: decrypted), !added.isEmpty else { return }
@@ -597,5 +635,10 @@ public struct KeyRingDocumentKeys: Sendable {
             guard let nb = record.notebookId, let wrapped = wrappedNoteKey(record.docId, nb) else { return nil }
             return try keyRing.noteKey(noteId: record.docId, wrappedKey: wrapped, notebookId: nb)
         }
+    }
+
+    /// Retired keys of a notebook document (`SyncEngine(retiredKeysFor:)`).
+    public func retiredKeys(for record: DocumentRecord) -> [Data] {
+        record.kind == .notebook ? keyRing.retiredNotebookKeys(record.notebookId ?? record.docId) : []
     }
 }

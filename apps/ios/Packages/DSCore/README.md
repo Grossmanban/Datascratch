@@ -193,6 +193,31 @@ for await status in await engine.statusUpdates() { /* connection, pending, catch
 `Y.mergeUpdates`), обход осиротевших штрихов — при снимке открытой заметки, в том числе при её
 закрытии. `close` сначала отцепляет документ и лишь потом ждёт отправки снимка, поэтому `open`
 той же заметки во время закрытия получает свежий экземпляр из хранилища со всеми правками.
+### Ключи блокнотов: канонический — с сервера
+
+Ключ блокнота один на все устройства — тот, что обёрнут мастер-ключом на сервере
+(`GET /v1/notebooks` → `wrappedKey`). Новый ключ создаётся **только** для блокнота, которого на
+сервере ещё нет; блокнот, пришедший с другого устройства, получает ключ с сервера.
+
+```swift
+// При каждом запуске до engine.start() и когда в аккаунте появился блокнот без ключа:
+for change in try await accounts.reconcileNotebookKeys() {
+    try notebookDocument(change.notebookId).rewrapNoteKeys(from: change.previousKey, to: change.key)
+    await engine.rekey(docId: change.notebookId)
+}
+// Ключ для записи в блокнот (заметка, перенос): свой или с сервера; nil — блокнота на сервере нет.
+let key = try await accounts.notebookKeyForWriting(notebookId)
+// Движку — отставные ключи, чтобы прочитать уже записанное ими:
+SyncEngine(store:client:keyFor: keys.key(for:), register:, retiredKeysFor: keys.retiredKeys(for:))
+```
+
+`reconcileNotebookKeys` заполняет недостающие ключи и заменяет отличающиеся на серверные;
+прежний ключ остаётся «отставным» (`KeyRing.retiredNotebookKeys`) — им читаются только уже
+записанные данные, писать им нельзя. `rewrapNoteKeys` переобёртывает ключи заметок, обёрнутые
+отставным ключом. `SyncEngine.rekey(docId:)` скачивает документ заново с начала (старое — через
+отставной ключ) и выгружает снимок каноническим ключом, чтобы все устройства снова читали весь
+документ; переживает перезапуск.
+
 ### Ненадёжная сеть
 
 Один `URLSession` (`DSNetwork.session`) на REST и WebSocket: соединения переиспользуются (HTTP/2

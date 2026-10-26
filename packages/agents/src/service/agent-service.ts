@@ -23,7 +23,7 @@ import {
   putNoteMeta,
   type Folder,
 } from "@datascratch/shared/document";
-import { blockIdOf, childElements, contentOf, findBlock, TEXT_BLOCKS, walkBlocks } from "../doc/model.js";
+import { blockIdOf, childElements, contentOf, findBlock, runText, TEXT_BLOCKS, walkBlocks } from "../doc/model.js";
 import { AgentError } from "../errors.js";
 import { renderHandwriting, type RenderedImage } from "../render/handwriting-png.js";
 import { base64url, uuidv7 } from "../util.js";
@@ -713,7 +713,7 @@ export class AgentService {
           }
         };
         collect(loc.el);
-        const hit = texts.map((t) => ({ t, i: t.toString().indexOf(input.quote!) })).find((x) => x.i !== -1);
+        const hit = texts.map((t) => ({ t, i: runText(t).indexOf(input.quote!) })).find((x) => x.i !== -1);
         if (!hit) throw new AgentError("not_found", `Quote "${input.quote}" not found in block ${input.blockId}. Use exact plain text, or omit quote.`);
         const start = Y.createRelativePositionFromTypeIndex(hit.t, hit.i);
         const end = Y.createRelativePositionFromTypeIndex(hit.t, hit.i + input.quote.length, -1);

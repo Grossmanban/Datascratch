@@ -119,8 +119,8 @@ def prune_ci_certs() -> None:
             revoked += 1
             print(f"revoked: {attributes.get('certificateType')} | {name} | until {until}")
         else:
-            # The log is public: show only the part before ":" of a person's certificate name.
-            print(f"kept:    {attributes.get('certificateType')} | {name.split(':')[0]}: … | until {until}")
+            # The log is public: never print the name of a person's certificate.
+            print(f"kept:    {attributes.get('certificateType')} | (not made by CI) | until {until}")
     print(f"Revoked {revoked} CI development certificate(s); {len(certificates) - revoked} kept.")
 
 

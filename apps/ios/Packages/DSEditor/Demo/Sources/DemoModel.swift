@@ -2,6 +2,7 @@ import DSCore
 import DSEditor
 import DSEditorCore
 import Observation
+import SwiftUI
 import UIKit
 
 /// Owns the editor and the demo document file.
@@ -12,6 +13,7 @@ final class DemoModel {
     private(set) var document: InMemoryEditorDocument
     /// The app's document model, when the editor runs on it (`-coreDocument`).
     @ObservationIgnored private var coreDocument: CoreEditorDocument?
+    @ObservationIgnored private var headerHost: UIHostingController<AnyView>?
     var status = ""
     var showHUD = false
     var showPalette = false
@@ -58,6 +60,14 @@ final class DemoModel {
         }
         // UI-test bisection (temporary): the app creates its editor in text mode.
         if args.contains("-startInText") { editor.tools.mode = .text }
+        // UI-test bisection (temporary): the app always puts a SwiftUI header above the text.
+        if args.contains("-header") {
+            let host = UIHostingController(rootView: AnyView(Text("Шапка заметки").font(.title3).padding(.vertical, 24)))
+            host.sizingOptions = .intrinsicContentSize
+            host.view.backgroundColor = .clear
+            headerHost = host
+            editor.headerView = host.view
+        }
         editor.attachmentResolver = images
         if args.contains("-fingerDrawing") || UIDevice.current.userInterfaceIdiom == .phone && args.contains("-fingerDrawingOnPhone") {
             editor.tools.allowsFingerDrawing = true

@@ -111,7 +111,7 @@ describe("reading", () => {
 });
 
 describe("writing", () => {
-  it("creates a note in the index with agentEdit marks", async () => {
+  it("creates a note without agentEdit marks and marks it createdByAgent (D-45)", async () => {
     const { ctx, svc } = setup();
     const r = await svc.createNote(principal(), { notebookId: NB_WORK, title: "Итоги", markdown: "Связано с [[План запуска]]\n\n- [ ] Отправить отчёт", folderId: FOLDER });
     const doc = ctx.data.current(r.note.id);
@@ -120,6 +120,12 @@ describe("writing", () => {
     expect(meta.get("title")).toBe("Итоги");
     expect(meta.get("folderId")).toBe(FOLDER);
     expect(meta.get("wrappedKey")).toBe(`wrapped-${r.note.id}`);
+    expect(meta.get("createdByAgent")).toEqual({ agentId: principal().grant.id, agentName: "Claude", at: "2026-10-25T12:00:00.000Z" });
+    expect(JSON.stringify(doc.getXmlFragment("content").toJSON())).not.toContain("agentEdit");
+    const deltas = (doc.getXmlFragment("content").toArray() as Y.XmlElement[]).flatMap((b) =>
+      b.toArray().flatMap((c) => (c instanceof Y.XmlText ? c.toDelta() : [])),
+    );
+    expect(deltas.some((d: { attributes?: Record<string, unknown> }) => d.attributes?.agentEdit)).toBe(false);
     expect(ctx.data.history(r.note.id)[0]!.origin).toMatchObject({ kind: "agent", action: "create_note" });
     const b = await svc.getBacklinks(principal(), { noteId: NOTE_PLAN });
     expect(b.backlinks.map((x) => x.title).sort()).toEqual(["Идеи", "Итоги"]);
@@ -152,6 +158,20 @@ describe("writing", () => {
     expect(after.handwriting[0]!.description).toBe("подчёркнуто от руки: «сроки запуска»");
     const meta = ctx.data.current(NB_WORK).getMap("notes").get(NOTE_PLAN) as Y.Map<unknown>;
     expect(meta.get("updatedAt")).toBe("2026-10-25T12:00:00.000Z");
+  });
+
+  it("edit_note still marks the agent's text with agentEdit", async () => {
+    const { ctx, svc } = setup();
+    const before = await svc.readNote(principal(), { noteId: NOTE_PLAN, includeImages: false });
+    const firstBlock = /<!-- block:([0-9a-f-]+) -->/.exec(before.markdown)![1]!;
+    await svc.editNote(principal(), { noteId: NOTE_PLAN, operations: [{ op: "insert", position: { after: firstBlock }, markdown: "От агента" }] });
+    const doc = ctx.data.current(NOTE_PLAN);
+    const meta = ctx.data.current(NB_WORK).getMap("notes").get(NOTE_PLAN) as Y.Map<unknown>;
+    expect(meta.get("createdByAgent")).toBeUndefined();
+    const marked = (doc.getXmlFragment("content").toArray() as Y.XmlElement[]).flatMap((b) =>
+      b.toArray().flatMap((c) => (c instanceof Y.XmlText ? c.toDelta() : [])),
+    ).filter((d: { attributes?: Record<string, unknown> }) => d.attributes?.agentEdit);
+    expect(marked.map((d: { insert: string }) => d.insert)).toEqual(["От агента"]);
   });
 
   it("adds comments and updates tasks", async () => {

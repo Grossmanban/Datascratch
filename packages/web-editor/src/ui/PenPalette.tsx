@@ -24,7 +24,9 @@ function toSettings(v: PenSelection): Partial<PenSettings> {
   const strokeTool = v.tool && v.tool !== "eraser" && v.tool !== "lasso" ? v.tool : null;
   const patch: Partial<PenSettings> = { tool: v.tool, eraserMode: v.eraserMode, drawWithAnyPointer: v.drawWithAnyPointer };
   if (strokeTool) {
-    patch.color = `${strokeTool === "highlighter" ? "highlight" : "ink"}.${v.color}`;
+    // Named inks map to tokens; a custom colour (#RRGGBB) is stored as is (strokes.md §2).
+    const color = String(v.color);
+    patch.color = color.startsWith("#") ? color : `${strokeTool === "highlighter" ? "highlight" : "ink"}.${color}`;
     patch.width = TOOL_DEFAULTS[strokeTool].width * WIDTH_STEPS[v.width];
   }
   return patch;

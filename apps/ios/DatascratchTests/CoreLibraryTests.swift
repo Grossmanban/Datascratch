@@ -259,6 +259,21 @@ struct CoreLibraryTests {
         #expect(try core.notebookDocument(notebook.id).note(id: noteId)?.title == "Agent note")
     }
 
+    /// After a sync merged an empty title block in front of the real one, the index keeps the
+    /// first non-empty title.
+    @Test func indexTakesTheFirstNonEmptyTitle() throws {
+        let core = try CoreLibrary.inMemory()
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "N", mode: .private)
+        let note = library.createNote(in: notebook.id, title: "Agent title")
+        let doc = try core.noteDocument(note.id, notebookId: notebook.id)
+        try doc.insertBlocks([.title("")], at: 0)
+        let fresh = try #require(core.refreshNote(note.id, notebookId: notebook.id))
+        #expect(fresh.0.title == "Agent title")
+        #expect(try core.notebookDocument(notebook.id).note(id: note.id)?.title == "Agent title")
+    }
+
     /// The user's cover image lives in `meta.cover` and its thumbnail in `NoteMeta.coverThumb`.
     @Test func coverImageAndThumbnailPersist() throws {
         let keys = KeyRing(store: InMemorySecretStore())

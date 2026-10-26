@@ -6,8 +6,8 @@ import { CoverDialog } from "@/features/doc/CoverDialog";
 import { syncRecoveryFlag } from "@/auth/recovery";
 import { consumeFreshAccount, useAuth } from "@/auth/session";
 import { hasRuntime, startRuntime } from "@/data/runtime";
-import { bootstrapAccount, purgeOldTrash } from "@/domain/actions";
-import { useWorkspace } from "@/domain/workspace";
+import { activeTabOf, bootstrapAccount, migrateSpaceSettings, purgeOldTrash } from "@/domain/actions";
+import { spaceOfNote, spaceOfNotebook, useWorkspace } from "@/domain/workspace";
 import { CommandPalette } from "@/features/palette/CommandPalette";
 import { ShareDialog } from "@/features/share/ShareDialog";
 import { HistoryDialog } from "@/features/doc/HistoryDialog";
@@ -70,6 +70,38 @@ export function AppShell() {
   useEffect(() => {
     if (ready) void purgeOldTrash();
   }, [ready]);
+
+  // D-48: the legacy account-wide active tab / daily notebook move to their space (once per space).
+  const notes = useWorkspace((s) => s.notes);
+  const settings = useWorkspace((s) => s.account.settings);
+  useEffect(() => {
+    if (ready && synced && hasRuntime()) migrateSpaceSettings();
+  }, [ready, synced, notes, settings]);
+
+  // Switching spaces swaps the screen too: the space's own last tab, or its documents (D-48).
+  const activeSpaceId = useWorkspace((s) => s.activeSpaceId);
+  const shownSpace = useRef(activeSpaceId);
+  useEffect(() => {
+    const prev = shownSpace.current;
+    shownSpace.current = activeSpaceId;
+    // Only a real switch (not the first choice of a space on this device) moves the screen.
+    if (!ready || !prev || !activeSpaceId || prev === activeSpaceId) return;
+    const st = useWorkspace.getState();
+    const [, kind, id] = pathname.split("/");
+    const shownIn =
+      kind === "doc" && id
+        ? spaceOfNote(st, id)
+        : kind === "notebook" && id
+          ? spaceOfNotebook(st, id)
+          : kind === "folder" && id
+            ? spaceOfNotebook(st, st.folders[id]?.notebookId)
+            : activeSpaceId;
+    // Unknown yet (its notebook index has not arrived): leave the screen as it is.
+    if (shownIn === null || shownIn === activeSpaceId) return;
+    const tab = activeTabOf(activeSpaceId);
+    void navigate(tab ? { to: "/doc/$noteId", params: { noteId: tab } } : { to: "/all" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSpaceId, ready]);
 
   // The signup screen runs before the account doc syncs: carry its recovery-key note over.
   useEffect(() => {

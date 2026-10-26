@@ -1,22 +1,75 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { newDoc, signUp, uniqueEmail } from "./helpers";
 
-test("spaces: «Все документы» shows only this space; tabs from another space are marked; same names are told apart", async ({ page }) => {
-  await signUp(page, uniqueEmail("spaces"));
-  await newDoc(page, "Документ первого пространства", "Текст");
-  const tab = page.getByTestId("sidebar").getByRole("link", { name: /Документ первого пространства/ });
-  await expect(tab).toBeVisible();
-  await expect(tab.getByTestId("other-space-mark")).toHaveCount(0);
+async function switchSpace(page: Page, name: RegExp | string) {
+  await page.getByTestId("space-switcher").click();
+  await page.getByRole("menuitem", { name }).first().click(); // spaces are listed before «Новое пространство»
+}
 
-  // A second space (with its own notebook) becomes the active one.
+test("spaces are isolated (D-48): a starred note and a tab of one space are not shown in another and come back", async ({ page }) => {
+  await signUp(page, uniqueEmail("spaces"));
+  await newDoc(page, "Рабочий план", "Текст");
+  const noteUrl = page.url();
+  await page.getByRole("button", { name: "В избранное" }).click();
+  const sidebar = page.getByTestId("sidebar");
+  const inSidebar = sidebar.getByRole("link", { name: /Рабочий план/ });
+  await expect(inSidebar).toHaveCount(2); // tab + starred
+
+  // A second space (with its own notebook) becomes the active one: nothing of the first is shown.
   await page.getByTestId("space-switcher").click();
   await page.getByRole("menuitem", { name: "Новое пространство" }).click();
-  await page.getByTestId("sidebar").getByRole("link", { name: "Все документы" }).click();
   await expect(page.getByTestId("space-switcher")).toContainText("Новое пространство");
+  await expect(page).toHaveURL(/\/all$/);
+  await expect(inSidebar).toHaveCount(0);
   await expect(page.getByText("Здесь пока пусто")).toBeVisible();
   await expect(page.getByTestId("doc-card")).toHaveCount(0);
-  // The open tab belongs to the first space: still listed, but marked.
-  await expect(tab.getByTestId("other-space-mark")).toBeVisible();
+  await page.goto("/starred");
+  await expect(page.getByTestId("space-switcher")).toContainText("Новое пространство");
+  await expect(page.getByText(/Отмечайте важное звёздочкой/)).toBeVisible();
+  await expect(page.getByTestId("doc-card")).toHaveCount(0);
+  // Search covers the current space only.
+  await page.keyboard.press("ControlOrMeta+k");
+  await page.getByTestId("palette-input").fill("Рабочий");
+  await expect(page.getByRole("option", { name: /Рабочий план/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  // A document of the second space has its own tab.
+  await newDoc(page, "Личный список");
+  await expect(sidebar.getByRole("link", { name: /Личный список/ })).toHaveCount(1);
+  await expect(inSidebar).toHaveCount(0);
+
+  // Back in the first space: its tab (opened again) and its starred note return; the other's tab hides.
+  await switchSpace(page, /Личное/);
+  await expect(page).toHaveURL(noteUrl);
+  await expect(page.locator(".ds-prose")).toContainText("Рабочий план");
+  await expect(inSidebar).toHaveCount(2);
+  await expect(sidebar.getByRole("link", { name: /Личный список/ })).toHaveCount(0);
+
+  // A link to a document of the other space (older links) opens it and switches to its space.
+  await switchSpace(page, /Новое пространство/);
+  await expect(page.locator(".ds-prose")).toContainText("Личный список");
+  await page.goto(noteUrl);
+  await expect(page.locator(".ds-prose")).toContainText("Рабочий план");
+  await expect(page.getByTestId("space-switcher")).toContainText("Личное");
+
+  // Moving to another space is an explicit command; the note leaves this space's tabs and starred.
+  await sidebar.getByRole("link", { name: /Рабочий план/ }).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Переместить в пространство…" }).hover();
+  await page.getByRole("menuitem", { name: "Новое пространство" }).last().hover();
+  await page.getByRole("menuitem", { name: /Новый блокнот/ }).hover();
+  await page.getByRole("menuitem", { name: "Корень блокнота" }).click();
+  await expect(page.getByText("Перемещено в «Новый блокнот»").first()).toBeVisible({ timeout: 15_000 });
+  await expect(inSidebar).toHaveCount(0);
+  await switchSpace(page, /Новое пространство/);
+  await expect(inSidebar).toHaveCount(2);
+});
+
+test("spaces with the same name are told apart by their document count", async ({ page }) => {
+  await signUp(page, uniqueEmail("spaces-names"));
+  await newDoc(page, "Документ", "Текст");
+  await page.getByTestId("space-switcher").click();
+  await page.getByRole("menuitem", { name: "Новое пространство" }).click();
+  await expect(page.getByTestId("space-switcher")).toContainText("Новое пространство");
 
   // Two spaces with the same name (e.g. migrated from iOS): the switcher shows document counts.
   await expect.poll(() => page.evaluate(() => "__ds" in window)).toBe(true);

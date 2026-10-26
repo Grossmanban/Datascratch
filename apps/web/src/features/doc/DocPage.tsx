@@ -7,7 +7,7 @@ import { useAuth } from "@/auth/session";
 import { colorFor } from "@/data/presence";
 import { runtime } from "@/data/runtime";
 import { acknowledgeAgentCreated, agentCreatedOf, openTab, restoreNote, toggleStar, updateNote } from "@/domain/actions";
-import { folderPath, isStarred, noteTitle, useWorkspace } from "@/domain/workspace";
+import { folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
 import { closeDocTab, noteMenuItems } from "@/features/docs/menus";
 import { TopBar } from "@/features/shell/PageHeader";
 import { useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
@@ -34,7 +34,11 @@ export function DocPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (note && !note.trashedAt) openTab(noteId);
+    if (!note) return;
+    // A link to a document of another space (older links, D-48) opens it in its own space.
+    const space = spaceOfNote(useWorkspace.getState(), noteId);
+    if (space && space !== useWorkspace.getState().activeSpaceId) setActiveSpace(space);
+    if (!note.trashedAt) openTab(noteId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId, !!note]);
 

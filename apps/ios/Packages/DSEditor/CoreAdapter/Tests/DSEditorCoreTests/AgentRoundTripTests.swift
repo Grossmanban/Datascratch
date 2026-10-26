@@ -145,6 +145,40 @@ import Testing
         #expect(doc.flatText(of: code.id) == "# comment\ndef hello():\n    print(\"hi\")\n")
     }
 
+    /// The agent's title block keeps its id and text through opening and editing elsewhere, and
+    /// the note's title (NoteMeta.title is derived from it) does not change.
+    @Test func agentTitleIsAdoptedNotReplaced() throws {
+        let note = try Self.agentNote()
+        let titleBefore = try note.title()
+        let titleId = try #require(try Self.blocks(note).first?.id)
+        let before = try note.crdt.encodeStateAsUpdate()
+        let doc = CoreEditorDocument(note: note)
+        _ = Projection.build(doc.blocks)
+        #expect(try note.crdt.encodeStateAsUpdate() == before, "opening writes nothing")
+        let cmd = EditorCommands(document: doc)
+        let last = try #require(doc.blocks.last)
+        cmd.typeText("!", marks: .empty, at: TextPosition(block: last.id, offset: doc.textLength(of: last.id)))
+        let after = try Self.blocks(note)
+        #expect(after.first?.id == titleId, "the title block is the agent's, not a new one")
+        #expect(try note.title() == titleBefore)
+        #expect(after.filter { $0.json.contains("\"type\":\"title\"") }.count == 1, "no second title is added")
+    }
+
+    /// Two titles (an empty one from a client that initialized the note before it synced, merged
+    /// with the agent's): the editor opens it without writing and removes neither.
+    @Test func twoMergedTitlesAreOpenedWithoutWrites() throws {
+        let note = try Self.agentNote()
+        let stray = NoteDocument(noteId: note.noteId)
+        try stray.initialize()
+        try note.crdt.applyUpdate(try stray.crdt.encodeStateAsUpdate())
+        let before = try note.crdt.encodeStateAsUpdate()
+        let ids = try Self.blocks(note).map(\.id)
+        let doc = CoreEditorDocument(note: note)
+        _ = Projection.build(doc.blocks)
+        #expect(try note.crdt.encodeStateAsUpdate() == before, "opening writes nothing")
+        #expect(try Self.blocks(note).map(\.id) == ids, "no block is removed or replaced")
+    }
+
     /// The shared reference note (every node and mark of document-model.md §4.2) survives an edit.
     @Test(.enabled(if: FileManager.default.fileExists(atPath: Self.vector.path)))
     func referenceNoteSurvivesAnEdit() throws {

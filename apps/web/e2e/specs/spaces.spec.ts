@@ -2,7 +2,10 @@ import { expect, test, type Page } from "@playwright/test";
 import { isExtended, newDoc, signUp, uniqueEmail } from "./helpers";
 
 async function switchSpace(page: Page, name: RegExp | string) {
+  // A menu still closing from the last switch swallows the next click.
+  await expect(page.getByRole("menu")).toHaveCount(0);
   await page.getByTestId("space-switcher").click();
+  await expect(page.getByRole("menu")).toBeVisible();
   await page.getByRole("menuitem", { name }).first().click(); // spaces are listed before «Новое пространство»
 }
 

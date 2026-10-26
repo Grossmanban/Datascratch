@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-10-26)
 
 ## Corpus Check
-- 863 files · ~610,012 words
+- 863 files · ~610,525 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 38 file(s) not represented in the graph (top: (none) 19, .css 6, .example 4)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `6f7636ae`
+- Built from commit: `bb0d298a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -406,10 +406,10 @@
 10. `n()` - 94 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Перестройка блоков (§4.1a): при разделении, слиянии, смене типа и перемещении блока клиент в той же транзакции заменяет затронутый штрих копией (новый strokeId, те же точки, якоря по соответствию символов)` --semantically_similar_to--> `rebaseRedoneAnchors()`  [INFERRED] [semantically similar]
-  docs/architecture/contracts/strokes.md → packages/shared/src/strokes/store.ts
 - `Agent Markdown escaping: backslash-escaped chars are plain text; read_note escapes everything that would become markup` --semantically_similar_to--> `escapeText()`  [INFERRED] [semantically similar]
   docs/architecture/contracts/agents-api.md → packages/shared/src/document/markdown.ts
+- `Перестройка блоков (§4.1a): при разделении, слиянии, смене типа и перемещении блока клиент в той же транзакции заменяет затронутый штрих копией (новый strokeId, те же точки, якоря по соответствию символов)` --semantically_similar_to--> `rebaseRedoneAnchors()`  [INFERRED] [semantically similar]
+  docs/architecture/contracts/strokes.md → packages/shared/src/strokes/store.ts
 - `Аутентификация (D-34, `crypto.md`)` --references--> `Session`  [INFERRED]
   docs/architecture/contracts/api.md → packages/shared/src/contracts/api.ts
 - `Шеринг (D-13, D-37)` --references--> `Share`  [INFERRED]
@@ -1817,10 +1817,10 @@ Cohesion: 0.07
 Nodes (14): docs, Locked, BenchmarkTests, KeyRepairTests, StuckFirstFactory, SyncHandshakeTests, Conn, eventually() (+6 more)
 
 ## Ambiguous Edges - Review These
-- `0030-server-database-postgresql.md` → `Shared for the whole account: app settings, account, keys, devices, agent grants`  [AMBIGUOUS]
-  docs/decisions/0048-isolated-spaces.md · relation: references
 - `0039-parallel-sessions.md` → `Closed: minimum iOS 26+ (D-32), XcodeGen accepted, Bundle ID (D-33), paid Apple Developer account`  [AMBIGUOUS]
   docs/open-questions.md · relation: references
+- `0030-server-database-postgresql.md` → `Shared for the whole account: app settings, account, keys, devices, agent grants`  [AMBIGUOUS]
+  docs/decisions/0048-isolated-spaces.md · relation: references
 - `Daily notes and Inbox live in the notebook from settings.dailyNotebookBySpace` → `settings.dailyNotebookBySpace { spaceId: notebookId } — daily notes and Inbox notebook per space (D-48)`  [AMBIGUOUS]
   docs/architecture/contracts/document-model.md · relation: conceptually_related_to
 - `D-30 Server DB: PostgreSQL` → `Account-wide (shared across spaces): app settings (theme, language, pen), account, keys, devices, agent grants`  [AMBIGUOUS]
@@ -1829,7 +1829,7 @@ Nodes (14): docs, Locked, BenchmarkTests, KeyRepairTests, StuckFirstFactory, Syn
   docs/spec/03-pencil.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **1342 isolated node(s):** `.isRequested`, `deadline`, `scheduled`, `.deleteTitle`, `deadline` (+1337 more)
+- **1342 isolated node(s):** `.body`, `.isRequested`, `.body`, `deadline`, `scheduled` (+1337 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 4626 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **35 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -1837,20 +1837,20 @@ Nodes (14): docs, Locked, BenchmarkTests, KeyRepairTests, StuckFirstFactory, Syn
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `@datascratch/ui — web components «Тихая бумага» (React 19, Radix, Tailwind v4, Motion, Lucide)`, `DSDateChip`, `SwiftUI`, `ui/src/index.ts`, `0045-agent-created-notes.md`, `AttachmentManager`?**
-  _High betweenness centrality (0.108) - this node is a cross-community bridge._
+  _High betweenness centrality (0.120) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `.isRequested`, `deadline`, `scheduled` to the rest of the system?**
+- **What connects `.body`, `.isRequested`, `.body` to the rest of the system?**
   _1342 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Data` be split into smaller, more focused modules?**
   _Cohesion score 0.0034853527411037558 - nodes in this community are weakly interconnected._
-- **Why does `DSDateChipModel` connect `DSDateChip` to `BlockLayoutFragment`, `Equatable (2)`, `Sendable`, `design-tokens.md`?**
-  _High betweenness centrality (0.084) - this node is a cross-community bridge._
+- **Why does `packages/design-tokens/tokens.json — источник значений; генерирует CSS-переменные и Swift` connect `design-tokens.md` to `DSColorToken`, `02-platforms.md`, `AttachmentManager`?**
+  _High betweenness centrality (0.101) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
 
-- **What is the exact relationship between `0030-server-database-postgresql.md` and `Shared for the whole account: app settings, account, keys, devices, agent grants`?**
-  _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
 - **What is the exact relationship between `0039-parallel-sessions.md` and `Closed: minimum iOS 26+ (D-32), XcodeGen accepted, Bundle ID (D-33), paid Apple Developer account`?**
+  _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
+- **What is the exact relationship between `0030-server-database-postgresql.md` and `Shared for the whole account: app settings, account, keys, devices, agent grants`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._

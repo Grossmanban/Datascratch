@@ -4326,9 +4326,9 @@
     "semantic_hash": "4ac1df3269effc7a1afe18500a423d82"
   },
   "docs/architecture/contracts/document-model.md": {
-    "mtime": 1793050555.9316998,
-    "seen": 1793051231.4136286,
-    "ast_hash": "c4352b4d143cdb3e52919da4a772ec13",
+    "mtime": 1793051694.4325216,
+    "seen": 1793051745.343133,
+    "ast_hash": "eac494a2c69c49ab94ccfdc2259efb84",
     "semantic_hash": ""
   },
   "docs/architecture/contracts/strokes.md": {
@@ -5184,9 +5184,9 @@
     "semantic_hash": ""
   },
   "packages/web-editor/src/collab/repairTitle.ts": {
-    "mtime": 1793050396.971661,
-    "seen": 1793051231.4135418,
-    "ast_hash": "162573f259a8128f4525c4e3de4a590b",
+    "mtime": 1793051708.76845,
+    "seen": 1793051745.3430011,
+    "ast_hash": "44b7d28e4ac9f9f16abd2003aab05c63",
     "semantic_hash": ""
   },
   "packages/web-editor/test/agentTitle.test.ts": {
@@ -5196,9 +5196,9 @@
     "semantic_hash": ""
   },
   "packages/web-editor/test/repairTitle.test.ts": {
-    "mtime": 1793050371.801967,
-    "seen": 1793051231.4135928,
-    "ast_hash": "89b15c1e6a929efb95125e735aeeefd9",
+    "mtime": 1793051708.7756152,
+    "seen": 1793051745.343083,
+    "ast_hash": "38f318b28eb877e6ea47942522a80523",
     "semantic_hash": ""
   },
   "packages/agents/test/agent-vectors.test.ts": {
@@ -5214,9 +5214,9 @@
     "semantic_hash": ""
   },
   "packages/web-editor/test/agentVector.test.ts": {
-    "mtime": 1793051223.5746198,
-    "seen": 1793051268.6090183,
-    "ast_hash": "2dbf31ecca84f6fece77b90f142ee963",
+    "mtime": 1793051595.5305853,
+    "seen": 1793051745.3430703,
+    "ast_hash": "1f97ff687015296545df8ba964adef53",
     "semantic_hash": ""
   }
 }

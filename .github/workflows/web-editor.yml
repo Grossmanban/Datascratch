@@ -8,6 +8,7 @@ on:
       - "packages/shared/**"
       - "packages/ui/**"
       - "packages/design-tokens/**"
+      - "packages/agents/src/doc/**"
       - ".github/workflows/web-editor.yml"
       - "pnpm-lock.yaml"
   pull_request:
@@ -35,8 +36,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # Tests open notes built by the real packages/agents code (create_note, edit_note).
       - name: Install
-        run: pnpm install --filter "@datascratch/web-editor..." --frozen-lockfile
+        run: pnpm install --filter "@datascratch/web-editor..." --filter "@datascratch/agents..." --frozen-lockfile
       - name: Build @datascratch/shared
         run: pnpm --filter @datascratch/shared build
       - name: Typecheck
@@ -85,8 +87,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # Tests open notes built by the real packages/agents code (create_note, edit_note).
       - name: Install
-        run: pnpm install --filter "@datascratch/web-editor..." --frozen-lockfile
+        run: pnpm install --filter "@datascratch/web-editor..." --filter "@datascratch/agents..." --frozen-lockfile
       - name: Build @datascratch/shared
         run: pnpm --filter @datascratch/shared build
       - name: Cache Playwright browsers

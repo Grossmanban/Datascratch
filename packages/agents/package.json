@@ -31,6 +31,7 @@
     "@datascratch/shared": "workspace:^",
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/newsreader": "^0.4.1",
+    "@expo-google-fonts/noto-emoji": "^0.4.8",
     "@modelcontextprotocol/server": "^2.4.0",
     "@napi-rs/canvas": "^1.0.13",
     "fastify-plugin": "^6.0.1",

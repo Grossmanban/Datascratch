@@ -1,7 +1,8 @@
+import { NetworkError } from "@/api/client";
 import * as Y from "yjs";
 import { docsApi, notebooksModeApi } from "@/api/endpoints";
 import { getMasterKey } from "@/auth/session";
-import { cachedNoteKey, notebookKey, rememberNotebookKey, rememberNoteKey } from "@/data/keys";
+import { cachedNoteKey, notebookKey, rememberNotebookKey, rememberNoteKey, serverNotebookKey } from "@/data/keys";
 import { enqueueOp } from "@/data/ops";
 import { runtime } from "@/data/runtime";
 import {
@@ -104,15 +105,32 @@ export function updateNotebook(id: string, patch: Partial<Pick<NotebookRef, "nam
 
 /** Needs the server: switching to "agent" hands the notebook key to it (crypto.md §8). */
 export async function setNotebookMode(id: string, mode: NotebookMode) {
-  let keyText: string | undefined;
-  if (mode === "agent") {
-    const key = await notebookKey(id);
-    if (!key) throw new Error("Notebook key unavailable");
-    keyText = toBase64Url(key);
-  }
-  await notebooksModeApi.setMode(id, mode, keyText);
+  await pushNotebookMode(id, mode);
   const m = acc().notebooks.get(id);
   m?.set("mode", mode);
+}
+
+/**
+ * Tell the server a notebook's mode; for «для агентов» with the server's own copy of the key
+ * (never a key only this device holds). Retried on network failures; the account doc is the
+ * user's intent and the runtime reconciles the server with it again on every sync start.
+ */
+export async function pushNotebookMode(id: string, mode: NotebookMode) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      let keyText: string | undefined;
+      if (mode === "agent") {
+        const key = await serverNotebookKey(id);
+        if (!key) throw new Error("Notebook key unavailable");
+        keyText = toBase64Url(key);
+      }
+      await notebooksModeApi.setMode(id, mode, keyText);
+      return;
+    } catch (e) {
+      if (!(e instanceof NetworkError) || attempt >= 2) throw e;
+      await new Promise((r) => setTimeout(r, 500 * 3 ** attempt));
+    }
+  }
 }
 
 export async function deleteNotebook(id: string) {

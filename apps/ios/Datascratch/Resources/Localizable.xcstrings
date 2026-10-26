@@ -121,6 +121,26 @@
         }
       }
     },
+    "Add": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить"
+          }
+        }
+      }
+    },
+    "Add Link": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить ссылку"
+          }
+        }
+      }
+    },
     "Add a task for this day": {
       "localizations": {
         "ru": {
@@ -267,6 +287,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Синий"
+          }
+        }
+      }
+    },
+    "Bold": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Жирный"
           }
         }
       }
@@ -1271,6 +1301,16 @@
         }
       }
     },
+    "Getting this notebook ready": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Блокнот готовится"
+          }
+        }
+      }
+    },
     "Give a task a date to see it here.": {
       "localizations": {
         "ru": {
@@ -1421,12 +1461,12 @@
         }
       }
     },
-    "Hide Sidebar": {
+    "Highlight": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Скрыть боковую панель"
+            "value": "Выделение"
           }
         }
       }
@@ -1521,12 +1561,32 @@
         }
       }
     },
+    "It was made on another device. You can write here once its key arrives.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Он создан на другом устройстве. Писать в него можно, как только придёт его ключ."
+          }
+        }
+      }
+    },
     "It's the only way back to your notes if you forget the password.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Только он вернёт доступ к заметкам, если вы забудете пароль."
+          }
+        }
+      }
+    },
+    "Italic": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Курсив"
           }
         }
       }
@@ -1587,6 +1647,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Линейка"
+          }
+        }
+      }
+    },
+    "Link": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка"
           }
         }
       }
@@ -2097,6 +2167,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "В избранном пусто"
+          }
+        }
+      }
+    },
+    "Numbered List": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нумерованный список"
           }
         }
       }
@@ -2791,6 +2871,26 @@
         }
       }
     },
+    "Send First": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сначала отправить"
+          }
+        }
+      }
+    },
+    "Sending changes…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправляем изменения…"
+          }
+        }
+      }
+    },
     "Serif": {
       "localizations": {
         "ru": {
@@ -2887,16 +2987,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Поделиться…"
-          }
-        }
-      }
-    },
-    "Show Columns": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Показать колонки"
           }
         }
       }
@@ -3051,6 +3141,16 @@
         }
       }
     },
+    "Some changes can't be read here yet": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Часть изменений здесь пока не читается"
+          }
+        }
+      }
+    },
     "Space": {
       "localizations": {
         "ru": {
@@ -3137,6 +3237,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Состояние"
+          }
+        }
+      }
+    },
+    "Strikethrough": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зачёркнутый"
           }
         }
       }
@@ -3401,6 +3511,16 @@
         }
       }
     },
+    "They were saved with another key. The rest of the notebook is up to date.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Они сохранены другим ключом. Остальное в блокноте синхронизировано."
+          }
+        }
+      }
+    },
     "This cannot be undone.": {
       "localizations": {
         "ru": {
@@ -3581,6 +3701,16 @@
         }
       }
     },
+    "Underline": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подчёркнутый"
+          }
+        }
+      }
+    },
     "Undo": {
       "localizations": {
         "ru": {
@@ -3597,6 +3727,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Неотправленные изменения сохранены на этом устройстве: %lld"
+          }
+        }
+      }
+    },
+    "Unsent changes on this device: %lld. They will be sent after you sign in to this same account.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неотправленных изменений на этом устройстве: %lld. Они отправятся после входа в этот же аккаунт."
           }
         }
       }

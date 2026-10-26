@@ -116,6 +116,8 @@ struct AccountSettings: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var confirmSignOut = false
+    @State private var isSending = false
+    @State private var unsent = 0
 
     var body: some View {
         SettingsPage(title: String(localized: "Account")) {
@@ -154,13 +156,27 @@ struct AccountSettings: View {
             }
             .buttonStyle(.dsSettingsRow)
             DSSettingsSection(footer: String(localized: "You will need your password to sign in again.")) {
-                Button { confirmSignOut = true } label: {
+                Button {
+                    unsent = app.accounts.unsentChanges
+                    confirmSignOut = true
+                } label: {
                     DSSettingsRow(String(localized: "Sign Out"), systemImage: "rectangle.portrait.and.arrow.right", role: .destructive)
                 }
                 .accessibilityIdentifier("settings.signOut")
             }
             .buttonStyle(.dsSettingsRow)
             .confirmationDialog("Sign out of Datascratch?", isPresented: $confirmSignOut, titleVisibility: .visible) {
+                if unsent > 0 {
+                    Button("Send First") {
+                        Task {
+                            isSending = true
+                            _ = await app.accounts.sendPending(timeout: .seconds(30))
+                            isSending = false
+                            await app.signOut()
+                            dismiss()
+                        }
+                    }
+                }
                 Button("Sign Out", role: .destructive) {
                     Task {
                         await app.signOut()
@@ -168,7 +184,18 @@ struct AccountSettings: View {
                     }
                 }
             } message: {
-                Text("You will need your password to sign in again.")
+                if unsent > 0 {
+                    Text("Unsent changes on this device: \(unsent). They will be sent after you sign in to this same account.")
+                } else {
+                    Text("You will need your password to sign in again.")
+                }
+            }
+            if isSending {
+                HStack(spacing: DSSpace.s2) {
+                    ProgressView()
+                    Text("Sending changes…").dsFont(.footnote).foregroundStyle(Color.dsSecondary)
+                }
+                .frame(maxWidth: .infinity)
             }
         }
     }

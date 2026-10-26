@@ -245,20 +245,3 @@ struct FullScreenButton: View {
     }
 }
 
-/// iPad: tasks, the calendar or a list on the whole width, and back.
-struct ContentFullScreenButton: View {
-    @Environment(SceneModel.self) private var scene
-
-    var body: some View {
-        if UIDevice.current.userInterfaceIdiom == .pad, !scene.isNoteWindow {
-            Button {
-                scene.toggleContentFullScreen()
-            } label: {
-                Image(systemName: scene.isContentFullScreen
-                      ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-            }
-            .accessibilityLabel(scene.isContentFullScreen ? Text("Show Columns") : Text("Full Screen"))
-            .accessibilityIdentifier("content.fullScreen")
-        }
-    }
-}

@@ -226,10 +226,58 @@ public final class KeyRing: Sendable {
         cache.withLock { $0[name] = key }
     }
 
-    /// Forgets all keys (sign-out).
+    /// Forgets all keys («Удалить данные с этого устройства», another account).
     public func clear() throws {
         cache.withLock { $0.removeAll() }
+        verified.withLock { $0.removeAll() }
         try store.removeAll()
+    }
+
+    static let keptOwnerName = "keptKeys.owner"
+    static let keptNotebooksName = "keptKeys.notebooks"
+
+    /// Sign-out that keeps the keys of `notebookIds` (data not on the server yet, spec/07),
+    /// marked as belonging to `owner` (userId). Everything else is forgotten.
+    public func clear(keepingNotebooks notebookIds: [String], owner: String) throws {
+        var kept: [(String, Data, Data?)] = []
+        for id in notebookIds {
+            guard let key = try notebookKey(id) else { continue }
+            kept.append((id, key, try store.data(for: Self.retiredNotebookKeysName(id))))
+        }
+        try clear()
+        guard !kept.isEmpty else { return }
+        for (id, key, retired) in kept {
+            try store.set(key, for: Self.notebookKeyName(id))
+            if let retired { try store.set(retired, for: Self.retiredNotebookKeysName(id)) }
+        }
+        try store.set(Data(owner.utf8), for: Self.keptOwnerName)
+        try store.set(Data(kept.map(\.0).joined(separator: ",").utf8), for: Self.keptNotebooksName)
+    }
+
+    /// Notebooks whose keys survived a sign-out (`clear(keepingNotebooks:owner:)`), and whose.
+    public var keptNotebookKeys: (owner: String, notebookIds: [String])? {
+        guard let owner = (try? store.data(for: Self.keptOwnerName)).flatMap({ $0 }).map({ String(decoding: $0, as: UTF8.self) }) else { return nil }
+        let ids = (try? store.data(for: Self.keptNotebooksName)).flatMap { $0 }.map { String(decoding: $0, as: UTF8.self) } ?? ""
+        return (owner, ids.split(separator: ",").map(String.init))
+    }
+
+    /// On sign-in: kept keys of the same account become ordinary keys again; those of another
+    /// account are removed (its data must not mix with this one). Returns the removed notebooks.
+    @discardableResult
+    public func resolveKeptKeys(signingInAs userId: String) throws -> [String] {
+        guard let kept = keptNotebookKeys else { return [] }
+        var removed: [String] = []
+        if kept.owner != userId {
+            for id in kept.notebookIds {
+                try store.remove(Self.notebookKeyName(id))
+                try store.remove(Self.retiredNotebookKeysName(id))
+                cache.withLock { $0[Self.notebookKeyName(id)] = nil }
+            }
+            removed = kept.notebookIds
+        }
+        try store.remove(Self.keptOwnerName)
+        try store.remove(Self.keptNotebooksName)
+        return removed
     }
 }
 

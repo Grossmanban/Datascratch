@@ -51,6 +51,24 @@ struct SnapshotTests {
         #expect(image.size.width == 820)
     }
 
+    @Test(.enabled(if: snapshotDirectory != nil), arguments: [ColorScheme.light, .dark])
+    func penToolbar(scheme: ColorScheme) throws {
+        let view = DSPenToolbarGallery()
+            .frame(width: 1024, height: 900, alignment: .top)
+            .environment(\.dsGlassFallback, true)
+            .environment(\.colorScheme, scheme)
+            .environment(\.locale, Locale(identifier: "ru_RU"))
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        let image = try #require(renderer.uiImage)
+        let data = try #require(image.pngData())
+        let url = URL(fileURLWithPath: snapshotDirectory ?? NSTemporaryDirectory())
+            .appendingPathComponent("pen-\(scheme == .dark ? "dark" : "light").png")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url)
+        #expect(image.size.width == 1024)
+    }
+
     @Test func syncChipLabels() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         #expect(DSSyncChip.label(.localOnly, now: now, language: .ru) == "Только на этом устройстве")

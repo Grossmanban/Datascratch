@@ -65,6 +65,10 @@ jobs:
         run: pnpm --filter @datascratch/ui test
       - name: Build showcase
         run: pnpm --filter @datascratch/ui showcase:build
+      - name: Install Playwright browser
+        run: pnpm --filter @datascratch/ui exec playwright install --with-deps chromium
+      - name: Layout tests (real browser, desktop + phone width)
+        run: pnpm --filter @datascratch/ui test:layout
       - uses: actions/upload-artifact@v4
         with:
           name: ui-showcase

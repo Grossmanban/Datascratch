@@ -32,6 +32,7 @@ export const agentsPlugin: LoadedPlugin = {
       publicUrl: ctx.config.PUBLIC_URL,
       secret: ctx.tokens.pluginSecret,
       appUrl: ctx.config.APP_URL ?? null,
+      clientIdMetadataDocuments: ctx.config.OAUTH_CLIENT_METADATA_DOCUMENTS,
       allowedOrigins: ctx.config.CORS_ORIGINS.split(',')
         .map((s) => s.trim())
         .filter(Boolean),

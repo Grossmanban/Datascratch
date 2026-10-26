@@ -23,6 +23,7 @@ import { DocView } from "./DocView";
 import { PresenceStack } from "./PresenceStack";
 import { StylePopover } from "./StylePopover";
 import { usePresence } from "./usePresence";
+import { iconGlyph, withIcon } from "@/lib/glyph";
 
 export function DocPage() {
   const { t } = useTranslation();
@@ -132,7 +133,7 @@ function DocScreen({ noteId }: { noteId: string }) {
         <nav className="flex min-w-0 items-center gap-1">
           {nb && (
             <Link to="/notebook/$notebookId" params={{ notebookId: nb.id }} className="hidden shrink-0 hover:text-ink sm:inline">
-              {nb.icon} {nb.name}
+              {withIcon(nb.icon, nb.name)}
             </Link>
           )}
           {path.map((f) => (
@@ -209,7 +210,7 @@ function IconPicker({ icon, onPick, disabled }: { icon: string | null; onPick: (
         trigger={
           icon ? (
             <button className="text-[54px] leading-none transition hover:scale-105" aria-label={t("style.icon")} disabled={disabled}>
-              {icon}
+              {iconGlyph(icon) || "·"}
             </button>
           ) : (
             <button className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[13px] text-ink-2 opacity-0 transition hover:bg-ink/5 hover:text-ink group-hover/hdr:opacity-100 focus:opacity-100">

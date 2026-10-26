@@ -41,6 +41,8 @@ export interface AgentsPluginOptions {
   routes?: { mcp?: boolean; rest?: boolean; oauth?: boolean; agentTokens?: boolean };
   /** Override for fetching OAuth Client ID Metadata Documents (tests, proxies). */
   fetchClientMetadata?: (url: string) => Promise<unknown>;
+  /** Advertise Client ID Metadata Documents (default true); see OAuthConfig. */
+  clientIdMetadataDocuments?: boolean;
   /** Max handwriting images attached to read_note (default 6). */
   maxImagesPerRead?: number;
 }
@@ -120,6 +122,7 @@ export const agentsPlugin: FastifyPluginAsync<AgentsPluginOptions> = async (app:
       refreshTtlSec: opts.tokenTtl?.refreshSec ?? 30 * 24 * 3600,
       codeTtlSec: opts.tokenTtl?.codeSec ?? 300,
       fetchClientMetadata: opts.fetchClientMetadata ?? fetchClientMetadataDocument,
+      advertiseClientIdMetadataDocuments: opts.clientIdMetadataDocuments ?? true,
     };
     registerOAuthRoutes(app, { ctx, grants, cfg, limiter: oauthLimiter });
   }

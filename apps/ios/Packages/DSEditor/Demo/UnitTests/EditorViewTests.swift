@@ -633,7 +633,8 @@ final class EditorViewTests: XCTestCase {
     func testFullHeightHostScrollsTheCaretMinimally() throws {
         let editor = host(keyboardDoc(), width: 820, height: 1180)
         let r = flatRange(editor, of: "привет")
-        editor.textView.becomeFirstResponder()
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder(), "editing (the inset logic scrolls only while editing)")
         editor.textView.selectedRange = NSRange(location: r.upperBound, length: 0)
         settle(editor)
         let caretBefore = editor.textView.caretRect(for: try XCTUnwrap(editor.textView.selectedTextRange).end)

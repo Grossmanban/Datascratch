@@ -1046,13 +1046,13 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793013049.4223537,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793013049.4223561,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -4010,7 +4010,7 @@
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793013049.4223583,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/recovery-rotate.json": {
@@ -4080,9 +4080,9 @@
     "semantic_hash": "cb9b553b8389ca41f355d424623a02d0"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1793012949.571036,
-    "seen": 1793013025.1706223,
-    "ast_hash": "deaeee76bb6a49cdedebe5ec8faab8e9",
+    "mtime": 1793014132.3864305,
+    "seen": 1793014192.9028308,
+    "ast_hash": "f2d32be14c323c9855604dd621669e6c",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
@@ -4134,10 +4134,10 @@
     "semantic_hash": "1bc98314d2ed2bf930beb5a30f74992f"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1793011837.6675997,
-    "seen": 1793012084.060374,
-    "ast_hash": "6323bae0ecc81a5ef57e239036eeb015",
-    "semantic_hash": "6323bae0ecc81a5ef57e239036eeb015"
+    "mtime": 1793014132.3657455,
+    "seen": 1793014192.903118,
+    "ast_hash": "54a641ffa230513a0c66eebfe8eebe03",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormulaViews.swift": {
     "mtime": 1792929059.610677,
@@ -4508,7 +4508,7 @@
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792967462.0829601,
     "seen": 1793013049.4226902,
-    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "infra/deploy/inspect.sh": {

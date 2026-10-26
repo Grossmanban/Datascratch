@@ -15,6 +15,8 @@ actor FakeSyncServer {
         let incoming: AsyncStream<String>
         let continuation: AsyncStream<String>.Continuation
         let closed = Locked(false)
+        /// Died silently: frames go nowhere and pings never come back (until closed).
+        let dead = Locked(false)
 
         init(server: FakeSyncServer) {
             self.server = server
@@ -23,6 +25,7 @@ actor FakeSyncServer {
 
         func send(_ text: String) async throws {
             guard !closed.withLock({ $0 }) else { throw SyncClientError.closed }
+            if dead.withLock({ $0 }) { return }
             await server.handle(text, from: self)
         }
 
@@ -31,7 +34,12 @@ actor FakeSyncServer {
             throw SyncClientError.closed
         }
 
-        func sendPing() async throws {}
+        func sendPing() async throws {
+            while dead.withLock({ $0 }) {
+                if closed.withLock({ $0 }) { throw SyncClientError.closed }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+        }
 
         func close() {
             closed.withLock { $0 = true }
@@ -40,6 +48,7 @@ actor FakeSyncServer {
         }
 
         func deliver(_ message: ServerMessage) {
+            if dead.withLock({ $0 }) { return }
             continuation.yield(String(decoding: try! JSONEncoder.sync.encode(message), as: UTF8.self))
         }
     }
@@ -77,6 +86,13 @@ actor FakeSyncServer {
     }
 
     func register(_ docId: String) { registered.insert(docId) }
+
+    /// The connections of `deviceId` die silently (no close, no error): the server keeps them.
+    func killSilently(deviceId: String) {
+        for c in conns.values where c.deviceId == deviceId { c.conn.dead.withLock { $0 = true } }
+    }
+
+    func connections(deviceId: String) -> Int { conns.values.filter { $0.deviceId == deviceId }.count }
 
     func subscribers(_ docId: String) -> Int { conns.values.filter { $0.subs.contains(docId) }.count }
 

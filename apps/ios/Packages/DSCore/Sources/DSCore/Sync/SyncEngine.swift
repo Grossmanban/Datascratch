@@ -122,6 +122,7 @@ public actor SyncEngine: SyncClientDelegate {
     private var focused: [String] = []
     /// Registrations in progress after `doc_not_found` (a document made on this device).
     private var registering: Set<String> = []
+    private var keyRecheck: Task<Void, Never>?
     private var traceHandler: (@Sendable (SyncTraceEvent) -> Void)?
     /// Retry of temporary failures (registration, server errors) with exponential backoff.
     private var retryTask: Task<Void, Never>?
@@ -206,6 +207,8 @@ public actor SyncEngine: SyncClientDelegate {
         running = false
         retryTask?.cancel()
         retryTask = nil
+        keyRecheck?.cancel()
+        keyRecheck = nil
         await client.stop()
     }
 
@@ -803,7 +806,26 @@ public actor SyncEngine: SyncClientDelegate {
     private func resumeAfterIndexUpdate(_ docId: String) async {
         guard !waitingForKey.isEmpty, (known[docId] ?? (try? store.document(docId)))?.kind == .notebook else { return }
         await resumeDocumentsWaitingForKeys()
+        // The key lookup may learn the note keys from this index a moment later (the app reads
+        // them when it reloads after remote changes): check again shortly, or the documents
+        // would wait until the next index update or restart.
+        guard !waitingForKey.isEmpty, keyRecheck == nil else { return }
+        keyRecheck = Task { [weak self] in
+            for delay in [Duration.milliseconds(500), .seconds(2), .seconds(10)] {
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled, let self, await self.recheckWaitingForKeys() else { break }
+            }
+            await self?.clearKeyRecheck()
+        }
     }
+
+    /// Whether documents still wait for their key.
+    private func recheckWaitingForKeys() async -> Bool {
+        await resumeDocumentsWaitingForKeys()
+        return !waitingForKey.isEmpty
+    }
+
+    private func clearKeyRecheck() { keyRecheck = nil }
 }
 
 /// Key lookup over a `KeyRing` (crypto.md §1): master key for the account document, notebook

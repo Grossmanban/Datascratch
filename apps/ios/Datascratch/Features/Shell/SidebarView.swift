@@ -31,6 +31,7 @@ struct SidebarView: View {
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityIdentifier("sidebar.tab")
                                 // An explicit close button on every tab (also swipe, menu and ⌘W).
                                 Button {
                                     if scene.selectedNoteId == note.id { scene.closeTab() } else { library.closeTab(note.id) }
@@ -93,6 +94,7 @@ struct SidebarView: View {
                                 NoteTitleLabel(note: note)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("sidebar.starredNote")
                             .contextMenu {
                                 Button("Remove from Starred", systemImage: "star.slash") {
                                     library.toggleStar(.note, note.id)
@@ -252,7 +254,7 @@ struct SpaceSwitcher: View {
             ForEach(library.spaces) { space in
                 Button {
                     withAnimation(Theme.Motion.smooth) {
-                        library.activateSpace(space.id)
+                        scene.switchSpace(to: space.id)
                         scene.sidebar = .allDocuments
                     }
                 } label: {

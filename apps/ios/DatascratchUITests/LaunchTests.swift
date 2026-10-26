@@ -251,6 +251,39 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
     }
 
+    /// D-48: spaces are isolated — the starred note and the open tab of «Personal» are not shown
+    /// in «Work» and come back with «Personal».
+    func testSpacesKeepTheirStarredAndTabs() throws {
+        let app = launchSignedIn()
+        // A tab in «Personal»; first-run seeding starred the welcome note there.
+        try openNewNoteInNativeEditor(app)
+        let switcher = app.descendants(matching: .any)["sidebar.spaceSwitcher"].firstMatch
+        for _ in 0..<3 where !(switcher.exists && switcher.isHittable) {
+            let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
+            if toggle.exists && toggle.isHittable { toggle.tap() } else if app.navigationBars.buttons.firstMatch.exists { app.navigationBars.buttons.firstMatch.tap() }
+            settle(1)
+        }
+        XCTAssertTrue(switcher.waitForExistence(timeout: 5) && switcher.isHittable, "no space switcher; buttons: \(Self.buttons(app))")
+        let starred = app.descendants(matching: .any)["sidebar.starredNote"].firstMatch
+        let tab = app.descendants(matching: .any)["sidebar.tab"].firstMatch
+        XCTAssertTrue(starred.waitForExistence(timeout: 5), "no starred note in Personal")
+        XCTAssertTrue(tab.exists, "no tab in Personal")
+
+        func choose(_ name: String) {
+            switcher.tap()
+            let item = app.buttons[name].firstMatch
+            XCTAssertTrue(item.waitForExistence(timeout: 3), "no \(name) in the space menu; buttons: \(Self.buttons(app))")
+            item.tap()
+            settle(1)
+        }
+        choose("Work")
+        XCTAssertFalse(starred.exists, "Personal's starred note shows in Work")
+        XCTAssertFalse(tab.exists, "Personal's tab shows in Work")
+        choose("Personal")
+        XCTAssertTrue(starred.waitForExistence(timeout: 3), "the starred note did not come back with Personal")
+        XCTAssertTrue(tab.waitForExistence(timeout: 3), "the tab did not come back with Personal")
+    }
+
     /// spec/04: the format bar shows while text is written and lights the marks it switches on.
     func testBoldViaFormatBar() throws {
         let app = launchSignedIn()

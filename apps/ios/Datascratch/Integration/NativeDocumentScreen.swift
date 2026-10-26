@@ -44,6 +44,21 @@ final class NativeEditorModel {
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
         // A literal [[Title]] (an agent's link, or one typed without autocomplete).
         editor.onOpenNoteTitled = { [weak app] title in app?.pendingRoute = .noteTitled(title) }
+        // D-45: «Создано агентом» strip until the person acknowledges it.
+        editor.onAcknowledgeCreatedByAgent = { [weak self] in
+            guard let self, let core = self.app?.core else { return }
+            try? core.notebookDocument(self.notebookId).clearCreatedByAgent(noteId: self.noteId)
+            self.editor.createdByAgent = nil
+        }
+        refreshCreatedByAgent()
+    }
+
+    /// The agent that created this note (`NoteMeta.createdByAgent`, D-45); follows the index,
+    /// so a strip acknowledged on another device goes here too.
+    func refreshCreatedByAgent() {
+        let meta = try? app?.core?.notebookDocument(notebookId).note(id: noteId)
+        let name = meta?.createdByAgent?.agentName
+        if editor.createdByAgent != name { editor.createdByAgent = name }
     }
 
     private func changed() {
@@ -184,7 +199,10 @@ struct NativeDocumentScreen: View {
                     .onChange(of: proxy.size.height) { _, height in model.header.containerHeight = height }
                 }
                 .onChange(of: note.style, initial: true) { _, style in model.apply(style: style) }
-                .onChange(of: note, initial: true) { _, note in model.header.note = note }
+                .onChange(of: note, initial: true) { _, note in
+                    model.header.note = note
+                    model.refreshCreatedByAgent()
+                }
                 .onChange(of: app.settings.fingerDrawing) { _, _ in
                     model.editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
                 }
@@ -248,7 +266,13 @@ struct NativeEditorToolbar: ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             Menu {
                 Button("Task", systemImage: "checkmark.circle") { model.editor.perform(.taskList) }
-                Button("Heading", systemImage: "textformat") { model.editor.perform(.heading2) }
+                Menu {
+                    Button("Heading 1") { model.editor.perform(.heading1) }
+                    Button("Heading 2") { model.editor.perform(.heading2) }
+                    Button("Heading 3") { model.editor.perform(.heading3) }
+                } label: {
+                    Label("Heading", systemImage: "textformat")
+                }
                 Button("Bulleted List", systemImage: "list.bullet") { model.editor.perform(.bulletList) }
                 Button("Quote", systemImage: "text.quote") { model.editor.perform(.quote) }
                 Divider()

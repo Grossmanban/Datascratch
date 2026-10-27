@@ -1,1 +1,1 @@
-- 2026-10-27 — web-editor: картинка или файл появляются в заметке сразу — локальное превью и тихое кольцо прогресса, затем тот же блок получает `attachmentId`; при ошибке — «Повторить» / «Удалить»; `uploadAttachment(file, onProgress?)`, `EditorApi.pickImage()` и `insertFiles()`.
+- 2026-10-27 — web-editor: картинка или файл появляются в заметке сразу — локальное превью и тихое кольцо прогресса, затем тот же блок получает `attachmentId`; при ошибке — «Повторить» / «Удалить»; `uploadAttachment(file, { onProgress })`, `EditorApi.pickImage()` и `insertFiles()`.

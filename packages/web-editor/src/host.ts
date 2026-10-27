@@ -20,10 +20,11 @@ export interface EditorHost {
   resolveAttachment?: (attachmentId: string) => Promise<string | null>;
   /**
    * Encrypts and stores a pasted, dropped or picked file; resolves with its attachment record. The
-   * editor has already inserted the block with a local preview; `onProgress(done)` (0..1 while the
-   * chunks are sealed, optional) drives its progress ring. A rejection shows «Повторить» / «Удалить».
+   * editor has already inserted the block with a local preview; `onProgress` (0..1, optional) drives
+   * its progress ring — it covers sealing the file locally; the server upload continues in the
+   * background (offline-first). A rejection shows «Повторить» / «Удалить» on the block.
    */
-  uploadAttachment?: (file: File, onProgress?: (done: number) => void) => Promise<UploadedAttachment>;
+  uploadAttachment?: (file: File, opts?: { onProgress?: (fraction: number) => void }) => Promise<UploadedAttachment>;
   /**
    * Downloads an image found in pasted HTML (http/https) so it can be stored as an attachment.
    * Rejects (or absent) when it cannot be fetched (CORS, offline): the image then stays as a link to

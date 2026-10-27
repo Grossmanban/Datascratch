@@ -19,14 +19,14 @@ declare global {
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
 /** Editor whose uploads the test drives by hand (progress, success, failure) through window.__up. */
-export function UploadEditor() {
+export function UploadEditor({ palette = false }: { palette?: boolean }) {
   const doc = useMemo(() => new Y.Doc(), []);
   const calls = useMemo<Call[]>(() => [], []);
   const resolved = useMemo<string[]>(() => [], []);
   const host = useMemo(
     () => ({
-      uploadAttachment: (file: File, onProgress?: (done: number) => void) =>
-        new Promise<UploadedAttachment>((resolve, reject) => calls.push({ file, onProgress, resolve, reject })),
+      uploadAttachment: (file: File, opts?: { onProgress?: (fraction: number) => void }) =>
+        new Promise<UploadedAttachment>((resolve, reject) => calls.push({ file, onProgress: opts?.onProgress, resolve, reject })),
       resolveAttachment: async (id: string) => {
         resolved.push(id);
         return PNG;
@@ -38,7 +38,7 @@ export function UploadEditor() {
     <div style={{ width: 700, margin: "0 auto" }}>
       <DatascratchEditor
         doc={doc}
-        showPalette={false}
+        showPalette={palette}
         bottomPadding={40}
         penSettings={{ tool: null }}
         host={host}

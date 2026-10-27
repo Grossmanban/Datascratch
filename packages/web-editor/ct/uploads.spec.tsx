@@ -102,3 +102,16 @@ test("a file gets a placeholder row with a ring, then its stored name, size and 
   const stored = await yBlock(page, "file");
   expect(stored).toMatchObject({ attachmentId: "att-pdf", name: "отчёт.pdf", size: 2048, mime: "application/pdf", blockId: placeholder!.blockId, __tag: placeholder!.__tag });
 });
+
+test("the palette's «Картинка» button opens the image picker and inserts the picked image", async ({ mount, page }) => {
+  await mount(<UploadEditor palette />);
+  await ready(page);
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByTestId("tool-image").click();
+  const fc = await chooser;
+  expect(fc.isMultiple()).toBe(true);
+  await fc.setFiles({ name: "из-палитры.png", mimeType: "image/png", buffer: Buffer.from(PNG_B64, "base64") });
+  await expect(page.locator(".ds-image .ds-upload")).toHaveAttribute("data-status", "uploading");
+  await page.evaluate(() => window.__up!.calls[0]!.resolve({ attachmentId: "att-p", name: "из-палитры.png", size: 68, mime: "image/png" }));
+  await expect.poll(async () => (await yBlock(page, "image"))?.attachmentId).toBe("att-p");
+});

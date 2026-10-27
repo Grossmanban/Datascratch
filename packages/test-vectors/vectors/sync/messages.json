@@ -146,6 +146,12 @@
         "retryAfterMs": 5000
       },
       {
+        "type": "error",
+        "code": "device_revoked",
+        "message": "device revoked",
+        "reason": "token_reuse"
+      },
+      {
         "type": "update",
         "docId": "0192f3c4-0000-7000-8000-000000000001",
         "seq": 45,
@@ -4287,6 +4293,15 @@
           "type": "error",
           "code": "teapot",
           "message": ""
+        }
+      },
+      {
+        "reason": "unknown revocation reason",
+        "message": {
+          "type": "error",
+          "code": "device_revoked",
+          "message": "",
+          "reason": "bored"
         }
       },
       {

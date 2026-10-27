@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { authApi } from "@/api/endpoints";
-import { ApiError, setTokenSource } from "@/api/client";
+import { ApiError, DeviceRevokedError, setTokenSource } from "@/api/client";
 import { accountDb, closeAccountDb, deleteAccountDb, hasAccountDb, kvDelete, kvGet, kvSet, openAccountDb } from "@/data/db";
 import type { Session } from "@/lib/shared";
 import { openLocal, sealLocal, type SealedBlob } from "./deviceKey";
@@ -116,6 +116,8 @@ async function refresh(): Promise<Session | null> {
         await persist();
         return session;
       } catch (e) {
+        // D-53: disconnected from another device — deviceRevoked (below) is wiping the data.
+        if (e instanceof DeviceRevokedError) return null;
         if (e instanceof ApiError && (e.status === 401 || e.code === "unauthorized")) {
           // Refresh token revoked (session ended from another device): leave, keeping local data.
           await endKeepingData("revoked");
@@ -136,7 +138,7 @@ function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
   return locks ? (locks.request("ds-session-refresh", fn) as Promise<T>) : fn();
 }
 
-setTokenSource({ get: () => session, refresh });
+setTokenSource({ get: () => session, refresh, deviceRevoked: () => void wipeRevokedDevice() });
 
 export const refreshSession = refresh;
 
@@ -350,7 +352,19 @@ async function forgetLocalData(userId: string) {
  * email for the sign-in form) is kept to explain it. Never for an expired token or a network error.
  */
 export async function wipeRevokedDevice() {
+  // REST and the sync socket may both report it: wipe once.
+  if (wiping) return wiping;
+  wiping = wipe().finally(() => {
+    wiping = null;
+  });
+  return wiping;
+}
+
+let wiping: Promise<void> | null = null;
+
+async function wipe() {
   const { userId, email } = useAuth.getState();
+  if (!userId) return;
   for (const fn of signedOutListeners) fn();
   session = null;
   masterKey?.fill(0);

@@ -14,6 +14,36 @@ struct SidebarView: View {
     /// Height of the floating footer: the list ends above it (a safe-area inset alone left the
     /// last row, Trash, under the footer on iPad).
     @State private var footerHeight: CGFloat = 0
+    /// §12.6: folded sections (per space, on this device) and sections opened past their first rows.
+    private let collapse = SidebarCollapse()
+    @State private var showingAll: Set<String> = []
+    @State private var isAllTagsPresented = false
+
+    private func isCollapsed(_ section: String) -> Bool { collapse.isCollapsed(section, in: library.activeSpace?.id) }
+
+    private func toggle(_ section: String) {
+        withAnimation(Theme.Motion.smooth) { collapse.toggle(section, in: library.activeSpace?.id) }
+    }
+
+    private func toggleShowingAll(_ section: String) {
+        withAnimation(Theme.Motion.smooth) {
+            if showingAll.contains(section) { showingAll.remove(section) } else { showingAll.insert(section) }
+        }
+    }
+
+    private func moveNotebooks(_ source: IndexSet, _ destination: Int) {
+        guard let space = library.activeSpace else { return }
+        library.moveNotebooks(inSpace: space.id, from: source, to: destination)
+    }
+
+    /// The open notebook stays visible even past the first rows.
+    private func isOpen(_ notebook: Notebook) -> Bool {
+        switch scene.sidebar {
+        case .notebook(let id): id == notebook.id
+        case .folder(let id): library.folder(id)?.notebookId == notebook.id
+        default: false
+        }
+    }
 
     var body: some View {
         @Bindable var scene = scene
@@ -90,33 +120,48 @@ struct SidebarView: View {
                 }
 
                 if !library.starredNotes.isEmpty {
-                    Section("Starred") {
-                        ForEach(library.starredNotes) { note in
-                            Button {
-                                scene.open(note.id)
-                            } label: {
-                                NoteTitleLabel(note: note)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("sidebar.starredNote")
-                            .contextMenu {
-                                Button("Remove from Starred", systemImage: "star.slash") {
-                                    library.toggleStar(.note, note.id)
+                    let starred = SidebarLimit.visible(library.starredNotes, showAll: showingAll.contains("starred"))
+                    Section {
+                        if !isCollapsed("starred") {
+                            ForEach(starred.rows) { note in
+                                Button {
+                                    scene.open(note.id)
+                                } label: {
+                                    NoteTitleLabel(note: note)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("sidebar.starredNote")
+                                .contextMenu {
+                                    Button("Remove from Starred", systemImage: "star.slash") {
+                                        library.toggleStar(.note, note.id)
+                                    }
                                 }
                             }
+                            moreRow("starred", hidden: starred.hidden, total: library.starredNotes.count)
+                        }
+                    } header: {
+                        SidebarSectionHeader(title: "Starred", identifier: "starred", isCollapsed: isCollapsed("starred")) {
+                            toggle("starred")
                         }
                     }
                 }
 
+                let notebooks = library.notebooks(in: library.activeSpace?.id)
+                let shownNotebooks = SidebarLimit.visible(notebooks, showAll: showingAll.contains("notebooks"), keep: isOpen)
                 Section {
-                    ForEach(library.notebooks(in: library.activeSpace?.id)) { notebook in
-                        NotebookRow(notebook: notebook)
-                            .accessibilityIdentifier("sidebar.notebook")
+                    if !isCollapsed("notebooks") {
+                        ForEach(shownNotebooks.rows) { notebook in
+                            NotebookRow(notebook: notebook)
+                                .accessibilityIdentifier("sidebar.notebook")
+                        }
+                        // Manual order by drag and drop, while the whole list is on screen.
+                        .onMove(perform: shownNotebooks.hidden == 0 ? moveNotebooks : nil)
+                        moreRow("notebooks", hidden: shownNotebooks.hidden, total: notebooks.count)
                     }
                 } header: {
-                    HStack {
-                        Text("Notebooks")
-                        Spacer()
+                    SidebarSectionHeader(title: "Notebooks", identifier: "notebooks", isCollapsed: isCollapsed("notebooks")) {
+                        toggle("notebooks")
+                    } accessory: {
                         if let space = library.activeSpace {
                             Button {
                                 scene.sheet = .newNotebook(spaceId: space.id)
@@ -130,10 +175,29 @@ struct SidebarView: View {
                     }
                 }
 
-                if !library.tags.isEmpty {
-                    Section("Tags") {
-                        ForEach(library.tags, id: \.name) { tag in
-                            TagRow(name: tag.name, count: tag.count)
+                let tags = library.tagTree
+                if !tags.isEmpty {
+                    let shownTags = SidebarLimit.visible(tags, showAll: showingAll.contains("tags"))
+                    Section {
+                        if !isCollapsed("tags") {
+                            ForEach(shownTags.rows) { TagTreeRow(node: $0) }
+                            moreRow("tags", hidden: shownTags.hidden, total: tags.count)
+                            Button {
+                                isAllTagsPresented = true
+                            } label: {
+                                Label {
+                                    Text("All Tags")
+                                } icon: {
+                                    Image(systemName: "tag")
+                                        .foregroundStyle(Theme.Palette.textSecondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("sidebar.allTags")
+                        }
+                    } header: {
+                        SidebarSectionHeader(title: "Tags", identifier: "tags", isCollapsed: isCollapsed("tags")) {
+                            toggle("tags")
                         }
                     }
                 }
@@ -174,6 +238,15 @@ struct SidebarView: View {
         }
         .onChange(of: scene.sidebar) { _, _ in
             if app.settings.hapticsEnabled { Haptics.selection() }
+        }
+        .sheet(isPresented: $isAllTagsPresented) { AllTagsSheet() }
+    }
+
+    /// «N more» past the first rows; «Show Less» at the end of a section opened in full.
+    @ViewBuilder
+    private func moreRow(_ section: String, hidden: Int, total: Int) -> some View {
+        if hidden > 0 || (showingAll.contains(section) && total > SidebarLimit.rows) {
+            SidebarMoreRow(hidden: hidden, identifier: section) { toggleShowingAll(section) }
         }
     }
 }

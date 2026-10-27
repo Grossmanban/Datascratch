@@ -226,6 +226,9 @@ final class LibraryStore {
         return counts.map { ($0.key, $0.value) }.sorted { $0.name < $1.name }
     }
 
+    /// The tags of this space as a tree by `/` (§12.6), top level by recent use.
+    var tagTree: [TagNode] { TagNode.tree(of: documents.map { ($0.tags, $0.updatedAt) }) }
+
     func isStarred(_ kind: StarRef.Kind, _ id: String) -> Bool {
         data.starred.contains(StarRef(kind: kind, id: id))
     }
@@ -332,6 +335,18 @@ final class LibraryStore {
         mutate { snapshot in
             guard let index = snapshot.notebooks.firstIndex(where: { $0.id == id }) else { return }
             change(&snapshot.notebooks[index])
+        }
+    }
+
+    /// The sidebar's manual order of a space's notebooks (drag and drop).
+    func moveNotebooks(inSpace spaceId: String, from source: IndexSet, to destination: Int) {
+        let ids = notebooks(in: spaceId).map(\.id)
+        var ordered = ids.enumerated().filter { !source.contains($0.offset) }.map(\.element)
+        ordered.insert(contentsOf: source.map { ids[$0] }, at: destination - source.filter { $0 < destination }.count)
+        mutate { snapshot in
+            for (order, id) in ordered.enumerated() {
+                if let index = snapshot.notebooks.firstIndex(where: { $0.id == id }) { snapshot.notebooks[index].order = Double(order) }
+            }
         }
     }
 

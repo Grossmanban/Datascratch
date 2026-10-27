@@ -38,11 +38,12 @@ INTERPOLATIONS = {
     r"Group \(indices.1 + 1)": "Group %lld",
     r"\(strength) of 4": "%lld of 4",
     r"Last used \(lastUsed.formatted(.relative(presentation: .named)))": "Last used %@",
+    r"\(hidden) more": "%lld more",
 }
 
 # Literals that look like text but are not translated (names, formats, prefixes).
 IGNORE = {
-    "Projects", "Drafts", "Plan", "Draft", "Target", "Links", "Target body", "Go to [[Target]] or [[Nowhere]].", "Dated", "Call back",
+    "Projects", "Drafts", "Plan", "Draft", "Target", "Links", "Target body", "Go to [[Target]] or [[Nowhere]].", "Dated", "Call back", "#tag\\(index) #group/child\\(index)",
     "* ", ", ", " · ", " : ", "> ", "[ ] ", "[] ", "☐ ", "DS1", "DS1-XXXX-XXXX-…", "Datascratch", "Library.json",
     "CFBundleShortVersionString", "CFBundleVersion", "DSServerURL", "DSWebHost", "DSExtendedMode",
     "XChaCha20-Poly1305 · Argon2id", "Quiet paper", "next week", "open to agents", "CoreLibrary", "Library", "Attachments", "a^2 + b^2 = c^2", "graph TD\n  A --> B",

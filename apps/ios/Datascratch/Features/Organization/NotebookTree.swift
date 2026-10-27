@@ -177,12 +177,14 @@ struct TagRow: View {
     @Environment(AppModel.self) private var app
     let name: String
     let count: Int
+    /// The row's text when it is not the whole tag (the last part of `работа/клиенты` in the tree).
+    var title: String? = nil
 
     var body: some View {
         let color = app.library.data.tagColors[name] ?? .gray
         Label {
             HStack {
-                Text(name).lineLimit(1)
+                Text(title ?? name).lineLimit(1)
                 Spacer()
                 Text(count, format: .number)
                     .font(Theme.Typography.footnote.monospacedDigit())

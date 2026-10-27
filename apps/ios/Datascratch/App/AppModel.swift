@@ -147,6 +147,15 @@ final class AppModel {
                                                body: NoteBody(blocks: [.paragraph("Go to [[Target]] or [[Nowhere]].")]))
                 noteForTesting = links.id
             }
+            if ProcessInfo.processInfo.arguments.contains("-ui-testing-many"),
+               let space = library.activeSpace, let first = library.notebooks(in: space.id).first {
+                // A crowded sidebar (§12.6): more notebooks and top-level tags than its first rows.
+                for index in 1...9 { _ = library.createNotebook(in: space.id, name: "nb\(index)", mode: .private) }
+                for index in 1...9 {
+                    _ = library.createNote(in: first.id, folder: nil, title: "tagged\(index)",
+                                           body: NoteBody(blocks: [.paragraph("#tag\(index) #group/child\(index)")]))
+                }
+            }
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-task-date"),
                let notebook = library.notebooks(in: library.activeSpace?.id).first {
                 // A task with a date chip (tap → the reschedule menu).

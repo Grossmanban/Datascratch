@@ -545,53 +545,31 @@ public final class EditorView: UIView {
     var userIsInteracting: Bool { userIsScrolling }
 
     /// A structural edit at the caret (Return, joining paragraphs, a paste) re-renders paragraphs and
-    /// moves the selection; UIKit then scrolled on its own — often far past the keyboard. The line
-    /// where the edit starts stays where it is on screen and only the least needed to show the caret
-    /// is added (builds 14 and 18).
-    func keepingScroll(at anchor: Int? = nil, _ edit: () -> Void) {
-        let offset = anchor ?? textView.selectedRange.location
-        let line = lineScreenY(at: offset)
-        let fallback = textView.contentOffset
+    /// moves the selection; UIKit then scrolled on its own — often far past the keyboard. The scroll
+    /// position is kept exactly and only the least needed to show the caret is added (builds 14
+    /// and 18).
+    func keepingScroll(_ edit: () -> Void) {
+        let offset = textView.contentOffset
         edit()
-        holdLine(at: offset, screenY: line, fallback: fallback)
+        holdScroll(offset)
         // UIKit scrolls to a programmatic selection on the next turn too.
-        DispatchQueue.main.async { [weak self] in
-            self?.holdLine(at: offset, screenY: line, fallback: fallback)
-        }
+        DispatchQueue.main.async { [weak self] in self?.holdScroll(offset) }
     }
 
-    /// The line holding a text offset: its distance from the top of the scroll view's bounds.
-    private func lineScreenY(at offset: Int) -> CGFloat? {
-        guard let position = textView.position(from: textView.beginningOfDocument,
-                                               offset: max(0, min(offset, textView.textStorage.length))) else { return nil }
-        let rect = textView.caretRect(for: position)
-        guard !rect.isNull, rect.minY.isFinite, rect.height > 0 else { return nil }
-        return rect.minY - textView.contentOffset.y
-    }
-
-    /// Typing rule (build 18): the content does not move while the person types. The line of the
-    /// edit goes back to where it was on screen (UIKit's own scroll to the caret, a re-laid-out
-    /// block or a header that changed height above it moved it), then the caret gets only the
-    /// scroll it needs to stay above the keyboard and the palette.
-    private func holdLine(at offset: Int, screenY: CGFloat?, fallback: CGPoint) {
+    /// Typing rule (build 18): the content does not move while the person types. The scroll
+    /// position goes back to where it was (UIKit's own scroll to the caret moved it), then the caret
+    /// gets only the scroll it needs to stay above the keyboard and the palette. A header that
+    /// changes height meanwhile is compensated in `layoutSubviews`.
+    private func holdScroll(_ offset: CGPoint) {
         guard !userIsInteracting else { return }
         textView.layoutIfNeeded()
-        if let screenY, let now = lineScreenY(at: offset) {
-            let minY = -textView.adjustedContentInset.top
-            let maxY = max(minY, textView.contentSize.height + textView.adjustedContentInset.bottom - textView.bounds.height)
-            let y = min(max(textView.contentOffset.y + now - screenY, minY), maxY)
-            if abs(y - textView.contentOffset.y) > 0.5 {
-                textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: y), animated: false)
-            }
-        } else if textView.contentOffset != fallback {
-            textView.setContentOffset(fallback, animated: false)
-        }
+        if textView.contentOffset != offset { textView.setContentOffset(offset, animated: false) }
         scrollCaretIntoView()
     }
 
-    /// Plain typing is applied by the text view after `shouldChangeTextIn`: the line is held in
-    /// `textViewDidChange`.
-    private var typingAnchor: (offset: Int, screenY: CGFloat?, fallback: CGPoint)?
+    /// Plain typing is applied by the text view after `shouldChangeTextIn`: the scroll position is
+    /// held in `textViewDidChange`.
+    private var typingOffset: CGPoint?
 
     private func layoutHeader() {
         guard let header = headerView else {
@@ -1073,7 +1051,7 @@ public final class EditorView: UIView {
     func pastePlainText() {
         guard let text = UIPasteboard.general.string, !text.isEmpty else { return }
         let range = selectionRange
-        keepingScroll(at: range.lowerBound) {
+        keepingScroll {
             select(commands.replace(range, with: text.replacingOccurrences(of: "\r\n", with: "\n"),
                                     marks: (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil)))
         }
@@ -1082,7 +1060,7 @@ public final class EditorView: UIView {
     private func insert(_ fragment: PasteFragment, over range: Range<Int>) {
         let blocks = resolvePastedImages(fragment)
         guard !blocks.isEmpty else { return }
-        keepingScroll(at: range.lowerBound) {
+        keepingScroll {
             select(commands.insertFragment(blocks, replacing: range))
         }
         notifyStateChange()
@@ -1832,7 +1810,7 @@ extension EditorView: UITextViewDelegate {
         let cmd = commands
         let start = p.paragraphs[si]
         pendingShortcut = nil
-        typingAnchor = nil
+        typingOffset = nil
 
         // Return in the title moves to the text (Apple Notes, spec/04).
         if text == "\n", start.kind.type == NodeType.title, range.length == 0, tv.markedTextRange == nil {
@@ -1844,7 +1822,7 @@ extension EditorView: UITextViewDelegate {
             if range.length > 0 { cmd.replace(lo..<hi, with: "") }
             let pos = TextPosition(block: start.blockId, offset: so)
             var caret = range.length == 0 ? MarkdownShortcuts(commands: cmd).handleReturn(at: pos) : nil
-            keepingScroll(at: lo) {
+            keepingScroll {
                 if caret == nil {
                     document.stopCapturing()
                     caret = cmd.splitParagraph(at: pos)
@@ -1856,7 +1834,7 @@ extension EditorView: UITextViewDelegate {
         }
         // Backspace at the start of a paragraph (or delete at the end of the previous one).
         if text.isEmpty, range.length == 1, ei == si + 1, eo == 0, so == start.length {
-            keepingScroll(at: lo) { select(cmd.joinBackward(at: TextPosition(block: p.paragraphs[ei].blockId, offset: 0))) }
+            keepingScroll { select(cmd.joinBackward(at: TextPosition(block: p.paragraphs[ei].blockId, offset: 0))) }
             return false
         }
         // Plain typing inside one text paragraph: let the text view apply it, mirror to the model.
@@ -1868,12 +1846,12 @@ extension EditorView: UITextViewDelegate {
             // Markdown shortcuts never fire on marked text (dictation and input methods stream
             // their text through it; acting on it moved the caret under them).
             if text.utf16.count == 1, tv.markedTextRange == nil { pendingShortcut = (lo + 1, text) }
-            typingAnchor = (lo, lineScreenY(at: lo), tv.contentOffset)
+            typingOffset = tv.contentOffset
             return true
         }
         // Everything else is structural.
         let clean = text.replacingOccurrences(of: "\u{FFFC}", with: "").replacingOccurrences(of: "\u{2028}", with: "\n")
-        keepingScroll(at: lo) { select(cmd.replace(lo..<hi, with: clean, marks: (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil))) }
+        keepingScroll { select(cmd.replace(lo..<hi, with: clean, marks: (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil))) }
         return false
     }
 
@@ -1898,12 +1876,10 @@ extension EditorView: UITextViewDelegate {
         }
         normalizeParagraph(i)
         ink.invalidateLayout()
-        if let anchor = typingAnchor {
-            typingAnchor = nil
-            holdLine(at: anchor.offset, screenY: anchor.screenY, fallback: anchor.fallback)
-            DispatchQueue.main.async { [weak self] in
-                self?.holdLine(at: anchor.offset, screenY: anchor.screenY, fallback: anchor.fallback)
-            }
+        if let offset = typingOffset {
+            typingOffset = nil
+            holdScroll(offset)
+            DispatchQueue.main.async { [weak self] in self?.holdScroll(offset) }
         }
         updateSlashMenu()
         notifyStateChange()

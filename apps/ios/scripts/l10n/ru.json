@@ -186,6 +186,7 @@
   "Name": "Название",
   "New Folder": "Новая папка",
   "New Note": "Новая заметка",
+  "New Note In": "Новая заметка в",
   "New Notebook": "Новый блокнот",
   "New Recovery Key": "Новый ключ восстановления",
   "New Space": "Новое пространство",
@@ -412,6 +413,7 @@
   "Your password signs you in and encrypts your notes. It never leaves this device.": "Пароль служит и для входа, и для шифрования заметок. Он никогда не покидает устройство.",
   "Your recovery key": "Ваш ключ восстановления",
   "Your token": "Ваш токен",
+  "in “%@”": "в «%@»",
   "until %@": "до %@",
   "until revoked": "до отзыва"
 }

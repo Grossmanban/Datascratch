@@ -80,12 +80,16 @@ struct DocumentCollectionView: View {
                 // One «New» button (D-38): the toolbar on iPad, the floating button on iPhone.
                 // (By idiom: the iPad split-view columns report a compact size class.)
                 if canCreate, !isPhone {
-                    Button {
-                        scene.newNote()
-                    } label: {
-                        Image(systemName: "square.and.pencil")
+                    NewNoteMenu {
+                        HStack(spacing: Theme.Space.s1) {
+                            Image(systemName: "square.and.pencil")
+                            if let name = NewNoteMenu.destinationName(app: app, scene: scene) {
+                                Text("in “\(name)”")
+                                    .font(Theme.Typography.footnote)
+                                    .lineLimit(1)
+                            }
+                        }
                     }
-                    .accessibilityLabel("New Note")
                     .accessibilityIdentifier("library.newNote")
                 }
             }
@@ -93,18 +97,27 @@ struct DocumentCollectionView: View {
         .safeAreaInset(edge: .bottom) {
             if isPhone, canCreate {
                 // One-handed use on iPhone: the main action sits under the thumb.
-                HStack {
+                HStack(spacing: Theme.Space.s2) {
                     Spacer()
-                    Button {
-                        scene.newNote()
-                    } label: {
+                    // Where the note goes, when the list is not that notebook (All Documents, a tag).
+                    if let name = NewNoteMenu.destinationName(app: app, scene: scene) {
+                        Text("in “\(name)”")
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                            .lineLimit(1)
+                            .padding(.horizontal, Theme.Space.s3)
+                            .padding(.vertical, Theme.Space.s2)
+                            .background(.regularMaterial, in: Capsule())
+                            .accessibilityHidden(true)
+                    }
+                    NewNoteMenu {
                         Image(systemName: "square.and.pencil")
                             .font(.title2.weight(.medium))
                             .frame(width: 56, height: 56)
                     }
+                    .menuStyle(.button)
                     .prominentGlass()
                     .buttonBorderShape(.circle)
-                    .accessibilityLabel("New Note")
                     .accessibilityIdentifier("library.newNote.floating")
                 }
                 .padding(.horizontal, Theme.Space.s5)
@@ -636,3 +649,39 @@ struct FolderBreadcrumb: View {
         .buttonStyle(.plain)
     }
 }
+
+/// «New Note»: a tap makes the note where `SceneModel.newNoteDestination` says; a long press
+/// picks another notebook of the space (spec/05).
+struct NewNoteMenu<Label: View>: View {
+    @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
+    @ViewBuilder var label: Label
+
+    /// The notebook a new note goes to, named when the list shown is not that notebook.
+    static func destinationName(app: AppModel, scene: SceneModel) -> String? {
+        guard !scene.isShowingAContainer, scene.selectedNoteId == nil,
+              let destination = scene.newNoteDestination else { return nil }
+        return app.library.notebook(destination.notebookId)?.name
+    }
+
+    var body: some View {
+        let library = app.library
+        Menu {
+            Section("New Note In") {
+                ForEach(library.notebooks(in: library.activeSpace?.id)) { notebook in
+                    Button(notebook.name, systemImage: "book.closed") {
+                        scene.newNote(in: notebook.id)
+                    }
+                    .disabled(library.isLocked(notebook: notebook.id))
+                }
+            }
+        } label: {
+            label
+        } primaryAction: {
+            scene.newNote()
+        }
+        .accessibilityLabel("New Note")
+        .accessibilityValue(Self.destinationName(app: app, scene: scene).map { Text("in “\($0)”") } ?? Text(verbatim: ""))
+    }
+}
+

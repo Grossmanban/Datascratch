@@ -68,8 +68,13 @@ grep -q 'not deployed yet' "$WORK/inspect.md"
 if grep -Eiq 'PASSWORD=|KMS_KEY=|SECRET=' "$WORK/inspect.md"; then echo "inspect printed a secret" >&2; exit 1; fi
 
 step "first deploy (fresh server: bootstrap + e2e1)"
-DS_HOST_MODE=fresh DS_TAG=e2e1 "$DEPLOY_DIR/remote.sh" deploy
+DS_HOST_MODE=fresh DS_TAG=e2e1 "$DEPLOY_DIR/remote.sh" deploy 2>&1 | tee "$WORK/first-deploy.log"
 node "$DEPLOY_DIR/smoke.mjs" https://localhost 180
+# The new DS_KMS_KEY is announced, but its value never reaches the (CI) log.
+grep -q 'ds key' "$WORK/first-deploy.log"
+kms="$(vps sh -c "grep -E '^DS_KMS_KEY=' /opt/datascratch/.env | cut -d= -f2-")"
+[ -n "$kms" ]
+if grep -qF "$kms" "$WORK/first-deploy.log"; then echo "DS_KMS_KEY leaked into the deploy log" >&2; exit 1; fi
 vps sh -c 'test "$(stat -c %a /opt/datascratch/.env)" = 600'
 vps test -f /etc/cron.d/datascratch-backup
 first="$(secrets_hash)"
@@ -89,9 +94,22 @@ step "manual rollback to the previous version"
 vps grep -qx 'DS_TAG=e2e1' /opt/datascratch/.env
 node "$DEPLOY_DIR/smoke.mjs" https://localhost 120
 
-step "nightly backup script works on the deployed stack"
-vps /opt/datascratch/backup.sh
-vps sh -c 'ls /opt/datascratch/backups/db-*.dump /opt/datascratch/backups/files-*.tar.gz'
+step "backups by hand: ds backup / backups / restore (D-55)"
+out="$(vps /opt/datascratch/ds backup 2> "$WORK/ds-stderr")"
+echo "$out"
+grep -q 'ds key' "$WORK/ds-stderr" # reminder until the key is marked as saved
+dump="$(echo "$out" | grep -o '/opt/datascratch/backups/db-[0-9TZ]*\.dump' | head -1)"
+[ -n "$dump" ] && echo "$out" | grep -qE 'db-[0-9TZ]+\.dump  [0-9.]+[KMG]?B' && echo "$out" | grep -q 'files-'
+vps /opt/datascratch/ds backups | grep -q "$(basename "$dump" .dump | sed 's/^db-//')"
+vps env RESTORE_YES=1 /opt/datascratch/ds restore "$(basename "$dump")"
+vps sh -c 'ls /opt/datascratch/backups/pre-restore-*.dump' > /dev/null
+node "$DEPLOY_DIR/smoke.mjs" https://localhost 120
+# The key is shown only at a terminal, never into a pipe; then the reminder stops.
+if vps /opt/datascratch/ds key > "$WORK/ds-key.out" 2>&1; then echo "ds key printed without a terminal" >&2; exit 1; fi
+if grep -qF "$kms" "$WORK/ds-key.out"; then echo "ds key leaked the key into a pipe" >&2; exit 1; fi
+docker exec -t "$VPS" /opt/datascratch/ds key | grep -qF "$kms"
+vps /opt/datascratch/ds key-saved > /dev/null
+[ -z "$(vps /opt/datascratch/ds backups 2>&1 > /dev/null)" ]
 
 step "shared server: an existing app behind nginx owns ports 80/443"
 vps sh -c 'cd /opt/datascratch && docker compose down' > /dev/null 2>&1

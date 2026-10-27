@@ -1,17 +1,17 @@
 # Graph Report - Datascratch  (2026-10-27)
 
 ## Corpus Check
-- 976 files · ~852,038 words
+- 976 files · ~852,217 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 39 file(s) not represented in the graph (top: (none) 20, .css 6, .example 4)
 
 ## Summary
-- 21940 nodes · 63889 edges · 407 communities (370 shown, 37 thin omitted)
+- 21940 nodes · 63890 edges · 407 communities (370 shown, 37 thin omitted)
 - Extraction: 84% EXTRACTED · 16% INFERRED · 0% AMBIGUOUS · INFERRED: 10046 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `bf2d4200`
+- Built from commit: `6327527c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1946,36 +1946,36 @@ Nodes (3): ./strokes, import, types
 ## Ambiguous Edges - Review These
 - `0030-server-database-postgresql.md` → `Shared for the whole account: app settings, account, keys, devices, agent grants`  [AMBIGUOUS]
   docs/decisions/0048-isolated-spaces.md · relation: references
-- `settings.dailyNotebookBySpace { spaceId: notebookId } — daily notes and Inbox notebook per space (D-48)` → `Daily notes and Inbox live in the notebook from settings.dailyNotebookBySpace`  [AMBIGUOUS]
+- `Daily notes and Inbox live in the notebook from settings.dailyNotebookBySpace` → `settings.dailyNotebookBySpace { spaceId: notebookId } — daily notes and Inbox notebook per space (D-48)`  [AMBIGUOUS]
   docs/architecture/contracts/document-model.md · relation: conceptually_related_to
-- `Account-wide (shared across spaces): app settings (theme, language, pen), account, keys, devices, agent grants` → `D-30 БД сервера: PostgreSQL (РЕШЕНО)`  [AMBIGUOUS]
-  docs/decisions/0048-isolated-spaces.md · relation: references
 - `Session ended from another device (refresh 401): endKeepingData("revoked") clears tokens/keys from memory but keeps account DB, writes kv revoked record; login screen offers «Удалить данные с этого устройства» (revoked.spec)` → `Revoked device wipes all its data: local DB, keys, attachments, image cache, incl. unsent changes; only when server unambiguously reports revocation (not network error or expired token)`  [AMBIGUOUS]
   docs/decisions/0053-security-audit-owner-decisions.md · relation: conceptually_related_to
+- `Account-wide (shared across spaces): app settings (theme, language, pen), account, keys, devices, agent grants` → `D-30 БД сервера: PostgreSQL (РЕШЕНО)`  [AMBIGUOUS]
+  docs/decisions/0048-isolated-spaces.md · relation: references
 
 ## Knowledge Gaps
 - **1526 isolated node(s):** `.body`, `onboarding`, `.phase`, `.isLocalOnlyTesting`, `.linkHost` (+1521 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 5405 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 5404 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **37 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `tokens.test.mjs`, `cn`, `@datascratch/ui — веб-компоненты «Тихая бумага»`, `DSLanguage (2)`, `0048-isolated-spaces.md`, `api/client.ts`?**
-  _High betweenness centrality (0.174) - this node is a cross-community bridge._
+  _High betweenness centrality (0.168) - this node is a cross-community bridge._
 - **Are the 370 inferred relationships involving `t()` (e.g. with `accept()` and `ACTION()`) actually correct?**
   _`t()` has 370 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `.body`, `onboarding`, `.phase` to the rest of the system?**
   _1526 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
   _Cohesion score 0.0018042548859934853 - nodes in this community are weakly interconnected._
-- **Why does `DSDateChipModel` connect `DSLanguage (2)` to `Sendable`, `design-tokens.md`, `Equatable`, `BlockLayoutFragment`?**
-  _High betweenness centrality (0.136) - this node is a cross-community bridge._
+- **Why does `el()` connect `I` to `mermaid.min.js`, `actions.ts`?**
+  _High betweenness centrality (0.137) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
 
 - **What is the exact relationship between `0030-server-database-postgresql.md` and `Shared for the whole account: app settings, account, keys, devices, agent grants`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
-- **What is the exact relationship between `settings.dailyNotebookBySpace { spaceId: notebookId } — daily notes and Inbox notebook per space (D-48)` and `Daily notes and Inbox live in the notebook from settings.dailyNotebookBySpace`?**
+- **What is the exact relationship between `Daily notes and Inbox live in the notebook from settings.dailyNotebookBySpace` and `settings.dailyNotebookBySpace { spaceId: notebookId } — daily notes and Inbox notebook per space (D-48)`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._

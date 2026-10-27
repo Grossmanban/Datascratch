@@ -61,7 +61,9 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         emailWindows.set(key, w);
       }
       w.count += 1;
-      if (w.count > PER_EMAIL_PER_MINUTE) throw new ApiError('rate_limited', 'too many attempts for this account, retry in a minute');
+      if (w.count > PER_EMAIL_PER_MINUTE) {
+        throw new ApiError('rate_limited', 'too many attempts for this account, retry in a minute', undefined, 60_000 - (now - w.start));
+      }
     };
     const { db } = ctx.database;
 
@@ -288,7 +290,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             .where(eq(users.id, rt.userId))
             .returning();
           // A forgotten (or stolen) password: sign out everywhere.
-          revoked = await revokeOtherDevices(ctx, tx, rt.userId, null);
+          revoked = await revokeOtherDevices(ctx, tx, rt.userId, null, 'recovery');
           const session = await createSession(ctx, tx, user!, b.deviceName ?? 'Recovered device');
           await tx.insert(securityEvents).values({
             userId: rt.userId,
@@ -298,7 +300,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           });
           return session;
         });
-        publishDeviceRevocations(ctx, revoked, 'password reset');
+        publishDeviceRevocations(ctx, revoked, 'recovery');
         return session;
       },
     );
@@ -340,9 +342,9 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             })
             .where(eq(users.id, p.userId));
           await recordEvent(tx, p, 'password_changed');
-          return revokeOtherDevices(ctx, tx, p.userId, p.deviceId);
+          return revokeOtherDevices(ctx, tx, p.userId, p.deviceId, 'password_change');
         });
-        publishDeviceRevocations(ctx, revoked, 'password changed');
+        publishDeviceRevocations(ctx, revoked, 'password_change');
         return reply.code(204).send(null);
       },
     );

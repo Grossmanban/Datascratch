@@ -12,8 +12,8 @@ final class SessionEndedUITests: XCTestCase {
 
         let alert = app.alerts.firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 10), "no «device signed out» notice on the welcome screen")
-        let message = alert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
-        XCTAssertTrue(message.contains("deleted"), "the notice does not say the data was deleted: \(message)")
+        let deleted = alert.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'deleted'")).firstMatch
+        XCTAssertTrue(deleted.exists, "the notice does not say the data was deleted")
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "device-revoked"
         screenshot.lifetime = .keepAlways

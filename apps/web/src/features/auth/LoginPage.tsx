@@ -37,7 +37,8 @@ export function LoginPage() {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" data-testid="login-form">
-      {revoked && <RevokedNotice unsent={revoked.unsent} signedOut={revoked.reason === "signedOut"} />}
+      {revoked?.reason === "wiped" && <WipedNotice />}
+      {revoked && revoked.reason !== "wiped" && <RevokedNotice unsent={revoked.unsent} signedOut={revoked.reason === "signedOut"} />}
       {!revoked && restoreFailed && (
         <p role="status" className="rounded-lg bg-[var(--ds-tint-yellow-bg)] px-3.5 py-3 text-[13.5px] text-ink" data-testid="restore-failed">
           {t("app.restoreFailed")}
@@ -66,6 +67,17 @@ export function LoginPage() {
         </span>
       </div>
     </form>
+  );
+}
+
+/** D-53: the device was disconnected from another device and its data deleted; say so plainly. */
+function WipedNotice() {
+  const { t } = useTranslation();
+  return (
+    <div role="alert" className="rounded-lg bg-[var(--ds-tint-yellow-bg)] px-3.5 py-3 text-[13.5px] text-ink" data-testid="wiped-notice">
+      <p className="font-semibold">{t("auth.wipedTitle")}</p>
+      <p className="mt-0.5 text-ink-2">{t("auth.wipedText")}</p>
+    </div>
   );
 }
 

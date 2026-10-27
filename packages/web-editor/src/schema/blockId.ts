@@ -1,3 +1,4 @@
+import { isPendingPastedImage } from "../uploads";
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
@@ -18,6 +19,8 @@ function stripIds(fragment: Fragment): Fragment {
   fragment.forEach((node) => {
     let attrs = node.attrs;
     for (const a of UNIQUE_ATTRS) {
+      // Pasted images keep the id their upload is registered under (uploads.ts).
+      if (a === "blockId" && typeof attrs[a] === "string" && isPendingPastedImage(attrs[a] as string)) continue;
       if (a in attrs && attrs[a] !== null) attrs = { ...attrs, [a]: null };
     }
     nodes.push(node.isText ? node : node.type.create(attrs, stripIds(node.content), node.marks));

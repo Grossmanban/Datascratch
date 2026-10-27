@@ -18,8 +18,19 @@ export interface UploadedAttachment {
 export interface EditorHost {
   /** attachmentId → URL that can be put into <img src> (blob: or https:). */
   resolveAttachment?: (attachmentId: string) => Promise<string | null>;
-  /** Uploads (encrypts) a pasted or dropped file and returns its attachment record. */
-  uploadAttachment?: (file: File) => Promise<UploadedAttachment>;
+  /**
+   * Encrypts and stores a pasted, dropped or picked file; resolves with its attachment record. The
+   * editor has already inserted the block with a local preview; `onProgress` (0..1, optional) drives
+   * its progress ring — it covers sealing the file locally; the server upload continues in the
+   * background (offline-first). A rejection shows «Повторить» / «Удалить» on the block.
+   */
+  uploadAttachment?: (file: File, opts?: { onProgress?: (fraction: number) => void }) => Promise<UploadedAttachment>;
+  /**
+   * Downloads an image found in pasted HTML (http/https) so it can be stored as an attachment.
+   * Rejects (or absent) when it cannot be fetched (CORS, offline): the image then stays as a link to
+   * its URL.
+   */
+  fetchRemoteImage?: (url: string) => Promise<File>;
   onOpenAttachment?: (attachment: { attachmentId: string; name: string; mime: string }) => void;
   /** Data for a page card (`pageCard`) or a note link chip. */
   resolveNote?: (noteId: string) => Promise<NoteSummary | null>;

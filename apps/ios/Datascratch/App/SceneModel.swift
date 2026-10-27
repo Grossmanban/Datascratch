@@ -177,6 +177,12 @@ final class SceneModel {
         }
     }
 
+    /// The notebook a new note goes to, named when the list shown is not that notebook.
+    var newNoteDestinationName: String? {
+        guard !isShowingAContainer, selectedNoteId == nil, let destination = newNoteDestination else { return nil }
+        return library.notebook(destination.notebookId)?.name
+    }
+
     private static let lastNotebookKey = "newNote.lastNotebookBySpace"
 
     static func lastNotebook(inSpace spaceId: String) -> String? {
@@ -197,7 +203,8 @@ final class SceneModel {
         if newNoteDestination == nil, let space = library.activeSpace {
             library.createNotebook(in: space.id, name: String(localized: "Notes"), mode: .private)
         }
-        guard let destination = notebookId.map({ ($0, nil) }) ?? newNoteDestination,
+        let picked: (notebookId: String, folderId: String?)? = notebookId.map { (notebookId: $0, folderId: nil) }
+        guard let destination = picked ?? newNoteDestination,
               !library.isLocked(notebook: destination.notebookId) else { return nil }
         let note = library.createNote(in: destination.notebookId, folder: destination.folderId, title: title)
         // In a tag's list the note gets the tag at once.

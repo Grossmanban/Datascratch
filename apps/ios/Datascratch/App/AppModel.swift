@@ -293,7 +293,8 @@ final class AppModel {
             return ServerInfo(host: host, version: "test")
         }
         #if canImport(DSCore)
-        return ServerInfo(host: host, version: try await ServerConnection.healthVersion(of: url))
+        let version = try await ServerConnection.healthVersion(of: url)
+        return ServerInfo(host: host, version: version)
         #else
         throw URLError(.unsupportedURL)
         #endif

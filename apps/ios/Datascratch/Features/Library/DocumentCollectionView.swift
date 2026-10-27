@@ -83,7 +83,7 @@ struct DocumentCollectionView: View {
                     NewNoteMenu {
                         HStack(spacing: Theme.Space.s1) {
                             Image(systemName: "square.and.pencil")
-                            if let name = NewNoteMenu.destinationName(app: app, scene: scene) {
+                            if let name = scene.newNoteDestinationName {
                                 Text("in “\(name)”")
                                     .font(Theme.Typography.footnote)
                                     .lineLimit(1)
@@ -100,7 +100,7 @@ struct DocumentCollectionView: View {
                 HStack(spacing: Theme.Space.s2) {
                     Spacer()
                     // Where the note goes, when the list is not that notebook (All Documents, a tag).
-                    if let name = NewNoteMenu.destinationName(app: app, scene: scene) {
+                    if let name = scene.newNoteDestinationName {
                         Text("in “\(name)”")
                             .font(Theme.Typography.footnote)
                             .foregroundStyle(Theme.Palette.textSecondary)
@@ -657,13 +657,6 @@ struct NewNoteMenu<Label: View>: View {
     @Environment(SceneModel.self) private var scene
     @ViewBuilder var label: Label
 
-    /// The notebook a new note goes to, named when the list shown is not that notebook.
-    static func destinationName(app: AppModel, scene: SceneModel) -> String? {
-        guard !scene.isShowingAContainer, scene.selectedNoteId == nil,
-              let destination = scene.newNoteDestination else { return nil }
-        return app.library.notebook(destination.notebookId)?.name
-    }
-
     var body: some View {
         let library = app.library
         Menu {
@@ -681,7 +674,7 @@ struct NewNoteMenu<Label: View>: View {
             scene.newNote()
         }
         .accessibilityLabel("New Note")
-        .accessibilityValue(Self.destinationName(app: app, scene: scene).map { Text("in “\($0)”") } ?? Text(verbatim: ""))
+        .accessibilityValue(scene.newNoteDestinationName.map { Text("in “\($0)”") } ?? Text(verbatim: ""))
     }
 }
 

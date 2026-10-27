@@ -325,6 +325,24 @@ const attAccess = (auth, req, a) => {
   if (!shareActive(s)) return false;
   return shareDocIds(s).includes(a.noteId);
 };
+// D-52 image fetch (api.md «Картинка по ссылке»). The mock never goes to the network: a private
+// address or `*.blocked.test` is refused, a `.png` URL gets a 2×2 red PNG, anything else is not an image.
+const MOCK_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==", "base64");
+route("POST", "/v1/fetch-image", (_q, res, { auth, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  let u;
+  try {
+    u = new URL(body.url);
+  } catch {
+    return json(res, 422, { error: "blocked" });
+  }
+  const h = u.hostname;
+  if (!/^https?:$/.test(u.protocol) || h === "localhost" || /^(127|10|192\.168)\./.test(h) || h.endsWith(".blocked.test"))
+    return json(res, 422, { error: "blocked" });
+  if (!u.pathname.endsWith(".png")) return json(res, 422, { error: "not_image" });
+  res.writeHead(200, { "content-type": "image/png", "content-length": MOCK_PNG.length, ...cors });
+  res.end(MOCK_PNG);
+});
 route("POST", "/v1/attachments", (_q, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
   if (body.size > 200 * 1024 * 1024 * 1.01) return err(res, 413, "payload_too_large");

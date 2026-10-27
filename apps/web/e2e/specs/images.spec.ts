@@ -67,3 +67,34 @@ test("the top bar's «Вставить картинку» inserts several pictur
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByTestId("insert-picture")).toBeVisible();
 });
+
+test("rich paste: an image linked from pasted HTML is fetched through the server (D-52); a blocked one stays a link", async ({ page }) => {
+  // The mock stands in for the internet (a `.png` URL gets a picture); against a real server only
+  // the refusal is checked: a private address is always blocked (decisions/0052).
+  const mock = !process.env.E2E_SERVER_URL;
+  await signUp(page, uniqueEmail("paste-remote"));
+  await newDoc(page, "Вставка из веба", "Текст");
+  const fetched: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().endsWith("/v1/fetch-image")) fetched.push(JSON.parse(r.postData() ?? "{}").url);
+  });
+  const allowed = "https://images.example.com/cat.png";
+  const blocked = "http://127.0.0.1/dog.png";
+  await page.locator(".ds-prose p").last().click();
+  await page.evaluate((html) => {
+    const dt = new DataTransfer();
+    dt.setData("text/html", html);
+    dt.setData("text/plain", "Кот: и");
+    document.querySelector(".ds-prose")!.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, `${mock ? `<p>Кот:</p><img src="${allowed}" alt="кот">` : ""}<p>и</p><img src="${blocked}" alt="пёс">`);
+  // The blocked one becomes a link to its address; the allowed one an encrypted attachment.
+  await expect(page.locator(`.ds-prose a[href="${blocked}"]`)).toHaveText("пёс", { timeout: 20_000 });
+  const images = page.locator(".ds-prose img");
+  if (mock) {
+    await expect(images).toHaveCount(1, { timeout: 15_000 });
+    await expect(images.first()).toHaveAttribute("src", /^blob:/);
+    await expect.poll(() => images.first().evaluate((img) => (img as HTMLImageElement).naturalWidth), { timeout: 15_000 }).toBe(2);
+    expect(fetched.sort()).toEqual([allowed, blocked].sort());
+  } else await expect(images).toHaveCount(0);
+  await expectSynced(page);
+});

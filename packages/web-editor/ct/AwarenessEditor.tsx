@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import * as Y from "yjs";
-import { Awareness } from "y-protocols/awareness";
+import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from "y-protocols/awareness";
 import { DatascratchEditor, type EditorApi } from "../src";
 
 declare global {
   interface Window {
-    __aw?: { api: EditorApi | null; apis: EditorApi[]; awareness: Record<string, Awareness>; ready: boolean };
+    __aw?: { api: EditorApi | null; apis: EditorApi[]; awareness: Record<string, Awareness>; ready: boolean; lib?: unknown };
   }
 }
 
@@ -20,6 +20,8 @@ export function AwarenessEditor({ docKey, awarenessKey }: { docKey: string; awar
     return (awarenesses[`${docKey}:${awarenessKey}`] ??= new Awareness(doc));
   }, [doc, docKey, awarenessKey]);
   window.__aw ??= { api: null, apis: [], awareness: awarenesses, ready: false };
+  // For tests that play a remote collaborator.
+  window.__aw.lib = { Y, Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, doc, awareness };
   return (
     <div style={{ width: 700 }}>
       <DatascratchEditor

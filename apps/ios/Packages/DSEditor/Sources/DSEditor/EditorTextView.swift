@@ -1,6 +1,7 @@
 #if canImport(UIKit)
 import DSEditorModel
 import UIKit
+import UniformTypeIdentifiers
 
 /// Routes the system undo (⌘Z, shake, three-finger swipe, toolbar) to the document's unified
 /// undo of text and strokes. UITextView's own registrations are ignored.
@@ -49,6 +50,33 @@ final class EditorTextView: UITextView {
     /// (caret placement, which also brought up the keyboard and won over the link tap) do not
     /// begin there. Long press and selection still work for editing the link's text.
     var tapTargetAt: ((CGPoint) -> Bool)?
+    /// Pasted images go to the host (`EditorView.onImagesReceived`); nil: plain text paste only.
+    var imagePaste: (([NSItemProvider]) -> Void)?
+
+    /// The pasteboard holds images and nothing more useful as text (a copied photo; a web image
+    /// with its address).
+    private var pasteboardIsImages: Bool {
+        let board = UIPasteboard.general
+        guard board.hasImages else { return false }
+        guard board.hasStrings else { return true }
+        return board.hasURLs && !(board.strings ?? []).contains { URL(string: $0)?.scheme == nil }
+    }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(paste(_:)), imagePaste != nil, UIPasteboard.general.hasImages { return true }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    override func paste(_ sender: Any?) {
+        if let imagePaste, pasteboardIsImages {
+            let providers = UIPasteboard.general.itemProviders.filter { $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) }
+            if !providers.isEmpty {
+                imagePaste(providers)
+                return
+            }
+        }
+        super.paste(sender)
+    }
     /// The editor's own tap recognizer (links, task boxes, date chips). The text view's own single
     /// taps wait for it to fail: it begins only on a tap target and fails at once elsewhere, so
     /// caret placement is not delayed, and on a target it always wins (date chip taps were taken

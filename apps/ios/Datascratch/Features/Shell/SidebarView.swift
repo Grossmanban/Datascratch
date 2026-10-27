@@ -19,7 +19,7 @@ struct SidebarView: View {
         @Bindable var scene = scene
         List(selection: $scene.sidebar) {
             Group {
-                if !library.openTabs.isEmpty {
+                if Features.tabs, !library.openTabs.isEmpty {
                     Section("Tabs") {
                         ForEach(library.openTabs) { note in
                             HStack(spacing: Theme.Space.s2) {
@@ -63,6 +63,7 @@ struct SidebarView: View {
                     SidebarLabel("All Documents", systemImage: "doc.on.doc")
                         .tag(SidebarItem.allDocuments)
                         .accessibilityIdentifier("sidebar.allDocuments")
+                    if Features.tasks {
                     Label {
                         HStack {
                             Text("Tasks")
@@ -80,9 +81,12 @@ struct SidebarView: View {
                     }
                     .tag(SidebarItem.tasks)
                     .accessibilityIdentifier("sidebar.tasks")
-                    SidebarLabel("Calendar", systemImage: "calendar")
-                        .tag(SidebarItem.calendar)
-                        .accessibilityIdentifier("sidebar.calendar")
+                    }
+                    if Features.calendar {
+                        SidebarLabel("Calendar", systemImage: "calendar")
+                            .tag(SidebarItem.calendar)
+                            .accessibilityIdentifier("sidebar.calendar")
+                    }
                 }
 
                 if !library.starredNotes.isEmpty {

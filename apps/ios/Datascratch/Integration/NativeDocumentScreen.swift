@@ -32,6 +32,8 @@ final class NativeEditorModel {
         serial = Self.created
         let note = try core.noteDocument(noteId, notebookId: notebookId)
         editor = EditorView(document: CoreEditorDocument(note: note))
+        // D-51: in the notes-only app task dates are quiet labels (no reschedule menu).
+        editor.taskDatesEnabled = Features.tasks
         // D-06: a finger draws only when enabled; on iPhone (no Pencil) it is on by default.
         editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
         editor.tools.mode = .text
@@ -393,7 +395,9 @@ struct NativeEditorToolbar: ToolbarContent {
                 }
                 Button("Move To…", systemImage: "folder") { scene.sheet = .move(noteId: note.id) }
                 Button("Open in New Window", systemImage: "macwindow.badge.plus") { openWindow(id: "note", value: note.id) }
-                Button("Close Tab", systemImage: "xmark") { scene.closeTab() }
+                if Features.tabs {
+                    Button("Close Tab", systemImage: "xmark") { scene.closeTab() }
+                }
                 Divider()
                 Button("Move to Trash", systemImage: "trash", role: .destructive) {
                     scene.closeDocument()

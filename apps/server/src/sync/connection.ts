@@ -276,9 +276,9 @@ export class SyncConnection {
         this.#send({ type: 'error', code: 'doc_not_found', message: err.message, ...(ref ? { ref } : {}) });
         return;
       }
-      if (err instanceof ApiError && err.code === 'bad_request') {
+      if (err instanceof ApiError && (err.code === 'bad_request' || err.code === 'payload_too_large')) {
         const ref = 'clientMsgId' in msg ? msg.clientMsgId : undefined;
-        this.#send({ type: 'error', code: 'bad_request', message: err.message, ...(ref ? { ref } : {}) });
+        this.#send({ type: 'error', code: err.code, message: err.message, ...(ref ? { ref } : {}) });
         return;
       }
       throw err;

@@ -60,6 +60,7 @@ export function attachmentRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         const access = await docAccess(db, p, b.noteId);
         if (!access || access.doc.kind !== 'note') throw notFound('note not found');
         if (!access.write) throw forbidden('read-only access');
+        await ctx.documents.quotaCheck(db, b.noteId, b.size, 'attachment');
         const [created] = await db
           .insert(attachments)
           .values({

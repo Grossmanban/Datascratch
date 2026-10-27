@@ -50,6 +50,12 @@ const ConfigSchema = z
     S3_FORCE_PATH_STYLE: bool.default(true),
 
     ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(200 * 1024 * 1024),
+    /** Who may create an account: anyone, nobody (existing accounts only) or holders of an invite code. */
+    DS_SIGNUP: z.enum(['open', 'closed', 'invite']).default('open'),
+    /** Comma-separated invite codes for DS_SIGNUP=invite. */
+    DS_INVITE_CODES: z.string().default(''),
+    /** Bytes one account may store: updates, snapshots and attachments (0: unlimited). */
+    USER_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(10 * 1024 ** 3),
     /** POST /v1/fetch-image (D-52): requests per account per minute, size cap, total timeout, parallel downloads. */
     FETCH_IMAGE_PER_MINUTE: z.coerce.number().int().positive().default(60),
     FETCH_IMAGE_MAX_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),

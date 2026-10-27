@@ -6,7 +6,7 @@
 
 - База: `https://<host>/v1`. JSON, UTF-8. Двоичные поля — base64url без padding.
 - Аутентификация: `Authorization: Bearer <accessToken>` (короткоживущий, 15 мин) + `refreshToken` (30 дней, ротация при каждом обновлении). Повторное предъявление уже использованного `refreshToken` — признак кражи: устройство отзывается. Исключение (уточнение 2026-10-26, предложение потока ios-core, принято координатором): повтор в течение **60 с** после обмена (ответ потерялся в сети), пока выданный взамен токен ещё не использован, возвращает **тот же** новый `refreshToken` (и свежий `accessToken`) — запрос идемпотентен. Повтор позже или после использования нового токена — отзыв устройства, как раньше.
-- Ошибки: HTTP-код + тело `{ "error": { "code": string, "message": string } }`. Коды: `bad_request`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `rate_limited`, `payload_too_large`, `internal`.
+- Ошибки: HTTP-код + тело `{ "error": { "code": string, "message": string } }`. Коды: `bad_request`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `rate_limited`, `payload_too_large`, `internal`. Превышение квоты хранения аккаунта — `payload_too_large` с сообщением `storage quota exceeded` (в REST — `413`, в синхронизации — `error` с `ref` = `clientMsgId`).
 - Идентификаторы создаёт клиент (UUIDv7); повторный `POST` с тем же id и тем же содержимым — идемпотентен (`200`), с другим — `409 conflict`.
 
 ## Аутентификация (D-34, `crypto.md`)
@@ -14,7 +14,7 @@
 | Метод | Путь | Тело → ответ |
 | --- | --- | --- |
 | POST | `/auth/prelogin` | `{ email }` → `{ salt, kdf }` (для неизвестного email — детерминированная фальшивая соль, чтобы нельзя было перебирать адреса) |
-| POST | `/auth/signup` | `{ email, salt, kdf, loginKey, recoveryLoginKey, wrappedMasterKeyPassword, wrappedMasterKeyRecovery, userId, accountDocId }` → `Session` |
+| POST | `/auth/signup` | `{ email, salt, kdf, loginKey, recoveryLoginKey, wrappedMasterKeyPassword, wrappedMasterKeyRecovery, userId, accountDocId, inviteCode? }` → `Session`. `403`, если регистрация на сервере закрыта или нужен код приглашения (`DS_SIGNUP`); любой конфликт — один и тот же `409` (аудит безопасности 2026-10-27) |
 | POST | `/auth/login` | `{ email, loginKey, deviceName }` → `Session` |
 | POST | `/auth/refresh` | `{ refreshToken }` → `Session` |
 | POST | `/auth/logout` | `{ refreshToken }` → `204` |

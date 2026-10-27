@@ -7,6 +7,7 @@ import i18n from "@/i18n";
 import { defaultNoteTitle } from "@/domain/note";
 import { features } from "@/lib/features";
 import { isFreshNote } from "@/lib/freshNotes";
+import { fetchRemoteImage } from "@/lib/remoteImage";
 import type { EditorHost, NoteSummary } from "./index";
 
 type Nav = ReturnType<typeof useNavigate>;
@@ -17,8 +18,20 @@ function summary(noteId: string): NoteSummary | null {
   return { noteId, title: noteTitle(n, i18n.t("app.untitled")), icon: n.icon };
 }
 
+/** Encrypts a file into a note's attachments; `onProgress` gets 0…1 while the chunks are sealed. */
+export async function uploadNoteFile(noteId: string, file: File, onProgress?: (done: number) => void) {
+  const k = await runtime().store.keyFor(noteId);
+  if (!k) throw new Error("no key");
+  onProgress?.(0);
+  const mime = file.type || "application/octet-stream";
+  const id = await storeAttachment(noteId, k, new Uint8Array(await file.arrayBuffer()), mime, onProgress);
+  return { attachmentId: id, name: file.name, size: file.size, mime };
+}
+
 /** Callbacks the editor needs, for the signed-in owner of a note. */
-export function ownerEditorHost(noteId: string, nav: Nav): EditorHost {
+// `fetchRemoteImage` is part of EditorHost from web-editor 8ceb4911 on; the intersection keeps
+// this compiling against an editor that does not declare it yet.
+export function ownerEditorHost(noteId: string, nav: Nav): EditorHost & { fetchRemoteImage?: (url: string) => Promise<File> } {
   const key = () => runtime().store.keyFor(noteId);
   const open = (id: string) => {
     openTab(id);
@@ -29,12 +42,14 @@ export function ownerEditorHost(noteId: string, nav: Nav): EditorHost {
       const k = await key();
       return k ? attachmentUrl(id, k).catch(() => null) : null;
     },
-    uploadAttachment: async (file) => {
-      const k = await key();
-      if (!k) throw new Error("no key");
-      const id = await storeAttachment(noteId, k, new Uint8Array(await file.arrayBuffer()), file.type || "application/octet-stream");
-      return { attachmentId: id, name: file.name, size: file.size, mime: file.type || "application/octet-stream" };
-    },
+    // `onProgress` (0…1) feeds the editor's upload placeholder while the file is encrypted; a
+    // rejection lets the editor offer «Повторить» (it calls this again with the same file).
+    // The agreed form is uploadAttachment(file, { onProgress }); a bare callback is accepted too.
+    // Rich paste: images linked from pasted HTML are fetched and stored like a dropped file;
+    // a rejection keeps the image as a link.
+    fetchRemoteImage: (url: string) => fetchRemoteImage(url),
+    uploadAttachment: (file: File, progress?: ((done: number) => void) | { onProgress?: (done: number) => void }) =>
+      uploadNoteFile(noteId, file, typeof progress === "function" ? progress : progress?.onProgress),
     onOpenAttachment: async ({ attachmentId }) => {
       const k = await key();
       if (k) window.open(await attachmentUrl(attachmentId, k), "_blank", "noopener");

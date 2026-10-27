@@ -604,6 +604,77 @@ public struct EditorCommands {
         }
     }
 
+    /// Title repair on load (`document-model.md` §4 «Один title», same rule and order as
+    /// web-editor), deterministic and idempotent, creating nothing:
+    /// 1. several top-level `title` nodes: only EMPTY titles are deleted (all empty: the first
+    ///    stays); non-empty extras are untouched;
+    /// 2. EMPTY paragraphs before the first title are deleted;
+    /// 3. the note starts with an empty title T: the empty paragraphs after it are skipped; if the
+    ///    first non-empty block is a paragraph whose blockId is older (UUIDv7 time) than T's, it
+    ///    was the original title, demoted by the empty-document race — its inline content (marks,
+    ///    strokes) moves into T, and it and the skipped empty paragraphs are deleted;
+    /// 4. an empty document is never written.
+    /// One transaction, not undoable; read-only notes are left alone. Returns whether anything changed.
+    @discardableResult
+    public func repairTitles() -> Bool {
+        guard !document.isReadOnly else { return false }
+        var deletions: [BlockID] = []
+        // 1.
+        let titles = document.blocks.filter { $0.type == NodeType.title }
+        if titles.count > 1 {
+            let keep = titles.first { $0.textLength > 0 } ?? titles[0]
+            deletions += titles.filter { $0.id != keep.id && $0.textLength == 0 }.map(\.id)
+        }
+        var top = document.blocks.filter { !deletions.contains($0.id) }
+        func isEmptyParagraph(_ b: BlockNode) -> Bool { b.type == NodeType.paragraph && b.textLength == 0 }
+        // 2.
+        if let firstTitle = top.firstIndex(where: { $0.type == NodeType.title }) {
+            let leading = top[..<firstTitle].filter(isEmptyParagraph).map(\.id)
+            deletions += leading
+            top.removeAll { leading.contains($0.id) }
+        }
+        // 3.
+        var demoted: (title: BlockID, paragraph: BlockID)?
+        if let first = top.first, first.type == NodeType.title, first.textLength == 0 {
+            var i = 1
+            while i < top.count, isEmptyParagraph(top[i]) { i += 1 }
+            if i < top.count, top[i].type == NodeType.paragraph, top[i].textLength > 0,
+               let titleTime = Self.uuidV7Time(first.id), let paraTime = Self.uuidV7Time(top[i].id), paraTime < titleTime {
+                demoted = (first.id, top[i].id)
+                deletions += top[1..<i].map(\.id)
+            }
+        }
+        guard !deletions.isEmpty || demoted != nil else { return false }
+        let re = demoted.map { StrokeReanchoring(document: document, blocks: [$0.paragraph]) }
+        let inline = demoted.map { document.inline(of: $0.paragraph, range: nil) } ?? []
+        // One transaction for the whole repair, synced but not undoable.
+        document.transact(origin: .system) {
+            for id in deletions { document.deleteBlock(id) }
+            if let d = demoted {
+                let title = d.title, para = d.paragraph
+                var offset = 0
+                for el in inline {
+                    switch el {
+                    case .text(let s, let marks): document.insertText(s, marks: marks, block: title, at: offset)
+                    case .atom(let atom, let marks): document.insertAtom(atom, marks: marks, block: title, at: offset)
+                    }
+                    offset += el.length
+                }
+                document.deleteBlock(para)
+                re?.apply(to: document, map: { $0.block == para ? TextPosition(block: title, offset: $0.offset) : nil },
+                          mapBlock: { $0 == para ? title : nil })
+            }
+        }
+        return true
+    }
+
+    /// Millisecond time of a UUIDv7 block id (its first 48 bits); nil for other ids.
+    static func uuidV7Time(_ id: BlockID) -> UInt64? {
+        let hex = id.replacingOccurrences(of: "-", with: "")
+        guard hex.count == 32, hex[hex.index(hex.startIndex, offsetBy: 12)] == "7" else { return nil }
+        return UInt64(hex.prefix(12), radix: 16)
+    }
+
     /// Re-creates a textblock as another type with the same blockId and content.
     func convertTextblock(_ id: BlockID, to type: String, attrs: [String: JSONValue]) {
         guard let node = document.block(id), let loc = document.location(of: id) else { return }

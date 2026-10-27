@@ -192,6 +192,9 @@ public enum ChangeOrigin: Hashable, Sendable {
     case remote
     /// Local change already shown by the text view: the editor does not re-render it.
     case textInput
+    /// A programmatic repair on this device (`document-model.md`: duplicate titles): synced, but
+    /// not an edit of the person — never in undo.
+    case system
 }
 
 /// Coarse description of what changed in one transaction.

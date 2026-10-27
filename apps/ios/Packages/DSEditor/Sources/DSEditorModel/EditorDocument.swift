@@ -9,6 +9,9 @@ import Foundation
 /// `InMemoryEditorDocument` is the reference implementation; DSCore provides the Yrs-backed one.
 @MainActor
 public protocol EditorDocument: AnyObject {
+    /// A note in a newer format than this client understands (R-03): shown, never repaired.
+    var isReadOnly: Bool { get }
+
     // MARK: Structure
 
     /// Top-level blocks (`title` first).
@@ -110,4 +113,9 @@ public extension EditorDocument {
             }
         }.joined()
     }
+}
+
+
+public extension EditorDocument {
+    var isReadOnly: Bool { false }
 }

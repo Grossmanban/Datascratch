@@ -710,6 +710,265 @@ final class EditorViewTests: XCTestCase {
                           "only the needed amount: the caret stays just above the keyboard, not at the top")
     }
 
+    // MARK: - Dictation (build 16 feedback)
+
+    private func dictationDoc() -> InMemoryEditorDocument {
+        InMemoryEditorDocument(blocks: [.title("Диктовка"), .paragraph("Первый абзац здесь"), .paragraph("Второй абзац")])
+    }
+
+    /// Dictation and input methods stream text as marked text: it lands at the caret, in the
+    /// caret's paragraph, and the next paragraph is untouched.
+    func testMarkedTextStreamedLikeDictationLandsAtTheCaret() throws {
+        let doc = dictationDoc()
+        let editor = host(doc)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        let at = flatRange(editor, of: "абзац здесь").lowerBound
+        editor.textView.selectedRange = NSRange(location: at, length: 0)
+        drainMainQueue()
+        for chunk in ["При", "Привет", "Привет мир", "Привет мир, "] {
+            editor.textView.setMarkedText(chunk, selectedRange: NSRange(location: chunk.utf16.count, length: 0))
+            drainMainQueue()
+            XCTAssertEqual(doc.flatText(of: doc.blocks[2].id), "Второй абзац", "the next paragraph is untouched while streaming")
+        }
+        editor.textView.unmarkText()
+        drainMainQueue()
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "Первый Привет мир, абзац здесь")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[2].id), "Второй абзац")
+        XCTAssertEqual(editor.textView.selectedRange.location, at + "Привет мир, ".utf16.count, "the caret follows the text")
+        XCTAssertEqual(editor.textView.textStorage.length, Projection.build(doc.blocks).length, "text view and document agree")
+    }
+
+    /// Dictation's placeholder puts nothing into the text; the result is inserted at the caret.
+    func testDictationPlaceholderKeepsTheCaretAndTheResultLandsThere() throws {
+        let doc = dictationDoc()
+        let editor = host(doc)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        let at = flatRange(editor, of: "абзац здесь").lowerBound
+        editor.textView.selectedRange = NSRange(location: at, length: 0)
+        let length = editor.textView.textStorage.length
+        let placeholder = editor.textView.insertDictationResultPlaceholder
+        drainMainQueue()
+        XCTAssertEqual(editor.textView.textStorage.length, length, "no placeholder character in the text")
+        XCTAssertEqual(editor.textView.selectedRange.location, at, "the caret stays")
+        XCTAssertGreaterThan(editor.textView.frame(forDictationResultPlaceholder: placeholder).height, 0)
+        editor.textView.removeDictationResultPlaceholder(placeholder, willInsertResult: true)
+        editor.textView.insertText("продиктованный ")
+        drainMainQueue()
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "Первый продиктованный абзац здесь")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[2].id), "Второй абзац")
+    }
+
+    /// Text the text view changed without asking the editor is mirrored into the document.
+    func testEditTheTextViewDidNotReportIsMirrored() throws {
+        let doc = dictationDoc()
+        let editor = host(doc)
+        let at = flatRange(editor, of: "здесь").lowerBound
+        editor.textView.textStorage.replaceCharacters(in: NSRange(location: at, length: 0), with: "сказано ")
+        editor.textView.selectedRange = NSRange(location: at + 8, length: 0)
+        editor.textViewDidChange(editor.textView)
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "Первый абзац сказано здесь")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[2].id), "Второй абзац")
+        XCTAssertEqual(editor.textView.textStorage.length, Projection.build(doc.blocks).length)
+    }
+
+    /// Links and date chips are accessibility elements that act like a tap (VoiceOver, UI tests).
+    func testLinksAndDateChipsAreAccessibleAndActivate() throws {
+        let doc = InMemoryEditorDocument(blocks: [
+            .title("A11y"),
+            .paragraph("См. [[Целевая заметка]] здесь"),
+            .paragraph([.text("Чип: ", .empty), .atom(.noteLink(noteId: "note-42", label: "Чип-заметка"), .empty)]),
+            .taskList([.taskItem("Задача с датой", scheduled: EditorView.isoDay(offset: 1))]),
+        ])
+        let editor = host(doc)
+        var openedTitle: String?
+        var openedId: String?
+        editor.onOpenNoteTitled = { openedTitle = $0 }
+        editor.onOpenNote = { openedId = $0 }
+        XCTAssertTrue(editor.noteLinkFrames(in: editor).contains { $0.kind == .note }, "the chip is found as a note link")
+        let elements = try XCTUnwrap(editor.accessibilityElements)
+        XCTAssertTrue(elements.first as AnyObject === editor.textView, "the text view stays the first element")
+        let link = try XCTUnwrap(elements.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel == "Целевая заметка" })
+        XCTAssertTrue(link.accessibilityTraits.contains(.link))
+        XCTAssertTrue(link.accessibilityActivate())
+        XCTAssertEqual(openedTitle, "Целевая заметка", "activating the element opens the link like a tap")
+        let chipLink = try XCTUnwrap(elements.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel == "Чип-заметка" })
+        XCTAssertTrue(chipLink.accessibilityActivate())
+        XCTAssertEqual(openedId, "note-42")
+        let chipRange = flatRange(editor, of: "Чип: ").upperBound
+        let chipFrame = try XCTUnwrap(editor.geometry.segmentFrame(chipRange..<(chipRange + 1)))
+        XCTAssertNotNil(editor.noteLink(at: CGPoint(x: chipFrame.midX, y: chipFrame.midY)), "a tap on the chip finds the link")
+        let chip = try XCTUnwrap(elements.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel?.hasPrefix("Дата: ") == true })
+        XCTAssertTrue(chip.accessibilityTraits.contains(.button))
+        XCTAssertGreaterThan(chip.accessibilityFrame.width, 0)
+    }
+
+    /// D-51 notes-only mode: date chips are quiet labels (no tap, no menu, not a button), the dates
+    /// stay in the document; switching back makes them actionable again.
+    func testTaskDatesSwitchMakesChipsInertOrActionable() throws {
+        let day = EditorView.isoDay(offset: 1)
+        let doc = InMemoryEditorDocument(blocks: [.title("D"), .taskList([.taskItem("Задача с датой", scheduled: day)])])
+        let editor = host(doc)
+        func chipCentre() throws -> CGPoint {
+            let f = try XCTUnwrap(editor.taskDateChipFrames(in: editor.textView).first, "the chip is drawn")
+            return CGPoint(x: f.midX, y: f.midY)
+        }
+        func chipElement() -> UIAccessibilityElement? {
+            editor.accessibilityElements?.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel?.hasPrefix("Дата: ") == true }
+        }
+        XCTAssertTrue(editor.hasTapTarget(at: try chipCentre()), "on by default: the chip is tappable")
+        XCTAssertEqual(chipElement()?.accessibilityTraits.contains(.button), true)
+
+        editor.taskDatesEnabled = false
+        settle(editor)
+        XCTAssertFalse(editor.hasTapTarget(at: try chipCentre()), "off: a tap on the chip is an ordinary tap in the text")
+        XCTAssertEqual(chipElement()?.accessibilityTraits.contains(.button), false, "off: a label, not a button")
+        XCTAssertEqual(chipElement()?.accessibilityTraits.contains(.staticText), true)
+        let item = doc.blocks[1].children[0].id
+        XCTAssertEqual(doc.block(item)?.attrs["scheduled"]?.stringValue, day, "the date stays in the document")
+
+        editor.taskDatesEnabled = true
+        settle(editor)
+        XCTAssertTrue(editor.hasTapTarget(at: try chipCentre()))
+    }
+
+    // MARK: - Title (Apple Notes style)
+
+    func testFocusTitlePutsTheCaretInTheTitle() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Черновик"), .paragraph("текст")])
+        let editor = host(doc)
+        window.makeKey()
+        editor.focusTitle()
+        XCTAssertTrue(editor.textView.isFirstResponder, "the keyboard comes up")
+        XCTAssertEqual(editor.textView.selectedRange.location, "Черновик".utf16.count, "the caret is at the end of the title")
+    }
+
+    func testReturnInAnEmptyTitleNamesTheNoteAndMovesToTheText() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title(""), .paragraph("Первый абзац")])
+        let editor = host(doc)
+        editor.defaultTitle = { "Заметка 26 октября 2026" }
+        window.makeKey()
+        editor.focusTitle()
+        XCTAssertFalse(editor.textView(editor.textView, shouldChangeTextIn: NSRange(location: 0, length: 0), replacementText: "\n"))
+        XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "Заметка 26 октября 2026")
+        XCTAssertEqual(doc.blocks.count, 2, "Return in the title does not split it")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "Первый абзац")
+        XCTAssertEqual(editor.textView.selectedRange.location, flatRange(editor, of: "Первый").lowerBound, "the caret is at the start of the text")
+    }
+
+    func testReturnInANamedTitleMovesToTheTextAndCreatesItIfMissing() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Идеи")])
+        let editor = host(doc)
+        editor.defaultTitle = { "не нужно" }
+        window.makeKey()
+        editor.focusTitle()
+        XCTAssertFalse(editor.textView(editor.textView, shouldChangeTextIn: NSRange(location: 2, length: 0), replacementText: "\n"))
+        XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "Идеи", "a named title is kept and not split")
+        XCTAssertEqual(doc.blocks.count, 2, "an empty paragraph for the text")
+        XCTAssertEqual(doc.blocks[1].type, NodeType.paragraph)
+        let bodyStart = try XCTUnwrap(Projection.build(doc.blocks).starts.dropFirst().first)
+        XCTAssertEqual(editor.textView.selectedRange.location, bodyStart)
+    }
+
+    func testLeavingAnEmptyTitleNamesTheNote() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title(""), .paragraph("текст заметки")])
+        let editor = host(doc)
+        editor.defaultTitle = { "Заметка" }
+        window.makeKey()
+        editor.focusTitle()
+        let inText = flatRange(editor, of: "заметки").lowerBound
+        editor.textView.selectedRange = NSRange(location: inText, length: 0)
+        editor.textViewDidChangeSelection(editor.textView)
+        XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "Заметка")
+        XCTAssertEqual(editor.textView.selectedRange.location, inText + "Заметка".utf16.count, "the caret stays on the same text")
+        XCTAssertFalse(editor.commitDefaultTitleIfNeeded(), "a named title is not touched again")
+    }
+
+    func testAnEmptyNoteKeepsAnEmptyTitleWhenClosedOrLeft() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title(""), .paragraph("")])
+        let editor = host(doc)
+        editor.defaultTitle = { "Заметка" }
+        window.makeKey()
+        editor.focusTitle()
+        XCTAssertFalse(editor.commitDefaultTitleIfNeeded(), "no text: the host drops the note, no title is invented")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "")
+    }
+
+    // MARK: - Scroll on Return and while selecting (build 14 feedback)
+
+    private func longDoc() -> InMemoryEditorDocument {
+        var blocks: [BlockNode] = [.title("Длинная")]
+        for i in 1...60 { blocks.append(.paragraph("Строка \(i) обычного текста")) }
+        return InMemoryEditorDocument(blocks: blocks)
+    }
+
+    /// Return on the last visible line scrolls at most a line plus a line of margin — the new line
+    /// sits just above the bottom, not far up the screen.
+    func testReturnAtTheBottomScrollsJustEnough() throws {
+        let editor = host(longDoc(), width: 700, height: 600)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        // The paragraph whose line is just above the bottom edge.
+        let visibleBottom = editor.textView.contentOffset.y + editor.textView.bounds.height - editor.textView.adjustedContentInset.bottom
+        var target = 0
+        for i in 1...60 {
+            let r = flatRange(editor, of: "Строка \(i) ")
+            if let p = editor.geometry.placement(at: r.lowerBound), p.origin.y + 6 < visibleBottom - 4 { target = r.lowerBound + "Строка \(i) обычного текста".utf16.count }
+        }
+        editor.textView.selectedRange = NSRange(location: target, length: 0)
+        settle(editor)
+        let before = editor.textView.contentOffset.y
+        XCTAssertFalse(editor.textView(editor.textView, shouldChangeTextIn: NSRange(location: target, length: 0), replacementText: "\n"))
+        drainMainQueue()
+        drainMainQueue()
+        settle(editor)
+        let line = editor.theme.bodyFont.lineHeight * EditorTheme.bodyLineHeightMultiple
+        let delta = editor.textView.contentOffset.y - before
+        XCTAssertLessThanOrEqual(delta, line * 2 + 24, "scrolled \(delta) pt for one new line (line \(line) pt)")
+        let caret = editor.textView.caretRect(for: try XCTUnwrap(editor.textView.selectedTextRange).end)
+        let visible = editor.textView.bounds.inset(by: editor.textView.adjustedContentInset)
+        XCTAssertTrue(visible.contains(caret), "the new line is visible")
+    }
+
+    /// While a finger is on the text (dragging a selection handle), the editor never scrolls by
+    /// itself: no keyboard-inset change, no late block height, no caret scroll moves the content.
+    func testNothingScrollsTheTextWhileAFingerIsOnIt() throws {
+        let source = "flowchart TD\n  S[Select] --> T[Touch]"
+        var blocks: [BlockNode] = [.title("Выделение"), .mermaid(source)]
+        for i in 1...60 { blocks.append(.paragraph("Абзац \(i) для выделения")) }
+        let editor = host(InMemoryEditorDocument(blocks: blocks), width: 700, height: 600)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        editor.textView.setContentOffset(CGPoint(x: 0, y: 900), animated: false)
+        settle(editor)
+        // A selection reaching far below the screen (UIKit moves the handle; the editor reacts).
+        let start = flatRange(editor, of: "Абзац 30 ").lowerBound
+        editor.textView.selectedRange = NSRange(location: start, length: 600)
+        settle(editor)
+        drainMainQueue()
+        drainMainQueue()
+        editor.textView.setContentOffset(CGPoint(x: 0, y: 900), animated: false)
+        settle(editor)
+        editor.touchObserver.setTouchingForTesting(true)
+        let before = editor.textView.contentOffset.y
+        for _ in 0..<10 {
+            editor.textViewDidChangeSelection(editor.textView)
+            editor.scrollCaretIntoView()
+            drainMainQueue()
+        }
+        postKeyboard(UIResponder.keyboardDidChangeFrameNotification, top: 300, in: window)
+        MermaidRenderer.shared.store(UIGraphicsImageRenderer(size: CGSize(width: 600, height: 500)).image { _ in }, for: source, dark: false)
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.contentOffset.y, before, accuracy: 0.5, "no programmatic scroll while the finger is down")
+        editor.touchObserver.setTouchingForTesting(false)
+        drainMainQueue()
+        drainMainQueue()
+        settle(editor)
+        XCTAssertGreaterThan(editor.textView.contentInset.bottom, 0, "the held-back keyboard inset is applied after the finger lifts")
+    }
+
     // MARK: - Block rendering (build 16 feedback)
 
     static let clippedFormulas = [

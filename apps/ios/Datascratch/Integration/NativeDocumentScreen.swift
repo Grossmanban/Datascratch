@@ -266,12 +266,6 @@ struct NativeDocumentScreen: View {
                         // variant that stays full height and insets itself crashed (ios-editor bisect).
                         NativeEditorRepresentable(editor: model.editor)
                             .accessibilityIdentifier("editor")
-                        if let menu = model.slashMenu, !menu.items.isEmpty {
-                            SlashMenuView(menu: menu, bounds: proxy.size) { id in
-                                model.editor.applySlashCommand(id)
-                                model.slashMenu = nil
-                            }
-                        }
                     }
                     // The column's width, never the editor's own: next to the list on an iPad mini
                     // in portrait it ran 18 pt past the screen edge.
@@ -309,6 +303,19 @@ struct NativeDocumentScreen: View {
                                 }
                             }
                             .frame(maxWidth: .infinity)
+                        }
+                    }
+                    // The "/" menu over the format bar and palette too: in a short editor (iPad in
+                    // landscape with the keyboard up) it reaches past the editor, and under the
+                    // bars its lower entries took no taps.
+                    .overlay {
+                        if let menu = model.slashMenu, !menu.items.isEmpty {
+                            GeometryReader { area in
+                                SlashMenuView(menu: menu, bounds: area.size) { id in
+                                    model.editor.applySlashCommand(id)
+                                    model.slashMenu = nil
+                                }
+                            }
                         }
                     }
                     // The cover's height follows the document area on appear and when its width
@@ -634,10 +641,13 @@ struct SlashMenuView: View {
     var body: some View {
         let groups = Dictionary(grouping: menu.items, by: \.group)
         let order = menu.items.map(\.group).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
-        let height = min(maxHeight, CGFloat(menu.items.count) * 44 + CGFloat(order.count) * 28 + 16)
-        // Below the caret when it fits, else above it.
+        let height = min(maxHeight, CGFloat(menu.items.count) * 44 + CGFloat(order.count) * 28 + 16,
+                         max(88, bounds.height - 16))
+        // Below the caret when it fits, else above it; never past the bottom of the area.
         let below = menu.caretRect.maxY + 6
-        let y = below + height <= bounds.height ? below : max(8, menu.caretRect.minY - 6 - height)
+        let y = below + height <= bounds.height - 8
+            ? below
+            : max(8, min(menu.caretRect.minY - 6 - height, bounds.height - height - 8))
         let x = min(max(8, menu.caretRect.minX), max(8, bounds.width - width - 8))
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {

@@ -4284,10 +4284,10 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793121586.4292793,
-    "seen": 1793121824.87807,
-    "ast_hash": "deb0ee83bb8da056e175aff29fb226b6",
-    "semantic_hash": "deb0ee83bb8da056e175aff29fb226b6"
+    "mtime": 1793122561.827186,
+    "seen": 1793122788.97128,
+    "ast_hash": "fdfc3a01814444ceb398cb37b816dce8",
+    "semantic_hash": "fdfc3a01814444ceb398cb37b816dce8"
   },
   "docs/README.md": {
     "mtime": 1792932377.5812895,
@@ -4644,10 +4644,10 @@
     "semantic_hash": "3a9c1d8bea912f6c04856a817fca33fb"
   },
   "docs/decisions/README.md": {
-    "mtime": 1793121586.425976,
-    "seen": 1793121824.8780792,
-    "ast_hash": "6efae13027e4ab2f9790cb324e115528",
-    "semantic_hash": "6efae13027e4ab2f9790cb324e115528"
+    "mtime": 1793122568.1378024,
+    "seen": 1793122788.9712882,
+    "ast_hash": "052c4259850aded7323298248103c12b",
+    "semantic_hash": "052c4259850aded7323298248103c12b"
   },
   "docs/development.md": {
     "mtime": 1793011775.6885345,
@@ -4674,10 +4674,10 @@
     "semantic_hash": "a2b193ae4f4df24d897042798847fa67"
   },
   "docs/open-questions.md": {
-    "mtime": 1793121135.8980267,
-    "seen": 1793121824.8780813,
-    "ast_hash": "0dc440abe309417d9ea4254027e8f9e2",
-    "semantic_hash": "0dc440abe309417d9ea4254027e8f9e2"
+    "mtime": 1793122561.8236504,
+    "seen": 1793122788.9712906,
+    "ast_hash": "bda2888524df939ba9833c59651d0147",
+    "semantic_hash": "bda2888524df939ba9833c59651d0147"
   },
   "docs/risks.md": {
     "mtime": 1792932377.585209,
@@ -4722,10 +4722,10 @@
     "semantic_hash": "398f341ef5852010ea26a575b8036ae8"
   },
   "docs/spec/06-data-server.md": {
-    "mtime": 1793121135.896794,
-    "seen": 1793121824.8780851,
-    "ast_hash": "0168ce0f2cd547ffa425be2d3c999157",
-    "semantic_hash": "0168ce0f2cd547ffa425be2d3c999157"
+    "mtime": 1793122542.1384137,
+    "seen": 1793122788.971292,
+    "ast_hash": "a2205256a45ceaf86817f8ebca97b835",
+    "semantic_hash": "a2205256a45ceaf86817f8ebca97b835"
   },
   "docs/spec/07-encryption.md": {
     "mtime": 1793121135.8973496,
@@ -5034,10 +5034,10 @@
     "semantic_hash": "97708c0cd9a84aa7a3b48e172d70022b"
   },
   "docs/decisions/0049-server-address-in-app.md": {
-    "mtime": 1793038525.3660254,
-    "seen": 1793090955.3928008,
-    "ast_hash": "0308bf10322cbb310dbb40814e7aa687",
-    "semantic_hash": "0308bf10322cbb310dbb40814e7aa687"
+    "mtime": 1793122531.9906564,
+    "seen": 1793122788.971284,
+    "ast_hash": "aa164ca0971c1a75d15f1c18e4c38394",
+    "semantic_hash": "aa164ca0971c1a75d15f1c18e4c38394"
   },
   "apps/web/src/domain/spaces.test.ts": {
     "mtime": 1793048181.5345962,
@@ -5620,5 +5620,11 @@
     "seen": 1793121959.45257,
     "ast_hash": "41bddc650ee76582c1fe2af827ab8bb9",
     "semantic_hash": "41bddc650ee76582c1fe2af827ab8bb9"
+  },
+  "docs/decisions/0055-backup-simple.md": {
+    "mtime": 1793122553.8612244,
+    "seen": 1793122788.9712863,
+    "ast_hash": "8fa10e455628d08dbb7e4d47d6e35688",
+    "semantic_hash": "8fa10e455628d08dbb7e4d47d6e35688"
   }
 }

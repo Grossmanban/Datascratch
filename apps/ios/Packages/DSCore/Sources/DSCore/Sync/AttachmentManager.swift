@@ -1,5 +1,12 @@
 import Foundation
 
+public enum AttachmentError: Error, Equatable, Sendable {
+    /// Not a lowercase UUIDv7 (`EntityID.make()`).
+    case invalidId(String)
+    /// An attachment with this id is already stored.
+    case alreadyExists(String)
+}
+
 /// Encrypted attachments (crypto.md §6, api.md «Вложения»): plaintext files are kept in a
 /// local directory, uploaded as 1 MiB encrypted chunks with resume, downloaded on demand.
 public actor AttachmentManager {
@@ -29,8 +36,15 @@ public actor AttachmentManager {
 
     /// Stores a new attachment locally and queues it for upload. Returns its id (put it into
     /// the `image`/`file` block or the note cover).
-    public func add(_ data: Data, mime: String, noteId: String) throws -> String {
-        let id = EntityID.make()
+    ///
+    /// `id`: an id made beforehand with `EntityID.make()`, when the block must reference the
+    /// attachment before its bytes exist (a pasted web page: the block is inserted at once, the
+    /// image downloaded afterwards). Until `add` is called nothing about it is stored or sent;
+    /// if the bytes never come, there is nothing to clean up (the block just has no file).
+    public func add(_ data: Data, mime: String, noteId: String, id: String? = nil) throws -> String {
+        let id = id ?? EntityID.make()
+        guard EntityID.isValid(id) else { throw AttachmentError.invalidId(id) }
+        guard try store.attachment(id) == nil else { throw AttachmentError.alreadyExists(id) }
         try data.write(to: directory.appendingPathComponent(id), options: .atomic)
         try store.saveAttachment(AttachmentRecord(
             attachmentId: id, noteId: noteId, mime: mime, size: Self.ciphertextSize(plaintextSize: data.count),

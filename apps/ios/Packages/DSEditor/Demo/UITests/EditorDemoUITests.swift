@@ -131,7 +131,7 @@ final class EditorDemoUITests: XCTestCase {
     /// The demo HUD's last editor diagnostics, for failure messages (`-hud` launches).
     @MainActor
     private func diagnostics(_ app: XCUIApplication) -> String {
-        let e = app.descendants(matching: .any)["hud.diag"]
+        let e = app.staticTexts["hud.diag"]
         return e.exists ? "diag: " + e.label : "diag: (HUD not found)"
     }
 

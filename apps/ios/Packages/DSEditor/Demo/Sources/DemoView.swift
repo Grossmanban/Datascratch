@@ -356,9 +356,12 @@ struct HUDView: View {
                 .accessibilityIdentifier("hud.links")
                 .opacity(0.01)
             // UI tests print this when they fail (the unified log keeps its arguments compressed).
+            // Visible (tiny): near-transparent HUD text is not exposed to UI tests.
             Text("diag " + model.diagnostics.joined(separator: " | "))
+                .font(.system(size: 5))
+                .lineLimit(4)
+                .frame(maxWidth: 260, alignment: .trailing)
                 .accessibilityIdentifier("hud.diag")
-                .opacity(0.01)
         }
         .font(.caption.monospacedDigit())
         .padding(8)

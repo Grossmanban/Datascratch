@@ -1050,10 +1050,10 @@
     "semantic_hash": "ff372fbbcd56eb444ba92f26be7bdadc"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1793088176.2759101,
-    "seen": 1793088440.957745,
-    "ast_hash": "d2e759bb408fb0b38917b72d51010e36",
-    "semantic_hash": "d2e759bb408fb0b38917b72d51010e36"
+    "mtime": 1793090319.8277955,
+    "seen": 1793090386.7125123,
+    "ast_hash": "d123bb05197c3ebd88c5c8bea0126ed5",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormatMenu.swift": {
     "mtime": 1793011531.6864011,
@@ -4710,10 +4710,10 @@
     "semantic_hash": "7de253f465da0a90057780f1b151d4db"
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1793089044.1378574,
-    "seen": 1793089152.760451,
-    "ast_hash": "210c549341daa42b354bde56d0ee7462",
-    "semantic_hash": "210c549341daa42b354bde56d0ee7462"
+    "mtime": 1793090337.7337508,
+    "seen": 1793090386.7162378,
+    "ast_hash": "374fd8397c9d5ea4673ade5c292a7e5c",
+    "semantic_hash": ""
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1793084705.4194863,

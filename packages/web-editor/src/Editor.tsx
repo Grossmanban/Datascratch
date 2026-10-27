@@ -14,6 +14,7 @@ import { acceptAll, blocksWithAgentEdits } from "./schema/agentReview";
 import { guardSchema } from "./schema/unknown";
 import { TASK_MENU_EVENT, type TaskMenuRequest } from "./schema/tasks";
 import { fillEmptyTitleIfNeeded, focusTitle } from "./schema/title";
+import { insertUpload, pickAndInsert } from "./uploads";
 import type { NoteStyle, StrokeAuthor } from "@datascratch/shared/contracts";
 import { filterBlocks, type BlockItem } from "./ui/blockItems";
 import { BubbleToolbar } from "./ui/BubbleToolbar";
@@ -40,6 +41,10 @@ export interface EditorApi {
   focusTitle(): void;
   /** Fills an empty title with `host.defaultTitle()` (call when the note closes); true if it did. */
   fillEmptyTitleIfNeeded(): boolean;
+  /** Opens the image picker and inserts the picked images at the caret (the palette's picture button). */
+  pickImage(): void;
+  /** Inserts files at the caret right away and uploads them behind a placeholder. */
+  insertFiles(files: File[]): void;
 }
 
 export interface DatascratchEditorProps {
@@ -202,12 +207,8 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
     function uploadFiles(files: FileList | null | undefined): boolean {
       const upload = host.current.uploadAttachment;
       if (!files?.length || !upload) return false;
-      for (const file of Array.from(files)) {
-        void upload(file).then((a) => {
-          if (file.type.startsWith("image/")) editor.chain().focus().insertImage({ attachmentId: a.attachmentId, alt: file.name }).run();
-          else editor.chain().focus().insertFile(a).run();
-        });
-      }
+      // The block appears at once with a local preview; the upload runs behind it (uploads.ts).
+      for (const file of Array.from(files)) insertUpload(editor, host, file);
       return true;
     }
     const pen = new PenLayer({
@@ -227,6 +228,10 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       undoManager,
       focusTitle: () => focusTitle(editor),
       fillEmptyTitleIfNeeded: () => fillEmptyTitleIfNeeded(editor, host, undoManager),
+      pickImage: () => pickAndInsert(editor, host, "image/*"),
+      insertFiles: (files) => {
+        for (const f of files) insertUpload(editor, host, f);
+      },
     };
     setApi(next);
     callbacks.current.onReady?.(next);

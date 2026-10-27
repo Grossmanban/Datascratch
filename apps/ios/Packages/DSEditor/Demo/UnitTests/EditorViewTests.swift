@@ -1324,4 +1324,66 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "Текст", "nothing was pasted as text")
         UIPasteboard.general.items = []
     }
+
+    /// Caption, description and replacement write the image block's attributes (undoable); the
+    /// upload ring follows `setImageProgress`.
+    func testImageCaptionReplaceAndUploadRing() throws {
+        let image = BlockNode(type: NodeType.image, attrs: ["attachmentId": .string("att-4"), "width": .null])
+        let doc = InMemoryEditorDocument(blocks: [.title("Подпись"), image, .paragraph("")])
+        let editor = host(doc)
+        editor.setImageAttributes(image.id, caption: "Вид с крыши", alt: "Город вечером")
+        XCTAssertEqual(doc.block(image.id)?.attrs["caption"]?.stringValue, "Вид с крыши")
+        XCTAssertEqual(doc.block(image.id)?.attrs["alt"]?.stringValue, "Город вечером")
+        editor.setImageAttributes(image.id, caption: "", alt: "Город вечером")
+        XCTAssertNil(doc.block(image.id)?.attrs["caption"]?.stringValue, "an empty caption removes it")
+        editor.replaceImage(image.id, attachmentId: "att-5", preview: solidImage(CGSize(width: 10, height: 10), .gray))
+        XCTAssertEqual(doc.block(image.id)?.attrs["attachmentId"]?.stringValue, "att-5")
+        editor.undo()
+        XCTAssertEqual(doc.block(image.id)?.attrs["attachmentId"]?.stringValue, "att-4", "replacing is undoable")
+        editor.setImageProgress(attachmentId: "att-4", 0.4)
+        XCTAssertEqual(editor.factory.uploadProgress["att-4"], 0.4)
+        editor.setImageProgress(attachmentId: "att-4", nil)
+        XCTAssertNil(editor.factory.uploadProgress["att-4"])
+    }
+
+    /// File blocks: a tap or VoiceOver activation asks the host to open the file.
+    func testFileTapAsksTheHostToOpenIt() throws {
+        let file = BlockNode(type: NodeType.file, attrs: ["attachmentId": .string("file-1"), "name": .string("Отчёт.pdf"),
+                                                           "size": .number(2048), "mime": .string("application/pdf")])
+        let doc = InMemoryEditorDocument(blocks: [.title("Файл"), .paragraph("Текст"), file, .paragraph("")])
+        let editor = host(doc)
+        var opened: (BlockID, String)?
+        editor.onFileTap = { opened = ($0, $1) }
+        settle(editor)
+        drainMainQueue()
+        settle(editor)
+        let view = try XCTUnwrap(editor.factory.fileViews.first { $0.block == file.id }?.view)
+        let frame = view.convert(view.bounds, to: editor.textView)
+        XCTAssertTrue(editor.hasTapTarget(at: CGPoint(x: frame.midX, y: frame.midY)))
+        let element = try XCTUnwrap(editor.accessibilityElements?.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel == "Отчёт.pdf" })
+        XCTAssertTrue(element.accessibilityActivate())
+        XCTAssertEqual(opened?.0, file.id)
+        XCTAssertEqual(opened?.1, "file-1")
+    }
+
+    /// «Фото» and «Файл» in the "/" menu are offered only to a host that handles them; choosing one
+    /// removes the typed "/query" and hands the id to the host.
+    func testHostSlashEntriesGoToTheHost() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Слэш"), .paragraph("")])
+        let editor = host(doc)
+        var menu: SlashMenuState?
+        editor.onSlashMenu = { menu = $0 }
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        editor.textView.selectedRange = NSRange(location: editor.textView.textStorage.length, length: 0)
+        editor.textView.insertText("/фот")
+        XCTAssertEqual(menu?.items.map(\.id) ?? [], [], "no host handler: no «Фото»")
+        var chosen: String?
+        editor.onHostSlashCommand = { chosen = $0 }
+        editor.textView.insertText("о")
+        XCTAssertEqual(menu?.items.map(\.id), ["image"])
+        editor.applySlashCommand("image")
+        XCTAssertEqual(chosen, "image")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "", "the typed /query is removed")
+    }
 }

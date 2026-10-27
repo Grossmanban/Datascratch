@@ -278,6 +278,9 @@ public actor APIClient {
     // MARK: Session
 
     private func setSession(_ s: AuthSession?) throws {
+        // A new device session (sign-in, sign-up, recovery; not a token refresh) starts afresh:
+        // a later revocation is reported again.
+        if let s, s.deviceId != session?.deviceId { revocation = nil }
         session = s
         try sessionStore.save(s)
         onSessionChange?(s)

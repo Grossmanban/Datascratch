@@ -34,12 +34,25 @@ test("offline: edits are kept locally, survive reload and sync when back online"
   await page.reload();
   await expect(page.locator(".ds-prose")).toContainText("Поезд, тоннель");
 
+  // Typed fast and the page left at once (no pause): the last words are still saved on the device.
+  await page.locator(".ds-prose p").last().click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" и последние слова перед закрытием вкладки");
+  await page.reload();
+  await expect(page.locator(".ds-prose")).toContainText("последние слова перед закрытием вкладки");
+
   await context.setOffline(false);
   await expectSynced(page);
 
   const ctx2 = await browser.newContext();
   const p2 = await ctx2.newPage();
   await signIn(p2, email);
-  await expect(p2.getByTestId("doc-card").filter({ hasText: "Записано без сети" })).toBeVisible({ timeout: 20_000 });
+  const card = p2.getByTestId("doc-card").filter({ hasText: "Записано без сети" });
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  // The words saved as the page closed reached the server too.
+  await card.click();
+  await expect(p2.locator(".ds-prose")).toContainText("последние слова перед закрытием вкладки", { timeout: 20_000 });
+  // and nothing of them is left in localStorage once applied
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("ds.unsaved.")))).toEqual([]);
   await ctx2.close();
 });

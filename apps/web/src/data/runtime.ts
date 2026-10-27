@@ -59,6 +59,15 @@ export class AccountRuntime {
   async start() {
     // SyncClient encrypts synchronously with libsodium: it must be ready first.
     await sodiumReady();
+    // Closing the tab or reloading right after typing: the last edits still reach IndexedDB.
+    const leave = () => this.store.flushUnsaved();
+    const hidden = () => document.visibilityState === "hidden" && leave();
+    window.addEventListener("pagehide", leave);
+    document.addEventListener("visibilitychange", hidden);
+    this.cleanups.push(() => {
+      window.removeEventListener("pagehide", leave);
+      document.removeEventListener("visibilitychange", hidden);
+    });
     this.client = new SyncClient({
       url: syncUrl(),
       deviceId: getSession()?.deviceId ?? (await deviceId()),
@@ -187,6 +196,14 @@ export class AccountRuntime {
     );
     this.client.start();
     void this.reconcileNotebooks();
+    // Notes with edits saved as the page last closed: opened once so the tail is written and sent
+    // even if the note is not opened again (indexes get theirs when they are attached).
+    for (const docId of this.store.tailDocIds())
+      if (this.store.rowKind(docId) === "note")
+        void this.store
+          .acquire(docId)
+          .then(() => this.store.release(docId))
+          .catch(() => undefined);
     this.scheduleFlush();
     this.pendingTimer = setInterval(() => void this.updatePending(), 2000);
   }
@@ -367,6 +384,7 @@ export class AccountRuntime {
       // Account and notebook indexes are live Y.Docs; notes are stored (opened on demand).
       if (notes.length) await this.client.addStoredDocs(notes);
       if (live.length) await this.client.addDocs(await Promise.all(live.map(async (docId) => ({ docId, doc: await this.store.pin(docId) }))));
+      for (const docId of live) this.store.applyTail(docId);
     })();
     for (const id of fresh) this.attaching.set(id, done);
     try {

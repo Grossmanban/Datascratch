@@ -273,6 +273,7 @@ public final class EditorView: UIView {
         textView.addGestureRecognizer(tap)
         textView.editorTap = tap
         textView.tapTargetAt = { [weak self] point in self?.hasTapTarget(at: point) ?? false }
+        textView.allowsSystemScroll = { [weak self] in self?.userIsInteracting ?? true }
         textView.textDropDelegate = self
         textView.richPaste = { [weak self] in self?.pasteRich() ?? false }
         textView.plainPaste = { [weak self] in self?.pastePlainText() }
@@ -409,7 +410,13 @@ public final class EditorView: UIView {
 
     public override func layoutSubviews() {
         super.layoutSubviews()
+        let shrinks = textView.frame.height > bounds.height + 0.5
         textView.frame = bounds
+        // The host shrank the editor (the keyboard, the format bar): keep the caret's line visible
+        // (UIKit's own scroll to the caret is off, see `EditorTextView.allowsSystemScroll`).
+        if shrinks, textView.isFirstResponder {
+            DispatchQueue.main.async { [weak self] in self?.scrollCaretIntoView() }
+        }
         let available = bounds.width - theme.horizontalPadding * 2
         let column = theme.columnWidth(available: max(200, available))
         let side = max(theme.horizontalPadding, (bounds.width - column) / 2)
@@ -1963,6 +1970,9 @@ extension EditorView: UITextViewDelegate {
         caretWasInTitle = inTitle && tv.isFirstResponder
         // Typing attributes are left alone while text is marked (dictation, input methods).
         if tv.markedTextRange == nil { updateTypingAttributes() }
+        // The caret moved without a finger (keyboard arrows, a programmatic selection): UIKit no
+        // longer scrolls to it by itself.
+        scrollCaretIntoView()
         updateSlashMenu()
         notifyStateChange()
     }

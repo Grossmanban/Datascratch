@@ -1201,14 +1201,14 @@ final class EditorViewTests: XCTestCase {
         settle(editor)
         // Every scroll change from here on, with who made it (a failure message prints them).
         var moves: [String] = []
-        let watch = editor.textView.observe(\.contentOffset, options: [.old, .new]) { _, change in
-            guard let old = change.oldValue, let new = change.newValue, abs(old.y - new.y) > 0.5 else { return }
-            let callers = Thread.callStackSymbols.dropFirst(3).prefix(14)
+        editor.textView.onScrollPositionChange = { old, new in
+            guard abs(old - new) > 0.5 else { return }
+            let callers = Thread.callStackSymbols.dropFirst(2).prefix(16)
                 .map { $0.split(separator: " ").dropFirst(3).prefix(2).joined(separator: " ") }
                 .joined(separator: " < ")
-            moves.append("\(Int(old.y))→\(Int(new.y)): \(callers)")
+            moves.append("\(Int(old))→\(Int(new)): \(callers)")
         }
-        defer { watch.invalidate() }
+        defer { editor.textView.onScrollPositionChange = nil }
         func log() -> String { "offset \(editor.textView.contentOffset.y); moves:\n" + moves.joined(separator: "\n") }
         // Where the title line is on screen, from the layout (`caretRect` is wrong in an empty title).
         func titleLineY() throws -> CGFloat {

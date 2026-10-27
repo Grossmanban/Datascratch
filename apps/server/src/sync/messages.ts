@@ -34,6 +34,8 @@ export const CloseCode = {
   internal: 1011,
   protocol: 4400,
   unauthorized: 4401,
+  /** Too many connections: retry later. */
+  tryAgainLater: 1013,
 } as const;
 
 /** Decoded size of a base64url string without decoding it. */

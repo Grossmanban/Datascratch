@@ -1387,19 +1387,19 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792932020.6857393,
-    "seen": 1793109329.1403134,
+    "seen": 1793112486.3686187,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792932020.6857393,
-    "seen": 1793109329.1403162,
+    "seen": 1793112486.3686223,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948008.1153855,
-    "seen": 1793109329.1403196,
+    "seen": 1793112486.3686244,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -2635,7 +2635,7 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1793018122.935858,
-    "seen": 1793109329.1410978,
+    "seen": 1793112486.3690903,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -3096,10 +3096,10 @@
     "semantic_hash": "eb32fc449fe611864c59f9d966b225e9"
   },
   "packages/shared/src/contracts/sync.ts": {
-    "mtime": 1793108614.7705216,
-    "seen": 1793109329.141335,
-    "ast_hash": "de96a37738ef275ea95854280250004f",
-    "semantic_hash": "de96a37738ef275ea95854280250004f"
+    "mtime": 1793112091.2137187,
+    "seen": 1793112486.3692393,
+    "ast_hash": "21a9d94622b1ab76ea0c840d88369b8c",
+    "semantic_hash": "21a9d94622b1ab76ea0c840d88369b8c"
   },
   "packages/shared/src/crypto/attachments.ts": {
     "mtime": 1792928122.8394945,
@@ -3270,10 +3270,10 @@
     "semantic_hash": "48c83cecc9bb79cd9a1aef9d5a6fc323"
   },
   "packages/shared/src/sync/client.ts": {
-    "mtime": 1793108709.0238688,
-    "seen": 1793109329.1414452,
-    "ast_hash": "907fa3da3bc3b1d7f7303292c5bf8b91",
-    "semantic_hash": "907fa3da3bc3b1d7f7303292c5bf8b91"
+    "mtime": 1793112175.2741764,
+    "seen": 1793112486.3692884,
+    "ast_hash": "da620344e35681e09f5accab87b762c2",
+    "semantic_hash": "da620344e35681e09f5accab87b762c2"
   },
   "packages/shared/src/sync/index.ts": {
     "mtime": 1792929262.1554523,
@@ -3324,10 +3324,10 @@
     "semantic_hash": "cef907fac83aa86560529fdcb7c85f17"
   },
   "packages/shared/test/sync.test.ts": {
-    "mtime": 1793108709.4038687,
-    "seen": 1793109329.1414688,
-    "ast_hash": "de4fea9130e0043e1543e945168c7dbb",
-    "semantic_hash": "de4fea9130e0043e1543e945168c7dbb"
+    "mtime": 1793112143.7982705,
+    "seen": 1793112486.369305,
+    "ast_hash": "c940bfc8e519c1a8cc51fcd1b45ecf87",
+    "semantic_hash": "c940bfc8e519c1a8cc51fcd1b45ecf87"
   },
   "packages/shared/test/vectors.test.ts": {
     "mtime": 1792943522.344789,
@@ -4338,10 +4338,10 @@
     "semantic_hash": "2dbe919b4eee6dbde382f10d8c652b50"
   },
   "docs/architecture/contracts/sync-protocol.md": {
-    "mtime": 1793108744.9322078,
-    "seen": 1793109329.1420124,
-    "ast_hash": "939ce6f3ab7ce6361f1f14b782368761",
-    "semantic_hash": "939ce6f3ab7ce6361f1f14b782368761"
+    "mtime": 1793112091.2142358,
+    "seen": 1793112486.3696835,
+    "ast_hash": "0cdf88bec88da78799b99335f09f9ccc",
+    "semantic_hash": "0cdf88bec88da78799b99335f09f9ccc"
   },
   "docs/architecture/data-model.md": {
     "mtime": 1792948008.1224272,
@@ -4993,7 +4993,7 @@
   },
   "apps/server/drizzle/0003_agent_move_note.sql": {
     "mtime": 1793029252.1373274,
-    "seen": 1793109329.1403232,
+    "seen": 1793112486.3686264,
     "ast_hash": "",
     "semantic_hash": ""
   },

@@ -80,10 +80,11 @@ final class AppModel {
     /// Main (library) windows on screen; a note window that closes itself reopens one when none is.
     @ObservationIgnored var mainWindowCount = 0
 
-    init(options: LaunchOptions = .fromProcess(), bundle: Bundle = .main) {
+    init(options: LaunchOptions = .fromProcess()) {
         let coreLibrary: AnyObject?
-        let info = bundle.infoDictionary ?? [:]
-        let host = (info["DSWebHost"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "datascratch.app"
+        // Links use the account's server host (`linkHost`); this one only stands in without a
+        // server. `DS_WEB_HOST` feeds the `applinks:` entitlement and nothing else.
+        let host = "datascratch.app"
         // UI tests: `-ui-testing-server <url>` stands for a server saved on this device.
         let testServer = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["ui-testing-server"]
             .flatMap { $0 as? String }.flatMap(URL.init(string:))

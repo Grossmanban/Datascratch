@@ -14,6 +14,14 @@ struct DemoView: View {
             .navigationTitle("Живой штрих")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            // On its own view: two alerts on the same view, and SwiftUI showed only one of them.
+            .background {
+                Color.clear
+                    .alert("Открыть «\(model.openedNoteTitle ?? "")»",
+                           isPresented: Binding(get: { model.openedNoteTitle != nil }, set: { if !$0 { model.openedNoteTitle = nil } })) {
+                        Button("OK", role: .cancel) {}
+                    }
+            }
             .alert("Заметки «\(model.pendingNoteTitle ?? "")» нет",
                    isPresented: Binding(get: { model.pendingNoteTitle != nil }, set: { if !$0 { model.pendingNoteTitle = nil } })) {
                 Button("Создать заметку") { model.status = "Создана «\(model.pendingNoteTitle ?? "")» (демо)" }
@@ -126,6 +134,8 @@ struct DemoView: View {
                 Toggle("Жесты пером", isOn: Binding(get: { model.editor.tools.gesturesEnabled },
                                                     set: { model.editor.tools.gesturesEnabled = $0 }))
                 Toggle("Замеры", isOn: Binding(get: { model.showHUD }, set: { model.showHUD = $0 }))
+                Toggle("Даты задач", isOn: Binding(get: { model.editor.taskDatesEnabled },
+                                                   set: { model.editor.taskDatesEnabled = $0 }))
                 if !model.status.isEmpty { Text(model.status) }
             } label: { Image(systemName: "ellipsis.circle") }
                 .accessibilityIdentifier("more")
@@ -319,6 +329,16 @@ struct HUDView: View {
     let model: DemoModel
     @State private var fps = FPSCounter()
 
+    /// "note:x,y;title:x,y" — centres of the note links in window points.
+    private var linkCentres: String {
+        guard let window = model.editor.window else { return "" }
+        let links = model.editor.noteLinkFrames(in: window).map { ($0.kind.rawValue, $0.frame) }
+        let chips = model.editor.taskDateChipFrames(in: window).map { ("date", $0) }
+        return (links + chips)
+            .map { "\($0.0):\(Int($0.1.midX)),\(Int($0.1.midY))" }
+            .joined(separator: ";")
+    }
+
     var body: some View {
         let _ = model.revision
         VStack(alignment: .trailing, spacing: 2) {
@@ -329,6 +349,18 @@ struct HUDView: View {
             Text("кадров/с: \(fps.fps)")
             Text("прокрутка: \(Int(model.scrollOffset.rounded()))")
                 .accessibilityIdentifier("hud.offset")
+            // UI tests: the last tapped note link, and where the links are on screen (window points).
+            Text("ссылка: \(model.openedNote)")
+                .accessibilityIdentifier("hud.openedNote")
+            Text(linkCentres)
+                .accessibilityIdentifier("hud.links")
+                .opacity(0.01)
+            // UI tests print this when they fail (the unified log keeps its arguments compressed).
+            TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+                Text(EditorDiagnostics.recent.joined(separator: " | "))
+                    .accessibilityIdentifier("hud.diag")
+                    .opacity(0.01)
+            }
         }
         .font(.caption.monospacedDigit())
         .padding(8)

@@ -37,6 +37,7 @@ public enum SampleDocument {
                 .text("выделение маркером", highlight),
                 .text(".", .empty),
             ]),
+            .paragraph("Ссылка текстом на заметку, которой ещё нет: [[Новая заметка]]."),
             .code("func greet(_ name: String) -> String {\n    // Code blocks are highlighted\n    return \"Hello, \\(name)!\"\n}", language: "swift"),
             .math("E = mc^2 \\quad \\int_0^1 x^2\\,dx = \\frac{1}{3}"),
             .mermaid("graph LR\n  A[Перо] --> B[Якорь]\n  B --> C[Перекладка]\n  C --> A"),

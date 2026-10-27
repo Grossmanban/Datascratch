@@ -74,7 +74,10 @@ final class AttachmentFactory {
             UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: size.height / 2).fill()
             attributed.draw(at: CGPoint(x: 6, y: (size.height - textSize.height) / 2))
         }
-        let a = InlineAtomAttachment(image: image)
+        // Not `InlineAtomAttachment(image:)`: that is NSTextAttachment's factory and returns a plain
+        // NSTextAttachment, so the chip was never recognized as a note link (taps did nothing).
+        let a = InlineAtomAttachment()
+        a.image = image
         a.atom = atom
         a.bounds = CGRect(x: 0, y: onPaper ? font.descender : font.descender - 1, width: size.width, height: size.height)
         return a

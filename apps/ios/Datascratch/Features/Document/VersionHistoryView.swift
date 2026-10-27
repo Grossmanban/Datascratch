@@ -241,11 +241,9 @@ struct DiffText: View {
             case .same: break
             case .added:
                 piece.backgroundColor = Theme.Palette.success.opacity(0.22)
-                piece.accessibilityLabel = String(localized: "Added: \(segment.text)")
             case .removed:
                 piece.strikethroughStyle = .single
                 piece.foregroundColor = Theme.Palette.danger
-                piece.accessibilityLabel = String(localized: "Removed: \(segment.text)")
             }
             text += piece
         }

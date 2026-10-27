@@ -121,17 +121,19 @@ private struct InvitationCard: View {
 /// («… зарегистрировалась — открыть доступ?»), and new guest links after a key change.
 struct SharingPrompts: ViewModifier {
     @Environment(AppModel.self) private var app
+    /// Answered or put off in this session: not asked again until the next launch.
+    @State private var handled: Set<String> = []
 
     func body(content: Content) -> some View {
         let sharing = app.accountSharing
-        let confirmation = sharing.confirmations.first
+        let confirmation = sharing.confirmations.first { !handled.contains($0.id) }
         content
             .alert(confirmation.map { String(localized: "\($0.member.email) signed up — give access?") } ?? "",
                    isPresented: Binding(get: { confirmation != nil }, set: { _ in })) {
                 if let confirmation {
                     Button("Give Access") { respond(confirmation, allow: true) }
                     Button("Don’t Give Access", role: .destructive) { respond(confirmation, allow: false) }
-                    Button("Later", role: .cancel) {}
+                    Button("Later", role: .cancel) { handled.insert(confirmation.id) }
                 }
             } message: {
                 Text("This account was created after you sent the invitation. Give access only if it is really this person.")
@@ -148,6 +150,7 @@ struct SharingPrompts: ViewModifier {
     }
 
     private func respond(_ confirmation: AccessConfirmation, allow: Bool) {
+        handled.insert(confirmation.id)
         Task { try? await app.accountSharing.confirm(confirmation, allow: allow) }
     }
 }

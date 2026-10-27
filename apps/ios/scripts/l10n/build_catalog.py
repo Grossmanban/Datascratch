@@ -48,8 +48,6 @@ INTERPOLATIONS = {
     r"\(invite.role.title) · waiting until \(expiresAt.formatted(date: .abbreviated, time: .omitted))": "%@ · waiting until %@",
     r"\(invite.role.title) · waiting": "%@ · waiting",
     r"Changed by \(names)": "Changed by %@",
-    r"Added: \(segment.text)": "Added: %@",
-    r"Removed: \(segment.text)": "Removed: %@",
     r"\($0.member.email) signed up — give access?": "%@ signed up — give access?",
     r"Opens when \(item.ownerEmail)’s device is online": "Opens when %@’s device is online",
     r"View only · \(owner) can edit": "View only · %@ can edit",

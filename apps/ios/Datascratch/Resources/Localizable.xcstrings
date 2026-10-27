@@ -281,16 +281,6 @@
         }
       }
     },
-    "Added: %@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Добавлено: %@"
-          }
-        }
-      }
-    },
     "Agent Access": {
       "localizations": {
         "ru": {
@@ -3357,16 +3347,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Удалено"
-          }
-        }
-      }
-    },
-    "Removed: %@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Удалено: %@"
           }
         }
       }

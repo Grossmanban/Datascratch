@@ -306,6 +306,18 @@ describe("api vectors", () => {
   });
 });
 
+describe("api failure vectors (D-53)", () => {
+  it("classifies every case as expected", async () => {
+    const { classifyApiFailure, SYNC_CLOSE_DEVICE_REVOKED, DEVICE_REVOKED_REASONS } =
+      await import("../src/contracts/index.js");
+    const v = load("api/failures.json");
+    expect(v.syncCloseDeviceRevoked).toBe(SYNC_CLOSE_DEVICE_REVOKED);
+    expect(v.reasons).toEqual([...DEVICE_REVOKED_REASONS]);
+    for (const c of v.cases)
+      expect(classifyApiFailure(c.status, c.body), c.name).toEqual(c.expected);
+  });
+});
+
 describe("recovery key rotation vector", () => {
   it("builds the expected body", async () => {
     const { rotateRecoveryKey, unwrapMasterKeyWithRecovery } = await import("../src/index.js");
@@ -321,5 +333,67 @@ describe("recovery key rotation vector", () => {
         unwrapMasterKeyWithRecovery(r.body.wrappedMasterKeyRecovery, r.recoveryKey, i.userId),
       ),
     ).toBe(i.masterKey);
+  });
+});
+
+describe("account sharing vectors (D-54)", () => {
+  it("derives keys, unwraps member keys and the chain, matches the safety code", async () => {
+    const c = await import("../src/crypto/index.js");
+    const v = load("crypto/sharing.json");
+    const o = v.accounts.owner;
+    const m = v.accounts.member;
+    const owner = c.generateBoxKeyPair(fromHex(o.seed));
+    const member = c.generateBoxKeyPair(fromHex(m.seed));
+    expect(c.toHex(owner.publicKey)).toBe(o.publicKey);
+    expect(c.toHex(member.secretKey)).toBe(m.secretKey);
+    expect(
+      c.toHex(
+        c.unwrapBoxSecretKey(o.wrappedSecretKey, fromHex(o.masterKey), o.userId, owner.publicKey),
+      ),
+    ).toBe(o.secretKey);
+    expect(
+      c.wrapBoxSecretKey(owner.secretKey, fromHex(o.masterKey), o.userId, {
+        nonce: fromHex(o.wrapNonce),
+      }),
+    ).toBe(o.wrappedSecretKey);
+    expect(c.toHex(c.memberWrapKey(member.secretKey, owner.publicKey))).toBe(v.memberWrapKey);
+
+    const nb = v.notebook;
+    const { ad: _ad, nonce: _n, wrappedKey, ...ref } = nb.memberWrap;
+    const current = c.unwrapKeyFromOwner(wrappedKey, member.secretKey, owner.publicKey, ref);
+    expect(c.toHex(current)).toBe(nb.keys[2].key);
+    expect(
+      c.toHex(c.unwrapKey(fromHex(o.masterKey), nb.ownerWrap.wrappedKey, nb.ownerWrap.ad)),
+    ).toBe(nb.keys[2].key);
+    const keys = c.unwrapKeyChain(current, 3, nb.keyChain, "notebook", nb.notebookId);
+    expect(keys.map(c.toHex)).toEqual([nb.keys[2].key, nb.keys[1].key, nb.keys[0].key]);
+    for (const bad of v.invalid)
+      expect(() =>
+        c.unwrapKey(c.memberWrapKey(member.secretKey, owner.publicKey), wrappedKey, bad.ad),
+      ).toThrow();
+
+    const note = v.note;
+    const noteKey = c.unwrapKey(
+      current,
+      note.wrappedByNotebookKey.wrappedKey,
+      note.wrappedByNotebookKey.ad,
+    );
+    expect(c.toHex(noteKey)).toBe(note.keys[1].key);
+    expect(c.unwrapKeyChain(noteKey, 2, note.keyChain, "note", note.noteId).map(c.toHex)).toEqual([
+      note.keys[1].key,
+      note.keys[0].key,
+    ]);
+    const { ad: _a2, nonce: _n2, wrappedKey: noteWrapped, ...noteRef } = note.memberWrap;
+    expect(
+      c.toHex(c.unwrapKeyFromOwner(noteWrapped, member.secretKey, owner.publicKey, noteRef)),
+    ).toBe(note.keys[1].key);
+
+    expect(
+      c.safetyCode(
+        { userId: m.userId, publicKey: member.publicKey },
+        { userId: o.userId, publicKey: owner.publicKey },
+      ),
+    ).toBe(v.safetyCode);
+    expect(v.safetyCode).toMatch(/^\d{5}( \d{5}){5}$/);
   });
 });

@@ -448,12 +448,322 @@
         }
       ]
     },
+    "boxKey": {
+      "valid": [
+        {
+          "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "wrappedSecretKey": "AQ"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "short public key",
+          "body": {
+            "publicKey": "AAAA",
+            "wrappedSecretKey": "AQ"
+          }
+        }
+      ]
+    },
+    "createInvitationRequest": {
+      "valid": [
+        {
+          "invitationId": "0192f3c4-0000-7000-8000-000000000001",
+          "target": {
+            "kind": "notebook",
+            "id": "0192f3c4-0000-7000-8000-000000000003"
+          },
+          "email": "A@B.co",
+          "role": "editor"
+        },
+        {
+          "invitationId": "0192f3c4-0000-7000-8000-000000000001",
+          "target": {
+            "kind": "note",
+            "id": "0192f3c4-0000-7000-8000-000000000003"
+          },
+          "email": "a@b.co",
+          "role": "viewer"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "unknown role",
+          "body": {
+            "invitationId": "0192f3c4-0000-7000-8000-000000000001",
+            "target": {
+              "kind": "notebook",
+              "id": "0192f3c4-0000-7000-8000-000000000003"
+            },
+            "email": "a@b.co",
+            "role": "admin"
+          }
+        },
+        {
+          "reason": "spaces cannot be shared",
+          "body": {
+            "invitationId": "0192f3c4-0000-7000-8000-000000000001",
+            "target": {
+              "kind": "space",
+              "id": "0192f3c4-0000-7000-8000-000000000003"
+            },
+            "email": "a@b.co",
+            "role": "viewer"
+          }
+        }
+      ]
+    },
+    "incomingInvitation": {
+      "valid": [
+        {
+          "id": "0192f3c4-0000-7000-8000-000000000001",
+          "target": {
+            "kind": "notebook",
+            "id": "0192f3c4-0000-7000-8000-000000000003"
+          },
+          "from": {
+            "userId": "0192f3c4-0000-7000-8000-000000000004",
+            "email": "owner@b.co"
+          },
+          "role": "viewer",
+          "createdAt": "2026-10-25T12:00:00.000Z",
+          "expiresAt": "2026-10-25T12:00:00.000Z"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing from",
+          "body": {
+            "id": "0192f3c4-0000-7000-8000-000000000001",
+            "target": {
+              "kind": "notebook",
+              "id": "0192f3c4-0000-7000-8000-000000000003"
+            },
+            "role": "viewer",
+            "createdAt": "2026-10-25T12:00:00.000Z",
+            "expiresAt": "2026-10-25T12:00:00.000Z"
+          }
+        }
+      ]
+    },
+    "member": {
+      "valid": [
+        {
+          "userId": "0192f3c4-0000-7000-8000-000000000004",
+          "email": "m@b.co",
+          "role": "editor",
+          "status": "awaiting_key",
+          "joinedAt": "2026-10-25T12:00:00.000Z",
+          "accountCreatedAfterInvite": true
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "unknown status",
+          "body": {
+            "userId": "0192f3c4-0000-7000-8000-000000000004",
+            "email": "m@b.co",
+            "role": "editor",
+            "status": "left",
+            "joinedAt": "2026-10-25T12:00:00.000Z",
+            "accountCreatedAfterInvite": false
+          }
+        }
+      ]
+    },
+    "putMemberKeyRequest": {
+      "valid": [
+        {
+          "version": 1,
+          "wrappedKey": "AQ"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "version 0",
+          "body": {
+            "version": 0,
+            "wrappedKey": "AQ"
+          }
+        }
+      ]
+    },
+    "rotateKeyRequest": {
+      "valid": [
+        {
+          "version": 2,
+          "ownerWrappedKey": "AQ",
+          "previousKeyWrap": "AQ",
+          "memberKeys": [
+            {
+              "userId": "0192f3c4-0000-7000-8000-000000000004",
+              "wrappedKey": "AQ"
+            }
+          ]
+        },
+        {
+          "version": 3,
+          "ownerWrappedKey": "AQ",
+          "previousKeyWrap": "AQ",
+          "memberKeys": [],
+          "notebookKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "rotation must produce version ≥ 2",
+          "body": {
+            "version": 1,
+            "ownerWrappedKey": "AQ",
+            "previousKeyWrap": "AQ",
+            "memberKeys": []
+          }
+        },
+        {
+          "reason": "duplicate member",
+          "body": {
+            "version": 2,
+            "ownerWrappedKey": "AQ",
+            "previousKeyWrap": "AQ",
+            "memberKeys": [
+              {
+                "userId": "0192f3c4-0000-7000-8000-000000000004",
+                "wrappedKey": "AQ"
+              },
+              {
+                "userId": "0192f3c4-0000-7000-8000-000000000004",
+                "wrappedKey": "AQ"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "sharedItem": {
+      "valid": [
+        {
+          "target": {
+            "kind": "notebook",
+            "id": "0192f3c4-0000-7000-8000-000000000003"
+          },
+          "owner": {
+            "userId": "0192f3c4-0000-7000-8000-000000000004",
+            "email": "owner@b.co",
+            "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          },
+          "role": "editor",
+          "keyVersion": 2,
+          "wrappedKey": "AQ",
+          "keyChain": [
+            "AQ"
+          ],
+          "docIds": [
+            "0192f3c4-0000-7000-8000-000000000003",
+            "0192f3c4-0000-7000-8000-000000000005"
+          ],
+          "addedAt": "2026-10-25T12:00:00.000Z"
+        },
+        {
+          "target": {
+            "kind": "note",
+            "id": "0192f3c4-0000-7000-8000-000000000005"
+          },
+          "owner": {
+            "userId": "0192f3c4-0000-7000-8000-000000000004",
+            "email": "owner@b.co",
+            "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          },
+          "role": "viewer",
+          "keyVersion": 1,
+          "wrappedKey": null,
+          "keyChain": [],
+          "docIds": [
+            "0192f3c4-0000-7000-8000-000000000005"
+          ],
+          "addedAt": "2026-10-25T12:00:00.000Z"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing owner public key",
+          "body": {
+            "target": {
+              "kind": "note",
+              "id": "0192f3c4-0000-7000-8000-000000000005"
+            },
+            "owner": {
+              "userId": "0192f3c4-0000-7000-8000-000000000004",
+              "email": "o@b.co"
+            },
+            "role": "viewer",
+            "keyVersion": 1,
+            "wrappedKey": null,
+            "keyChain": [],
+            "docIds": [],
+            "addedAt": "2026-10-25T12:00:00.000Z"
+          }
+        }
+      ]
+    },
+    "docVersion": {
+      "valid": [
+        {
+          "seq": 3,
+          "createdAt": "2026-10-25T12:00:00.000Z",
+          "deviceId": "dev-1"
+        },
+        {
+          "seq": 9,
+          "createdAt": "2026-10-25T12:00:00.000Z",
+          "deviceId": "dev-1",
+          "authors": [
+            {
+              "kind": "user",
+              "userId": "0192f3c4-0000-7000-8000-000000000004"
+            },
+            {
+              "kind": "agent",
+              "tokenId": "tok-1"
+            }
+          ]
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "author without kind",
+          "body": {
+            "seq": 9,
+            "createdAt": "2026-10-25T12:00:00.000Z",
+            "deviceId": "d",
+            "authors": [
+              {
+                "userId": "0192f3c4-0000-7000-8000-000000000004"
+              }
+            ]
+          }
+        }
+      ]
+    },
     "apiError": {
       "valid": [
         {
           "error": {
             "code": "conflict",
             "message": "id exists with different content"
+          }
+        },
+        {
+          "error": {
+            "code": "device_revoked",
+            "message": "device revoked",
+            "reason": "user"
+          }
+        },
+        {
+          "error": {
+            "code": "rate_limited",
+            "message": "slow down",
+            "retryAfterMs": 5000
           }
         }
       ],
@@ -464,6 +774,16 @@
             "error": {
               "code": "teapot",
               "message": ""
+            }
+          }
+        },
+        {
+          "reason": "unknown revocation reason",
+          "body": {
+            "error": {
+              "code": "device_revoked",
+              "message": "",
+              "reason": "bored"
             }
           }
         }

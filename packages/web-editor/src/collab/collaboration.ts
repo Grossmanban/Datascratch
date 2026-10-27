@@ -37,10 +37,15 @@ export interface CollaborationOptions {
   user: { name: string; color: string } | null;
 }
 
+/** A collaborator's colour from awareness (another client): only a literal hex colour reaches a style. */
+function presenceColor(color: unknown): string {
+  return typeof color === "string" && /^#[0-9a-f]{3,8}$/i.test(color) ? color : "#2E5BDB";
+}
+
 function cursorBuilder(user: { name?: string; color?: string }): HTMLElement {
   const caret = document.createElement("span");
   caret.className = "ds-collab-caret";
-  caret.style.setProperty("--ds-collab-color", user.color ?? "#2E5BDB");
+  caret.style.setProperty("--ds-collab-color", presenceColor(user.color));
   const label = document.createElement("span");
   label.className = "ds-collab-label";
   label.textContent = user.name ?? "Гость";
@@ -77,7 +82,7 @@ export function createCursorPlugin(awareness: Awareness) {
   return yCursorPlugin(awareness, {
     cursorBuilder: (u: { name?: string; color?: string }) => cursorBuilder(u),
     selectionBuilder: (u: { color?: string }) => ({
-      style: `background-color: color-mix(in srgb, ${u.color ?? "#2E5BDB"} 22%, transparent)`,
+      style: `background-color: color-mix(in srgb, ${presenceColor(u.color)} 22%, transparent)`,
       class: "ds-collab-selection",
     }),
   });

@@ -9,6 +9,10 @@ final class DemoModel {
     let editor: EditorView
     private(set) var document: InMemoryEditorDocument
     var status = ""
+    /// Id of the last note link tapped (shown in the HUD for UI tests).
+    var openedNote = ""
+    /// Title of a note link that was tapped: the demo shows it in an alert (UI tests wait for it).
+    var openedNoteTitle: String?
     var showHUD = false
     var showPalette = false
     /// Title of a `[[Title]]` link that was tapped (the demo has one note: it offers to create it).
@@ -23,6 +27,8 @@ final class DemoModel {
     var revision = 0
     /// Editor scroll position (for the HUD and UI tests).
     var scrollOffset: CGFloat = 0
+    /// The editor's latest diagnostic lines (`-uiTesting`; the HUD shows them to UI tests).
+    var diagnostics: [String] = []
 
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
     private let images = DemoImages()
@@ -49,6 +55,10 @@ final class DemoModel {
             editor.tools.allowsFingerDrawing = true
         }
         if args.contains("-hud") { showHUD = true }
+        // Next turn: lines are also logged from inside touch handling.
+        EditorDiagnostics.onLog = { [weak self] _ in
+            DispatchQueue.main.async { self?.diagnostics = EditorDiagnostics.recent }
+        }
         editor.onStateChange = { [weak self] in
             guard let self else { return }
             self.revision &+= 1
@@ -56,8 +66,16 @@ final class DemoModel {
         }
         editor.onScroll = { [weak self] y in self?.scrollOffset = y }
         editor.onPaletteRequest = { [weak self] _ in self?.showPalette = true }
-        editor.onOpenNote = { [weak self] id in self?.status = "Ссылка на заметку \(id.prefix(8))…" }
-        editor.onOpenNoteTitled = { [weak self] title in self?.pendingNoteTitle = title }
+        editor.onOpenNote = { [weak self] id in
+            EditorDiagnostics.log("demo onOpenNote \(id) (model \(self == nil ? "gone" : "alive"))")
+            self?.status = "Ссылка на заметку \(id.prefix(8))…"
+            self?.openedNote = id
+            self?.openedNoteTitle = self?.editor.attachmentResolver?.noteTitle(for: id) ?? id
+        }
+        editor.onOpenNoteTitled = { [weak self] title in
+            EditorDiagnostics.log("demo onOpenNoteTitled \(title)")
+            self?.pendingNoteTitle = title
+        }
         editor.onSlashMenu = { [weak self] menu in
             self?.slashMenu = menu
             self?.slashSelection = menu?.items.first?.id

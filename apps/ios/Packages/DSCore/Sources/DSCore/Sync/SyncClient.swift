@@ -83,7 +83,7 @@ public protocol SyncClientDelegate: AnyObject, Sendable {
 }
 
 /// The WebSocket side of sync-protocol.md: `hello`/`welcome`, reconnection with backoff,
-/// pings every 25 s, typed sending. Document logic lives in `SyncEngine`.
+/// pings every 25 s (no pong in 10 s = dead connection, replaced), typed sending. Document logic lives in `SyncEngine`.
 public actor SyncClient {
     public struct Configuration: Sendable {
         /// `wss://host/v1/sync`.
@@ -99,6 +99,10 @@ public actor SyncClient {
         /// flaky networks) before the exponential backoff starts.
         public var quickRetries = 2
         public var quickRetryDelay: Duration = .milliseconds(300)
+        public var pingInterval: Duration = SyncProtocol.pingInterval
+        /// No pong this long after a ping: the connection died silently (the app was suspended,
+        /// the network changed, a NAT entry expired) and is replaced by a new one.
+        public var pongTimeout: Duration = .seconds(10)
 
         public init(url: URL, deviceId: String, clientVersion: String) {
             self.url = url
@@ -125,6 +129,8 @@ public actor SyncClient {
     private var runTask: Task<Void, Never>?
     public private(set) var state: SyncConnectionState = .disconnected
     private var attempt = 0
+    /// The wait before the next connection attempt; `reconnectNow` cuts it short.
+    private var retryWait: Task<Void, Never>?
     /// Connection attempts that failed in a row (0 once connected).
     public private(set) var consecutiveFailures = 0
 
@@ -158,6 +164,36 @@ public actor SyncClient {
         connection?.close()
         attempt = 0
         consecutiveFailures = 0
+        retryWait?.cancel()
+    }
+
+    /// App returned to the foreground: a connection that died silently while suspended is
+    /// replaced at once (instead of at the next ping, or never if the socket hangs), and a
+    /// pending reconnect is not waited for.
+    public func checkConnection() {
+        guard isConnected, let conn = connection else {
+            attempt = 0
+            retryWait?.cancel()
+            return
+        }
+        let timeout = configuration.pongTimeout
+        Task { if await !Self.ping(conn, timeout: timeout) { conn.close() } }
+    }
+
+    /// Whether a pong came back in time. Not structured: a ping on a dead socket may never
+    /// return, and a task group would wait for it.
+    static func ping(_ conn: any WebSocketConnection, timeout: Duration) async -> Bool {
+        let done = Locked(false)
+        return await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+            @Sendable func finish(_ alive: Bool) {
+                if done.withLock({ let first = !$0; $0 = true; return first }) { c.resume(returning: alive) }
+            }
+            Task { finish((try? await conn.sendPing()) != nil) }
+            Task {
+                try? await Task.sleep(for: timeout)
+                finish(false)
+            }
+        }
     }
 
     public var isConnected: Bool {
@@ -201,8 +237,11 @@ public actor SyncClient {
                 continue
             }
             let delay = backoff()
+            let wait = Task { _ = try? await Task.sleep(for: delay) }
+            retryWait = wait   // before the state shows `.waiting`, so `reconnectNow` can cut it short
             await setState(.waiting(retryIn: delay))
-            try? await Task.sleep(for: delay)
+            await wait.value
+            retryWait = nil
         }
         await setState(.disconnected)
     }
@@ -244,11 +283,16 @@ public actor SyncClient {
             throw SyncClientError.closed
         }
 
+        let (interval, pongTimeout) = (configuration.pingInterval, configuration.pongTimeout)
         let pinger = Task { [conn] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: SyncProtocol.pingInterval)
+                try? await Task.sleep(for: interval)
                 if Task.isCancelled { break }
-                try? await conn.sendPing()
+                // A dead connection: closing it makes `receive` throw, and we reconnect.
+                if await !Self.ping(conn, timeout: pongTimeout) {
+                    if !Task.isCancelled { conn.close() }
+                    break
+                }
             }
         }
         defer { pinger.cancel() }

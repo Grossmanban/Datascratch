@@ -263,6 +263,8 @@ struct SidebarView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        // The whole row, the gap before the badge too, opens the invitations.
+                        .contentShape(Rectangle())
                         .accessibilityIdentifier("sidebar.invitations")
                     }
                     ForEach(items) { item in

@@ -79,10 +79,8 @@ async function run(blockId: string): Promise<void> {
   uploads.update(blockId, { status: "uploading", progress: null });
   let stored: UploadedAttachment;
   try {
-    stored = await upload(state.file, {
-      onProgress: (fraction) => {
-        if (uploads.get(blockId)?.status === "uploading") uploads.update(blockId, { progress: Math.max(0, Math.min(1, fraction)) });
-      },
+    stored = await upload(state.file, (done) => {
+      if (uploads.get(blockId)?.status === "uploading") uploads.update(blockId, { progress: Math.max(0, Math.min(1, done)) });
     });
   } catch {
     uploads.update(blockId, { status: "failed" });

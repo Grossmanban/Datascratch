@@ -57,7 +57,9 @@ export async function verifyUserToken(ctx: AppContext, token: string): Promise<U
     .select({ id: devices.id, lastSeenAt: devices.lastSeenAt, revokedAt: devices.revokedAt, reason: devices.revokedReason })
     .from(devices)
     .where(and(eq(devices.id, claims.deviceId), eq(devices.userId, claims.userId)));
-  if (!dev) return null;
+  // Device rows are only ever removed with their account (revoking marks them): a valid,
+  // server-signed token whose device is gone belongs to a deleted account.
+  if (!dev) throw deviceRevoked('account_deleted');
   if (dev.revokedAt) throw deviceRevoked(revokeReason(dev.reason));
   if (Date.now() - dev.lastSeenAt.getTime() > LAST_SEEN_RESOLUTION_MS) {
     await db

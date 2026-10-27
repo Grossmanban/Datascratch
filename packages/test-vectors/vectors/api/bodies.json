@@ -705,6 +705,35 @@
         }
       ]
     },
+    "sharedByMeItem": {
+      "valid": [
+        {
+          "target": {
+            "kind": "notebook",
+            "id": "0192f3c4-0000-7000-8000-000000000003"
+          },
+          "keyVersion": 2,
+          "keyRotationPending": true,
+          "members": 3,
+          "awaitingKey": 1
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "negative count",
+          "body": {
+            "target": {
+              "kind": "note",
+              "id": "0192f3c4-0000-7000-8000-000000000003"
+            },
+            "keyVersion": 1,
+            "keyRotationPending": false,
+            "members": -1,
+            "awaitingKey": 0
+          }
+        }
+      ]
+    },
     "docVersion": {
       "valid": [
         {

@@ -419,11 +419,10 @@ final class CoreLibrary: LibraryBackend {
     /// Everything of the account on this device: documents, keys, the overlay and the decrypted
     /// attachments in `attachments` (and their records).
     func wipeLocalData(attachments: URL? = nil) throws {
-        for state in [AttachmentRecord.State.pendingUpload, .synced, .remote] {
-            for record in (try? store.attachments(state: state)) ?? [] { try? store.deleteAttachment(record.attachmentId) }
-        }
-        if let attachments, let files = try? FileManager.default.contentsOfDirectory(at: attachments, includingPropertiesForKeys: nil) {
-            for file in files { try? FileManager.default.removeItem(at: file) }
+        if let attachments {
+            try? AttachmentManager.wipeLocal(directory: attachments, store: store)
+        } else {
+            try? store.deleteAllAttachments()
         }
         notebookDocs.removeAll()
         noteDocs.removeAll()

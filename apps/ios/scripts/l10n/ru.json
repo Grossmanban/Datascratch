@@ -376,6 +376,8 @@
   "The notes of the previous account, including unsent changes, will be removed from this device.": "Заметки прежнего аккаунта, включая неотправленные изменения, будут удалены с этого устройства.",
   "The old key no longer works. Save this one in a password manager or on paper.": "Старый ключ больше не работает. Сохраните новый в менеджере паролей или на бумаге.",
   "The server copy of the key will be deleted. Agents will lose access, and only your devices will be able to read these notes.": "Копия ключа на сервере будет удалена. Агенты потеряют доступ, читать заметки смогут только ваши устройства.",
+  "The server sent a response this app cannot use.": "Сервер прислал ответ, который приложение не может использовать.",
+  "The server sent unsafe sign-in parameters. Nothing was sent; check the server address.": "Сервер прислал небезопасные параметры входа. Ничего не отправлено — проверьте адрес сервера.",
   "The session was ended from another device or in your account settings. Your notes stay on this device; changes made here will sync once you sign in again.": "Сеанс завершён с другого устройства или в настройках аккаунта. Заметки остаются на этом устройстве; изменения, сделанные здесь, синхронизируются, как только вы снова войдёте.",
   "Theme": "Тема",
   "These groups don't match. Check the key you saved.": "Группы не совпадают. Проверьте сохранённый ключ.",

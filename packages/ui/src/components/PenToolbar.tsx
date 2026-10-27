@@ -1,4 +1,4 @@
-import { ChevronDown, Hand, Plus, Redo2, Type, Undo2 } from "lucide-react";
+import { ChevronDown, Hand, ImagePlus, Plus, Redo2, Type, Undo2 } from "lucide-react";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { cn } from "../lib/cn";
@@ -118,6 +118,7 @@ const L = {
     collapse: "Свернуть палитру",
     expand: "Развернуть палитру",
     more: "Цвет, толщина и другие настройки",
+    image: "Картинка",
   },
   en: {
     toolbar: "Pen",
@@ -142,6 +143,7 @@ const L = {
     collapse: "Collapse palette",
     expand: "Expand palette",
     more: "Color, width and more",
+    image: "Image",
   },
 } as const;
 
@@ -344,6 +346,8 @@ export interface PenToolbarProps {
   /** Recent custom colours (controlled). Omit to keep them in localStorage. */
   recentColors?: Record<PenColorFamily, string[]>;
   onRecentColor?: (family: PenColorFamily, hex: string) => void;
+  /** Shows an "Image" button next to undo/redo (in the popover when compact). */
+  onInsertImage?: () => void;
   className?: string;
 }
 
@@ -384,6 +388,7 @@ export function PenToolbar({
   onCollapsedChange,
   recentColors,
   onRecentColor,
+  onInsertImage,
   className,
 }: PenToolbarProps) {
   const locale = useLocale();
@@ -658,6 +663,7 @@ export function PenToolbar({
 
   const extras = (
     <>
+      {onInsertImage && roundBtn("tool-image", t.image, <ImagePlus />, onInsertImage)}
       {roundBtn(
         "tool-finger",
         t.anyPointer,

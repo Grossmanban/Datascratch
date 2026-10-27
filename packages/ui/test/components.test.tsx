@@ -635,3 +635,31 @@ describe("Menu rows", () => {
     expect(second!.querySelector("[data-menu-trailing] svg")).toHaveClass("invisible");
   });
 });
+
+describe("PenToolbar image button", () => {
+  it("shows «Картинка» only when onInsertImage is set, inline and in the compact popover", async () => {
+    const { PenToolbar, defaultPenSelection } = await import("../src");
+    const insert = vi.fn();
+    const { rerender } = renderUI(
+      <PenToolbar value={defaultPenSelection} onChange={() => {}} compact={false} />,
+    );
+    expect(screen.queryByRole("button", { name: "Картинка" })).not.toBeInTheDocument();
+    rerender(
+      <PenToolbar
+        value={defaultPenSelection}
+        onChange={() => {}}
+        compact={false}
+        onInsertImage={insert}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Картинка" }));
+    expect(insert).toHaveBeenCalledOnce();
+    rerender(
+      <PenToolbar value={defaultPenSelection} onChange={() => {}} compact onInsertImage={insert} />,
+    );
+    expect(screen.queryByRole("button", { name: "Картинка" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Цвет, толщина и другие настройки" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Картинка" }));
+    expect(insert).toHaveBeenCalledTimes(2);
+  });
+});

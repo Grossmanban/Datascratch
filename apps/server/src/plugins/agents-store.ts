@@ -1,6 +1,7 @@
 import { and, desc, eq, lt } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { agentAudit, agentGrants, oauthClients, oauthCodes, oauthTokens } from '../db/schema.js';
+import { noteKeyCache } from './agent-key-cache.js';
 import type {
   AgentGrant,
   AgentsStore,
@@ -79,7 +80,13 @@ export class PgAgentsStore implements AgentsStore {
     if (patch.notebookIds) set.notebookIds = patch.notebookIds;
     if (patch.permission) set.permission = patch.permission;
     if (Object.keys(set).length === 0) return;
+    // A revoked or narrowed grant: drop decrypted note keys of the notebooks it covered (crypto.md §8).
+    const narrows = Boolean(patch.revokedAt || patch.notebookIds);
+    const [before] = narrows
+      ? await this.db.select({ notebookIds: agentGrants.notebookIds }).from(agentGrants).where(eq(agentGrants.id, id))
+      : [];
     await this.db.update(agentGrants).set(set).where(eq(agentGrants.id, id));
+    if (before) noteKeyCache.forgetNotebooks(before.notebookIds);
   }
 
   async upsertClient(c: OAuthClient) {

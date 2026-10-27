@@ -65,6 +65,9 @@ final class NativeEditorModel: ClosingEditor {
             DispatchQueue.main.async { self?.mediaChooser = id == "file" ? .files : .photos }
         }
         editor.onImagesReceived = { [weak self] providers in self?.receiveImages(providers) }
+        editor.onPastedImages = { [weak self] images in
+            self?.receivePastedImages(images) ?? images.map { _ in nil }
+        }
         editor.onImageTap = { [weak self] _, attachmentId, _ in
             DispatchQueue.main.async { self?.viewingImage = attachmentId }
         }

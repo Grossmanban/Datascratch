@@ -93,6 +93,32 @@ extension NativeEditorModel {
         }
     }
 
+    /// Images inside a pasted web page or rich text: each gets its id at once (the new block refers
+    /// to it); the bytes come with the paste or are downloaded (http/https), then are stored under
+    /// that id and go up like any photo. A failed download leaves the image as a link.
+    func receivePastedImages(_ images: [PastedImage]) -> [String?] {
+        guard let app else { return images.map { _ in nil } }
+        let noteId = self.noteId
+        return images.map { image -> String? in
+            if case .url(let url) = image.source, !["http", "https"].contains(url.scheme?.lowercased() ?? "") { return nil }
+            let id = EntityID.make()
+            Task { [weak self] in
+                var data: Data?
+                switch image.source {
+                case .data(let bytes): data = bytes
+                case .url(let url): data = try? await URLSession.shared.data(from: url).0
+                }
+                guard let data, (try? await app.covers.addImage(data, noteId: noteId, id: id)) != nil else {
+                    self?.editor.imageFailed(attachmentId: id)
+                    return
+                }
+                self?.editor.imageDidLoad(attachmentId: id)
+                self?.showUpload(of: id)
+            }
+            return id
+        }
+    }
+
     /// Images pasted or dropped into the text (the editor put the caret at the drop point).
     func receiveImages(_ providers: [NSItemProvider]) {
         Task {

@@ -1,8 +1,8 @@
-import pino from 'pino';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createContext } from './context.js';
 import { createDatabase, runMigrations } from './db/client.js';
+import { createLogger } from './lib/log.js';
 import { registerJobs } from './jobs/index.js';
 import { InlineQueue, PgBossQueue, type JobQueue } from './jobs/queue.js';
 import { createStorage } from './storage/index.js';
@@ -12,10 +12,7 @@ export { buildApp } from './app.js';
 
 async function main() {
   const config = loadConfig();
-  const log = pino({
-    level: config.LOG_LEVEL,
-    redact: ['req.headers.authorization', '*.accessToken', '*.refreshToken', '*.loginKey', '*.token'],
-  });
+  const log = createLogger(config.LOG_LEVEL);
   log.info({ version: VERSION }, 'starting datascratch server');
 
   const database = createDatabase(config.DATABASE_URL, config.DATABASE_POOL_MAX);

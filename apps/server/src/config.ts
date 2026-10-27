@@ -24,6 +24,9 @@ const ConfigSchema = z
     /** Advertise OAuth Client ID Metadata Documents to MCP clients; off when the server cannot reach their hosts. */
     OAUTH_CLIENT_METADATA_DOCUMENTS: bool.default(true),
 
+    /** Proxies whose X-Forwarded-For is believed (proxy-addr names or CIDRs, comma-separated). */
+    TRUST_PROXY: z.string().default('loopback,linklocal,uniquelocal'),
+
     DATABASE_URL: z.string().min(1),
     DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
     /** Run migrations automatically on startup. */
@@ -63,6 +66,7 @@ const ConfigSchema = z
     FETCH_IMAGE_MAX_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
     FETCH_IMAGE_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
     FETCH_IMAGE_CONCURRENCY: z.coerce.number().int().positive().default(4),
+    FETCH_IMAGE_CONCURRENCY_PER_USER: z.coerce.number().int().positive().default(2),
     SYNC_UPDATE_MAX_BYTES: z.coerce.number().int().positive().default(2 * 1024 * 1024),
     SYNC_SNAPSHOT_MAX_BYTES: z.coerce.number().int().positive().default(16 * 1024 * 1024),
     SYNC_AWARENESS_MAX_BYTES: z.coerce.number().int().positive().default(64 * 1024),

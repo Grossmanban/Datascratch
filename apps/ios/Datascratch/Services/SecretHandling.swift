@@ -83,3 +83,20 @@ nonisolated enum SafeFileName {
         return String(trimmed.prefix(200))
     }
 }
+
+/// D-53: the device was signed out from another device and its data erased. The welcome screen
+/// says so once; the flag survives a relaunch until it is read.
+@Observable
+final class DeviceRevokedNotice {
+    static let shared = DeviceRevokedNotice()
+    private static let key = "app.deviceRevokedNotice"
+
+    var isPending: Bool {
+        didSet { UserDefaults.standard.set(isPending, forKey: Self.key) }
+    }
+
+    private init() {
+        isPending = UserDefaults.standard.bool(forKey: Self.key)
+            || ProcessInfo.processInfo.arguments.contains("-ui-testing-device-revoked")
+    }
+}

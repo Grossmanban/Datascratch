@@ -31,6 +31,8 @@ final class ServerConnection: CoreLibraryRemote {
     let attachmentsDirectory: URL
     /// Called after the local data was erased: images held in memory go too.
     var onLocalDataWiped: (() -> Void)?
+    /// Set by `ServerAccountService`: erases the device when the session was revoked (D-53).
+    var onDeviceRevoked: (() async -> Void)?
 
     init(serverURL: URL, webHost: String, core: CoreLibrary, sync: SyncCenter, attachmentsDirectory: URL) {
         self.attachmentsDirectory = attachmentsDirectory
@@ -76,6 +78,11 @@ final class ServerConnection: CoreLibraryRemote {
             ) { [weak self] in
                 do {
                     return .user(accessToken: try await api.accessToken())
+                } catch let error as APIError where Self.isDeviceRevoked(error) {
+                    // D-53: the session was revoked (another device, a password change or a
+                    // recovery): everything on this device goes.
+                    await self?.deviceRevoked()
+                    throw error
                 } catch APIError.notAuthenticated {
                     // The refresh token was refused: the session was ended on the server.
                     await self?.sessionEnded()
@@ -131,15 +138,28 @@ final class ServerConnection: CoreLibraryRemote {
         }
     }
 
-    /// The server ended this device's session (revoked from another device or the web, or the
-    /// refresh token expired). Sync stops; the library and the keys stay on the device, and
-    /// signing in again picks up where it stopped.
+    /// The server refused the refresh token without saying the device was revoked (it expired,
+    /// or an older server). Sync stops; the library and the keys stay on the device, and signing
+    /// in again picks up where it stopped. A revocation erases the device (`deviceRevoked`, D-53).
     func sessionEnded() async {
         guard !sync.isSessionEnded else { return }
         sync.markSessionEnded()
         let email = (try? core.store.string(ServerAccountService.emailKey)) ?? nil
         try? core.store.setString(email ?? "", for: ServerAccountService.sessionEndedKey)
         await stop()
+    }
+
+    /// D-53: the server said for certain that this device's session was revoked. Unlike
+    /// `sessionEnded` (an expired or refused refresh token), everything on the device is
+    /// erased; the account service does it (`ServerAccountService.deviceRevoked`).
+    func deviceRevoked() async {
+        await onDeviceRevoked?()
+    }
+
+    /// A revocation, not an expired token or a network error (api.md: 401 `device_revoked`).
+    nonisolated static func isDeviceRevoked(_ error: any Error) -> Bool {
+        guard case APIError.server(401, let code, _)? = error as? APIError else { return false }
+        return code == "device_revoked"
     }
 
     func stop() async {
@@ -460,7 +480,23 @@ final class ServerAccountService: AccountService {
 
     init(connection: ServerConnection) {
         self.connection = connection
+        connection.onDeviceRevoked = { [weak self] in await self?.deviceRevoked() }
         Task { await restore() }
+    }
+
+    /// D-53: this device was signed out from another device (or by a password change or a
+    /// recovery). Everything goes — the library, unsent changes, keys, attachments — and the
+    /// welcome screen says why. The session is already dead on the server: no logout call.
+    func deviceRevoked() async {
+        guard account != nil else { return }
+        await connection.stop()
+        try? connection.accounts.eraseDeviceKeys()
+        try? connection.core.wipeLocalData(attachments: connection.attachmentsDirectory)
+        connection.onLocalDataWiped?()
+        try? connection.core.store.setString(nil, for: Self.emailKey)
+        sessionResumed()
+        account = nil
+        DeviceRevokedNotice.shared.isPending = true
     }
 
     /// A stored session survives restarts: resume syncing without asking for the password.

@@ -12,6 +12,7 @@ import { formatDay, localDate } from "@/lib/dates";
 import { toBase64Url, uuidv7, type Share, type SharePermission } from "@/lib/shared";
 import { Button, Dialog, IconButton, SegmentedControl, Spinner, toast } from "@/ui";
 import { withIcon } from "@/lib/glyph";
+import { PeopleSection } from "./People";
 
 type Expiry = "never" | "1d" | "7d" | "30d";
 const EXPIRY_DAYS: Record<Expiry, number | null> = { never: null, "1d": 1, "7d": 7, "30d": 30 };
@@ -38,6 +39,11 @@ function ShareDialogInner() {
   const [key, setKey] = useState<Uint8Array | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
+  // A key change (D-54 rotation) re-creates the guest links with the new key: re-read both.
+  const keysChangedAt = useUi((s) => s.keysChangedAt);
+  useEffect(() => {
+    if (keysChangedAt) void qc.invalidateQueries({ queryKey: ["shares"] });
+  }, [keysChangedAt, qc]);
   useEffect(() => {
     if (!target) return;
     let alive = true;
@@ -45,7 +51,7 @@ function ShareDialogInner() {
     return () => {
       alive = false;
     };
-  }, [target]);
+  }, [target, keysChangedAt]);
 
   const shares = useQuery({ queryKey: ["shares"], queryFn: sharesApi.list, enabled: !!target });
   const mine = (shares.data ?? []).filter((s) => target && s.target.kind === target.kind && s.target.id === target.id);
@@ -91,6 +97,8 @@ function ShareDialogInner() {
       description={`${target?.kind === "note" ? t("share.note") : t("share.notebook")} · ${name}`}
     >
       <div className="flex flex-col gap-4" data-testid="share-dialog">
+        {target && <PeopleSection target={target} />}
+        <div className="border-t border-line pt-4 text-[13px] font-semibold text-ink">{t("share.guestLink")}</div>
         <div>
           <div className="mb-1.5 text-[13px] font-medium text-ink-2">{t("share.permission")}</div>
           <SegmentedControl

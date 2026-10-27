@@ -23,7 +23,7 @@ export type SyncErrorCode =
 /** Server → client messages (sync-protocol.md §4). */
 export type ServerMessage =
   | Exclude<SharedServerMessage, { type: 'error' }>
-  | { type: 'error'; code: SyncErrorCode; message: string; ref?: string };
+  | { type: 'error'; code: SyncErrorCode; message: string; ref?: string; retryAfterMs?: number };
 
 export const PROTOCOL_VERSION = SYNC_PROTOCOL_VERSION;
 

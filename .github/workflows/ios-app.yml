@@ -177,3 +177,12 @@ jobs:
           name: xcresult-${{ matrix.family }}
           path: apps/ios/build/*.xcresult
           retention-days: 7
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.family }}
+          path: apps/ios/build/build.log
+          retention-days: 7
+          if-no-files-found: ignore

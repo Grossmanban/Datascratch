@@ -55,8 +55,22 @@ export function tokenVarName(token: string): string {
   return `--ds-${token.replace(/\./g, "-")}`;
 }
 
-/** CSS value for a colour token or a literal `#RRGGBB`. */
-export function colorTokenVar(token: string | null | undefined): string {
+const HEX_COLOR = /^#[0-9a-f]{3,8}$/i;
+/** A token name: dotted lower-case words (`ink.blue`, `tint.red.fg`) — nothing CSS could read as syntax. */
+const TOKEN_NAME = /^[a-z][a-z0-9]*(\.[a-z0-9]+){0,3}$/;
+
+/**
+ * The colour if it is a literal `#rgb`…`#rrggbbaa` or a token name, else null. Colours come from
+ * documents and presence written by other clients: anything else could inject CSS into a style.
+ */
+export function safeColor(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  return HEX_COLOR.test(value) || TOKEN_NAME.test(value) ? value : null;
+}
+
+/** CSS value for a colour token or a literal `#RRGGBB`; invalid values render as `inherit`. */
+export function colorTokenVar(value: string | null | undefined): string {
+  const token = safeColor(value);
   if (!token) return "inherit";
   if (token.startsWith("#")) return token;
   const fallback = TOKEN_FALLBACKS[token] ?? "currentColor";
@@ -64,7 +78,8 @@ export function colorTokenVar(token: string | null | undefined): string {
 }
 
 /** Concrete colour for canvas drawing; reads the live CSS variable (theme-aware). */
-export function resolveColor(token: string, el: Element | null): string {
+export function resolveColor(value: string, el: Element | null): string {
+  const token = safeColor(value) ?? "ink.black";
   if (token.startsWith("#")) return token;
   if (el) {
     const v = getComputedStyle(el).getPropertyValue(tokenVarName(token)).trim();

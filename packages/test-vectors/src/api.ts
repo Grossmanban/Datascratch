@@ -421,8 +421,17 @@ export function apiVectors() {
             target: { kind: "notebook", id: vid(3) },
             keyVersion: 2,
             keyRotationPending: true,
+            pendingSinceVersion: 1,
             members: 3,
             awaitingKey: 1,
+          },
+          {
+            target: { kind: "note", id: vid(5) },
+            keyVersion: 1,
+            keyRotationPending: false,
+            pendingSinceVersion: null,
+            members: 1,
+            awaitingKey: 0,
           },
         ],
         invalid: [
@@ -436,6 +445,28 @@ export function apiVectors() {
               awaitingKey: 0,
             },
           },
+        ],
+      },
+      notebookKeyResponse: {
+        valid: [
+          { wrappedKey: "AQ" },
+          {
+            wrappedKey: "AQ",
+            version: 3,
+            keyChain: ["AQ", "AQ"],
+            keyRotationPending: true,
+            pendingSinceVersion: 2,
+          },
+          {
+            wrappedKey: "AQ",
+            version: 1,
+            keyChain: [],
+            keyRotationPending: false,
+            pendingSinceVersion: null,
+          },
+        ],
+        invalid: [
+          { reason: "pendingSinceVersion 0", body: { wrappedKey: "AQ", pendingSinceVersion: 0 } },
         ],
       },
       docVersion: {

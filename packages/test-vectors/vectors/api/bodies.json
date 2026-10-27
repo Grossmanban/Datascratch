@@ -714,8 +714,20 @@
           },
           "keyVersion": 2,
           "keyRotationPending": true,
+          "pendingSinceVersion": 1,
           "members": 3,
           "awaitingKey": 1
+        },
+        {
+          "target": {
+            "kind": "note",
+            "id": "0192f3c4-0000-7000-8000-000000000005"
+          },
+          "keyVersion": 1,
+          "keyRotationPending": false,
+          "pendingSinceVersion": null,
+          "members": 1,
+          "awaitingKey": 0
         }
       ],
       "invalid": [
@@ -730,6 +742,39 @@
             "keyRotationPending": false,
             "members": -1,
             "awaitingKey": 0
+          }
+        }
+      ]
+    },
+    "notebookKeyResponse": {
+      "valid": [
+        {
+          "wrappedKey": "AQ"
+        },
+        {
+          "wrappedKey": "AQ",
+          "version": 3,
+          "keyChain": [
+            "AQ",
+            "AQ"
+          ],
+          "keyRotationPending": true,
+          "pendingSinceVersion": 2
+        },
+        {
+          "wrappedKey": "AQ",
+          "version": 1,
+          "keyChain": [],
+          "keyRotationPending": false,
+          "pendingSinceVersion": null
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "pendingSinceVersion 0",
+          "body": {
+            "wrappedKey": "AQ",
+            "pendingSinceVersion": 0
           }
         }
       ]

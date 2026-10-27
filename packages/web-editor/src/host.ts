@@ -24,6 +24,12 @@ export interface EditorHost {
    * chunks are sealed, optional) drives its progress ring. A rejection shows «Повторить» / «Удалить».
    */
   uploadAttachment?: (file: File, onProgress?: (done: number) => void) => Promise<UploadedAttachment>;
+  /**
+   * Downloads an image found in pasted HTML (http/https) so it can be stored as an attachment.
+   * Rejects (or absent) when it cannot be fetched (CORS, offline): the image then stays as a link to
+   * its URL.
+   */
+  fetchRemoteImage?: (url: string) => Promise<File>;
   onOpenAttachment?: (attachment: { attachmentId: string; name: string; mime: string }) => void;
   /** Data for a page card (`pageCard`) or a note link chip. */
   resolveNote?: (noteId: string) => Promise<NoteSummary | null>;

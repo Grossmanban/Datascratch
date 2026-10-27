@@ -48,3 +48,22 @@ test("images: «/» → Картинка and paste insert an encrypted image tha
   await expect.poll(() => theirs.first().evaluate((img) => (img as HTMLImageElement).naturalWidth), { timeout: 20_000 }).toBe(2);
   await other.close();
 });
+
+test("the top bar's «Вставить картинку» inserts several pictures, never into the title, and is there on a phone", async ({ page }) => {
+  await signUp(page, uniqueEmail("picture-button"));
+  await newDoc(page, "Кнопка", "Текст");
+  // The caret is still in the text; put it back into the title to check it is not used there.
+  await page.locator(".ds-prose .ds-title").click();
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByTestId("insert-picture").click();
+  await (await chooser).setFiles([
+    { name: "a.png", mimeType: "image/png", buffer: PNG },
+    { name: "b.png", mimeType: "image/png", buffer: PNG },
+  ]);
+  await expect(page.locator(".ds-prose img")).toHaveCount(2, { timeout: 15_000 });
+  await expect(page.locator(".ds-prose .ds-title")).toHaveText("Кнопка");
+  await expect(page.locator(".ds-prose .ds-title img")).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByTestId("insert-picture")).toBeVisible();
+});

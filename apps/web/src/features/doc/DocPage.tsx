@@ -1,6 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ChevronRight, FileQuestion, MoreHorizontal, Share2, Smile, Star, Undo2, X } from "lucide-react";
+import { ChevronRight, FileQuestion, ImagePlus, MoreHorizontal, Share2, Smile, Star, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/session";
@@ -16,13 +16,13 @@ import { useNoteContentReady, useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc
 import { useUi } from "@/hooks/useUi";
 import { FORMAT_VERSION } from "@/lib/shared";
 import { EMOJI_CHOICES } from "@/lib/tokens";
-import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner } from "@/ui";
+import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner, toast } from "@/ui";
 import { defaultNoteTitle, hasBody, isNoteEmpty, setNoteMeta } from "@/domain/note";
 import i18n from "@/i18n";
 import { Backlinks } from "./Backlinks";
 import { CoverImage, coverError, removeCover, setCoverImage } from "./Cover";
 import { readTitle, type EditorApi } from "@/editor";
-import { ownerEditorHost } from "@/editor/hosts";
+import { ownerEditorHost, uploadNoteFile } from "@/editor/hosts";
 import { DocView } from "./DocView";
 import { PenPaletteToggle } from "./PenPaletteToggle";
 import { PresenceStack } from "./PresenceStack";
@@ -145,6 +145,7 @@ function DocScreen({ noteId }: { noteId: string }) {
             >
               <Star className={cn("size-4", starred && "fill-current")} />
             </IconButton>
+            {editable && editorApi && <InsertPicture api={editorApi} noteId={noteId} />}
             {doc && meta && <StylePopover doc={doc} style={meta.style} disabled={!editable} />}
             <IconButton label={t("docs.share")} onClick={() => useUi.setState({ shareFor: { kind: "note", id: noteId } })} data-testid="share-button">
               <Share2 className="size-4" />
@@ -275,3 +276,59 @@ function IconPicker({ icon, onPick, disabled }: { icon: string | null; onPick: (
     </div>
   );
 }
+
+/**
+ * «Вставить картинку» in the document's top bar: the same as «/» → «Картинка», reachable with
+ * one tap (narrow screens, iPad Safari). Several pictures at once; while they are being encrypted
+ * the button shows how far it got.
+ */
+function InsertPicture({ api, noteId }: { api: EditorApi; noteId: string }) {
+  const { t } = useTranslation();
+  const input = useRef<HTMLInputElement>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+  const insert = async (files: File[]) => {
+    const done: { attachmentId: string; alt: string }[] = [];
+    for (const [i, file] of files.entries()) {
+      const a = await uploadNoteFile(noteId, file, (part) => setProgress((i + part) / files.length));
+      done.push({ attachmentId: a.attachmentId, alt: file.name });
+    }
+    const ed = api.editor;
+    // At the caret in the text; never into the title (or with no caret yet): then at the end.
+    const { $from, to } = ed.state.selection;
+    const inTitle = $from.depth >= 1 && $from.node(1).type.name === "title";
+    const at = inTitle || !ed.isFocused ? ed.state.doc.content.size : to;
+    ed.chain()
+      .focus()
+      .insertContentAt(at, done.map((d) => ({ type: "image", attrs: d })))
+      .run();
+  };
+  return (
+    <>
+      <IconButton
+        label={progress === null ? t("docs.insertPicture") : `${t("docs.insertPicture")} · ${Math.round(progress * 100)}%`}
+        onClick={() => input.current?.click()}
+        disabled={progress !== null}
+        data-testid="insert-picture"
+      >
+        {progress === null ? <ImagePlus className="size-4" /> : <span className="text-[11px] font-semibold tabular-nums">{Math.round(progress * 100)}%</span>}
+      </IconButton>
+      <input
+        ref={input}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = [...(e.target.files ?? [])];
+          e.target.value = "";
+          if (!files.length) return;
+          setProgress(0);
+          void insert(files)
+            .catch((err) => toast(t("docs.insertPictureFailed", { reason: (err as Error).message }), { tone: "danger" }))
+            .finally(() => setProgress(null));
+        }}
+      />
+    </>
+  );
+}
+

@@ -1,7 +1,6 @@
 {
   "1": "cn",
   "4": "EditorTheme",
-  "5": "GuestPage.tsx",
   "6": "EditorView.swift",
   "7": "EditorCommands",
   "9": "DSPenToolbar",
@@ -144,7 +143,6 @@
   "334": "deploy.yml",
   "335": "web.yml",
   "339": "FrameRateBoost (2)",
-  "340": "Step (2)",
   "342": "ios/project.yml (2)",
   "344": "contracts/sync.ts (2) (2)",
   "346": "steps (4)",

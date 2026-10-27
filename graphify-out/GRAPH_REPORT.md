@@ -1,13 +1,19 @@
 # Graph Report - Datascratch  (2026-10-27)
 
 ## Corpus Check
-- 35 files · ~653,897 words
+- 894 files · ~654,126 words
 - Verdict: corpus is large enough that graph structure adds value.
+- Unclassified: 38 file(s) not represented in the graph (top: (none) 19, .css 6, .example 4)
 
 ## Summary
 - 16945 nodes · 43974 edges · 445 communities (392 shown, 53 thin omitted)
 - Extraction: 89% EXTRACTED · 11% INFERRED · 0% AMBIGUOUS · INFERRED: 4631 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
+
+## Graph Freshness
+- Built from commit: `84425a5c`
+- Run `git rev-parse HEAD` and compare to check if the graph is stale.
+- Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - Data
@@ -459,20 +465,20 @@
 6. `t()` - 110 edges
 7. `CoreLibrary` - 109 edges
 8. `AppModel` - 99 edges
-9. `InMemoryEditorDocument` - 94 edges
-10. `n()` - 94 edges
+9. `n()` - 94 edges
+10. `InMemoryEditorDocument` - 94 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Перестройка блоков (§4.1a): при разделении, слиянии, смене типа и перемещении блока клиент в той же транзакции заменяет затронутый штрих копией (новый strokeId, те же точки, якоря по соответствию символов)` --semantically_similar_to--> `rebaseRedoneAnchors()`  [INFERRED] [semantically similar]
   docs/architecture/contracts/strokes.md → packages/shared/src/strokes/store.ts
 - `Agent Markdown escaping: backslash-escaped chars are plain text; read_note escapes everything that would become markup` --semantically_similar_to--> `escapeText()`  [INFERRED] [semantically similar]
   docs/architecture/contracts/agents-api.md → packages/shared/src/document/markdown.ts
-- `Error ref = clientMsgId for push/snapshot errors, else docId` --references--> `ErrorMessage`  [INFERRED]
-  docs/architecture/contracts/sync-protocol.md → packages/shared/src/contracts/sync.ts
+- `GitHub secrets (APPLE_TEAM_ID, ASC issuer/key/p8)` --shares_data_with--> `KEY_P8`  [INFERRED]
+  apps/ios/RELEASE.md → .github/workflows/ios-release.yml
+- `extendedMode build flag (DS_EXTENDED_MODE → DSExtendedMode Info.plist; VITE_DS_EXTENDED_MODE), default false` --references--> `VITE_DS_EXTENDED_MODE`  [INFERRED]
+  docs/decisions/0051-minimal-mode.md → .github/workflows/web.yml
 - `Данные` --references--> `dailyNotebookId()`  [INFERRED]
   docs/decisions/0048-isolated-spaces.md → apps/web/src/domain/actions.ts
-- `3. Упаковка точек` --references--> `t()`  [INFERRED]
-  docs/architecture/contracts/strokes.md → packages/web-editor/demo/sample.ts
 
 ## Import Cycles
 - 2-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs`
@@ -2059,13 +2065,13 @@ Nodes (3): mermaid@^12.2.0, loadMermaid(), mermaid
 ## Ambiguous Edges - Review These
 - `0030-server-database-postgresql.md` → `Shared for the whole account: app settings, account, keys, devices, agent grants`  [AMBIGUOUS]
   docs/decisions/0048-isolated-spaces.md · relation: references
+- `D-30 БД сервера: PostgreSQL` → `Account-wide (shared across spaces): app settings (theme, language, pen), account, keys, devices, agent grants`  [AMBIGUOUS]
+  docs/decisions/0048-isolated-spaces.md · relation: references
 - `settings.dailyNotebookBySpace { spaceId: notebookId } — daily notes and Inbox notebook per space (D-48)` → `Daily notes and Inbox live in the notebook from settings.dailyNotebookBySpace`  [AMBIGUOUS]
   docs/architecture/contracts/document-model.md · relation: conceptually_related_to
-- `Account-wide (shared across spaces): app settings (theme, language, pen), account, keys, devices, agent grants` → `D-30 БД сервера: PostgreSQL`  [AMBIGUOUS]
-  docs/decisions/0048-isolated-spaces.md · relation: references
 
 ## Knowledge Gaps
-- **1412 isolated node(s):** `.signedOutEmail`, `.unsentChanges`, `passwordChanged`, `recoveryKeyRotated`, `recoveryUsed` (+1407 more)
+- **1412 isolated node(s):** `.body`, `onboarding`, `.phase`, `system`, `light` (+1407 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 4801 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **53 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -2073,20 +2079,20 @@ Nodes (3): mermaid@^12.2.0, loadMermaid(), mermaid
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `crypto/keys.ts`, `DSLanguage`, `scripts/generate.mjs`?**
-  _High betweenness centrality (0.121) - this node is a cross-community bridge._
+  _High betweenness centrality (0.114) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `.signedOutEmail`, `.unsentChanges`, `passwordChanged` to the rest of the system?**
+- **What connects `.body`, `onboarding`, `.phase` to the rest of the system?**
   _1412 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Data` be split into smaller, more focused modules?**
   _Cohesion score 0.0035022014905847967 - nodes in this community are weakly interconnected._
 - **Why does `packages/design-tokens/tokens.json — источник значений; генерирует CSS-переменные и Swift` connect `design-tokens.md` to `02-platforms.md`, `scripts/generate.mjs`, `DSColorToken`?**
-  _High betweenness centrality (0.106) - this node is a cross-community bridge._
+  _High betweenness centrality (0.107) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
 
 - **What is the exact relationship between `0030-server-database-postgresql.md` and `Shared for the whole account: app settings, account, keys, devices, agent grants`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
-- **What is the exact relationship between `settings.dailyNotebookBySpace { spaceId: notebookId } — daily notes and Inbox notebook per space (D-48)` and `Daily notes and Inbox live in the notebook from settings.dailyNotebookBySpace`?**
-  _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
+- **What is the exact relationship between `D-30 БД сервера: PostgreSQL` and `Account-wide (shared across spaces): app settings (theme, language, pen), account, keys, devices, agent grants`?**
+  _Edge tagged AMBIGUOUS (relation: references) - confidence is low._

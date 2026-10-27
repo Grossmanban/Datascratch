@@ -212,7 +212,8 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
           if (plain || !looksLikeMarkdown(text)) return null as unknown as Slice;
           const out = normalizePastedHtml(markdownToHtml(text), { markdown: true });
           preparePastedImages(out.images);
-          const box = document.createElement("div");
+          // Parsed in an inert document: nothing in it loads or runs (never the live page).
+          const box = document.implementation.createHTMLDocument("").createElement("div");
           box.innerHTML = out.html;
           return PMDOMParser.fromSchema(view.state.schema).parseSlice(box, { context: $context });
         },

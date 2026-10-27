@@ -540,7 +540,7 @@ public struct NoteMetaContent: Hashable, Sendable {
         let s = entries["style"]
         style = Style(font: s?["font"]?.stringValue ?? "sans", width: s?["width"]?.stringValue ?? "normal",
                       paper: s?["paper"]?.stringValue ?? "plain", textColor: s?["textColor"]?.stringValue)
-        if let c = entries["cover"], let id = c["attachmentId"]?.stringValue {
+        if let c = entries["cover"], let id = c["attachmentId"]?.stringValue, EntityID.isValid(id) {
             cover = Cover(attachmentId: id, offsetY: c["offsetY"]?.doubleValue ?? 0.5)
         }
         if let b = entries["backdrop"], let kind = b["kind"]?.stringValue.flatMap(Backdrop.Kind.init(rawValue:)), let v = b["value"]?.stringValue {

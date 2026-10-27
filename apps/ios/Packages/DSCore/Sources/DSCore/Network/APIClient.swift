@@ -96,8 +96,13 @@ public actor APIClient {
 
     // MARK: Auth
 
+    /// Salt and KDF parameters for a login. Parameters outside crypto.md §2 bounds throw
+    /// `CryptoError.unsafeKDF`: a hostile server (the address is user-entered, D-49) could
+    /// otherwise lower them and brute-force the password from a cheap login key.
     public func prelogin(email: String) async throws -> PreloginResponse {
-        try await call("POST", "/auth/prelogin", body: PreloginRequest(email: email), auth: false, idempotent: true)
+        let response: PreloginResponse = try await call("POST", "/auth/prelogin", body: PreloginRequest(email: email), auth: false, idempotent: true)
+        try response.kdf.validate()
+        return response
     }
 
     /// Signs up and stores the session.
@@ -161,7 +166,7 @@ public actor APIClient {
 
     public func devices() async throws -> [Device] { try await call("GET", "/devices") }
 
-    public func revokeDevice(id: String) async throws { try await send("DELETE", "/devices/\(id)") }
+    public func revokeDevice(id: String) async throws { try await send("DELETE", "/devices/\(seg(id))") }
 
     public func deleteAccount(loginKey: Data) async throws {
         try await send("DELETE", "/me", body: ["loginKey": Base64URL.encode(loginKey)])
@@ -179,16 +184,16 @@ public actor APIClient {
 
     public func notebookKey(id: String) async throws -> Data {
         struct R: Decodable { var wrappedKey: Base64URLData }
-        let r: R = try await call("GET", "/notebooks/\(id)/key")
+        let r: R = try await call("GET", "/notebooks/\(seg(id))/key")
         return r.wrappedKey.data
     }
 
     public func setNotebookMode(id: String, mode: NotebookMode, notebookKey: Data? = nil) async throws {
         struct Body: Encodable { var mode: NotebookMode; var notebookKey: Base64URLData? }
-        try await send("PATCH", "/notebooks/\(id)/mode", body: Body(mode: mode, notebookKey: notebookKey.map(Base64URLData.init)), idempotent: true)
+        try await send("PATCH", "/notebooks/\(seg(id))/mode", body: Body(mode: mode, notebookKey: notebookKey.map(Base64URLData.init)), idempotent: true)
     }
 
-    public func deleteNotebook(id: String) async throws { try await send("DELETE", "/notebooks/\(id)") }
+    public func deleteNotebook(id: String) async throws { try await send("DELETE", "/notebooks/\(seg(id))") }
 
     /// Registers a document before its first push (`notebookId` nil only for the account doc).
     public func registerDoc(docId: String, kind: DocKind, notebookId: String?) async throws {
@@ -198,17 +203,17 @@ public actor APIClient {
     /// Moves a note document to another notebook (api.md «Перенос заметки»). Use
     /// `AccountService.moveNote`, which also rewraps the note key and moves its `NoteMeta`.
     public func moveDoc(id: String, toNotebook notebookId: String) async throws {
-        try await send("PATCH", "/docs/\(id)", body: MoveDocRequest(notebookId: notebookId), idempotent: true)
+        try await send("PATCH", "/docs/\(seg(id))", body: MoveDocRequest(notebookId: notebookId), idempotent: true)
     }
 
-    public func deleteDoc(id: String) async throws { try await send("DELETE", "/docs/\(id)") }
+    public func deleteDoc(id: String) async throws { try await send("DELETE", "/docs/\(seg(id))") }
 
-    public func versions(docId: String) async throws -> [DocVersion] { try await call("GET", "/docs/\(docId)/versions") }
+    public func versions(docId: String) async throws -> [DocVersion] { try await call("GET", "/docs/\(seg(docId))/versions") }
 
     /// Encrypted state at `seq` (open with `CryptoAD.doc(docId)`).
     public func version(docId: String, seq: Int64) async throws -> Data {
         struct R: Decodable { var payload: Base64URLData }
-        let r: R = try await call("GET", "/docs/\(docId)/versions/\(seq)")
+        let r: R = try await call("GET", "/docs/\(seg(docId))/versions/\(seq)")
         return r.payload.data
     }
 
@@ -220,16 +225,16 @@ public actor APIClient {
     }
 
     public func uploadChunk(attachmentId: String, index: Int, data: Data) async throws {
-        _ = try await raw("PUT", "/attachments/\(attachmentId)/chunks/\(index)", body: data, contentType: "application/octet-stream")
+        _ = try await raw("PUT", "/attachments/\(seg(attachmentId))/chunks/\(index)", body: data, contentType: "application/octet-stream")
     }
 
-    public func attachmentStatus(id: String) async throws -> AttachmentStatus { try await call("GET", "/attachments/\(id)") }
+    public func attachmentStatus(id: String) async throws -> AttachmentStatus { try await call("GET", "/attachments/\(seg(id))") }
 
     public func downloadChunk(attachmentId: String, index: Int) async throws -> Data {
-        try await raw("GET", "/attachments/\(attachmentId)/chunks/\(index)", body: nil, contentType: nil)
+        try await raw("GET", "/attachments/\(seg(attachmentId))/chunks/\(index)", body: nil, contentType: nil)
     }
 
-    public func deleteAttachment(id: String) async throws { try await send("DELETE", "/attachments/\(id)") }
+    public func deleteAttachment(id: String) async throws { try await send("DELETE", "/attachments/\(seg(id))") }
 
     // MARK: Sharing
 
@@ -239,11 +244,11 @@ public actor APIClient {
 
     public func shares() async throws -> [Share] { try await call("GET", "/shares") }
 
-    public func revokeShare(id: String) async throws { try await send("DELETE", "/shares/\(id)") }
+    public func revokeShare(id: String) async throws { try await send("DELETE", "/shares/\(seg(id))") }
 
     /// Guest access without an account (D-37).
     public func guestSession(shareId: String) async throws -> GuestSession {
-        try await call("POST", "/shares/\(shareId)/guest", body: [String: String](), auth: false)
+        try await call("POST", "/shares/\(seg(shareId))/guest", body: [String: String](), auth: false)
     }
 
     // MARK: Agent tokens
@@ -255,10 +260,10 @@ public actor APIClient {
 
     public func agentTokens() async throws -> [AgentToken] { try await call("GET", "/agent-tokens") }
 
-    public func revokeAgentToken(id: String) async throws { try await send("DELETE", "/agent-tokens/\(id)") }
+    public func revokeAgentToken(id: String) async throws { try await send("DELETE", "/agent-tokens/\(seg(id))") }
 
     /// The audit format belongs to the agents stream; returned as raw JSON.
-    public func agentTokenAudit(id: String) async throws -> Data { try await raw("GET", "/agent-tokens/\(id)/audit", body: nil, contentType: nil) }
+    public func agentTokenAudit(id: String) async throws -> Data { try await raw("GET", "/agent-tokens/\(seg(id))/audit", body: nil, contentType: nil) }
 
     // MARK: Service
 
@@ -327,6 +332,27 @@ public actor APIClient {
         retryBaseDelay * (pow(2, Double(n - 1)) * Double.random(in: 0.7...1.3))
     }
 
+    /// An id as one path segment; throws `UnsafePathError` for anything but letters, digits,
+    /// `-` and `_` (an id with `/` would otherwise pass as several plain segments).
+    private func seg(_ id: String) throws -> String {
+        guard Self.isPlainSegment(Substring(id)) else { throw UnsafePathError(path: id) }
+        return id
+    }
+
+    static func isPlainSegment(_ s: Substring) -> Bool {
+        !s.isEmpty && s.unicodeScalars.allSatisfy { $0.isASCII && (CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_") }
+    }
+
+    /// The endpoint URL. Ids in paths come from documents and servers: a segment like `..`,
+    /// or one carrying `/`, `%`, `?` or `#`, could reach another endpoint, so only plain
+    /// segments (letters, digits, `-`, `_`) are allowed.
+    static func url(_ base: URL, _ path: String) throws -> URL {
+        let segments = path.dropFirst().split(separator: "/", omittingEmptySubsequences: false)
+        let plain = segments.allSatisfy(isPlainSegment)
+        guard path.hasPrefix("/"), plain else { throw UnsafePathError(path: path) }
+        return base.appendingPathComponent(String(path.dropFirst()))
+    }
+
     /// - Parameter idempotent: repeating the request has the same effect; default by method
     ///   (GET, PUT, DELETE, HEAD).
     private func raw(_ method: String, _ path: String, body: Data?, contentType: String?, auth: Bool = true, idempotent: Bool? = nil) async throws -> Data {
@@ -334,7 +360,7 @@ public actor APIClient {
         var retried = false
         var attempt = 0
         while true {
-            var request = URLRequest(url: baseURL.appendingPathComponent(String(path.dropFirst())))
+            var request = URLRequest(url: try Self.url(baseURL, path))
             request.timeoutInterval = attemptTimeouts[min(attempt, attemptTimeouts.count - 1)]
             request.httpMethod = method
             request.httpBody = body

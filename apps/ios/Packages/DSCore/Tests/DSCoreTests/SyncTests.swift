@@ -59,6 +59,11 @@ actor FakeSyncServer {
     var nextSeq: [String: Int64] = [:]
     var conns: [UUID: (conn: Conn, deviceId: String?, subs: Set<String>)] = [:]
     var accepting = true
+    /// The next `hello` is answered with `rate_limited` and this `retryAfterMs`.
+    var rateLimitNextHello: Int?
+    var hellos: [ContinuousClock.Instant] = []
+
+    func setRateLimitNextHello(_ ms: Int?) { rateLimitNextHello = ms }
     var received: [ClientMessage] = []
     /// A client pushed into a document it had not subscribed to (protocol violation).
     var pushedWithoutSubscription = false
@@ -102,6 +107,13 @@ actor FakeSyncServer {
         if case .snapshot = msg, let snapshotDelay { try? await Task.sleep(for: snapshotDelay) }
         switch msg {
         case .hello(_, let deviceId, _):
+            hellos.append(.now)
+            if let ms = rateLimitNextHello {
+                rateLimitNextHello = nil
+                c.deliver(.error(code: .rateLimited, message: "slow down", ref: nil, retryAfterMs: ms))
+                c.close()
+                return
+            }
             conns[c.id]?.deviceId = deviceId
             c.deliver(.welcome(userId: "0192f3c4-0000-7000-8000-00000000000a", serverTime: DSDate.iso(Date())))
         case .subscribe(let entries):
@@ -153,14 +165,16 @@ struct FakeFactory: WebSocketFactory {
     func connect(to url: URL) async throws -> any WebSocketConnection { try await server.connect() }
 }
 
-/// Polls until `condition` holds (async delivery between actors).
+/// Polls until `condition` holds (async delivery between actors). The condition is checked
+/// once more after the deadline: if the process was starved past it (a loaded CI simulator), a
+/// condition that became true meanwhile must not count as a timeout.
 func eventually(timeout: Duration = .seconds(5), _ condition: () async throws -> Bool) async throws -> Bool {
     let deadline = ContinuousClock.now + timeout
     while ContinuousClock.now < deadline {
         if try await condition() { return true }
         try await Task.sleep(for: .milliseconds(10))
     }
-    return false
+    return try await condition()
 }
 
 @Suite(.serialized) struct SyncTests {

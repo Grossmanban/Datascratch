@@ -279,6 +279,7 @@ final class AppModel {
         connection.onLibraryCarried = { [library] justCarried in library.mergeCarriedDuplicates(anyName: justCarried) }
         sync.onBackOnline = { connection.reconnect() }
         covers.remote = connection
+        connection.onLocalDataWiped = { [weak covers] in covers?.forgetAll() }
         return (connection, ServerAccountService(connection: connection), ServerSharingService(connection: connection),
                 ServerAccessService(connection: connection))
     }

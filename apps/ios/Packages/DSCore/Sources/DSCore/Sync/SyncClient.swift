@@ -131,6 +131,8 @@ public actor SyncClient {
     private var attempt = 0
     /// The wait before the next connection attempt; `reconnectNow` cuts it short.
     private var retryWait: Task<Void, Never>?
+    /// `rate_limited` with `retryAfterMs`: no new connection before this.
+    private var notBefore: ContinuousClock.Instant?
     /// Connection attempts that failed in a row (0 once connected).
     public private(set) var consecutiveFailures = 0
 
@@ -222,6 +224,12 @@ public actor SyncClient {
             connection?.close()
             connection = nil
             if Task.isCancelled { break }
+            if let notBefore, notBefore > .now {
+                // The server asked us to wait (rate_limited, retryAfterMs).
+                try? await Task.sleep(until: notBefore)
+                self.notBefore = nil
+                if Task.isCancelled { break }
+            }
             if let welcomedAt, ContinuousClock.now - welcomedAt > .seconds(5) {
                 // A working connection dropped: reconnect at once. (One dropped right after
                 // `welcome` counts as a failure, so a server closing at once is not hammered.)
@@ -248,9 +256,10 @@ public actor SyncClient {
 
     private func backoff() -> Duration {
         attempt += 1
-        let base = Double(configuration.minBackoff.components.seconds) * pow(2, Double(min(attempt - 1, 10)))
-        let capped = min(base, Double(configuration.maxBackoff.components.seconds))
-        return .milliseconds(Int(capped * 1000 * Double.random(in: 0.8...1.2)))
+        // Whole durations: `components.seconds` alone dropped the fraction, so a backoff under a
+        // second (tests) became zero and reconnects spun without pause.
+        let base = configuration.minBackoff * pow(2, Double(min(attempt - 1, 10)))
+        return min(base, configuration.maxBackoff) * Double.random(in: 0.8...1.2)
     }
 
     private func connectOnce(welcomed: () -> Void) async throws {
@@ -277,7 +286,8 @@ public actor SyncClient {
             welcomed()
             await setState(.connected(userId: userId))
             await delegate?.syncClientDidConnect(self, userId: userId)
-        case .error(let code, let message, _):
+        case .error(let code, let message, _, let retryAfterMs):
+            rateLimited(code, retryAfterMs)
             throw SyncClientError.server(code, message)
         default:
             throw SyncClientError.closed
@@ -300,12 +310,18 @@ public actor SyncClient {
         while !Task.isCancelled {
             let text = try await conn.receive()
             guard let message = SyncFrame.decode(text) else { continue }
-            if case .error(let code, let message, nil) = message, code == .unauthorized || code == .protocolMismatch {
+            if case .error(let code, _, nil, let retryAfterMs) = message { rateLimited(code, retryAfterMs) }
+            if case .error(let code, let message, nil, _) = message, code == .unauthorized || code == .protocolMismatch {
                 // Connection-level error: reconnect with fresh credentials (or stop).
                 throw SyncClientError.server(code, message)
             }
             await delegate?.syncClient(self, didReceive: message)
         }
+    }
+
+    private func rateLimited(_ code: SyncErrorCode, _ retryAfterMs: Int?) {
+        guard code == .rateLimited, let retryAfterMs else { return }
+        notBefore = .now + .milliseconds(min(retryAfterMs, 600_000))
     }
 
     private func setState(_ s: SyncConnectionState) async {

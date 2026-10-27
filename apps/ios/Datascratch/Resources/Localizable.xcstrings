@@ -1581,6 +1581,16 @@
         }
       }
     },
+    "Hidden while the screen is recorded or shared": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрыто, пока экран записывается или транслируется"
+          }
+        }
+      }
+    },
     "Hide Keyboard": {
       "localizations": {
         "ru": {
@@ -3261,6 +3271,16 @@
         }
       }
     },
+    "Show your recovery key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать ключ восстановления"
+          }
+        }
+      }
+    },
     "Sign In": {
       "localizations": {
         "ru": {
@@ -3751,6 +3771,26 @@
         }
       }
     },
+    "The server sent a response this app cannot use.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер прислал ответ, который приложение не может использовать."
+          }
+        }
+      }
+    },
+    "The server sent unsafe sign-in parameters. Nothing was sent; check the server address.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер прислал небезопасные параметры входа. Ничего не отправлено — проверьте адрес сервера."
+          }
+        }
+      }
+    },
     "The session was ended from another device or in your account settings. Your notes stay on this device; changes made here will sync once you sign in again.": {
       "localizations": {
         "ru": {
@@ -3847,6 +3887,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Файл слишком большой (можно до 100 МБ)."
+          }
+        }
+      }
+    },
+    "This image is too large (over 50 megapixels).": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изображение слишком большое (больше 50 мегапикселей)."
           }
         }
       }

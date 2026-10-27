@@ -332,14 +332,16 @@ struct CoreLibraryTests {
         let notebooks = library.notebooks(in: library.activeSpace?.id)
         let notebook = try #require(notebooks.first)
         let note = library.createNote(in: notebook.id, folder: nil, title: "Trip")
+        // Attachment ids are UUIDv7: DSCore ignores anything else in the cover (security audit).
+        let (coverId, thumbId) = (UUIDv7.make(), UUIDv7.make())
         library.updateNote(note.id) {
-            $0.coverImage = NoteCover(attachmentId: "cover-1", offsetY: 0.25)
-            $0.coverThumb = "thumb-1"
+            $0.coverImage = NoteCover(attachmentId: coverId, offsetY: 0.25)
+            $0.coverThumb = thumbId
         }
         let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
         let again = try #require(reloaded.note(note.id))
-        #expect(again.coverImage == NoteCover(attachmentId: "cover-1", offsetY: 0.25))
-        #expect(again.coverThumb == "thumb-1")
+        #expect(again.coverImage == NoteCover(attachmentId: coverId, offsetY: 0.25))
+        #expect(again.coverThumb == thumbId)
 
         reloaded.updateNote(note.id) { $0.coverImage = nil; $0.coverThumb = nil }
         let cleared = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))

@@ -250,6 +250,23 @@ nonisolated enum UUIDv7 {
         uuid(date).uuidString.lowercased()
     }
 
+    /// Whether `string` is such an id (the same check as DSCore's `EntityID.isValid`): ids from
+    /// documents name files, so anything else (`../`, `/`) is refused before a file is touched.
+    static func isValid(_ string: String) -> Bool {
+        let u = Array(string.utf8)
+        guard u.count == 36 else { return false }
+        func hex(_ c: UInt8) -> Bool { (c >= 48 && c <= 57) || (c >= 97 && c <= 102) }
+        for (i, c) in u.enumerated() {
+            switch i {
+            case 8, 13, 18, 23: if c != 45 { return false }
+            case 14: if c != 55 { return false }
+            case 19: if !(c == 56 || c == 57 || c == 97 || c == 98) { return false }
+            default: if !hex(c) { return false }
+            }
+        }
+        return true
+    }
+
     static func uuid(_ date: Date) -> UUID {
         var b = [UInt8](repeating: 0, count: 16)
         let ms = UInt64(max(0, date.timeIntervalSince1970 * 1000))

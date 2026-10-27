@@ -119,12 +119,31 @@ jobs:
         run: |
           xcodebuild -list
           set -o pipefail
+          # Wall-clock targets run in the next step, alone: here ~27 suites share the
+          # runner's cores (Argon2id at 64 MiB among them) and time says little.
           xcodebuild test \
             -scheme DSCore \
             -destination "id=${{ steps.sim.outputs.udid }}" \
+            -skip-testing:DSCoreTests/SyncPerfTests \
+            -skip-testing:DSCoreTests/LiveSyncTests \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee xcodebuild.log | grep -E "error:|warning:|Test Suite|Test Case|✔|✘|passed|failed|\*\* " || true
           grep -q "\*\* TEST SUCCEEDED \*\*" xcodebuild.log
+      - name: Sync speed and live update targets (alone on the runner)
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme DSCore \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -only-testing:DSCoreTests/SyncPerfTests \
+            -only-testing:DSCoreTests/LiveSyncTests \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee timing.log | grep -E "error:|BENCH|✔|✘|\*\* " || true
+          grep -q "\*\* TEST SUCCEEDED \*\*" timing.log
+          # The filter must have selected them (an empty run also "succeeds").
+          grep -q "syncSpeedTargets() passed" timing.log
+          grep -q "remoteChangeReachesOpenNoteWithinOneSecond() passed" timing.log
+          grep "BENCH" timing.log | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY" || true
       - name: Benchmarks (spec/11 targets, informational)
         continue-on-error: true
         run: |
@@ -170,7 +189,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: xcodebuild-log
-          path: apps/ios/Packages/DSCore/xcodebuild.log
+          path: |
+            apps/ios/Packages/DSCore/xcodebuild.log
+            apps/ios/Packages/DSCore/timing.log
 
   publish:
     needs: ios

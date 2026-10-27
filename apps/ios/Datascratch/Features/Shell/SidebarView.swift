@@ -49,164 +49,12 @@ struct SidebarView: View {
         @Bindable var scene = scene
         List(selection: $scene.sidebar) {
             Group {
-                if Features.tabs, !library.openTabs.isEmpty {
-                    Section("Tabs") {
-                        ForEach(library.openTabs) { note in
-                            HStack(spacing: Theme.Space.s2) {
-                                Button {
-                                    scene.open(note.id)
-                                } label: {
-                                    NoteTitleLabel(note: note)
-                                        .fontWeight(scene.selectedNoteId == note.id ? .semibold : .regular)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("sidebar.tab")
-                                // An explicit close button on every tab (also swipe, menu and ⌘W).
-                                Button {
-                                    if scene.selectedNoteId == note.id { scene.closeTab() } else { library.closeTab(note.id) }
-                                } label: {
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundStyle(Theme.Palette.textTertiary)
-                                        .frame(width: 28, height: 28)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Close Tab")
-                                .accessibilityIdentifier("tab.close")
-                            }
-                            .contextMenu {
-                                Button("Open in New Window", systemImage: "macwindow.badge.plus") {
-                                    openWindow(id: "note", value: note.id)
-                                }
-                                Button("Close Tab", systemImage: "xmark") { library.closeTab(note.id) }
-                            }
-                            .swipeActions {
-                                Button("Close", systemImage: "xmark") { library.closeTab(note.id) }
-                            }
-                        }
-                    }
-                }
-
-                Section {
-                    SidebarLabel("All Documents", systemImage: "doc.on.doc")
-                        .tag(SidebarItem.allDocuments)
-                        .accessibilityIdentifier("sidebar.allDocuments")
-                    if Features.tasks {
-                    Label {
-                        HStack {
-                            Text("Tasks")
-                            Spacer()
-                            let due = TaskIndex.filter(library.taskEntries, bucket: .today, today: DayKey.from(Date())).count
-                            if due > 0 {
-                                Text(due, format: .number)
-                                    .font(Theme.Typography.footnote.monospacedDigit())
-                                    .foregroundStyle(Theme.Palette.textSecondary)
-                            }
-                        }
-                    } icon: {
-                        Image(systemName: "checkmark.circle")
-                            .foregroundStyle(Theme.Palette.textSecondary)
-                    }
-                    .tag(SidebarItem.tasks)
-                    .accessibilityIdentifier("sidebar.tasks")
-                    }
-                    if Features.calendar {
-                        SidebarLabel("Calendar", systemImage: "calendar")
-                            .tag(SidebarItem.calendar)
-                            .accessibilityIdentifier("sidebar.calendar")
-                    }
-                }
-
-                if !library.starredNotes.isEmpty {
-                    let starred = SidebarLimit.visible(library.starredNotes, showAll: showingAll.contains("starred"))
-                    Section {
-                        if !isCollapsed("starred") {
-                            ForEach(starred.rows) { note in
-                                Button {
-                                    scene.open(note.id)
-                                } label: {
-                                    NoteTitleLabel(note: note)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("sidebar.starredNote")
-                                .contextMenu {
-                                    Button("Remove from Starred", systemImage: "star.slash") {
-                                        library.toggleStar(.note, note.id)
-                                    }
-                                }
-                            }
-                            moreRow("starred", hidden: starred.hidden, total: library.starredNotes.count)
-                        }
-                    } header: {
-                        SidebarSectionHeader(title: "Starred", identifier: "starred", isCollapsed: isCollapsed("starred")) {
-                            toggle("starred")
-                        }
-                    }
-                }
-
-                let notebooks = library.notebooks(in: library.activeSpace?.id)
-                let shownNotebooks = SidebarLimit.visible(notebooks, showAll: showingAll.contains("notebooks"), keep: isOpen)
-                Section {
-                    if !isCollapsed("notebooks") {
-                        ForEach(shownNotebooks.rows) { notebook in
-                            NotebookRow(notebook: notebook)
-                                .accessibilityIdentifier("sidebar.notebook")
-                        }
-                        // Manual order by drag and drop, while the whole list is on screen.
-                        .onMove(perform: shownNotebooks.hidden == 0 ? moveNotebooks : nil)
-                        moreRow("notebooks", hidden: shownNotebooks.hidden, total: notebooks.count)
-                    }
-                } header: {
-                    SidebarSectionHeader(title: "Notebooks", identifier: "notebooks", isCollapsed: isCollapsed("notebooks")) {
-                        toggle("notebooks")
-                    } accessory: {
-                        if let space = library.activeSpace {
-                            Button {
-                                scene.sheet = .newNotebook(spaceId: space.id)
-                            } label: {
-                                Image(systemName: "plus")
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("New Notebook")
-                            .accessibilityIdentifier("sidebar.newNotebook")
-                        }
-                    }
-                }
-
-                let tags = library.tagTree
-                if !tags.isEmpty {
-                    let shownTags = SidebarLimit.visible(tags, showAll: showingAll.contains("tags"))
-                    Section {
-                        if !isCollapsed("tags") {
-                            ForEach(shownTags.rows) { TagTreeRow(node: $0) }
-                            moreRow("tags", hidden: shownTags.hidden, total: tags.count)
-                            Button {
-                                isAllTagsPresented = true
-                            } label: {
-                                Label {
-                                    Text("All Tags")
-                                } icon: {
-                                    Image(systemName: "tag")
-                                        .foregroundStyle(Theme.Palette.textSecondary)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("sidebar.allTags")
-                        }
-                    } header: {
-                        SidebarSectionHeader(title: "Tags", identifier: "tags", isCollapsed: isCollapsed("tags")) {
-                            toggle("tags")
-                        }
-                    }
-                }
-
-                Section {
-                    SidebarLabel("Trash", systemImage: "trash")
-                        .tag(SidebarItem.trash)
-                        .accessibilityIdentifier("sidebar.trash")
-                }
+                tabsSection
+                mainSection
+                starredSection
+                notebooksSection
+                tagsSection
+                trashSection
             }
             .modifier(SidebarRowStyle(isCompact: isPhone))
         }
@@ -240,6 +88,177 @@ struct SidebarView: View {
             if app.settings.hapticsEnabled { Haptics.selection() }
         }
         .sheet(isPresented: $isAllTagsPresented) { AllTagsSheet() }
+    }
+
+    @ViewBuilder private var tabsSection: some View {
+        if Features.tabs, !library.openTabs.isEmpty {
+            Section("Tabs") {
+                ForEach(library.openTabs) { note in
+                    HStack(spacing: Theme.Space.s2) {
+                        Button {
+                            scene.open(note.id)
+                        } label: {
+                            NoteTitleLabel(note: note)
+                                .fontWeight(scene.selectedNoteId == note.id ? .semibold : .regular)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("sidebar.tab")
+                        // An explicit close button on every tab (also swipe, menu and ⌘W).
+                        Button {
+                            if scene.selectedNoteId == note.id { scene.closeTab() } else { library.closeTab(note.id) }
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Theme.Palette.textTertiary)
+                                .frame(width: 28, height: 28)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Close Tab")
+                        .accessibilityIdentifier("tab.close")
+                    }
+                    .contextMenu {
+                        Button("Open in New Window", systemImage: "macwindow.badge.plus") {
+                            openWindow(id: "note", value: note.id)
+                        }
+                        Button("Close Tab", systemImage: "xmark") { library.closeTab(note.id) }
+                    }
+                    .swipeActions {
+                        Button("Close", systemImage: "xmark") { library.closeTab(note.id) }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var mainSection: some View {
+        Section {
+            SidebarLabel("All Documents", systemImage: "doc.on.doc")
+                .tag(SidebarItem.allDocuments)
+                .accessibilityIdentifier("sidebar.allDocuments")
+            if Features.tasks {
+            Label {
+                HStack {
+                    Text("Tasks")
+                    Spacer()
+                    let due = TaskIndex.filter(library.taskEntries, bucket: .today, today: DayKey.from(Date())).count
+                    if due > 0 {
+                        Text(due, format: .number)
+                            .font(Theme.Typography.footnote.monospacedDigit())
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                    }
+                }
+            } icon: {
+                Image(systemName: "checkmark.circle")
+                    .foregroundStyle(Theme.Palette.textSecondary)
+            }
+            .tag(SidebarItem.tasks)
+            .accessibilityIdentifier("sidebar.tasks")
+            }
+            if Features.calendar {
+                SidebarLabel("Calendar", systemImage: "calendar")
+                    .tag(SidebarItem.calendar)
+                    .accessibilityIdentifier("sidebar.calendar")
+            }
+        }
+    }
+
+    @ViewBuilder private var starredSection: some View {
+        if !library.starredNotes.isEmpty {
+            let starred = SidebarLimit.visible(library.starredNotes, showAll: showingAll.contains("starred"))
+            Section {
+                if !isCollapsed("starred") {
+                    ForEach(starred.rows) { note in
+                        Button {
+                            scene.open(note.id)
+                        } label: {
+                            NoteTitleLabel(note: note)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("sidebar.starredNote")
+                        .contextMenu {
+                            Button("Remove from Starred", systemImage: "star.slash") {
+                                library.toggleStar(.note, note.id)
+                            }
+                        }
+                    }
+                    moreRow("starred", hidden: starred.hidden, total: library.starredNotes.count)
+                }
+            } header: {
+                SidebarSectionHeader(title: "Starred", identifier: "starred", isCollapsed: isCollapsed("starred")) {
+                    toggle("starred")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var notebooksSection: some View {
+        let notebooks = library.notebooks(in: library.activeSpace?.id)
+        let shownNotebooks = SidebarLimit.visible(notebooks, showAll: showingAll.contains("notebooks"), keep: isOpen)
+        Section {
+            if !isCollapsed("notebooks") {
+                ForEach(shownNotebooks.rows) { notebook in
+                    NotebookRow(notebook: notebook)
+                        .accessibilityIdentifier("sidebar.notebook")
+                }
+                // Manual order by drag and drop, while the whole list is on screen.
+                .onMove(perform: shownNotebooks.hidden == 0 ? moveNotebooks : nil)
+                moreRow("notebooks", hidden: shownNotebooks.hidden, total: notebooks.count)
+            }
+        } header: {
+            SidebarSectionHeader(title: "Notebooks", identifier: "notebooks", isCollapsed: isCollapsed("notebooks")) {
+                toggle("notebooks")
+            } accessory: {
+                if let space = library.activeSpace {
+                    Button {
+                        scene.sheet = .newNotebook(spaceId: space.id)
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("New Notebook")
+                    .accessibilityIdentifier("sidebar.newNotebook")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var tagsSection: some View {
+        let tags = library.tagTree
+        if !tags.isEmpty {
+            let shownTags = SidebarLimit.visible(tags, showAll: showingAll.contains("tags"))
+            Section {
+                if !isCollapsed("tags") {
+                    ForEach(shownTags.rows) { TagTreeRow(node: $0) }
+                    moreRow("tags", hidden: shownTags.hidden, total: tags.count)
+                    Button {
+                        isAllTagsPresented = true
+                    } label: {
+                        Label {
+                            Text("All Tags")
+                        } icon: {
+                            Image(systemName: "tag")
+                                .foregroundStyle(Theme.Palette.textSecondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("sidebar.allTags")
+                }
+            } header: {
+                SidebarSectionHeader(title: "Tags", identifier: "tags", isCollapsed: isCollapsed("tags")) {
+                    toggle("tags")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var trashSection: some View {
+        Section {
+            SidebarLabel("Trash", systemImage: "trash")
+                .tag(SidebarItem.trash)
+                .accessibilityIdentifier("sidebar.trash")
+        }
     }
 
     /// «N more» past the first rows; «Show Less» at the end of a section opened in full.

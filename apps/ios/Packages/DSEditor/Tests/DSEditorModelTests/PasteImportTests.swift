@@ -19,7 +19,7 @@ private indirect enum Shape: Equatable, CustomStringConvertible {
 }
 
 private func shape(_ b: BlockNode) -> Shape {
-    let attrs = b.attrs.filter { $0.key != "blockId" && $0.key != "taskId" && $0.value != .null }
+    let attrs = b.attrs.filter { $0.key != "blockId" && $0.key != "taskId" && $0.key != PasteFragment.pasteImageAttr && $0.value != .null }
     if let inline = b.inline {
         return .block(b.type, attrs, inline.map { el in
             switch el {
@@ -182,7 +182,7 @@ struct PasteImportTests {
         #expect(p.contains(.text("кодом", MarkSet([MarkName.code: MarkSet.plain]))))
         #expect(p.contains(.text("ссылкой", MarkSet([MarkName.link: .object(["href": "https://example.com/x?a=1&b=2"])]))))
         #expect(p.contains(.text("важно", MarkSet([MarkName.bold: MarkSet.plain]))), "bold from the inline style")
-        #expect(f.blocks[1].plainText.contains("и ссылкой — важно."), "whitespace collapses, &nbsp; is a space")
+        #expect(f.blocks[1].plainText.contains("и ссылкой\u{00A0}— важно."), "whitespace collapses, &nbsp; stays")
         let list = f.blocks[2]
         #expect(list.children.count == 2)
         #expect(list.children[1].children.map(\.type) == ["paragraph", "orderedList"])
@@ -300,5 +300,47 @@ struct PasteImportTests {
         let table = HTMLImport.blocks("<table><tr><td><p style=\"text-align:center\">x</p></td></tr></table>").blocks
         #expect(table[0].children[0].children[0].attrs["align"] == "center")
         #expect(MarkdownImport.looksLikeMarkdown("Купить ==молоко== и\n- хлеб"))
+    }
+
+    // MARK: Shared vectors (web and iOS)
+
+    nonisolated static let pasteVectors = agentsVector.deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("paste/cases.json")
+
+    /// `packages/test-vectors/vectors/paste/cases.json`: the same clipboard gives the same blocks
+    /// and images on the web and on iOS (spec/04 «Вставка с форматированием»).
+    @Test(.enabled(if: FileManager.default.fileExists(atPath: pasteVectors.path)))
+    func sharedPasteVectors() throws {
+        let file = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: Self.pasteVectors)) as? [String: Any])
+        let cases = try #require(file["cases"] as? [[String: Any]])
+        for c in cases {
+            let name = c["name"] as? String ?? "?"
+            let fragment: PasteFragment
+            if let html = c["html"] as? String {
+                fragment = HTMLImport.blocks(html)
+            } else {
+                let text = try #require(c["text"] as? String)
+                fragment = MarkdownImport.blocks(text, options: .init(remoteImages: true))
+            }
+            let expected = try #require(c["expected"] as? [String: Any])
+            let blocks = (expected["blocks"] as? [[String: Any]] ?? []).map { shape(json: $0) }
+            let ours = fragment.blocks.map(shape)
+            #expect(ours.count == blocks.count, "\(name): \(ours.count) blocks, expected \(blocks.count)\n\(ours)\n≠\n\(blocks)")
+            for (a, b) in zip(ours, blocks) {
+                #expect(a == b, "\(name):\n\(a)\n≠\n\(b)")
+            }
+            let images = expected["images"] as? [[String: Any]] ?? []
+            #expect(fragment.images.count == images.count, "\(name): images")
+            for (img, exp) in zip(fragment.images, images) {
+                let src = exp["src"] as? String ?? ""
+                #expect(img.alt == (exp["alt"] as? String ?? ""), "\(name): alt")
+                switch img.source {
+                case .url(let url): #expect(url.absoluteString == src, "\(name): \(url) ≠ \(src)")
+                case .data(let data):
+                    let payload = src.split(separator: ",", maxSplits: 1).last.map(String.init) ?? ""
+                    #expect(Data(base64Encoded: payload) == data, "\(name): embedded image bytes")
+                }
+            }
+        }
     }
 }

@@ -501,3 +501,34 @@ describe('owner overview and rotation scope', () => {
     expect((await call(owner, 'GET', '/shared-by-me')).body[1]).toMatchObject({ awaitingKey: 0 });
   });
 });
+
+describe('the last member leaves', () => {
+  it('the resource stays in shared-by-me with the rotation pending until it is done', async () => {
+    const owner = await user();
+    const m = await user();
+    const { notebookId } = await createNotebook(s, owner);
+    const noteId = await createNote(s, owner, notebookId);
+    const other = await createNote(s, owner, notebookId);
+    await share(owner, { kind: 'notebook', id: notebookId }, m, 'editor');
+    await share(owner, { kind: 'note', id: other }, m, 'viewer');
+    expect((await call(owner, 'DELETE', `/members/notebook/${notebookId}/${m.userId}`)).status).toBe(204);
+    expect((await call(m, 'DELETE', `/members/note/${other}/${m.userId}`)).status).toBe(204);
+
+    const pending = (await call(owner, 'GET', '/shared-by-me')).body;
+    expect(pending).toEqual([
+      { target: { kind: 'note', id: other }, keyVersion: 1, keyRotationPending: true, pendingSinceVersion: 1, members: 0, awaitingKey: 0 },
+      { target: { kind: 'notebook', id: notebookId }, keyVersion: 1, keyRotationPending: true, pendingSinceVersion: 1, members: 0, awaitingKey: 0 },
+    ]);
+
+    const rotation = { ownerWrappedKey: b64(rnd(73)), previousKeyWrap: b64(rnd(73)), memberKeys: [], version: 2 };
+    expect((await call(owner, 'POST', `/members/note/${other}/rotate`, rotation)).status).toBe(204);
+    expect((await call(owner, 'POST', `/members/notebook/${notebookId}/rotate`, rotation)).status).toBe(204);
+    // Step 1 done, notes still to re-key: listed, version past pendingSinceVersion.
+    expect((await call(owner, 'GET', '/shared-by-me')).body).toEqual([
+      { target: { kind: 'notebook', id: notebookId }, keyVersion: 2, keyRotationPending: true, pendingSinceVersion: 1, members: 0, awaitingKey: 0 },
+    ]);
+    expect((await call(owner, 'POST', `/members/notebook/${notebookId}/rotate/done`, {})).status).toBe(204);
+    expect((await call(owner, 'GET', '/shared-by-me')).body).toEqual([]);
+    expect(noteId).toBeTruthy();
+  });
+});

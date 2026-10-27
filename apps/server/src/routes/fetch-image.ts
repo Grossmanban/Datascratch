@@ -22,8 +22,8 @@ export function fetchImageRoutes(ctx: AppContext): FastifyPluginAsyncZod {
     let running = 0;
     const runningFor = new Map<string, number>();
 
-    /** Fixed one-minute window per account. */
-    function allow(userId: string): boolean {
+    /** Fixed one-minute window per account; returns how long to wait when over the limit (0: allowed). */
+    function wait(userId: string): number {
       const now = Date.now();
       let w = windows.get(userId);
       if (!w || now - w.start >= 60_000) {
@@ -34,7 +34,7 @@ export function fetchImageRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         windows.set(userId, w);
       }
       w.count += 1;
-      return w.count <= perMinute;
+      return w.count <= perMinute ? 0 : 60_000 - (now - w.start);
     }
 
     app.post(
@@ -49,11 +49,14 @@ export function fetchImageRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req, reply) => {
         const p = await requireUser(ctx, req);
-        if (!allow(p.userId)) throw new ApiError('rate_limited', 'too many image downloads, retry in a minute');
+        const retryAfterMs = wait(p.userId);
+        if (retryAfterMs > 0) {
+          throw new ApiError('rate_limited', 'too many image downloads, retry in a minute', undefined, retryAfterMs);
+        }
         // One account cannot take every slot; the server-wide cap bounds memory.
         const mine = runningFor.get(p.userId) ?? 0;
         if (mine >= ctx.config.FETCH_IMAGE_CONCURRENCY_PER_USER || running >= ctx.config.FETCH_IMAGE_CONCURRENCY) {
-          throw new ApiError('rate_limited', 'too many image downloads in progress, retry shortly');
+          throw new ApiError('rate_limited', 'too many image downloads in progress, retry shortly', undefined, 2_000);
         }
         running += 1;
         runningFor.set(p.userId, mine + 1);

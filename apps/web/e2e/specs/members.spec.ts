@@ -123,3 +123,70 @@ test("D-54: an invitation to an email without an account waits; its link opens t
   await expect(q.getByTestId("invitations-row")).toHaveCount(0);
   await other.close();
 });
+
+test("D-54: the member sees a shared notebook in «Общие со мной», a viewer only reads, an editor writes, leaving removes it", async ({ page, browser }) => {
+  const owner = uniqueEmail("owner3");
+  const friend = uniqueEmail("member");
+  const other = await browser.newContext();
+  const q = await other.newPage();
+  await signUp(q, friend);
+
+  await signUp(page, owner);
+  await newDoc(page, "Совместная заметка", "Начало");
+  await expectSynced(page);
+  const sidebar = page.getByTestId("sidebar");
+  await sidebar.getByRole("link", { name: /Заметки/ }).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Поделиться…" }).click();
+  const people = page.getByTestId("people");
+  await page.getByTestId("invite-email").fill(friend);
+  await page.getByTestId("invite-role").click();
+  await page.getByRole("menuitem", { name: "Только чтение" }).click();
+  await page.getByTestId("invite-submit").click();
+  await expect(people.getByTestId("invitation").filter({ hasText: friend })).toBeVisible();
+
+  await q.reload();
+  await q.getByTestId("invitations-row").click();
+  await q.getByTestId("invitation-in").getByTestId("accept-invitation").click();
+  await q.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
+
+  // The key reaches the member on its own; the notebook shows up under its own name.
+  const shared = q.getByTestId("shared-row").filter({ hasText: "Заметки" });
+  await expect(shared).toBeVisible({ timeout: 30_000 });
+  await expect(shared).not.toHaveAttribute("data-waiting", "", { timeout: 30_000 });
+  await shared.click();
+  const card = q.getByTestId("doc-card").filter({ hasText: "Совместная заметка" });
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  await card.click();
+  await expect(q.locator(".ds-prose")).toContainText("Начало", { timeout: 20_000 });
+  // Read only: a badge, no sharing further, the text does not take input.
+  await expect(q.getByTestId("read-only-badge")).toBeVisible();
+  await expect(q.getByTestId("share-button")).toHaveCount(0);
+  await expect(q.locator(".ds-prose [contenteditable=true]").or(q.locator(".ds-prose[contenteditable=true]"))).toHaveCount(0);
+
+  // The owner makes them an editor; back in the tab the member can write, and the owner sees it.
+  const member = people.getByTestId("member").filter({ hasText: friend });
+  await expect(member).toBeVisible();
+  await member.getByTestId("member-role").click();
+  const reread = page.waitForResponse((r) => r.url().includes("/v1/members/") && r.request().method() === "GET");
+  await page.getByRole("menuitem", { name: "Может редактировать" }).click();
+  await reread;
+  await q.reload();
+  await expect(q.getByTestId("read-only-badge")).toHaveCount(0, { timeout: 20_000 });
+  await q.locator(".ds-prose p").last().click();
+  await q.keyboard.press("End");
+  await q.keyboard.type(" и правка участника");
+  await expectSynced(q);
+  await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
+  await expect(page.locator(".ds-prose")).toContainText("Начало и правка участника", { timeout: 20_000 });
+
+  // «Выйти»: gone for the member, and from the owner's list of people.
+  await q.getByTestId("shared-row").filter({ hasText: "Заметки" }).click({ button: "right" });
+  await q.getByRole("menuitem", { name: "Выйти" }).click();
+  await q.getByRole("alertdialog").or(q.getByRole("dialog")).getByRole("button", { name: "Выйти" }).click();
+  await expect(q.getByTestId("shared-row")).toHaveCount(0);
+  await expect(q.getByText("Вы вышли из общего доступа").first()).toBeVisible();
+  await sidebar.getByRole("link", { name: /Заметки/ }).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Поделиться…" }).click();
+  await expect(people.getByTestId("member")).toHaveCount(0);
+  await other.close();
+});

@@ -49,6 +49,7 @@ export {
   type MemberRole,
   type OutgoingInvitation,
   type SharedItem,
+  type SharedRef,
   MAX_MEMBERS,
   type SignupRequest,
   type Space,

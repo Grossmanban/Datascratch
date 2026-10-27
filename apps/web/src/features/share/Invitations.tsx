@@ -3,6 +3,7 @@ import { Mail } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { NetworkError } from "@/api/client";
 import { membersApi } from "@/api/endpoints";
+import { refreshShared } from "@/data/sharedWithMe";
 import { useUi } from "@/hooks/useUi";
 import { formatDay, localDate } from "@/lib/dates";
 import type { IncomingInvitation } from "@/lib/shared";
@@ -46,7 +47,7 @@ export function InvitationsDialog() {
   const incoming = useIncomingInvitations();
   const done = () => {
     void qc.invalidateQueries({ queryKey: ["incoming-invitations"] });
-    void qc.invalidateQueries({ queryKey: ["shared-with-me"] });
+    void refreshShared();
   };
   const failed = (e: unknown) => toast(e instanceof NetworkError ? t("common.requiresOnline") : String((e as Error).message), { tone: "danger" });
   const accept = useMutation({

@@ -17,6 +17,9 @@ export type NotebookSnapshot = {
   folders: Folder[];
   notes: NoteMeta[];
   tags: Record<string, TagProps>;
+  /** `meta.name`/`meta.icon` — how a notebook shared with this account is titled (D-54). */
+  name: string | null;
+  icon: string | null;
 };
 
 export function readNotebook(doc: Y.Doc): NotebookSnapshot {
@@ -29,6 +32,8 @@ export function readNotebook(doc: Y.Doc): NotebookSnapshot {
     folders: readMapOfMaps<Folder>(m.folders).sort((a, b) => a.order - b.order),
     notes: readMapOfMaps<NoteMeta>(m.notes),
     tags,
+    name: typeof m.meta.get("name") === "string" ? (m.meta.get("name") as string) : null,
+    icon: typeof m.meta.get("icon") === "string" ? (m.meta.get("icon") as string) : null,
   };
 }
 

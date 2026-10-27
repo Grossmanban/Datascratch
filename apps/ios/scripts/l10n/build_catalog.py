@@ -42,7 +42,7 @@ INTERPOLATIONS = {
 
 # Literals that look like text but are not translated (names, formats, prefixes).
 IGNORE = {
-    "Projects", "Drafts", "Plan", "Draft", "Target", "Links", "Target body", "Go to [[Target]] or [[Nowhere]].",
+    "Projects", "Drafts", "Plan", "Draft", "Target", "Links", "Target body", "Go to [[Target]] or [[Nowhere]].", "Dated", "Call back",
     "* ", ", ", " · ", " : ", "> ", "[ ] ", "[] ", "☐ ", "DS1", "DS1-XXXX-XXXX-…", "Datascratch", "Library.json",
     "CFBundleShortVersionString", "CFBundleVersion", "DSServerURL", "DSWebHost",
     "XChaCha20-Poly1305 · Argon2id", "Quiet paper", "next week", "open to agents", "CoreLibrary", "Library", "Attachments", "a^2 + b^2 = c^2", "graph TD\n  A --> B",

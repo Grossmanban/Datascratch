@@ -17,15 +17,28 @@ protocol CoreLibraryRemote: AnyObject {
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?)
     /// The account lists notebooks whose keys this device does not hold.
     func notebookKeysMissing()
+    /// Note keys (`NoteMeta.wrappedKey`) arrived with a notebook index: documents that waited
+    /// for them can be subscribed.
+    func noteKeysLearned()
 }
 
 /// `NoteMeta.wrappedKey` by note id, readable from the sync engine's actor.
 nonisolated final class WrappedKeyIndex: @unchecked Sendable {
     private let lock = NSLock()
     private var keys: [String: (notebookId: String, wrapped: String)] = [:]
+    private var changed = false
 
     func set(noteId: String, notebookId: String, wrapped: String) {
-        lock.withLock { keys[noteId] = (notebookId, wrapped) }
+        lock.withLock {
+            guard keys[noteId]?.notebookId != notebookId || keys[noteId]?.wrapped != wrapped else { return }
+            keys[noteId] = (notebookId, wrapped)
+            changed = true
+        }
+    }
+
+    /// Whether a key was added or replaced since the last call.
+    func takeChanged() -> Bool {
+        lock.withLock { defer { changed = false }; return changed }
     }
 
     func wrapped(noteId: String, notebookId: String) -> String? {
@@ -206,13 +219,17 @@ final class CoreLibrary: LibraryBackend {
         return doc
     }
 
-    func noteDocument(_ id: String, notebookId: String) throws -> NoteDocument {
+    /// The note's document. Only a note created on this device (`creating`) gets the empty
+    /// title + paragraph structure: a note made elsewhere (an agent, another device) whose
+    /// document has not arrived yet stays empty until sync fills it — initializing it wrote a
+    /// second, empty title over the agent's (prod 2026-10-26, iPad build 15).
+    func noteDocument(_ id: String, notebookId: String, creating: Bool = false) throws -> NoteDocument {
         if let doc = noteDocs[id] { return doc }
         let isNew = try store.document(id) == nil
         let crdt = try Self.open(.note, docId: id, notebookId: notebookId, store: store)
         let doc = NoteDocument(crdt)
         attach(crdt, notebookId: notebookId)
-        if isNew { try doc.initialize() }
+        if isNew && creating { try doc.initialize() }
         noteDocs[id] = doc
         notebookIdOfNote[id] = notebookId
         remote?.documentOpened(crdt, notebookId: notebookId)
@@ -310,9 +327,13 @@ final class CoreLibrary: LibraryBackend {
             }
             let haveStarred = Set(account.starred())
             for item in local.starred() where !haveStarred.contains(item) { try account.star(item) }
-            if account.dailyNotebookId == nil, let daily = local.dailyNotebookId {
-                try account.setSetting("dailyNotebookId", .string(value: daily))
+            // D-48: the carried spaces bring their daily notebooks along.
+            var daily = Self.stringMap(account.setting(Self.dailyBySpaceKey))
+            for (space, notebook) in Self.stringMap(local.setting(Self.dailyBySpaceKey)) where daily[space] == nil { daily[space] = notebook }
+            if let legacy = local.dailyNotebookId, let space = local.notebook(id: legacy)?.spaceId, daily[space] == nil {
+                daily[space] = legacy
             }
+            if !daily.isEmpty { try account.setSetting(Self.dailyBySpaceKey, Self.yObject(daily)) }
             try store.deleteDocument(record.docId)
         }
         return carried
@@ -473,8 +494,12 @@ final class CoreLibrary: LibraryBackend {
         snapshot.starred = account.starred().map { StarRef(kind: StarRef.Kind(rawValue: $0.kind.rawValue) ?? .note, id: $0.id) }
         snapshot.tabs = account.tabs()
         snapshot.dailyNotebookId = account.dailyNotebookId
+        snapshot.dailyNotebookBySpace = Self.stringMap(account.setting(Self.dailyBySpaceKey))
+        snapshot.activeTabBySpace = Self.stringMap(account.setting(Self.activeTabBySpaceKey))
+        migrateToSpaceSettings(&snapshot)
         snapshot.activeSpaceId = overlay.activeSpaceId
         snapshot.versions = overlay.versions
+        if wrappedKeys.takeChanged() { remote?.noteKeysLearned() }
         return snapshot
     }
 
@@ -501,7 +526,14 @@ final class CoreLibrary: LibraryBackend {
     func refreshNote(_ noteId: String, notebookId: String) -> (NoteMeta, NoteBody)? {
         guard let notebook = try? notebookDocument(notebookId), let note = try? noteDocument(noteId, notebookId: notebookId)
         else { return nil }
-        if let derived = try? note.derived() {
+        // A document that has not arrived yet (no blocks) says nothing about the title: never
+        // copy its empty title over the one the index already has.
+        if let blocks = try? note.blocks(), !blocks.isEmpty, var derived = try? note.derived() {
+            // Two title blocks can meet after a sync (an empty one from an older build): the
+            // index takes the first non-empty title; the editors remove the empty duplicates.
+            if let title = blocks.first(where: { $0.type == BlockType.title && !$0.text.isEmpty })?.text {
+                derived.title = title
+            }
             try? notebook.syncDerived(derived)
             try? store.index(derived, notebookId: notebookId)
         }
@@ -646,7 +678,7 @@ final class CoreLibrary: LibraryBackend {
         guard try keys.notebookKey(meta.notebookId) != nil else { throw DSCore.AccountError.missingKey(meta.notebookId) }
         let (_, wrapped) = try keys.createNoteKey(noteId: meta.id, notebookId: meta.notebookId)
         wrappedKeys.set(noteId: meta.id, notebookId: meta.notebookId, wrapped: wrapped)
-        let doc = try noteDocument(meta.id, notebookId: meta.notebookId)
+        let doc = try noteDocument(meta.id, notebookId: meta.notebookId, creating: true)
         try notebook.putNote(coreMeta(meta, wrappedKey: wrapped))
         try write(body: body, title: meta.title, previous: nil, to: doc, resolve: resolve)
         try writeStyle(meta, doc: doc)
@@ -718,13 +750,20 @@ final class CoreLibrary: LibraryBackend {
     private func write(body: NoteBody, title: String, previous: NoteBody?, to doc: NoteDocument,
                        resolve: NoteBodyCodec.LinkResolver) throws {
         let current = try doc.blocks()
+        // A document that has not arrived yet (made elsewhere, not synced): nothing is written
+        // into it — writing would race the real content (prod 2026-10-26, a lost title).
+        guard !current.isEmpty else {
+            Self.log.notice("skipped writing \(doc.noteId, privacy: .public): its document has not arrived yet")
+            return
+        }
         if let titleIndex = current.firstIndex(where: { $0.type == BlockType.title }) {
-            if current[titleIndex].text != title {
+            // Never blank a title: an empty one here is a stale index value, not an edit.
+            if current[titleIndex].text != title, !title.isEmpty {
                 var block = current[titleIndex]
-                block.inline = title.isEmpty ? [] : [.text(title, marks: [])]
+                block.inline = [.text(title, marks: [])]
                 try doc.replaceBlock(at: [UInt32(titleIndex)], with: block)
             }
-        } else {
+        } else if !title.isEmpty {
             try doc.insertBlocks([.title(title)], at: 0)
         }
 
@@ -794,17 +833,11 @@ final class CoreLibrary: LibraryBackend {
         }
     }
 
-    /// Full rewrite, only when every body block is one the stand-in editor represents.
+    /// A reorder or kind change from the list-level body (the stand-in editor): no longer written
+    /// by deleting every block and appending them again — that whole-document rewrite raced
+    /// other devices' edits (prod 2026-10-26). The native editor writes such changes itself.
     private func rewriteIfRepresentable(_ doc: NoteDocument, body: NoteBody, resolve: NoteBodyCodec.LinkResolver) throws {
-        let current = try doc.blocks()
-        guard current.allSatisfy({ $0.type == BlockType.title || NoteBodyCodec.isRepresentable($0) }) else {
-            Self.log.notice("skipped rewriting \(doc.noteId, privacy: .public): it has blocks the stand-in editor cannot show")
-            return
-        }
-        for (index, block) in current.enumerated().reversed() where block.type != BlockType.title {
-            try doc.deleteBlock(at: [UInt32(index)])
-        }
-        try doc.appendBlocks(NoteBodyCodec.blocks(from: body, resolveLink: resolve))
+        Self.log.notice("skipped rewriting \(doc.noteId, privacy: .public): reorders are written by the editor")
     }
 
     private func persistAccountLists(_ old: LibrarySnapshot, _ new: LibrarySnapshot) throws {
@@ -820,8 +853,12 @@ final class CoreLibrary: LibraryBackend {
             for id in new.tabs where !old.tabs.contains(id) { try account.openTab(noteId: id) }
             for id in old.tabs where !new.tabs.contains(id) { try account.closeTab(noteId: id) }
         }
-        if old.dailyNotebookId != new.dailyNotebookId {
-            try account.setSetting("dailyNotebookId", .optionalString(new.dailyNotebookId))
+        // D-48: per-space keys only; the legacy `dailyNotebookId`/`activeTab` are not written.
+        if (old.dailyNotebookBySpace ?? [:]) != (new.dailyNotebookBySpace ?? [:]) {
+            try account.setSetting(Self.dailyBySpaceKey, Self.yObject(new.dailyNotebookBySpace ?? [:]))
+        }
+        if (old.activeTabBySpace ?? [:]) != (new.activeTabBySpace ?? [:]) {
+            try account.setSetting(Self.activeTabBySpaceKey, Self.yObject(new.activeTabBySpace ?? [:]))
         }
         if old.tagColors != new.tagColors {
             let changed = Set(old.tagColors.keys).union(new.tagColors.keys).filter { old.tagColors[$0] != new.tagColors[$0] }
@@ -831,6 +868,35 @@ final class CoreLibrary: LibraryBackend {
                     try doc.setTagProperties(TagProperties(name: tag, color: new.tagColors[tag]?.rawValue))
                 }
             }
+        }
+    }
+
+    // MARK: D-48 per-space settings
+
+    static let dailyBySpaceKey = "dailyNotebookBySpace"
+    static let activeTabBySpaceKey = "activeTabBySpace"
+
+    static func stringMap(_ value: YValue?) -> [String: String] {
+        guard case .object(let entries)? = value else { return [:] }
+        return entries.compactMapValues { if case .string(let text) = $0 { text } else { nil } }
+    }
+
+    static func yObject(_ map: [String: String]) -> YValue {
+        .object(entries: map.mapValues { .string(value: $0) })
+    }
+
+    /// Once per account: the legacy account-wide `dailyNotebookId` and `activeTab` go to the space
+    /// of their notebook/note (contract `document-model.md` §2); the legacy keys stay untouched.
+    private func migrateToSpaceSettings(_ snapshot: inout LibrarySnapshot) {
+        if Self.stringMap(account.setting(Self.dailyBySpaceKey)).isEmpty, let legacy = account.dailyNotebookId,
+           let space = snapshot.spaceId(ofNotebook: legacy) {
+            snapshot.dailyNotebookBySpace = [space: legacy]
+            try? account.setSetting(Self.dailyBySpaceKey, Self.yObject([space: legacy]))
+        }
+        if Self.stringMap(account.setting(Self.activeTabBySpaceKey)).isEmpty, let legacy = account.activeTab,
+           let space = snapshot.spaceId(ofNote: legacy) {
+            snapshot.activeTabBySpace = [space: legacy]
+            try? account.setSetting(Self.activeTabBySpaceKey, Self.yObject([space: legacy]))
         }
     }
 

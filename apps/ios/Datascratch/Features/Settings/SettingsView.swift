@@ -130,7 +130,8 @@ struct AccountSettings: View {
                 DSSettingsRow(String(localized: "Status"), systemImage: "arrow.triangle.2.circlepath",
                               accessory: .custom(AnyView(DSSyncChip(app.sync.dsState).accessibilityIdentifier("sync.status"))))
                 DSSettingsRow(String(localized: "Server"), systemImage: "server.rack",
-                              value: app.sync.serverURL?.host() ?? String(localized: "Not connected"))
+                              value: app.serverURL.map(ServerAddress.display) ?? String(localized: "Not connected"))
+                    .accessibilityIdentifier("settings.server")
                 if case .notSent = app.sync.phase {
                     Button { app.sync.retryFailed() } label: {
                         DSSettingsRow(String(localized: "Retry"), systemImage: "arrow.clockwise", accessory: .chevron)

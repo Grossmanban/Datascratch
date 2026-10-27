@@ -9,7 +9,7 @@ import UIKit
 
 /// Owns one `EditorView` over a note's Yrs document (TextKit 2 + living-stroke pen layer).
 @Observable
-final class NativeEditorModel {
+final class NativeEditorModel: ClosingEditor {
     let editor: EditorView
     let noteId: String
     let notebookId: String
@@ -32,6 +32,13 @@ final class NativeEditorModel {
         serial = Self.created
         let note = try core.noteDocument(noteId, notebookId: notebookId)
         editor = EditorView(document: CoreEditorDocument(note: note))
+        // D-51: in the notes-only app task dates are quiet labels (no reschedule menu).
+        editor.taskDatesEnabled = Features.tasks
+        // spec/04: an empty title becomes «Note Oct 26, 2026» (the note's creation day) on Return
+        // in the title, when the caret leaves it or the note is closed, if the note has text.
+        editor.defaultTitle = { [weak app] in
+            app?.library.note(noteId).map { Self.defaultTitle(created: $0.createdAt) }
+        }
         // D-06: a finger draws only when enabled; on iPhone (no Pencil) it is on by default.
         editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
         editor.tools.mode = .text
@@ -98,6 +105,52 @@ final class NativeEditorModel {
         let meta = try? app?.core?.notebookDocument(notebookId).note(id: noteId)
         let name = meta?.createdByAgent?.agentName
         if editor.createdByAgent != name { editor.createdByAgent = name }
+    }
+
+    /// «Note Oct 26, 2026» / «Заметка 26 октября 2026», in the app's language.
+    static func defaultTitle(created: Date) -> String {
+        let locale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "en")
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        if locale.language.languageCode == .russian {
+            formatter.dateFormat = "d MMMM y"
+        } else {
+            formatter.setLocalizedDateFormatFromTemplate("MMMdy")
+        }
+        return String(localized: "Note \(formatter.string(from: created))")
+    }
+
+    /// A new note: the caret goes into its title, once.
+    @ObservationIgnored private var titleFocused = false
+
+    func focusTitleOfNewNote() {
+        guard !titleFocused else { return }
+        titleFocused = true
+        Task { @MainActor [weak self] in
+            // After the editor is in its window (first responder needs one).
+            try? await Task.sleep(for: .milliseconds(300))
+            self?.editor.focusTitle()
+        }
+    }
+
+    func finishNewNote() -> Bool {
+        guard let app, let core = app.core, let note = try? core.noteDocument(noteId, notebookId: notebookId) else { return false }
+        let blocks = (try? note.blocks()) ?? []
+        // Nothing written: no strokes, empty title, and paragraphs empty or holding only the tag
+        // a tag's list put there.
+        let isEmpty = note.strokes().isEmpty && blocks.allSatisfy { block in
+            switch block.type {
+            case BlockType.title: block.text.isEmpty
+            case BlockType.paragraph: Self.isOnlyTags(block.text)
+            default: false
+            }
+        }
+        if !isEmpty { editor.commitDefaultTitleIfNeeded() }
+        return isEmpty
+    }
+
+    static func isOnlyTags(_ text: String) -> Bool {
+        text.split(whereSeparator: \.isWhitespace).allSatisfy { $0.hasPrefix("#") && $0.count > 1 }
     }
 
     private func changed() {
@@ -186,7 +239,8 @@ struct NativeDocumentScreen: View {
                 .padding(.leading, isTight ? Theme.Space.s1 : Theme.Space.s3)
             PenPalette(model: model, isCompact: isCompact)
             Button { setPaletteCollapsed(true) } label: {
-                Image(systemName: "chevron.down.right")
+                // A clear «fold» glyph (the earlier one drew an empty circle on iPhone).
+                Image(systemName: "chevron.down")
                     .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
                     .foregroundStyle(Theme.Palette.textSecondary)
                     .frame(width: isCompact ? 22 : 28, height: isCompact ? 22 : 28)
@@ -212,12 +266,6 @@ struct NativeDocumentScreen: View {
                         // variant that stays full height and insets itself crashed (ios-editor bisect).
                         NativeEditorRepresentable(editor: model.editor)
                             .accessibilityIdentifier("editor")
-                        if let menu = model.slashMenu, !menu.items.isEmpty {
-                            SlashMenuView(menu: menu, bounds: proxy.size) { id in
-                                model.editor.applySlashCommand(id)
-                                model.slashMenu = nil
-                            }
-                        }
                     }
                     // The column's width, never the editor's own: next to the list on an iPad mini
                     // in portrait it ran 18 pt past the screen edge.
@@ -257,8 +305,24 @@ struct NativeDocumentScreen: View {
                             .frame(maxWidth: .infinity)
                         }
                     }
+                    // The "/" menu over the format bar and palette too: in a short editor (iPad in
+                    // landscape with the keyboard up) it reaches past the editor, and under the
+                    // bars its lower entries took no taps.
+                    .overlay {
+                        if let menu = model.slashMenu, !menu.items.isEmpty {
+                            GeometryReader { area in
+                                SlashMenuView(menu: menu, bounds: area.size) { id in
+                                    model.editor.applySlashCommand(id)
+                                    model.slashMenu = nil
+                                }
+                            }
+                        }
+                    }
+                    // The cover's height follows the document area on appear and when its width
+                    // changes (rotation, split view) — not when the keyboard or palette resizes
+                    // it: a cover resizing then relaid the text out and the scroll fought back.
                     .onAppear { model.header.containerHeight = proxy.size.height }
-                    .onChange(of: proxy.size.height) { _, height in model.header.containerHeight = height }
+                    .onChange(of: proxy.size.width) { _, _ in model.header.containerHeight = proxy.size.height }
                 }
                 .onChange(of: note.style, initial: true) { _, style in model.apply(style: style) }
                 .onChange(of: note, initial: true) { _, note in
@@ -290,6 +354,7 @@ struct NativeDocumentScreen: View {
             if app.core == nil { failed = true }
             return
         }
+        app.connection?.focus(noteId)
         if let kept = scene.editor(for: noteId) as? NativeEditorModel, kept.notebookId == note.notebookId {
             model = kept
             return
@@ -299,6 +364,8 @@ struct NativeDocumentScreen: View {
             model.installHeader(app: app, scene: scene)
             scene.keepEditor(model, for: noteId)
             self.model = model
+            // Only a note just made here: an existing note opens as it is.
+            if scene.freshNoteId == noteId { model.focusTitleOfNewNote() }
         } catch {
             failed = true
         }
@@ -388,7 +455,9 @@ struct NativeEditorToolbar: ToolbarContent {
                 }
                 Button("Move To…", systemImage: "folder") { scene.sheet = .move(noteId: note.id) }
                 Button("Open in New Window", systemImage: "macwindow.badge.plus") { openWindow(id: "note", value: note.id) }
-                Button("Close Tab", systemImage: "xmark") { scene.closeTab() }
+                if Features.tabs {
+                    Button("Close Tab", systemImage: "xmark") { scene.closeTab() }
+                }
                 Divider()
                 Button("Move to Trash", systemImage: "trash", role: .destructive) {
                     scene.closeDocument()
@@ -572,10 +641,13 @@ struct SlashMenuView: View {
     var body: some View {
         let groups = Dictionary(grouping: menu.items, by: \.group)
         let order = menu.items.map(\.group).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
-        let height = min(maxHeight, CGFloat(menu.items.count) * 44 + CGFloat(order.count) * 28 + 16)
-        // Below the caret when it fits, else above it.
+        let height = min(maxHeight, CGFloat(menu.items.count) * 44 + CGFloat(order.count) * 28 + 16,
+                         max(88, bounds.height - 16))
+        // Below the caret when it fits, else above it; never past the bottom of the area.
         let below = menu.caretRect.maxY + 6
-        let y = below + height <= bounds.height ? below : max(8, menu.caretRect.minY - 6 - height)
+        let y = below + height <= bounds.height - 8
+            ? below
+            : max(8, min(menu.caretRect.minY - 6 - height, bounds.height - height - 8))
         let x = min(max(8, menu.caretRect.minX), max(8, bounds.width - width - 8))
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {

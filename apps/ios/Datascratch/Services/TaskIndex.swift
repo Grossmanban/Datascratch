@@ -84,8 +84,8 @@ nonisolated enum TaskIndex {
 }
 
 extension LibraryStore {
-    /// Task index over all documents of all spaces (tasks are global, like in Craft).
+    /// Task index over the documents of the active space (D-48: spaces are isolated).
     var taskEntries: [TaskEntry] {
-        TaskIndex.build(notes: data.notes, bodies: data.bodies)
+        TaskIndex.build(notes: activeSpaceNotes, bodies: data.bodies)
     }
 }

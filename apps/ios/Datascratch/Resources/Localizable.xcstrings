@@ -1,6 +1,26 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@"
+          }
+        }
+      }
+    },
+    "%lld changes wait for a key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменений ждут ключ: %lld"
+          }
+        }
+      }
+    },
     "%lld d": {
       "localizations": {
         "ru": {
@@ -17,6 +37,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Осталось дней: %lld"
+          }
+        }
+      }
+    },
+    "%lld documents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Документов: %lld"
+          }
+        }
+      }
+    },
+    "%lld more": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ещё %lld"
           }
         }
       }
@@ -211,6 +251,16 @@
         }
       }
     },
+    "All Tags": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все теги"
+          }
+        }
+      }
+    },
     "All notebooks in this space and their notes will be deleted.": {
       "localizations": {
         "ru": {
@@ -371,6 +421,16 @@
         }
       }
     },
+    "Can’t reach this server. Check the address and the connection.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удаётся связаться с сервером. Проверьте адрес и подключение."
+          }
+        }
+      }
+    },
     "Cards": {
       "localizations": {
         "ru": {
@@ -431,6 +491,16 @@
         }
       }
     },
+    "Checking the server…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверяю сервер…"
+          }
+        }
+      }
+    },
     "Choose File…": {
       "localizations": {
         "ru": {
@@ -487,6 +557,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Закрыть вкладку"
+          }
+        }
+      }
+    },
+    "Collapsed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свёрнуто"
           }
         }
       }
@@ -911,6 +991,16 @@
         }
       }
     },
+    "Dismiss": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрыть"
+          }
+        }
+      }
+    },
     "Divider": {
       "localizations": {
         "ru": {
@@ -1167,6 +1257,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Введите ключ восстановления, сохранённый при регистрации, и задайте новый пароль. Заметки останутся в целости."
+          }
+        }
+      }
+    },
+    "Expanded": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Развёрнуто"
           }
         }
       }
@@ -1751,6 +1851,16 @@
         }
       }
     },
+    "Move to Space…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переместить в пространство…"
+          }
+        }
+      }
+    },
     "Move to Trash": {
       "localizations": {
         "ru": {
@@ -1787,6 +1897,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Новая заметка"
+          }
+        }
+      }
+    },
+    "New Note In": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая заметка в"
           }
         }
       }
@@ -2057,6 +2177,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не отправлено: %lld"
+          }
+        }
+      }
+    },
+    "Note %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заметка %@"
           }
         }
       }
@@ -2801,6 +2931,16 @@
         }
       }
     },
+    "Search Tags": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск тегов"
+          }
+        }
+      }
+    },
     "Search and Commands": {
       "localizations": {
         "ru": {
@@ -3007,6 +3147,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Показать ключ"
+          }
+        }
+      }
+    },
+    "Show Less": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свернуть"
           }
         }
       }
@@ -3571,6 +3721,16 @@
         }
       }
     },
+    "This is not a server address.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это не похоже на адрес сервера."
+          }
+        }
+      }
+    },
     "This link is incomplete: the part after “#” with the key is missing. Ask for the full link.": {
       "localizations": {
         "ru": {
@@ -3767,6 +3927,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Скоро"
+          }
+        }
+      }
+    },
+    "Use an https:// address.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нужен адрес с https://."
           }
         }
       }
@@ -4017,6 +4187,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ваш токен"
+          }
+        }
+      }
+    },
+    "in “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "в «%@»"
           }
         }
       }

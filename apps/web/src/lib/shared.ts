@@ -25,6 +25,7 @@ export {
   uuidv7,
   type AgentPermission,
   type AgentToken,
+  type Author,
   type ClientMessage,
   type Device,
   type DocKind,

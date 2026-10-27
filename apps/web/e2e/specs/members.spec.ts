@@ -174,10 +174,17 @@ test("D-54: the member sees a shared notebook in «Общие со мной», a
   await expect(q.getByTestId("read-only-badge")).toHaveCount(0, { timeout: 20_000 });
   await q.locator(".ds-prose p").last().click();
   await q.keyboard.press("End");
-  await q.keyboard.type(" и правка участника");
+  await q.keyboard.type(" и правка участника, достаточно длинная");
   await expectSynced(q);
   await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
   await expect(page.locator(".ds-prose")).toContainText("Начало и правка участника", { timeout: 20_000 });
+  // Leaving after many edits saves a version; the owner's history names who wrote it.
+  await q.getByTestId("close-tab").click();
+  await expectSynced(q);
+  await page.getByRole("button", { name: "Ещё", exact: true }).click();
+  await page.getByRole("menuitem", { name: "История версий" }).click();
+  await expect(page.getByRole("dialog").getByTestId("version-authors").first()).toContainText(friend, { timeout: 20_000 });
+  await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
 
   // «Выйти»: gone for the member, and from the owner's list of people.
   await q.getByTestId("shared-row").filter({ hasText: "Заметки" }).click({ button: "right" });

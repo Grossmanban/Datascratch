@@ -41,6 +41,12 @@ public final class EditorView: UIView {
     /// The host's items for an image's long-press menu (share, save, replace, caption…), shown
     /// after the editor's own (width, delete).
     public var imageMenu: ((_ block: BlockID, _ attachmentId: String) -> [UIMenuElement])?
+    /// A file block was tapped (or activated with VoiceOver): the host opens or shares it.
+    public var onFileTap: ((_ block: BlockID, _ attachmentId: String) -> Void)?
+    /// "/" menu entries the host carries out («Фото», «Файл»: `SlashCommands.hostHandled`): the
+    /// typed "/query" is removed first, then this is called with the entry's id. Nil: those
+    /// entries are not offered.
+    public var onHostSlashCommand: ((String) -> Void)?
     /// Shows "Посмотреть историю" in the agent-edits banner when set.
     public var onShowHistory: (() -> Void)? {
         didSet { agentBanner.onShowHistory = onShowHistory }
@@ -968,7 +974,8 @@ public final class EditorView: UIView {
             if let hit = SlashCommands.trigger(in: before) {
                 let start = projection.starts[i] + hit.slashOffset
                 let caret = textView.selectedTextRange.map { textView.caretRect(for: $0.start) } ?? .zero
-                state = SlashMenuState(query: hit.query, items: SlashCommands.matching(hit.query),
+                let items = SlashCommands.matching(hit.query).filter { onHostSlashCommand != nil || !SlashCommands.hostHandled.contains($0.id) }
+                state = SlashMenuState(query: hit.query, items: items,
                                        range: start..<range.lowerBound, caretRect: textView.convert(caret, to: self))
             }
         }
@@ -1009,7 +1016,7 @@ public final class EditorView: UIView {
         case "table": insertBlock(EditorCommands.table(rows: 3, columns: 3))
         case "drawing": insertBlock(.drawing(height: 260))
         case "rule": insertBlock(.rule())
-        default: break
+        default: if SlashCommands.hostHandled.contains(id) { onHostSlashCommand?(id) }
         }
         notifyStateChange()
     }
@@ -1046,6 +1053,34 @@ public final class EditorView: UIView {
         rerenderAtoms(of: NodeType.image)
     }
 
+    /// Upload progress of an image, drawn as a small quiet ring at its bottom-right corner:
+    /// 0..1, 0 or less for "uploading" without a known amount, nil when done.
+    public func setImageProgress(attachmentId: String, _ progress: Double?) {
+        factory.uploadProgress[attachmentId] = progress
+        for (_, view) in factory.imageViews where view.node?.attrs["attachmentId"]?.stringValue == attachmentId {
+            view.updateProgress()
+        }
+    }
+
+    /// An image's caption and description for VoiceOver (nil or empty removes them). Undoable.
+    public func setImageAttributes(_ block: BlockID, caption: String?, alt: String?) {
+        guard document.block(block)?.type == NodeType.image else { return }
+        func value(_ s: String?) -> JSONValue { s.map { $0.isEmpty ? .null : .string($0) } ?? .null }
+        document.stopCapturing()
+        document.transact(origin: .local) { document.setAttributes(block, ["caption": value(caption), "alt": value(alt)]) }
+        document.stopCapturing()
+    }
+
+    /// Points an image block at another attachment («Заменить»); `preview` as in `insertImage`.
+    /// Undoable.
+    public func replaceImage(_ block: BlockID, attachmentId: String, preview: UIImage? = nil) {
+        guard document.block(block)?.type == NodeType.image else { return }
+        if let preview { factory.previews[attachmentId] = preview }
+        document.stopCapturing()
+        document.transact(origin: .local) { document.setAttributes(block, ["attachmentId": .string(attachmentId)]) }
+        document.stopCapturing()
+    }
+
     /// An image's width as a fraction of the column (0..1; nil: full width). Undoable.
     public func setImageWidth(_ block: BlockID, fraction: Double?) {
         guard document.block(block)?.type == NodeType.image else { return }
@@ -1070,6 +1105,18 @@ public final class EditorView: UIView {
             return (block, frame)
         }
         return nil
+    }
+
+    /// The file block under a point (text view coordinates).
+    func file(at point: CGPoint) -> BlockID? {
+        factory.fileViews.first { _, view in
+            view.window != nil && view.convert(view.bounds, to: textView).contains(point)
+        }?.block
+    }
+
+    private func openFile(_ block: BlockID) {
+        guard let id = document.block(block)?.attrs["attachmentId"]?.stringValue else { return }
+        onFileTap?(block, id)
     }
 
     private func openImage(_ block: BlockID, frame: CGRect) {
@@ -1274,7 +1321,7 @@ public final class EditorView: UIView {
     /// the text view's own taps (caret placement) do not begin there.
     func hasTapTarget(at point: CGPoint) -> Bool {
         noteLink(at: point) != nil || taskCheckbox(at: point) != nil || (taskDatesEnabled && taskDateChip(at: point) != nil)
-            || (onImageTap != nil && image(at: point) != nil)
+            || (onImageTap != nil && image(at: point) != nil) || (onFileTap != nil && file(at: point) != nil)
     }
 
     /// The task date chip under a point (text view coordinates): its item, whether it is the
@@ -1367,6 +1414,13 @@ public final class EditorView: UIView {
                     guard let self else { return }
                     self.openImage(block, frame: self.textView.convert(frame, to: self))
                 }
+            }
+        }
+        if onFileTap != nil {
+            for (block, view) in factory.fileViews where view.window != nil {
+                let name = document.block(block)?.attrs["name"]?.stringValue
+                add(name.flatMap { $0.isEmpty ? nil : $0 } ?? "Файл", frame: view.convert(view.bounds, to: textView),
+                    traits: .button, hint: "Открыть") { [weak self] in self?.openFile(block) }
             }
         }
         storage.enumerateAttribute(.dsWikiLink, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
@@ -1520,6 +1574,10 @@ public final class EditorView: UIView {
             // Next turn, like links: the host presents its zoom.
             let frame = textView.convert(hit.frame, to: self)
             DispatchQueue.main.async { [weak self] in self?.openImage(hit.block, frame: frame) }
+            return
+        }
+        if onFileTap != nil, let block = file(at: point) {
+            DispatchQueue.main.async { [weak self] in self?.openFile(block) }
             return
         }
         if taskDatesEnabled, let chip = taskDateChip(at: point) {

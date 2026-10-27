@@ -314,6 +314,23 @@ public struct NotebookKeyState: Codable, Hashable, Sendable {
     public var version: Int?
     public var keyChain: [Base64URLData]?
     public var keyRotationPending: Bool?
+    /// The key version when access changed: `version == pendingSinceVersion` → the rotation
+    /// (`rotate`) is still to do; `version > pendingSinceVersion` → done, notes and
+    /// `rotate/done` remain. Absent on older servers.
+    public var pendingSinceVersion: Int?
+
+    enum CodingKeys: String, CodingKey { case wrappedKey, version, keyChain, keyRotationPending, pendingSinceVersion }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        wrappedKey = try APIValidation.bytes(c, .wrappedKey, nonEmpty: true)
+        version = try c.decodeIfPresent(Int.self, forKey: .version)
+        keyChain = try c.decodeIfPresent([Base64URLData].self, forKey: .keyChain)
+        keyRotationPending = try c.decodeIfPresent(Bool.self, forKey: .keyRotationPending)
+        pendingSinceVersion = try c.decodeIfPresent(Int.self, forKey: .pendingSinceVersion)
+        if let v = version, v < 1 { throw APIValidation.fail(c, .version, "version ≥ 1") }
+        if let p = pendingSinceVersion, p < 1 { throw APIValidation.fail(c, .pendingSinceVersion, "version ≥ 1") }
+    }
 }
 
 public struct PublicKeyRecord: Codable, Hashable, Sendable {
@@ -336,12 +353,14 @@ public struct SharedByMeItem: Codable, Hashable, Sendable {
     public var target: SharingTarget
     public var keyVersion: Int
     public var keyRotationPending: Bool
+    /// See `NotebookKeyState.pendingSinceVersion`.
+    public var pendingSinceVersion: Int?
     /// Members besides the owner, including those awaiting a key.
     public var members: Int
     /// Accepted, still without a key.
     public var awaitingKey: Int
 
-    enum CodingKeys: String, CodingKey { case target, keyVersion, keyRotationPending, members, awaitingKey }
+    enum CodingKeys: String, CodingKey { case target, keyVersion, keyRotationPending, pendingSinceVersion, members, awaitingKey }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -349,6 +368,8 @@ public struct SharedByMeItem: Codable, Hashable, Sendable {
         keyVersion = try c.decode(Int.self, forKey: .keyVersion)
         guard keyVersion >= 1 else { throw APIValidation.fail(c, .keyVersion, "version ≥ 1") }
         keyRotationPending = try c.decode(Bool.self, forKey: .keyRotationPending)
+        pendingSinceVersion = try c.decodeIfPresent(Int.self, forKey: .pendingSinceVersion)
+        if let p = pendingSinceVersion, p < 1 { throw APIValidation.fail(c, .pendingSinceVersion, "version ≥ 1") }
         members = try c.decode(Int.self, forKey: .members)
         awaitingKey = try c.decode(Int.self, forKey: .awaitingKey)
         guard members >= 0, awaitingKey >= 0, awaitingKey <= members else { throw APIValidation.fail(c, .members, "counts ≥ 0") }

@@ -407,6 +407,7 @@ struct EncodingVectorTests {
             "rotateKeyRequest": { _ = try JSONDecoder().decode(RotateKeyRequest.self, from: $0) },
             "sharedItem": { _ = try JSONDecoder().decode(SharedItem.self, from: $0) },
             "sharedByMeItem": { _ = try JSONDecoder().decode(SharedByMeItem.self, from: $0) },
+            "notebookKeyResponse": { _ = try JSONDecoder().decode(NotebookKeyState.self, from: $0) },
             "docVersion": { _ = try JSONDecoder().decode(DocVersion.self, from: $0) },
         ]
         for (name, c) in cases {

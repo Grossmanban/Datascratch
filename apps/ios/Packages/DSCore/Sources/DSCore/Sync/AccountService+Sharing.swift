@@ -105,8 +105,6 @@ extension AccountService {
         return result
     }
 
-    static func rotationMarker(_ kind: ShareTargetKind, _ id: String) -> String { "sharing.rotated.\(kind.rawValue).\(id)" }
-
     /// Changes a shared notebook's key after someone lost access (crypto.md §10.3, steps 1–2):
     /// a new key `v+1` for the owner, every member and the chain in one `rotate` request, then a
     /// new key for every note, written to the index (it syncs with the new notebook key). Call
@@ -128,7 +126,6 @@ extension AccountService {
             notebookKey: agentMode ? newKey : nil)
         try await api.rotateKey(request, of: target)
         try keys.adoptNotebookKey(newKey, version: next, olderKeys: [oldKey], notebookId: id)
-        try store.setString(String(next), for: Self.rotationMarker(.notebook, id))
         try rekeyNotes(in: notebook)
     }
 
@@ -178,27 +175,41 @@ extension AccountService {
         }
         guard allRekeyed, try store.pendingOutbox(docId: id).isEmpty else { return false }
         try await api.rotationDone(notebookId: id)
-        try store.setString(nil, for: Self.rotationMarker(.notebook, id))
         return true
     }
 
-    /// On start, for each notebook this account shares: a pending rotation (someone left or was
-    /// removed) is done or finished — `rotate` if it was not made yet, otherwise the notes still
-    /// on old keys get theirs. Returns notebooks whose rotation waits for the index to sync
-    /// (`finishNotebookRotation` after that).
+    /// On start, for each notebook this account shares (`GET /shared-by-me`): a pending
+    /// rotation (someone left or was removed) is made or finished — from any of the owner's
+    /// devices. `version == pendingSinceVersion`: not rotated yet → `rotate`; `version >
+    /// pendingSinceVersion`: rotated → the notes still on old keys get theirs. Older servers
+    /// without the field: rotated if a note is still wrapped under an earlier notebook key.
+    /// Returns whether a rotation is under way (`finishNotebookRotation` once the index syncs).
     public func resumeNotebookRotation(_ notebook: NotebookDocument, agentMode: Bool = false) async throws -> Bool {
         let id = notebook.notebookId
         let state = try await api.notebookKeyState(id: id)
         guard state.keyRotationPending == true else { return false }
         try await adoptServerNotebookKey(id)
-        let rotatedTo = try store.string(Self.rotationMarker(.notebook, id)).flatMap(Int.init)
-        if rotatedTo != (state.version ?? 1) {
-            // Pending since an access change, not rotated yet (from this device's view).
-            try await rotateNotebookKey(notebook, agentMode: agentMode)
+        let rotated: Bool
+        if let since = state.pendingSinceVersion {
+            rotated = (state.version ?? 1) > since
         } else {
+            rotated = try !notesNeedingNewKeys(in: notebook).isEmpty
+        }
+        if rotated {
             try rekeyNotes(in: notebook)
+        } else {
+            try await rotateNotebookKey(notebook, agentMode: agentMode)
         }
         return true
+    }
+
+    /// Notes still wrapped under an earlier notebook key (crypto.md §10.3, step 2 not done).
+    func notesNeedingNewKeys(in notebook: NotebookDocument) throws -> [NoteMeta] {
+        guard let nbKey = try keys.notebookKey(notebook.notebookId) else { throw AccountError.missingKey(notebook.notebookId) }
+        return notebook.notes(includeTrashed: true).filter { meta in
+            guard let wrapped = Base64URL.decode(meta.wrappedKey) else { return false }
+            return (try? DSCrypto.unwrapKey(wrapped, with: nbKey, ad: meta.wrappedKeyAD)) == nil
+        }
     }
 
     /// A note shared on its own: new key `v+1` for the owner, members and chain in one request

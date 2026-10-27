@@ -147,7 +147,8 @@ DSCore
 - Пути REST: id в пути — только буквы, цифры, `-`, `_` (`UnsafePathError`, запрос не уходит).
 - Отзыв устройства (D-53): `401` с `error.code == "device_revoked"` (в том числе на
   `/auth/refresh`) → `DeviceRevokedError(reason:)`, один раз `APIClient.setDeviceRevokedHandler`,
-  `api.revocation`; без повторов и обновления токена. Разбор ответов — `APIFailure.classify`
+  `api.revocation` (сбрасывается новой сессией устройства — вход, регистрация, восстановление;
+  после повторного входа следующий отзыв сообщается снова); без повторов и обновления токена. Разбор ответов — `APIFailure.classify`
   (векторы `api/failures.json`): истёкший токен, страница прокси с 401, 502–504 без нашего тела
   и отсутствие ответа отзывом не считаются никогда. Причина: `user`, `password_change`,
   `recovery`, `token_reuse`, `account_deleted`; неизвестная или без причины → `user`.
@@ -185,6 +186,38 @@ DSCore
   вложений («Удалить данные с этого устройства»). `uploadPending(noteKey:)` / `upload` (куски по
   1 MiB, докачка), `download(...)`, `localURL`, `delete`.
 - `ShareLink(url:)` / `.url` — ссылки `https://<host>/s/<shareId>#k=<ключ>` (crypto.md §7).
+
+### Совместный доступ по аккаунтам (D-54, crypto.md §10)
+
+- Пара ключей аккаунта X25519: `AccountService.ensureBoxKeyPair()` (само при регистрации и входе;
+  у старых аккаунтов создаётся и публикуется `PUT /me/box-key` один раз, на других устройствах
+  загружается и сверяется с открытым ключом — `CryptoError.boxKeyMismatch`). `KeyRing.boxSecretKey`.
+- Владелец: `invite(_:role:to:)` → id приглашения (ссылка `…/invite/<id>`);
+  `grantPendingKeys(to:key:version:confirmed:)` — выдаёт ключ принявшим (`awaiting_key`), обёрнутый
+  для каждого (`DSCrypto.wrapKeyForMember`); зарегистрировавшиеся после приглашения — только после
+  подтверждения владельца, они возвращаются для вопроса «… зарегистрировалась — открыть доступ?».
+  `ownerKey(notebookId:)` / `ownerKey(note:notebookId:)` — текущий ключ и версия.
+- Смена ключа (после удаления или выхода участника): `resumeNotebookRotation(_:)` при запуске
+  (по `keyRotationPending`) или `rotateNotebookKey(_:)` сразу — шаг 1 одним `rotate` (новая
+  версия для владельца, активных участников, звено цепочки; в режиме «для агентов» — ключ
+  серверу; ждущие ключа получают новую версию через `grantPendingKeys`, после подтверждения),
+  шаг 2 `rekeyNotes(in:)` — новые ключи заметок в индексе (`NoteMeta.keyVersion`, `keyChain`),
+  шаг 3 `finishNotebookRotation(_:)` — когда индекс подтверждён (`rotate/done`). Сделан ли шаг 1,
+  решает `pendingSinceVersion` (версия выше — сделан; у старого сервера — есть ли заметки под
+  прежним ключом блокнота), поэтому доделать можно с любого устройства владельца. Прерванная смена
+  доделывается при следующем запуске. Отдельно расшаренная заметка — `rotateNoteKey(_:in:)`,
+  `syncSharedNoteMeta(_:in:)`.
+- Участник: `acceptInvitation(id:)`, `refreshSharedWithMe()` — забирает выданные ключи
+  (`KeyRing.adoptSharedItem`: ключ блокнота становится ключом блокнота, заметки — ключом этой
+  заметки) и регистрирует документы для синхронизации; `leave(_:)`; `safetyCode(with:publicKey:)`.
+- Версии ключей: `NoteMeta.keyVersion`/`keyChain` (пишутся только с версии 2),
+  `KeyRing.noteKey(_:notebookId:)`, `earlierNoteKeys`, `notebookKeyVersion`; старые данные
+  читаются ключами из цепочки (`KeyRingDocumentKeys(keyRing:noteMeta:)` → `retiredKeys(for:)`).
+  `reconcileNotebookKeys` и `notebookKeyForWriting` понимают версии ключей блокнотов.
+- REST: `APIClient.boxKey/putBoxKey/publicKey`, приглашения, участники, `rotateKey`,
+  `rotationDone`, `sharedNoteKey`, `sharedWithMe`, `sharedByMe` (по нему владелец при запуске
+  выдаёт ключи и доделывает смену ключа), `notebookKeyState`; типы со строгой проверкой
+  (векторы `api/bodies.json`). Авторы: `UpdateItem.author`, `DocVersion.authors` (`UpdateAuthor`).
 
 ## Синхронизация
 

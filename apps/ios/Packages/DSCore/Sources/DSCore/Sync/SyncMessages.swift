@@ -197,6 +197,15 @@ public struct UpdateItem: Hashable, Sendable {
     public var seq: Int64
     public var payload: Data
     public var deviceId: String
+    /// Who sent it, set by the server (D-54; older servers omit it).
+    public var author: UpdateAuthor?
+
+    public init(seq: Int64, payload: Data, deviceId: String, author: UpdateAuthor? = nil) {
+        self.seq = seq
+        self.payload = payload
+        self.deviceId = deviceId
+        self.author = author
+    }
 }
 
 public enum SyncErrorCode: String, Codable, Sendable {
@@ -233,8 +242,8 @@ public enum ServerMessage: Codable, Hashable, Sendable {
     /// `reason` (`device_revoked` only, D-53).
     case error(code: SyncErrorCode, message: String, ref: String?, retryAfterMs: Int? = nil, reason: DeviceRevocationReason? = nil)
 
-    enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref, retryAfterMs, reason }
-    struct Item: Encodable { var seq: Int64; var payload: String; var deviceId: String }
+    enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref, retryAfterMs, reason, author }
+    struct Item: Encodable { var seq: Int64; var payload: String; var deviceId: String; var author: UpdateAuthor? }
     struct Snap: Encodable { var seq: Int64; var payload: String }
 
     public init(from decoder: any Decoder) throws {
@@ -257,12 +266,14 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             var items: [UpdateItem] = []
             while !itemsC.isAtEnd {
                 let i = try itemsC.nestedContainer(keyedBy: CodingKeys.self)
-                items.append(UpdateItem(seq: try V.positive(i, .seq), payload: try V.bytes(i, .payload), deviceId: try V.shortId(i, .deviceId)))
+                items.append(UpdateItem(seq: try V.positive(i, .seq), payload: try V.bytes(i, .payload), deviceId: try V.shortId(i, .deviceId),
+                                        author: try i.decodeIfPresent(UpdateAuthor.self, forKey: .author)))
             }
             self = .updates(docId: try V.uuid(c, .docId), snapshot: snapshot, items: items, upToDate: try c.decode(Bool.self, forKey: .upToDate))
         case "update":
             self = .update(docId: try V.uuid(c, .docId), item: UpdateItem(
-                seq: try V.positive(c, .seq), payload: try V.bytes(c, .payload), deviceId: try V.shortId(c, .deviceId)))
+                seq: try V.positive(c, .seq), payload: try V.bytes(c, .payload), deviceId: try V.shortId(c, .deviceId),
+                author: try c.decodeIfPresent(UpdateAuthor.self, forKey: .author)))
         case "ack":
             self = .ack(docId: try V.uuid(c, .docId), clientMsgId: try V.shortId(c, .clientMsgId), seq: try V.positive(c, .seq))
         case "awareness":
@@ -288,7 +299,7 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             try c.encode("updates", forKey: .type)
             try c.encode(docId, forKey: .docId)
             try c.encode(snapshot.map { Snap(seq: $0.seq, payload: Base64URL.encode($0.payload)) }, forKey: .snapshot)
-            try c.encode(items.map { Item(seq: $0.seq, payload: Base64URL.encode($0.payload), deviceId: $0.deviceId) }, forKey: .items)
+            try c.encode(items.map { Item(seq: $0.seq, payload: Base64URL.encode($0.payload), deviceId: $0.deviceId, author: $0.author) }, forKey: .items)
             try c.encode(upToDate, forKey: .upToDate)
         case .update(let docId, let item):
             try c.encode("update", forKey: .type)
@@ -296,6 +307,7 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             try c.encode(item.seq, forKey: .seq)
             try c.encode(Base64URL.encode(item.payload), forKey: .payload)
             try c.encode(item.deviceId, forKey: .deviceId)
+            try c.encodeIfPresent(item.author, forKey: .author)
         case .ack(let docId, let id, let seq):
             try c.encode("ack", forKey: .type)
             try c.encode(docId, forKey: .docId)

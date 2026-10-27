@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { docUpdates } from '../src/db/schema.js';
 import { COMPACT_JOB } from '../src/jobs/index.js';
-import { MAX_SUBSCRIBE_DOCS } from '../src/sync/connection.js';
+import { MAX_SUBSCRIBE_DOCS } from '@datascratch/shared/contracts';
 import {
   SyncClient,
   api,
@@ -272,29 +272,17 @@ describe('snapshots, compaction and history', () => {
 });
 
 describe('subscribe limits (security audit 2026-10-27)', () => {
-  it('collapses duplicate documents into one subscription and one answer', async () => {
+  it('refuses duplicate documents and more than MAX_SUBSCRIBE_DOCS in one subscribe', async () => {
     const noteId = await createNote(s, u, notebookId);
-    const a = await SyncClient.user(s, u);
-    for (let i = 0; i < 3; i++) await a.push(noteId, rnd(10));
-    const spy = vi.spyOn(s.ctx.documents, 'updatesForMany');
     const b = await SyncClient.user(s, u);
     b.send({ type: 'subscribe', docs: Array.from({ length: 5000 }, () => ({ docId: noteId, since: 0 })) });
-    await b.next((m) => m.type === 'updates' && m.docId === noteId && m.upToDate);
-    await sleep(300);
-    const answers = b.messages.filter((m) => m.type === 'updates' && m.docId === noteId);
-    expect(answers).toHaveLength(1);
-    expect(answers[0].items.map((i: any) => i.seq)).toEqual([1, 2, 3]);
-    // One row per document is read, not one per duplicate.
-    expect(spy.mock.calls.flatMap(([, docs]) => docs)).toEqual([{ docId: noteId, since: 0 }]);
-    spy.mockRestore();
-    for (const x of [a, b]) x.close();
-  });
-
-  it('refuses a subscribe with too many documents', async () => {
-    const b = await SyncClient.user(s, u);
+    expect((await b.next((m) => m.type === 'error')).code).toBe('bad_request');
     b.send({ type: 'subscribe', docs: Array.from({ length: MAX_SUBSCRIBE_DOCS + 1 }, () => ({ docId: newId(), since: 0 })) });
-    const err = await b.next((m) => m.type === 'error');
-    expect(err.code).toBe('bad_request');
+    expect((await b.next((m) => m.type === 'error' && b.messages.filter((x) => x.type === 'error').length === 2)).code).toBe(
+      'bad_request',
+    );
+    // Nothing was subscribed or read.
+    expect(b.messages.filter((m) => m.type === 'updates')).toEqual([]);
     b.close();
   });
 

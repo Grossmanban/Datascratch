@@ -5,7 +5,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { runtime } from "@/data/runtime";
 import { useIndexVersion } from "@/data/indexer";
 import { useTranslation } from "react-i18next";
-import { folderPath, notesInSpace, useWorkspace, visibleNotes, type NoteEntry } from "@/domain/workspace";
+import { findNotebook, folderPath, notesInSpace, useWorkspace, visibleNotes, type NoteEntry } from "@/domain/workspace";
+import { useShared } from "@/data/sharedWithMe";
 import { TopBar, PageTitle } from "@/features/shell/PageHeader";
 import { setDocView, useUi } from "@/hooks/useUi";
 import { tintFg } from "@/lib/tokens";
@@ -220,7 +221,8 @@ export function AllDocsPage() {
 export function NotebookPage() {
   const { t } = useTranslation();
   const { notebookId } = useParams({ from: "/app/notebook/$notebookId" });
-  const nb = useWorkspace((s) => s.account.notebooks.find((n) => n.id === notebookId));
+  const nb = useWorkspace(useShallow((s) => findNotebook(s, notebookId)));
+  const readOnly = useShared((s) => s.items[`notebook:${notebookId}`]?.role === "viewer");
   const notes = useWorkspace((s) => s.notes);
   const folders = useWorkspace((s) => s.folders);
   const list = useMemo(() => visibleNotes(Object.values(notes).filter((n) => n.notebookId === notebookId && !n.folderId)), [notes, notebookId]);
@@ -235,7 +237,7 @@ export function NotebookPage() {
       icon={iconGlyph(nb.icon) || undefined}
       notes={list}
       empty={{ icon: <FolderIcon className="size-7" />, title: t("docs.emptyFolder") }}
-      newIn={{ notebookId, folderId: null }}
+      newIn={readOnly ? null : { notebookId, folderId: null }}
       extra={
         <>
           <UnreadableNote notebookId={notebookId} />
@@ -250,7 +252,8 @@ export function FolderPage() {
   const { t } = useTranslation();
   const { folderId } = useParams({ from: "/app/folder/$folderId" });
   const folder = useWorkspace((s) => s.folders[folderId]);
-  const nb = useWorkspace((s) => s.account.notebooks.find((n) => n.id === folder?.notebookId));
+  const nb = useWorkspace(useShallow((s) => findNotebook(s, folder?.notebookId)));
+  const readOnly = useShared((s) => s.items[`notebook:${folder?.notebookId}`]?.role === "viewer");
   const path = useWorkspace(useShallow((s) => folderPath(s, folderId)));
   const notes = useWorkspace((s) => s.notes);
   const folders = useWorkspace((s) => s.folders);
@@ -281,7 +284,7 @@ export function FolderPage() {
       }
       notes={list}
       empty={{ icon: <FolderIcon className="size-7" />, title: t("docs.emptyFolder") }}
-      newIn={{ notebookId: folder.notebookId, folderId }}
+      newIn={readOnly ? null : { notebookId: folder.notebookId, folderId }}
       extra={
         <>
           <UnreadableNote notebookId={nb.id} />

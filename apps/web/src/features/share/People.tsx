@@ -27,8 +27,28 @@ export function PeopleSection({ target }: { target: ShareTarget }) {
   const [role, setRole] = useState<MemberRole>("editor");
   const [copied, setCopied] = useState<string | null>(null);
   // Who has access changes on other devices (an invitation accepted): always fresh when opened.
-  const members = useQuery({ queryKey: ["members", keyOf(target)], queryFn: () => membersApi.list(target), staleTime: 0, refetchOnWindowFocus: true });
-  const invitations = useQuery({ queryKey: ["invitations", keyOf(target)], queryFn: () => membersApi.outgoing(target), staleTime: 0, refetchOnWindowFocus: true });
+  // While invitations are open the dialog keeps watching, so an acceptance shows up (and gets its key) soon.
+  const invitations = useQuery({
+    queryKey: ["invitations", keyOf(target)],
+    queryFn: () => membersApi.outgoing(target),
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: (q) => (q.state.data?.length ? 10_000 : false),
+  });
+  const pendingInvites = !!invitations.data?.length;
+  const members = useQuery({
+    queryKey: ["members", keyOf(target)],
+    queryFn: () => membersApi.list(target),
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: pendingInvites ? 10_000 : false,
+  });
+  // An invitation left the list (accepted, most likely): its member is in the other one now.
+  const inviteCount = invitations.data?.length;
+  useEffect(() => {
+    void qc.invalidateQueries({ queryKey: ["members", keyOf(target)] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inviteCount]);
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["members", keyOf(target)] });
     void qc.invalidateQueries({ queryKey: ["invitations", keyOf(target)] });

@@ -3,7 +3,7 @@ import * as Y from "yjs";
 import { getMasterKey } from "@/auth/session";
 import { fromBase64Url, toBase64Url, type DocKind } from "@/lib/shared";
 import { accountDb, hasAccountDb, type DocRow } from "./db";
-import { notebookKey, noteKey } from "./keys";
+import { cachedNoteKey, notebookKey, noteKey } from "./keys";
 import { enqueueOp, flushOps } from "./ops";
 
 /** Transaction origins. REMOTE comes from SyncClient; anything else is a local edit. */
@@ -111,6 +111,32 @@ export class DocStore {
     for (const fn of this.rowWaiters.get(docId) ?? []) fn();
     this.rowWaiters.delete(docId);
     return row;
+  }
+
+  /**
+   * Remove documents from this device entirely (D-54: a shared resource this account no longer has):
+   * the loaded doc, its row, its saved updates and any saved tail. SyncClient detaches them first.
+   */
+  async forget(docIds: string[]) {
+    const db = accountDb();
+    for (const docId of docIds) {
+      this.docs.get(docId)?.destroy();
+      this.docs.delete(docId);
+      this.pinned.delete(docId);
+      this.refs.delete(docId);
+      this.rows.delete(docId);
+      this.unsaved.delete(docId);
+      this.sessionEdits.delete(docId);
+      try {
+        localStorage.removeItem(tailKey(db.name, docId));
+      } catch {
+        // storage blocked: nothing was saved there
+      }
+    }
+    await db.transaction("rw", db.docs, db.updates, async () => {
+      await db.docs.bulkDelete(docIds);
+      await db.updates.where("docId").anyOf(docIds).delete();
+    });
   }
 
   /** Kind of a known doc (from the cached rows), without waiting for storage. */
@@ -397,7 +423,8 @@ export class DocStore {
     if (!row) return null;
     if (row.kind === "account") return getMasterKey();
     if (row.kind === "notebook") return notebookKey(docId);
-    if (!row.notebookId) return null;
+    // A note shared on its own (D-54): its key came with «Общие со мной».
+    if (!row.notebookId) return cachedNoteKey(docId) ?? null;
     let notebookId = row.notebookId;
     let meta = (await this.load(notebookId)).getMap<Y.Map<unknown>>("notes").get(docId);
     // Moved to another notebook (api.md «Перенос заметки»): find the index that lists it now. If none

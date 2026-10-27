@@ -307,8 +307,12 @@ route("DELETE", "/v1/notebooks/:id", (_q, res, { auth, params }) => {
 route("POST", "/v1/docs", (_q, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const d = db.docs.get(body.docId);
-  if (d) return d.userId === auth.userId ? json(res, 204) : err(res, 409, "conflict");
-  db.docs.set(body.docId, { docId: body.docId, userId: auth.userId, kind: body.kind, notebookId: body.notebookId ?? null, items: [], snapshot: null, history: [] });
+  // D-54: an editor of a shared notebook creates notes in it; they belong to its owner.
+  const shared = body.kind === "note" && body.notebookId ? db.members.get(`notebook:${body.notebookId}`)?.get(auth.userId) : null;
+  if (shared && shared.role !== "editor") return err(res, 403, "forbidden");
+  const ownerId = shared ? ownerOf({ kind: "notebook", id: body.notebookId }) : auth.userId;
+  if (d) return d.userId === ownerId ? json(res, 204) : err(res, 409, "conflict");
+  db.docs.set(body.docId, { docId: body.docId, userId: ownerId, kind: body.kind, notebookId: body.notebookId ?? null, items: [], snapshot: null, history: [] });
   json(res, 204);
 });
 route("PATCH", "/v1/docs/:id", (_q, res, { auth, params, body }) => {
@@ -736,9 +740,19 @@ wss.on("connection", (ws) => {
   const c = { ws, welcomed: false, userId: null, shareId: null, permission: null, deviceId: null, deviceSession: null, subs: new Set() };
   clients.add(c);
   const send = (m) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(m));
+  // D-54: a member reaches the documents of what is shared with them (the index and notes of a
+  // notebook, or one note); returns their role, or null.
+  const memberRole = (doc) => {
+    if (!doc || !c.userId) return null;
+    const viaNote = db.members.get(`note:${doc.docId}`)?.get(c.userId);
+    const nbId = doc.kind === "notebook" ? doc.docId : doc.notebookId;
+    const viaNotebook = nbId ? db.members.get(`notebook:${nbId}`)?.get(c.userId) : null;
+    const m = viaNote ?? viaNotebook;
+    return m && m.status === "active" ? m.role : null;
+  };
   const canAccess = (doc) => {
     if (!doc) return false;
-    if (c.userId) return doc.userId === c.userId;
+    if (c.userId) return doc.userId === c.userId || !!memberRole(doc);
     const s = db.shares.get(c.shareId);
     return shareActive(s) && shareDocIds(s).includes(doc.docId);
   };
@@ -811,6 +825,7 @@ wss.on("connection", (ws) => {
         const d = db.docs.get(m.docId);
         if (!canAccess(d)) return send({ type: "error", code: "doc_not_found", message: "unknown doc", ref: m.clientMsgId });
         if (c.shareId && c.permission !== "edit") return send({ type: "error", code: "forbidden", message: "view only", ref: m.clientMsgId });
+        if (d.userId !== c.userId && memberRole(d) === "viewer") return send({ type: "error", code: "forbidden", message: "view only", ref: m.clientMsgId });
         if (refusePushes) return send({ type: "error", code: "internal", message: "refused by the test", ref: m.clientMsgId });
         const seq = (d.items[d.items.length - 1]?.seq ?? d.snapshot?.seq ?? 0) + 1;
         if (m.type === "snapshot") {

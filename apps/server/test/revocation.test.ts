@@ -103,6 +103,12 @@ describe('device revocation signal', () => {
     const ws = await live(u, u.session);
     expect((await api(s, 'DELETE', '/me', { token: u.session.accessToken, body: { loginKey: u.loginKey } })).status).toBe(204);
     await expectKicked(ws, 'account_deleted');
+    // While its access token is still valid, HTTP says the same; the refresh token is gone
+    // with the account (a plain 401).
+    const me = await api(s, 'GET', '/me', { token: u.session.accessToken });
+    expect([me.status, me.body.error.code, me.body.error.reason]).toEqual([401, 'device_revoked', 'account_deleted']);
+    const r = await api(s, 'POST', '/auth/refresh', { body: { refreshToken: u.session.refreshToken } });
+    expect([r.status, r.body.error.code]).toEqual([401, 'unauthorized']);
   });
 });
 

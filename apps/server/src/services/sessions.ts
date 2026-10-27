@@ -182,6 +182,6 @@ export async function revokeOtherDevices(
   return rows.map((r) => r.id);
 }
 
-export function publishDeviceRevocations(ctx: AppContext, deviceIds: string[], reason: RevokeReason | 'account_deleted') {
+export function publishDeviceRevocations(ctx: AppContext, deviceIds: string[], reason: RevokeReason) {
   for (const id of deviceIds) ctx.hub.publish(topics.device(id), { type: 'revoked', reason });
 }

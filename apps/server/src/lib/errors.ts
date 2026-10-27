@@ -36,7 +36,7 @@ export class ApiError extends Error {
 }
 
 /** Why a device stopped working; the client wipes its local data (api.md, «Аутентификация»). */
-export type RevokeReason = 'user' | 'password_change' | 'recovery' | 'token_reuse';
+export type RevokeReason = 'user' | 'password_change' | 'recovery' | 'token_reuse' | 'account_deleted';
 
 export const deviceRevoked = (reason: RevokeReason) =>
   new ApiError('device_revoked', 'this device was signed out; local data must be removed', reason);

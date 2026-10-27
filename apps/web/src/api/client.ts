@@ -1,3 +1,4 @@
+import { classifyApiFailure, type DeviceRevokedReason } from "@datascratch/shared";
 import { apiBase } from "@/config";
 import type { ApiErrorCode, Session } from "@/lib/shared";
 
@@ -21,10 +22,33 @@ export class NetworkError extends Error {
   }
 }
 
+/**
+ * D-53: the server said this device was disconnected from the account (401 `device_revoked`).
+ * Not an expired token: the app wipes the device's data (TokenSource.deviceRevoked).
+ */
+export class DeviceRevokedError extends Error {
+  constructor(readonly reason: DeviceRevokedReason) {
+    super(`device revoked (${reason})`);
+    this.name = "DeviceRevokedError";
+  }
+}
+
 export type TokenSource = {
   get(): Session | null;
   refresh(): Promise<Session | null>;
+  /** The server answered `device_revoked` (D-53): wipe local data. */
+  deviceRevoked?(reason: DeviceRevokedReason): void;
 };
+
+/** A 401 that is `device_revoked` (classifyApiFailure, D-53): tell the app and throw. */
+async function checkRevoked(res: Response) {
+  if (res.status !== 401) return;
+  const body = await res.clone().text().catch(() => "");
+  const failure = classifyApiFailure(res.status, body);
+  if (failure.kind !== "device_revoked") return;
+  tokens?.deviceRevoked?.(failure.reason);
+  throw new DeviceRevokedError(failure.reason);
+}
 
 let tokens: TokenSource | null = null;
 export function setTokenSource(source: TokenSource | null) {
@@ -147,9 +171,12 @@ export async function requestResponse(method: string, path: string, opts: Reques
     session = (await tokens?.refresh()) ?? session;
   }
   let res = await doFetch(method, path, opts, session?.accessToken);
+  // A disconnected device is not refreshed (the refresh would be refused the same way).
+  await checkRevoked(res);
   if (res.status === 401 && auth && tokens) {
     const refreshed = await tokens.refresh();
     if (refreshed) res = await doFetch(method, path, opts, refreshed.accessToken);
+    await checkRevoked(res);
   }
   return res;
 }

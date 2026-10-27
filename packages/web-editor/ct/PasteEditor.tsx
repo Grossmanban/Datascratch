@@ -1,10 +1,11 @@
 import { useMemo } from "react";
 import * as Y from "yjs";
 import { DatascratchEditor, type EditorApi, type UploadedAttachment } from "../src";
+import { pendingPastedImage } from "../src/uploads";
 
 declare global {
   interface Window {
-    __paste?: { api: EditorApi; doc: Y.Doc; uploads: string[]; fetched: string[]; ready: boolean };
+    __paste?: { api: EditorApi; doc: Y.Doc; uploads: string[]; fetched: string[]; pendingImage: typeof pendingPastedImage; ready: boolean };
   }
 }
 
@@ -25,6 +26,7 @@ export function PasteEditor() {
       fetchRemoteImage: async (url: string): Promise<File> => {
         fetched.push(url);
         if (url.includes("blocked")) throw new Error("CORS");
+        if (url.includes("slow")) await new Promise((r) => setTimeout(r, 1500));
         return new File([new Uint8Array([137, 80, 78, 71])], url.split("/").pop() || "image.png", { type: "image/png" });
       },
     }),
@@ -42,7 +44,7 @@ export function PasteEditor() {
           setTimeout(() => {
             api.editor.commands.setContent("<h1 data-type=title>Вставка</h1><p></p>");
             api.undoManager.clear();
-            window.__paste = { api, doc, uploads, fetched, ready: true };
+            window.__paste = { api, doc, uploads, fetched, pendingImage: pendingPastedImage, ready: true };
           }, 0)
         }
       />

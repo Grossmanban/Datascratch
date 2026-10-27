@@ -124,6 +124,18 @@ test("web page: two images keep their order and place in the text and are stored
   expect(nodes.map((n) => n.type)).toEqual(["paragraph"]);
 });
 
+test("a remote image never goes into an <img>: ring only until the bytes are local (blob:)", async ({ mount, page }) => {
+  await mount(<PasteEditor />);
+  await ready(page);
+  await caret(page, "body");
+  await paste(page, { html: `<p>до</p><img src="https://example.com/slow.png" alt="Медленная"><p>после</p>`, text: "до после" });
+  await expect(page.locator(".ds-upload-ring")).toBeVisible();
+  const srcs = () => page.evaluate(() => Array.from(document.querySelectorAll(".ds-prose img")).map((i) => i.getAttribute("src") ?? ""));
+  expect((await srcs()).filter((s) => /^https?:/.test(s))).toEqual([]);
+  await expect.poll(async () => find(await body(page), "image")[0]?.attrs?.attachmentId, { timeout: 5000 }).toBe("att-1");
+  expect((await srcs()).filter((s) => /^https?:/.test(s))).toEqual([]);
+});
+
 test("an https image that cannot be fetched stays as a link to its URL", async ({ mount, page }) => {
   await mount(<PasteEditor />);
   await ready(page);

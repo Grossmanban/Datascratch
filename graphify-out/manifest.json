@@ -984,9 +984,9 @@
     "semantic_hash": "b94b2bdac92ca48dff93f0062e8f0b7a"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1793094354.3986824,
-    "seen": 1793094406.0619998,
-    "ast_hash": "4ade7700a09a8844a275e695fc733e39",
+    "mtime": 1793095969.4199965,
+    "seen": 1793096042.977464,
+    "ast_hash": "b6e346950a6b498fa8932bd2249b2fa1",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
@@ -1038,10 +1038,10 @@
     "semantic_hash": "171b27f0ab878e7994e2250214074071"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorTextView.swift": {
-    "mtime": 1793088246.371326,
-    "seen": 1793088440.9577358,
-    "ast_hash": "66792ba5fb9a22a68f899b5043aa02ad",
-    "semantic_hash": "66792ba5fb9a22a68f899b5043aa02ad"
+    "mtime": 1793095969.3275664,
+    "seen": 1793096042.9774976,
+    "ast_hash": "ca2778582dc470e664f929c0f3695df2",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorTheme.swift": {
     "mtime": 1793043803.2727058,
@@ -1050,9 +1050,9 @@
     "semantic_hash": "ff372fbbcd56eb444ba92f26be7bdadc"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1793094321.6336937,
-    "seen": 1793094406.0620358,
-    "ast_hash": "c3b68bfeb7b3a279d42fce3cb81182df",
+    "mtime": 1793095992.3425448,
+    "seen": 1793096042.9775064,
+    "ast_hash": "1268dd08dd5f6fd195502adfecfe3793",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormatMenu.swift": {
@@ -4710,10 +4710,10 @@
     "semantic_hash": "7de253f465da0a90057780f1b151d4db"
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1793090337.7337508,
-    "seen": 1793090464.0327044,
-    "ast_hash": "374fd8397c9d5ea4673ade5c292a7e5c",
-    "semantic_hash": "374fd8397c9d5ea4673ade5c292a7e5c"
+    "mtime": 1793095992.374011,
+    "seen": 1793096042.9799073,
+    "ast_hash": "0fb6711f951d3a1105f42832dbf10713",
+    "semantic_hash": ""
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1793084705.4194863,

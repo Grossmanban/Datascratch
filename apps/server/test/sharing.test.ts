@@ -446,3 +446,47 @@ describe('authors (server-stamped)', () => {
     fresh.close();
   }, 20_000);
 });
+
+describe('owner overview and rotation scope', () => {
+  it('shared-by-me lists what the owner shares; rotate names exactly the active members', async () => {
+    const owner = await user();
+    const active = await user();
+    const waiting = await user();
+    expect((await call(owner, 'GET', '/shared-by-me')).body).toEqual([]);
+    const { notebookId } = await createNotebook(s, owner);
+    const noteId = await createNote(s, owner, notebookId);
+    const lonely = await createNotebook(s, owner); // nothing shared: not listed
+    const nb = { kind: 'notebook' as const, id: notebookId };
+    await share(owner, nb, active, 'editor');
+    const id = await invite(owner, nb, waiting.email, 'viewer');
+    expect((await call(waiting, 'POST', `/invitations/${id}/accept`, {})).status).toBe(200);
+    await invite(owner, { kind: 'note', id: noteId }, `pending-${newId().slice(-6)}@example.com`, 'viewer');
+
+    let list = (await call(owner, 'GET', '/shared-by-me')).body;
+    expect(list).toEqual([
+      { target: { kind: 'note', id: noteId }, keyVersion: 1, keyRotationPending: false, members: 0, awaitingKey: 0 },
+      { target: nb, keyVersion: 1, keyRotationPending: false, members: 2, awaitingKey: 1 },
+    ]);
+    expect(list.some((x: any) => x.target.id === lonely.notebookId)).toBe(false);
+    expect((await call(active, 'GET', '/shared-by-me')).body).toEqual([]);
+
+    const body = (keys: TestUser[]) => ({
+      version: 2,
+      ownerWrappedKey: b64(rnd(73)),
+      previousKeyWrap: b64(rnd(73)),
+      memberKeys: keys.map((u) => ({ userId: u.userId, wrappedKey: b64(rnd(73)) })),
+    });
+    const rotate = (keys: TestUser[]) => call(owner, 'POST', `/members/notebook/${notebookId}/rotate`, body(keys));
+    // The waiting member never gets a key through a rotation (owner's confirmation).
+    expect((await rotate([active, waiting])).status).toBe(409);
+    expect((await rotate([])).status).toBe(409);
+    expect((await rotate([active])).status).toBe(204);
+    list = (await call(owner, 'GET', '/shared-by-me')).body;
+    expect(list[1]).toMatchObject({ keyVersion: 2, keyRotationPending: true, members: 2, awaitingKey: 1 });
+    // The waiting member then gets the new version directly.
+    expect(
+      (await call(owner, 'PUT', `/members/notebook/${notebookId}/${waiting.userId}/key`, { version: 2, wrappedKey: b64(rnd(73)) })).status,
+    ).toBe(204);
+    expect((await call(owner, 'GET', '/shared-by-me')).body[1]).toMatchObject({ awaitingKey: 0 });
+  });
+});

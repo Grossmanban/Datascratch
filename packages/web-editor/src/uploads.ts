@@ -213,6 +213,11 @@ export function isPendingPastedImage(blockId: string): boolean {
   return pendingPasted.has(blockId);
 }
 
+/** Source of a pasted image until its upload starts (right after the paste transaction). */
+export function pendingPastedImage(blockId: string): { src: string; alt: string } | null {
+  return pendingPasted.get(blockId) ?? null;
+}
+
 /** Registers the images of an HTML paste (normalizePastedHtml) before ProseMirror parses it. */
 export function preparePastedImages(images: Map<string, { src: string; alt: string }>): void {
   pendingPasted.clear();
@@ -232,8 +237,9 @@ export function startPastedImages(editor: Editor, host: HostRef): void {
     const source = pendingPasted.get(id)!;
     pendingPasted.delete(id);
     if (!present.has(id)) continue;
-    // http(s) images show the remote picture as their preview while it is fetched.
-    uploads.set(id, { kind: "image", file: null, source, previewUrl: source.src.startsWith("data:") ? null : source.src, progress: null, status: "uploading" });
+    // No preview until the bytes are local (blob:): a remote URL never goes into an <img> (the
+    // app's CSP blocks it, and it would tell the third-party site the user's IP). Ring only.
+    uploads.set(id, { kind: "image", file: null, source, previewUrl: null, progress: null, status: "uploading" });
     jobs.set(id, { editor, host });
     void run(id);
   }

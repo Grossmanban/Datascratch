@@ -1,0 +1,2480 @@
+{
+  "version": 1,
+  "description": "Вставка с форматированием (spec/04 «Вставка с форматированием»): буфер обмена → блоки заметки. Вход — html (text/html буфера) или text (text/plain, распознанный как Markdown). Вставка в пустой абзац заметки. expected.blocks — вставленные блоки в каноническом JSON (packages/test-vectors/README.md): без blockId и taskId, атрибуты со значением null опущены; пустой абзац, который клиент оставляет после вставленного блока, в сравнение не входит. Картинки — блоки image с attachmentId = null на момент вставки; expected.images — их источники {src, alt} в порядке блоков (data: или https; клиент загружает их как вложения). Файл проверяет и обновляет CT-тест packages/web-editor/ct/pasteVectors.spec.tsx (UPDATE_VECTORS=1), iOS — DSEditorModelTests.",
+  "cases": [
+    {
+      "name": "web-page",
+      "source": "web",
+      "description": "Выделение на веб-странице: заголовок, метки, вложенный список, таблица с выравниванием, картинки (data: и https), линия, код, цитата; стили и скрипты выбрасываются",
+      "html": "<html><head><style>p { color: red }</style></head><body>\n<h1>Отчёт</h1>\n<p>Текст с <b>жирным</b>, <em>курсивом</em>, <u>подчёркнутым</u>, <s>старым</s>, <code>кодом</code>\nи <a href=\"https://example.com/x?a=1&amp;b=2\">ссылкой</a>&nbsp;— <span style=\"font-weight:700\">важно</span>.</p>\n<ul>\n  <li>Первый</li>\n  <li>Второй\n    <ol start=\"3\"><li>вложенный</li></ol>\n  </li>\n</ul>\n<table>\n  <thead><tr><th>Имя</th><th style=\"text-align:right\">Сумма</th></tr></thead>\n  <tbody><tr><td>Аня</td><td align=\"right\">10</td></tr></tbody>\n</table>\n<p><img src=\"data:image/png;base64,iVBORw==\" alt=\"Логотип\"> подпись</p>\n<img src=\"https://example.com/photo.jpg\">\n<hr>\n<pre><code class=\"language-swift\">let x = 1\nprint(x)\n</code></pre>\n<blockquote><p>Цитата</p></blockquote>\n<script>alert(1)</script>\n</body></html>",
+      "expected": {
+        "blocks": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Отчёт"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Текст с "
+              },
+              {
+                "type": "text",
+                "text": "жирным",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "курсивом",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "подчёркнутым",
+                "marks": [
+                  {
+                    "type": "underline"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "старым",
+                "marks": [
+                  {
+                    "type": "strike"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "кодом",
+                "marks": [
+                  {
+                    "type": "code"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " и "
+              },
+              {
+                "type": "text",
+                "text": "ссылкой",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://example.com/x?a=1&b=2"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " — "
+              },
+              {
+                "type": "text",
+                "text": "важно",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": "."
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Первый"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Второй"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "orderedList",
+                    "attrs": {
+                      "start": 3
+                    },
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "вложенный"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "content": [
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Имя"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "align": "right",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Сумма"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Аня"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "right",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "10"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "image",
+            "attrs": {
+              "alt": "Логотип"
+            }
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "подпись"
+              }
+            ]
+          },
+          {
+            "type": "image"
+          },
+          {
+            "type": "horizontalRule",
+            "attrs": {
+              "style": "line"
+            }
+          },
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": "swift"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "let x = 1\nprint(x)"
+              }
+            ]
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Цитата"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "images": [
+          {
+            "src": "data:image/png;base64,iVBORw==",
+            "alt": "Логотип"
+          },
+          {
+            "src": "https://example.com/photo.jpg",
+            "alt": ""
+          }
+        ]
+      }
+    },
+    {
+      "name": "google-docs-marks",
+      "source": "google-docs",
+      "description": "Обёртка Google Docs <b style=font-weight:normal> не делает всё жирным; жирный и курсив — из стилей span",
+      "html": "<meta charset=\"utf-8\"><b style=\"font-weight:normal;\" id=\"docs-internal-guid-1\"><p dir=\"ltr\"><span style=\"font-weight:400\">Обычный </span><span style=\"font-weight:700\">жирный</span></p><p dir=\"ltr\"><span style=\"font-style:italic\">курсив</span></p></b>",
+      "expected": {
+        "blocks": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Обычный "
+              },
+              {
+                "type": "text",
+                "text": "жирный",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "курсив",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "images": []
+      }
+    },
+    {
+      "name": "apple-notes",
+      "source": "apple-notes",
+      "description": "Apple Notes: div на строку, пустая строка <div><br></div> не создаёт абзаца, список с чекбоксами — задачи",
+      "html": "<div>Первая строка</div><div><br></div><div>Вторая <b>строка</b></div>\n<ul><li><input type=\"checkbox\" checked>Сделано</li><li><input type=\"checkbox\">Не сделано</li></ul>",
+      "expected": {
+        "blocks": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Первая строка"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Вторая "
+              },
+              {
+                "type": "text",
+                "text": "строка",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "state": "done"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Сделано"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "state": "open"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Не сделано"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "images": []
+      }
+    },
+    {
+      "name": "entities-broken-markup",
+      "source": "web",
+      "description": "Сущности HTML и незакрытые теги",
+      "html": "<p>A &lt;b&gt; &#8212; &#x41; &unknown; <i>курсив</i><p>следующий",
+      "expected": {
+        "blocks": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "A <b> — A &unknown; "
+              },
+              {
+                "type": "text",
+                "text": "курсив",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "следующий"
+              }
+            ]
+          }
+        ],
+        "images": []
+      }
+    },
+    {
+      "name": "word-lists",
+      "source": "word",
+      "description": "Списки Word (абзацы mso-list): уровни → вложенность, маркер Word выбрасывается, «1.» — нумерованный список",
+      "html": "<p class=MsoListParagraphCxSpFirst style='mso-list:l0 level1 lfo1'><![if !supportLists]><span style='mso-list:Ignore'>·<span>&nbsp;&nbsp;</span></span><![endif]>Первый<o:p></o:p></p>\n<p class=MsoListParagraphCxSpMiddle style='mso-list:l0 level2 lfo1'><span style='mso-list:Ignore'>o<span>&nbsp;</span></span>Вложенный</p>\n<p class=MsoListParagraphCxSpLast style='mso-list:l0 level1 lfo1'><span style='mso-list:Ignore'>·</span>Второй</p>\n<p class=MsoNormal>Обычный</p>\n<p style='mso-list:l1 level1 lfo2'><span style='mso-list:Ignore'>1.<span>&nbsp;</span></span>Раз</p>",
+      "expected": {
+        "blocks": [
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Первый"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "bulletList",
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "Вложенный"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Второй"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Обычный"
+              }
+            ]
+          },
+          {
+            "type": "orderedList",
+            "attrs": {
+              "start": 1
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Раз"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "images": []
+      }
+    },
+    {
+      "name": "checkbox-not-every-item",
+      "source": "web",
+      "description": "Список — задачи, только если чекбокс у каждого пункта; иначе обычный список",
+      "html": "<ul><li><input type=checkbox checked>а</li><li>б</li></ul>",
+      "expected": {
+        "blocks": [
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "а"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "б"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "images": []
+      }
+    },
+    {
+      "name": "figure-caption-local-image",
+      "source": "web",
+      "description": "figcaption — подпись картинки; картинки file: и cid: пропускаются",
+      "html": "<figure><img src=\"https://e.com/a.png\"><figcaption> Закат </figcaption></figure><p><img src=\"file:///C:/x.png\" alt=\"локальная\">текст</p>",
+      "expected": {
+        "blocks": [
+          {
+            "type": "image",
+            "attrs": {
+              "caption": "Закат"
+            }
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "текст"
+              }
+            ]
+          }
+        ],
+        "images": [
+          {
+            "src": "https://e.com/a.png",
+            "alt": ""
+          }
+        ]
+      }
+    },
+    {
+      "name": "cell-paragraph-align",
+      "source": "web",
+      "description": "Ячейка берёт выравнивание своих абзацев (align на ячейке, не textAlign абзаца)",
+      "html": "<table><tr><td><p style=\"text-align:center\">x</p></td></tr></table>",
+      "expected": {
+        "blocks": [
+          {
+            "type": "table",
+            "content": [
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "center",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "x"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "images": []
+      }
+    },
+    {
+      "name": "markdown-details",
+      "source": "markdown",
+      "description": "Markdown: уровни заголовков выше 3 → 3, зачёркивание, <u>, ссылка, перенос строки, экранированный #, цитата, линия, вложенные списки, отменённая задача",
+      "text": "# Заголовок\n#### Глубокий\nТекст с ~~зачёркнутым~~, <u>подчёркнутым</u> и [ссылкой](https://example.com).\nВторая строка\\#не-тег\n\n> Цитата\n> в две строки\n\n---\n\n1. раз\n   - вложенный\n3. три\n\n- [-] отменено\n",
+      "expected": {
+        "blocks": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Заголовок"
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 3
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Глубокий"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Текст с "
+              },
+              {
+                "type": "text",
+                "text": "зачёркнутым",
+                "marks": [
+                  {
+                    "type": "strike"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "подчёркнутым",
+                "marks": [
+                  {
+                    "type": "underline"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " и "
+              },
+              {
+                "type": "text",
+                "text": "ссылкой",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://example.com"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": "."
+              },
+              {
+                "type": "hardBreak"
+              },
+              {
+                "type": "text",
+                "text": "Вторая строка#не-тег"
+              }
+            ]
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Цитата"
+                  },
+                  {
+                    "type": "hardBreak"
+                  },
+                  {
+                    "type": "text",
+                    "text": "в две строки"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "horizontalRule",
+            "attrs": {
+              "style": "line"
+            }
+          },
+          {
+            "type": "orderedList",
+            "attrs": {
+              "start": 1
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "раз"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "bulletList",
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "вложенный"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "три"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "state": "cancelled"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "отменено"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "images": []
+      }
+    },
+    {
+      "name": "markdown-remote-image",
+      "source": "markdown",
+      "description": "Картинка Markdown по https — блок картинки (загружается как вложение)",
+      "text": "Текст\n\n![Схема](https://example.com/a.png)",
+      "expected": {
+        "blocks": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Текст"
+              }
+            ]
+          },
+          {
+            "type": "image",
+            "attrs": {
+              "alt": "Схема"
+            }
+          }
+        ],
+        "images": [
+          {
+            "src": "https://example.com/a.png",
+            "alt": "Схема"
+          }
+        ]
+      }
+    },
+    {
+      "name": "agents-create-note",
+      "source": "markdown",
+      "description": "Markdown вектора агентов (create_note) без [[ссылки]] на неизвестную заметку",
+      "text": "Короткое введение с **жирным**, *курсивом*, `кодом`, ==маркером== и ссылкой на [[План запуска]] #работа.\n\n> [!warning] ⚠️\n> Сроки сдвигаются — проверить до пятницы.\n\n| Задача | Ответственный | Статус |\n| :--- | :---: | ---: |\n| Дизайн | Аня | готово |\n| Сервер | Борис | в работе |\n\n- первый пункт\n- второй пункт\n  - вложенный\n\n1. раз\n2. два\n\n- [ ] Отправить отчёт ⏳ 2026-10-27 📅 2026-10-30\n- [x] Созвон с командой\n\n```ts\nconst total = items.reduce((a, b) => a + b, 0);\n```\n\n$$\nE = mc^2\n$$\n\nФормула в строке: $a^2 + b^2 = c^2$.\n\n```mermaid\ngraph TD; A-->B\n```",
+      "expected": {
+        "blocks": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Короткое введение с "
+              },
+              {
+                "type": "text",
+                "text": "жирным",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "курсивом",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "кодом",
+                "marks": [
+                  {
+                    "type": "code"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "маркером",
+                "marks": [
+                  {
+                    "type": "highlight",
+                    "attrs": {
+                      "color": "highlight.yellow"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " и ссылкой на [[План запуска]] "
+              },
+              {
+                "type": "tag",
+                "attrs": {
+                  "name": "работа"
+                }
+              },
+              {
+                "type": "text",
+                "text": "."
+              }
+            ]
+          },
+          {
+            "type": "callout",
+            "attrs": {
+              "tone": "warning",
+              "emoji": "⚠️"
+            },
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Сроки сдвигаются — проверить до пятницы."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "content": [
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "align": "left",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Задача"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "align": "center",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Ответственный"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "align": "right",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Статус"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "left",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Дизайн"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "center",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Аня"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "right",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "готово"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "left",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Сервер"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "center",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Борис"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "right",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "в работе"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "первый пункт"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "второй пункт"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "bulletList",
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "вложенный"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "orderedList",
+            "attrs": {
+              "start": 1
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "раз"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "два"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "state": "open",
+                  "scheduled": "2026-10-27",
+                  "deadline": "2026-10-30"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Отправить отчёт"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "state": "done"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Созвон с командой"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": "ts"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "const total = items.reduce((a, b) => a + b, 0);"
+              }
+            ]
+          },
+          {
+            "type": "mathBlock",
+            "attrs": {
+              "latex": "E = mc^2"
+            }
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Формула в строке: $a^2 + b^2 = c^2$."
+              }
+            ]
+          },
+          {
+            "type": "mermaid",
+            "attrs": {
+              "source": "graph TD; A-->B"
+            }
+          }
+        ],
+        "images": []
+      }
+    },
+    {
+      "name": "google-docs",
+      "source": "google-docs",
+      "description": "Документ Google Docs целиком: заголовок, метки из стилей span, ссылка, вложенный список (Docs пишет вложенный ul соседом li), таблица с выравниванием в абзацах, ширины колонок и <br> между блоками отбрасываются, картинка по https; цвета, шрифты и размеры не переносятся",
+      "html": "<meta charset=\"utf-8\"><b style=\"font-weight:normal;\" id=\"docs-internal-guid-1a2b3c4d-7fff-1234-5678-9abcdef01234\"><h1 dir=\"ltr\" style=\"line-height:1.38;margin-top:20pt;margin-bottom:6pt;\"><span style=\"font-size:20pt;font-family:Arial,sans-serif;color:#000000;background-color:transparent;font-weight:400;font-style:normal;font-variant:normal;text-decoration:none;vertical-align:baseline;white-space:pre;white-space:pre-wrap;\">План проекта</span></h1><p dir=\"ltr\" style=\"line-height:1.38;margin-top:0pt;margin-bottom:0pt;text-align:left;\"><span style=\"font-size:11pt;font-family:Arial,sans-serif;color:#000000;background-color:transparent;font-weight:400;\">Обычный </span><span style=\"font-size:11pt;font-family:Arial,sans-serif;color:#000000;background-color:transparent;font-weight:700;\">жирный</span><span style=\"font-size:11pt;font-family:Arial,sans-serif;color:#ff0000;background-color:#ffff00;font-weight:400;font-style:italic;\"> курсив</span><span style=\"font-size:11pt;font-family:Arial,sans-serif;font-weight:400;\"> и </span><a href=\"https://example.com/doc\" style=\"text-decoration:none;\"><span style=\"font-size:11pt;font-family:Arial,sans-serif;color:#1155cc;font-weight:400;text-decoration:underline;-webkit-text-decoration-skip:none;text-decoration-skip-ink:none;\">ссылка</span></a></p><ul style=\"margin-top:0;margin-bottom:0;padding-inline-start:48px;\"><li dir=\"ltr\" style=\"list-style-type:disc;font-size:11pt;font-family:Arial,sans-serif;color:#000000;\" aria-level=\"1\"><p dir=\"ltr\" style=\"line-height:1.38;margin-top:0pt;margin-bottom:0pt;\" role=\"presentation\"><span style=\"font-size:11pt;font-family:Arial,sans-serif;\">Пункт один</span></p></li><ul style=\"margin-top:0;margin-bottom:0;padding-inline-start:48px;\"><li dir=\"ltr\" style=\"list-style-type:circle;font-size:11pt;font-family:Arial,sans-serif;\" aria-level=\"2\"><p dir=\"ltr\" style=\"line-height:1.38;margin-top:0pt;margin-bottom:0pt;\" role=\"presentation\"><span style=\"font-size:11pt;font-family:Arial,sans-serif;\">Вложенный пункт</span></p></li></ul><li dir=\"ltr\" style=\"list-style-type:disc;font-size:11pt;font-family:Arial,sans-serif;\" aria-level=\"1\"><p dir=\"ltr\" style=\"line-height:1.38;margin-top:0pt;margin-bottom:0pt;\" role=\"presentation\"><span style=\"font-size:11pt;font-family:Arial,sans-serif;\">Пункт два</span></p></li></ul><br><div dir=\"ltr\" style=\"margin-left:0pt;\" align=\"left\"><table style=\"border:none;border-collapse:collapse;\"><colgroup><col width=\"301\"><col width=\"301\"></colgroup><tbody><tr style=\"height:0pt\"><td style=\"border-left:solid #000000 1pt;border-right:solid #000000 1pt;vertical-align:top;padding:5pt 5pt 5pt 5pt;overflow:hidden;overflow-wrap:break-word;\"><p dir=\"ltr\" style=\"line-height:1.2;margin-top:0pt;margin-bottom:0pt;\"><span style=\"font-size:11pt;font-family:Arial,sans-serif;font-weight:700;\">Задача</span></p></td><td style=\"border-left:solid #000000 1pt;vertical-align:top;padding:5pt 5pt 5pt 5pt;\"><p dir=\"ltr\" style=\"line-height:1.2;text-align:center;margin-top:0pt;margin-bottom:0pt;\"><span style=\"font-size:11pt;font-family:Arial,sans-serif;\">Статус</span></p></td></tr><tr style=\"height:0pt\"><td style=\"vertical-align:top;padding:5pt 5pt 5pt 5pt;\"><p dir=\"ltr\" style=\"line-height:1.2;margin-top:0pt;margin-bottom:0pt;\"><span style=\"font-size:11pt;font-family:Arial,sans-serif;\">Дизайн</span></p></td><td style=\"vertical-align:top;padding:5pt 5pt 5pt 5pt;\"><p dir=\"ltr\" style=\"line-height:1.2;text-align:center;margin-top:0pt;margin-bottom:0pt;\"><span style=\"font-size:11pt;font-family:Arial,sans-serif;\">готово</span></p></td></tr></tbody></table></div><p dir=\"ltr\" style=\"line-height:1.38;margin-top:0pt;margin-bottom:0pt;\"><span style=\"font-size:11pt;font-family:Arial,sans-serif;\"><span style=\"border:none;display:inline-block;overflow:hidden;width:120px;height:80px;\"><img src=\"https://lh7-rt.googleusercontent.com/docsz/AD_4nXexample\" width=\"120\" height=\"80\" style=\"margin-left:0px;margin-top:0px;\"></span></span></p></b>",
+      "expected": {
+        "blocks": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "План проекта"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Обычный "
+              },
+              {
+                "type": "text",
+                "text": "жирный",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " курсив",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " и "
+              },
+              {
+                "type": "text",
+                "text": "ссылка",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://example.com/doc"
+                    }
+                  },
+                  {
+                    "type": "underline"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Пункт один"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "bulletList",
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "Вложенный пункт"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Пункт два"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "content": [
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Задача",
+                            "marks": [
+                              {
+                                "type": "bold"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "center",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Статус"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Дизайн"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "center",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "готово"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "image"
+          }
+        ],
+        "images": [
+          {
+            "src": "https://lh7-rt.googleusercontent.com/docsz/AD_4nXexample",
+            "alt": ""
+          }
+        ]
+      }
+    },
+    {
+      "name": "word",
+      "source": "word",
+      "description": "Документ Word: заголовок, метки, список с уровнями и нумерованный список из абзацев mso-list, таблица с выравниванием, картинка file: пропускается",
+      "html": "<html xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" xmlns=\"http://www.w3.org/TR/REC-html40\"><head><meta name=ProgId content=Word.Document><style><!-- p.MsoNormal {margin:0cm; font-size:11.0pt; font-family:\"Calibri\",sans-serif;} --></style></head><body lang=RU style='tab-interval:35.4pt;word-wrap:break-word'><!--StartFragment--><h1><span lang=RU>Отчёт за неделю<o:p></o:p></span></h1><p class=MsoNormal><b><span lang=RU>Жирный</span></b><span lang=RU> и <i>курсив</i> и <u>подчёркнутый</u><o:p></o:p></span></p><p class=MsoListParagraphCxSpFirst style='text-indent:-18.0pt;mso-list:l0 level1 lfo1'><![if !supportLists]><span lang=RU style='font-family:Symbol;mso-fareast-font-family:Symbol'><span style='mso-list:Ignore'>·<span style='font:7.0pt \"Times New Roman\"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></span></span><![endif]><span lang=RU>Первый пункт<o:p></o:p></span></p><p class=MsoListParagraphCxSpMiddle style='margin-left:72.0pt;mso-add-space:auto;text-indent:-18.0pt;mso-list:l0 level2 lfo1'><![if !supportLists]><span lang=RU style='font-family:\"Courier New\"'><span style='mso-list:Ignore'>o<span style='font:7.0pt \"Times New Roman\"'>&nbsp;&nbsp; </span></span></span><![endif]><span lang=RU>Вложенный<o:p></o:p></span></p><p class=MsoListParagraphCxSpLast style='text-indent:-18.0pt;mso-list:l0 level1 lfo1'><![if !supportLists]><span lang=RU style='font-family:Symbol'><span style='mso-list:Ignore'>·<span style='font:7.0pt \"Times New Roman\"'>&nbsp;&nbsp;&nbsp; </span></span></span><![endif]><span lang=RU>Второй пункт<o:p></o:p></span></p><p class=MsoNormal><span lang=RU>Между списками<o:p></o:p></span></p><p class=MsoListParagraphCxSpFirst style='text-indent:-18.0pt;mso-list:l1 level1 lfo2'><![if !supportLists]><span lang=RU><span style='mso-list:Ignore'>1.<span style='font:7.0pt \"Times New Roman\"'>&nbsp;&nbsp;&nbsp; </span></span></span><![endif]><span lang=RU>Первый шаг<o:p></o:p></span></p><p class=MsoListParagraphCxSpLast style='text-indent:-18.0pt;mso-list:l1 level1 lfo2'><![if !supportLists]><span lang=RU><span style='mso-list:Ignore'>2.<span style='font:7.0pt \"Times New Roman\"'>&nbsp;&nbsp;&nbsp; </span></span></span><![endif]><span lang=RU>Второй шаг<o:p></o:p></span></p><table class=MsoTableGrid border=1 cellspacing=0 cellpadding=0 style='border-collapse:collapse;border:none'><tr><td width=301 valign=top style='width:225.6pt;border:solid windowtext 1.0pt;padding:0cm 5.4pt 0cm 5.4pt'><p class=MsoNormal><span lang=RU>Имя<o:p></o:p></span></p></td><td width=301 valign=top style='width:225.6pt;border:solid windowtext 1.0pt;padding:0cm 5.4pt 0cm 5.4pt'><p class=MsoNormal align=right style='text-align:right'><span lang=RU>Сумма<o:p></o:p></span></p></td></tr><tr><td width=301 valign=top style='padding:0cm 5.4pt 0cm 5.4pt'><p class=MsoNormal><span lang=RU>Аня<o:p></o:p></span></p></td><td width=301 valign=top style='padding:0cm 5.4pt 0cm 5.4pt'><p class=MsoNormal align=right style='text-align:right'><span lang=RU>120<o:p></o:p></span></p></td></tr></table><p class=MsoNormal><span lang=RU><img width=100 height=50 src=\"file:///C:/Users/x/AppData/Local/Temp/msohtmlclip1/01/clip_image001.png\" alt=\"Схема\" v:shapes=\"Picture_x0020_1\"></span><span lang=RU>Конец<o:p></o:p></span></p><!--EndFragment--></body></html>",
+      "expected": {
+        "blocks": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Отчёт за неделю"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Жирный",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " и "
+              },
+              {
+                "type": "text",
+                "text": "курсив",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " и "
+              },
+              {
+                "type": "text",
+                "text": "подчёркнутый",
+                "marks": [
+                  {
+                    "type": "underline"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Первый пункт"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "bulletList",
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "Вложенный"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Второй пункт"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Между списками"
+              }
+            ]
+          },
+          {
+            "type": "orderedList",
+            "attrs": {
+              "start": 1
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Первый шаг"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Второй шаг"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "content": [
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Имя"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "right",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Сумма"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Аня"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "right",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "120"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Конец"
+              }
+            ]
+          }
+        ],
+        "images": []
+      }
+    },
+    {
+      "name": "web-page-images",
+      "source": "web",
+      "description": "Статья: картинки data: и https внутри абзацев выносятся блоками (абзац делится), figcaption — подпись, вложенный нумерованный список, код, таблица; h5 → h3",
+      "html": "<h2 style=\"font-family: Georgia; color: rgb(30, 30, 30);\">Как это устроено</h2><p style=\"font-size: 18px;\">Текст до картинки с <strong>жирным</strong>, <em>курсивом</em>, <s>зачёркнутым</s>, <code>кодом</code> и <a href=\"https://example.com/a\" target=\"_blank\">ссылкой</a>.</p><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==\" alt=\"Первая\"></p><p>Текст между картинками.</p><figure class=\"wp-block-image\"><img src=\"https://example.com/cat.png\" alt=\"Кот\" loading=\"lazy\"><figcaption>Подпись</figcaption></figure><blockquote><p>Цитата со страницы.</p></blockquote><ol><li>Шаг один<ol><li>Подшаг</li></ol></li><li>Шаг два</li></ol><pre><code class=\"language-js\">const x = 1;\nconsole.log(x);</code></pre><hr><table><thead><tr><th>Имя</th><th style=\"text-align: right\">Цена</th></tr></thead><tbody><tr><td>Чай</td><td align=\"right\">120</td></tr></tbody></table><h5>Мелкий заголовок</h5>",
+      "expected": {
+        "blocks": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Как это устроено"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Текст до картинки с "
+              },
+              {
+                "type": "text",
+                "text": "жирным",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "курсивом",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "зачёркнутым",
+                "marks": [
+                  {
+                    "type": "strike"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "кодом",
+                "marks": [
+                  {
+                    "type": "code"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " и "
+              },
+              {
+                "type": "text",
+                "text": "ссылкой",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://example.com/a"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": "."
+              }
+            ]
+          },
+          {
+            "type": "image",
+            "attrs": {
+              "alt": "Первая"
+            }
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Текст между картинками."
+              }
+            ]
+          },
+          {
+            "type": "image",
+            "attrs": {
+              "alt": "Кот",
+              "caption": "Подпись"
+            }
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Цитата со страницы."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "orderedList",
+            "attrs": {
+              "start": 1
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Шаг один"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "orderedList",
+                    "attrs": {
+                      "start": 1
+                    },
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "Подшаг"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Шаг два"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "language": "js"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "const x = 1;\nconsole.log(x);"
+              }
+            ]
+          },
+          {
+            "type": "horizontalRule",
+            "attrs": {
+              "style": "line"
+            }
+          },
+          {
+            "type": "table",
+            "content": [
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Имя"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "align": "right",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Цена"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Чай"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "right",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "120"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 3
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Мелкий заголовок"
+              }
+            ]
+          }
+        ],
+        "images": [
+          {
+            "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+            "alt": "Первая"
+          },
+          {
+            "src": "https://example.com/cat.png",
+            "alt": "Кот"
+          }
+        ]
+      }
+    },
+    {
+      "name": "markdown",
+      "source": "markdown",
+      "description": "Markdown: заголовок, метки, ссылка, вложенный список, задачи, цитата, таблица с :--- и ---:",
+      "text": "# Заголовок из Markdown\n\nАбзац с **жирным**, *курсивом*, `кодом` и [ссылкой](https://example.com/md).\n\n- пункт\n  - вложенный\n\n1. первый\n\n- [ ] задача\n- [x] сделано\n\n> цитата\n\n| Колонка | Число |\n| :--- | ---: |\n| А | 1 |\n",
+      "expected": {
+        "blocks": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Заголовок из Markdown"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Абзац с "
+              },
+              {
+                "type": "text",
+                "text": "жирным",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "курсивом",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "кодом",
+                "marks": [
+                  {
+                    "type": "code"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " и "
+              },
+              {
+                "type": "text",
+                "text": "ссылкой",
+                "marks": [
+                  {
+                    "type": "link",
+                    "attrs": {
+                      "href": "https://example.com/md"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": "."
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "пункт"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "bulletList",
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "вложенный"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "orderedList",
+            "attrs": {
+              "start": 1
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "первый"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "state": "open"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "задача"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "state": "done"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "сделано"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "blockquote",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "цитата"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "content": [
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "align": "left",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Колонка"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "align": "right",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Число"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "left",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "А"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "align": "right",
+                      "colspan": 1,
+                      "rowspan": 1
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "1"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "images": []
+      }
+    }
+  ]
+}

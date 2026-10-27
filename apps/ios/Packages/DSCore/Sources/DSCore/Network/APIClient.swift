@@ -66,6 +66,7 @@ public actor APIClient {
     private let sessionStore: any SessionStore
     private var session: AuthSession?
     private var refreshTask: Task<AuthSession, any Error>?
+    private var deviceRevokedHandler: (@Sendable (DeviceRevocationReason) -> Void)?
     private let now: @Sendable () -> Date
 
     /// Called whenever the session changes (sign-in, refresh, sign-out).
@@ -277,6 +278,21 @@ public actor APIClient {
         onSessionChange?(s)
     }
 
+    /// Called once when the server reports this device revoked (D-53), from any request; the
+    /// app wipes local data. Not called for expired or rejected tokens or network failures.
+    public func setDeviceRevokedHandler(_ handler: (@Sendable (DeviceRevocationReason) -> Void)?) {
+        deviceRevokedHandler = handler
+    }
+
+    /// Set once the server said this device is revoked.
+    public private(set) var revocation: DeviceRevocationReason?
+
+    private func deviceRevoked(_ reason: DeviceRevocationReason) {
+        guard revocation == nil else { return }
+        revocation = reason
+        deviceRevokedHandler?(reason)
+    }
+
     /// Refreshes 60 s before expiry; concurrent callers share one refresh.
     private func validSession(forceRefresh: Bool = false) async throws -> AuthSession {
         guard let s = session else { throw APIError.notAuthenticated }
@@ -391,14 +407,22 @@ public actor APIClient {
                 continue
             }
             if (200..<300).contains(response.statusCode) { return data }
-            if response.statusCode == 401, auth, !retried {
+            switch APIFailure.classify(status: response.statusCode, body: data) {
+            case .deviceRevoked(let reason):
+                // D-53: never retried or refreshed (a refresh is refused the same way).
+                deviceRevoked(reason)
+                throw DeviceRevokedError(reason: reason)
+            case .unauthorized where auth && !retried:
                 retried = true
                 continue
+            case .unauthorized:
+                let fields = APIFailure.errorBody(data)
+                throw APIError.server(status: 401, code: fields?.code ?? "unauthorized", message: fields?.message ?? "HTTP 401")
+            case .network:
+                throw APIError.transport("HTTP \(response.statusCode)")
+            case .error(let status, let code, let message):
+                throw APIError.server(status: status, code: code ?? "internal", message: message)
             }
-            if let body = try? JSONDecoder().decode(APIErrorBody.self, from: data) {
-                throw APIError.server(status: response.statusCode, code: body.error.code, message: body.error.message)
-            }
-            throw APIError.server(status: response.statusCode, code: "internal", message: String(decoding: data.prefix(200), as: UTF8.self))
         }
     }
 }

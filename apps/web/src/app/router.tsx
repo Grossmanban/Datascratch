@@ -13,6 +13,7 @@ import { SettingsPage, type SettingsSection } from "@/features/settings/Settings
 import { AppShell } from "@/features/shell/AppShell";
 import { TasksPage, type TaskView } from "@/features/tasks/TasksPage";
 import { features } from "@/lib/features";
+import { useUi } from "@/hooks/useUi";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -102,6 +103,15 @@ const calendarRoute = createRoute({
   }),
 });
 const docRoute = createRoute({ getParentRoute: () => appLayout, path: "/doc/$noteId", component: DocPage });
+// D-54: the link an inviter sends (api.md): it only opens the incoming invitations, it grants nothing.
+const inviteRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: "/invite/$invitationId",
+  beforeLoad: ({ params }) => {
+    useUi.setState({ invitationsOpen: params.invitationId });
+    throw redirect({ to: "/all", replace: true });
+  },
+});
 const settingsRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/settings/$section",
@@ -138,6 +148,7 @@ const routeTree = rootRoute.addChildren([
     tasksRoute,
     calendarRoute,
     docRoute,
+    inviteRoute,
     settingsIndex,
     settingsRoute,
   ]),

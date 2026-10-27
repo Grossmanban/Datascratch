@@ -16,6 +16,8 @@ type UiState = {
   /** The tab overview (spec/12 §12.6): «+N», ⌘⇧\\ or the tab count on a phone. */
   tabOverviewOpen: boolean;
   shareFor: { kind: "note" | "notebook"; id: string } | null;
+  /** Incoming invitations dialog (D-54); a string highlights that invitation (/invite/:id). */
+  invitationsOpen: boolean | string;
   historyFor: string | null;
   /** Note whose cover dialog is open (spec/12 §12.7). */
   coverFor: string | null;
@@ -37,6 +39,7 @@ export const useUi = create<UiState>(() => ({
   paletteOpen: false,
   tabOverviewOpen: false,
   shareFor: null,
+  invitationsOpen: false,
   historyFor: null,
   coverFor: null,
   newNotebookFor: null,

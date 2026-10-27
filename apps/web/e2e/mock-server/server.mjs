@@ -23,6 +23,9 @@ const db = {
   agentTokens: new Map(),
   recovery: new Map(),
   attachments: new Map(), // id -> { id, userId, noteId, size, chunkCount, mime, chunks: Map<index, Buffer> }
+  // D-54 sharing with accounts (api.md «Совместный доступ по аккаунтам»)
+  invitations: new Map(), // id -> { id, target, email, role, status, from: { userId, email }, createdAt, expiresAt, userExisted }
+  members: new Map(), // "<kind>:<id>" -> Map<userId, { userId, email, role, status, joinedAt, accountCreatedAfterInvite, wrappedKey, keyVersion }>
 };
 
 function deviceRevoked(res, reason) {
@@ -364,6 +367,136 @@ route("POST", "/v1/fetch-image", (_q, res, { auth, body }) => {
   res.writeHead(200, { "content-type": "image/png", "content-length": MOCK_PNG.length, ...cors });
   res.end(MOCK_PNG);
 });
+// ---------- D-54: sharing with accounts ----------
+const targetKey = (t) => `${t.kind}:${t.id}`;
+function ownerOf(target) {
+  if (target.kind === "notebook") return db.notebooks.get(target.id)?.userId ?? null;
+  return db.docs.get(target.id)?.userId ?? null;
+}
+const membersOf = (target) => {
+  const k = targetKey(target);
+  if (!db.members.has(k)) db.members.set(k, new Map());
+  return db.members.get(k);
+};
+const liveInvitation = (i) => i.status === "pending" && Date.parse(i.expiresAt) > Date.now();
+function sharedItemFor(target, m) {
+  const owner = userById(ownerOf(target));
+  const docIds =
+    target.kind === "note" ? [target.id] : [target.id, ...[...db.docs.values()].filter((d) => d.notebookId === target.id && d.kind === "note").map((d) => d.docId)];
+  return {
+    target,
+    owner: { userId: owner.userId, email: owner.email, publicKey: owner.boxKey?.publicKey ?? b64u(Buffer.alloc(32)) },
+    role: m.role,
+    keyVersion: m.keyVersion ?? 1,
+    wrappedKey: m.wrappedKey ?? null,
+    keyChain: [],
+    docIds,
+    addedAt: m.joinedAt,
+  };
+}
+const parseTarget = (kind, id) => (kind === "notebook" || kind === "note" ? { kind, id } : null);
+
+route("POST", "/v1/invitations", (_q, res, { auth, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const target = body.target;
+  if (!target || ownerOf(target) !== auth.userId) return err(res, 403, "forbidden");
+  const email = String(body.email ?? "").trim().toLowerCase();
+  if (!email || !["editor", "viewer"].includes(body.role)) return err(res, 400, "bad_request");
+  const pending = [...db.invitations.values()].filter((i) => targetKey(i.target) === targetKey(target) && liveInvitation(i));
+  const same = pending.find((i) => i.email === email);
+  if (!same && membersOf(target).size + pending.length >= 50) return err(res, 409, "conflict", "member limit");
+  if (same) db.invitations.delete(same.id);
+  db.invitations.set(body.invitationId, {
+    id: body.invitationId,
+    target,
+    email,
+    role: body.role,
+    status: "pending",
+    from: { userId: auth.userId, email: auth.user.email },
+    createdAt: nowIso(),
+    expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    userExisted: db.users.has(email),
+  });
+  json(res, 204);
+});
+route("GET", "/v1/invitations", (req, res, { auth }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const [kind, id] = String(new URL(req.url, "http://x").searchParams.get("target") ?? "").split(":");
+  const target = parseTarget(kind, id);
+  if (!target || ownerOf(target) !== auth.userId) return err(res, 403, "forbidden");
+  const list = [...db.invitations.values()].filter((i) => targetKey(i.target) === targetKey(target));
+  json(
+    res,
+    200,
+    list.map((i) => ({ id: i.id, email: i.email, role: i.role, status: i.status === "pending" && !liveInvitation(i) ? "expired" : i.status, createdAt: i.createdAt, expiresAt: i.expiresAt })),
+  );
+});
+route("DELETE", "/v1/invitations/:id", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const i = db.invitations.get(params.id);
+  if (!i || i.from.userId !== auth.userId) return err(res, 404, "not_found");
+  db.invitations.delete(params.id);
+  json(res, 204);
+});
+route("GET", "/v1/invitations/incoming", (_q, res, { auth }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const list = [...db.invitations.values()].filter((i) => i.email === auth.user.email && liveInvitation(i));
+  json(res, 200, list.map((i) => ({ id: i.id, target: i.target, from: i.from, role: i.role, createdAt: i.createdAt, expiresAt: i.expiresAt })));
+});
+route("POST", "/v1/invitations/:id/accept", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const i = db.invitations.get(params.id);
+  if (!i || i.email !== auth.user.email || !liveInvitation(i)) return err(res, 404, "not_found");
+  i.status = "accepted";
+  const m = { userId: auth.userId, email: auth.user.email, role: i.role, status: "awaiting_key", joinedAt: nowIso(), accountCreatedAfterInvite: !i.userExisted, wrappedKey: null, keyVersion: 1 };
+  membersOf(i.target).set(auth.userId, m);
+  json(res, 200, sharedItemFor(i.target, m));
+});
+route("POST", "/v1/invitations/:id/decline", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const i = db.invitations.get(params.id);
+  if (!i || i.email !== auth.user.email) return err(res, 404, "not_found");
+  i.status = "declined";
+  json(res, 204);
+});
+const pubMember = ({ wrappedKey: _k, keyVersion: _v, ...m }) => m;
+route("GET", "/v1/members/:kind/:id", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const target = parseTarget(params.kind, params.id);
+  if (!target) return err(res, 404, "not_found");
+  const members = membersOf(target);
+  if (ownerOf(target) !== auth.userId && !members.has(auth.userId)) return err(res, 404, "not_found");
+  json(res, 200, [...members.values()].map(pubMember));
+});
+route("PATCH", "/v1/members/:kind/:id/:userId", (_q, res, { auth, params, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const target = parseTarget(params.kind, params.id);
+  if (!target || ownerOf(target) !== auth.userId) return err(res, 403, "forbidden");
+  const m = membersOf(target).get(params.userId);
+  if (!m) return err(res, 404, "not_found");
+  m.role = body.role;
+  json(res, 204);
+});
+route("DELETE", "/v1/members/:kind/:id/:userId", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const target = parseTarget(params.kind, params.id);
+  if (!target) return err(res, 404, "not_found");
+  if (ownerOf(target) !== auth.userId && params.userId !== auth.userId) return err(res, 403, "forbidden");
+  if (!membersOf(target).delete(params.userId)) return err(res, 404, "not_found");
+  json(res, 204);
+});
+route("GET", "/v1/shared-with-me", (_q, res, { auth }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const out = [];
+  for (const [k, members] of db.members) {
+    const m = members.get(auth.userId);
+    if (!m) continue;
+    const [kind, id] = k.split(":");
+    out.push(sharedItemFor({ kind, id }, m));
+  }
+  json(res, 200, out);
+});
+
 route("POST", "/v1/attachments", (_q, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
   if (body.size > 200 * 1024 * 1024 * 1.01) return err(res, 413, "payload_too_large");

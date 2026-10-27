@@ -12,6 +12,7 @@ import { formatDay, localDate } from "@/lib/dates";
 import { toBase64Url, uuidv7, type Share, type SharePermission } from "@/lib/shared";
 import { Button, Dialog, IconButton, SegmentedControl, Spinner, toast } from "@/ui";
 import { withIcon } from "@/lib/glyph";
+import { PeopleSection } from "./People";
 
 type Expiry = "never" | "1d" | "7d" | "30d";
 const EXPIRY_DAYS: Record<Expiry, number | null> = { never: null, "1d": 1, "7d": 7, "30d": 30 };
@@ -91,6 +92,8 @@ function ShareDialogInner() {
       description={`${target?.kind === "note" ? t("share.note") : t("share.notebook")} · ${name}`}
     >
       <div className="flex flex-col gap-4" data-testid="share-dialog">
+        {target && <PeopleSection target={target} />}
+        <div className="border-t border-line pt-4 text-[13px] font-semibold text-ink">{t("share.guestLink")}</div>
         <div>
           <div className="mb-1.5 text-[13px] font-medium text-ink-2">{t("share.permission")}</div>
           <SegmentedControl

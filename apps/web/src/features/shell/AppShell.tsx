@@ -9,6 +9,7 @@ import { hasRuntime, startRuntime } from "@/data/runtime";
 import { activeTabOf, bootstrapAccount, migrateSpaceSettings, purgeOldTrash, tidyTabs } from "@/domain/actions";
 import { spaceOfNote, spaceOfNotebook, useWorkspace } from "@/domain/workspace";
 import { CommandPalette } from "@/features/palette/CommandPalette";
+import { InvitationsDialog } from "@/features/share/Invitations";
 import { ShareDialog } from "@/features/share/ShareDialog";
 import { HistoryDialog } from "@/features/doc/HistoryDialog";
 import { NewNotebookDialog } from "@/features/shell/NewNotebookDialog";
@@ -195,6 +196,7 @@ export function AppShell() {
       <CommandPalette />
       {features.tabs && <TabOverview />}
       <ShareDialog />
+      <InvitationsDialog />
       <HistoryDialog />
       <CoverDialog />
       <NewNotebookDialog />

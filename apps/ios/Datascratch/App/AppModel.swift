@@ -161,8 +161,8 @@ final class AppModel {
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-many"),
                let space = library.activeSpace, let first = library.notebooks(in: space.id).first {
                 // A crowded sidebar (§12.6): more notebooks and top-level tags than its first rows.
-                for index in 1...9 { _ = library.createNotebook(in: space.id, name: "nb\(index)", mode: .private) }
-                for index in 1...9 {
+                for index in 1...7 { _ = library.createNotebook(in: space.id, name: "nb\(index)", mode: .private) }
+                for index in 1...7 {
                     _ = library.createNote(in: first.id, folder: nil, title: "tagged\(index)",
                                            body: NoteBody(blocks: [.paragraph("#tag\(index) #group/child\(index)")]))
                 }

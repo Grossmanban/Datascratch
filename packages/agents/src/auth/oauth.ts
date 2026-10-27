@@ -468,6 +468,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
         clientName: client.clientName,
         clientUri: client.clientUri,
         logoUri: client.logoUri,
+        verifiedHost: client.registration === "cimd" ? new URL(client.clientId).host : null,
         redirectHost: (() => {
           const u = new URL(q.redirect_uri!);
           return u.host || u.protocol;

@@ -329,18 +329,30 @@ route("DELETE", "/v1/docs/:id", (_q, res, { auth, params }) => {
   db.docs.delete(params.id);
   json(res, 204);
 });
+/** D-54: the role of an account in a document shared with it (the note's or its notebook's), or null. */
+function memberRoleOf(userId, doc) {
+  if (!doc || !userId) return null;
+  const viaNote = db.members.get(`note:${doc.docId}`)?.get(userId);
+  const nbId = doc.kind === "notebook" ? doc.docId : doc.notebookId;
+  const viaNotebook = nbId ? db.members.get(`notebook:${nbId}`)?.get(userId) : null;
+  const m = viaNote ?? viaNotebook;
+  return m && m.status === "active" ? m.role : null;
+}
+const canRead = (auth, d) => d && (d.userId === auth.userId || !!memberRoleOf(auth.userId, d));
+
 route("GET", "/v1/docs/:id/versions", (_q, res, { auth, params }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const d = db.docs.get(params.id);
-  if (!d || d.userId !== auth.userId) return err(res, 404, "not_found");
-  // Versions are the encrypted snapshots clients uploaded (the server can't merge ciphertext).
-  json(res, 200, d.history.map(({ seq, createdAt, deviceId }) => ({ seq, createdAt, deviceId })).reverse());
+  if (!canRead(auth, d)) return err(res, 404, "not_found");
+  // Versions are the encrypted snapshots clients uploaded (the server can't merge ciphertext);
+  // authors — who pushed since the previous version (D-54), stamped here, never by the client.
+  json(res, 200, d.history.map(({ seq, createdAt, deviceId, authors }) => ({ seq, createdAt, deviceId, authors: authors ?? [] })).reverse());
 });
 route("GET", "/v1/docs/:id/versions/:seq", (_q, res, { auth, params }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const d = db.docs.get(params.id);
   const v = d?.history.find((h) => h.seq === Number(params.seq));
-  if (!d || d.userId !== auth.userId || !v) return err(res, 404, "not_found");
+  if (!canRead(auth, d) || !v) return err(res, 404, "not_found");
   json(res, 200, { payload: v.payload });
 });
 
@@ -742,14 +754,7 @@ wss.on("connection", (ws) => {
   const send = (m) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(m));
   // D-54: a member reaches the documents of what is shared with them (the index and notes of a
   // notebook, or one note); returns their role, or null.
-  const memberRole = (doc) => {
-    if (!doc || !c.userId) return null;
-    const viaNote = db.members.get(`note:${doc.docId}`)?.get(c.userId);
-    const nbId = doc.kind === "notebook" ? doc.docId : doc.notebookId;
-    const viaNotebook = nbId ? db.members.get(`notebook:${nbId}`)?.get(c.userId) : null;
-    const m = viaNote ?? viaNotebook;
-    return m && m.status === "active" ? m.role : null;
-  };
+  const memberRole = (doc) => memberRoleOf(c.userId, doc);
   const canAccess = (doc) => {
     if (!doc) return false;
     if (c.userId) return doc.userId === c.userId || !!memberRole(doc);
@@ -830,12 +835,17 @@ wss.on("connection", (ws) => {
         const seq = (d.items[d.items.length - 1]?.seq ?? d.snapshot?.seq ?? 0) + 1;
         if (m.type === "snapshot") {
           d.snapshot = { seq: m.baseSeq, payload: m.payload };
-          d.history.push({ seq: m.baseSeq, payload: m.payload, deviceId: c.deviceId, createdAt: nowIso() });
+          const since = d.history[d.history.length - 1]?.seq ?? 0;
+          const authors = [];
+          for (const a of d.authorLog ?? [])
+            if (a.seq > since && a.seq <= m.baseSeq && !authors.some((x) => JSON.stringify(x) === JSON.stringify(a.author))) authors.push(a.author);
+          d.history.push({ seq: m.baseSeq, payload: m.payload, deviceId: c.deviceId, createdAt: nowIso(), authors });
           send({ type: "ack", docId: m.docId, clientMsgId: m.clientMsgId, seq: m.baseSeq });
           break;
         }
         const item = { seq, payload: m.payload, deviceId: c.deviceId, createdAt: nowIso() };
         d.items.push(item);
+        (d.authorLog ??= []).push({ seq, author: c.userId ? { kind: "user", userId: c.userId } : { kind: "guest", shareId: c.shareId } });
         send({ type: "ack", docId: m.docId, clientMsgId: m.clientMsgId, seq });
         for (const o of clients)
           if (o !== c && o.welcomed && o.subs.has(m.docId)) o.ws.send(JSON.stringify({ type: "update", docId: m.docId, seq, payload: m.payload, deviceId: c.deviceId }));

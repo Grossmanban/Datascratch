@@ -45,8 +45,17 @@ extension NativeEditorModel {
     func insertImages(_ items: [Data]) async -> Int {
         guard let app else { return 0 }
         var inserted = 0
+        var tooLarge = false
         for data in items {
-            guard let added = try? await app.covers.addImage(data, noteId: noteId) else { continue }
+            let added: CoverImages.AddedImage
+            do {
+                added = try await app.covers.addImage(data, noteId: noteId)
+            } catch CoverImages.CoverError.tooLarge {
+                tooLarge = true
+                continue
+            } catch {
+                continue
+            }
             let preview = app.covers.image(added.id, noteId: noteId)
             if let block = replacing {
                 editor.replaceImage(block, attachmentId: added.id, preview: preview)
@@ -57,7 +66,11 @@ extension NativeEditorModel {
             showUpload(of: added.id)
             inserted += 1
         }
-        if inserted < items.count { mediaError = String(localized: "Some of these files are not images.") }
+        if tooLarge {
+            mediaError = CoverImages.CoverError.tooLarge.errorDescription
+        } else if inserted < items.count {
+            mediaError = String(localized: "Some of these files are not images.")
+        }
         return inserted
     }
 
@@ -94,19 +107,21 @@ extension NativeEditorModel {
     }
 
     /// Images inside a pasted web page or rich text: each gets its id at once (the new block refers
-    /// to it); the bytes come with the paste or are downloaded (http/https), then are stored under
+    /// to it); the bytes come with the paste or are downloaded (https, `RemoteImageFetcher`), then are stored under
     /// that id and go up like any photo. A failed download leaves the image as a link.
     func receivePastedImages(_ images: [PastedImage]) -> [String?] {
         guard let app else { return images.map { _ in nil } }
         let noteId = self.noteId
-        return images.map { image -> String? in
-            if case .url(let url) = image.source, !["http", "https"].contains(url.scheme?.lowercased() ?? "") { return nil }
+        // At most 50 per paste; the rest stay links.
+        return images.enumerated().map { index, image -> String? in
+            guard index < RemoteImageFetcher.maxImagesPerPaste else { return nil }
+            if case .url(let url) = image.source, url.scheme?.lowercased() != "https" { return nil }
             let id = EntityID.make()
             Task { [weak self] in
                 var data: Data?
                 switch image.source {
                 case .data(let bytes): data = bytes
-                case .url(let url): data = try? await URLSession.shared.data(from: url).0
+                case .url(let url): data = try? await RemoteImageFetcher.fetch(url)
                 }
                 guard let data, (try? await app.covers.addImage(data, noteId: noteId, id: id)) != nil else {
                     self?.editor.imageFailed(attachmentId: id)
@@ -162,7 +177,9 @@ extension NativeEditorModel {
 
     /// The file of an attachment, named for sharing or Quick Look (it is stored under its id).
     func share(_ attachmentId: String, name: String, preview: Bool = false) {
-        guard let app else { return }
+        // The id and the name come from the note's content: never let them form a path.
+        guard let app, UUIDv7.isValid(attachmentId) else { return }
+        let name = SafeFileName.sanitize(name, fallback: attachmentId)
         let noteId = self.noteId
         Task { [weak self] in
             guard let file = await app.covers.file(attachmentId, noteId: noteId) else {
@@ -180,8 +197,7 @@ extension NativeEditorModel {
 
     /// Images on the clipboard (copied in Photos, Safari, a screenshot).
     func insertPastedImages() async {
-        let data = UIPasteboard.general.images?.compactMap { $0.jpegData(compressionQuality: 0.95) } ?? []
-        await insertImages(data)
+        await insertImages(CoverImages.pastedImageData().map { [$0] } ?? [])
     }
 }
 

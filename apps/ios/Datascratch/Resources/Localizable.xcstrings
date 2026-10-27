@@ -1581,6 +1581,16 @@
         }
       }
     },
+    "Hidden while the screen is recorded or shared": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрыто, пока экран записывается или транслируется"
+          }
+        }
+      }
+    },
     "Hide Keyboard": {
       "localizations": {
         "ru": {
@@ -3261,6 +3271,16 @@
         }
       }
     },
+    "Show your recovery key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать ключ восстановления"
+          }
+        }
+      }
+    },
     "Sign In": {
       "localizations": {
         "ru": {
@@ -3847,6 +3867,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Файл слишком большой (можно до 100 МБ)."
+          }
+        }
+      }
+    },
+    "This image is too large (over 50 megapixels).": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изображение слишком большое (больше 50 мегапикселей)."
           }
         }
       }

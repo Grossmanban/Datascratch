@@ -244,8 +244,13 @@ struct RecoveryKeySettings: View {
                             .listRowBackground(Color.clear)
                         RecoveryKeyActions(key: key)
                     } else {
-                        Button("Show Key", systemImage: "eye") { withAnimation { isRevealed = true } }
-                            .accessibilityIdentifier("recoveryKey.show")
+                        Button("Show Key", systemImage: "eye") {
+                            Task {
+                                guard await DeviceOwner.authenticate(reason: String(localized: "Show your recovery key")) else { return }
+                                withAnimation { isRevealed = true }
+                            }
+                        }
+                        .accessibilityIdentifier("recoveryKey.show")
                     }
                 } footer: {
                     Text("If you forget your password, this key is the only way back to your notes. Keep it in a password manager or on paper.")
@@ -300,7 +305,7 @@ struct RecoveryKeyActions: View {
     var body: some View {
         HStack {
             Button("Copy", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = key.formatted
+                SecretPasteboard.copy(key.formatted)
                 Haptics.success()
             }
             Spacer()

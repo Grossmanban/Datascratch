@@ -480,7 +480,7 @@ struct RecoveryKeyView: View {
                 RecoveryKeyGrid(key: key)
                 HStack(spacing: Theme.Space.s3) {
                     Button(copied ? LocalizedStringKey("Copied") : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc") {
-                        UIPasteboard.general.string = key.formatted
+                        SecretPasteboard.copy(key.formatted)
                         withAnimation { copied = true }
                         Haptics.success()
                     }
@@ -538,6 +538,7 @@ struct RecoveryKeyGrid: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(key.formatted))
         .accessibilityIdentifier("recoveryKey.grid")
+        .hiddenWhenCaptured()
     }
 }
 

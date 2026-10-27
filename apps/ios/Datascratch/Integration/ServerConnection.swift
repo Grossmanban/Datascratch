@@ -7,8 +7,8 @@ import UIKit
 
 /// Everything that talks to the Datascratch server (contracts/api.md, sync-protocol.md):
 /// REST client with the stored session, DSCore's account flows, and the sync engine
-/// that persists, encrypts and exchanges document updates. Used when `DS_SERVER_URL`
-/// is set; without a server the app works on this device only.
+/// that persists, encrypts and exchanges document updates. Used once the person signed in to a
+/// server of their own (D-49); without one the app works on this device only.
 final class ServerConnection: CoreLibraryRemote {
     nonisolated private static let log = Logger(subsystem: "com.datascratch.app", category: "Server")
     /// Sync timing (connect, subscribe order, catch-up) for Instruments.
@@ -98,9 +98,9 @@ final class ServerConnection: CoreLibraryRemote {
                 }
             }
             let wrappedKeys = core.wrappedKeys
-            let keys = KeyRingDocumentKeys(keyRing: core.keys) { noteId, notebookId in
-                wrappedKeys.wrapped(noteId: noteId, notebookId: notebookId)
-            }
+            let keys = KeyRingDocumentKeys(keyRing: core.keys, noteMeta: { noteId, notebookId in
+                wrappedKeys.meta(noteId: noteId, notebookId: notebookId)
+            })
             let keyRing = core.keys
             let engine = SyncEngine(store: core.store, client: client, keyFor: keys.key(for:), register: { [core] record in
                 do {

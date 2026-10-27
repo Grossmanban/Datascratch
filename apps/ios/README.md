@@ -22,7 +22,7 @@ open Datascratch.xcodeproj
 | Путь | Что |
 | --- | --- |
 | `project.yml` | Описание проекта XcodeGen: цели, Info.plist, entitlements (Associated Domains), схемы |
-| `Config/*.xcconfig` | Версия, `DS_WEB_HOST` (домен ссылок), `DS_SERVER_URL` (сервер), `DS_TEAM_ID` из `Local.xcconfig` |
+| `Config/*.xcconfig` | Версия, `DS_WEB_HOST` (домен ссылок), `DS_TEAM_ID` из `Local.xcconfig` |
 | `Datascratch/App` | Точка входа, окна (WindowGroup для документа — многооконность и Stage Manager), команды меню и шорткаты, `AppModel` (сервисы), `SceneModel` (навигация окна) |
 | `Datascratch/Services` | Модели (зеркало `contracts/document-model.md`), `LibraryStore` (локальное хранилище), индекс задач, аккаунт и ключ восстановления, синхронизация (статус), шеринг и маршруты ссылок, устройства и токены агентов |
 | `Datascratch/Design` | Временные токены «Тихой бумаги» (`contracts/design-tokens.md`) до пакета `DSDesign` |

@@ -8,6 +8,7 @@ import {
   generateKey,
   initCrypto,
   KeyUnavailableError,
+  uuidv7,
   encryptDocUpdate,
   toBase64Url,
   type SkippedUpdate,
@@ -717,5 +718,154 @@ describe("key not available yet", () => {
     await until(() => dr.getText("t").toString() === "old");
     expect(r.client.getSkipped(DOC)).toEqual([]);
     expect(await r.client.retrySkipped(DOC)).toBe(false);
+  });
+});
+
+describe("connection hygiene and storage failures", () => {
+  /** Wraps a socket factory; `onFrame` may react to server frames (e.g. drop the link). */
+  function wrapFactory(
+    inner: (url: string) => WebSocketLike,
+    onOpen: () => void,
+    onFrame?: (raw: string, socket: WebSocketLike) => void,
+  ) {
+    return (url: string): WebSocketLike => {
+      const s = inner(url);
+      onOpen();
+      const proxy: WebSocketLike = {
+        get readyState() {
+          return s.readyState;
+        },
+        send: (d) => s.send(d),
+        close: (c, r) => s.close(c, r),
+        onopen: null,
+        onmessage: null,
+        onclose: null,
+        onerror: null,
+      };
+      s.onopen = (e) => proxy.onopen?.(e);
+      s.onclose = (e) => proxy.onclose?.(e);
+      s.onerror = (e) => proxy.onerror?.(e);
+      s.onmessage = (e) => {
+        proxy.onmessage?.(e);
+        onFrame?.(String(e.data), s);
+      };
+      return proxy;
+    };
+  }
+
+  it("does not reset the backoff on welcome when the server drops right after it", async () => {
+    const hub = new MemorySyncHub();
+    let connects = 0;
+    const factory = wrapFactory(
+      hub.socketFactory(),
+      () => connects++,
+      (raw, s) => {
+        if (raw.includes('"welcome"')) setTimeout(() => s.close(), 0);
+      },
+    );
+    const a = makeClient(hub, "dev-a", {
+      createSocket: factory,
+      backoff: { initialMs: 20, maxMs: 2000 },
+      stableAfterMs: 5000,
+    });
+    a.client.start();
+    await new Promise((r) => setTimeout(r, 700));
+    await a.client.stop();
+    // Exponential: ~20, 40, 80, 160, 320 ms → about 5–6 connects (a reset loop would be ~25+).
+    expect(connects).toBeLessThanOrEqual(8);
+    expect(connects).toBeGreaterThanOrEqual(3);
+  });
+
+  it("waits for retry-after when rate limited", async () => {
+    const hub = new MemorySyncHub();
+    const times: number[] = [];
+    const inner = hub.socketFactory();
+    const factory = (url: string): WebSocketLike => {
+      times.push(Date.now());
+      const s = inner(url);
+      const realSend = s.send.bind(s);
+      // First connection: answer the hello with rate_limited (retry after 300 ms).
+      if (times.length === 1) {
+        s.send = () => {
+          setTimeout(() => {
+            s.onmessage?.({
+              data: JSON.stringify({
+                type: "error",
+                code: "rate_limited",
+                message: "slow down",
+                retryAfterMs: 300,
+              }),
+            });
+          }, 0);
+        };
+      } else {
+        s.send = realSend;
+      }
+      return s;
+    };
+    const a = makeClient(hub, "dev-a", {
+      createSocket: factory,
+      backoff: { initialMs: 10, maxMs: 50 },
+    });
+    await a.client.addDoc(DOC, new Y.Doc());
+    a.client.start();
+    await until(() => a.client.isSynced(DOC), 10_000);
+    expect(times.length).toBeGreaterThanOrEqual(2);
+    expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(290);
+  });
+
+  it("keeps edits when the outbox storage fails and sends them once it recovers", async () => {
+    const hub = new MemorySyncHub();
+    const storage = new MemorySyncStorage();
+    let failures = 2;
+    const realEnqueue = storage.enqueue.bind(storage);
+    storage.enqueue = async (item) => {
+      if (failures > 0) {
+        failures--;
+        throw new DOMException("quota", "QuotaExceededError");
+      }
+      return realEnqueue(item);
+    };
+    const states: boolean[] = [];
+    const a = makeClient(hub, "dev-a", { storage, storageRetryMs: 20 });
+    a.client.on("storage", (ok) => states.push(ok));
+    const da = new Y.Doc();
+    await a.client.addDoc(DOC, da);
+    a.client.start();
+    await until(() => a.client.isSynced(DOC));
+    da.getText("t").insert(0, "precious");
+    await until(() => a.client.storageFull);
+    await until(() => hub.docs.get(DOC)!.items.length === 1);
+    expect(a.client.storageFull).toBe(false);
+    expect(states).toEqual([false, true]);
+    const b = makeClient(hub, "dev-b");
+    const db = new Y.Doc();
+    await b.client.addDoc(DOC, db);
+    b.client.start();
+    await until(() => db.getText("t").toString() === "precious");
+  });
+
+  it("splits subscribe into messages of at most 1000 distinct documents", async () => {
+    const hub = new MemorySyncHub();
+    const subscribes: number[] = [];
+    const inner = hub.socketFactory();
+    const factory = (url: string): WebSocketLike => {
+      const s = inner(url);
+      const send = s.send.bind(s);
+      s.send = (d: string) => {
+        const m = JSON.parse(d) as { type: string; docs?: unknown[] };
+        if (m.type === "subscribe") subscribes.push(m.docs!.length);
+        send(d);
+      };
+      return s;
+    };
+    const ids = Array.from({ length: 2500 }, () => uuidv7());
+    const a = makeClient(hub, "dev-a", { createSocket: factory });
+    let synced = 0;
+    a.client.on("synced", () => synced++);
+    await a.client.addDocs(ids.map((docId) => ({ docId, doc: new Y.Doc() })));
+    a.client.start();
+    await until(() => synced === 2500);
+    expect(subscribes).toEqual([1000, 1000, 500]);
   });
 });

@@ -216,9 +216,10 @@ public actor SyncEngine: SyncClientDelegate {
 
     /// Schedules one retry pass (registration, subscription, sending) after a temporary
     /// failure; the delay doubles up to a minute and resets once a pass has none.
-    private func scheduleRetry() {
+    /// `atLeast`: the server's `retryAfterMs` for `rate_limited`.
+    private func scheduleRetry(atLeast minimum: Duration? = nil) {
         guard retryTask == nil else { return }
-        let delay = retryDelay.map { min($0 * 2, Self.maxRetryDelay) } ?? minRetryDelay
+        let delay = max(retryDelay.map { min($0 * 2, Self.maxRetryDelay) } ?? minRetryDelay, minimum ?? .zero)
         retryDelay = delay
         retryTask = Task { [weak self] in
             try? await Task.sleep(for: delay)
@@ -531,7 +532,9 @@ public actor SyncEngine: SyncClientDelegate {
     @discardableResult
     private func subscribe(_ records: [DocumentRecord]) async throws -> Bool {
         var ready: [DocumentRecord] = []
-        for record in records where !refused.contains(record.docId) {
+        var seen: Set<String> = []
+        // No docId twice in a frame (sync-protocol §2: the server refuses the whole message).
+        for record in records where !refused.contains(record.docId) && seen.insert(record.docId).inserted {
             guard (try? keyFor(record)) != nil else {
                 waitingForKey.insert(record.docId)
                 trace(.keyMissing(docId: record.docId))
@@ -548,7 +551,7 @@ public actor SyncEngine: SyncClientDelegate {
         let urgentCount = ready.prefix { priority($0) < 100 }.count
         var frames: [[DocumentRecord]] = urgentCount > 0 && urgentCount < ready.count ? [Array(ready[..<urgentCount])] : []
         let rest = urgentCount > 0 && urgentCount < ready.count ? Array(ready[urgentCount...]) : ready
-        frames += stride(from: 0, to: rest.count, by: 100).map { Array(rest[$0..<min($0 + 100, rest.count)]) }
+        frames += stride(from: 0, to: rest.count, by: min(100, SyncProtocol.maxSubscribeDocs)).map { Array(rest[$0..<min($0 + 100, rest.count)]) }
         for frame in frames {
             try await client.send(.subscribe(docs: frame.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }))
             trace(.subscribed(docIds: frame.map(\.docId)))
@@ -691,7 +694,7 @@ public actor SyncEngine: SyncClientDelegate {
             guard open[docId] != nil, let record = try? store.document(docId), let key = try? keyFor(record),
                   let plain = try? DSCrypto.open(payload, key: key, ad: CryptoAD.awareness(docId)) else { return }
             awarenessHandler?(docId, plain, deviceId)
-        case .error(let code, _, let ref):
+        case .error(let code, _, let ref, let retryAfterMs):
             guard let ref else { return }
             if inFlight.contains(ref) {
                 inFlight.remove(ref)
@@ -699,7 +702,7 @@ public actor SyncEngine: SyncClientDelegate {
                 // trouble are retried up to LocalStore.maxSendAttempts.
                 let permanent = [.forbidden, .payloadTooLarge, .badRequest, .protocolMismatch].contains(code)
                 if code != .rateLimited { try? store.markFailed(clientMsgId: ref, error: code.rawValue, permanent: permanent) }
-                if !permanent { scheduleRetry() }
+                if !permanent { scheduleRetry(atLeast: retryAfterMs.map { .milliseconds($0) }) }
                 if code == .docNotFound, let item = try? store.pendingOutbox().first(where: { $0.clientMsgId == ref }) {
                     // Registration was lost: register again on the next flush.
                     try? store.setRegistered(item.docId, false)

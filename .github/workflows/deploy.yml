@@ -195,33 +195,6 @@ jobs:
         with:
           node-version: 22
 
-      # D-49: the server's address is never shown in this public log. It is masked before
-      # anything can print it; DS_DOMAIN is a secret (a variable would be printed in the step's env).
-      - name: Address
-        env:
-          DOMAIN: ${{ secrets.DS_DOMAIN }}
-          DOMAIN_IN_VARIABLES: ${{ vars.DS_DOMAIN != '' }}
-        run: |
-          if [ -z "$DOMAIN" ] && [ "$DOMAIN_IN_VARIABLES" = true ]; then
-            echo "::error title=DS_DOMAIN::DS_DOMAIN is a repository variable, which public logs show. Delete the variable and add a secret with the same name (infra/DEPLOY.md, «Подключить свой домен»)."
-            exit 1
-          fi
-          if [ -n "$DOMAIN" ]; then
-            domain="$DOMAIN"
-          else
-            ip="$DEPLOY_HOST"
-            if ! [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              ip="$(getent ahostsv4 "$DEPLOY_HOST" | awk 'NR==1{print $1}')"
-            fi
-            [ -n "$ip" ] || { echo "::error::Cannot resolve the DEPLOY_HOST secret to an IPv4 address; set the DS_DOMAIN secret."; exit 1; }
-            echo "::add-mask::$ip"
-            # <ip-with-dashes>.sslip.io resolves to the IP itself; it gets a real certificate.
-            domain="${ip//./-}.sslip.io"
-          fi
-          echo "::add-mask::$domain"
-          echo "DS_DOMAIN=$domain" >> "$GITHUB_ENV"
-          echo "Address set (hidden in this log, D-49)."
-
       - name: SSH key and host key
         env:
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -229,6 +202,14 @@ jobs:
           # Deploying needs a pinned host key; trust-on-first-use is for the read-only inspect only.
           REQUIRE_KNOWN_HOSTS: "1"
         run: infra/deploy/ssh-setup.sh
+
+      # D-49: the server's address is never shown in this public log; it is masked before
+      # anything can print it (infra/deploy/address.sh). The repository secret DS_DOMAIN sets
+      # or changes it; without it the server keeps the domain it already has.
+      - name: Address
+        env:
+          DS_DOMAIN_SECRET: ${{ secrets.DS_DOMAIN }}
+        run: infra/deploy/address.sh
 
       - name: Bootstrap and deploy
         env:

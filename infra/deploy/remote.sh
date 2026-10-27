@@ -4,6 +4,7 @@
 #   remote.sh inspect      read-only survey of the server (Markdown on stdout)
 #   remote.sh deploy       bootstrap (idempotent) + deploy.sh up $DS_TAG
 #   remote.sh info         mode of the running deployment (key=value lines)
+#   remote.sh domain       the domain the server runs with (empty before the first deploy)
 #   remote.sh smoke-local  smoke test of 127.0.0.1:<proxy port> through an SSH tunnel
 #   remote.sh check        health of Datascratch inside its web container (edge mode)
 #   remote.sh snippet      the config snippet for an existing nginx (behind-proxy mode)
@@ -69,6 +70,10 @@ case "${1:-}" in
     ;;
   info)
     remote "$SUDO /opt/datascratch/deploy.sh info" < /dev/null
+    ;;
+  domain)
+    # Read-only and never failing: nothing there yet means an empty answer.
+    remote "$SUDO sh -c 'grep -E \"^DS_DOMAIN=\" /opt/datascratch/.env 2> /dev/null | tail -1 | cut -d= -f2-'" < /dev/null || true
     ;;
   snippet)
     remote "$SUDO cat /opt/datascratch/proxy/nginx.conf" < /dev/null

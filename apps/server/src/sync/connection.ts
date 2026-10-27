@@ -39,6 +39,11 @@ const HELLO_TIMEOUT_MS = 10_000;
 /** Subscribe fast path: documents per batched query, and max updates per document in it. */
 const FAST_PATH_BATCH = 200;
 const FAST_PATH_MAX_UPDATES = 100;
+/** Fast path by size: a document above this goes the paged way; a batch stays under the total. */
+const FAST_PATH_DOC_BYTES = 1024 * 1024;
+const FAST_PATH_BATCH_BYTES = 8 * 1024 * 1024;
+/** Documents in one `subscribe` (duplicates are dropped first). */
+export const MAX_SUBSCRIBE_DOCS = 10_000;
 const MAX_BUFFERED_BYTES = 64 * 1024 * 1024;
 /** Catch-up pauses while this much is still queued on the socket (backpressure). */
 const CATCHUP_HIGH_WATER = 4 * 1024 * 1024;
@@ -301,10 +306,24 @@ export class SyncConnection {
     sub.buffer = [];
   }
 
-  async #subscribe(list: { docId: string; since: number }[]) {
+  async #subscribe(requested: { docId: string; since: number }[]) {
     const db = this.ctx.database.db;
-    const rows = await loadDocs(db, [...new Set(list.map((d) => d.docId))]);
-    type Item = { docId: string; since: number; sub: Subscription; lastSeq: number; snapshotSeq: number };
+    // One entry per document (the last one wins): duplicates would multiply subscriptions and rows.
+    const unique = new Map(requested.map((d) => [d.docId, d.since]));
+    if (unique.size > MAX_SUBSCRIBE_DOCS) {
+      throw new SyncError('bad_request', `too many documents in one subscribe (max ${MAX_SUBSCRIBE_DOCS})`);
+    }
+    const list = [...unique].map(([docId, since]) => ({ docId, since }));
+    const rows = await loadDocs(db, [...unique.keys()]);
+    type Item = {
+      docId: string;
+      since: number;
+      sub: Subscription;
+      lastSeq: number;
+      snapshotSeq: number;
+      /** Upper bound of the bytes the fast path loads for this document. */
+      bytes: number;
+    };
     const fast: Item[] = [];
     const slow: Item[] = [];
     for (const { docId, since } of list) {
@@ -318,18 +337,54 @@ export class SyncConnection {
       this.#access.set(docId, a.write);
       // A client ahead of the server (e.g. restored from another backup) starts over.
       const from = since > row.lastSeq ? 0 : since;
-      const item = { docId, since: from, sub: this.#newSub(docId, from), lastSeq: row.lastSeq, snapshotSeq: 0 };
+      const item = {
+        docId,
+        since: from,
+        sub: this.#newSub(docId, from),
+        lastSeq: row.lastSeq,
+        snapshotSeq: 0,
+        // Updates after the newest snapshot (or after `from` when that is later) weigh at most this.
+        bytes: row.bytesSinceSnapshot,
+      };
       // Fast path: either every update after `from` is still stored (no newer snapshot) and
-      // there are few, or the newest snapshot plus a short tail after it.
-      if (from >= row.snapshotSeq && row.lastSeq - from <= FAST_PATH_MAX_UPDATES) fast.push(item);
+      // there are few, or the newest snapshot plus a short tail after it. Big ones go paged.
+      if (row.bytesSinceSnapshot > FAST_PATH_DOC_BYTES) slow.push(item);
+      else if (from >= row.snapshotSeq && row.lastSeq - from <= FAST_PATH_MAX_UPDATES) fast.push(item);
       else if (from < row.snapshotSeq && row.lastSeq - row.snapshotSeq <= FAST_PATH_MAX_UPDATES) {
         fast.push({ ...item, snapshotSeq: row.snapshotSeq });
       } else slow.push(item);
     }
 
-    for (let i = 0; i < fast.length; i += FAST_PATH_BATCH) {
+    // Snapshot sizes (metadata only) so that no batch loads more than FAST_PATH_BATCH_BYTES.
+    const withSnapshot = fast.filter((b) => b.snapshotSeq > 0);
+    for (let i = 0; i < withSnapshot.length; i += 1000) {
+      const part = withSnapshot.slice(i, i + 1000);
+      const sizes = await this.ctx.documents.snapshotSizes(
+        db,
+        part.map((b) => b.docId),
+      );
+      for (const b of part) b.bytes += sizes.get(b.docId) ?? 0;
+    }
+    const batches: Item[][] = [];
+    let current: Item[] = [];
+    let currentBytes = 0;
+    for (const b of fast) {
+      if (b.bytes > FAST_PATH_DOC_BYTES) {
+        slow.push(b);
+        continue;
+      }
+      if (current.length >= FAST_PATH_BATCH || currentBytes + b.bytes > FAST_PATH_BATCH_BYTES) {
+        batches.push(current);
+        current = [];
+        currentBytes = 0;
+      }
+      current.push(b);
+      currentBytes += b.bytes;
+    }
+    if (current.length > 0) batches.push(current);
+
+    for (const batch of batches) {
       if (this.#closed) return;
-      const batch = fast.slice(i, i + FAST_PATH_BATCH);
       const withSnap = batch.filter((b) => b.snapshotSeq > 0);
       const snaps = await this.ctx.documents.latestSnapshots(
         db,

@@ -213,6 +213,11 @@ export function isPendingPastedImage(blockId: string): boolean {
   return pendingPasted.has(blockId);
 }
 
+/** Source of a pasted image until its upload starts (right after the paste transaction). */
+export function pendingPastedImage(blockId: string): { src: string; alt: string } | null {
+  return pendingPasted.get(blockId) ?? null;
+}
+
 /** Registers the images of an HTML paste (normalizePastedHtml) before ProseMirror parses it. */
 export function preparePastedImages(images: Map<string, { src: string; alt: string }>): void {
   pendingPasted.clear();

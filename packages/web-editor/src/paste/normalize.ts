@@ -3,6 +3,7 @@
 // quotes, code blocks, tables with cell alignment, rules — and images become upload placeholders.
 // Fonts, colours, sizes and other styling are dropped quietly (the schema has no rule for them).
 // The block mapping is the same as the iOS editor's (DSEditorModel paste).
+import { Fragment, Slice, type Node as PMNode, type Schema } from "@tiptap/pm/model";
 import { uuidv7 } from "@datascratch/shared/ids";
 
 /** A pasted image waiting to become an attachment: `src` is a data: or http(s) URL. */
@@ -92,18 +93,28 @@ function taskLists(root: HTMLElement): void {
     for (const li of items) {
       const box = boxOf(li)!;
       const done = box instanceof HTMLInputElement ? box.hasAttribute("checked") || box.checked : /checkbox-on/.test(box.className);
+      const state = box.getAttribute("data-state") ?? (done ? "done" : "open");
       box.remove();
       li.setAttribute("data-type", "taskItem");
-      li.setAttribute("data-state", done ? "done" : "open");
+      li.setAttribute("data-state", state);
     }
     (list.tagName === "OL" ? rename(list, "ul") : list).setAttribute("data-type", "taskList");
   }
 }
 
-/** Column alignment lives on the cell (`align`), not on the paragraphs inside it. */
-function cellAlign(root: HTMLElement): void {
+/**
+ * Column alignment lives on the cell (`align`), not on the paragraphs inside it. Left is the
+ * default and dropped — except a Markdown `:---` column (`keepLeft`), which the agents' importer
+ * keeps as `left`. Column widths of the source (px from Docs or Word) are dropped.
+ */
+function cellAlign(root: HTMLElement, keepLeft: boolean): void {
+  root.querySelectorAll("colgroup, col").forEach((e) => e.remove());
   for (const cell of Array.from(root.querySelectorAll("td, th"))) {
-    let align = (cell.getAttribute("align") ?? "").toLowerCase() || /text-align:\s*(\w+)/.exec(styleOf(cell))?.[1] || "";
+    cell.removeAttribute("width");
+    cell.removeAttribute("colwidth");
+    cell.removeAttribute("data-colwidth");
+    const own = (cell.getAttribute("align") ?? "").toLowerCase();
+    let align = own || /text-align:\s*(\w+)/.exec(styleOf(cell))?.[1] || "";
     const paras = Array.from(cell.querySelectorAll("p, div"));
     if (!align && paras.length) {
       const aligns = paras.map((p) => (p.getAttribute("align") ?? "").toLowerCase() || /text-align:\s*(\w+)/.exec(styleOf(p))?.[1] || "");
@@ -113,7 +124,7 @@ function cellAlign(root: HTMLElement): void {
       p.removeAttribute("align");
       p.setAttribute("style", styleOf(p).replace(/text-align:\s*\w+;?/g, ""));
     }
-    if (ALIGNS.has(align)) cell.setAttribute("align", align);
+    if (ALIGNS.has(align) || (keepLeft && own === "left")) cell.setAttribute("align", align);
     else cell.removeAttribute("align");
     cell.setAttribute("style", styleOf(cell).replace(/text-align:\s*\w+;?/g, ""));
   }
@@ -139,12 +150,59 @@ function hoist(figure: Element): void {
   }
 }
 
+const BLOCK_TAGS = new Set(["ADDRESS", "ARTICLE", "ASIDE", "BLOCKQUOTE", "DIV", "DL", "FIELDSET", "FIGURE", "FOOTER", "FORM", "H1", "H2", "H3", "H4", "H5", "H6", "HEADER", "HR", "LI", "MAIN", "NAV", "OL", "P", "PRE", "SECTION", "TABLE", "UL"]);
+
+const BLOCK_SELECTOR = [...BLOCK_TAGS].join(",").toLowerCase();
+const isBlock = (n: Node) => n.nodeType === Node.ELEMENT_NODE && BLOCK_TAGS.has((n as Element).tagName);
+const blank = (n: Node) => (n.nodeType === Node.TEXT_NODE && !(n.textContent ?? "").trim()) || n.nodeName === "BR";
+
+/**
+ * Lines that are not in a paragraph (Apple Notes' `<div>` per line, text and `<br>` between
+ * blocks) become paragraphs; an empty line (`<div><br></div>`, a lone `<br>`) is dropped. Left to
+ * ProseMirror, bare inline content at the top of the note would be wrapped in the note's first
+ * text block type — the title.
+ */
+function looseLines(root: HTMLElement): void {
+  for (const div of Array.from(root.querySelectorAll("div:not([data-type])")).reverse()) {
+    if (Array.from(div.childNodes).some(isBlock)) continue;
+    if (Array.from(div.childNodes).every(blank) && !div.querySelector("img, figure")) div.remove();
+    else rename(div, "p");
+  }
+  const flush = (run: Node[]) => {
+    // A wrapper around blocks (some apps put the whole selection in a <span>) is not a line.
+    if (run.some((n) => n.nodeType === Node.ELEMENT_NODE && (n as Element).querySelector(BLOCK_SELECTOR))) return;
+    if (run.every(blank)) return run.forEach((n) => n.nodeName === "BR" && n.parentNode?.removeChild(n));
+    const p = root.ownerDocument.createElement("p");
+    run[0]!.parentNode!.insertBefore(p, run[0]!);
+    p.append(...run);
+  };
+  for (const container of [root, ...Array.from(root.querySelectorAll("div:not([data-type])"))]) {
+    let run: Node[] = [];
+    for (const child of Array.from(container.childNodes)) {
+      if (isBlock(child) || child.nodeType === Node.COMMENT_NODE) {
+        if (run.length) flush(run);
+        run = [];
+      } else run.push(child);
+    }
+    if (run.length) flush(run);
+  }
+}
+
+/** A code block copied with its final line break does not end in an empty line. */
+function trimCode(root: HTMLElement): void {
+  for (const pre of Array.from(root.querySelectorAll("pre"))) {
+    let last: Node | null = pre;
+    while (last?.lastChild) last = last.lastChild;
+    if (last?.nodeType === Node.TEXT_NODE) last.textContent = last.textContent!.replace(/\r?\n$/, "");
+  }
+}
+
 /**
  * Tidies pasted HTML. Images with a data: or http(s) source become image placeholders with a fresh
  * blockId; their sources are returned for the upload (other sources — file:, cid: — cannot be read
  * and are dropped).
  */
-export function normalizePastedHtml(html: string): { html: string; images: Map<string, PastedImage> } {
+export function normalizePastedHtml(html: string, opts: { markdown?: boolean } = {}): { html: string; images: Map<string, PastedImage> } {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const root = doc.body;
   const images = new Map<string, PastedImage>();
@@ -175,7 +233,8 @@ export function normalizePastedHtml(html: string): { html: string; images: Map<s
 
   nestLists(root);
   taskLists(root);
-  cellAlign(root);
+  cellAlign(root, !!opts.markdown);
+  trimCode(root);
 
   for (const img of Array.from(root.querySelectorAll("img"))) {
     const src = img.getAttribute("src") ?? "";
@@ -201,6 +260,7 @@ export function normalizePastedHtml(html: string): { html: string; images: Map<s
     (link && link.textContent?.trim() === "" ? link : img).replaceWith(figure);
     hoist(figure);
   }
+  looseLines(root);
   return { html: root.innerHTML, images };
 }
 
@@ -208,4 +268,26 @@ export function normalizePastedHtml(html: string): { html: string; images: Map<s
 export function looksLikeMarkdown(text: string): boolean {
   if (/^(#{1,6}\s|\s*[-*+]\s+\S|\s*\d+[.)]\s+\S|>\s|```|\|.+\|\s*$)/m.test(text)) return true;
   return /(\*\*[^*\n]+\*\*|__[^_\n]+__|\[[^\]\n]+\]\([^)\s]+\)|`[^`\n]+`|~~[^~\n]+~~|!\[[^\]\n]*\]\([^)\s]+\))/.test(text);
+}
+
+/**
+ * Safety net: a pasted slice never carries a title. Our own copied title arrives as a heading
+ * (normalizePastedHtml); anything else that ProseMirror wrapped in the note's first text block type
+ * is a plain paragraph.
+ */
+export function untitleSlice(slice: Slice, schema: Schema): Slice {
+  const map = (fragment: Fragment): Fragment => {
+    const nodes: PMNode[] = [];
+    fragment.forEach((node) => {
+      if (node.type.name === "title") nodes.push(schema.nodes.paragraph!.create(null, node.content, node.marks));
+      else nodes.push(node.isLeaf ? node : node.copy(map(node.content)));
+    });
+    return Fragment.from(nodes);
+  };
+  let found = false;
+  slice.content.descendants((n) => {
+    if (n.type.name === "title") found = true;
+    return !found;
+  });
+  return found ? new Slice(map(slice.content), slice.openStart, slice.openEnd) : slice;
 }

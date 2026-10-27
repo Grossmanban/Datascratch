@@ -15,7 +15,7 @@ import { guardSchema } from "./schema/unknown";
 import { TASK_MENU_EVENT, type TaskMenuRequest } from "./schema/tasks";
 import { fillEmptyTitleIfNeeded, focusTitle } from "./schema/title";
 import { insertUpload, pickAndInsert, preparePastedImages, startPastedImages } from "./uploads";
-import { normalizePastedHtml, looksLikeMarkdown } from "./paste/normalize";
+import { normalizePastedHtml, looksLikeMarkdown, untitleSlice } from "./paste/normalize";
 import { markdownToHtml } from "./paste/markdown";
 import { DOMParser as PMDOMParser, type Slice } from "@tiptap/pm/model";
 import type { NoteStyle, StrokeAuthor } from "@datascratch/shared/contracts";
@@ -202,6 +202,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
           if (data.files?.length && onlyImages) return uploadFiles(data.files);
           return false;
         },
+        transformPasted: (slice, view) => untitleSlice(slice, view.state.schema),
         transformPastedHTML: (html) => {
           const out = normalizePastedHtml(html);
           preparePastedImages(out.images);
@@ -209,7 +210,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
         },
         clipboardTextParser: (text, $context, plain, view) => {
           if (plain || !looksLikeMarkdown(text)) return null as unknown as Slice;
-          const out = normalizePastedHtml(markdownToHtml(text));
+          const out = normalizePastedHtml(markdownToHtml(text), { markdown: true });
           preparePastedImages(out.images);
           const box = document.createElement("div");
           box.innerHTML = out.html;

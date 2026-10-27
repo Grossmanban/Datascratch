@@ -39,6 +39,11 @@ function ShareDialogInner() {
   const [key, setKey] = useState<Uint8Array | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
+  // A key change (D-54 rotation) re-creates the guest links with the new key: re-read both.
+  const keysChangedAt = useUi((s) => s.keysChangedAt);
+  useEffect(() => {
+    if (keysChangedAt) void qc.invalidateQueries({ queryKey: ["shares"] });
+  }, [keysChangedAt, qc]);
   useEffect(() => {
     if (!target) return;
     let alive = true;
@@ -46,7 +51,7 @@ function ShareDialogInner() {
     return () => {
       alive = false;
     };
-  }, [target]);
+  }, [target, keysChangedAt]);
 
   const shares = useQuery({ queryKey: ["shares"], queryFn: sharesApi.list, enabled: !!target });
   const mine = (shares.data ?? []).filter((s) => target && s.target.kind === target.kind && s.target.id === target.id);

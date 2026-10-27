@@ -209,11 +209,18 @@ export class DocStore {
       return;
     }
     if (!tail) return;
+    let update: Uint8Array;
     try {
-      Y.applyUpdate(doc, fromBase64Url(tail), ORIGIN_TAIL);
+      update = fromBase64Url(tail);
+      Y.applyUpdate(doc, update, ORIGIN_TAIL);
     } catch {
-      // a damaged tail is dropped
+      return; // a damaged tail is dropped
     }
+    // Applying emits only what this doc lacked; what had reached IndexedDB but never the sync
+    // outbox would stay unsent. So the whole tail goes to the update listeners again, and SyncClient
+    // queues it (updates are idempotent). The listeners here — docStore's and SyncClient's — read
+    // only the update and its origin.
+    doc.emit("update", [update, ORIGIN_TAIL, doc, null as unknown as Y.Transaction]);
   }
 
   /** Docs of this account with a tail saved as a page closed (applied when they are loaded). */
@@ -294,6 +301,7 @@ export class DocStore {
     doc.on("update", (update: Uint8Array, origin: unknown) => {
       if (origin === ORIGIN_LOAD) return;
       this.persistUpdate(docId, update);
+      if (origin !== ORIGIN_REMOTE) this.noteSessionEdit(docId, update);
       this.emit(docId, origin);
     });
 
@@ -310,6 +318,21 @@ export class DocStore {
    */
   private unsaved = new Map<string, Uint8Array[]>();
 
+  /**
+   * Local edits of this page session, per doc (merged as they grow). SyncClient batches edits before
+   * putting them in its outbox, so an edit can reach IndexedDB and still never be sent if the page
+   * closes in between — and on the next start nothing compares the device with the server. So the
+   * tail saved as the page closes holds all of them, and applying it hands it to SyncClient again
+   * (applyTail); updates are idempotent, sending some twice is harmless.
+   */
+  private sessionEdits = new Map<string, Uint8Array[]>();
+
+  private noteSessionEdit(docId: string, update: Uint8Array) {
+    const parts = this.sessionEdits.get(docId) ?? [];
+    parts.push(update);
+    this.sessionEdits.set(docId, parts.length > 64 ? [Y.mergeUpdates(parts)] : parts);
+  }
+
   /** Merged updates being written now (an IndexedDB write the browser aborts if the page goes away). */
   private writing = new Map<string, Uint8Array[]>();
 
@@ -323,8 +346,8 @@ export class DocStore {
   flushUnsaved() {
     if (!hasAccountDb()) return;
     const db = accountDb();
-    for (const docId of new Set([...this.unsaved.keys(), ...this.writing.keys()])) {
-      const parts = [...(this.writing.get(docId) ?? []), ...(this.unsaved.get(docId) ?? [])];
+    for (const docId of new Set([...this.unsaved.keys(), ...this.writing.keys(), ...this.sessionEdits.keys()])) {
+      const parts = [...(this.writing.get(docId) ?? []), ...(this.unsaved.get(docId) ?? []), ...(this.sessionEdits.get(docId) ?? [])];
       if (!parts.length) continue;
       try {
         localStorage.setItem(tailKey(db.name, docId), toBase64Url(Y.mergeUpdates(parts)));
@@ -387,7 +410,11 @@ export class DocStore {
         if (row.notebookId !== notebookId) await this.patchRow(docId, { notebookId });
       }
     }
-    return noteKey(docId, notebookId, meta?.get("wrappedKey") as string | undefined);
+    return noteKey(docId, notebookId, {
+      wrappedKey: meta?.get("wrappedKey") as string | undefined,
+      keyVersion: meta?.get("keyVersion") as number | undefined,
+      keyChain: meta?.get("keyChain") as string[] | undefined,
+    });
   }
 
   private findNoteMeta(docId: string): { notebookId: string; meta: Y.Map<unknown> } | null {

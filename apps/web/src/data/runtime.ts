@@ -1,7 +1,7 @@
 import { SyncClient } from "@datascratch/shared";
 import type * as Y from "yjs";
 import { deviceId } from "@/auth/deviceKey";
-import { getSession, refreshSession } from "@/auth/session";
+import { getSession, refreshSession, wipeRevokedDevice } from "@/auth/session";
 import { APP_VERSION, syncUrl } from "@/config";
 import { notebookMaps, syncNotebookMetaCopy } from "@/domain/notebook";
 import { sodiumReady } from "@/lib/shared";
@@ -110,6 +110,9 @@ export class AccountRuntime {
       }),
       this.client.on("awareness", (docId, payload) => receivePresence(docId, payload)),
       this.client.on("skipped", (item) => this.onSkipped(item)),
+      // D-53: the server closed the socket with device_revoked (4410): this device was disconnected
+      // from another one. The client has stopped for good; the app wipes everything of the account.
+      this.client.on("deviceRevoked", () => void wipeRevokedDevice()),
       // The outbox storage failed (quota) or recovered: a calm banner while edits only live in memory.
       this.client.on("storage", (ok) => useSyncStatus.setState({ storageFull: !ok })),
       this.client.on("error", (e) => {

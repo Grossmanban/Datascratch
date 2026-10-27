@@ -203,23 +203,13 @@ jobs:
           REQUIRE_KNOWN_HOSTS: "1"
         run: infra/deploy/ssh-setup.sh
 
+      # D-49: the server's address is never shown in this public log; it is masked before
+      # anything can print it (infra/deploy/address.sh). The repository secret DS_DOMAIN sets
+      # or changes it; without it the server keeps the domain it already has.
       - name: Address
         env:
-          DOMAIN: ${{ vars.DS_DOMAIN }}
-        run: |
-          if [ -n "$DOMAIN" ]; then
-            domain="$DOMAIN"
-          else
-            ip="$DEPLOY_HOST"
-            if ! [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              ip="$(getent ahostsv4 "$DEPLOY_HOST" | awk 'NR==1{print $1}')"
-            fi
-            [ -n "$ip" ] || { echo "::error::Cannot resolve $DEPLOY_HOST to an IPv4 address; set the DS_DOMAIN variable."; exit 1; }
-            # <ip-with-dashes>.sslip.io resolves to the IP itself; it gets a real certificate.
-            domain="${ip//./-}.sslip.io"
-          fi
-          echo "DS_DOMAIN=$domain" >> "$GITHUB_ENV"
-          echo "Deploying to https://$domain"
+          DS_DOMAIN_SECRET: ${{ secrets.DS_DOMAIN }}
+        run: infra/deploy/address.sh
 
       - name: Bootstrap and deploy
         env:
@@ -227,8 +217,9 @@ jobs:
           DS_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           infra/deploy/remote.sh deploy
-          # Only these keys with plain values may reach $GITHUB_ENV (the server's answer is not trusted).
-          infra/deploy/remote.sh info | grep -E '^DS_(MODE|DOMAIN|PROXY_PORT|TAG)=[A-Za-z0-9._:-]*$' | tee -a "$GITHUB_ENV"
+          # Only these keys with plain values may reach $GITHUB_ENV (the server's answer is not trusted);
+          # not DS_DOMAIN: it is set and masked above, an older value from the server would be printed.
+          infra/deploy/remote.sh info | grep -E '^DS_(MODE|PROXY_PORT|TAG)=[A-Za-z0-9._:-]*$' | tee -a "$GITHUB_ENV"
 
       - name: Smoke test
         id: smoke
@@ -241,7 +232,7 @@ jobs:
             # Behind the other app's Caddy: first Datascratch itself, then the public address.
             infra/deploy/remote.sh check
             node infra/deploy/smoke.mjs "https://$DS_DOMAIN" 300 || {
-              echo "::error title=Public address::Datascratch runs, but https://$DS_DOMAIN does not answer through the other app's Caddy (certificate or DNS?). It is not rolled back."
+              echo "::error title=Public address::Datascratch runs, but its public address does not answer through the other app's Caddy (certificate or DNS?). It is not rolled back."
               echo "public_failed=true" >> "$GITHUB_OUTPUT"
               exit 1
             }
@@ -262,7 +253,6 @@ jobs:
       - name: Summary
         if: always()
         env:
-          IOS_URL: ${{ vars.DS_SERVER_URL }}
           PUBLIC_OK: ${{ steps.public.outcome }}
         run: |
           {
@@ -275,10 +265,9 @@ jobs:
             echo
             echo "| | |"
             echo "| --- | --- |"
-            echo "| Address | https://${DS_DOMAIN:-?} |"
+            echo "| Address | not shown here (D-49); on the server: \`/opt/datascratch/deploy.sh status\` |"
             echo "| Version | \`${DS_TAG}\` |"
             echo "| Mode | ${DS_MODE:-?} (direct — own Caddy on 80/443; edge — behind Sinhron's Caddy; proxy — behind your web server) |"
-            echo "| iOS server (variable DS_SERVER_URL) | ${IOS_URL:-not set — set it to https://${DS_DOMAIN:-…}} |"
             if [ "${DS_MODE:-}" = proxy ]; then
               echo
               echo "### Behind your existing proxy"
@@ -286,12 +275,9 @@ jobs:
               if [ "$PUBLIC_OK" = success ]; then
                 echo "The public address already works."
               else
-                echo "Connect your proxy to it (infra/DEPLOY.md, «Сервер, на котором уже что-то работает»). Ready config for nginx:"
-                echo
-                echo '```nginx'
-                infra/deploy/remote.sh snippet 2> /dev/null || echo "# (could not read /opt/datascratch/proxy/nginx.conf)"
-                echo '```'
-                echo "Also on the server: /opt/datascratch/proxy/Caddyfile and traefik.yml."
+                # The configs are not copied here: they contain the address (D-49).
+                echo "Connect your proxy to it (infra/DEPLOY.md, «Сервер, на котором уже что-то работает»): ready configs are on the server,"
+                echo "\`/opt/datascratch/proxy/nginx.conf\`, \`Caddyfile\` and \`traefik.yml\`."
               fi
             fi
           } >> "$GITHUB_STEP_SUMMARY"

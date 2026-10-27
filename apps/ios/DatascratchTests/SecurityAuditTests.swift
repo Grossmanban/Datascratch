@@ -111,6 +111,30 @@ struct SecurityAuditTests {
         let kept = ServerAccountService.map(Datascratch.AccountError.invalidRecoveryKey)
         #expect(kept as? Datascratch.AccountError == .invalidRecoveryKey)
     }
+
+    /// D-53: only a revocation the server states erases the device; an expired token or a
+    /// network error never does.
+    @Test func onlyAStatedRevocationErasesTheDevice() {
+        #expect(ServerConnection.isDeviceRevoked(DeviceRevokedError(reason: .passwordChange)))
+        #expect(!ServerConnection.isDeviceRevoked(APIError.server(status: 401, code: "unauthorized", message: "")))
+        #expect(!ServerConnection.isDeviceRevoked(APIError.transport("HTTP 502")))
+        #expect(!ServerConnection.isDeviceRevoked(APIError.notAuthenticated))
+        #expect(!ServerConnection.isDeviceRevoked(APIError.transport("offline")))
+        #expect(!ServerConnection.isDeviceRevoked(URLError(.notConnectedToInternet)))
+    }
+
+    /// D-49 amendment: the build's server is used only by an install that already signed in
+    /// with it; a new install starts with an empty «Server» field.
+    @Test func onlyAnEarlierSignInKeepsTheBuildServer() throws {
+        let fresh = try CoreLibrary.inMemory()
+        #expect(!AppModel.signedInBeforeServerField(fresh))
+        let signedIn = try CoreLibrary.inMemory()
+        try signedIn.store.setString("me@example.org", for: ServerAccountService.emailKey)
+        #expect(AppModel.signedInBeforeServerField(signedIn))
+        let signedOutByServer = try CoreLibrary.inMemory()
+        try signedOutByServer.store.setString("me@example.org", for: ServerAccountService.sessionEndedKey)
+        #expect(AppModel.signedInBeforeServerField(signedOutByServer))
+    }
     #endif
 
     private static func pngHeader(width: UInt32, height: UInt32) -> Data {

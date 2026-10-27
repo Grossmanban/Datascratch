@@ -185,7 +185,7 @@ struct SharedLinkView: View {
     private var webURL: URL? {
         var components = URLComponents()
         components.scheme = "https"
-        components.host = app.webHost
+        components.host = app.linkHost
         components.path = "/s/\(shareId)"
         components.fragment = key.map { "k=\($0)" }
         return components.url

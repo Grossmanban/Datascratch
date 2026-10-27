@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# Datascratch on this server: backups and the agents key (D-55). Run as root over SSH.
+#   ds backup            make a backup now; prints the files and their sizes
+#   ds backups           list the backups on this server
+#   ds restore <file>    restore a backup (db-<time>.dump; the files-<time>.tar.gz next to it
+#                        is restored too). Checks the backup first and keeps the current data
+#                        as pre-restore-<time>.* (restore.sh)
+#   ds key               what DS_KMS_KEY is and its value — terminal only, never in a log
+#   ds key-saved         stop reminding about DS_KMS_KEY
+set -euo pipefail
+
+DIR="${DS_DIR:-/opt/datascratch}"
+BACKUPS="$DIR/backups"
+SAVED="$DIR/.kms-key-saved"
+CALLER_DIR="$PWD"
+cd "$DIR"
+
+human() { numfmt --to=iec --suffix=B "$1" 2> /dev/null || echo "$1 B"; }
+
+remind() {
+  [ -f "$SAVED" ] && return 0
+  echo "Reminder: save DS_KMS_KEY in your password manager — run: $DIR/ds key" >&2
+}
+
+key_block() {
+  local key
+  key=$(grep -E '^DS_KMS_KEY=' .env | cut -d= -f2-)
+  cat << EOF
+
+================================ DS_KMS_KEY ================================
+  What:  the server key that opens notebooks in the "for AI agents" mode
+         (it wraps their keys; private notebooks never depend on it).
+  Where: $DIR/.env (line DS_KMS_KEY=...), readable by root only.
+  Do:    save it in your password manager now.
+  Note:  it is deliberately NOT in the backups. When you move to another
+         server, put the same DS_KMS_KEY into the new .env before restoring.
+  Lost:  agents lose access to their notebooks until you switch each of
+         them to private and back in the app; your notes themselves are safe.
+
+  DS_KMS_KEY=$key
+=============================================================================
+When it is saved:  $DIR/ds key-saved
+
+EOF
+}
+
+case "${1:-}" in
+  backup)
+    remind
+    out=$(./backup.sh)
+    stamp=$(echo "$out" | sed -n 's/.*backup \([0-9TZ]*\) .*/\1/p' | head -1)
+    [ -n "$stamp" ] || { echo "$out" >&2; exit 1; }
+    for f in "$BACKUPS/db-$stamp.dump" "$BACKUPS/files-$stamp.tar.gz"; do
+      [ -f "$f" ] && echo "$f  $(human "$(stat -c %s "$f")")"
+    done
+    echo "Copy them off the server, e.g.: scp root@<this-server>:$BACKUPS/*-$stamp.* ."
+    ;;
+  backups)
+    remind
+    shopt -s nullglob
+    dumps=("$BACKUPS"/db-*.dump)
+    [ ${#dumps[@]} -gt 0 ] || { echo "no backups yet (make one: $DIR/ds backup)"; exit 0; }
+    for f in "${dumps[@]}"; do
+      stamp=${f##*/db-}
+      stamp=${stamp%.dump}
+      size=$(stat -c %s "$f")
+      [ -f "$BACKUPS/files-$stamp.tar.gz" ] && size=$((size + $(stat -c %s "$BACKUPS/files-$stamp.tar.gz")))
+      echo "$stamp  $(human "$size")  $f"
+    done
+    ;;
+  restore)
+    db="${2:?usage: ds restore <db-<time>.dump>}"
+    # A path as given (relative to where ds was run), else a name in the backups directory.
+    case "$db" in /*) ;; *) if [ -f "$CALLER_DIR/$db" ]; then db="$CALLER_DIR/$db"; else db="$BACKUPS/$db"; fi ;; esac
+    [ -f "$db" ] || { echo "no such backup: ${2}" >&2; exit 1; }
+    files="${db%/*}/files-$(basename "$db" .dump | sed 's/^db-//').tar.gz"
+    if [ -f "$files" ]; then ./restore.sh "$db" "$files"; else ./restore.sh "$db"; fi
+    ;;
+  key)
+    # Only to a person at a terminal: never into a pipe, a file or a CI log.
+    if [ ! -t 1 ]; then
+      echo "ds key prints a secret: run it in an interactive SSH session." >&2
+      exit 1
+    fi
+    key_block
+    ;;
+  key-saved)
+    touch "$SAVED"
+    echo "OK, no more reminders."
+    ;;
+  *)
+    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac

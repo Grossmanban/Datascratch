@@ -64,11 +64,11 @@ export interface RotateResult {
 }
 
 /**
- * Run (or resume) the rotation of a notebook key. Step 1 is skipped when some
- * note is still under an older notebook key — then step 1 already happened and
- * only the notes are left. When every note is under the current key the step
- * cannot be told apart from «not started», so it runs again: an extra version
- * is harmless.
+ * Run (or resume) the rotation of a notebook key — from any of the owner's
+ * devices. Step 1 is skipped when the key version is already above the
+ * server's `pendingSinceVersion`. Older servers lack it: then step 1 counts as
+ * done when some note is still under an older notebook key, and otherwise it
+ * runs again (an extra version is harmless).
  */
 export async function rotateNotebookKey(options: RotateNotebookOptions): Promise<RotateResult> {
   const { api, notebookId, owner, masterKey, index } = options;
@@ -80,7 +80,14 @@ export async function rotateNotebookKey(options: RotateNotebookOptions): Promise
   }
   const metas = getNoteMetas(index, { includeTrashed: true });
   const behind = (m: NoteMeta) => noteKeysFromMeta(m, notebook.keys).notebookIndex > 0;
-  const resuming = metas.some(behind);
+  // The server says whether step 1 happened (`pendingSinceVersion`); older
+  // servers do not, then a note under an older notebook key tells it.
+  const since = res.pendingSinceVersion;
+  const resuming = !res.keyRotationPending
+    ? false
+    : since != null
+      ? notebook.version > since
+      : metas.some(behind);
 
   if (!resuming) {
     const version = notebook.version + 1;

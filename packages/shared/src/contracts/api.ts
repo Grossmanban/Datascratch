@@ -298,6 +298,8 @@ export const notebookKeyResponseSchema = z.object({
   version: keyVersionSchema.optional(),
   keyChain: z.array(wrappedKeySchema).optional(),
   keyRotationPending: z.boolean().optional(),
+  /** Key version when the rotation became pending; a higher `version` = step 1 done. */
+  pendingSinceVersion: keyVersionSchema.nullable().optional(),
 });
 export type NotebookKeyResponse = z.infer<typeof notebookKeyResponseSchema>;
 
@@ -440,6 +442,8 @@ export const sharedByMeItemSchema = z.object({
   target: shareTargetSchema,
   keyVersion: keyVersionSchema,
   keyRotationPending: z.boolean(),
+  /** See notebookKeyResponseSchema; absent from older servers. */
+  pendingSinceVersion: keyVersionSchema.nullable().optional(),
   members: z.number().int().nonnegative(),
   awaitingKey: z.number().int().nonnegative(),
 });

@@ -1,3 +1,5 @@
+import type { AuthorRef } from '../db/schema.js';
+
 /**
  * Fan-out of live events between connections (D-25). The default implementation
  * keeps everything in process memory; a multi-process deployment would swap it for
@@ -7,14 +9,23 @@
  *   doc:<docId>        live updates, awareness, deletion and moves of a document
  *   device:<deviceId>  control: the device was revoked
  *   share:<shareId>    control: the share was revoked
- *   user:<userId>      control: the account was deleted / all sessions revoked
+ *   user:<userId>      control: the account's memberships changed (D-54): re-check access
  */
 export type HubMessage =
-  | { type: 'update'; docId: string; seq: number; payload: string; deviceId: string; origin: string | null }
+  | {
+      type: 'update';
+      docId: string;
+      seq: number;
+      payload: string;
+      deviceId: string;
+      author: AuthorRef;
+      origin: string | null;
+    }
   | { type: 'awareness'; docId: string; payload: string; deviceId: string; origin: string | null }
   | { type: 'revoked'; reason: string }
   | { type: 'doc_deleted'; docId: string }
-  | { type: 'doc_moved'; docId: string };
+  | { type: 'doc_moved'; docId: string }
+  | { type: 'access_changed' };
 
 export type HubListener = (msg: HubMessage) => void;
 

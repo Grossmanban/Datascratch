@@ -40,6 +40,11 @@ export const noteKeyCache = {
     for (const [noteId, e] of entries) if (ids.has(e.notebookId)) entries.delete(noteId);
   },
 
+  /** Drops the keys of these notes (a note shared on its own got a new key, D-54). */
+  forgetNotes(noteIds: Iterable<string>): void {
+    for (const id of noteIds) entries.delete(id);
+  },
+
   size(): number {
     return entries.size;
   },

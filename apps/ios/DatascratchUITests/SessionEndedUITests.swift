@@ -1,9 +1,30 @@
 import XCTest
 
-/// The server ended this device's session from another device: the app says so plainly,
-/// keeps the library, and offers to sign in again.
+/// The server refused this device's session without revoking it (an expired token): the app
+/// says so plainly, keeps the library, and offers to sign in again. A revoked device (D-53)
+/// is erased and the welcome screen explains why.
 final class SessionEndedUITests: XCTestCase {
-    func testRevokedDeviceSaysSoAndKeepsTheLibrary() throws {
+    func testRevokedDeviceExplainsTheWipe() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-ui-testing-device-revoked"]
+        app.launch()
+
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 10), "no «device signed out» notice on the welcome screen")
+        let deleted = alert.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'deleted'")).firstMatch
+        XCTAssertTrue(deleted.exists, "the notice does not say the data was deleted")
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "device-revoked"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        // «Sign In» goes straight to the form.
+        alert.buttons["Sign In"].tap()
+        XCTAssertTrue(app.textFields["signIn.email"].waitForExistence(timeout: 5), "Sign In does not open the form")
+    }
+
+    func testEndedSessionSaysSoAndKeepsTheLibrary() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-ui-testing-signed-in", "-ui-testing-session-ended"]

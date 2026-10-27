@@ -155,9 +155,9 @@ public final class NotebookDocument: Sendable {
         var fields: [String: String] = [:]
         for meta in notes() {
             guard let wrapped = Base64URL.decode(meta.wrappedKey),
-                  (try? DSCrypto.unwrapKey(wrapped, with: newKey, ad: CryptoAD.noteKey(meta.id))) == nil,
-                  let noteKey = try? DSCrypto.unwrapKey(wrapped, with: oldKey, ad: CryptoAD.noteKey(meta.id)) else { continue }
-            fields[meta.id] = Base64URL.encode(try DSCrypto.wrapKey(noteKey, with: newKey, ad: CryptoAD.noteKey(meta.id)))
+                  (try? DSCrypto.unwrapKey(wrapped, with: newKey, ad: meta.wrappedKeyAD)) == nil,
+                  let noteKey = try? DSCrypto.unwrapKey(wrapped, with: oldKey, ad: meta.wrappedKeyAD) else { continue }
+            fields[meta.id] = Base64URL.encode(try DSCrypto.wrapKey(noteKey, with: newKey, ad: meta.wrappedKeyAD))
         }
         guard !fields.isEmpty else { return 0 }
         try crdt.transact(origin: origin) { txn in

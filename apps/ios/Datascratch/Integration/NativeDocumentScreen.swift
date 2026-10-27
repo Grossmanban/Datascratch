@@ -22,7 +22,9 @@ final class NativeEditorModel: ClosingEditor {
     let header = NativeHeaderState()
     @ObservationIgnored private var headerHost: UIHostingController<AnyView>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
-    @ObservationIgnored private weak var app: AppModel?
+    @ObservationIgnored weak var app: AppModel?
+    /// Images and note titles for the editor (it holds the resolver weakly).
+    @ObservationIgnored private var attachments: NoteAttachments?
 
     init(app: AppModel, core: CoreLibrary, noteId: String, notebookId: String) throws {
         self.app = app
@@ -32,6 +34,9 @@ final class NativeEditorModel: ClosingEditor {
         serial = Self.created
         let note = try core.noteDocument(noteId, notebookId: notebookId)
         editor = EditorView(document: CoreEditorDocument(note: note))
+        let attachments = NoteAttachments(app: app, noteId: noteId)
+        self.attachments = attachments
+        editor.attachmentResolver = attachments
         // D-51: in the notes-only app task dates are quiet labels (no reschedule menu).
         editor.taskDatesEnabled = Features.tasks
         // spec/04: an empty title becomes «Note Oct 26, 2026» (the note's creation day) on Return
@@ -53,7 +58,8 @@ final class NativeEditorModel: ClosingEditor {
         editor.onLinkRequest = { [weak self] in self?.isAskingForLink = true }
         // The "/" block menu: the screen shows it at the caret (spec/04).
         editor.onSlashMenu = { [weak self] menu in
-            DispatchQueue.main.async { self?.slashMenu = menu }
+            // «Фото» and «Файл» are the app's own entries.
+            DispatchQueue.main.async { self?.slashMenu = menu.map(NoteMedia.withMediaItems) }
         }
         // A literal [[Title]] (an agent's link, or one typed without autocomplete).
         editor.onOpenNoteTitled = { [weak app] title in app?.pendingRoute = .noteTitled(title) }
@@ -91,6 +97,11 @@ final class NativeEditorModel: ClosingEditor {
     var isAskingForLink = false
     /// The open "/" menu, if any.
     var slashMenu: SlashMenuState?
+    /// Where a photo or file comes from (`MediaPickers`).
+    enum MediaChooser: Hashable { case photos, camera, files }
+    var mediaChooser: MediaChooser?
+    /// Why a photo or file could not be attached.
+    var mediaError: String?
     /// A pen palette tap not yet applied to the editor's tools (they change a turn later).
     var pendingPenSelection: DSPenSelection?
     @ObservationIgnored private var keyboardObservers: [NSObjectProtocol] = []
@@ -266,6 +277,7 @@ struct NativeDocumentScreen: View {
                         // variant that stays full height and insets itself crashed (ios-editor bisect).
                         NativeEditorRepresentable(editor: model.editor)
                             .accessibilityIdentifier("editor")
+                            .modifier(MediaPickers(model: model))
                     }
                     // The column's width, never the editor's own: next to the list on an iPad mini
                     // in portrait it ran 18 pt past the screen edge.
@@ -312,8 +324,12 @@ struct NativeDocumentScreen: View {
                         if let menu = model.slashMenu, !menu.items.isEmpty {
                             GeometryReader { area in
                                 SlashMenuView(menu: menu, bounds: area.size) { id in
-                                    model.editor.applySlashCommand(id)
-                                    model.slashMenu = nil
+                                    if NoteMedia.isMediaCommand(id) {
+                                        model.applyMediaCommand(id)
+                                    } else {
+                                        model.editor.applySlashCommand(id)
+                                        model.slashMenu = nil
+                                    }
                                 }
                             }
                         }
@@ -401,6 +417,8 @@ struct NativeEditorToolbar: ToolbarContent {
             model.editor.insertBlock(EditorCommands.table(rows: 3, columns: 3, header: ["", "", ""]))
         }
         Button("Divider", systemImage: "minus") { model.editor.insertBlock(.rule("line")) }
+        Divider()
+        MediaInsertItems(model: model)
     }
 
     var body: some ToolbarContent {

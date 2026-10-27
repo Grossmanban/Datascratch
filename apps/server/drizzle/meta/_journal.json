@@ -36,6 +36,13 @@
       "when": 1793109467987,
       "tag": "0004_storage_quota",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793121434102,
+      "tag": "0005_device_revoked_reason",
+      "breakpoints": true
     }
   ]
 }

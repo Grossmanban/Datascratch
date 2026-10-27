@@ -114,12 +114,12 @@ nonisolated enum RemoteImageFetcher {
         private let lock = NSLock()
         private var count = 0
 
+        // The completion-handler form: the async one crashes SILGen's @objc thunk (Swift 6.3).
         func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                        newRequest request: URLRequest) async -> URLRequest? {
+                        newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
             let redirects = lock.withLock { count += 1; return count }
-            guard redirects <= RemoteImageFetcher.maxRedirects, let url = request.url,
-                  await RemoteImageFetcher.isAllowed(url) else { return nil }
-            return request
+            guard redirects <= RemoteImageFetcher.maxRedirects, let url = request.url else { return completionHandler(nil) }
+            Task { completionHandler(await RemoteImageFetcher.isAllowed(url) ? request : nil) }
         }
     }
 }

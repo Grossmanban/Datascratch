@@ -606,6 +606,8 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
                 keyVersion: b.version,
                 keyChain,
                 keyRotationPending: true,
+                // A voluntary rotation starts the flag here; one after a departure keeps its version.
+                pendingSinceVersion: t.keyRotationPending ? sql`${notebooks.pendingSinceVersion}` : t.keyVersion,
                 ...(serverWrappedKey ? { serverWrappedKey } : {}),
               })
               .where(eq(notebooks.id, t.id));
@@ -617,6 +619,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
                 keyVersion: b.version,
                 keyChain,
                 keyRotationPending: false,
+                pendingSinceVersion: null,
               })
               .where(eq(docs.id, t.id));
           }
@@ -643,7 +646,10 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         const p = await requireUser(ctx, req);
         if (req.params.kind !== 'notebook') throw badRequest('a note rotation needs no done: rotate clears the flag');
         const t = await requireOwnTarget(db, p.userId, req.params);
-        await db.update(notebooks).set({ keyRotationPending: false }).where(eq(notebooks.id, t.id));
+        await db
+          .update(notebooks)
+          .set({ keyRotationPending: false, pendingSinceVersion: null })
+          .where(eq(notebooks.id, t.id));
         // The notes now have new keys in the index: agents re-read them.
         noteKeyCache.forgetNotebooks([t.id]);
         return reply.code(204).send(null);
@@ -682,6 +688,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           id: string;
           key_version: number;
           key_rotation_pending: boolean;
+          pending_since_version: number | null;
           members: number;
           awaiting_key: number;
         }>(sql`
@@ -691,13 +698,13 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             SELECT notebook_id, note_id FROM invitations
             WHERE owner_id = ${p.userId} AND status = 'pending' AND expires_at > now()
           )
-          SELECT 'notebook' AS kind, n.id, n.key_version, n.key_rotation_pending,
+          SELECT 'notebook' AS kind, n.id, n.key_version, n.key_rotation_pending, n.pending_since_version,
             (SELECT count(*)::int FROM members m WHERE m.notebook_id = n.id) AS members,
             (SELECT count(*)::int FROM members m WHERE m.notebook_id = n.id
                AND (m.wrapped_key IS NULL OR m.key_version IS DISTINCT FROM n.key_version)) AS awaiting_key
           FROM notebooks n WHERE n.user_id = ${p.userId} AND n.id IN (SELECT notebook_id FROM targets)
           UNION ALL
-          SELECT 'note', d.id, d.key_version, d.key_rotation_pending,
+          SELECT 'note', d.id, d.key_version, d.key_rotation_pending, d.pending_since_version,
             (SELECT count(*)::int FROM members m WHERE m.note_id = d.id),
             (SELECT count(*)::int FROM members m WHERE m.note_id = d.id
                AND (m.wrapped_key IS NULL OR m.key_version IS DISTINCT FROM d.key_version))
@@ -707,6 +714,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           target: { kind: r.kind, id: r.id },
           keyVersion: Number(r.key_version),
           keyRotationPending: r.key_rotation_pending,
+          pendingSinceVersion: r.pending_since_version === null ? null : Number(r.pending_since_version),
           members: Number(r.members),
           awaitingKey: Number(r.awaiting_key),
         }));

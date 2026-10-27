@@ -177,6 +177,7 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           version: nb.keyVersion,
           keyChain: nb.keyChain,
           keyRotationPending: nb.keyRotationPending,
+          pendingSinceVersion: nb.pendingSinceVersion,
         };
       },
     );

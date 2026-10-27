@@ -127,6 +127,8 @@ export const notebooks = pgTable(
     keyChain: jsonb('key_chain').$type<string[]>().notNull().default([]),
     /** A member left or was removed: the owner's client must rotate the key. */
     keyRotationPending: boolean('key_rotation_pending').notNull().default(false),
+    /** Key version when the flag was set (null without it): above it, step 1 of the rotation is done. */
+    pendingSinceVersion: integer('pending_since_version'),
     createdAt: created(),
   },
   (t) => [index('notebooks_user_idx').on(t.userId)],
@@ -156,6 +158,7 @@ export const docs = pgTable(
     ownerWrappedKey: bytea('owner_wrapped_key'),
     keyChain: jsonb('key_chain').$type<string[]>().notNull().default([]),
     keyRotationPending: boolean('key_rotation_pending').notNull().default(false),
+    pendingSinceVersion: integer('pending_since_version'),
     createdAt: created(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },

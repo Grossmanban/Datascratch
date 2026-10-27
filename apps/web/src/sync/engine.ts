@@ -15,10 +15,12 @@ type SyncState = {
   failed: Record<string, SyncFailure>;
   /** Server items this device could not read, per document (skipped; the rest keeps syncing). */
   skipped: Record<string, number>;
+  /** The browser storage refuses writes (quota): edits wait in memory, not saved on this device. */
+  storageFull: boolean;
 };
 
 export function createSyncStatusStore() {
-  return create<SyncState>(() => ({ status: "offline", pending: 0, lastSyncedAt: null, error: null, failed: {}, skipped: {} }));
+  return create<SyncState>(() => ({ status: "offline", pending: 0, lastSyncedAt: null, error: null, failed: {}, skipped: {}, storageFull: false }));
 }
 export type SyncStatusStore = ReturnType<typeof createSyncStatusStore>;
 

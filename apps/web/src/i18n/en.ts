@@ -134,6 +134,8 @@ const en: Loose<Messages> = {
     pending_many: "{{count}} changes waiting to sync",
     pending_other: "{{count}} changes waiting to sync",
     notSent: "Not sent: {{count}}",
+    storageFull: "Browser storage is full — changes are not saved on this device.",
+    storageFullHint: "They still reach the server while this tab is open; free up browser storage to keep them offline too.",
     unreadableTitle: "Some changes can't be read here yet",
     unreadableText: "They were saved with another key. The rest of the notebook is up to date.",
     unreadableShow: "Unreadable changes",

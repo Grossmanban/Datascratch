@@ -104,9 +104,16 @@ DS_KMS_KEY=$(secret)
 METRICS_TOKEN=$(secret)
 STORAGE_DRIVER=disk
 BACKUP_KEEP_DAYS=14
-BACKUP_RCLONE_REMOTE=
 ENV
   umask 022
+  # DS_KMS_KEY is shown only to a person at a terminal (deploys run from public CI logs).
+  here="$(cd "$(dirname "$0")" && pwd)"
+  if [ -t 1 ] && [ -f "$here/ds" ]; then
+    DS_DIR="$DS_DIR" bash "$here/ds" key
+  else
+    echo "[bootstrap] NEW SERVER KEY: DS_KMS_KEY was created in $DS_DIR/.env. It is not in the backups."
+    echo "[bootstrap] Save it in a password manager: log in over SSH and run  $DS_DIR/ds key"
+  fi
 else
   log ".env exists — secrets kept"
 fi

@@ -103,7 +103,20 @@ final class SceneModel {
 
     /// iPhone (and the compact width of a narrow window): the system's three-column stack.
     var columnVisibility: NavigationSplitViewVisibility = .all
-    var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
+    var preferredCompactColumn: NavigationSplitViewColumn = .sidebar {
+        didSet {
+            // iPhone: «Back» leaves the document without changing the selection.
+            if !isPad, oldValue == .detail, preferredCompactColumn != .detail,
+               let fresh = freshNoteId, selectedNoteId == fresh {
+                leaveFreshNote(fresh)
+            }
+        }
+    }
+
+    /// A document is on screen (on iPhone the selection outlives «Back»).
+    var isDocumentShown: Bool {
+        selectedNoteId != nil && (isPad || preferredCompactColumn == .detail)
+    }
     var isCommandPalettePresented = false
     var sheet: SceneSheet?
     var searchText = ""
@@ -157,7 +170,7 @@ final class SceneModel {
             if let folder = library.folder(id) { return (folder.notebookId, folder.id) }
         default: break
         }
-        if let current = selectedNoteId.flatMap({ library.note($0) }), current.kind == .note {
+        if isDocumentShown, let current = selectedNoteId.flatMap({ library.note($0) }), current.kind == .note {
             return (current.notebookId, current.folderId)
         }
         let notebooks = library.notebooks(in: library.activeSpace?.id)
@@ -179,7 +192,7 @@ final class SceneModel {
 
     /// The notebook a new note goes to, named when the list shown is not that notebook.
     var newNoteDestinationName: String? {
-        guard !isShowingAContainer, selectedNoteId == nil, let destination = newNoteDestination else { return nil }
+        guard !isShowingAContainer, !isDocumentShown, let destination = newNoteDestination else { return nil }
         return library.notebook(destination.notebookId)?.name
     }
 

@@ -102,6 +102,24 @@ function validRedirectUri(uri: string): boolean {
   return /^[a-z][a-z0-9+.-]*\.?[a-z0-9+.-]*:$/.test(u.protocol) && !["javascript:", "data:", "file:", "vbscript:"].includes(u.protocol);
 }
 
+/** Stored client metadata is bounded: anyone may register a client (RFC 7591). */
+export const CLIENT_LIMITS = { redirectUris: 10, uriLength: 2000, metadataBytes: 65_536 } as const;
+
+function boundedRedirectUris(list: unknown): string[] | null {
+  if (!Array.isArray(list) || list.length === 0 || list.length > CLIENT_LIMITS.redirectUris) return null;
+  return list.every((r) => typeof r === "string" && r.length <= CLIENT_LIMITS.uriLength && validRedirectUri(r)) ? (list as string[]) : null;
+}
+
+/** An optional https URL from client metadata (client_uri, logo_uri), or null. */
+function optionalHttpsUrl(v: unknown): string | null {
+  if (typeof v !== "string" || v.length > CLIENT_LIMITS.uriLength) return null;
+  try {
+    return new URL(v).protocol === "https:" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Exact match; for loopback redirect URIs any port is accepted (RFC 8252 §7.3). */
 function redirectAllowed(client: OAuthClient, uri: string): boolean {
   if (client.redirectUris.includes(uri)) return true;
@@ -139,9 +157,31 @@ export async function fetchClientMetadataDocument(url: string): Promise<unknown>
   if (addresses.some((a) => isPrivateAddress(a.address))) throw new Error("client_id host resolves to a private address");
   const res = await fetch(url, { headers: { accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(`metadata document returned HTTP ${res.status}`);
-  const text = await res.text();
-  if (text.length > 65_536) throw new Error("metadata document is too large");
-  return JSON.parse(text);
+  return JSON.parse(await readCapped(res, CLIENT_LIMITS.metadataBytes));
+}
+
+/** Reads a response body as UTF-8 and stops (cancelling the download) once it exceeds `max` bytes. */
+export async function readCapped(res: Response, max: number): Promise<string> {
+  const declared = Number(res.headers.get("content-length") ?? "0");
+  if (declared > max) {
+    await res.body?.cancel();
+    throw new Error("metadata document is too large");
+  }
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel();
+      throw new Error("metadata document is too large");
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 const CIMD_TTL_MS = 24 * 3600_000;
@@ -174,16 +214,21 @@ export class ClientRegistry {
     }
     if (!doc || typeof doc !== "object" || doc.client_id !== clientId)
       throw new OAuthProblem("invalid_client", "The client metadata document must contain client_id equal to its URL.", 401);
-    const redirectUris = Array.isArray(doc.redirect_uris) ? doc.redirect_uris.filter((r): r is string => typeof r === "string" && validRedirectUri(r)) : [];
-    if (redirectUris.length === 0) throw new OAuthProblem("invalid_client", "The client metadata document has no valid redirect_uris.", 401);
+    const redirectUris = boundedRedirectUris(doc.redirect_uris);
+    if (!redirectUris)
+      throw new OAuthProblem(
+        "invalid_client",
+        `The client metadata document needs 1–${CLIENT_LIMITS.redirectUris} valid redirect_uris (https, http loopback or a private-use scheme; at most ${CLIENT_LIMITS.uriLength} characters).`,
+        401,
+      );
     const method = doc.token_endpoint_auth_method ?? "none";
     if (method !== "none") throw new OAuthProblem("invalid_client", "Client ID Metadata Document clients must use token_endpoint_auth_method \"none\".", 401);
     const client: OAuthClient = {
       clientId,
       clientSecretHash: null,
       clientName: typeof doc.client_name === "string" && doc.client_name.trim() ? doc.client_name.trim().slice(0, 100) : new URL(clientId).host,
-      clientUri: typeof doc.client_uri === "string" ? doc.client_uri : null,
-      logoUri: typeof doc.logo_uri === "string" ? doc.logo_uri : null,
+      clientUri: optionalHttpsUrl(doc.client_uri),
+      logoUri: optionalHttpsUrl(doc.logo_uri),
       redirectUris,
       tokenEndpointAuthMethod: "none",
       registration: "cimd",
@@ -195,9 +240,12 @@ export class ClientRegistry {
 
   /** RFC 7591 dynamic client registration. */
   async register(body: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const redirectUris = Array.isArray(body.redirect_uris) ? body.redirect_uris : [];
-    if (redirectUris.length === 0 || !redirectUris.every((r) => typeof r === "string" && validRedirectUri(r)))
-      throw new OAuthProblem("invalid_redirect_uri", "redirect_uris must be https URLs, http loopback URLs or private-use scheme URIs, without fragments.");
+    const redirectUris = boundedRedirectUris(body.redirect_uris);
+    if (!redirectUris)
+      throw new OAuthProblem(
+        "invalid_redirect_uri",
+        `redirect_uris must be 1–${CLIENT_LIMITS.redirectUris} https URLs, http loopback URLs or private-use scheme URIs, without fragments, at most ${CLIENT_LIMITS.uriLength} characters each.`,
+      );
     const method = (body.token_endpoint_auth_method as string | undefined) ?? "none";
     if (!["none", "client_secret_post", "client_secret_basic"].includes(method))
       throw new OAuthProblem("invalid_client_metadata", `Unsupported token_endpoint_auth_method "${method}".`);
@@ -210,9 +258,9 @@ export class ClientRegistry {
       clientId,
       clientSecretHash: secret ? sha256Hex(secret) : null,
       clientName: name,
-      clientUri: typeof body.client_uri === "string" ? body.client_uri : null,
-      logoUri: typeof body.logo_uri === "string" ? body.logo_uri : null,
-      redirectUris: redirectUris as string[],
+      clientUri: optionalHttpsUrl(body.client_uri),
+      logoUri: optionalHttpsUrl(body.logo_uri),
+      redirectUris,
       tokenEndpointAuthMethod: method as OAuthClient["tokenEndpointAuthMethod"],
       registration: "dcr",
       createdAt: this.now().toISOString(),
@@ -361,6 +409,12 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
   });
 
   app.get("/oauth/authorize", async (request, reply) => {
+    try {
+      limited(request); // each call may fetch a client metadata document
+    } catch (err) {
+      if (err instanceof OAuthProblem) return html(reply, 429, errorPage("Слишком много запросов. Подождите минуту и попробуйте снова."));
+      throw err;
+    }
     const q = request.query as Record<string, string | undefined>;
     // Errors before the redirect URI is trusted are shown to the user, never redirected (open redirect).
     if (!q.client_id || !q.redirect_uri) return html(reply, 400, errorPage("В запросе нет client_id или redirect_uri."));

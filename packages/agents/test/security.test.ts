@@ -8,7 +8,9 @@ import * as Y from "yjs";
 import { noteToMarkdown } from "../src/doc/markdown-export.js";
 import { markdownToBlocks, MAX_NESTING, safeHref } from "../src/doc/markdown-import.js";
 import { contentOf } from "../src/doc/model.js";
+import { CLIENT_LIMITS, readCapped } from "../src/auth/oauth.js";
 import { makeNoteDoc } from "../src/testing/fixtures.js";
+import { startServer } from "./server.js";
 
 /** A note whose one paragraph is a single text run, as any client may write it. */
 function rawNote(text: string, marks: Record<string, unknown> = {}): Y.Doc {
@@ -88,5 +90,58 @@ describe("Markdown import limits", () => {
     const links = (p!.inline ?? []).filter((i) => "text" in i && "link" in i.marks);
     expect(links.map((l) => ("text" in l ? l.text : ""))).toEqual(["сайт"]);
     expect((p!.inline ?? []).map((i) => ("text" in i ? i.text : "")).join("")).toContain("нажми");
+  });
+});
+
+describe("OAuth client registration is bounded (audit 3)", () => {
+  const register = (base: string, body: unknown) =>
+    fetch(`${base}/oauth/register`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  it("refuses too many or too long redirect_uris and drops unsafe client_uri/logo_uri", async () => {
+    const s = await startServer();
+    try {
+      const many = Array.from({ length: CLIENT_LIMITS.redirectUris + 1 }, (_, i) => `https://agent.example/cb${i}`);
+      expect((await register(s.base, { redirect_uris: many })).status).toBe(400);
+      expect((await register(s.base, { redirect_uris: ["https://agent.example/" + "a".repeat(CLIENT_LIMITS.uriLength)] })).status).toBe(400);
+      const ok = await register(s.base, {
+        redirect_uris: ["https://agent.example/cb"],
+        client_uri: "javascript:alert(1)",
+        logo_uri: "http://tracker.example/pixel.png",
+      });
+      expect(ok.status).toBe(201);
+      const body = await ok.json();
+      expect(body.client_uri).toBeUndefined();
+      expect(body.logo_uri).toBeUndefined();
+      const stored = await s.ctx.store.getClient(body.client_id);
+      expect(stored).toMatchObject({ clientUri: null, logoUri: null });
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("rate-limits the authorization page per address", async () => {
+    const s = await startServer({ rateLimit: { oauth: { perMinute: 2, burst: 2 } } });
+    try {
+      const codes: number[] = [];
+      for (let i = 0; i < 4; i++) codes.push((await fetch(`${s.base}/oauth/authorize?client_id=x&redirect_uri=https://a.example/cb`)).status);
+      expect(codes.slice(0, 2)).toEqual([400, 400]);
+      expect(codes.slice(2)).toEqual([429, 429]);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("stops reading a client metadata document after 64 KiB", async () => {
+    let pulled = 0;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++;
+        controller.enqueue(new Uint8Array(16_384).fill(0x20));
+      },
+    });
+    await expect(readCapped(new Response(endless), CLIENT_LIMITS.metadataBytes)).rejects.toThrow(/too large/);
+    expect(pulled).toBeLessThan(10);
+    await expect(readCapped(new Response("x", { headers: { "content-length": "999999999" } }), CLIENT_LIMITS.metadataBytes)).rejects.toThrow(/too large/);
+    expect(await readCapped(new Response('{"a":1}'), CLIENT_LIMITS.metadataBytes)).toBe('{"a":1}');
   });
 });

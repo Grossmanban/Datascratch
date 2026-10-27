@@ -41,7 +41,7 @@ export function ownerEditorHost(noteId: string, nav: Nav): EditorHost {
     },
     // `onProgress` (0…1) feeds the editor's upload placeholder while the file is encrypted; a
     // rejection lets the editor offer «Повторить» (it calls this again with the same file).
-    // web-editor passes the callback itself (39687ca3); an { onProgress } object is accepted too.
+    // The agreed form is uploadAttachment(file, { onProgress }); a bare callback is accepted too.
     uploadAttachment: (file: File, progress?: ((done: number) => void) | { onProgress?: (done: number) => void }) =>
       uploadNoteFile(noteId, file, typeof progress === "function" ? progress : progress?.onProgress),
     onOpenAttachment: async ({ attachmentId }) => {

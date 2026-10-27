@@ -359,6 +359,8 @@ public actor APIClient {
 
     public func sharedWithMe() async throws -> [SharedItem] { try await call("GET", "/shared-with-me") }
 
+    public func sharedByMe() async throws -> [SharedByMeItem] { try await call("GET", "/shared-by-me") }
+
     /// Called once when the server reports this device revoked (D-53), from any request; the
     /// app wipes local data. Not called for expired or rejected tokens or network failures.
     public func setDeviceRevokedHandler(_ handler: (@Sendable (DeviceRevocationReason) -> Void)?) {

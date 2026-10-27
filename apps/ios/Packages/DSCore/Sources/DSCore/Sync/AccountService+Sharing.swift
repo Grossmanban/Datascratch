@@ -90,12 +90,14 @@ extension AccountService {
         return needConfirmation
     }
 
-    /// Wraps `key` for every current member of `target` (rotation).
+    /// Wraps `key` for the active members of `target` (rotation, api.md): members still
+    /// waiting for a key get the new version through `grantPendingKeys` — after the owner's
+    /// confirmation where needed — never through a rotation.
     func memberKeys(for target: SharingTarget, key: Data, version: Int) async throws -> [MemberKey] {
         let me = try await signedInUserId
         guard let secretKey = try keys.boxSecretKey() else { throw SharingError.noBoxKey }
         var result: [MemberKey] = []
-        for member in try await api.members(of: target) where member.userId != me {
+        for member in try await api.members(of: target) where member.userId != me && member.status == .active {
             let publicKey = try await api.publicKey(userId: member.userId)
             let ref = MemberKeyRef(kind: target.kind, targetId: target.id, version: version, fromUserId: me, toUserId: member.userId)
             result.append(MemberKey(userId: member.userId, wrappedKey: try DSCrypto.wrapKeyForMember(key, ownerSecretKey: secretKey, memberPublicKey: publicKey, ref: ref)))

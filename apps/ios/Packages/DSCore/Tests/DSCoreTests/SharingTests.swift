@@ -187,7 +187,9 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
             var r = s.resources[key]!
             guard r.owner == me else { return Self.err(403, "forbidden") }
             let keysFor = (b["memberKeys"] as! [[String: String]])
-            guard b["version"] as? Int == r.version + 1, Set(keysFor.map { $0["userId"]! }) == Set(r.members.keys) else { return Self.err(409, "conflict") }
+            // memberKeys == the active members (awaiting ones get the key via PUT …/key).
+            guard b["version"] as? Int == r.version + 1,
+                  Set(keysFor.map { $0["userId"]! }) == Set(r.members.filter { $0.value.status == "active" }.keys) else { return Self.err(409, "conflict") }
             r.version += 1
             r.ownerWrapped = b["ownerWrappedKey"] as! String
             r.chain.insert(b["previousKeyWrap"] as! String, at: 0)
@@ -285,6 +287,13 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         #expect(try anna.service.store.document(note.noteId)?.notebookId == nbId)
         #expect(try anna.service.keys.noteKey(notebook.note(id: note.noteId)!, notebookId: nbId) == noteKeyV1)
 
+        // Clara accepts too but registered after the invitation; not confirmed yet.
+        let clara = try await Self.device(server, userId: EntityID.make(), email: "clara@x.co")
+        try await clara.service.ensureBoxKeyPair()
+        let invC = try await owner.service.invite("clara@x.co", role: .viewer, to: target)
+        server.state.withLock { $0.emails["clara@x.co#late"] = "1" }
+        _ = try await clara.service.acceptInvitation(id: invC)
+
         // Boris is removed: the owner rotates; Anna gets v2 and can still read v1 data.
         try await owner.service.api.removeMember(userId: boris.userId, from: target)
         #expect(try await owner.service.resumeNotebookRotation(notebook))
@@ -309,6 +318,14 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         #expect(try owner.service.store.pendingOutbox(docId: nbId).isEmpty)
         // The list (JSON) and the single read agree on the key fields.
         #expect(notebook.notes(includeTrashed: true).first { $0.id == note.noteId } == notebook.note(id: note.noteId))
+        // The rotation did not give Clara the key; she gets v2 only once confirmed.
+        #expect(server.state.withLock { $0.resources["notebook:\(nbId)"]!.members[clara.userId]!.wrappedKey } == nil)
+        #expect(try await owner.service.grantPendingKeys(to: target, key: key2, version: 2).map(\.userId) == [clara.userId])
+        try await owner.service.grantPendingKeys(to: target, key: key2, version: 2, confirmed: [clara.userId])
+        _ = try await clara.service.refreshSharedWithMe()
+        #expect(try clara.service.keys.notebookKey(nbId) == key2)
+        #expect(clara.service.keys.retiredNotebookKeys(nbId).contains(nbKey))
+
         // Step 3 clears the pending flag once the index is synced (no outbox here).
         #expect(try await owner.service.finishNotebookRotation(notebook))
         #expect(server.state.withLock { $0.resources["notebook:\(nbId)"]!.pending } == false)

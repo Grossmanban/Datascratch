@@ -198,7 +198,8 @@ DSCore
   `ownerKey(notebookId:)` / `ownerKey(note:notebookId:)` — текущий ключ и версия.
 - Смена ключа (после удаления или выхода участника): `resumeNotebookRotation(_:)` при запуске
   (по `keyRotationPending`) или `rotateNotebookKey(_:)` сразу — шаг 1 одним `rotate` (новая
-  версия для владельца, участников, звено цепочки; в режиме «для агентов» — ключ серверу),
+  версия для владельца, активных участников, звено цепочки; в режиме «для агентов» — ключ
+  серверу; ждущие ключа получают новую версию через `grantPendingKeys`, после подтверждения),
   шаг 2 `rekeyNotes(in:)` — новые ключи заметок в индексе (`NoteMeta.keyVersion`, `keyChain`),
   шаг 3 `finishNotebookRotation(_:)` — когда индекс подтверждён (`rotate/done`). Прерванная смена
   доделывается при следующем запуске. Отдельно расшаренная заметка — `rotateNoteKey(_:in:)`,
@@ -211,7 +212,8 @@ DSCore
   читаются ключами из цепочки (`KeyRingDocumentKeys(keyRing:noteMeta:)` → `retiredKeys(for:)`).
   `reconcileNotebookKeys` и `notebookKeyForWriting` понимают версии ключей блокнотов.
 - REST: `APIClient.boxKey/putBoxKey/publicKey`, приглашения, участники, `rotateKey`,
-  `rotationDone`, `sharedNoteKey`, `sharedWithMe`, `notebookKeyState`; типы со строгой проверкой
+  `rotationDone`, `sharedNoteKey`, `sharedWithMe`, `sharedByMe` (по нему владелец при запуске
+  выдаёт ключи и доделывает смену ключа), `notebookKeyState`; типы со строгой проверкой
   (векторы `api/bodies.json`). Авторы: `UpdateItem.author`, `DocVersion.authors` (`UpdateAuthor`).
 
 ## Синхронизация

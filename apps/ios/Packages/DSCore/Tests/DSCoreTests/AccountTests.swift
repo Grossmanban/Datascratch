@@ -257,4 +257,43 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
         try await device1.logout()
         #expect(try device1.keys.masterKey() == nil)
     }
+
+    /// Rich paste: the block gets the attachment id before the image bytes exist; the bytes are
+    /// added under that id later, or never (then nothing is stored or sent).
+    @Test func attachmentWithIdMadeBeforehand() async throws {
+        let server = FakeRESTServer()
+        let device = try makeService(server)
+        let signup = try await device.signup(email: "paste@example.com", password: "pw")
+        let space = Space(name: "Personal", order: 1)
+        try signup.account.putSpace(space)
+        let notebook = try await device.createNotebook(name: "Web", spaceId: space.id, order: 1, in: signup.account)
+        let note = try await device.createNote(in: notebook, title: "Pasted")
+        let meta = try #require(notebook.note(id: note.noteId))
+        let noteKey = try #require(try device.keys.noteKey(noteId: note.noteId, wrappedKey: meta.wrappedKey, notebookId: notebook.notebookId))
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(EntityID.make())
+        let dir2 = FileManager.default.temporaryDirectory.appendingPathComponent(EntityID.make())
+        defer { try? FileManager.default.removeItem(at: dir); try? FileManager.default.removeItem(at: dir2) }
+        let files = try AttachmentManager(api: device.api, store: device.store, directory: dir)
+
+        let filled = EntityID.make()
+        let never = EntityID.make()
+        // Nothing exists for a reserved id until its bytes are added.
+        #expect(try device.store.attachment(filled) == nil)
+        let payload = DSCrypto.randomBytes(1000)
+        #expect(try await files.add(payload, mime: "image/jpeg", noteId: note.noteId, id: filled) == filled)
+        await files.uploadPending { _ in noteKey }
+        #expect(try device.store.attachment(filled)?.state == .synced)
+        let other = try AttachmentManager(api: device.api, store: try LocalStore.inMemory(), directory: dir2)
+        #expect(try Data(contentsOf: try await other.download(filled, noteId: note.noteId, noteKey: noteKey)) == payload)
+
+        // The id that never got bytes: nothing stored, nothing uploaded.
+        #expect(try device.store.attachment(never) == nil)
+        #expect(await files.localURL(never) == nil)
+        #expect(server.state.withLock { $0.attachments[never] } == nil)
+        #expect(server.state.withLock { $0.attachments.count } == 1)
+
+        // Misuse is refused.
+        await #expect(throws: AttachmentError.alreadyExists(filled)) { try await files.add(payload, mime: "image/jpeg", noteId: note.noteId, id: filled) }
+        await #expect(throws: AttachmentError.invalidId("nope")) { try await files.add(payload, mime: "image/jpeg", noteId: note.noteId, id: "nope") }
+    }
 }

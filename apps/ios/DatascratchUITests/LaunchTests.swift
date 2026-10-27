@@ -311,6 +311,31 @@ final class LibraryUITests: XCTestCase {
                        "the New Note button does not say it goes to nb3: \(String(describing: button.value))")
     }
 
+    /// Build 19: a photo goes into the text at once, as a block after the caret (a stand-in
+    /// for the photo library: its sheet runs in another process).
+    func testInsertingAPhoto() throws {
+        let app = launchSignedIn(["-ui-testing-sample-photo"])
+        try openNewNoteInNativeEditor(app)
+        app.typeText("Photo note\n")
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        let text = editor.textViews.firstMatch
+        let before = ((text.value as? String) ?? "").filter { $0 == "\u{FFFC}" }.count
+        let insert = app.buttons["editor.insert"].firstMatch
+        if insert.waitForExistence(timeout: 3) {
+            insert.tap()
+        } else {
+            app.buttons["document.more"].firstMatch.tap()
+            app.buttons["Insert"].firstMatch.tap()
+        }
+        let sample = app.buttons["Sample Photo"].firstMatch
+        XCTAssertTrue(sample.waitForExistence(timeout: 5), "no photo entry in Insert; buttons: \(Self.buttons(app))")
+        sample.tap()
+        let added = NSPredicate { _, _ in ((text.value as? String) ?? "").filter { $0 == "\u{FFFC}" }.count > before }
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: added, evaluatedWith: nil)], timeout: 10), .completed,
+                       "no image block in the text")
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
+    }
+
     /// Back to the list: the back button on iPhone, «Close Document» on iPad.
     private func leaveDocument(_ app: XCUIApplication) {
         let close = app.buttons["document.close"].firstMatch

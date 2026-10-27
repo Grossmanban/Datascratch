@@ -70,11 +70,11 @@ struct RootView: View {
         .tint(Theme.Palette.accent)
         .onAppear { app.settings.applyAppearanceToWindows() }
         .onOpenURL { url in
-            app.pendingRoute = AppRoute.parse(url, webHost: app.webHost)
+            app.pendingRoute = AppRoute.parse(url, webHost: app.linkHost)
         }
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
             if let url = activity.webpageURL {
-                app.pendingRoute = AppRoute.parse(url, webHost: app.webHost)
+                app.pendingRoute = AppRoute.parse(url, webHost: app.linkHost)
             }
         }
     }

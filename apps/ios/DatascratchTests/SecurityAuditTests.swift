@@ -121,6 +121,19 @@ struct SecurityAuditTests {
         #expect(!ServerConnection.isDeviceRevoked(APIError.transport("offline")))
         #expect(!ServerConnection.isDeviceRevoked(URLError(.notConnectedToInternet)))
     }
+
+    /// D-49 amendment: the build's server is used only by an install that already signed in
+    /// with it; a new install starts with an empty «Server» field.
+    @Test func onlyAnEarlierSignInKeepsTheBuildServer() throws {
+        let fresh = try CoreLibrary.inMemory()
+        #expect(!AppModel.signedInBeforeServerField(fresh))
+        let signedIn = try CoreLibrary.inMemory()
+        try signedIn.store.setString("me@example.org", for: ServerAccountService.emailKey)
+        #expect(AppModel.signedInBeforeServerField(signedIn))
+        let signedOutByServer = try CoreLibrary.inMemory()
+        try signedOutByServer.store.setString("me@example.org", for: ServerAccountService.sessionEndedKey)
+        #expect(AppModel.signedInBeforeServerField(signedOutByServer))
+    }
     #endif
 
     private static func pngHeader(width: UInt32, height: UInt32) -> Data {

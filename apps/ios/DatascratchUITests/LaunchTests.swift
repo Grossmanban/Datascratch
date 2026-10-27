@@ -114,10 +114,25 @@ final class OnboardingUITests: XCTestCase {
         field.typeText(text + "\n")
     }
 
-    /// The build's server is filled in.
-    func testServerFieldStartsWithTheDefaultServer() throws {
+    /// The server this device already signed in to is filled in.
+    func testServerFieldStartsWithTheSavedServer() throws {
         let app = launchToSignIn([])
         XCTAssertEqual(app.textFields["signIn.server"].value as? String, "sync.example.org")
+    }
+
+    /// D-49 amendment: with nothing saved the field is empty — no address of ours, only a
+    /// neutral example in the placeholder.
+    func testServerFieldIsEmptyWithoutASavedServer() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing"]
+        app.launch()
+        app.buttons["welcome.signIn"].tap()
+        let field = app.textFields["signIn.server"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "no Server field on Sign In")
+        let value = (field.value as? String) ?? ""
+        XCTAssertTrue(value.isEmpty || value == field.placeholderValue, "the field is prefilled: \(value)")
+        XCTAssertTrue(field.placeholderValue?.contains("notes.company.ru") == true, "placeholder: \(field.placeholderValue ?? "nil")")
     }
 
     /// A plain http:// address (not localhost) is refused before anything is sent.

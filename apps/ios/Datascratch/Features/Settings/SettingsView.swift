@@ -125,7 +125,7 @@ struct AccountSettings: View {
                 .padding(.vertical, -DSSpace.s4)
             DSSettingsSection(String(localized: "Sync"),
                               footer: app.sync.isLocalOnly
-                                ? String(localized: "Notes are stored only on this device until the Datascratch server is connected.")
+                                ? String(localized: "Notes are stored only on this device until you sign in to your server.")
                                 : nil) {
                 DSSettingsRow(String(localized: "Status"), systemImage: "arrow.triangle.2.circlepath",
                               accessory: .custom(AnyView(DSSyncChip(app.sync.dsState).accessibilityIdentifier("sync.status"))))
@@ -551,14 +551,14 @@ struct DevicesSettings: View {
 
     var body: some View {
         SettingsPage(title: String(localized: "Devices")) {
-            DSSettingsSection(footer: String(localized: "Signing a device out removes its access immediately and deletes the data on it.")) {
+            DSSettingsSection(footer: String(localized: "Ending a session removes that device's access immediately and deletes the data on it.")) {
                 ForEach(app.access.devices) { device in
                     DSSettingsRow(device.name,
                                   subtitle: device.isCurrent ? String(localized: "This device")
                                       : device.lastSeenAt.formatted(.relative(presentation: .named)),
                                   systemImage: device.platform == "iPadOS" ? "ipad" : device.platform == "web" ? "globe" : "iphone",
                                   accessory: device.isCurrent ? .none : .custom(AnyView(
-                                      Button("Sign Out", role: .destructive) { deviceToSignOut = device }
+                                      Button("End Session", role: .destructive) { deviceToSignOut = device }
                                       .buttonStyle(.borderless)
                                       .font(Theme.Typography.footnote.weight(.semibold))
                                   )))
@@ -566,10 +566,10 @@ struct DevicesSettings: View {
             }
         }
         .task { await app.access.refresh() }
-        .confirmationDialog("Sign out this device?",
+        .confirmationDialog("End the session on this device?",
                             isPresented: Binding(get: { deviceToSignOut != nil }, set: { if !$0 { deviceToSignOut = nil } }),
                             titleVisibility: .visible, presenting: deviceToSignOut) { device in
-            Button("Sign Out and Delete Its Data", role: .destructive) {
+            Button("End Session and Delete Its Data", role: .destructive) {
                 Task { try? await app.access.revokeDevice(device.id) }
             }
         } message: { _ in

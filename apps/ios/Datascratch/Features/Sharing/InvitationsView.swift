@@ -113,6 +113,9 @@ private struct InvitationCard: View {
             .controlSize(.regular)
         }
         .padding(.vertical, Theme.Space.s2)
+        // Keep Accept and Decline as their own elements: an identifier on a plain container
+        // would be given to every child and hide theirs.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("invitation")
     }
 }

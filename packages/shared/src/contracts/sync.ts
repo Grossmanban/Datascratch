@@ -183,7 +183,7 @@ export const errorMessageSchema = z.object({
  * string carries the DeviceRevokedReason. Clients treat this close code alone
  * as a revocation too, in case the error frame was lost.
  */
-export const SYNC_CLOSE_DEVICE_REVOKED = 4401;
+export const SYNC_CLOSE_DEVICE_REVOKED = 4410;
 
 export const serverMessageSchema = z.discriminatedUnion("type", [
   welcomeMessageSchema,

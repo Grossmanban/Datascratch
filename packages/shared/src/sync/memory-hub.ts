@@ -103,7 +103,7 @@ export class MemorySyncHub {
 
   /**
    * Revoke a device (D-53): its open connections get `error device_revoked`
-   * and close 4401; later hellos from it are refused the same way.
+   * and close 4410; later hellos from it are refused the same way.
    */
   revokeDevice(deviceId: string, reason: DeviceRevokedReason): void {
     this.revoked.set(deviceId, reason);

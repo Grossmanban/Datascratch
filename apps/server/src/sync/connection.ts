@@ -16,7 +16,7 @@ import {
   type SyncErrorCode,
 } from './messages.js';
 
-type SyncPrincipal = UserPrincipal | GuestPrincipal;
+export type SyncPrincipal = UserPrincipal | GuestPrincipal;
 
 /** Something to send for a given seq: another device's update, or the ack of our own push. */
 type Pending =
@@ -36,6 +36,11 @@ interface Subscription {
 }
 
 const HELLO_TIMEOUT_MS = 10_000;
+/** Largest frame accepted before `hello` succeeds (a hello is well under 4 KB). */
+export const PRE_AUTH_MAX_PAYLOAD = 64 * 1024;
+/** Messages waiting to be handled before the socket stops reading (and when it reads again). */
+const QUEUE_PAUSE_AT = 32;
+const QUEUE_RESUME_AT = 8;
 /** Subscribe fast path: documents per batched query, and max updates per document in it. */
 const FAST_PATH_BATCH = 200;
 const FAST_PATH_MAX_UPDATES = 100;
@@ -59,6 +64,16 @@ class SyncError extends Error {
   }
 }
 
+/**
+ * Change the frame size limit of one connection. `ws` has no public per-socket option;
+ * its receiver checks `_maxPayload` against each frame header before buffering it
+ * (verified by the pre-auth frame test).
+ */
+function setMaxPayload(socket: WebSocket, bytes: number) {
+  const receiver = (socket as unknown as { _receiver?: { _maxPayload?: number } })._receiver;
+  if (receiver && typeof receiver._maxPayload === 'number') receiver._maxPayload = bytes;
+}
+
 /** One WebSocket client of /v1/sync (sync-protocol.md). */
 export class SyncConnection {
   readonly id = uuidv7();
@@ -67,6 +82,8 @@ export class SyncConnection {
   readonly #access = new Map<string, boolean>();
   readonly #control: (() => void)[] = [];
   #queue: Promise<void> = Promise.resolve();
+  #queued = 0;
+  #paused = false;
   #closed = false;
   #tokens: number;
   #lastRefill = Date.now();
@@ -76,8 +93,13 @@ export class SyncConnection {
     private readonly ctx: AppContext,
     private readonly socket: WebSocket,
     private readonly onClose: (c: SyncConnection) => void,
+    /** Whether this principal may hold one more connection (per-user cap). */
+    private readonly admit: (p: SyncPrincipal) => boolean = () => true,
+    /** Largest frame once authenticated. */
+    private readonly maxPayload = 0,
   ) {
     this.#tokens = this.#capacity;
+    setMaxPayload(socket, PRE_AUTH_MAX_PAYLOAD);
     this.#helloTimer = setTimeout(() => this.#fail('unauthorized', 'hello timeout', CloseCode.unauthorized), HELLO_TIMEOUT_MS);
     socket.on('message', (data, isBinary) => {
       if (isBinary) {
@@ -85,8 +107,22 @@ export class SyncConnection {
         return;
       }
       const text = Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.concat(data as Buffer[]).toString('utf8');
-      // Messages are handled strictly in order, one at a time.
-      this.#queue = this.#queue.then(() => this.#handle(text)).catch((err) => this.#internal(err));
+      // Messages are handled strictly in order, one at a time; a deep queue stops reading the socket.
+      this.#queued += 1;
+      if (this.#queued >= QUEUE_PAUSE_AT && !this.#paused) {
+        this.#paused = true;
+        socket.pause();
+      }
+      this.#queue = this.#queue
+        .then(() => this.#handle(text))
+        .catch((err) => this.#internal(err))
+        .finally(() => {
+          this.#queued -= 1;
+          if (this.#paused && this.#queued <= QUEUE_RESUME_AT && !this.#closed) {
+            this.#paused = false;
+            socket.resume();
+          }
+        });
     });
     socket.on('close', () => this.#cleanup());
     socket.on('error', () => this.#cleanup());
@@ -165,6 +201,21 @@ export class SyncConnection {
 
   async #handle(text: string) {
     if (this.#closed) return;
+    // Rate limit before parsing: a flood of large messages costs no JSON work.
+    if (this.#principal && !this.#takeToken()) {
+      let ref: string | undefined;
+      if (text.length <= PRE_AUTH_MAX_PAYLOAD) {
+        try {
+          const m = JSON.parse(text) as { clientMsgId?: unknown; docId?: unknown };
+          const r = m.clientMsgId ?? m.docId;
+          if (typeof r === 'string') ref = r;
+        } catch {
+          // no ref
+        }
+      }
+      this.#send({ type: 'error', code: 'rate_limited', message: 'too many messages', ...(ref ? { ref } : {}) });
+      return;
+    }
     let raw: unknown;
     try {
       raw = JSON.parse(text);
@@ -196,11 +247,6 @@ export class SyncConnection {
     }
     if (msg.type === 'hello') {
       this.#send({ type: 'error', code: 'bad_request', message: 'already authenticated' });
-      return;
-    }
-    if (!this.#takeToken()) {
-      const ref = 'clientMsgId' in msg ? msg.clientMsgId : 'docId' in msg ? msg.docId : undefined;
-      this.#send({ type: 'error', code: 'rate_limited', message: 'too many messages', ...(ref ? { ref } : {}) });
       return;
     }
     try {
@@ -251,7 +297,9 @@ export class SyncConnection {
     }
     if (!p) return this.#fail('unauthorized', 'invalid credentials', CloseCode.unauthorized);
     if (this.#closed) return;
+    if (!this.admit(p)) return this.#fail('rate_limited', 'too many connections', CloseCode.tryAgainLater);
     this.#principal = p;
+    setMaxPayload(this.socket, this.maxPayload);
     const kick = (m: HubMessage) => {
       if (m.type === 'revoked') this.#fail('unauthorized', m.reason, CloseCode.unauthorized);
     };

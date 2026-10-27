@@ -256,9 +256,10 @@ public actor SyncClient {
 
     private func backoff() -> Duration {
         attempt += 1
-        let base = Double(configuration.minBackoff.components.seconds) * pow(2, Double(min(attempt - 1, 10)))
-        let capped = min(base, Double(configuration.maxBackoff.components.seconds))
-        return .milliseconds(Int(capped * 1000 * Double.random(in: 0.8...1.2)))
+        // Whole durations: `components.seconds` alone dropped the fraction, so a backoff under a
+        // second (tests) became zero and reconnects spun without pause.
+        let base = configuration.minBackoff * pow(2, Double(min(attempt - 1, 10)))
+        return min(base, configuration.maxBackoff) * Double.random(in: 0.8...1.2)
     }
 
     private func connectOnce(welcomed: () -> Void) async throws {

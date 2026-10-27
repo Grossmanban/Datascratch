@@ -286,6 +286,9 @@ function InsertPicture({ api, noteId }: { api: EditorApi; noteId: string }) {
   const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
+  // The editor's own picker (web-editor 1e48522b) inserts a placeholder at once and fills it as
+  // the file is encrypted; until that editor is in, the same thing happens here.
+  const editorPick = (api as EditorApi & { pickImage?: () => void }).pickImage;
   const insert = async (files: File[]) => {
     const done: { attachmentId: string; alt: string }[] = [];
     for (const [i, file] of files.entries()) {
@@ -306,7 +309,7 @@ function InsertPicture({ api, noteId }: { api: EditorApi; noteId: string }) {
     <>
       <IconButton
         label={progress === null ? t("docs.insertPicture") : `${t("docs.insertPicture")} · ${Math.round(progress * 100)}%`}
-        onClick={() => input.current?.click()}
+        onClick={() => (editorPick ? editorPick.call(api) : input.current?.click())}
         disabled={progress !== null}
         data-testid="insert-picture"
       >

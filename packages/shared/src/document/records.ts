@@ -7,11 +7,13 @@ import type {
   Folder,
   NoteMeta,
   NotebookRef,
+  SharedRef,
   Space,
   StarredItem,
   TabItem,
   TagProps,
 } from "../contracts/document.js";
+import { sharedRefKey } from "../contracts/document.js";
 import { accountRoots, notebookRoots } from "./factories.js";
 import { readRecord, readRecords, writeRecord } from "./yjs.js";
 
@@ -60,6 +62,19 @@ export function setSetting(doc: Y.Doc, key: string, value: unknown): void {
   if (value === undefined) settings.delete(key);
   else settings.set(key, value);
 }
+
+/** «Общие со мной» placements (D-54), optionally of one space. */
+export function getSharedRefs(doc: Y.Doc, spaceId?: string): SharedRef[] {
+  return readRecords<SharedRef>(accountRoots(doc).shared)
+    .filter((r) => spaceId === undefined || r.spaceId === spaceId)
+    .sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+export const getSharedRef = (doc: Y.Doc, kind: SharedRef["kind"], id: string) =>
+  readRecord<SharedRef>(accountRoots(doc).shared, sharedRefKey(kind, id));
+export const putSharedRef = (doc: Y.Doc, ref: SharedRef) =>
+  void writeRecord(accountRoots(doc).shared, sharedRefKey(ref.kind, ref.id), ref);
+export const deleteSharedRef = (doc: Y.Doc, kind: SharedRef["kind"], id: string) =>
+  accountRoots(doc).shared.delete(sharedRefKey(kind, id));
 
 export const getStarred = (doc: Y.Doc): StarredItem[] =>
   accountRoots(doc).starred.toJSON() as StarredItem[];

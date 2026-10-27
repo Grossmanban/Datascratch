@@ -67,7 +67,8 @@
 1. **Settings → Secrets and variables → Actions → Variables → New repository variable**: имя `DEPLOY_ENABLED`, значение `true`. Это предохранитель: без него выкладка никогда не запускается.
 2. **Actions → deploy → Run workflow** → **mode**: `deploy` → **Run workflow**.
 3. Первый запуск идёт ≈ 10 минут: сборка образов, подготовка сервера, выкладка, проверка.
-4. Откройте запуск → **Summary**: **адрес** (например `https://203-0-113-10.sslip.io`), версия и режим (`direct` — Datascratch сам на портах 80/443; `edge` — рядом с Sinhron, через его Caddy; `proxy` — за вашим существующим веб-сервером, см. ниже).
+4. Откройте запуск → **Summary**: версия и режим (`direct` — Datascratch сам на портах 80/443; `edge` — рядом с Sinhron, через его Caddy; `proxy` — за вашим существующим веб-сервером, см. ниже).
+5. **Адрес** сервера в журналах и Summary не показывается: репозиторий публичный, а сервер личный (D-49). Без своего домена он такой: IP сервера с дефисами вместо точек + `.sslip.io` (IP `203.0.113.10` → `https://203-0-113-10.sslip.io`). Посмотреть на сервере: `/opt/datascratch/deploy.sh status` (строка `domain:`).
 
 После этого каждый push в `main`, меняющий сервер, веб или инфраструктуру, выкладывается сам (пока `DEPLOY_ENABLED=true`).
 
@@ -81,8 +82,8 @@ Datascratch умеет жить рядом с другими программа�
 - **Автообновления** уже настроенные — не меняются; на сервере с другими программами их политика тоже не меняется.
 - **Рядом с Sinhron.** Если на сервере работает Sinhron (контейнер `sinhron-caddy` держит 80/443), Datascratch встраивается в его Caddy: наш веб-контейнер `datascratch-web` не открывает портов, а подключается к общей docker-сети `edge`; выкладка кладёт файл `/etc/sinhron/caddy-sites/datascratch.caddy` (только свой) и перезагружает Caddy Sinhron — сначала `caddy validate`, при любой ошибке файл убирается и Caddy Sinhron не трогается. Сертификат для адреса Datascratch получает Caddy Sinhron. Заголовки безопасности Sinhron на Datascratch не распространяются (у веб-приложения свои).
   - Нужна версия Sinhron, которая умеет принимать соседей (импортирует `/etc/caddy/sites/*.caddy` и подключена к сети `edge`). Если Sinhron старее, выкладка остановится с сообщением «Update Sinhron first» — обновите Sinhron (`sudo bash /opt/sinhron/server/install.sh --yes --no-upgrade`; это делает его владелец, Datascratch сам Sinhron не обновляет) и запустите выкладку снова.
-- **Порты 80/443 заняты другим веб-сервером** (не Sinhron) — Datascratch слушает только `127.0.0.1:8480` (снаружи недоступен), а HTTPS и сертификат остаются за вашим веб-сервером. В Summary запуска будет готовый фрагмент настройки для nginx; на сервере также лежат `/opt/datascratch/proxy/nginx.conf`, `Caddyfile` и `traefik.yml`.
-  - **nginx, вручную (по умолчанию):** скопируйте `/opt/datascratch/proxy/nginx.conf` в `/etc/nginx/sites-available/datascratch.conf`, затем `ln -s /etc/nginx/sites-available/datascratch.conf /etc/nginx/sites-enabled/ && nginx -t && systemctl reload nginx`. Сертификат: `certbot --nginx -d <адрес из Summary>`.
+- **Порты 80/443 заняты другим веб-сервером** (не Sinhron) — Datascratch слушает только `127.0.0.1:8480` (снаружи недоступен), а HTTPS и сертификат остаются за вашим веб-сервером. Готовые настройки лежат на сервере: `/opt/datascratch/proxy/nginx.conf`, `Caddyfile` и `traefik.yml` (в Summary их нет — в них адрес).
+  - **nginx, вручную (по умолчанию):** скопируйте `/opt/datascratch/proxy/nginx.conf` в `/etc/nginx/sites-available/datascratch.conf`, затем `ln -s /etc/nginx/sites-available/datascratch.conf /etc/nginx/sites-enabled/ && nginx -t && systemctl reload nginx`. Сертификат: `certbot --nginx -d <адрес сервера>`.
   - **nginx, автоматически:** переменная `DS_NGINX_AUTO=true` — выкладка сама добавит этот сайт (только свой файл `datascratch.conf`; прежняя версия этого файла сохраняется рядом), проверит `nginx -t` и перезагрузит nginx. Если проверка не прошла — всё возвращается как было, nginx не перезагружается. С `DS_NGINX_CERTBOT=true` дополнительно запустится `certbot --nginx` для адреса Datascratch.
   - **Caddy / Traefik:** добавьте фрагмент из `/opt/datascratch/proxy/Caddyfile` или `traefik.yml` — сертификат они получат сами.
 - **Память.** Если на сервере есть другие программы, Datascratch берёт меньше: PostgreSQL до 512 МБ, сервер до 512 МБ, веб до 128 МБ (вместо 1 ГБ / 1 ГБ / 256 МБ) — не больше 1,15 ГБ, в простое 300–400 МБ. Вместе с Sinhron (≈ 1–1,5 ГБ) остаётся запас на 4 ГБ. Проверено замером (`infra/deploy/test/memory-check.sh`): первая синхронизация 10 000 заметок с этими лимитами — пик PostgreSQL ~50 МБ, сервер ~110 МБ, веб ~11 МБ, без перезапусков.
@@ -174,14 +175,11 @@ rsync -av root@АДРЕС-СЕРВЕРА:/opt/datascratch/backups/ ./datascratch
 ## Подключить свой домен (по желанию)
 
 1. У регистратора домена создайте запись **A**: имя, например, `notes` → IP сервера. Подождите 5–30 минут.
-2. GitHub → **Settings → Secrets and variables → Actions → Variables** → **New repository variable**: имя `DS_DOMAIN`, значение `notes.ваш-домен.ru`.
+2. GitHub → **Settings → Secrets and variables → Actions → Secrets** → **New repository secret**: имя `DS_DOMAIN`, значение `notes.ваш-домен.ru`. Именно секрет, не переменная: переменные видны в публичных журналах. Если `DS_DOMAIN` уже заведена как переменная — удалите её и создайте секрет, иначе выкладка остановится с ошибкой `DS_DOMAIN`.
 3. **Actions → deploy → Run workflow**. Caddy сам получит сертификат для нового домена. Старый адрес `…sslip.io` перестанет обслуживаться — войдите в веб-приложении по новому адресу. Ссылки шеринга, созданные на старом адресе, нужно будет пересоздать.
 
 ## Адрес сервера для iPhone и iPad
 
-Приложение для iOS узнаёт адрес сервера при сборке:
-
-1. GitHub → **Settings → Secrets and variables → Actions → Variables** → **New repository variable**: имя `DS_SERVER_URL`, значение — адрес из Summary (например `https://203-0-113-10.sslip.io` или `https://notes.ваш-домен.ru`), без `/` в конце.
-2. Выпустите новую сборку для TestFlight (`apps/ios/RELEASE.md`, «Как выпустить сборку»).
+Адрес в сборку не зашивается (D-49): при первом входе приложение спрашивает адрес сервера (или берёт его из ссылки-приглашения). Новая сборка при смене адреса не нужна.
 
 Веб-приложению ничего настраивать не нужно: оно открывается с того же адреса и само обращается к API на нём же.

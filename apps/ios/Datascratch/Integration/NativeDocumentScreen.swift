@@ -51,7 +51,11 @@ final class NativeEditorModel: ClosingEditor {
         // during gesture handling, and an immediate re-render there crashed UIKit
         // (_delayTouchesForEvent) in ios-editor's demo.
         editor.onStateChange = { [weak self] in
-            DispatchQueue.main.async { self?.changed() }
+            DispatchQueue.main.async {
+                // D-54 «view only»: no keyboard (the server would refuse the edits anyway).
+                if let self, self.isViewOnly, self.editor.isEditingText { self.editor.dismissKeyboard() }
+                self?.changed()
+            }
         }
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
         // «Link» on the format bar: the screen asks for the address.
@@ -195,6 +199,21 @@ final class NativeEditorModel: ClosingEditor {
         text.split(whereSeparator: \.isWhitespace).allSatisfy { $0.hasPrefix("#") && $0.count > 1 }
     }
 
+    /// D-54: the note is shared with this account «view only»: reading, searching and copying
+    /// stay; typing, the pen and the bars do not.
+    var isViewOnly = false {
+        didSet {
+            guard isViewOnly != oldValue else { return }
+            if isViewOnly {
+                editor.tools.mode = .text
+                editor.tools.allowsFingerDrawing = false
+                if editor.isEditingText { editor.dismissKeyboard() }
+            } else {
+                editor.tools.allowsFingerDrawing = app?.settings.fingerDrawingEffective ?? false
+            }
+        }
+    }
+
     private func changed() {
         revision &+= 1
         // Title, tags and tasks of the list views follow the document (debounced).
@@ -266,6 +285,16 @@ struct NativeDocumentScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let noteId: String
 
+    /// D-54: shared with this account «view only» (the note itself or its notebook).
+    private func isViewOnly(_ note: NoteMeta) -> Bool {
+        app.accountSharing.role(forNote: note.id, notebookId: note.notebookId) == .viewer
+    }
+
+    private func owner(of note: NoteMeta) -> String? {
+        app.accountSharing.owner(of: ShareTarget(kind: .note, id: note.id))
+            ?? app.accountSharing.owner(of: ShareTarget(kind: .notebook, id: note.notebookId))
+    }
+
     private func setPaletteCollapsed(_ collapsed: Bool) {
         withAnimation(reduceMotion ? nil : Theme.Motion.snappy) {
             app.settings.penPaletteCollapsed = collapsed
@@ -315,9 +344,13 @@ struct NativeDocumentScreen: View {
                     .frame(width: proxy.size.width)
                     // The palette sits in the bottom safe area: the text scrolls clear of it, and it
                     // rides up with the keyboard in one animation (no second layout pass).
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        if isViewOnly(note) { ViewOnlyBanner(owner: owner(of: note)) }
+                    }
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         // Inline when it fits the column, else the compact row: it never runs past
                         // the column's edges (iPad split view with three columns).
+                        if !isViewOnly(note) {
                         VStack(spacing: 0) {
                             // While text is being written: marks and block styles above the palette.
                             FormatBarRow(model: model)
@@ -347,6 +380,7 @@ struct NativeDocumentScreen: View {
                             }
                             .frame(maxWidth: .infinity)
                         }
+                        }
                     }
                     // The "/" menu over the format bar and palette too: in a short editor (iPad in
                     // landscape with the keyboard up) it reaches past the editor, and under the
@@ -372,6 +406,7 @@ struct NativeDocumentScreen: View {
                     model.header.note = note
                     model.refreshCreatedByAgent()
                 }
+                .onChange(of: isViewOnly(note), initial: true) { _, viewOnly in model.isViewOnly = viewOnly }
                 .onChange(of: app.settings.fingerDrawing) { _, _ in
                     model.editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
                 }
@@ -423,6 +458,11 @@ struct NativeEditorToolbar: ToolbarContent {
     let model: NativeEditorModel
     let note: NoteMeta
 
+    /// D-54 «view only»: nothing that edits (insert, style, cover, undo, move, trash).
+    private var isViewOnly: Bool { model.isViewOnly }
+    /// Shared with this account: the owner moves it; a note shared on its own has no notebook here.
+    private var isShared: Bool { app.accountSharing.role(forNote: note.id, notebookId: note.notebookId) != nil }
+
     @ViewBuilder private var insertItems: some View {
         Button("Task", systemImage: "checkmark.circle") { model.editor.perform(.taskList) }
         Menu {
@@ -453,6 +493,7 @@ struct NativeEditorToolbar: ToolbarContent {
             CloseDocumentButton()
             FullScreenButton()
             let _ = model.revision
+            if !isViewOnly {
             Button { model.editor.undo() } label: { Image(systemName: "arrow.uturn.backward") }
                 .disabled(!model.editor.canUndo)
                 .accessibilityLabel("Undo")
@@ -461,16 +502,19 @@ struct NativeEditorToolbar: ToolbarContent {
                 .disabled(!model.editor.canRedo)
                 .accessibilityLabel("Redo")
                 .keyboardShortcut("z", modifiers: [.command, .shift])
+            }
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             // A narrow column (next to the list on an iPad mini in portrait): Insert and Share go
             // into «…» so the bar fits the column (D-47).
             if !isNarrowColumn {
+                if !isViewOnly {
                 Menu { insertItems } label: {
                     Image(systemName: "plus.circle")
                 }
                 .accessibilityLabel("Insert")
                 .accessibilityIdentifier("editor.insert")
+                }
 
                 Button {
                     scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
@@ -482,14 +526,16 @@ struct NativeEditorToolbar: ToolbarContent {
 
             Menu {
                 if isNarrowColumn {
-                    Menu("Insert", systemImage: "plus.circle") { insertItems }
+                    if !isViewOnly { Menu("Insert", systemImage: "plus.circle") { insertItems } }
                     Button("Share", systemImage: "square.and.arrow.up") {
                         scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
                     }
                     Divider()
                 }
-                Button("Style…", systemImage: "textformat") { scene.sheet = .documentStyle(noteId: note.id) }
-                Menu("Cover", systemImage: "photo") { CoverMenuItems(note: note) }
+                if !isViewOnly {
+                    Button("Style…", systemImage: "textformat") { scene.sheet = .documentStyle(noteId: note.id) }
+                    Menu("Cover", systemImage: "photo") { CoverMenuItems(note: note) }
+                }
                 Button("Version History", systemImage: "clock.arrow.circlepath") {
                     app.library.recordVersion(ofNote: note.id)
                     scene.sheet = .versions(noteId: note.id)
@@ -498,15 +544,19 @@ struct NativeEditorToolbar: ToolbarContent {
                        systemImage: "star") {
                     app.library.toggleStar(.note, note.id)
                 }
-                Button("Move To…", systemImage: "folder") { scene.sheet = .move(noteId: note.id) }
+                if !isShared {
+                    Button("Move To…", systemImage: "folder") { scene.sheet = .move(noteId: note.id) }
+                }
                 Button("Open in New Window", systemImage: "macwindow.badge.plus") { openWindow(id: "note", value: note.id) }
                 if Features.tabs {
                     Button("Close Tab", systemImage: "xmark") { scene.closeTab() }
                 }
-                Divider()
-                Button("Move to Trash", systemImage: "trash", role: .destructive) {
-                    scene.closeDocument()
-                    app.library.trash(note: note.id)
+                if !isViewOnly, note.notebookId != Notebook.sharedNotesId {
+                    Divider()
+                    Button("Move to Trash", systemImage: "trash", role: .destructive) {
+                        scene.closeDocument()
+                        app.library.trash(note: note.id)
+                    }
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -887,3 +937,34 @@ struct PenPalette: View {
 }
 
 #endif
+
+/// D-54: a calm strip over a note shared «view only».
+struct ViewOnlyBanner: View {
+    let owner: String?
+
+    var body: some View {
+        HStack(spacing: Theme.Space.s2) {
+            Image(systemName: "eye")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Theme.Palette.accent)
+            Group {
+                if let owner {
+                    Text("View only · \(owner) can edit")
+                } else {
+                    Text("View only")
+                }
+            }
+            .font(Theme.Typography.footnote.weight(.medium))
+            .foregroundStyle(Theme.Palette.textSecondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, Theme.Space.s4)
+        .padding(.vertical, Theme.Space.s2)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.Palette.separator).frame(height: 0.5) }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("viewOnly.banner")
+    }
+}

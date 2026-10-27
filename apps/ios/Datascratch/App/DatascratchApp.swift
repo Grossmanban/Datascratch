@@ -91,6 +91,7 @@ struct MainWindow: View {
                 MainSplitView()
                     .environment(scene)
                     .focusedSceneValue(\.sceneModel, scene)
+                    .modifier(SharingPrompts())
                     .onChange(of: app.pendingRoute, initial: true) { _, route in
                         guard let route else { return }
                         scene.handle(route)

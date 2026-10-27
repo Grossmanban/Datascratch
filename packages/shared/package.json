@@ -35,6 +35,10 @@
       "types": "./dist/sync/index.d.ts",
       "import": "./dist/sync/index.js"
     },
+    "./sharing": {
+      "types": "./dist/sharing/index.d.ts",
+      "import": "./dist/sharing/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

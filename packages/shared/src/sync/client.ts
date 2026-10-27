@@ -19,7 +19,13 @@ import {
   type SyncAuth,
   type SyncErrorCode,
 } from "../contracts/sync.js";
-import { deviceRevokedReasonSchema, type DeviceRevokedReason } from "../contracts/api.js";
+import {
+  deviceRevokedReasonSchema,
+  type Author,
+  type DeviceRevokedReason,
+} from "../contracts/api.js";
+
+type RemoteRef = RemoteUpdateInfo;
 import { fromBase64Url, toBase64Url } from "../crypto/base64url.js";
 import {
   decryptAwareness,
@@ -116,6 +122,20 @@ export interface SyncClientOptions {
   storedDocs?: StoredDocsHandler;
   /** Hook before a compaction snapshot of a live document (e.g. purge orphaned strokes, D-35). */
   beforeSnapshot?: (docId: string, doc: Y.Doc) => void;
+  /**
+   * Documents this account may only read (D-54 role `viewer`): local edits
+   * and compaction snapshots are not sent (the server would reject them with
+   * `forbidden`). Checked on every send, so a role change applies at once.
+   */
+  readOnly?: (docId: string) => boolean;
+  /**
+   * An item does not decrypt with any known key. Return true when the key may
+   * simply be newer than ours (D-54 key rotation of a shared notebook): the
+   * document pauses instead of skipping the item; refresh the keys and call
+   * `keyAvailable(docId)`. Asked at most once per document until an item
+   * decrypts again, so real corruption is still skipped.
+   */
+  keyMaybeStale?: (docId: string) => boolean | Promise<boolean>;
   /** Consecutive auth failures before giving up (status "unauthorized"). Default 3. */
   maxAuthFailures?: number;
   random?: () => number;
@@ -171,7 +191,20 @@ interface Listeners {
   synced: (docId: string) => void;
   error: (error: SyncClientError) => void;
   awareness: (docId: string, payload: Uint8Array, deviceId: string) => void;
-  remoteUpdate: (docId: string, update: Uint8Array) => void;
+  /**
+   * A remote update or snapshot was applied (live doc) or queued for the
+   * app (stored doc). `info.author` is the server-stamped author (D-54) —
+   * use it for «who changed what»; absent from older servers and snapshots.
+   */
+  remoteUpdate: (docId: string, update: Uint8Array, info: RemoteUpdateInfo) => void;
+}
+
+export interface RemoteUpdateInfo {
+  seq: number;
+  kind: "update" | "snapshot";
+  /** null for snapshots. */
+  deviceId: string | null;
+  author?: Author;
 }
 
 /**
@@ -216,6 +249,8 @@ export class SyncClient {
       | "storedDocs"
       | "alternateKeysFor"
       | "recoverSkippedFromSnapshot"
+      | "readOnly"
+      | "keyMaybeStale"
     >
   > &
     SyncClientOptions;
@@ -238,6 +273,9 @@ export class SyncClient {
   private storageFailing = false;
   private readonly skippedLog = new Map<string, SkippedUpdate[]>();
   private readonly recoveryTried = new Set<string>();
+  /** Documents paused once by keyMaybeStale since their last successful decrypt. */
+  private readonly staleTried = new Set<string>();
+  private readonly sentWaiters = new Map<string, (() => void)[]>();
   private socket: WebSocketLike | null = null;
   private _status: SyncStatus = "idle";
   private welcomed = false;
@@ -551,6 +589,24 @@ export class SyncClient {
     });
   }
 
+  /**
+   * Resolves once every local edit of `docId` made so far has been accepted
+   * by the server (or dropped as unacceptable) — e.g. before telling the
+   * server a key rotation is done (D-54). Waits across reconnects.
+   */
+  async whenSent(docId: string): Promise<void> {
+    const entry = this.docs.get(docId);
+    if (entry) await this.flushPending(docId, entry);
+    await this.chain;
+    const outbox = await this.outboxItems();
+    if (![...outbox.values()].some((i) => i.docId === docId)) return;
+    await new Promise<void>((resolve) => {
+      const list = this.sentWaiters.get(docId) ?? [];
+      list.push(resolve);
+      this.sentWaiters.set(docId, list);
+    });
+  }
+
   /** Flush batched local updates to the outbox now. */
   async flush(): Promise<void> {
     for (const [docId, entry] of this.docs) await this.flushPending(docId, entry);
@@ -800,8 +856,19 @@ export class SyncClient {
   }
 
   private async removeOutbox(clientMsgId: string): Promise<void> {
-    (await this.outboxItems()).delete(clientMsgId);
+    const outbox = await this.outboxItems();
+    const docId = outbox.get(clientMsgId)?.docId;
+    outbox.delete(clientMsgId);
     await this.opts.storage.removeOutbox(clientMsgId);
+    if (docId) this.notifySent(docId, outbox);
+  }
+
+  private notifySent(docId: string, outbox: Map<string, OutboxItem>): void {
+    const waiters = this.sentWaiters.get(docId);
+    if (!waiters) return;
+    for (const item of outbox.values()) if (item.docId === docId) return;
+    this.sentWaiters.delete(docId);
+    for (const fn of waiters) fn();
   }
 
   /** Persist cursors lazily: a lost write only means re-fetching a few updates. */
@@ -873,7 +940,7 @@ export class SyncClient {
         const skippedBefore = this.skippedLog.get(msg.docId)?.length ?? 0;
         let paused = false;
         if (msg.snapshot) {
-          const ref = { seq: msg.snapshot.seq, deviceId: null, kind: "snapshot" as const };
+          const ref: RemoteRef = { seq: msg.snapshot.seq, deviceId: null, kind: "snapshot" };
           const r = await this.applyRemote(msg.docId, entry, msg.snapshot.payload, ref);
           if (r === PAUSED) paused = true;
           else {
@@ -886,7 +953,12 @@ export class SyncClient {
         }
         for (const item of msg.items) {
           if (paused) break;
-          const ref = { seq: item.seq, deviceId: item.deviceId, kind: "update" as const };
+          const ref: RemoteRef = {
+            seq: item.seq,
+            deviceId: item.deviceId,
+            kind: "update",
+            ...(item.author ? { author: item.author } : {}),
+          };
           const size = await this.applyRemote(msg.docId, entry, item.payload, ref);
           if (size === PAUSED) {
             paused = true;
@@ -922,7 +994,12 @@ export class SyncClient {
       case "update": {
         const entry = this.docs.get(msg.docId);
         if (!entry || entry.paused) return;
-        const ref = { seq: msg.seq, deviceId: msg.deviceId, kind: "update" as const };
+        const ref: RemoteRef = {
+          seq: msg.seq,
+          deviceId: msg.deviceId,
+          kind: "update",
+          ...(msg.author ? { author: msg.author } : {}),
+        };
         const size = await this.applyRemote(msg.docId, entry, msg.payload, ref);
         if (size === PAUSED) return;
         this.count(entry, size);
@@ -1032,7 +1109,7 @@ export class SyncClient {
     docId: string,
     entry: DocEntry,
     payload: string,
-    ref: { seq: number; deviceId: string | null; kind: "update" | "snapshot" },
+    ref: RemoteRef,
   ): Promise<number | typeof PAUSED> {
     let update: Uint8Array;
     try {
@@ -1043,9 +1120,20 @@ export class SyncClient {
         this.pause(docId, entry);
         return PAUSED;
       }
+      if (
+        this.opts.keyMaybeStale &&
+        !this.staleTried.has(docId) &&
+        (await this.opts.keyMaybeStale(docId))
+      ) {
+        // Possibly a newer key (rotation): wait for it, the item is re-read on resume.
+        this.staleTried.add(docId);
+        this.pause(docId, entry);
+        return PAUSED;
+      }
       this.skip(docId, ref, "decrypt_failed", e);
       return 0;
     }
+    this.staleTried.delete(docId);
     if (!entry.doc) {
       try {
         // Validate before handing it to the app: a corrupt update must not poison the saved state.
@@ -1055,7 +1143,7 @@ export class SyncClient {
         return 0;
       }
       entry.stored.push(update);
-      for (const fn of this.listeners.remoteUpdate) fn(docId, update);
+      for (const fn of this.listeners.remoteUpdate) fn(docId, update, ref);
       return update.length;
     }
     try {
@@ -1064,7 +1152,7 @@ export class SyncClient {
       this.skip(docId, ref, "apply_failed", e);
       return 0;
     }
-    for (const fn of this.listeners.remoteUpdate) fn(docId, update);
+    for (const fn of this.listeners.remoteUpdate) fn(docId, update, ref);
     return update.length;
   }
 
@@ -1175,6 +1263,7 @@ export class SyncClient {
     const updates = entry.pending;
     entry.pending = [];
     entry.pendingBytes = 0;
+    if (this.opts.readOnly?.(docId)) return;
     {
       const update = updates.length === 1 ? updates[0]! : Y.mergeUpdates(updates);
       if (update.length > MAX_UPDATE_BYTES) {
@@ -1225,6 +1314,7 @@ export class SyncClient {
 
   private async enqueueSnapshot(docId: string, entry: DocEntry, force: boolean): Promise<void> {
     if (entry.snapshotInFlight && !force) return;
+    if (this.opts.readOnly?.(docId)) return;
     let state: Uint8Array;
     if (entry.doc) {
       this.opts.beforeSnapshot?.(docId, entry.doc);

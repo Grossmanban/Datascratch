@@ -174,8 +174,8 @@ describe('devices', () => {
     const del = await api(s, 'DELETE', `/devices/${second.body.deviceId}`, { token: u.session.accessToken });
     expect(del.status).toBe(204);
     const err = await ws.next((m) => m.type === 'error');
-    expect(err.code).toBe('unauthorized');
-    expect((await ws.waitClose()).code).toBe(4401);
+    expect(err).toMatchObject({ code: 'device_revoked', reason: 'user' });
+    expect(await ws.waitClose()).toEqual({ code: 4410, reason: 'user' });
     expect((await api(s, 'GET', '/me', { token: second.body.accessToken })).status).toBe(401);
     expect((await api(s, 'DELETE', `/devices/${second.body.deviceId}`, { token: u.session.accessToken })).status).toBe(404);
   });

@@ -65,6 +65,8 @@ export const devices = pgTable(
     createdAt: created(),
     lastSeenAt: ts('last_seen_at').notNull().defaultNow(),
     revokedAt: ts('revoked_at'),
+    /** Why the device was revoked (user | password_change | recovery | token_reuse): clients wipe local data on it. */
+    revokedReason: text('revoked_reason'),
   },
   (t) => [index('devices_user_idx').on(t.userId)],
 );

@@ -181,6 +181,12 @@ export class SyncConnection {
     }
   }
 
+  /** The device was revoked: tell why, then close with 4410 (sync-protocol: the client wipes its data). */
+  #revoked(reason: string) {
+    this.#send({ type: 'error', code: 'device_revoked', message: 'this device was signed out', reason });
+    this.close(CloseCode.deviceRevoked, reason);
+  }
+
   #fail(code: SyncErrorCode, message: string, closeCode: number) {
     this.#send({ type: 'error', code, message });
     this.close(closeCode, message);
@@ -296,7 +302,12 @@ export class SyncConnection {
     clearTimeout(this.#helloTimer);
     let p: SyncPrincipal | null;
     if (msg.auth.kind === 'user') {
-      p = await verifyUserToken(this.ctx, msg.auth.accessToken);
+      try {
+        p = await verifyUserToken(this.ctx, msg.auth.accessToken);
+      } catch (err) {
+        if (err instanceof ApiError && err.code === 'device_revoked') return this.#revoked(err.reason ?? 'user');
+        throw err;
+      }
     } else {
       // Guest device ids are namespaced so they can never collide with a user's devices
       // (and stay within the 64 characters of the contract's deviceId).
@@ -313,7 +324,10 @@ export class SyncConnection {
     this.#principal = p;
     setMaxPayload(this.socket, this.maxPayload);
     const kick = (m: HubMessage) => {
-      if (m.type === 'revoked') this.#fail('unauthorized', m.reason, CloseCode.unauthorized);
+      if (m.type !== 'revoked') return;
+      // A revoked device (its reason travels in the hub message); a guest's share was revoked.
+      if (p.kind === 'user') this.#revoked(m.reason);
+      else this.#fail('unauthorized', m.reason, CloseCode.unauthorized);
     };
     if (p.kind === 'user') {
       this.#control.push(this.ctx.hub.subscribe(topics.device(p.deviceId), kick));

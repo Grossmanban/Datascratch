@@ -45,6 +45,9 @@ final class CoverImages {
 
     /// Attachments added on this device and still going up to the server.
     private(set) var uploading: Set<String> = []
+    @ObservationIgnored private var uploads: [String: Task<Void, Never>] = [:]
+    /// Posted with the attachment id as `object` when a missing file has arrived (a download).
+    static let didArrive = Notification.Name("CoverImages.didArrive")
 
     nonisolated struct AddedImage: Sendable {
         var id: String
@@ -109,11 +112,24 @@ final class CoverImages {
     private func upload(_ id: String, noteId: String) {
         guard let remote else { return }
         uploading.insert(id)
-        Task {
+        uploads[id] = Task {
             await remote.uploadAttachment(id, noteId: noteId)
             uploading.remove(id)
+            uploads[id] = nil
             revision += 1
         }
+    }
+
+    /// Returns when the attachment's upload has ended (at once if none is running).
+    func uploadEnded(_ id: String) async {
+        await uploads[id]?.value
+    }
+
+    /// The file of an attachment on this device, downloading it when missing.
+    func file(_ attachmentId: String, noteId: String) async -> URL? {
+        let local = url(attachmentId)
+        if FileManager.default.fileExists(atPath: local.path) { return local }
+        return await remote?.downloadAttachment(attachmentId, noteId: noteId)
     }
 
     private func store(_ data: Data, mime: String = "image/jpeg", noteId: String) async throws -> String {
@@ -144,6 +160,7 @@ final class CoverImages {
             _ = await remote.downloadAttachment(attachmentId, noteId: noteId)
             downloading.remove(attachmentId)
             revision += 1
+            NotificationCenter.default.post(name: Self.didArrive, object: attachmentId)
         }
     }
 

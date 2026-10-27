@@ -22,6 +22,10 @@ on:
       - "infra/deploy/Caddyfile"
       - "infra/deploy/web.Dockerfile"
 
+# Least privilege: jobs that need more ask for it themselves.
+permissions:
+  contents: read
+
 concurrency:
   group: web-${{ github.ref }}
   cancel-in-progress: true
@@ -35,7 +39,7 @@ jobs:
         working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -107,7 +111,7 @@ jobs:
       E2E_SERVER_URL: http://localhost:8080
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22

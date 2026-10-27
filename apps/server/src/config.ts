@@ -24,6 +24,9 @@ const ConfigSchema = z
     /** Advertise OAuth Client ID Metadata Documents to MCP clients; off when the server cannot reach their hosts. */
     OAUTH_CLIENT_METADATA_DOCUMENTS: bool.default(true),
 
+    /** Proxies whose X-Forwarded-For is believed (proxy-addr names or CIDRs, comma-separated). */
+    TRUST_PROXY: z.string().default('loopback,linklocal,uniquelocal'),
+
     DATABASE_URL: z.string().min(1),
     DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
     /** Run migrations automatically on startup. */
@@ -50,16 +53,28 @@ const ConfigSchema = z
     S3_FORCE_PATH_STYLE: bool.default(true),
 
     ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(200 * 1024 * 1024),
+    /** Who may create an account: anyone, nobody (existing accounts only) or holders of an invite code. */
+    DS_SIGNUP: z.enum(['open', 'closed', 'invite']).default('open'),
+    /** Comma-separated invite codes for DS_SIGNUP=invite. */
+    DS_INVITE_CODES: z.string().default(''),
+    /** Largest image attachment decrypted for an agent (handwriting/image rendering). */
+    AGENT_IMAGE_MAX_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
+    /** Bytes one account may store: updates, snapshots and attachments (0: unlimited). */
+    USER_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(10 * 1024 ** 3),
     /** POST /v1/fetch-image (D-52): requests per account per minute, size cap, total timeout, parallel downloads. */
     FETCH_IMAGE_PER_MINUTE: z.coerce.number().int().positive().default(60),
     FETCH_IMAGE_MAX_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
     FETCH_IMAGE_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
     FETCH_IMAGE_CONCURRENCY: z.coerce.number().int().positive().default(4),
+    FETCH_IMAGE_CONCURRENCY_PER_USER: z.coerce.number().int().positive().default(2),
     SYNC_UPDATE_MAX_BYTES: z.coerce.number().int().positive().default(2 * 1024 * 1024),
-    SYNC_SNAPSHOT_MAX_BYTES: z.coerce.number().int().positive().default(50 * 1024 * 1024),
+    SYNC_SNAPSHOT_MAX_BYTES: z.coerce.number().int().positive().default(16 * 1024 * 1024),
     SYNC_AWARENESS_MAX_BYTES: z.coerce.number().int().positive().default(64 * 1024),
     /** Messages per second allowed per WebSocket connection (token bucket, burst = 5x). */
     SYNC_RATE_PER_SEC: z.coerce.number().positive().default(100),
+    /** Open sync connections per client IP, and per account (guests: per share). */
+    SYNC_MAX_CONN_PER_IP: z.coerce.number().int().positive().default(30),
+    SYNC_MAX_CONN_PER_USER: z.coerce.number().int().positive().default(10),
 
     /** History retention (see docs/spec/10-sync.md). */
     HISTORY_KEEP_ALL_DAYS: z.coerce.number().int().nonnegative().default(7),

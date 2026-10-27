@@ -1,7 +1,7 @@
 // Load generator for memory-check.sh (no dependencies; Node 22).
 //   node memory-load.mjs ids   <n>                         → n UUIDv7 ids, one per line
 //   node memory-load.mjs setup <base>                      → prints {userId, notebookId, accessToken, deviceId}
-//   node memory-load.mjs sync  <base> <account.json> <ids> → one subscribe for every id, waits for all upToDate
+//   node memory-load.mjs sync  <base> <account.json> <ids> → subscribes to every id (1000 per message), waits for all upToDate
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
@@ -68,7 +68,12 @@ if (mode === 'ids') {
       );
     ws.onmessage = (ev) => {
       const m = JSON.parse(String(ev.data));
-      if (m.type === 'welcome') ws.send(JSON.stringify({ type: 'subscribe', docs: ids.map((docId) => ({ docId, since: 0 })) }));
+      if (m.type === 'welcome') {
+        // At most 1000 documents per subscribe (MAX_SUBSCRIBE_DOCS, sync-protocol).
+        for (let i = 0; i < ids.length; i += 1000) {
+          ws.send(JSON.stringify({ type: 'subscribe', docs: ids.slice(i, i + 1000).map((docId) => ({ docId, since: 0 })) }));
+        }
+      }
       else if (m.type === 'updates' && m.upToDate) {
         pending.delete(m.docId);
         if (pending.size === 0) resolve();

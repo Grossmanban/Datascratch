@@ -12,6 +12,10 @@ on:
       - ".github/workflows/ios-app.yml"
   workflow_dispatch:
 
+# Least privilege: jobs that need more ask for it themselves.
+permissions:
+  contents: read
+
 concurrency:
   group: ios-app-${{ github.ref }}
   cancel-in-progress: true

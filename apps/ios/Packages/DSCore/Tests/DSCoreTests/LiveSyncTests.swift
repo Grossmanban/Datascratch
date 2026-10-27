@@ -149,4 +149,18 @@ import Testing
         await a.stop()
         await b.stop()
     }
+
+    /// sync-protocol §7: `rate_limited` with `retryAfterMs` — no reconnect sooner (the quick
+    /// handshake retries would otherwise come within ~0.3 s).
+    @Test func rateLimitedHandshakeWaitsRetryAfter() async throws {
+        let server = FakeSyncServer()
+        await server.setRateLimitNextHello(700)
+        let b = try device("B", server: server)
+        await b.start()
+        #expect(try await eventually(timeout: .seconds(5)) { await b.client.isConnected })
+        let hellos = await server.hellos
+        #expect(hellos.count == 2)
+        #expect(hellos[1] - hellos[0] >= .milliseconds(700))
+        await b.stop()
+    }
 }

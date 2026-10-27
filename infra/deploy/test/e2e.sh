@@ -170,6 +170,12 @@ grep -qx 'DS_MODE=edge' <<< "$info"
 grep -q 'reverse_proxy datascratch-web:80' "$WORK/caddy-sites/datascratch.caddy"
 [ -z "$(docker port datascratch-web)" ] || { echo "datascratch-web must not publish ports in edge mode" >&2; exit 1; }
 vps grep -qx 'DS_MEM_SERVER=512m' /opt/datascratch/.env
+# The limits are applied to the containers (PostgreSQL's used to be fixed at 1g).
+[ "$(docker inspect -f '{{.HostConfig.Memory}}' datascratch-postgres-1)" = "$((512 * 1024 * 1024))" ]
+[ "$(docker inspect -f '{{.HostConfig.Memory}}' datascratch-web)" = "$((128 * 1024 * 1024))" ]
+# Caddy runs unprivileged and reports healthy.
+[ "$(docker exec datascratch-web id -u)" = "10001" ]
+[ "$(docker inspect -f '{{.State.Health.Status}}' datascratch-web)" = "healthy" ]
 "$DEPLOY_DIR/remote.sh" check | grep -q '"ok":true'
 node "$DEPLOY_DIR/smoke.mjs" https://localhost 120
 sinhron_ok

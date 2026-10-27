@@ -58,8 +58,21 @@ final class NativeEditorModel: ClosingEditor {
         editor.onLinkRequest = { [weak self] in self?.isAskingForLink = true }
         // The "/" block menu: the screen shows it at the caret (spec/04).
         editor.onSlashMenu = { [weak self] menu in
-            // «Фото» and «Файл» are the app's own entries.
-            DispatchQueue.main.async { self?.slashMenu = menu.map(NoteMedia.withMediaItems) }
+            DispatchQueue.main.async { self?.slashMenu = menu }
+        }
+        // Photos and files (build 19): «/Фото», «/Файл», paste and drop, taps and the long-press menu.
+        editor.onHostSlashCommand = { [weak self] id in
+            DispatchQueue.main.async { self?.mediaChooser = id == "file" ? .files : .photos }
+        }
+        editor.onImagesReceived = { [weak self] providers in self?.receiveImages(providers) }
+        editor.onImageTap = { [weak self] _, attachmentId, _ in
+            DispatchQueue.main.async { self?.viewingImage = attachmentId }
+        }
+        editor.onFileTap = { [weak self] _, attachmentId in
+            DispatchQueue.main.async { self?.openFile(attachmentId: attachmentId) }
+        }
+        editor.imageMenu = { [weak self] block, attachmentId in
+            self?.imageMenu(block: block, attachmentId: attachmentId) ?? []
         }
         // A literal [[Title]] (an agent's link, or one typed without autocomplete).
         editor.onOpenNoteTitled = { [weak app] title in app?.pendingRoute = .noteTitled(title) }
@@ -89,6 +102,12 @@ final class NativeEditorModel: ClosingEditor {
                 }
             }
         }
+        // A photo of this note arrived (downloaded): the editor drops its placeholder.
+        keyboardObservers.append(NotificationCenter.default.addObserver(forName: CoverImages.didArrive, object: nil,
+                                                                        queue: .main) { [weak self] note in
+            guard let id = note.object as? String else { return }
+            MainActor.assumeIsolated { self?.editor.imageDidLoad(attachmentId: id) }
+        })
     }
 
     /// An on-screen keyboard is showing.
@@ -102,6 +121,15 @@ final class NativeEditorModel: ClosingEditor {
     var mediaChooser: MediaChooser?
     /// Why a photo or file could not be attached.
     var mediaError: String?
+    /// The photo on the whole screen (attachment id).
+    var viewingImage: String?
+    /// The photo whose caption is being written.
+    var captionTarget: BlockID?
+    /// The photo «Replace…» picks a new image for.
+    @ObservationIgnored var replacing: BlockID?
+    /// A file for the share sheet / Quick Look.
+    var sharing: URL?
+    var previewing: URL?
     /// A pen palette tap not yet applied to the editor's tools (they change a turn later).
     var pendingPenSelection: DSPenSelection?
     @ObservationIgnored private var keyboardObservers: [NSObjectProtocol] = []
@@ -324,12 +352,8 @@ struct NativeDocumentScreen: View {
                         if let menu = model.slashMenu, !menu.items.isEmpty {
                             GeometryReader { area in
                                 SlashMenuView(menu: menu, bounds: area.size) { id in
-                                    if NoteMedia.isMediaCommand(id) {
-                                        model.applyMediaCommand(id)
-                                    } else {
-                                        model.editor.applySlashCommand(id)
-                                        model.slashMenu = nil
-                                    }
+                                    model.editor.applySlashCommand(id)
+                                    model.slashMenu = nil
                                 }
                             }
                         }

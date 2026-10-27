@@ -441,6 +441,26 @@
         }
       }
     },
+    "Caption": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подпись"
+          }
+        }
+      }
+    },
+    "Caption…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подпись…"
+          }
+        }
+      }
+    },
     "Cards": {
       "localizations": {
         "ru": {
@@ -2601,6 +2621,16 @@
         }
       }
     },
+    "Photo": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фото"
+          }
+        }
+      }
+    },
     "Photo Library": {
       "localizations": {
         "ru": {
@@ -2861,6 +2891,16 @@
         }
       }
     },
+    "Replace…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заменить…"
+          }
+        }
+      }
+    },
     "Reposition Cover": {
       "localizations": {
         "ru": {
@@ -2927,6 +2967,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Без засечек"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить"
           }
         }
       }
@@ -3637,6 +3687,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не удалось прикрепить файл."
+          }
+        }
+      }
+    },
+    "The file is not on this device yet. Try again when online.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файла пока нет на этом устройстве. Попробуйте, когда будет сеть."
           }
         }
       }

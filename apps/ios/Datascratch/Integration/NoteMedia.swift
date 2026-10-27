@@ -1,6 +1,8 @@
 #if canImport(DSEditor) && canImport(DSEditorCore) && canImport(DSCore) && canImport(DSDesign)
+import DSCore
 import DSEditor
 import PhotosUI
+import QuickLook
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
@@ -31,34 +33,6 @@ final class NoteAttachments: EditorAttachmentResolver {
 /// block after the caret at once (the file on this device is the preview) and uploads in the
 /// background, encrypted with the note key.
 enum NoteMedia {
-    /// «/» entries the app handles itself (the editor's own list has no attachments).
-    static let slashItems: [SlashCommand] = [
-        SlashCommand(id: "image", title: "Фото", systemImage: "photo",
-                     keywords: ["photo", "image", "picture", "картинка", "изображение", "фото"], group: "Вставка"),
-        SlashCommand(id: "file", title: "Файл", systemImage: "paperclip",
-                     keywords: ["file", "attachment", "document", "вложение", "документ"], group: "Вставка"),
-    ]
-
-    /// The editor's «/» menu with «Фото» and «Файл» added where the query matches them.
-    static func withMediaItems(_ menu: SlashMenuState) -> SlashMenuState {
-        var menu = menu
-        let query = menu.query.trimmingCharacters(in: .whitespaces)
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
-        let extra = slashItems.filter { item in
-            query.isEmpty || ([item.title] + item.keywords).contains {
-                $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).hasPrefix(query)
-            }
-        }
-        menu.items += extra
-        return menu
-    }
-
-    static func isMediaCommand(_ id: String) -> Bool { slashItems.contains { $0.id == id } }
-
-    static func imageBlock(_ attachmentId: String) -> BlockNode {
-        BlockNode(type: NodeType.image, attrs: ["attachmentId": .string(attachmentId)])
-    }
-
     static func fileBlock(_ attachmentId: String, name: String, size: Int, mime: String) -> BlockNode {
         BlockNode(type: NodeType.file, attrs: ["attachmentId": .string(attachmentId), "name": .string(name),
                                                "size": .number(Double(size)), "mime": .string(mime)])
@@ -73,7 +47,14 @@ extension NativeEditorModel {
         var inserted = 0
         for data in items {
             guard let added = try? await app.covers.addImage(data, noteId: noteId) else { continue }
-            editor.insertBlock(NoteMedia.imageBlock(added.id))
+            let preview = app.covers.image(added.id, noteId: noteId)
+            if let block = replacing {
+                editor.replaceImage(block, attachmentId: added.id, preview: preview)
+                replacing = nil
+            } else {
+                editor.insertImage(attachmentId: added.id, preview: preview)
+            }
+            showUpload(of: added.id)
             inserted += 1
         }
         if inserted < items.count { mediaError = String(localized: "Some of these files are not images.") }
@@ -102,22 +83,79 @@ extension NativeEditorModel {
         }
     }
 
+    /// A quiet ring on the photo while it goes up (spinning: DSCore reports no chunk progress).
+    private func showUpload(of attachmentId: String) {
+        guard let app, app.covers.uploading.contains(attachmentId) else { return }
+        editor.setImageProgress(attachmentId: attachmentId, 0)
+        Task { [weak self] in
+            await app.covers.uploadEnded(attachmentId)
+            self?.editor.setImageProgress(attachmentId: attachmentId, nil)
+        }
+    }
+
+    /// Images pasted or dropped into the text (the editor put the caret at the drop point).
+    func receiveImages(_ providers: [NSItemProvider]) {
+        Task {
+            var data: [Data] = []
+            for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                if let bytes = try? await provider.loadData(for: .image) { data.append(bytes) }
+            }
+            await insertImages(data)
+        }
+    }
+
+    /// The long-press entries of a photo, between the editor's «Width» and «Delete».
+    func imageMenu(block: BlockID, attachmentId: String) -> [UIMenuElement] {
+        [
+            UIAction(title: String(localized: "Caption…"), image: UIImage(systemName: "text.below.photo")) { [weak self] _ in
+                self?.captionTarget = block
+            },
+            UIAction(title: String(localized: "Replace…"), image: UIImage(systemName: "photo.badge.arrow.down")) { [weak self] _ in
+                self?.replacing = block
+                self?.mediaChooser = .photos
+            },
+            UIAction(title: String(localized: "Share…"), image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in
+                self?.share(attachmentId, name: "Photo.jpg")
+            },
+        ]
+    }
+
+    /// A file block tapped: Quick Look, under the file's own name.
+    func openFile(attachmentId: String) {
+        let blocks = (try? app?.core?.noteDocument(noteId, notebookId: notebookId).blocks()) ?? []
+        func find(_ list: [Block]) -> Block? {
+            for block in list {
+                if block.attrs["attachmentId"]?.stringValue == attachmentId { return block }
+                if let inner = find(block.children) { return inner }
+            }
+            return nil
+        }
+        let name = find(blocks)?.attrs["name"]?.stringValue ?? attachmentId
+        share(attachmentId, name: name, preview: true)
+    }
+
+    /// The file of an attachment, named for sharing or Quick Look (it is stored under its id).
+    func share(_ attachmentId: String, name: String, preview: Bool = false) {
+        guard let app else { return }
+        let noteId = self.noteId
+        Task { [weak self] in
+            guard let file = await app.covers.file(attachmentId, noteId: noteId) else {
+                self?.mediaError = String(localized: "The file is not on this device yet. Try again when online.")
+                return
+            }
+            let named = FileManager.default.temporaryDirectory.appendingPathComponent(attachmentId, isDirectory: true)
+                .appendingPathComponent(name)
+            try? FileManager.default.createDirectory(at: named.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: named)
+            try? FileManager.default.copyItem(at: file, to: named)
+            if preview { self?.previewing = named } else { self?.sharing = named }
+        }
+    }
+
     /// Images on the clipboard (copied in Photos, Safari, a screenshot).
     func insertPastedImages() async {
         let data = UIPasteboard.general.images?.compactMap { $0.jpegData(compressionQuality: 0.95) } ?? []
         await insertImages(data)
-    }
-
-    /// A «/» entry of `NoteMedia`: the typed "/query" goes, then the chooser opens.
-    func applyMediaCommand(_ id: String) {
-        // The editor removes "/query" when applying an entry; «Text» keeps a paragraph as it is.
-        if editor.formatState.block == .paragraph {
-            editor.applySlashCommand("paragraph")
-        } else {
-            editor.dismissSlashMenu()
-        }
-        slashMenu = nil
-        mediaChooser = id == "file" ? .files : .photos
     }
 }
 
@@ -163,6 +201,7 @@ extension NoteMedia {
 struct MediaPickers: ViewModifier {
     @Bindable var model: NativeEditorModel
     @State private var picked: [PhotosPickerItem] = []
+    @State private var caption = ""
 
     private func showing(_ chooser: NativeEditorModel.MediaChooser) -> Binding<Bool> {
         Binding(get: { model.mediaChooser == chooser },
@@ -193,15 +232,22 @@ struct MediaPickers: ViewModifier {
                              onClose: { model.mediaChooser = nil })
                     .ignoresSafeArea()
             }
-            .onDrop(of: [.image], isTargeted: nil) { providers in
-                Task {
-                    var data: [Data] = []
-                    for provider in providers {
-                        if let bytes = try? await provider.loadData(for: .image) { data.append(bytes) }
+            .fullScreenCover(item: Binding(get: { model.viewingImage.map(ViewedImage.init) }, set: { model.viewingImage = $0?.id })) { image in
+                ImageViewer(image: model.app?.covers.image(image.id, noteId: model.noteId)) { model.viewingImage = nil }
+            }
+            .sheet(item: Binding(get: { model.sharing.map(SharedFile.init) }, set: { model.sharing = $0?.url })) { file in
+                ActivityView(items: [file.url])
+            }
+            .quickLookPreview(Binding(get: { model.previewing }, set: { model.previewing = $0 }))
+            .alert("Caption", isPresented: Binding(get: { model.captionTarget != nil }, set: { if !$0 { model.captionTarget = nil } })) {
+                TextField("Caption", text: $caption)
+                Button("Save") {
+                    if let block = model.captionTarget {
+                        model.editor.setImageAttributes(block, caption: caption.isEmpty ? nil : caption, alt: nil)
                     }
-                    await model.insertImages(data)
+                    caption = ""
                 }
-                return true
+                Button("Cancel", role: .cancel) { caption = "" }
             }
             .alert("Can’t Attach", isPresented: Binding(get: { model.mediaError != nil }, set: { if !$0 { model.mediaError = nil } })) {
                 Button("OK", role: .cancel) {}
@@ -209,6 +255,62 @@ struct MediaPickers: ViewModifier {
                 Text(model.mediaError ?? "")
             }
     }
+}
+
+private struct ViewedImage: Identifiable { let id: String }
+private struct SharedFile: Identifiable { let url: URL; var id: URL { url } }
+
+/// A photo on the whole screen: pinch and double-tap to zoom, swipe down or «Done» to close.
+struct ImageViewer: View {
+    let image: UIImage?
+    let onClose: () -> Void
+    @State private var scale: CGFloat = 1
+    @State private var settled: CGFloat = 1
+    @State private var drag: CGSize = .zero
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(scale)
+                    .offset(drag)
+                    .gesture(MagnifyGesture()
+                        .onChanged { scale = max(1, settled * $0.magnification) }
+                        .onEnded { _ in settled = scale })
+                    .simultaneousGesture(DragGesture()
+                        .onChanged { drag = $0.translation }
+                        .onEnded { value in
+                            if scale <= 1, value.translation.height > 120 { onClose() }
+                            withAnimation(Theme.Motion.snappy) { drag = .zero }
+                        })
+                    .onTapGesture(count: 2) {
+                        withAnimation(Theme.Motion.snappy) { scale = scale > 1 ? 1 : 2.5; settled = scale }
+                    }
+                    .accessibilityLabel("Photo")
+                    .accessibilityIdentifier("imageViewer.image")
+            } else {
+                ProgressView().tint(.white)
+            }
+            Button("Done", action: onClose)
+                .buttonStyle(.glass)
+                .padding(Theme.Space.s4)
+                .accessibilityIdentifier("imageViewer.done")
+        }
+    }
+}
+
+/// The system share sheet.
+struct ActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 private extension NSItemProvider {

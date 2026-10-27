@@ -165,14 +165,16 @@ struct FakeFactory: WebSocketFactory {
     func connect(to url: URL) async throws -> any WebSocketConnection { try await server.connect() }
 }
 
-/// Polls until `condition` holds (async delivery between actors).
+/// Polls until `condition` holds (async delivery between actors). The condition is checked
+/// once more after the deadline: if the process was starved past it (a loaded CI simulator), a
+/// condition that became true meanwhile must not count as a timeout.
 func eventually(timeout: Duration = .seconds(5), _ condition: () async throws -> Bool) async throws -> Bool {
     let deadline = ContinuousClock.now + timeout
     while ContinuousClock.now < deadline {
         if try await condition() { return true }
         try await Task.sleep(for: .milliseconds(10))
     }
-    return false
+    return try await condition()
 }
 
 @Suite(.serialized) struct SyncTests {

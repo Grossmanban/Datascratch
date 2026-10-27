@@ -126,6 +126,21 @@ export class PgAgentsStore implements AgentsStore {
     await this.db.delete(oauthTokens).where(eq(oauthTokens.tokenHash, tokenHash));
   }
 
+  async useRefreshToken(tokenHash: string) {
+    // UPDATE … RETURNING is atomic: of two concurrent refreshes only one gets the token.
+    const [t] = await this.db
+      .update(oauthTokens)
+      .set({ kind: 'refresh_used' })
+      .where(and(eq(oauthTokens.tokenHash, tokenHash), eq(oauthTokens.kind, 'refresh')))
+      .returning();
+    if (t) return { token: { ...t, kind: 'refresh' as const, expiresAt: t.expiresAt.toISOString() }, reused: false };
+    const [old] = await this.db
+      .select()
+      .from(oauthTokens)
+      .where(and(eq(oauthTokens.tokenHash, tokenHash), eq(oauthTokens.kind, 'refresh_used')));
+    return old ? { token: { ...old, expiresAt: old.expiresAt.toISOString() }, reused: true } : null;
+  }
+
   async deleteTokensOfGrant(grantId: string) {
     await this.db.delete(oauthTokens).where(eq(oauthTokens.grantId, grantId));
   }

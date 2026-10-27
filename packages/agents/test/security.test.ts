@@ -11,6 +11,7 @@ import { contentOf } from "../src/doc/model.js";
 import { CLIENT_LIMITS, readCapped } from "../src/auth/oauth.js";
 import { consentPage } from "../src/auth/pages.js";
 import { makeNoteDoc } from "../src/testing/fixtures.js";
+import { createInMemoryContext } from "../src/testing/in-memory.js";
 import { startServer } from "./server.js";
 
 /** A note whose one paragraph is a single text run, as any client may write it. */
@@ -176,5 +177,45 @@ describe("consent page identity (audit 4)", () => {
     expect(html).toMatch(/<b>claude\.ai<\/b><span class="badge ok">адрес проверен<\/span>/);
     expect(html).toContain('<img src="https://claude.ai/logo.png"');
     expect(html).not.toContain("Название этого агента не проверено");
+  });
+});
+
+describe("OAuth redirects and refresh tokens (audit 5, 6)", () => {
+  it("never redirects to a registered client's URI before consent (open redirect)", async () => {
+    const s = await startServer();
+    try {
+      const reg = await (
+        await fetch(`${s.base}/oauth/register`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ redirect_uris: ["https://evil.example/landing"] }) })
+      ).json();
+      const res = await fetch(`${s.base}/oauth/authorize?client_id=${reg.client_id}&redirect_uri=${encodeURIComponent("https://evil.example/landing")}&response_type=token`, {
+        redirect: "manual",
+      });
+      expect(res.status).toBe(400);
+      expect(res.headers.get("location")).toBeNull();
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("accepts reverse-domain and known app schemes only", async () => {
+    const s = await startServer();
+    try {
+      const reg = (uri: string) =>
+        fetch(`${s.base}/oauth/register`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ redirect_uris: [uri] }) }).then((r) => r.status);
+      expect(await reg("com.example.agent:/callback")).toBe(201);
+      expect(await reg("cursor://anysphere.cursor-retrieval/callback")).toBe(201);
+      for (const bad of ["intent://x", "ms-settings:x", "itms-services://x", "javascript:alert(1)", "myapp://cb", "jar:file:x"]) expect(await reg(bad)).toBe(400);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("rotates refresh tokens atomically and revokes the grant when a used token comes back", async () => {
+    const ctx = createInMemoryContext();
+    const t = { tokenHash: "h1", kind: "refresh" as const, grantId: "g1", clientId: "c1", scope: "notes:read", resource: "r", expiresAt: "2099-01-01T00:00:00.000Z" };
+    await ctx.store.insertToken(t);
+    const [a, b] = await Promise.all([ctx.store.useRefreshToken("h1"), ctx.store.useRefreshToken("h1")]);
+    expect([a?.reused, b?.reused].sort()).toEqual([false, true]);
+    expect(await ctx.store.useRefreshToken("nope")).toBeNull();
   });
 });

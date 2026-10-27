@@ -88,6 +88,9 @@ function isLoopback(host: string): boolean {
   return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
 }
 
+/** Plain (non reverse-domain) schemes of known agent apps accepted as redirect targets. */
+export const PLAIN_APP_SCHEMES = new Set(["cursor", "vscode", "vscode-insiders", "windsurf", "zed", "claude"]);
+
 function validRedirectUri(uri: string): boolean {
   let u: URL;
   try {
@@ -98,8 +101,10 @@ function validRedirectUri(uri: string): boolean {
   if (u.hash) return false;
   if (u.protocol === "https:") return true;
   if (u.protocol === "http:") return isLoopback(u.hostname);
-  // Private-use URI schemes of native apps (RFC 8252 §7.1), e.g. `cursor://…`.
-  return /^[a-z][a-z0-9+.-]*\.?[a-z0-9+.-]*:$/.test(u.protocol) && !["javascript:", "data:", "file:", "vbscript:"].includes(u.protocol);
+  // Private-use URI schemes of native apps: reverse-domain names (RFC 8252 §7.1, `com.example.app:`),
+  // plus a few well-known agent apps that use a plain scheme.
+  const scheme = u.protocol.slice(0, -1);
+  return /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)+$/.test(scheme) || PLAIN_APP_SCHEMES.has(scheme);
 }
 
 /** Stored client metadata is bounded: anyone may register a client (RFC 7591). */
@@ -425,8 +430,9 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
       return html(reply, 400, errorPage(err instanceof OAuthProblem ? err.description : "Неизвестный клиент."));
     }
     if (!redirectAllowed(client, q.redirect_uri)) return html(reply, 400, errorPage("Адрес возврата (redirect_uri) не зарегистрирован для этого клиента."));
-    const back = (error: string, description: string) =>
-      redirectWith(reply, q.redirect_uri!, { error, error_description: description, state: q.state ?? null, iss: cfg.issuer });
+    // Errors before the user saw the consent page are shown here, not redirected: anyone can register a
+    // client with any redirect URI, so redirecting them would make this server an open redirector (RFC 9700 §4.11.2).
+    const back = (error: string, description: string) => html(reply, 400, errorPage(`${description} (${error})`));
     if (q.response_type !== "code") return back("unsupported_response_type", "Only response_type=code is supported.");
     if (!q.code_challenge || q.code_challenge_method !== "S256") return back("invalid_request", "PKCE with code_challenge_method=S256 is required.");
     if (!/^[A-Za-z0-9_-]{43,128}$/.test(q.code_challenge)) return back("invalid_request", "Malformed code_challenge.");
@@ -542,7 +548,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
     const auth = clientAuth(request, body);
     // RFC 7009: always 200; only revoke when the token belongs to the caller.
     if (rec && auth.clientId === rec.clientId) {
-      if (rec.kind === "refresh") await deps.grants.revoke(rec.grantId);
+      if (rec.kind === "refresh" || rec.kind === "refresh_used") await deps.grants.revoke(rec.grantId);
       else await ctx.store.deleteToken(rec.tokenHash);
     }
     return noStore(reply).code(200).send({});
@@ -595,13 +601,21 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
 
   async function refresh(client: OAuthClient, body: Record<string, string>) {
     if (!body.refresh_token) throw new OAuthProblem("invalid_request", "refresh_token is required.");
-    const rec = await ctx.store.getToken(sha256Hex(body.refresh_token));
-    if (!rec || rec.kind !== "refresh" || new Date(rec.expiresAt) <= now()) throw new OAuthProblem("invalid_grant", "The refresh token is invalid or expired. Authorize again.");
-    if (rec.clientId !== client.clientId) throw new OAuthProblem("invalid_grant", "The refresh token was issued to another client.");
+    const hash = sha256Hex(body.refresh_token);
+    const peek = await ctx.store.getToken(hash);
+    // A token of another client is refused before it is touched: a client cannot burn someone else's token.
+    if (peek && peek.clientId !== client.clientId) throw new OAuthProblem("invalid_grant", "The refresh token was issued to another client.");
+    const used = await ctx.store.useRefreshToken(hash);
+    if (used?.reused) {
+      // A rotated token came back: it leaked (or two copies of the client race). Revoke the whole grant (RFC 9700 §4.14.2).
+      await deps.grants.revoke(used.token.grantId);
+      throw new OAuthProblem("invalid_grant", "This refresh token was already used, so access was revoked for safety. Authorize again.");
+    }
+    const rec = used?.token;
+    if (!rec || new Date(rec.expiresAt) <= now()) throw new OAuthProblem("invalid_grant", "The refresh token is invalid or expired. Authorize again.");
     const grant = await ctx.store.getGrant(rec.grantId);
     if (!grant || grant.revokedAt) throw new OAuthProblem("invalid_grant", "Access was revoked by the user. Authorize again.");
     if (body.resource && canonicalResource(body.resource) !== rec.resource) throw new OAuthProblem("invalid_target", "resource does not match the original authorization.");
-    await ctx.store.deleteToken(rec.tokenHash); // rotation
-    return issue(grant, client.clientId, rec.resource);
+    return issue(grant, client.clientId, rec.resource); // the old token is already marked used (rotation)
   }
 }

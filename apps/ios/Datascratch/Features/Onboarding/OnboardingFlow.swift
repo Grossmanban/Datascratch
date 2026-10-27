@@ -85,7 +85,16 @@ struct WelcomeView: View {
             .padding(.horizontal, Theme.Space.s6)
         }
         .onAppear { withAnimation(Theme.Motion.gentle.delay(0.1)) { appeared = true } }
+        .alert("Device Signed Out", isPresented: Binding(get: { revoked.isPending }, set: { revoked.isPending = $0 })) {
+            Button("Sign In") { path.append(.signIn) }
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("This device was disconnected from the account on another device. Its data was deleted. Sign in again — your notes will download from the server.")
+        }
     }
+
+    /// D-53: shown once after a revocation erased this device.
+    private var revoked: DeviceRevokedNotice { .shared }
 }
 
 /// Shared card layout of the auth forms.
@@ -441,6 +450,11 @@ struct RecoverView: View {
                     .textContentType(.newPassword)
             }
             PasswordStrengthMeter(password: password)
+            Label("All your devices will be signed out and their data deleted, including unsent changes. Notes on the server stay.",
+                  systemImage: "exclamationmark.triangle")
+                .font(Theme.Typography.footnote)
+                .foregroundStyle(Theme.Palette.textSecondary)
+                .accessibilityIdentifier("recover.devicesWarning")
             ErrorText(message: error)
             PrimaryButton(title: "Set New Password", isWorking: isWorking,
                           isDisabled: email.isEmpty || keyText.isEmpty || password.isEmpty) { submit() }

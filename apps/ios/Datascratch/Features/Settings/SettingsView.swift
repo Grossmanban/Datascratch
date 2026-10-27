@@ -498,7 +498,7 @@ struct ChangePasswordView: View {
             DSSettingsSection {
                 field(SecureField("Current password", text: $current).textContentType(.password))
             }
-            DSSettingsSection(footer: String(localized: "At least 10 characters. Only the key wrapper is re-encrypted; your notes stay as they are.")) {
+            DSSettingsSection(footer: String(localized: "At least 10 characters. Only the key wrapper is re-encrypted; your notes stay as they are. Other devices will be signed out and their data deleted.")) {
                 field(SecureField("New password", text: $new).textContentType(.newPassword))
                 if !new.isEmpty {
                     PasswordStrengthMeter(password: new)
@@ -547,19 +547,18 @@ struct ChangePasswordView: View {
 
 struct DevicesSettings: View {
     @Environment(AppModel.self) private var app
+    @State private var deviceToSignOut: Device?
 
     var body: some View {
         SettingsPage(title: String(localized: "Devices")) {
-            DSSettingsSection(footer: String(localized: "Signing a device out removes its access immediately.")) {
+            DSSettingsSection(footer: String(localized: "Signing a device out removes its access immediately and deletes the data on it.")) {
                 ForEach(app.access.devices) { device in
                     DSSettingsRow(device.name,
                                   subtitle: device.isCurrent ? String(localized: "This device")
                                       : device.lastSeenAt.formatted(.relative(presentation: .named)),
                                   systemImage: device.platform == "iPadOS" ? "ipad" : device.platform == "web" ? "globe" : "iphone",
                                   accessory: device.isCurrent ? .none : .custom(AnyView(
-                                      Button("Sign Out", role: .destructive) {
-                                          Task { try? await app.access.revokeDevice(device.id) }
-                                      }
+                                      Button("Sign Out", role: .destructive) { deviceToSignOut = device }
                                       .buttonStyle(.borderless)
                                       .font(Theme.Typography.footnote.weight(.semibold))
                                   )))
@@ -567,6 +566,15 @@ struct DevicesSettings: View {
             }
         }
         .task { await app.access.refresh() }
+        .confirmationDialog("Sign out this device?",
+                            isPresented: Binding(get: { deviceToSignOut != nil }, set: { if !$0 { deviceToSignOut = nil } }),
+                            titleVisibility: .visible, presenting: deviceToSignOut) { device in
+            Button("Sign Out and Delete Its Data", role: .destructive) {
+                Task { try? await app.access.revokeDevice(device.id) }
+            }
+        } message: { _ in
+            Text("All data on that device will be deleted, including unsent changes.")
+        }
     }
 }
 

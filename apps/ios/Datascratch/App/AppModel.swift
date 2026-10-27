@@ -183,6 +183,21 @@ final class AppModel {
         isRecoveryKeyConfirmed = secureStore.data(for: Self.unconfirmedItem) == nil
         let sync = self.sync
         library.onLocalChange = { sync.noteLocalChange() }
+        wireLocalWipe()
+    }
+
+    /// Erasing the device (D-53 revocation, «Delete data») also forgets the recovery key kept
+    /// on it and the cover cache.
+    private func wireLocalWipe() {
+        #if canImport(DSCore)
+        connection?.onLocalDataWiped = { [weak self] in
+            guard let self else { return }
+            covers.forgetAll()
+            pendingRecoveryKey = nil
+            savedRecoveryKey = nil
+            isRecoveryKeyConfirmed = true
+        }
+        #endif
     }
 
     private var signedInForTesting = false
@@ -279,7 +294,6 @@ final class AppModel {
         connection.onLibraryCarried = { [library] justCarried in library.mergeCarriedDuplicates(anyName: justCarried) }
         sync.onBackOnline = { connection.reconnect() }
         covers.remote = connection
-        connection.onLocalDataWiped = { [weak covers] in covers?.forgetAll() }
         return (connection, ServerAccountService(connection: connection), ServerSharingService(connection: connection),
                 ServerAccessService(connection: connection))
     }
@@ -316,6 +330,7 @@ final class AppModel {
         accounts = side.accounts
         sharing = side.sharing
         access = side.access
+        wireLocalWipe()
         #endif
     }
 

@@ -111,6 +111,16 @@ struct SecurityAuditTests {
         let kept = ServerAccountService.map(Datascratch.AccountError.invalidRecoveryKey)
         #expect(kept as? Datascratch.AccountError == .invalidRecoveryKey)
     }
+
+    /// D-53: only a revocation the server states erases the device; an expired token or a
+    /// network error never does.
+    @Test func onlyAStatedRevocationErasesTheDevice() {
+        #expect(ServerConnection.isDeviceRevoked(APIError.server(status: 401, code: "device_revoked", message: "")))
+        #expect(!ServerConnection.isDeviceRevoked(APIError.server(status: 401, code: "unauthorized", message: "")))
+        #expect(!ServerConnection.isDeviceRevoked(APIError.notAuthenticated))
+        #expect(!ServerConnection.isDeviceRevoked(APIError.transport("offline")))
+        #expect(!ServerConnection.isDeviceRevoked(URLError(.notConnectedToInternet)))
+    }
     #endif
 
     private static func pngHeader(width: UInt32, height: UInt32) -> Data {

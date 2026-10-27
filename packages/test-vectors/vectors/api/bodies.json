@@ -455,6 +455,20 @@
             "code": "conflict",
             "message": "id exists with different content"
           }
+        },
+        {
+          "error": {
+            "code": "device_revoked",
+            "message": "device revoked",
+            "reason": "user"
+          }
+        },
+        {
+          "error": {
+            "code": "rate_limited",
+            "message": "slow down",
+            "retryAfterMs": 5000
+          }
         }
       ],
       "invalid": [
@@ -464,6 +478,16 @@
             "error": {
               "code": "teapot",
               "message": ""
+            }
+          }
+        },
+        {
+          "reason": "unknown revocation reason",
+          "body": {
+            "error": {
+              "code": "device_revoked",
+              "message": "",
+              "reason": "bored"
             }
           }
         }

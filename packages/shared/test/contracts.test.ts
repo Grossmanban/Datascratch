@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AD,
+  classifyApiFailure,
   createNotebookRequestSchema,
   emailSchema,
   isoDateTimeSchema,
@@ -155,5 +156,45 @@ describe("NoteMeta.createdByAgent (D-45)", () => {
     expect(noteMetaSchema.safeParse({ ...base, createdByAgent: { agentId: ID } }).success).toBe(
       false,
     );
+  });
+});
+
+describe("device revocation (D-53)", () => {
+  const revoked = { error: { code: "device_revoked", message: "x", reason: "recovery" } };
+  it("classifies only a well-formed 401 device_revoked as a revocation", () => {
+    expect(classifyApiFailure(401, revoked)).toEqual({
+      kind: "device_revoked",
+      reason: "recovery",
+    });
+    expect(classifyApiFailure(401, JSON.stringify(revoked))).toEqual({
+      kind: "device_revoked",
+      reason: "recovery",
+    });
+    // A missing / newer reason is still a revocation; wrong status or proxy pages never are.
+    const noReason = { error: { code: "device_revoked", message: "x" } };
+    expect(classifyApiFailure(401, noReason)).toEqual({ kind: "device_revoked", reason: "user" });
+    const newReason = { error: { code: "device_revoked", message: "x", reason: "future" } };
+    expect(classifyApiFailure(401, newReason)).toEqual({ kind: "device_revoked", reason: "user" });
+    expect(classifyApiFailure(403, revoked).kind).toBe("error");
+    expect(classifyApiFailure(401, "<html>401</html>").kind).toBe("unauthorized");
+  });
+  it("keeps token expiry and network failures apart", () => {
+    const expired = { error: { code: "unauthorized", message: "expired" } };
+    expect(classifyApiFailure(401, expired)).toEqual({ kind: "unauthorized" });
+    expect(classifyApiFailure(null, null)).toEqual({ kind: "network" });
+    expect(classifyApiFailure(503, "<html>bad gateway</html>")).toEqual({ kind: "network" });
+    const internal = { error: { code: "internal", message: "boom" } };
+    expect(classifyApiFailure(500, internal)).toEqual({
+      kind: "error",
+      status: 500,
+      code: "internal",
+      message: "boom",
+    });
+  });
+  it("parses the sync error frame with a reason", () => {
+    const msg = parseServerMessage(
+      JSON.stringify({ type: "error", code: "device_revoked", message: "x", reason: "user" }),
+    );
+    expect(msg).toMatchObject({ code: "device_revoked", reason: "user" });
   });
 });

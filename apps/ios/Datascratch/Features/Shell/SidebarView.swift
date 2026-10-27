@@ -261,10 +261,12 @@ struct SidebarView: View {
                                 Image(systemName: "envelope.badge")
                                     .foregroundStyle(Theme.Palette.accent)
                             }
+                            // The whole row, the gap before the badge too, opens the invitations
+                            // (as `SidebarMoreRow`: the shape on the label, not on the button).
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        // The whole row, the gap before the badge too, opens the invitations.
-                        .contentShape(Rectangle())
                         .accessibilityIdentifier("sidebar.invitations")
                     }
                     ForEach(items) { item in

@@ -12,6 +12,11 @@
 {$DS_SITE} {
 	encode zstd gzip
 
+	# No request body is larger than an attachment chunk (~1 MiB); sync frames are not bodies.
+	request_body {
+		max_size 16MB
+	}
+
 	# API, sync WebSocket, MCP and OAuth for AI agents: the server sets its own headers there.
 	@api path /v1/* /mcp /mcp/* /oauth/* /.well-known/oauth-*
 	@web not path /v1/* /mcp /mcp/* /oauth/* /.well-known/oauth-*

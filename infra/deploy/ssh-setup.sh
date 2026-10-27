@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # GitHub Actions helper: write the deploy key and the server's host key for SSH.
 # Env: DEPLOY_HOST, DEPLOY_PORT, KEY (private key), KNOWN_HOSTS (optional pinned
-# known_hosts lines, repository variable DEPLOY_KNOWN_HOSTS). Exports
+# known_hosts lines, repository variable DEPLOY_KNOWN_HOSTS), REQUIRE_KNOWN_HOSTS=1
+# (deploy: a missing pinned host key is an error, no trust on first use). Exports
 # DEPLOY_KEY_FILE and DEPLOY_KNOWN_HOSTS_FILE through $GITHUB_ENV.
 set -euo pipefail
 dir="${RUNNER_TEMP:-/tmp}/ssh"
@@ -27,6 +28,9 @@ fi
 if [ -n "${KNOWN_HOSTS:-}" ]; then
   printf '%s\n' "$KNOWN_HOSTS" > "$dir/known_hosts"
   echo "Host key pinned by the DEPLOY_KNOWN_HOSTS variable."
+elif [ "${REQUIRE_KNOWN_HOSTS:-0}" = "1" ]; then
+  echo "::error title=DEPLOY_KNOWN_HOSTS is not set::Deploying needs the server's host key pinned. Run the workflow in 'inspect' mode once: it prints the key lines and their fingerprint. Compare the fingerprint with the provider's console and save the lines as the repository variable DEPLOY_KNOWN_HOSTS (infra/DEPLOY.md)."
+  exit 1
 else
   # Trust on first use: remember the key the server presents now and show its
   # fingerprint, so it can be compared with the provider's console (infra/DEPLOY.md).

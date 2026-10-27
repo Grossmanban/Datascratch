@@ -51,11 +51,7 @@ final class NativeEditorModel: ClosingEditor {
         // during gesture handling, and an immediate re-render there crashed UIKit
         // (_delayTouchesForEvent) in ios-editor's demo.
         editor.onStateChange = { [weak self] in
-            DispatchQueue.main.async {
-                // D-54 «view only»: no keyboard (the server would refuse the edits anyway).
-                if let self, self.isViewOnly, self.editor.isEditingText { self.editor.dismissKeyboard() }
-                self?.changed()
-            }
+            DispatchQueue.main.async { self?.changed() }
         }
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
         // «Link» on the format bar: the screen asks for the address.
@@ -200,17 +196,12 @@ final class NativeEditorModel: ClosingEditor {
     }
 
     /// D-54: the note is shared with this account «view only»: reading, searching and copying
-    /// stay; typing, the pen and the bars do not.
+    /// stay; the editor's read-only mode drops every edit, and the screen hides its bars.
     var isViewOnly = false {
         didSet {
             guard isViewOnly != oldValue else { return }
-            if isViewOnly {
-                editor.tools.mode = .text
-                editor.tools.allowsFingerDrawing = false
-                if editor.isEditingText { editor.dismissKeyboard() }
-            } else {
-                editor.tools.allowsFingerDrawing = app?.settings.fingerDrawingEffective ?? false
-            }
+            if isViewOnly { editor.tools.mode = .text }
+            editor.isReadOnly = isViewOnly
         }
     }
 

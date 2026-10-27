@@ -2141,6 +2141,16 @@
         }
       }
     },
+    "Note %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заметка %@"
+          }
+        }
+      }
+    },
     "Notebook name": {
       "localizations": {
         "ru": {

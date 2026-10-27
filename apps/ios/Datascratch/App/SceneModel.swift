@@ -46,7 +46,29 @@ final class SceneModel {
             searchText = ""
         }
     }
-    var selectedNoteId: String?
+    var selectedNoteId: String? {
+        didSet {
+            if let fresh = freshNoteId, oldValue == fresh, selectedNoteId != fresh { leaveFreshNote(fresh) }
+        }
+    }
+
+    /// A note just made with «New Note» in this window (spec/04, like Apple Notes): its title gets
+    /// the caret; when it is left, an empty title takes the default («Note Oct 26, 2026») if the
+    /// note has text, and a note left with nothing in it is dropped.
+    var freshNoteId: String?
+
+    private func leaveFreshNote(_ id: String) {
+        freshNoteId = nil
+        let isEmpty: Bool
+        if let editor = editor(for: id) as? ClosingEditor {
+            isEmpty = editor.finishNewNote()
+        } else {
+            isEmpty = library.note(id)?.title.isEmpty == true && library.body(id).blocks.allSatisfy { $0.text.isEmpty }
+        }
+        guard isEmpty, let note = library.note(id), note.title.isEmpty else { return }
+        editors.removeAll { $0.noteId == id }
+        library.deleteForever(id)
+    }
 
     // MARK: iPad levels (D-47): 1 sidebar → 2 list (Tasks, Calendar) → 3 document
     //
@@ -150,6 +172,7 @@ final class SceneModel {
             library.setBody(NoteBody(blocks: [.paragraph("#\(tag) ")]), ofNote: note.id)
         }
         open(note.id)
+        if title.isEmpty { freshNoteId = note.id }
         return note
     }
 
@@ -280,3 +303,11 @@ final class SceneModel {
 extension FocusedValues {
     @Entry var sceneModel: SceneModel?
 }
+
+/// The editor of a note being left (`SceneModel.freshNoteId`).
+@MainActor
+protocol ClosingEditor: AnyObject {
+    /// Gives an empty title its default if the note has text; returns whether nothing is in it.
+    func finishNewNote() -> Bool
+}
+

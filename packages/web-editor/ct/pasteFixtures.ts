@@ -1,29 +1,26 @@
-// Clipboard HTML as the apps write it (shapes taken from Google Docs, Word and a plain web page).
-export const PNG_DATA =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+// Clipboard fixtures of the shared paste vectors (packages/test-vectors/vectors/paste/cases.json).
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-export const GOOGLE_DOCS = `<meta charset="utf-8"><b style="font-weight:normal;" id="docs-internal-guid-1a2b3c4d-7fff-1234-5678-9abcdef01234"><h1 dir="ltr" style="line-height:1.38;margin-top:20pt;margin-bottom:6pt;"><span style="font-size:20pt;font-family:Arial,sans-serif;color:#000000;background-color:transparent;font-weight:400;font-style:normal;font-variant:normal;text-decoration:none;vertical-align:baseline;white-space:pre;white-space:pre-wrap;">План проекта</span></h1><p dir="ltr" style="line-height:1.38;margin-top:0pt;margin-bottom:0pt;text-align:left;"><span style="font-size:11pt;font-family:Arial,sans-serif;color:#000000;background-color:transparent;font-weight:400;">Обычный </span><span style="font-size:11pt;font-family:Arial,sans-serif;color:#000000;background-color:transparent;font-weight:700;">жирный</span><span style="font-size:11pt;font-family:Arial,sans-serif;color:#ff0000;background-color:#ffff00;font-weight:400;font-style:italic;"> курсив</span><span style="font-size:11pt;font-family:Arial,sans-serif;font-weight:400;"> и </span><a href="https://example.com/doc" style="text-decoration:none;"><span style="font-size:11pt;font-family:Arial,sans-serif;color:#1155cc;font-weight:400;text-decoration:underline;-webkit-text-decoration-skip:none;text-decoration-skip-ink:none;">ссылка</span></a></p><ul style="margin-top:0;margin-bottom:0;padding-inline-start:48px;"><li dir="ltr" style="list-style-type:disc;font-size:11pt;font-family:Arial,sans-serif;color:#000000;" aria-level="1"><p dir="ltr" style="line-height:1.38;margin-top:0pt;margin-bottom:0pt;" role="presentation"><span style="font-size:11pt;font-family:Arial,sans-serif;">Пункт один</span></p></li><ul style="margin-top:0;margin-bottom:0;padding-inline-start:48px;"><li dir="ltr" style="list-style-type:circle;font-size:11pt;font-family:Arial,sans-serif;" aria-level="2"><p dir="ltr" style="line-height:1.38;margin-top:0pt;margin-bottom:0pt;" role="presentation"><span style="font-size:11pt;font-family:Arial,sans-serif;">Вложенный пункт</span></p></li></ul><li dir="ltr" style="list-style-type:disc;font-size:11pt;font-family:Arial,sans-serif;" aria-level="1"><p dir="ltr" style="line-height:1.38;margin-top:0pt;margin-bottom:0pt;" role="presentation"><span style="font-size:11pt;font-family:Arial,sans-serif;">Пункт два</span></p></li></ul><br><div dir="ltr" style="margin-left:0pt;" align="left"><table style="border:none;border-collapse:collapse;"><colgroup><col width="301"><col width="301"></colgroup><tbody><tr style="height:0pt"><td style="border-left:solid #000000 1pt;border-right:solid #000000 1pt;vertical-align:top;padding:5pt 5pt 5pt 5pt;overflow:hidden;overflow-wrap:break-word;"><p dir="ltr" style="line-height:1.2;margin-top:0pt;margin-bottom:0pt;"><span style="font-size:11pt;font-family:Arial,sans-serif;font-weight:700;">Задача</span></p></td><td style="border-left:solid #000000 1pt;vertical-align:top;padding:5pt 5pt 5pt 5pt;"><p dir="ltr" style="line-height:1.2;text-align:center;margin-top:0pt;margin-bottom:0pt;"><span style="font-size:11pt;font-family:Arial,sans-serif;">Статус</span></p></td></tr><tr style="height:0pt"><td style="vertical-align:top;padding:5pt 5pt 5pt 5pt;"><p dir="ltr" style="line-height:1.2;margin-top:0pt;margin-bottom:0pt;"><span style="font-size:11pt;font-family:Arial,sans-serif;">Дизайн</span></p></td><td style="vertical-align:top;padding:5pt 5pt 5pt 5pt;"><p dir="ltr" style="line-height:1.2;text-align:center;margin-top:0pt;margin-bottom:0pt;"><span style="font-size:11pt;font-family:Arial,sans-serif;">готово</span></p></td></tr></tbody></table></div><p dir="ltr" style="line-height:1.38;margin-top:0pt;margin-bottom:0pt;"><span style="font-size:11pt;font-family:Arial,sans-serif;"><span style="border:none;display:inline-block;overflow:hidden;width:120px;height:80px;"><img src="https://lh7-rt.googleusercontent.com/docsz/AD_4nXexample" width="120" height="80" style="margin-left:0px;margin-top:0px;"></span></span></p></b>`;
+export interface PasteCase {
+  name: string;
+  source: string;
+  description: string;
+  html?: string;
+  text?: string;
+  expected?: { blocks: unknown[]; images: { src: string; alt: string }[] };
+}
 
-export const WORD = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta name=ProgId content=Word.Document><style><!-- p.MsoNormal {margin:0cm; font-size:11.0pt; font-family:"Calibri",sans-serif;} --></style></head><body lang=RU style='tab-interval:35.4pt;word-wrap:break-word'><!--StartFragment--><h1><span lang=RU>Отчёт за неделю<o:p></o:p></span></h1><p class=MsoNormal><b><span lang=RU>Жирный</span></b><span lang=RU> и <i>курсив</i> и <u>подчёркнутый</u><o:p></o:p></span></p><p class=MsoListParagraphCxSpFirst style='text-indent:-18.0pt;mso-list:l0 level1 lfo1'><![if !supportLists]><span lang=RU style='font-family:Symbol;mso-fareast-font-family:Symbol'><span style='mso-list:Ignore'>·<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></span></span><![endif]><span lang=RU>Первый пункт<o:p></o:p></span></p><p class=MsoListParagraphCxSpMiddle style='margin-left:72.0pt;mso-add-space:auto;text-indent:-18.0pt;mso-list:l0 level2 lfo1'><![if !supportLists]><span lang=RU style='font-family:"Courier New"'><span style='mso-list:Ignore'>o<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp; </span></span></span><![endif]><span lang=RU>Вложенный<o:p></o:p></span></p><p class=MsoListParagraphCxSpLast style='text-indent:-18.0pt;mso-list:l0 level1 lfo1'><![if !supportLists]><span lang=RU style='font-family:Symbol'><span style='mso-list:Ignore'>·<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp; </span></span></span><![endif]><span lang=RU>Второй пункт<o:p></o:p></span></p><p class=MsoNormal><span lang=RU>Между списками<o:p></o:p></span></p><p class=MsoListParagraphCxSpFirst style='text-indent:-18.0pt;mso-list:l1 level1 lfo2'><![if !supportLists]><span lang=RU><span style='mso-list:Ignore'>1.<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp; </span></span></span><![endif]><span lang=RU>Первый шаг<o:p></o:p></span></p><p class=MsoListParagraphCxSpLast style='text-indent:-18.0pt;mso-list:l1 level1 lfo2'><![if !supportLists]><span lang=RU><span style='mso-list:Ignore'>2.<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp; </span></span></span><![endif]><span lang=RU>Второй шаг<o:p></o:p></span></p><table class=MsoTableGrid border=1 cellspacing=0 cellpadding=0 style='border-collapse:collapse;border:none'><tr><td width=301 valign=top style='width:225.6pt;border:solid windowtext 1.0pt;padding:0cm 5.4pt 0cm 5.4pt'><p class=MsoNormal><span lang=RU>Имя<o:p></o:p></span></p></td><td width=301 valign=top style='width:225.6pt;border:solid windowtext 1.0pt;padding:0cm 5.4pt 0cm 5.4pt'><p class=MsoNormal align=right style='text-align:right'><span lang=RU>Сумма<o:p></o:p></span></p></td></tr><tr><td width=301 valign=top style='padding:0cm 5.4pt 0cm 5.4pt'><p class=MsoNormal><span lang=RU>Аня<o:p></o:p></span></p></td><td width=301 valign=top style='padding:0cm 5.4pt 0cm 5.4pt'><p class=MsoNormal align=right style='text-align:right'><span lang=RU>120<o:p></o:p></span></p></td></tr></table><p class=MsoNormal><span lang=RU><img width=100 height=50 src="file:///C:/Users/x/AppData/Local/Temp/msohtmlclip1/01/clip_image001.png" alt="Схема" v:shapes="Picture_x0020_1"></span><span lang=RU>Конец<o:p></o:p></span></p><!--EndFragment--></body></html>`;
+export const VECTORS_PATH = fileURLToPath(new URL("../../test-vectors/vectors/paste/cases.json", import.meta.url));
 
-export const WEB_PAGE = `<h2 style="font-family: Georgia; color: rgb(30, 30, 30);">Как это устроено</h2><p style="font-size: 18px;">Текст до картинки с <strong>жирным</strong>, <em>курсивом</em>, <s>зачёркнутым</s>, <code>кодом</code> и <a href="https://example.com/a" target="_blank">ссылкой</a>.</p><p><img src="${PNG_DATA}" alt="Первая"></p><p>Текст между картинками.</p><figure class="wp-block-image"><img src="https://example.com/cat.png" alt="Кот" loading="lazy"><figcaption>Подпись</figcaption></figure><blockquote><p>Цитата со страницы.</p></blockquote><ol><li>Шаг один<ol><li>Подшаг</li></ol></li><li>Шаг два</li></ol><pre><code class="language-js">const x = 1;
-console.log(x);</code></pre><hr><table><thead><tr><th>Имя</th><th style="text-align: right">Цена</th></tr></thead><tbody><tr><td>Чай</td><td align="right">120</td></tr></tbody></table><h5>Мелкий заголовок</h5>`;
+export const pasteVectors = (): { cases: PasteCase[] } & Record<string, unknown> => JSON.parse(readFileSync(VECTORS_PATH, "utf8"));
 
-export const MARKDOWN = `# Заголовок из Markdown
+const input = (name: string) => {
+  const c = pasteVectors().cases.find((k) => k.name === name)!;
+  return (c.html ?? c.text)!;
+};
 
-Абзац с **жирным**, *курсивом*, \`кодом\` и [ссылкой](https://example.com/md).
-
-- пункт
-  - вложенный
-
-1. первый
-
-- [ ] задача
-- [x] сделано
-
-> цитата
-
-| Колонка | Число |
-| :--- | ---: |
-| А | 1 |
-`;
+export const GOOGLE_DOCS = input("google-docs");
+export const WORD = input("word");
+export const WEB_PAGE = input("web-page-images");
+export const MARKDOWN = input("markdown");

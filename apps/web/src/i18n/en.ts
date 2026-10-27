@@ -170,6 +170,8 @@ const en: Loose<Messages> = {
     count_other: "{{count}} tabs",
   },
   docs: {
+    insertPicture: "Insert picture",
+    insertPictureFailed: "Could not insert the picture: {{reason}}",
     filterPlaceholder: "Search this list",
     filterClear: "Clear search",
     noMatches: "Nothing found",

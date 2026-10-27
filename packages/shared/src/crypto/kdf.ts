@@ -2,6 +2,8 @@
 import {
   DEFAULT_KDF,
   KDF_ALG,
+  KDF_BOUNDS,
+  isSafeKdf,
   KDF_OUTPUT_BYTES,
   KEY_BYTES,
   LOGIN_KEY_CONTEXT,
@@ -41,7 +43,15 @@ export function derivePasswordKeys(
   salt: Uint8Array,
   kdf: KdfParams = DEFAULT_KDF,
 ): PasswordKeys {
-  if (kdf.alg !== KDF_ALG) throw new CryptoError("malformed", `unsupported KDF ${String(kdf.alg)}`);
+  if (kdf.alg !== KDF_ALG)
+    throw new CryptoError("unsafe_kdf", `unsupported KDF ${String(kdf.alg)}`);
+  // Never run with params a (possibly hostile) server chose outside the bounds.
+  if (!isSafeKdf(kdf)) {
+    throw new CryptoError(
+      "unsafe_kdf",
+      `KDF params out of bounds (ops ${KDF_BOUNDS.minOps}..${KDF_BOUNDS.maxOps}, mem ${KDF_BOUNDS.minMem}..${KDF_BOUNDS.maxMem} bytes)`,
+    );
+  }
   if (salt.length !== SALT_BYTES) throw new CryptoError("malformed", "salt must be 16 bytes");
   const s = sodium();
   const out = s.crypto_pwhash(

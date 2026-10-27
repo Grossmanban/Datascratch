@@ -134,9 +134,18 @@ describe("OAuth 2.1 for MCP clients", () => {
     });
     expect(again.status).toBe(400);
     expect((await again.json()).error).toBe("invalid_grant");
-
-    // Revoking the connection cuts the agent off.
-    await fetch(`${s.base}/v1/agent-tokens/${list[0].id}`, { method: "DELETE", headers: { authorization: `Bearer user:${USER}` } });
+    // Reuse of a rotated token means it leaked: the grant is revoked, so even the fresh refresh token is dead.
+    const fresh = (await refreshed.json()).refresh_token as string;
+    const afterReuse = await fetch(`${s.base}/oauth/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: fresh, client_id: provider.info.client_id }).toString(),
+    });
+    expect(afterReuse.status).toBe(400);
+    const revoked = await fetch(`${s.base}/v1/agent-tokens`, { headers: { authorization: `Bearer user:${USER}` } }).then((x) => x.json());
+    expect(revoked).toEqual([]);
+    // …and the agent is cut off (revoking from the token list does the same).
+    void list;
     await expect(client.callTool({ name: "list_notebooks", arguments: {} })).rejects.toThrow();
   });
 
@@ -190,9 +199,11 @@ describe("OAuth 2.1 for MCP clients", () => {
     // Unregistered redirect: an error page, never a redirect.
     const evil = await fetch(url({ redirect_uri: "https://evil.example/cb" }), { redirect: "manual" });
     expect(evil.status).toBe(400);
-    // No PKCE: error goes back to the client.
+    // No PKCE: an error page too — errors before consent are never redirected (no open redirect, RFC 9700 §4.11.2).
     const noPkce = await fetch(url({ code_challenge_method: "plain" }), { redirect: "manual" });
-    expect(new URL(noPkce.headers.get("location")!).searchParams.get("error")).toBe("invalid_request");
+    expect(noPkce.status).toBe(400);
+    expect(noPkce.headers.get("location")).toBeNull();
+    expect(await noPkce.text()).toContain("invalid_request");
     // Not signed in: sent to the app login with a return URL.
     const anon = await fetch(url({}), { redirect: "manual" });
     expect(anon.headers.get("location")).toMatch(/^https:\/\/app\.example\/login\?returnTo=/);

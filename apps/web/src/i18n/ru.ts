@@ -166,6 +166,8 @@ const ru = {
     count_other: "{{count}} вкладки",
   },
   docs: {
+    insertPicture: "Вставить картинку",
+    insertPictureFailed: "Не удалось вставить картинку: {{reason}}",
     filterPlaceholder: "Искать в этом списке",
     filterClear: "Очистить поиск",
     noMatches: "Ничего не найдено",

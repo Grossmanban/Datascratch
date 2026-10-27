@@ -96,12 +96,13 @@ jobs:
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
         run: infra/deploy/ssh-setup.sh
-      - name: Survey (changes nothing on the server)
-        env:
-          DS_DIAG_DOCS: ${{ inputs.diag_docs }}
+      # The repository is public, so its run logs are too: the survey must not print server
+      # details (ports, processes, addresses, device and grant activity) into them. Disabled
+      # until its output is encrypted to the owner (security audit 2026-10-27).
+      - name: Survey (disabled in the public repository)
         run: |
-          infra/deploy/remote.sh inspect | tee "$RUNNER_TEMP/inspect.md"
-          cat "$RUNNER_TEMP/inspect.md" >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Inspect mode is disabled: its output would be public in this repository's Actions logs. Run infra/deploy/remote.sh inspect from the owner's own terminal instead."
+          exit 1
 
   images:
     name: Build and publish images

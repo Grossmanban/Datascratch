@@ -7,6 +7,10 @@ public struct APIErrorBody: Codable, Sendable {
     public struct Inner: Codable, Sendable {
         public var code: String
         public var message: String
+        /// `device_revoked` (D-53).
+        public var reason: DeviceRevocationReason?
+        /// `rate_limited`.
+        public var retryAfterMs: Int?
     }
     public var error: Inner
 }

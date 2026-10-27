@@ -34,6 +34,12 @@ public struct SyncStatus: Equatable, Sendable {
     /// Nothing left to send or fetch (failed messages aside).
     public var isIdle: Bool { pending == 0 && catchingUp == 0 }
 
+    /// D-53: the server revoked this device; syncing has stopped for good (the app wipes).
+    public var revoked: DeviceRevocationReason? {
+        if case .revoked(let reason) = connection { return reason }
+        return nil
+    }
+
     /// One state for the sync indicator.
     public enum Summary: Equatable, Sendable {
         /// No connection for a while (`pending` changes wait for it); a single failed or stuck
@@ -49,7 +55,7 @@ public struct SyncStatus: Equatable, Sendable {
         switch connection {
         case .connected: break
         case .connecting, .waiting: return connectionTrouble ? .offline : .syncing
-        case .disconnected, .stopped: return .offline
+        case .disconnected, .stopped, .revoked: return .offline
         }
         if !isIdle { return .syncing }
         if let first = failed.first { return .failed(documents: failed.count, reason: first.reason) }
@@ -123,6 +129,8 @@ public actor SyncEngine: SyncClientDelegate {
     /// Registrations in progress after `doc_not_found` (a document made on this device).
     private var registering: Set<String> = []
     private var keyRecheck: Task<Void, Never>?
+    private var deviceRevokedHandler: (@Sendable (DeviceRevocationReason) -> Void)?
+    private var revocationReported = false
     private var traceHandler: (@Sendable (SyncTraceEvent) -> Void)?
     /// Retry of temporary failures (registration, server errors) with exponential backoff.
     private var retryTask: Task<Void, Never>?
@@ -387,6 +395,12 @@ public actor SyncEngine: SyncClientDelegate {
     }
 
     /// Timing events of the sync (for `os_signpost` / a debug log in the app).
+    /// Called once when the server revokes this device (D-53: `device_revoked` frame or close
+    /// 4410). Never for an expired token or a network failure. The app wipes local data.
+    public func setDeviceRevokedHandler(_ handler: (@Sendable (DeviceRevocationReason) -> Void)?) {
+        deviceRevokedHandler = handler
+    }
+
     public func setTraceHandler(_ handler: (@Sendable (SyncTraceEvent) -> Void)?) {
         traceHandler = handler
     }
@@ -649,6 +663,15 @@ public actor SyncEngine: SyncClientDelegate {
 
     public func syncClient(_ client: SyncClient, didChangeState state: SyncConnectionState) async {
         connection = state
+        if case .revoked(let reason) = state, !revocationReported {
+            // Nothing more is sent: the client never reconnects; retries stop here.
+            revocationReported = true
+            retryTask?.cancel()
+            retryTask = nil
+            keyRecheck?.cancel()
+            keyRecheck = nil
+            deviceRevokedHandler?(reason)
+        }
         connectionTrouble = await client.consecutiveFailures > client.configuration.quickRetries
         if case .connected = state {} else {
             inFlight.removeAll()
@@ -694,7 +717,7 @@ public actor SyncEngine: SyncClientDelegate {
             guard open[docId] != nil, let record = try? store.document(docId), let key = try? keyFor(record),
                   let plain = try? DSCrypto.open(payload, key: key, ad: CryptoAD.awareness(docId)) else { return }
             awarenessHandler?(docId, plain, deviceId)
-        case .error(let code, _, let ref, let retryAfterMs):
+        case .error(let code, _, let ref, let retryAfterMs, _):
             guard let ref else { return }
             if inFlight.contains(ref) {
                 inFlight.remove(ref)

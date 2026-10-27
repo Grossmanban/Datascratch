@@ -985,9 +985,9 @@
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
     "mtime": 1793095969.4199965,
-    "seen": 1793096042.977464,
+    "seen": 1793097603.6010118,
     "ast_hash": "b6e346950a6b498fa8932bd2249b2fa1",
-    "semantic_hash": ""
+    "semantic_hash": "b6e346950a6b498fa8932bd2249b2fa1"
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
     "mtime": 1793011608.2055936,
@@ -1039,9 +1039,9 @@
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorTextView.swift": {
     "mtime": 1793095969.3275664,
-    "seen": 1793096042.9774976,
+    "seen": 1793097603.6010334,
     "ast_hash": "ca2778582dc470e664f929c0f3695df2",
-    "semantic_hash": ""
+    "semantic_hash": "ca2778582dc470e664f929c0f3695df2"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorTheme.swift": {
     "mtime": 1793043803.2727058,
@@ -1051,9 +1051,9 @@
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
     "mtime": 1793095992.3425448,
-    "seen": 1793096042.9775064,
+    "seen": 1793097603.601039,
     "ast_hash": "1268dd08dd5f6fd195502adfecfe3793",
-    "semantic_hash": ""
+    "semantic_hash": "1268dd08dd5f6fd195502adfecfe3793"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormatMenu.swift": {
     "mtime": 1793011531.6864011,
@@ -1123,9 +1123,9 @@
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/TextGeometry.swift": {
     "mtime": 1793094321.6264696,
-    "seen": 1793094406.0620716,
+    "seen": 1793097603.6010654,
     "ast_hash": "6b5e5d496ac434c211e440ccb3285ab1",
-    "semantic_hash": ""
+    "semantic_hash": "6b5e5d496ac434c211e440ccb3285ab1"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditorModel/AgentEdits.swift": {
     "mtime": 1793004906.5024047,
@@ -4711,9 +4711,9 @@
   },
   "docs/spec/04-editor.md": {
     "mtime": 1793095992.374011,
-    "seen": 1793096042.9799073,
+    "seen": 1793097603.6025167,
     "ast_hash": "0fb6711f951d3a1105f42832dbf10713",
-    "semantic_hash": ""
+    "semantic_hash": "0fb6711f951d3a1105f42832dbf10713"
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1793084705.4194863,

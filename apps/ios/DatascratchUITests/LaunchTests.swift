@@ -209,6 +209,52 @@ final class LibraryUITests: XCTestCase {
         }
     }
 
+    /// spec/04, like Apple Notes: a new note starts with the caret in its title; Return in an
+    /// empty title gives it the default («Note Oct 26, 2026») and goes to the text; a new note
+    /// left with nothing in it is not kept.
+    func testNewNoteTitleLikeAppleNotes() throws {
+        let app = launchSignedIn()
+        let cards = app.descendants(matching: .any).matching(identifier: "document.card")
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 10), "no document list")
+        let before = cards.count
+
+        try openNewNoteInNativeEditor(app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the new note's title did not get the caret")
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        let text = editor.textViews.firstMatch
+        XCTAssertTrue(text.waitForExistence(timeout: 5), "no text view")
+        text.typeText("\nBody")
+        let value = { (text.value as? String) ?? "" }
+        let titled = NSPredicate { _, _ in
+            let v = value()
+            return (v.hasPrefix("Note ") || v.hasPrefix("Заметка ")) && v.contains("Body")
+        }
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: titled, evaluatedWith: nil)], timeout: 5), .completed,
+                       "the empty title did not get the default; text: \(value())")
+        leaveDocument(app)
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5), "back to the list")
+        XCTAssertEqual(cards.count, before + 1, "the written note is not in the list")
+
+        // A new note left untouched is dropped.
+        try openNewNoteInNativeEditor(app)
+        settle(1)
+        leaveDocument(app)
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5), "back to the list")
+        settle(1)
+        XCTAssertEqual(cards.count, before + 1, "an empty new note was kept")
+    }
+
+    /// Back to the list: the back button on iPhone, «Close Document» on iPad.
+    private func leaveDocument(_ app: XCUIApplication) {
+        let close = app.buttons["document.close"].firstMatch
+        if UIDevice.current.userInterfaceIdiom == .pad, close.waitForExistence(timeout: 3) {
+            close.tap()
+        } else {
+            app.navigationBars.buttons.firstMatch.tap()
+        }
+        settle(1)
+    }
+
     /// Native editor only (DSEditor): switching Text ↔ Pen repeatedly must not crash.
     func testSwitchingPenToolsInEditor() throws {
         let app = launchSignedIn()

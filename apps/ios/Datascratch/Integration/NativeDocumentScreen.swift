@@ -9,7 +9,7 @@ import UIKit
 
 /// Owns one `EditorView` over a note's Yrs document (TextKit 2 + living-stroke pen layer).
 @Observable
-final class NativeEditorModel {
+final class NativeEditorModel: ClosingEditor {
     let editor: EditorView
     let noteId: String
     let notebookId: String
@@ -34,6 +34,11 @@ final class NativeEditorModel {
         editor = EditorView(document: CoreEditorDocument(note: note))
         // D-51: in the notes-only app task dates are quiet labels (no reschedule menu).
         editor.taskDatesEnabled = Features.tasks
+        // spec/04: an empty title becomes «Note Oct 26, 2026» (the note's creation day) on Return
+        // in the title, when the caret leaves it or the note is closed, if the note has text.
+        editor.defaultTitle = { [weak app] in
+            app?.library.note(noteId).map { Self.defaultTitle(created: $0.createdAt) }
+        }
         // D-06: a finger draws only when enabled; on iPhone (no Pencil) it is on by default.
         editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
         editor.tools.mode = .text
@@ -100,6 +105,39 @@ final class NativeEditorModel {
         let meta = try? app?.core?.notebookDocument(notebookId).note(id: noteId)
         let name = meta?.createdByAgent?.agentName
         if editor.createdByAgent != name { editor.createdByAgent = name }
+    }
+
+    /// «Note Oct 26, 2026» / «Заметка 26 октября 2026», in the app's language.
+    static func defaultTitle(created: Date) -> String {
+        let locale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "en")
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        if locale.language.languageCode == .russian {
+            formatter.dateFormat = "d MMMM y"
+        } else {
+            formatter.setLocalizedDateFormatFromTemplate("MMMdy")
+        }
+        return String(localized: "Note \(formatter.string(from: created))")
+    }
+
+    /// A new note: the caret goes into its title, once.
+    @ObservationIgnored private var titleFocused = false
+
+    func focusTitleOfNewNote() {
+        guard !titleFocused else { return }
+        titleFocused = true
+        Task { @MainActor [weak self] in
+            // After the editor is in its window (first responder needs one).
+            try? await Task.sleep(for: .milliseconds(300))
+            self?.editor.focusTitle()
+        }
+    }
+
+    func finishNewNote() -> Bool {
+        editor.commitDefaultTitleIfNeeded()
+        guard let app, let core = app.core, let note = try? core.noteDocument(noteId, notebookId: notebookId) else { return false }
+        let blocks = (try? note.blocks()) ?? []
+        return note.strokes().isEmpty && blocks.allSatisfy { $0.text.isEmpty && ($0.type == BlockType.title || $0.type == BlockType.paragraph) }
     }
 
     private func changed() {
@@ -306,6 +344,8 @@ struct NativeDocumentScreen: View {
             model.installHeader(app: app, scene: scene)
             scene.keepEditor(model, for: noteId)
             self.model = model
+            // Only a note just made here: an existing note opens as it is.
+            if scene.freshNoteId == noteId { model.focusTitleOfNewNote() }
         } catch {
             failed = true
         }

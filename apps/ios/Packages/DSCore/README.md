@@ -147,7 +147,8 @@ DSCore
 - Пути REST: id в пути — только буквы, цифры, `-`, `_` (`UnsafePathError`, запрос не уходит).
 - Отзыв устройства (D-53): `401` с `error.code == "device_revoked"` (в том числе на
   `/auth/refresh`) → `DeviceRevokedError(reason:)`, один раз `APIClient.setDeviceRevokedHandler`,
-  `api.revocation`; без повторов и обновления токена. Разбор ответов — `APIFailure.classify`
+  `api.revocation` (сбрасывается новой сессией устройства — вход, регистрация, восстановление;
+  после повторного входа следующий отзыв сообщается снова); без повторов и обновления токена. Разбор ответов — `APIFailure.classify`
   (векторы `api/failures.json`): истёкший токен, страница прокси с 401, 502–504 без нашего тела
   и отсутствие ответа отзывом не считаются никогда. Причина: `user`, `password_change`,
   `recovery`, `token_reuse`, `account_deleted`; неизвестная или без причины → `user`.

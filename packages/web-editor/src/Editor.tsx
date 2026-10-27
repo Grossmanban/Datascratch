@@ -14,7 +14,10 @@ import { acceptAll, blocksWithAgentEdits } from "./schema/agentReview";
 import { guardSchema } from "./schema/unknown";
 import { TASK_MENU_EVENT, type TaskMenuRequest } from "./schema/tasks";
 import { fillEmptyTitleIfNeeded, focusTitle } from "./schema/title";
-import { insertUpload, pickAndInsert } from "./uploads";
+import { insertUpload, pickAndInsert, preparePastedImages, startPastedImages } from "./uploads";
+import { normalizePastedHtml, looksLikeMarkdown } from "./paste/normalize";
+import { markdownToHtml } from "./paste/markdown";
+import { DOMParser as PMDOMParser, type Slice } from "@tiptap/pm/model";
 import type { NoteStyle, StrokeAuthor } from "@datascratch/shared/contracts";
 import { filterBlocks, type BlockItem } from "./ui/blockItems";
 import { BubbleToolbar } from "./ui/BubbleToolbar";
@@ -177,9 +180,41 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       element: mount,
       extensions,
       editable: !readOnly,
+      // Markdown in pasted text is parsed by clipboardTextParser (and skipped on Shift+paste); the
+      // marks' own paste rules would bold `**x**` even in a plain paste. Links still autolink.
+      enablePasteRules: ["link"],
       editorProps: {
         attributes: { class: "ds-prose", spellcheck: "true", "aria-label": "Текст заметки" },
-        handlePaste: (_view, event) => uploadFiles(event.clipboardData?.files),
+        // Rich paste (spec/04 «Вставка»): HTML is tidied (normalize.ts), Markdown text goes through
+        // the same path, the title takes plain text only, Shift+paste is plain text (ProseMirror).
+        handlePaste: (view, event) => {
+          const data = event.clipboardData;
+          if (!data) return false;
+          const { $from } = view.state.selection;
+          if ($from.depth >= 1 && $from.node(1).type.name === "title") {
+            const text = data.getData("text/plain").replace(/\s*\n\s*/g, " ").trim();
+            if (text) view.dispatch(view.state.tr.insertText(text).scrollIntoView());
+            return true;
+          }
+          // A screenshot or copied image (no rich text around it) goes in as a file.
+          const html = data.getData("text/html");
+          const onlyImages = !html || !new DOMParser().parseFromString(html, "text/html").body.textContent?.trim();
+          if (data.files?.length && onlyImages) return uploadFiles(data.files);
+          return false;
+        },
+        transformPastedHTML: (html) => {
+          const out = normalizePastedHtml(html);
+          preparePastedImages(out.images);
+          return out.html;
+        },
+        clipboardTextParser: (text, $context, plain, view) => {
+          if (plain || !looksLikeMarkdown(text)) return null as unknown as Slice;
+          const out = normalizePastedHtml(markdownToHtml(text));
+          preparePastedImages(out.images);
+          const box = document.createElement("div");
+          box.innerHTML = out.html;
+          return PMDOMParser.fromSchema(view.state.schema).parseSlice(box, { context: $context });
+        },
         handleDrop: (view, event, _slice, moved) => {
           if (moved) return false;
           const files = event.dataTransfer?.files;
@@ -196,6 +231,10 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
           remountQueued = true;
           setTimeout(() => setSchemaGen((g) => g + 1), 0);
         }),
+      onTransaction: ({ transaction }) => {
+        // Placeholders of pasted images start their upload once the paste has landed.
+        if (transaction.getMeta("paste")) queueMicrotask(() => startPastedImages(editor, host));
+      },
       onUpdate: ({ editor: e }) => {
         const title = e.state.doc.firstChild?.type.name === "title" ? e.state.doc.firstChild.textContent : readTitle(doc);
         if (title !== lastTitle) {

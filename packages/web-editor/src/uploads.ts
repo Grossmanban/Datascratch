@@ -10,7 +10,10 @@ import type { HostRef, UploadedAttachment } from "./host";
 
 export interface UploadState {
   kind: "image" | "file";
-  file: File;
+  /** The local file; null for a pasted image until it is decoded (data:) or fetched (http). */
+  file: File | null;
+  /** Where a pasted image comes from (data: or http(s) URL). */
+  source?: { src: string; alt: string };
   /** Object URL of the local file (images), revoked when the upload is over. */
   previewUrl: string | null;
   /** 0..1, or null while the app reports no progress. */
@@ -70,16 +73,51 @@ function findBlock(editor: Editor, blockId: string): number | null {
 
 const jobs = new Map<string, { editor: Editor; host: HostRef }>();
 
+/** A data: URL as a File (decoded here: the app's CSP need not allow fetching data:). */
+function dataUrlToFile(src: string, name: string): File {
+  const [head, body = ""] = src.split(",", 2);
+  const mime = /data:([^;,]+)/.exec(head!)?.[1] ?? "image/png";
+  const bytes = /;base64/i.test(head!) ? Uint8Array.from(atob(body), (c) => c.charCodeAt(0)) : new TextEncoder().encode(decodeURIComponent(body));
+  const ext = mime.split("/")[1]?.replace("+xml", "") ?? "png";
+  return new File([bytes], name || `image.${ext}`, { type: mime });
+}
+
+/** A pasted http(s) image that cannot be fetched becomes a link to its URL (no history step). */
+function imageToLink(editor: Editor, blockId: string, src: string, alt: string): void {
+  const pos = findBlock(editor, blockId);
+  if (pos === null) return;
+  const { schema } = editor.state;
+  const node = editor.state.doc.nodeAt(pos)!;
+  const link = schema.marks.link!.create({ href: src });
+  const para = schema.nodes.paragraph!.create(null, schema.text(alt || src, [link]));
+  editor.view.dispatch(editor.state.tr.replaceWith(pos, pos + node.nodeSize, para).setMeta("addToHistory", false));
+}
+
 async function run(blockId: string): Promise<void> {
   const job = jobs.get(blockId);
-  const state = uploads.get(blockId);
+  let state = uploads.get(blockId);
   if (!job || !state) return;
   const upload = job.host.current.uploadAttachment;
   if (!upload) return uploads.update(blockId, { status: "failed" });
   uploads.update(blockId, { status: "uploading", progress: null });
+  if (!state.file && state.source) {
+    const { src, alt } = state.source;
+    try {
+      const file = src.startsWith("data:") ? dataUrlToFile(src, alt) : await (job.host.current.fetchRemoteImage?.(src) ?? Promise.reject(new Error("no fetch")));
+      const previewUrl = state.previewUrl ?? URL.createObjectURL(file);
+      uploads.update(blockId, { file, previewUrl });
+      state = uploads.get(blockId)!;
+    } catch {
+      if (src.startsWith("data:")) return uploads.update(blockId, { status: "failed" });
+      jobs.delete(blockId);
+      uploads.set(blockId, null);
+      if (!job.editor.isDestroyed) imageToLink(job.editor, blockId, src, alt);
+      return;
+    }
+  }
   let stored: UploadedAttachment;
   try {
-    stored = await upload(state.file, (done) => {
+    stored = await upload(state.file!, (done) => {
       if (uploads.get(blockId)?.status === "uploading") uploads.update(blockId, { progress: Math.max(0, Math.min(1, done)) });
     });
   } catch {
@@ -163,4 +201,38 @@ export function pickAndInsert(editor: Editor, host: HostRef, accept: "image/*" |
     for (const file of Array.from(input.files ?? [])) insertUpload(editor, host, file);
   });
   input.click();
+}
+
+/** Pasted images waiting for the paste transaction (blockId → source). */
+const pendingPasted = new Map<string, { src: string; alt: string }>();
+
+/** Ids the paste keeps (the blockId plugin strips ids from pasted content otherwise). */
+export function isPendingPastedImage(blockId: string): boolean {
+  return pendingPasted.has(blockId);
+}
+
+/** Registers the images of an HTML paste (normalizePastedHtml) before ProseMirror parses it. */
+export function preparePastedImages(images: Map<string, { src: string; alt: string }>): void {
+  pendingPasted.clear();
+  for (const [id, img] of images) pendingPasted.set(id, img);
+}
+
+/** After the paste landed: every placeholder that made it into the note starts its upload. */
+export function startPastedImages(editor: Editor, host: HostRef): void {
+  if (!pendingPasted.size) return;
+  const ids = [...pendingPasted.keys()];
+  const present = new Set<string>();
+  editor.state.doc.descendants((n) => {
+    if (n.type.name === "image" && n.attrs.blockId && pendingPasted.has(n.attrs.blockId)) present.add(n.attrs.blockId);
+    return true;
+  });
+  for (const id of ids) {
+    const source = pendingPasted.get(id)!;
+    pendingPasted.delete(id);
+    if (!present.has(id)) continue;
+    // http(s) images show the remote picture as their preview while it is fetched.
+    uploads.set(id, { kind: "image", file: null, source, previewUrl: source.src.startsWith("data:") ? null : source.src, progress: null, status: "uploading" });
+    jobs.set(id, { editor, host });
+    void run(id);
+  }
 }

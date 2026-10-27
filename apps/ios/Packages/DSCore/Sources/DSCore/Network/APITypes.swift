@@ -93,12 +93,16 @@ public struct NotebookInfo: Codable, Hashable, Sendable, Identifiable {
     public var mode: NotebookMode
     public var createdAt: String
     public var wrappedKey: Base64URLData
+    /// Shared with other accounts (D-54; older servers omit it).
+    public var shared: Bool?
 }
 
 public struct DocVersion: Codable, Hashable, Sendable {
     public var seq: Int64
     public var createdAt: String
     public var deviceId: String
+    /// Who edited since the previous version, in order of first edit (D-54; older servers omit it).
+    public var authors: [UpdateAuthor]?
 }
 
 public struct AttachmentStatus: Codable, Hashable, Sendable {

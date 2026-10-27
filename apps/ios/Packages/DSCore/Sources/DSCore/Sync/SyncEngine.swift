@@ -858,12 +858,19 @@ public actor SyncEngine: SyncClientDelegate {
 /// keys for notebook documents, note keys unwrapped from `NoteMeta.wrappedKey`.
 public struct KeyRingDocumentKeys: Sendable {
     public let keyRing: KeyRing
-    /// `wrappedKey` of a note (from its notebook document).
-    public let wrappedNoteKey: @Sendable (_ noteId: String, _ notebookId: String) -> String?
+    /// `NoteMeta` of a note (from its notebook document): wrapped key, key version and chain.
+    public let noteMeta: @Sendable (_ noteId: String, _ notebookId: String) -> NoteMeta?
 
-    public init(keyRing: KeyRing, wrappedNoteKey: @escaping @Sendable (_ noteId: String, _ notebookId: String) -> String?) {
+    public init(keyRing: KeyRing, noteMeta: @escaping @Sendable (_ noteId: String, _ notebookId: String) -> NoteMeta?) {
         self.keyRing = keyRing
-        self.wrappedNoteKey = wrappedNoteKey
+        self.noteMeta = noteMeta
+    }
+
+    /// Only the `wrappedKey` (note keys of version 1, before D-54).
+    public init(keyRing: KeyRing, wrappedNoteKey: @escaping @Sendable (_ noteId: String, _ notebookId: String) -> String?) {
+        self.init(keyRing: keyRing) { noteId, notebookId in
+            wrappedNoteKey(noteId, notebookId).map { NoteMeta(id: noteId, wrappedKey: $0) }
+        }
     }
 
     public func key(for record: DocumentRecord) throws -> Data? {
@@ -873,8 +880,10 @@ public struct KeyRingDocumentKeys: Sendable {
         case .notebook:
             return try keyRing.notebookKey(record.notebookId ?? record.docId)
         case .note:
-            guard let nb = record.notebookId, let wrapped = wrappedNoteKey(record.docId, nb) else { return nil }
-            return try keyRing.noteKey(noteId: record.docId, wrappedKey: wrapped, notebookId: nb)
+            // A note shared with this account on its own: its key came from the owner.
+            if let shared = try keyRing.sharedNoteKey(record.docId) { return shared }
+            guard let nb = record.notebookId, let meta = noteMeta(record.docId, nb) else { return nil }
+            return try keyRing.noteKey(meta, notebookId: nb)
         }
     }
 
@@ -888,8 +897,16 @@ public struct KeyRingDocumentKeys: Sendable {
         }
     }
 
-    /// Retired keys of a notebook document (`SyncEngine(retiredKeysFor:)`).
+    /// Keys a document had before its current one (`SyncEngine(retiredKeysFor:)`): a notebook's
+    /// retired and earlier-version keys; a note's earlier versions (its chain, crypto.md §10.3).
     public func retiredKeys(for record: DocumentRecord) -> [Data] {
-        record.kind == .notebook ? keyRing.retiredNotebookKeys(record.notebookId ?? record.docId) : []
+        switch record.kind {
+        case .account: return []
+        case .notebook: return keyRing.retiredNotebookKeys(record.notebookId ?? record.docId)
+        case .note:
+            if (try? keyRing.sharedNoteKey(record.docId)) != nil { return keyRing.retiredSharedNoteKeys(record.docId) }
+            guard let nb = record.notebookId, let meta = noteMeta(record.docId, nb) else { return [] }
+            return keyRing.earlierNoteKeys(meta, notebookId: nb)
+        }
     }
 }

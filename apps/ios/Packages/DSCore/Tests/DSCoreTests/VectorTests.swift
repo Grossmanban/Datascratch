@@ -399,6 +399,14 @@ struct EncodingVectorTests {
             "attachmentStatus": { _ = try JSONDecoder().decode(AttachmentStatus.self, from: $0) },
             "createShareRequest": { _ = try JSONDecoder().decode(CreateShareRequest.self, from: $0) },
             "apiError": { _ = try JSONDecoder().decode(APIErrorBody.self, from: $0) },
+            "boxKey": { _ = try JSONDecoder().decode(BoxKeyRecord.self, from: $0) },
+            "createInvitationRequest": { _ = try JSONDecoder().decode(CreateInvitationRequest.self, from: $0) },
+            "incomingInvitation": { _ = try JSONDecoder().decode(IncomingInvitation.self, from: $0) },
+            "member": { _ = try JSONDecoder().decode(Member.self, from: $0) },
+            "putMemberKeyRequest": { _ = try JSONDecoder().decode(PutMemberKeyRequest.self, from: $0) },
+            "rotateKeyRequest": { _ = try JSONDecoder().decode(RotateKeyRequest.self, from: $0) },
+            "sharedItem": { _ = try JSONDecoder().decode(SharedItem.self, from: $0) },
+            "docVersion": { _ = try JSONDecoder().decode(DocVersion.self, from: $0) },
         ]
         for (name, c) in cases {
             guard let decode = decoders[name] else {

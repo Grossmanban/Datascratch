@@ -40,13 +40,19 @@ import Testing
         let base = URL(string: "https://example.com/v1")!
         #expect(try APIClient.url(base, "/attachments/0192f3c4-0000-7000-8000-00000000000a/chunks/3").absoluteString
                 == "https://example.com/v1/attachments/0192f3c4-0000-7000-8000-00000000000a/chunks/3")
-        // "a/b" makes two plain segments: ids are checked one by one in the API methods (below).
-        for id in malicious where id != "a/b" {
+        // "a/b" makes two plain segments and "x?y" a query (our own paths use one, checked
+        // separately): ids are checked one by one in the API methods (below).
+        for id in malicious where id != "a/b" && id != "x?y" {
             #expect(throws: UnsafePathError.self) { try APIClient.url(base, "/attachments/\(id)") }
         }
         let api = APIClient(baseURL: URL(string: "https://example.com")!, transport: FakeRESTServer(),
                             sessionStore: SecretSessionStore(store: InMemorySecretStore()))
         await #expect(throws: UnsafePathError.self) { try await api.deleteDoc(id: "../me") }
+        // A query only with plain characters.
+        #expect(try APIClient.url(base, "/invitations?target=notebook:0192f3c4-0000-7000-8000-00000000000a").absoluteString
+                == "https://example.com/v1/invitations?target=notebook:0192f3c4-0000-7000-8000-00000000000a")
+        #expect(throws: UnsafePathError.self) { try APIClient.url(base, "/invitations?target=../x#y") }
+        await #expect(throws: UnsafePathError.self) { _ = try await api.invitations(for: SharingTarget(kind: .notebook, id: "x&admin=1")) }
         await #expect(throws: UnsafePathError.self) { _ = try await api.attachmentStatus(id: "../auth/logout") }
         for id in malicious {
             await #expect(throws: UnsafePathError.self) { _ = try await api.attachmentStatus(id: id) }

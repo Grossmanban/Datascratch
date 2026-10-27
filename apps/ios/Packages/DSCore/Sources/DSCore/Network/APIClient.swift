@@ -189,6 +189,11 @@ public actor APIClient {
         return r.wrappedKey.data
     }
 
+    /// The owner's notebook key with its sharing state (D-54: version, chain, pending rotation).
+    public func notebookKeyState(id: String) async throws -> NotebookKeyState {
+        try await call("GET", "/notebooks/\(seg(id))/key")
+    }
+
     public func setNotebookMode(id: String, mode: NotebookMode, notebookKey: Data? = nil) async throws {
         struct Body: Encodable { var mode: NotebookMode; var notebookKey: Base64URLData? }
         try await send("PATCH", "/notebooks/\(seg(id))/mode", body: Body(mode: mode, notebookKey: notebookKey.map(Base64URLData.init)), idempotent: true)
@@ -278,6 +283,82 @@ public actor APIClient {
         onSessionChange?(s)
     }
 
+    // MARK: Account sharing (D-54)
+
+    /// The account's box key pair: `nil` until created (`404`).
+    public func boxKey() async throws -> BoxKeyRecord? {
+        do {
+            return try await call("GET", "/me/box-key")
+        } catch APIError.server(404, _, _) {
+            return nil
+        }
+    }
+
+    /// Once per account; the same data again is accepted, different data is `409`.
+    public func putBoxKey(_ record: BoxKeyRecord) async throws {
+        _ = try await send("PUT", "/me/box-key", body: record)
+    }
+
+    public func publicKey(userId: String) async throws -> Data {
+        let r: PublicKeyRecord = try await call("GET", "/users/\(seg(userId))/public-key")
+        return r.publicKey.data
+    }
+
+    /// The same answer whether or not an account has this email.
+    public func invite(_ request: CreateInvitationRequest) async throws {
+        _ = try await send("POST", "/invitations", body: request, idempotent: true)
+    }
+
+    public func invitations(for target: SharingTarget) async throws -> [OutgoingInvitation] {
+        try await call("GET", "/invitations?target=\(target.kind.rawValue):\(seg(target.id))")
+    }
+
+    public func revokeInvitation(id: String) async throws { _ = try await send("DELETE", "/invitations/\(seg(id))") }
+
+    public func incomingInvitations() async throws -> [IncomingInvitation] { try await call("GET", "/invitations/incoming") }
+
+    public func acceptInvitation(id: String) async throws -> SharedItem {
+        try await call("POST", "/invitations/\(seg(id))/accept", body: [String: String](), idempotent: true)
+    }
+
+    public func declineInvitation(id: String) async throws {
+        _ = try await send("POST", "/invitations/\(seg(id))/decline", body: [String: String](), idempotent: true)
+    }
+
+    public func members(of target: SharingTarget) async throws -> [Member] {
+        try await call("GET", "/members/\(target.kind.rawValue)/\(seg(target.id))")
+    }
+
+    public func setMemberRole(_ role: MemberRole, userId: String, in target: SharingTarget) async throws {
+        _ = try await send("PATCH", "/members/\(target.kind.rawValue)/\(seg(target.id))/\(seg(userId))", body: ["role": role], idempotent: true)
+    }
+
+    /// The owner removes a member, or a member removes itself («Выйти»).
+    public func removeMember(userId: String, from target: SharingTarget) async throws {
+        _ = try await send("DELETE", "/members/\(target.kind.rawValue)/\(seg(target.id))/\(seg(userId))")
+    }
+
+    /// The owner gives a member the current key (`409` if `version` is not current).
+    public func putMemberKey(_ request: PutMemberKeyRequest, userId: String, in target: SharingTarget) async throws {
+        _ = try await send("PUT", "/members/\(target.kind.rawValue)/\(seg(target.id))/\(seg(userId))/key", body: request)
+    }
+
+    /// Atomic key rotation (`409` if `version` ≠ current + 1 or a member is missing).
+    public func rotateKey(_ request: RotateKeyRequest, of target: SharingTarget) async throws {
+        _ = try await send("POST", "/members/\(target.kind.rawValue)/\(seg(target.id))/rotate", body: request)
+    }
+
+    /// Notebooks: every note has its new key → clears `keyRotationPending`.
+    public func rotationDone(notebookId: String) async throws {
+        _ = try await send("POST", "/members/notebook/\(seg(notebookId))/rotate/done", body: [String: String](), idempotent: true)
+    }
+
+    public func sharedNoteKey(noteId: String) async throws -> NoteKeyState {
+        try await call("GET", "/members/note/\(seg(noteId))/key")
+    }
+
+    public func sharedWithMe() async throws -> [SharedItem] { try await call("GET", "/shared-with-me") }
+
     /// Called once when the server reports this device revoked (D-53), from any request; the
     /// app wipes local data. Not called for expired or rejected tokens or network failures.
     public func setDeviceRevokedHandler(_ handler: (@Sendable (DeviceRevocationReason) -> Void)?) {
@@ -363,10 +444,21 @@ public actor APIClient {
     /// or one carrying `/`, `%`, `?` or `#`, could reach another endpoint, so only plain
     /// segments (letters, digits, `-`, `_`) are allowed.
     static func url(_ base: URL, _ path: String) throws -> URL {
-        let segments = path.dropFirst().split(separator: "/", omittingEmptySubsequences: false)
+        // An optional query (`?target=notebook:<id>`): letters, digits, `-`, `_`, `:`, `=`, `&`.
+        let parts = path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
+        let route = parts[0]
+        let segments = route.dropFirst().split(separator: "/", omittingEmptySubsequences: false)
         let plain = segments.allSatisfy(isPlainSegment)
-        guard path.hasPrefix("/"), plain else { throw UnsafePathError(path: path) }
-        return base.appendingPathComponent(String(path.dropFirst()))
+        let query = parts.count > 1 ? String(parts[1]) : nil
+        let queryOK = query.map { q in
+            !q.isEmpty && q.unicodeScalars.allSatisfy { $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "-_:=&".unicodeScalars.contains($0)) }
+        } ?? true
+        guard route.hasPrefix("/"), plain, queryOK else { throw UnsafePathError(path: path) }
+        let url = base.appendingPathComponent(String(route.dropFirst()))
+        guard let query else { return url }
+        var c = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        c.percentEncodedQuery = query
+        return c.url!
     }
 
     /// - Parameter idempotent: repeating the request has the same effect; default by method

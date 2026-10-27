@@ -14,6 +14,10 @@ public enum CryptoError: Error, Equatable {
     /// Wrong key, wrong `ad` or tampered ciphertext.
     case decryptionFailed
     case invalidRecoveryKey
+    /// An account's secret box key does not match its published public key (§10.1).
+    case boxKeyMismatch
+    /// A peer public key libsodium refuses (low order).
+    case invalidPeerKey
 }
 
 /// Password KDF parameters stored next to the salt (crypto.md §2).

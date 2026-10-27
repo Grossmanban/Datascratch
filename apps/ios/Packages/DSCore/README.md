@@ -140,6 +140,11 @@ DSCore
   ~0.5 с — не на главном потоке); `seal/open` (конверт `0x01 || nonce || XChaCha20-Poly1305`
   с `ad` из `CryptoAD`); `wrapKey/unwrapKey`; `sealAttachment/openAttachment` (куски по 1 MiB);
   `recoveryLoginKey`. `RecoveryKeyFormat.format/parse` — `DS1-XXXX-…` (Crockford Base32).
+- Параметры KDF с сервера (`APIClient.prelogin`: вход, смена пароля, смена ключа
+  восстановления) принимаются только в границах crypto.md §2 (`KDFParams.validate()`:
+  `argon2id13`, `3 ≤ ops ≤ 10`, `64 MiB ≤ mem ≤ 256 MiB`), иначе `CryptoError.unsafeKDF` —
+  враждебный сервер не может удешевить `loginKey` для перебора пароля.
+- Пути REST: id в пути — только буквы, цифры, `-`, `_` (`UnsafePathError`, запрос не уходит).
 - `SignupMaterial.make(password:userId:)`, `PasswordChangeMaterial.make(...)` — всё для
   `/auth/signup`, `/auth/password`, `/auth/recovery/finish`.
 - `KeyRing(store:)` — иерархия ключей: мастер-ключ, ключи блокнотов (в `SecretStore`),
@@ -165,7 +170,13 @@ DSCore
   (`EntityID.make()`), когда блок должен сослаться на вложение раньше, чем есть байты (вставка
   веб-страницы: блок сразу, картинка — после загрузки). Пока байты не добавлены, о вложении нигде
   ничего нет: не отправляется и не требует уборки; неверный id — `AttachmentError.invalidId`,
-  занятый — `.alreadyExists`. `uploadPending(noteKey:)` / `upload` (куски по
+  занятый — `.alreadyExists`. Id вложения — только UUIDv7 везде (`localURL`, `upload`, `download`,
+  `delete`, обложка в `meta`): id из содержимого заметки (другие устройства, агенты) вида
+  `../library.sqlite` не выходит за папку вложений. `download` сверяет описание с сервера (число
+  кусков с размером, размер с записанным и с `maxSize` = 200 МБ, размер каждого куска) и пишет
+  куски на диск по мере расшифровки — `AttachmentError.invalidDownload`, файла не остаётся.
+  `wipeLocal()` / `AttachmentManager.wipeLocal(directory:store:)` — все локальные файлы и записи
+  вложений («Удалить данные с этого устройства»). `uploadPending(noteKey:)` / `upload` (куски по
   1 MiB, докачка), `download(...)`, `localURL`, `delete`.
 - `ShareLink(url:)` / `.url` — ссылки `https://<host>/s/<shareId>#k=<ключ>` (crypto.md §7).
 

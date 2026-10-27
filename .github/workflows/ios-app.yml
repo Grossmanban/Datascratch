@@ -98,8 +98,8 @@ jobs:
             -project Datascratch.xcodeproj -scheme Datascratch \
             -destination "${{ steps.sim.outputs.destination }}" \
             -derivedDataPath build/DerivedData \
-            CODE_SIGNING_ALLOWED=NO | tee build/build.log | xcbeautify --renderer github-actions || \
-          (grep -E "error:" build/build.log | head -50; tail -40 build/build.log; exit 1)
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/build.log | xcbeautify --renderer github-actions || \
+          (grep -E "error:|Assertion|Stack dump|crashed|PLEASE submit" build/build.log | head -50; tail -40 build/build.log; exit 1)
 
       - name: Unit tests
         timeout-minutes: 15

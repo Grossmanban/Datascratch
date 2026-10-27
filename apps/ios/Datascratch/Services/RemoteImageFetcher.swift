@@ -12,7 +12,7 @@ nonisolated enum RemoteImageFetcher {
     static let timeout: TimeInterval = 15
     static let maxRedirects = 3
 
-    enum FetchError: Error {
+    nonisolated enum FetchError: Error {
         case refused
         case tooLarge
         case badResponse
@@ -110,7 +110,7 @@ nonisolated enum RemoteImageFetcher {
     }
 
     /// Follows at most `maxRedirects` redirects, each to an allowed address.
-    final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    nonisolated final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         private let lock = NSLock()
         private var count = 0
 

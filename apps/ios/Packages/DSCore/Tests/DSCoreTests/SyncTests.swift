@@ -17,6 +17,10 @@ actor FakeSyncServer {
         let closed = Locked(false)
         /// Died silently: frames go nowhere and pings never come back (until closed).
         let dead = Locked(false)
+        /// What the server closed with.
+        let closedWith = Locked<(code: Int, reason: String?)?>(nil)
+        var closeCode: Int? { closedWith.withLock { $0?.code } }
+        var closeReason: String? { closedWith.withLock { $0?.reason } }
 
         init(server: FakeSyncServer) {
             self.server = server
@@ -98,6 +102,18 @@ actor FakeSyncServer {
     }
 
     func connections(deviceId: String) -> Int { conns.values.filter { $0.deviceId == deviceId }.count }
+
+    /// Server-side close of every connection of `deviceId` with `code` (and `reason`), after
+    /// an optional frame (D-53: `device_revoked` + 4410; or 4401 for a dead token).
+    func closeConnections(deviceId: String, frame: ServerMessage?, code: Int, reason: String?) {
+        for c in conns.values where c.deviceId == deviceId {
+            if let frame { c.conn.deliver(frame) }
+            c.conn.closedWith.withLock { $0 = (code, reason) }
+            c.conn.close()
+        }
+    }
+
+    func helloCount() -> Int { hellos.count }
 
     func subscribers(_ docId: String) -> Int { conns.values.filter { $0.subs.contains(docId) }.count }
 

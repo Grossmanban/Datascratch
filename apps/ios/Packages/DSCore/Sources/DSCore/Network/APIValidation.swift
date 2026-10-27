@@ -387,14 +387,17 @@ extension AttachmentStatus {
 public enum APIErrorCode: String, Codable, Sendable {
     case badRequest = "bad_request", unauthorized, forbidden, notFound = "not_found", conflict
     case rateLimited = "rate_limited", payloadTooLarge = "payload_too_large", `internal`
+    case deviceRevoked = "device_revoked"
 }
 
 extension APIErrorBody.Inner {
-    enum CodingKeys: String, CodingKey { case code, message }
+    enum CodingKeys: String, CodingKey { case code, message, reason, retryAfterMs }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         code = try c.decode(APIErrorCode.self, forKey: .code).rawValue
         message = try c.decode(String.self, forKey: .message)
+        reason = try c.decodeIfPresent(DeviceRevocationReason.self, forKey: .reason)
+        retryAfterMs = try c.decodeIfPresent(Int.self, forKey: .retryAfterMs)
     }
 }

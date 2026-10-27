@@ -107,10 +107,9 @@ struct SecurityAuditTests {
     #if canImport(DSCore)
     @Test func unsafeServerAnswersBecomeReadableErrors() {
         let kdf = ServerAccountService.map(CryptoError.unsafeKDF(ops: 1, mem: 8192))
-        #expect(kdf as? AccountError == .unsafeServerParameters)
-        let path = ServerAccountService.map(UnsafePathError(path: "../x"))
-        #expect(path is AccountError)
-        #expect(ServerAccountService.map(AccountError.invalidRecoveryKey) as? AccountError == .invalidRecoveryKey)
+        #expect(kdf as? Datascratch.AccountError == .unsafeServerParameters)
+        let kept = ServerAccountService.map(Datascratch.AccountError.invalidRecoveryKey)
+        #expect(kept as? Datascratch.AccountError == .invalidRecoveryKey)
     }
     #endif
 

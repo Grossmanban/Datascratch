@@ -145,9 +145,9 @@ struct ContentColumn: View {
 
     var body: some View {
         switch scene.sidebar ?? .allDocuments {
-        case .tasks:
+        case .tasks where Features.tasks:
             TasksView()
-        case .calendar:
+        case .calendar where Features.calendar:
             CalendarView()
         case .trash:
             TrashView()

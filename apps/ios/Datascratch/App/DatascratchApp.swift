@@ -31,6 +31,12 @@ struct DatascratchApp: App {
                 app.settings.applyAppearanceToWindows()
                 app.refreshRecoveryKeyState()
             }
+            // iOS drops the sync socket while the app is suspended, and a socket that looks alive
+            // may no longer deliver: coming back checks it and replaces a dead one at once
+            // (remote edits showed only after a relaunch, 2026-10-26).
+            #if canImport(DSCore)
+            if phase == .active { app.connection?.checkConnection() }
+            #endif
         }
 
         // A single document in its own window (Stage Manager, split view).

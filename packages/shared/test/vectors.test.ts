@@ -306,6 +306,18 @@ describe("api vectors", () => {
   });
 });
 
+describe("api failure vectors (D-53)", () => {
+  it("classifies every case as expected", async () => {
+    const { classifyApiFailure, SYNC_CLOSE_DEVICE_REVOKED, DEVICE_REVOKED_REASONS } =
+      await import("../src/contracts/index.js");
+    const v = load("api/failures.json");
+    expect(v.syncCloseDeviceRevoked).toBe(SYNC_CLOSE_DEVICE_REVOKED);
+    expect(v.reasons).toEqual([...DEVICE_REVOKED_REASONS]);
+    for (const c of v.cases)
+      expect(classifyApiFailure(c.status, c.body), c.name).toEqual(c.expected);
+  });
+});
+
 describe("recovery key rotation vector", () => {
   it("builds the expected body", async () => {
     const { rotateRecoveryKey, unwrapMasterKeyWithRecovery } = await import("../src/index.js");

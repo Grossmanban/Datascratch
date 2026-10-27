@@ -61,7 +61,6 @@ jobs:
       ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
       TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
-      DS_WEB_HOST: ${{ vars.DS_WEB_HOST || 'datascratch.app' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -140,8 +139,14 @@ jobs:
           rm "$RUNNER_TEMP/dist.p12"
 
       - name: Archive
+        env:
+          # A secret, not a variable: secrets are masked, and a variable would be printed in
+          # this step's env header before anything could mask it. No domain in public logs.
+          DS_WEB_HOST_SECRET: ${{ secrets.DS_WEB_HOST }}
         run: |
           set -o pipefail
+          DS_WEB_HOST="${DS_WEB_HOST_SECRET:-datascratch.app}"
+          echo "::add-mask::$DS_WEB_HOST"
           xcodebuild archive \
             -project Datascratch.xcodeproj -scheme Datascratch -configuration Release \
             -destination "generic/platform=iOS" \

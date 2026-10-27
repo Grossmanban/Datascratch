@@ -286,7 +286,8 @@ route("GET", "/v1/notebooks/:id/key", (_q, res, { auth, params }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const n = db.notebooks.get(params.id);
   if (!n || n.userId !== auth.userId) return err(res, 404, "not_found");
-  json(res, 200, { wrappedKey: n.wrappedKey });
+  // D-54 key versions (crypto.md §10.3): version, chain and a pending rotation.
+  json(res, 200, { wrappedKey: n.wrappedKey, version: n.keyVersion ?? 1, keyChain: n.keyChain ?? [], keyRotationPending: !!n.keyRotationPending });
 });
 route("PATCH", "/v1/notebooks/:id/mode", (_q, res, { auth, params, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
@@ -387,14 +388,50 @@ function sharedItemFor(target, m) {
     target,
     owner: { userId: owner.userId, email: owner.email, publicKey: owner.boxKey?.publicKey ?? b64u(Buffer.alloc(32)) },
     role: m.role,
-    keyVersion: m.keyVersion ?? 1,
-    wrappedKey: m.wrappedKey ?? null,
-    keyChain: [],
+    keyVersion: resourceKey(target).version,
+    wrappedKey: m.keyVersion === resourceKey(target).version ? (m.wrappedKey ?? null) : null,
+    keyChain: resourceKey(target).keyChain,
     docIds,
     addedAt: m.joinedAt,
   };
 }
 const parseTarget = (kind, id) => (kind === "notebook" || kind === "note" ? { kind, id } : null);
+/** Key state of a shared resource: a notebook's lives on the notebook, a shared note's on its doc. */
+function resourceKey(target) {
+  const r = target.kind === "notebook" ? db.notebooks.get(target.id) : db.docs.get(target.id);
+  return { r, version: r?.keyVersion ?? 1, keyChain: r?.keyChain ?? [], pending: !!r?.keyRotationPending };
+}
+
+// crypto.md §10.1: one key pair per account, published once.
+route("GET", "/v1/me/box-key", (_q, res, { auth }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  if (!auth.user.boxKey) return err(res, 404, "not_found");
+  json(res, 200, auth.user.boxKey);
+});
+route("PUT", "/v1/me/box-key", (_q, res, { auth, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const prev = auth.user.boxKey;
+  if (prev && (prev.publicKey !== body.publicKey || prev.wrappedSecretKey !== body.wrappedSecretKey)) return err(res, 409, "conflict");
+  auth.user.boxKey = { publicKey: body.publicKey, wrappedSecretKey: body.wrappedSecretKey };
+  json(res, 204);
+});
+/** Only for accounts related through a shared resource or an accepted invitation (api.md); else 404. */
+function related(a, b) {
+  if (a === b) return true;
+  for (const [k, members] of db.members) {
+    const [kind, id] = k.split(":");
+    const owner = ownerOf({ kind, id });
+    const inIt = (u) => u === owner || members.has(u);
+    if (inIt(a) && inIt(b)) return true;
+  }
+  return false;
+}
+route("GET", "/v1/users/:userId/public-key", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const u = userById(params.userId);
+  if (!u?.boxKey || !related(auth.userId, u.userId)) return err(res, 404, "not_found");
+  json(res, 200, { userId: u.userId, publicKey: u.boxKey.publicKey });
+});
 
 route("POST", "/v1/invitations", (_q, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
@@ -483,7 +520,66 @@ route("DELETE", "/v1/members/:kind/:id/:userId", (_q, res, { auth, params }) => 
   if (!target) return err(res, 404, "not_found");
   if (ownerOf(target) !== auth.userId && params.userId !== auth.userId) return err(res, 403, "forbidden");
   if (!membersOf(target).delete(params.userId)) return err(res, 404, "not_found");
+  const { r } = resourceKey(target);
+  if (r) r.keyRotationPending = true;
   json(res, 204);
+});
+route("PUT", "/v1/members/:kind/:id/:userId/key", (_q, res, { auth, params, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const target = parseTarget(params.kind, params.id);
+  if (!target || ownerOf(target) !== auth.userId) return err(res, 403, "forbidden");
+  const m = membersOf(target).get(params.userId);
+  if (!m) return err(res, 404, "not_found");
+  if (body.version !== resourceKey(target).version) return err(res, 409, "conflict", "stale key version");
+  Object.assign(m, { wrappedKey: body.wrappedKey, keyVersion: body.version, status: "active" });
+  json(res, 204);
+});
+route("POST", "/v1/members/:kind/:id/rotate", (_q, res, { auth, params, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const target = parseTarget(params.kind, params.id);
+  if (!target || ownerOf(target) !== auth.userId) return err(res, 403, "forbidden");
+  const { r, version, keyChain } = resourceKey(target);
+  if (body.version !== version + 1) return err(res, 409, "conflict", "version");
+  const members = membersOf(target);
+  const given = new Map(body.memberKeys.map((k) => [k.userId, k.wrappedKey]));
+  for (const [userId, m] of members) if (m.status === "active" && !given.has(userId)) return err(res, 409, "conflict", "memberKeys");
+  r.keyVersion = body.version;
+  r.keyChain = [body.previousKeyWrap, ...keyChain];
+  if (target.kind === "notebook") {
+    r.wrappedKey = body.ownerWrappedKey;
+    if (body.notebookKey) r.serverKey = body.notebookKey;
+  } else {
+    r.ownerWrappedKey = body.ownerWrappedKey;
+    r.keyRotationPending = false;
+  }
+  for (const [userId, m] of members) if (given.has(userId)) Object.assign(m, { wrappedKey: given.get(userId), keyVersion: body.version, status: "active" });
+  json(res, 204);
+});
+route("POST", "/v1/members/:kind/:id/rotate/done", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const target = parseTarget(params.kind, params.id);
+  if (!target || ownerOf(target) !== auth.userId) return err(res, 403, "forbidden");
+  resourceKey(target).r.keyRotationPending = false;
+  json(res, 204);
+});
+route("GET", "/v1/members/note/:id/key", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const d = db.docs.get(params.id);
+  if (!d || d.userId !== auth.userId || !d.ownerWrappedKey) return err(res, 404, "not_found");
+  json(res, 200, { version: d.keyVersion ?? 1, ownerWrappedKey: d.ownerWrappedKey, keyChain: d.keyChain ?? [] });
+});
+route("GET", "/v1/shared-by-me", (_q, res, { auth }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const out = [];
+  for (const [k, members] of db.members) {
+    const [kind, id] = k.split(":");
+    const target = { kind, id };
+    if (ownerOf(target) !== auth.userId) continue;
+    const { version, pending } = resourceKey(target);
+    if (!members.size && !pending) continue;
+    out.push({ target, keyVersion: version, keyRotationPending: pending, members: members.size, awaitingKey: [...members.values()].filter((m) => m.status === "awaiting_key").length });
+  }
+  json(res, 200, out);
 });
 route("GET", "/v1/shared-with-me", (_q, res, { auth }) => {
   if (!auth) return err(res, 401, "unauthorized");

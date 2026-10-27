@@ -2,6 +2,8 @@ import { SyncClient } from "@datascratch/shared";
 import type * as Y from "yjs";
 import { deviceId } from "@/auth/deviceKey";
 import { getSession, refreshSession, wipeRevokedDevice } from "@/auth/session";
+import { accountBoxKeys } from "./sharing";
+import { maintainShares } from "./ownerShares";
 import { APP_VERSION, syncUrl } from "@/config";
 import { notebookMaps, syncNotebookMetaCopy } from "@/domain/notebook";
 import { sodiumReady } from "@/lib/shared";
@@ -11,7 +13,7 @@ import { uploadPending } from "./attachments";
 import { accountDb } from "./db";
 import { DocStore, ORIGIN_REMOTE } from "./docStore";
 import { Indexer } from "./indexer";
-import { checkNotebookKeys, clearKeys, onNotebookKeyReplaced, retiredKeysFor, type ReplacedNotebookKey } from "./keys";
+import { alternateKeysFor, checkNotebookKeys, clearKeys, onNotebookKeyReplaced, type ReplacedNotebookKey } from "./keys";
 import { notebooksApi } from "@/api/endpoints";
 import { pushNotebookMode } from "@/domain/actions";
 import { ad, unwrapKey, wrapKey } from "@/lib/shared";
@@ -74,8 +76,9 @@ export class AccountRuntime {
       client: { platform: "web", version: APP_VERSION },
       storage: this.storage,
       createSocket: connectWithTimeout,
-      // Items sealed with a key this device used before switching to the server's stay readable.
-      alternateKeysFor: (docId) => retiredKeysFor(docId),
+      // Older key versions (D-54 rotation) and keys this device used before switching to the
+      // server's: items sealed with them stay readable.
+      alternateKeysFor: (docId) => alternateKeysFor(docId),
       // After skipping unreadable items, ask once for the server's latest snapshot (it may cover them).
       recoverSkippedFromSnapshot: true,
       auth: async () => {
@@ -199,6 +202,13 @@ export class AccountRuntime {
     );
     this.client.start();
     void this.reconcileNotebooks();
+    // D-54: this account's key pair exists (created once, crypto.md §10.1); offline it waits. Then
+    // the owner's upkeep of what it shares (keys for members, key changes, guest links).
+    void accountBoxKeys()
+      .then(() => maintainShares())
+      .catch((e) => console.warn("[ds] account key pair not ready:", (e as Error).message));
+    const upkeep = setInterval(() => void maintainShares(), 120_000);
+    this.cleanups.push(() => clearInterval(upkeep));
     // Notes with edits saved as the page last closed: opened once so the tail is written and sent
     // even if the note is not opened again (indexes get theirs when they are attached).
     for (const docId of this.store.tailDocIds())

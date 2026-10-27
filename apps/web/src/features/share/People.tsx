@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, Copy, Mail, UserPlus, X } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError, NetworkError } from "@/api/client";
 import { membersApi } from "@/api/endpoints";
 import { useAuth } from "@/auth/session";
+import { giveAccessNow, maintainShares } from "@/data/ownerShares";
 import { formatDay, localDate } from "@/lib/dates";
 import { uuidv7, type Member, type MemberRole, type OutgoingInvitation, type ShareTarget } from "@/lib/shared";
 import { Button, confirmDialog, DropdownMenu, IconButton, Input, Spinner, toast } from "@/ui";
@@ -32,6 +33,13 @@ export function PeopleSection({ target }: { target: ShareTarget }) {
     void qc.invalidateQueries({ queryKey: ["members", keyOf(target)] });
     void qc.invalidateQueries({ queryKey: ["invitations", keyOf(target)] });
   };
+  // Someone accepted and waits for the key: deliver it now rather than on the next upkeep pass.
+  const waiting = (members.data ?? []).filter((m) => m.status === "awaiting_key" && !m.accountCreatedAfterInvite).length;
+  useEffect(() => {
+    if (!waiting) return;
+    void maintainShares().then(refresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waiting]);
   const failed = (e: unknown) =>
     toast(
       e instanceof NetworkError
@@ -60,8 +68,11 @@ export function PeopleSection({ target }: { target: ShareTarget }) {
   });
   const remove = useMutation({
     mutationFn: (userId: string) => membersApi.remove(target, userId),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast(t("share.people.removed"));
+      refresh();
+      // The key changes now (crypto.md §10.3), and guest links are re-created with it.
+      await maintainShares();
       refresh();
     },
     onError: failed,
@@ -158,6 +169,20 @@ export function PeopleSection({ target }: { target: ShareTarget }) {
                   </div>
                 )}
               </div>
+              {m.status === "awaiting_key" && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="shrink-0"
+                  data-testid="give-access"
+                  onClick={async () => {
+                    await giveAccessNow(target, m.userId);
+                    refresh();
+                  }}
+                >
+                  {t("share.people.giveAccess")}
+                </Button>
+              )}
               <DropdownMenu
                 align="end"
                 trigger={

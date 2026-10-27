@@ -19,7 +19,42 @@ public extension EditorAttachmentResolver {
 /// keep their views across re-renders.
 @MainActor
 final class AttachmentFactory {
-    weak var resolver: EditorAttachmentResolver?
+    /// The host's resolver, seen through `previews` (block views and heights read images here).
+    var resolver: EditorAttachmentResolver? {
+        get { previewing }
+        set { previewing.host = newValue }
+    }
+    private let previewing = PreviewingResolver()
+    /// Local previews of images the host is still storing or uploading, by attachment id: shown
+    /// until the host's resolver has the image.
+    var previews: [String: UIImage] {
+        get { previewing.previews }
+        set { previewing.previews = newValue }
+    }
+
+    /// Re-reads the image of every live view showing `attachmentId` (the host now has it).
+    func refreshImages(attachmentId: String) {
+        for view in viewCache.values where view.node?.attrs["attachmentId"]?.stringValue == attachmentId {
+            if let node = view.node { view.configure(node: node, resolver: resolver, theme: theme) }
+        }
+    }
+
+    /// Image block hooks (the editor wires them): long-press menu, a new width from the resize
+    /// handle, VoiceOver activation (zoom). `showsResizeHandle`: iPad, text tool.
+    var imageMenu: ((BlockID) -> UIMenu?)?
+    var imageResized: ((BlockID, Double) -> Void)?
+    var imageActivated: ((BlockID, ImageBlockView) -> Void)?
+    var showsResizeHandle = false {
+        didSet {
+            guard showsResizeHandle != oldValue else { return }
+            for (_, view) in imageViews { view.setNeedsLayout() }
+        }
+    }
+
+    /// Live image views, for hit-testing taps (by block).
+    var imageViews: [(block: BlockID, view: ImageBlockView)] {
+        viewCache.compactMap { id, view in (view as? ImageBlockView).map { (id, $0) } }
+    }
     var theme: EditorTheme {
         didSet { viewCache.removeAll() }
     }
@@ -127,7 +162,10 @@ final class AttachmentFactory {
         switch node.type {
         case NodeType.horizontalRule: v = RuleBlockView()
         case NodeType.drawing: v = DrawingBlockView()
-        case NodeType.image: v = ImageBlockView()
+        case NodeType.image:
+            let image = ImageBlockView()
+            image.factory = self
+            v = image
         case NodeType.mathBlock: v = MathBlockView()
         case NodeType.mermaid: v = MermaidBlockView()
         case NodeType.file: v = FileBlockView()
@@ -141,6 +179,16 @@ final class AttachmentFactory {
         v.configure(node: node, resolver: resolver, theme: theme)
         return v
     }
+}
+
+/// The host's resolver plus local previews of images that are not stored yet.
+@MainActor
+final class PreviewingResolver: EditorAttachmentResolver {
+    weak var host: EditorAttachmentResolver?
+    var previews: [String: UIImage] = [:]
+    func image(for attachmentId: String) -> UIImage? { host?.image(for: attachmentId) ?? previews[attachmentId] }
+    func noteTitle(for noteId: String) -> String? { host?.noteTitle(for: noteId) }
+    func noteId(forLinkLabel label: String) -> String? { host?.noteId(forLinkLabel: label) }
 }
 
 /// Inline chip (note link, tag).
@@ -292,18 +340,29 @@ final class DrawingBlockView: BlockContentView {
     }
 }
 
-final class ImageBlockView: BlockContentView {
+/// An image block: the picture (or the local preview while the host stores it), its caption, a
+/// long-press menu, and on iPad a handle on the right edge that resizes it to ¼, ½, ¾ or the full
+/// column (`spec/04-editor.md`, «Фото»).
+final class ImageBlockView: BlockContentView, UIContextMenuInteractionDelegate, UIGestureRecognizerDelegate {
+    weak var factory: AttachmentFactory?
     private let imageView = UIImageView()
     private let caption = UILabel()
+    /// The resize handle: a pill on the image's right edge inside a larger touch area.
+    let grip = UIView()
+    private let gripPill = UIView()
+    /// Width fraction while the handle is dragged (the document changes when it is let go).
+    private var liveFraction: CGFloat?
+    private var dragStartFraction: CGFloat = 1
+    static let widthStops: [CGFloat] = [0.25, 0.5, 0.75, 1]
 
     override func configure(node: BlockNode, resolver: EditorAttachmentResolver?, theme: EditorTheme) {
         super.configure(node: node, resolver: resolver, theme: theme)
-        imageView.contentMode = .scaleAspectFit
         imageView.layer.cornerRadius = 10
         imageView.clipsToBounds = true
         imageView.backgroundColor = EditorTheme.codeBackground
         if let id = node.attrs["attachmentId"]?.stringValue, let img = resolver?.image(for: id) {
             imageView.image = img
+            imageView.contentMode = .scaleAspectFit
         } else {
             imageView.image = UIImage(systemName: "photo")
             imageView.tintColor = EditorTheme.secondaryText
@@ -316,19 +375,102 @@ final class ImageBlockView: BlockContentView {
         if imageView.superview == nil {
             addSubview(imageView)
             addSubview(caption)
+            addInteraction(UIContextMenuInteraction(delegate: self))
+            gripPill.backgroundColor = .white
+            gripPill.layer.cornerRadius = 3
+            gripPill.layer.borderColor = UIColor.black.withAlphaComponent(0.15).cgColor
+            gripPill.layer.borderWidth = 0.5
+            gripPill.layer.shadowColor = UIColor.black.cgColor
+            gripPill.layer.shadowOpacity = 0.25
+            gripPill.layer.shadowRadius = 3
+            gripPill.layer.shadowOffset = .zero
+            gripPill.isUserInteractionEnabled = false
+            grip.addSubview(gripPill)
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(resize(_:)))
+            pan.delegate = self
+            grip.addGestureRecognizer(pan)
+            grip.accessibilityElementsHidden = true
+            addSubview(grip)
         }
-        accessibilityLabel = node.attrs["alt"]?.stringValue
+        let alt = node.attrs["alt"]?.stringValue
+        accessibilityLabel = alt?.isEmpty == false ? alt : "Изображение"
+        accessibilityHint = "Открыть"
         isAccessibilityElement = true
         accessibilityTraits = .image
     }
 
+    private var fraction: CGFloat {
+        liveFraction ?? CGFloat(node?.attrs["width"]?.numberValue ?? 1)
+    }
+
+    /// The picture's frame in this view.
+    var imageFrame: CGRect { imageView.frame }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         let hasCaption = caption.text?.isEmpty == false
-        let fraction = CGFloat(node?.attrs["width"]?.numberValue ?? 1)
         let w = bounds.width * fraction
         imageView.frame = CGRect(x: (bounds.width - w) / 2, y: 0, width: w, height: bounds.height - (hasCaption ? 24 : 0))
         caption.frame = CGRect(x: 0, y: bounds.height - 22, width: bounds.width, height: 20)
+        grip.isHidden = !(factory?.showsResizeHandle ?? false)
+        grip.frame = CGRect(x: imageView.frame.maxX - 22, y: imageView.frame.midY - 30, width: 32, height: 60)
+        gripPill.frame = CGRect(x: 13, y: 12, width: 6, height: 36)
+        bringSubviewToFront(grip)
+    }
+
+    @objc private func resize(_ pan: UIPanGestureRecognizer) {
+        guard let node, bounds.width > 0 else { return }
+        switch pan.state {
+        case .began:
+            dragStartFraction = fraction
+            liveFraction = dragStartFraction
+        case .changed:
+            // The image is centred: its right edge moves by half the width change.
+            let raw = dragStartFraction + 2 * pan.translation(in: self).x / bounds.width
+            let snapped = Self.nearestStop(to: raw)
+            if snapped != liveFraction {
+                liveFraction = snapped
+                UISelectionFeedbackGenerator().selectionChanged()
+                setNeedsLayout()
+            }
+        case .ended:
+            let chosen = liveFraction ?? dragStartFraction
+            liveFraction = nil
+            factory?.imageResized?(node.id, Double(chosen))
+            setNeedsLayout()
+        default:
+            liveFraction = nil
+            setNeedsLayout()
+        }
+    }
+
+    static func nearestStop(to fraction: CGFloat) -> CGFloat {
+        widthStops.min { abs($0 - fraction) < abs($1 - fraction) } ?? 1
+    }
+
+    // Drags of the handle win over scrolling the text.
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+        other is UIPanGestureRecognizer && other.view is UIScrollView
+    }
+
+    override func accessibilityActivate() -> Bool {
+        guard let node else { return false }
+        factory?.imageActivated?(node.id, self)
+        return true
+    }
+
+    // MARK: Long-press menu
+
+    func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
+        guard let node, let menu = factory?.imageMenu?(node.id) else { return nil }
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in menu }
+    }
+
+    func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configuration: UIContextMenuConfiguration,
+                                highlightPreviewForItemWithIdentifier identifier: any NSCopying) -> UITargetedPreview? {
+        let parameters = UIPreviewParameters()
+        parameters.visiblePath = UIBezierPath(roundedRect: imageView.bounds, cornerRadius: 10)
+        return UITargetedPreview(view: imageView, parameters: parameters)
     }
 }
 

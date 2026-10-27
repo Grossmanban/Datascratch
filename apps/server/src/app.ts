@@ -19,6 +19,7 @@ import { loadPlugins, type LoadedPlugin } from './plugins/loader.js';
 import { accountRoutes } from './routes/account.js';
 import { attachmentRoutes } from './routes/attachments.js';
 import { authRoutes } from './routes/auth.js';
+import { fetchImageRoutes } from './routes/fetch-image.js';
 import { notebookRoutes } from './routes/notebooks.js';
 import { shareRoutes } from './routes/shares.js';
 import { registerSync } from './sync/server.js';
@@ -152,6 +153,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
       await v1.register(accountRoutes(ctx));
       await v1.register(notebookRoutes(ctx));
       await v1.register(attachmentRoutes(ctx));
+      await v1.register(fetchImageRoutes(ctx));
       await v1.register(shareRoutes(ctx));
       await registerSync(v1, ctx);
     },

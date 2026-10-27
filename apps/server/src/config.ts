@@ -50,6 +50,11 @@ const ConfigSchema = z
     S3_FORCE_PATH_STYLE: bool.default(true),
 
     ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(200 * 1024 * 1024),
+    /** POST /v1/fetch-image (D-52): requests per account per minute, size cap, total timeout, parallel downloads. */
+    FETCH_IMAGE_PER_MINUTE: z.coerce.number().int().positive().default(60),
+    FETCH_IMAGE_MAX_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
+    FETCH_IMAGE_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+    FETCH_IMAGE_CONCURRENCY: z.coerce.number().int().positive().default(4),
     SYNC_UPDATE_MAX_BYTES: z.coerce.number().int().positive().default(2 * 1024 * 1024),
     SYNC_SNAPSHOT_MAX_BYTES: z.coerce.number().int().positive().default(50 * 1024 * 1024),
     SYNC_AWARENESS_MAX_BYTES: z.coerce.number().int().positive().default(64 * 1024),

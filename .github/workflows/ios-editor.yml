@@ -20,6 +20,10 @@ on:
 
 # No cancel-in-progress: cancelling a job stuck in the simulator can take many minutes and
 # would block the next run behind it.
+# Least privilege: jobs that need more ask for it themselves.
+permissions:
+  contents: read
+
 concurrency:
   group: ios-editor-${{ github.sha }}
 

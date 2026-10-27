@@ -12,6 +12,8 @@ export interface GuestPrincipal {
   target: { kind: 'note' | 'notebook'; id: string };
   /** Namespaced device id (`guest:<base64url of SHA-256(shareId|hello.deviceId)[0..16]>`); only used to tag updates. */
   deviceId: string;
+  /** When the share stops working (null: never); live sync connections close then. */
+  expiresAt: Date | null;
 }
 
 /** Who talks to the REST/sync API. Agents go through the agents plugin (plugins/agents-data.ts). */

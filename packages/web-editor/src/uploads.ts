@@ -7,6 +7,7 @@ import type { Editor } from "@tiptap/core";
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { uuidv7 } from "@datascratch/shared/ids";
 import type { HostRef, UploadedAttachment } from "./host";
+import { dataUrlBytes, MAX_DATA_IMAGE_BYTES } from "./paste/normalize";
 
 export interface UploadState {
   kind: "image" | "file";
@@ -75,6 +76,7 @@ const jobs = new Map<string, { editor: Editor; host: HostRef }>();
 
 /** A data: URL as a File (decoded here: the app's CSP need not allow fetching data:). */
 function dataUrlToFile(src: string, name: string): File {
+  if (dataUrlBytes(src) > MAX_DATA_IMAGE_BYTES) throw new Error("data: image too large");
   const [head, body = ""] = src.split(",", 2);
   const mime = /data:([^;,]+)/.exec(head!)?.[1] ?? "image/png";
   const bytes = /;base64/i.test(head!) ? Uint8Array.from(atob(body), (c) => c.charCodeAt(0)) : new TextEncoder().encode(decodeURIComponent(body));
@@ -205,6 +207,23 @@ export function pickAndInsert(editor: Editor, host: HostRef, accept: "image/*" |
   input.click();
 }
 
+/** Pasted images fetched and stored at once (a page with many pictures does not flood the network). */
+export const PASTED_IMAGE_CONCURRENCY = 4;
+let activePasted = 0;
+const waitingPasted: (() => void)[] = [];
+
+function inPastedSlot(task: () => Promise<void>): void {
+  const start = () => {
+    activePasted++;
+    void task().finally(() => {
+      activePasted--;
+      waitingPasted.shift()?.();
+    });
+  };
+  if (activePasted < PASTED_IMAGE_CONCURRENCY) start();
+  else waitingPasted.push(start);
+}
+
 /** Pasted images waiting for the paste transaction (blockId → source). */
 const pendingPasted = new Map<string, { src: string; alt: string }>();
 
@@ -241,6 +260,6 @@ export function startPastedImages(editor: Editor, host: HostRef): void {
     // app's CSP blocks it, and it would tell the third-party site the user's IP). Ring only.
     uploads.set(id, { kind: "image", file: null, source, previewUrl: null, progress: null, status: "uploading" });
     jobs.set(id, { editor, host });
-    void run(id);
+    inPastedSlot(() => run(id));
   }
 }

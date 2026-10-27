@@ -10,7 +10,7 @@ export const SYNC_PING_INTERVAL_MS = 25_000;
 
 /** Decoded payload limits (sync-protocol.md §7). */
 export const MAX_UPDATE_BYTES = 2 * 1024 * 1024;
-export const MAX_SNAPSHOT_BYTES = 50 * 1024 * 1024;
+export const MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024;
 
 /** A client compacts a document once either threshold is exceeded (sync-protocol.md §5). */
 export const SNAPSHOT_THRESHOLD_UPDATES = 500;
@@ -43,9 +43,18 @@ export const helloMessageSchema = z.object({
   client: z.object({ platform: z.enum(CLIENT_PLATFORMS), version: z.string().min(1) }),
 });
 
+/** At most this many documents per `subscribe` message; clients split larger sets. */
+export const MAX_SUBSCRIBE_DOCS = 1000;
+
 export const subscribeMessageSchema = z.object({
   type: z.literal("subscribe"),
-  docs: z.array(z.object({ docId: uuidSchema, since: sinceSchema })).min(1),
+  docs: z
+    .array(z.object({ docId: uuidSchema, since: sinceSchema }))
+    .min(1)
+    .max(MAX_SUBSCRIBE_DOCS)
+    .refine((docs) => new Set(docs.map((d) => d.docId)).size === docs.length, {
+      message: "duplicate docId in subscribe",
+    }),
 });
 
 export const unsubscribeMessageSchema = z.object({
@@ -161,6 +170,8 @@ export const errorMessageSchema = z.object({
   message: z.string(),
   /** clientMsgId or docId the error refers to. */
   ref: z.string().optional(),
+  /** For `rate_limited`: how long to wait before reconnecting/resending. */
+  retryAfterMs: z.number().int().nonnegative().optional(),
 });
 
 export const serverMessageSchema = z.discriminatedUnion("type", [

@@ -1,6 +1,7 @@
 import { and, desc, eq, lt } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { agentAudit, agentGrants, oauthClients, oauthCodes, oauthTokens } from '../db/schema.js';
+import { noteKeyCache } from './agent-key-cache.js';
 import type {
   AgentGrant,
   AgentsStore,
@@ -79,7 +80,13 @@ export class PgAgentsStore implements AgentsStore {
     if (patch.notebookIds) set.notebookIds = patch.notebookIds;
     if (patch.permission) set.permission = patch.permission;
     if (Object.keys(set).length === 0) return;
+    // A revoked or narrowed grant: drop decrypted note keys of the notebooks it covered (crypto.md §8).
+    const narrows = Boolean(patch.revokedAt || patch.notebookIds);
+    const [before] = narrows
+      ? await this.db.select({ notebookIds: agentGrants.notebookIds }).from(agentGrants).where(eq(agentGrants.id, id))
+      : [];
     await this.db.update(agentGrants).set(set).where(eq(agentGrants.id, id));
+    if (before) noteKeyCache.forgetNotebooks(before.notebookIds);
   }
 
   async upsertClient(c: OAuthClient) {
@@ -124,6 +131,21 @@ export class PgAgentsStore implements AgentsStore {
 
   async deleteToken(tokenHash: string) {
     await this.db.delete(oauthTokens).where(eq(oauthTokens.tokenHash, tokenHash));
+  }
+
+  async useRefreshToken(tokenHash: string) {
+    // UPDATE … RETURNING is atomic: of two concurrent refreshes only one gets the token.
+    const [t] = await this.db
+      .update(oauthTokens)
+      .set({ kind: 'refresh_used' })
+      .where(and(eq(oauthTokens.tokenHash, tokenHash), eq(oauthTokens.kind, 'refresh')))
+      .returning();
+    if (t) return { token: { ...t, kind: 'refresh' as const, expiresAt: t.expiresAt.toISOString() }, reused: false };
+    const [old] = await this.db
+      .select()
+      .from(oauthTokens)
+      .where(and(eq(oauthTokens.tokenHash, tokenHash), eq(oauthTokens.kind, 'refresh_used')));
+    return old ? { token: { ...old, expiresAt: old.expiresAt.toISOString() }, reused: true } : null;
   }
 
   async deleteTokensOfGrant(grantId: string) {

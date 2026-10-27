@@ -49,6 +49,7 @@ export function syncVectors() {
       { type: "error", code: "payload_too_large", message: "update exceeds 2 MiB", ref: vid(30) },
       { type: "error", code: "unauthorized", message: "token expired" },
       { type: "error", code: "bad_request", message: "invalid message" },
+      { type: "error", code: "rate_limited", message: "too many messages", retryAfterMs: 5000 },
       { type: "update", docId: doc, seq: 45, payload: P, deviceId: "guest:AAECAwQFBgcICQoLDA0ODw" },
     ],
   };
@@ -71,6 +72,23 @@ export function syncVectors() {
       {
         reason: "negative since",
         message: { type: "subscribe", docs: [{ docId: doc, since: -1 }] },
+      },
+      {
+        reason: "duplicate docId in subscribe",
+        message: {
+          type: "subscribe",
+          docs: [
+            { docId: doc, since: 0 },
+            { docId: doc, since: 5 },
+          ],
+        },
+      },
+      {
+        reason: "more than 1000 documents in one subscribe",
+        message: {
+          type: "subscribe",
+          docs: Array.from({ length: 1001 }, (_, i) => ({ docId: vid(10_000 + i), since: 0 })),
+        },
       },
       { reason: "empty subscribe", message: { type: "subscribe", docs: [] } },
       {

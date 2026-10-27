@@ -11,6 +11,12 @@ public struct APIErrorBody: Codable, Sendable {
     public var error: Inner
 }
 
+/// A request path would contain an unsafe segment (an id with `..`, `/` and the like); the
+/// request is not sent.
+public struct UnsafePathError: Error, Equatable, Sendable {
+    public var path: String
+}
+
 public enum APIError: Error, Equatable, Sendable {
     /// `{ error: { code, message } }` with the HTTP status.
     case server(status: Int, code: String, message: String)

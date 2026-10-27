@@ -43,6 +43,16 @@ INTERPOLATIONS = {
     r"in “\(name)”": "in “%@”",
     r"in “\($0)”": "in “%@”",
     r"\(info.host) · \(info.version)": "%@ · %@",
+    # D-54
+    r"Remove \(member.email)": "Remove %@",
+    r"\(invite.role.title) · waiting until \(expiresAt.formatted(date: .abbreviated, time: .omitted))": "%@ · waiting until %@",
+    r"\(invite.role.title) · waiting": "%@ · waiting",
+    r"Changed by \(names)": "Changed by %@",
+    r"Added: \(segment.text)": "Added: %@",
+    r"Removed: \(segment.text)": "Removed: %@",
+    r"\($0.member.email) signed up — give access?": "%@ signed up — give access?",
+    r"Opens when \(item.ownerEmail)’s device is online": "Opens when %@’s device is online",
+    r"View only · \(owner) can edit": "View only · %@ can edit",
 }
 
 # Literals that look like text but are not translated (names, formats, prefixes).
@@ -53,6 +63,8 @@ IGNORE = {
     "XChaCha20-Poly1305 · Argon2id", "Quiet paper", "next week", "open to agents", "CoreLibrary", "Library", "Attachments", "a^2 + b^2 = c^2", "graph TD\n  A --> B",
     # First-run space names as an older build wrote them (matched when merging duplicates).
     "Личное", "Работа", "Заметки",
+    # D-54: UI-test seed and the comparison's line marks.
+    "Shared plans", "Roadmap", "Plan for two", "Ideas", "Only the owner edits this.", "• ", "☑ ", "———", "“", "”",
 }
 
 LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')

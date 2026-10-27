@@ -30,6 +30,8 @@ enum SceneSheet: Identifiable, Hashable {
     case documentStyle(noteId: String)
     case move(noteId: String)
     case sharedLink(shareId: String, key: String?)
+    /// D-54: invitations to this account.
+    case invitations
     case taskDate(noteId: String, blockId: String, field: TaskDateField)
 
     var id: Self { self }
@@ -165,21 +167,29 @@ final class SceneModel {
     /// this space (remembered on this device), else the space's first notebook.
     var newNoteDestination: (notebookId: String, folderId: String?)? {
         switch sidebar {
-        case .notebook(let id): return (id, nil)
+        case .notebook(let id) where canCreate(in: id): return (id, nil)
         case .folder(let id):
-            if let folder = library.folder(id) { return (folder.notebookId, folder.id) }
+            if let folder = library.folder(id), canCreate(in: folder.notebookId) { return (folder.notebookId, folder.id) }
         default: break
         }
-        if isDocumentShown, let current = selectedNoteId.flatMap({ library.note($0) }), current.kind == .note {
+        if isDocumentShown, let current = selectedNoteId.flatMap({ library.note($0) }), current.kind == .note,
+           canCreate(in: current.notebookId) {
             return (current.notebookId, current.folderId)
         }
-        let notebooks = library.notebooks(in: library.activeSpace?.id)
+        let notebooks = library.notebooks(in: library.activeSpace?.id).filter { canCreate(in: $0.id) }
         if let space = library.activeSpace?.id, let last = Self.lastNotebook(inSpace: space),
            notebooks.contains(where: { $0.id == last }), !library.isLocked(notebook: last) {
             return (last, nil)
         }
         guard let notebook = notebooks.first(where: { !library.isLocked(notebook: $0.id) }) ?? notebooks.first else { return nil }
         return (notebook.id, nil)
+    }
+
+    /// D-54: notes are made in this account's notebooks and in those shared with it to edit — not
+    /// in «view only» ones, nor among notes shared on their own.
+    func canCreate(in notebookId: String) -> Bool {
+        guard notebookId != Notebook.sharedNotesId else { return false }
+        return app.accountSharing.role(for: ShareTarget(kind: .notebook, id: notebookId)) != .viewer
     }
 
     /// Whether the list shown is a notebook or folder (then the «New Note» button needs no «in …»).

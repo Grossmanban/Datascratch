@@ -17,6 +17,10 @@ on:
       - .github/workflows/ios-core.yml
   workflow_dispatch:
 
+# Least privilege: jobs that need more ask for it themselves.
+permissions:
+  contents: read
+
 concurrency:
   group: ios-core-${{ github.ref }}
   cancel-in-progress: true
@@ -53,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: apps/ios/Packages/DSCore/yrs-ffi
       - name: cargo test
@@ -77,7 +81,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     permissions:
-      contents: write # publishes the yrs_ffiFFI.xcframework release
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -91,7 +95,7 @@ jobs:
           xcrun simctl list runtimes
       - name: Rust targets
         run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios aarch64-apple-darwin x86_64-apple-darwin
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: apps/ios/Packages/DSCore/yrs-ffi
       - name: Build yrs_ffiFFI.xcframework
@@ -133,34 +137,28 @@ jobs:
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee bench.log | grep -E "BENCH|✘|\*\* TEST" || true
           grep "BENCH" bench.log | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY" || true
-      - name: Publish yrs_ffiFFI.xcframework release
-        # Consumers (DSEditor, the app) download the binary instead of building Rust.
+      - name: Package yrs_ffiFFI.xcframework for the release
+        # Published by the `publish` job, the only one allowed to write to the repository.
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/ios-core')
+        run: |
+          (cd build && ditto -c -k --sequesterRsrc --keepParent yrs_ffiFFI.xcframework yrs_ffiFFI.xcframework.zip)
+          echo "yrs-ffi-$(./scripts/yrs-ffi-hash.sh)" > build/yrs-ffi-tag.txt
+      - name: Upload the packaged xcframework
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/ios-core')
+        uses: actions/upload-artifact@v4
+        with:
+          name: yrs-ffi-xcframework
+          path: |
+            apps/ios/Packages/DSCore/build/yrs_ffiFFI.xcframework.zip
+            apps/ios/Packages/DSCore/build/yrs-ffi-tag.txt
+          retention-days: 3
+      - name: Pinned release resolves (what DSEditor and the app use)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="yrs-ffi-$(./scripts/yrs-ffi-hash.sh)"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists"
-          else
-            (cd build && ditto -c -k --sequesterRsrc --keepParent yrs_ffiFFI.xcframework yrs_ffiFFI.xcframework.zip)
-            CHECKSUM=$(swift package compute-checksum build/yrs_ffiFFI.xcframework.zip)
-            gh release create "$TAG" build/yrs_ffiFFI.xcframework.zip --target "$GITHUB_SHA" --prerelease \
-              --title "$TAG" --notes "yrs_ffiFFI.xcframework for DSCore (yrs-ffi sources hash ${TAG#yrs-ffi-}). SwiftPM checksum: $CHECKSUM"
-          fi
-          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/yrs_ffiFFI.xcframework.zip"
-          CHECKSUM=$(gh release view "$TAG" --json body -q .body | sed -n 's/.*SwiftPM checksum: \([0-9a-f]*\).*/\1/p')
-          echo "### yrs_ffiFFI.xcframework" >> "$GITHUB_STEP_SUMMARY"
-          echo "url: $URL" >> "$GITHUB_STEP_SUMMARY"
-          echo "checksum: $CHECKSUM" >> "$GITHUB_STEP_SUMMARY"
-          echo "url=$URL checksum=$CHECKSUM"
-          if ! grep -q "$TAG" Package.swift; then
-            echo "::warning::Package.swift does not pin $TAG yet (update yrsRelease url/checksum)"
-          fi
-      - name: Pinned release resolves (what DSEditor and the app use)
-        run: |
-          TAG="yrs-ffi-$(./scripts/yrs-ffi-hash.sh)"
-          if grep -q "$TAG" Package.swift; then
+          # A new release is created by the `publish` job after this one; check it then.
+          if grep -q "$TAG" Package.swift && gh release view "$TAG" >/dev/null 2>&1; then
             mv build/yrs_ffiFFI.xcframework build/local.xcframework
             swift package resolve
             mv build/local.xcframework build/yrs_ffiFFI.xcframework
@@ -173,3 +171,41 @@ jobs:
         with:
           name: xcodebuild-log
           path: apps/ios/Packages/DSCore/xcodebuild.log
+
+  publish:
+    needs: ios
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/ios-core')
+    name: Publish yrs_ffiFFI.xcframework
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # the only job that writes: creates the yrs_ffiFFI.xcframework release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: yrs-ffi-xcframework
+          path: apps/ios/Packages/DSCore/build
+      - name: Publish yrs_ffiFFI.xcframework release
+        # Consumers (DSEditor, the app) download the binary instead of building Rust.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="$(cat build/yrs-ffi-tag.txt)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+          else
+            # SwiftPM's checksum is the SHA-256 of the archive (what `swift package compute-checksum` prints).
+            CHECKSUM=$(sha256sum build/yrs_ffiFFI.xcframework.zip | cut -d' ' -f1)
+            gh release create "$TAG" build/yrs_ffiFFI.xcframework.zip --target "$GITHUB_SHA" --prerelease \
+              --title "$TAG" --notes "yrs_ffiFFI.xcframework for DSCore (yrs-ffi sources hash ${TAG#yrs-ffi-}). SwiftPM checksum: $CHECKSUM"
+          fi
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/yrs_ffiFFI.xcframework.zip"
+          CHECKSUM=$(gh release view "$TAG" --json body -q .body | sed -n 's/.*SwiftPM checksum: \([0-9a-f]*\).*/\1/p')
+          echo "### yrs_ffiFFI.xcframework" >> "$GITHUB_STEP_SUMMARY"
+          echo "url: $URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "checksum: $CHECKSUM" >> "$GITHUB_STEP_SUMMARY"
+          echo "url=$URL checksum=$CHECKSUM"
+          if ! grep -q "$TAG" Package.swift; then
+            echo "::warning::Package.swift does not pin $TAG yet (update yrsRelease url/checksum)"
+          fi

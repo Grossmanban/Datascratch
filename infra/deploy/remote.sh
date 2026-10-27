@@ -34,15 +34,20 @@ case "${1:-}" in
     ;;
   deploy)
     echo "::group::Upload deployment files"
+    # A fresh private directory (not a fixed /tmp path another user could prepare).
+    tmp=$(remote 'mktemp -d /tmp/ds-deploy.XXXXXXXX' < /dev/null)
+    case "$tmp" in /tmp/ds-deploy.*) ;; *) echo "unexpected temporary directory: $tmp" >&2; exit 1 ;; esac
+    t=$(q "$tmp")
+    trap 'remote "rm -rf $t" < /dev/null > /dev/null 2>&1 || true' EXIT
     tar -C "$HERE" -cf - docker-compose.yml docker-compose.edge.yml bootstrap.sh deploy.sh inspect.sh -C "$HERE/.." backup.sh restore.sh \
-      | remote "rm -rf /tmp/ds-deploy && mkdir -p /tmp/ds-deploy && tar -xf - -C /tmp/ds-deploy"
+      | remote "tar -xf - -C $t"
     echo "::endgroup::"
 
     echo "::group::Prepare the server (bootstrap)"
-    remote "$SUDO env DS_DEPLOY_USER=$(q "$USER_") DS_HOST_MODE=$(q "${DS_HOST_MODE:-auto}") DS_SKIP_FIREWALL=$(q "${DS_SKIP_FIREWALL:-0}") bash /tmp/ds-deploy/bootstrap.sh"
-    remote "$SUDO install -m 0644 /tmp/ds-deploy/docker-compose.yml /tmp/ds-deploy/docker-compose.edge.yml /opt/datascratch/ \
-      && $SUDO install -m 0755 /tmp/ds-deploy/deploy.sh /tmp/ds-deploy/inspect.sh /tmp/ds-deploy/backup.sh /tmp/ds-deploy/restore.sh /opt/datascratch/ \
-      && rm -rf /tmp/ds-deploy"
+    remote "$SUDO env DS_DEPLOY_USER=$(q "$USER_") DS_HOST_MODE=$(q "${DS_HOST_MODE:-auto}") DS_SKIP_FIREWALL=$(q "${DS_SKIP_FIREWALL:-0}") bash $t/bootstrap.sh" < /dev/null
+    remote "$SUDO install -m 0644 $t/docker-compose.yml $t/docker-compose.edge.yml /opt/datascratch/ \
+      && $SUDO install -m 0755 $t/deploy.sh $t/inspect.sh $t/backup.sh $t/restore.sh /opt/datascratch/ \
+      && rm -rf $t" < /dev/null
     echo "::endgroup::"
 
     echo "::group::Deploy $DS_TAG"

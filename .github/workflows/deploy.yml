@@ -129,8 +129,8 @@ jobs:
             echo "postgres=ghcr.io/$owner/datascratch-postgres:16-alpine"
             echo "tag=${GITHUB_SHA::12}"
           } >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -140,7 +140,7 @@ jobs:
       - name: Mirror PostgreSQL to GHCR
         run: docker buildx imagetools create -t "${{ steps.names.outputs.postgres }}" docker.io/library/postgres:16-alpine
       - name: Server image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: infra/Dockerfile
@@ -152,7 +152,7 @@ jobs:
           cache-from: type=gha,scope=server
           cache-to: type=gha,scope=server,mode=max
       - name: Web image (web app + Caddy)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: infra/deploy/web.Dockerfile
@@ -199,6 +199,8 @@ jobs:
         env:
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          # Deploying needs a pinned host key; trust-on-first-use is for the read-only inspect only.
+          REQUIRE_KNOWN_HOSTS: "1"
         run: infra/deploy/ssh-setup.sh
 
       - name: Address
@@ -225,7 +227,8 @@ jobs:
           DS_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           infra/deploy/remote.sh deploy
-          infra/deploy/remote.sh info | tee -a "$GITHUB_ENV"
+          # Only these keys with plain values may reach $GITHUB_ENV (the server's answer is not trusted).
+          infra/deploy/remote.sh info | grep -E '^DS_(MODE|DOMAIN|PROXY_PORT|TAG)=[A-Za-z0-9._:-]*$' | tee -a "$GITHUB_ENV"
 
       - name: Smoke test
         id: smoke

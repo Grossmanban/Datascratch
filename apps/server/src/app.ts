@@ -64,7 +64,9 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
 
   app.setErrorHandler((err: FastifyError, req, reply) => {
     if (err instanceof ApiError) {
-      return reply.code(err.statusCode).send({ error: { code: err.code, message: err.message } });
+      return reply
+        .code(err.statusCode)
+        .send({ error: { code: err.code, message: err.message, ...(err.reason ? { reason: err.reason } : {}) } });
     }
     if (hasZodFastifySchemaValidationErrors(err)) {
       const issue = err.validation[0];

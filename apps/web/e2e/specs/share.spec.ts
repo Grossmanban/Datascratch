@@ -18,6 +18,10 @@ test("share link: guest without an account edits live; revoking cuts access", as
   await guest.goto(url.replace(/^https?:\/\/[^/]+/, ""));
   await expect(guest.getByTestId("guest-doc").locator(".ds-prose")).toContainText("Набросок", { timeout: 20_000 });
   await expect(guest.getByTestId("guest-permission")).toBeVisible();
+  // The key leaves the address bar at once (audit 2026-10-27); a reload in this tab still opens it.
+  expect(guest.url()).not.toContain("#k=");
+  await guest.reload();
+  await expect(guest.getByTestId("guest-doc").locator(".ds-prose")).toContainText("Набросок", { timeout: 20_000 });
   await guest.locator(".ds-prose p").first().click();
   await guest.keyboard.press("End");
   await guest.keyboard.type(" — дополнено гостем");
@@ -30,5 +34,7 @@ test("share link: guest without an account edits live; revoking cuts access", as
   const guest2 = await guestCtx.newPage();
   await guest2.goto(url.replace(/^https?:\/\/[^/]+/, ""));
   await expect(guest2.getByText(/Ссылка недействительна|This link doesn't work/)).toBeVisible();
+  // The guest that was already in: the server cuts it off, a new token is refused, it stops (no loop).
+  await expect(guest.getByText(/Ссылка недействительна|This link doesn't work/)).toBeVisible({ timeout: 30_000 });
   await guestCtx.close();
 });

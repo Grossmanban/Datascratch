@@ -81,3 +81,23 @@ function NotSent({ count }: { count: number }) {
     </div>
   );
 }
+
+/** «Хранилище браузера заполнено»: shown above the screen while SyncClient cannot save to IndexedDB. */
+export function StorageFullBanner() {
+  const { t } = useTranslation();
+  const full = useSyncStatus((s) => s.storageFull);
+  if (!full) return null;
+  return (
+    <div
+      role="status"
+      data-testid="storage-full"
+      className="flex shrink-0 items-center gap-2 border-b border-warning/25 bg-warning/10 px-4 py-2 text-[13px] text-ink"
+    >
+      <CloudAlert className="size-4 shrink-0 text-warning" />
+      <span className="min-w-0">
+        <span className="font-medium">{t("sync.storageFull")}</span>
+        <span className="text-ink-2"> {t("sync.storageFullHint")}</span>
+      </span>
+    </div>
+  );
+}

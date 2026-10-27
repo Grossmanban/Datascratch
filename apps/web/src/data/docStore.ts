@@ -1,14 +1,19 @@
 import { REMOTE_ORIGIN } from "@datascratch/shared";
 import * as Y from "yjs";
 import { getMasterKey } from "@/auth/session";
-import type { DocKind } from "@/lib/shared";
-import { accountDb, type DocRow } from "./db";
+import { fromBase64Url, toBase64Url, type DocKind } from "@/lib/shared";
+import { accountDb, hasAccountDb, type DocRow } from "./db";
 import { notebookKey, noteKey } from "./keys";
 import { enqueueOp, flushOps } from "./ops";
 
 /** Transaction origins. REMOTE comes from SyncClient; anything else is a local edit. */
 export const ORIGIN_REMOTE = REMOTE_ORIGIN;
 export const ORIGIN_LOAD = Symbol("load");
+/** Edits saved to localStorage as the page closed, applied on the next load (flushUnsaved). */
+const ORIGIN_TAIL = Symbol("unsaved-tail");
+
+export const TAIL_PREFIX = "ds.unsaved.";
+const tailKey = (dbName: string, docId: string) => `${TAIL_PREFIX}${dbName}.${docId}`;
 
 const COMPACT_LOCAL_AFTER = 200;
 /** How long a held doc waits for its row before loading unsynced (see open()). */
@@ -179,8 +184,49 @@ export class DocStore {
     // A note opened by a link on a fresh device can be listed by its notebook a moment before its
     // row is stored; without the row it would load as a plain doc that never syncs.
     if (!row && !this.pinned.has(docId)) row = await this.waitForRow(docId, ROW_WAIT_MS);
-    if (row?.kind === "note" && this.noteSync) return this.noteSync.open(docId, () => this.loadFromDisk(docId));
+    if (row?.kind === "note" && this.noteSync) {
+      const doc = await this.noteSync.open(docId, () => this.loadFromDisk(docId));
+      // Live in SyncClient by now: the tail is written and sent like any edit.
+      this.applyTail(docId);
+      return doc;
+    }
     return this.loadFromDisk(docId);
+  }
+
+  /**
+   * Apply the tail saved as the page closed (flushUnsaved) to a loaded doc, once it is attached to
+   * SyncClient (for indexes: after addDocs), so it is written to IndexedDB and sent like any edit.
+   */
+  applyTail(docId: string) {
+    const doc = this.docs.get(docId);
+    if (!doc || !hasAccountDb()) return;
+    const key = tailKey(accountDb().name, docId);
+    let tail: string | null = null;
+    try {
+      tail = localStorage.getItem(key);
+      localStorage.removeItem(key);
+    } catch {
+      return;
+    }
+    if (!tail) return;
+    try {
+      Y.applyUpdate(doc, fromBase64Url(tail), ORIGIN_TAIL);
+    } catch {
+      // a damaged tail is dropped
+    }
+  }
+
+  /** Docs of this account with a tail saved as a page closed (applied when they are loaded). */
+  tailDocIds(): string[] {
+    if (!hasAccountDb()) return [];
+    const prefix = `${TAIL_PREFIX}${accountDb().name}.`;
+    try {
+      return Object.keys(localStorage)
+        .filter((k) => k.startsWith(prefix))
+        .map((k) => k.slice(prefix.length));
+    } catch {
+      return [];
+    }
   }
 
   private waitForRow(docId: string, ms: number): Promise<DocRow | undefined> {
@@ -247,11 +293,68 @@ export class DocStore {
     if (rows.length > COMPACT_LOCAL_AFTER) void this.compactLocal(docId, doc, rows.map((r) => r.id!));
     doc.on("update", (update: Uint8Array, origin: unknown) => {
       if (origin === ORIGIN_LOAD) return;
-      void this.serial(docId, () => accountDb().updates.add({ docId, update }));
+      this.persistUpdate(docId, update);
       this.emit(docId, origin);
     });
+
     this.docs.set(docId, doc);
     return doc;
+  }
+
+  /**
+   * Updates waiting to be written, per doc. Each keystroke is an update; written one row at a time
+   * they queue up behind IndexedDB, and leaving the page (closing the tab, a reload) dropped the
+   * queued tail: the last words typed were lost (seen as a cut title in e2e). Now everything that
+   * arrives while a write is in flight goes into the next write as one merged row, so at most the
+   * one write in flight is at risk.
+   */
+  private unsaved = new Map<string, Uint8Array[]>();
+
+  /** Merged updates being written now (an IndexedDB write the browser aborts if the page goes away). */
+  private writing = new Map<string, Uint8Array[]>();
+
+  /**
+   * Leaving the page (pagehide, tab hidden): IndexedDB writes that have not committed are aborted
+   * on navigation, so what is still waiting or being written is put into localStorage, which
+   * writes synchronously. The next load of the doc applies it and removes it (Yjs updates are
+   * idempotent, so a tail that did reach IndexedDB is harmless). It is no more exposed than the
+   * unencrypted updates in IndexedDB, and deleteAccountDb clears it with them.
+   */
+  flushUnsaved() {
+    if (!hasAccountDb()) return;
+    const db = accountDb();
+    for (const docId of new Set([...this.unsaved.keys(), ...this.writing.keys()])) {
+      const parts = [...(this.writing.get(docId) ?? []), ...(this.unsaved.get(docId) ?? [])];
+      if (!parts.length) continue;
+      try {
+        localStorage.setItem(tailKey(db.name, docId), toBase64Url(Y.mergeUpdates(parts)));
+      } catch {
+        // storage full or blocked: nothing more can be done synchronously
+      }
+    }
+  }
+
+  private persistUpdate(docId: string, update: Uint8Array) {
+    const waiting = this.unsaved.get(docId);
+    if (waiting) {
+      waiting.push(update);
+      return;
+    }
+    this.unsaved.set(docId, [update]);
+    void this.serial(docId, async () => {
+      const batch = this.unsaved.get(docId) ?? [];
+      this.unsaved.delete(docId);
+      if (!batch.length) return;
+      const merged = batch.length === 1 ? batch[0]! : Y.mergeUpdates(batch);
+      this.writing.set(docId, [...(this.writing.get(docId) ?? []), merged]);
+      try {
+        await accountDb().updates.add({ docId, update: merged });
+      } finally {
+        const left = (this.writing.get(docId) ?? []).filter((u) => u !== merged);
+        if (left.length) this.writing.set(docId, left);
+        else this.writing.delete(docId);
+      }
+    });
   }
 
   private async compactLocal(docId: string, doc: Y.Doc, ids: number[]) {

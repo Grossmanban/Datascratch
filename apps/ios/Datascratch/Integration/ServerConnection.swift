@@ -429,7 +429,13 @@ extension ServerConnection: CoverAttachmentRemote {
 
     func downloadAttachment(_ attachmentId: String, noteId: String) async -> URL? {
         guard let attachments, engine != nil, let key = noteKey(noteId) else { return nil }
-        return try? await attachments.download(attachmentId, noteId: noteId, noteKey: key)
+        do {
+            return try await attachments.download(attachmentId, noteId: noteId, noteKey: key)
+        } catch {
+            // A bad id or a download that does not add up (AttachmentError) shows as not loaded.
+            Self.log.error("attachment download \(attachmentId, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     func deleteAttachment(_ attachmentId: String) async {
@@ -482,7 +488,7 @@ final class ServerAccountService: AccountService {
             account = Account(userId: result.session.userId, email: email, createdAt: Date())
             await connection.start(session: result.session, isNewAccount: true)
             return key
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -502,7 +508,7 @@ final class ServerAccountService: AccountService {
             account = Account(userId: session.userId, email: email, createdAt: Date())
             sessionResumed()
             await connection.start(session: session, isNewAccount: false)
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -544,7 +550,7 @@ final class ServerAccountService: AccountService {
             account = Account(userId: session.userId, email: email, createdAt: Date())
             sessionResumed()
             await connection.start(session: session, isNewAccount: false)
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error, recovering: true)
         }
     }
@@ -554,7 +560,7 @@ final class ServerAccountService: AccountService {
         guard new.count >= Credentials.minimumPasswordLength else { throw AccountError.weakPassword }
         do {
             try await connection.accounts.changePassword(email: email, currentPassword: current, newPassword: new)
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -566,7 +572,7 @@ final class ServerAccountService: AccountService {
                                                                        account: connection.core.account)
             guard let key = RecoveryKey(text) else { throw AccountError.invalidRecoveryKey }
             return key
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -582,7 +588,7 @@ final class ServerAccountService: AccountService {
                 }
                 return SecurityEvent(kind: kind, date: date, deviceName: event.deviceName)
             }
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -608,6 +614,14 @@ final class ServerAccountService: AccountService {
             try? await Task.sleep(for: .milliseconds(500))
         }
         return unsentChanges == 0
+    }
+
+    /// DSCore errors as the person should read them; anything else as it is.
+    static func map(_ error: any Error, recovering: Bool = false) -> any Error {
+        if let api = error as? APIError { return map(api, recovering: recovering) }
+        if case .unsafeKDF? = error as? CryptoError { return AccountError.unsafeServerParameters }
+        if error is UnsafePathError { return AccountError.server(String(localized: "The server sent a response this app cannot use.")) }
+        return error
     }
 
     private static func map(_ error: APIError, recovering: Bool = false) -> AccountError {

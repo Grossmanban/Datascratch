@@ -101,6 +101,19 @@ struct SecurityAuditTests {
         #expect(!(await RemoteImageFetcher.isAllowed(URL(string: "https://192.168.0.10/a.png")!)))
     }
 
+    // ios-core: a server lowering the password KDF, or sending unusable paths, is an error the
+    // person can read, not a crash.
+
+    #if canImport(DSCore)
+    @Test func unsafeServerAnswersBecomeReadableErrors() {
+        let kdf = ServerAccountService.map(CryptoError.unsafeKDF(ops: 1, mem: 8192))
+        #expect(kdf as? AccountError == .unsafeServerParameters)
+        let path = ServerAccountService.map(UnsafePathError(path: "../x"))
+        #expect(path is AccountError)
+        #expect(ServerAccountService.map(AccountError.invalidRecoveryKey) as? AccountError == .invalidRecoveryKey)
+    }
+    #endif
+
     private static func pngHeader(width: UInt32, height: UInt32) -> Data {
         func be(_ v: UInt32) -> [UInt8] { [UInt8(v >> 24), UInt8(v >> 16 & 0xff), UInt8(v >> 8 & 0xff), UInt8(v & 0xff)] }
         func chunk(_ type: String, _ body: [UInt8]) -> [UInt8] {

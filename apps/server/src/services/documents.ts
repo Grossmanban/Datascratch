@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, lte, lt, sql } from 'drizzle-orm';
 import type { DbOrTx } from '../db/client.js';
 import { docSnapshots, docUpdates, docs } from '../db/schema.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { ApiError, badRequest, notFound } from '../lib/errors.js';
 import { toB64 } from '../lib/encoding.js';
 import { topics, type Broadcaster } from '../sync/hub.js';
 
@@ -68,7 +68,22 @@ export class DocumentService {
   constructor(
     private readonly hub: Broadcaster,
     private readonly retention: RetentionPolicy,
+    /** Bytes an account may store (0: unlimited); see quotaCheck. */
+    private readonly quotaBytes = 0,
   ) {}
+
+  /**
+   * Refuse a write that would take the document owner's account over its storage quota
+   * (guests and agents count against the owner). Snapshots get 10 % headroom so that an
+   * account at its limit can still compact its history.
+   */
+  async quotaCheck(db: DbOrTx, docId: string, bytes: number, kind: 'update' | 'snapshot' | 'attachment' = 'update') {
+    if (this.quotaBytes <= 0) return;
+    const res = await db.execute<{ used: string | number | null }>(sql`SELECT ds_storage_of_doc(${docId}) AS used`);
+    const used = Number(res.rows[0]?.used ?? 0);
+    const limit = kind === 'snapshot' ? this.quotaBytes * 1.1 : this.quotaBytes;
+    if (used + bytes > limit) throw new ApiError('payload_too_large', 'storage quota exceeded');
+  }
 
   /** Append an update with the next seq. The doc row lock serializes writers per document. */
   async append(db: DbOrTx, input: AppendInput): Promise<AppendResult> {
@@ -110,6 +125,7 @@ export class DocumentService {
           };
         }
       }
+      await this.quotaCheck(tx, input.docId, input.payload.byteLength);
       const [row] = await tx
         .update(docs)
         .set({
@@ -156,6 +172,7 @@ export class DocumentService {
       const [doc] = await tx.select().from(docs).where(eq(docs.id, input.docId)).for('update');
       if (!doc) throw notFound('document not registered');
       if (input.baseSeq < 1 || input.baseSeq > doc.lastSeq) throw badRequest('baseSeq out of range');
+      await this.quotaCheck(tx, input.docId, input.payload.byteLength, 'snapshot');
       await tx
         .insert(docSnapshots)
         .values({
@@ -251,6 +268,19 @@ export class DocumentService {
     for (const r of res.rows) {
       out.get(r.doc_id)!.push({ seq: Number(r.seq), payload: r.payload, deviceId: r.device_id });
     }
+    return out;
+  }
+
+  /** Size in bytes of the newest snapshot of each document, without loading the payloads. */
+  async snapshotSizes(db: DbOrTx, docIds: string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (docIds.length === 0) return out;
+    const res = await db.execute<{ doc_id: string; bytes: string | number }>(sql`
+      SELECT DISTINCT ON (doc_id) doc_id, octet_length(payload) AS bytes
+      FROM doc_snapshots
+      WHERE doc_id = ANY(${`{${docIds.join(',')}}`}::uuid[])
+      ORDER BY doc_id, seq DESC`);
+    for (const r of res.rows) out.set(r.doc_id, Number(r.bytes));
     return out;
   }
 

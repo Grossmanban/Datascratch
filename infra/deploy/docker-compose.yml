@@ -25,7 +25,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: ${DS_MEM_POSTGRES:-1g}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-datascratch}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing in .env}

@@ -776,7 +776,7 @@ describe("connection hygiene and storage failures", () => {
     expect(connects).toBeGreaterThanOrEqual(3);
   });
 
-  it("waits for retry-after when rate limited", async () => {
+  it("waits for retry-after before reconnecting when the server closes after rate_limited", async () => {
     const hub = new MemorySyncHub();
     const times: number[] = [];
     const inner = hub.socketFactory();
@@ -796,6 +796,7 @@ describe("connection hygiene and storage failures", () => {
                 retryAfterMs: 300,
               }),
             });
+            s.close(); // too many connections: the server closes (1013) after the error
           }, 0);
         };
       } else {
@@ -812,6 +813,49 @@ describe("connection hygiene and storage failures", () => {
     await until(() => a.client.isSynced(DOC), 10_000);
     expect(times.length).toBeGreaterThanOrEqual(2);
     expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(290);
+  });
+
+  it("holds sending without reconnecting on a message-rate limit, then resends", async () => {
+    const hub = new MemorySyncHub();
+    let connects = 0;
+    let limited = false;
+    const inner = hub.socketFactory();
+    const factory = (url: string): WebSocketLike => {
+      connects++;
+      const s = inner(url);
+      const send = s.send.bind(s);
+      s.send = (d: string) => {
+        const m = JSON.parse(d) as { type: string; clientMsgId?: string };
+        if (m.type === "push" && !limited) {
+          limited = true; // the server drops this push and answers rate_limited
+          setTimeout(() => {
+            s.onmessage?.({
+              data: JSON.stringify({
+                type: "error",
+                code: "rate_limited",
+                message: "too many messages",
+                ref: m.clientMsgId,
+                retryAfterMs: 200,
+              }),
+            });
+          }, 0);
+          return;
+        }
+        send(d);
+      };
+      return s;
+    };
+    const a = makeClient(hub, "dev-a", { createSocket: factory });
+    const da = new Y.Doc();
+    await a.client.addDoc(DOC, da);
+    a.client.start();
+    await until(() => a.client.isSynced(DOC));
+    const t0 = Date.now();
+    da.getText("t").insert(0, "x");
+    await until(() => hub.docs.get(DOC)!.items.length === 1);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(190);
+    expect(connects).toBe(1);
+    await until(async () => (await a.storage.listOutbox()).length === 0);
   });
 
   it("keeps edits when the outbox storage fails and sends them once it recovers", async () => {

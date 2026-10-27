@@ -16,7 +16,7 @@ import {
   type SyncErrorCode,
 } from './messages.js';
 
-type SyncPrincipal = UserPrincipal | GuestPrincipal;
+export type SyncPrincipal = UserPrincipal | GuestPrincipal;
 
 /** Something to send for a given seq: another device's update, or the ack of our own push. */
 type Pending =
@@ -36,9 +36,19 @@ interface Subscription {
 }
 
 const HELLO_TIMEOUT_MS = 10_000;
+/** Largest frame accepted before `hello` succeeds (a hello is well under 4 KB). */
+export const PRE_AUTH_MAX_PAYLOAD = 64 * 1024;
+/** Messages waiting to be handled before the socket stops reading (and when it reads again). */
+const QUEUE_PAUSE_AT = 32;
+/** Suggested wait before reconnecting when the account already has too many connections. */
+const TOO_MANY_RETRY_MS = 30_000;
+const QUEUE_RESUME_AT = 8;
 /** Subscribe fast path: documents per batched query, and max updates per document in it. */
 const FAST_PATH_BATCH = 200;
 const FAST_PATH_MAX_UPDATES = 100;
+/** Fast path by size: a document above this goes the paged way; a batch stays under the total. */
+const FAST_PATH_DOC_BYTES = 1024 * 1024;
+const FAST_PATH_BATCH_BYTES = 8 * 1024 * 1024;
 const MAX_BUFFERED_BYTES = 64 * 1024 * 1024;
 /** Catch-up pauses while this much is still queued on the socket (backpressure). */
 const CATCHUP_HIGH_WATER = 4 * 1024 * 1024;
@@ -54,6 +64,16 @@ class SyncError extends Error {
   }
 }
 
+/**
+ * Change the frame size limit of one connection. `ws` has no public per-socket option;
+ * its receiver checks `_maxPayload` against each frame header before buffering it
+ * (verified by the pre-auth frame test).
+ */
+function setMaxPayload(socket: WebSocket, bytes: number) {
+  const receiver = (socket as unknown as { _receiver?: { _maxPayload?: number } })._receiver;
+  if (receiver && typeof receiver._maxPayload === 'number') receiver._maxPayload = bytes;
+}
+
 /** One WebSocket client of /v1/sync (sync-protocol.md). */
 export class SyncConnection {
   readonly id = uuidv7();
@@ -62,17 +82,25 @@ export class SyncConnection {
   readonly #access = new Map<string, boolean>();
   readonly #control: (() => void)[] = [];
   #queue: Promise<void> = Promise.resolve();
+  #queued = 0;
+  #paused = false;
   #closed = false;
   #tokens: number;
   #lastRefill = Date.now();
   readonly #helloTimer: NodeJS.Timeout;
+  #expiryTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly ctx: AppContext,
     private readonly socket: WebSocket,
     private readonly onClose: (c: SyncConnection) => void,
+    /** Whether this principal may hold one more connection (per-user cap). */
+    private readonly admit: (p: SyncPrincipal) => boolean = () => true,
+    /** Largest frame once authenticated. */
+    private readonly maxPayload = 0,
   ) {
     this.#tokens = this.#capacity;
+    setMaxPayload(socket, PRE_AUTH_MAX_PAYLOAD);
     this.#helloTimer = setTimeout(() => this.#fail('unauthorized', 'hello timeout', CloseCode.unauthorized), HELLO_TIMEOUT_MS);
     socket.on('message', (data, isBinary) => {
       if (isBinary) {
@@ -80,8 +108,22 @@ export class SyncConnection {
         return;
       }
       const text = Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.concat(data as Buffer[]).toString('utf8');
-      // Messages are handled strictly in order, one at a time.
-      this.#queue = this.#queue.then(() => this.#handle(text)).catch((err) => this.#internal(err));
+      // Messages are handled strictly in order, one at a time; a deep queue stops reading the socket.
+      this.#queued += 1;
+      if (this.#queued >= QUEUE_PAUSE_AT && !this.#paused) {
+        this.#paused = true;
+        socket.pause();
+      }
+      this.#queue = this.#queue
+        .then(() => this.#handle(text))
+        .catch((err) => this.#internal(err))
+        .finally(() => {
+          this.#queued -= 1;
+          if (this.#paused && this.#queued <= QUEUE_RESUME_AT && !this.#closed) {
+            this.#paused = false;
+            socket.resume();
+          }
+        });
     });
     socket.on('close', () => this.#cleanup());
     socket.on('error', () => this.#cleanup());
@@ -109,6 +151,7 @@ export class SyncConnection {
     if (this.#closed) return;
     this.#closed = true;
     clearTimeout(this.#helloTimer);
+    if (this.#expiryTimer) clearTimeout(this.#expiryTimer);
     for (const s of this.#subs.values()) s.unsubscribe();
     this.#subs.clear();
     for (const off of this.#control) off();
@@ -160,6 +203,23 @@ export class SyncConnection {
 
   async #handle(text: string) {
     if (this.#closed) return;
+    // Rate limit before parsing: a flood of large messages costs no JSON work.
+    if (this.#principal && !this.#takeToken()) {
+      let ref: string | undefined;
+      if (text.length <= PRE_AUTH_MAX_PAYLOAD) {
+        try {
+          const m = JSON.parse(text) as { clientMsgId?: unknown; docId?: unknown };
+          const r = m.clientMsgId ?? m.docId;
+          if (typeof r === 'string') ref = r;
+        } catch {
+          // no ref
+        }
+      }
+      // When the bucket holds a whole token again (sync-protocol: the client waits at least this long).
+      const retryAfterMs = Math.ceil(((1 - this.#tokens) / this.ctx.config.SYNC_RATE_PER_SEC) * 1000);
+      this.#send({ type: 'error', code: 'rate_limited', message: 'too many messages', retryAfterMs, ...(ref ? { ref } : {}) });
+      return;
+    }
     let raw: unknown;
     try {
       raw = JSON.parse(text);
@@ -173,6 +233,11 @@ export class SyncConnection {
       return this.#fail('protocol_mismatch', `protocol ${PROTOCOL_VERSION} required`, CloseCode.protocol);
     }
     const parsed = ClientMessage.safeParse(raw);
+    if (!parsed.success && !this.#principal) {
+      // Before authentication only a valid hello is acceptable: no second chances.
+      clearTimeout(this.#helloTimer);
+      return this.#fail('bad_request', 'hello expected', CloseCode.protocol);
+    }
     if (!parsed.success) {
       const ref = typeof raw === 'object' && raw ? ((raw as { clientMsgId?: unknown }).clientMsgId as string) : undefined;
       this.#send({
@@ -191,11 +256,6 @@ export class SyncConnection {
     }
     if (msg.type === 'hello') {
       this.#send({ type: 'error', code: 'bad_request', message: 'already authenticated' });
-      return;
-    }
-    if (!this.#takeToken()) {
-      const ref = 'clientMsgId' in msg ? msg.clientMsgId : 'docId' in msg ? msg.docId : undefined;
-      this.#send({ type: 'error', code: 'rate_limited', message: 'too many messages', ...(ref ? { ref } : {}) });
       return;
     }
     try {
@@ -223,9 +283,9 @@ export class SyncConnection {
         this.#send({ type: 'error', code: 'doc_not_found', message: err.message, ...(ref ? { ref } : {}) });
         return;
       }
-      if (err instanceof ApiError && err.code === 'bad_request') {
+      if (err instanceof ApiError && (err.code === 'bad_request' || err.code === 'payload_too_large')) {
         const ref = 'clientMsgId' in msg ? msg.clientMsgId : undefined;
-        this.#send({ type: 'error', code: 'bad_request', message: err.message, ...(ref ? { ref } : {}) });
+        this.#send({ type: 'error', code: err.code, message: err.message, ...(ref ? { ref } : {}) });
         return;
       }
       throw err;
@@ -246,7 +306,12 @@ export class SyncConnection {
     }
     if (!p) return this.#fail('unauthorized', 'invalid credentials', CloseCode.unauthorized);
     if (this.#closed) return;
+    if (!this.admit(p)) {
+      this.#send({ type: 'error', code: 'rate_limited', message: 'too many connections', retryAfterMs: TOO_MANY_RETRY_MS });
+      return this.close(CloseCode.tryAgainLater, 'too many connections');
+    }
     this.#principal = p;
+    setMaxPayload(this.socket, this.maxPayload);
     const kick = (m: HubMessage) => {
       if (m.type === 'revoked') this.#fail('unauthorized', m.reason, CloseCode.unauthorized);
     };
@@ -254,6 +319,7 @@ export class SyncConnection {
       this.#control.push(this.ctx.hub.subscribe(topics.device(p.deviceId), kick));
     } else {
       this.#control.push(this.ctx.hub.subscribe(topics.share(p.shareId), kick));
+      if (p.expiresAt) this.#closeAt(p.expiresAt);
     }
     this.#send({
       type: 'welcome',
@@ -261,6 +327,14 @@ export class SyncConnection {
       serverTime: new Date().toISOString(),
       protocol: PROTOCOL_VERSION,
     });
+  }
+
+  /** Close the connection when a guest's share expires (timers longer than ~24 days re-arm). */
+  #closeAt(at: Date) {
+    const ms = at.getTime() - Date.now();
+    if (ms <= 0) return this.#fail('unauthorized', 'share expired', CloseCode.unauthorized);
+    this.#expiryTimer = setTimeout(() => this.#closeAt(at), Math.min(ms, 2 ** 31 - 1));
+    this.#expiryTimer.unref();
   }
 
   /** Read access → `false` (read-only) / `true` (write); throws doc_not_found. */
@@ -301,10 +375,23 @@ export class SyncConnection {
     sub.buffer = [];
   }
 
-  async #subscribe(list: { docId: string; since: number }[]) {
+  async #subscribe(requested: { docId: string; since: number }[]) {
     const db = this.ctx.database.db;
-    const rows = await loadDocs(db, [...new Set(list.map((d) => d.docId))]);
-    type Item = { docId: string; since: number; sub: Subscription; lastSeq: number; snapshotSeq: number };
+    // The contract schema already refuses duplicates and more than MAX_SUBSCRIBE_DOCS
+    // documents; one entry per document is kept here too, as duplicates would multiply
+    // subscriptions and rows.
+    const unique = new Map(requested.map((d) => [d.docId, d.since]));
+    const list = [...unique].map(([docId, since]) => ({ docId, since }));
+    const rows = await loadDocs(db, [...unique.keys()]);
+    type Item = {
+      docId: string;
+      since: number;
+      sub: Subscription;
+      lastSeq: number;
+      snapshotSeq: number;
+      /** Upper bound of the bytes the fast path loads for this document. */
+      bytes: number;
+    };
     const fast: Item[] = [];
     const slow: Item[] = [];
     for (const { docId, since } of list) {
@@ -318,18 +405,54 @@ export class SyncConnection {
       this.#access.set(docId, a.write);
       // A client ahead of the server (e.g. restored from another backup) starts over.
       const from = since > row.lastSeq ? 0 : since;
-      const item = { docId, since: from, sub: this.#newSub(docId, from), lastSeq: row.lastSeq, snapshotSeq: 0 };
+      const item = {
+        docId,
+        since: from,
+        sub: this.#newSub(docId, from),
+        lastSeq: row.lastSeq,
+        snapshotSeq: 0,
+        // Updates after the newest snapshot (or after `from` when that is later) weigh at most this.
+        bytes: row.bytesSinceSnapshot,
+      };
       // Fast path: either every update after `from` is still stored (no newer snapshot) and
-      // there are few, or the newest snapshot plus a short tail after it.
-      if (from >= row.snapshotSeq && row.lastSeq - from <= FAST_PATH_MAX_UPDATES) fast.push(item);
+      // there are few, or the newest snapshot plus a short tail after it. Big ones go paged.
+      if (row.bytesSinceSnapshot > FAST_PATH_DOC_BYTES) slow.push(item);
+      else if (from >= row.snapshotSeq && row.lastSeq - from <= FAST_PATH_MAX_UPDATES) fast.push(item);
       else if (from < row.snapshotSeq && row.lastSeq - row.snapshotSeq <= FAST_PATH_MAX_UPDATES) {
         fast.push({ ...item, snapshotSeq: row.snapshotSeq });
       } else slow.push(item);
     }
 
-    for (let i = 0; i < fast.length; i += FAST_PATH_BATCH) {
+    // Snapshot sizes (metadata only) so that no batch loads more than FAST_PATH_BATCH_BYTES.
+    const withSnapshot = fast.filter((b) => b.snapshotSeq > 0);
+    for (let i = 0; i < withSnapshot.length; i += 1000) {
+      const part = withSnapshot.slice(i, i + 1000);
+      const sizes = await this.ctx.documents.snapshotSizes(
+        db,
+        part.map((b) => b.docId),
+      );
+      for (const b of part) b.bytes += sizes.get(b.docId) ?? 0;
+    }
+    const batches: Item[][] = [];
+    let current: Item[] = [];
+    let currentBytes = 0;
+    for (const b of fast) {
+      if (b.bytes > FAST_PATH_DOC_BYTES) {
+        slow.push(b);
+        continue;
+      }
+      if (current.length >= FAST_PATH_BATCH || currentBytes + b.bytes > FAST_PATH_BATCH_BYTES) {
+        batches.push(current);
+        current = [];
+        currentBytes = 0;
+      }
+      current.push(b);
+      currentBytes += b.bytes;
+    }
+    if (current.length > 0) batches.push(current);
+
+    for (const batch of batches) {
       if (this.#closed) return;
-      const batch = fast.slice(i, i + FAST_PATH_BATCH);
       const withSnap = batch.filter((b) => b.snapshotSeq > 0);
       const snaps = await this.ctx.documents.latestSnapshots(
         db,

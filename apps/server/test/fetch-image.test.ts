@@ -269,3 +269,30 @@ describe('fetch-image rate limit', () => {
     }
   });
 });
+
+describe('fetch-image concurrency', () => {
+  it('limits parallel downloads per account, not just per server', async () => {
+    const t = await startServer({ FETCH_IMAGE_CONCURRENCY: '3', FETCH_IMAGE_CONCURRENCY_PER_USER: '2' });
+    try {
+      const a = await signup(t);
+      const b = await signup(t);
+      // Downloads that hang until released.
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      t.ctx.imageFetcher = { fetch: () => gate.then(() => ({ mime: 'image/png', bytes: PNG })) } as unknown as ImageFetcher;
+      const call = (x: TestUser) =>
+        api(t, 'POST', '/fetch-image', { body: { url: 'https://example.com/a.png' }, token: x.session.accessToken });
+      const first = [call(a), call(a)];
+      await new Promise((r) => setTimeout(r, 50));
+      expect((await call(a)).status).toBe(429); // a's own limit
+      const other = call(b); // b still gets a slot
+      await new Promise((r) => setTimeout(r, 50));
+      expect((await call(b)).status).toBe(429); // the server-wide limit (3) is reached
+      release();
+      expect((await Promise.all([...first, other])).map((r) => r.status)).toEqual([200, 200, 200]);
+      expect((await call(a)).status).toBe(200);
+    } finally {
+      await t.close();
+    }
+  });
+});

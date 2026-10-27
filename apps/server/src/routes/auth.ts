@@ -7,7 +7,7 @@ import type { DbOrTx } from '../db/client.js';
 import type { UserPrincipal } from '../services/principal.js';
 import { devices, docs, recoveryTokens, refreshTokens, securityEvents, users } from '../db/schema.js';
 import { fromB64, randomToken, safeEqual, sha256, toB64, uuidv7 } from '../lib/encoding.js';
-import { conflict, unauthorized } from '../lib/errors.js';
+import { ApiError, conflict, forbidden, unauthorized } from '../lib/errors.js';
 import { fakeSalt, hashSecret, verifyDummy, verifySecret } from '../lib/password.js';
 import {
   createSession,
@@ -21,6 +21,14 @@ import { DeviceName, Email, Key32, Kdf, Salt, Session, WrappedKey, errorResponse
 const DEFAULT_KDF = { alg: 'argon2id13', ops: 3, mem: 67_108_864 } as const;
 const RECOVERY_TTL_MS = 15 * 60_000;
 const authLimit = { rateLimit: { max: 20, timeWindow: '1 minute' } };
+/**
+ * Attempts per email address per minute, whatever address they come from (the per-IP
+ * limits alone are bypassed by spreading over many addresses).
+ */
+const PER_EMAIL_PER_MINUTE = 10;
+
+/** One message for every signup conflict: it must not tell whether an email is registered. */
+const SIGNUP_CONFLICT = 'signup failed: this account cannot be created';
 
 async function recordEvent(
   tx: DbOrTx,
@@ -33,6 +41,28 @@ async function recordEvent(
 
 export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
   return async (app) => {
+    const inviteCodes = ctx.config.DS_INVITE_CODES.split(',')
+      .map((c) => c.trim())
+      .filter(Boolean)
+      .map((c) => sha256(c));
+    const inviteOk = (code: string | undefined) =>
+      code !== undefined && inviteCodes.some((c) => safeEqual(c, sha256(code.trim())));
+    const emailWindows = new Map<string, { start: number; count: number }>();
+    /** Fixed one-minute window per route and email address (login, prelogin, signup, recovery). */
+    const perEmail = (route: string, email: string) => {
+      const key = `${route}|${email}`;
+      const now = Date.now();
+      let w = emailWindows.get(key);
+      if (!w || now - w.start >= 60_000) {
+        if (emailWindows.size > 50_000) {
+          for (const [k, v] of emailWindows) if (now - v.start >= 60_000) emailWindows.delete(k);
+        }
+        w = { start: now, count: 0 };
+        emailWindows.set(key, w);
+      }
+      w.count += 1;
+      if (w.count > PER_EMAIL_PER_MINUTE) throw new ApiError('rate_limited', 'too many attempts for this account, retry in a minute');
+    };
     const { db } = ctx.database;
 
     app.post(
@@ -46,6 +76,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         },
       },
       async (req) => {
+        perEmail('prelogin', req.body.email);
         const [u] = await db.select({ salt: users.salt, kdf: users.kdf }).from(users).where(eq(users.email, req.body.email));
         if (u) return { salt: toB64(u.salt), kdf: u.kdf };
         return { salt: toB64(fakeSalt(ctx.tokens.fakeSaltKey, req.body.email)), kdf: DEFAULT_KDF };
@@ -69,11 +100,14 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             userId: id(),
             accountDocId: id(),
             deviceName: DeviceName.optional(),
+            /** Required when DS_SIGNUP=invite. */
+            inviteCode: z.string().min(1).max(200).optional(),
           }),
           response: { 200: Session, ...errorResponses },
         },
       },
       async (req) => {
+        perEmail('signup', req.body.email);
         const b = req.body;
         const loginKey = fromB64(b.loginKey);
         const wrappedPw = fromB64(b.wrappedMasterKeyPassword);
@@ -85,8 +119,12 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             existing.accountDocId === b.accountDocId &&
             safeEqual(existing.wrappedMasterKeyPassword, wrappedPw) &&
             (await verifySecret(existing.loginHash, loginKey));
-          if (!same) throw conflict('account exists');
+          if (!same) throw conflict(SIGNUP_CONFLICT);
           return createSession(ctx, db, existing, b.deviceName ?? 'Unknown device');
+        }
+        if (ctx.config.DS_SIGNUP === 'closed') throw forbidden('signup is closed on this server');
+        if (ctx.config.DS_SIGNUP === 'invite' && !inviteOk(b.inviteCode)) {
+          throw forbidden('a valid invite code is required');
         }
         const [loginHash, recoveryHash] = await Promise.all([
           hashSecret(loginKey),
@@ -109,13 +147,13 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             .onConflictDoNothing()
             .returning();
           const user = inserted[0];
-          if (!user) throw conflict('email already registered');
+          if (!user) throw conflict(SIGNUP_CONFLICT);
           const doc = await tx
             .insert(docs)
             .values({ id: b.accountDocId, userId: user.id, kind: 'account', notebookId: null })
             .onConflictDoNothing()
             .returning({ id: docs.id });
-          if (doc.length === 0) throw conflict('accountDocId already in use');
+          if (doc.length === 0) throw conflict(SIGNUP_CONFLICT);
           return createSession(ctx, tx, user, b.deviceName ?? 'Unknown device');
         });
       },
@@ -132,6 +170,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         },
       },
       async (req) => {
+        perEmail('login', req.body.email);
         const loginKey = fromB64(req.body.loginKey);
         const [u] = await db.select().from(users).where(eq(users.email, req.body.email));
         const ok = u ? await verifySecret(u.loginHash, loginKey) : await verifyDummy(loginKey);
@@ -187,6 +226,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         },
       },
       async (req) => {
+        perEmail('recovery', req.body.email);
         const key = fromB64(req.body.recoveryLoginKey);
         const [u] = await db.select().from(users).where(eq(users.email, req.body.email));
         const ok = u ? await verifySecret(u.recoveryHash, key) : await verifyDummy(key);

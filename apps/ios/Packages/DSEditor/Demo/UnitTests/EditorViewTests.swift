@@ -3,6 +3,7 @@ import DSEditorModel
 import DSInk
 import UIKit
 import UniformTypeIdentifiers
+import WebKit
 import XCTest
 
 @MainActor
@@ -1466,5 +1467,36 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(doc.blocks.map(\.type), [NodeType.title, NodeType.heading, NodeType.taskList, NodeType.paragraph])
         XCTAssertEqual(doc.blocks[2].children.map { $0.attrs["state"]?.stringValue }, ["open", "done"])
         UIPasteboard.general.items = []
+    }
+
+    // MARK: - Mermaid hardening (security audit 2026-10-27)
+
+    /// A huge diagram is captured at most at 16 megapixels; small ones at full size.
+    func testMermaidSnapshotIsCappedInPixels() {
+        XCTAssertEqual(MermaidRenderer.snapshotWidth(for: CGSize(width: 600, height: 400), scale: 3), 600, "small: full size")
+        let width = MermaidRenderer.snapshotWidth(for: CGSize(width: 900, height: 6000), scale: 3)
+        XCTAssertLessThan(width, 900)
+        let pixels = width * (6000 * width / 900) * 9
+        XCTAssertLessThanOrEqual(pixels, MermaidRenderer.maxPixels * 1.001, "within the pixel budget")
+    }
+
+    /// The diagram cache is bounded: the least recently used image goes first.
+    func testMermaidCacheIsBounded() {
+        let renderer = MermaidRenderer.shared
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { _ in }
+        for i in 0...MermaidRenderer.maxImages { renderer.store(image, for: "cache-test-\(i)", dark: false) }
+        XCTAssertNil(renderer.cachedImage(for: "cache-test-0", dark: false), "the oldest diagram was evicted")
+        XCTAssertNotNil(renderer.cachedImage(for: "cache-test-\(MermaidRenderer.maxImages)", dark: false))
+    }
+
+    /// The rules that keep the diagram web view offline compile.
+    func testMermaidNetworkRulesCompile() {
+        let done = expectation(description: "rules compiled")
+        WKContentRuleListStore.default().compileContentRuleList(forIdentifier: "DSEditor.test.offline",
+                                                                encodedContentRuleList: MermaidRenderer.networkRules) { list, error in
+            XCTAssertNotNil(list, "rules compile: \(String(describing: error))")
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 10)
     }
 }

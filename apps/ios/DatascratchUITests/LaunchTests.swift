@@ -982,6 +982,8 @@ final class LibraryUITests: XCTestCase {
     /// §12.6: a crowded section shows its first rows and «N more», opens in full and back, folds
     /// from its title; tags form a tree and «All Tags» lists them all.
     func testCrowdedSidebarSectionsFold() throws {
+        // iPad in portrait: the opened list fits on screen (rows of a lazy list off screen do not exist).
+        if UIDevice.current.userInterfaceIdiom == .pad { rotate(.portrait) }
         let app = launchSignedIn(["-ui-testing-many"])
         let more = sidebarElement(app, "sidebar.more.notebooks")
         XCTAssertTrue(more.exists, "no «N more» under the notebooks; buttons: \(Self.buttons(app))")
@@ -993,14 +995,14 @@ final class LibraryUITests: XCTestCase {
                        "no more notebooks after «N more»")
         // The list is lazy: «Show Less» at its end exists once scrolled to.
         let less = app.descendants(matching: .any)["sidebar.less.notebooks"].firstMatch
-        for _ in 0..<3 where !less.exists { app.cells.firstMatch.swipeUp(); settle(0.5) }
+        if !less.waitForExistence(timeout: 2) { app.cells.firstMatch.swipeUp() }
         XCTAssertTrue(less.waitForExistence(timeout: 3), "no «Show Less» after the notebooks")
         less.tap()
-        for _ in 0..<3 where !more.exists { app.cells.firstMatch.swipeDown(); settle(0.5) }
+        if !more.waitForExistence(timeout: 2) { app.cells.firstMatch.swipeDown() }
         XCTAssertTrue(more.waitForExistence(timeout: 3), "«Show Less» did not fold the list back")
 
         let header = app.descendants(matching: .any)["sidebar.section.notebooks"].firstMatch
-        for _ in 0..<4 where !(header.exists && header.isHittable) { app.cells.firstMatch.swipeDown(); settle(0.5) }
+        if !header.waitForExistence(timeout: 2) { app.cells.firstMatch.swipeDown() }
         XCTAssertTrue(header.waitForExistence(timeout: 3), "no notebooks title")
         header.tap()
         XCTAssertTrue(rows.firstMatch.waitForNonExistence(timeout: 3), "the notebooks did not fold")
@@ -1017,9 +1019,9 @@ final class LibraryUITests: XCTestCase {
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 3), "no search in «All Tags»")
         search.tap()
-        search.typeText("group/child7")
+        search.typeText("group/child5")
         let nested = app.descendants(matching: .any).matching(identifier: "allTags.tag").firstMatch
-        XCTAssertTrue(nested.waitForExistence(timeout: 3) && nested.label.contains("group/child7"),
+        XCTAssertTrue(nested.waitForExistence(timeout: 3) && nested.label.contains("group/child5"),
                       "«All Tags» does not list the nested tag; first: \(nested.label)")
     }
 

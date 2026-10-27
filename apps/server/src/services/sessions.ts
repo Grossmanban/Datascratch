@@ -4,7 +4,7 @@ import type { AppContext } from '../context.js';
 import type { DbOrTx } from '../db/client.js';
 import { devices, refreshTokens, users } from '../db/schema.js';
 import { fromB64, randomToken, sha256, toB64, uuidv7 } from '../lib/encoding.js';
-import { unauthorized } from '../lib/errors.js';
+import { deviceRevoked, unauthorized, type RevokeReason } from '../lib/errors.js';
 import { topics } from '../sync/hub.js';
 
 export interface SessionDto {
@@ -86,6 +86,12 @@ export async function refreshSession(ctx: AppContext, token: string): Promise<Se
       .where(eq(refreshTokens.tokenHash, sha256(token)))
       .for('update');
     if (!rt) return null;
+    // A revoked device learns it was revoked (and why) instead of a plain 401: it wipes its data.
+    const [dev] = await tx
+      .select({ revokedAt: devices.revokedAt, reason: devices.revokedReason })
+      .from(devices)
+      .where(eq(devices.id, rt.deviceId));
+    if (dev?.revokedAt) return { revoked: revokeReason(dev.reason) };
     const user = async () => {
       const [row] = await tx
         .select({ user: users })
@@ -111,10 +117,12 @@ export async function refreshSession(ctx: AppContext, token: string): Promise<Se
         const u = next ? await user() : null;
         if (u) return sessionFor(ctx, tx, u, rt.deviceId, successor);
       }
-      await tx.update(devices).set({ revokedAt: sql`now()` }).where(eq(devices.id, rt.deviceId));
-      await tx.delete(refreshTokens).where(eq(refreshTokens.deviceId, rt.deviceId));
+      await tx
+        .update(devices)
+        .set({ revokedAt: sql`now()`, revokedReason: 'token_reuse' })
+        .where(eq(devices.id, rt.deviceId));
       revokedDevice = rt.deviceId;
-      return null;
+      return { revoked: 'token_reuse' as const };
     }
     if (rt.expiresAt <= new Date()) return null;
     const u = await user();
@@ -123,40 +131,57 @@ export async function refreshSession(ctx: AppContext, token: string): Promise<Se
     await tx.update(devices).set({ lastSeenAt: sql`now()` }).where(eq(devices.id, rt.deviceId));
     return sessionFor(ctx, tx, u, rt.deviceId, await issueRefresh(ctx, tx, rt.deviceId, successor));
   });
-  if (revokedDevice) ctx.hub.publish(topics.device(revokedDevice), { type: 'revoked', reason: 'refresh token reuse' });
+  if (revokedDevice) ctx.hub.publish(topics.device(revokedDevice), { type: 'revoked', reason: 'token_reuse' });
   if (!result) throw unauthorized('invalid refresh token');
+  if ('revoked' in result) throw deviceRevoked(result.revoked);
   return result;
 }
 
-/** Revoke one device: its refresh tokens stop working and live connections are closed. */
-export async function revokeDevice(ctx: AppContext, db: DbOrTx, userId: string, deviceId: string): Promise<boolean> {
+const REASONS: readonly RevokeReason[] = ['user', 'password_change', 'recovery', 'token_reuse'];
+/** Devices revoked before reasons were recorded count as revoked by the user. */
+export const revokeReason = (r: string | null | undefined): RevokeReason =>
+  REASONS.includes(r as RevokeReason) ? (r as RevokeReason) : 'user';
+
+/**
+ * Revoke one device: its tokens stop working and live connections are closed. The refresh
+ * tokens stay (useless now) so that the device is told why on its next refresh.
+ */
+export async function revokeDevice(
+  ctx: AppContext,
+  db: DbOrTx,
+  userId: string,
+  deviceId: string,
+  reason: RevokeReason = 'user',
+): Promise<boolean> {
   const rows = await db
     .update(devices)
-    .set({ revokedAt: sql`now()` })
+    .set({ revokedAt: sql`now()`, revokedReason: reason })
     .where(and(eq(devices.id, deviceId), eq(devices.userId, userId), isNull(devices.revokedAt)))
     .returning({ id: devices.id });
-  await db.delete(refreshTokens).where(eq(refreshTokens.deviceId, deviceId));
-  if (rows.length > 0) ctx.hub.publish(topics.device(deviceId), { type: 'revoked', reason: 'device revoked' });
+  if (rows.length > 0) ctx.hub.publish(topics.device(deviceId), { type: 'revoked', reason });
   return rows.length > 0;
 }
 
 /** Revoke every device of a user except `keep` (password change, recovery). */
-export async function revokeOtherDevices(ctx: AppContext, db: DbOrTx, userId: string, keep: string | null) {
+export async function revokeOtherDevices(
+  ctx: AppContext,
+  db: DbOrTx,
+  userId: string,
+  keep: string | null,
+  reason: RevokeReason,
+) {
   const rows = await db
     .update(devices)
-    .set({ revokedAt: sql`now()` })
+    .set({ revokedAt: sql`now()`, revokedReason: reason })
     .where(
       keep
         ? and(eq(devices.userId, userId), isNull(devices.revokedAt), ne(devices.id, keep))
         : and(eq(devices.userId, userId), isNull(devices.revokedAt)),
     )
     .returning({ id: devices.id });
-  for (const r of rows) {
-    await db.delete(refreshTokens).where(eq(refreshTokens.deviceId, r.id));
-  }
   return rows.map((r) => r.id);
 }
 
-export function publishDeviceRevocations(ctx: AppContext, deviceIds: string[], reason: string) {
+export function publishDeviceRevocations(ctx: AppContext, deviceIds: string[], reason: RevokeReason | 'account_deleted') {
   for (const id of deviceIds) ctx.hub.publish(topics.device(id), { type: 'revoked', reason });
 }

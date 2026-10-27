@@ -2,7 +2,8 @@ import { and, eq, isNull, lt, sql } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
 import type { AppContext } from '../context.js';
 import { devices } from '../db/schema.js';
-import { unauthorized } from '../lib/errors.js';
+import { deviceRevoked, unauthorized } from '../lib/errors.js';
+import { revokeReason } from '../services/sessions.js';
 import { loadActiveShare } from '../services/access.js';
 import type { GuestPrincipal, UserPrincipal } from '../services/principal.js';
 
@@ -43,16 +44,21 @@ export async function verifyWebCookie(ctx: AppContext, req: FastifyRequest): Pro
   return { kind: 'user', userId: claims.userId, deviceId: claims.deviceId };
 }
 
-/** Verify an access token and that its device (session) has not been revoked. */
+/**
+ * Verify an access token and that its device (session) has not been revoked. A valid token
+ * of a revoked device throws device_revoked (with the reason): the client must wipe its
+ * local data. An expired or invalid token is just null (a plain 401: refresh and retry).
+ */
 export async function verifyUserToken(ctx: AppContext, token: string): Promise<UserPrincipal | null> {
   const claims = await ctx.tokens.verifyAccess(token);
   if (!claims) return null;
   const { db } = ctx.database;
   const [dev] = await db
-    .select({ id: devices.id, lastSeenAt: devices.lastSeenAt })
+    .select({ id: devices.id, lastSeenAt: devices.lastSeenAt, revokedAt: devices.revokedAt, reason: devices.revokedReason })
     .from(devices)
-    .where(and(eq(devices.id, claims.deviceId), eq(devices.userId, claims.userId), isNull(devices.revokedAt)));
+    .where(and(eq(devices.id, claims.deviceId), eq(devices.userId, claims.userId)));
   if (!dev) return null;
+  if (dev.revokedAt) throw deviceRevoked(revokeReason(dev.reason));
   if (Date.now() - dev.lastSeenAt.getTime() > LAST_SEEN_RESOLUTION_MS) {
     await db
       .update(devices)

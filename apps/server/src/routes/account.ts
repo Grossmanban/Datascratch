@@ -62,7 +62,7 @@ export function accountRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         publishDeviceRevocations(
           ctx,
           devs.map((d) => d.id),
-          'account deleted',
+          'account_deleted',
         );
         await ctx.jobs.enqueue(CLEANUP_JOB, {});
         return reply.code(204).send(null);

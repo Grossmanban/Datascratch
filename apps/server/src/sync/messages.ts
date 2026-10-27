@@ -18,12 +18,13 @@ export type SyncErrorCode =
   | 'rate_limited'
   | 'protocol_mismatch'
   | 'bad_request'
+  | 'device_revoked'
   | 'internal';
 
 /** Server → client messages (sync-protocol.md §4). */
 export type ServerMessage =
   | Exclude<SharedServerMessage, { type: 'error' }>
-  | { type: 'error'; code: SyncErrorCode; message: string; ref?: string; retryAfterMs?: number };
+  | { type: 'error'; code: SyncErrorCode; message: string; ref?: string; retryAfterMs?: number; reason?: string };
 
 export const PROTOCOL_VERSION = SYNC_PROTOCOL_VERSION;
 
@@ -36,6 +37,8 @@ export const CloseCode = {
   unauthorized: 4401,
   /** Too many connections: retry later. */
   tryAgainLater: 1013,
+  /** This device was revoked (reason in the close reason and the preceding error): wipe local data. */
+  deviceRevoked: 4410,
 } as const;
 
 /** Decoded size of a base64url string without decoding it. */

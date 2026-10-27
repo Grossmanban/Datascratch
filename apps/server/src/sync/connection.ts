@@ -4,7 +4,9 @@ import type { AppContext } from '../context.js';
 import { COMPACT_JOB } from '../jobs/index.js';
 import { fromB64, sha256, toB64, uuidv7 } from '../lib/encoding.js';
 import { ApiError } from '../lib/errors.js';
-import { accessFor, docAccess, loadDocs } from '../services/access.js';
+import type { AuthorRef } from '../db/schema.js';
+import { accessFor, docAccess, loadDocs, loadMemberships } from '../services/access.js';
+import type { CatchUpItem } from '../services/documents.js';
 import type { GuestPrincipal, UserPrincipal } from '../services/principal.js';
 import { topics, type HubMessage } from './hub.js';
 import {
@@ -19,8 +21,16 @@ import {
 export type SyncPrincipal = UserPrincipal | GuestPrincipal;
 
 /** Something to send for a given seq: another device's update, or the ack of our own push. */
+/** An update as sent to clients; `author` only when known (sync-protocol.md §4). */
+const item = (x: CatchUpItem) => ({
+  seq: x.seq,
+  payload: toB64(x.payload),
+  deviceId: x.deviceId,
+  ...(x.author ? { author: x.author } : {}),
+});
+
 type Pending =
-  | { kind: 'update'; seq: number; payload: string; deviceId: string }
+  | { kind: 'update'; seq: number; payload: string; deviceId: string; author: AuthorRef | null }
   | { kind: 'ack'; seq: number; clientMsgId: string };
 
 interface Subscription {
@@ -331,6 +341,12 @@ export class SyncConnection {
     };
     if (p.kind === 'user') {
       this.#control.push(this.ctx.hub.subscribe(topics.device(p.deviceId), kick));
+      // A membership was added, changed or removed (D-54): access is checked again.
+      this.#control.push(
+        this.ctx.hub.subscribe(topics.user(p.userId), (m) => {
+          if (m.type === 'access_changed') this.#recheckAccess();
+        }),
+      );
     } else {
       this.#control.push(this.ctx.hub.subscribe(topics.share(p.shareId), kick));
       if (p.expiresAt) this.#closeAt(p.expiresAt);
@@ -341,6 +357,35 @@ export class SyncConnection {
       serverTime: new Date().toISOString(),
       protocol: PROTOCOL_VERSION,
     });
+  }
+
+  /**
+   * Re-check every cached and subscribed document after a membership change: lost documents
+   * get `doc_not_found` (sync-protocol.md §6), a changed role takes effect for the next write.
+   */
+  #recheckAccess() {
+    this.#queue = this.#queue
+      .then(async () => {
+        const ids = new Set([...this.#access.keys(), ...this.#subs.keys()]);
+        this.#access.clear();
+        if (ids.size === 0 || this.#closed) return;
+        const db = this.ctx.database.db;
+        const p = this.#principal!;
+        const rows = await loadDocs(db, [...ids]);
+        const memberships = p.kind === 'user' ? await loadMemberships(db, p.userId) : undefined;
+        for (const docId of ids) {
+          const row = rows.get(docId);
+          const a = row ? accessFor(p, row, memberships) : null;
+          if (a) {
+            this.#access.set(docId, a.write);
+            continue;
+          }
+          if (!this.#subs.has(docId)) continue;
+          this.#unsubscribe(docId);
+          this.#send({ type: 'error', code: 'doc_not_found', message: 'document is no longer shared', ref: docId });
+        }
+      })
+      .catch((err) => this.#internal(err));
   }
 
   /** Close the connection when a guest's share expires (timers longer than ~24 days re-arm). */
@@ -365,6 +410,12 @@ export class SyncConnection {
 
   #deviceId(): string {
     return this.#principal!.deviceId;
+  }
+
+  /** The author stamped on this connection's updates (D-54): who is authenticated, not what the client says. */
+  #author(): AuthorRef {
+    const p = this.#principal!;
+    return p.kind === 'user' ? { kind: 'user', userId: p.userId } : { kind: 'guest', shareId: p.shareId };
   }
 
   #newSub(docId: string, since: number): Subscription {
@@ -408,9 +459,15 @@ export class SyncConnection {
     };
     const fast: Item[] = [];
     const slow: Item[] = [];
+    const p = this.#principal!;
+    // Documents of other accounts are visible through memberships (D-54).
+    const memberships =
+      p.kind === 'user' && [...rows.values()].some((r) => r.userId !== p.userId)
+        ? await loadMemberships(db, p.userId)
+        : undefined;
     for (const { docId, since } of list) {
       const row = rows.get(docId);
-      const a = row ? accessFor(this.#principal!, row) : null;
+      const a = row ? accessFor(p, row, memberships) : null;
       if (!row || !a) {
         this.#access.delete(docId);
         this.#send({ type: 'error', code: 'doc_not_found', message: 'document not found', ref: docId });
@@ -494,7 +551,7 @@ export class SyncConnection {
           type: 'updates',
           docId: b.docId,
           snapshot: snap ? { seq: snap.seq, payload: toB64(snap.payload) } : null,
-          items: items.map((x) => ({ seq: x.seq, payload: toB64(x.payload), deviceId: x.deviceId })),
+          items: items.map(item),
           upToDate: true,
         });
         this.#goLive(b.docId, b.sub);
@@ -515,7 +572,7 @@ export class SyncConnection {
             type: 'updates',
             docId,
             snapshot: page.snapshot ? { seq: page.snapshot.seq, payload: toB64(page.snapshot.payload) } : null,
-            items: page.items.map((x) => ({ seq: x.seq, payload: toB64(x.payload), deviceId: x.deviceId })),
+            items: page.items.map(item),
             upToDate: page.upToDate,
           });
           await this.#drained();
@@ -571,7 +628,7 @@ export class SyncConnection {
     }
     // Our own pushes are represented by their ack entry (see #push), never echoed.
     if (m.type !== 'update' || m.origin === this.id) return;
-    this.#enqueue(docId, sub, { kind: 'update', seq: m.seq, payload: m.payload, deviceId: m.deviceId });
+    this.#enqueue(docId, sub, { kind: 'update', seq: m.seq, payload: m.payload, deviceId: m.deviceId, author: m.author });
   }
 
   #enqueue(docId: string, sub: Subscription, e: Pending) {
@@ -590,7 +647,15 @@ export class SyncConnection {
 
   #emit(docId: string, e: Pending) {
     if (e.kind === 'ack') this.#send({ type: 'ack', docId, clientMsgId: e.clientMsgId, seq: e.seq });
-    else this.#send({ type: 'update', docId, seq: e.seq, payload: e.payload, deviceId: e.deviceId });
+    else
+      this.#send({
+        type: 'update',
+        docId,
+        seq: e.seq,
+        payload: e.payload,
+        deviceId: e.deviceId,
+        ...(e.author ? { author: e.author } : {}),
+      });
   }
 
   /**
@@ -617,7 +682,7 @@ export class SyncConnection {
         for (const r of rows) {
           if (r.seq !== sub.sent + 1 || sub.pending.has(r.seq)) break;
           sub.sent = r.seq;
-          this.#send({ type: 'update', docId, seq: r.seq, payload: toB64(r.payload), deviceId: r.deviceId });
+          this.#send({ type: 'update', docId, ...item(r) });
         }
         // Gaps that are not in the database are allowed ("дыры" in seq): skip them.
         if (sub.pending.size > 0 && rows.length === 0) sub.sent = Math.min(...sub.pending.keys()) - 1;
@@ -638,13 +703,14 @@ export class SyncConnection {
     }
     const bytes = fromB64(payload);
     const deviceId = this.#deviceId();
-    const r = await this.ctx.documents.append(this.ctx.database.db, { docId, payload: bytes, deviceId, clientMsgId });
+    const author = this.#author();
+    const r = await this.ctx.documents.append(this.ctx.database.db, { docId, payload: bytes, deviceId, clientMsgId, author });
     const sub = this.#subs.get(docId);
     // On a subscribed document the ack takes its place in seq order.
     if (sub) this.#enqueue(docId, sub, { kind: 'ack', seq: r.seq, clientMsgId });
     else this.#send({ type: 'ack', docId, clientMsgId, seq: r.seq });
     if (!r.duplicate) this.ctx.metrics.syncUpdates.inc({ source: this.#principal!.kind });
-    if (!r.duplicate) this.ctx.documents.publishUpdate(docId, r.seq, payload, deviceId, this.id);
+    if (!r.duplicate) this.ctx.documents.publishUpdate(docId, r.seq, payload, deviceId, author, this.id);
   }
 
   async #canWriteRef(docId: string, ref: string): Promise<boolean> {

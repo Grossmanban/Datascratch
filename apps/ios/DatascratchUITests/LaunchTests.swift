@@ -847,6 +847,38 @@ final class LibraryUITests: XCTestCase {
                       || app.otherElements["tasks.bucket"].firstMatch.waitForExistence(timeout: 2))
     }
 
+    /// §12.6: a crowded section shows its first rows and «N more», opens in full and back, folds
+    /// from its title; tags form a tree and «All Tags» lists them all.
+    func testCrowdedSidebarSectionsFold() throws {
+        let app = launchSignedIn(["-ui-testing-many"])
+        let more = sidebarElement(app, "sidebar.more.notebooks")
+        XCTAssertTrue(more.exists, "no «N more» under the notebooks; buttons: \(Self.buttons(app))")
+        let rows = app.descendants(matching: .any).matching(identifier: "sidebar.notebook")
+        let before = rows.count
+        more.tap()
+        let less = app.descendants(matching: .any)["sidebar.less.notebooks"].firstMatch
+        XCTAssertTrue(less.waitForExistence(timeout: 3), "the notebooks did not open in full")
+        XCTAssertGreaterThan(rows.count, before, "no more notebooks after «N more»")
+        less.tap()
+        XCTAssertTrue(more.waitForExistence(timeout: 3), "«Show Less» did not fold the list back")
+
+        let header = app.descendants(matching: .any)["sidebar.section.notebooks"].firstMatch
+        XCTAssertTrue(header.exists, "no notebooks title")
+        header.tap()
+        XCTAssertTrue(rows.firstMatch.waitForNonExistence(timeout: 3), "the notebooks did not fold")
+        header.tap()
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 3), "the notebooks did not unfold")
+
+        let allTags = app.descendants(matching: .any)["sidebar.allTags"].firstMatch
+        if !allTags.isHittable { app.swipeUp() }
+        XCTAssertTrue(allTags.waitForExistence(timeout: 3), "no «All Tags»")
+        allTags.tap()
+        let tag = app.descendants(matching: .any).matching(identifier: "allTags.tag").firstMatch
+        XCTAssertTrue(tag.waitForExistence(timeout: 5), "«All Tags» lists no tags")
+        XCTAssertGreaterThanOrEqual(app.descendants(matching: .any).matching(identifier: "allTags.tag").count, 10,
+                                    "«All Tags» is missing tags (parents and children)")
+    }
+
     /// D-51: by default the app is notes only — no Tasks, Calendar or tabs, and opening a note
     /// leaves no tab behind.
     func testNotesOnlyByDefault() throws {

@@ -41,6 +41,16 @@
         }
       }
     },
+    "%lld more": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ещё %lld"
+          }
+        }
+      }
+    },
     "%lld of 4": {
       "localizations": {
         "ru": {
@@ -227,6 +237,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Все документы"
+          }
+        }
+      }
+    },
+    "All Tags": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все теги"
           }
         }
       }
@@ -507,6 +527,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Закрыть вкладку"
+          }
+        }
+      }
+    },
+    "Collapsed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свёрнуто"
           }
         }
       }
@@ -1197,6 +1227,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Введите ключ восстановления, сохранённый при регистрации, и задайте новый пароль. Заметки останутся в целости."
+          }
+        }
+      }
+    },
+    "Expanded": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Развёрнуто"
           }
         }
       }
@@ -2841,6 +2881,16 @@
         }
       }
     },
+    "Search Tags": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск тегов"
+          }
+        }
+      }
+    },
     "Search and Commands": {
       "localizations": {
         "ru": {
@@ -3047,6 +3097,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Показать ключ"
+          }
+        }
+      }
+    },
+    "Show Less": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свернуть"
           }
         }
       }

@@ -38,9 +38,13 @@ final class MermaidRenderer: NSObject {
     static let maxPixels: CGFloat = 16_000_000
     /// Tallest drawing in the web view, in points: taller diagrams are scaled down in the page.
     static let maxPageHeight: CGFloat = 6000
-    /// Blocks every network load (http, https, ws, wss, ftp, file) from the diagram page.
+    /// Blocks every network load (http, https, ws, wss, ftp, file) from the diagram page. One rule
+    /// per scheme: content-blocker patterns have no alternation (`|` failed to compile).
     static let networkRules = """
-    [{"trigger":{"url-filter":"^(https?|wss?|ftp|file):"},"action":{"type":"block"}}]
+    [{"trigger":{"url-filter":"^https?:"},"action":{"type":"block"}},
+     {"trigger":{"url-filter":"^wss?:"},"action":{"type":"block"}},
+     {"trigger":{"url-filter":"^ftp:"},"action":{"type":"block"}},
+     {"trigger":{"url-filter":"^file:"},"action":{"type":"block"}}]
     """
     private static var ruleList: WKContentRuleList?
     private static var compilingRules = false

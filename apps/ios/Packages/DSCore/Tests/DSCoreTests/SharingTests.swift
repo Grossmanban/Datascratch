@@ -107,6 +107,7 @@ struct SharingVectorTests {
 final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
     struct Membership { var role: String; var status: String; var createdAfter: Bool; var wrappedKey: String? }
     struct Resource { var owner: String; var version = 1; var ownerWrapped: String = ""; var chain: [String] = []; var pending = false
+        var pendingSince: Int?
         var members: [String: Membership] = [:]; var docIds: [String] = [] }
     struct State {
         var boxKeys: [String: (publicKey: String, wrapped: String)] = [:]
@@ -115,6 +116,8 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         var resources: [String: Resource] = [:]       // "kind:id"
         var tokens: [String: String] = [:]            // access token → userId
         var rotations: [[String: Any]] = []
+        /// An older server: no `pendingSinceVersion`.
+        var withoutPendingSince = false
     }
     let state = Locked(State())
 
@@ -180,6 +183,7 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         case ("DELETE", "members"):
             let key = "\(p[1]):\(p[2])"
             s.resources[key]!.members[p[3]] = nil
+            if !s.resources[key]!.pending { s.resources[key]!.pendingSince = s.resources[key]!.version }
             s.resources[key]!.pending = true
             return (204, nil)
         case ("POST", "members") where p.last == "rotate":
@@ -194,19 +198,22 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
             r.ownerWrapped = b["ownerWrappedKey"] as! String
             r.chain.insert(b["previousKeyWrap"] as! String, at: 0)
             for k in keysFor { r.members[k["userId"]!]!.wrappedKey = k["wrappedKey"]; r.members[k["userId"]!]!.status = "active" }
-            if p[1] == "note" { r.pending = false }
+            if p[1] == "note" { r.pending = false; r.pendingSince = nil }
             s.resources[key] = r
             s.rotations.append(b)
             return (204, nil)
         case ("POST", "members") where p.last == "done":
             s.resources["notebook:\(p[2])"]!.pending = false
+            s.resources["notebook:\(p[2])"]!.pendingSince = nil
             return (204, nil)
         case ("GET", "members") where p.last == "key":
             let r = s.resources["note:\(p[2])"]!
             return (200, ["version": r.version, "ownerWrappedKey": r.ownerWrapped, "keyChain": r.chain])
         case ("GET", "notebooks") where p.last == "key":
             let r = s.resources["notebook:\(p[1])"]!
-            return (200, ["wrappedKey": r.ownerWrapped, "version": r.version, "keyChain": r.chain, "keyRotationPending": r.pending])
+            var body: [String: Any] = ["wrappedKey": r.ownerWrapped, "version": r.version, "keyChain": r.chain, "keyRotationPending": r.pending]
+            if !s.withoutPendingSince { body["pendingSinceVersion"] = r.pendingSince as Any? ?? NSNull() }
+            return (200, body)
         case ("GET", "shared-with-me"):
             return (200, s.resources.filter { $0.value.members[me] != nil }.map { sharedItem(s, key: $0.key, for: me) })
         default:
@@ -364,5 +371,51 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         _ = try await member.service.refreshSharedWithMe()
         #expect(try member.service.keys.sharedNoteKey(note.noteId) == k2)
         #expect(lookup.retiredKeys(for: record) == [k1])
+    }
+
+    /// A rotation interrupted after `rotate` (before the notes got new keys) is finished from
+    /// another device of the owner without rotating again — with `pendingSinceVersion`, and by
+    /// the notes on an older server.
+    @Test(arguments: [false, true])
+    func rotationFinishedFromASecondOwnerDevice(olderServer: Bool) async throws {
+        let server = FakeSharingServer()
+        server.state.withLock { $0.withoutPendingSince = olderServer }
+        let ownerId = EntityID.make(), master = DSCrypto.newKey()
+        let phone = try await Self.device(server, userId: ownerId, email: "o@x.co", master: master)
+        let member = try await Self.device(server, userId: EntityID.make(), email: "m@x.co")
+        let leaving = try await Self.device(server, userId: EntityID.make(), email: "l@x.co")
+        for d in [phone, member, leaving] { try await d.service.ensureBoxKeyPair() }
+        let notebook = NotebookDocument(notebookId: EntityID.make())
+        try notebook.initialize()
+        let nbId = notebook.notebookId
+        let (_, wrapped) = try phone.service.keys.createNotebookKey(notebookId: nbId)
+        let note = try await phone.service.createNote(in: notebook, title: "n")
+        server.state.withLock { $0.resources["notebook:\(nbId)"] = .init(owner: ownerId, ownerWrapped: Base64URL.encode(wrapped), docIds: [nbId, note.noteId]) }
+        let target = SharingTarget(kind: .notebook, id: nbId)
+        for (d, email) in [(member, "m@x.co"), (leaving, "l@x.co")] {
+            let inv = try await phone.service.invite(email, role: .editor, to: target)
+            _ = try await d.service.acceptInvitation(id: inv)
+        }
+        let (k1, v1) = try await phone.service.ownerKey(notebookId: nbId)
+        try await phone.service.grantPendingKeys(to: target, key: k1, version: v1)
+        try await phone.service.api.removeMember(userId: leaving.userId, from: target)
+
+        // The phone rotates (step 1) but stops before the notes get new keys: simulate by
+        // taking the index state from before step 2.
+        let before = try notebook.crdt.encodeStateAsUpdate()
+        try await phone.service.rotateNotebookKey(notebook)
+        let indexAfterStep1 = NotebookDocument(notebookId: nbId)
+        try indexAfterStep1.crdt.applyUpdate(before, origin: .remote)
+        #expect(server.state.withLock { $0.rotations.count } == 1)
+
+        // The iPad (same account, fresh device) finishes: no second rotate.
+        let ipad = try await Self.device(server, userId: ownerId, email: "o@x.co", master: master)
+        try await ipad.service.ensureBoxKeyPair()
+        #expect(try await ipad.service.resumeNotebookRotation(indexAfterStep1))
+        #expect(server.state.withLock { $0.rotations.count } == 1)
+        #expect(try ipad.service.keys.notebookKeyVersion(nbId) == 2)
+        #expect(try await ipad.service.notesNeedingNewKeys(in: indexAfterStep1).isEmpty)
+        #expect(try await ipad.service.finishNotebookRotation(indexAfterStep1))
+        #expect(server.state.withLock { $0.resources["notebook:\(nbId)"]!.pending } == false)
     }
 }

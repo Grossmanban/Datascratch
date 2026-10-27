@@ -161,7 +161,11 @@ DSCore
   (новое устройство), `setMode` (режим «для агентов»), `createNote(in:...)` (ключ заметки,
   `NoteMeta`), `moveNote(id:from:to:)` (перенос в другой блокнот), `dailyNote(for:in:)`, `inbox(in:)`.
 - `AttachmentManager(api:store:directory:)`: `add(_:mime:noteId:)` → `attachmentId` (файл
-  сохраняется локально и ставится в очередь), `uploadPending(noteKey:)` / `upload` (куски по
+  сохраняется локально и ставится в очередь); `add(_:mime:noteId:id:)` — с id, созданным заранее
+  (`EntityID.make()`), когда блок должен сослаться на вложение раньше, чем есть байты (вставка
+  веб-страницы: блок сразу, картинка — после загрузки). Пока байты не добавлены, о вложении нигде
+  ничего нет: не отправляется и не требует уборки; неверный id — `AttachmentError.invalidId`,
+  занятый — `.alreadyExists`. `uploadPending(noteKey:)` / `upload` (куски по
   1 MiB, докачка), `download(...)`, `localURL`, `delete`.
 - `ShareLink(url:)` / `.url` — ссылки `https://<host>/s/<shareId>#k=<ключ>` (crypto.md §7).
 

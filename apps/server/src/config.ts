@@ -54,6 +54,8 @@ const ConfigSchema = z
     DS_SIGNUP: z.enum(['open', 'closed', 'invite']).default('open'),
     /** Comma-separated invite codes for DS_SIGNUP=invite. */
     DS_INVITE_CODES: z.string().default(''),
+    /** Largest image attachment decrypted for an agent (handwriting/image rendering). */
+    AGENT_IMAGE_MAX_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
     /** Bytes one account may store: updates, snapshots and attachments (0: unlimited). */
     USER_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(10 * 1024 ** 3),
     /** POST /v1/fetch-image (D-52): requests per account per minute, size cap, total timeout, parallel downloads. */

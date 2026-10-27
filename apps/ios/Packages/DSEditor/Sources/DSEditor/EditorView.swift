@@ -47,6 +47,12 @@ public final class EditorView: UIView {
     /// typed "/query" is removed first, then this is called with the entry's id. Nil: those
     /// entries are not offered.
     public var onHostSlashCommand: ((String) -> Void)?
+    /// Images inside a rich paste (a web page, Notes, Mail, Word, Markdown): the host stores each
+    /// and returns its attachment id at once, before any upload or download, then calls
+    /// `imageDidLoad` when the bytes are there or `imageFailed` when a download fails. Nil for an
+    /// image skips it (an address stays as a link to it). Without a handler, addresses become
+    /// links and embedded images are dropped.
+    public var onPastedImages: (([PastedImage]) -> [String?])?
     /// Shows "Посмотреть историю" in the agent-edits banner when set.
     public var onShowHistory: (() -> Void)? {
         didSet { agentBanner.onShowHistory = onShowHistory }
@@ -268,6 +274,8 @@ public final class EditorView: UIView {
         textView.editorTap = tap
         textView.tapTargetAt = { [weak self] point in self?.hasTapTarget(at: point) ?? false }
         textView.textDropDelegate = self
+        textView.richPaste = { [weak self] in self?.pasteRich() ?? false }
+        textView.plainPaste = { [weak self] in self?.pastePlainText() }
         factory.imageMenu = { [weak self] block in self?.menu(forImage: block) }
         factory.imageResized = { [weak self] block, fraction in self?.setImageWidth(block, fraction: fraction) }
         factory.imageActivated = { [weak self] block, view in
@@ -1027,6 +1035,138 @@ public final class EditorView: UIView {
         guard projection.paragraphs.indices.contains(i) else { return }
         let caret = commands.insertBlock(node, after: TextPosition(block: projection.paragraphs[i].blockId, offset: o))
         select(caret)
+    }
+
+    // MARK: - Rich paste
+
+    /// Addresses of pasted images still downloading, by attachment id (`imageFailed`).
+    private var pastedImageURLs: [String: URL] = [:]
+
+    /// Rich paste (`spec/04-editor.md`, «Вставка»): HTML first, then RTF / RTFD, then text that
+    /// reads as Markdown. Returns false to leave the paste to the text view (plain text). The title
+    /// takes plain text (its first line); code blocks paste their text as is.
+    func pasteRich(from board: UIPasteboard = .general) -> Bool {
+        let range = selectionRange
+        let (i, _) = projection.position(at: range.lowerBound)
+        guard projection.paragraphs.indices.contains(i) else { return false }
+        let kind = projection.paragraphs[i].kind.type
+        if kind == NodeType.codeBlock { return false }
+        if kind == NodeType.title {
+            guard let text = board.string else { return false }
+            insert(PasteFragment(blocks: [.paragraph(text)]), over: range)
+            return true
+        }
+        var fragment: PasteFragment?
+        if let data = board.data(forPasteboardType: UTType.html.identifier), let html = String(data: data, encoding: .utf8) {
+            fragment = HTMLImport.blocks(html)
+        } else if let rich = Self.attributedString(from: board) {
+            fragment = Self.fragment(from: rich)
+        } else if let text = board.string, MarkdownImport.looksLikeMarkdown(text) {
+            fragment = MarkdownImport.blocks(text, options: .init(remoteImages: true))
+        }
+        guard let fragment, !fragment.blocks.isEmpty else { return false }
+        insert(fragment, over: range)
+        return true
+    }
+
+    /// «Вставить без форматирования»: the pasteboard's plain text.
+    func pastePlainText() {
+        guard let text = UIPasteboard.general.string, !text.isEmpty else { return }
+        let range = selectionRange
+        keepingScroll(at: range.lowerBound) {
+            select(commands.replace(range, with: text.replacingOccurrences(of: "\r\n", with: "\n"),
+                                    marks: (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil)))
+        }
+    }
+
+    private func insert(_ fragment: PasteFragment, over range: Range<Int>) {
+        let blocks = resolvePastedImages(fragment)
+        guard !blocks.isEmpty else { return }
+        keepingScroll(at: range.lowerBound) {
+            select(commands.insertFragment(blocks, replacing: range))
+        }
+        notifyStateChange()
+    }
+
+    /// Image blocks of a paste get the host's attachment ids; without one, an address becomes a
+    /// link and an embedded image is dropped.
+    private func resolvePastedImages(_ fragment: PasteFragment) -> [BlockNode] {
+        guard !fragment.images.isEmpty else { return fragment.blocks }
+        let ids = onPastedImages?(fragment.images) ?? Array(repeating: nil, count: fragment.images.count)
+        func resolve(_ block: BlockNode) -> BlockNode? {
+            guard block.type == NodeType.image, case .number(let n)? = block.attrs[PasteFragment.pasteImageAttr] else {
+                var b = block
+                b.children = block.children.compactMap(resolve)
+                return b
+            }
+            let index = Int(n)
+            guard fragment.images.indices.contains(index) else { return nil }
+            let image = fragment.images[index]
+            if index < ids.count, let id = ids[index] {
+                if case .url(let url) = image.source { pastedImageURLs[id] = url }
+                var attrs = block.attrs
+                attrs[PasteFragment.pasteImageAttr] = nil
+                attrs["attachmentId"] = .string(id)
+                return BlockNode(id: block.id, type: NodeType.image, attrs: attrs)
+            }
+            if case .url(let url) = image.source { return Self.linkParagraph(url, alt: image.alt) }
+            return nil
+        }
+        return fragment.blocks.compactMap(resolve)
+    }
+
+    private static func linkParagraph(_ url: URL, alt: String) -> BlockNode {
+        .paragraph([.text(alt.isEmpty ? url.absoluteString : alt, MarkSet([MarkName.link: .object(["href": .string(url.absoluteString)])]))])
+    }
+
+    /// A pasted image could not be downloaded: its block becomes a link to the address.
+    public func imageFailed(attachmentId: String) {
+        guard let url = pastedImageURLs.removeValue(forKey: attachmentId) else { return }
+        let blocks = document.allBlocks.filter { $0.type == NodeType.image && $0.attrs["attachmentId"]?.stringValue == attachmentId }
+        guard !blocks.isEmpty else { return }
+        document.stopCapturing()
+        document.transact(origin: .system) {
+            for b in blocks {
+                guard let loc = document.location(of: b.id) else { continue }
+                document.insertBlock(Self.linkParagraph(url, alt: b.attrs["alt"]?.stringValue ?? ""), parent: loc.parent, at: loc.index)
+                document.deleteBlock(b.id)
+            }
+        }
+        document.stopCapturing()
+    }
+
+    private static func attributedString(from board: UIPasteboard) -> NSAttributedString? {
+        for (type, documentType) in [(UTType.rtfd.identifier, NSAttributedString.DocumentType.rtfd),
+                                     (UTType.flatRTFD.identifier, .rtfd), (UTType.rtf.identifier, .rtf)] {
+            if let data = board.data(forPasteboardType: type),
+               let s = try? NSAttributedString(data: data, options: [.documentType: documentType], documentAttributes: nil) {
+                return s
+            }
+        }
+        return nil
+    }
+
+    /// RTF / RTFD → blocks through HTML (one mapping): attachments become embedded images.
+    private static func fragment(from rich: NSAttributedString) -> PasteFragment? {
+        let copy = NSMutableAttributedString(attributedString: rich)
+        var images: [String] = []
+        copy.enumerateAttribute(.attachment, in: NSRange(location: 0, length: copy.length), options: .reverse) { value, range, _ in
+            guard let attachment = value as? NSTextAttachment else { return }
+            let data = attachment.fileWrapper?.regularFileContents
+                ?? attachment.contents
+                ?? (attachment.image ?? attachment.image(forBounds: attachment.bounds, textContainer: nil, characterIndex: range.location))?.pngData()
+            guard let data, UIImage(data: data) != nil else {
+                copy.replaceCharacters(in: range, with: "")
+                return
+            }
+            images.append("<img src=\"data:image/png;base64,\(data.base64EncodedString())\">")
+            copy.replaceCharacters(in: range, with: "\nDSPASTEIMAGE\(images.count - 1)X\n")
+        }
+        guard let data = try? copy.data(from: NSRange(location: 0, length: copy.length),
+                                        documentAttributes: [.documentType: NSAttributedString.DocumentType.html]),
+              var html = String(data: data, encoding: .utf8) else { return nil }
+        for (i, tag) in images.enumerated() { html = html.replacingOccurrences(of: "DSPASTEIMAGE\(i)X", with: tag) }
+        return HTMLImport.blocks(html)
     }
 
     // MARK: - Images
@@ -1860,6 +2000,11 @@ extension EditorView: UITextViewDelegate {
         }
         if para.kind.isText, para.kind.type != NodeType.codeBlock, para.kind.type != NodeType.title {
             extra.append(contentsOf: formatMenu())
+        }
+        if UIPasteboard.general.hasStrings, para.kind.type != NodeType.codeBlock {
+            extra.append(UIAction(title: "Вставить без форматирования", image: UIImage(systemName: "doc.on.clipboard")) { [weak self] _ in
+                self?.pastePlainText()
+            })
         }
         guard !extra.isEmpty else { return nil }
         return UIMenu(children: extra + suggestedActions)

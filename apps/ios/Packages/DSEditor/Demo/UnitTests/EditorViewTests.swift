@@ -2,6 +2,7 @@
 import DSEditorModel
 import DSInk
 import UIKit
+import UniformTypeIdentifiers
 import XCTest
 
 @MainActor
@@ -1385,5 +1386,66 @@ final class EditorViewTests: XCTestCase {
         editor.applySlashCommand("image")
         XCTAssertEqual(chosen, "image")
         XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "", "the typed /query is removed")
+    }
+
+    // MARK: - Rich paste (build 19)
+
+    private func putHTML(_ html: String, plain: String) {
+        UIPasteboard.general.items = [[UTType.html.identifier: Data(html.utf8), UTType.utf8PlainText.identifier: plain]]
+    }
+
+    /// A web page selection pastes as blocks with marks, images through the host, in one undo step.
+    func testPastingHTMLInsertsBlocksAndOneUndoStep() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Вставка"), .paragraph("До ")])
+        let editor = host(doc)
+        var asked: [PastedImage] = []
+        editor.onPastedImages = { images in asked = images; return images.map { _ in "att-paste" } }
+        editor.textView.selectedRange = NSRange(location: flatRange(editor, of: "До ").upperBound, length: 0)
+        putHTML("<p> и <b>после</b></p><h2>Раздел</h2><ul><li>один</li><li>два</li></ul><img src=\"https://example.com/a.png\" alt=\"Схема\">",
+                plain: "и после")
+        editor.textView.paste(nil)
+        XCTAssertEqual(doc.blocks.map(\.type), [NodeType.title, NodeType.paragraph, NodeType.heading, NodeType.bulletList, NodeType.image, NodeType.paragraph])
+        XCTAssertEqual(doc.blocks[1].plainText, "До и после")
+        XCTAssertEqual(doc.blocks[1].inline?.last, .text("после", MarkSet([MarkName.bold: MarkSet.plain])))
+        XCTAssertEqual(asked.first?.source, .url(URL(string: "https://example.com/a.png")!))
+        XCTAssertEqual(doc.blocks[4].attrs["attachmentId"]?.stringValue, "att-paste")
+        XCTAssertNil(doc.blocks[4].attrs[PasteFragment.pasteImageAttr], "the paste index never reaches the document")
+        editor.undo()
+        XCTAssertEqual(doc.blocks.map(\.plainText), ["Вставка", "До "], "one paste is one undo step")
+        editor.redo()
+        let image = try XCTUnwrap(doc.blocks.firstIndex { $0.type == NodeType.image })
+        editor.imageFailed(attachmentId: "att-paste")
+        XCTAssertEqual(doc.blocks[image].type, NodeType.paragraph, "a failed download leaves a link to the address")
+        XCTAssertEqual(doc.blocks[image].inline?.first, .text("Схема", MarkSet([MarkName.link: .object(["href": "https://example.com/a.png"])])))
+        UIPasteboard.general.items = []
+    }
+
+    /// In the title only the plain first line goes in; «Вставить без форматирования» pastes text.
+    func testPasteInTheTitleAndPlainPaste() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title(""), .paragraph("")])
+        let editor = host(doc)
+        editor.textView.selectedRange = NSRange(location: 0, length: 0)
+        putHTML("<h1>Большой заголовок</h1><p>и текст</p>", plain: "Большой заголовок\nи текст")
+        editor.textView.paste(nil)
+        XCTAssertEqual(doc.blocks[0].plainText, "Большой заголовок")
+        XCTAssertEqual(doc.blocks.count, 2)
+        editor.textView.selectedRange = NSRange(location: editor.textView.textStorage.length, length: 0)
+        editor.textView.pasteWithoutFormatting(nil)
+        XCTAssertEqual(doc.blocks.map(\.type), [NodeType.title, NodeType.paragraph, NodeType.paragraph], "plain text, its line break a new paragraph")
+        XCTAssertEqual(doc.blocks[1].plainText, "Большой заголовок")
+        XCTAssertEqual(doc.blocks[1].inline?.first?.marks, .empty)
+        UIPasteboard.general.items = []
+    }
+
+    /// Plain text that reads as Markdown is parsed as Markdown.
+    func testPastingMarkdownText() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Md"), .paragraph("")])
+        let editor = host(doc)
+        editor.textView.selectedRange = NSRange(location: editor.textView.textStorage.length, length: 0)
+        UIPasteboard.general.string = "## План\n\n- [ ] купить\n- [x] позвонить\n\n**важно**"
+        editor.textView.paste(nil)
+        XCTAssertEqual(doc.blocks.map(\.type), [NodeType.title, NodeType.heading, NodeType.taskList, NodeType.paragraph])
+        XCTAssertEqual(doc.blocks[2].children.map { $0.attrs["state"]?.stringValue }, ["open", "done"])
+        UIPasteboard.general.items = []
     }
 }

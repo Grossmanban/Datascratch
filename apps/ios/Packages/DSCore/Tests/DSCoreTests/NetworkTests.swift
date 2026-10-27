@@ -219,6 +219,9 @@ struct StuckFirstFactory: WebSocketFactory {
         await server.setAccepting(false)
         var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: "A", clientVersion: "test")
         config.minBackoff = .milliseconds(20)
+        // Bounded: the longer the offline phase lasts (a slow runner), the further the backoff
+        // pushes the next attempt; the default 30 s cap would outlast the wait below.
+        config.maxBackoff = .milliseconds(100)
         config.quickRetryDelay = .milliseconds(5)
         let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
         let engine = SyncEngine(store: try LocalStore.inMemory(), client: client, keyFor: { _ in nil }, register: nil)
@@ -227,5 +230,24 @@ struct StuckFirstFactory: WebSocketFactory {
         await server.setAccepting(true)
         #expect(try await eventually { await engine.status().summary == .synced })
         await engine.stop()
+    }
+}
+
+@Suite struct BackoffTests {
+    /// Sub-second backoffs are kept whole (they used to be truncated to whole seconds: zero).
+    @Test func subSecondBackoffIsNotZero() async throws {
+        let server = FakeSyncServer()
+        await server.setAccepting(false)
+        var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: "A", clientVersion: "test")
+        config.minBackoff = .milliseconds(200)
+        config.maxBackoff = .milliseconds(400)
+        config.quickRetries = 0
+        let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
+        await client.start()
+        var delay: Duration?
+        #expect(try await eventually { if case .waiting(let d) = await client.state { delay = d; return true }; return false })
+        let d = try #require(delay)
+        #expect(d >= .milliseconds(160) && d <= .milliseconds(480))
+        await client.stop()
     }
 }

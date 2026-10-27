@@ -1,7 +1,7 @@
 // Messages of the WebSocket sync protocol (sync-protocol.md, v1).
 // The server and every client validate incoming frames with these schemas.
 import { z } from "zod";
-import { deviceRevokedReasonSchema } from "./api.js";
+import { authorSchema, deviceRevokedReasonSchema } from "./api.js";
 import { base64UrlSchema, uuidSchema } from "./common.js";
 
 export const SYNC_PROTOCOL_VERSION = 1;
@@ -114,10 +114,14 @@ export const welcomeMessageSchema = z.object({
   protocol: z.literal(SYNC_PROTOCOL_VERSION),
 });
 
+/** Server-stamped author (D-54); optional so older servers still parse. */
+const authorFieldSchema = authorSchema.optional();
+
 export const updateItemSchema = z.object({
   seq: seqSchema,
   payload: payloadSchema,
   deviceId: deviceIdSchema,
+  author: authorFieldSchema,
 });
 export type UpdateItem = z.infer<typeof updateItemSchema>;
 
@@ -136,6 +140,7 @@ export const updateMessageSchema = z.object({
   seq: seqSchema,
   payload: payloadSchema,
   deviceId: deviceIdSchema,
+  author: authorFieldSchema,
 });
 
 export const ackMessageSchema = z.object({

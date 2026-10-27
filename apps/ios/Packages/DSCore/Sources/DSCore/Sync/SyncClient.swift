@@ -10,6 +10,14 @@ public protocol WebSocketConnection: Sendable {
     func receive() async throws -> String
     func sendPing() async throws
     func close()
+    /// The close code and reason the server sent, once closed (nil if none or unknown).
+    var closeCode: Int? { get }
+    var closeReason: String? { get }
+}
+
+extension WebSocketConnection {
+    public var closeCode: Int? { nil }
+    public var closeReason: String? { nil }
 }
 
 /// Opens connections (URLSession in the app, an in-memory server in tests).
@@ -55,6 +63,9 @@ final class URLSessionWebSocket: WebSocketConnection, @unchecked Sendable {
     }
 
     func close() { task.cancel(with: .normalClosure, reason: nil) }
+
+    var closeCode: Int? { task.closeCode == .invalid ? nil : task.closeCode.rawValue }
+    var closeReason: String? { task.closeReason.map { String(decoding: $0, as: UTF8.self) } }
 }
 
 public enum SyncConnectionState: Equatable, Sendable {
@@ -66,12 +77,16 @@ public enum SyncConnectionState: Equatable, Sendable {
     case waiting(retryIn: Duration)
     /// Stopped for good (protocol mismatch, signed out).
     case stopped(reason: String)
+    /// D-53: the server revoked this device; no reconnect. The app wipes local data.
+    case revoked(reason: DeviceRevocationReason)
 }
 
 public enum SyncClientError: Error, Equatable {
     case notConnected
     case closed
     case server(SyncErrorCode, String)
+    /// D-53: `device_revoked` frame or close 4410.
+    case deviceRevoked(DeviceRevocationReason)
 }
 
 /// Receives connection events. Called on the client's actor; implementations should be quick.
@@ -218,6 +233,11 @@ public actor SyncClient {
             } catch let SyncClientError.server(code, message) where code == .protocolMismatch {
                 await setState(.stopped(reason: message))
                 return
+            } catch SyncClientError.deviceRevoked(let reason) {
+                connection?.close()
+                connection = nil
+                await setState(.revoked(reason: reason))
+                return
             } catch {
                 // Fall through to the retry.
             }
@@ -279,14 +299,15 @@ public actor SyncClient {
         try await conn.send(try SyncFrame.encode(hello))
 
         // Until `welcome` nothing else is accepted (§3).
-        guard let first = SyncFrame.decode(try await conn.receive()) else { throw SyncClientError.closed }
+        guard let first = SyncFrame.decode(try await receive(conn)) else { throw SyncClientError.closed }
         watchdog.cancel()
         switch first {
         case .welcome(let userId, _):
             welcomed()
             await setState(.connected(userId: userId))
             await delegate?.syncClientDidConnect(self, userId: userId)
-        case .error(let code, let message, _, let retryAfterMs):
+        case .error(let code, let message, _, let retryAfterMs, let reason):
+            if code == .deviceRevoked { throw SyncClientError.deviceRevoked(reason ?? .user) }
             rateLimited(code, retryAfterMs)
             throw SyncClientError.server(code, message)
         default:
@@ -308,14 +329,28 @@ public actor SyncClient {
         defer { pinger.cancel() }
 
         while !Task.isCancelled {
-            let text = try await conn.receive()
+            let text = try await receive(conn)
             guard let message = SyncFrame.decode(text) else { continue }
-            if case .error(let code, _, nil, let retryAfterMs) = message { rateLimited(code, retryAfterMs) }
-            if case .error(let code, let message, nil, _) = message, code == .unauthorized || code == .protocolMismatch {
+            if case .error(.deviceRevoked, _, _, _, let reason) = message { throw SyncClientError.deviceRevoked(reason ?? .user) }
+            if case .error(let code, _, nil, let retryAfterMs, _) = message { rateLimited(code, retryAfterMs) }
+            if case .error(let code, let message, nil, _, _) = message, code == .unauthorized || code == .protocolMismatch {
                 // Connection-level error: reconnect with fresh credentials (or stop).
                 throw SyncClientError.server(code, message)
             }
             await delegate?.syncClient(self, didReceive: message)
+        }
+    }
+
+    /// The next frame; a close with 4410 (with or without a `device_revoked` frame before it)
+    /// is a revocation, its reason from the close reason (unknown or absent → `user`).
+    private func receive(_ conn: any WebSocketConnection) async throws -> String {
+        do {
+            return try await conn.receive()
+        } catch {
+            if conn.closeCode == SyncProtocol.closeDeviceRevoked {
+                throw SyncClientError.deviceRevoked(DeviceRevocationReason(lenient: conn.closeReason))
+            }
+            throw error
         }
     }
 

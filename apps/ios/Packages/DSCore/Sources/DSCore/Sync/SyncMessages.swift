@@ -203,6 +203,8 @@ public enum SyncErrorCode: String, Codable, Sendable {
     case badRequest = "bad_request"
     case unauthorized, forbidden, docNotFound = "doc_not_found", payloadTooLarge = "payload_too_large"
     case rateLimited = "rate_limited", protocolMismatch = "protocol_mismatch", `internal`
+    /// D-53: this device was revoked (`reason`); the connection is closed with 4410.
+    case deviceRevoked = "device_revoked"
 }
 
 /// Timing events of `SyncEngine` (`setTraceHandler`), e.g. for `os_signpost` intervals:
@@ -228,9 +230,10 @@ public enum ServerMessage: Codable, Hashable, Sendable {
     case ack(docId: String, clientMsgId: String, seq: Int64)
     case awareness(docId: String, payload: Data, deviceId: String)
     /// `retryAfterMs` (`rate_limited` only, §7): do not resend or reconnect sooner.
-    case error(code: SyncErrorCode, message: String, ref: String?, retryAfterMs: Int? = nil)
+    /// `reason` (`device_revoked` only, D-53).
+    case error(code: SyncErrorCode, message: String, ref: String?, retryAfterMs: Int? = nil, reason: DeviceRevocationReason? = nil)
 
-    enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref, retryAfterMs }
+    enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref, retryAfterMs, reason }
     struct Item: Encodable { var seq: Int64; var payload: String; var deviceId: String }
     struct Snap: Encodable { var seq: Int64; var payload: String }
 
@@ -267,7 +270,8 @@ public enum ServerMessage: Codable, Hashable, Sendable {
         case "error":
             self = .error(code: try c.decode(SyncErrorCode.self, forKey: .code), message: try c.decode(String.self, forKey: .message),
                           ref: try c.decodeIfPresent(String.self, forKey: .ref),
-                          retryAfterMs: try c.decodeIfPresent(Int.self, forKey: .retryAfterMs).map { max(0, $0) })
+                          retryAfterMs: try c.decodeIfPresent(Int.self, forKey: .retryAfterMs).map { max(0, $0) },
+                          reason: try c.decodeIfPresent(DeviceRevocationReason.self, forKey: .reason))
         case let t: throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(t)")
         }
     }
@@ -302,12 +306,13 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             try c.encode(docId, forKey: .docId)
             try c.encode(Base64URL.encode(payload), forKey: .payload)
             try c.encode(deviceId, forKey: .deviceId)
-        case .error(let code, let message, let ref, let retryAfterMs):
+        case .error(let code, let message, let ref, let retryAfterMs, let reason):
             try c.encode("error", forKey: .type)
             try c.encode(code, forKey: .code)
             try c.encode(message, forKey: .message)
             try c.encodeIfPresent(ref, forKey: .ref)
             try c.encodeIfPresent(retryAfterMs, forKey: .retryAfterMs)
+            try c.encodeIfPresent(reason, forKey: .reason)
         }
     }
 

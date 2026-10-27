@@ -1,13 +1,19 @@
 # Graph Report - Datascratch  (2026-10-27)
 
 ## Corpus Check
-- 4 files · ~655,165 words
+- 884 files · ~655,248 words
 - Verdict: corpus is large enough that graph structure adds value.
+- Unclassified: 38 file(s) not represented in the graph (top: (none) 19, .css 6, .example 4)
 
 ## Summary
 - 17187 nodes · 44846 edges · 461 communities (369 shown, 92 thin omitted)
 - Extraction: 89% EXTRACTED · 11% INFERRED · 0% AMBIGUOUS · INFERRED: 4710 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
+
+## Graph Freshness
+- Built from commit: `e3fdc896`
+- Run `git rev-parse HEAD` and compare to check if the graph is stale.
+- Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - Data
@@ -436,10 +442,10 @@
   docs/architecture/contracts/strokes.md → packages/shared/src/strokes/store.ts
 - `Шеринг (D-13, D-37)` --references--> `Share`  [INFERRED]
   docs/architecture/contracts/api.md → packages/shared/src/contracts/api.ts
-- `Данные` --references--> `dailyNotebookId()`  [INFERRED]
-  docs/decisions/0048-isolated-spaces.md → apps/web/src/domain/actions.ts
 - `3. Упаковка точек` --references--> `t()`  [INFERRED]
   docs/architecture/contracts/strokes.md → packages/web-editor/demo/sample.ts
+- `Данные` --references--> `dailyNotebookId()`  [INFERRED]
+  docs/decisions/0048-isolated-spaces.md → apps/web/src/domain/actions.ts
 
 ## Import Cycles
 - 2-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs`
@@ -1945,23 +1951,23 @@ Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main
   docs/decisions/0048-isolated-spaces.md · relation: references
 
 ## Knowledge Gaps
-- **1423 isolated node(s):** `.value`, `.intValue`, `folder`, `note`, `notebook` (+1418 more)
+- **1423 isolated node(s):** `.missingChunks`, `.uploaded`, `pendingUpload`, `remote`, `synced` (+1418 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 4815 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **92 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `roadmap.md`, `DSLanguage`, `ui/src/index.ts`, `Foundation`, `scripts/generate.mjs`, `@datascratch/ui — веб-компоненты «Тихая бумага»`?**
+- **Why does `packages/design-tokens/tokens.json — источник значений; генерирует CSS-переменные и Swift` connect `design-tokens.md` to `02-platforms.md`, `scripts/generate.mjs`, `DSColorToken`?**
   _High betweenness centrality (0.103) - this node is a cross-community bridge._
 - **Are the 121 inferred relationships involving `e()` (e.g. with `_4()` and `a()`) actually correct?**
   _`e()` has 121 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `.value`, `.intValue`, `folder` to the rest of the system?**
+- **What connects `.missingChunks`, `.uploaded`, `pendingUpload` to the rest of the system?**
   _1423 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Data` be split into smaller, more focused modules?**
   _Cohesion score 0.0034853527411037558 - nodes in this community are weakly interconnected._
-- **Why does `packages/design-tokens/tokens.json — источник значений; генерирует CSS-переменные и Swift` connect `design-tokens.md` to `02-platforms.md`, `scripts/generate.mjs`, `DSColorToken`?**
-  _High betweenness centrality (0.098) - this node is a cross-community bridge._
+- **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `roadmap.md`, `DSLanguage`, `ui/src/index.ts`, `Foundation`, `scripts/generate.mjs`, `@datascratch/ui — веб-компоненты «Тихая бумага»`?**
+  _High betweenness centrality (0.092) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._

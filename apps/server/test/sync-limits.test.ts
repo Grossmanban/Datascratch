@@ -19,7 +19,7 @@ import {
 let s: TestServer;
 let u: TestUser;
 beforeAll(async () => {
-  s = await startServer({ SYNC_MAX_CONN_PER_IP: '6', SYNC_MAX_CONN_PER_USER: '3' });
+  s = await startServer({ SYNC_MAX_CONN_PER_IP: '6', SYNC_MAX_CONN_PER_USER: '3', SYNC_RATE_PER_SEC: '10' });
   u = await signup(s);
 });
 afterAll(() => s.close());
@@ -88,16 +88,19 @@ describe('connection caps', () => {
 describe('flooding', () => {
   it('rate-limits before parsing', async () => {
     const c = await SyncClient.user(s, u);
-    // 600 large non-JSON messages, faster than the bucket (100/s, burst 500) refills.
+    // 200 large non-JSON messages, much faster than the bucket (10/s, burst 50) refills.
     const junk = 'y'.repeat(32 * 1024);
-    for (let i = 0; i < 600; i++) c.ws.send(junk);
-    await c.next((m) => m.type === 'error' && m.code === 'rate_limited', 10_000);
-    await sleep(500);
+    const started = Date.now();
+    for (let i = 0; i < 200; i++) c.ws.send(junk);
+    const answered = () => c.messages.filter((m) => m.type === 'error').length;
+    while (answered() < 200 && Date.now() - started < 10_000) await sleep(20);
+    const elapsed = (Date.now() - started) / 1000;
     const invalid = c.messages.filter((m) => m.type === 'error' && m.code === 'bad_request').length;
     const limited = c.messages.filter((m) => m.type === 'error' && m.code === 'rate_limited').length;
-    expect(invalid + limited).toBe(600);
-    expect(invalid).toBeLessThanOrEqual(520);
-    expect(limited).toBeGreaterThanOrEqual(80);
+    expect(invalid + limited).toBe(200);
+    // Only what the bucket allows was parsed: the burst plus what refilled meanwhile.
+    expect(invalid).toBeLessThanOrEqual(50 + Math.ceil(10 * elapsed) + 1);
+    expect(limited).toBeGreaterThan(0);
     await closeAll([c]);
   }, 30_000);
 });

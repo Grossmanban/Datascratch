@@ -64,8 +64,14 @@ final class EditorTextView: UITextView {
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         if action == #selector(paste(_:)), imagePaste != nil, UIPasteboard.general.hasImages { return true }
+        if action == #selector(pasteWithoutFormatting(_:)) { return plainPaste != nil && UIPasteboard.general.hasStrings }
         return super.canPerformAction(action, withSender: sender)
     }
+
+    /// Rich paste (HTML, RTF, Markdown); false leaves the plain text paste to UIKit.
+    var richPaste: (() -> Bool)?
+    /// «Вставить без форматирования» (⇧⌘V).
+    var plainPaste: (() -> Void)?
 
     override func paste(_ sender: Any?) {
         if let imagePaste, pasteboardIsImages {
@@ -75,7 +81,13 @@ final class EditorTextView: UITextView {
                 return
             }
         }
+        if richPaste?() == true { return }
         super.paste(sender)
+    }
+
+    /// «Вставить без форматирования» from the keyboard (⇧⌘V).
+    @objc func pasteWithoutFormatting(_ sender: Any?) {
+        plainPaste?()
     }
     /// The editor's own tap recognizer (links, task boxes, date chips). The text view's own single
     /// taps wait for it to fail: it begins only on a tap target and fails at once elsewhere, so
@@ -194,6 +206,12 @@ final class EditorTextView: UITextView {
             cmd("Сдвинуть вправо", "\t", [], .indent),
             cmd("Сдвинуть влево", "\t", .shift, .outdent),
             cmd("Ссылка", "k", .command, .link),
+            {
+                let c = UIKeyCommand(title: "Вставить без форматирования", action: #selector(pasteWithoutFormatting(_:)),
+                                     input: "v", modifierFlags: [.command, .shift])
+                c.wantsPriorityOverSystemBehavior = true
+                return c
+            }(),
         ]
     }
 

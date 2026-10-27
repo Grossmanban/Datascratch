@@ -98,3 +98,38 @@ test("rich paste: an image linked from pasted HTML is fetched through the server
   } else await expect(images).toHaveCount(0);
   await expectSynced(page);
 });
+
+test("attachments open safely: a document type is downloaded, never opened on our origin; an SVG is stored as PNG", async ({ page, context }) => {
+  await signUp(page, uniqueEmail("attach-open"));
+  await newDoc(page, "Вложения", "Текст");
+  // An HTML file: double-click downloads it instead of opening a tab (it would run on our origin).
+  let chooser = page.waitForEvent("filechooser");
+  await slash(page, /Файл PDF|File/);
+  await (await chooser).setFiles({ name: "page.html", mimeType: "text/html", buffer: Buffer.from("<script>parent.pwned=1</script>") });
+  const file = page.locator(".ds-prose .ds-file").first();
+  await expect(file).toBeVisible({ timeout: 15_000 });
+  await expect(file).not.toHaveClass(/is-uploading/, { timeout: 15_000 });
+  let popups = 0;
+  context.on("page", () => popups++);
+  const download = page.waitForEvent("download");
+  await file.dblclick();
+  expect((await download).suggestedFilename()).toBe("page.html");
+  expect(popups).toBe(0);
+
+  // A picked SVG becomes a PNG attachment (an SVG is a document that can carry scripts).
+  const registered: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().endsWith("/v1/attachments")) registered.push(JSON.parse(r.postData() ?? "{}").mime);
+  });
+  chooser = page.waitForEvent("filechooser");
+  await slash(page, /Картинка|Изображение|Image/);
+  await (await chooser).setFiles({
+    name: "dot.svg",
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="3"><rect width="4" height="3" fill="red"/><script>alert(1)</script></svg>'),
+  });
+  const img = page.locator(".ds-prose img").last();
+  await expect(img).toHaveAttribute("src", /^blob:/, { timeout: 15_000 });
+  await expect.poll(() => img.evaluate((i) => (i as HTMLImageElement).naturalWidth), { timeout: 15_000 }).toBe(4);
+  await expect.poll(() => registered.at(-1)).toBe("image/png");
+});

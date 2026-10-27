@@ -58,6 +58,18 @@ export DS_DOMAIN=localhost DS_SERVER_IMAGE="$SRV" DS_WEB_IMAGE="$WEB" DS_POSTGRE
 export NODE_TLS_REJECT_UNAUTHORIZED=0
 vps() { docker exec "$VPS" "$@"; }
 secrets_hash() { vps sh -c "grep -E '^(POSTGRES_PASSWORD|DS_KMS_KEY|DS_JWT_SECRET)=' /opt/datascratch/.env | sha256sum"; }
+# The deploy workflow's address step (D-49): prints DS_DOMAIN=<value>, fails if the value
+# showed up in its output anywhere but in the runner's (hidden) mask commands.
+address() {
+  local env out
+  env="$(mktemp -p "$WORK")"
+  out="$(env -u DS_DOMAIN GITHUB_ENV="$env" "$@" "$DEPLOY_DIR/address.sh")"
+  local value
+  value="$(sed -n 's/^DS_DOMAIN=//p' "$env")"
+  if grep -v '^::add-mask::' <<< "$out" | grep -qF "$value"; then echo "address.sh printed the address" >&2; exit 1; fi
+  grep -qxF "::add-mask::$value" <<< "$out"
+  echo "$value"
+}
 
 step "read-only survey of the server"
 before="$(docker exec "$VPS" sh -c 'ls -la /opt /etc/cron.d; ls /etc/apt/apt.conf.d' | sha256sum)"
@@ -66,6 +78,9 @@ grep -q '^## Server survey' "$WORK/inspect.md"
 grep -q 'not deployed yet' "$WORK/inspect.md"
 [ "$(docker exec "$VPS" sh -c 'ls -la /opt /etc/cron.d; ls /etc/apt/apt.conf.d' | sha256sum)" = "$before" ] || { echo "inspect changed the server" >&2; exit 1; }
 if grep -Eiq 'PASSWORD=|KMS_KEY=|SECRET=' "$WORK/inspect.md"; then echo "inspect printed a secret" >&2; exit 1; fi
+
+step "address before the first deploy: no secret, nothing on the server → sslip.io from the IP"
+[ "$(address)" = "127-0-0-1.sslip.io" ]
 
 step "first deploy (fresh server: bootstrap + e2e1)"
 DS_HOST_MODE=fresh DS_TAG=e2e1 "$DEPLOY_DIR/remote.sh" deploy 2>&1 | tee "$WORK/first-deploy.log"
@@ -78,6 +93,10 @@ if grep -qF "$kms" "$WORK/first-deploy.log"; then echo "DS_KMS_KEY leaked into t
 vps sh -c 'test "$(stat -c %a /opt/datascratch/.env)" = 600'
 vps test -f /etc/cron.d/datascratch-backup
 first="$(secrets_hash)"
+
+step "address: the secret wins; without it the server keeps its domain (no settings needed)"
+[ "$(address env DS_DOMAIN_SECRET=notes.example.org)" = "notes.example.org" ]
+[ "$(address)" = "localhost" ]
 
 step "second deploy (idempotent bootstrap, secrets kept)"
 DS_HOST_MODE=fresh DS_TAG=e2e2 "$DEPLOY_DIR/remote.sh" deploy

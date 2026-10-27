@@ -145,6 +145,12 @@ DSCore
   `argon2id13`, `3 ≤ ops ≤ 10`, `64 MiB ≤ mem ≤ 256 MiB`), иначе `CryptoError.unsafeKDF` —
   враждебный сервер не может удешевить `loginKey` для перебора пароля.
 - Пути REST: id в пути — только буквы, цифры, `-`, `_` (`UnsafePathError`, запрос не уходит).
+- Отзыв устройства (D-53): `401` с `error.code == "device_revoked"` (в том числе на
+  `/auth/refresh`) → `DeviceRevokedError(reason:)`, один раз `APIClient.setDeviceRevokedHandler`,
+  `api.revocation`; без повторов и обновления токена. Разбор ответов — `APIFailure.classify`
+  (векторы `api/failures.json`): истёкший токен, страница прокси с 401, 502–504 без нашего тела
+  и отсутствие ответа отзывом не считаются никогда. Причина: `user`, `password_change`,
+  `recovery`, `token_reuse`, `account_deleted`; неизвестная или без причины → `user`.
 - `SignupMaterial.make(password:userId:)`, `PasswordChangeMaterial.make(...)` — всё для
   `/auth/signup`, `/auth/password`, `/auth/recovery/finish`.
 - `KeyRing(store:)` — иерархия ключей: мастер-ключ, ключи блокнотов (в `SecretStore`),
@@ -309,6 +315,11 @@ keep-alive), новых TLS-рукопожатий меньше; `waitsForConnec
   восстанавливается сразу. `reconnectNow()` (сеть вернулась) не ждёт текущую задержку.
   `rate_limited` с `retryAfterMs` (sync-protocol §7): ни переподключения, ни повторной отправки
   раньше этого срока. `subscribe` — до 1000 документов без повторов `docId` (движок шлёт пачки по 100).
+- Отзыв устройства (D-53): кадр `error` с `code: "device_revoked"` и/или закрытие с кодом 4410
+  (причина — из кадра, иначе из причины закрытия, иначе `user`) → `SyncConnectionState.revoked`,
+  `SyncStatus.revoked`, один раз `SyncEngine.setDeviceRevokedHandler`; без переподключения, очередь
+  отправки больше не отправляется. `unauthorized`/4401 и обрыв связи — обычное переподключение.
+  Стирание данных — в приложении.
 - Пульс: пинг каждые 25 с (`pingInterval`), нет понга за 10 с (`pongTimeout`) — соединение
   умерло молча (приложение было приостановлено, сменилась сеть, истекла запись NAT): оно
   закрывается, новое подписывается с `lastSeq` и догоняет пропущенное. Раньше ошибка пинга

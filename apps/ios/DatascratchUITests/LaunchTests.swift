@@ -444,6 +444,8 @@ final class LibraryUITests: XCTestCase {
         let app = launchSignedIn(Self.extendedMode)
         // A tab in «Personal»; first-run seeding starred the welcome note there.
         try openNewNoteInNativeEditor(app)
+        // Written in, so leaving it keeps the note (an empty new note is dropped).
+        app.typeText("Tab note")
         let switcher = app.descendants(matching: .any)["sidebar.spaceSwitcher"].firstMatch
         // iPhone: choosing a space shows its documents; come back to the sidebar each time.
         func showSidebar() {
@@ -1005,8 +1007,14 @@ final class LibraryUITests: XCTestCase {
         allTags.tap()
         let tag = app.descendants(matching: .any).matching(identifier: "allTags.tag").firstMatch
         XCTAssertTrue(tag.waitForExistence(timeout: 5), "«All Tags» lists no tags")
-        XCTAssertGreaterThanOrEqual(app.descendants(matching: .any).matching(identifier: "allTags.tag").count, 10,
-                                    "«All Tags» is missing tags (parents and children)")
+        // The list is lazy (only rows on screen exist): search finds a nested tag.
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 3), "no search in «All Tags»")
+        search.tap()
+        search.typeText("group/child7")
+        let nested = app.descendants(matching: .any).matching(identifier: "allTags.tag").firstMatch
+        XCTAssertTrue(nested.waitForExistence(timeout: 3) && nested.label.contains("group/child7"),
+                      "«All Tags» does not list the nested tag; first: \(nested.label)")
     }
 
     /// D-51: by default the app is notes only — no Tasks, Calendar or tabs, and opening a note
@@ -1021,6 +1029,13 @@ final class LibraryUITests: XCTestCase {
         try openNewNoteInNativeEditor(app)
         // Something in it, so leaving does not drop it (an empty new note is not kept).
         app.typeText("Kept")
+        // iPhone: back from the document and the list to the sidebar.
+        let allRow = app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch
+        for _ in 0..<3 where !(allRow.exists && allRow.isHittable) {
+            let back = app.navigationBars.buttons.firstMatch
+            if back.exists { back.tap() }
+            settle(1)
+        }
         let again = sidebarElement(app, "sidebar.allDocuments")
         XCTAssertTrue(again.exists, "the sidebar did not come back; buttons: \(Self.buttons(app))")
         XCTAssertFalse(app.descendants(matching: .any)["sidebar.tab"].firstMatch.exists, "opening a note made a tab")

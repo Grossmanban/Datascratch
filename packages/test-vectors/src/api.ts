@@ -246,6 +246,195 @@ export function apiVectors() {
           },
         ],
       },
+      boxKey: {
+        valid: [{ publicKey: KEY, wrappedSecretKey: "AQ" }],
+        invalid: [
+          { reason: "short public key", body: { publicKey: "AAAA", wrappedSecretKey: "AQ" } },
+        ],
+      },
+      createInvitationRequest: {
+        valid: [
+          {
+            invitationId: ID,
+            target: { kind: "notebook", id: vid(3) },
+            email: "A@B.co",
+            role: "editor",
+          },
+          {
+            invitationId: ID,
+            target: { kind: "note", id: vid(3) },
+            email: "a@b.co",
+            role: "viewer",
+          },
+        ],
+        invalid: [
+          {
+            reason: "unknown role",
+            body: {
+              invitationId: ID,
+              target: { kind: "notebook", id: vid(3) },
+              email: "a@b.co",
+              role: "admin",
+            },
+          },
+          {
+            reason: "spaces cannot be shared",
+            body: {
+              invitationId: ID,
+              target: { kind: "space", id: vid(3) },
+              email: "a@b.co",
+              role: "viewer",
+            },
+          },
+        ],
+      },
+      incomingInvitation: {
+        valid: [
+          {
+            id: ID,
+            target: { kind: "notebook", id: vid(3) },
+            from: { userId: vid(4), email: "owner@b.co" },
+            role: "viewer",
+            createdAt: T,
+            expiresAt: T,
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing from",
+            body: {
+              id: ID,
+              target: { kind: "notebook", id: vid(3) },
+              role: "viewer",
+              createdAt: T,
+              expiresAt: T,
+            },
+          },
+        ],
+      },
+      member: {
+        valid: [
+          {
+            userId: vid(4),
+            email: "m@b.co",
+            role: "editor",
+            status: "awaiting_key",
+            joinedAt: T,
+            accountCreatedAfterInvite: true,
+          },
+        ],
+        invalid: [
+          {
+            reason: "unknown status",
+            body: {
+              userId: vid(4),
+              email: "m@b.co",
+              role: "editor",
+              status: "left",
+              joinedAt: T,
+              accountCreatedAfterInvite: false,
+            },
+          },
+        ],
+      },
+      putMemberKeyRequest: {
+        valid: [{ version: 1, wrappedKey: "AQ" }],
+        invalid: [{ reason: "version 0", body: { version: 0, wrappedKey: "AQ" } }],
+      },
+      rotateKeyRequest: {
+        valid: [
+          {
+            version: 2,
+            ownerWrappedKey: "AQ",
+            previousKeyWrap: "AQ",
+            memberKeys: [{ userId: vid(4), wrappedKey: "AQ" }],
+          },
+          {
+            version: 3,
+            ownerWrappedKey: "AQ",
+            previousKeyWrap: "AQ",
+            memberKeys: [],
+            notebookKey: KEY,
+          },
+        ],
+        invalid: [
+          {
+            reason: "rotation must produce version ≥ 2",
+            body: { version: 1, ownerWrappedKey: "AQ", previousKeyWrap: "AQ", memberKeys: [] },
+          },
+          {
+            reason: "duplicate member",
+            body: {
+              version: 2,
+              ownerWrappedKey: "AQ",
+              previousKeyWrap: "AQ",
+              memberKeys: [
+                { userId: vid(4), wrappedKey: "AQ" },
+                { userId: vid(4), wrappedKey: "AQ" },
+              ],
+            },
+          },
+        ],
+      },
+      sharedItem: {
+        valid: [
+          {
+            target: { kind: "notebook", id: vid(3) },
+            owner: { userId: vid(4), email: "owner@b.co", publicKey: KEY },
+            role: "editor",
+            keyVersion: 2,
+            wrappedKey: "AQ",
+            keyChain: ["AQ"],
+            docIds: [vid(3), vid(5)],
+            addedAt: T,
+          },
+          {
+            target: { kind: "note", id: vid(5) },
+            owner: { userId: vid(4), email: "owner@b.co", publicKey: KEY },
+            role: "viewer",
+            keyVersion: 1,
+            wrappedKey: null,
+            keyChain: [],
+            docIds: [vid(5)],
+            addedAt: T,
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing owner public key",
+            body: {
+              target: { kind: "note", id: vid(5) },
+              owner: { userId: vid(4), email: "o@b.co" },
+              role: "viewer",
+              keyVersion: 1,
+              wrappedKey: null,
+              keyChain: [],
+              docIds: [],
+              addedAt: T,
+            },
+          },
+        ],
+      },
+      docVersion: {
+        valid: [
+          { seq: 3, createdAt: T, deviceId: "dev-1" },
+          {
+            seq: 9,
+            createdAt: T,
+            deviceId: "dev-1",
+            authors: [
+              { kind: "user", userId: vid(4) },
+              { kind: "agent", tokenId: "tok-1" },
+            ],
+          },
+        ],
+        invalid: [
+          {
+            reason: "author without kind",
+            body: { seq: 9, createdAt: T, deviceId: "d", authors: [{ userId: vid(4) }] },
+          },
+        ],
+      },
       apiError: {
         valid: [
           { error: { code: "conflict", message: "id exists with different content" } },

@@ -14,7 +14,14 @@ import { b64 } from '../lib/encoding.js';
 export const id = () => uuidSchema;
 
 export const ErrorBody = z
-  .object({ error: z.object({ code: z.string(), message: z.string() }) })
+  .object({
+    error: z.object({
+      code: z.string(),
+      message: z.string(),
+      reason: z.string().optional(),
+      retryAfterMs: z.number().int().nonnegative().optional(),
+    }),
+  })
   .meta({ id: 'Error' });
 
 export const Kdf = kdfParamsSchema.meta({ id: 'Kdf' });

@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "description": "Account sharing (crypto.md §10, D-54). Key pairs: crypto_box_seed_keypair(seed). memberWrapKey = crypto_generichash(32, 'ds1|member-wrap', key = crypto_box_beforenm(peerPk, mySk)) — equal from both sides. Envelopes use the fixed nonces given (never in production). keyChain[i] wraps the key of version (current - i - 1) with the key of version (current - i). Safety code: 6 groups of 5 digits.",
+  "accounts": {
+    "owner": {
+      "userId": "0192f3c4-0000-7000-8000-000000000065",
+      "seed": "0adac189bb3d0aa0ea3eec7d17e0dbe8e3c792b6502a6e968436133e94396950",
+      "publicKey": "073f3a4ad061b70e9d92e61328c21fde5fe68053721c174c48df434c35f6707c",
+      "secretKey": "6801e747ab309c21134961c436472bc0effa8ce22711493d69728b34d5e0eeab",
+      "masterKey": "51dfddafc306ac700aa538d299c2385091b88ca1cf6407eb42a87cc412cbc7d3",
+      "wrapNonce": "3f823f53e2d771f3a21a539f49f65cbd440559fa55d7cdd5",
+      "wrappedSecretKey": "AT-CP1Pi13HzohpTn0n2XL1EBVn6VdfN1cYZh5d07dAfrdwfnelq3k71v_KIKDchcFw9Gp4m0E-R3rCEtGtheDtKy3U0fWFu8g",
+      "ad": "ds1|key|account-box|0192f3c4-0000-7000-8000-000000000065"
+    },
+    "member": {
+      "userId": "0192f3c4-0000-7000-8000-000000000066",
+      "seed": "0800fbecae7c9bf78743aaf9409a9c8ccd814d00a5de151cec49e9d506711261",
+      "publicKey": "49eb01545590ff18712be0c5b423e2233e0020f1870112790da3497cce7a3e11",
+      "secretKey": "f4cff92bdb84da87c426c4b7c1e7b8d316322fb185e48c8d7f057d13c6ce4256"
+    }
+  },
+  "memberWrapKey": "3fe4971d1591e01f298f57d80b9082223e86ad52a57051bc1743866d2cafc7eb",
+  "notebook": {
+    "notebookId": "0192f3c4-0000-7000-8000-000000000067",
+    "keys": [
+      {
+        "version": 1,
+        "key": "fd1940a0e4dea3136ad2a16430e240086ef55f33e89d60f8da2264bb778a395b"
+      },
+      {
+        "version": 2,
+        "key": "849262bfe1ffc0e4f94ed07900bbc5619205794e2ca6c8f3021783ceff23ada9"
+      },
+      {
+        "version": 3,
+        "key": "902ad5724e0466a4f941b639f99965834323d0f570d70a81215cd4a900a87e75"
+      }
+    ],
+    "ownerWrap": {
+      "version": 3,
+      "ad": "ds1|key|notebook|0192f3c4-0000-7000-8000-000000000067|3",
+      "nonce": "29b46b1080c1f27329035f23e2b45fae55d5fd726a6016bb",
+      "wrappedKey": "ASm0axCAwfJzKQNfI-K0X65V1f1yamAWu2JUo7kG0Fip1rZoiC_wz8MTSg8PjvvFbZLMi6y4mb7kf9a3Lfd-OhLktY4nlCEwxQ"
+    },
+    "legacyAdVersion1": "ds1|key|notebook|0192f3c4-0000-7000-8000-000000000067",
+    "memberWrap": {
+      "kind": "notebook",
+      "targetId": "0192f3c4-0000-7000-8000-000000000067",
+      "version": 3,
+      "fromUserId": "0192f3c4-0000-7000-8000-000000000065",
+      "toUserId": "0192f3c4-0000-7000-8000-000000000066",
+      "ad": "ds1|key|member|notebook|0192f3c4-0000-7000-8000-000000000067|3|0192f3c4-0000-7000-8000-000000000065|0192f3c4-0000-7000-8000-000000000066",
+      "nonce": "68b7ea213ea29d19922774ab4fa524d986e645fb3af7a5e4",
+      "wrappedKey": "AWi36iE-op0Zkid0q0-lJNmG5kX7Ovel5Gimemti1DKhmj-jRyq8X9rUY2yqGRxzRtelGM-72eUpmmT2diC6txbStFNIZp8Gsw"
+    },
+    "keyChain": [
+      "AQpL82LodZYThSnBHLkxlmrsPsKJlvcGCO-46Pahg8rha_Tdax43rIduHbV9ELOIu1CtzVTGGdujRr2IX2DbIS0HwlB-GCyqUQ",
+      "ARZVohE3Jnrdf0LLvbSg4rFaeAoDJm9X1DqvKO3fB7nABjR1425TA8jHjPrMlAGRGMxhNfm-MwRCCRsdMtbe02q07A1DEg6Vjg"
+    ],
+    "keyChainAds": [
+      "ds1|key|prev|notebook|0192f3c4-0000-7000-8000-000000000067|3",
+      "ds1|key|prev|notebook|0192f3c4-0000-7000-8000-000000000067|2"
+    ]
+  },
+  "note": {
+    "noteId": "0192f3c4-0000-7000-8000-000000000068",
+    "keys": [
+      {
+        "version": 1,
+        "key": "6e9df14f5b5bbd2d57aca10a5526c6b0e0470122ecadf80987cc732b0d37a0d2"
+      },
+      {
+        "version": 2,
+        "key": "b563c6ebde446b670b3541452938e0f593990b8c7a1d209540a3d9d0ac82d0a6"
+      }
+    ],
+    "wrappedByNotebookKey": {
+      "version": 2,
+      "ad": "ds1|key|note|0192f3c4-0000-7000-8000-000000000068|2",
+      "nonce": "44e0153accb0068307531f9337cba5ed5e7eb4230ca5832b",
+      "wrappedKey": "AUTgFTrMsAaDB1MfkzfLpe1efrQjDKWDK_PC2WOnaGgZP_HCQ6n8pmot_NadxuyMCTb6wD_rnxhytXWGCnJOx4QTWaw7PbxfMw"
+    },
+    "keyChain": [
+      "AbKaHaAQHo9X_uyUY_yCHDkbKnd_-6WImpj5eaCjDuGQCulvW2EnPl7M0nREIbD8bWzcebS8lvHOpqIgHiIcA4Y61ronVyYc2A"
+    ],
+    "memberWrap": {
+      "kind": "note",
+      "targetId": "0192f3c4-0000-7000-8000-000000000068",
+      "version": 2,
+      "fromUserId": "0192f3c4-0000-7000-8000-000000000065",
+      "toUserId": "0192f3c4-0000-7000-8000-000000000066",
+      "ad": "ds1|key|member|note|0192f3c4-0000-7000-8000-000000000068|2|0192f3c4-0000-7000-8000-000000000065|0192f3c4-0000-7000-8000-000000000066",
+      "nonce": "49b65b378c21bb2e15c7c90eb4d50d907ed8fa5a5460c79f",
+      "wrappedKey": "AUm2WzeMIbsuFcfJDrTVDZB-2PpaVGDHn3CvJKBxb5tCFpLrW5sTkwpVKXq-O56eQnjhFnjwHfsuW1paqfGXT3rTut77WYuGIg"
+    }
+  },
+  "safetyCode": "73664 01722 46372 15681 29518 00880",
+  "invalid": [
+    {
+      "reason": "member wrap opened with the ad of another version",
+      "ad": "ds1|key|member|notebook|0192f3c4-0000-7000-8000-000000000067|2|0192f3c4-0000-7000-8000-000000000065|0192f3c4-0000-7000-8000-000000000066"
+    },
+    {
+      "reason": "member wrap opened with owner and member swapped in the ad",
+      "ad": "ds1|key|member|notebook|0192f3c4-0000-7000-8000-000000000067|3|0192f3c4-0000-7000-8000-000000000066|0192f3c4-0000-7000-8000-000000000065"
+    }
+  ]
+}

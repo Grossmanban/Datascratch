@@ -116,8 +116,7 @@ struct CoverMenuItems: View {
     }
 
     private func paste() {
-        guard let data = UIPasteboard.general.image.flatMap({ CoverImages.jpeg($0, maxPixels: CoverImages.maxCoverPixels, quality: 0.9) })
-        else { return }
+        guard let data = CoverImages.pastedImageData() else { return }
         CoverPickers.apply(data, noteId: note.id, app: app)
     }
 }

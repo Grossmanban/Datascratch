@@ -8,6 +8,7 @@ import { docs } from '../src/db/schema.js';
 import { AD, open, seal } from '../src/lib/sodium.js';
 import type { AgentGrant, AgentsContext } from '../src/plugins/agents-context.js';
 import { createAgentsContext } from '../src/plugins/loader.js';
+import { runCleanup } from '../src/jobs/index.js';
 import {
   SyncClient,
   api,
@@ -313,6 +314,32 @@ describe('data source', () => {
     expect(Buffer.from(key).equals(Buffer.from(a.noteKey))).toBe(true);
     expect((await load(a.noteId)).getText('t').toString()).toBe('from user');
     for (const x of [a, b, c]) x.client.close();
+  });
+
+  it('removes OAuth clients nobody granted access to after a day (security audit 3)', async () => {
+    const { notebookId, client } = await setupNotebook();
+    const old = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    const mk = (clientId: string, createdAt: string) => ({
+      clientId,
+      clientSecretHash: null,
+      clientName: 'x',
+      clientUri: null,
+      logoUri: null,
+      redirectUris: ['https://a.example/cb'],
+      tokenEndpointAuthMethod: 'none' as const,
+      registration: 'dcr' as const,
+      createdAt,
+    });
+    const [unused, used, fresh] = [newId(), newId(), newId()];
+    await agents.store.upsertClient(mk(unused, old));
+    await agents.store.upsertClient(mk(used, old));
+    await agents.store.upsertClient(mk(fresh, new Date().toISOString()));
+    await agents.store.insertGrant(grant([notebookId], 'read', { kind: 'oauth', clientId: used }));
+    await runCleanup(s.ctx);
+    expect(await agents.store.getClient(unused)).toBeNull();
+    expect(await agents.store.getClient(used)).not.toBeNull();
+    expect(await agents.store.getClient(fresh)).not.toBeNull();
+    client.close();
   });
 
   it('decrypts image attachments', async () => {

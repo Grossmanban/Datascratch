@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 import { withAgentScope } from '../src/db/client.js';
 import { docs } from '../src/db/schema.js';
@@ -328,6 +328,17 @@ describe('data source', () => {
     await api(s, 'PUT', `/attachments/${attachmentId}/chunks/0`, { token: t, binary: Buffer.from(chunk) });
     const out = await agents.data.loadAttachmentImage!(u.userId, attachmentId);
     expect(Buffer.from(out!).equals(img)).toBe(true);
+    // Above AGENT_IMAGE_MAX_BYTES nothing is read or decrypted (security audit 2026-10-27).
+    const limit = s.ctx.config.AGENT_IMAGE_MAX_BYTES;
+    s.ctx.config.AGENT_IMAGE_MAX_BYTES = 1000;
+    try {
+      const get = vi.spyOn(s.ctx.storage, 'get');
+      expect(await agents.data.loadAttachmentImage!(u.userId, attachmentId)).toBeNull();
+      expect(get).not.toHaveBeenCalled();
+      get.mockRestore();
+    } finally {
+      s.ctx.config.AGENT_IMAGE_MAX_BYTES = limit;
+    }
     void notebookId;
     client.close();
   });

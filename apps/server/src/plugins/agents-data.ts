@@ -261,25 +261,37 @@ export class PgAgentDataSource implements AgentDataSource {
     });
   }
 
+  /**
+   * An image attachment, decrypted, for rendering to an agent. Access is checked inside the
+   * agent's RLS scope; the blobs are read and decrypted after it (not holding a pooled
+   * connection), and only up to AGENT_IMAGE_MAX_BYTES.
+   */
   async loadAttachmentImage(userId: string, attachmentId: string, grantId?: string) {
-    return this.#scope(userId, grantId, async (tx) => {
+    const found = await this.#scope(userId, grantId, async (tx) => {
       const [a] = await tx.select().from(attachments).where(eq(attachments.id, attachmentId));
       if (!a || !a.mime.startsWith('image/')) return null;
+      if (a.size > this.ctx.config.AGENT_IMAGE_MAX_BYTES) return null;
       const dk = await this.#docAndKey(tx, a.noteId);
       if (!dk) return null;
       const chunks = await tx
-        .select()
+        .select({ index: attachmentChunks.index })
         .from(attachmentChunks)
         .where(eq(attachmentChunks.attachmentId, a.id))
         .orderBy(asc(attachmentChunks.index));
       if (chunks.length !== a.chunkCount) return null;
-      const parts: Uint8Array[] = [];
-      for (const c of chunks) {
-        const blob = await this.ctx.storage.get(chunkKey(a.id, c.index));
-        if (!blob) return null;
-        parts.push(await open(dk.key, blob, AD.attachment(a.id, c.index, c.index === a.chunkCount - 1)));
-      }
-      return Buffer.concat(parts);
+      return { a, key: dk.key };
     });
+    if (!found) return null;
+    const { a, key } = found;
+    const parts: Uint8Array[] = [];
+    let total = 0;
+    for (let index = 0; index < a.chunkCount; index++) {
+      const blob = await this.ctx.storage.get(chunkKey(a.id, index));
+      if (!blob) return null;
+      total += blob.length;
+      if (total > this.ctx.config.AGENT_IMAGE_MAX_BYTES + a.chunkCount * 64) return null;
+      parts.push(await open(key, blob, AD.attachment(a.id, index, index === a.chunkCount - 1)));
+    }
+    return Buffer.concat(parts);
   }
 }

@@ -48,7 +48,7 @@ public enum MarkdownImport {
             if t.hasPrefix("```") || t.hasPrefix("~~~") || t == "$$" { score += 2 }
             if t.range(of: #"^(\*\s*){3,}$|^(-\s*){3,}$|^(_\s*){3,}$"#, options: .regularExpression) != nil { score += 1 }
             if i + 1 < lines.count, t.contains("|"), MarkdownBlockParser.isDelimiterRow(lines[i + 1]) { score += 3 }
-            if t.range(of: #"\*\*[^*\s][^*]*\*\*|__[^_\s][^_]*__|~~[^~\s][^~]*~~|`[^`\s][^`]*`|\[[^\]]+\]\((https?:|mailto:)[^)]+\)"#,
+            if t.range(of: #"\*\*[^*\s][^*]*\*\*|__[^_\s][^_]*__|~~[^~\s][^~]*~~|`[^`\s][^`]*`|==[^=\s][^=]*==|\[[^\]]+\]\((https?:|mailto:)[^)]+\)"#,
                        options: .regularExpression) != nil { score += 1 }
         }
         return score >= 2

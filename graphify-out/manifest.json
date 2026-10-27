@@ -984,10 +984,10 @@
     "semantic_hash": "b94b2bdac92ca48dff93f0062e8f0b7a"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1793087381.31602,
-    "seen": 1793087500.2062778,
-    "ast_hash": "2c24cea63a0242537bd7242600874b30",
-    "semantic_hash": "2c24cea63a0242537bd7242600874b30"
+    "mtime": 1793088246.3732557,
+    "seen": 1793088440.9576926,
+    "ast_hash": "49e25c472b30f935cd5caee929a953f3",
+    "semantic_hash": "49e25c472b30f935cd5caee929a953f3"
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
     "mtime": 1793011608.2055936,
@@ -1038,10 +1038,10 @@
     "semantic_hash": "171b27f0ab878e7994e2250214074071"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorTextView.swift": {
-    "mtime": 1793087049.2239795,
-    "seen": 1793087264.1702409,
-    "ast_hash": "2981f387eebf9b2229f716d1e5499a32",
-    "semantic_hash": "2981f387eebf9b2229f716d1e5499a32"
+    "mtime": 1793088246.371326,
+    "seen": 1793088440.9577358,
+    "ast_hash": "66792ba5fb9a22a68f899b5043aa02ad",
+    "semantic_hash": "66792ba5fb9a22a68f899b5043aa02ad"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorTheme.swift": {
     "mtime": 1793043803.2727058,
@@ -1050,10 +1050,10 @@
     "semantic_hash": "ff372fbbcd56eb444ba92f26be7bdadc"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1793087362.3929465,
-    "seen": 1793087500.2063057,
-    "ast_hash": "cfaf5a7752def152b1b8faa08fc7f085",
-    "semantic_hash": "cfaf5a7752def152b1b8faa08fc7f085"
+    "mtime": 1793088176.2759101,
+    "seen": 1793088440.957745,
+    "ast_hash": "d2e759bb408fb0b38917b72d51010e36",
+    "semantic_hash": "d2e759bb408fb0b38917b72d51010e36"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormatMenu.swift": {
     "mtime": 1793011531.6864011,
@@ -4710,10 +4710,10 @@
     "semantic_hash": "7de253f465da0a90057780f1b151d4db"
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1793087395.5885777,
-    "seen": 1793087500.2084785,
-    "ast_hash": "8ca821c32f11a659b019db8c5c9ed7b7",
-    "semantic_hash": "8ca821c32f11a659b019db8c5c9ed7b7"
+    "mtime": 1793088266.7907455,
+    "seen": 1793088440.9608777,
+    "ast_hash": "ef6927fd70a030abd5eee13663d9e638",
+    "semantic_hash": "ef6927fd70a030abd5eee13663d9e638"
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1793084705.4194863,
@@ -5320,5 +5320,29 @@
     "seen": 1793087019.417264,
     "ast_hash": "1823a7b6a71d251c26f3d9a43054f1e6",
     "semantic_hash": "1823a7b6a71d251c26f3d9a43054f1e6"
+  },
+  "apps/ios/Packages/DSEditor/Sources/DSEditorModel/EditorCommands+Paste.swift": {
+    "mtime": 1793088063.1049552,
+    "seen": 1793088440.9578633,
+    "ast_hash": "37c0a4bffdf9ca290826df7f863dbdf1",
+    "semantic_hash": "37c0a4bffdf9ca290826df7f863dbdf1"
+  },
+  "apps/ios/Packages/DSEditor/Sources/DSEditorModel/HTMLImport.swift": {
+    "mtime": 1793088019.172486,
+    "seen": 1793088440.9578826,
+    "ast_hash": "8a070a4f627faa0c699fe3856b229e69",
+    "semantic_hash": "8a070a4f627faa0c699fe3856b229e69"
+  },
+  "apps/ios/Packages/DSEditor/Sources/DSEditorModel/MarkdownImport.swift": {
+    "mtime": 1793087873.07751,
+    "seen": 1793088440.9578955,
+    "ast_hash": "53d6d9007dd6b55dab2c7aa07f53a913",
+    "semantic_hash": "53d6d9007dd6b55dab2c7aa07f53a913"
+  },
+  "apps/ios/Packages/DSEditor/Tests/DSEditorModelTests/PasteImportTests.swift": {
+    "mtime": 1793088104.5061014,
+    "seen": 1793088440.9579976,
+    "ast_hash": "7b9d53163360170a63a068f74f0dd43d",
+    "semantic_hash": "7b9d53163360170a63a068f74f0dd43d"
   }
 }

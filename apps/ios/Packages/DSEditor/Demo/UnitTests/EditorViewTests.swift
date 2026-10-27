@@ -1420,14 +1420,14 @@ final class EditorViewTests: XCTestCase {
         UIPasteboard.general.items = []
     }
 
-    /// In the title only the plain first line goes in; «Вставить без форматирования» pastes text.
+    /// In the title only plain text goes in, on one line; «Вставить без форматирования» pastes text.
     func testPasteInTheTitleAndPlainPaste() throws {
         let doc = InMemoryEditorDocument(blocks: [.title(""), .paragraph("")])
         let editor = host(doc)
         editor.textView.selectedRange = NSRange(location: 0, length: 0)
         putHTML("<h1>Большой заголовок</h1><p>и текст</p>", plain: "Большой заголовок\nи текст")
         editor.textView.paste(nil)
-        XCTAssertEqual(doc.blocks[0].plainText, "Большой заголовок")
+        XCTAssertEqual(doc.blocks[0].plainText, "Большой заголовок и текст", "the title is one line")
         XCTAssertEqual(doc.blocks.count, 2)
         editor.textView.selectedRange = NSRange(location: editor.textView.textStorage.length, length: 0)
         editor.textView.pasteWithoutFormatting(nil)

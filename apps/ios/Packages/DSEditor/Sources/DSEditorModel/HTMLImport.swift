@@ -247,7 +247,23 @@ struct HTMLMapper {
                 run = []
             }
         }
-        for node in nodes {
+        var k = 0
+        while k < nodes.count {
+            let node = nodes[k]
+            // Word lists are paragraphs with `mso-list` in their style.
+            if Self.isWordListItem(node) {
+                flush(&self)
+                var group: [HTMLNode] = []
+                while k < nodes.count {
+                    let n = nodes[k]
+                    if Self.isWordListItem(n) { group.append(n); k += 1; continue }
+                    if n.isText, n.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { k += 1; continue }
+                    break
+                }
+                out.append(contentsOf: wordList(group))
+                continue
+            }
+            k += 1
             if node.isText || !isBlock(node) {
                 run.append(node)
                 continue
@@ -257,6 +273,68 @@ struct HTMLMapper {
         }
         flush(&self)
         return out
+    }
+
+    static func isWordListItem(_ node: HTMLNode) -> Bool {
+        node.tag == "p" && (node.style["mso-list"].map { $0 != "ignore" } ?? false)
+    }
+
+    /// Word list paragraphs → nested lists: the level from `mso-list: l0 level2`, numbered when
+    /// the marker Word drew is a number or letter («1.», «a)»), bulleted otherwise («·», «o», «§»).
+    private mutating func wordList(_ ps: [HTMLNode]) -> [BlockNode] {
+        typealias Entry = (level: Int, ordered: Bool, inline: [InlineElement])
+        let entries: [Entry] = ps.map { p in
+            let spec = p.style["mso-list"] ?? ""
+            let level = spec.range(of: #"level(\d+)"#, options: .regularExpression)
+                .flatMap { Int(spec[$0].dropFirst(5)) } ?? 1
+            let marker = Self.wordMarker(in: p)?.textContent.replacingOccurrences(of: "\u{00A0}", with: " ")
+                .trimmingCharacters(in: .whitespaces) ?? ""
+            let ordered = marker.range(of: #"^[0-9A-Za-z]{1,4}[.)]$"#, options: .regularExpression) != nil
+            return (level, ordered, inline(p.children, marks: .empty).trimmed())
+        }
+        func build(_ i: inout Int, level: Int) -> [BlockNode] {
+            var lists: [BlockNode] = []
+            var items: [BlockNode] = []
+            var ordered: Bool?
+            func flush() {
+                guard let o = ordered, !items.isEmpty else { return }
+                lists.append(o ? BlockNode(type: NodeType.orderedList, attrs: ["start": 1], children: items)
+                               : BlockNode(type: NodeType.bulletList, children: items))
+                items = []
+            }
+            while i < entries.count, entries[i].level >= level {
+                if entries[i].level > level {
+                    let nested = build(&i, level: entries[i].level)
+                    if var last = items.popLast() {
+                        last.children.append(contentsOf: nested)
+                        items.append(last)
+                    } else {
+                        items.append(BlockNode(type: NodeType.listItem, children: [.paragraph()] + nested))
+                    }
+                    continue
+                }
+                let e = entries[i]
+                if let o = ordered, o != e.ordered { flush() }
+                ordered = e.ordered
+                items.append(BlockNode(type: NodeType.listItem, children: [.paragraph(e.inline)]))
+                i += 1
+            }
+            flush()
+            return lists
+        }
+        var i = 0
+        var out: [BlockNode] = []
+        while i < entries.count { out.append(contentsOf: build(&i, level: entries[i].level)) }
+        return out
+    }
+
+    /// The marker Word drew for a list paragraph (`<span style="mso-list:Ignore">`).
+    static func wordMarker(in node: HTMLNode) -> HTMLNode? {
+        for c in node.children where !c.isText {
+            if c.style["mso-list"] == "ignore" { return c }
+            if let f = wordMarker(in: c) { return f }
+        }
+        return nil
     }
 
     /// A node that starts its own block (a div holding only inline content still does).
@@ -286,6 +364,16 @@ struct HTMLMapper {
             return [BlockNode(type: NodeType.horizontalRule, attrs: ["style": "line"])]
         case "img":
             return image(node).map { [$0] } ?? []
+        case "figure":
+            // An image with its caption.
+            if let img = Self.first("img", in: node), var block = image(img) {
+                if let caption = node.children.first(where: { $0.tag == "figcaption" })?.textContent
+                    .trimmingCharacters(in: .whitespacesAndNewlines), !caption.isEmpty {
+                    block.attrs["caption"] = .string(caption)
+                }
+                return [block]
+            }
+            return blocks(node.children)
         case "pre":
             let code = node.children.first { $0.tag == "code" }
             let language = (code?.attrs["class"] ?? node.attrs["class"] ?? "")
@@ -347,6 +435,20 @@ struct HTMLMapper {
                                                       "alt": alt.isEmpty ? .null : .string(alt)])
     }
 
+    static func first(_ tag: String, in node: HTMLNode) -> HTMLNode? {
+        for c in node.children {
+            if c.tag == tag { return c }
+            if let f = first(tag, in: c) { return f }
+        }
+        return nil
+    }
+
+    /// Whether an `<img>` is skipped entirely: local Word paths (`file:`, `cid:`) cannot be read.
+    static func isUnreadable(_ node: HTMLNode) -> Bool {
+        let src = (node.attrs["src"] ?? "").lowercased()
+        return src.hasPrefix("file:") || src.hasPrefix("cid:")
+    }
+
     private func imageSource(_ node: HTMLNode) -> PastedImage.Source? {
         guard let src = node.attrs["src"]?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
         if src.hasPrefix("data:image/"), let comma = src.firstIndex(of: ","), src[..<comma].hasSuffix(";base64"),
@@ -365,7 +467,9 @@ struct HTMLMapper {
         let items = explicit ?? node.children.filter { $0.tag == "li" }
         var out: [BlockNode] = []
         var run: [BlockNode] = []
-        var runTask = false
+        // A list is a task list when every item has a checkbox (GitHub, Notion, Notes).
+        let boxes = items.map { Self.checkbox(in: $0) }
+        let runTask = !items.isEmpty && boxes.allSatisfy { $0 != nil }
         func flush() {
             guard !run.isEmpty else { return }
             if runTask { out.append(BlockNode(type: NodeType.taskList, children: run)) }
@@ -373,14 +477,10 @@ struct HTMLMapper {
             else { out.append(BlockNode(type: NodeType.bulletList, children: run)) }
             run = []
         }
-        for li in items {
-            let box = Self.checkbox(in: li)
-            let isTask = box != nil
-            if !run.isEmpty, isTask != runTask { flush() }
-            runTask = isTask
+        for (li, box) in zip(items, boxes) {
             var children = blocks(li.children)
             if children.first?.type != NodeType.paragraph { children.insert(.paragraph(), at: 0) }
-            if let checked = box {
+            if runTask, let checked = box {
                 run.append(BlockNode(type: NodeType.taskItem,
                                      attrs: ["taskId": .string(UUIDv7.generate()), "state": .string(checked ? "done" : "open")],
                                      children: children))
@@ -431,7 +531,9 @@ struct HTMLMapper {
             return BlockNode(type: NodeType.tableRow, children: cells.map { cell in
                 var attrs: [String: JSONValue] = ["colspan": .number(Double(Int(cell.attrs["colspan"] ?? "") ?? 1)),
                                                   "rowspan": .number(Double(Int(cell.attrs["rowspan"] ?? "") ?? 1))]
-                let align = (cell.attrs["align"] ?? cell.style["text-align"])?.lowercased()
+                let paragraphsAlign = cell.children.filter { !$0.isText }.compactMap { $0.attrs["align"] ?? $0.style["text-align"] }
+                let common = paragraphsAlign.isEmpty || Set(paragraphsAlign).count > 1 ? nil : paragraphsAlign.first
+                let align = (cell.attrs["align"] ?? cell.style["text-align"] ?? common)?.lowercased()
                 if let align, ["left", "center", "right"].contains(align) { attrs["align"] = .string(align) }
                 let inline = self.inline(cell.children, marks: .empty).trimmed()
                 return BlockNode(type: cell.tag == "th" || inHead ? NodeType.tableHeader : NodeType.tableCell, attrs: attrs,
@@ -508,10 +610,12 @@ struct HTMLMapper {
                 if imagesOut, let source = imageSource(node) {
                     images.append(PastedImage(source: source, alt: node.attrs["alt"] ?? ""))
                     out.append(.atom(InlineAtom(type: PasteFragment.pasteImageAttr, attrs: ["index": .number(Double(images.count - 1))]), marks))
-                } else if let alt = node.attrs["alt"], !alt.isEmpty {
+                } else if !Self.isUnreadable(node), let alt = node.attrs["alt"], !alt.isEmpty {
                     out.append(.text(alt, marks))
                 }
             case "input":
+                break
+            case _ where node.style["mso-list"] == "ignore":
                 break
             case "pre":
                 out.append(.text(node.textContent, marks.setting(MarkName.code, MarkSet.plain)))

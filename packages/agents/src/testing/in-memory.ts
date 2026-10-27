@@ -69,6 +69,13 @@ export class InMemoryAgentsStore implements AgentsStore {
   async deleteToken(tokenHash: string) {
     this.tokens.delete(tokenHash);
   }
+  async useRefreshToken(tokenHash: string) {
+    const t = this.tokens.get(tokenHash);
+    if (!t || (t.kind !== "refresh" && t.kind !== "refresh_used")) return null;
+    if (t.kind === "refresh_used") return { token: t, reused: true };
+    this.tokens.set(tokenHash, { ...t, kind: "refresh_used" });
+    return { token: t, reused: false };
+  }
   async deleteTokensOfGrant(grantId: string) {
     for (const [k, t] of this.tokens) if (t.grantId === grantId) this.tokens.delete(k);
   }

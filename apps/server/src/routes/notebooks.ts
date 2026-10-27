@@ -9,6 +9,7 @@ import { agentGrants, docSnapshots, docUpdates, docs, notebooks, shares, users }
 import { fromB64, safeEqual, toB64 } from '../lib/encoding.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { AD, open } from '../lib/sodium.js';
+import { noteKeyCache } from '../plugins/agent-key-cache.js';
 import { topics } from '../sync/hub.js';
 import { CLEANUP_JOB } from '../jobs/index.js';
 import { Key32, WrappedKey, errorResponses, id } from './schemas.js';
@@ -206,6 +207,8 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           .set({ mode, serverWrappedKey })
           .where(eq(notebooks.id, req.params.id))
           .returning();
+        // Keys decrypted for agents must not outlive agent mode (crypto.md §8).
+        noteKeyCache.forgetNotebooks([req.params.id]);
         return dto(nb!);
       },
     );
@@ -240,6 +243,7 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           return ids;
         });
         for (const d of gone) ctx.hub.publish(topics.doc(d), { type: 'doc_deleted', docId: d });
+        noteKeyCache.forgetNotebooks([nbId]);
         await ctx.jobs.enqueue(CLEANUP_JOB, {});
         return reply.code(204).send(null);
       },

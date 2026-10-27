@@ -316,6 +316,19 @@ describe('data source', () => {
     for (const x of [a, b, c]) x.client.close();
   });
 
+  it('rotates refresh tokens atomically: of two concurrent uses one wins, the other is reuse (security audit 6)', async () => {
+    const { notebookId, client } = await setupNotebook();
+    const g = grant([notebookId], 'read', { kind: 'oauth', clientId: 'c-rot' });
+    await agents.store.insertGrant(g);
+    const hash = rnd(32).toString('hex');
+    await agents.store.insertToken({ tokenHash: hash, kind: 'refresh', grantId: g.id, clientId: 'c-rot', scope: 'notes:read', resource: 'r', expiresAt: new Date(Date.now() + 3600_000).toISOString() });
+    const results = await Promise.all([agents.store.useRefreshToken(hash), agents.store.useRefreshToken(hash), agents.store.useRefreshToken(hash)]);
+    expect(results.map((r) => r?.reused).sort()).toEqual([false, true, true]);
+    expect((await agents.store.getToken(hash))?.kind).toBe('refresh_used');
+    expect(await agents.store.useRefreshToken('missing')).toBeNull();
+    client.close();
+  });
+
   it('removes OAuth clients nobody granted access to after a day (security audit 3)', async () => {
     const { notebookId, client } = await setupNotebook();
     const old = new Date(Date.now() - 2 * 86_400_000).toISOString();

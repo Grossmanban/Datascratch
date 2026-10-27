@@ -283,7 +283,7 @@ export const oauthTokens = pgTable(
   'oauth_tokens',
   {
     tokenHash: text('token_hash').primaryKey(),
-    kind: text('kind').$type<'access' | 'refresh'>().notNull(),
+    kind: text('kind').$type<'access' | 'refresh' | 'refresh_used'>().notNull(),
     grantId: text('grant_id')
       .notNull()
       .references(() => agentGrants.id, { onDelete: 'cascade' }),

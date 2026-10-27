@@ -187,7 +187,8 @@ export interface AuthorizationCode {
 
 export interface OAuthToken {
   tokenHash: string;
-  kind: "access" | "refresh";
+  /** `refresh_used`: a rotated refresh token, kept until it expires to detect reuse (RFC 9700 §4.14.2). */
+  kind: "access" | "refresh" | "refresh_used";
   grantId: string;
   clientId: string;
   scope: string;
@@ -226,6 +227,13 @@ export interface AgentsStore {
   insertToken(token: OAuthToken): Promise<void>;
   getToken(tokenHash: string): Promise<OAuthToken | null>;
   deleteToken(tokenHash: string): Promise<void>;
+  /**
+   * Refresh-token rotation, atomically (server: one UPDATE … RETURNING): an
+   * unused refresh token becomes `refresh_used` and is returned with
+   * `reused: false`; a token that was already used is returned with
+   * `reused: true` (the caller revokes the grant); unknown → null.
+   */
+  useRefreshToken(tokenHash: string): Promise<{ token: OAuthToken; reused: boolean } | null>;
   deleteTokensOfGrant(grantId: string): Promise<void>;
 
   appendAudit(entry: AuditEntry): Promise<void>;

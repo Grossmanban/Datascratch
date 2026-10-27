@@ -33,6 +33,7 @@ final class ServerConnection: CoreLibraryRemote {
     var onLocalDataWiped: (() -> Void)?
     /// Set by `ServerAccountService`: erases the device when the session was revoked (D-53).
     var onDeviceRevoked: (() async -> Void)?
+    private var isRevoked = false
 
     init(serverURL: URL, webHost: String, core: CoreLibrary, sync: SyncCenter, attachmentsDirectory: URL) {
         self.attachmentsDirectory = attachmentsDirectory
@@ -43,6 +44,12 @@ final class ServerConnection: CoreLibraryRemote {
         api = APIClient(baseURL: serverURL, sessionStore: SecretSessionStore(store: core.secrets))
         accounts = DSCore.AccountService(api: api, keys: core.keys, store: core.store)
         attachments = try? AttachmentManager(api: api, store: core.store, directory: attachmentsDirectory)
+        let api = api
+        Task { [weak self] in
+            await api.setDeviceRevokedHandler { reason in
+                Task { @MainActor in await self?.deviceRevoked(reason: reason) }
+            }
+        }
     }
 
     /// Merges what doubled up when the device library was carried into the account.
@@ -51,6 +58,7 @@ final class ServerConnection: CoreLibraryRemote {
 
     /// Starts syncing for a signed-in account.
     func start(session: AuthSession, isNewAccount: Bool) async {
+        isRevoked = false
         do {
             let carried = try core.adoptAccount(docId: session.accountDocId, isNew: isNewAccount)
             let api = self.api
@@ -78,10 +86,10 @@ final class ServerConnection: CoreLibraryRemote {
             ) { [weak self] in
                 do {
                     return .user(accessToken: try await api.accessToken())
-                } catch let error as APIError where Self.isDeviceRevoked(error) {
-                    // D-53: the session was revoked (another device, a password change or a
+                } catch let error as DeviceRevokedError {
+                    // D-53: the session was revoked (another device, a password change, a
                     // recovery): everything on this device goes.
-                    await self?.deviceRevoked()
+                    await self?.deviceRevoked(reason: error.reason)
                     throw error
                 } catch APIError.notAuthenticated {
                     // The refresh token was refused: the session was ended on the server.
@@ -113,6 +121,9 @@ final class ServerConnection: CoreLibraryRemote {
                 }
             }, retiredKeysFor: keys.retiredKeys(for:), isKeyCanonical: keys.isCanonical)
             self.engine = engine
+            await engine.setDeviceRevokedHandler { [weak self] reason in
+                Task { @MainActor in await self?.deviceRevoked(reason: reason) }
+            }
             let signposter = Self.signposter
             await engine.setTraceHandler { event in signposter.emitEvent("sync", "\(String(describing: event), privacy: .public)") }
             core.remote = self
@@ -149,17 +160,21 @@ final class ServerConnection: CoreLibraryRemote {
         await stop()
     }
 
-    /// D-53: the server said for certain that this device's session was revoked. Unlike
-    /// `sessionEnded` (an expired or refused refresh token), everything on the device is
-    /// erased; the account service does it (`ServerAccountService.deviceRevoked`).
-    func deviceRevoked() async {
+    /// D-53: the server said for certain that this device's session was revoked (DSCore's
+    /// handlers on the API client and the sync engine — either may come first — or a
+    /// `DeviceRevokedError`). Unlike `sessionEnded` (an expired or refused refresh token),
+    /// everything on the device is erased, once; the account service does it
+    /// (`ServerAccountService.deviceRevoked`).
+    func deviceRevoked(reason: DeviceRevocationReason) async {
+        guard !isRevoked else { return }
+        isRevoked = true
+        Self.log.notice("device revoked (\(reason.rawValue, privacy: .public)): erasing local data")
         await onDeviceRevoked?()
     }
 
-    /// A revocation, not an expired token or a network error (api.md: 401 `device_revoked`).
+    /// A revocation, not an expired token or a network error (DSCore classifies the response).
     nonisolated static func isDeviceRevoked(_ error: any Error) -> Bool {
-        guard case APIError.server(401, let code, _)? = error as? APIError else { return false }
-        return code == "device_revoked"
+        error is DeviceRevokedError
     }
 
     func stop() async {

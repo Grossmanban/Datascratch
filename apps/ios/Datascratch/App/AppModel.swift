@@ -340,10 +340,13 @@ final class AppModel {
     /// D-49: signing in or up on another server. Only while signed out: the account, its keys and
     /// library belong to one server.
     func useServer(_ url: URL) {
-        guard url != serverURL, accounts.account == nil else { return }
+        guard accounts.account == nil else { return }
+        // Saved even when it is already the current one: a device must never depend on an
+        // address it did not keep (D-49 amendment; before build 22 the default was not saved).
+        if !isUITesting { UserDefaults.standard.set(url.absoluteString, forKey: Self.serverKey) }
+        guard url != serverURL else { return }
         serverURL = url
         guard !isUITesting else { return }
-        UserDefaults.standard.set(url.absoluteString, forKey: Self.serverKey)
         sync.useServer(url)
         #if canImport(DSCore)
         guard let core else { return }

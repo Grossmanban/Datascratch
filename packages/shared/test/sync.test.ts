@@ -239,13 +239,13 @@ describe("sync client", () => {
     await a.client.addDoc(DOC, da);
     a.client.start();
     await until(() => a.client.isSynced(DOC));
-    hub.revokeDevice("dev-a", "password_changed");
+    hub.revokeDevice("dev-a", "password_change");
     await until(() => a.client.status === "revoked");
     da.getText("t").insert(0, "unsent");
     a.client.reconnect();
     a.client.start();
     await new Promise((r) => setTimeout(r, 50));
-    expect(reasons).toEqual(["password_changed"]);
+    expect(reasons).toEqual(["password_change"]);
     expect(errors.some((e) => (e.code as string) === "device_revoked")).toBe(false);
     expect(hub.connectionCount).toBe(0);
     expect(hub.docs.get(DOC)!.items).toHaveLength(0);
@@ -253,13 +253,13 @@ describe("sync client", () => {
 
   it("treats a revoked hello like a revocation, not an auth failure", async () => {
     const hub = new MemorySyncHub();
-    hub.revokeDevice("dev-a", "refresh_reuse");
+    hub.revokeDevice("dev-a", "token_reuse");
     const a = makeClient(hub, "dev-a");
     const reasons: string[] = [];
     a.client.on("deviceRevoked", (r) => reasons.push(r));
     a.client.start();
     await until(() => a.client.status === "revoked");
-    expect(reasons).toEqual(["refresh_reuse"]);
+    expect(reasons).toEqual(["token_reuse"]);
   });
 
   it("never reports a revocation for auth failures or network loss", async () => {
@@ -282,7 +282,7 @@ describe("sync client", () => {
     expect(reasons).toEqual([]);
   });
 
-  it("treats close code 4401 alone as a revocation", async () => {
+  it("treats close code 4410 alone as a revocation", async () => {
     const hub = new MemorySyncHub();
     const factory = hub.socketFactory();
     let last: ReturnType<typeof factory> | null = null;

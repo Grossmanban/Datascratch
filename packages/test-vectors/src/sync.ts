@@ -50,7 +50,7 @@ export function syncVectors() {
       { type: "error", code: "unauthorized", message: "token expired" },
       { type: "error", code: "bad_request", message: "invalid message" },
       { type: "error", code: "rate_limited", message: "too many messages", retryAfterMs: 5000 },
-      { type: "error", code: "device_revoked", message: "device revoked", reason: "refresh_reuse" },
+      { type: "error", code: "device_revoked", message: "device revoked", reason: "token_reuse" },
       { type: "update", docId: doc, seq: 45, payload: P, deviceId: "guest:AAECAwQFBgcICQoLDA0ODw" },
     ],
   };

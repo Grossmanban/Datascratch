@@ -3,12 +3,12 @@
   "description": "REST failure classification (D-53, api.md; TS: classifyApiFailure). `status: null` = no HTTP response. `body` is parsed JSON or raw text (a string is JSON-parsed first; unparsable → no error body). A 401 with `error.code: \"device_revoked\"` is a revocation whatever its reason (unknown/absent → \"user\"); only it wipes local data; `unauthorized` → refresh the token; `network` → retry later. `syncCloseDeviceRevoked` is the WebSocket close code with the same meaning (close reason = revocation reason; unknown/absent → \"user\").",
   "reasons": [
     "user",
-    "password_changed",
+    "password_change",
     "recovery",
-    "refresh_reuse",
+    "token_reuse",
     "account_deleted"
   ],
-  "syncCloseDeviceRevoked": 4401,
+  "syncCloseDeviceRevoked": 4410,
   "cases": [
     {
       "name": "revoked: user",
@@ -26,18 +26,18 @@
       }
     },
     {
-      "name": "revoked: password_changed",
+      "name": "revoked: password_change",
       "status": 401,
       "body": {
         "error": {
           "code": "device_revoked",
           "message": "device revoked",
-          "reason": "password_changed"
+          "reason": "password_change"
         }
       },
       "expected": {
         "kind": "device_revoked",
-        "reason": "password_changed"
+        "reason": "password_change"
       }
     },
     {
@@ -56,18 +56,18 @@
       }
     },
     {
-      "name": "revoked: refresh_reuse",
+      "name": "revoked: token_reuse",
       "status": 401,
       "body": {
         "error": {
           "code": "device_revoked",
           "message": "device revoked",
-          "reason": "refresh_reuse"
+          "reason": "token_reuse"
         }
       },
       "expected": {
         "kind": "device_revoked",
-        "reason": "refresh_reuse"
+        "reason": "token_reuse"
       }
     },
     {

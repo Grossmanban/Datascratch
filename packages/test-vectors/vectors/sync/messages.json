@@ -149,7 +149,7 @@
         "type": "error",
         "code": "device_revoked",
         "message": "device revoked",
-        "reason": "refresh_reuse"
+        "reason": "token_reuse"
       },
       {
         "type": "update",

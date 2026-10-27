@@ -41,12 +41,15 @@ export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
  * data for every reason; the reason only picks the wording / security note.
  */
 export const DEVICE_REVOKED_REASONS = [
-  /** Revoked by the user from another device. */
+  /** Disconnected in the device list on another device, or logged out. */
   "user",
-  "password_changed",
+  /** The password was changed on another device. */
+  "password_change",
+  /** Access was restored with the recovery key. */
   "recovery",
-  /** A refresh token was reused: a sign of theft. */
-  "refresh_reuse",
+  /** A used refresh token was presented again outside the 60 s grace: a sign of theft. */
+  "token_reuse",
+  /** WebSocket only: the account was deleted while connected (REST then answers `unauthorized`). */
   "account_deleted",
 ] as const;
 export type DeviceRevokedReason = (typeof DEVICE_REVOKED_REASONS)[number];

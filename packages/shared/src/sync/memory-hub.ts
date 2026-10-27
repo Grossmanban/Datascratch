@@ -257,7 +257,14 @@ export class MemorySyncHub {
         const d = this.doc(conn, msg.docId, msg.clientMsgId);
         if (!d) return;
         if (msg.type === "push") {
-          const item = { seq: ++d.seq, payload: msg.payload, deviceId: conn.deviceId! };
+          const userId = conn.principal?.userId;
+          // The server stamps the author (sync-protocol §4, D-54).
+          const item: UpdateItem = {
+            seq: ++d.seq,
+            payload: msg.payload,
+            deviceId: conn.deviceId!,
+            ...(userId ? { author: { kind: "user" as const, userId } } : {}),
+          };
           d.items.push(item);
           conn.send({ type: "ack", docId: msg.docId, clientMsgId: msg.clientMsgId, seq: item.seq });
           for (const other of this.connections) {

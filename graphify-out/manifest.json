@@ -4734,10 +4734,10 @@
     "semantic_hash": "de67beede4fd8fa82e5026fcc84915f8"
   },
   "docs/spec/08-sharing.md": {
-    "mtime": 1793121586.4202015,
-    "seen": 1793121824.8780885,
-    "ast_hash": "d554a86f6a79f9330eebbe5529c1fa6a",
-    "semantic_hash": "d554a86f6a79f9330eebbe5529c1fa6a"
+    "mtime": 1793137156.6917152,
+    "seen": 1793137246.1189024,
+    "ast_hash": "e78b13d100d4552ec04bdf3bb2dba7cc",
+    "semantic_hash": ""
   },
   "docs/spec/09-agents-api.md": {
     "mtime": 1793026087.0084429,
@@ -5616,9 +5616,9 @@
     "semantic_hash": "a35933ace1875e40e8f0a80ec2fb0e87"
   },
   "docs/decisions/0054-account-sharing-simple.md": {
-    "mtime": 1793125423.0073926,
-    "seen": 1793125638.8712032,
-    "ast_hash": "50277859ff7bd9820da576cb168e003b",
+    "mtime": 1793137156.697299,
+    "seen": 1793137246.1183803,
+    "ast_hash": "0b2e4440198726001c8db2d4d25d6880",
     "semantic_hash": ""
   },
   "docs/decisions/0055-backup-simple.md": {

@@ -22,8 +22,12 @@ public enum EditorDiagnostics {
         }
     }
 
+    /// Called on the main queue with every line (the demo keeps them in observable state).
+    @MainActor public static var onLog: ((String) -> Void)?
+
     @MainActor private static func remember(_ line: String) {
         recent = Array((recent + [line]).suffix(12))
+        onLog?(line)
     }
 }
 #endif

@@ -960,15 +960,15 @@
     "semantic_hash": "606014230fa9f49aa15d818595778a2c"
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoModel.swift": {
-    "mtime": 1793059631.1189747,
-    "seen": 1793059739.163619,
-    "ast_hash": "1b21a51290192c8c27d524c8fd810edc",
+    "mtime": 1793061297.2862878,
+    "seen": 1793061356.0462987,
+    "ast_hash": "5f3de305340d8feb8fbe17bc162674bb",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoView.swift": {
-    "mtime": 1793059639.6942008,
-    "seen": 1793059739.163624,
-    "ast_hash": "0236dee88e5cfbb3bff64b09b9f8e857",
+    "mtime": 1793061286.693826,
+    "seen": 1793061356.0463018,
+    "ast_hash": "67c9f1eec935e2ff1438575013b0f310",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/EditorDemoApp.swift": {
@@ -1032,9 +1032,9 @@
     "semantic_hash": "ec9d695491ff34da6b30617c5674aa92"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorDiagnostics.swift": {
-    "mtime": 1793059631.11837,
-    "seen": 1793059739.1639504,
-    "ast_hash": "8e9e5653ef258acc81f66212718cb111",
+    "mtime": 1793061286.536487,
+    "seen": 1793061356.0466542,
+    "ast_hash": "171b27f0ab878e7994e2250214074071",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorTextView.swift": {
@@ -1388,19 +1388,19 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793059764.101092,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793059764.1010952,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1793059764.101097,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2636,7 +2636,7 @@
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792967462.0829601,
     "seen": 1793059764.101436,
-    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "infra/deploy/docker-compose.yml": {

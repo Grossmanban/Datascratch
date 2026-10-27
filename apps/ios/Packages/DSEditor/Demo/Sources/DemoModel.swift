@@ -27,6 +27,8 @@ final class DemoModel {
     var revision = 0
     /// Editor scroll position (for the HUD and UI tests).
     var scrollOffset: CGFloat = 0
+    /// The editor's latest diagnostic lines (`-uiTesting`; the HUD shows them to UI tests).
+    var diagnostics: [String] = []
 
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
     private let images = DemoImages()
@@ -53,6 +55,10 @@ final class DemoModel {
             editor.tools.allowsFingerDrawing = true
         }
         if args.contains("-hud") { showHUD = true }
+        // Next turn: lines are also logged from inside touch handling.
+        EditorDiagnostics.onLog = { [weak self] _ in
+            DispatchQueue.main.async { self?.diagnostics = EditorDiagnostics.recent }
+        }
         editor.onStateChange = { [weak self] in
             guard let self else { return }
             self.revision &+= 1

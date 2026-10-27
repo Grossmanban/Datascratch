@@ -435,6 +435,13 @@ export const rotateKeyRequestSchema = z
   });
 export type RotateKeyRequest = z.infer<typeof rotateKeyRequestSchema>;
 
+export const sharedNoteKeyResponseSchema = z.object({
+  version: keyVersionSchema,
+  ownerWrappedKey: wrappedKeySchema,
+  keyChain: z.array(wrappedKeySchema),
+});
+export type SharedNoteKeyResponse = z.infer<typeof sharedNoteKeyResponseSchema>;
+
 export const sharedItemSchema = z.object({
   target: shareTargetSchema,
   owner: z.object({ userId: uuidSchema, email: z.string(), publicKey: key32Schema }),
@@ -593,6 +600,7 @@ export const API_ROUTES = {
   deleteMember: { method: "DELETE", path: "/members/:kind/:id/:userId" },
   putMemberKey: { method: "PUT", path: "/members/:kind/:id/:userId/key" },
   rotateKey: { method: "POST", path: "/members/:kind/:id/rotate" },
+  getSharedNoteKey: { method: "GET", path: "/members/note/:id/key" },
   rotateKeyDone: { method: "POST", path: "/members/:kind/:id/rotate/done" },
   sharedWithMe: { method: "GET", path: "/shared-with-me" },
   createAgentToken: { method: "POST", path: "/agent-tokens" },

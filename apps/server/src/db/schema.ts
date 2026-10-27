@@ -47,6 +47,8 @@ export const users = pgTable('users', {
   wrappedMasterKeyPassword: bytea('wrapped_master_key_password').notNull(),
   wrappedMasterKeyRecovery: bytea('wrapped_master_key_recovery').notNull(),
   accountDocId: uuid('account_doc_id').notNull(),
+  /** Bytes stored for this account (updates, snapshots, attachments); kept by triggers (0004). */
+  storageBytes: bigint('storage_bytes', { mode: 'number' }).notNull().default(0),
   createdAt: created(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });

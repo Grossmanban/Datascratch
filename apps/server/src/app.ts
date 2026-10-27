@@ -52,7 +52,10 @@ export interface BuildOptions {
 export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
     loggerInstance: ctx.log,
-    trustProxy: true,
+    // Only proxies on private hops are trusted (our Caddy, a host nginx, Sinhron's Caddy):
+    // the client address is the rightmost untrusted X-Forwarded-For entry, so a client
+    // cannot choose its own address by sending the header itself.
+    trustProxy: ctx.config.TRUST_PROXY.split(',').map((s) => s.trim()).filter(Boolean),
     bodyLimit: 1024 * 1024,
   }).withTypeProvider<ZodTypeProvider>();
 
@@ -97,10 +100,9 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
 
   await app.register(rateLimit, {
     global: false,
-    errorResponseBuilder: (_req, c) => ({
-      statusCode: 429,
-      error: { code: 'rate_limited', message: `rate limit exceeded, retry in ${Math.ceil(c.ttl / 1000)} s` },
-    }),
+    // Thrown by the plugin; an ApiError goes through the error handler as a proper 429.
+    errorResponseBuilder: (_req, c) =>
+      new ApiError('rate_limited', `rate limit exceeded, retry in ${Math.ceil(c.ttl / 1000)} s`),
   });
 
   await app.register(swagger, {

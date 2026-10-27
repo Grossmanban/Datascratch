@@ -23,7 +23,7 @@ export type SyncErrorCode =
 /** Server → client messages (sync-protocol.md §4). */
 export type ServerMessage =
   | Exclude<SharedServerMessage, { type: 'error' }>
-  | { type: 'error'; code: SyncErrorCode; message: string; ref?: string };
+  | { type: 'error'; code: SyncErrorCode; message: string; ref?: string; retryAfterMs?: number };
 
 export const PROTOCOL_VERSION = SYNC_PROTOCOL_VERSION;
 
@@ -34,6 +34,8 @@ export const CloseCode = {
   internal: 1011,
   protocol: 4400,
   unauthorized: 4401,
+  /** Too many connections: retry later. */
+  tryAgainLater: 1013,
 } as const;
 
 /** Decoded size of a base64url string without decoding it. */

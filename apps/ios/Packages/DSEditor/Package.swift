@@ -26,6 +26,7 @@ let package = Package(
                 .product(name: "SwiftMath", package: "SwiftMath", condition: .when(platforms: [.iOS])),
                 .product(name: "DSDesign", package: "DSDesign", condition: .when(platforms: [.iOS])),
             ],
+            exclude: ["Resources/README.md"],
             resources: [.copy("Resources/mermaid.min.js"), .copy("Resources/mermaid-LICENSE.txt")]
         ),
         .testTarget(name: "DSInkTests", dependencies: ["DSInk"]),

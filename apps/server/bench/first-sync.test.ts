@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { SyncClient, createNotebook, rnd, signup, startServer, type TestServer, type TestUser } from '../test/helpers.js';
 import { uuidv7 } from '../src/lib/encoding.js';
+import { MAX_SUBSCRIBE_DOCS } from '@datascratch/shared/contracts';
 
 const N = Number(process.env.BENCH_NOTES ?? 10_000);
 const UPDATES_PER_NOTE = Number(process.env.BENCH_UPDATES ?? 3);
@@ -51,8 +52,10 @@ it(`first sync of ${N} notes`, async () => {
       }
     });
   });
-  // One subscribe for every document, like SyncClient.addDocs of @datascratch/shared.
-  c.send({ type: 'subscribe', docs: ids.map((docId) => ({ docId, since: 0 })) });
+  // Every document, in subscribes of at most MAX_SUBSCRIBE_DOCS, like SyncClient of @datascratch/shared.
+  for (let i = 0; i < ids.length; i += MAX_SUBSCRIBE_DOCS) {
+    c.send({ type: 'subscribe', docs: ids.slice(i, i + MAX_SUBSCRIBE_DOCS).map((docId) => ({ docId, since: 0 })) });
+  }
   await done;
   const ms = Date.now() - start;
   console.log(`first sync of ${N} notes: ${ms} ms (${Math.round(N / (ms / 1000))} docs/s)`);

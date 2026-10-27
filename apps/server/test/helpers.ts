@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
-import pino from 'pino';
+import { createLogger } from '../src/lib/log.js';
 import WebSocket from 'ws';
 import { buildApp } from '../src/app.js';
 import { loadConfig, type Config } from '../src/config.js';
@@ -51,7 +51,7 @@ export async function startServer(
     JOBS_ENABLED: 'false',
     ...overrides,
   });
-  const log = pino({ level: config.LOG_LEVEL });
+  const log = createLogger(config.LOG_LEVEL);
   const database = createDatabase(config.DATABASE_URL, 5);
   const jobs = new InlineQueue(log);
   const ctx = createContext({ config, log, database, storage: new DiskStorage(dir), jobs });

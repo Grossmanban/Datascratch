@@ -10,7 +10,7 @@ export const SYNC_PING_INTERVAL_MS = 25_000;
 
 /** Decoded payload limits (sync-protocol.md §7). */
 export const MAX_UPDATE_BYTES = 2 * 1024 * 1024;
-export const MAX_SNAPSHOT_BYTES = 50 * 1024 * 1024;
+export const MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024;
 
 /** A client compacts a document once either threshold is exceeded (sync-protocol.md §5). */
 export const SNAPSHOT_THRESHOLD_UPDATES = 500;

@@ -27,7 +27,13 @@ final class ServerConnection: CoreLibraryRemote {
     /// Encrypted attachments (cover images) in the same directory as `CoverImages`.
     let attachments: AttachmentManager?
 
+    /// Plaintext attachments on this device (also `CoverImages.directory`).
+    let attachmentsDirectory: URL
+    /// Called after the local data was erased: images held in memory go too.
+    var onLocalDataWiped: (() -> Void)?
+
     init(serverURL: URL, webHost: String, core: CoreLibrary, sync: SyncCenter, attachmentsDirectory: URL) {
+        self.attachmentsDirectory = attachmentsDirectory
         self.serverURL = serverURL
         self.webHost = webHost
         self.core = core
@@ -423,7 +429,13 @@ extension ServerConnection: CoverAttachmentRemote {
 
     func downloadAttachment(_ attachmentId: String, noteId: String) async -> URL? {
         guard let attachments, engine != nil, let key = noteKey(noteId) else { return nil }
-        return try? await attachments.download(attachmentId, noteId: noteId, noteKey: key)
+        do {
+            return try await attachments.download(attachmentId, noteId: noteId, noteKey: key)
+        } catch {
+            // A bad id or a download that does not add up (AttachmentError) shows as not loaded.
+            Self.log.error("attachment download \(attachmentId, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     func deleteAttachment(_ attachmentId: String) async {
@@ -476,7 +488,7 @@ final class ServerAccountService: AccountService {
             account = Account(userId: result.session.userId, email: email, createdAt: Date())
             await connection.start(session: result.session, isNewAccount: true)
             return key
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -486,7 +498,8 @@ final class ServerAccountService: AccountService {
         // Signed out on this device, now signing in to a different account: what the previous
         // account left here is removed first, so none of it reaches the new one (spec/07).
         if let previous = signedOutEmail, previous != email {
-            try? connection.core.wipeLocalData()
+            try? connection.core.wipeLocalData(attachments: connection.attachmentsDirectory)
+            connection.onLocalDataWiped?()
         }
         do {
             let session = try await connection.accounts.login(email: email, password: password, deviceName: UIDevice.current.name)
@@ -495,7 +508,7 @@ final class ServerAccountService: AccountService {
             account = Account(userId: session.userId, email: email, createdAt: Date())
             sessionResumed()
             await connection.start(session: session, isNewAccount: false)
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -509,10 +522,13 @@ final class ServerAccountService: AccountService {
     /// «Delete data from this device» (spec/07): documents, keys and the stored session go; the
     /// app starts over at the welcome screen.
     func deleteLocalData() async {
+        // The server forgets this device's session first (a stolen refresh token stops working).
+        try? await connection.api.logout()
         await connection.stop()
-        // Every key, kept ones of unsent notebooks too; then the database.
+        // Every key, kept ones of unsent notebooks too; then the database and the attachments.
         try? connection.accounts.eraseDeviceKeys()
-        try? connection.core.wipeLocalData()
+        try? connection.core.wipeLocalData(attachments: connection.attachmentsDirectory)
+        connection.onLocalDataWiped?()
         try? connection.core.store.setString(nil, for: Self.emailKey)
         sessionResumed()
         account = nil
@@ -534,7 +550,7 @@ final class ServerAccountService: AccountService {
             account = Account(userId: session.userId, email: email, createdAt: Date())
             sessionResumed()
             await connection.start(session: session, isNewAccount: false)
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error, recovering: true)
         }
     }
@@ -544,7 +560,7 @@ final class ServerAccountService: AccountService {
         guard new.count >= Credentials.minimumPasswordLength else { throw AccountError.weakPassword }
         do {
             try await connection.accounts.changePassword(email: email, currentPassword: current, newPassword: new)
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -556,7 +572,7 @@ final class ServerAccountService: AccountService {
                                                                        account: connection.core.account)
             guard let key = RecoveryKey(text) else { throw AccountError.invalidRecoveryKey }
             return key
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -572,7 +588,7 @@ final class ServerAccountService: AccountService {
                 }
                 return SecurityEvent(kind: kind, date: date, deviceName: event.deviceName)
             }
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -598,6 +614,14 @@ final class ServerAccountService: AccountService {
             try? await Task.sleep(for: .milliseconds(500))
         }
         return unsentChanges == 0
+    }
+
+    /// DSCore errors as the person should read them; anything else as it is.
+    static func map(_ error: any Error, recovering: Bool = false) -> any Error {
+        if let api = error as? APIError { return map(api, recovering: recovering) }
+        if case .unsafeKDF? = error as? CryptoError { return AccountError.unsafeServerParameters }
+        if error is UnsafePathError { return AccountError.server(String(localized: "The server sent a response this app cannot use.")) }
+        return error
     }
 
     private static func map(_ error: APIError, recovering: Bool = false) -> AccountError {

@@ -126,7 +126,7 @@ struct NewAgentTokenSheet: View {
                             .textSelection(.enabled)
                         Button(copied ? LocalizedStringKey("Copied") : "Copy Token",
                                systemImage: copied ? "checkmark" : "doc.on.doc") {
-                            UIPasteboard.general.string = secret
+                            SecretPasteboard.copy(secret)
                             copied = true
                         }
                     } header: {

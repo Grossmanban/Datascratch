@@ -51,7 +51,7 @@ struct ShareSheet: View {
                     Section("Active links") {
                         ForEach(links) { link in
                             ShareLinkRow(link: link, isCopied: copiedId == link.id) {
-                                UIPasteboard.general.url = link.url
+                                SecretPasteboard.copy(link.url)
                                 withAnimation { copiedId = link.id }
                                 Haptics.success()
                             } onRevoke: {
@@ -76,7 +76,7 @@ struct ShareSheet: View {
             do {
                 let link = try await app.sharing.createLink(for: target, permission: permission,
                                                             expiresAt: hasExpiry ? expiry : nil)
-                UIPasteboard.general.url = link.url
+                SecretPasteboard.copy(link.url)
                 copiedId = link.id
                 Haptics.success()
             } catch {

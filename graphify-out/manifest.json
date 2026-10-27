@@ -36,10 +36,10 @@
     "semantic_hash": "f14360880adb80eb338d59362f24dece"
   },
   ".github/workflows/ios-editor.yml": {
-    "mtime": 1793041390.9051757,
-    "seen": 1793041541.2359107,
-    "ast_hash": "83aac0236b34832654ac1c1324c4e6a8",
-    "semantic_hash": "83aac0236b34832654ac1c1324c4e6a8"
+    "mtime": 1793082724.787008,
+    "seen": 1793082859.8393526,
+    "ast_hash": "8b974b9d6bea9bdbd4a0d9f519932d07",
+    "semantic_hash": "8b974b9d6bea9bdbd4a0d9f519932d07"
   },
   ".github/workflows/ios-release.yml": {
     "mtime": 1792948578.359508,
@@ -961,15 +961,15 @@
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoModel.swift": {
     "mtime": 1793061297.2862878,
-    "seen": 1793061356.0462987,
+    "seen": 1793082859.839827,
     "ast_hash": "5f3de305340d8feb8fbe17bc162674bb",
-    "semantic_hash": ""
+    "semantic_hash": "5f3de305340d8feb8fbe17bc162674bb"
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoView.swift": {
     "mtime": 1793062876.1956103,
-    "seen": 1793062941.0135024,
+    "seen": 1793082859.83983,
     "ast_hash": "bac5286acec854c218ec53519dedb873",
-    "semantic_hash": ""
+    "semantic_hash": "bac5286acec854c218ec53519dedb873"
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/EditorDemoApp.swift": {
     "mtime": 1792929845.1587236,
@@ -979,9 +979,9 @@
   },
   "apps/ios/Packages/DSEditor/Demo/UITests/EditorDemoUITests.swift": {
     "mtime": 1793062876.1962652,
-    "seen": 1793062941.0135384,
+    "seen": 1793082859.8398352,
     "ast_hash": "b94b2bdac92ca48dff93f0062e8f0b7a",
-    "semantic_hash": ""
+    "semantic_hash": "b94b2bdac92ca48dff93f0062e8f0b7a"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
     "mtime": 1793046979.7207956,
@@ -1033,15 +1033,15 @@
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorDiagnostics.swift": {
     "mtime": 1793061286.536487,
-    "seen": 1793061356.0466542,
+    "seen": 1793082859.8398583,
     "ast_hash": "171b27f0ab878e7994e2250214074071",
-    "semantic_hash": ""
+    "semantic_hash": "171b27f0ab878e7994e2250214074071"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorTextView.swift": {
     "mtime": 1793056047.7319963,
-    "seen": 1793056226.059513,
+    "seen": 1793082859.8398607,
     "ast_hash": "6d2a26089ddcc0152f4eab73533159bf",
-    "semantic_hash": ""
+    "semantic_hash": "6d2a26089ddcc0152f4eab73533159bf"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorTheme.swift": {
     "mtime": 1793043803.2727058,
@@ -1051,9 +1051,9 @@
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
     "mtime": 1793059654.8324645,
-    "seen": 1793059739.1640117,
+    "seen": 1793082859.8398654,
     "ast_hash": "da4b93630965f2936640d6a8690a4463",
-    "semantic_hash": ""
+    "semantic_hash": "da4b93630965f2936640d6a8690a4463"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormatMenu.swift": {
     "mtime": 1793011531.6864011,
@@ -1387,20 +1387,20 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
-    "seen": 1793062966.250389,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "seen": 1793082859.839994,
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
-    "seen": 1793062966.2503934,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "seen": 1793082859.8399959,
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
-    "seen": 1793062966.2503967,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "seen": 1793082859.839998,
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2635,8 +2635,8 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792967462.0829601,
-    "seen": 1793062966.2507823,
-    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "seen": 1793082859.8405476,
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "infra/deploy/docker-compose.yml": {
@@ -4674,10 +4674,10 @@
     "semantic_hash": "a2b193ae4f4df24d897042798847fa67"
   },
   "docs/open-questions.md": {
-    "mtime": 1793021976.6650064,
-    "seen": 1793023273.0223234,
-    "ast_hash": "6dc4b7d590a7e598139f7ac99b7ee854",
-    "semantic_hash": "6dc4b7d590a7e598139f7ac99b7ee854"
+    "mtime": 1793082735.9211414,
+    "seen": 1793082859.8411198,
+    "ast_hash": "22e8e165201a213d6d62a756da3821af",
+    "semantic_hash": "22e8e165201a213d6d62a756da3821af"
   },
   "docs/risks.md": {
     "mtime": 1792948578.4210732,

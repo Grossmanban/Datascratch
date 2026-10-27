@@ -88,6 +88,7 @@ export class SyncConnection {
   #tokens: number;
   #lastRefill = Date.now();
   readonly #helloTimer: NodeJS.Timeout;
+  #expiryTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly ctx: AppContext,
@@ -150,6 +151,7 @@ export class SyncConnection {
     if (this.#closed) return;
     this.#closed = true;
     clearTimeout(this.#helloTimer);
+    if (this.#expiryTimer) clearTimeout(this.#expiryTimer);
     for (const s of this.#subs.values()) s.unsubscribe();
     this.#subs.clear();
     for (const off of this.#control) off();
@@ -307,6 +309,7 @@ export class SyncConnection {
       this.#control.push(this.ctx.hub.subscribe(topics.device(p.deviceId), kick));
     } else {
       this.#control.push(this.ctx.hub.subscribe(topics.share(p.shareId), kick));
+      if (p.expiresAt) this.#closeAt(p.expiresAt);
     }
     this.#send({
       type: 'welcome',
@@ -314,6 +317,14 @@ export class SyncConnection {
       serverTime: new Date().toISOString(),
       protocol: PROTOCOL_VERSION,
     });
+  }
+
+  /** Close the connection when a guest's share expires (timers longer than ~24 days re-arm). */
+  #closeAt(at: Date) {
+    const ms = at.getTime() - Date.now();
+    if (ms <= 0) return this.#fail('unauthorized', 'share expired', CloseCode.unauthorized);
+    this.#expiryTimer = setTimeout(() => this.#closeAt(at), Math.min(ms, 2 ** 31 - 1));
+    this.#expiryTimer.unref();
   }
 
   /** Read access → `false` (read-only) / `true` (write); throws doc_not_found. */

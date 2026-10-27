@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   AD,
+  DEFAULT_KDF,
   ATTACHMENT_CHUNK_BYTES,
   CryptoError,
   attachmentChunkCount,
@@ -37,7 +38,8 @@ import {
 } from "../src/index.js";
 
 // Cheap KDF parameters for flow tests; the real parameters are covered by vectors.
-const FAST_KDF: KdfParams = { alg: "argon2id13", ops: 1, mem: 8 * 1024 * 1024 };
+// The KDF refuses params below crypto.md §2 bounds, so flow tests use the real defaults.
+const FAST_KDF: KdfParams = DEFAULT_KDF;
 const USER = "0192f3c4-0000-7000-8000-000000000001";
 
 beforeAll(async () => {
@@ -242,5 +244,28 @@ describe("moving a note", () => {
     const moved = rewrapNoteKey(wrapNoteKey(note, a, "n1"), a, b, "n1");
     expect(unwrapNoteKey(moved, b, "n1")).toEqual(note);
     expect(() => unwrapNoteKey(moved, a, "n1")).toThrow(CryptoError);
+  });
+});
+
+describe("KDF bounds (crypto.md §2)", () => {
+  it("refuses weak or huge params a hostile server could send", async () => {
+    const { isSafeKdf, kdfParamsSchema, preloginResponseSchema } = await import("../src/index.js");
+    const salt = new Uint8Array(16);
+    for (const kdf of [
+      { alg: "argon2id13", ops: 2, mem: 64 * 1024 * 1024 },
+      { alg: "argon2id13", ops: 11, mem: 64 * 1024 * 1024 },
+      { alg: "argon2id13", ops: 3, mem: 8 * 1024 * 1024 },
+      { alg: "argon2id13", ops: 3, mem: 512 * 1024 * 1024 },
+      { alg: "argon2i13", ops: 3, mem: 64 * 1024 * 1024 },
+    ]) {
+      expect(isSafeKdf(kdf)).toBe(false);
+      expect(kdfParamsSchema.safeParse(kdf).success).toBe(false);
+      expect(preloginResponseSchema.safeParse({ salt: "A".repeat(22), kdf }).success).toBe(false);
+      expect(() => derivePasswordKeys("pw", salt, kdf as KdfParams)).toThrow(
+        expect.objectContaining({ code: "unsafe_kdf" }),
+      );
+    }
+    expect(isSafeKdf({ alg: "argon2id13", ops: 10, mem: 256 * 1024 * 1024 })).toBe(true);
+    expect(isSafeKdf(DEFAULT_KDF)).toBe(true);
   });
 });

@@ -6,6 +6,7 @@
 import * as Y from "yjs";
 import {
   MAX_SNAPSHOT_BYTES,
+  MAX_SUBSCRIBE_DOCS,
   MAX_UPDATE_BYTES,
   SNAPSHOT_THRESHOLD_BYTES,
   SNAPSHOT_THRESHOLD_UPDATES,
@@ -52,7 +53,13 @@ const WS_OPEN = 1;
 export type SyncStatus = "idle" | "connecting" | "online" | "offline" | "unauthorized" | "stopped";
 
 export interface SyncClientError {
-  code: SyncErrorCode | "decrypt_failed" | "apply_failed" | "too_large" | "key_missing";
+  code:
+    | SyncErrorCode
+    | "decrypt_failed"
+    | "apply_failed"
+    | "too_large"
+    | "key_missing"
+    | "storage_failed";
   message: string;
   docId?: string;
   ref?: string;
@@ -75,6 +82,10 @@ export interface SyncClientOptions {
   keyFor: (docId: string) => Uint8Array | null | Promise<Uint8Array | null>;
   /** Report `key_missing` when a paused document waits longer than this. Default 30 s. */
   missingKeyReportMs?: number;
+  /** A connection must stay up this long before the reconnect backoff resets. Default 10 s. */
+  stableAfterMs?: number;
+  /** Retry interval after the outbox storage failed (quota, closed DB). Default 5 s. */
+  storageRetryMs?: number;
   /**
    * Retired or alternate keys tried when `keyFor` cannot decrypt an item
    * (e.g. after a key rotation or a client that sealed with a wrong key).
@@ -134,6 +145,11 @@ export interface SkippedUpdate {
 
 interface Listeners {
   status: (status: SyncStatus) => void;
+  /**
+   * Outbox storage failed (`ok: false`, e.g. quota exceeded — show «хранилище
+   * заполнено») or works again (`ok: true`). Edits are kept in memory meanwhile.
+   */
+  storage: (ok: boolean, error?: unknown) => void;
   /** A document paused because its key is not available yet. */
   keyMissing: (docId: string) => void;
   /** An item was skipped; the rest of the document keeps syncing. */
@@ -198,7 +214,13 @@ export class SyncClient {
     remoteUpdate: new Set(),
     skipped: new Set(),
     keyMissing: new Set(),
+    storage: new Set(),
   };
+  private stableTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Consecutive rate_limited answers (for its own growing delay). */
+  private rateLimits = 0;
+  private rateLimitedUntil = 0;
+  private storageFailing = false;
   private readonly skippedLog = new Map<string, SkippedUpdate[]>();
   private readonly recoveryTried = new Set<string>();
   private socket: WebSocketLike | null = null;
@@ -220,6 +242,8 @@ export class SyncClient {
     this.opts = {
       batchMs: 30,
       missingKeyReportMs: 30_000,
+      stableAfterMs: 10_000,
+      storageRetryMs: 5_000,
       stateFlushMs: 200,
       maxAuthFailures: 3,
       random: Math.random,
@@ -249,6 +273,8 @@ export class SyncClient {
   async stop(): Promise<void> {
     this.running = false;
     this.clearReconnect();
+    if (this.stableTimer) clearTimeout(this.stableTimer);
+    this.stableTimer = null;
     for (const [docId, entry] of this.docs) await this.flushPending(docId, entry);
     const s = this.socket;
     this.socket = null;
@@ -383,10 +409,9 @@ export class SyncClient {
     }
     if (this.welcomed && list.length > 0) {
       // Subscribe before pushing (sync-protocol.md §3), then send what was queued for these docs.
-      this.send({
-        type: "subscribe",
-        docs: ids.map((docId) => ({ docId, since: this.docs.get(docId)!.state.lastSeq })),
-      });
+      this.sendSubscribe(
+        ids.map((docId) => ({ docId, since: this.docs.get(docId)!.state.lastSeq })),
+      );
       const added = new Set(ids);
       await this.serial(async () => {
         for (const item of (await this.outboxItems()).values()) {
@@ -429,7 +454,7 @@ export class SyncClient {
         if (entry.paused.timer) clearTimeout(entry.paused.timer);
         entry.paused = null;
         if (this.welcomed) {
-          this.send({ type: "subscribe", docs: [{ docId, since: entry.state.lastSeq }] });
+          this.sendSubscribe([{ docId, since: entry.state.lastSeq }]);
         }
       }
       await this.enqueuePending(docId, entry);
@@ -450,9 +475,14 @@ export class SyncClient {
     this.recoveryTried.delete(docId);
     await this.serial(async () => {
       // Re-applying already applied updates is harmless (CRDT).
-      if (this.welcomed) this.send({ type: "subscribe", docs: [{ docId, since }] });
+      if (this.welcomed) this.sendSubscribe([{ docId, since }]);
     });
     return true;
+  }
+
+  /** True while the outbox storage is failing (edits wait in memory). */
+  get storageFull(): boolean {
+    return this.storageFailing;
   }
 
   isPaused(docId: string): boolean {
@@ -515,7 +545,7 @@ export class SyncClient {
     if (!entry) throw new Error(`document ${docId} is not synced`);
     await this.serial(async () => {
       if (!this.welcomed) return; // the next welcome subscribes anyway
-      this.send({ type: "subscribe", docs: [{ docId, since: entry.state.lastSeq }] });
+      this.sendSubscribe([{ docId, since: entry.state.lastSeq }]);
       for (const item of (await this.outboxItems()).values())
         if (item.docId === docId) this.sendItem(item);
     });
@@ -585,6 +615,8 @@ export class SyncClient {
       if (socket !== this.socket) return;
       this.socket = null;
       this.welcomed = false;
+      if (this.stableTimer) clearTimeout(this.stableTimer);
+      this.stableTimer = null;
       for (const entry of this.docs.values()) {
         entry.synced = false;
         entry.snapshotInFlight = null;
@@ -624,12 +656,24 @@ export class SyncClient {
     const max = this.opts.backoff?.maxMs ?? 30_000;
     const exp = Math.min(max, initial * 2 ** this.attempt);
     // Full jitter in [exp/2, exp] spreads reconnect storms after a server restart.
-    const delay = exp / 2 + (exp / 2) * this.opts.random();
+    let delay = exp / 2 + (exp / 2) * this.opts.random();
+    // A rate-limited client waits at least until the server's retry-after.
+    delay = Math.max(delay, this.rateLimitedUntil - Date.now());
     this.attempt++;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
     }, delay);
+  }
+
+  /** subscribe in messages of at most MAX_SUBSCRIBE_DOCS distinct documents. */
+  private sendSubscribe(docs: { docId: string; since: number }[]): void {
+    const unique = new Map<string, number>();
+    for (const d of docs) unique.set(d.docId, Math.min(d.since, unique.get(d.docId) ?? d.since));
+    const all = [...unique].map(([docId, since]) => ({ docId, since }));
+    for (let i = 0; i < all.length; i += MAX_SUBSCRIBE_DOCS) {
+      this.send({ type: "subscribe", docs: all.slice(i, i + MAX_SUBSCRIBE_DOCS) });
+    }
   }
 
   private send(msg: ClientMessage): boolean {
@@ -668,9 +712,24 @@ export class SyncClient {
     return this.outbox;
   }
 
-  private async enqueue(item: OutboxItem): Promise<void> {
-    await this.opts.storage.enqueue(item);
+  /** Store an outbox item; false (and storage state "failing") when storage rejects it. */
+  private async enqueue(item: OutboxItem): Promise<boolean> {
+    try {
+      await this.opts.storage.enqueue(item);
+    } catch (e) {
+      if (!this.storageFailing) {
+        this.storageFailing = true;
+        for (const fn of this.listeners.storage) fn(false, e);
+      }
+      this.emitError({ code: "storage_failed", message: String(e), docId: item.docId });
+      return false;
+    }
     (await this.outboxItems()).set(item.clientMsgId, item);
+    if (this.storageFailing) {
+      this.storageFailing = false;
+      for (const fn of this.listeners.storage) fn(true);
+    }
+    return true;
   }
 
   private async removeOutbox(clientMsgId: string): Promise<void> {
@@ -698,8 +757,18 @@ export class SyncClient {
     }
     this.dirty.clear();
     const storage = this.opts.storage;
-    if (storage.setDocStates) await storage.setDocStates(entries);
-    else for (const [id, state] of entries) await storage.setDocState(id, state);
+    try {
+      if (storage.setDocStates) await storage.setDocStates(entries);
+      else for (const [id, state] of entries) await storage.setDocState(id, state);
+    } catch (e) {
+      // Keep the cursors dirty and retry; a lost cursor write only means re-fetching.
+      for (const [id] of entries) this.dirty.add(id);
+      this.emitError({ code: "storage_failed", message: String(e) });
+      this.stateTimer ??= setTimeout(() => {
+        this.stateTimer = null;
+        void this.flushStates();
+      }, this.opts.storageRetryMs);
+    }
   }
 
   private serial<T>(fn: () => Promise<T>): Promise<T> {
@@ -716,11 +785,17 @@ export class SyncClient {
     switch (msg.type) {
       case "welcome": {
         this.welcomed = true;
-        this.attempt = 0;
         this.authFailures = 0;
         this.setStatus("online");
-        const docs = [...this.docs].map(([docId, e]) => ({ docId, since: e.state.lastSeq }));
-        if (docs.length > 0) this.send({ type: "subscribe", docs });
+        // Reset the backoff only once the connection proved stable: a server
+        // that accepts and then drops us must not cause a reconnect storm.
+        if (this.stableTimer) clearTimeout(this.stableTimer);
+        this.stableTimer = setTimeout(() => {
+          this.stableTimer = null;
+          this.attempt = 0;
+          this.rateLimits = 0;
+        }, this.opts.stableAfterMs);
+        this.sendSubscribe([...this.docs].map(([docId, e]) => ({ docId, since: e.state.lastSeq })));
         for (const item of (await this.outboxItems()).values()) this.sendItem(item);
         return;
       }
@@ -772,7 +847,7 @@ export class SyncClient {
         ) {
           // Ask once for the server's latest snapshot; it may cover the skipped items.
           this.recoveryTried.add(msg.docId);
-          this.send({ type: "subscribe", docs: [{ docId: msg.docId, since: 0 }] });
+          this.sendSubscribe([{ docId: msg.docId, since: 0 }]);
         }
         await this.maybeSnapshot(msg.docId, entry);
         return;
@@ -820,12 +895,17 @@ export class SyncClient {
         return;
       }
       case "error":
-        await this.handleError(msg.code, msg.message, msg.ref);
+        await this.handleError(msg.code, msg.message, msg.ref, msg.retryAfterMs);
         return;
     }
   }
 
-  private async handleError(code: SyncErrorCode, message: string, ref?: string): Promise<void> {
+  private async handleError(
+    code: SyncErrorCode,
+    message: string,
+    ref?: string,
+    retryAfterMs?: number,
+  ): Promise<void> {
     const item = ref ? (await this.outboxItems()).get(ref) : undefined;
     const docId = item?.docId ?? (ref && this.docs.has(ref) ? ref : undefined);
     this.emitError({ code, message, ...(ref ? { ref } : {}), ...(docId ? { docId } : {}) });
@@ -843,9 +923,14 @@ export class SyncClient {
         this.setStatus("stopped");
         this.socket?.close(1000, "protocol mismatch");
         return;
-      case "rate_limited":
+      case "rate_limited": {
+        // Own growing delay (5 s, 10 s, … 60 s), at least the server's retry-after.
+        this.rateLimits++;
+        const own = Math.min(60_000, 5_000 * 2 ** (this.rateLimits - 1));
+        this.rateLimitedUntil = Date.now() + Math.max(own, retryAfterMs ?? 0);
         this.socket?.close(1000, "rate limited");
         return;
+      }
       case "payload_too_large":
         if (item) {
           await this.removeOutbox(item.clientMsgId);
@@ -1038,7 +1123,16 @@ export class SyncClient {
         size: update.length,
         createdAt: Date.now(),
       };
-      await this.enqueue(item);
+      if (!(await this.enqueue(item))) {
+        // Never drop local edits: keep them and retry later.
+        entry.pending = [update, ...entry.pending];
+        entry.pendingBytes += update.length;
+        entry.timer ??= setTimeout(
+          () => void this.flushPending(docId, entry),
+          this.opts.storageRetryMs,
+        );
+        return;
+      }
       if (this.welcomed) this.sendItem(item);
     }
   }
@@ -1085,7 +1179,10 @@ export class SyncClient {
       createdAt: Date.now(),
     };
     entry.snapshotInFlight = item.clientMsgId;
-    await this.enqueue(item);
+    if (!(await this.enqueue(item))) {
+      entry.snapshotInFlight = null; // retried at the next threshold check
+      return;
+    }
     if (this.welcomed) this.sendItem(item);
   }
 }

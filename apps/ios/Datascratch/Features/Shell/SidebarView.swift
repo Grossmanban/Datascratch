@@ -31,8 +31,9 @@ struct SidebarView: View {
         }
     }
 
-    private func moveNotebooks(_ source: IndexSet, _ destination: Int) {
-        guard let space = library.activeSpace else { return }
+    private func moveNotebooks(_ source: IndexSet, _ destination: Int, allShown: Bool) {
+        // Offsets of a list cut after its first rows are not the notebooks' order.
+        guard allShown, let space = library.activeSpace else { return }
         library.moveNotebooks(inSpace: space.id, from: source, to: destination)
     }
 
@@ -166,7 +167,7 @@ struct SidebarView: View {
 
     @ViewBuilder private var starredSection: some View {
         if !library.starredNotes.isEmpty {
-            let starred = SidebarLimit.visible(library.starredNotes, showAll: showingAll.contains("starred"))
+            let starred: (rows: [NoteMeta], hidden: Int) = SidebarLimit.visible(library.starredNotes, showAll: showingAll.contains("starred"))
             Section {
                 if !isCollapsed("starred") {
                     ForEach(starred.rows) { note in
@@ -194,40 +195,47 @@ struct SidebarView: View {
     }
 
     @ViewBuilder private var notebooksSection: some View {
-        let notebooks = library.notebooks(in: library.activeSpace?.id)
-        let shownNotebooks = SidebarLimit.visible(notebooks, showAll: showingAll.contains("notebooks"), keep: isOpen)
+        let notebooks: [Notebook] = library.notebooks(in: library.activeSpace?.id)
+        let shown: (rows: [Notebook], hidden: Int) = SidebarLimit.visible(
+            notebooks, showAll: showingAll.contains("notebooks"), keep: { (notebook: Notebook) -> Bool in isOpen(notebook) })
         Section {
             if !isCollapsed("notebooks") {
-                ForEach(shownNotebooks.rows) { notebook in
+                ForEach(shown.rows) { (notebook: Notebook) in
                     NotebookRow(notebook: notebook)
                         .accessibilityIdentifier("sidebar.notebook")
                 }
                 // Manual order by drag and drop, while the whole list is on screen.
-                .onMove(perform: shownNotebooks.hidden == 0 ? moveNotebooks : nil)
-                moreRow("notebooks", hidden: shownNotebooks.hidden, total: notebooks.count)
+                .onMove { (source: IndexSet, destination: Int) in
+                    moveNotebooks(source, destination, allShown: shown.hidden == 0)
+                }
+                moreRow("notebooks", hidden: shown.hidden, total: notebooks.count)
             }
         } header: {
-            SidebarSectionHeader(title: "Notebooks", identifier: "notebooks", isCollapsed: isCollapsed("notebooks")) {
-                toggle("notebooks")
-            } accessory: {
-                if let space = library.activeSpace {
-                    Button {
-                        scene.sheet = .newNotebook(spaceId: space.id)
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("New Notebook")
-                    .accessibilityIdentifier("sidebar.newNotebook")
+            notebooksHeader
+        }
+    }
+
+    private var notebooksHeader: some View {
+        SidebarSectionHeader(title: "Notebooks", identifier: "notebooks", isCollapsed: isCollapsed("notebooks")) {
+            toggle("notebooks")
+        } accessory: {
+            if let space = library.activeSpace {
+                Button {
+                    scene.sheet = .newNotebook(spaceId: space.id)
+                } label: {
+                    Image(systemName: "plus")
                 }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("New Notebook")
+                .accessibilityIdentifier("sidebar.newNotebook")
             }
         }
     }
 
     @ViewBuilder private var tagsSection: some View {
-        let tags = library.tagTree
+        let tags: [TagNode] = library.tagTree
         if !tags.isEmpty {
-            let shownTags = SidebarLimit.visible(tags, showAll: showingAll.contains("tags"))
+            let shownTags: (rows: [TagNode], hidden: Int) = SidebarLimit.visible(tags, showAll: showingAll.contains("tags"))
             Section {
                 if !isCollapsed("tags") {
                     ForEach(shownTags.rows) { TagTreeRow(node: $0) }

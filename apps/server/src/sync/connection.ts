@@ -49,8 +49,6 @@ const FAST_PATH_MAX_UPDATES = 100;
 /** Fast path by size: a document above this goes the paged way; a batch stays under the total. */
 const FAST_PATH_DOC_BYTES = 1024 * 1024;
 const FAST_PATH_BATCH_BYTES = 8 * 1024 * 1024;
-/** Documents in one `subscribe` (duplicates are dropped first). */
-export const MAX_SUBSCRIBE_DOCS = 10_000;
 const MAX_BUFFERED_BYTES = 64 * 1024 * 1024;
 /** Catch-up pauses while this much is still queued on the socket (backpressure). */
 const CATCHUP_HIGH_WATER = 4 * 1024 * 1024;
@@ -379,11 +377,10 @@ export class SyncConnection {
 
   async #subscribe(requested: { docId: string; since: number }[]) {
     const db = this.ctx.database.db;
-    // One entry per document (the last one wins): duplicates would multiply subscriptions and rows.
+    // The contract schema already refuses duplicates and more than MAX_SUBSCRIBE_DOCS
+    // documents; one entry per document is kept here too, as duplicates would multiply
+    // subscriptions and rows.
     const unique = new Map(requested.map((d) => [d.docId, d.since]));
-    if (unique.size > MAX_SUBSCRIBE_DOCS) {
-      throw new SyncError('bad_request', `too many documents in one subscribe (max ${MAX_SUBSCRIBE_DOCS})`);
-    }
     const list = [...unique].map(([docId, since]) => ({ docId, since }));
     const rows = await loadDocs(db, [...unique.keys()]);
     type Item = {

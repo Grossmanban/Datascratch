@@ -86,7 +86,12 @@ public enum SlashCommands {
         SlashCommand(id: "table", title: "Таблица", systemImage: "tablecells", keywords: ["table"], group: "Вставка"),
         SlashCommand(id: "drawing", title: "Блок рисования", systemImage: "scribble", keywords: ["drawing", "sketch", "рисунок"], group: "Вставка"),
         SlashCommand(id: "rule", title: "Разделитель", systemImage: "minus", hint: "---", keywords: ["divider", "rule", "hr", "линия"], group: "Вставка"),
+        SlashCommand(id: "image", title: "Фото", systemImage: "photo", keywords: ["photo", "image", "picture", "картинка", "изображение"], group: "Вставка"),
+        SlashCommand(id: "file", title: "Файл", systemImage: "doc", keywords: ["file", "attachment", "документ", "вложение"], group: "Вставка"),
     ]
+
+    /// Entries the host carries out (it picks the photo or file); offered only when it handles them.
+    public static let hostHandled: Set<String> = ["image", "file"]
 
     public static func command(_ id: String) -> SlashCommand? { all.first { $0.id == id } }
 

@@ -29,6 +29,8 @@ export class ApiError extends Error {
     message: string = code,
     /** Extra detail for the client (device_revoked: why). */
     readonly reason?: string,
+    /** rate_limited: when to try again. */
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.statusCode = STATUS[code];

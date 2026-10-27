@@ -61,7 +61,9 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         emailWindows.set(key, w);
       }
       w.count += 1;
-      if (w.count > PER_EMAIL_PER_MINUTE) throw new ApiError('rate_limited', 'too many attempts for this account, retry in a minute');
+      if (w.count > PER_EMAIL_PER_MINUTE) {
+        throw new ApiError('rate_limited', 'too many attempts for this account, retry in a minute', undefined, 60_000 - (now - w.start));
+      }
     };
     const { db } = ctx.database;
 

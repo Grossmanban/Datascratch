@@ -16,6 +16,17 @@ import type { SharingApi } from "./api.js";
 import { noteKeysFromMeta, ownerNotebookKeys, type VersionedKeys } from "./keys.js";
 import { wrapForMembers, type OwnerIdentity } from "./members.js";
 
+/** Only members that hold a key get the new one; `awaiting_key` ones wait for delivery. */
+async function activeMembers(
+  api: Pick<SharingApi, "listMembers">,
+  target: ShareTarget,
+  ownerId: string,
+) {
+  return (await api.listMembers(target)).filter(
+    (m) => m.status === "active" && m.userId !== ownerId,
+  );
+}
+
 export interface RotateNotebookOptions {
   api: Pick<
     SharingApi,
@@ -74,7 +85,7 @@ export async function rotateNotebookKey(options: RotateNotebookOptions): Promise
   if (!resuming) {
     const version = notebook.version + 1;
     const key = generateKey();
-    const members = (await api.listMembers(target)).filter((m) => m.userId !== owner.userId);
+    const members = await activeMembers(api, target, owner.userId);
     await api.rotateKey(target, {
       version,
       ownerWrappedKey: wrapKey(masterKey, key, AD.notebookKeyVersion(notebookId, version)),
@@ -179,7 +190,7 @@ export async function rotateSharedNoteKey(options: RotateNoteOptions): Promise<V
     AD.noteKeyVersion(noteId, version),
   );
   const previousKeyWrap = wrapPreviousKey(key, old.keys[0]!, "note", noteId, version);
-  const members = (await api.listMembers(target)).filter((m) => m.userId !== owner.userId);
+  const members = await activeMembers(api, target, owner.userId);
   await api.rotateKey(target, {
     version,
     ownerWrappedKey,

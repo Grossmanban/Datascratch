@@ -17,6 +17,16 @@ function summary(noteId: string): NoteSummary | null {
   return { noteId, title: noteTitle(n, i18n.t("app.untitled")), icon: n.icon };
 }
 
+/** Encrypts a file into a note's attachments; `onProgress` gets 0…1 while the chunks are sealed. */
+export async function uploadNoteFile(noteId: string, file: File, onProgress?: (done: number) => void) {
+  const k = await runtime().store.keyFor(noteId);
+  if (!k) throw new Error("no key");
+  onProgress?.(0);
+  const mime = file.type || "application/octet-stream";
+  const id = await storeAttachment(noteId, k, new Uint8Array(await file.arrayBuffer()), mime, onProgress);
+  return { attachmentId: id, name: file.name, size: file.size, mime };
+}
+
 /** Callbacks the editor needs, for the signed-in owner of a note. */
 export function ownerEditorHost(noteId: string, nav: Nav): EditorHost {
   const key = () => runtime().store.keyFor(noteId);
@@ -29,12 +39,8 @@ export function ownerEditorHost(noteId: string, nav: Nav): EditorHost {
       const k = await key();
       return k ? attachmentUrl(id, k).catch(() => null) : null;
     },
-    uploadAttachment: async (file) => {
-      const k = await key();
-      if (!k) throw new Error("no key");
-      const id = await storeAttachment(noteId, k, new Uint8Array(await file.arrayBuffer()), file.type || "application/octet-stream");
-      return { attachmentId: id, name: file.name, size: file.size, mime: file.type || "application/octet-stream" };
-    },
+    // `onProgress` (0…1) feeds the editor's upload placeholder while the file is encrypted.
+    uploadAttachment: (file: File, onProgress?: (done: number) => void) => uploadNoteFile(noteId, file, onProgress),
     onOpenAttachment: async ({ attachmentId }) => {
       const k = await key();
       if (k) window.open(await attachmentUrl(attachmentId, k), "_blank", "noopener");

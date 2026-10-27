@@ -9,6 +9,7 @@ import { noteToMarkdown } from "../src/doc/markdown-export.js";
 import { markdownToBlocks, MAX_NESTING, safeHref } from "../src/doc/markdown-import.js";
 import { contentOf } from "../src/doc/model.js";
 import { CLIENT_LIMITS, readCapped } from "../src/auth/oauth.js";
+import { consentPage } from "../src/auth/pages.js";
 import { makeNoteDoc } from "../src/testing/fixtures.js";
 import { startServer } from "./server.js";
 
@@ -143,5 +144,37 @@ describe("OAuth client registration is bounded (audit 3)", () => {
     expect(pulled).toBeLessThan(10);
     await expect(readCapped(new Response("x", { headers: { "content-length": "999999999" } }), CLIENT_LIMITS.metadataBytes)).rejects.toThrow(/too large/);
     expect(await readCapped(new Response('{"a":1}'), CLIENT_LIMITS.metadataBytes)).toBe('{"a":1}');
+  });
+});
+
+describe("consent page identity (audit 4)", () => {
+  const base = {
+    clientName: "Claude",
+    clientUri: "https://evil.example",
+    logoUri: "https://evil.example/claude-logo.png",
+    userEmail: null,
+    notebooks: [{ id: "n1", name: "Работа", space: null, icon: null, color: null }],
+    writeRequested: false,
+    request: "r",
+    action: "/oauth/authorize",
+    appUrl: null,
+  };
+
+  it("a dynamically registered client is shown by its redirect host, unverified, without logo or site", () => {
+    const html = consentPage({ ...base, redirectHost: "evil.example", verifiedHost: null });
+    expect(html).toMatch(/<b>evil\.example<\/b><span class="badge warn">не проверен<\/span>/);
+    expect(html).toContain("называет себя «Claude»");
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("сайт evil.example");
+    expect(html).toContain("Название этого агента не проверено");
+    expect(consentPage({ ...base, redirectHost: "127.0.0.1:53682", verifiedHost: null })).toContain("<b>программа на этом компьютере</b>");
+    expect(consentPage({ ...base, redirectHost: "cursor:", verifiedHost: null })).toContain("<b>приложение cursor</b>");
+  });
+
+  it("a client metadata document client is shown by its verified client_id host", () => {
+    const html = consentPage({ ...base, clientUri: "https://claude.ai", logoUri: "https://claude.ai/logo.png", redirectHost: "claude.ai", verifiedHost: "claude.ai" });
+    expect(html).toMatch(/<b>claude\.ai<\/b><span class="badge ok">адрес проверен<\/span>/);
+    expect(html).toContain('<img src="https://claude.ai/logo.png"');
+    expect(html).not.toContain("Название этого агента не проверено");
   });
 });

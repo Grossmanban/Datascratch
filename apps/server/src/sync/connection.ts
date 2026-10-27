@@ -231,6 +231,11 @@ export class SyncConnection {
       return this.#fail('protocol_mismatch', `protocol ${PROTOCOL_VERSION} required`, CloseCode.protocol);
     }
     const parsed = ClientMessage.safeParse(raw);
+    if (!parsed.success && !this.#principal) {
+      // Before authentication only a valid hello is acceptable: no second chances.
+      clearTimeout(this.#helloTimer);
+      return this.#fail('bad_request', 'hello expected', CloseCode.protocol);
+    }
     if (!parsed.success) {
       const ref = typeof raw === 'object' && raw ? ((raw as { clientMsgId?: unknown }).clientMsgId as string) : undefined;
       this.#send({

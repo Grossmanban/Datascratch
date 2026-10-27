@@ -47,8 +47,8 @@ const en: Loose<Messages> = {
     requiresOnline: "Requires a connection to the server",
   },
   auth: {
-    revokedTitle: "This browser was disconnected from the account",
-    revokedText: "The session was ended from another device. Please sign in again.",
+    revokedTitle: "The session on this device has ended",
+    revokedText: "The server no longer accepts this sign-in. Please sign in again.",
     wipedTitle: "This device was disconnected from the account from another device",
     wipedText: "Its data has been deleted. Sign in again — your notes will load from the server.",
     revokedUnsent_one: "{{count}} unsent change is kept here and will be sent after you sign in.",

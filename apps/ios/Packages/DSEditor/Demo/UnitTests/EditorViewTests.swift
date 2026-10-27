@@ -2,6 +2,7 @@
 import DSEditorModel
 import DSInk
 import UIKit
+import UniformTypeIdentifiers
 import XCTest
 
 @MainActor
@@ -1129,5 +1130,341 @@ final class EditorViewTests: XCTestCase {
                 }
             }
         }
+    }
+
+    // MARK: - The content does not move while typing (build 18 feedback)
+
+    /// Brings a paragraph to the middle of the screen and puts the caret at its start.
+    private func caretMidScreen(_ editor: EditorView, at word: String) throws -> Int {
+        let start = flatRange(editor, of: word).lowerBound
+        let placement = try XCTUnwrap(editor.geometry.placement(at: start))
+        editor.textView.setContentOffset(CGPoint(x: 0, y: max(0, placement.origin.y - editor.textView.bounds.height / 2)), animated: false)
+        editor.textView.selectedRange = NSRange(location: start, length: 0)
+        settle(editor)
+        drainMainQueue()
+        settle(editor)
+        return start
+    }
+
+    /// Backspace at the start of a paragraph in the middle of a note joins it to the previous one:
+    /// nothing scrolls.
+    func testBackspaceJoiningParagraphsKeepsTheOffset() throws {
+        let editor = host(longDoc(), width: 700, height: 600)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        _ = try caretMidScreen(editor, at: "Строка 30 ")
+        let before = editor.textView.contentOffset.y
+        editor.textView.deleteBackward()
+        drainMainQueue()
+        drainMainQueue()
+        settle(editor)
+        XCTAssertTrue(editor.textView.textStorage.string.contains("текстаСтрока 30 "), "the paragraphs were joined")
+        XCTAssertEqual(editor.textView.contentOffset.y, before, accuracy: 1, "joining paragraphs does not scroll")
+    }
+
+    /// Typing in the middle of a note, including a line that wraps, does not scroll.
+    func testTypingMidDocumentKeepsTheOffset() throws {
+        let editor = host(longDoc(), width: 700, height: 600)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        _ = try caretMidScreen(editor, at: "Строка 30 ")
+        let before = editor.textView.contentOffset.y
+        for word in ["Длинное ", "дописанное ", "предложение, ", "которое ", "переносится ", "на ", "новую ", "строку ", "и ", "ещё ", "дальше ", "по ", "ширине ", "колонки "] {
+            editor.textView.insertText(word)
+        }
+        drainMainQueue()
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.contentOffset.y, before, accuracy: 1, "typing does not scroll while the caret is visible")
+        editor.textView.deleteBackward()
+        editor.textView.deleteBackward()
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.contentOffset.y, before, accuracy: 1, "deleting characters does not scroll")
+    }
+
+    /// A fresh note under a cover: the caret goes into the empty title, the keyboard comes up (the
+    /// host shrinks the editor) and the header re-measures while the title is typed — the title
+    /// line does not move down.
+    func testTypingTheTitleOfAFreshNoteDoesNotMoveItDown() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title(""), .paragraph("")])
+        let editor = host(doc, width: 820, height: 1180)
+        // Drawing available (as with a Pencil): a screen of room below the text, so even an empty
+        // note can scroll by the header's growth. Without it a short note cannot scroll and the
+        // title moves with the header.
+        editor.tools.allowsFingerDrawing = true
+        drainMainQueue()
+        let header = UIView()
+        let height = header.heightAnchor.constraint(equalToConstant: 200)
+        height.isActive = true
+        editor.headerView = header
+        settle(editor)
+        // Every scroll change from here on, with who made it (a failure message prints them).
+        var moves: [String] = []
+        editor.textView.onScrollPositionChange = { old, new in
+            guard abs(old - new) > 0.5 else { return }
+            let callers = Thread.callStackSymbols.dropFirst(2).prefix(16)
+                .map { $0.split(separator: " ").dropFirst(3).prefix(2).joined(separator: " ") }
+                .joined(separator: " < ")
+            moves.append("\(Int(old))→\(Int(new)): \(callers)")
+        }
+        defer { editor.textView.onScrollPositionChange = nil }
+        func log() -> String { "offset \(editor.textView.contentOffset.y); moves:\n" + moves.joined(separator: "\n") }
+        // Where the title line is on screen, from the layout (`caretRect` is wrong in an empty title).
+        func titleLineY() throws -> CGFloat {
+            let line = try XCTUnwrap(editor.geometry.lineFrame(at: 0))
+            return line.minY - editor.textView.contentOffset.y
+        }
+        let top = editor.textView.contentOffset.y
+        window.makeKey()
+        editor.focusTitle()
+        settle(editor)
+        // The keyboard: the host shrinks the editor (SwiftUI keyboard avoidance).
+        editor.frame.size.height = 760
+        settle(editor)
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.contentOffset.y, top, accuracy: 1, "focusing the empty title does not scroll; \(log())")
+        let before = try titleLineY()
+        editor.textView.insertText("План")
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(try titleLineY(), before, accuracy: 1, "typing the title does not move it; \(log())")
+        // The host's header grows (its metadata row re-measures after the first keystrokes).
+        height.constant = 260
+        editor.headerLayoutDidChange()
+        settle(editor)
+        editor.textView.insertText(" на неделю")
+        drainMainQueue()
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "План на неделю")
+        XCTAssertEqual(try titleLineY(), before, accuracy: 1, "the title stays put when the header changes height; \(log())")
+    }
+
+    // MARK: - Photos (build 19)
+
+    private final class ImageStore: EditorAttachmentResolver {
+        var images: [String: UIImage] = [:]
+        func image(for attachmentId: String) -> UIImage? { images[attachmentId] }
+        func noteTitle(for noteId: String) -> String? { nil }
+    }
+
+    private func solidImage(_ size: CGSize, _ color: UIColor) -> UIImage {
+        UIGraphicsImageRenderer(size: size).image { ctx in
+            color.setFill()
+            ctx.fill(CGRect(origin: .zero, size: size))
+        }
+    }
+
+    /// An image goes in after the caret's paragraph with the host's attachment id; its local preview
+    /// shows (and sets the block's height) until the host has the stored image.
+    func testInsertImageShowsThePreviewUntilTheHostHasIt() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Фото"), .paragraph("Перед фото"), .paragraph("После")])
+        let editor = host(doc)
+        let store = ImageStore()
+        editor.attachmentResolver = store
+        editor.textView.selectedRange = NSRange(location: flatRange(editor, of: "Перед фото").upperBound, length: 0)
+        let preview = solidImage(CGSize(width: 400, height: 200), .red)
+        let block = editor.insertImage(attachmentId: "att-1", preview: preview, alt: "Закат")
+        settle(editor)
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(doc.blocks.map(\.type), [NodeType.title, NodeType.paragraph, NodeType.image, NodeType.paragraph])
+        XCTAssertEqual(doc.blocks[2].id, block)
+        XCTAssertEqual(doc.blocks[2].attrs["attachmentId"]?.stringValue, "att-1")
+        XCTAssertEqual(doc.blocks[2].attrs["alt"]?.stringValue, "Закат")
+        XCTAssertEqual(editor.factory.resolver?.image(for: "att-1"), preview, "the preview stands in for the image")
+        XCTAssertEqual(editor.factory.height(for: doc.blocks[2], width: 600), 300, accuracy: 1, "the preview's aspect ratio sets the height")
+
+        let stored = solidImage(CGSize(width: 300, height: 300), .blue)
+        store.images["att-1"] = stored
+        editor.imageDidLoad(attachmentId: "att-1")
+        XCTAssertNil(editor.factory.previews["att-1"], "the preview is dropped once the host has the image")
+        XCTAssertEqual(editor.factory.resolver?.image(for: "att-1"), stored)
+        editor.undo()
+        XCTAssertFalse(doc.blocks.contains { $0.type == NodeType.image }, "inserting an image is undoable")
+    }
+
+    /// Width from the menu or the iPad handle: snapped stops, full width stored as null, undoable.
+    func testImageWidthIsStoredAndUndoable() throws {
+        let image = BlockNode(type: NodeType.image, attrs: ["attachmentId": .string("att-2"), "width": .null])
+        let doc = InMemoryEditorDocument(blocks: [.title("Ширина"), image, .paragraph("")])
+        let editor = host(doc)
+        editor.setImageWidth(image.id, fraction: 0.5)
+        XCTAssertEqual(doc.block(image.id)?.attrs["width"]?.numberValue, 0.5)
+        editor.setImageWidth(image.id, fraction: 1)
+        XCTAssertNil(doc.block(image.id)?.attrs["width"], "full width is null: no attribute (document-model §4.1)")
+        editor.undo()
+        XCTAssertEqual(doc.block(image.id)?.attrs["width"]?.numberValue, 0.5)
+        XCTAssertEqual(ImageBlockView.nearestStop(to: 0.4), 0.5)
+        XCTAssertEqual(ImageBlockView.nearestStop(to: 0.2), 0.25)
+        XCTAssertEqual(ImageBlockView.nearestStop(to: 0.9), 1)
+    }
+
+    /// A tap on an image (and VoiceOver activation) asks the host to zoom it, with its frame.
+    func testImageTapAndActivationAskTheHostToZoom() throws {
+        let image = BlockNode(type: NodeType.image, attrs: ["attachmentId": .string("att-3"), "width": .null, "alt": .string("Схема")])
+        let doc = InMemoryEditorDocument(blocks: [.title("Зум"), .paragraph("Текст"), image, .paragraph("")])
+        let editor = host(doc)
+        let store = ImageStore()
+        store.images["att-3"] = solidImage(CGSize(width: 200, height: 100), .green)
+        editor.attachmentResolver = store
+        var opened: (BlockID, String, CGRect)?
+        editor.onImageTap = { opened = ($0, $1, $2) }
+        settle(editor)
+        drainMainQueue()
+        settle(editor)
+        let view = try XCTUnwrap(editor.factory.imageViews.first { $0.block == image.id }?.view, "the image view is laid out")
+        let frame = view.convert(view.imageFrame, to: editor.textView)
+        XCTAssertGreaterThan(frame.height, 20)
+        let centre = CGPoint(x: frame.midX, y: frame.midY)
+        XCTAssertEqual(editor.image(at: centre)?.block, image.id)
+        XCTAssertTrue(editor.hasTapTarget(at: centre), "a tap on the image is the editor's, not caret placement")
+        let element = try XCTUnwrap(editor.accessibilityElements?.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel == "Схема" })
+        XCTAssertTrue(element.accessibilityTraits.contains(.image))
+        XCTAssertTrue(element.accessibilityActivate())
+        XCTAssertEqual(opened?.0, image.id)
+        XCTAssertEqual(opened?.1, "att-3")
+        XCTAssertGreaterThan(opened?.2.width ?? 0, 20)
+        editor.onImageTap = nil
+        XCTAssertFalse(editor.hasTapTarget(at: centre), "without a zoom handler a tap on the image is an ordinary tap")
+    }
+
+    /// ⌘V with a copied photo goes to the host as item providers; text pastes as before.
+    func testPastingAnImageHandsItToTheHost() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Вставка"), .paragraph("Текст")])
+        let editor = host(doc)
+        var received: [NSItemProvider] = []
+        editor.onImagesReceived = { received = $0 }
+        UIPasteboard.general.image = solidImage(CGSize(width: 20, height: 20), .orange)
+        XCTAssertTrue(editor.textView.canPerformAction(#selector(UIResponderStandardEditActions.paste(_:)), withSender: nil))
+        editor.textView.paste(nil)
+        XCTAssertEqual(received.count, 1, "the pasted photo went to the host")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "Текст", "nothing was pasted as text")
+        UIPasteboard.general.items = []
+    }
+
+    /// Caption, description and replacement write the image block's attributes (undoable); the
+    /// upload ring follows `setImageProgress`.
+    func testImageCaptionReplaceAndUploadRing() throws {
+        let image = BlockNode(type: NodeType.image, attrs: ["attachmentId": .string("att-4"), "width": .null])
+        let doc = InMemoryEditorDocument(blocks: [.title("Подпись"), image, .paragraph("")])
+        let editor = host(doc)
+        editor.setImageAttributes(image.id, caption: "Вид с крыши", alt: "Город вечером")
+        XCTAssertEqual(doc.block(image.id)?.attrs["caption"]?.stringValue, "Вид с крыши")
+        XCTAssertEqual(doc.block(image.id)?.attrs["alt"]?.stringValue, "Город вечером")
+        editor.setImageAttributes(image.id, caption: "", alt: "Город вечером")
+        XCTAssertNil(doc.block(image.id)?.attrs["caption"]?.stringValue, "an empty caption removes it")
+        editor.replaceImage(image.id, attachmentId: "att-5", preview: solidImage(CGSize(width: 10, height: 10), .gray))
+        XCTAssertEqual(doc.block(image.id)?.attrs["attachmentId"]?.stringValue, "att-5")
+        editor.undo()
+        XCTAssertEqual(doc.block(image.id)?.attrs["attachmentId"]?.stringValue, "att-4", "replacing is undoable")
+        editor.setImageProgress(attachmentId: "att-4", 0.4)
+        XCTAssertEqual(editor.factory.uploadProgress["att-4"], 0.4)
+        editor.setImageProgress(attachmentId: "att-4", nil)
+        XCTAssertNil(editor.factory.uploadProgress["att-4"])
+    }
+
+    /// File blocks: a tap or VoiceOver activation asks the host to open the file.
+    func testFileTapAsksTheHostToOpenIt() throws {
+        let file = BlockNode(type: NodeType.file, attrs: ["attachmentId": .string("file-1"), "name": .string("Отчёт.pdf"),
+                                                           "size": .number(2048), "mime": .string("application/pdf")])
+        let doc = InMemoryEditorDocument(blocks: [.title("Файл"), .paragraph("Текст"), file, .paragraph("")])
+        let editor = host(doc)
+        var opened: (BlockID, String)?
+        editor.onFileTap = { opened = ($0, $1) }
+        settle(editor)
+        drainMainQueue()
+        settle(editor)
+        let view = try XCTUnwrap(editor.factory.fileViews.first { $0.block == file.id }?.view)
+        let frame = view.convert(view.bounds, to: editor.textView)
+        XCTAssertTrue(editor.hasTapTarget(at: CGPoint(x: frame.midX, y: frame.midY)))
+        let element = try XCTUnwrap(editor.accessibilityElements?.compactMap { $0 as? UIAccessibilityElement }.first { $0.accessibilityLabel == "Отчёт.pdf" })
+        XCTAssertTrue(element.accessibilityActivate())
+        XCTAssertEqual(opened?.0, file.id)
+        XCTAssertEqual(opened?.1, "file-1")
+    }
+
+    /// «Фото» and «Файл» in the "/" menu are offered only to a host that handles them; choosing one
+    /// removes the typed "/query" and hands the id to the host.
+    func testHostSlashEntriesGoToTheHost() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Слэш"), .paragraph("")])
+        let editor = host(doc)
+        var menu: SlashMenuState?
+        editor.onSlashMenu = { menu = $0 }
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        editor.textView.selectedRange = NSRange(location: editor.textView.textStorage.length, length: 0)
+        editor.textView.insertText("/фот")
+        XCTAssertEqual(menu?.items.map(\.id) ?? [], [], "no host handler: no «Фото»")
+        var chosen: String?
+        editor.onHostSlashCommand = { chosen = $0 }
+        editor.textView.insertText("о")
+        XCTAssertEqual(menu?.items.map(\.id), ["image"])
+        editor.applySlashCommand("image")
+        XCTAssertEqual(chosen, "image")
+        XCTAssertEqual(doc.flatText(of: doc.blocks[1].id), "", "the typed /query is removed")
+    }
+
+    // MARK: - Rich paste (build 19)
+
+    private func putHTML(_ html: String, plain: String) {
+        UIPasteboard.general.items = [[UTType.html.identifier: Data(html.utf8), UTType.utf8PlainText.identifier: plain]]
+    }
+
+    /// A web page selection pastes as blocks with marks, images through the host, in one undo step.
+    func testPastingHTMLInsertsBlocksAndOneUndoStep() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Вставка"), .paragraph("До ")])
+        let editor = host(doc)
+        var asked: [PastedImage] = []
+        editor.onPastedImages = { images in asked = images; return images.map { _ in "att-paste" } }
+        editor.textView.selectedRange = NSRange(location: flatRange(editor, of: "До ").upperBound, length: 0)
+        putHTML("<p> и <b>после</b></p><h2>Раздел</h2><ul><li>один</li><li>два</li></ul><img src=\"https://example.com/a.png\" alt=\"Схема\">",
+                plain: "и после")
+        editor.textView.paste(nil)
+        XCTAssertEqual(doc.blocks.map(\.type), [NodeType.title, NodeType.paragraph, NodeType.heading, NodeType.bulletList, NodeType.image, NodeType.paragraph])
+        XCTAssertEqual(doc.blocks[1].plainText, "До и после")
+        XCTAssertEqual(doc.blocks[1].inline?.last, .text("после", MarkSet([MarkName.bold: MarkSet.plain])))
+        XCTAssertEqual(asked.first?.source, .url(URL(string: "https://example.com/a.png")!))
+        XCTAssertEqual(doc.blocks[4].attrs["attachmentId"]?.stringValue, "att-paste")
+        XCTAssertNil(doc.blocks[4].attrs[PasteFragment.pasteImageAttr], "the paste index never reaches the document")
+        editor.undo()
+        XCTAssertEqual(doc.blocks.map(\.plainText), ["Вставка", "До "], "one paste is one undo step")
+        editor.redo()
+        let image = try XCTUnwrap(doc.blocks.firstIndex { $0.type == NodeType.image })
+        editor.imageFailed(attachmentId: "att-paste")
+        XCTAssertEqual(doc.blocks[image].type, NodeType.paragraph, "a failed download leaves a link to the address")
+        XCTAssertEqual(doc.blocks[image].inline?.first, .text("Схема", MarkSet([MarkName.link: .object(["href": "https://example.com/a.png"])])))
+        UIPasteboard.general.items = []
+    }
+
+    /// In the title only plain text goes in, on one line; «Вставить без форматирования» pastes text.
+    func testPasteInTheTitleAndPlainPaste() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title(""), .paragraph("")])
+        let editor = host(doc)
+        editor.textView.selectedRange = NSRange(location: 0, length: 0)
+        putHTML("<h1>Большой заголовок</h1><p>и текст</p>", plain: "Большой заголовок\nи текст")
+        editor.textView.paste(nil)
+        XCTAssertEqual(doc.blocks[0].plainText, "Большой заголовок и текст", "the title is one line")
+        XCTAssertEqual(doc.blocks.count, 2)
+        editor.textView.selectedRange = NSRange(location: editor.textView.textStorage.length, length: 0)
+        editor.textView.pasteWithoutFormatting(nil)
+        XCTAssertEqual(doc.blocks.map(\.type), [NodeType.title, NodeType.paragraph, NodeType.paragraph], "plain text, its line break a new paragraph")
+        XCTAssertEqual(doc.blocks[1].plainText, "Большой заголовок")
+        XCTAssertEqual(doc.blocks[1].inline?.first?.marks, .empty)
+        UIPasteboard.general.items = []
+    }
+
+    /// Plain text that reads as Markdown is parsed as Markdown.
+    func testPastingMarkdownText() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Md"), .paragraph("")])
+        let editor = host(doc)
+        editor.textView.selectedRange = NSRange(location: editor.textView.textStorage.length, length: 0)
+        UIPasteboard.general.string = "## План\n\n- [ ] купить\n- [x] позвонить\n\n**важно**"
+        editor.textView.paste(nil)
+        XCTAssertEqual(doc.blocks.map(\.type), [NodeType.title, NodeType.heading, NodeType.taskList, NodeType.paragraph])
+        XCTAssertEqual(doc.blocks[2].children.map { $0.attrs["state"]?.stringValue }, ["open", "done"])
+        UIPasteboard.general.items = []
     }
 }

@@ -16,6 +16,7 @@ import {
   type SyncClientOptions,
   type SyncStatus,
   type WebSocketLike,
+  SYNC_CLOSE_DEVICE_REVOKED,
 } from "../src/index.js";
 
 const DOC = "0192f3c4-0000-7000-8000-0000000000d1";
@@ -225,6 +226,76 @@ describe("sync client", () => {
     dg.getText("t").insert(0, "nope");
     await until(() => errors.some((e) => e.code === "forbidden"));
     await until(async () => (await g.storage.listOutbox()).length === 0);
+  });
+
+  it("reports a revoked device once and stops without sending the outbox", async () => {
+    const hub = new MemorySyncHub();
+    const a = makeClient(hub, "dev-a");
+    const reasons: string[] = [];
+    const errors: SyncClientError[] = [];
+    a.client.on("deviceRevoked", (r) => reasons.push(r));
+    a.client.on("error", (e) => errors.push(e));
+    const da = new Y.Doc();
+    await a.client.addDoc(DOC, da);
+    a.client.start();
+    await until(() => a.client.isSynced(DOC));
+    hub.revokeDevice("dev-a", "password_change");
+    await until(() => a.client.status === "revoked");
+    da.getText("t").insert(0, "unsent");
+    a.client.reconnect();
+    a.client.start();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(reasons).toEqual(["password_change"]);
+    expect(errors.some((e) => (e.code as string) === "device_revoked")).toBe(false);
+    expect(hub.connectionCount).toBe(0);
+    expect(hub.docs.get(DOC)!.items).toHaveLength(0);
+  });
+
+  it("treats a revoked hello like a revocation, not an auth failure", async () => {
+    const hub = new MemorySyncHub();
+    hub.revokeDevice("dev-a", "token_reuse");
+    const a = makeClient(hub, "dev-a");
+    const reasons: string[] = [];
+    a.client.on("deviceRevoked", (r) => reasons.push(r));
+    a.client.start();
+    await until(() => a.client.status === "revoked");
+    expect(reasons).toEqual(["token_reuse"]);
+  });
+
+  it("never reports a revocation for auth failures or network loss", async () => {
+    let accept = true;
+    const hub = new MemorySyncHub({
+      authenticate: () =>
+        accept ? { userId: null, canRead: () => true, canWrite: () => true } : null,
+    });
+    const a = makeClient(hub, "dev-a", { maxAuthFailures: 2 });
+    const reasons: string[] = [];
+    a.client.on("deviceRevoked", (r) => reasons.push(r));
+    await a.client.addDoc(DOC, new Y.Doc());
+    a.client.start();
+    await until(() => a.client.isSynced(DOC));
+    hub.dropAll();
+    await until(() => a.client.isSynced(DOC));
+    accept = false;
+    hub.dropAll();
+    await until(() => a.client.status === "unauthorized");
+    expect(reasons).toEqual([]);
+  });
+
+  it("treats close code 4410 alone as a revocation", async () => {
+    const hub = new MemorySyncHub();
+    const factory = hub.socketFactory();
+    let last: ReturnType<typeof factory> | null = null;
+    const a = makeClient(hub, "dev-a", {
+      createSocket: (url) => (last = factory(url)),
+    });
+    const reasons: string[] = [];
+    a.client.on("deviceRevoked", (r) => reasons.push(r));
+    a.client.start();
+    await until(() => a.client.status === "online");
+    last!.onclose?.({ code: SYNC_CLOSE_DEVICE_REVOKED, reason: "bogus" });
+    expect(a.client.status).toBe("revoked");
+    expect(reasons).toEqual(["user"]);
   });
 
   it("gives up after repeated auth failures", async () => {

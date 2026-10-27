@@ -1,3 +1,8 @@
+import {
+  DEVICE_REVOKED_REASONS,
+  SYNC_CLOSE_DEVICE_REVOKED,
+  classifyApiFailure,
+} from "@datascratch/shared/contracts";
 import { vid } from "./util.js";
 
 const ID = vid(1);
@@ -241,9 +246,208 @@ export function apiVectors() {
           },
         ],
       },
+      boxKey: {
+        valid: [{ publicKey: KEY, wrappedSecretKey: "AQ" }],
+        invalid: [
+          { reason: "short public key", body: { publicKey: "AAAA", wrappedSecretKey: "AQ" } },
+        ],
+      },
+      createInvitationRequest: {
+        valid: [
+          {
+            invitationId: ID,
+            target: { kind: "notebook", id: vid(3) },
+            email: "A@B.co",
+            role: "editor",
+          },
+          {
+            invitationId: ID,
+            target: { kind: "note", id: vid(3) },
+            email: "a@b.co",
+            role: "viewer",
+          },
+        ],
+        invalid: [
+          {
+            reason: "unknown role",
+            body: {
+              invitationId: ID,
+              target: { kind: "notebook", id: vid(3) },
+              email: "a@b.co",
+              role: "admin",
+            },
+          },
+          {
+            reason: "spaces cannot be shared",
+            body: {
+              invitationId: ID,
+              target: { kind: "space", id: vid(3) },
+              email: "a@b.co",
+              role: "viewer",
+            },
+          },
+        ],
+      },
+      incomingInvitation: {
+        valid: [
+          {
+            id: ID,
+            target: { kind: "notebook", id: vid(3) },
+            from: { userId: vid(4), email: "owner@b.co" },
+            role: "viewer",
+            createdAt: T,
+            expiresAt: T,
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing from",
+            body: {
+              id: ID,
+              target: { kind: "notebook", id: vid(3) },
+              role: "viewer",
+              createdAt: T,
+              expiresAt: T,
+            },
+          },
+        ],
+      },
+      member: {
+        valid: [
+          {
+            userId: vid(4),
+            email: "m@b.co",
+            role: "editor",
+            status: "awaiting_key",
+            joinedAt: T,
+            accountCreatedAfterInvite: true,
+          },
+        ],
+        invalid: [
+          {
+            reason: "unknown status",
+            body: {
+              userId: vid(4),
+              email: "m@b.co",
+              role: "editor",
+              status: "left",
+              joinedAt: T,
+              accountCreatedAfterInvite: false,
+            },
+          },
+        ],
+      },
+      putMemberKeyRequest: {
+        valid: [{ version: 1, wrappedKey: "AQ" }],
+        invalid: [{ reason: "version 0", body: { version: 0, wrappedKey: "AQ" } }],
+      },
+      rotateKeyRequest: {
+        valid: [
+          {
+            version: 2,
+            ownerWrappedKey: "AQ",
+            previousKeyWrap: "AQ",
+            memberKeys: [{ userId: vid(4), wrappedKey: "AQ" }],
+          },
+          {
+            version: 3,
+            ownerWrappedKey: "AQ",
+            previousKeyWrap: "AQ",
+            memberKeys: [],
+            notebookKey: KEY,
+          },
+        ],
+        invalid: [
+          {
+            reason: "rotation must produce version ≥ 2",
+            body: { version: 1, ownerWrappedKey: "AQ", previousKeyWrap: "AQ", memberKeys: [] },
+          },
+          {
+            reason: "duplicate member",
+            body: {
+              version: 2,
+              ownerWrappedKey: "AQ",
+              previousKeyWrap: "AQ",
+              memberKeys: [
+                { userId: vid(4), wrappedKey: "AQ" },
+                { userId: vid(4), wrappedKey: "AQ" },
+              ],
+            },
+          },
+        ],
+      },
+      sharedItem: {
+        valid: [
+          {
+            target: { kind: "notebook", id: vid(3) },
+            owner: { userId: vid(4), email: "owner@b.co", publicKey: KEY },
+            role: "editor",
+            keyVersion: 2,
+            wrappedKey: "AQ",
+            keyChain: ["AQ"],
+            docIds: [vid(3), vid(5)],
+            addedAt: T,
+          },
+          {
+            target: { kind: "note", id: vid(5) },
+            owner: { userId: vid(4), email: "owner@b.co", publicKey: KEY },
+            role: "viewer",
+            keyVersion: 1,
+            wrappedKey: null,
+            keyChain: [],
+            docIds: [vid(5)],
+            addedAt: T,
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing owner public key",
+            body: {
+              target: { kind: "note", id: vid(5) },
+              owner: { userId: vid(4), email: "o@b.co" },
+              role: "viewer",
+              keyVersion: 1,
+              wrappedKey: null,
+              keyChain: [],
+              docIds: [],
+              addedAt: T,
+            },
+          },
+        ],
+      },
+      docVersion: {
+        valid: [
+          { seq: 3, createdAt: T, deviceId: "dev-1" },
+          {
+            seq: 9,
+            createdAt: T,
+            deviceId: "dev-1",
+            authors: [
+              { kind: "user", userId: vid(4) },
+              { kind: "agent", tokenId: "tok-1" },
+            ],
+          },
+        ],
+        invalid: [
+          {
+            reason: "author without kind",
+            body: { seq: 9, createdAt: T, deviceId: "d", authors: [{ userId: vid(4) }] },
+          },
+        ],
+      },
       apiError: {
-        valid: [{ error: { code: "conflict", message: "id exists with different content" } }],
-        invalid: [{ reason: "unknown code", body: { error: { code: "teapot", message: "" } } }],
+        valid: [
+          { error: { code: "conflict", message: "id exists with different content" } },
+          { error: { code: "device_revoked", message: "device revoked", reason: "user" } },
+          { error: { code: "rate_limited", message: "slow down", retryAfterMs: 5000 } },
+        ],
+        invalid: [
+          { reason: "unknown code", body: { error: { code: "teapot", message: "" } } },
+          {
+            reason: "unknown revocation reason",
+            body: { error: { code: "device_revoked", message: "", reason: "bored" } },
+          },
+        ],
       },
     };
   return {
@@ -252,5 +456,51 @@ export function apiVectors() {
         "REST bodies (api.md v1): every `valid` body must be accepted and every `invalid` one rejected by the schema of the same name (TS: `<name>Schema` in @datascratch/shared/contracts). Unknown extra fields are ignored.",
       cases,
     },
+    "api/failures.json": failureVectors(),
+  };
+}
+
+/** How a client classifies REST failures (D-53): only a revocation wipes data. */
+function failureVectors() {
+  const revoked = (reason: string) => ({
+    error: { code: "device_revoked", message: "device revoked", reason },
+  });
+  const inputs: { name: string; status: number | null; body: unknown }[] = [
+    ...DEVICE_REVOKED_REASONS.map((r) => ({
+      name: `revoked: ${r}`,
+      status: 401,
+      body: revoked(r),
+    })),
+    { name: "revoked body as raw text", status: 401, body: JSON.stringify(revoked("recovery")) },
+    {
+      name: "expired access token",
+      status: 401,
+      body: { error: { code: "unauthorized", message: "token expired" } },
+    },
+    {
+      name: "device_revoked without reason → reason user",
+      status: 401,
+      body: { error: { code: "device_revoked", message: "x" } },
+    },
+    { name: "unknown (newer) reason → reason user", status: 401, body: revoked("bored") },
+    { name: "device_revoked on a non-401 is not a wipe", status: 403, body: revoked("user") },
+    { name: "proxy 401 page", status: 401, body: "<html>401 Unauthorized</html>" },
+    { name: "no response (offline, timeout)", status: null, body: null },
+    { name: "gateway error page", status: 502, body: "<html>Bad Gateway</html>" },
+    { name: "gateway timeout, empty", status: 504, body: "" },
+    {
+      name: "server error with body",
+      status: 503,
+      body: { error: { code: "internal", message: "maintenance" } },
+    },
+    { name: "conflict", status: 409, body: { error: { code: "conflict", message: "exists" } } },
+    { name: "non-JSON 500", status: 500, body: "oops" },
+  ];
+  return {
+    description:
+      'REST failure classification (D-53, api.md; TS: classifyApiFailure). `status: null` = no HTTP response. `body` is parsed JSON or raw text (a string is JSON-parsed first; unparsable → no error body). A 401 with `error.code: "device_revoked"` is a revocation whatever its reason (unknown/absent → "user"); only it wipes local data; `unauthorized` → refresh the token; `network` → retry later. `syncCloseDeviceRevoked` is the WebSocket close code with the same meaning (close reason = revocation reason; unknown/absent → "user").',
+    reasons: [...DEVICE_REVOKED_REASONS],
+    syncCloseDeviceRevoked: SYNC_CLOSE_DEVICE_REVOKED,
+    cases: inputs.map((c) => ({ ...c, expected: classifyApiFailure(c.status, c.body) })),
   };
 }

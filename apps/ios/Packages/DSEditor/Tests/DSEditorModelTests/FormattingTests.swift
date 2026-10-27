@@ -27,5 +27,8 @@ import Testing
         #expect(SlashCommands.matching("h2").map(\.id) == ["heading2"])
         #expect(SlashCommands.matching("todo").map(\.id) == ["taskList"])
         #expect(SlashCommands.matching("ТАБЛ").map(\.id) == ["table"])
+        #expect(SlashCommands.matching("фото").map(\.id) == ["image"])
+        #expect(SlashCommands.matching("файл").map(\.id) == ["file"])
+        #expect(SlashCommands.hostHandled == ["image", "file"])
     }
 }

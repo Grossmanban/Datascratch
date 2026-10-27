@@ -416,7 +416,14 @@ final class CoreLibrary: LibraryBackend {
     /// Removes everything this device holds — documents, keys, pending work — and starts over
     /// with an empty device library (spec/07: «Delete data from this device», and signing in to a
     /// different account after this device was signed out).
-    func wipeLocalData() throws {
+    /// Everything of the account on this device: documents, keys, the overlay and the decrypted
+    /// attachments in `attachments` (and their records).
+    func wipeLocalData(attachments: URL? = nil) throws {
+        if let attachments {
+            try? AttachmentManager.wipeLocal(directory: attachments, store: store)
+        } else {
+            try? store.deleteAllAttachments()
+        }
         notebookDocs.removeAll()
         noteDocs.removeAll()
         subscriptions.removeAll()

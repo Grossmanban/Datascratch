@@ -13,7 +13,7 @@ final class RecordingAttachmentRemote: CoverAttachmentRemote {
     init(directory: URL) { self.directory = directory }
 
     func addAttachment(_ data: Data, mime: String, noteId: String, id presetId: String?) async throws -> String {
-        let id = presetId ?? UUID().uuidString.lowercased()
+        let id = presetId ?? UUIDv7.make()
         try data.write(to: directory.appendingPathComponent(id))
         added.append((mime, noteId, data.count))
         return id

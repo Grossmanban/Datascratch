@@ -1000,7 +1000,8 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(more.waitForExistence(timeout: 3), "«Show Less» did not fold the list back")
 
         let header = app.descendants(matching: .any)["sidebar.section.notebooks"].firstMatch
-        XCTAssertTrue(header.exists, "no notebooks title")
+        for _ in 0..<4 where !(header.exists && header.isHittable) { app.cells.firstMatch.swipeDown(); settle(0.5) }
+        XCTAssertTrue(header.waitForExistence(timeout: 3), "no notebooks title")
         header.tap()
         XCTAssertTrue(rows.firstMatch.waitForNonExistence(timeout: 3), "the notebooks did not fold")
         header.tap()

@@ -4,8 +4,9 @@ import UIKit
 /// Where cover images go besides this device: the server's encrypted attachments
 /// (crypto.md §6). Nil without a server.
 protocol CoverAttachmentRemote: AnyObject {
-    /// Stores the file as a new attachment of the note and returns its id.
-    func addAttachment(_ data: Data, mime: String, noteId: String) async throws -> String
+    /// Stores the file as a new attachment of the note and returns its id (`id` when the
+    /// document already refers to one made beforehand, e.g. a pasted web image).
+    func addAttachment(_ data: Data, mime: String, noteId: String, id: String?) async throws -> String
     func uploadAttachment(_ attachmentId: String, noteId: String) async
     /// Fetches an attachment that is not on this device yet.
     func downloadAttachment(_ attachmentId: String, noteId: String) async -> URL?
@@ -92,11 +93,11 @@ final class CoverImages {
     /// too: every client reads JPEG), shown at once from this device, encrypted with the note key
     /// and uploaded in the background (crypto.md §6). Offline, DSCore keeps it and uploads it once
     /// connected.
-    func addImage(_ data: Data, noteId: String) async throws -> AddedImage {
+    func addImage(_ data: Data, noteId: String, id presetId: String? = nil) async throws -> AddedImage {
         guard let image = UIImage(data: data),
               let jpeg = Self.jpeg(image, maxPixels: Self.maxPhotoPixels, quality: 0.85),
               let stored = UIImage(data: jpeg) else { throw CoverError.notAnImage }
-        let id = try await store(jpeg, noteId: noteId)
+        let id = try await store(jpeg, noteId: noteId, id: presetId)
         cache.setObject(stored, forKey: id as NSString)
         upload(id, noteId: noteId)
         return AddedImage(id: id, pixelSize: CGSize(width: stored.size.width * stored.scale, height: stored.size.height * stored.scale))
@@ -132,11 +133,11 @@ final class CoverImages {
         return await remote?.downloadAttachment(attachmentId, noteId: noteId)
     }
 
-    private func store(_ data: Data, mime: String = "image/jpeg", noteId: String) async throws -> String {
+    private func store(_ data: Data, mime: String = "image/jpeg", noteId: String, id presetId: String? = nil) async throws -> String {
         if let remote {
-            return try await remote.addAttachment(data, mime: mime, noteId: noteId)
+            return try await remote.addAttachment(data, mime: mime, noteId: noteId, id: presetId)
         }
-        let id = UUIDv7.make()
+        let id = presetId ?? UUIDv7.make()
         try data.write(to: url(id), options: [.atomic, .completeFileProtection])
         return id
     }

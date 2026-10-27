@@ -12,8 +12,8 @@ final class RecordingAttachmentRemote: CoverAttachmentRemote {
 
     init(directory: URL) { self.directory = directory }
 
-    func addAttachment(_ data: Data, mime: String, noteId: String) async throws -> String {
-        let id = UUID().uuidString.lowercased()
+    func addAttachment(_ data: Data, mime: String, noteId: String, id presetId: String?) async throws -> String {
+        let id = presetId ?? UUID().uuidString.lowercased()
         try data.write(to: directory.appendingPathComponent(id))
         added.append((mime, noteId, data.count))
         return id
@@ -69,6 +69,20 @@ struct NoteMediaTests {
         let id = try await images.addFile(bytes, mime: "application/pdf", noteId: "note-3")
         #expect(remote.added.first?.mime == "application/pdf")
         #expect(try Data(contentsOf: images.directory.appendingPathComponent(id)) == bytes)
+    }
+
+    /// A pasted web image: the document refers to the id before the bytes are here.
+    @Test func aPresetIdIsKept() async throws {
+        let images = CoverImages.temporary()
+        let remote = RecordingAttachmentRemote(directory: images.directory)
+        images.remote = remote
+        let id = UUIDv7.make()
+        let added = try await images.addImage(photo(CGSize(width: 300, height: 200)), noteId: "note-5", id: id)
+        #expect(added.id == id)
+        #expect(images.image(id, noteId: "note-5") != nil)
+        let offline = CoverImages.temporary()
+        let local = try await offline.addImage(photo(CGSize(width: 300, height: 200)), noteId: "note-5", id: id)
+        #expect(local.id == id)
     }
 
     @Test func notAnImageIsRefused() async {

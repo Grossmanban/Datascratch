@@ -984,10 +984,10 @@
     "semantic_hash": "b94b2bdac92ca48dff93f0062e8f0b7a"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1793088526.364961,
-    "seen": 1793088652.2636719,
-    "ast_hash": "a833b04518c9600c51fed491578fd52a",
-    "semantic_hash": "a833b04518c9600c51fed491578fd52a"
+    "mtime": 1793089026.4030378,
+    "seen": 1793089152.757712,
+    "ast_hash": "5f6afd3c65eb8fb3c8f9fb8159e5b1e2",
+    "semantic_hash": "5f6afd3c65eb8fb3c8f9fb8159e5b1e2"
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
     "mtime": 1793011608.2055936,
@@ -4710,10 +4710,10 @@
     "semantic_hash": "7de253f465da0a90057780f1b151d4db"
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1793088526.3686714,
-    "seen": 1793088652.2666063,
-    "ast_hash": "7be0ed4eec95f88bc1142f505fac3d2d",
-    "semantic_hash": "7be0ed4eec95f88bc1142f505fac3d2d"
+    "mtime": 1793089044.1378574,
+    "seen": 1793089152.760451,
+    "ast_hash": "210c549341daa42b354bde56d0ee7462",
+    "semantic_hash": "210c549341daa42b354bde56d0ee7462"
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1793084705.4194863,

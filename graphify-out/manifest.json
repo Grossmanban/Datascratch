@@ -2149,9 +2149,9 @@
   },
   "apps/web/src/editor/hosts.ts": {
     "mtime": 1793088326.8548126,
-    "seen": 1793088436.1233673,
+    "seen": 1793088683.7564878,
     "ast_hash": "c832ed28948be307aa4cfa13dda8eafb",
-    "semantic_hash": ""
+    "semantic_hash": "c832ed28948be307aa4cfa13dda8eafb"
   },
   "apps/web/src/editor/index.ts": {
     "mtime": 1793045324.034558,
@@ -4273,9 +4273,9 @@
   },
   "apps/web/README.md": {
     "mtime": 1793088389.9666653,
-    "seen": 1793088436.1239107,
+    "seen": 1793088683.7569695,
     "ast_hash": "a6f26a2181a045d78d9624a87be26898",
-    "semantic_hash": ""
+    "semantic_hash": "a6f26a2181a045d78d9624a87be26898"
   },
   "apps/web/index.html": {
     "mtime": 1793014433.2680414,
@@ -4675,9 +4675,9 @@
   },
   "docs/open-questions.md": {
     "mtime": 1793088401.6480558,
-    "seen": 1793088436.1239927,
+    "seen": 1793088683.7569711,
     "ast_hash": "00de0bd327f7c3d90ae29607153d3c0d",
-    "semantic_hash": ""
+    "semantic_hash": "00de0bd327f7c3d90ae29607153d3c0d"
   },
   "docs/risks.md": {
     "mtime": 1792932836.5541606,
@@ -5329,14 +5329,14 @@
   },
   "apps/web/src/lib/remoteImage.test.ts": {
     "mtime": 1793088363.4173322,
-    "seen": 1793088436.1234763,
+    "seen": 1793088683.7565768,
     "ast_hash": "d3a74b394ad03f4572fe460ad99392d6",
-    "semantic_hash": ""
+    "semantic_hash": "d3a74b394ad03f4572fe460ad99392d6"
   },
   "apps/web/src/lib/remoteImage.ts": {
     "mtime": 1793088311.9164588,
-    "seen": 1793088436.1234782,
+    "seen": 1793088683.756578,
     "ast_hash": "e12868a0e5d8abe7b1fb99178b46ca94",
-    "semantic_hash": ""
+    "semantic_hash": "e12868a0e5d8abe7b1fb99178b46ca94"
   }
 }

@@ -81,3 +81,30 @@ test("an item nobody can read is skipped: sync settles (no endless spinner), a c
   await request.post(`${MOCK}/v1/__test/inject-unreadable`, { data: { docId: notebookId } });
   await expect(note).toBeVisible({ timeout: 15_000 });
 });
+
+test("browser storage full: a calm banner while edits cannot be saved on the device, gone once they can", async ({ page }) => {
+  await signUp(page, uniqueEmail("storage-full"));
+  await newDoc(page, "Квота", "Текст");
+  await expect.poll(() => page.evaluate(() => "__ds" in window)).toBe(true);
+  // Make the outbox storage refuse writes the way a full IndexedDB does.
+  await page.evaluate(() => {
+    type Storage = { enqueue: (i: unknown) => Promise<void>; __enqueue?: (i: unknown) => Promise<void> };
+    const s = (window as unknown as { __ds: { client: { opts: { storage: Storage } } } }).__ds.client.opts.storage;
+    s.__enqueue = s.enqueue.bind(s);
+    s.enqueue = () => Promise.reject(new DOMException("quota", "QuotaExceededError"));
+  });
+  await page.locator(".ds-prose p").last().click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" и ещё");
+  const banner = page.getByTestId("storage-full");
+  await expect(banner).toContainText("Хранилище браузера заполнено");
+  await page.evaluate(() => {
+    type Storage = { enqueue: (i: unknown) => Promise<void>; __enqueue?: (i: unknown) => Promise<void> };
+    const s = (window as unknown as { __ds: { client: { opts: { storage: Storage } } } }).__ds.client.opts.storage;
+    s.enqueue = s.__enqueue!;
+  });
+  await page.keyboard.type(" и ещё");
+  await expect(banner).toHaveCount(0, { timeout: 15_000 });
+  await expectSynced(page);
+  await expect(page.locator(".ds-prose")).toContainText("и ещё и ещё");
+});

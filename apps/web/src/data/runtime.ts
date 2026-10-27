@@ -101,6 +101,8 @@ export class AccountRuntime {
       }),
       this.client.on("awareness", (docId, payload) => receivePresence(docId, payload)),
       this.client.on("skipped", (item) => this.onSkipped(item)),
+      // The outbox storage failed (quota) or recovered: a calm banner while edits only live in memory.
+      this.client.on("storage", (ok) => useSyncStatus.setState({ storageFull: !ok })),
       this.client.on("error", (e) => {
         if (e.code === "unauthorized") void refreshSession().then((s) => s && this.client.reconnect());
         useSyncStatus.setState({ error: `${e.code}: ${e.message}` });

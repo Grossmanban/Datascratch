@@ -26,6 +26,7 @@ export const ACCOUNT_ROOTS = {
   settings: "settings",
   starred: "starred",
   tabs: "tabs",
+  shared: "shared",
 } as const;
 
 export const NOTEBOOK_ROOTS = {
@@ -138,8 +139,27 @@ export const noteMetaSchema = z.object({
     .object({ agentId: z.string(), agentName: z.string(), at: isoDateTimeSchema })
     .nullable()
     .optional(),
+  /** Version of the noteKey (D-54, crypto.md §10.3); absent = 1. */
+  keyVersion: z.number().int().positive().optional(),
+  /** Wrapped previous noteKeys, newest first (crypto.md §10.3); absent = []. */
+  keyChain: z.array(z.string()).optional(),
 });
 export type NoteMeta = z.infer<typeof noteMetaSchema>;
+
+/**
+ * Placement of a notebook/note shared with this account (D-54): which space
+ * shows it under «Общие со мной». Access and keys live on the server.
+ */
+export const sharedRefSchema = z.object({
+  kind: z.enum(["notebook", "note"]),
+  id: uuidSchema,
+  spaceId: uuidSchema,
+  order: z.number(),
+  addedAt: isoDateTimeSchema,
+});
+export type SharedRef = z.infer<typeof sharedRefSchema>;
+/** Key of a SharedRef in `account.shared`. */
+export const sharedRefKey = (kind: "notebook" | "note", id: string) => `${kind}:${id}`;
 
 /**
  * `meta` of a notebook document. `name`, `icon` and `space` duplicate the

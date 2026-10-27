@@ -225,7 +225,22 @@ function DevicesCard() {
             hint={t("settings.lastSeen", { when: formatRelative(d.lastSeenAt) })}
           >
             {!d.current && (
-              <Button size="sm" variant="ghost" loading={revoke.isPending && revoke.variables === d.id} onClick={() => revoke.mutate(d.id)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                loading={revoke.isPending && revoke.variables === d.id}
+                onClick={async () => {
+                  // D-53: the device's data is deleted when it learns it was disconnected.
+                  const ok = await confirmDialog({
+                    title: t("settings.revokeDeviceTitle", { name: d.name }),
+                    description: t("settings.revokeDeviceText"),
+                    confirmLabel: t("settings.revokeDevice"),
+                    cancelLabel: t("common.cancel"),
+                    danger: true,
+                  });
+                  if (ok) revoke.mutate(d.id);
+                }}
+              >
                 {t("settings.revokeDevice")}
               </Button>
             )}
@@ -286,6 +301,9 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title={t("settings.changePassword")}>
       <form onSubmit={submit} className="flex flex-col gap-4">
+        <p className="text-[13.5px] leading-relaxed text-ink-2" data-testid="password-others-wiped">
+          {t("settings.passwordOthersWiped")}
+        </p>
         <Field label={t("settings.currentPassword")} error={error}>
           {(id) => <Input id={id} type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} autoFocus />}
         </Field>

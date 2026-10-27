@@ -22,7 +22,9 @@ final class NativeEditorModel: ClosingEditor {
     let header = NativeHeaderState()
     @ObservationIgnored private var headerHost: UIHostingController<AnyView>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
-    @ObservationIgnored private weak var app: AppModel?
+    @ObservationIgnored weak var app: AppModel?
+    /// Images and note titles for the editor (it holds the resolver weakly).
+    @ObservationIgnored private var attachments: NoteAttachments?
 
     init(app: AppModel, core: CoreLibrary, noteId: String, notebookId: String) throws {
         self.app = app
@@ -32,6 +34,9 @@ final class NativeEditorModel: ClosingEditor {
         serial = Self.created
         let note = try core.noteDocument(noteId, notebookId: notebookId)
         editor = EditorView(document: CoreEditorDocument(note: note))
+        let attachments = NoteAttachments(app: app, noteId: noteId)
+        self.attachments = attachments
+        editor.attachmentResolver = attachments
         // D-51: in the notes-only app task dates are quiet labels (no reschedule menu).
         editor.taskDatesEnabled = Features.tasks
         // spec/04: an empty title becomes «Note Oct 26, 2026» (the note's creation day) on Return
@@ -54,6 +59,20 @@ final class NativeEditorModel: ClosingEditor {
         // The "/" block menu: the screen shows it at the caret (spec/04).
         editor.onSlashMenu = { [weak self] menu in
             DispatchQueue.main.async { self?.slashMenu = menu }
+        }
+        // Photos and files (build 19): «/Фото», «/Файл», paste and drop, taps and the long-press menu.
+        editor.onHostSlashCommand = { [weak self] id in
+            DispatchQueue.main.async { self?.mediaChooser = id == "file" ? .files : .photos }
+        }
+        editor.onImagesReceived = { [weak self] providers in self?.receiveImages(providers) }
+        editor.onImageTap = { [weak self] _, attachmentId, _ in
+            DispatchQueue.main.async { self?.viewingImage = attachmentId }
+        }
+        editor.onFileTap = { [weak self] _, attachmentId in
+            DispatchQueue.main.async { self?.openFile(attachmentId: attachmentId) }
+        }
+        editor.imageMenu = { [weak self] block, attachmentId in
+            self?.imageMenu(block: block, attachmentId: attachmentId) ?? []
         }
         // A literal [[Title]] (an agent's link, or one typed without autocomplete).
         editor.onOpenNoteTitled = { [weak app] title in app?.pendingRoute = .noteTitled(title) }
@@ -83,6 +102,12 @@ final class NativeEditorModel: ClosingEditor {
                 }
             }
         }
+        // A photo of this note arrived (downloaded): the editor drops its placeholder.
+        keyboardObservers.append(NotificationCenter.default.addObserver(forName: CoverImages.didArrive, object: nil,
+                                                                        queue: .main) { [weak self] note in
+            guard let id = note.object as? String else { return }
+            MainActor.assumeIsolated { self?.editor.imageDidLoad(attachmentId: id) }
+        })
     }
 
     /// An on-screen keyboard is showing.
@@ -91,6 +116,20 @@ final class NativeEditorModel: ClosingEditor {
     var isAskingForLink = false
     /// The open "/" menu, if any.
     var slashMenu: SlashMenuState?
+    /// Where a photo or file comes from (`MediaPickers`).
+    enum MediaChooser: Hashable { case photos, camera, files }
+    var mediaChooser: MediaChooser?
+    /// Why a photo or file could not be attached.
+    var mediaError: String?
+    /// The photo on the whole screen (attachment id).
+    var viewingImage: String?
+    /// The photo whose caption is being written.
+    var captionTarget: BlockID?
+    /// The photo «Replace…» picks a new image for.
+    @ObservationIgnored var replacing: BlockID?
+    /// A file for the share sheet / Quick Look.
+    var sharing: URL?
+    var previewing: URL?
     /// A pen palette tap not yet applied to the editor's tools (they change a turn later).
     var pendingPenSelection: DSPenSelection?
     @ObservationIgnored private var keyboardObservers: [NSObjectProtocol] = []
@@ -266,6 +305,7 @@ struct NativeDocumentScreen: View {
                         // variant that stays full height and insets itself crashed (ios-editor bisect).
                         NativeEditorRepresentable(editor: model.editor)
                             .accessibilityIdentifier("editor")
+                            .modifier(MediaPickers(model: model))
                     }
                     // The column's width, never the editor's own: next to the list on an iPad mini
                     // in portrait it ran 18 pt past the screen edge.
@@ -401,6 +441,8 @@ struct NativeEditorToolbar: ToolbarContent {
             model.editor.insertBlock(EditorCommands.table(rows: 3, columns: 3, header: ["", "", ""]))
         }
         Button("Divider", systemImage: "minus") { model.editor.insertBlock(.rule("line")) }
+        Divider()
+        MediaInsertItems(model: model)
     }
 
     var body: some ToolbarContent {

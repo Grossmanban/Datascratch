@@ -26,6 +26,7 @@ export function PasteEditor() {
       fetchRemoteImage: async (url: string): Promise<File> => {
         fetched.push(url);
         if (url.includes("blocked")) throw new Error("CORS");
+        if (url.includes("slow")) await new Promise((r) => setTimeout(r, 1500));
         return new File([new Uint8Array([137, 80, 78, 71])], url.split("/").pop() || "image.png", { type: "image/png" });
       },
     }),

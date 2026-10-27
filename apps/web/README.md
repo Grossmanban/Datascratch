@@ -67,6 +67,7 @@ e2e/            Playwright-тесты и мок-сервер
 - Единый источник — `src/lib/securityHeaders.ts`: CSP (`script-src 'self' 'wasm-unsafe-eval'`, `connect-src 'self'` + WebSocket своего хоста, `frame-ancestors 'none'`, `object-src 'none'`…), HSTS, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`. Боевая копия — в `infra/deploy/Caddyfile`; unit-тест сверяет их.
 - `vite preview` отдаёт те же заголовки, поэтому весь e2e идёт под боевым CSP (адрес тестового сервера разрешён в `connect-src`); `csp.spec.ts` падает на любом `securitypolicyviolation`. Job `web-image` в `web.yml` собирает образ и проверяет заголовки через `curl -I`.
 - Чтобы не ослаблять CSP: тема применяется до отрисовки файлом `/theme-init.js` (не inline-скриптом), zod работает в режиме `jitless` (без пробы `new Function`).
+- Смена темы мгновенная на всех поверхностях: на два кадра `lib/theme.ts` ставит `data-theme-switching`, и `styles/index.css` отключает `transition` — иначе элементы с плавным hover (поле «Новый документ», вкладки) перетекали в новый цвет ~150 мс (ловил `theme.spec`).
 
 ### Аудит безопасности 2026-10-27
 

@@ -248,14 +248,22 @@ final class BlockLayoutFragment: NSTextLayoutFragment {
         var x = last.typographicBounds.minX + Self.usedWidth(of: last) + 8
         for chip in chips {
             let rect = CGRect(x: x, y: baseline - ascender - 3, width: chip.size.width, height: chip.size.height)
-            ctx.setFillColor(chip.color.withAlphaComponent(0.12).cgColor)
-            ctx.addPath(UIBezierPath(roundedRect: rect, cornerRadius: rect.height / 2).cgPath)
-            ctx.fillPath()
             let iconWidth = chip.icon.map { $0.size.width + 4 } ?? 0
-            if let icon = chip.icon {
-                icon.draw(at: CGPoint(x: rect.minX + 7, y: rect.midY - icon.size.height / 2))
+            if d.datesInteractive {
+                ctx.setFillColor(chip.color.withAlphaComponent(0.12).cgColor)
+                ctx.addPath(UIBezierPath(roundedRect: rect, cornerRadius: rect.height / 2).cgPath)
+                ctx.fillPath()
+                chip.icon?.draw(at: CGPoint(x: rect.minX + 7, y: rect.midY - (chip.icon?.size.height ?? 0) / 2))
+                chip.text.draw(at: CGPoint(x: rect.minX + 7 + iconWidth, y: rect.minY + 2))
+            } else {
+                // Notes-only mode (D-51): a quiet label, nothing that looks tappable.
+                let quiet = NSMutableAttributedString(attributedString: chip.text)
+                quiet.addAttribute(.foregroundColor, value: d.secondaryColor, range: NSRange(location: 0, length: quiet.length))
+                if let icon = chip.icon?.withTintColor(d.secondaryColor, renderingMode: .alwaysOriginal) {
+                    icon.draw(at: CGPoint(x: rect.minX + 7, y: rect.midY - icon.size.height / 2))
+                }
+                quiet.draw(at: CGPoint(x: rect.minX + 7 + iconWidth, y: rect.minY + 2))
             }
-            chip.text.draw(at: CGPoint(x: rect.minX + 7 + iconWidth, y: rect.minY + 2))
             x = rect.maxX + 6
         }
     }

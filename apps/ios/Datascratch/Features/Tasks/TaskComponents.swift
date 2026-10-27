@@ -178,7 +178,9 @@ struct TaskMenuItems: View {
 extension LibraryStore {
     /// The inbox if it exists already (menus must not create notes while rendering).
     func ensureInboxIfPossible() -> NoteMeta? {
-        data.notes.first { $0.kind == .inbox && !$0.isTrashed }
+        // The active space's Inbox (D-48: each space has its own).
+        guard let notebook = dailyNotebook else { return nil }
+        return data.notes.first { $0.kind == .inbox && !$0.isTrashed && $0.notebookId == notebook.id }
     }
 }
 

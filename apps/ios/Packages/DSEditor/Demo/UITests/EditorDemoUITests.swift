@@ -112,6 +112,85 @@ final class EditorDemoUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground)
     }
 
+    /// Scrolls the editor until `element` is on screen (pulling toward the top first, then small
+    /// steps down so nothing jumps past the screen).
+    @MainActor
+    private func scrollIntoView(_ element: XCUIElement, in editor: XCUIElement) -> Bool {
+        for attempt in 0..<10 {
+            if element.exists, editor.frame.insetBy(dx: 0, dy: 60).contains(CGPoint(x: element.frame.midX, y: element.frame.midY)) {
+                return true
+            }
+            let (from, to): (CGFloat, CGFloat) = attempt < 2 ? (0.4, 0.6) : (0.6, 0.45)
+            editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: from))
+                .press(forDuration: 0.05, thenDragTo: editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
+            sleep(1)
+        }
+        return false
+    }
+
+    /// The demo HUD's last editor diagnostics, for failure messages (`-hud` launches).
+    @MainActor
+    private func diagnostics(_ app: XCUIApplication) -> String {
+        let e = app.staticTexts["hud.diag"]
+        return e.exists ? "diag: " + e.label : "diag: (HUD not found)"
+    }
+
+    /// A real touch at the centre of an element's frame (not an accessibility activation).
+    @MainActor
+    private func touch(_ element: XCUIElement, in app: XCUIApplication) {
+        let f = element.frame
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: f.midX, dy: f.midY)).tap()
+    }
+
+    /// Build 14 feedback (iPhone): a single tap on a note link did nothing. Real taps, keyboard
+    /// not shown: the chip opens its note, a literal [[Title]] of a missing note offers to create it.
+    /// The links are found through their accessibility elements (VoiceOver, spec/05).
+    @MainActor
+    func testTappingNoteLinksOpensThem() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-hud"]
+        app.launch()
+        let editor = app.textViews["editor.text"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        app.buttons["tool.text"].tap()
+
+        let chip = app.links["Идеи"]
+        XCTAssertTrue(scrollIntoView(chip, in: editor), "the note link chip is on screen and accessible")
+        touch(chip, in: app)
+        let opened = app.alerts["Открыть «Идеи»"]
+        XCTAssertTrue(opened.waitForExistence(timeout: 10), "the chip opens its note; \(diagnostics(app))")
+        XCTAssertEqual(app.keyboards.count, 0, "the tap opened the link instead of starting to type")
+        opened.buttons["OK"].tap()
+
+        let title = app.links["Новая заметка"]
+        XCTAssertTrue(scrollIntoView(title, in: editor), "the [[Title]] link is on screen and accessible")
+        touch(title, in: app)
+        XCTAssertTrue(app.alerts["Заметки «Новая заметка» нет"].waitForExistence(timeout: 10),
+                      "a missing [[Title]] offers to create the note; \(diagnostics(app))")
+        XCTAssertEqual(app.state, .runningForeground)
+    }
+
+    /// Build 14 feedback (iPhone): task date chips did nothing on a tap. A real tap opens the
+    /// reschedule menu (spec/12: Сегодня / Завтра / След. неделя / Дата…).
+    @MainActor
+    func testTappingATaskDateChipOpensTheRescheduleMenu() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-hud"]
+        app.launch()
+        let editor = app.textViews["editor.text"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        app.buttons["tool.text"].tap()
+        let chip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Дата: ' OR label BEGINSWITH 'Дедлайн: '")).firstMatch
+        XCTAssertTrue(scrollIntoView(chip, in: editor), "a date chip is on screen and accessible")
+        touch(chip, in: app)
+        // The edit menu may page its items: the first ones are always shown.
+        let menuItem = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label IN {'Сегодня', 'Завтра', 'След. неделя', 'Дата…'}")).firstMatch
+        XCTAssertTrue(menuItem.waitForExistence(timeout: 10), "the reschedule menu opens; \(diagnostics(app))")
+        XCTAssertEqual(app.keyboards.count, 0, "the tap opened the menu instead of starting to type")
+        XCTAssertEqual(app.state, .runningForeground)
+    }
+
     @MainActor
     func testOpenLargeNotePerformance() throws {
         let app = XCUIApplication()

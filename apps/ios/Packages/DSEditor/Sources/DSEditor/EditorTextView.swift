@@ -45,6 +45,59 @@ final class EditorTextView: UITextView {
         onLayout?()
     }
 
+    /// Whether a point holds something a single tap acts on (a note link): the system's own taps
+    /// (caret placement, which also brought up the keyboard and won over the link tap) do not
+    /// begin there. Long press and selection still work for editing the link's text.
+    var tapTargetAt: ((CGPoint) -> Bool)?
+    /// The editor's own tap recognizer (links, task boxes, date chips). The text view's own single
+    /// taps wait for it to fail: it begins only on a tap target and fails at once elsewhere, so
+    /// caret placement is not delayed, and on a target it always wins (date chip taps were taken
+    /// by the caret tap on iPad, build 16).
+    weak var editorTap: UIGestureRecognizer? {
+        didSet { gestureRecognizers?.forEach(yieldToEditorTap) }
+    }
+
+    override func addGestureRecognizer(_ g: UIGestureRecognizer) {
+        super.addGestureRecognizer(g)
+        yieldToEditorTap(g)
+    }
+
+    private func yieldToEditorTap(_ g: UIGestureRecognizer) {
+        guard let editorTap, g !== editorTap, let tap = g as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1 else { return }
+        tap.require(toFail: editorTap)
+    }
+
+    override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+        if g !== editorTap, let tap = g as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1,
+           tapTargetAt?(g.location(in: self)) == true {
+            EditorDiagnostics.log("system tap \(NSStringFromClass(type(of: g))) refused on a tap target")
+            return false
+        }
+        return super.gestureRecognizerShouldBegin(g)
+    }
+
+    // MARK: - Dictation
+
+    /// Dictation's "…" placeholder is not put into the text: UITextView inserts it as an
+    /// attachment character that the editor took for a block insertion, which moved the caret to
+    /// the next paragraph and dropped the result (iPhone, build 14). The result arrives as plain
+    /// text input at the caret instead.
+    private final class DictationPlaceholder: NSObject {
+        let range: NSRange
+        init(range: NSRange) { self.range = range }
+    }
+
+    override var insertDictationResultPlaceholder: Any {
+        DictationPlaceholder(range: selectedRange)
+    }
+
+    override func frame(forDictationResultPlaceholder placeholder: Any) -> CGRect {
+        guard let range = selectedTextRange else { return .zero }
+        return caretRect(for: range.end)
+    }
+
+    override func removeDictationResultPlaceholder(_ placeholder: Any, willInsertResult: Bool) {}
+
     /// Touches that land on TextKit's internal drawing views (layout fragment and canvas views)
     /// are addressed to the text view itself. TextKit 2 recycles those views on any relayout or
     /// scroll (the keyboard appearing, a paragraph re-rendered); when the touched view left the

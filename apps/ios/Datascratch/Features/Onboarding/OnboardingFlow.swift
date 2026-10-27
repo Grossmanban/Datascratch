@@ -131,6 +131,105 @@ struct FieldBox<Field: View>: View {
     }
 }
 
+/// D-49: «Server» on the sign-in and sign-up screens. It starts with this device's server (the
+/// build's by default); another address is checked (`GET /v1/health`, `https://` only) and named
+/// with its version before the account goes there. Hidden in a build with no server at all.
+struct ServerField: View {
+    struct Entry: Equatable {
+        var text: String?
+        var status: Status = .unchecked
+    }
+
+    enum Status: Equatable {
+        case unchecked
+        case checking
+        case reachable(ServerInfo)
+        case failed(String)
+    }
+
+    @Environment(AppModel.self) private var app
+    @Binding var state: Entry
+    let identifier: String
+
+    static func isShown(_ app: AppModel) -> Bool { app.serverURL != nil || app.defaultServerURL != nil }
+
+    var body: some View {
+        if Self.isShown(app) {
+            VStack(alignment: .leading, spacing: Theme.Space.s2) {
+                FieldBox {
+                    HStack(spacing: Theme.Space.s2) {
+                        Image(systemName: "server.rack")
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                        TextField("Server", text: Binding(
+                            get: { state.text ?? app.serverURL.map(ServerAddress.display) ?? "" },
+                            set: { state.text = $0; state.status = .unchecked }))
+                            .textContentType(.URL)
+                            .keyboardType(.URL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .onSubmit { Task { _ = await Self.check($state, app: app) } }
+                            .accessibilityIdentifier("\(identifier).server")
+                    }
+                }
+                switch state.status {
+                case .unchecked:
+                    EmptyView()
+                case .checking:
+                    Label("Checking the server…", systemImage: "hourglass")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                case .reachable(let info):
+                    Label("\(info.host) · \(info.version)", systemImage: "checkmark.seal")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .accessibilityIdentifier("\(identifier).serverInfo")
+                case .failed(let message):
+                    Text(message)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.danger)
+                        .accessibilityIdentifier("\(identifier).serverError")
+                }
+            }
+        }
+    }
+
+    /// The typed server, checked; nil (with the reason shown) when it cannot be used.
+    @MainActor
+    private static func check(_ state: Binding<Entry>, app: AppModel) async -> URL? {
+        let text = state.wrappedValue.text ?? app.serverURL.map(ServerAddress.display) ?? ""
+        switch ServerAddress.parse(text) {
+        case .failure(.notHTTPS):
+            state.wrappedValue.status = .failed(String(localized: "Use an https:// address."))
+            return nil
+        case .failure:
+            state.wrappedValue.status = .failed(String(localized: "This is not a server address."))
+            return nil
+        case .success(let url):
+            // The server already in use needs no check.
+            if url == app.serverURL, state.wrappedValue.text == nil { return url }
+            if case .reachable = state.wrappedValue.status { return url }
+            state.wrappedValue.status = .checking
+            do {
+                let info = try await app.checkServer(url)
+                state.wrappedValue.status = .reachable(info)
+                return url
+            } catch {
+                state.wrappedValue.status = .failed(String(localized: "Can’t reach this server. Check the address and the connection."))
+                return nil
+            }
+        }
+    }
+
+    /// Before signing in or up: the typed server is checked and becomes the app's server.
+    @MainActor
+    static func use(_ state: Binding<Entry>, app: AppModel) async -> Bool {
+        guard isShown(app) else { return true }
+        guard let url = await check(state, app: app) else { return false }
+        app.useServer(url)
+        return true
+    }
+}
+
 struct PasswordStrengthMeter: View {
     let password: String
 
@@ -193,10 +292,12 @@ struct SignUpView: View {
     @State private var repeated = ""
     @State private var error: String?
     @State private var isWorking = false
+    @State private var server = ServerField.Entry()
 
     var body: some View {
         AuthCard(title: "Create account",
                  subtitle: "Your password signs you in and encrypts your notes. It never leaves this device.") {
+            ServerField(state: $server, identifier: "signUp")
             FieldBox {
                 TextField("Email", text: $email)
                     .textContentType(.username)
@@ -237,6 +338,10 @@ struct SignUpView: View {
         isWorking = true
         error = nil
         Task {
+            guard await ServerField.use($server, app: app) else {
+                isWorking = false
+                return
+            }
             do {
                 // Keep onboarding on screen until the key is confirmed.
                 app.isSigningUp = true
@@ -259,9 +364,11 @@ struct SignInView: View {
     @State private var password = ""
     @State private var error: String?
     @State private var isWorking = false
+    @State private var server = ServerField.Entry()
 
     var body: some View {
         AuthCard(title: "Welcome back", subtitle: "Sign in with your email and password.") {
+            ServerField(state: $server, identifier: "signIn")
             FieldBox {
                 TextField("Email", text: $email)
                     .textContentType(.username)
@@ -290,6 +397,10 @@ struct SignInView: View {
         isWorking = true
         error = nil
         Task {
+            guard await ServerField.use($server, app: app) else {
+                isWorking = false
+                return
+            }
             do {
                 try await app.accounts.signIn(email: email, password: password)
                 app.finishOnboarding()

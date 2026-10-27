@@ -132,3 +132,26 @@ struct RecoveryKeyFlowTests {
         #expect(app.isRecoveryKeyConfirmed)
     }
 }
+
+/// D-49: the address typed into «Server».
+struct ServerAddressTests {
+    @Test func addressesBecomeHTTPSBaseURLs() throws {
+        #expect(try ServerAddress.parse("sync.example.org").get().absoluteString == "https://sync.example.org")
+        #expect(try ServerAddress.parse(" https://notes.example.com/ ").get().absoluteString == "https://notes.example.com")
+        #expect(try ServerAddress.parse("https://example.com:8443/ds").get().absoluteString == "https://example.com:8443/ds")
+        #expect(try ServerAddress.parse("http://localhost:8080").get().absoluteString == "http://localhost:8080")
+    }
+
+    @Test func insecureAndBrokenAddressesAreRefused() {
+        #expect(ServerAddress.parse("http://notes.example.com") == .failure(.notHTTPS))
+        #expect(ServerAddress.parse("") == .failure(.empty))
+        #expect(ServerAddress.parse("ftp://example.com") == .failure(.invalid))
+        #expect(ServerAddress.parse("https://") == .failure(.invalid))
+        #expect(ServerAddress.parse("https://example.com/?a=1") == .failure(.invalid))
+    }
+
+    @Test func httpsAddressesShowWithoutTheScheme() throws {
+        #expect(ServerAddress.display(try ServerAddress.parse("sync.example.org").get()) == "sync.example.org")
+        #expect(ServerAddress.display(try ServerAddress.parse("http://localhost:8080").get()) == "http://localhost:8080")
+    }
+}

@@ -1,7 +1,24 @@
 import { Extension, Mark, Node, mergeAttributes } from "@tiptap/core";
 import Link from "@tiptap/extension-link";
 import HorizontalRule from "@tiptap/extension-horizontal-rule";
-import { colorTokenVar } from "../tokens";
+import { colorTokenVar, safeColor } from "../tokens";
+
+const TEXT_ALIGNS = ["left", "center", "right", "justify"] as const;
+const CELL_ALIGNS = ["left", "center", "right"] as const;
+
+/** An alignment from the document or pasted HTML, if it is one of `allowed` (never raw into a style). */
+function alignOf(value: unknown, allowed: readonly string[]): string | null {
+  const v = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return allowed.includes(v) ? v : null;
+}
+
+/** Links open only web and mail addresses (`javascript:`, `data:` and the like are never links). */
+export function safeHref(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const href = value.trim();
+  // eslint-disable-next-line no-control-regex
+  return /^(https?:\/\/|mailto:)/i.test(href) && !/[\u0000-\u001f\u007f]/.test(href) ? href : null;
+}
 
 /**
  * `doc = title block+` (document-model.md §4.2) is what clients write; the editor reads more
@@ -38,8 +55,11 @@ export const TextAlign = Extension.create({
         attributes: {
           textAlign: {
             default: null,
-            parseHTML: (el) => (el as HTMLElement).style.textAlign || null,
-            renderHTML: (attrs) => (attrs.textAlign ? { style: `text-align: ${attrs.textAlign}` } : {}),
+            parseHTML: (el) => alignOf((el as HTMLElement).style.textAlign, TEXT_ALIGNS),
+            renderHTML: (attrs) => {
+              const align = alignOf(attrs.textAlign, TEXT_ALIGNS);
+              return align ? { style: `text-align: ${align}` } : {};
+            },
           },
         },
       },
@@ -69,8 +89,11 @@ export const TableCellAlign = Extension.create({
         attributes: {
           align: {
             default: null,
-            parseHTML: (el) => (el as HTMLElement).style.textAlign || (el as HTMLElement).getAttribute("align") || null,
-            renderHTML: (attrs) => (attrs.align ? { style: `text-align: ${attrs.align}` } : {}),
+            parseHTML: (el) => alignOf((el as HTMLElement).style.textAlign || (el as HTMLElement).getAttribute("align"), CELL_ALIGNS),
+            renderHTML: (attrs) => {
+              const align = alignOf(attrs.align, CELL_ALIGNS);
+              return align ? { style: `text-align: ${align}` } : {};
+            },
           },
         },
       },
@@ -103,14 +126,20 @@ export const DsLink = Link.extend({
     return {
       href: {
         default: null,
-        parseHTML: (el: HTMLElement) => el.getAttribute("href"),
+        parseHTML: (el: HTMLElement) => safeHref(el.getAttribute("href")),
       },
     };
   },
-  renderHTML({ HTMLAttributes }) {
-    return ["a", mergeAttributes(HTMLAttributes, { rel: "noopener noreferrer nofollow", target: "_blank" }), 0];
+  // A pasted or loaded <a> with any other scheme is plain text.
+  parseHTML() {
+    return [{ tag: "a[href]", getAttrs: (el) => (safeHref((el as HTMLElement).getAttribute("href")) ? null : false) }];
   },
-}).configure({ openOnClick: false, autolink: true, linkOnPaste: true });
+  renderHTML({ HTMLAttributes }) {
+    // The document may carry any href (other clients, agents): only a safe one is rendered.
+    const href = safeHref(HTMLAttributes.href);
+    return ["a", mergeAttributes({ ...HTMLAttributes, href }, { rel: "noopener noreferrer nofollow", target: "_blank" }), 0];
+  },
+}).configure({ openOnClick: false, autolink: true, linkOnPaste: true, isAllowedUri: (url) => safeHref(url) !== null });
 
 /** `highlight` mark with a colour token (`highlight.yellow`, …). */
 export const Highlight = Mark.create({
@@ -119,7 +148,7 @@ export const Highlight = Mark.create({
     return {
       color: {
         default: "highlight.yellow",
-        parseHTML: (el) => el.getAttribute("data-color") ?? "highlight.yellow",
+        parseHTML: (el) => safeColor(el.getAttribute("data-color")) ?? "highlight.yellow",
         renderHTML: (attrs) => ({ "data-color": attrs.color, style: `--ds-mark-bg: ${colorTokenVar(attrs.color)}` }),
       },
     };
@@ -150,7 +179,7 @@ export const TextColor = Mark.create({
     return {
       color: {
         default: null,
-        parseHTML: (el) => el.getAttribute("data-text-color"),
+        parseHTML: (el) => safeColor(el.getAttribute("data-text-color")),
         renderHTML: (attrs) => ({ "data-text-color": attrs.color, style: `color: ${colorTokenVar(attrs.color)}` }),
       },
     };

@@ -4,6 +4,8 @@ import {
   attachments,
   devices,
   docs,
+  agentGrants,
+  oauthClients,
   oauthCodes,
   oauthTokens,
   recoveryTokens,
@@ -17,6 +19,8 @@ export const HISTORY_SWEEP_JOB = 'history-sweep';
 
 const DAY_MS = 86_400_000;
 const STALE_UPLOAD_DAYS = 7;
+/** OAuth clients anyone can register (RFC 7591) are kept a day without a grant, then removed. */
+const UNUSED_OAUTH_CLIENT_MS = DAY_MS;
 const REVOKED_DEVICE_KEEP_DAYS = 30;
 
 /** Delete blobs whose DB rows are gone, and expired auth rows. */
@@ -30,6 +34,16 @@ export async function runCleanup(ctx: AppContext): Promise<{ blobs: number }> {
   await db.delete(refreshTokens).where(lt(refreshTokens.expiresAt, new Date(now)));
   await db.delete(oauthCodes).where(lt(oauthCodes.expiresAt, new Date(now)));
   await db.delete(oauthTokens).where(lt(oauthTokens.expiresAt, new Date(now)));
+  // Registered or cached clients nobody granted access to (and with no pending code) after a day.
+  await db
+    .delete(oauthClients)
+    .where(
+      and(
+        lt(oauthClients.createdAt, new Date(now - UNUSED_OAUTH_CLIENT_MS)),
+        sql`NOT EXISTS (SELECT 1 FROM ${agentGrants} WHERE ${agentGrants.clientId} = ${oauthClients.clientId})`,
+        sql`NOT EXISTS (SELECT 1 FROM ${oauthCodes} WHERE ${oauthCodes.clientId} = ${oauthClients.clientId})`,
+      ),
+    );
   await db
     .delete(recoveryTokens)
     .where(or(lt(recoveryTokens.expiresAt, new Date(now)), isNotNull(recoveryTokens.usedAt)));

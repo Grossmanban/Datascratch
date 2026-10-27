@@ -91,11 +91,12 @@ import Testing
     @Test func metaAndComments() throws {
         let note = try makeNote()
         try note.setStyle(.init(font: "serif", width: "wide", paper: "dots"))
-        try note.setCover(.init(attachmentId: "a1", offsetY: 0.3))
+        let coverId = EntityID.make()
+        try note.setCover(.init(attachmentId: coverId, offsetY: 0.3))
         try note.setBackdrop(.init(kind: .gradient, value: "dawn"))
         let meta = note.meta()
         #expect(meta.style.font == "serif")
-        #expect(meta.cover?.attachmentId == "a1")
+        #expect(meta.cover?.attachmentId == coverId)
         #expect(meta.backdrop?.value == "dawn")
 
         let comment = Comment(blockId: "b1", anchor: (Data([1]), Data([2])), author: Author(kind: .guest, id: "g", name: "Guest"), text: "?")

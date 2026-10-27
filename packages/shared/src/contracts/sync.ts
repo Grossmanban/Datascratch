@@ -1,6 +1,7 @@
 // Messages of the WebSocket sync protocol (sync-protocol.md, v1).
 // The server and every client validate incoming frames with these schemas.
 import { z } from "zod";
+import { deviceRevokedReasonSchema } from "./api.js";
 import { base64UrlSchema, uuidSchema } from "./common.js";
 
 export const SYNC_PROTOCOL_VERSION = 1;
@@ -161,6 +162,7 @@ export const SYNC_ERROR_CODES = [
   "rate_limited",
   "protocol_mismatch",
   "internal",
+  "device_revoked",
 ] as const;
 export type SyncErrorCode = (typeof SYNC_ERROR_CODES)[number];
 
@@ -172,7 +174,16 @@ export const errorMessageSchema = z.object({
   ref: z.string().optional(),
   /** For `rate_limited`: how long to wait before reconnecting/resending. */
   retryAfterMs: z.number().int().nonnegative().optional(),
+  /** Present with `device_revoked` (D-53). */
+  reason: deviceRevokedReasonSchema.optional(),
 });
+
+/**
+ * WebSocket close code after `error device_revoked` (D-53); the close reason
+ * string carries the DeviceRevokedReason. Clients treat this close code alone
+ * as a revocation too, in case the error frame was lost.
+ */
+export const SYNC_CLOSE_DEVICE_REVOKED = 4401;
 
 export const serverMessageSchema = z.discriminatedUnion("type", [
   welcomeMessageSchema,

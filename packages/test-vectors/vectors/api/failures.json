@@ -1,0 +1,232 @@
+{
+  "version": 1,
+  "description": "REST failure classification (D-53, api.md; TS: classifyApiFailure). `status: null` = no HTTP response. `body` is parsed JSON or raw text (a string is JSON-parsed first; unparsable → no error body). A 401 with `error.code: \"device_revoked\"` is a revocation whatever its reason (unknown/absent → \"user\"); only it wipes local data; `unauthorized` → refresh the token; `network` → retry later. `syncCloseDeviceRevoked` is the WebSocket close code with the same meaning (close reason = revocation reason; unknown/absent → \"user\").",
+  "reasons": [
+    "user",
+    "password_changed",
+    "recovery",
+    "refresh_reuse",
+    "account_deleted"
+  ],
+  "syncCloseDeviceRevoked": 4401,
+  "cases": [
+    {
+      "name": "revoked: user",
+      "status": 401,
+      "body": {
+        "error": {
+          "code": "device_revoked",
+          "message": "device revoked",
+          "reason": "user"
+        }
+      },
+      "expected": {
+        "kind": "device_revoked",
+        "reason": "user"
+      }
+    },
+    {
+      "name": "revoked: password_changed",
+      "status": 401,
+      "body": {
+        "error": {
+          "code": "device_revoked",
+          "message": "device revoked",
+          "reason": "password_changed"
+        }
+      },
+      "expected": {
+        "kind": "device_revoked",
+        "reason": "password_changed"
+      }
+    },
+    {
+      "name": "revoked: recovery",
+      "status": 401,
+      "body": {
+        "error": {
+          "code": "device_revoked",
+          "message": "device revoked",
+          "reason": "recovery"
+        }
+      },
+      "expected": {
+        "kind": "device_revoked",
+        "reason": "recovery"
+      }
+    },
+    {
+      "name": "revoked: refresh_reuse",
+      "status": 401,
+      "body": {
+        "error": {
+          "code": "device_revoked",
+          "message": "device revoked",
+          "reason": "refresh_reuse"
+        }
+      },
+      "expected": {
+        "kind": "device_revoked",
+        "reason": "refresh_reuse"
+      }
+    },
+    {
+      "name": "revoked: account_deleted",
+      "status": 401,
+      "body": {
+        "error": {
+          "code": "device_revoked",
+          "message": "device revoked",
+          "reason": "account_deleted"
+        }
+      },
+      "expected": {
+        "kind": "device_revoked",
+        "reason": "account_deleted"
+      }
+    },
+    {
+      "name": "revoked body as raw text",
+      "status": 401,
+      "body": "{\"error\":{\"code\":\"device_revoked\",\"message\":\"device revoked\",\"reason\":\"recovery\"}}",
+      "expected": {
+        "kind": "device_revoked",
+        "reason": "recovery"
+      }
+    },
+    {
+      "name": "expired access token",
+      "status": 401,
+      "body": {
+        "error": {
+          "code": "unauthorized",
+          "message": "token expired"
+        }
+      },
+      "expected": {
+        "kind": "unauthorized"
+      }
+    },
+    {
+      "name": "device_revoked without reason → reason user",
+      "status": 401,
+      "body": {
+        "error": {
+          "code": "device_revoked",
+          "message": "x"
+        }
+      },
+      "expected": {
+        "kind": "device_revoked",
+        "reason": "user"
+      }
+    },
+    {
+      "name": "unknown (newer) reason → reason user",
+      "status": 401,
+      "body": {
+        "error": {
+          "code": "device_revoked",
+          "message": "device revoked",
+          "reason": "bored"
+        }
+      },
+      "expected": {
+        "kind": "device_revoked",
+        "reason": "user"
+      }
+    },
+    {
+      "name": "device_revoked on a non-401 is not a wipe",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "device_revoked",
+          "message": "device revoked",
+          "reason": "user"
+        }
+      },
+      "expected": {
+        "kind": "error",
+        "status": 403,
+        "code": "device_revoked",
+        "message": "device revoked"
+      }
+    },
+    {
+      "name": "proxy 401 page",
+      "status": 401,
+      "body": "<html>401 Unauthorized</html>",
+      "expected": {
+        "kind": "unauthorized"
+      }
+    },
+    {
+      "name": "no response (offline, timeout)",
+      "status": null,
+      "body": null,
+      "expected": {
+        "kind": "network"
+      }
+    },
+    {
+      "name": "gateway error page",
+      "status": 502,
+      "body": "<html>Bad Gateway</html>",
+      "expected": {
+        "kind": "network"
+      }
+    },
+    {
+      "name": "gateway timeout, empty",
+      "status": 504,
+      "body": "",
+      "expected": {
+        "kind": "network"
+      }
+    },
+    {
+      "name": "server error with body",
+      "status": 503,
+      "body": {
+        "error": {
+          "code": "internal",
+          "message": "maintenance"
+        }
+      },
+      "expected": {
+        "kind": "error",
+        "status": 503,
+        "code": "internal",
+        "message": "maintenance"
+      }
+    },
+    {
+      "name": "conflict",
+      "status": 409,
+      "body": {
+        "error": {
+          "code": "conflict",
+          "message": "exists"
+        }
+      },
+      "expected": {
+        "kind": "error",
+        "status": 409,
+        "code": "conflict",
+        "message": "exists"
+      }
+    },
+    {
+      "name": "non-JSON 500",
+      "status": 500,
+      "body": "oops",
+      "expected": {
+        "kind": "error",
+        "status": 500,
+        "code": null,
+        "message": "HTTP 500"
+      }
+    }
+  ]
+}

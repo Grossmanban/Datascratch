@@ -50,6 +50,27 @@ final class EditorTextView: UITextView {
     /// (caret placement, which also brought up the keyboard and won over the link tap) do not
     /// begin there. Long press and selection still work for editing the link's text.
     var tapTargetAt: ((CGPoint) -> Bool)?
+    /// Whether UIKit may scroll by itself (`scrollRectToVisible`): only while a finger is on the
+    /// text (edge autoscroll when dragging a selection). Otherwise UIKit scrolled to its own caret
+    /// rect, which is wrong in an empty paragraph — a fresh note's title went off screen on focus,
+    /// with the keyboard and while typing (build 18); the editor scrolls the caret's line into view
+    /// itself (`EditorView.scrollCaretIntoView`).
+    var allowsSystemScroll: (() -> Bool)?
+
+    override func scrollRectToVisible(_ rect: CGRect, animated: Bool) {
+        guard allowsSystemScroll?() ?? true else { return }
+        super.scrollRectToVisible(rect, animated: animated)
+    }
+
+    /// Every change of the scroll position, including those made through `bounds` (tests).
+    var onScrollPositionChange: ((_ from: CGFloat, _ to: CGFloat) -> Void)?
+
+    override var bounds: CGRect {
+        didSet {
+            if oldValue.origin.y != bounds.origin.y { onScrollPositionChange?(oldValue.origin.y, bounds.origin.y) }
+        }
+    }
+
     /// Pasted images go to the host (`EditorView.onImagesReceived`); nil: plain text paste only.
     var imagePaste: (([NSItemProvider]) -> Void)?
 
@@ -64,8 +85,14 @@ final class EditorTextView: UITextView {
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         if action == #selector(paste(_:)), imagePaste != nil, UIPasteboard.general.hasImages { return true }
+        if action == #selector(pasteWithoutFormatting(_:)) { return plainPaste != nil && UIPasteboard.general.hasStrings }
         return super.canPerformAction(action, withSender: sender)
     }
+
+    /// Rich paste (HTML, RTF, Markdown); false leaves the plain text paste to UIKit.
+    var richPaste: (() -> Bool)?
+    /// «Вставить без форматирования» (⇧⌘V).
+    var plainPaste: (() -> Void)?
 
     override func paste(_ sender: Any?) {
         if let imagePaste, pasteboardIsImages {
@@ -75,7 +102,13 @@ final class EditorTextView: UITextView {
                 return
             }
         }
+        if richPaste?() == true { return }
         super.paste(sender)
+    }
+
+    /// «Вставить без форматирования» from the keyboard (⇧⌘V).
+    @objc func pasteWithoutFormatting(_ sender: Any?) {
+        plainPaste?()
     }
     /// The editor's own tap recognizer (links, task boxes, date chips). The text view's own single
     /// taps wait for it to fail: it begins only on a tap target and fails at once elsewhere, so
@@ -194,6 +227,12 @@ final class EditorTextView: UITextView {
             cmd("Сдвинуть вправо", "\t", [], .indent),
             cmd("Сдвинуть влево", "\t", .shift, .outdent),
             cmd("Ссылка", "k", .command, .link),
+            {
+                let c = UIKeyCommand(title: "Вставить без форматирования", action: #selector(pasteWithoutFormatting(_:)),
+                                     input: "v", modifierFlags: [.command, .shift])
+                c.wantsPriorityOverSystemBehavior = true
+                return c
+            }(),
         ]
     }
 

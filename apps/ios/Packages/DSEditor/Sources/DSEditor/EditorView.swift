@@ -525,8 +525,7 @@ public final class EditorView: UIView {
     /// touching the text (dragging a selection handle, scrolling): UIKit's own edge autoscroll
     /// runs then, and scrolling on top of it made the selection run away (build 14).
     func scrollCaretIntoView() {
-        guard textView.isFirstResponder, !userIsInteracting, let range = textView.selectedTextRange else { return }
-        let caret = textView.caretRect(for: range.end)
+        guard textView.isFirstResponder, !userIsInteracting, let caret = caretLineFrame() else { return }
         let margin = max(8, theme.bodyFont.lineHeight)
         var visible = textView.bounds.inset(by: textView.adjustedContentInset)
         visible.size.height -= overlayInsets.bottom
@@ -539,6 +538,14 @@ public final class EditorView: UIView {
         let minY = -textView.adjustedContentInset.top
         let maxY = max(minY, textView.contentSize.height + textView.adjustedContentInset.bottom - textView.bounds.height)
         textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: min(max(y, minY), maxY)), animated: false)
+    }
+
+    /// The caret's line in text view content coordinates, from the layout (`caretRect` is wrong in
+    /// an empty paragraph).
+    func caretLineFrame() -> CGRect? {
+        let r = textView.selectedRange
+        if let line = geometry.lineFrame(at: r.location + r.length) { return line }
+        return textView.selectedTextRange.map { textView.caretRect(for: $0.end) }
     }
 
     /// The person has a finger (or pencil) on the text view: no programmatic scrolling then.

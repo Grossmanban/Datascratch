@@ -1199,19 +1199,6 @@ final class EditorViewTests: XCTestCase {
         height.isActive = true
         editor.headerView = header
         settle(editor)
-        window.makeKey()
-        editor.focusTitle()
-        settle(editor)
-        func titleLineY() throws -> CGFloat {
-            let caret = editor.textView.caretRect(for: try XCTUnwrap(editor.textView.selectedTextRange).end)
-            return caret.minY - editor.textView.contentOffset.y
-        }
-        // The keyboard: the host shrinks the editor (SwiftUI keyboard avoidance).
-        editor.frame.size.height = 760
-        settle(editor)
-        drainMainQueue()
-        settle(editor)
-        let before = try titleLineY()
         // Every scroll change from here on, with who made it (a failure message prints them).
         var moves: [String] = []
         let watch = editor.textView.observe(\.contentOffset, options: [.old, .new]) { _, change in
@@ -1222,11 +1209,27 @@ final class EditorViewTests: XCTestCase {
             moves.append("\(Int(old.y))→\(Int(new.y)): \(callers)")
         }
         defer { watch.invalidate() }
+        func log() -> String { "offset \(editor.textView.contentOffset.y); moves:\n" + moves.joined(separator: "\n") }
+        // Where the title line is on screen, from the layout (`caretRect` is wrong in an empty title).
+        func titleLineY() throws -> CGFloat {
+            let line = try XCTUnwrap(editor.geometry.lineFrame(at: 0))
+            return line.minY - editor.textView.contentOffset.y
+        }
+        let top = editor.textView.contentOffset.y
+        window.makeKey()
+        editor.focusTitle()
+        settle(editor)
+        // The keyboard: the host shrinks the editor (SwiftUI keyboard avoidance).
+        editor.frame.size.height = 760
+        settle(editor)
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.contentOffset.y, top, accuracy: 1, "focusing the empty title does not scroll; \(log())")
+        let before = try titleLineY()
         editor.textView.insertText("План")
         drainMainQueue()
         settle(editor)
-        XCTAssertEqual(try titleLineY(), before, accuracy: 1,
-                       "typing the title does not move it; offset \(editor.textView.contentOffset.y), content \(editor.textView.contentSize.height), bounds \(editor.textView.bounds.height); moves:\n\(moves.joined(separator: "\n"))")
+        XCTAssertEqual(try titleLineY(), before, accuracy: 1, "typing the title does not move it; \(log())")
         // The host's header grows (its metadata row re-measures after the first keystrokes).
         height.constant = 260
         editor.headerLayoutDidChange()
@@ -1236,8 +1239,7 @@ final class EditorViewTests: XCTestCase {
         drainMainQueue()
         settle(editor)
         XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "План на неделю")
-        XCTAssertEqual(try titleLineY(), before, accuracy: 1,
-                       "the title stays put when the header changes height; moves:\n\(moves.joined(separator: "\n"))")
+        XCTAssertEqual(try titleLineY(), before, accuracy: 1, "the title stays put when the header changes height; \(log())")
     }
 
     // MARK: - Photos (build 19)

@@ -275,6 +275,8 @@ export class SyncClient {
     this.clearReconnect();
     if (this.stableTimer) clearTimeout(this.stableTimer);
     this.stableTimer = null;
+    if (this.resendTimer) clearTimeout(this.resendTimer);
+    this.resendTimer = null;
     for (const [docId, entry] of this.docs) await this.flushPending(docId, entry);
     const s = this.socket;
     this.socket = null;
@@ -683,7 +685,25 @@ export class SyncClient {
     return true;
   }
 
+  private resendTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private scheduleResend(): void {
+    if (this.resendTimer) return;
+    this.resendTimer = setTimeout(
+      () => {
+        this.resendTimer = null;
+        void this.resendOutbox();
+      },
+      Math.max(0, this.rateLimitedUntil - Date.now()),
+    );
+  }
+
   private sendItem(item: OutboxItem): void {
+    if (Date.now() < this.rateLimitedUntil) {
+      // Rate limited: everything still in the outbox goes out once the delay ends.
+      this.scheduleResend();
+      return;
+    }
     // Items of documents not subscribed on this connection wait until addDoc().
     if (!this.docs.has(item.docId)) return;
     if (item.kind === "push") {
@@ -924,18 +944,21 @@ export class SyncClient {
         this.socket?.close(1000, "protocol mismatch");
         return;
       case "rate_limited": {
-        // Own growing delay (5 s, 10 s, … 60 s), at least the server's retry-after.
+        // The server's retry-after when given; otherwise an own growing delay (5 s … 60 s).
         this.rateLimits++;
         const own = Math.min(60_000, 5_000 * 2 ** (this.rateLimits - 1));
-        this.rateLimitedUntil = Date.now() + Math.max(own, retryAfterMs ?? 0);
-        this.socket?.close(1000, "rate limited");
+        this.rateLimitedUntil = Date.now() + (retryAfterMs ?? own);
+        // The server keeps the connection for message-rate limits (it closes with 1013
+        // only for too many connections, and the reconnect then honours the delay):
+        // hold sending and resend the outbox once the delay has passed.
+        this.scheduleResend();
         return;
       }
       case "payload_too_large":
         if (item) {
           await this.removeOutbox(item.clientMsgId);
           const entry = this.docs.get(item.docId);
-          // An oversized update is replaced by a snapshot (limit 50 MiB), which contains it.
+          // An oversized update is replaced by a snapshot (limit 16 MiB), which contains it.
           if (item.kind === "push" && entry) await this.enqueueSnapshot(item.docId, entry, true);
           else if (entry) entry.snapshotInFlight = null;
         }

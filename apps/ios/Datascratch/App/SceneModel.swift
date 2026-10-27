@@ -147,6 +147,9 @@ final class SceneModel {
     var library: LibraryStore { app.library }
 
     /// Notebook + folder where "New note" puts a note, based on what is selected.
+    /// Where «New Note» puts the note (spec/05): the open notebook or folder, else where the open
+    /// document lies; in All Documents, a tag or search — the notebook last written or opened in
+    /// this space (remembered on this device), else the space's first notebook.
     var newNoteDestination: (notebookId: String, folderId: String?)? {
         switch sidebar {
         case .notebook(let id): return (id, nil)
@@ -157,17 +160,47 @@ final class SceneModel {
         if let current = selectedNoteId.flatMap({ library.note($0) }), current.kind == .note {
             return (current.notebookId, current.folderId)
         }
-        guard let notebook = library.notebooks(in: library.activeSpace?.id).first else { return nil }
+        let notebooks = library.notebooks(in: library.activeSpace?.id)
+        if let space = library.activeSpace?.id, let last = Self.lastNotebook(inSpace: space),
+           notebooks.contains(where: { $0.id == last }), !library.isLocked(notebook: last) {
+            return (last, nil)
+        }
+        guard let notebook = notebooks.first(where: { !library.isLocked(notebook: $0.id) }) ?? notebooks.first else { return nil }
         return (notebook.id, nil)
     }
 
+    /// Whether the list shown is a notebook or folder (then the «New Note» button needs no «in …»).
+    var isShowingAContainer: Bool {
+        switch sidebar {
+        case .notebook, .folder: true
+        default: false
+        }
+    }
+
+    private static let lastNotebookKey = "newNote.lastNotebookBySpace"
+
+    static func lastNotebook(inSpace spaceId: String) -> String? {
+        (UserDefaults.standard.dictionary(forKey: lastNotebookKey) as? [String: String])?[spaceId]
+    }
+
+    private func rememberNotebook(of note: NoteMeta) {
+        guard let space = library.data.spaceId(ofNotebook: note.notebookId) else { return }
+        var map = (UserDefaults.standard.dictionary(forKey: Self.lastNotebookKey) as? [String: String]) ?? [:]
+        guard map[space] != note.notebookId else { return }
+        map[space] = note.notebookId
+        UserDefaults.standard.set(map, forKey: Self.lastNotebookKey)
+    }
+
+    /// «New Note»; `notebookId` when the person picked another notebook (long press on the button).
     @discardableResult
-    func newNote(title: String = "") -> NoteMeta? {
+    func newNote(title: String = "", in notebookId: String? = nil) -> NoteMeta? {
         if newNoteDestination == nil, let space = library.activeSpace {
             library.createNotebook(in: space.id, name: String(localized: "Notes"), mode: .private)
         }
-        guard let destination = newNoteDestination, !library.isLocked(notebook: destination.notebookId) else { return nil }
+        guard let destination = notebookId.map({ ($0, nil) }) ?? newNoteDestination,
+              !library.isLocked(notebook: destination.notebookId) else { return nil }
         let note = library.createNote(in: destination.notebookId, folder: destination.folderId, title: title)
+        // In a tag's list the note gets the tag at once.
         if case .tag(let tag) = sidebar {
             library.setBody(NoteBody(blocks: [.paragraph("#\(tag) ")]), ofNote: note.id)
         }
@@ -190,6 +223,7 @@ final class SceneModel {
         }
         // The notes-only app (D-51) neither shows nor writes tabs.
         if Features.tabs { library.openTab(noteId) }
+        if let note = library.note(noteId), note.kind == .note { rememberNotebook(of: note) }
     }
 
     /// A window showing one document (no columns to hide).

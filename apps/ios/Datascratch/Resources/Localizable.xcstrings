@@ -1871,6 +1871,16 @@
         }
       }
     },
+    "New Note In": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая заметка в"
+          }
+        }
+      }
+    },
     "New Notebook": {
       "localizations": {
         "ru": {
@@ -4127,6 +4137,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ваш токен"
+          }
+        }
+      }
+    },
+    "in “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "в «%@»"
           }
         }
       }

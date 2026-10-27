@@ -134,10 +134,23 @@ final class NativeEditorModel: ClosingEditor {
     }
 
     func finishNewNote() -> Bool {
-        editor.commitDefaultTitleIfNeeded()
         guard let app, let core = app.core, let note = try? core.noteDocument(noteId, notebookId: notebookId) else { return false }
         let blocks = (try? note.blocks()) ?? []
-        return note.strokes().isEmpty && blocks.allSatisfy { $0.text.isEmpty && ($0.type == BlockType.title || $0.type == BlockType.paragraph) }
+        // Nothing written: no strokes, empty title, and paragraphs empty or holding only the tag
+        // a tag's list put there.
+        let isEmpty = note.strokes().isEmpty && blocks.allSatisfy { block in
+            switch block.type {
+            case BlockType.title: block.text.isEmpty
+            case BlockType.paragraph: Self.isOnlyTags(block.text)
+            default: false
+            }
+        }
+        if !isEmpty { editor.commitDefaultTitleIfNeeded() }
+        return isEmpty
+    }
+
+    static func isOnlyTags(_ text: String) -> Bool {
+        text.split(whereSeparator: \.isWhitespace).allSatisfy { $0.hasPrefix("#") && $0.count > 1 }
     }
 
     private func changed() {

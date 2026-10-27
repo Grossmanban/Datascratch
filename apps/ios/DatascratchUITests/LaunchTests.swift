@@ -244,6 +244,30 @@ final class LibraryUITests: XCTestCase {
         XCTAssertEqual(cards.count, before + 1, "an empty new note was kept")
     }
 
+    /// spec/05: in All Documents a new note goes to the notebook last opened in this space, and
+    /// the button says where.
+    func testNewNoteGoesToTheLastUsedNotebook() throws {
+        let app = launchSignedIn(["-ui-testing-many"])
+        _ = sidebarElement(app, "sidebar.allDocuments")
+        let more = app.descendants(matching: .any)["sidebar.more.notebooks"].firstMatch
+        if more.exists { more.tap() }
+        let notebook = app.cells.containing(.staticText, identifier: "nb3").firstMatch
+        let label = app.staticTexts["nb3"].firstMatch
+        XCTAssertTrue(label.waitForExistence(timeout: 5), "no notebook nb3 in the sidebar")
+        (notebook.exists ? notebook : label).tap()
+        try openNewNoteInNativeEditor(app)
+        leaveDocument(app)
+
+        let all = sidebarElement(app, "sidebar.allDocuments")
+        XCTAssertTrue(all.exists, "no All Documents; buttons: \(Self.buttons(app))")
+        all.tap()
+        let button = newNoteButton(app)
+        XCTAssertTrue(button.exists, "no New Note button")
+        let says = NSPredicate(format: "value CONTAINS 'nb3'")
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: says, evaluatedWith: button)], timeout: 5), .completed,
+                       "the New Note button does not say it goes to nb3: \(String(describing: button.value))")
+    }
+
     /// Back to the list: the back button on iPhone, «Close Document» on iPad.
     private func leaveDocument(_ app: XCUIApplication) {
         let close = app.buttons["document.close"].firstMatch

@@ -3060,9 +3060,9 @@
     "semantic_hash": ""
   },
   "packages/shared/src/contracts/api.ts": {
-    "mtime": 1793127075.7037828,
-    "seen": 1793127213.4184809,
-    "ast_hash": "2e134c4fc1b3ce295aa303159cd675b2",
+    "mtime": 1793128119.4844735,
+    "seen": 1793128257.3566036,
+    "ast_hash": "1c22e2b52c28b7454290369593170a51",
     "semantic_hash": ""
   },
   "packages/shared/src/contracts/common.ts": {
@@ -3360,9 +3360,9 @@
     "semantic_hash": "7fc8501271469c9ea5a285185a409d08"
   },
   "packages/test-vectors/src/api.ts": {
-    "mtime": 1793127075.7037828,
-    "seen": 1793127213.4199984,
-    "ast_hash": "96887dd7f60409d8f121e13f0630476a",
+    "mtime": 1793128119.4884734,
+    "seen": 1793128257.3596556,
+    "ast_hash": "e171634fd36b696141798dabaa9d8c4d",
     "semantic_hash": ""
   },
   "packages/test-vectors/src/crypto.ts": {
@@ -3420,9 +3420,9 @@
     "semantic_hash": "3f13d953701c8cc9ae00ac8dc702542d"
   },
   "packages/test-vectors/vectors/api/bodies.json": {
-    "mtime": 1793127075.7077827,
-    "seen": 1793127213.4203484,
-    "ast_hash": "301a06555836769b5da941e690f45121",
+    "mtime": 1793128119.4884734,
+    "seen": 1793128257.360176,
+    "ast_hash": "79f80467ee3a3582dce9ade701681406",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/attachment.json": {
@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793127085.0812995,
-    "seen": 1793127213.4255698,
-    "ast_hash": "51b0849b4e077ee02d7bd770fc25ab0d",
+    "mtime": 1793128132.7897558,
+    "seen": 1793128257.3695586,
+    "ast_hash": "0a9c28948a3c0a47feb5da7ad79467c2",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -4308,15 +4308,15 @@
     "semantic_hash": "134fc03c006dd4264ae9619c417f9e73"
   },
   "docs/architecture/contracts/api.md": {
-    "mtime": 1793127075.5997827,
-    "seen": 1793127213.4256563,
-    "ast_hash": "5a484e2fc5c05aa49210f86213314319",
+    "mtime": 1793128118.6164734,
+    "seen": 1793128257.3697014,
+    "ast_hash": "d1c3d1d7c582929b3cde14b3914c7c16",
     "semantic_hash": ""
   },
   "docs/architecture/contracts/crypto.md": {
-    "mtime": 1793127075.5997827,
-    "seen": 1793127213.4256585,
-    "ast_hash": "56499ea38d30e918b6ae4c0cbfa615fc",
+    "mtime": 1793128118.6164734,
+    "seen": 1793128257.3697047,
+    "ast_hash": "cf71a0683cf7325426cb398b400517e4",
     "semantic_hash": ""
   },
   "docs/architecture/contracts/design-tokens.md": {
@@ -4788,9 +4788,9 @@
     "semantic_hash": "465af7ea82c8877732cebfe1735b7e64"
   },
   "packages/shared/README.md": {
-    "mtime": 1793127075.6997828,
-    "seen": 1793127213.4281795,
-    "ast_hash": "fb2d0e61a447eece631e759eb6f552cb",
+    "mtime": 1793128119.4844735,
+    "seen": 1793128257.3735833,
+    "ast_hash": "1af0ff7dee3fb6fcfc3527718b8756c4",
     "semantic_hash": ""
   },
   "packages/test-vectors/README.md": {
@@ -5712,15 +5712,15 @@
     "semantic_hash": ""
   },
   "packages/shared/src/sharing/rotation.ts": {
-    "mtime": 1793127075.7037828,
-    "seen": 1793127213.4194157,
-    "ast_hash": "5fe1c465af793f18eb924f20ff8140ae",
+    "mtime": 1793128119.4844735,
+    "seen": 1793128257.3584871,
+    "ast_hash": "88e3e95ba85225667b267b010af8574a",
     "semantic_hash": ""
   },
   "packages/shared/test/sharing.test.ts": {
-    "mtime": 1793127075.7037828,
-    "seen": 1793127213.419827,
-    "ast_hash": "bf1bb7336b60b078928b26de31dda531",
+    "mtime": 1793128119.4844735,
+    "seen": 1793128257.359345,
+    "ast_hash": "55c52642229f5083df5c5ace6cb4aced",
     "semantic_hash": ""
   },
   "packages/shared/src/sharing/owner.ts": {

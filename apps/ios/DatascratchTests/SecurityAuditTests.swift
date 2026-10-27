@@ -108,7 +108,12 @@ struct SecurityAuditTests {
             return be(UInt32(body.count)) + typed + be(crc32(typed))
         }
         let ihdr = be(width) + be(height) + [8, 6, 0, 0, 0]
-        return Data([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] + chunk("IHDR", ihdr) + chunk("IEND", []))
+        // The first row only, as one stored (uncompressed) deflate block: a valid, truncated stream,
+        // so ImageIO reads the header as it would for a real file still loading.
+        let row = Int(width) * 4 + 1
+        let idat: [UInt8] = [0x78, 0x01, 0x00, UInt8(row & 0xff), UInt8(row >> 8),
+                             UInt8(~row & 0xff), UInt8((~row >> 8) & 0xff)] + [UInt8](repeating: 0, count: row)
+        return Data([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] + chunk("IHDR", ihdr) + chunk("IDAT", idat))
     }
 
     private static func crc32(_ bytes: [UInt8]) -> UInt32 {

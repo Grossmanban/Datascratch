@@ -142,6 +142,12 @@ async function fetchChunk(id: string, index: number, auth: string | null): Promi
 
 const urlCache = new Map<string, Promise<string>>();
 
+/** Signing out (or a wiped device, D-53): decrypted attachments leave memory too. */
+export function forgetDecryptedAttachments() {
+  for (const p of urlCache.values()) void p.then((url) => URL.revokeObjectURL(url)).catch(() => undefined);
+  urlCache.clear();
+}
+
 /**
  * Decrypt an attachment into an object URL. Encrypted chunks are cached locally so images
  * keep working offline. `auth` overrides the bearer (guests pass their guest token).

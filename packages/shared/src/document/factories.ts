@@ -22,6 +22,7 @@ export interface AccountDocRoots {
   settings: Y.Map<unknown>;
   starred: Y.Array<unknown>;
   tabs: Y.Array<unknown>;
+  shared: Y.Map<unknown>;
 }
 
 export interface NotebookDocRoots {
@@ -46,6 +47,7 @@ export function accountRoots(doc: Y.Doc): AccountDocRoots {
     settings: doc.getMap(ACCOUNT_ROOTS.settings),
     starred: doc.getArray(ACCOUNT_ROOTS.starred),
     tabs: doc.getArray(ACCOUNT_ROOTS.tabs),
+    shared: doc.getMap(ACCOUNT_ROOTS.shared),
   };
 }
 

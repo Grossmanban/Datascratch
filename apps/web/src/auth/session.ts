@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { authApi } from "@/api/endpoints";
-import { ApiError, setTokenSource } from "@/api/client";
+import { ApiError, DeviceRevokedError, setTokenSource } from "@/api/client";
 import { accountDb, closeAccountDb, deleteAccountDb, hasAccountDb, kvDelete, kvGet, kvSet, openAccountDb } from "@/data/db";
 import type { Session } from "@/lib/shared";
 import { openLocal, sealLocal, type SealedBlob } from "./deviceKey";
@@ -21,7 +21,8 @@ export type RevokedInfo = {
   at: string;
   unsent: number;
   /** "signedOut": the user signed out with unsent changes (spec/07 «Выход из аккаунта»). */
-  reason?: "revoked" | "signedOut";
+  /** wiped: D-53 — the device was disconnected from another device and its data deleted. */
+  reason?: "revoked" | "signedOut" | "wiped";
 };
 
 type AuthState = {
@@ -115,6 +116,8 @@ async function refresh(): Promise<Session | null> {
         await persist();
         return session;
       } catch (e) {
+        // D-53: disconnected from another device — deviceRevoked (below) is wiping the data.
+        if (e instanceof DeviceRevokedError) return null;
         if (e instanceof ApiError && (e.status === 401 || e.code === "unauthorized")) {
           // Refresh token revoked (session ended from another device): leave, keeping local data.
           await endKeepingData("revoked");
@@ -135,7 +138,7 @@ function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
   return locks ? (locks.request("ds-session-refresh", fn) as Promise<T>) : fn();
 }
 
-setTokenSource({ get: () => session, refresh });
+setTokenSource({ get: () => session, refresh, deviceRevoked: () => void wipeRevokedDevice() });
 
 export const refreshSession = refresh;
 
@@ -339,6 +342,43 @@ async function endKeepingData(reason: "revoked" | "signedOut") {
 async function forgetLocalData(userId: string) {
   for (const k of ["pendingRecovery", "recoveryKey", "recoveryKeyAt", "recoveryConfirmed", "recoveryStep"]) await kvDelete(k);
   await deleteAccountDb(userId);
+}
+
+/**
+ * D-53: this device was disconnected from the account from another device. Everything of the
+ * account on it goes: IndexedDB (documents, outbox, keys, cached attachments, unsaved tails via
+ * deleteAccountDb), the session and the recovery key; the signed-out listeners stop sync and drop
+ * decrypted attachments from memory; guest share keys of this tab go too. Only the fact (and the
+ * email for the sign-in form) is kept to explain it. Never for an expired token or a network error.
+ */
+export async function wipeRevokedDevice() {
+  // REST and the sync socket may both report it: wipe once.
+  if (wiping) return wiping;
+  wiping = wipe().finally(() => {
+    wiping = null;
+  });
+  return wiping;
+}
+
+let wiping: Promise<void> | null = null;
+
+async function wipe() {
+  const { userId, email } = useAuth.getState();
+  if (!userId) return;
+  for (const fn of signedOutListeners) fn();
+  session = null;
+  masterKey?.fill(0);
+  masterKey = null;
+  await kvDelete("account");
+  if (userId) await forgetLocalData(userId).catch(() => undefined);
+  try {
+    for (const k of Object.keys(sessionStorage)) if (k.startsWith("ds.shareKey.")) sessionStorage.removeItem(k);
+  } catch {
+    // storage blocked: nothing was kept there
+  }
+  const info: RevokedInfo | null = userId && email ? { userId, email, at: new Date().toISOString(), unsent: 0, reason: "wiped" } : null;
+  if (info) await kvSet("revoked", info);
+  useAuth.setState({ status: "signedOut", userId: null, email: null, accountDocId: null, recoveryStep: false, recoveryOnDevice: false, revoked: info });
 }
 
 /** «Удалить данные с этого устройства» after a revocation (e.g. the device was lost). */

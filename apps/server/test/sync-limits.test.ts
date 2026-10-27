@@ -65,7 +65,7 @@ describe('connection caps', () => {
     const open = [await SyncClient.user(s, v), await SyncClient.user(s, v), await SyncClient.user(s, v)];
     const extra = await SyncClient.connect(s);
     hello(extra, v);
-    expect(await extra.next((m) => m.type === 'error')).toMatchObject({ code: 'rate_limited' });
+    expect(await extra.next((m) => m.type === 'error')).toMatchObject({ code: 'rate_limited', retryAfterMs: 30_000 });
     expect((await extra.waitClose()).code).toBe(1013);
     // Another account is not affected; closing one frees a slot.
     const w = await SyncClient.user(s, await signup(s));
@@ -101,6 +101,9 @@ describe('flooding', () => {
     // Only what the bucket allows was parsed: the burst plus what refilled meanwhile.
     expect(invalid).toBeLessThanOrEqual(50 + Math.ceil(10 * elapsed) + 1);
     expect(limited).toBeGreaterThan(0);
+    // Each refusal says when a message would be accepted again (≤ one token at 10/s).
+    const waits = c.messages.filter((m) => m.code === 'rate_limited').map((m) => m.retryAfterMs);
+    expect(waits.every((w) => Number.isInteger(w) && w > 0 && w <= 100)).toBe(true);
     await closeAll([c]);
   }, 30_000);
 });

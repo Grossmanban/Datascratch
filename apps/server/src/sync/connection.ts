@@ -40,6 +40,8 @@ const HELLO_TIMEOUT_MS = 10_000;
 export const PRE_AUTH_MAX_PAYLOAD = 64 * 1024;
 /** Messages waiting to be handled before the socket stops reading (and when it reads again). */
 const QUEUE_PAUSE_AT = 32;
+/** Suggested wait before reconnecting when the account already has too many connections. */
+const TOO_MANY_RETRY_MS = 30_000;
 const QUEUE_RESUME_AT = 8;
 /** Subscribe fast path: documents per batched query, and max updates per document in it. */
 const FAST_PATH_BATCH = 200;
@@ -215,7 +217,9 @@ export class SyncConnection {
           // no ref
         }
       }
-      this.#send({ type: 'error', code: 'rate_limited', message: 'too many messages', ...(ref ? { ref } : {}) });
+      // When the bucket holds a whole token again (sync-protocol: the client waits at least this long).
+      const retryAfterMs = Math.ceil(((1 - this.#tokens) / this.ctx.config.SYNC_RATE_PER_SEC) * 1000);
+      this.#send({ type: 'error', code: 'rate_limited', message: 'too many messages', retryAfterMs, ...(ref ? { ref } : {}) });
       return;
     }
     let raw: unknown;
@@ -304,7 +308,10 @@ export class SyncConnection {
     }
     if (!p) return this.#fail('unauthorized', 'invalid credentials', CloseCode.unauthorized);
     if (this.#closed) return;
-    if (!this.admit(p)) return this.#fail('rate_limited', 'too many connections', CloseCode.tryAgainLater);
+    if (!this.admit(p)) {
+      this.#send({ type: 'error', code: 'rate_limited', message: 'too many connections', retryAfterMs: TOO_MANY_RETRY_MS });
+      return this.close(CloseCode.tryAgainLater, 'too many connections');
+    }
     this.#principal = p;
     setMaxPayload(this.socket, this.maxPayload);
     const kick = (m: HubMessage) => {

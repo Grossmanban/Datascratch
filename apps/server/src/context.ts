@@ -40,12 +40,16 @@ export function createContext(opts: {
     ...opts,
     hub,
     tokens: new TokenSigner(fromB64(config.DS_JWT_SECRET), config.ACCESS_TOKEN_TTL_SEC),
-    documents: new DocumentService(hub, {
-      keepAllDays: config.HISTORY_KEEP_ALL_DAYS,
-      dailyDays: config.HISTORY_DAILY_DAYS,
-      weeklyDays: config.HISTORY_WEEKLY_DAYS,
-      coveredUpdatesKeepDays: config.COVERED_UPDATES_KEEP_DAYS,
-    }),
+    documents: new DocumentService(
+      hub,
+      {
+        keepAllDays: config.HISTORY_KEEP_ALL_DAYS,
+        dailyDays: config.HISTORY_DAILY_DAYS,
+        weeklyDays: config.HISTORY_WEEKLY_DAYS,
+        coveredUpdatesKeepDays: config.COVERED_UPDATES_KEEP_DAYS,
+      },
+      config.USER_STORAGE_QUOTA_BYTES,
+    ),
     keys: new KeyService(fromB64(config.DS_KMS_KEY)),
     metrics: new Metrics(),
     imageFetcher: new ImageFetcher({ maxBytes: config.FETCH_IMAGE_MAX_BYTES, timeoutMs: config.FETCH_IMAGE_TIMEOUT_MS }),

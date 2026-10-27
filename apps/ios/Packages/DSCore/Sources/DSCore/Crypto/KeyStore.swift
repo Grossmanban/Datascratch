@@ -91,8 +91,8 @@ public final class KeychainSecretStore: SecretStore {
 /// Persisted in the `SecretStore`: master key and (optionally) unwrapped notebook keys.
 /// Note keys are unwrapped on demand from `NoteMeta.wrappedKey` and kept in memory only.
 public final class KeyRing: Sendable {
-    private let store: any SecretStore
-    private let cache = Locked<[String: Data]>([:])
+    let store: any SecretStore
+    let cache = Locked<[String: Data]>([:])
     /// Notebooks whose key was confirmed by the server in this session (`adoptNotebookKey`).
     private let verified = Locked<Set<String>>([])
 
@@ -174,7 +174,7 @@ public final class KeyRing: Sendable {
         retiredNotebookKeys(in: (try? store.data(for: Self.retiredNotebookKeysName(notebookId))) ?? Data())
     }
 
-    private func retiredNotebookKeys(in data: Data) -> [Data] {
+    func retiredNotebookKeys(in data: Data) -> [Data] {
         stride(from: 0, to: data.count - data.count % 32, by: 32).map { data.subdata(in: data.startIndex + $0 ..< data.startIndex + $0 + 32) }
     }
 
@@ -240,15 +240,18 @@ public final class KeyRing: Sendable {
     /// marked as belonging to `owner` (userId). Everything else is forgotten.
     public func clear(keepingNotebooks notebookIds: [String], owner: String) throws {
         var kept: [(String, Data, Data?)] = []
+        var versions: [String: Data] = [:]
         for id in notebookIds {
             guard let key = try notebookKey(id) else { continue }
             kept.append((id, key, try store.data(for: Self.retiredNotebookKeysName(id))))
+            versions[id] = try store.data(for: Self.notebookKeyVersionName(id))
         }
         try clear()
         guard !kept.isEmpty else { return }
         for (id, key, retired) in kept {
             try store.set(key, for: Self.notebookKeyName(id))
             if let retired { try store.set(retired, for: Self.retiredNotebookKeysName(id)) }
+            if let v = versions[id] { try store.set(v, for: Self.notebookKeyVersionName(id)) }
         }
         try store.set(Data(owner.utf8), for: Self.keptOwnerName)
         try store.set(Data(kept.map(\.0).joined(separator: ",").utf8), for: Self.keptNotebooksName)
@@ -271,6 +274,7 @@ public final class KeyRing: Sendable {
             for id in kept.notebookIds {
                 try store.remove(Self.notebookKeyName(id))
                 try store.remove(Self.retiredNotebookKeysName(id))
+                try store.remove(Self.notebookKeyVersionName(id))
                 cache.withLock { $0[Self.notebookKeyName(id)] = nil }
             }
             removed = kept.notebookIds

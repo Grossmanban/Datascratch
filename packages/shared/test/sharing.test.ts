@@ -54,6 +54,7 @@ interface Resource {
   ownerWrappedKey: string;
   keyChain: string[];
   pending: boolean;
+  pendingSince?: number | null;
   members: Map<string, { role: "editor" | "viewer"; wrappedKey: string | null; late?: boolean }>;
 }
 
@@ -127,6 +128,7 @@ class FakeServer {
         version: r.version,
         keyChain: r.keyChain,
         keyRotationPending: r.pending,
+        pendingSinceVersion: r.pending ? (r.pendingSince ?? null) : null,
       });
     }
     if ((m = p.match(/^\/members\/note\/([^/]+)\/key$/))) {
@@ -144,6 +146,7 @@ class FakeServer {
           target: { kind: r.kind, id: r.id },
           keyVersion: r.version,
           keyRotationPending: r.pending,
+          pendingSinceVersion: r.pending ? (r.pendingSince ?? null) : null,
           members: r.members.size,
           awaitingKey: [...r.members.values()].filter((v) => !v.wrappedKey).length,
         })),
@@ -197,6 +200,7 @@ class FakeServer {
       }
       if (rest === "rotate/done") {
         r.pending = false;
+        r.pendingSince = null;
         return this.res(204);
       }
       if ((m = rest?.match(/^([^/]+)\/key$/) ?? null)) {
@@ -207,6 +211,7 @@ class FakeServer {
       }
       if (rest && method === "DELETE") {
         r.members.delete(rest);
+        if (!r.pending) r.pendingSince = r.version;
         r.pending = true;
         return this.res(204);
       }
@@ -494,6 +499,38 @@ describe("guest links after rotation", () => {
     expect(links[0]!.share.permission).toBe("view");
     expect(parseShareLink(links[0]!.url)).toMatchObject({ shareId: links[0]!.share.id, key });
     expect(s.server.shares.size).toBe(2);
+  });
+});
+
+describe("rotation from a second owner device", () => {
+  it("does not rotate twice when the server reports pendingSinceVersion", async () => {
+    const s = await setup();
+    const api = s.server.api(OWNER);
+    await api.removeMember({ kind: "notebook", id: NB }, BOB);
+    const empty = new Y.Doc(); // no notes: the NoteMeta heuristic cannot tell
+    const opts = {
+      api,
+      notebookId: NB,
+      owner: { userId: OWNER, secretKey: s.owner.secretKey },
+      masterKey: s.masterKey,
+      index: empty,
+      agentMode: false,
+      whenIndexSent: async () => {},
+    };
+    // Device A: step 1, then it dies before rotate/done.
+    await expect(
+      rotateNotebookKey({
+        ...opts,
+        onKeys: () => {
+          throw new Error("crash");
+        },
+      }),
+    ).rejects.toThrow("crash");
+    // Device B picks it up without a second version.
+    const r = await rotateNotebookKey({ ...opts, onKeys: () => {} });
+    expect(r).toMatchObject({ rotated: true, newVersion: false });
+    expect(s.server.resources.get(`notebook:${NB}`)!.version).toBe(2);
+    expect(s.server.resources.get(`notebook:${NB}`)!.pending).toBe(false);
   });
 });
 

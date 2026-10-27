@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, lte, lt, sql } from 'drizzle-orm';
 import type { DbOrTx } from '../db/client.js';
-import { docSnapshots, docUpdates, docs } from '../db/schema.js';
+import { docSnapshots, docUpdates, docs, type AuthorRef } from '../db/schema.js';
 import { ApiError, badRequest, notFound } from '../lib/errors.js';
 import { toB64 } from '../lib/encoding.js';
 import { topics, type Broadcaster } from '../sync/hub.js';
@@ -10,6 +10,8 @@ export interface AppendInput {
   payload: Uint8Array;
   deviceId: string;
   clientMsgId?: string | null;
+  /** Who sent the update (D-54), from the authenticated connection or token, never from the client. */
+  author: AuthorRef;
 }
 
 export interface AppendResult {
@@ -32,6 +34,8 @@ export interface CatchUpItem {
   seq: number;
   payload: Buffer;
   deviceId: string;
+  /** null for guest updates stored before authors were recorded (D-54). */
+  author: AuthorRef | null;
 }
 
 export interface CatchUpPage {
@@ -146,19 +150,28 @@ export class DocumentService {
         payload: Buffer.from(input.payload),
         deviceId: input.deviceId,
         clientMsgId: input.clientMsgId ?? null,
+        author: input.author,
       });
       return { ...row!, duplicate: false };
     });
   }
 
   /** Relay an accepted update to live subscribers (call after the transaction committed). */
-  publishUpdate(docId: string, seq: number, payload: Uint8Array | string, deviceId: string, origin: string | null) {
+  publishUpdate(
+    docId: string,
+    seq: number,
+    payload: Uint8Array | string,
+    deviceId: string,
+    author: AuthorRef,
+    origin: string | null,
+  ) {
     this.hub.publish(topics.doc(docId), {
       type: 'update',
       docId,
       seq,
       payload: typeof payload === 'string' ? payload : toB64(payload),
       deviceId,
+      author,
       origin,
     });
   }
@@ -173,6 +186,13 @@ export class DocumentService {
       if (!doc) throw notFound('document not registered');
       if (input.baseSeq < 1 || input.baseSeq > doc.lastSeq) throw badRequest('baseSeq out of range');
       await this.quotaCheck(tx, input.docId, input.payload.byteLength, 'snapshot');
+      // Version history shows who changed the document since the previous version (D-54):
+      // the authors of the updates after the previous snapshot, in order of their first update.
+      const authors = await tx.execute<{ author: AuthorRef }>(sql`
+        SELECT author FROM doc_updates
+        WHERE doc_id = ${input.docId} AND author IS NOT NULL AND seq <= ${input.baseSeq}
+          AND seq > coalesce((SELECT max(seq) FROM doc_snapshots WHERE doc_id = ${input.docId} AND seq < ${input.baseSeq}), 0)
+        GROUP BY author ORDER BY min(seq)`);
       await tx
         .insert(docSnapshots)
         .values({
@@ -180,6 +200,7 @@ export class DocumentService {
           seq: input.baseSeq,
           payload: Buffer.from(input.payload),
           deviceId: input.deviceId,
+          authors: authors.rows.map((r) => r.author),
         })
         .onConflictDoNothing();
       if (input.baseSeq <= doc.snapshotSeq) return { newest: false };
@@ -230,7 +251,7 @@ export class DocumentService {
     }
     for (;;) {
       const rows = await db
-        .select({ seq: docUpdates.seq, payload: docUpdates.payload, deviceId: docUpdates.deviceId })
+        .select({ seq: docUpdates.seq, payload: docUpdates.payload, deviceId: docUpdates.deviceId, author: docUpdates.author })
         .from(docUpdates)
         .where(and(eq(docUpdates.docId, docId), gt(docUpdates.seq, cursor)))
         .orderBy(asc(docUpdates.seq))
@@ -260,13 +281,19 @@ export class DocumentService {
     if (docs.length === 0) return out;
     const ids = `{${docs.map((d) => d.docId).join(',')}}`;
     const sinces = `{${docs.map((d) => d.since).join(',')}}`;
-    const res = await db.execute<{ doc_id: string; seq: string | number; payload: Buffer; device_id: string }>(sql`
-      SELECT u.doc_id, u.seq, u.payload, u.device_id
+    const res = await db.execute<{
+      doc_id: string;
+      seq: string | number;
+      payload: Buffer;
+      device_id: string;
+      author: AuthorRef | null;
+    }>(sql`
+      SELECT u.doc_id, u.seq, u.payload, u.device_id, u.author
       FROM unnest(${ids}::uuid[], ${sinces}::bigint[]) AS q(doc_id, since)
       JOIN doc_updates u ON u.doc_id = q.doc_id AND u.seq > q.since
       ORDER BY u.doc_id, u.seq`);
     for (const r of res.rows) {
-      out.get(r.doc_id)!.push({ seq: Number(r.seq), payload: r.payload, deviceId: r.device_id });
+      out.get(r.doc_id)!.push({ seq: Number(r.seq), payload: r.payload, deviceId: r.device_id, author: r.author });
     }
     return out;
   }
@@ -300,7 +327,7 @@ export class DocumentService {
   /** Updates with after < seq < before, in order (gap filling for live delivery). */
   async range(db: DbOrTx, docId: string, after: number, before: number): Promise<CatchUpItem[]> {
     return db
-      .select({ seq: docUpdates.seq, payload: docUpdates.payload, deviceId: docUpdates.deviceId })
+      .select({ seq: docUpdates.seq, payload: docUpdates.payload, deviceId: docUpdates.deviceId, author: docUpdates.author })
       .from(docUpdates)
       .where(and(eq(docUpdates.docId, docId), gt(docUpdates.seq, after), lt(docUpdates.seq, before)))
       .orderBy(asc(docUpdates.seq));
@@ -308,7 +335,12 @@ export class DocumentService {
 
   async listVersions(db: DbOrTx, docId: string) {
     return db
-      .select({ seq: docSnapshots.seq, createdAt: docSnapshots.createdAt, deviceId: docSnapshots.deviceId })
+      .select({
+        seq: docSnapshots.seq,
+        createdAt: docSnapshots.createdAt,
+        deviceId: docSnapshots.deviceId,
+        authors: docSnapshots.authors,
+      })
       .from(docSnapshots)
       .where(eq(docSnapshots.docId, docId))
       .orderBy(desc(docSnapshots.seq));

@@ -180,8 +180,12 @@ public struct NoteMeta: MapRecord {
     public var tags: [String]
     public var icon: String?
     public var coverThumb: String?
-    /// noteKey wrapped by notebookKey, base64url (crypto.md).
+    /// noteKey wrapped by notebookKey, base64url (crypto.md; `ad` with the version from 2 on).
     public var wrappedKey: String
+    /// Version of the note key (D-54, crypto.md §10.3); absent = 1.
+    public var keyVersion: Int = 1
+    /// Earlier note keys, from the current version back (crypto.md §10.3); absent = [].
+    public var keyChain: [String] = []
     public var createdAt: String
     public var updatedAt: String
     public var trashedAt: String?
@@ -221,6 +225,9 @@ public struct NoteMeta: MapRecord {
             "trashedAt": .optionalString(trashedAt), "order": .number(value: order),
         ]
         if let createdByAgent { f["createdByAgent"] = createdByAgent.value }
+        // Written once a key was rotated (absent = 1 / [] for everyone else).
+        if keyVersion > 1 { f["keyVersion"] = .number(value: Double(keyVersion)) }
+        if !keyChain.isEmpty { f["keyChain"] = .list(items: keyChain.map { .string(value: $0) }) }
         return f
     }
 
@@ -230,7 +237,12 @@ public struct NoteMeta: MapRecord {
                   tags: f["tags"]?.items?.compactMap(\.stringValue) ?? [], icon: str(f, "icon"), coverThumb: str(f, "coverThumb"),
                   wrappedKey: str(f, "wrappedKey") ?? "", createdAt: str(f, "createdAt") ?? "", updatedAt: str(f, "updatedAt"),
                   trashedAt: str(f, "trashedAt"), order: num(f, "order") ?? 0, createdByAgent: AgentAuthor(f["createdByAgent"]))
+        keyVersion = max(1, Int(num(f, "keyVersion") ?? 1))
+        keyChain = f["keyChain"]?.items?.compactMap(\.stringValue) ?? []
     }
+
+    /// The `ad` of `wrappedKey` (crypto.md §10.3).
+    public var wrappedKeyAD: String { CryptoAD.targetKey(.note, id, version: keyVersion) }
 
     public var isTrashed: Bool { trashedAt != nil }
 }
@@ -338,6 +350,8 @@ extension NoteMeta: Decodable {
                   icon: r.str("icon"), coverThumb: r.str("coverThumb"), wrappedKey: r.str("wrappedKey") ?? "",
                   createdAt: r.str("createdAt") ?? "", updatedAt: r.str("updatedAt"), trashedAt: r.str("trashedAt"), order: r.num("order") ?? 0,
                   createdByAgent: r.object("createdByAgent"))
+        keyVersion = max(1, Int(r.num("keyVersion") ?? 1))
+        keyChain = r.strings("keyChain")
     }
 }
 

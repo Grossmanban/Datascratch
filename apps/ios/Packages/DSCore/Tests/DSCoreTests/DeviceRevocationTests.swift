@@ -50,6 +50,25 @@ import Testing
         #expect(await api.revocation == .passwordChange)
     }
 
+    /// Signing in again on the same `APIClient` (a new device session) re-arms the report.
+    @Test func revocationIsReportedAgainAfterSigningIn() async throws {
+        let revoked = Locked(true)
+        let transport = StubTransport { req in
+            if req.url!.path == "/v1/auth/login" {
+                return (200, Data(#"{"userId":"\#(NetworkRetryTests.userId)","deviceId":"d2","accessToken":"t2","refreshToken":"r2","accessExpiresAt":"\#(DSDate.iso(Date().addingTimeInterval(3600)))","wrappedMasterKeyPassword":"AQ","accountDocId":"\#(NetworkRetryTests.accountDocId)"}"#.utf8))
+            }
+            return revoked.withLock { $0 } ? (401, Self.revoked) : (200, Data(#"{"userId":"u","email":"e@x","accountDocId":"a","createdAt":"2026-10-25T00:00:00.000Z"}"#.utf8))
+        }
+        let api = try await api(transport)
+        let reported = Locked(0)
+        await api.setDeviceRevokedHandler { _ in reported.withLock { $0 += 1 } }
+        await #expect(throws: DeviceRevokedError.self) { _ = try await api.me() }
+        _ = try await api.login(email: "e@x.co", loginKey: Data(repeating: 1, count: 32), deviceName: "iPad")
+        #expect(await api.revocation == nil)
+        await #expect(throws: DeviceRevokedError.self) { _ = try await api.me() }
+        #expect(reported.withLock { $0 } == 2)
+    }
+
     /// The usual way a revoked device learns it: its refresh is refused.
     @Test func refreshRefusedAsRevoked() async throws {
         let transport = StubTransport { req in

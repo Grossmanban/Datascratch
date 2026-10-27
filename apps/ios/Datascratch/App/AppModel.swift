@@ -35,11 +35,10 @@ final class AppModel {
     let sync: SyncCenter
     private(set) var sharing: any SharingService
     private(set) var access: any AccessService
-    /// D-49: the server this device signs in to — the one chosen on the sign-in screen (kept on
-    /// this device with the account), else the build's `DS_SERVER_URL`.
+    /// D-49: the server this device signs in to — only one the person typed, got in an invite
+    /// link, or signed in to earlier on this device. The build's `DS_SERVER_URL` is never shown
+    /// (amendment 2026-10-27); it only keeps an install that signed in before D-49 working.
     private(set) var serverURL: URL?
-    /// The build's server: what the «Server» field starts with.
-    let defaultServerURL: URL?
     private static let serverKey = "account.serverURL"
     @ObservationIgnored private let isUITesting: Bool
     let webHost: String
@@ -85,13 +84,11 @@ final class AppModel {
         let info = bundle.infoDictionary ?? [:]
         let host = (info["DSWebHost"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "datascratch.app"
         let buildServer = (info["DSServerURL"] as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) }
-        // UI tests: `-ui-testing-server <url>` stands for the build's server.
+        // UI tests: `-ui-testing-server <url>` stands for a server saved on this device.
         let testServer = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["ui-testing-server"]
             .flatMap { $0 as? String }.flatMap(URL.init(string:))
-        defaultServerURL = options.uiTesting ? testServer : buildServer
         let stored = options.uiTesting ? nil : UserDefaults.standard.string(forKey: Self.serverKey).flatMap(URL.init(string:))
-        let server = stored ?? buildServer
-        serverURL = options.uiTesting ? testServer : server
+        var server = stored
         isUITesting = options.uiTesting
         webHost = host
         let coverImages: CoverImages = options.uiTesting ? .temporary() : .appSupport()
@@ -112,8 +109,13 @@ final class AppModel {
             let made = Self.makeLibrary(inMemory: false)
             library = made.0
             coreLibrary = made.1
+            if server == nil, let buildServer, Self.signedInBeforeServerField(made.1) {
+                server = buildServer
+                UserDefaults.standard.set(buildServer.absoluteString, forKey: Self.serverKey)
+            }
             sync = SyncCenter(serverURL: server)
         }
+        serverURL = options.uiTesting ? testServer : server
         #if canImport(DSCore)
         let coreStack = coreLibrary as? CoreLibrary
         core = coreStack
@@ -183,6 +185,21 @@ final class AppModel {
         isRecoveryKeyConfirmed = secureStore.data(for: Self.unconfirmedItem) == nil
         let sync = self.sync
         library.onLocalChange = { sync.noteLocalChange() }
+        wireLocalWipe()
+    }
+
+    /// Erasing the device (D-53 revocation, «Delete data») also forgets the recovery key kept
+    /// on it and the cover cache.
+    private func wireLocalWipe() {
+        #if canImport(DSCore)
+        connection?.onLocalDataWiped = { [weak self] in
+            guard let self else { return }
+            covers.forgetAll()
+            pendingRecoveryKey = nil
+            savedRecoveryKey = nil
+            isRecoveryKeyConfirmed = true
+        }
+        #endif
     }
 
     private var signedInForTesting = false
@@ -270,16 +287,35 @@ final class AppModel {
         isRecoveryKeyConfirmed = false
     }
 
+    /// An install signed in (or signed out by the server) before the «Server» field existed used
+    /// the build's server without saving it: that sign-in is this device's, so it stays.
+    static func signedInBeforeServerField(_ core: AnyObject?) -> Bool {
+        #if canImport(DSCore)
+        guard let core = core as? CoreLibrary else { return false }
+        return [ServerAccountService.emailKey, ServerAccountService.sessionEndedKey].contains { key in
+            guard let value = try? core.store.string(key) else { return false }
+            return !value.isEmpty
+        }
+        #else
+        return false
+        #endif
+    }
+
+    /// UI tests with no `-ui-testing-server`: accounts stay on the device, no server is asked for.
+    var isLocalOnlyTesting: Bool { isUITesting && serverURL == nil }
+
+    /// Share links and invites name the account's own server (the web app is served there).
+    var linkHost: String { serverURL?.host() ?? webHost }
+
     #if canImport(DSCore)
     private static func serverSide(_ server: URL, webHost: String, core: CoreLibrary, sync: SyncCenter, library: LibraryStore,
                                    covers: CoverImages)
         -> (connection: ServerConnection, accounts: any AccountService, sharing: any SharingService, access: any AccessService) {
-        let connection = ServerConnection(serverURL: server, webHost: webHost, core: core, sync: sync,
+        let connection = ServerConnection(serverURL: server, webHost: server.host() ?? webHost, core: core, sync: sync,
                                           attachmentsDirectory: covers.directory)
         connection.onLibraryCarried = { [library] justCarried in library.mergeCarriedDuplicates(anyName: justCarried) }
         sync.onBackOnline = { connection.reconnect() }
         covers.remote = connection
-        connection.onLocalDataWiped = { [weak covers] in covers?.forgetAll() }
         return (connection, ServerAccountService(connection: connection), ServerSharingService(connection: connection),
                 ServerAccessService(connection: connection))
     }
@@ -304,10 +340,13 @@ final class AppModel {
     /// D-49: signing in or up on another server. Only while signed out: the account, its keys and
     /// library belong to one server.
     func useServer(_ url: URL) {
-        guard url != serverURL, accounts.account == nil else { return }
+        guard accounts.account == nil else { return }
+        // Saved even when it is already the current one: a device must never depend on an
+        // address it did not keep (D-49 amendment; before build 22 the default was not saved).
+        if !isUITesting { UserDefaults.standard.set(url.absoluteString, forKey: Self.serverKey) }
+        guard url != serverURL else { return }
         serverURL = url
         guard !isUITesting else { return }
-        UserDefaults.standard.set(url.absoluteString, forKey: Self.serverKey)
         sync.useServer(url)
         #if canImport(DSCore)
         guard let core else { return }
@@ -316,6 +355,7 @@ final class AppModel {
         accounts = side.accounts
         sharing = side.sharing
         access = side.access
+        wireLocalWipe()
         #endif
     }
 

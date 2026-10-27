@@ -138,9 +138,13 @@ function continues(text: string, i: number): boolean {
   return false;
 }
 
+/** Characters of one block that are laid out; anchors beyond them are not drawn (a 200k-character block must not stall the server). */
+export const MAX_LAYOUT_CHARS = 20_000;
+
 function layoutText(ctx: SKRSContext2D, el: Y.XmlElement, left: number, width: number): Layout {
   const style = blockStyle(el);
-  const flat = flatten(el);
+  const full = flatten(el);
+  const flat = full.text.length > MAX_LAYOUT_CHARS ? { ...full, text: full.text.slice(0, MAX_LAYOUT_CHARS) } : full;
   const fs = style.size;
   const lineHeight = fs * (style.family === DISPLAY_FAMILY ? 1.25 : 1.5);
   const ascent = fs * 0.97;
@@ -592,15 +596,33 @@ export function textSegments(doc: Y.Doc, stroke: Stroke, block: Y.XmlElement, la
   return regionSegments(doc, stroke, { texts: new Map([[block, { layout, dy, key: 0 }]]), decor: [], height: 0 }, undefined, keepShape);
 }
 
+/** Bounding box of drawn points (loops: spreading 100k+ values into Math.min overflows the stack). */
 function boxOf(segments: Pt[][]): { minY: number; maxY: number; minX: number; maxX: number } | null {
-  const pts = segments.flat();
-  if (pts.length === 0) return null;
-  return {
-    minY: Math.min(...pts.map((p) => p.y - p.w)),
-    maxY: Math.max(...pts.map((p) => p.y + p.w)),
-    minX: Math.min(...pts.map((p) => p.x - p.w)),
-    maxX: Math.max(...pts.map((p) => p.x + p.w)),
-  };
+  let box: { minY: number; maxY: number; minX: number; maxX: number } | null = null;
+  for (const seg of segments)
+    for (const p of seg) {
+      if (!box) box = { minY: p.y - p.w, maxY: p.y + p.w, minX: p.x - p.w, maxX: p.x + p.w };
+      else {
+        box.minY = Math.min(box.minY, p.y - p.w);
+        box.maxY = Math.max(box.maxY, p.y + p.w);
+        box.minX = Math.min(box.minX, p.x - p.w);
+        box.maxX = Math.max(box.maxX, p.x + p.w);
+      }
+    }
+  return box;
+}
+
+/** Largest frame drawn, in points, and largest bitmap: crops around the strokes, then lowers the scale. */
+export const MAX_FRAME_PT = { width: 1600, height: 2400 };
+export const MAX_PIXELS = 16_000_000;
+/** Points drawn per image at most; strokes beyond are left out. */
+export const MAX_DRAWN_POINTS = 300_000;
+
+/** Crops [lo, hi] to at most `max`, keeping the strokes' range [a, b] (or its start) in view. */
+function cropAxis(lo: number, hi: number, a: number, b: number, max: number): [number, number] {
+  if (hi - lo <= max) return [lo, hi];
+  const start = Math.max(lo, Math.min(a - 40, hi - max, (a + b) / 2 - max / 2));
+  return [start, start + max];
 }
 
 export interface RenderOptions {
@@ -623,9 +645,27 @@ export function autoScale(heightPt: number): number {
   return heightPt <= 200 ? 3 : 2;
 }
 
-async function paint(widthPt: number, top: number, bottom: number, requested: number | undefined, painters: Painter[], left = 0): Promise<RenderedImage> {
+type Box = NonNullable<ReturnType<typeof boxOf>>;
+
+async function paint(
+  widthPt: number,
+  top: number,
+  bottom: number,
+  requested: number | undefined,
+  painters: Painter[],
+  left = 0,
+  focus: Box | null = null,
+): Promise<RenderedImage> {
+  // Never more than MAX_FRAME_PT around the strokes (a margin note on a huge block, strokes far away).
+  const f = focus ?? { minX: left, maxX: left, minY: top, maxY: top };
+  [top, bottom] = cropAxis(top, bottom, f.minY, f.maxY, MAX_FRAME_PT.height);
+  let right: number;
+  [left, right] = cropAxis(left, left + widthPt, f.minX, f.maxX, MAX_FRAME_PT.width);
+  widthPt = right - left;
   const height = Math.max(1, bottom - top);
-  const scale = requested ?? autoScale(height);
+  let scale = Math.min(requested ?? autoScale(height), Math.sqrt(MAX_PIXELS / (Math.max(1, widthPt) * height)));
+  // Rounding up to whole pixels may overshoot the cap by a row or column.
+  while (Math.ceil(widthPt * scale) * Math.ceil(height * scale) > MAX_PIXELS) scale *= 0.999;
   const canvas = createCanvas(Math.ceil(widthPt * scale), Math.ceil(height * scale));
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = BG;
@@ -644,7 +684,8 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
   const scale = options.scale;
   const ctxLines = options.contextLines ?? 1;
   const wanted = new Set(item.strokeIds);
-  const strokes = readStrokes(doc).filter((s) => wanted.has(s.id));
+  let budget = MAX_DRAWN_POINTS;
+  const strokes = readStrokes(doc).filter((s) => wanted.has(s.id) && (budget -= s.points.length) >= 0);
   const width = COLUMN + PAD * 2;
 
   if (item.kind === "text") {
@@ -653,7 +694,10 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
     if (placements.length === 0) throw new Error("handwriting has no visible strokes");
     const all = topLevelBlocks(doc);
     const idx = placements.map((p) => all.indexOf(p.top)).filter((n) => n >= 0);
-    const tops = all.slice(Math.min(...idx), Math.max(...idx) + 1);
+    const tops = all.slice(
+      idx.reduce((m, n) => Math.min(m, n), Infinity),
+      idx.reduce((m, n) => Math.max(m, n), -Infinity) + 1,
+    );
     const region = layoutRegion(measureCanvas(), tops, PAD, COLUMN);
     const anchorLines: { top: number; bottom: number }[] = [];
     const shaped = shapeGroup(placements.map((p) => traceStroke(doc, p.stroke, region, anchorLines, true)));
@@ -662,12 +706,12 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
     if (!box) throw new Error("handwriting has no visible strokes");
     // Frame: every stroke (never clipped) plus the lines it sits on and some context around them.
     const context = 26 * ctxLines;
-    const linesTop = Math.min(...anchorLines.map((l) => l.top));
-    const linesBottom = Math.max(...anchorLines.map((l) => l.bottom));
+    const linesTop = anchorLines.reduce((m, l) => Math.min(m, l.top), Infinity);
+    const linesBottom = anchorLines.reduce((m, l) => Math.max(m, l.bottom), -Infinity);
     // Snap the context edges to whole text lines (no half-cut lines at the borders).
     const allLines = [...region.texts.values()].flatMap((p) => p.layout.lines.map((l) => ({ top: p.dy + l.top, bottom: p.dy + l.bottom })));
-    const snapUp = (y: number) => Math.min(y, ...allLines.filter((l) => l.top < y && l.bottom > y).map((l) => l.top - 6));
-    const snapDown = (y: number) => Math.max(y, ...allLines.filter((l) => l.top < y && l.bottom > y).map((l) => l.bottom + 6));
+    const snapUp = (y: number) => allLines.reduce((m, l) => (l.top < y && l.bottom > y ? Math.min(m, l.top - 6) : m), y);
+    const snapDown = (y: number) => allLines.reduce((m, l) => (l.top < y && l.bottom > y ? Math.max(m, l.bottom + 6) : m), y);
     const top = Math.min(box.minY - 10, Math.max(0, snapUp(linesTop - context)));
     const bottom = Math.max(box.maxY + 10, Math.min(region.height, snapDown(linesBottom + context)));
     const left = Math.min(0, box.minX - 10);
@@ -686,6 +730,7 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
         (c) => over.forEach((x) => x.segments.forEach((seg) => drawSegment(c, x.s, seg))),
       ],
       left,
+      box,
     );
   }
 
@@ -700,10 +745,15 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
     const box = boxOf(segs.flatMap((x) => x.segments));
     const top = Math.min(0, (box?.minY ?? PAD) - 8);
     const bottom = Math.max(PAD + (layout?.height ?? 0) + PAD, (box?.maxY ?? 0) + 8);
-    return paint(width, top, bottom, scale, [
-      (c) => layout && drawText(c, layout, PAD),
-      (c) => segs.forEach((x) => x.segments.forEach((seg) => drawSegment(c, x.s, seg))),
-    ]);
+    return paint(
+      width,
+      top,
+      bottom,
+      scale,
+      [(c) => layout && drawText(c, layout, PAD), (c) => segs.forEach((x) => x.segments.forEach((seg) => drawSegment(c, x.s, seg)))],
+      0,
+      box,
+    );
   }
 
   // drawing / image: points in fractions of the block width
@@ -711,7 +761,8 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
   const box = boxOf(segs.flatMap((x) => x.segments));
   let contentH = Number(attr(loc.el, "height") ?? 0) || 0;
   let img: Awaited<ReturnType<typeof loadImage>> | null = null;
-  if (item.kind === "image" && options.image) {
+  const pixels = options.image ? imagePixels(options.image) : null;
+  if (item.kind === "image" && options.image && pixels !== null && pixels <= MAX_IMAGE_PIXELS) {
     try {
       img = await loadImage(Buffer.from(options.image));
       contentH = (COLUMN * img.height) / img.width;
@@ -735,5 +786,28 @@ export async function renderHandwriting(doc: Y.Doc, item: HandwritingItem, optio
       }
     },
     (c) => segs.forEach((x) => x.segments.forEach((seg) => drawSegment(c, x.s, seg))),
-  ]);
+  ], 0, box);
+}
+
+/** Pictures larger than this are not decoded (a 20000×20000 PNG would need 1.6 GB): a placeholder is drawn. */
+export const MAX_IMAGE_PIXELS = 40_000_000;
+
+/** Width × height from a PNG or JPEG header without decoding; null when unknown. */
+export function imagePixels(b: Uint8Array): number | null {
+  if (b.length >= 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    return dv.getUint32(16) * dv.getUint32(20);
+  }
+  if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {
+    // Walk JPEG segments to the first SOFn marker.
+    for (let i = 2; i + 9 < b.length; ) {
+      if (b[i] !== 0xff) return null;
+      const marker = b[i + 1]!;
+      const len = (b[i + 2]! << 8) | b[i + 3]!;
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc)
+        return ((b[i + 5]! << 8) | b[i + 6]!) * ((b[i + 7]! << 8) | b[i + 8]!);
+      i += 2 + len;
+    }
+  }
+  return null;
 }

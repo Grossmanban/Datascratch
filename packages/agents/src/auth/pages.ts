@@ -26,6 +26,10 @@ p{margin:0 0 16px;color:var(--text2)}
 .who img{width:40px;height:40px;border-radius:10px;object-fit:cover}
 .who .ph{width:40px;height:40px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font:600 18px var(--display)}
 .who small{display:block;color:var(--text3);font-size:13px}
+.who b{overflow-wrap:anywhere}
+.badge{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font:600 11px/18px var(--sans);letter-spacing:.02em;vertical-align:2px}
+.badge.ok{background:var(--accent-soft);color:var(--accent)}
+.badge.warn{background:var(--warning-soft);color:var(--warning)}
 h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin:24px 0 10px}
 .nb{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;cursor:pointer;transition:border-color .2s,background .2s}
 .nb:hover{border-color:var(--accent)}
@@ -66,10 +70,18 @@ export interface ConsentNotebook {
 }
 
 export interface ConsentPageInput {
+  /** Name the client gives itself — not verified, shown as a quote. */
   clientName: string;
   clientUri: string | null;
   logoUri: string | null;
+  /** Where the browser goes back: host of an https/loopback redirect, or the private-use scheme. */
   redirectHost: string;
+  /**
+   * The client is identified by an https client_id that served its metadata
+   * document (CIMD): its host is verified. Dynamically registered clients can
+   * call themselves anything (RFC 7591), so they are «не проверен».
+   */
+  verifiedHost: string | null;
   userEmail: string | null;
   notebooks: ConsentNotebook[];
   /** The client asked for `notes:write`: pre-select "read & write". */
@@ -79,10 +91,23 @@ export interface ConsentPageInput {
   appUrl: string | null;
 }
 
+/** How the redirect target reads for a person: a site, an app on this computer, or a native app. */
+function describeRedirect(redirectHost: string): string {
+  if (/^(127\.0\.0\.1|\[::1\]|localhost)(:\d+)?$/.test(redirectHost)) return "программа на этом компьютере";
+  if (redirectHost.endsWith(":")) return `приложение ${redirectHost.slice(0, -1)}`;
+  return redirectHost;
+}
+
 export function consentPage(i: ConsentPageInput): string {
   const initial = esc((i.clientName.trim()[0] ?? "A").toUpperCase());
-  const logo = i.logoUri && /^https:\/\//.test(i.logoUri) ? `<img src="${esc(i.logoUri)}" alt="">` : `<div class="ph">${initial}</div>`;
-  const host = i.clientUri ? esc(safeHost(i.clientUri) ?? i.redirectHost) : esc(i.redirectHost);
+  // Only a verified client may show its picture: an unverified logo could imitate a known agent (and works as a tracking pixel).
+  const logo = i.verifiedHost && i.logoUri && /^https:\/\//.test(i.logoUri) ? `<img src="${esc(i.logoUri)}" alt="">` : `<div class="ph">${initial}</div>`;
+  const identity = i.verifiedHost ?? describeRedirect(i.redirectHost);
+  const badge = i.verifiedHost ? `<span class="badge ok">адрес проверен</span>` : `<span class="badge warn">не проверен</span>`;
+  const site = i.verifiedHost && i.clientUri ? safeHost(i.clientUri) : null;
+  const details = [`называет себя «${esc(i.clientName)}»`, site && site !== i.verifiedHost ? `сайт ${esc(site)}` : null, `вернёт вас на ${esc(i.redirectHost)}`]
+    .filter(Boolean)
+    .join(" · ");
   const notebooks = i.notebooks.length
     ? i.notebooks
         .map(
@@ -94,7 +119,8 @@ export function consentPage(i: ConsentPageInput): string {
   const body = `
 <h1>Доступ для ИИ-агента</h1>
 <p>Агент просит доступ к вашим заметкам${i.userEmail ? ` в аккаунте <b>${esc(i.userEmail)}</b>` : ""}.</p>
-<div class="who">${logo}<div><b>${esc(i.clientName)}</b><small>${host} · вернёт вас на ${esc(i.redirectHost)}</small></div></div>
+<div class="who">${logo}<div><b>${esc(identity)}</b>${badge}<small>${details}</small></div></div>
+${i.verifiedHost ? "" : `<div class="note">Название этого агента не проверено: так может назвать себя кто угодно. Разрешайте доступ, только если вы сами только что начали подключение и адрес возврата выше вам знаком.</div>`}
 <form method="post" action="${esc(i.action)}">
 <input type="hidden" name="request" value="${esc(i.request)}">
 <h2>Блокноты</h2>

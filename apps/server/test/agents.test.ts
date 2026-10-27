@@ -8,6 +8,8 @@ import { docs } from '../src/db/schema.js';
 import { AD, open, seal } from '../src/lib/sodium.js';
 import type { AgentGrant, AgentsContext } from '../src/plugins/agents-context.js';
 import { createAgentsContext } from '../src/plugins/loader.js';
+import { runCleanup } from '../src/jobs/index.js';
+import { noteKeyCache } from '../src/plugins/agent-key-cache.js';
 import {
   SyncClient,
   api,
@@ -313,6 +315,63 @@ describe('data source', () => {
     expect(Buffer.from(key).equals(Buffer.from(a.noteKey))).toBe(true);
     expect((await load(a.noteId)).getText('t').toString()).toBe('from user');
     for (const x of [a, b, c]) x.client.close();
+  });
+
+  it('rotates refresh tokens atomically: of two concurrent uses one wins, the other is reuse (security audit 6)', async () => {
+    const { notebookId, client } = await setupNotebook();
+    const g = grant([notebookId], 'read', { kind: 'oauth', clientId: 'c-rot' });
+    await agents.store.insertGrant(g);
+    const hash = rnd(32).toString('hex');
+    await agents.store.insertToken({ tokenHash: hash, kind: 'refresh', grantId: g.id, clientId: 'c-rot', scope: 'notes:read', resource: 'r', expiresAt: new Date(Date.now() + 3600_000).toISOString() });
+    const results = await Promise.all([agents.store.useRefreshToken(hash), agents.store.useRefreshToken(hash), agents.store.useRefreshToken(hash)]);
+    expect(results.map((r) => r?.reused).sort()).toEqual([false, true, true]);
+    expect((await agents.store.getToken(hash))?.kind).toBe('refresh_used');
+    expect(await agents.store.useRefreshToken('missing')).toBeNull();
+    client.close();
+  });
+
+  it('drops cached note keys when the notebook leaves agent mode or the grant is revoked (security audit 7)', async () => {
+    const { notebookId, noteId, client } = await setupNotebook();
+    const g = grant([notebookId], 'read');
+    await agents.store.insertGrant(g);
+    expect(await agents.data.loadDoc(u.userId, noteId, g.id)).not.toBeNull();
+    expect(noteKeyCache.get(noteId)).toBeDefined();
+    await agents.store.updateGrant(g.id, { revokedAt: new Date().toISOString() });
+    expect(noteKeyCache.get(noteId)).toBeUndefined();
+    const g2 = grant([notebookId], 'read');
+    await agents.store.insertGrant(g2);
+    expect(await agents.data.loadDoc(u.userId, noteId, g2.id)).not.toBeNull();
+    expect(noteKeyCache.get(noteId)).toBeDefined();
+    await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, { token: u.session.accessToken, body: { mode: 'private' } });
+    expect(noteKeyCache.get(noteId)).toBeUndefined();
+    expect(await agents.data.loadDoc(u.userId, noteId, g2.id)).toBeNull();
+    client.close();
+  });
+
+  it('removes OAuth clients nobody granted access to after a day (security audit 3)', async () => {
+    const { notebookId, client } = await setupNotebook();
+    const old = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    const mk = (clientId: string, createdAt: string) => ({
+      clientId,
+      clientSecretHash: null,
+      clientName: 'x',
+      clientUri: null,
+      logoUri: null,
+      redirectUris: ['https://a.example/cb'],
+      tokenEndpointAuthMethod: 'none' as const,
+      registration: 'dcr' as const,
+      createdAt,
+    });
+    const [unused, used, fresh] = [newId(), newId(), newId()];
+    await agents.store.upsertClient(mk(unused, old));
+    await agents.store.upsertClient(mk(used, old));
+    await agents.store.upsertClient(mk(fresh, new Date().toISOString()));
+    await agents.store.insertGrant(grant([notebookId], 'read', { kind: 'oauth', clientId: used }));
+    await runCleanup(s.ctx);
+    expect(await agents.store.getClient(unused)).toBeNull();
+    expect(await agents.store.getClient(used)).not.toBeNull();
+    expect(await agents.store.getClient(fresh)).not.toBeNull();
+    client.close();
   });
 
   it('decrypts image attachments', async () => {

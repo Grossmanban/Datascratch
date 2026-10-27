@@ -14,6 +14,18 @@ export interface PastedImage {
 
 const ALIGNS = new Set(["center", "right"]);
 
+/** At most this many images of one paste become attachments; the rest are dropped. */
+export const MAX_PASTED_IMAGES = 50;
+/** A data: image larger than this (decoded) is dropped. */
+export const MAX_DATA_IMAGE_BYTES = 20 * 1024 * 1024;
+
+/** Decoded size of a data: URL without decoding it. */
+export function dataUrlBytes(src: string): number {
+  const comma = src.indexOf(",");
+  const body = comma < 0 ? "" : src.slice(comma + 1);
+  return /;base64/i.test(src.slice(0, Math.max(comma, 0))) ? Math.floor((body.replace(/=+$/, "").length * 3) / 4) : body.length;
+}
+
 function unwrap(el: Element): void {
   el.replaceWith(...Array.from(el.childNodes));
 }
@@ -207,8 +219,12 @@ export function normalizePastedHtml(html: string, opts: { markdown?: boolean } =
   const root = doc.body;
   const images = new Map<string, PastedImage>();
 
-  // Noise: styles, scripts, Word's o:p, conditional comments, list markers.
-  root.querySelectorAll("style, script, meta, link, title, xml, o\\:p").forEach((e) => e.remove());
+  // Noise: styles, scripts, Word's o:p, conditional comments, list markers. Active content and
+  // event handlers never reach the editor (defence in depth: the app's CSP blocks them too).
+  root.querySelectorAll("style, script, noscript, template, meta, link, base, title, xml, o\\:p, iframe, frame, frameset, object, embed, applet, svg, math, form, button, select, textarea").forEach((e) => e.remove());
+  root.querySelectorAll("*").forEach((e) => {
+    for (const a of Array.from(e.attributes)) if (/^on/i.test(a.name) || a.name === "srcdoc" || a.name === "formaction") e.removeAttribute(a.name);
+  });
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
   const comments: Node[] = [];
   for (let n = walker.nextNode(); n; n = walker.nextNode()) comments.push(n);
@@ -239,7 +255,8 @@ export function normalizePastedHtml(html: string, opts: { markdown?: boolean } =
   for (const img of Array.from(root.querySelectorAll("img"))) {
     const src = img.getAttribute("src") ?? "";
     if (img.closest('figure[data-type="image"]')) continue;
-    if (!/^(data:image\/|https?:)/i.test(src)) {
+    const tooBig = /^data:/i.test(src) && dataUrlBytes(src) > MAX_DATA_IMAGE_BYTES;
+    if (!/^(data:image\/|https?:)/i.test(src) || tooBig || images.size >= MAX_PASTED_IMAGES) {
       img.remove();
       continue;
     }
@@ -261,6 +278,8 @@ export function normalizePastedHtml(html: string, opts: { markdown?: boolean } =
     hoist(figure);
   }
   looseLines(root);
+  // Check boxes became tasks; any other input goes.
+  root.querySelectorAll("input").forEach((e) => e.remove());
   return { html: root.innerHTML, images };
 }
 

@@ -254,6 +254,19 @@ export class DocumentService {
     return out;
   }
 
+  /** Size in bytes of the newest snapshot of each document, without loading the payloads. */
+  async snapshotSizes(db: DbOrTx, docIds: string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (docIds.length === 0) return out;
+    const res = await db.execute<{ doc_id: string; bytes: string | number }>(sql`
+      SELECT DISTINCT ON (doc_id) doc_id, octet_length(payload) AS bytes
+      FROM doc_snapshots
+      WHERE doc_id = ANY(${`{${docIds.join(',')}}`}::uuid[])
+      ORDER BY doc_id, seq DESC`);
+    for (const r of res.rows) out.set(r.doc_id, Number(r.bytes));
+    return out;
+  }
+
   /** The newest snapshot of each document (fast path of a first sync). */
   async latestSnapshots(db: DbOrTx, docIds: string[]): Promise<Map<string, { seq: number; payload: Buffer }>> {
     const out = new Map<string, { seq: number; payload: Buffer }>();

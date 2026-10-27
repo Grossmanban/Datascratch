@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { docUpdates } from '../src/db/schema.js';
 import { COMPACT_JOB } from '../src/jobs/index.js';
+import { MAX_SUBSCRIBE_DOCS } from '../src/sync/connection.js';
 import {
   SyncClient,
   api,
@@ -267,6 +268,71 @@ describe('snapshots, compaction and history', () => {
     expect(sub3.pages[0].snapshot).toBeNull();
     expect(seqsOf(sub3)[0]).toBe(121);
     for (const x of [a, b]) x.close();
+  });
+});
+
+describe('subscribe limits (security audit 2026-10-27)', () => {
+  it('collapses duplicate documents into one subscription and one answer', async () => {
+    const noteId = await createNote(s, u, notebookId);
+    const a = await SyncClient.user(s, u);
+    for (let i = 0; i < 3; i++) await a.push(noteId, rnd(10));
+    const spy = vi.spyOn(s.ctx.documents, 'updatesForMany');
+    const b = await SyncClient.user(s, u);
+    b.send({ type: 'subscribe', docs: Array.from({ length: 5000 }, () => ({ docId: noteId, since: 0 })) });
+    await b.next((m) => m.type === 'updates' && m.docId === noteId && m.upToDate);
+    await sleep(300);
+    const answers = b.messages.filter((m) => m.type === 'updates' && m.docId === noteId);
+    expect(answers).toHaveLength(1);
+    expect(answers[0].items.map((i: any) => i.seq)).toEqual([1, 2, 3]);
+    // One row per document is read, not one per duplicate.
+    expect(spy.mock.calls.flatMap(([, docs]) => docs)).toEqual([{ docId: noteId, since: 0 }]);
+    spy.mockRestore();
+    for (const x of [a, b]) x.close();
+  });
+
+  it('refuses a subscribe with too many documents', async () => {
+    const b = await SyncClient.user(s, u);
+    b.send({ type: 'subscribe', docs: Array.from({ length: MAX_SUBSCRIBE_DOCS + 1 }, () => ({ docId: newId(), since: 0 })) });
+    const err = await b.next((m) => m.type === 'error');
+    expect(err.code).toBe('bad_request');
+    b.close();
+  });
+
+  it('sends large documents the paged way, still complete', async () => {
+    const t = await startServer();
+    try {
+      const v = await signup(t);
+      const { notebookId: nb } = await createNotebook(t, v);
+      const big = await createNote(t, v, nb);
+      const small = await createNote(t, v, nb);
+      const a = await SyncClient.user(t, v);
+      const payloads = [rnd(600_000), rnd(600_000)];
+      for (const p of payloads) expect(await a.push(big, p)).toMatchObject({ type: 'ack' });
+      await a.push(small, rnd(10));
+      const spy = vi.spyOn(t.ctx.documents, 'updatesForMany');
+      const b = await SyncClient.user(t, v);
+      b.send({
+        type: 'subscribe',
+        docs: [
+          { docId: big, since: 0 },
+          { docId: small, since: 0 },
+        ],
+      });
+      const pages: any[] = [];
+      for (;;) {
+        const m = await b.next((x) => x.type === 'updates' && x.docId === big);
+        pages.push(m);
+        if (m.upToDate) break;
+      }
+      expect(pages.flatMap((p) => p.items.map((i: any) => i.payload))).toEqual(payloads.map(b64));
+      await b.next((x) => x.type === 'updates' && x.docId === small, 5000, true);
+      // The big document (1.2 MB since its last snapshot) was not loaded by the batched query.
+      expect(spy.mock.calls.flatMap(([, docs]) => docs.map((d) => d.docId))).toEqual([small]);
+      spy.mockRestore();
+      for (const x of [a, b]) x.close();
+    } finally {
+      await t.close();
+    }
   });
 });
 

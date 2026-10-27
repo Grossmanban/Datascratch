@@ -9,6 +9,7 @@ extension EditorCommands {
     /// - Returns: the caret after the inserted content.
     @discardableResult
     public func insertFragment(_ blocks: [BlockNode], replacing range: Range<Int>) -> TextPosition? {
+        guard !document.isReadOnly else { return nil }
         let p = projection
         guard !p.paragraphs.isEmpty, !blocks.isEmpty else { return nil }
         var caret: TextPosition?

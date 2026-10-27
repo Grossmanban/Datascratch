@@ -248,8 +248,11 @@ jobs:
       # process (ios-app testNoteLinksOpenNotes, testTaskDateChipOpensTheRescheduleMenu).
       # The same bare EditorView in the app's process passes (ios-app BareEditorProbeTests). These
       # tests run last, on their own, so a red result here does not hide the other steps.
+      # Owner's decision D-53 (6A, 2026-10-27): the tests still run every time, but a failure here
+      # is a visible warning, not a red job; a pass raises a notice so they can come back.
       - name: Demo typing UI tests (known demo-only crash)
         timeout-minutes: 20
+        continue-on-error: true
         if: ${{ !cancelled() && hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != '' }}
         working-directory: apps/ios/Packages/DSEditor/Demo
         run: |
@@ -271,6 +274,14 @@ jobs:
             code=${PIPESTATUS[0]}
             [ $code -eq 0 ] || status=$code
           done
+          if [ $status -ne 0 ]; then
+            failed=$(grep -hoE "Test [Cc]ase '[^']+' failed" "$RUNNER_TEMP"/demo-typing-*.log 2>/dev/null | sed -E "s/Test [Cc]ase '([^']+)' failed/\1/" | sort -u | paste -sd ',' -)
+            echo "::warning title=Known demo-only crash::Demo typing UI tests failed (known demo-only defect, docs/open-questions.md): ${failed:-see logs}"
+            echo "- ⚠️ Known demo-only crash: ${failed:-see logs} (warning only, D-53)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::notice title=Known demo-only crash::The demo typing UI tests passed — they can return to the main UI test step."
+            echo "- ✅ Demo typing UI tests passed — consider moving them back (D-53)" >> "$GITHUB_STEP_SUMMARY"
+          fi
           exit $status
 
       - name: Upload logs and results

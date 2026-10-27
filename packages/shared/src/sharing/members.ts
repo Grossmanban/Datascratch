@@ -39,9 +39,11 @@ export async function wrapForMembers(
 
 /**
  * Give the current key to members that accepted but have no key yet
- * (`awaiting_key`). `confirm` may hold back a member, e.g. one whose account
- * was created after the invitation (open question, D-54); default: everyone.
- * Returns the members that got the key.
+ * (`awaiting_key`). Sign-up does not verify e-mail addresses, so a member
+ * whose account was created after the invitation gets the key only when
+ * `confirm` says so (the owner is asked «<почта> приняла приглашение —
+ * открыть доступ?», D-54); without `confirm` they keep waiting. Returns the
+ * members that got the key.
  */
 export async function deliverAwaitingKeys(options: {
   api: Pick<SharingApi, "listMembers" | "getPublicKey" | "putMemberKey">;
@@ -56,7 +58,7 @@ export async function deliverAwaitingKeys(options: {
   );
   const delivered: Member[] = [];
   for (const member of waiting) {
-    if (options.confirm && !(await options.confirm(member))) continue;
+    if (member.accountCreatedAfterInvite && !(await options.confirm?.(member))) continue;
     const [wrap] = await wrapForMembers(api, target, keys.keys[0]!, keys.version, owner, [
       member.userId,
     ]);

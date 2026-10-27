@@ -19,6 +19,8 @@ import {
   putNoteMeta,
   reconcileSharedRefs,
   repairSharedNoteMeta,
+  parseShareLink,
+  recreateShareLinks,
   rotateNotebookKey,
   rotateSharedNoteKey,
   sharedItemKeys,
@@ -28,6 +30,7 @@ import {
   type Member,
   type NoteMeta,
   type SharedItem,
+  type Share,
   type SharingApi,
 } from "../src/index.js";
 
@@ -50,7 +53,7 @@ interface Resource {
   ownerWrappedKey: string;
   keyChain: string[];
   pending: boolean;
-  members: Map<string, { role: "editor" | "viewer"; wrappedKey: string | null }>;
+  members: Map<string, { role: "editor" | "viewer"; wrappedKey: string | null; late?: boolean }>;
 }
 
 /** In-memory server for the D-54 endpoints (api.md), enough for client flows. */
@@ -58,6 +61,7 @@ class FakeServer {
   boxKeys = new Map<string, { publicKey: string; wrappedSecretKey: string }>();
   resources = new Map<string, Resource>();
   calls: string[] = [];
+  shares = new Map<string, Share>();
 
   api(userId: string): SharingApi {
     return createSharingApi(
@@ -98,6 +102,22 @@ class FakeServer {
       return k
         ? this.res(200, { userId: m[1], publicKey: k.publicKey })
         : this.res(404, { error: { code: "not_found", message: "" } });
+    }
+    if (p === "/shares" && method === "GET") return this.res(200, [...this.shares.values()]);
+    if (p === "/shares" && method === "POST") {
+      const share: Share = {
+        id: body.shareId,
+        target: body.target,
+        permission: body.permission,
+        expiresAt: body.expiresAt,
+        createdAt: T,
+      };
+      this.shares.set(share.id, share);
+      return this.res(200, share);
+    }
+    if ((m = p.match(/^\/shares\/([^/]+)$/)) && method === "DELETE") {
+      this.shares.delete(m[1]!);
+      return this.res(204);
     }
     if ((m = p.match(/^\/notebooks\/([^/]+)\/key$/))) {
       const r = this.resources.get(`notebook:${m[1]}`)!;
@@ -144,7 +164,7 @@ class FakeServer {
           role: v.role,
           status: v.wrappedKey ? "active" : "awaiting_key",
           joinedAt: T,
-          accountCreatedAfterInvite: false,
+          accountCreatedAfterInvite: v.late ?? false,
         }));
         return this.res(200, list);
       }
@@ -224,7 +244,7 @@ async function setup(): Promise<Setup> {
     pending: false,
     members: new Map([
       [ALICE, { role: "editor", wrappedKey: null }],
-      [BOB, { role: "viewer", wrappedKey: null }],
+      [BOB, { role: "viewer", wrappedKey: null, late: true }],
     ]),
   });
   const index = new Y.Doc();
@@ -271,16 +291,22 @@ describe("member keys", () => {
     const keys = ownerNotebookKeys(await api.getNotebookKey(NB), s.masterKey, NB);
     expect(keys.keys[0]).toEqual(s.nbKey);
     expect(await memberKeys(s.server, ALICE, new Uint8Array(32))).toBeNull();
-    const held: string[] = [];
-    const delivered = await deliverAwaitingKeys({
+    const asked: string[] = [];
+    const args = {
       api,
-      target: { kind: "notebook", id: NB },
+      target: { kind: "notebook" as const, id: NB },
       keys,
       owner: { userId: OWNER, secretKey: s.owner.secretKey },
-      confirm: (m) => (m.userId === BOB ? (held.push(m.userId), false) : true),
-    });
+    };
+    // Bob's account was created after the invitation: no key without the owner's yes.
+    const delivered = await deliverAwaitingKeys(args);
     expect(delivered.map((m) => m.userId)).toEqual([ALICE]);
-    expect(held).toEqual([BOB]);
+    const later = await deliverAwaitingKeys({
+      ...args,
+      confirm: (m) => (asked.push(m.userId), true),
+    });
+    expect(later.map((m) => m.userId)).toEqual([BOB]);
+    expect(asked).toEqual([BOB]);
     expect((await memberKeys(s.server, ALICE, s.alice.secretKey))!.keys).toEqual([s.nbKey]);
   });
 });
@@ -369,6 +395,38 @@ describe("notebook key rotation", () => {
     expect(s.server.resources.get(`notebook:${NB}`)!.version).toBe(2);
     expect(s.server.resources.get(`notebook:${NB}`)!.pending).toBe(false);
     expect(s.server.calls.filter((c) => c.endsWith("/rotate"))).toHaveLength(1);
+  });
+});
+
+describe("guest links after rotation", () => {
+  it("re-creates the links of the resource with the new key", async () => {
+    const s = await setup();
+    const api = s.server.api(OWNER);
+    const old = await api.createShare({
+      shareId: "0192f3c4-0000-7000-8000-00000000f001",
+      target: { kind: "notebook", id: NB },
+      permission: "view",
+      expiresAt: null,
+    });
+    await api.createShare({
+      shareId: "0192f3c4-0000-7000-8000-00000000f002",
+      target: { kind: "note", id: NOTE2 },
+      permission: "edit",
+      expiresAt: null,
+    });
+    const key = generateKey();
+    const links = await recreateShareLinks({
+      api,
+      target: { kind: "notebook", id: NB },
+      key,
+      webOrigin: "https://ds.test",
+    });
+    expect(links).toHaveLength(1);
+    expect(links[0]!.oldId).toBe(old.id);
+    expect(s.server.shares.has(old.id)).toBe(false);
+    expect(links[0]!.share.permission).toBe("view");
+    expect(parseShareLink(links[0]!.url)).toMatchObject({ shareId: links[0]!.share.id, key });
+    expect(s.server.shares.size).toBe(2);
   });
 });
 

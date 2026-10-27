@@ -8,8 +8,10 @@ import {
   outgoingInvitationSchema,
   publicKeyResponseSchema,
   sharedItemSchema,
+  shareSchema,
   sharedNoteKeyResponseSchema,
   type BoxKey,
+  type CreateShareRequest,
   type CreateInvitationRequest,
   type MemberRole,
   type PutMemberKeyRequest,
@@ -62,6 +64,10 @@ export function createSharingApi(http: HttpClient) {
     getSharedNoteKey: (noteId: string) =>
       http("getSharedNoteKey", { params: { id: noteId }, schema: sharedNoteKeyResponseSchema }),
     sharedWithMe: () => http("sharedWithMe", { schema: z.array(sharedItemSchema) }),
+
+    listShares: () => http("listShares", { schema: z.array(shareSchema) }),
+    createShare: (body: CreateShareRequest) => http("createShare", { body, schema: shareSchema }),
+    deleteShare: (id: string) => http("deleteShare", { params: { id } }),
 
     getNotebookKey: (notebookId: string) =>
       http("getNotebookKey", { params: { id: notebookId }, schema: notebookKeyResponseSchema }),

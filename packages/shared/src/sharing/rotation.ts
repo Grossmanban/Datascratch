@@ -5,6 +5,9 @@
 import type * as Y from "yjs";
 import { AD } from "../contracts/crypto.js";
 import type { NoteMeta } from "../contracts/document.js";
+import type { Share, ShareTarget } from "../contracts/api.js";
+import { buildShareLink } from "../crypto/share-link.js";
+import { uuidv7 } from "../ids.js";
 import { toBase64Url } from "../crypto/base64url.js";
 import { generateKey, unwrapKey, wrapKey } from "../crypto/keys.js";
 import { wrapPreviousKey } from "../crypto/sharing.js";
@@ -114,6 +117,41 @@ export async function rotateNotebookKey(options: RotateNotebookOptions): Promise
   if (notes.size) await options.onKeys({ notes });
   await api.rotateKeyDone(target);
   return { rotated: true, newVersion: !resuming, notebook, rekeyedNotes: notes.size };
+}
+
+/**
+ * Guest links carry the key (crypto.md §7), so after a rotation the owner
+ * re-creates the links of the resource with the new key: same permission and
+ * expiry, old links revoked (D-54). Returns the new links for «Ссылки
+ * обновлены — отправьте новые».
+ */
+export async function recreateShareLinks(options: {
+  api: Pick<SharingApi, "listShares" | "createShare" | "deleteShare">;
+  target: ShareTarget;
+  key: Uint8Array;
+  webOrigin: string;
+  newId?: () => string;
+}): Promise<{ oldId: string; share: Share; url: string }[]> {
+  const { api, target } = options;
+  const shares = (await api.listShares()).filter(
+    (s) => s.target.kind === target.kind && s.target.id === target.id,
+  );
+  const out: { oldId: string; share: Share; url: string }[] = [];
+  for (const old of shares) {
+    const share = await api.createShare({
+      shareId: (options.newId ?? uuidv7)(),
+      target,
+      permission: old.permission,
+      expiresAt: old.expiresAt,
+    });
+    await api.deleteShare(old.id);
+    out.push({
+      oldId: old.id,
+      share,
+      url: buildShareLink(options.webOrigin, share.id, options.key),
+    });
+  }
+  return out;
 }
 
 export interface RotateNoteOptions {

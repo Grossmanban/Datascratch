@@ -43,6 +43,20 @@
       "when": 1793121434102,
       "tag": "0005_device_revoked_reason",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793125633537,
+      "tag": "0006_sharing",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793127816405,
+      "tag": "0007_rotation_since",
+      "breakpoints": true
     }
   ]
 }

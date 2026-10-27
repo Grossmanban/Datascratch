@@ -178,6 +178,8 @@ test("D-54: the member sees a shared notebook in «Общие со мной», a
   await expectSynced(q);
   await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
   await expect(page.locator(".ds-prose")).toContainText("Начало и правка участника", { timeout: 20_000 });
+  // Collaborators are named, not «Гость»: the owner sees the member's name on the presence stack.
+  await expect(page.getByTestId("presence").getByLabel(friend.split("@")[0]!)).toBeVisible({ timeout: 15_000 });
   // Leaving after many edits saves a version; the owner's history names who wrote it.
   await q.getByTestId("close-tab").click();
   await expectSynced(q);

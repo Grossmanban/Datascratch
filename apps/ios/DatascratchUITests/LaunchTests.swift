@@ -1017,7 +1017,10 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(all.exists, "no All Documents; buttons: \(Self.buttons(app))")
         XCTAssertFalse(app.descendants(matching: .any)["sidebar.tasks"].firstMatch.exists, "Tasks shown in the notes-only app")
         XCTAssertFalse(app.descendants(matching: .any)["sidebar.calendar"].firstMatch.exists, "Calendar shown in the notes-only app")
+        all.tap()
         try openNewNoteInNativeEditor(app)
+        // Something in it, so leaving does not drop it (an empty new note is not kept).
+        app.typeText("Kept")
         let again = sidebarElement(app, "sidebar.allDocuments")
         XCTAssertTrue(again.exists, "the sidebar did not come back; buttons: \(Self.buttons(app))")
         XCTAssertFalse(app.descendants(matching: .any)["sidebar.tab"].firstMatch.exists, "opening a note made a tab")

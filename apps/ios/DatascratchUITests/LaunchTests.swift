@@ -405,6 +405,10 @@ final class LibraryUITests: XCTestCase {
         let menu = app.descendants(matching: .any)["slashMenu"].firstMatch
         XCTAssertTrue(menu.waitForExistence(timeout: 5), "no slash menu after typing /")
         text.typeText("h")
+        // The filtered menu arrives a moment later and is shorter, so it can move (above or
+        // below the caret): a tap on the unfiltered one landed where the entry no longer was (iPad).
+        XCTAssertTrue(app.buttons["slash.quote"].firstMatch.waitForNonExistence(timeout: 5), "the menu did not filter for /h")
+        settle(0.5)
         let heading = app.buttons["slash.heading2"].firstMatch
         XCTAssertTrue(heading.waitForExistence(timeout: 3) && heading.isHittable, "no «Заголовок 2» for /h")
         heading.tap()

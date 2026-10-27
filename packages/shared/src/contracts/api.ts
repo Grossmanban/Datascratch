@@ -435,6 +435,16 @@ export const rotateKeyRequestSchema = z
   });
 export type RotateKeyRequest = z.infer<typeof rotateKeyRequestSchema>;
 
+/** `GET /shared-by-me`: everything the caller shares as owner. */
+export const sharedByMeItemSchema = z.object({
+  target: shareTargetSchema,
+  keyVersion: keyVersionSchema,
+  keyRotationPending: z.boolean(),
+  members: z.number().int().nonnegative(),
+  awaitingKey: z.number().int().nonnegative(),
+});
+export type SharedByMeItem = z.infer<typeof sharedByMeItemSchema>;
+
 export const sharedNoteKeyResponseSchema = z.object({
   version: keyVersionSchema,
   ownerWrappedKey: wrappedKeySchema,
@@ -603,6 +613,7 @@ export const API_ROUTES = {
   getSharedNoteKey: { method: "GET", path: "/members/note/:id/key" },
   rotateKeyDone: { method: "POST", path: "/members/:kind/:id/rotate/done" },
   sharedWithMe: { method: "GET", path: "/shared-with-me" },
+  sharedByMe: { method: "GET", path: "/shared-by-me" },
   createAgentToken: { method: "POST", path: "/agent-tokens" },
   listAgentTokens: { method: "GET", path: "/agent-tokens" },
   deleteAgentToken: { method: "DELETE", path: "/agent-tokens/:id" },

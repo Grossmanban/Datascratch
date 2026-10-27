@@ -21,6 +21,7 @@ import {
   repairSharedNoteMeta,
   parseShareLink,
   recreateShareLinks,
+  maintainOwnedShares,
   rotateNotebookKey,
   rotateSharedNoteKey,
   sharedItemKeys,
@@ -136,6 +137,18 @@ class FakeServer {
         keyChain: r.keyChain,
       });
     }
+    if (p === "/shared-by-me") {
+      return this.res(
+        200,
+        [...this.resources.values()].map((r) => ({
+          target: { kind: r.kind, id: r.id },
+          keyVersion: r.version,
+          keyRotationPending: r.pending,
+          members: r.members.size,
+          awaitingKey: [...r.members.values()].filter((v) => !v.wrappedKey).length,
+        })),
+      );
+    }
     if (p === "/shared-with-me") {
       const items: SharedItem[] = [];
       for (const r of this.resources.values()) {
@@ -172,7 +185,8 @@ class FakeServer {
         if (body.version !== r.version + 1)
           return this.res(409, { error: { code: "conflict", message: "version" } });
         const ids = new Set(body.memberKeys.map((k: { userId: string }) => k.userId));
-        if (ids.size !== r.members.size || [...r.members.keys()].some((u) => !ids.has(u)))
+        const active = [...r.members].filter(([, v]) => v.wrappedKey).map(([u]) => u);
+        if (ids.size !== active.length || active.some((u) => !ids.has(u)))
           return this.res(409, { error: { code: "conflict", message: "members" } });
         r.version = body.version;
         r.ownerWrappedKey = body.ownerWrappedKey;
@@ -395,6 +409,59 @@ describe("notebook key rotation", () => {
     expect(s.server.resources.get(`notebook:${NB}`)!.version).toBe(2);
     expect(s.server.resources.get(`notebook:${NB}`)!.pending).toBe(false);
     expect(s.server.calls.filter((c) => c.endsWith("/rotate"))).toHaveLength(1);
+  });
+});
+
+describe("owner maintenance", () => {
+  it("rotates, re-links and delivers keys in one pass, holding back late accounts", async () => {
+    const s = await setup();
+    const api = s.server.api(OWNER);
+    // Alice holds the v1 key; Bob (account made after the invite) waits; someone left → pending.
+    await deliverAwaitingKeys({
+      api,
+      target: { kind: "notebook", id: NB },
+      keys: { version: 1, keys: [s.nbKey] },
+      owner: { userId: OWNER, secretKey: s.owner.secretKey },
+    });
+    s.server.resources.get(`notebook:${NB}`)!.pending = true;
+    await api.createShare({
+      shareId: "0192f3c4-0000-7000-8000-00000000f003",
+      target: { kind: "notebook", id: NB },
+      permission: "view",
+      expiresAt: null,
+    });
+    const keyring = new Map<string, number>();
+    const relinked: string[] = [];
+    const asked: string[] = [];
+    const opts = {
+      api,
+      owner: { userId: OWNER, secretKey: s.owner.secretKey },
+      masterKey: s.masterKey,
+      notebookIndex: async () => s.index,
+      notebookOfNote: async () => NB,
+      isAgentMode: () => false,
+      whenIndexSent: async () => {},
+      onKeys: (t: { kind: string; id: string }, k: { version: number }) =>
+        void keyring.set(`${t.kind}:${t.id}`, k.version),
+      links: {
+        webOrigin: "https://ds.test",
+        onRecreated: (_t: unknown, urls: string[]) => void relinked.push(...urls),
+      },
+    };
+    const [r] = await maintainOwnedShares(opts);
+    expect(r).toMatchObject({ rotated: true, delivered: [] });
+    expect(keyring.get(`notebook:${NB}`)).toBe(2);
+    expect(keyring.get(`note:${NOTE1}`)).toBe(2);
+    expect(relinked).toHaveLength(1);
+    expect(s.server.resources.get(`notebook:${NB}`)!.members.get(BOB)!.wrappedKey).toBeNull();
+    // Next run, the owner says yes for Bob: he gets the current (v2) key.
+    const [again] = await maintainOwnedShares({
+      ...opts,
+      confirm: (_t, m) => (asked.push(m.userId), true),
+    });
+    expect(again).toMatchObject({ rotated: false, delivered: [BOB] });
+    expect(asked).toEqual([BOB]);
+    expect(s.server.resources.get(`notebook:${NB}`)!.version).toBe(2);
   });
 });
 

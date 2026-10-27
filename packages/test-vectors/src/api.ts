@@ -415,6 +415,29 @@ export function apiVectors() {
           },
         ],
       },
+      sharedByMeItem: {
+        valid: [
+          {
+            target: { kind: "notebook", id: vid(3) },
+            keyVersion: 2,
+            keyRotationPending: true,
+            members: 3,
+            awaitingKey: 1,
+          },
+        ],
+        invalid: [
+          {
+            reason: "negative count",
+            body: {
+              target: { kind: "note", id: vid(3) },
+              keyVersion: 1,
+              keyRotationPending: false,
+              members: -1,
+              awaitingKey: 0,
+            },
+          },
+        ],
+      },
       docVersion: {
         valid: [
           { seq: 3, createdAt: T, deviceId: "dev-1" },

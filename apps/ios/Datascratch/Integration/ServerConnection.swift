@@ -144,6 +144,14 @@ final class ServerConnection: CoreLibraryRemote {
         core.remote = nil
     }
 
+    /// D-49: the version a server reports at `GET /v1/health` (before signing in to it).
+    static func healthVersion(of url: URL) async throws -> String {
+        let api = APIClient(baseURL: url, sessionStore: SecretSessionStore(store: InMemorySecretStore()))
+        let health = try await api.health()
+        guard health.ok else { throw URLError(.badServerResponse) }
+        return health.version
+    }
+
     /// App back in the foreground: a socket that died silently while suspended is replaced at
     /// once, a live one is kept (DSCore pings it).
     func checkConnection() {

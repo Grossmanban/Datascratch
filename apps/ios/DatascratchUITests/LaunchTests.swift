@@ -94,6 +94,49 @@ final class OnboardingUITests: XCTestCase {
                       "reminder not shown; buttons: \(LibraryUITests.buttons(app))")
     }
 
+    // MARK: D-49: the server field
+
+    private func launchToSignIn(_ extra: [String]) -> XCUIApplication {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-ui-testing-server", "https://sync.example.org"] + extra
+        app.launch()
+        app.buttons["welcome.signIn"].tap()
+        XCTAssertTrue(app.textFields["signIn.server"].waitForExistence(timeout: 5), "no Server field on Sign In")
+        return app
+    }
+
+    private func replaceServer(_ app: XCUIApplication, with text: String) {
+        let field = app.textFields["signIn.server"]
+        field.tap()
+        let current = (field.value as? String) ?? ""
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
+        field.typeText(text + "\n")
+    }
+
+    /// The build's server is filled in.
+    func testServerFieldStartsWithTheDefaultServer() throws {
+        let app = launchToSignIn([])
+        XCTAssertEqual(app.textFields["signIn.server"].value as? String, "sync.example.org")
+    }
+
+    /// A plain http:// address (not localhost) is refused before anything is sent.
+    func testServerFieldRefusesAnInsecureAddress() throws {
+        let app = launchToSignIn([])
+        replaceServer(app, with: "http://notes.example.org")
+        XCTAssertTrue(app.descendants(matching: .any)["signIn.serverError"].firstMatch.waitForExistence(timeout: 5),
+                      "no error for an http:// address")
+    }
+
+    /// Another server is checked and shown by name and version before signing in.
+    func testServerFieldChecksACustomServer() throws {
+        let app = launchToSignIn(["-ui-testing-health-ok"])
+        replaceServer(app, with: "notes.example.net")
+        let info = app.descendants(matching: .any)["signIn.serverInfo"].firstMatch
+        XCTAssertTrue(info.waitForExistence(timeout: 5), "the server was not checked")
+        XCTAssertTrue(info.label.contains("notes.example.net"), "info: \(info.label)")
+    }
+
     private static func groupIndex(_ placeholder: String?) -> Int {
         let digits = (placeholder ?? "").filter(\.isNumber)
         return max(0, (Int(digits) ?? 1) - 1)
@@ -870,6 +913,23 @@ final class LibraryUITests: XCTestCase {
         shot.name = "account-settings"
         shot.lifetime = .keepAlways
         add(shot)
+    }
+
+    /// D-49: Settings shows the server of this device's account.
+    func testSettingsShowsTheServer() throws {
+        let app = launchSignedIn(["-ui-testing-server", "https://sync.example.org"])
+        let palette = sidebarElement(app, "sidebar.commandPalette")
+        XCTAssertTrue(palette.waitForExistence(timeout: 5), "command palette button not found")
+        palette.tap()
+        let field = app.textFields["palette.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
+        field.tap()
+        field.typeText("Settings\n")
+        let account = app.descendants(matching: .any)["settings.account"].firstMatch
+        XCTAssertTrue(account.waitForExistence(timeout: 5), "no Account row")
+        account.tap()
+        let server = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'sync.example.org' OR value CONTAINS 'sync.example.org'")).firstMatch
+        XCTAssertTrue(server.waitForExistence(timeout: 5), "Settings does not show the server")
     }
 
     /// Tabs close with their own button.

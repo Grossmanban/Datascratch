@@ -44,9 +44,15 @@ final class SyncCenter {
         guard heldChanges > 0, let since = heldSince else { return false }
         return now.timeIntervalSince(since) > 60
     }
-    let serverURL: URL?
+    private(set) var serverURL: URL?
 
     @ObservationIgnored private var monitor: NWPathMonitor?
+
+    /// D-49: signing in on another server (only while signed out).
+    func useServer(_ url: URL) {
+        serverURL = url
+        if case .localOnly = phase { phase = .offline(pending: 0) }
+    }
 
     init(serverURL: URL?, monitorNetwork: Bool = true) {
         self.serverURL = serverURL

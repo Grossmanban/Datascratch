@@ -42,6 +42,7 @@ INTERPOLATIONS = {
     r"Note \(formatter.string(from: created))": "Note %@",
     r"in “\(name)”": "in “%@”",
     r"in “\($0)”": "in “%@”",
+    r"\(info.host) · \(info.version)": "%@ · %@",
 }
 
 # Literals that look like text but are not translated (names, formats, prefixes).

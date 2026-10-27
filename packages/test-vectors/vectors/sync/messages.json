@@ -112,6 +112,52 @@
         "deviceId": "dev-3"
       },
       {
+        "type": "updates",
+        "docId": "0192f3c4-0000-7000-8000-000000000001",
+        "snapshot": null,
+        "items": [
+          {
+            "seq": 45,
+            "payload": "AQIDBA",
+            "deviceId": "dev-1",
+            "author": {
+              "kind": "user",
+              "userId": "0192f3c4-0000-7000-8000-00000000000a"
+            }
+          },
+          {
+            "seq": 46,
+            "payload": "AQIDBA",
+            "deviceId": "guest:abc",
+            "author": {
+              "kind": "guest",
+              "shareId": "0192f3c4-0000-7000-8000-000000000005"
+            }
+          },
+          {
+            "seq": 47,
+            "payload": "AQIDBA",
+            "deviceId": "agent",
+            "author": {
+              "kind": "agent",
+              "tokenId": "tok-1"
+            }
+          }
+        ],
+        "upToDate": true
+      },
+      {
+        "type": "update",
+        "docId": "0192f3c4-0000-7000-8000-000000000001",
+        "seq": 48,
+        "payload": "AQIDBA",
+        "deviceId": "dev-3",
+        "author": {
+          "kind": "user",
+          "userId": "0192f3c4-0000-7000-8000-00000000000b"
+        }
+      },
+      {
         "type": "ack",
         "docId": "0192f3c4-0000-7000-8000-000000000001",
         "clientMsgId": "0192f3c4-0000-7000-8000-00000000001e",
@@ -4293,6 +4339,20 @@
           "type": "error",
           "code": "teapot",
           "message": ""
+        }
+      },
+      {
+        "reason": "unknown author kind",
+        "message": {
+          "type": "update",
+          "docId": "0192f3c4-0000-7000-8000-000000000001",
+          "seq": 1,
+          "payload": "AQIDBA",
+          "deviceId": "d",
+          "author": {
+            "kind": "robot",
+            "id": "x"
+          }
         }
       },
       {

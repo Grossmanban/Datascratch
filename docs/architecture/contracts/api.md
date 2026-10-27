@@ -46,10 +46,12 @@
 | POST | `/docs` | `{ docId, kind: "account"\|"notebook"\|"note", notebookId \| null }` → `204`; регистрация до первого `push` |
 | PATCH | `/docs/:id` | `{ notebookId }` → `204` — перенос заметки (`kind = note`) в другой блокнот того же пользователя; повтор с тем же `notebookId` — `204` |
 | DELETE | `/docs/:id` | окончательное удаление (после корзины) |
-| GET | `/docs/:id/versions` | список снимков для истории версий `{ seq, createdAt, deviceId }[]` |
+| GET | `/docs/:id/versions` | список снимков для истории версий `{ seq, createdAt, deviceId, authors: Author[] }[]`; `authors` — кто менял документ после предыдущей версии (без повторов, по порядку первой правки, D-54) |
 | GET | `/docs/:id/versions/:seq` | `{ payload }` — зашифрованное состояние на момент `seq` |
 
-`Notebook = { id, mode, createdAt, wrappedKey }`.
+`Notebook = { id, mode, createdAt, wrappedKey, shared }` (`shared` — у блокнота есть участники, D-54).
+
+`Author = { kind: "user", userId } | { kind: "guest", shareId } | { kind: "agent", tokenId }` — автора ставит сервер по тому, кто прислал обновление, а не со слов клиента (D-54).
 
 **Перенос заметки** (`PATCH /docs/:id`, 2026-10-25). Сервер меняет только блокнот документа; содержимое, история версий, вложения и `noteKey` остаются прежними. Порядок на клиенте: (1) обернуть `noteKey` ключом нового блокнота (`ad = ds1|key|note|<noteId>`) и записать `NoteMeta` в индекс нового блокнота; (2) `PATCH /docs/:id`; (3) удалить `NoteMeta` из индекса старого блокнота. Отдельно передавать ключ серверу не нужно: для блокнотов «для агентов» сервер получает `noteKey` из `NoteMeta.wrappedKey` индекса, а ключ блокнота у него есть (`crypto.md` §8). Права следуют за заметкой сразу: гости шеринга старого блокнота её теряют (подписчики получают `error doc_not_found` с `ref = docId`), шеринг самой заметки сохраняется; агенты видят заметку, только если новый блокнот «для агентов» и входит в их разрешение. Ошибки: `400` — документ не заметка; `404` — нет документа или целевого блокнота у пользователя.
 
@@ -81,6 +83,52 @@
 | GET | `/shares` | мои ссылки |
 | DELETE | `/shares/:id` | отзыв (сразу отключает гостей) |
 | POST | `/shares/:id/guest` | (без авторизации) `{}` → `{ guestToken, target, permission, docIds }` — гостевой токен для `hello` в синхронизации |
+
+## Совместный доступ по аккаунтам (D-54)
+
+Простой вариант: блокнот или одна заметка, конкретному аккаунту по почте, роли `editor` («Может редактировать») и `viewer` («Только чтение»). Доступом управляет только владелец. Ключи — `crypto.md` §10. `:kind` в путях — `notebook` или `note`.
+
+**Ключи аккаунта**
+
+| Метод | Путь | Тело → ответ |
+| --- | --- | --- |
+| PUT | `/me/box-key` | `{ publicKey, wrappedSecretKey }` → `204`; один раз на аккаунт (повтор с теми же данными — `204`, с другими — `409`) |
+| GET | `/me/box-key` | `{ publicKey, wrappedSecretKey }` или `404`, если пары ещё нет |
+| GET | `/users/:userId/public-key` | `{ userId, publicKey }` — только для аккаунтов, связанных с вызывающим общим ресурсом или приглашением; иначе `404` |
+
+**Приглашения**
+
+| Метод | Путь | Тело → ответ |
+| --- | --- | --- |
+| POST | `/invitations` | `{ invitationId, target: { kind, id }, email, role }` → `204`. **Ответ одинаковый**, есть аккаунт с такой почтой или нет. Только владелец ресурса. Повтор для той же почты и ресурса заменяет роль и продлевает срок |
+| GET | `/invitations?target=<kind>:<id>` | исходящие по ресурсу: `{ id, email, role, status: "pending"\|"accepted"\|"declined"\|"expired", createdAt, expiresAt }[]` |
+| DELETE | `/invitations/:id` | владелец отзывает непринятое приглашение → `204` |
+| GET | `/invitations/incoming` | входящие: `{ id, target: { kind, id }, from: { userId, email }, role, createdAt, expiresAt }[]` (только `pending`) |
+| POST | `/invitations/:id/accept` | → `SharedItem` (ключ ещё может быть `null`, см. ниже) |
+| POST | `/invitations/:id/decline` | → `204` |
+
+- Приглашение живёт **30 дней**. Приглашение на почту без аккаунта ждёт регистрации с этой почтой и появляется во входящих после неё. Ссылка «скопировать и отправить» — `https://<web-host>/invite/<invitationId>`: она только открывает программу на входящих, сама по себе прав не даёт.
+- Ограничение частоты: не больше **50 приглашений в сутки** на аккаунт (`429 rate_limited`).
+- Название блокнота или заметки сервер не знает (оно зашифровано), поэтому во входящих — кто пригласил, что (блокнот или заметка) и роль. Название появляется после принятия, когда клиент владельца выдаст ключ.
+
+**Участники**
+
+| Метод | Путь | Тело → ответ |
+| --- | --- | --- |
+| GET | `/members/:kind/:id` | `Member[]` — видят владелец и участники |
+| PATCH | `/members/:kind/:id/:userId` | `{ role }` → `204` (только владелец) |
+| DELETE | `/members/:kind/:id/:userId` | `204`. Владелец убирает участника; участник указывает себя — «Выйти». После этого сервер сразу закрывает доступ и ставит `keyRotationPending` |
+| PUT | `/members/:kind/:id/:userId/key` | (только владелец) `{ version, wrappedKey }` → `204` — выдать ключ участнику (`crypto.md` §10.2); `409`, если `version` не текущая |
+| POST | `/members/:kind/:id/rotate` | (только владелец) смена ключа, `crypto.md` §10.3: `{ version, ownerWrappedKey, previousKeyWrap, memberKeys: { userId, wrappedKey }[], notebookKey? }` → `204`. Атомарно; `409`, если `version` ≠ текущая + 1 или `memberKeys` не покрывает всех участников. `notebookKey` — только для блокнота в режиме «для агентов» (сервер переоборачивает его своим ключом, `crypto.md` §8) |
+| POST | `/members/:kind/:id/rotate/done` | (только владелец) все заметки блокнота получили новые ключи → снимает `keyRotationPending` |
+| GET | `/shared-with-me` | `SharedItem[]` |
+
+- `Member = { userId, email, role, status: "active"\|"awaiting_key", joinedAt, accountCreatedAfterInvite: boolean }`. `awaiting_key` — приглашение принято, клиент владельца ещё не выдал ключ: он делает это сам, как только оказывается в сети, и затем видит участника `active`. `accountCreatedAfterInvite` — аккаунт зарегистрирован уже после приглашения (почта при регистрации не подтверждается — `open-questions.md`).
+- `SharedItem = { target: { kind, id }, owner: { userId, email, publicKey }, role, keyVersion, wrappedKey: string \| null, keyChain: string[], docIds: string[], addedAt }`. `keyChain` — звенья цепочки от текущей версии назад (`crypto.md` §10.3). `docIds` — документы ресурса (индекс и заметки блокнота или одна заметка).
+- `GET /notebooks/:id/key` у владельца дополнительно отдаёт `{ version, keyChain, keyRotationPending }`; `Notebook` получает поле `shared: boolean`.
+- В ресурсе не больше **50 человек**, считая непринятые приглашения: сверх — `409 conflict` с сообщением `member limit`.
+- Режим «для агентов» у общего блокнота включает и выключает только владелец (`PATCH /notebooks/:id/mode` — `403` для участника).
+- Удаление блокнота или заметки владельцем закрывает доступ всем участникам; удаление аккаунта владельца — тоже.
 
 ## Токены агентов (`spec/09-agents-api.md`)
 

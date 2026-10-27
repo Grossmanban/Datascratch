@@ -165,7 +165,8 @@ final class SceneModel {
             if fullScreen == .content { fullScreen = nil }
             padLevel = .document
         }
-        library.openTab(noteId)
+        // The notes-only app (D-51) neither shows nor writes tabs.
+        if Features.tabs { library.openTab(noteId) }
     }
 
     /// A window showing one document (no columns to hide).
@@ -182,7 +183,7 @@ final class SceneModel {
     func closeTab() {
         guard let id = selectedNoteId else { return }
         closeDocument()
-        library.closeTab(id)
+        if Features.tabs { library.closeTab(id) }
     }
 
     func closeDocument() {
@@ -205,7 +206,7 @@ final class SceneModel {
             case .notebook, .folder, .tag: sidebar = .allDocuments
             default: break
             }
-            selectedNoteId = restoringTab ? library.activeTab : nil
+            selectedNoteId = restoringTab && Features.tabs ? library.activeTab : nil
             if selectedNoteId == nil {
                 padLevel = .list
                 preferredCompactColumn = .content
@@ -222,6 +223,7 @@ final class SceneModel {
     }
 
     func openToday() {
+        guard Features.calendar else { return }
         let today = DayKey.from(Date())
         calendarDay = today
         if let note = library.ensureDailyNote(for: today) {

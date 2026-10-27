@@ -102,6 +102,9 @@ final class OnboardingUITests: XCTestCase {
 
 @MainActor
 final class LibraryUITests: XCTestCase {
+    /// D-51: tasks, calendar and tabs are the extended mode; their tests turn it on.
+    static let extendedMode = ["-ds-extended-mode", "YES"]
+
     private func launchSignedIn(_ extra: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -290,7 +293,7 @@ final class LibraryUITests: XCTestCase {
     /// spec/12: a tap on a task's date chip opens the reschedule menu, and the app keeps running
     /// (build 14: the tap did nothing; later it crashed in the menu's gesture).
     func testTaskDateChipOpensTheRescheduleMenu() throws {
-        let app = launchSignedIn(["-ui-testing-task-date"])
+        let app = launchSignedIn(["-ui-testing-task-date"] + Self.extendedMode)
         let editor = app.descendants(matching: .any)["editor"].firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 10), "the Dated note did not open")
         settle(1)
@@ -325,7 +328,7 @@ final class LibraryUITests: XCTestCase {
     /// D-48: spaces are isolated — the starred note and the open tab of «Personal» are not shown
     /// in «Work» and come back with «Personal».
     func testSpacesKeepTheirStarredAndTabs() throws {
-        let app = launchSignedIn()
+        let app = launchSignedIn(Self.extendedMode)
         // A tab in «Personal»; first-run seeding starred the welcome note there.
         try openNewNoteInNativeEditor(app)
         let switcher = app.descendants(matching: .any)["sidebar.spaceSwitcher"].firstMatch
@@ -631,7 +634,7 @@ final class LibraryUITests: XCTestCase {
     private func checkContentFullScreen(_ orientation: UIDeviceOrientation) throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
         rotate(orientation)
-        let app = launchSignedIn()
+        let app = launchSignedIn(Self.extendedMode)
         let tasks = sidebarElement(app, "sidebar.tasks")
         XCTAssertTrue(tasks.exists, "no Tasks in the sidebar; buttons: \(Self.buttons(app))")
         tasks.tap()
@@ -802,7 +805,7 @@ final class LibraryUITests: XCTestCase {
     /// Tabs close with their own button.
     func testClosingATab() throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad: sidebar beside the document") }
-        let app = launchSignedIn()
+        let app = launchSignedIn(Self.extendedMode)
         try openNewNoteInNativeEditor(app)
         let showSidebar = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
         if showSidebar.exists { showSidebar.tap(); settle(1) }
@@ -832,7 +835,7 @@ final class LibraryUITests: XCTestCase {
     }
 
     func testCommandPaletteOpensTasks() throws {
-        let app = launchSignedIn()
+        let app = launchSignedIn(Self.extendedMode)
         let paletteButton = sidebarElement(app, "sidebar.commandPalette")
         XCTAssertTrue(paletteButton.exists, "command palette button not found; buttons: \(Self.buttons(app))")
         paletteButton.tap()
@@ -842,6 +845,20 @@ final class LibraryUITests: XCTestCase {
         field.typeText("Go to Tasks\n")
         XCTAssertTrue(app.segmentedControls["tasks.bucket"].firstMatch.waitForExistence(timeout: 5)
                       || app.otherElements["tasks.bucket"].firstMatch.waitForExistence(timeout: 2))
+    }
+
+    /// D-51: by default the app is notes only — no Tasks, Calendar or tabs, and opening a note
+    /// leaves no tab behind.
+    func testNotesOnlyByDefault() throws {
+        let app = launchSignedIn()
+        let all = sidebarElement(app, "sidebar.allDocuments")
+        XCTAssertTrue(all.exists, "no All Documents; buttons: \(Self.buttons(app))")
+        XCTAssertFalse(app.descendants(matching: .any)["sidebar.tasks"].firstMatch.exists, "Tasks shown in the notes-only app")
+        XCTAssertFalse(app.descendants(matching: .any)["sidebar.calendar"].firstMatch.exists, "Calendar shown in the notes-only app")
+        try openNewNoteInNativeEditor(app)
+        let again = sidebarElement(app, "sidebar.allDocuments")
+        XCTAssertTrue(again.exists, "the sidebar did not come back; buttons: \(Self.buttons(app))")
+        XCTAssertFalse(app.descendants(matching: .any)["sidebar.tab"].firstMatch.exists, "opening a note made a tab")
     }
 
     func testSettingsFingerDrawingToggle() throws {

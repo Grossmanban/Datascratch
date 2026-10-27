@@ -1189,6 +1189,11 @@ final class EditorViewTests: XCTestCase {
     func testTypingTheTitleOfAFreshNoteDoesNotMoveItDown() throws {
         let doc = InMemoryEditorDocument(blocks: [.title(""), .paragraph("")])
         let editor = host(doc, width: 820, height: 1180)
+        // Drawing available (as with a Pencil): a screen of room below the text, so even an empty
+        // note can scroll by the header's growth. Without it a short note cannot scroll and the
+        // title moves with the header.
+        editor.tools.allowsFingerDrawing = true
+        drainMainQueue()
         let header = UIView()
         let height = header.heightAnchor.constraint(equalToConstant: 200)
         height.isActive = true
@@ -1275,7 +1280,7 @@ final class EditorViewTests: XCTestCase {
         editor.setImageWidth(image.id, fraction: 0.5)
         XCTAssertEqual(doc.block(image.id)?.attrs["width"]?.numberValue, 0.5)
         editor.setImageWidth(image.id, fraction: 1)
-        XCTAssertEqual(doc.block(image.id)?.attrs["width"], .null, "full width is stored as null (document-model)")
+        XCTAssertNil(doc.block(image.id)?.attrs["width"], "full width is null: no attribute (document-model §4.1)")
         editor.undo()
         XCTAssertEqual(doc.block(image.id)?.attrs["width"]?.numberValue, 0.5)
         XCTAssertEqual(ImageBlockView.nearestStop(to: 0.4), 0.5)

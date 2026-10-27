@@ -510,10 +510,10 @@
     "semantic_hash": "b72cbfa25213450174dfad404011fb54"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Sync/AttachmentManager.swift": {
-    "mtime": 1792939085.140849,
-    "seen": 1793090660.518052,
-    "ast_hash": "6e8d77c14405aaf20284a46254436958",
-    "semantic_hash": "6e8d77c14405aaf20284a46254436958"
+    "mtime": 1793090768.020829,
+    "seen": 1793090830.4739504,
+    "ast_hash": "62c63c8dd6cfb09a8436df0bfc9e5fe8",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Sync/SyncClient.swift": {
     "mtime": 1793058734.741273,
@@ -552,10 +552,10 @@
     "semantic_hash": "1f87a4505bbed86d0126780f0aee7e66"
   },
   "apps/ios/Packages/DSCore/Tests/DSCoreTests/AccountTests.swift": {
-    "mtime": 1793022241.2443407,
-    "seen": 1793090660.518075,
-    "ast_hash": "3375c83f0de94c481e71d72e70f97684",
-    "semantic_hash": "3375c83f0de94c481e71d72e70f97684"
+    "mtime": 1793090768.0226083,
+    "seen": 1793090830.4742093,
+    "ast_hash": "3626bfb2699de9ac6e60154c6a0ba07d",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSCore/Tests/DSCoreTests/BenchmarkTests.swift": {
     "mtime": 1792967161.6935477,
@@ -4230,10 +4230,10 @@
     "semantic_hash": "317855e29c661691ad9aaeff65c0fa79"
   },
   "apps/ios/Packages/DSCore/README.md": {
-    "mtime": 1793058734.741273,
-    "seen": 1793090660.5201259,
-    "ast_hash": "68f5a3af928de43a333044c10999c8d0",
-    "semantic_hash": "68f5a3af928de43a333044c10999c8d0"
+    "mtime": 1793090768.020829,
+    "seen": 1793090830.499461,
+    "ast_hash": "7a9827a7c5b4e68fb0dea35e5416b29c",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSDesign/README.md": {
     "mtime": 1793022328.1707149,
@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793090597.5723803,
-    "seen": 1793090660.5201516,
-    "ast_hash": "d2fdda8db919c817c95a9299448ff718",
+    "mtime": 1793090768.4735734,
+    "seen": 1793090830.499735,
+    "ast_hash": "eea085f1a8604bf7021ca53ef29929f3",
     "semantic_hash": ""
   },
   "docs/README.md": {

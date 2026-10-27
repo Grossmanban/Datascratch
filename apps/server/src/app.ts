@@ -64,7 +64,16 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
 
   app.setErrorHandler((err: FastifyError, req, reply) => {
     if (err instanceof ApiError) {
-      return reply.code(err.statusCode).send({ error: { code: err.code, message: err.message } });
+      return reply
+        .code(err.statusCode)
+        .send({
+          error: {
+            code: err.code,
+            message: err.message,
+            ...(err.reason ? { reason: err.reason } : {}),
+            ...(err.retryAfterMs !== undefined ? { retryAfterMs: err.retryAfterMs } : {}),
+          },
+        });
     }
     if (hasZodFastifySchemaValidationErrors(err)) {
       const issue = err.validation[0];
@@ -102,7 +111,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
     global: false,
     // Thrown by the plugin; an ApiError goes through the error handler as a proper 429.
     errorResponseBuilder: (_req, c) =>
-      new ApiError('rate_limited', `rate limit exceeded, retry in ${Math.ceil(c.ttl / 1000)} s`),
+      new ApiError('rate_limited', `rate limit exceeded, retry in ${Math.ceil(c.ttl / 1000)} s`, undefined, c.ttl),
   });
 
   await app.register(swagger, {

@@ -25,8 +25,8 @@ export function UploadEditor() {
   const resolved = useMemo<string[]>(() => [], []);
   const host = useMemo(
     () => ({
-      uploadAttachment: (file: File, opts?: { onProgress?: (f: number) => void }) =>
-        new Promise<UploadedAttachment>((resolve, reject) => calls.push({ file, onProgress: opts?.onProgress, resolve, reject })),
+      uploadAttachment: (file: File, onProgress?: (done: number) => void) =>
+        new Promise<UploadedAttachment>((resolve, reject) => calls.push({ file, onProgress, resolve, reject })),
       resolveAttachment: async (id: string) => {
         resolved.push(id);
         return PNG;

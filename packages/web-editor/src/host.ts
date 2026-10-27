@@ -20,10 +20,10 @@ export interface EditorHost {
   resolveAttachment?: (attachmentId: string) => Promise<string | null>;
   /**
    * Encrypts and stores a pasted, dropped or picked file; resolves with its attachment record. The
-   * editor has already inserted the block with a local preview; `onProgress` (0..1, optional) drives
-   * its progress ring. A rejection shows «Повторить» / «Удалить» on the block.
+   * editor has already inserted the block with a local preview; `onProgress(done)` (0..1 while the
+   * chunks are sealed, optional) drives its progress ring. A rejection shows «Повторить» / «Удалить».
    */
-  uploadAttachment?: (file: File, opts?: { onProgress?: (fraction: number) => void }) => Promise<UploadedAttachment>;
+  uploadAttachment?: (file: File, onProgress?: (done: number) => void) => Promise<UploadedAttachment>;
   onOpenAttachment?: (attachment: { attachmentId: string; name: string; mime: string }) => void;
   /** Data for a page card (`pageCard`) or a note link chip. */
   resolveNote?: (noteId: string) => Promise<NoteSummary | null>;

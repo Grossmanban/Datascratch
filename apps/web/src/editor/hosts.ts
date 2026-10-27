@@ -1,5 +1,5 @@
 import type { useNavigate } from "@tanstack/react-router";
-import { attachmentUrl, storeAttachment } from "@/data/attachments";
+import { attachmentUrl, openDecrypted, storeAttachment, svgToPng } from "@/data/attachments";
 import { runtime } from "@/data/runtime";
 import { createNote, findInbox, getOrCreateInbox, moveTask, openTab } from "@/domain/actions";
 import { allTags, noteTitle, spaceOfNote, spaceOfNotebook, useWorkspace } from "@/domain/workspace";
@@ -7,6 +7,7 @@ import i18n from "@/i18n";
 import { defaultNoteTitle } from "@/domain/note";
 import { features } from "@/lib/features";
 import { isFreshNote } from "@/lib/freshNotes";
+import { isSvg } from "@/lib/safeMime";
 import { fetchRemoteImage } from "@/lib/remoteImage";
 import type { EditorHost, NoteSummary } from "./index";
 
@@ -19,9 +20,11 @@ function summary(noteId: string): NoteSummary | null {
 }
 
 /** Encrypts a file into a note's attachments; `onProgress` gets 0…1 while the chunks are sealed. */
-export async function uploadNoteFile(noteId: string, file: File, onProgress?: (done: number) => void) {
+export async function uploadNoteFile(noteId: string, input: File, onProgress?: (done: number) => void) {
   const k = await runtime().store.keyFor(noteId);
   if (!k) throw new Error("no key");
+  // An SVG (a picked file or a pasted data:image/svg+xml) is stored as a PNG, never as SVG.
+  const file = isSvg(input) ? await svgToPng(input, input.name) : input;
   onProgress?.(0);
   const mime = file.type || "application/octet-stream";
   const id = await storeAttachment(noteId, k, new Uint8Array(await file.arrayBuffer()), mime, onProgress);
@@ -48,9 +51,10 @@ export function ownerEditorHost(noteId: string, nav: Nav): EditorHost {
     fetchRemoteImage: (url: string) => fetchRemoteImage(url),
     uploadAttachment: (file: File, progress?: ((done: number) => void) | { onProgress?: (done: number) => void }) =>
       uploadNoteFile(noteId, file, typeof progress === "function" ? progress : progress?.onProgress),
-    onOpenAttachment: async ({ attachmentId }) => {
+    // Only a raster image, PDF or text opens in a tab; anything else is downloaded (audit 2026-10-27).
+    onOpenAttachment: async ({ attachmentId, name, mime }) => {
       const k = await key();
-      if (k) window.open(await attachmentUrl(attachmentId, k), "_blank", "noopener");
+      if (k) await openDecrypted(await attachmentUrl(attachmentId, k), name, mime);
     },
     resolveNote: async (id) => summary(id),
     onOpenNote: open,

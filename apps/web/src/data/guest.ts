@@ -1,5 +1,6 @@
 import { guestDeviceId, MemorySyncStorage, REMOTE_ORIGIN, SyncClient } from "@datascratch/shared";
 import * as Y from "yjs";
+import { ApiError } from "@/api/client";
 import { sharesApi } from "@/api/endpoints";
 import { APP_VERSION, syncUrl } from "@/config";
 import { ad, fromBase64Url, sodiumReady, unwrapKey, uuidv7, type GuestGrant } from "@/lib/shared";
@@ -43,6 +44,7 @@ export class GuestSession {
       },
     });
     this.client.on("synced", (docId) => {
+      this.reauthTries = 0;
       this.readyDocs.add(docId);
       this.emit();
       this.updateStatus();
@@ -52,12 +54,53 @@ export class GuestSession {
     this.client.on("error", (e) => {
       console.warn("guest sync:", e.code, e.message, e.docId ?? "");
       // Guest tokens are short-lived: fetch a new one and reconnect.
-      if (e.code === "unauthorized")
-        void sharesApi.guest(this.shareId).then((g) => {
+      if (e.code === "unauthorized") this.reauthorize();
+    });
+  }
+
+  /** Set when the share is gone (revoked or expired) or the token cannot be renewed; sync stops. */
+  ended: "revoked" | "unavailable" | null = null;
+  private reauthTries = 0;
+  private reauthing = false;
+  private reauthTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * A new guest token after the server refused the current one: at most one attempt at a time,
+   * with a growing pause between attempts and a cap (audit 2026-10-27: a refusing server must not
+   * cause a reconnect loop). The count resets only once a document has synced again.
+   */
+  private reauthorize() {
+    if (this.reauthing || this.ended) return;
+    if (this.reauthTries >= GuestSession.MAX_REAUTH) return this.end("unavailable");
+    this.reauthing = true;
+    const delay = this.reauthTries === 0 ? 0 : Math.min(30_000, 1000 * 2 ** (this.reauthTries - 1));
+    this.reauthTries++;
+    this.reauthTimer = setTimeout(() => {
+      this.reauthTimer = null;
+      sharesApi
+        .guest(this.shareId)
+        .then((g) => {
+          this.reauthing = false;
+          if (this.ended) return;
           this.grant.guestToken = g.guestToken;
           this.client.reconnect();
+        })
+        .catch((e: unknown) => {
+          this.reauthing = false;
+          // The share itself is refused: revoked or expired. Anything else is retried with backoff.
+          if (e instanceof ApiError && [401, 403, 404, 410].includes(e.status)) return this.end("revoked");
+          this.reauthorize();
         });
-    });
+    }, delay);
+  }
+
+  static readonly MAX_REAUTH = 6;
+
+  private end(reason: "revoked" | "unavailable") {
+    this.ended = reason;
+    if (this.reauthTimer) clearTimeout(this.reauthTimer);
+    void this.client.stop();
+    this.emit();
   }
 
   static async open(shareId: string, keyText: string): Promise<GuestSession> {
@@ -137,6 +180,8 @@ export class GuestSession {
   }
 
   close() {
+    if (this.reauthTimer) clearTimeout(this.reauthTimer);
+    this.ended ??= "unavailable";
     void this.client.stop();
     for (const d of this.docs.values()) d.destroy();
     this.docs.clear();

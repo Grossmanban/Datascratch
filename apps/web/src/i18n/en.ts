@@ -73,6 +73,7 @@ const en: Loose<Messages> = {
     wrongCredentials: "Wrong email or password",
     emailTaken: "This email is already registered",
     serverUnavailable: "Server unavailable. Check your connection.",
+    unsafeKdf: "The server sent unsafe password encryption parameters. Sign-in was stopped — check the server address.",
     deriving: "Securing your keys…",
     recoveryTitle: "Your recovery key",
     recoveryText:

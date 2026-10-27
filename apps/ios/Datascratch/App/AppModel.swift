@@ -147,6 +147,13 @@ final class AppModel {
                                                body: NoteBody(blocks: [.paragraph("Go to [[Target]] or [[Nowhere]].")]))
                 noteForTesting = links.id
             }
+            if ProcessInfo.processInfo.arguments.contains("-ui-testing-task-date"),
+               let notebook = library.notebooks(in: library.activeSpace?.id).first {
+                // A task with a date chip (tap → the reschedule menu).
+                let dated = library.createNote(in: notebook.id, folder: nil, title: "Dated",
+                                               body: NoteBody(blocks: [.task("Call back", scheduled: DayKey.from(Date()))]))
+                noteForTesting = dated.id
+            }
             // The server ended this device's session (revoked elsewhere).
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-session-ended") { sync.markSessionEnded() }
         }
@@ -161,7 +168,7 @@ final class AppModel {
     private var signedInForTesting = false
     /// `-ui-testing-folders`: the notebook a new scene starts on.
     @ObservationIgnored var notebookForTesting: String?
-    /// `-ui-testing-links`: the note a new scene opens.
+    /// `-ui-testing-links` / `-ui-testing-task-date`: the note a new scene opens.
     @ObservationIgnored var noteForTesting: String?
 
     /// `-ui-testing-cover`: the first document gets an image cover (screenshots, layout tests).

@@ -287,6 +287,23 @@ final class LibraryUITests: XCTestCase {
                       "a link to a missing note did not offer to create it")
     }
 
+    /// spec/12: a tap on a task's date chip opens the reschedule menu, and the app keeps running
+    /// (build 14: the tap did nothing; later it crashed in the menu's gesture).
+    func testTaskDateChipOpensTheRescheduleMenu() throws {
+        let app = launchSignedIn(["-ui-testing-task-date"])
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "the Dated note did not open")
+        settle(1)
+        let chip = editor.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH 'Дата: ' OR label BEGINSWITH 'Дедлайн: '")).firstMatch
+        XCTAssertTrue(chip.waitForExistence(timeout: 5), "no date chip; editor: \(editor.debugDescription.prefix(3000))")
+        chip.tap()
+        let item = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label IN {'Сегодня', 'Завтра', 'След. неделя', 'Дата…', 'Today', 'Tomorrow', 'Next Week', 'Date…'}")).firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 10), "the reschedule menu did not open")
+        XCTAssertEqual(app.state, .runningForeground, "the app quit after the tap")
+    }
+
     /// spec/05: a notebook's folders show as a strip above its documents; a tap opens the folder,
     /// whose own subfolders and breadcrumb then show.
     func testFolderStripNavigates() throws {

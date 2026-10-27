@@ -41,6 +41,7 @@ export class Metrics {
   readonly syncMessages = new Counter('ds_sync_messages_total', 'Sync messages received, by type.');
   readonly syncUpdates = new Counter('ds_sync_updates_total', 'Document updates stored, by source.');
   readonly syncErrors = new Counter('ds_sync_errors_total', 'Sync errors sent to clients, by code.');
+  readonly fetchImage = new Counter('ds_fetch_image_total', 'Image downloads by link (POST /v1/fetch-image), by result.');
   readonly #gauges: Gauge[] = [];
 
   constructor() {
@@ -56,7 +57,7 @@ export class Metrics {
 
   render(): string {
     return (
-      [this.httpRequests, this.syncMessages, this.syncUpdates, this.syncErrors]
+      [this.httpRequests, this.syncMessages, this.syncUpdates, this.syncErrors, this.fetchImage]
         .map((c) => c.render())
         .concat(this.#gauges.map(gaugeText))
         .join('\n') + '\n'

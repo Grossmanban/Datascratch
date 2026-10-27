@@ -209,4 +209,11 @@ export async function deleteAccountDb(userId: string): Promise<void> {
     current = null;
   }
   await Dexie.delete(`ds-account-${userId}`);
+  // Edits saved as a page closed (docStore.flushUnsaved) go with the account's data.
+  try {
+    const prefix = `ds.unsaved.ds-account-${userId}.`;
+    for (const k of Object.keys(localStorage)) if (k.startsWith(prefix)) localStorage.removeItem(k);
+  } catch {
+    // storage blocked: nothing was saved there either
+  }
 }

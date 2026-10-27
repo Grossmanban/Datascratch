@@ -16,6 +16,9 @@ nonisolated enum AccountError: LocalizedError, Equatable, Sendable {
     case wrongCredentials
     case accountExists
     case invalidRecoveryKey
+    /// The server asked for password-KDF parameters below crypto.md §2 (a hostile or broken
+    /// server making the login key cheap to guess); nothing was derived or sent.
+    case unsafeServerParameters
     case server(String)
 
     var errorDescription: String? {
@@ -26,6 +29,7 @@ nonisolated enum AccountError: LocalizedError, Equatable, Sendable {
         case .wrongCredentials: String(localized: "Wrong email or password.")
         case .accountExists: String(localized: "An account with this email already exists on this device.")
         case .invalidRecoveryKey: String(localized: "This recovery key is not valid.")
+        case .unsafeServerParameters: String(localized: "The server sent unsafe sign-in parameters. Nothing was sent; check the server address.")
         case .server(let message): message
         }
     }

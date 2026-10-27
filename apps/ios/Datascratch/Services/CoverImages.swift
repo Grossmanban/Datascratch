@@ -1,5 +1,7 @@
+import ImageIO
 import Observation
 import UIKit
+import UniformTypeIdentifiers
 
 /// Where cover images go besides this device: the server's encrypted attachments
 /// (crypto.md §6). Nil without a server.
@@ -24,8 +26,14 @@ final class CoverImages {
 
     nonisolated enum CoverError: LocalizedError {
         case notAnImage
+        case tooLarge
 
-        var errorDescription: String? { String(localized: "This file is not an image.") }
+        var errorDescription: String? {
+            switch self {
+            case .notAnImage: String(localized: "This file is not an image.")
+            case .tooLarge: String(localized: "This image is too large (over 50 megapixels).")
+            }
+        }
     }
 
     /// Plaintext files named by attachment id (the same layout DSCore's
@@ -75,9 +83,11 @@ final class CoverImages {
     /// Scales the picked image down, stores the cover and its thumbnail, and queues
     /// both for upload when a server is connected.
     func add(_ data: Data, noteId: String) async throws -> Added {
-        guard let image = UIImage(data: data) else { throw CoverError.notAnImage }
-        guard let full = Self.jpeg(image, maxPixels: Self.maxCoverPixels, quality: 0.85),
-              let thumb = Self.jpeg(image, maxPixels: Self.thumbPixels, quality: 0.8) else { throw CoverError.notAnImage }
+        let (fullPixels, thumbPixels) = (Self.maxCoverPixels, Self.thumbPixels)
+        let (full, thumb) = try await Task.detached(priority: .userInitiated) {
+            (try Self.jpeg(data, maxPixels: fullPixels, quality: 0.85),
+             try Self.jpeg(data, maxPixels: thumbPixels, quality: 0.8))
+        }.value
         let coverId = try await store(full, noteId: noteId)
         let thumbId = try await store(thumb, noteId: noteId)
         if let remote {
@@ -94,9 +104,12 @@ final class CoverImages {
     /// and uploaded in the background (crypto.md §6). Offline, DSCore keeps it and uploads it once
     /// connected.
     func addImage(_ data: Data, noteId: String, id presetId: String? = nil) async throws -> AddedImage {
-        guard let image = UIImage(data: data),
-              let jpeg = Self.jpeg(image, maxPixels: Self.maxPhotoPixels, quality: 0.85),
-              let stored = UIImage(data: jpeg) else { throw CoverError.notAnImage }
+        // Decoded off the main thread, never at full size (ImageIO thumbnail of the file).
+        let maxPixels = Self.maxPhotoPixels
+        let jpeg = try await Task.detached(priority: .userInitiated) {
+            try Self.jpeg(data, maxPixels: maxPixels, quality: 0.85)
+        }.value
+        guard let stored = UIImage(data: jpeg) else { throw CoverError.notAnImage }
         let id = try await store(jpeg, noteId: noteId, id: presetId)
         cache.setObject(stored, forKey: id as NSString)
         upload(id, noteId: noteId)
@@ -128,7 +141,7 @@ final class CoverImages {
 
     /// The file of an attachment on this device, downloading it when missing.
     func file(_ attachmentId: String, noteId: String) async -> URL? {
-        let local = url(attachmentId)
+        guard let local = url(attachmentId) else { return nil }
         if FileManager.default.fileExists(atPath: local.path) { return local }
         return await remote?.downloadAttachment(attachmentId, noteId: noteId)
     }
@@ -138,15 +151,19 @@ final class CoverImages {
             return try await remote.addAttachment(data, mime: mime, noteId: noteId, id: presetId)
         }
         let id = presetId ?? UUIDv7.make()
-        try data.write(to: url(id), options: [.atomic, .completeFileProtection])
+        guard let file = url(id) else { throw CoverError.notAnImage }
+        try data.write(to: file, options: [.atomic, .completeFileProtection])
         return id
     }
 
     /// The image if it is on this device; otherwise starts a download and returns nil
     /// (`revision` changes when it arrives).
     func image(_ attachmentId: String, noteId: String) -> UIImage? {
+        guard let file = url(attachmentId) else { return nil }
         if let cached = cache.object(forKey: attachmentId as NSString) { return cached }
-        if let image = UIImage(contentsOfFile: url(attachmentId).path) {
+        if FileManager.default.fileExists(atPath: file.path) {
+            // A file from another client may be any size: decoded no larger than a photo here.
+            guard let image = Self.image(at: file, maxPixels: Self.maxPhotoPixels) else { return nil }
             cache.setObject(image, forKey: attachmentId as NSString)
             return image
         }
@@ -155,7 +172,7 @@ final class CoverImages {
     }
 
     private func fetch(_ attachmentId: String, noteId: String) {
-        guard let remote, !downloading.contains(attachmentId) else { return }
+        guard let remote, UUIDv7.isValid(attachmentId), !downloading.contains(attachmentId) else { return }
         downloading.insert(attachmentId)
         Task {
             _ = await remote.downloadAttachment(attachmentId, noteId: noteId)
@@ -167,28 +184,76 @@ final class CoverImages {
 
     /// Forgets a replaced or removed cover here and on the server.
     func remove(_ ids: [String]) {
+        let ids = ids.filter(UUIDv7.isValid)
         for id in ids {
             cache.removeObject(forKey: id as NSString)
-            try? FileManager.default.removeItem(at: url(id))
+            if let file = url(id) { try? FileManager.default.removeItem(at: file) }
         }
         guard let remote else { return }
         Task { for id in ids { await remote.deleteAttachment(id) } }
     }
 
-    private func url(_ id: String) -> URL { directory.appendingPathComponent(id) }
+    /// Forgets every decrypted image held in memory (local data erased, another account).
+    func forgetAll() {
+        cache.removeAllObjects()
+        uploading.removeAll()
+    }
 
-    nonisolated static func jpeg(_ image: UIImage, maxPixels: CGFloat, quality: CGFloat) -> Data? {
-        let pixels = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
-        let factor = min(1, maxPixels / max(pixels.width, pixels.height, 1))
-        let target = CGSize(width: (pixels.width * factor).rounded(), height: (pixels.height * factor).rounded())
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        format.opaque = true
-        // Drawing also applies the EXIF orientation.
-        let scaled = UIGraphicsImageRenderer(size: target, format: format).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: target))
+    /// The file of an attachment id; nil for anything that is not an id (ids come from documents
+    /// and must never become paths like `../library.sqlite`).
+    private func url(_ id: String) -> URL? {
+        UUIDv7.isValid(id) ? directory.appendingPathComponent(id) : nil
+    }
+
+    /// Images over this many pixels are refused before they are decoded: a crafted file or a huge
+    /// panorama would otherwise take all the memory.
+    nonisolated static let maxSourcePixels: Double = 50_000_000
+
+    /// At most `maxPixels` on the long side, decoded straight from the file by ImageIO (the full
+    /// image is never in memory), EXIF orientation applied.
+    nonisolated static func downscaled(_ source: CGImageSource, maxPixels: CGFloat) throws -> CGImage {
+        guard CGImageSourceGetCount(source) > 0,
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.doubleValue,
+              let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.doubleValue,
+              width > 0, height > 0 else { throw CoverError.notAnImage }
+        guard width * height <= maxSourcePixels else { throw CoverError.tooLarge }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(min(maxPixels, max(width, height))),
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { throw CoverError.notAnImage }
+        return image
+    }
+
+    /// `data` (JPEG, HEIC, PNG…) scaled to `maxPixels` and encoded as JPEG.
+    nonisolated static func jpeg(_ data: Data, maxPixels: CGFloat, quality: CGFloat) throws -> Data {
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
+        else { throw CoverError.notAnImage }
+        let image = try downscaled(source, maxPixels: maxPixels)
+        let out = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil)
+        else { throw CoverError.notAnImage }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { throw CoverError.notAnImage }
+        return out as Data
+    }
+
+    /// The clipboard's image as its file bytes (decoded later, scaled); a plain bitmap otherwise.
+    static func pastedImageData() -> Data? {
+        let board = UIPasteboard.general
+        for type in [UTType.heic, .jpeg, .png, .tiff, .gif, .webP] {
+            if let data = board.data(forPasteboardType: type.identifier) { return data }
         }
-        return scaled.jpegData(compressionQuality: quality)
+        return board.image?.pngData()
+    }
+
+    nonisolated static func image(at file: URL, maxPixels: CGFloat) -> UIImage? {
+        guard let source = CGImageSourceCreateWithURL(file as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let image = try? downscaled(source, maxPixels: maxPixels) else { return nil }
+        return UIImage(cgImage: image)
     }
 }
 

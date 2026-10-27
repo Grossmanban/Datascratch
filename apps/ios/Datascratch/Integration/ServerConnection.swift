@@ -407,9 +407,9 @@ final class ServerConnection: CoreLibraryRemote {
 // MARK: - Attachments
 
 extension ServerConnection: CoverAttachmentRemote {
-    func addAttachment(_ data: Data, mime: String, noteId: String) async throws -> String {
+    func addAttachment(_ data: Data, mime: String, noteId: String, id: String?) async throws -> String {
         guard let attachments else { throw APIError.notAuthenticated }
-        return try await attachments.add(data, mime: mime, noteId: noteId)
+        return try await attachments.add(data, mime: mime, noteId: noteId, id: id)
     }
 
     func uploadAttachment(_ attachmentId: String, noteId: String) async {

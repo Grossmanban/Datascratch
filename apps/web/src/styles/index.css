@@ -143,3 +143,11 @@
     transform: translateY(12px) scale(0.96);
   }
 }
+
+/* Switching the theme: no transitions for that moment, so every surface takes the new colours at
+   once instead of fading over its hover transition (lib/theme.ts sets the attribute for two frames). */
+[data-theme-switching] *,
+[data-theme-switching] *::before,
+[data-theme-switching] *::after {
+  transition: none !important;
+}

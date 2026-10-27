@@ -19,7 +19,14 @@ const media = typeof window !== "undefined" ? window.matchMedia?.("(prefers-colo
 function apply() {
   const { pref } = useTheme.getState();
   const resolved = pref === "system" ? (media?.matches ? "dark" : "light") : pref;
-  document.documentElement.dataset.theme = resolved;
+  const root = document.documentElement;
+  // A real switch (not the first paint): hover transitions on backgrounds would otherwise fade the
+  // old colour out over ~150 ms (styles/index.css turns them off while this attribute is set).
+  if (root.dataset.theme && root.dataset.theme !== resolved) {
+    root.dataset.themeSwitching = "";
+    requestAnimationFrame(() => requestAnimationFrame(() => delete root.dataset.themeSwitching));
+  }
+  root.dataset.theme = resolved;
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolved === "dark" ? "#1A1917" : "#FAF8F4");
   if (useTheme.getState().resolved !== resolved) useTheme.setState({ resolved });
 }

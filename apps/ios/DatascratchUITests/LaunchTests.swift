@@ -988,10 +988,15 @@ final class LibraryUITests: XCTestCase {
         let rows = app.descendants(matching: .any).matching(identifier: "sidebar.notebook")
         let before = rows.count
         more.tap()
+        let opened = NSPredicate { _, _ in rows.count > before }
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: opened, evaluatedWith: nil)], timeout: 5), .completed,
+                       "no more notebooks after «N more»")
+        // The list is lazy: «Show Less» at its end exists once scrolled to.
         let less = app.descendants(matching: .any)["sidebar.less.notebooks"].firstMatch
-        XCTAssertTrue(less.waitForExistence(timeout: 3), "the notebooks did not open in full")
-        XCTAssertGreaterThan(rows.count, before, "no more notebooks after «N more»")
+        for _ in 0..<3 where !less.exists { app.cells.firstMatch.swipeUp(); settle(0.5) }
+        XCTAssertTrue(less.waitForExistence(timeout: 3), "no «Show Less» after the notebooks")
         less.tap()
+        for _ in 0..<3 where !more.exists { app.cells.firstMatch.swipeDown(); settle(0.5) }
         XCTAssertTrue(more.waitForExistence(timeout: 3), "«Show Less» did not fold the list back")
 
         let header = app.descendants(matching: .any)["sidebar.section.notebooks"].firstMatch

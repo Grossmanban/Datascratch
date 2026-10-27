@@ -423,7 +423,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       {api && taskMenu && <TaskMenu editor={api.editor} request={taskMenu} host={host.current} dates={taskDates} onClose={() => setTaskMenu(null)} />}
       {api && showPalette && !readOnly && (
         <div className="ds-palette-dock">
-          <PenPalette pen={api.pen} undoManager={api.undoManager} />
+          <PenPalette pen={api.pen} undoManager={api.undoManager} onInsertImage={host.current.uploadAttachment && !readOnly ? () => api.pickImage() : undefined} />
         </div>
       )}
     </div>

@@ -42,7 +42,7 @@ function readCollapsed(): boolean {
 }
 
 /** The design-system pen palette (D-38) bound to the pen layer and the shared undo manager. */
-export function PenPalette({ pen, undoManager }: { pen: PenLayer; undoManager: Y.UndoManager }) {
+export function PenPalette({ pen, undoManager, onInsertImage }: { pen: PenLayer; undoManager: Y.UndoManager; onInsertImage?: () => void }) {
   const [s, setS] = useState<PenSettings>(pen.getSettings());
   // Collapsed into one round button; remembered per viewer.
   const [collapsed, setCollapsed] = useState(readCollapsed);
@@ -85,6 +85,7 @@ export function PenPalette({ pen, undoManager }: { pen: PenLayer; undoManager: Y
         canRedo={canRedo}
         onUndo={() => undoManager.undo()}
         onRedo={() => undoManager.redo()}
+        onInsertImage={onInsertImage}
       />
     </div>
   );

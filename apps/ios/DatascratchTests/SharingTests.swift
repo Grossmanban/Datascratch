@@ -42,7 +42,7 @@ struct SharingTests {
 
     @Test func invitationsAcceptedLandInSharedWithMe() async throws {
         let sharing = LocalAccountSharingService(webHost: "notes.example.org", demo: true)
-        let notebook = ShareTarget(kind: .notebook, id: UUIDv7.make())
+        let notebook = Datascratch.ShareTarget(kind: .notebook, id: UUIDv7.make())
         sharing.seedForTesting(invitedTo: notebook, viewOnly: nil, owned: nil)
         let invite = try #require(sharing.incoming.first)
         try await sharing.accept(invite)
@@ -55,7 +55,7 @@ struct SharingTests {
 
     @Test func theOwnerInvitesAndRevokes() async throws {
         let sharing = LocalAccountSharingService(webHost: "notes.example.org", demo: true)
-        let note = ShareTarget(kind: .note, id: UUIDv7.make())
+        let note = Datascratch.ShareTarget(kind: .note, id: UUIDv7.make())
         let invite = try await sharing.invite("kate@example.org", role: .viewer, to: note)
         #expect(invite.link?.absoluteString == "https://notes.example.org/invite/\(invite.id)")
         #expect(try await sharing.people(of: note).invites == [invite])

@@ -328,3 +328,29 @@ public struct PublicKeyRecord: Codable, Hashable, Sendable {
         publicKey = try APIValidation.bytes(c, .publicKey, length: DSCrypto.boxKeyLength)
     }
 }
+
+/// `GET /shared-by-me`: what this account shares (it owns it and has a member or an open
+/// invitation). The owner's client uses it on start to give keys (`awaitingKey`), finish key
+/// rotations (`keyRotationPending`) and fix `NoteMeta`, and for the «Поделиться» window.
+public struct SharedByMeItem: Codable, Hashable, Sendable {
+    public var target: SharingTarget
+    public var keyVersion: Int
+    public var keyRotationPending: Bool
+    /// Members besides the owner, including those awaiting a key.
+    public var members: Int
+    /// Accepted, still without a key.
+    public var awaitingKey: Int
+
+    enum CodingKeys: String, CodingKey { case target, keyVersion, keyRotationPending, members, awaitingKey }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        target = try c.decode(SharingTarget.self, forKey: .target)
+        keyVersion = try c.decode(Int.self, forKey: .keyVersion)
+        guard keyVersion >= 1 else { throw APIValidation.fail(c, .keyVersion, "version ≥ 1") }
+        keyRotationPending = try c.decode(Bool.self, forKey: .keyRotationPending)
+        members = try c.decode(Int.self, forKey: .members)
+        awaitingKey = try c.decode(Int.self, forKey: .awaitingKey)
+        guard members >= 0, awaitingKey >= 0, awaitingKey <= members else { throw APIValidation.fail(c, .members, "counts ≥ 0") }
+    }
+}

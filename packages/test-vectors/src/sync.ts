@@ -44,6 +44,30 @@ export function syncVectors() {
       },
       { type: "updates", docId: doc, snapshot: null, items: [], upToDate: true },
       { type: "update", docId: doc, seq: 43, payload: P, deviceId: "dev-3" },
+      {
+        type: "updates",
+        docId: doc,
+        snapshot: null,
+        items: [
+          { seq: 45, payload: P, deviceId: "dev-1", author: { kind: "user", userId: vid(10) } },
+          {
+            seq: 46,
+            payload: P,
+            deviceId: "guest:abc",
+            author: { kind: "guest", shareId: vid(5) },
+          },
+          { seq: 47, payload: P, deviceId: "agent", author: { kind: "agent", tokenId: "tok-1" } },
+        ],
+        upToDate: true,
+      },
+      {
+        type: "update",
+        docId: doc,
+        seq: 48,
+        payload: P,
+        deviceId: "dev-3",
+        author: { kind: "user", userId: vid(11) },
+      },
       { type: "ack", docId: doc, clientMsgId: vid(30), seq: 44 },
       { type: "awareness", docId: doc, payload: P, deviceId: "dev-3" },
       { type: "error", code: "payload_too_large", message: "update exceeds 2 MiB", ref: vid(30) },
@@ -103,6 +127,17 @@ export function syncVectors() {
         message: { type: "update", docId: doc, seq: 0, payload: P, deviceId: "d" },
       },
       { reason: "unknown error code", message: { type: "error", code: "teapot", message: "" } },
+      {
+        reason: "unknown author kind",
+        message: {
+          type: "update",
+          docId: doc,
+          seq: 1,
+          payload: P,
+          deviceId: "d",
+          author: { kind: "robot", id: "x" },
+        },
+      },
       {
         reason: "unknown revocation reason",
         message: { type: "error", code: "device_revoked", message: "", reason: "bored" },

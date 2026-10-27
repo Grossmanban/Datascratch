@@ -1,1 +1,0 @@
-- 2026-10-27 · web · `EditorHost.fetchRemoteImage(url)` для rich paste: http(s), без cookies, только `image/*`, до 20 МБ, таймаут 15 с; при сбое редактор оставляет ссылку. В проде пока упирается в CSP — вопрос в `open-questions.md`.

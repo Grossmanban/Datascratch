@@ -11,6 +11,8 @@ public enum SyncProtocol {
     /// Decoded payload limits (§7).
     public static let maxUpdateBytes = 2 * 1024 * 1024
     public static let maxSnapshotBytes = 50 * 1024 * 1024
+    /// Documents in one `subscribe` (§2): more go in several messages.
+    public static let maxSubscribeDocs = 1000
 }
 
 public enum SyncAuth: Codable, Hashable, Sendable {
@@ -171,7 +173,10 @@ public enum ClientMessage: Codable, Hashable, Sendable {
                           client: try c.decode(ClientInfo.self, forKey: .client))
         case "subscribe":
             let docs = try c.decode([SubscribeEntry].self, forKey: .docs)
-            guard !docs.isEmpty else { throw DecodingError.dataCorruptedError(forKey: .docs, in: c, debugDescription: "empty") }
+            guard (1...SyncProtocol.maxSubscribeDocs).contains(docs.count) else {
+                throw DecodingError.dataCorruptedError(forKey: .docs, in: c, debugDescription: "1–\(SyncProtocol.maxSubscribeDocs) documents")
+            }
+            guard Set(docs.map(\.docId)).count == docs.count else { throw DecodingError.dataCorruptedError(forKey: .docs, in: c, debugDescription: "duplicate docId") }
             self = .subscribe(docs: docs)
         case "unsubscribe":
             let ids = try c.decode([String].self, forKey: .docIds)
@@ -222,9 +227,10 @@ public enum ServerMessage: Codable, Hashable, Sendable {
     case update(docId: String, item: UpdateItem)
     case ack(docId: String, clientMsgId: String, seq: Int64)
     case awareness(docId: String, payload: Data, deviceId: String)
-    case error(code: SyncErrorCode, message: String, ref: String?)
+    /// `retryAfterMs` (`rate_limited` only, §7): do not resend or reconnect sooner.
+    case error(code: SyncErrorCode, message: String, ref: String?, retryAfterMs: Int? = nil)
 
-    enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref }
+    enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref, retryAfterMs }
     struct Item: Encodable { var seq: Int64; var payload: String; var deviceId: String }
     struct Snap: Encodable { var seq: Int64; var payload: String }
 
@@ -260,7 +266,8 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             self = .awareness(docId: try V.uuid(c, .docId), payload: try V.bytes(c, .payload), deviceId: try V.shortId(c, .deviceId))
         case "error":
             self = .error(code: try c.decode(SyncErrorCode.self, forKey: .code), message: try c.decode(String.self, forKey: .message),
-                          ref: try c.decodeIfPresent(String.self, forKey: .ref))
+                          ref: try c.decodeIfPresent(String.self, forKey: .ref),
+                          retryAfterMs: try c.decodeIfPresent(Int.self, forKey: .retryAfterMs).map { max(0, $0) })
         case let t: throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(t)")
         }
     }
@@ -295,11 +302,12 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             try c.encode(docId, forKey: .docId)
             try c.encode(Base64URL.encode(payload), forKey: .payload)
             try c.encode(deviceId, forKey: .deviceId)
-        case .error(let code, let message, let ref):
+        case .error(let code, let message, let ref, let retryAfterMs):
             try c.encode("error", forKey: .type)
             try c.encode(code, forKey: .code)
             try c.encode(message, forKey: .message)
             try c.encodeIfPresent(ref, forKey: .ref)
+            try c.encodeIfPresent(retryAfterMs, forKey: .retryAfterMs)
         }
     }
 

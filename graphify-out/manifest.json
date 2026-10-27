@@ -4686,10 +4686,10 @@
     "semantic_hash": "7ec5762707a921ecf9d19d0c95ffa59b"
   },
   "docs/roadmap.md": {
-    "mtime": 1793058870.1854243,
-    "seen": 1793090955.392829,
-    "ast_hash": "433a0ff63060af69d21c1dc8db35f87e",
-    "semantic_hash": "433a0ff63060af69d21c1dc8db35f87e"
+    "mtime": 1793121586.4208884,
+    "seen": 1793121959.4525764,
+    "ast_hash": "886ddc640c3a4e1dc9934ea0a13acd6c",
+    "semantic_hash": "886ddc640c3a4e1dc9934ea0a13acd6c"
   },
   "docs/spec/01-concept.md": {
     "mtime": 1792927481.4070244,
@@ -5614,5 +5614,11 @@
     "seen": 1793121824.8780775,
     "ast_hash": "a35933ace1875e40e8f0a80ec2fb0e87",
     "semantic_hash": "a35933ace1875e40e8f0a80ec2fb0e87"
+  },
+  "docs/decisions/0054-account-sharing-simple.md": {
+    "mtime": 1793121574.169166,
+    "seen": 1793121959.45257,
+    "ast_hash": "41bddc650ee76582c1fe2af827ab8bb9",
+    "semantic_hash": "41bddc650ee76582c1fe2af827ab8bb9"
   }
 }

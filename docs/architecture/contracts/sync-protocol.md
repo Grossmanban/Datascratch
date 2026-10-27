@@ -19,7 +19,7 @@
 | `type` | Поля | Смысл |
 | --- | --- | --- |
 | `hello` | `protocol: 1`, `auth: { kind: "user", accessToken } \| { kind: "guest", shareId, guestToken }`, `deviceId`, `client: { platform: "ios"\|"web", version }` | Первое сообщение. До `welcome` другие не принимаются |
-| `subscribe` | `docs: [{ docId, since }]` | Подписаться и получить всё после `since` (0 — с начала) |
+| `subscribe` | `docs: [{ docId, since }]` (1–1000 документов, без повторов `docId`; больше — несколькими сообщениями) | Подписаться и получить всё после `since` (0 — с начала) |
 | `unsubscribe` | `docIds: string[]` | |
 | `push` | `docId`, `clientMsgId`, `payload` | Отправить зашифрованное обновление |
 | `snapshot` | `docId`, `clientMsgId`, `baseSeq`, `payload` | Загрузить зашифрованный снимок состояния, включающий все обновления до `baseSeq` |
@@ -56,6 +56,8 @@
 - Агенты по WebSocket не подключаются — они работают через MCP/REST (сервер сам применяет их правки как обычные обновления).
 
 ## 7. Коды ошибок
+
+У `error` с кодом `rate_limited` может быть необязательное поле `retryAfterMs` — клиент не переподключается и не повторяет отправку раньше (аудит 2026-10-27).
 
 `bad_request` (некорректное сообщение), `unauthorized`, `forbidden`, `doc_not_found`, `payload_too_large` (лимит обновления 2 MiB, снимка 50 MiB — считаются **декодированные** байты, не base64), `rate_limited`, `protocol_mismatch`, `internal`.
 

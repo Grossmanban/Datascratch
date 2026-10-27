@@ -464,7 +464,17 @@ struct HTMLMapper {
     private mutating func list(_ node: HTMLNode, items explicit: [HTMLNode]? = nil) -> [BlockNode] {
         let ordered = node.tag == "ol"
         let start = Int(node.attrs["start"] ?? "") ?? 1
-        let items = explicit ?? node.children.filter { $0.tag == "li" }
+        // Items, and lists placed right after an item (Google Docs nests that way): they belong to it.
+        var nestedAfter: [Int: [HTMLNode]] = [:]
+        var items: [HTMLNode] = []
+        if let explicit {
+            items = explicit
+        } else {
+            for child in node.children {
+                if child.tag == "li" { items.append(child) }
+                else if child.tag == "ul" || child.tag == "ol", !items.isEmpty { nestedAfter[items.count - 1, default: []].append(child) }
+            }
+        }
         var out: [BlockNode] = []
         var run: [BlockNode] = []
         // A list is a task list when every item has a checkbox (GitHub, Notion, Notes).
@@ -477,23 +487,16 @@ struct HTMLMapper {
             else { out.append(BlockNode(type: NodeType.bulletList, children: run)) }
             run = []
         }
-        for (li, box) in zip(items, boxes) {
+        for (index, (li, box)) in zip(items, boxes).enumerated() {
             var children = blocks(li.children)
             if children.first?.type != NodeType.paragraph { children.insert(.paragraph(), at: 0) }
+            for nested in nestedAfter[index] ?? [] { children.append(contentsOf: list(nested)) }
             if runTask, let checked = box {
                 run.append(BlockNode(type: NodeType.taskItem,
                                      attrs: ["taskId": .string(UUIDv7.generate()), "state": .string(checked ? "done" : "open")],
                                      children: children))
             } else {
                 run.append(BlockNode(type: NodeType.listItem, children: children))
-            }
-        }
-        // Lists nested directly in a list (not inside an item) go into the previous item.
-        for nested in node.children where nested.tag == "ul" || nested.tag == "ol" {
-            let blocks = list(nested)
-            if var last = run.popLast() {
-                last.children.append(contentsOf: blocks)
-                run.append(last)
             }
         }
         flush()
@@ -598,8 +601,8 @@ struct HTMLMapper {
         var out: [InlineElement] = []
         for node in nodes {
             if node.isText {
+                // Non-breaking spaces stay (as on the web).
                 let collapsed = node.text.replacingOccurrences(of: #"[ \t\r\n\f]+"#, with: " ", options: .regularExpression)
-                    .replacingOccurrences(of: "\u{00A0}", with: " ")
                 if !collapsed.isEmpty { out.append(.text(collapsed, marks)) }
                 continue
             }

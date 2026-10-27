@@ -53,7 +53,9 @@ final class SharingUITests: XCTestCase {
         invitations.tap()
         let accept = app.buttons["invitation.accept"].firstMatch
         if !accept.waitForExistence(timeout: 5), invitations.exists, invitations.isHittable { invitations.tap() }
-        XCTAssertTrue(accept.waitForExistence(timeout: 5), "no Accept button")
+        let sheetOpen = app.descendants(matching: .any)["invitations"].firstMatch.exists
+        XCTAssertTrue(accept.waitForExistence(timeout: 5),
+                      sheetOpen ? "no Accept button in Invitations" : "tapping the row did not open Invitations")
         accept.tap()
         XCTAssertTrue(app.descendants(matching: .any)["sidebar.sharedPending"].firstMatch.waitForExistence(timeout: 5)
                       || app.descendants(matching: .any)["sidebar.sharedNotebook"].firstMatch.waitForExistence(timeout: 2),

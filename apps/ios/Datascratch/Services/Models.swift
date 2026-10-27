@@ -47,11 +47,11 @@ nonisolated struct Notebook: Codable, Identifiable, Hashable, Sendable {
 extension Notebook {
     /// D-54: notebooks other accounts share with this one belong to no space here; the sidebar
     /// lists them under «Общие со мной» in every space.
-    static let sharedSpaceId = "shared-with-me"
+    nonisolated static let sharedSpaceId = "shared-with-me"
     /// D-54: notes shared on their own (without their notebook) sit in this virtual notebook.
-    static let sharedNotesId = "shared-notes"
+    nonisolated static let sharedNotesId = "shared-notes"
 
-    var isSharedWithMe: Bool { spaceId == Self.sharedSpaceId }
+    nonisolated var isSharedWithMe: Bool { spaceId == Self.sharedSpaceId }
 }
 
 nonisolated struct Folder: Codable, Identifiable, Hashable, Sendable {

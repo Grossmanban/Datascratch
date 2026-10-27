@@ -21,8 +21,9 @@ test("a new note: the cursor is in the title, Enter fills an empty title with th
   await expect(title).toHaveText(`Заметка ${today}`);
 
   // Closed fully empty: not kept.
+  const firstUrl = page.url();
   await page.getByTestId("new-doc").click();
-  await page.waitForURL((u) => u.pathname.startsWith("/doc/"));
+  await page.waitForURL((u) => u.pathname.startsWith("/doc/") && u.href !== firstUrl);
   const emptyUrl = page.url();
   await expect(title).toHaveText("");
   await page.getByTestId("sidebar").getByRole("link", { name: "Все документы" }).click();

@@ -11,6 +11,8 @@ import UIKit
 /// is set; without a server the app works on this device only.
 final class ServerConnection: CoreLibraryRemote {
     nonisolated private static let log = Logger(subsystem: "com.datascratch.app", category: "Server")
+    /// Sync timing (connect, subscribe order, catch-up) for Instruments.
+    nonisolated private static let signposter = OSSignposter(subsystem: "com.datascratch.app", category: "Sync")
 
     let serverURL: URL
     let webHost: String
@@ -98,6 +100,8 @@ final class ServerConnection: CoreLibraryRemote {
                 }
             }, retiredKeysFor: keys.retiredKeys(for:), isKeyCanonical: keys.isCanonical)
             self.engine = engine
+            let signposter = Self.signposter
+            await engine.setTraceHandler { event in signposter.emitEvent("sync", "\(String(describing: event), privacy: .public)") }
             core.remote = self
             await engine.start()
             await repairKeys(changes, engine: engine)
@@ -140,6 +144,27 @@ final class ServerConnection: CoreLibraryRemote {
         core.remote = nil
     }
 
+    /// D-49: the version a server reports at `GET /v1/health` (before signing in to it).
+    static func healthVersion(of url: URL) async throws -> String {
+        let api = APIClient(baseURL: url, sessionStore: SecretSessionStore(store: InMemorySecretStore()))
+        let health = try await api.health()
+        guard health.ok else { throw URLError(.badServerResponse) }
+        return health.version
+    }
+
+    /// App back in the foreground: a socket that died silently while suspended is replaced at
+    /// once, a live one is kept (DSCore pings it).
+    func checkConnection() {
+        guard let engine else { return }
+        Task { await engine.client.checkConnection() }
+    }
+
+    /// The person opened a note: it is caught up before the other documents.
+    func focus(_ noteId: String) {
+        guard let engine else { return }
+        Task { await engine.focus(noteId) }
+    }
+
     /// Network came back: reconnect right away instead of waiting for the back-off.
     func reconnect() {
         guard let engine else { return }
@@ -160,8 +185,16 @@ final class ServerConnection: CoreLibraryRemote {
 
     private func observeStatus(_ engine: SyncEngine) {
         statusTask?.cancel()
-        statusTask = Task { [sync] in
+        statusTask = Task { [weak self, sync] in
+            var catching = false, caughtUp = false
             for await status in await engine.statusUpdates() {
+                // Once the account has caught up with the server: first-run twins are judged on
+                // what it really holds, not on what this device had before the first sync.
+                if status.catchingUp > 0 { catching = true }
+                if !caughtUp, catching, status.catchingUp == 0, case .connected = status.connection {
+                    caughtUp = true
+                    self?.onLibraryCarried?(false)
+                }
                 let summary: SyncCenter.Summary = switch status.summary {
                 case .offline: .offline
                 case .syncing: .syncing
@@ -171,6 +204,14 @@ final class ServerConnection: CoreLibraryRemote {
                 sync.apply(summary: summary, pending: status.pending)
                 let unreadable = Set(status.unreadable.compactMap { $0.notebookId ?? nil })
                 if sync.unreadableNotebookIds != unreadable { sync.unreadableNotebookIds = unreadable }
+                var signatures: [String: String] = [:]
+                for (notebook, items) in Dictionary(grouping: status.unreadable, by: { $0.notebookId ?? $0.docId }) {
+                    let count = items.reduce(0) { $0 + $1.count }
+                    let newest = items.map(\.lastSeq).max() ?? 0
+                    signatures[notebook] = "\(count)-\(newest)-\(items.count)"
+                }
+                if sync.unreadableSignatures != signatures { sync.unreadableSignatures = signatures }
+                sync.setHeld(status.held)
             }
         }
     }
@@ -278,6 +319,11 @@ final class ServerConnection: CoreLibraryRemote {
 
     /// The account document brought notebooks whose keys this device lacks (made on another
     /// device): fetch them, then let the engine pick their documents up.
+    func noteKeysLearned() {
+        guard let engine else { return }
+        Task { await engine.resumeDocumentsWaitingForKeys() }
+    }
+
     func notebookKeysMissing() {
         guard engine != nil, !isFetchingKeys else { return }
         isFetchingKeys = true

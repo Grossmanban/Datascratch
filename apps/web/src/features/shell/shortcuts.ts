@@ -2,7 +2,7 @@ import type { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { getOrCreateDaily, openTab } from "@/domain/actions";
 import { useWorkspace } from "@/domain/workspace";
-import { closeDocTab, newNoteAndOpen } from "@/features/docs/menus";
+import { closeDocTab, newDocTarget, newNoteAndOpen } from "@/features/docs/menus";
 import { focusKindOf, toggleFocus, toggleSidebar, useUi } from "@/hooks/useUi";
 import { today } from "@/lib/dates";
 import { toggleTheme } from "@/lib/theme";
@@ -31,9 +31,8 @@ export function useShortcuts(navigate: ReturnType<typeof useNavigate>) {
       }
       if (e.altKey && (e.code === "KeyN" || key === "n") && !mod) {
         e.preventDefault();
-        const st = useWorkspace.getState();
-        const nb = st.account.notebooks.find((n) => n.spaceId === st.activeSpaceId);
-        if (nb) void newNoteAndOpen(navigate, nb.id);
+        const to = newDocTarget(location.pathname);
+        if (to) void newNoteAndOpen(navigate, to.notebookId, to.folderId, to.tag);
         return;
       }
       if (features.calendar && e.altKey && (e.code === "KeyT" || key === "t") && !mod) {

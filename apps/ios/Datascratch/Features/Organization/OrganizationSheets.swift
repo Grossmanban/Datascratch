@@ -130,6 +130,7 @@ struct ModeOption: View {
 }
 
 struct SpaceEditor: View {
+    @Environment(SceneModel.self) private var scene
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     let space: Space?
@@ -180,7 +181,7 @@ struct SpaceEditor: View {
                             }
                         } else {
                             let created = app.library.createSpace(name: trimmed, icon: icon, color: color)
-                            app.library.activateSpace(created.id)
+                            scene.switchSpace(to: created.id)
                         }
                         dismiss()
                     }

@@ -28,13 +28,20 @@ final class AppModel {
     #if canImport(DSCore)
     /// The document store behind `library` (nil when DSCore could not open).
     let core: CoreLibrary?
-    /// The server connection when `DS_SERVER_URL` is set.
-    let connection: ServerConnection?
+    /// The connection to `serverURL` (none in a local-only build without a server).
+    private(set) var connection: ServerConnection?
     #endif
-    let accounts: any AccountService
+    private(set) var accounts: any AccountService
     let sync: SyncCenter
-    let sharing: any SharingService
-    let access: any AccessService
+    private(set) var sharing: any SharingService
+    private(set) var access: any AccessService
+    /// D-49: the server this device signs in to — the one chosen on the sign-in screen (kept on
+    /// this device with the account), else the build's `DS_SERVER_URL`.
+    private(set) var serverURL: URL?
+    /// The build's server: what the «Server» field starts with.
+    let defaultServerURL: URL?
+    private static let serverKey = "account.serverURL"
+    @ObservationIgnored private let isUITesting: Bool
     let webHost: String
     let covers: CoverImages
 
@@ -77,7 +84,15 @@ final class AppModel {
         let coreLibrary: AnyObject?
         let info = bundle.infoDictionary ?? [:]
         let host = (info["DSWebHost"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "datascratch.app"
-        let server = (info["DSServerURL"] as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) }
+        let buildServer = (info["DSServerURL"] as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) }
+        // UI tests: `-ui-testing-server <url>` stands for the build's server.
+        let testServer = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["ui-testing-server"]
+            .flatMap { $0 as? String }.flatMap(URL.init(string:))
+        defaultServerURL = options.uiTesting ? testServer : buildServer
+        let stored = options.uiTesting ? nil : UserDefaults.standard.string(forKey: Self.serverKey).flatMap(URL.init(string:))
+        let server = stored ?? buildServer
+        serverURL = options.uiTesting ? testServer : server
+        isUITesting = options.uiTesting
         webHost = host
         let coverImages: CoverImages = options.uiTesting ? .temporary() : .appSupport()
         covers = coverImages
@@ -104,15 +119,11 @@ final class AppModel {
         core = coreStack
         if let server, let coreStack, !options.uiTesting {
             // An account on the Datascratch server: DSCore does auth, keys and sync.
-            let connection = ServerConnection(serverURL: server, webHost: host, core: coreStack, sync: sync,
-                                              attachmentsDirectory: coverImages.directory)
-            self.connection = connection
-            connection.onLibraryCarried = { [library] justCarried in library.mergeCarriedDuplicates(anyName: justCarried) }
-            accounts = ServerAccountService(connection: connection)
-            sharing = ServerSharingService(connection: connection)
-            access = ServerAccessService(connection: connection)
-            sync.onBackOnline = { connection.reconnect() }
-            coverImages.remote = connection
+            let side = Self.serverSide(server, webHost: host, core: coreStack, sync: sync, library: library, covers: coverImages)
+            connection = side.connection
+            accounts = side.accounts
+            sharing = side.sharing
+            access = side.access
         } else {
             connection = nil
             accounts = LocalAccountService(store: secureStore)
@@ -257,6 +268,53 @@ final class AppModel {
     func adoptRotatedRecoveryKey(_ key: RecoveryKey) {
         savedRecoveryKey = key
         isRecoveryKeyConfirmed = false
+    }
+
+    #if canImport(DSCore)
+    private static func serverSide(_ server: URL, webHost: String, core: CoreLibrary, sync: SyncCenter, library: LibraryStore,
+                                   covers: CoverImages)
+        -> (connection: ServerConnection, accounts: any AccountService, sharing: any SharingService, access: any AccessService) {
+        let connection = ServerConnection(serverURL: server, webHost: webHost, core: core, sync: sync,
+                                          attachmentsDirectory: covers.directory)
+        connection.onLibraryCarried = { [library] justCarried in library.mergeCarriedDuplicates(anyName: justCarried) }
+        sync.onBackOnline = { connection.reconnect() }
+        covers.remote = connection
+        return (connection, ServerAccountService(connection: connection), ServerSharingService(connection: connection),
+                ServerAccessService(connection: connection))
+    }
+    #endif
+
+    /// D-49: what `GET /v1/health` says about a server, before signing in to it.
+    func checkServer(_ url: URL) async throws -> ServerInfo {
+        let host = url.host() ?? ServerAddress.display(url)
+        if isUITesting {
+            // UI tests reach no server: `-ui-testing-health-ok` stands for a healthy one.
+            guard ProcessInfo.processInfo.arguments.contains("-ui-testing-health-ok") else { throw URLError(.cannotConnectToHost) }
+            return ServerInfo(host: host, version: "test")
+        }
+        #if canImport(DSCore)
+        return ServerInfo(host: host, version: try await ServerConnection.healthVersion(of: url))
+        #else
+        throw URLError(.unsupportedURL)
+        #endif
+    }
+
+    /// D-49: signing in or up on another server. Only while signed out: the account, its keys and
+    /// library belong to one server.
+    func useServer(_ url: URL) {
+        guard url != serverURL, accounts.account == nil else { return }
+        serverURL = url
+        guard !isUITesting else { return }
+        UserDefaults.standard.set(url.absoluteString, forKey: Self.serverKey)
+        sync.useServer(url)
+        #if canImport(DSCore)
+        guard let core else { return }
+        let side = Self.serverSide(url, webHost: webHost, core: core, sync: sync, library: library, covers: covers)
+        connection = side.connection
+        accounts = side.accounts
+        sharing = side.sharing
+        access = side.access
+        #endif
     }
 
     func signOut() async {

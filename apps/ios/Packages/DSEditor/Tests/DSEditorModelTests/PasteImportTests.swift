@@ -256,7 +256,7 @@ struct PasteImportTests {
         let cmd = EditorCommands(document: doc)
         let fragment = MarkdownImport.blocks("# Заголовок\n\nТекст")
         cmd.insertFragment(fragment.blocks, replacing: 0..<0)
-        #expect(doc.blocks[0].plainText == "Заголовок")
+        #expect(doc.blocks[0].plainText == "Заголовок Текст", "the title is one line: breaks become spaces")
         #expect(doc.blocks.count == 2)
     }
 
@@ -267,5 +267,38 @@ struct PasteImportTests {
         let at = Projection.build(doc.blocks).starts[1]
         cmd.insertFragment(MarkdownImport.blocks("| a | b |\n|---|---|\n| 1 | 2 |").blocks, replacing: at..<at)
         #expect(doc.blocks.map(\.type) == ["title", "table", "paragraph"])
+    }
+
+    // MARK: Agreed with web-editor (spec/04 «Вставка с форматированием»)
+
+    /// Word lists (mso-list paragraphs) with levels and markers; a checklist only when every item
+    /// has a checkbox; figcaption is the image caption; file: and cid: images are skipped; a cell
+    /// takes the alignment of its paragraphs.
+    @Test func htmlWebEditorMapping() {
+        let word = """
+        <p class=MsoListParagraphCxSpFirst style='mso-list:l0 level1 lfo1'><![if !supportLists]><span style='mso-list:Ignore'>·<span>&nbsp;&nbsp;</span></span><![endif]>Первый<o:p></o:p></p>
+        <p class=MsoListParagraphCxSpMiddle style='mso-list:l0 level2 lfo1'><span style='mso-list:Ignore'>o<span>&nbsp;</span></span>Вложенный</p>
+        <p class=MsoListParagraphCxSpLast style='mso-list:l0 level1 lfo1'><span style='mso-list:Ignore'>·</span>Второй</p>
+        <p class=MsoNormal>Обычный</p>
+        <p style='mso-list:l1 level1 lfo2'><span style='mso-list:Ignore'>1.<span>&nbsp;</span></span>Раз</p>
+        """
+        let w = HTMLImport.blocks(word).blocks
+        #expect(w.map(\.type) == ["bulletList", "paragraph", "orderedList"])
+        #expect(w[0].children.count == 2)
+        #expect(w[0].children[0].children.map(\.type) == ["paragraph", "bulletList"])
+        #expect(w[0].children[0].children[0].inline == [.text("Первый", .empty)], "Word's drawn marker is dropped")
+        #expect(w[2].children[0].children[0].inline == [.text("Раз", .empty)])
+
+        let mixed = HTMLImport.blocks("<ul><li><input type=checkbox checked>а</li><li>б</li></ul>").blocks
+        #expect(mixed.map(\.type) == ["bulletList"], "not every item has a checkbox: a plain list")
+
+        let figure = HTMLImport.blocks("<figure><img src=\"https://e.com/a.png\"><figcaption> Закат </figcaption></figure><p><img src=\"file:///C:/x.png\" alt=\"локальная\">текст</p>")
+        #expect(figure.blocks.map(\.type) == ["image", "paragraph"])
+        #expect(figure.blocks[0].attrs["caption"] == "Закат")
+        #expect(figure.blocks[1].inline == [.text("текст", .empty)], "file: images are skipped")
+
+        let table = HTMLImport.blocks("<table><tr><td><p style=\"text-align:center\">x</p></td></tr></table>").blocks
+        #expect(table[0].children[0].children[0].attrs["align"] == "center")
+        #expect(MarkdownImport.looksLikeMarkdown("Купить ==молоко== и\n- хлеб"))
     }
 }

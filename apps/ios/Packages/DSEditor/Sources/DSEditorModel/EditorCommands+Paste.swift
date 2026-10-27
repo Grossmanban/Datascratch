@@ -5,7 +5,7 @@ extension EditorCommands {
     /// «Вставка»): a leading paragraph's text continues the text before the caret, a trailing
     /// paragraph's text runs into the text after it, and the other blocks go in between, in the
     /// caret's container (a list item, a quote). In the title, a code block or a table cell only
-    /// the plain text is inserted (the title takes its first line).
+    /// the plain text is inserted (in the title on one line).
     /// - Returns: the caret after the inserted content.
     @discardableResult
     public func insertFragment(_ blocks: [BlockNode], replacing range: Range<Int>) -> TextPosition? {
@@ -18,7 +18,11 @@ extension EditorCommands {
             guard let c = caret, let node = document.block(c.block) else { return }
             if node.type == NodeType.title || node.type == NodeType.codeBlock || isInTableCell(c.block) {
                 var text = blocks.map(\.plainText).joined(separator: "\n")
-                if node.type == NodeType.title { text = text.components(separatedBy: .newlines).first { !$0.isEmpty } ?? "" }
+                if node.type == NodeType.title {
+                    // The title is one line: line breaks become spaces (as on the web).
+                    text = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+                        .filter { !$0.isEmpty }.joined(separator: " ")
+                }
                 if isInTableCell(c.block) { text = text.replacingOccurrences(of: "\n", with: " ") }
                 document.insertText(text, marks: .empty, block: c.block, at: c.offset)
                 caret = TextPosition(block: c.block, offset: c.offset + text.utf16.count)

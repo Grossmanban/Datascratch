@@ -59,6 +59,7 @@ import { createHttpClient, createSharingApi, ensureAccountKeyPair, rotateNoteboo
 const api = createSharingApi(createHttpClient({ baseUrl, accessToken: () => tokens.access() }));
 // После регистрации и при каждом входе: старые аккаунты получают пару ключей здесь же.
 const me = await ensureAccountKeyPair(api, userId, masterKey);
+// Обязательно до приглашений и до принятия приглашения: без пары сервер отвечает 409.
 ```
 
 - **Участник:** ключи общих ресурсов — `sharedItemKeys(item, { userId, secretKey })` для каждого из `api.sharedWithMe()` (`null`, пока владелец не выдал ключ); ключи заметок общего блокнота — `noteKeysFromMeta(noteMeta, notebookKeys.keys)`. Первый ключ списка — для `keyFor`, остальные — для `alternateKeysFor`. Роль `viewer` — опция `readOnly: (docId) => …` у `SyncClient` (правки и снимки не отправляются). `reconcileSharedRefs(accountDoc, items, currentSpaceId)` раскладывает «Общие со мной» и возвращает исчезнувшие ресурсы — их вкладки, избранное и локальные данные удаляет приложение.

@@ -681,8 +681,8 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       { schema: { tags: ['sharing'], security, response: { 200: z.array(sharedByMeItemSchema), ...errorResponses } } },
       async (req) => {
         const p = await requireUser(ctx, req);
-        // Everything the caller owns that has a member or a running invitation: on start the
-        // owner's client gives keys, rotates and repairs NoteMeta from it.
+        // Everything the caller owns that has a member, a running invitation or a pending key
+        // rotation: on start the owner's client gives keys, rotates and repairs NoteMeta from it.
         const res = await db.execute<{
           kind: TargetKind;
           id: string;
@@ -697,6 +697,12 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             UNION
             SELECT notebook_id, note_id FROM invitations
             WHERE owner_id = ${p.userId} AND status = 'pending' AND expires_at > now()
+            -- After the last member left the key must still change (and guest links be
+            -- re-created): a pending rotation keeps the resource listed until it is done.
+            UNION
+            SELECT id, NULL FROM notebooks WHERE user_id = ${p.userId} AND key_rotation_pending
+            UNION
+            SELECT NULL, id FROM docs WHERE user_id = ${p.userId} AND kind = 'note' AND key_rotation_pending
           )
           SELECT 'notebook' AS kind, n.id, n.key_version, n.key_rotation_pending, n.pending_since_version,
             (SELECT count(*)::int FROM members m WHERE m.notebook_id = n.id) AS members,

@@ -19,12 +19,14 @@ import type {
   SignupRequest,
   SecurityEvent,
 } from "@/lib/shared";
+import { checkedPrelogin } from "@/auth/kdfBounds";
 import { api } from "./client";
 
 const noAuth = { auth: false } as const;
 
 export const authApi = {
-  prelogin: (email: string) => api.post<PreloginResponse>("/auth/prelogin", { email }, noAuth),
+  // The KDF parameters are checked against the client bounds (crypto.md §2) before any use.
+  prelogin: async (email: string): Promise<PreloginResponse> => checkedPrelogin(await api.post<unknown>("/auth/prelogin", { email }, noAuth)),
   signup: (body: SignupRequest) => api.post<Session>("/auth/signup", body, noAuth),
   login: (email: string, loginKey: string, deviceName: string) =>
     api.post<Session>("/auth/login", { email, loginKey, deviceName }, noAuth),

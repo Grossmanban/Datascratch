@@ -18,6 +18,7 @@ import { cn } from "@/ui";
 import { Sidebar } from "./Sidebar";
 import { TabOverview } from "./TabOverview";
 import { TabStrip } from "./TabStrip";
+import { StorageFullBanner } from "./SyncIndicator";
 import { Splash } from "./Splash";
 import { useShortcuts } from "./shortcuts";
 import { features } from "@/lib/features";
@@ -178,6 +179,7 @@ export function AppShell() {
         {/* Tabs of the current space above the screen; full screen hides them like the sidebar. */}
         {features.tabs && !isMobile && !(focusKind && focused) && <TabStrip />}
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <StorageFullBanner />
           {/* A short fade when the screen changes (tabs inside a screen keep their own motion). */}
           <motion.div
             key={screenKey}

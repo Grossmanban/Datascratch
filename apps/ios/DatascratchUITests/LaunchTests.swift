@@ -1009,8 +1009,10 @@ final class LibraryUITests: XCTestCase {
         header.tap()
         XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 3), "the notebooks did not unfold")
 
+        // Folded again, so the tags fit on screen (rows of a lazy list off screen do not exist).
+        header.tap()
         let allTags = app.descendants(matching: .any)["sidebar.allTags"].firstMatch
-        if !allTags.isHittable { app.swipeUp() }
+        if !allTags.waitForExistence(timeout: 2) { app.cells.firstMatch.swipeUp() }
         XCTAssertTrue(allTags.waitForExistence(timeout: 3), "no «All Tags»")
         allTags.tap()
         let tag = app.descendants(matching: .any).matching(identifier: "allTags.tag").firstMatch

@@ -133,8 +133,9 @@ function describeGroup(group: TextStrokePlacement[]): { description: string; mar
     const offsets = p.anchors.filter((a): a is PlacedAnchor => a !== null && a.block === p.main).map((a) => a.offset);
     const text = texts.get(p.main) ?? flatten(p.main).text;
     texts.set(p.main, text);
-    const start = Math.min(...offsets);
-    const end = Math.max(...offsets) + 1;
+    // Loops: a stroke may have 100k+ anchors, too many to spread into Math.min.
+    const start = offsets.reduce((m, o) => Math.min(m, o), Infinity);
+    const end = offsets.reduce((m, o) => Math.max(m, o), -Infinity) + 1;
     const hint = hintOf(p.stroke);
     const words = clip(wordSpan(text, start, end));
     marks.push({ hint, tool: p.stroke.tool, text: words, start, end });

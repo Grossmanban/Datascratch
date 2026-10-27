@@ -1,5 +1,6 @@
 import type { Editor, Range } from "@tiptap/core";
 import type { EditorHost } from "../host";
+import { pickAndInsert } from "../uploads";
 
 export interface BlockItem {
   id: string;
@@ -44,11 +45,7 @@ export const BLOCK_ITEMS: BlockItem[] = [
     keywords: ["image", "picture", "картинка", "фото"],
     run: (e, r, host) => {
       if (r) e.chain().focus().deleteRange(r).run();
-      pickFile("image/*", async (file) => {
-        if (!host.uploadAttachment) return;
-        const a = await host.uploadAttachment(file);
-        e.chain().focus().insertImage({ attachmentId: a.attachmentId, alt: file.name }).run();
-      });
+      pickAndInsert(e, { current: host }, "image/*");
     },
   },
   {
@@ -60,11 +57,7 @@ export const BLOCK_ITEMS: BlockItem[] = [
     keywords: ["file", "pdf", "attachment", "файл"],
     run: (e, r, host) => {
       if (r) e.chain().focus().deleteRange(r).run();
-      pickFile("*/*", async (file) => {
-        if (!host.uploadAttachment) return;
-        const a = await host.uploadAttachment(file);
-        e.chain().focus().insertFile(a).run();
-      });
+      pickAndInsert(e, { current: host }, "*/*");
     },
   },
   {
@@ -81,17 +74,6 @@ export const BLOCK_ITEMS: BlockItem[] = [
   },
   { id: "link", title: "Ссылка на заметку", hint: "[[ ]]", icon: "↗", group: "Связи", keywords: ["link", "note", "ссылка", "[["], shortcut: "[[", run: (e, r) => chainAt(e, r).insertContent("[[").run() },
 ];
-
-function pickFile(accept: string, onFile: (f: File) => void) {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = accept;
-  input.onchange = () => {
-    const f = input.files?.[0];
-    if (f) onFile(f);
-  };
-  input.click();
-}
 
 export function filterBlocks(query: string, host: EditorHost): BlockItem[] {
   const q = query.trim().toLowerCase();

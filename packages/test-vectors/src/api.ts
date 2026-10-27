@@ -1,3 +1,8 @@
+import {
+  DEVICE_REVOKED_REASONS,
+  SYNC_CLOSE_DEVICE_REVOKED,
+  classifyApiFailure,
+} from "@datascratch/shared/contracts";
 import { vid } from "./util.js";
 
 const ID = vid(1);
@@ -242,8 +247,18 @@ export function apiVectors() {
         ],
       },
       apiError: {
-        valid: [{ error: { code: "conflict", message: "id exists with different content" } }],
-        invalid: [{ reason: "unknown code", body: { error: { code: "teapot", message: "" } } }],
+        valid: [
+          { error: { code: "conflict", message: "id exists with different content" } },
+          { error: { code: "device_revoked", message: "device revoked", reason: "user" } },
+          { error: { code: "rate_limited", message: "slow down", retryAfterMs: 5000 } },
+        ],
+        invalid: [
+          { reason: "unknown code", body: { error: { code: "teapot", message: "" } } },
+          {
+            reason: "unknown revocation reason",
+            body: { error: { code: "device_revoked", message: "", reason: "bored" } },
+          },
+        ],
       },
     };
   return {
@@ -252,5 +267,51 @@ export function apiVectors() {
         "REST bodies (api.md v1): every `valid` body must be accepted and every `invalid` one rejected by the schema of the same name (TS: `<name>Schema` in @datascratch/shared/contracts). Unknown extra fields are ignored.",
       cases,
     },
+    "api/failures.json": failureVectors(),
+  };
+}
+
+/** How a client classifies REST failures (D-53): only a revocation wipes data. */
+function failureVectors() {
+  const revoked = (reason: string) => ({
+    error: { code: "device_revoked", message: "device revoked", reason },
+  });
+  const inputs: { name: string; status: number | null; body: unknown }[] = [
+    ...DEVICE_REVOKED_REASONS.map((r) => ({
+      name: `revoked: ${r}`,
+      status: 401,
+      body: revoked(r),
+    })),
+    { name: "revoked body as raw text", status: 401, body: JSON.stringify(revoked("recovery")) },
+    {
+      name: "expired access token",
+      status: 401,
+      body: { error: { code: "unauthorized", message: "token expired" } },
+    },
+    {
+      name: "device_revoked without reason → reason user",
+      status: 401,
+      body: { error: { code: "device_revoked", message: "x" } },
+    },
+    { name: "unknown (newer) reason → reason user", status: 401, body: revoked("bored") },
+    { name: "device_revoked on a non-401 is not a wipe", status: 403, body: revoked("user") },
+    { name: "proxy 401 page", status: 401, body: "<html>401 Unauthorized</html>" },
+    { name: "no response (offline, timeout)", status: null, body: null },
+    { name: "gateway error page", status: 502, body: "<html>Bad Gateway</html>" },
+    { name: "gateway timeout, empty", status: 504, body: "" },
+    {
+      name: "server error with body",
+      status: 503,
+      body: { error: { code: "internal", message: "maintenance" } },
+    },
+    { name: "conflict", status: 409, body: { error: { code: "conflict", message: "exists" } } },
+    { name: "non-JSON 500", status: 500, body: "oops" },
+  ];
+  return {
+    description:
+      'REST failure classification (D-53, api.md; TS: classifyApiFailure). `status: null` = no HTTP response. `body` is parsed JSON or raw text (a string is JSON-parsed first; unparsable → no error body). A 401 with `error.code: "device_revoked"` is a revocation whatever its reason (unknown/absent → "user"); only it wipes local data; `unauthorized` → refresh the token; `network` → retry later. `syncCloseDeviceRevoked` is the WebSocket close code with the same meaning (close reason = revocation reason; unknown/absent → "user").',
+    reasons: [...DEVICE_REVOKED_REASONS],
+    syncCloseDeviceRevoked: SYNC_CLOSE_DEVICE_REVOKED,
+    cases: inputs.map((c) => ({ ...c, expected: classifyApiFailure(c.status, c.body) })),
   };
 }

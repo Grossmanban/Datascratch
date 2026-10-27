@@ -10,6 +10,7 @@ import {
   MAX_UPDATE_BYTES,
   SNAPSHOT_THRESHOLD_BYTES,
   SNAPSHOT_THRESHOLD_UPDATES,
+  SYNC_CLOSE_DEVICE_REVOKED,
   SYNC_PROTOCOL_VERSION,
   parseServerMessage,
   type ClientMessage,
@@ -18,6 +19,7 @@ import {
   type SyncAuth,
   type SyncErrorCode,
 } from "../contracts/sync.js";
+import { deviceRevokedReasonSchema, type DeviceRevokedReason } from "../contracts/api.js";
 import { fromBase64Url, toBase64Url } from "../crypto/base64url.js";
 import {
   decryptAwareness,
@@ -50,7 +52,12 @@ export type WebSocketFactory = (url: string) => WebSocketLike;
 
 const WS_OPEN = 1;
 
-export type SyncStatus = "idle" | "connecting" | "online" | "offline" | "unauthorized" | "stopped";
+/**
+ * `revoked`: this device was disconnected from the account (D-53); the client
+ * stopped for good and the app must wipe local data (see `deviceRevoked`).
+ */
+export type SyncStatus =
+  "idle" | "connecting" | "online" | "offline" | "unauthorized" | "stopped" | "revoked";
 
 export interface SyncClientError {
   code:
@@ -146,6 +153,13 @@ export interface SkippedUpdate {
 interface Listeners {
   status: (status: SyncStatus) => void;
   /**
+   * The server revoked this device (D-53). Fired once; the client has stopped
+   * and sends nothing more, the outbox included. The app wipes ALL local data
+   * and asks to sign in again. Never fired for an expired token or a network
+   * failure.
+   */
+  deviceRevoked: (reason: DeviceRevokedReason) => void;
+  /**
    * Outbox storage failed (`ok: false`, e.g. quota exceeded — show «хранилище
    * заполнено») or works again (`ok: true`). Edits are kept in memory meanwhile.
    */
@@ -208,6 +222,7 @@ export class SyncClient {
   private readonly docs = new Map<string, DocEntry>();
   private readonly listeners: { [K in keyof Listeners]: Set<Listeners[K]> } = {
     status: new Set(),
+    deviceRevoked: new Set(),
     synced: new Set(),
     error: new Set(),
     awareness: new Set(),
@@ -262,7 +277,7 @@ export class SyncClient {
 
   /** Start connecting (and keep reconnecting until stop()). */
   start(): void {
-    if (this.running) return;
+    if (this.running || this._status === "revoked") return;
     this.running = true;
     this.attempt = 0;
     this.authFailures = 0;
@@ -290,8 +305,30 @@ export class SyncClient {
     await this.flushStates();
   }
 
+  /** Stop for good after a revocation (D-53) and tell the app once. */
+  private revoke(reason: DeviceRevokedReason): void {
+    if (this._status === "revoked") return;
+    this.running = false;
+    this.clearReconnect();
+    if (this.stableTimer) clearTimeout(this.stableTimer);
+    this.stableTimer = null;
+    if (this.resendTimer) clearTimeout(this.resendTimer);
+    this.resendTimer = null;
+    const s = this.socket;
+    this.socket = null;
+    this.welcomed = false;
+    if (s) {
+      s.onclose = null;
+      s.close(1000, "device revoked");
+    }
+    this.setStatus("revoked");
+    for (const fn of this.listeners.deviceRevoked) fn(reason);
+  }
+
   /** Reconnect now (e.g. the OS reports the network is back, or after re-login). */
   reconnect(): void {
+    // A revoked device must sign in again; the app creates a new client after wiping.
+    if (this._status === "revoked") return;
     this.running = true;
     this.attempt = 0;
     this.authFailures = 0;
@@ -613,8 +650,13 @@ export class SyncClient {
       }
       void this.serial(() => this.handle(msg));
     };
-    socket.onclose = () => {
+    socket.onclose = (ev) => {
       if (socket !== this.socket) return;
+      if (ev?.code === SYNC_CLOSE_DEVICE_REVOKED) {
+        const reason = deviceRevokedReasonSchema.safeParse(ev.reason);
+        this.revoke(reason.success ? reason.data : "user");
+        return;
+      }
       this.socket = null;
       this.welcomed = false;
       if (this.stableTimer) clearTimeout(this.stableTimer);
@@ -623,7 +665,12 @@ export class SyncClient {
         entry.synced = false;
         entry.snapshotInFlight = null;
       }
-      if (this.running && this._status !== "unauthorized" && this._status !== "stopped") {
+      if (
+        this.running &&
+        this._status !== "unauthorized" &&
+        this._status !== "stopped" &&
+        this._status !== "revoked"
+      ) {
         this.setStatus("offline");
         this.scheduleReconnect();
       }
@@ -915,6 +962,10 @@ export class SyncClient {
         return;
       }
       case "error":
+        if (msg.code === "device_revoked") {
+          this.revoke(msg.reason ?? "user");
+          return;
+        }
         await this.handleError(msg.code, msg.message, msg.ref, msg.retryAfterMs);
         return;
     }

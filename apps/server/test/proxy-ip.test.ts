@@ -55,7 +55,10 @@ describe('rate limit answer', () => {
         });
       }
       expect(last!.statusCode).toBe(429);
-      expect(JSON.parse(last!.body)).toMatchObject({ error: { code: 'rate_limited' } });
+      const body = JSON.parse(last!.body);
+      expect(body).toMatchObject({ error: { code: 'rate_limited' } });
+      expect(body.error.retryAfterMs).toBeGreaterThan(0);
+      expect(body.error.retryAfterMs).toBeLessThanOrEqual(60_000);
     } finally {
       await t.close();
     }

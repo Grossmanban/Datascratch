@@ -22,18 +22,31 @@ protocol CoreLibraryRemote: AnyObject {
     func noteKeysLearned()
 }
 
-/// `NoteMeta.wrappedKey` by note id, readable from the sync engine's actor.
+/// A note's key fields of `NoteMeta` (wrapped key, key version and chain, D-54) by note id,
+/// readable from the sync engine's actor.
 nonisolated final class WrappedKeyIndex: @unchecked Sendable {
+    private struct Entry: Equatable {
+        var notebookId: String
+        var wrapped: String
+        var keyVersion: Int
+        var keyChain: [String]
+    }
+
     private let lock = NSLock()
-    private var keys: [String: (notebookId: String, wrapped: String)] = [:]
+    private var keys: [String: Entry] = [:]
     private var changed = false
 
-    func set(noteId: String, notebookId: String, wrapped: String) {
+    func set(noteId: String, notebookId: String, wrapped: String, keyVersion: Int = 1, keyChain: [String] = []) {
+        let entry = Entry(notebookId: notebookId, wrapped: wrapped, keyVersion: keyVersion, keyChain: keyChain)
         lock.withLock {
-            guard keys[noteId]?.notebookId != notebookId || keys[noteId]?.wrapped != wrapped else { return }
-            keys[noteId] = (notebookId, wrapped)
+            guard keys[noteId] != entry else { return }
+            keys[noteId] = entry
             changed = true
         }
+    }
+
+    func set(_ meta: DSCore.NoteMeta, notebookId: String) {
+        set(noteId: meta.id, notebookId: notebookId, wrapped: meta.wrappedKey, keyVersion: meta.keyVersion, keyChain: meta.keyChain)
     }
 
     /// Whether a key was added or replaced since the last call.
@@ -42,7 +55,16 @@ nonisolated final class WrappedKeyIndex: @unchecked Sendable {
     }
 
     func wrapped(noteId: String, notebookId: String) -> String? {
-        lock.withLock { keys[noteId].flatMap { $0.notebookId == notebookId ? $0.wrapped : nil } }
+        meta(noteId: noteId, notebookId: notebookId)?.wrappedKey
+    }
+
+    /// Enough of the `NoteMeta` to open the note: `KeyRing.noteKey(_:notebookId:)`.
+    func meta(noteId: String, notebookId: String) -> DSCore.NoteMeta? {
+        guard let entry = lock.withLock({ keys[noteId] }), entry.notebookId == notebookId else { return nil }
+        var meta = DSCore.NoteMeta(id: noteId, wrappedKey: entry.wrapped)
+        meta.keyVersion = entry.keyVersion
+        meta.keyChain = entry.keyChain
+        return meta
     }
 }
 
@@ -359,7 +381,10 @@ final class CoreLibrary: LibraryBackend {
             guard let key = (try? keys.notebookKey(ref.id)) ?? nil, let notebook = try? notebookDocument(ref.id) else { continue }
             for meta in notebook.notes(includeTrashed: true) {
                 if let wrapped = DSCore.Base64URL.decode(meta.wrappedKey),
-                   (try? DSCrypto.unwrapKey(wrapped, with: key, ad: CryptoAD.noteKey(meta.id))) != nil { continue }
+                   (try? DSCrypto.unwrapKey(wrapped, with: key, ad: meta.wrappedKeyAD)) != nil { continue }
+                // Wrapped under an earlier key of a shared notebook: its rotation re-keys it (D-54).
+                if meta.keyVersion > 1 || !keys.retiredNotebookKeys(ref.id).isEmpty,
+                   (try? keys.noteKey(meta, notebookId: ref.id)) != nil { continue }
                 guard let updates = try? store.updates(docId: meta.id), !updates.isEmpty,
                       let wrapped = try? keys.createNoteKey(noteId: meta.id, notebookId: ref.id).wrappedKey else { continue }
                 try? notebook.updateNote(id: meta.id, ["wrappedKey": .string(value: wrapped)])
@@ -461,8 +486,8 @@ final class CoreLibrary: LibraryBackend {
             return try keys.notebookKey(target.id)
         case .note:
             guard let notebookId = notebookIdOfNote[target.id],
-                  let wrapped = wrappedKeys.wrapped(noteId: target.id, notebookId: notebookId) else { return nil }
-            return try keys.noteKey(noteId: target.id, wrappedKey: wrapped, notebookId: notebookId)
+                  let meta = wrappedKeys.meta(noteId: target.id, notebookId: notebookId) else { return nil }
+            return try keys.noteKey(meta, notebookId: notebookId)
         }
     }
 
@@ -511,7 +536,7 @@ final class CoreLibrary: LibraryBackend {
     }
 
     private func snapshotNote(_ meta: DSCore.NoteMeta, notebookId: String) -> (NoteMeta, NoteBody)? {
-        wrappedKeys.set(noteId: meta.id, notebookId: notebookId, wrapped: meta.wrappedKey)
+        wrappedKeys.set(meta, notebookId: notebookId)
         guard let note = try? noteDocument(meta.id, notebookId: notebookId) else { return nil }
         let body = NoteBodyCodec.body(from: (try? note.blocks()) ?? [])
         var item = NoteMeta(id: meta.id, notebookId: notebookId, folderId: meta.folderId, parentNoteId: meta.parentNoteId,
@@ -696,14 +721,19 @@ final class CoreLibrary: LibraryBackend {
     private func moveNote(_ meta: NoteMeta, from oldNotebookId: String) throws {
         let source = try notebookDocument(oldNotebookId)
         guard let oldMeta = source.note(id: meta.id) else { return }
-        let noteKey = try keys.noteKey(noteId: meta.id, wrappedKey: oldMeta.wrappedKey, notebookId: oldNotebookId)
+        let noteKey = try keys.noteKey(oldMeta, notebookId: oldNotebookId)
         guard let targetKey = try keys.notebookKey(meta.notebookId) else { throw DSCore.AccountError.missingKey(meta.notebookId) }
-        let wrapped = try DSCrypto.wrapKey(noteKey, with: targetKey, ad: CryptoAD.noteKey(meta.id))
+        let wrapped = try DSCrypto.wrapKey(noteKey, with: targetKey, ad: oldMeta.wrappedKeyAD)
         try source.purgeNote(id: meta.id)
         let encoded = DSCore.Base64URL.encode(wrapped)
-        wrappedKeys.set(noteId: meta.id, notebookId: meta.notebookId, wrapped: encoded)
+        wrappedKeys.set(noteId: meta.id, notebookId: meta.notebookId, wrapped: encoded,
+                        keyVersion: oldMeta.keyVersion, keyChain: oldMeta.keyChain)
         notebookIdOfNote[meta.id] = meta.notebookId
-        try notebookDocument(meta.notebookId).putNote(coreMeta(meta, wrappedKey: encoded))
+        // The key keeps its version and chain (D-54): only the wrapping notebook key changes.
+        var moved = coreMeta(meta, wrappedKey: encoded)
+        moved.keyVersion = oldMeta.keyVersion
+        moved.keyChain = oldMeta.keyChain
+        try notebookDocument(meta.notebookId).putNote(moved)
         _ = try store.ensureDocument(docId: meta.id, kind: .note, notebookId: meta.notebookId)
         // The record follows the note (registration, search, tasks), and the server is told.
         try store.setNotebook(meta.id, notebookId: meta.notebookId)

@@ -62,7 +62,6 @@ jobs:
       TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
       DS_WEB_HOST: ${{ vars.DS_WEB_HOST || 'datascratch.app' }}
-      DS_SERVER_URL: ${{ vars.DS_SERVER_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -154,7 +153,6 @@ jobs:
             DS_TEAM_ID="$TEAM_ID" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             DS_WEB_HOST="$DS_WEB_HOST" \
-            DS_SERVER_URL="$DS_SERVER_URL" \
             | xcbeautify --renderer github-actions
 
       - name: Export and upload to TestFlight

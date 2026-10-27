@@ -36,8 +36,7 @@ final class AppModel {
     private(set) var sharing: any SharingService
     private(set) var access: any AccessService
     /// D-49: the server this device signs in to — only one the person typed, got in an invite
-    /// link, or signed in to earlier on this device. The build's `DS_SERVER_URL` is never shown
-    /// (amendment 2026-10-27); it only keeps an install that signed in before D-49 working.
+    /// link, or signed in to earlier on this device. No address is built into the app.
     private(set) var serverURL: URL?
     private static let serverKey = "account.serverURL"
     @ObservationIgnored private let isUITesting: Bool
@@ -83,12 +82,11 @@ final class AppModel {
         let coreLibrary: AnyObject?
         let info = bundle.infoDictionary ?? [:]
         let host = (info["DSWebHost"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "datascratch.app"
-        let buildServer = (info["DSServerURL"] as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) }
         // UI tests: `-ui-testing-server <url>` stands for a server saved on this device.
         let testServer = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["ui-testing-server"]
             .flatMap { $0 as? String }.flatMap(URL.init(string:))
         let stored = options.uiTesting ? nil : UserDefaults.standard.string(forKey: Self.serverKey).flatMap(URL.init(string:))
-        var server = stored
+        let server = stored
         isUITesting = options.uiTesting
         webHost = host
         let coverImages: CoverImages = options.uiTesting ? .temporary() : .appSupport()
@@ -109,10 +107,6 @@ final class AppModel {
             let made = Self.makeLibrary(inMemory: false)
             library = made.0
             coreLibrary = made.1
-            if server == nil, let buildServer, Self.signedInBeforeServerField(made.1) {
-                server = buildServer
-                UserDefaults.standard.set(buildServer.absoluteString, forKey: Self.serverKey)
-            }
             sync = SyncCenter(serverURL: server)
         }
         serverURL = options.uiTesting ? testServer : server
@@ -285,20 +279,6 @@ final class AppModel {
     func adoptRotatedRecoveryKey(_ key: RecoveryKey) {
         savedRecoveryKey = key
         isRecoveryKeyConfirmed = false
-    }
-
-    /// An install signed in (or signed out by the server) before the «Server» field existed used
-    /// the build's server without saving it: that sign-in is this device's, so it stays.
-    static func signedInBeforeServerField(_ core: AnyObject?) -> Bool {
-        #if canImport(DSCore)
-        guard let core = core as? CoreLibrary else { return false }
-        return [ServerAccountService.emailKey, ServerAccountService.sessionEndedKey].contains { key in
-            guard let value = try? core.store.string(key) else { return false }
-            return !value.isEmpty
-        }
-        #else
-        return false
-        #endif
     }
 
     /// UI tests with no `-ui-testing-server`: accounts stay on the device, no server is asked for.

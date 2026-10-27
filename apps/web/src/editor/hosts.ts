@@ -39,9 +39,11 @@ export function ownerEditorHost(noteId: string, nav: Nav): EditorHost {
       const k = await key();
       return k ? attachmentUrl(id, k).catch(() => null) : null;
     },
-    // `opts.onProgress` (0…1) feeds the editor's upload placeholder while the file is encrypted; a
+    // `onProgress` (0…1) feeds the editor's upload placeholder while the file is encrypted; a
     // rejection lets the editor offer «Повторить» (it calls this again with the same file).
-    uploadAttachment: (file: File, opts?: { onProgress?: (fraction: number) => void }) => uploadNoteFile(noteId, file, opts?.onProgress),
+    // web-editor passes the callback itself (39687ca3); an { onProgress } object is accepted too.
+    uploadAttachment: (file: File, progress?: ((done: number) => void) | { onProgress?: (done: number) => void }) =>
+      uploadNoteFile(noteId, file, typeof progress === "function" ? progress : progress?.onProgress),
     onOpenAttachment: async ({ attachmentId }) => {
       const k = await key();
       if (k) window.open(await attachmentUrl(attachmentId, k), "_blank", "noopener");

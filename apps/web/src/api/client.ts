@@ -42,6 +42,8 @@ type RequestOptions = {
    * server had already closed, and reports «Load failed».
    */
   retry?: boolean;
+  /** Response timeout instead of the default (for a request the server itself works on a while). */
+  timeoutMs?: number;
 };
 
 /**
@@ -104,7 +106,7 @@ async function fetchOnce(method: string, path: string, opts: RequestOptions, acc
   const controller = new AbortController();
   const onAbort = () => controller.abort(opts.signal?.reason);
   opts.signal?.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(() => controller.abort(new TimeoutError()), opts.body instanceof Uint8Array ? UPLOAD_TIMEOUT_MS : RESPONSE_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(new TimeoutError()), opts.timeoutMs ?? (opts.body instanceof Uint8Array ? UPLOAD_TIMEOUT_MS : RESPONSE_TIMEOUT_MS));
   try {
     return await fetch(`${apiBase()}${path}`, {
       method,
@@ -137,7 +139,8 @@ async function toError(res: Response): Promise<ApiError> {
   }
 }
 
-export async function request<T>(method: string, path: string, opts: RequestOptions = {}): Promise<T> {
+/** An API request with the session (refreshed as needed); the response is returned as is, whatever its status. */
+export async function requestResponse(method: string, path: string, opts: RequestOptions = {}): Promise<Response> {
   const auth = opts.auth ?? true;
   let session = auth ? tokens?.get() ?? null : null;
   if (auth && session && Date.parse(session.accessExpiresAt) - Date.now() < 30_000) {
@@ -148,6 +151,11 @@ export async function request<T>(method: string, path: string, opts: RequestOpti
     const refreshed = await tokens.refresh();
     if (refreshed) res = await doFetch(method, path, opts, refreshed.accessToken);
   }
+  return res;
+}
+
+export async function request<T>(method: string, path: string, opts: RequestOptions = {}): Promise<T> {
+  const res = await requestResponse(method, path, opts);
   if (!res.ok) throw await toError(res);
   if (opts.raw) return (await res.arrayBuffer()) as T;
   if (res.status === 204) return undefined as T;

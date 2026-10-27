@@ -984,10 +984,10 @@
     "semantic_hash": "b94b2bdac92ca48dff93f0062e8f0b7a"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1793095969.4199965,
-    "seen": 1793097603.6010118,
-    "ast_hash": "b6e346950a6b498fa8932bd2249b2fa1",
-    "semantic_hash": "b6e346950a6b498fa8932bd2249b2fa1"
+    "mtime": 1793108611.074149,
+    "seen": 1793108839.9940658,
+    "ast_hash": "3e821fbeab3e2383970119c515bc395d",
+    "semantic_hash": "3e821fbeab3e2383970119c515bc395d"
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
     "mtime": 1793011608.2055936,
@@ -996,10 +996,10 @@
     "semantic_hash": "95bd84c3f7d3a94fa4ac6fe5d935d841"
   },
   "apps/ios/Packages/DSEditor/Package.swift": {
-    "mtime": 1792931319.7113512,
-    "seen": 1793087019.41713,
-    "ast_hash": "e88e343d62997e44734ee38cddeb85d8",
-    "semantic_hash": "e88e343d62997e44734ee38cddeb85d8"
+    "mtime": 1793108549.3746357,
+    "seen": 1793108839.9940712,
+    "ast_hash": "8423617bbd72c9528dd5cb0d586e510e",
+    "semantic_hash": "8423617bbd72c9528dd5cb0d586e510e"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/AgentEditsBanner.swift": {
     "mtime": 1793005247.0234547,
@@ -1104,16 +1104,16 @@
     "semantic_hash": "f437ed22533045b8ea5e09610c65246d"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/MermaidRenderer.swift": {
-    "mtime": 1793037326.3084438,
-    "seen": 1793087019.4171817,
-    "ast_hash": "9b1f92a09ff68f50d5aeca2eec544b8c",
-    "semantic_hash": "9b1f92a09ff68f50d5aeca2eec544b8c"
+    "mtime": 1793108549.3736696,
+    "seen": 1793108839.9941075,
+    "ast_hash": "48d62337c6f2adea3297e6764809e303",
+    "semantic_hash": "48d62337c6f2adea3297e6764809e303"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/Resources/mermaid.min.js": {
-    "mtime": 1792929109.6571202,
-    "seen": 1793087019.417184,
-    "ast_hash": "def493e96e3915c5dd101c4395d72dfa",
-    "semantic_hash": "def493e96e3915c5dd101c4395d72dfa"
+    "mtime": 1793108549.3876746,
+    "seen": 1793108839.9941094,
+    "ast_hash": "a7356d5ed14359059683bd4be1a82cf3",
+    "semantic_hash": "a7356d5ed14359059683bd4be1a82cf3"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/Signposts.swift": {
     "mtime": 1792973920.4548624,
@@ -4248,8 +4248,8 @@
     "semantic_hash": "af7e430534b621b3d0edb53fc0a3488d"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/Resources/mermaid-LICENSE.txt": {
-    "mtime": 1792929109.659992,
-    "seen": 1793087226.6105537,
+    "mtime": 1793108549.3916748,
+    "seen": 1793108755.1647515,
     "ast_hash": "c06d54b935c5ea2158444a214eebef04",
     "semantic_hash": "c06d54b935c5ea2158444a214eebef04"
   },
@@ -4710,10 +4710,10 @@
     "semantic_hash": "7de253f465da0a90057780f1b151d4db"
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1793095992.374011,
-    "seen": 1793097603.6025167,
-    "ast_hash": "0fb6711f951d3a1105f42832dbf10713",
-    "semantic_hash": "0fb6711f951d3a1105f42832dbf10713"
+    "mtime": 1793108636.7560637,
+    "seen": 1793108839.9951205,
+    "ast_hash": "1c6f4559db26df6181e8f1d020743d5e",
+    "semantic_hash": "1c6f4559db26df6181e8f1d020743d5e"
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1793084705.4194863,
@@ -5344,5 +5344,11 @@
     "seen": 1793090464.0310524,
     "ast_hash": "3c2f25f145c237e490941955016a9a1c",
     "semantic_hash": "3c2f25f145c237e490941955016a9a1c"
+  },
+  "apps/ios/Packages/DSEditor/Sources/DSEditor/Resources/README.md": {
+    "mtime": 1793108549.4049222,
+    "seen": 1793108839.995118,
+    "ast_hash": "0d5e79f56f8a80205cf177657e274be2",
+    "semantic_hash": "0d5e79f56f8a80205cf177657e274be2"
   }
 }

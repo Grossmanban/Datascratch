@@ -166,6 +166,7 @@ export const Document: Story = () => {
           tools={["pen", "pencil", "marker", "highlighter", "eraser", "lasso"]}
           collapsed={collapsed}
           onCollapsedChange={setCollapsed}
+          onInsertImage={() => {}}
         />
       </div>
     </div>

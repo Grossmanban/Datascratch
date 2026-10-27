@@ -355,6 +355,12 @@ struct HUDView: View {
             Text(linkCentres)
                 .accessibilityIdentifier("hud.links")
                 .opacity(0.01)
+            // UI tests print this when they fail (the unified log keeps its arguments compressed).
+            TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+                Text(EditorDiagnostics.recent.joined(separator: " | "))
+                    .accessibilityIdentifier("hud.diag")
+                    .opacity(0.01)
+            }
         }
         .font(.caption.monospacedDigit())
         .padding(8)

@@ -128,6 +128,13 @@ final class EditorDemoUITests: XCTestCase {
         return false
     }
 
+    /// The demo HUD's last editor diagnostics, for failure messages (`-hud` launches).
+    @MainActor
+    private func diagnostics(_ app: XCUIApplication) -> String {
+        let e = app.descendants(matching: .any)["hud.diag"]
+        return e.exists ? "diag: " + e.label : "diag: (HUD not found)"
+    }
+
     /// A real touch at the centre of an element's frame (not an accessibility activation).
     @MainActor
     private func touch(_ element: XCUIElement, in app: XCUIApplication) {
@@ -151,7 +158,7 @@ final class EditorDemoUITests: XCTestCase {
         XCTAssertTrue(scrollIntoView(chip, in: editor), "the note link chip is on screen and accessible")
         touch(chip, in: app)
         let opened = app.alerts["Открыть «Идеи»"]
-        XCTAssertTrue(opened.waitForExistence(timeout: 10), "the chip opens its note")
+        XCTAssertTrue(opened.waitForExistence(timeout: 10), "the chip opens its note; \(diagnostics(app))")
         XCTAssertEqual(app.keyboards.count, 0, "the tap opened the link instead of starting to type")
         opened.buttons["OK"].tap()
 
@@ -159,7 +166,7 @@ final class EditorDemoUITests: XCTestCase {
         XCTAssertTrue(scrollIntoView(title, in: editor), "the [[Title]] link is on screen and accessible")
         touch(title, in: app)
         XCTAssertTrue(app.alerts["Заметки «Новая заметка» нет"].waitForExistence(timeout: 10),
-                      "a missing [[Title]] offers to create the note")
+                      "a missing [[Title]] offers to create the note; \(diagnostics(app))")
         XCTAssertEqual(app.state, .runningForeground)
     }
 
@@ -179,7 +186,7 @@ final class EditorDemoUITests: XCTestCase {
         // The edit menu may page its items: the first ones are always shown.
         let menuItem = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label IN {'Сегодня', 'Завтра', 'След. неделя', 'Дата…'}")).firstMatch
-        XCTAssertTrue(menuItem.waitForExistence(timeout: 10), "the reschedule menu opens")
+        XCTAssertTrue(menuItem.waitForExistence(timeout: 10), "the reschedule menu opens; \(diagnostics(app))")
         XCTAssertEqual(app.keyboards.count, 0, "the tap opened the menu instead of starting to type")
         XCTAssertEqual(app.state, .runningForeground)
     }

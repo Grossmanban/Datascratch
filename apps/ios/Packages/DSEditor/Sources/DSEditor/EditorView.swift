@@ -1357,6 +1357,7 @@ public final class EditorView: UIView {
             // still dispatching this touch crashes its gesture environment (`_delayTouchesForEvent`).
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
+                EditorDiagnostics.log("link handler runs (window \(self.window != nil))")
                 switch link {
                 case .id(let id): self.onOpenNote?(id)
                 case .title(let title): self.onOpenNoteTitled?(title)
@@ -1371,6 +1372,7 @@ public final class EditorView: UIView {
             // Next turn, for the same reason as links above: the menu's own recognizers must not
             // join a touch UIKit is still delivering.
             DispatchQueue.main.async { [weak self] in
+                EditorDiagnostics.log("presenting date menu (editor \(self != nil), first responder \(self?.textView.isFirstResponder ?? false))")
                 self?.editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: "taskDate",
                                                                              sourcePoint: CGPoint(x: chip.rect.midX, y: chip.rect.minY)))
             }
@@ -1902,6 +1904,16 @@ final class TaskDatePickerController: UIViewController {
 }
 
 extension EditorView: @preconcurrency UIEditMenuInteractionDelegate {
+    public func editMenuInteraction(_ interaction: UIEditMenuInteraction, willPresentMenuFor configuration: UIEditMenuConfiguration,
+                                    animator: any UIEditMenuInteractionAnimating) {
+        EditorDiagnostics.log("edit menu will present \(configuration.identifier)")
+    }
+
+    public func editMenuInteraction(_ interaction: UIEditMenuInteraction, willDismissMenuFor configuration: UIEditMenuConfiguration,
+                                    animator: any UIEditMenuInteractionAnimating) {
+        EditorDiagnostics.log("edit menu will dismiss \(configuration.identifier)")
+    }
+
     public func editMenuInteraction(_ interaction: UIEditMenuInteraction, menuFor configuration: UIEditMenuConfiguration,
                                     suggestedActions: [UIMenuElement]) -> UIMenu? {
         if configuration.identifier as? String == "taskDate" { return dateMenu() }

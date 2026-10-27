@@ -24,11 +24,18 @@ test("menu rows: icon | name | ✓ on one line, the check right-aligned and cent
     await page.getByTestId("space-switcher").click();
     const menu = page.getByRole("menu");
     await expect(menu).toBeVisible();
+    // Measure once the opening animation (scale + fade) has finished: boxes taken mid-animation are
+    // a few pixels off and made this test flaky on a busy machine.
+    await page.waitForFunction(() => {
+      const m = document.querySelector('[role="menu"]');
+      return !!m && m.getAnimations({ subtree: true }).every((a) => a.playState === "finished");
+    });
     const checked = menu.getByRole("menuitem").filter({ has: page.locator("[data-menu-trailing] svg:not(.invisible)") });
     await expect(checked).toHaveCount(1);
     const row = (await checked.boundingBox())!;
     const check = (await checked.locator("[data-menu-trailing] svg").boundingBox())!;
     const name = (await checked.locator("[data-menu-label]").boundingBox())!;
+    const lineHeight = await checked.locator("[data-menu-label]").evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
     // Same line, vertically centred, on the right of the name, inside the row.
     expect(Math.abs(check.y + check.height / 2 - (row.y + row.height / 2))).toBeLessThan(3);
     expect(Math.abs(name.y + name.height / 2 - (row.y + row.height / 2))).toBeLessThan(3);
@@ -41,7 +48,7 @@ test("menu rows: icon | name | ✓ on one line, the check right-aligned and cent
     expect(Math.abs(plainName.x - name.x)).toBeLessThan(3);
     await page.keyboard.press("Escape");
     await expect(menu).toHaveCount(0);
-    // The ellipsis keeps the long name on one line.
-    expect(name.height).toBeLessThan(24);
+    // The ellipsis keeps the long name on one line (callout: 16/24 px).
+    expect(name.height).toBeLessThanOrEqual(lineHeight + 0.5);
   }
 });

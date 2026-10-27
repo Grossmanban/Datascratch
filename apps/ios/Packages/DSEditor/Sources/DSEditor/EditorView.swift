@@ -47,6 +47,12 @@ public final class EditorView: UIView {
     /// typed "/query" is removed first, then this is called with the entry's id. Nil: those
     /// entries are not offered.
     public var onHostSlashCommand: ((String) -> Void)?
+    /// Images inside a rich paste (a web page, Notes, Mail, Word, Markdown): the host stores each
+    /// and returns its attachment id at once, before any upload or download, then calls
+    /// `imageDidLoad` when the bytes are there or `imageFailed` when a download fails. Nil for an
+    /// image skips it (an address stays as a link to it). Without a handler, addresses become
+    /// links and embedded images are dropped.
+    public var onPastedImages: (([PastedImage]) -> [String?])?
     /// Shows "Посмотреть историю" in the agent-edits banner when set.
     public var onShowHistory: (() -> Void)? {
         didSet { agentBanner.onShowHistory = onShowHistory }
@@ -267,7 +273,10 @@ public final class EditorView: UIView {
         textView.addGestureRecognizer(tap)
         textView.editorTap = tap
         textView.tapTargetAt = { [weak self] point in self?.hasTapTarget(at: point) ?? false }
+        textView.allowsSystemScroll = { [weak self] in self?.userIsInteracting ?? true }
         textView.textDropDelegate = self
+        textView.richPaste = { [weak self] in self?.pasteRich() ?? false }
+        textView.plainPaste = { [weak self] in self?.pastePlainText() }
         factory.imageMenu = { [weak self] block in self?.menu(forImage: block) }
         factory.imageResized = { [weak self] block, fraction in self?.setImageWidth(block, fraction: fraction) }
         factory.imageActivated = { [weak self] block, view in
@@ -401,7 +410,13 @@ public final class EditorView: UIView {
 
     public override func layoutSubviews() {
         super.layoutSubviews()
+        let shrinks = textView.frame.height > bounds.height + 0.5
         textView.frame = bounds
+        // The host shrank the editor (the keyboard, the format bar): keep the caret's line visible
+        // (UIKit's own scroll to the caret is off, see `EditorTextView.allowsSystemScroll`).
+        if shrinks, textView.isFirstResponder {
+            DispatchQueue.main.async { [weak self] in self?.scrollCaretIntoView() }
+        }
         let available = bounds.width - theme.horizontalPadding * 2
         let column = theme.columnWidth(available: max(200, available))
         let side = max(theme.horizontalPadding, (bounds.width - column) / 2)
@@ -517,8 +532,7 @@ public final class EditorView: UIView {
     /// touching the text (dragging a selection handle, scrolling): UIKit's own edge autoscroll
     /// runs then, and scrolling on top of it made the selection run away (build 14).
     func scrollCaretIntoView() {
-        guard textView.isFirstResponder, !userIsInteracting, let range = textView.selectedTextRange else { return }
-        let caret = textView.caretRect(for: range.end)
+        guard textView.isFirstResponder, !userIsInteracting, let caret = caretLineFrame() else { return }
         let margin = max(8, theme.bodyFont.lineHeight)
         var visible = textView.bounds.inset(by: textView.adjustedContentInset)
         visible.size.height -= overlayInsets.bottom
@@ -533,57 +547,43 @@ public final class EditorView: UIView {
         textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: min(max(y, minY), maxY)), animated: false)
     }
 
+    /// The caret's line in text view content coordinates, from the layout (`caretRect` is wrong in
+    /// an empty paragraph).
+    func caretLineFrame() -> CGRect? {
+        let r = textView.selectedRange
+        if let line = geometry.lineFrame(at: r.location + r.length) { return line }
+        return textView.selectedTextRange.map { textView.caretRect(for: $0.end) }
+    }
+
     /// The person has a finger (or pencil) on the text view: no programmatic scrolling then.
     var userIsInteracting: Bool { userIsScrolling }
 
     /// A structural edit at the caret (Return, joining paragraphs, a paste) re-renders paragraphs and
-    /// moves the selection; UIKit then scrolled on its own — often far past the keyboard. The line
-    /// where the edit starts stays where it is on screen and only the least needed to show the caret
-    /// is added (builds 14 and 18).
-    func keepingScroll(at anchor: Int? = nil, _ edit: () -> Void) {
-        let offset = anchor ?? textView.selectedRange.location
-        let line = lineScreenY(at: offset)
-        let fallback = textView.contentOffset
+    /// moves the selection; UIKit then scrolled on its own — often far past the keyboard. The scroll
+    /// position is kept exactly and only the least needed to show the caret is added (builds 14
+    /// and 18).
+    func keepingScroll(_ edit: () -> Void) {
+        let offset = textView.contentOffset
         edit()
-        holdLine(at: offset, screenY: line, fallback: fallback)
+        holdScroll(offset)
         // UIKit scrolls to a programmatic selection on the next turn too.
-        DispatchQueue.main.async { [weak self] in
-            self?.holdLine(at: offset, screenY: line, fallback: fallback)
-        }
+        DispatchQueue.main.async { [weak self] in self?.holdScroll(offset) }
     }
 
-    /// The line holding a text offset: its distance from the top of the scroll view's bounds.
-    private func lineScreenY(at offset: Int) -> CGFloat? {
-        guard let position = textView.position(from: textView.beginningOfDocument,
-                                               offset: max(0, min(offset, textView.textStorage.length))) else { return nil }
-        let rect = textView.caretRect(for: position)
-        guard !rect.isNull, rect.minY.isFinite, rect.height > 0 else { return nil }
-        return rect.minY - textView.contentOffset.y
-    }
-
-    /// Typing rule (build 18): the content does not move while the person types. The line of the
-    /// edit goes back to where it was on screen (UIKit's own scroll to the caret, a re-laid-out
-    /// block or a header that changed height above it moved it), then the caret gets only the
-    /// scroll it needs to stay above the keyboard and the palette.
-    private func holdLine(at offset: Int, screenY: CGFloat?, fallback: CGPoint) {
+    /// Typing rule (build 18): the content does not move while the person types. The scroll
+    /// position goes back to where it was (UIKit's own scroll to the caret moved it), then the caret
+    /// gets only the scroll it needs to stay above the keyboard and the palette. A header that
+    /// changes height meanwhile is compensated in `layoutSubviews`.
+    private func holdScroll(_ offset: CGPoint) {
         guard !userIsInteracting else { return }
         textView.layoutIfNeeded()
-        if let screenY, let now = lineScreenY(at: offset) {
-            let minY = -textView.adjustedContentInset.top
-            let maxY = max(minY, textView.contentSize.height + textView.adjustedContentInset.bottom - textView.bounds.height)
-            let y = min(max(textView.contentOffset.y + now - screenY, minY), maxY)
-            if abs(y - textView.contentOffset.y) > 0.5 {
-                textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: y), animated: false)
-            }
-        } else if textView.contentOffset != fallback {
-            textView.setContentOffset(fallback, animated: false)
-        }
+        if textView.contentOffset != offset { textView.setContentOffset(offset, animated: false) }
         scrollCaretIntoView()
     }
 
-    /// Plain typing is applied by the text view after `shouldChangeTextIn`: the line is held in
-    /// `textViewDidChange`.
-    private var typingAnchor: (offset: Int, screenY: CGFloat?, fallback: CGPoint)?
+    /// Plain typing is applied by the text view after `shouldChangeTextIn`: the scroll position is
+    /// held in `textViewDidChange`.
+    private var typingOffset: CGPoint?
 
     private func layoutHeader() {
         guard let header = headerView else {
@@ -1027,6 +1027,138 @@ public final class EditorView: UIView {
         guard projection.paragraphs.indices.contains(i) else { return }
         let caret = commands.insertBlock(node, after: TextPosition(block: projection.paragraphs[i].blockId, offset: o))
         select(caret)
+    }
+
+    // MARK: - Rich paste
+
+    /// Addresses of pasted images still downloading, by attachment id (`imageFailed`).
+    private var pastedImageURLs: [String: URL] = [:]
+
+    /// Rich paste (`spec/04-editor.md`, «Вставка»): HTML first, then RTF / RTFD, then text that
+    /// reads as Markdown. Returns false to leave the paste to the text view (plain text). The title
+    /// takes plain text (its first line); code blocks paste their text as is.
+    func pasteRich(from board: UIPasteboard = .general) -> Bool {
+        let range = selectionRange
+        let (i, _) = projection.position(at: range.lowerBound)
+        guard projection.paragraphs.indices.contains(i) else { return false }
+        let kind = projection.paragraphs[i].kind.type
+        if kind == NodeType.codeBlock { return false }
+        if kind == NodeType.title {
+            guard let text = board.string else { return false }
+            insert(PasteFragment(blocks: [.paragraph(text)]), over: range)
+            return true
+        }
+        var fragment: PasteFragment?
+        if let data = board.data(forPasteboardType: UTType.html.identifier), let html = String(data: data, encoding: .utf8) {
+            fragment = HTMLImport.blocks(html)
+        } else if let rich = Self.attributedString(from: board) {
+            fragment = Self.fragment(from: rich)
+        } else if let text = board.string, MarkdownImport.looksLikeMarkdown(text) {
+            fragment = MarkdownImport.blocks(text, options: .init(remoteImages: true))
+        }
+        guard let fragment, !fragment.blocks.isEmpty else { return false }
+        insert(fragment, over: range)
+        return true
+    }
+
+    /// «Вставить без форматирования»: the pasteboard's plain text.
+    func pastePlainText() {
+        guard let text = UIPasteboard.general.string, !text.isEmpty else { return }
+        let range = selectionRange
+        keepingScroll {
+            select(commands.replace(range, with: text.replacingOccurrences(of: "\r\n", with: "\n"),
+                                    marks: (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil)))
+        }
+    }
+
+    private func insert(_ fragment: PasteFragment, over range: Range<Int>) {
+        let blocks = resolvePastedImages(fragment)
+        guard !blocks.isEmpty else { return }
+        keepingScroll {
+            select(commands.insertFragment(blocks, replacing: range))
+        }
+        notifyStateChange()
+    }
+
+    /// Image blocks of a paste get the host's attachment ids; without one, an address becomes a
+    /// link and an embedded image is dropped.
+    private func resolvePastedImages(_ fragment: PasteFragment) -> [BlockNode] {
+        guard !fragment.images.isEmpty else { return fragment.blocks }
+        let ids = onPastedImages?(fragment.images) ?? Array(repeating: nil, count: fragment.images.count)
+        func resolve(_ block: BlockNode) -> BlockNode? {
+            guard block.type == NodeType.image, case .number(let n)? = block.attrs[PasteFragment.pasteImageAttr] else {
+                var b = block
+                b.children = block.children.compactMap(resolve)
+                return b
+            }
+            let index = Int(n)
+            guard fragment.images.indices.contains(index) else { return nil }
+            let image = fragment.images[index]
+            if index < ids.count, let id = ids[index] {
+                if case .url(let url) = image.source { pastedImageURLs[id] = url }
+                var attrs = block.attrs
+                attrs[PasteFragment.pasteImageAttr] = nil
+                attrs["attachmentId"] = .string(id)
+                return BlockNode(id: block.id, type: NodeType.image, attrs: attrs)
+            }
+            if case .url(let url) = image.source { return Self.linkParagraph(url, alt: image.alt) }
+            return nil
+        }
+        return fragment.blocks.compactMap(resolve)
+    }
+
+    private static func linkParagraph(_ url: URL, alt: String) -> BlockNode {
+        .paragraph([.text(alt.isEmpty ? url.absoluteString : alt, MarkSet([MarkName.link: .object(["href": .string(url.absoluteString)])]))])
+    }
+
+    /// A pasted image could not be downloaded: its block becomes a link to the address.
+    public func imageFailed(attachmentId: String) {
+        guard let url = pastedImageURLs.removeValue(forKey: attachmentId) else { return }
+        let blocks = document.allBlocks.filter { $0.type == NodeType.image && $0.attrs["attachmentId"]?.stringValue == attachmentId }
+        guard !blocks.isEmpty else { return }
+        document.stopCapturing()
+        document.transact(origin: .system) {
+            for b in blocks {
+                guard let loc = document.location(of: b.id) else { continue }
+                document.insertBlock(Self.linkParagraph(url, alt: b.attrs["alt"]?.stringValue ?? ""), parent: loc.parent, at: loc.index)
+                document.deleteBlock(b.id)
+            }
+        }
+        document.stopCapturing()
+    }
+
+    private static func attributedString(from board: UIPasteboard) -> NSAttributedString? {
+        for (type, documentType) in [(UTType.rtfd.identifier, NSAttributedString.DocumentType.rtfd),
+                                     (UTType.flatRTFD.identifier, .rtfd), (UTType.rtf.identifier, .rtf)] {
+            if let data = board.data(forPasteboardType: type),
+               let s = try? NSAttributedString(data: data, options: [.documentType: documentType], documentAttributes: nil) {
+                return s
+            }
+        }
+        return nil
+    }
+
+    /// RTF / RTFD → blocks through HTML (one mapping): attachments become embedded images.
+    private static func fragment(from rich: NSAttributedString) -> PasteFragment? {
+        let copy = NSMutableAttributedString(attributedString: rich)
+        var images: [String] = []
+        copy.enumerateAttribute(.attachment, in: NSRange(location: 0, length: copy.length), options: .reverse) { value, range, _ in
+            guard let attachment = value as? NSTextAttachment else { return }
+            let data = attachment.fileWrapper?.regularFileContents
+                ?? attachment.contents
+                ?? (attachment.image ?? attachment.image(forBounds: attachment.bounds, textContainer: nil, characterIndex: range.location))?.pngData()
+            guard let data, UIImage(data: data) != nil else {
+                copy.replaceCharacters(in: range, with: "")
+                return
+            }
+            images.append("<img src=\"data:image/png;base64,\(data.base64EncodedString())\">")
+            copy.replaceCharacters(in: range, with: "\nDSPASTEIMAGE\(images.count - 1)X\n")
+        }
+        guard let data = try? copy.data(from: NSRange(location: 0, length: copy.length),
+                                        documentAttributes: [.documentType: NSAttributedString.DocumentType.html]),
+              var html = String(data: data, encoding: .utf8) else { return nil }
+        for (i, tag) in images.enumerated() { html = html.replacingOccurrences(of: "DSPASTEIMAGE\(i)X", with: tag) }
+        return HTMLImport.blocks(html)
     }
 
     // MARK: - Images
@@ -1692,7 +1824,7 @@ extension EditorView: UITextViewDelegate {
         let cmd = commands
         let start = p.paragraphs[si]
         pendingShortcut = nil
-        typingAnchor = nil
+        typingOffset = nil
 
         // Return in the title moves to the text (Apple Notes, spec/04).
         if text == "\n", start.kind.type == NodeType.title, range.length == 0, tv.markedTextRange == nil {
@@ -1704,7 +1836,7 @@ extension EditorView: UITextViewDelegate {
             if range.length > 0 { cmd.replace(lo..<hi, with: "") }
             let pos = TextPosition(block: start.blockId, offset: so)
             var caret = range.length == 0 ? MarkdownShortcuts(commands: cmd).handleReturn(at: pos) : nil
-            keepingScroll(at: lo) {
+            keepingScroll {
                 if caret == nil {
                     document.stopCapturing()
                     caret = cmd.splitParagraph(at: pos)
@@ -1716,7 +1848,7 @@ extension EditorView: UITextViewDelegate {
         }
         // Backspace at the start of a paragraph (or delete at the end of the previous one).
         if text.isEmpty, range.length == 1, ei == si + 1, eo == 0, so == start.length {
-            keepingScroll(at: lo) { select(cmd.joinBackward(at: TextPosition(block: p.paragraphs[ei].blockId, offset: 0))) }
+            keepingScroll { select(cmd.joinBackward(at: TextPosition(block: p.paragraphs[ei].blockId, offset: 0))) }
             return false
         }
         // Plain typing inside one text paragraph: let the text view apply it, mirror to the model.
@@ -1728,12 +1860,12 @@ extension EditorView: UITextViewDelegate {
             // Markdown shortcuts never fire on marked text (dictation and input methods stream
             // their text through it; acting on it moved the caret under them).
             if text.utf16.count == 1, tv.markedTextRange == nil { pendingShortcut = (lo + 1, text) }
-            typingAnchor = (lo, lineScreenY(at: lo), tv.contentOffset)
+            typingOffset = tv.contentOffset
             return true
         }
         // Everything else is structural.
         let clean = text.replacingOccurrences(of: "\u{FFFC}", with: "").replacingOccurrences(of: "\u{2028}", with: "\n")
-        keepingScroll(at: lo) { select(cmd.replace(lo..<hi, with: clean, marks: (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil))) }
+        keepingScroll { select(cmd.replace(lo..<hi, with: clean, marks: (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil))) }
         return false
     }
 
@@ -1758,12 +1890,10 @@ extension EditorView: UITextViewDelegate {
         }
         normalizeParagraph(i)
         ink.invalidateLayout()
-        if let anchor = typingAnchor {
-            typingAnchor = nil
-            holdLine(at: anchor.offset, screenY: anchor.screenY, fallback: anchor.fallback)
-            DispatchQueue.main.async { [weak self] in
-                self?.holdLine(at: anchor.offset, screenY: anchor.screenY, fallback: anchor.fallback)
-            }
+        if let offset = typingOffset {
+            typingOffset = nil
+            holdScroll(offset)
+            DispatchQueue.main.async { [weak self] in self?.holdScroll(offset) }
         }
         updateSlashMenu()
         notifyStateChange()
@@ -1840,6 +1970,9 @@ extension EditorView: UITextViewDelegate {
         caretWasInTitle = inTitle && tv.isFirstResponder
         // Typing attributes are left alone while text is marked (dictation, input methods).
         if tv.markedTextRange == nil { updateTypingAttributes() }
+        // The caret moved without a finger (keyboard arrows, a programmatic selection): UIKit no
+        // longer scrolls to it by itself.
+        scrollCaretIntoView()
         updateSlashMenu()
         notifyStateChange()
     }
@@ -1860,6 +1993,11 @@ extension EditorView: UITextViewDelegate {
         }
         if para.kind.isText, para.kind.type != NodeType.codeBlock, para.kind.type != NodeType.title {
             extra.append(contentsOf: formatMenu())
+        }
+        if UIPasteboard.general.hasStrings, para.kind.type != NodeType.codeBlock {
+            extra.append(UIAction(title: "Вставить без форматирования", image: UIImage(systemName: "doc.on.clipboard")) { [weak self] _ in
+                self?.pastePlainText()
+            })
         }
         guard !extra.isEmpty else { return nil }
         return UIMenu(children: extra + suggestedActions)

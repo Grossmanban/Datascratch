@@ -12,6 +12,7 @@
 | `@datascratch/shared/document` | Фабрики `account`/`notebook`/`note` (с копией имени, иконки и пространства в `meta` блокнота),  доступ к записям (пространства, блокноты, папки, мета заметок, теги, избранное, вкладки), PM-JSON ↔ Yjs (как y-prosemirror), задачи, бэклинки, теги, текст для поиска, экспорт в Markdown, блочные операции для агентов (`applyBlockOperations`) | `document-model.md` |
 | `@datascratch/shared/strokes` | Упаковка точек, якоря (Yjs RelativePosition) и D-35, раскладка по строкам при заданной платформой геометрии глифов, толщина, хранение штрихов, `rebaseRedoneAnchors` и `attachAnchorRebase` после undo, `restoreNoteVersion`, перепривязка при перестройке блоков (`captureAnchorOffsets` → `reanchorStrokes`) | `strokes.md` |
 | `@datascratch/shared/sync` | `SyncClient` (WebSocket браузера/Node, офлайн-очередь через `SyncStorage`, шифрование, переподключение с backoff, снимки по порогам), `MemorySyncStorage`, `MemorySyncHub` — эталонный сервер протокола в памяти для тестов | `sync-protocol.md` |
+| `@datascratch/shared/sharing` | Совместный доступ по аккаунтам (D-54): REST-клиент (`createHttpClient` + `createSharingApi`, ошибки — `ApiRequestError` с `classifyApiFailure`), пара ключей аккаунта (`ensureAccountKeyPair`), ключи общих блокнотов и заметок (`ownerNotebookKeys`, `sharedItemKeys`, `noteKeysFromMeta`), выдача ключей участникам (`deliverAwaitingKeys`), смена ключа (`rotateNotebookKey`, `rotateSharedNoteKey`, `repairSharedNoteMeta`), «Общие со мной» в документе аккаунта (`reconcileSharedRefs`) | `crypto.md` §10, `api.md` |
 
 Корневой импорт `@datascratch/shared` реэкспортирует всё.
 
@@ -48,7 +49,21 @@ sync.start();
 
 **Испорченные элементы не останавливают синхронизацию.** Если обновление или снимок не расшифровывается (сначала пробуются ключи `alternateKeysFor`) или не применяется, клиент пропускает его, двигает курсор дальше, пишет запись `{ docId, seq, deviceId, kind, reason }` (`getSkipped(docId)`) и шлёт событие `skipped` — хост показывает предупреждение по документу. С опцией `recoverSkippedFromSnapshot` клиент после такой догоняющей подписки один раз переподписывается с `since: 0`, чтобы получить последний снимок сервера, который может покрывать пропущенное.
 
-Обновления, применённые из сети, помечены origin `REMOTE_ORIGIN` — редактор и undo-менеджер могут их отличать.
+Обновления, применённые из сети, помечены origin `REMOTE_ORIGIN` — редактор и undo-менеджер могут их отличать. Событие `remoteUpdate(docId, update, info)` несёт `info.author` — автора, которого поставил сервер (D-54: «кто что изменил»).
+
+### Совместный доступ (D-54)
+
+```ts
+import { createHttpClient, createSharingApi, ensureAccountKeyPair, rotateNotebookKey } from "@datascratch/shared/sharing";
+
+const api = createSharingApi(createHttpClient({ baseUrl, accessToken: () => tokens.access() }));
+// После регистрации и при каждом входе: старые аккаунты получают пару ключей здесь же.
+const me = await ensureAccountKeyPair(api, userId, masterKey);
+```
+
+- **Участник:** ключи общих ресурсов — `sharedItemKeys(item, { userId, secretKey })` для каждого из `api.sharedWithMe()` (`null`, пока владелец не выдал ключ); ключи заметок общего блокнота — `noteKeysFromMeta(noteMeta, notebookKeys.keys)`. Первый ключ списка — для `keyFor`, остальные — для `alternateKeysFor`. Роль `viewer` — опция `readOnly: (docId) => …` у `SyncClient` (правки и снимки не отправляются). `reconcileSharedRefs(accountDoc, items, currentSpaceId)` раскладывает «Общие со мной» и возвращает исчезнувшие ресурсы — их вкладки, избранное и локальные данные удаляет приложение.
+- **Смена ключа у участников.** Чтобы обновление, зашифрованное уже новым ключом, не пропускалось, передайте `keyMaybeStale: (docId) => документ общий`: документ встанет на паузу, приложение заново читает `sharedWithMe()` (и индекс блокнота) и вызывает `keyAvailable(docId)`.
+- **Владелец при запуске:** `deliverAwaitingKeys` для ресурсов, где кто-то ждёт ключ (аккаунтам, созданным после приглашения, — только после «да» владельца в `confirm`), и `rotateNotebookKey` для общих блокнотов (сам проверяет `keyRotationPending`, продолжает прерванную смену и не делает лишней версии ключа). `onKeys` обновляет keyring приложения, `whenIndexSent: () => sync.whenSent(notebookId)`. Отдельно расшаренная заметка — `rotateSharedNoteKey`; после сбоя — `repairSharedNoteMeta`. После смены ключа — `recreateShareLinks` (гостевые ссылки ресурса пересоздаются с новым ключом).
 
 ### Особенности, о которых стоит знать
 

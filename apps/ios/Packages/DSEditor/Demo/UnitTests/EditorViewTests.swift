@@ -1469,6 +1469,162 @@ final class EditorViewTests: XCTestCase {
         UIPasteboard.general.items = []
     }
 
+    // MARK: - Read-only mode (D-54 viewer)
+
+    /// Read-only: no typing, keys, paste, cut, formatting, "/" or undo; copying works; switching
+    /// back makes the editor editable again.
+    func testReadOnlyRejectsTypingPasteFormattingAndUndo() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Только чтение"), .paragraph("Первый абзац")])
+        let editor = host(doc)
+        let tv = editor.textView
+        let para = doc.blocks[1].id
+        let start = flatRange(editor, of: "Первый").lowerBound
+        // An edit made before the switch: undo must not take it back while read-only.
+        tv.selectedRange = NSRange(location: start, length: 0)
+        if editor.textView(tv, shouldChangeTextIn: NSRange(location: start, length: 0), replacementText: "Я") {
+            tv.textStorage.replaceCharacters(in: NSRange(location: start, length: 0), with: "Я")
+            tv.selectedRange = NSRange(location: start + 1, length: 0)
+            editor.textViewDidChange(tv)
+        }
+        settle(editor)
+        XCTAssertEqual(doc.flatText(of: para), "ЯПервый абзац")
+        XCTAssertTrue(editor.canUndo)
+
+        editor.isReadOnly = true
+        drainMainQueue()
+        XCTAssertTrue(editor.isEffectivelyReadOnly)
+        XCTAssertFalse(tv.isEditable, "no keyboard")
+        XCTAssertTrue(tv.isSelectable, "text can still be selected")
+        XCTAssertEqual(tv.keyCommands?.count ?? 0, 0, "no editor key commands (hardware keyboard)")
+        XCTAssertFalse(editor.canUndo)
+
+        let range = flatRange(editor, of: "Первый")
+        tv.selectedRange = NSRange(location: range.lowerBound, length: range.count)
+        XCTAssertFalse(editor.textView(tv, shouldChangeTextIn: tv.selectedRange, replacementText: "x"))
+        XCTAssertFalse(tv.canPerformAction(#selector(UIResponderStandardEditActions.paste(_:)), withSender: nil))
+        XCTAssertFalse(tv.canPerformAction(#selector(UIResponderStandardEditActions.cut(_:)), withSender: nil))
+        XCTAssertFalse(tv.canPerformAction(#selector(UIResponderStandardEditActions.delete(_:)), withSender: nil))
+        XCTAssertFalse(tv.canPerformAction(#selector(EditorTextView.pasteWithoutFormatting(_:)), withSender: nil))
+        XCTAssertFalse(tv.canPerformAction(#selector(UIResponderStandardEditActions.toggleBoldface(_:)), withSender: nil))
+        XCTAssertTrue(tv.canPerformAction(#selector(UIResponderStandardEditActions.copy(_:)), withSender: nil), "copying works")
+        XCTAssertNil(editor.textView(tv, editMenuForTextIn: tv.selectedRange, suggestedActions: []), "no format or task items")
+
+        UIPasteboard.general.string = "вставка"
+        tv.paste(nil)
+        tv.pasteWithoutFormatting(nil)
+        XCTAssertTrue(editor.pasteRich(), "a rich paste is swallowed")
+        editor.pastePlainText()
+        editor.perform(.bold)
+        editor.perform(.heading1)
+        editor.perform(.bulletList)
+        editor.undo()
+        editor.setStyle(DocumentStyle(font: .serif, width: .wide, paper: .grid, textColor: nil))
+        settle(editor)
+        XCTAssertEqual(doc.blocks.map(\.type), [NodeType.title, NodeType.paragraph])
+        XCTAssertEqual(doc.flatText(of: para), "ЯПервый абзац", "nothing changed")
+        XCTAssertEqual(doc.blocks[1].inline?.first?.marks, .empty)
+        XCTAssertEqual(doc.style.paper, .plain)
+        tv.becomeFirstResponder()
+        XCTAssertFalse(editor.isEditingText, "selecting to copy is not editing (no format bar)")
+        UIPasteboard.general.items = []
+
+        editor.isReadOnly = false
+        drainMainQueue()
+        XCTAssertTrue(tv.isEditable)
+        XCTAssertGreaterThan(tv.keyCommands?.count ?? 0, 0)
+        XCTAssertTrue(editor.canUndo, "the earlier edit can be undone again")
+        editor.undo()
+        XCTAssertEqual(doc.flatText(of: para), "Первый абзац")
+    }
+
+    /// Read-only: no pen strokes, Scribble, task toggles or date menus, image width/delete,
+    /// table edits, "/" entries or image insertion; links and image zoom stay; edits from
+    /// elsewhere are shown.
+    func testReadOnlyTurnsOffPenTasksImagesAndTablesButShowsRemoteEdits() throws {
+        let day = EditorView.isoDay(offset: 1)
+        let image = BlockNode(type: NodeType.image, attrs: ["attachmentId": .string("att-ro"), "width": .null])
+        let table = EditorCommands.table(rows: 2, columns: 2, header: ["a", "b"])
+        let agent = MarkSet([MarkName.agentEdit: .object(["agent": "claude"])])
+        let doc = InMemoryEditorDocument(blocks: [
+            .title("Вид"), .paragraph([.text("Абзац агента", agent)]), .taskList([.taskItem("Задача", scheduled: day)]),
+            image, table, .paragraph(""),
+        ])
+        let editor = host(doc)
+        let store = ImageStore()
+        store.images["att-ro"] = solidImage(CGSize(width: 200, height: 100), .green)
+        editor.attachmentResolver = store
+        editor.onImageTap = { _, _, _ in }
+        var hostSlash = false
+        editor.onHostSlashCommand = { _ in hostSlash = true }
+        settle(editor)
+        drainMainQueue()
+        settle(editor)
+        let before = "\(doc.blocks)"
+
+        editor.isReadOnly = true
+        drainMainQueue()
+        settle(editor)
+
+        // Pen: the model takes no stroke even when the ink controller is driven directly.
+        editor.tools.mode = .pen
+        drainMainQueue()
+        let t = CACurrentMediaTime()
+        for (i, x) in stride(from: 40.0, through: 200.0, by: 20.0).enumerated() {
+            let sample = PenSample(location: CGPoint(x: x, y: 80), pressure: 0.5, altitude: 1, azimuth: 0, roll: 0,
+                                   timestamp: t + Double(i) * 0.01, estimationIndex: nil)
+            if i == 0 { editor.ink.penBegan(sample) } else { editor.ink.penMoved([sample], predicted: []) }
+        }
+        editor.ink.penEnded(cancelled: false)
+        XCTAssertTrue(doc.strokes.isEmpty, "no stroke was stored")
+        XCTAssertFalse(editor.scribbleInteraction(UIScribbleInteraction(delegate: editor), shouldBeginAt: .zero), "no Scribble")
+        editor.tools.mode = .text
+        drainMainQueue()
+
+        // Tasks: no check box toggle, no date chip menu.
+        let item = try XCTUnwrap(doc.blocks[2].children.first?.id)
+        let chip = try XCTUnwrap(editor.taskDateChipFrames(in: editor.textView).first, "the date chip is drawn")
+        XCTAssertFalse(editor.hasTapTarget(at: CGPoint(x: chip.midX, y: chip.midY)), "a date chip opens no menu")
+        let taskStart = flatRange(editor, of: "Задача").lowerBound
+        editor.textView.selectedRange = NSRange(location: taskStart, length: 0)
+        editor.perform(.toggleTask)
+        editor.commands.toggleTask(item)
+        XCTAssertEqual(doc.block(item)?.attrs["state"]?.stringValue, "open")
+
+        // Agent edits: no banner, nothing to accept.
+        let banner = editor.textView.subviews.first { $0.accessibilityIdentifier == "agentEdits.banner" }
+        XCTAssertEqual(banner?.isHidden, true, "a viewer gets no accept banner")
+        editor.acceptAgentEdits()
+        XCTAssertTrue(editor.hasAgentEdits)
+
+        // Images: zoom stays; width, delete and the resize handle go; nothing is inserted.
+        let view = try XCTUnwrap(editor.factory.imageViews.first { $0.block == image.id }?.view)
+        let frame = view.convert(view.imageFrame, to: editor.textView)
+        XCTAssertTrue(editor.hasTapTarget(at: CGPoint(x: frame.midX, y: frame.midY)), "a tap still zooms")
+        XCTAssertNil(editor.factory.imageMenu?(image.id), "no width or delete (and no host items here)")
+        XCTAssertFalse(editor.factory.showsResizeHandle)
+        editor.setImageWidth(image.id, fraction: 0.5)
+        editor.insertImage(attachmentId: "att-new", preview: solidImage(CGSize(width: 10, height: 10), .red))
+        XCTAssertNil(editor.factory.previews["att-new"])
+
+        // Tables: cells do not edit, structure buttons are hidden and do nothing.
+        let tableView = try XCTUnwrap(editor.factory.view(for: try XCTUnwrap(doc.block(table.id))) as? TableBlockView)
+        XCTAssertFalse(tableView.textFieldShouldBeginEditing(UITextField()))
+        editor.commands.setTableCell(table.id, row: 1, column: 0, text: "x")
+        editor.commands.addTableRow(table.id)
+
+        // "/" and host entries.
+        editor.applySlashCommand("photo")
+        XCTAssertFalse(hostSlash)
+
+        XCTAssertEqual("\(doc.blocks)", before, "the note is unchanged")
+
+        // Edits from elsewhere (sync) still arrive and are shown.
+        let last = doc.blocks[5].id
+        doc.transact(origin: .remote) { doc.insertText("от соавтора", marks: .empty, block: last, at: 0) }
+        settle(editor)
+        XCTAssertTrue(editor.textView.textStorage.string.contains("от соавтора"))
+    }
+
     // MARK: - Mermaid hardening (security audit 2026-10-27)
 
     /// A huge diagram is captured at most at 16 megapixels; small ones at full size.

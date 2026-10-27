@@ -2,6 +2,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { onSignedOut, restore, useAuth } from "@/auth/session";
+import { forgetDecryptedAttachments } from "@/data/attachments";
 import { stopRuntime } from "@/data/runtime";
 import { Splash } from "@/features/shell/Splash";
 import { PwaPrompt } from "@/features/shell/PwaPrompt";
@@ -23,6 +24,7 @@ export function App() {
     void restore();
     return onSignedOut(() => {
       stopRuntime();
+      forgetDecryptedAttachments();
       queryClient.clear();
       void router.navigate({ to: "/login" });
     });

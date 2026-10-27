@@ -5608,5 +5608,17 @@
     "seen": 1793121864.024427,
     "ast_hash": "0d5e79f56f8a80205cf177657e274be2",
     "semantic_hash": "0d5e79f56f8a80205cf177657e274be2"
+  },
+  "docs/decisions/0053-security-audit-owner-decisions.md": {
+    "mtime": 1793121854.155164,
+    "seen": 1793121909.1773102,
+    "ast_hash": "a35933ace1875e40e8f0a80ec2fb0e87",
+    "semantic_hash": ""
+  },
+  "docs/decisions/0054-account-sharing-simple.md": {
+    "mtime": 1793121854.155164,
+    "seen": 1793121909.1773148,
+    "ast_hash": "41bddc650ee76582c1fe2af827ab8bb9",
+    "semantic_hash": ""
   }
 }

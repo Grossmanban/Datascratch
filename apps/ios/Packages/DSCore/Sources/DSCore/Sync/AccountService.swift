@@ -39,6 +39,8 @@ public actor AccountService {
         let account = AccountDocument(accountDocId: accountDocId)
         try account.initialize()
         try store.ensureDocument(docId: accountDocId, kind: .account, notebookId: nil)
+        // The account's box key pair (crypto.md §10.1); retried on later sign-ins if this fails.
+        _ = try? await ensureBoxKeyPair()
         return SignupResult(session: session, recoveryKeyText: material.recoveryKeyText, account: account)
     }
 
@@ -51,6 +53,9 @@ public actor AccountService {
         try keys.resolveKeptKeys(signingInAs: session.userId)
         try keys.unlock(wrappedMasterKey: session.wrappedMasterKeyPassword.data, passwordKey: derived.passwordKey, userId: session.userId)
         try store.ensureDocument(docId: session.accountDocId, kind: .account, notebookId: nil)
+        // Created for accounts made before D-54, loaded on a new device (crypto.md §10.1). Not
+        // fatal for signing in: sharing waits until it succeeds (`ensureBoxKeyPair` again).
+        _ = try? await ensureBoxKeyPair()
         return session
     }
 
@@ -165,8 +170,20 @@ public actor AccountService {
         var changes: [NotebookKeyChange] = []
         for nb in try await api.notebooks() {
             guard let master = try keys.masterKey() else { throw AccountError.notSignedIn }
-            let key = try DSCrypto.unwrapKey(nb.wrappedKey.data, with: master, ad: CryptoAD.notebookKey(nb.id))
-            if let previous = try keys.adoptNotebookKey(key, notebookId: nb.id) {
+            let previous: Data?
+            let key: Data
+            if let k = try? DSCrypto.unwrapKey(nb.wrappedKey.data, with: master, ad: CryptoAD.notebookKey(nb.id)) {
+                key = k
+                previous = try keys.adoptNotebookKey(k, version: 1, olderKeys: [], notebookId: nb.id)
+            } else {
+                // A rotated key (shared notebook, D-54): its version and chain come with the key.
+                let state = try await api.notebookKeyState(id: nb.id)
+                let before = try keys.notebookKey(nb.id)
+                key = try keys.addNotebookKey(wrapped: state.wrappedKey.data, notebookId: nb.id, version: state.version ?? 1,
+                                              chain: state.keyChain?.map(\.data) ?? [])
+                previous = before == key ? nil : before
+            }
+            if let previous {
                 changes.append(NotebookKeyChange(notebookId: nb.id, previousKey: previous, key: key))
             }
         }
@@ -180,7 +197,9 @@ public actor AccountService {
     public func notebookKeyForWriting(_ notebookId: String) async throws -> Data? {
         if let key = try keys.notebookKey(notebookId) { return key }
         do {
-            return try keys.addNotebookKey(wrapped: try await api.notebookKey(id: notebookId), notebookId: notebookId)
+            let state = try await api.notebookKeyState(id: notebookId)
+            return try keys.addNotebookKey(wrapped: state.wrappedKey.data, notebookId: notebookId, version: state.version ?? 1,
+                                           chain: state.keyChain?.map(\.data) ?? [])
         } catch APIError.server(404, _, _) {
             return nil
         }
@@ -213,9 +232,10 @@ public actor AccountService {
     /// `NoteMeta` from the source notebook. Content, history, attachments and the note key stay.
     public func moveNote(id noteId: String, from source: NotebookDocument, to target: NotebookDocument, folderId: String? = nil) async throws {
         guard var meta = source.note(id: noteId) else { throw DocumentError.notFound("note \(noteId)") }
-        let noteKey = try keys.noteKey(noteId: noteId, wrappedKey: meta.wrappedKey, notebookId: source.notebookId)
+        let noteKey = try keys.noteKey(meta, notebookId: source.notebookId)
         guard let targetKey = try keys.notebookKey(target.notebookId) else { throw AccountError.missingKey(target.notebookId) }
-        meta.wrappedKey = Base64URL.encode(try DSCrypto.wrapKey(noteKey, with: targetKey, ad: CryptoAD.noteKey(noteId)))
+        // Chain links are under the note keys themselves: they move as they are.
+        meta.wrappedKey = Base64URL.encode(try DSCrypto.wrapKey(noteKey, with: targetKey, ad: meta.wrappedKeyAD))
         meta.folderId = folderId
         meta.parentNoteId = nil
         try target.putNote(meta)

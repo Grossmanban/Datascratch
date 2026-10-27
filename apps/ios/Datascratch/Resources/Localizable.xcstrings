@@ -261,12 +261,32 @@
         }
       }
     },
+    "All data on that device will be deleted, including unsent changes.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все данные на этом устройстве будут удалены, включая неотправленные изменения."
+          }
+        }
+      }
+    },
     "All notebooks in this space and their notes will be deleted.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Все блокноты этого пространства и их заметки будут удалены."
+          }
+        }
+      }
+    },
+    "All your devices will be signed out and their data deleted, including unsent changes. Notes on the server stay.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все ваши устройства будут отключены, данные на них удалены, включая неотправленные изменения. Заметки на сервере сохранятся."
           }
         }
       }
@@ -321,12 +341,12 @@
         }
       }
     },
-    "At least 10 characters. Only the key wrapper is re-encrypted; your notes stay as they are.": {
+    "At least 10 characters. Only the key wrapper is re-encrypted; your notes stay as they are. Other devices will be signed out and their data deleted.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Не меньше 10 символов. Перешифровывается только обёртка ключа, заметки остаются как есть."
+            "value": "Не меньше 10 символов. Перешифровывается только обёртка ключа, заметки остаются как есть. Другие устройства будут отключены, данные на них удалены."
           }
         }
       }
@@ -1001,6 +1021,16 @@
         }
       }
     },
+    "Device Signed Out": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Устройство отключено"
+          }
+        }
+      }
+    },
     "Devices": {
       "localizations": {
         "ru": {
@@ -1251,6 +1281,36 @@
         }
       }
     },
+    "End Session": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завершить сеанс"
+          }
+        }
+      }
+    },
+    "End Session and Delete Its Data": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завершить сеанс и удалить данные"
+          }
+        }
+      }
+    },
+    "End the session on this device?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завершить сеанс на этом устройстве?"
+          }
+        }
+      }
+    },
     "End-to-end encrypted. Only you hold the keys.": {
       "localizations": {
         "ru": {
@@ -1271,12 +1331,32 @@
         }
       }
     },
+    "Ending a session removes that device's access immediately and deletes the data on it.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завершение сеанса сразу отключает доступ устройства и удаляет данные на нём."
+          }
+        }
+      }
+    },
     "Enter a valid email address.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Введите правильный адрес почты."
+          }
+        }
+      }
+    },
+    "Enter the address of your server.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Введите адрес вашего сервера."
           }
         }
       }
@@ -2271,12 +2351,12 @@
         }
       }
     },
-    "Notes are stored only on this device until the Datascratch server is connected.": {
+    "Notes are stored only on this device until you sign in to your server.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Пока сервер Datascratch не подключён, заметки хранятся только на этом устройстве."
+            "value": "Заметки хранятся только на этом устройстве, пока вы не войдёте на свой сервер."
           }
         }
       }
@@ -3351,16 +3431,6 @@
         }
       }
     },
-    "Signing a device out removes its access immediately.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Выход на устройстве сразу отключает его доступ."
-          }
-        }
-      }
-    },
     "Signing in to another account removes this device's notes of the previous account.": {
       "localizations": {
         "ru": {
@@ -3847,6 +3917,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Это устройство"
+          }
+        }
+      }
+    },
+    "This device was disconnected from the account on another device. Its data was deleted. Sign in again — your notes will download from the server.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это устройство отключено от аккаунта с другого устройства. Данные на нём удалены. Войдите снова — заметки загрузятся с сервера"
           }
         }
       }
@@ -4357,6 +4437,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ваш ключ восстановления"
+          }
+        }
+      }
+    },
+    "Your server address, e.g. notes.company.ru": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "адрес вашего сервера, например notes.company.ru"
           }
         }
       }

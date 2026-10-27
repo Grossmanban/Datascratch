@@ -4,8 +4,9 @@ import UIKit
 /// Where cover images go besides this device: the server's encrypted attachments
 /// (crypto.md §6). Nil without a server.
 protocol CoverAttachmentRemote: AnyObject {
-    /// Stores the file as a new attachment of the note and returns its id.
-    func addAttachment(_ data: Data, mime: String, noteId: String) async throws -> String
+    /// Stores the file as a new attachment of the note and returns its id (`id` when the
+    /// document already refers to one made beforehand, e.g. a pasted web image).
+    func addAttachment(_ data: Data, mime: String, noteId: String, id: String?) async throws -> String
     func uploadAttachment(_ attachmentId: String, noteId: String) async
     /// Fetches an attachment that is not on this device yet.
     func downloadAttachment(_ attachmentId: String, noteId: String) async -> URL?
@@ -38,6 +39,21 @@ final class CoverImages {
 
     static let maxCoverPixels: CGFloat = 2400
     static let thumbPixels: CGFloat = 480
+    /// Photos in a note's text: the long side at most this (a 48 MP photo stays readable, ~1 MB).
+    static let maxPhotoPixels: CGFloat = 2560
+    /// Files the app will attach (larger ones are refused before reading them twice).
+    static let maxFileBytes = 100 * 1024 * 1024
+
+    /// Attachments added on this device and still going up to the server.
+    private(set) var uploading: Set<String> = []
+    @ObservationIgnored private var uploads: [String: Task<Void, Never>] = [:]
+    /// Posted with the attachment id as `object` when a missing file has arrived (a download).
+    static let didArrive = Notification.Name("CoverImages.didArrive")
+
+    nonisolated struct AddedImage: Sendable {
+        var id: String
+        var pixelSize: CGSize
+    }
 
     init(directory: URL) {
         self.directory = directory
@@ -73,11 +89,55 @@ final class CoverImages {
         return Added(cover: coverId, thumb: thumbId)
     }
 
-    private func store(_ data: Data, noteId: String) async throws -> String {
-        if let remote {
-            return try await remote.addAttachment(data, mime: "image/jpeg", noteId: noteId)
+    /// A photo for the note's text: scaled to `maxPhotoPixels` and stored as JPEG (HEIC and PNG
+    /// too: every client reads JPEG), shown at once from this device, encrypted with the note key
+    /// and uploaded in the background (crypto.md §6). Offline, DSCore keeps it and uploads it once
+    /// connected.
+    func addImage(_ data: Data, noteId: String, id presetId: String? = nil) async throws -> AddedImage {
+        guard let image = UIImage(data: data),
+              let jpeg = Self.jpeg(image, maxPixels: Self.maxPhotoPixels, quality: 0.85),
+              let stored = UIImage(data: jpeg) else { throw CoverError.notAnImage }
+        let id = try await store(jpeg, noteId: noteId, id: presetId)
+        cache.setObject(stored, forKey: id as NSString)
+        upload(id, noteId: noteId)
+        return AddedImage(id: id, pixelSize: CGSize(width: stored.size.width * stored.scale, height: stored.size.height * stored.scale))
+    }
+
+    /// Any other file, as it is.
+    func addFile(_ data: Data, mime: String, noteId: String) async throws -> String {
+        let id = try await store(data, mime: mime, noteId: noteId)
+        upload(id, noteId: noteId)
+        return id
+    }
+
+    private func upload(_ id: String, noteId: String) {
+        guard let remote else { return }
+        uploading.insert(id)
+        uploads[id] = Task {
+            await remote.uploadAttachment(id, noteId: noteId)
+            uploading.remove(id)
+            uploads[id] = nil
+            revision += 1
         }
-        let id = UUIDv7.make()
+    }
+
+    /// Returns when the attachment's upload has ended (at once if none is running).
+    func uploadEnded(_ id: String) async {
+        await uploads[id]?.value
+    }
+
+    /// The file of an attachment on this device, downloading it when missing.
+    func file(_ attachmentId: String, noteId: String) async -> URL? {
+        let local = url(attachmentId)
+        if FileManager.default.fileExists(atPath: local.path) { return local }
+        return await remote?.downloadAttachment(attachmentId, noteId: noteId)
+    }
+
+    private func store(_ data: Data, mime: String = "image/jpeg", noteId: String, id presetId: String? = nil) async throws -> String {
+        if let remote {
+            return try await remote.addAttachment(data, mime: mime, noteId: noteId, id: presetId)
+        }
+        let id = presetId ?? UUIDv7.make()
         try data.write(to: url(id), options: [.atomic, .completeFileProtection])
         return id
     }
@@ -101,6 +161,7 @@ final class CoverImages {
             _ = await remote.downloadAttachment(attachmentId, noteId: noteId)
             downloading.remove(attachmentId)
             revision += 1
+            NotificationCenter.default.post(name: Self.didArrive, object: attachmentId)
         }
     }
 

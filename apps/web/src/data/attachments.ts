@@ -12,8 +12,16 @@ const chunkKey = (id: string, index: number) => `${id}:${index}`;
 /**
  * Encrypt a file with the note key, keep the encrypted chunks locally (works offline) and
  * upload them in the background. Returns the attachmentId to reference from the document.
+ * `onProgress` gets 0…1 as the chunks are sealed (what the user waits for before the block can
+ * point at the attachment); the upload itself runs in the background afterwards.
  */
-export async function storeAttachment(noteId: string, noteKey: Uint8Array, data: Uint8Array, mime: string): Promise<string> {
+export async function storeAttachment(
+  noteId: string,
+  noteKey: Uint8Array,
+  data: Uint8Array,
+  mime: string,
+  onProgress?: (done: number) => void,
+): Promise<string> {
   if (data.length > MAX_ATTACHMENT) throw new Error("payload_too_large");
   const id = uuidv7();
   const chunkCount = Math.max(1, Math.ceil(data.length / CHUNK_PLAIN));
@@ -25,6 +33,11 @@ export async function storeAttachment(noteId: string, noteKey: Uint8Array, data:
     const env = await seal(noteKey, data.subarray(i * CHUNK_PLAIN, (i + 1) * CHUNK_PLAIN), ad.attachmentChunk(id, i, last));
     size += env.length;
     rows.push({ key: chunkKey(id, i), attachmentId: id, index: i, data: env });
+    if (onProgress) {
+      onProgress((i + 1) / chunkCount);
+      // Let the page paint the progress between chunks of a big file.
+      if (!last) await new Promise((r) => setTimeout(r, 0));
+    }
   }
   const row: AttachmentRow = {
     id,

@@ -88,6 +88,9 @@ test("spaces with the same name are told apart by their document count", async (
     const [, account] = [...rt.store.docs].find(([id]) => rt.store.rows.get(id)?.kind === "account")!;
     account.getMap("spaces").forEach((s) => s.set("name", "Личное"));
   });
+  // The menu of the last switch may still be closing and swallow the click.
+  await expect(page.getByRole("menu")).toHaveCount(0);
   await page.getByTestId("space-switcher").click();
+  await expect(page.getByRole("menu")).toBeVisible();
   await expect(page.getByRole("menuitem", { name: /^Личное · \d+ документ/ })).toHaveCount(2);
 });

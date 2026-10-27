@@ -10,6 +10,7 @@ on:
       - "packages/design-tokens/**"
       - "packages/agents/src/doc/**"
       - "packages/test-vectors/vectors/agents/**"
+      - "packages/test-vectors/vectors/paste/**"
       - ".github/workflows/web-editor.yml"
       - "pnpm-lock.yaml"
   pull_request:

@@ -421,12 +421,42 @@
         }
       }
     },
+    "Can’t Attach": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прикрепить"
+          }
+        }
+      }
+    },
     "Can’t reach this server. Check the address and the connection.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Не удаётся связаться с сервером. Проверьте адрес и подключение."
+          }
+        }
+      }
+    },
+    "Caption": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подпись"
+          }
+        }
+      }
+    },
+    "Caption…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подпись…"
           }
         }
       }
@@ -1307,6 +1337,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Отклик"
+          }
+        }
+      }
+    },
+    "File": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл"
           }
         }
       }
@@ -2581,6 +2621,26 @@
         }
       }
     },
+    "Photo": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фото"
+          }
+        }
+      }
+    },
+    "Photo Library": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Медиатека"
+          }
+        }
+      }
+    },
     "Pick a Date…": {
       "localizations": {
         "ru": {
@@ -2831,6 +2891,16 @@
         }
       }
     },
+    "Replace…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заменить…"
+          }
+        }
+      }
+    },
     "Reposition Cover": {
       "localizations": {
         "ru": {
@@ -2897,6 +2967,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Без засечек"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить"
           }
         }
       }
@@ -3301,6 +3381,16 @@
         }
       }
     },
+    "Some of these files are not images.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Некоторые из этих файлов — не изображения."
+          }
+        }
+      }
+    },
     "Space": {
       "localizations": {
         "ru": {
@@ -3511,6 +3601,16 @@
         }
       }
     },
+    "Take Photo": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Снять фото"
+          }
+        }
+      }
+    },
     "Task": {
       "localizations": {
         "ru": {
@@ -3577,6 +3677,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ключа шифрования этого документа нет на этом устройстве."
+          }
+        }
+      }
+    },
+    "The file could not be attached.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прикрепить файл."
+          }
+        }
+      }
+    },
+    "The file is not on this device yet. Try again when online.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файла пока нет на этом устройстве. Попробуйте, когда будет сеть."
           }
         }
       }
@@ -3717,6 +3837,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Этот файл — не изображение."
+          }
+        }
+      }
+    },
+    "This file is too large to attach (up to 100 MB).": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл слишком большой (можно до 100 МБ)."
           }
         }
       }

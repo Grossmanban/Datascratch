@@ -1,4 +1,5 @@
 import type { Editor } from "@tiptap/core";
+import { safeHref } from "../schema/core";
 import { useEffect, useState } from "react";
 import { NodeSelection } from "@tiptap/pm/state";
 import { ColorPanel, FormatToolbar, LinkPanel, type FormatElement } from "@datascratch/ui";
@@ -90,8 +91,17 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
       <LinkPanel
         href={(editor.getAttributes("link").href as string) ?? ""}
         onApply={(href) => {
-          if (href.trim()) c().extendMarkRange("link").setLink({ href: href.trim() }).run();
-          else c().extendMarkRange("link").unsetLink().run();
+          if (!href.trim()) {
+            c().extendMarkRange("link").unsetLink().run();
+            setPanel(null);
+            return;
+          }
+          // Only web and mail links; «example.com» means https://example.com. Anything else
+          // (javascript:, data:, …) is not applied and the panel stays open.
+          const raw = href.trim();
+          const safe = safeHref(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw.replace(/^\/+/, "")}`);
+          if (!safe) return;
+          c().extendMarkRange("link").setLink({ href: safe }).run();
           setPanel(null);
         }}
         onRemove={() => {

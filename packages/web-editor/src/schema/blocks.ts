@@ -1,4 +1,5 @@
-import { InputRule, Node, mergeAttributes, nodeInputRule } from "@tiptap/core";
+import { InputRule, Node, mergeAttributes, nodeInputRule, type Editor } from "@tiptap/core";
+import { removeUpload, retryUpload, uploads, type UploadState } from "../uploads";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { NodeViewRendererProps } from "@tiptap/core";
 import type { HostRef } from "../host";
@@ -301,6 +302,69 @@ function formatSize(size: number): string {
   return `${(size / 1024 / 1024).toFixed(1)} МБ`;
 }
 
+
+/**
+ * The upload state of a placeholder block (uploads.ts): a quiet progress ring while the file is
+ * being stored, «Повторить» / «Удалить» when it failed. Local to this client.
+ */
+function uploadOverlay(editor: Editor, blockId: () => string | null, onState: (state: UploadState | null) => void) {
+  const el = document.createElement("div");
+  el.className = "ds-upload";
+  el.contentEditable = "false";
+  el.hidden = true;
+  const ring = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  ring.setAttribute("viewBox", "0 0 24 24");
+  ring.classList.add("ds-upload-ring");
+  ring.innerHTML = '<circle cx="12" cy="12" r="9" class="ds-upload-track"/><circle cx="12" cy="12" r="9" class="ds-upload-bar" pathLength="100"/>';
+  const failed = document.createElement("div");
+  failed.className = "ds-upload-failed";
+  const label = document.createElement("span");
+  label.textContent = "Не удалось загрузить";
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.textContent = "Повторить";
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.textContent = "Удалить";
+  failed.append(label, retry, remove);
+  el.append(ring, failed);
+  for (const b of [retry, remove]) b.addEventListener("mousedown", (e) => e.preventDefault());
+  retry.addEventListener("click", () => {
+    const id = blockId();
+    if (id) retryUpload(id);
+  });
+  remove.addEventListener("click", () => {
+    const id = blockId();
+    if (id) removeUpload(editor, id);
+  });
+  let unsubscribe: (() => void) | null = null;
+  let subscribed: string | null = null;
+  const show = (state: UploadState | null) => {
+    el.hidden = !state;
+    el.dataset.status = state?.status ?? "";
+    ring.classList.toggle("is-indeterminate", !!state && state.progress === null);
+    const bar = ring.querySelector<SVGCircleElement>(".ds-upload-bar")!;
+    bar.style.strokeDashoffset = String(100 - Math.round((state?.progress ?? 0.25) * 100));
+    el.setAttribute("aria-label", state?.status === "failed" ? "Не удалось загрузить" : `Загрузка${state?.progress != null ? ` ${Math.round(state.progress * 100)}%` : ""}`);
+    onState(state);
+  };
+  return {
+    el,
+    /** (Re)subscribes when the block id is known or changes. */
+    sync() {
+      const id = blockId();
+      if (id === subscribed) return;
+      unsubscribe?.();
+      subscribed = id;
+      unsubscribe = id ? uploads.subscribe(id, show) : null;
+      show(id ? uploads.get(id) : null);
+    },
+    destroy() {
+      unsubscribe?.();
+    },
+  };
+}
+
 export const Image = Node.create<HostOptions>({
   name: "image",
   group: "block",
@@ -345,6 +409,19 @@ export const Image = Node.create<HostOptions>({
       const handle = document.createElement("span");
       handle.className = "ds-resize-handle";
       frame.append(img, handle);
+      // Placeholder while the file is stored: local preview + progress ring / retry (uploads.ts).
+      let uploading = false;
+      const overlay = uploadOverlay(
+        editor,
+        () => current.attrs.blockId ?? null,
+        (state) => {
+          uploading = !!state;
+          frame.classList.toggle("is-uploading", state?.status === "uploading");
+          frame.classList.toggle("is-failed", state?.status === "failed");
+          if (state?.previewUrl && !current.attrs.attachmentId) img.src = state.previewUrl;
+        },
+      );
+      frame.append(overlay.el);
       const caption = document.createElement("input");
       caption.className = "ds-image-caption";
       caption.placeholder = "Подпись";
@@ -357,7 +434,9 @@ export const Image = Node.create<HostOptions>({
         img.alt = current.attrs.alt ?? "";
         if (document.activeElement !== caption) caption.value = current.attrs.caption ?? "";
         caption.hidden = !editor.isEditable && !current.attrs.caption;
+        overlay.sync();
         const id = current.attrs.attachmentId as string | null;
+        frame.classList.toggle("is-empty", !id && !uploading);
         if (id && id !== resolvedFor) {
           resolvedFor = id;
           frame.classList.add("is-loading");
@@ -409,8 +488,9 @@ export const Image = Node.create<HostOptions>({
         },
         selectNode: () => dom.classList.add("is-selected"),
         deselectNode: () => dom.classList.remove("is-selected"),
-        stopEvent: (e) => e.target === caption || e.target === handle,
+        stopEvent: (e) => e.target === caption || e.target === handle || (e.target instanceof globalThis.Node && overlay.el.contains(e.target)),
         ignoreMutation: () => true,
+        destroy: () => overlay.destroy(),
       };
     };
   },
@@ -453,7 +533,7 @@ export const FileBlock = Node.create<HostOptions>({
   },
   addNodeView() {
     const host = this.options.host;
-    return ({ node }) => {
+    return ({ node, editor }) => {
       let current = node;
       const dom = document.createElement("div");
       dom.className = "ds-file";
@@ -464,17 +544,27 @@ export const FileBlock = Node.create<HostOptions>({
       name.className = "ds-file-name";
       const meta = document.createElement("span");
       meta.className = "ds-file-meta";
-      dom.append(icon, name, meta);
+      // Placeholder while the file is stored: progress ring / retry (uploads.ts).
+      const overlay = uploadOverlay(
+        editor,
+        () => current.attrs.blockId ?? null,
+        (state) => {
+          dom.classList.toggle("is-uploading", state?.status === "uploading");
+          dom.classList.toggle("is-failed", state?.status === "failed");
+        },
+      );
+      dom.append(icon, name, meta, overlay.el);
       const render = () => {
+        overlay.sync();
         const mime = String(current.attrs.mime);
         icon.textContent = mime === "application/pdf" ? "PDF" : (mime.split("/")[1] ?? "file").slice(0, 4).toUpperCase();
         name.textContent = current.attrs.name || "Файл";
         meta.textContent = formatSize(Number(current.attrs.size) || 0);
       };
       render();
-      dom.addEventListener("dblclick", () =>
-        host.current.onOpenAttachment?.({ attachmentId: current.attrs.attachmentId, name: current.attrs.name, mime: current.attrs.mime }),
-      );
+      dom.addEventListener("dblclick", () => {
+        if (current.attrs.attachmentId) host.current.onOpenAttachment?.({ attachmentId: current.attrs.attachmentId, name: current.attrs.name, mime: current.attrs.mime });
+      });
       return {
         dom,
         update: (n) => {
@@ -485,7 +575,9 @@ export const FileBlock = Node.create<HostOptions>({
         },
         selectNode: () => dom.classList.add("is-selected"),
         deselectNode: () => dom.classList.remove("is-selected"),
+        stopEvent: (e) => e.target instanceof globalThis.Node && overlay.el.contains(e.target),
         ignoreMutation: () => true,
+        destroy: () => overlay.destroy(),
       };
     };
   },

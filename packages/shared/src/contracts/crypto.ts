@@ -18,15 +18,28 @@ export const KDF_OPS = 3;
 export const KDF_MEM = 67_108_864;
 export const KDF_OUTPUT_BYTES = 64;
 
+/**
+ * Bounds a client accepts for KDF params from `prelogin` (crypto.md §2, audit
+ * 2026-10-27): a hostile server must not be able to weaken the KDF (cheap
+ * loginKey to brute-force) or exhaust memory.
+ */
+export const KDF_BOUNDS = Object.freeze({
+  minOps: 3,
+  maxOps: 10,
+  minMem: 64 * 1024 * 1024,
+  maxMem: 256 * 1024 * 1024,
+});
+
 export const kdfParamsSchema = z.object({
   alg: z.literal(KDF_ALG),
-  ops: z.number().int().min(1).max(64),
-  mem: z
-    .number()
-    .int()
-    .min(8 * 1024 * 1024)
-    .max(4 * 1024 * 1024 * 1024),
+  ops: z.number().int().min(KDF_BOUNDS.minOps).max(KDF_BOUNDS.maxOps),
+  mem: z.number().int().min(KDF_BOUNDS.minMem).max(KDF_BOUNDS.maxMem),
 });
+
+/** True when `kdf` is within the accepted bounds (crypto.md §2). */
+export function isSafeKdf(kdf: unknown): kdf is { alg: typeof KDF_ALG; ops: number; mem: number } {
+  return kdfParamsSchema.safeParse(kdf).success;
+}
 export type KdfParams = z.infer<typeof kdfParamsSchema>;
 
 /** Current default KDF parameters (crypto.md §2). */

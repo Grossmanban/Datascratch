@@ -29,9 +29,7 @@ export async function uploadNoteFile(noteId: string, file: File, onProgress?: (d
 }
 
 /** Callbacks the editor needs, for the signed-in owner of a note. */
-// `fetchRemoteImage` is part of EditorHost from web-editor 8ceb4911 on; the intersection keeps
-// this compiling against an editor that does not declare it yet.
-export function ownerEditorHost(noteId: string, nav: Nav): EditorHost & { fetchRemoteImage?: (url: string) => Promise<File> } {
+export function ownerEditorHost(noteId: string, nav: Nav): EditorHost {
   const key = () => runtime().store.keyFor(noteId);
   const open = (id: string) => {
     openTab(id);
@@ -45,8 +43,8 @@ export function ownerEditorHost(noteId: string, nav: Nav): EditorHost & { fetchR
     // `onProgress` (0…1) feeds the editor's upload placeholder while the file is encrypted; a
     // rejection lets the editor offer «Повторить» (it calls this again with the same file).
     // The agreed form is uploadAttachment(file, { onProgress }); a bare callback is accepted too.
-    // Rich paste: images linked from pasted HTML are fetched and stored like a dropped file;
-    // a rejection keeps the image as a link.
+    // Rich paste: images linked from pasted HTML are fetched through the server (D-52) and stored
+    // like a dropped file; a rejection keeps the image as a link.
     fetchRemoteImage: (url: string) => fetchRemoteImage(url),
     uploadAttachment: (file: File, progress?: ((done: number) => void) | { onProgress?: (done: number) => void }) =>
       uploadNoteFile(noteId, file, typeof progress === "function" ? progress : progress?.onProgress),

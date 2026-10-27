@@ -1,5 +1,5 @@
 import { getTitle, SyncClient } from "@datascratch/shared";
-import type * as Y from "yjs";
+import * as Y from "yjs";
 import { deviceId } from "@/auth/deviceKey";
 import { getSession, refreshSession, wipeRevokedDevice } from "@/auth/session";
 import { accountBoxKeys } from "./sharing";
@@ -12,7 +12,7 @@ import { refreshAccount, refreshNotebook, refreshStandaloneNote, resetWorkspace,
 import { uiStatus, useSyncStatus } from "@/sync/engine";
 import { uploadPending } from "./attachments";
 import { accountDb } from "./db";
-import { DocStore, ORIGIN_REMOTE } from "./docStore";
+import { DocStore, ORIGIN_LOAD, ORIGIN_REMOTE } from "./docStore";
 import { Indexer } from "./indexer";
 import { alternateKeysFor, checkNotebookKeys, clearKeys, onNotebookKeyReplaced, type ReplacedNotebookKey } from "./keys";
 import { notebooksApi } from "@/api/endpoints";
@@ -364,11 +364,26 @@ export class AccountRuntime {
 
   /** Read a document again from seq 0 (updates that could not be decrypted were skipped). */
   private async rereadDoc(docId: string) {
-    await this.client.removeDoc(docId).catch(() => undefined);
-    const st = await this.storage.getDocState(docId);
-    if (st) await this.storage.setDocState(docId, { ...st, lastSeq: 0 });
-    this.attached.delete(docId);
-    await this.attach([docId]);
+    // While the doc is out of the client its local edits are not queued (removeDoc detaches the
+    // listener): collect them and hand them over once it is back, or they never reach the server.
+    const pinned = this.store.get(docId);
+    const missed: Uint8Array[] = [];
+    const collect = (update: Uint8Array, origin: unknown) => {
+      if (origin !== ORIGIN_REMOTE && origin !== ORIGIN_LOAD) missed.push(update);
+    };
+    pinned?.on("update", collect);
+    try {
+      await this.client.removeDoc(docId).catch(() => undefined);
+      const st = await this.storage.getDocState(docId);
+      if (st) await this.storage.setDocState(docId, { ...st, lastSeq: 0 });
+      this.attached.delete(docId);
+      await this.attach([docId]);
+    } finally {
+      pinned?.off("update", collect);
+    }
+    // Already stored locally; ORIGIN_LOAD keeps DocStore from saving them twice. Updates are
+    // idempotent, so those queued before the detach are harmless to send again.
+    if (pinned && missed.length) pinned.emit("update", [Y.mergeUpdates(missed), ORIGIN_LOAD, pinned, null as unknown as Y.Transaction]);
     // An open note is live in the client again only through openDoc.
     const live = this.store.get(docId);
     if (live && (await this.store.row(docId))?.kind === "note") await this.client.openDoc(docId, () => live).catch(() => undefined);

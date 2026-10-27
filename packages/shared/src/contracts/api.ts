@@ -32,13 +32,90 @@ export const API_ERROR_CODES = [
   "rate_limited",
   "payload_too_large",
   "internal",
+  "device_revoked",
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
+/**
+ * Why a device session was revoked (D-53, api.md). The client wipes all local
+ * data for every reason; the reason only picks the wording / security note.
+ */
+export const DEVICE_REVOKED_REASONS = [
+  /** Disconnected in the device list on another device, or logged out. */
+  "user",
+  /** The password was changed on another device. */
+  "password_change",
+  /** Access was restored with the recovery key. */
+  "recovery",
+  /** A used refresh token was presented again outside the 60 s grace: a sign of theft. */
+  "token_reuse",
+  /** WebSocket only: the account was deleted while connected (REST then answers `unauthorized`). */
+  "account_deleted",
+] as const;
+export type DeviceRevokedReason = (typeof DEVICE_REVOKED_REASONS)[number];
+export const deviceRevokedReasonSchema = z.enum(DEVICE_REVOKED_REASONS);
+
 export const apiErrorSchema = z.object({
-  error: z.object({ code: z.enum(API_ERROR_CODES), message: z.string() }),
+  error: z.object({
+    code: z.enum(API_ERROR_CODES),
+    message: z.string(),
+    /** Present with `device_revoked` (HTTP 401). */
+    reason: deviceRevokedReasonSchema.optional(),
+    /** For `rate_limited`. */
+    retryAfterMs: z.number().int().nonnegative().optional(),
+  }),
 });
 export type ApiError = z.infer<typeof apiErrorSchema>;
+
+/**
+ * How a client must react to a failed REST call (D-53). `device_revoked` is
+ * strictly separate from an expired token (`unauthorized` → refresh) and from
+ * network failures (`network` → retry later): only it wipes local data.
+ */
+export type ApiFailure =
+  | { kind: "device_revoked"; reason: DeviceRevokedReason }
+  | { kind: "unauthorized" }
+  | { kind: "network" }
+  | { kind: "error"; status: number; code: ApiErrorCode | null; message: string };
+
+/**
+ * Classify a REST failure. Pass `status: null` when no HTTP response arrived
+ * (fetch threw, timeout, offline). `body` is the parsed JSON or raw text.
+ * Only a 401 whose JSON body has `error.code: "device_revoked"` yields
+ * `device_revoked`; a proxy's 401 or garbage never does.
+ */
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+export function classifyApiFailure(status: number | null, body: unknown): ApiFailure {
+  if (status === null) return { kind: "network" };
+  let json = body;
+  if (typeof body === "string") {
+    try {
+      json = JSON.parse(body);
+    } catch {
+      json = null;
+    }
+  }
+  if (status === 401 && isRecord(json) && isRecord(json.error)) {
+    if (json.error.code === "device_revoked") {
+      // A reason added by a newer server still means "revoked" (fallback "user").
+      const reason = deviceRevokedReasonSchema.safeParse(json.error.reason);
+      return { kind: "device_revoked", reason: reason.success ? reason.data : "user" };
+    }
+  }
+  const parsed = apiErrorSchema.safeParse(json);
+  const error = parsed.success ? parsed.data.error : null;
+  if (status === 401) return { kind: "unauthorized" };
+  if (status >= 502 && status <= 504 && !error) return { kind: "network" };
+  return {
+    kind: "error",
+    status,
+    code: error?.code ?? null,
+    message: error?.message ?? `HTTP ${status}`,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Shared pieces

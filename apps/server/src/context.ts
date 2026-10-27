@@ -5,6 +5,7 @@ import type { Database } from './db/client.js';
 import type { JobQueue } from './jobs/queue.js';
 import { fromB64 } from './lib/encoding.js';
 import { DocumentService } from './services/documents.js';
+import { ImageFetcher } from './services/image-fetch.js';
 import { KeyService } from './services/keys.js';
 import { Metrics } from './metrics.js';
 import type { BlobStorage } from './storage/index.js';
@@ -22,6 +23,7 @@ export interface AppContext {
   documents: DocumentService;
   keys: KeyService;
   metrics: Metrics;
+  imageFetcher: ImageFetcher;
 }
 
 export function createContext(opts: {
@@ -46,5 +48,6 @@ export function createContext(opts: {
     }),
     keys: new KeyService(fromB64(config.DS_KMS_KEY)),
     metrics: new Metrics(),
+    imageFetcher: new ImageFetcher({ maxBytes: config.FETCH_IMAGE_MAX_BYTES, timeoutMs: config.FETCH_IMAGE_TIMEOUT_MS }),
   };
 }

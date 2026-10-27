@@ -140,9 +140,10 @@ struct FieldBox<Field: View>: View {
     }
 }
 
-/// D-49: «Server» on the sign-in and sign-up screens. It starts with this device's server (the
-/// build's by default); another address is checked (`GET /v1/health`, `https://` only) and named
-/// with its version before the account goes there. Hidden in a build with no server at all.
+/// D-49: «Server» on the sign-in and sign-up screens, in every build. Empty unless this device
+/// already signed in somewhere (amendment 2026-10-27: no address of ours is ever shown); the
+/// address is checked (`GET /v1/health`, `https://` only) and named with its version before the
+/// account goes there.
 struct ServerField: View {
     struct Entry: Equatable {
         var text: String?
@@ -160,16 +161,14 @@ struct ServerField: View {
     @Binding var state: Entry
     let identifier: String
 
-    static func isShown(_ app: AppModel) -> Bool { app.serverURL != nil || app.defaultServerURL != nil }
-
     var body: some View {
-        if Self.isShown(app) {
+        Group {
             VStack(alignment: .leading, spacing: Theme.Space.s2) {
                 FieldBox {
                     HStack(spacing: Theme.Space.s2) {
                         Image(systemName: "server.rack")
                             .foregroundStyle(Theme.Palette.textTertiary)
-                        TextField("Server", text: Binding(
+                        TextField("Your server address, e.g. notes.company.ru", text: Binding(
                             get: { state.text ?? app.serverURL.map(ServerAddress.display) ?? "" },
                             set: { state.text = $0; state.status = .unchecked }))
                             .textContentType(.URL)
@@ -177,6 +176,7 @@ struct ServerField: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .onSubmit { Task { _ = await Self.check($state, app: app) } }
+                            .accessibilityLabel("Server")
                             .accessibilityIdentifier("\(identifier).server")
                     }
                 }
@@ -206,6 +206,10 @@ struct ServerField: View {
     @MainActor
     private static func check(_ state: Binding<Entry>, app: AppModel) async -> URL? {
         let text = state.wrappedValue.text ?? app.serverURL.map(ServerAddress.display) ?? ""
+        guard !text.trimmingCharacters(in: .whitespaces).isEmpty else {
+            state.wrappedValue.status = .failed(String(localized: "Enter the address of your server."))
+            return nil
+        }
         switch ServerAddress.parse(text) {
         case .failure(.notHTTPS):
             state.wrappedValue.status = .failed(String(localized: "Use an https:// address."))
@@ -232,7 +236,8 @@ struct ServerField: View {
     /// Before signing in or up: the typed server is checked and becomes the app's server.
     @MainActor
     static func use(_ state: Binding<Entry>, app: AppModel) async -> Bool {
-        guard isShown(app) else { return true }
+        // UI tests without a server sign in to the on-device account service.
+        if app.isLocalOnlyTesting, (state.wrappedValue.text ?? "").isEmpty { return true }
         guard let url = await check(state, app: app) else { return false }
         app.useServer(url)
         return true

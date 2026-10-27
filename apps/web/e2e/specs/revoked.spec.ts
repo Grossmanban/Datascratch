@@ -1,7 +1,15 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { expectSynced, newDoc, signIn, signUp, uniqueEmail } from "./helpers";
 
 const MOCK = "http://localhost:8787";
+
+/** Settings → devices → «Завершить сеанс» on the other device, after the D-53 warning. */
+async function endOtherSession(q: Page) {
+  await q.getByRole("button", { name: "Завершить сеанс" }).first().click();
+  const dialog = q.getByRole("alertdialog").or(q.getByRole("dialog"));
+  await expect(dialog).toContainText("Все данные на этом устройстве будут удалены, включая неотправленные изменения");
+  await dialog.getByRole("button", { name: "Завершить сеанс" }).click();
+}
 
 test("a session ended from another device: explained on the login screen, unsent changes kept and sent after signing in", async ({ page, browser, request }) => {
   test.skip(!!process.env.E2E_SERVER_URL, "mock server only (it refuses pushes on request)");
@@ -25,7 +33,7 @@ test("a session ended from another device: explained on the login screen, unsent
   const q = await other.newPage();
   await signIn(q, email);
   await q.goto("/settings/account");
-  await q.getByRole("button", { name: "Отключить" }).first().click();
+  await endOtherSession(q);
 
   // Not a silent sync status: the login screen says what happened.
   await page.waitForURL("**/login**", { timeout: 20_000 });
@@ -57,7 +65,7 @@ test("after a revocation the local data can be deleted from the login screen", a
   const q = await other.newPage();
   await signIn(q, email);
   await q.goto("/settings/account");
-  await q.getByRole("button", { name: "Отключить" }).first().click();
+  await endOtherSession(q);
   await page.waitForURL("**/login**", { timeout: 20_000 });
   await other.close();
 
@@ -108,5 +116,19 @@ test("signing out with unsent changes warns, keeps them, and sends them after si
   await signIn(q, email);
   await q.goto(noteUrl.replace(/^https?:\/\/[^/]+/, ""));
   await expect(q.locator(".ds-prose")).toContainText("Первая строка и правка до выхода", { timeout: 20_000 });
+  await other.close();
+});
+
+test("D-53: password change and recovery warn that other devices are disconnected and their data deleted", async ({ page, browser }) => {
+  await signUp(page, uniqueEmail("d53-warnings"));
+  await page.goto("/settings/account");
+  await page.getByRole("button", { name: "Сменить пароль" }).first().click();
+  await expect(page.getByTestId("password-others-wiped")).toContainText("Другие устройства будут отключены, данные на них удалены");
+  await page.keyboard.press("Escape");
+  // Recovery is for a signed-out browser.
+  const other = await browser.newContext();
+  const r = await other.newPage();
+  await r.goto("/recover");
+  await expect(r.getByTestId("recover-others-wiped")).toContainText("будут отключены, данные на них удалены");
   await other.close();
 });

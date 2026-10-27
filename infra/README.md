@@ -111,14 +111,7 @@ crontab -e
 
 Копии складываются в `/opt/datascratch/infra/backups/` и хранятся 14 дней (`BACKUP_KEEP_DAYS`). Проверить вручную: `./backup.sh`.
 
-**Копии должны храниться вне этого сервера** (R-11). Проще всего — Hetzner Storage Box (от ~4 €/мес) через `rclone`:
-
-```bash
-apt install -y rclone
-rclone config        # n → имя storagebox → тип sftp → host: uXXXXX.your-storagebox.de, user: uXXXXX, порт 23, пароль Storage Box
-```
-
-Потом в `.env`: `BACKUP_RCLONE_REMOTE=storagebox:datascratch` — `backup.sh` будет сам копировать каждую новую копию туда. Подойдёт любое хранилище, которое понимает rclone (S3, Backblaze B2, Google Drive…).
+**Унести копии с сервера** — дело администратора (D-55), например `rsync -av root@АДРЕС:/opt/datascratch/infra/backups/ ./datascratch-backups/` со своего компьютера. Если сервер пропадёт вместе с копиями, данные восстановить будет нельзя.
 
 ### 8. Обновление сервера
 

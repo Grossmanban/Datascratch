@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Datascratch backup: PostgreSQL dump + attachment files, optionally copied off the server.
+# Datascratch backup: PostgreSQL dump + attachment files, kept on this server (copy them off with
+# scp/rsync; on a deployed server: /opt/datascratch/ds backup, D-55).
 # Usage (from anywhere):  infra/backup.sh
 # Daily via cron:         17 3 * * * /opt/datascratch/infra/backup.sh >> /var/log/datascratch-backup.log 2>&1
 set -euo pipefail
@@ -29,13 +30,7 @@ fi
 # 3. Quick integrity check of the dump.
 docker compose exec -T postgres pg_restore --list < "$DIR/db-$STAMP.dump" > /dev/null
 
-# 4. Off-site copy (R-11): any rclone remote (Hetzner Storage Box, S3, B2, ...).
-if [ -n "${BACKUP_RCLONE_REMOTE:-}" ]; then
-  rclone copy "$DIR" "$BACKUP_RCLONE_REMOTE" --include "*-$STAMP.*"
-  echo "copied to $BACKUP_RCLONE_REMOTE"
-fi
-
-# 5. Local retention.
+# 4. Local retention. Copies off the server are made by the admin (scp/rsync, D-55).
 find "$DIR" -maxdepth 1 -type f \( -name 'db-*.dump' -o -name 'files-*.tar.gz' \) -mtime +"$KEEP" -delete
 
 echo "[$(date -u +%FT%TZ)] done"

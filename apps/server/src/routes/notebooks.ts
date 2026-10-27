@@ -7,7 +7,12 @@ import type { AppContext } from '../context.js';
 import type { DbOrTx } from '../db/client.js';
 import { agentGrants, docSnapshots, docUpdates, docs, notebooks, shares, users } from '../db/schema.js';
 import { fromB64, safeEqual, toB64 } from '../lib/encoding.js';
-import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
+import { docAccess } from '../services/access.js';
+import type { UserPrincipal } from '../services/principal.js';
+import { memberOf } from '../services/sharing.js';
+import { sharedNotebookIds } from './sharing.js';
+import { authorSchema, notebookKeyResponseSchema } from '@datascratch/shared/contracts';
 import { AD, open } from '../lib/sodium.js';
 import { noteKeyCache } from '../plugins/agent-key-cache.js';
 import { topics } from '../sync/hub.js';
@@ -16,7 +21,7 @@ import { Key32, WrappedKey, errorResponses, id } from './schemas.js';
 
 const Mode = z.enum(['private', 'agent']);
 const Notebook = z
-  .object({ id: id(), mode: Mode, createdAt: z.string(), wrappedKey: z.string() })
+  .object({ id: id(), mode: Mode, createdAt: z.string(), wrappedKey: z.string(), shared: z.boolean().optional() })
   .meta({ id: 'Notebook' });
 const DocKind = z.enum(['account', 'notebook', 'note']);
 
@@ -48,8 +53,19 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         .select()
         .from(notebooks)
         .where(and(eq(notebooks.id, notebookId), eq(notebooks.userId, userId)));
-      if (!nb) throw notFound('notebook not found');
+      if (!nb) {
+        // Members of a shared notebook see it, but only its owner manages it (D-54).
+        if (await memberOf(db, { kind: 'notebook', id: notebookId }, userId)) throw forbidden('only the owner can do this');
+        throw notFound('notebook not found');
+      }
       return nb;
+    }
+
+    /** A document the caller may read; `owner` tells owner-only actions apart (D-54). */
+    async function visibleDoc(p: UserPrincipal, docId: string) {
+      const a = await docAccess(db, p, docId);
+      if (!a) throw notFound('document not found');
+      return a;
     }
 
     /**
@@ -135,7 +151,11 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           .from(notebooks)
           .where(eq(notebooks.userId, p.userId))
           .orderBy(asc(notebooks.createdAt));
-        return rows.map(dto);
+        const shared = await sharedNotebookIds(
+          db,
+          rows.map((r) => r.id),
+        );
+        return rows.map((r) => ({ ...dto(r), shared: shared.has(r.id) }));
       },
     );
 
@@ -146,13 +166,19 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           tags: ['notebooks'],
           security,
           params: z.object({ id: id() }),
-          response: { 200: z.object({ wrappedKey: z.string() }), ...errorResponses },
+          response: { 200: notebookKeyResponseSchema, ...errorResponses },
         },
       },
       async (req) => {
         const p = await requireUser(ctx, req);
         const nb = await ownNotebook(p.userId, req.params.id);
-        return { wrappedKey: toB64(nb.wrappedKey) };
+        return {
+          wrappedKey: toB64(nb.wrappedKey),
+          version: nb.keyVersion,
+          keyChain: nb.keyChain,
+          keyRotationPending: nb.keyRotationPending,
+          pendingSinceVersion: nb.pendingSinceVersion,
+        };
       },
     );
 
@@ -270,15 +296,24 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         }
         if (!notebookId) throw badRequest('notebookId is required');
         if (kind === 'notebook' && docId !== notebookId) throw badRequest('notebook docId must equal notebookId');
-        await ownNotebook(p.userId, notebookId);
+        // An editor of a shared notebook creates notes in it; they belong to the owner (D-54).
+        let ownerId = p.userId;
+        const [nb] = await db.select({ userId: notebooks.userId }).from(notebooks).where(eq(notebooks.id, notebookId));
+        if (nb && nb.userId !== p.userId) {
+          const m = await memberOf(db, { kind: 'notebook', id: notebookId }, p.userId);
+          if (!m) throw notFound('notebook not found');
+          if (m.role !== 'editor' || kind !== 'note') throw forbidden('read-only access');
+          if (m.accountCreatedAfterInvite && !m.wrappedKey) throw notFound('notebook not found');
+          ownerId = nb.userId;
+        } else if (!nb) throw notFound('notebook not found');
         const [created] = await db
           .insert(docs)
-          .values({ id: docId, userId: p.userId, kind, notebookId })
+          .values({ id: docId, userId: ownerId, kind, notebookId })
           .onConflictDoNothing()
           .returning({ id: docs.id });
         if (!created) {
           const [ex] = await db.select().from(docs).where(eq(docs.id, docId));
-          if (!ex || ex.userId !== p.userId || ex.kind !== kind || ex.notebookId !== notebookId) {
+          if (!ex || ex.userId !== ownerId || ex.kind !== kind || ex.notebookId !== notebookId) {
             throw conflict('document exists');
           }
         }
@@ -303,11 +338,9 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req, reply) => {
         const p = await requireUser(ctx, req);
-        const [doc] = await db
-          .select()
-          .from(docs)
-          .where(and(eq(docs.id, req.params.id), eq(docs.userId, p.userId)));
-        if (!doc) throw notFound('document not found');
+        const { doc, owner } = await visibleDoc(p, req.params.id);
+        // Moving a note out of a shared notebook is the owner's (members would lose it).
+        if (!owner) throw forbidden('only the owner can move this note');
         if (doc.kind !== 'note') throw badRequest('only note documents can be moved');
         await ownNotebook(p.userId, req.body.notebookId);
         if (doc.notebookId === req.body.notebookId) return reply.code(204).send(null);
@@ -332,11 +365,9 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req, reply) => {
         const p = await requireUser(ctx, req);
-        const [doc] = await db
-          .select()
-          .from(docs)
-          .where(and(eq(docs.id, req.params.id), eq(docs.userId, p.userId)));
-        if (!doc) throw notFound('document not found');
+        const { doc, owner } = await visibleDoc(p, req.params.id);
+        // Members put notes in the trash (an index edit); deleting for good is the owner's.
+        if (!owner) throw forbidden('only the owner can delete this note');
         if (doc.kind !== 'note') throw badRequest('only note documents can be deleted; delete the notebook instead');
         await db.transaction(async (tx) => {
           await revokeSharesFor(ctx, tx, p.userId, [doc.id]);
@@ -356,20 +387,28 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           security,
           params: z.object({ id: id() }),
           response: {
-            200: z.array(z.object({ seq: z.number().int(), createdAt: z.string(), deviceId: z.string() })),
+            200: z.array(
+              z.object({
+                seq: z.number().int(),
+                createdAt: z.string(),
+                deviceId: z.string(),
+                authors: z.array(authorSchema),
+              }),
+            ),
             ...errorResponses,
           },
         },
       },
       async (req) => {
         const p = await requireUser(ctx, req);
-        const [doc] = await db
-          .select({ id: docs.id })
-          .from(docs)
-          .where(and(eq(docs.id, req.params.id), eq(docs.userId, p.userId)));
-        if (!doc) throw notFound('document not found');
+        const { doc } = await visibleDoc(p, req.params.id);
         const rows = await ctx.documents.listVersions(db, doc.id);
-        return rows.map((r) => ({ seq: r.seq, createdAt: r.createdAt.toISOString(), deviceId: r.deviceId }));
+        return rows.map((r) => ({
+          seq: r.seq,
+          createdAt: r.createdAt.toISOString(),
+          deviceId: r.deviceId,
+          authors: r.authors ?? [],
+        }));
       },
     );
 
@@ -385,11 +424,7 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req) => {
         const p = await requireUser(ctx, req);
-        const [doc] = await db
-          .select({ id: docs.id })
-          .from(docs)
-          .where(and(eq(docs.id, req.params.id), eq(docs.userId, p.userId)));
-        if (!doc) throw notFound('document not found');
+        const { doc } = await visibleDoc(p, req.params.id);
         const v = await ctx.documents.getVersion(db, doc.id, req.params.seq);
         if (!v) throw notFound('version not found');
         return { payload: toB64(v.payload) };

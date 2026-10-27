@@ -88,7 +88,7 @@ export async function api<T = any>(
   s: TestServer,
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
-  opts: { body?: unknown; token?: string; binary?: Buffer } = {},
+  opts: { body?: unknown; token?: string; binary?: Buffer; remoteAddress?: string } = {},
 ): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
   if (opts.token) headers.authorization = `Bearer ${opts.token}`;
@@ -100,7 +100,13 @@ export async function api<T = any>(
     headers['content-type'] = 'application/json';
     payload = JSON.stringify(opts.body);
   }
-  const res = await s.app.inject({ method, url: `/v1${path}`, headers, ...(payload !== undefined ? { payload } : {}) });
+  const res = await s.app.inject({
+    method,
+    url: `/v1${path}`,
+    headers,
+    ...(payload !== undefined ? { payload } : {}),
+    ...(opts.remoteAddress ? { remoteAddress: opts.remoteAddress } : {}),
+  });
   const raw = res.rawPayload;
   let body: any = null;
   if (res.headers['content-type']?.toString().includes('application/json') && raw.length > 0) body = JSON.parse(raw.toString());
@@ -118,7 +124,12 @@ export interface TestUser {
   session: { accessToken: string; refreshToken: string; deviceId: string; userId: string };
 }
 
-export async function signup(s: TestServer, email = `u${newId().slice(-8)}@example.com`): Promise<TestUser> {
+/** `remoteAddress`: sign up from another address, for tests that need more accounts than the per-address limit. */
+export async function signup(
+  s: TestServer,
+  email = `u${newId().slice(-8)}@example.com`,
+  remoteAddress?: string,
+): Promise<TestUser> {
   const user = {
     email,
     userId: newId(),
@@ -135,6 +146,7 @@ export async function signup(s: TestServer, email = `u${newId().slice(-8)}@examp
       wrappedMasterKeyRecovery: b64(rnd(73)),
       deviceName: 'Test device',
     },
+    ...(remoteAddress ? { remoteAddress } : {}),
   });
   if (res.status !== 200) throw new Error(`signup failed: ${res.status} ${JSON.stringify(res.body)}`);
   return { ...user, session: res.body };

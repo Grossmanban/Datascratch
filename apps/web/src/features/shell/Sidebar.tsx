@@ -58,19 +58,19 @@ import {
   type FolderEntry,
 } from "@/domain/workspace";
 import { useRecoveryUnconfirmed } from "@/auth/recovery";
-import { folderMenuItems, newNoteAndOpen, noteMenuItems } from "@/features/docs/menus";
+import { folderMenuItems, newDocTarget, newNoteAndOpen, noteMenuItems } from "@/features/docs/menus";
 import { useUi } from "@/hooks/useUi";
 import { DND_FOLDER, DND_NOTE, dragFolder, dragNote, dropKind } from "@/lib/dnd";
 import { today } from "@/lib/dates";
 import { tintFg, tintName } from "@/lib/tokens";
-import { cn, confirmDialog, ContextMenu, DropdownMenu, IconButton, Kbd, SpaceTile, toast, Tooltip, type MenuItem } from "@/ui";
+import { cn, confirmDialog, ContextMenu, DropdownMenu, IconButton, SpaceTile, toast, Tooltip, type MenuItem } from "@/ui";
 import type { NotebookRef } from "@/lib/shared";
 import { InlineRename } from "./InlineRename";
 import { AllTagsDialog, MoreList, TagRow, useSpaceCollapsed, useTagTree } from "./SidebarLists";
 import { unreadableMenuState, useUnreadable } from "@/features/docs/UnreadableNote";
 import { SyncIndicator } from "./SyncIndicator";
 import { createSpaceInteractive } from "./spaces";
-import { iconGlyph } from "@/lib/glyph";
+import { iconGlyph, withIcon } from "@/lib/glyph";
 import { features } from "@/lib/features";
 
 function useCollapsed(key: string, def = false) {
@@ -125,9 +125,13 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
     return null;
   });
 
-  const newDoc = () => {
-    const nb = nbs[0];
-    if (nb) void newNoteAndOpen(navigate, nb.id);
+  // Where a new note goes (spec/05): the open notebook/folder, else the last used one in this space.
+  const target = newDocTarget(pathname);
+  const targetNb = nbs.find((n) => n.id === target?.notebookId);
+  const newDoc = (notebookId = target?.notebookId, sameFolder = true) => {
+    if (!notebookId || !target) return;
+    const same = notebookId === target.notebookId;
+    void newNoteAndOpen(navigate, notebookId, same && sameFolder ? target.folderId : null, target.tag);
   };
 
   return (
@@ -150,18 +154,38 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
       </div>
 
       <div className="px-3 pb-2">
-        <button
-          onClick={newDoc}
-          className="group flex h-8 w-full items-center gap-2 rounded-md bg-surface px-2.5 text-[13.5px] font-medium text-ink shadow-[0_1px_2px_rgb(40_30_10/0.06)] ring-1 ring-line transition hover:ring-ink/15 active:scale-[0.99]"
-          data-testid="new-doc"
-        >
-          <Plus className="size-4 text-ink-2" />
-          <span className="flex-1 text-left">{t("nav.newDoc")}</span>
-          <span className="hidden gap-0.5 group-hover:flex">
-            <Kbd>⌥</Kbd>
-            <Kbd>N</Kbd>
-          </span>
-        </button>
+        <div className="flex h-8 w-full items-stretch rounded-md bg-surface text-[13.5px] shadow-[0_1px_2px_rgb(40_30_10/0.06)] ring-1 ring-line transition hover:ring-ink/15">
+          <button
+            onClick={() => newDoc()}
+            className={cn("group flex shrink-0 items-center gap-2 rounded-l-md px-2.5 font-medium text-ink transition active:scale-[0.99]", !(targetNb && nbs.length > 1) && "flex-1")}
+            data-testid="new-doc"
+            title={`${t("nav.newDoc")} · ⌥N`}
+          >
+            <Plus className="size-4 shrink-0 text-ink-2" />
+            <span className="whitespace-nowrap text-left">{t("nav.newDoc")}</span>
+          </button>
+          {/* Shows where it goes and lets another notebook be picked. */}
+          {targetNb && nbs.length > 1 && (
+            <DropdownMenu
+              align="end"
+              items={nbs.map((nb) => ({
+                label: withIcon(nb.icon, nb.name),
+                checked: nb.id === targetNb.id,
+                onSelect: () => newDoc(nb.id),
+              }))}
+              trigger={
+                <button
+                  className="flex min-w-0 flex-1 items-center justify-end gap-0.5 rounded-r-md border-l border-line pl-2 pr-1.5 text-[12px] text-ink-2 transition hover:bg-ink/[0.04] hover:text-ink"
+                  aria-label={t("nav.newDocIn", { name: targetNb.name })}
+                  data-testid="new-doc-target"
+                >
+                  <span className="truncate">{t("nav.newDocInShort", { name: targetNb.name })}</span>
+                  <ChevronDown className="size-3 shrink-0" />
+                </button>
+              }
+            />
+          )}
+        </div>
       </div>
 
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 pb-4">

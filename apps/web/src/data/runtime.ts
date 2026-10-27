@@ -95,6 +95,8 @@ export class AccountRuntime {
       this.client.on("status", () => this.updateStatus()),
       this.client.on("synced", (docId) => {
         if (docId === this.accountDocId) useWorkspace.setState({ accountSynced: true });
+        // A notebook index caught up: its meta copy can be checked now (copyNotebookNames).
+        if (this.store.rowKind(docId) === "notebook") this.copyNotebookNames();
         this.updateStatus();
       }),
       this.client.on("awareness", (docId, payload) => receivePresence(docId, payload)),
@@ -484,6 +486,9 @@ export class AccountRuntime {
     for (const ref of account.notebooks) {
       const doc = this.store.get(ref.id);
       if (!doc) continue;
+      // Only into a notebook doc whose server state is here: writing into one still loading is a
+      // blind write on every new device (and the copy is usually already there).
+      if (!this.client.isSynced(ref.id)) continue;
       const space = account.spaces.find((s) => s.id === ref.spaceId) ?? null;
       syncNotebookMetaCopy(doc, ref, space);
     }

@@ -2,7 +2,14 @@
 import DSCore
 import Foundation
 import Testing
+#if canImport(DSEditorCore)
+import DSEditorCore
+import DSEditorModel
+#endif
 @testable import Datascratch
+
+@MainActor
+private final class Counter { var value = 0 }
 
 @MainActor
 struct CoreLibraryTests {
@@ -156,6 +163,164 @@ struct CoreLibraryTests {
         #expect(core.healUnreadableNotes().isEmpty)
         let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: KeyRing(store: InMemorySecretStore())))
         #expect(reloaded.body(note.id).blocks.map(\.text) == ["Kept locally"])
+    }
+
+    /// D-48: starred, tabs (with the active one), daily notebook, Inbox and tasks belong to one
+    /// space; switching back restores them, and the per-space settings survive a reload.
+    @Test func spacesAreIsolated() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let library = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        let a = library.createSpace(name: "A")
+        let b = library.createSpace(name: "B")
+        let notebookA = library.createNotebook(in: a.id, name: "NA", mode: .private)
+        let notebookB = library.createNotebook(in: b.id, name: "NB", mode: .private)
+        library.activateSpace(a.id)
+        let noteA = library.createNote(in: notebookA.id, title: "A1")
+        library.toggleStar(.note, noteA.id)
+        library.openTab(noteA.id)
+        library.addInboxTask("Task in A")
+        #expect(library.starredNotes.map(\.id) == [noteA.id])
+        #expect(library.openTabs.map(\.id) == [noteA.id])
+        #expect(library.activeTab == noteA.id)
+        #expect(library.dailyNotebook?.id == notebookA.id)
+        #expect(library.taskEntries.contains { $0.text == "Task in A" })
+
+        library.activateSpace(b.id)
+        #expect(library.starredNotes.isEmpty)
+        #expect(library.openTabs.isEmpty)
+        #expect(library.activeTab == nil)
+        #expect(library.dailyNotebook?.id == notebookB.id)
+        #expect(!library.taskEntries.contains { $0.text == "Task in A" })
+        #expect(library.ensureInboxIfPossible() == nil)
+        let inboxB = try #require(library.ensureInbox())
+        #expect(inboxB.notebookId == notebookB.id)
+
+        library.activateSpace(a.id)
+        #expect(library.activeTab == noteA.id)
+        #expect(library.ensureInboxIfPossible()?.notebookId == notebookA.id)
+
+        let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        #expect(reloaded.data.dailyNotebookBySpace?[a.id] == notebookA.id)
+        #expect(reloaded.data.dailyNotebookBySpace?[b.id] == notebookB.id)
+        #expect(reloaded.data.activeTabBySpace?[a.id] == noteA.id)
+    }
+
+    /// D-48: «Move to Space…» takes the notebook's starred notes and tabs along.
+    @Test func movingANotebookToAnotherSpaceTakesItsStarredAndTabs() throws {
+        let library = LibraryStore(backend: try CoreLibrary.inMemory())
+        let a = library.createSpace(name: "A")
+        let b = library.createSpace(name: "B")
+        let notebook = library.createNotebook(in: a.id, name: "Moves", mode: .private)
+        let stays = library.createNotebook(in: a.id, name: "Stays", mode: .private)
+        library.activateSpace(a.id)
+        let note = library.createNote(in: notebook.id, title: "Starred")
+        library.toggleStar(.note, note.id)
+        library.openTab(note.id)
+
+        library.moveNotebook(notebook.id, toSpace: b.id)
+        #expect(library.starredNotes.isEmpty && library.openTabs.isEmpty)
+        #expect(library.dailyNotebook?.id == stays.id)
+        library.activateSpace(b.id)
+        #expect(library.starredNotes.map(\.id) == [note.id])
+        #expect(library.openTabs.map(\.id) == [note.id])
+        #expect(library.dailyNotebook?.id == notebook.id)
+    }
+
+    /// D-48 migration: the legacy account-wide `dailyNotebookId` goes to its notebook's space.
+    @Test func legacyDailyNotebookMovesToItsSpace() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        let a = library.createSpace(name: "A")
+        let notebook = library.createNotebook(in: a.id, name: "NA", mode: .private)
+        try core.account.setSetting(CoreLibrary.dailyBySpaceKey, CoreLibrary.yObject([:]))
+        try core.account.setSetting("dailyNotebookId", .string(value: notebook.id))
+
+        let reloaded = LibraryStore(backend: try CoreLibrary(store: store, keys: keys))
+        #expect(reloaded.data.dailyNotebookBySpace == [a.id: notebook.id])
+    }
+
+    /// Prod 2026-10-26 (iPad, build 15): opening an agent's note whose document had not arrived
+    /// yet wrote an empty title over the agent's. Opening (and loading the library) must write
+    /// nothing: no outbox items, the title in the index unchanged.
+    @Test func openingANoteMadeElsewhereWritesNothing() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "Ии", mode: .agent)
+        // The agent's note: its meta came with the notebook index, its document did not.
+        let noteId = DSCore.EntityID.make()
+        let wrapped = try keys.createNoteKey(noteId: noteId, notebookId: notebook.id).wrappedKey
+        try core.notebookDocument(notebook.id).putNote(DSCore.NoteMeta(id: noteId, title: "Agent note", wrappedKey: wrapped), origin: .remote)
+        let before = try store.outboxCount()
+
+        _ = core.loadSnapshot()
+        let doc = try core.noteDocument(noteId, notebookId: notebook.id)
+        #expect(try doc.blocks().isEmpty)
+        _ = core.refreshNote(noteId, notebookId: notebook.id)
+        #expect(try store.outboxCount() == before)
+        #expect(try core.notebookDocument(notebook.id).note(id: noteId)?.title == "Agent note")
+    }
+
+    /// After a sync merged an empty title block in front of the real one, the index keeps the
+    /// first non-empty title.
+    @Test func indexTakesTheFirstNonEmptyTitle() throws {
+        let core = try CoreLibrary.inMemory()
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "N", mode: .private)
+        let note = library.createNote(in: notebook.id, title: "Agent title")
+        let doc = try core.noteDocument(note.id, notebookId: notebook.id)
+        try doc.insertBlocks([.title("")], at: 0)
+        let fresh = try #require(core.refreshNote(note.id, notebookId: notebook.id))
+        #expect(fresh.0.title == "Agent title")
+        #expect(try core.notebookDocument(notebook.id).note(id: note.id)?.title == "Agent title")
+    }
+
+    /// A change made on another device (a rollback on the web) reaches the open note's editor
+    /// and the list without reopening anything (prod 2026-10-26).
+    @Test func remoteChangesReachTheOpenNoteAndTheList() async throws {
+        let core = try CoreLibrary.inMemory()
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let notebook = library.createNotebook(in: space.id, name: "N", mode: .private)
+        let note = library.createNote(in: notebook.id, title: "Draft")
+        let doc = try core.noteDocument(note.id, notebookId: notebook.id)
+        #if canImport(DSEditorCore)
+        let editor = CoreEditorDocument(note: doc)
+        let remoteChanges = Counter()
+        let token = editor.observe { if $0.origin == .remote { remoteChanges.value += 1 } }
+        defer { _ = token }
+        #endif
+
+        // The other device edits the note and its entry in the notebook index.
+        let otherNote = NoteDocument(CRDTDocument(kind: .note, docId: note.id))
+        try otherNote.crdt.applyUpdates([try doc.crdt.encodeStateAsUpdate()], origin: .remote)
+        let blocks = try otherNote.blocks()
+        let titleIndex = try #require(blocks.firstIndex { $0.type == BlockType.title })
+        try otherNote.insertText("Rolled back ", at: 0, inBlock: [UInt32(titleIndex)])
+        try doc.crdt.applyUpdates([try otherNote.crdt.encodeStateAsUpdate(since: doc.crdt.stateVector())], origin: .remote)
+
+        let index = try core.notebookDocument(notebook.id)
+        let otherIndex = NotebookDocument(CRDTDocument(kind: .notebook, docId: notebook.id))
+        try otherIndex.crdt.applyUpdates([try index.crdt.encodeStateAsUpdate()], origin: .remote)
+        var meta = try #require(otherIndex.note(id: note.id))
+        meta.title = "Rolled back Draft"
+        try otherIndex.putNote(meta)
+        try index.crdt.applyUpdates([try otherIndex.crdt.encodeStateAsUpdate(since: index.crdt.stateVector())], origin: .remote)
+
+        for _ in 0..<40 where library.note(note.id)?.title != "Rolled back Draft" {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(try doc.title() == "Rolled back Draft")
+        #expect(library.note(note.id)?.title == "Rolled back Draft")
+        #if canImport(DSEditorCore)
+        #expect(remoteChanges.value > 0)
+        #endif
     }
 
     /// The user's cover image lives in `meta.cover` and its thumbnail in `NoteMeta.coverThumb`.
@@ -369,9 +534,9 @@ struct CoreLibraryTests {
         #expect(library.data.spaces == before.spaces && library.data.notebooks == before.notebooks)
     }
 
-    /// Both «Notes» twins hold the person's notes (some written in the account after build 5):
-    /// the notes move into one notebook, one Inbox stays.
-    @Test func twinNotebooksWithNotesBecomeOne() throws {
+    /// Both «Personal» twins hold the person's notes (some written in the account after build 5):
+    /// without a fresh carry nothing of theirs moves or goes (spec/02, «Стартовые пространства»).
+    @Test func twinSpacesWithNotesStayApart() throws {
         let keys = KeyRing(store: InMemorySecretStore())
         let store = try LocalStore.inMemory()
         let core = try CoreLibrary(store: store, keys: keys)
@@ -395,16 +560,37 @@ struct CoreLibraryTests {
         core.needsCarriedMerge = false
 
         library.mergeCarriedDuplicates(anyName: false)
-        let personal = try #require(library.spaces.first { $0.name == String(localized: "Personal") })
-        let notebooks = library.notebooks(in: personal.id).filter { $0.name == String(localized: "Notes") }
-        #expect(notebooks.count == 1)
-        let kept = try #require(notebooks.first)
         let live = library.data.notes.filter { !$0.isTrashed }
-        #expect(live.first { $0.id == early }?.notebookId == kept.id)
-        #expect(live.first { $0.id == later }?.notebookId == kept.id)
-        #expect(live.filter { $0.kind == .inbox }.count == 1)
-        #expect(live.filter { $0.title == LibraryStore.welcomeTitle }.count == 1)
-        #expect(library.dailyNotebook?.id == kept.id)
+        #expect(live.first { $0.id == early }?.notebookId == localNotes.id)
+        #expect(live.first { $0.id == later }?.notebookId == accountNotes.id)
+        #expect(library.spaces.contains { $0.id == localSpace.id } && library.spaces.contains { $0.id == accountSpace.id })
+    }
+
+    /// Prod, build 14 (owner's iPhone): «Личное» with the person's notebooks next to an English
+    /// «Personal» that holds only the seeded «Notes», and «Work» next to «Работа», both empty.
+    /// Once the account has synced the empty twins go; nothing with content is touched.
+    @Test func emptyFirstRunTwinsGoAfterSync() throws {
+        let library = LibraryStore(backend: try CoreLibrary.inMemory())
+        let russian = library.createSpace(name: "Личное")
+        let mine = library.createNotebook(in: russian.id, name: "Заметки", mode: .private)
+        let test = library.createNotebook(in: russian.id, name: "Тест", mode: .private)
+        let note = library.createNote(in: test.id, folder: nil, title: "Моя заметка")
+        let english = library.createSpace(name: "Personal")
+        let seeded = library.createNotebook(in: english.id, name: "Notes", mode: .private)
+        _ = library.createNote(in: seeded.id, title: LibraryStore.welcomeTitle, body: LibraryStore(persistence: .inMemory).firstRunWelcomeBody())
+        let work = library.createSpace(name: "Work")
+        let rabota = library.createSpace(name: "Работа")
+        let other = library.createSpace(name: "Personal")
+        let kept = library.createNotebook(in: other.id, name: "Идеи", mode: .private)
+        _ = library.createNote(in: kept.id, folder: nil, title: "Идея")
+
+        library.mergeCarriedDuplicates(anyName: false)
+        #expect(!library.spaces.contains { $0.id == english.id })
+        #expect(library.notebook(seeded.id) == nil)
+        #expect([work.id, rabota.id].filter { id in library.spaces.contains { $0.id == id } }.count == 1)
+        #expect(library.spaces.contains { $0.id == russian.id } && library.spaces.contains { $0.id == other.id })
+        #expect(library.notebook(mine.id) != nil && library.note(note.id)?.notebookId == test.id)
+        #expect(library.notebook(kept.id) != nil)
     }
 
     /// spec/07: «Delete data from this device» (and signing in to another account) leaves an
@@ -564,10 +750,33 @@ final class RecordingRemote: CoreLibraryRemote {
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?) { opened.append(crdt.docId) }
     var keysMissing = 0
     func notebookKeysMissing() { keysMissing += 1 }
+    var keysLearned = 0
+    func noteKeysLearned() { keysLearned += 1 }
 }
 
 @MainActor
 struct CoreLibraryRemoteTests {
+    /// A note key that arrives with a notebook index lets the documents waiting for it be
+    /// subscribed — once, not on every reload.
+    @Test func newNoteKeysWakeTheDocumentsWaitingForThem() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let core = try CoreLibrary(store: try LocalStore.inMemory(), keys: keys)
+        let library = LibraryStore(backend: core)
+        let notebook = library.createNotebook(in: library.createSpace(name: "S").id, name: "N", mode: .private)
+        let remote = RecordingRemote()
+        core.remote = remote
+        _ = core.loadSnapshot()
+        let learned = remote.keysLearned
+
+        let noteId = DSCore.EntityID.make()
+        let wrapped = try keys.createNoteKey(noteId: noteId, notebookId: notebook.id).wrappedKey
+        try core.notebookDocument(notebook.id).putNote(DSCore.NoteMeta(id: noteId, title: "From the web", wrappedKey: wrapped), origin: .remote)
+        _ = core.loadSnapshot()
+        #expect(remote.keysLearned == learned + 1)
+        _ = core.loadSnapshot()
+        #expect(remote.keysLearned == learned + 1)
+    }
+
     @Test func notebooksAndDocumentsReachTheServerSide() throws {
         let core = try CoreLibrary.inMemory()
         let remote = RecordingRemote()

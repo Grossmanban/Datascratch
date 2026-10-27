@@ -7,6 +7,9 @@ import UIKit
 /// names follow `design-tokens.md` so swapping to DSDesign is mechanical.
 public struct EditorTheme: Sendable {
     public var style: DocumentStyle
+    /// Task dates are actionable (D-51: off in the notes-only app): date chips open the reschedule
+    /// menu and menus offer dates. Off, the chips are quiet labels and the dates stay in the document.
+    public var taskDatesEnabled = true
     public var baseFontSize: CGFloat = 17
 
     public init(style: DocumentStyle = DocumentStyle()) { self.style = style }

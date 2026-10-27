@@ -145,6 +145,115 @@ import Testing
         #expect(doc.flatText(of: code.id) == "# comment\ndef hello():\n    print(\"hi\")\n")
     }
 
+    /// The agent's title block keeps its id and text through opening and editing elsewhere, and
+    /// the note's title (NoteMeta.title is derived from it) does not change.
+    @Test func agentTitleIsAdoptedNotReplaced() throws {
+        let note = try Self.agentNote()
+        let titleBefore = try note.title()
+        let titleId = try #require(try Self.blocks(note).first?.id)
+        let before = try note.crdt.encodeStateAsUpdate()
+        let doc = CoreEditorDocument(note: note)
+        _ = Projection.build(doc.blocks)
+        #expect(try note.crdt.encodeStateAsUpdate() == before, "opening writes nothing")
+        let cmd = EditorCommands(document: doc)
+        let last = try #require(doc.blocks.last)
+        cmd.typeText("!", marks: .empty, at: TextPosition(block: last.id, offset: doc.textLength(of: last.id)))
+        let after = try Self.blocks(note)
+        #expect(after.first?.id == titleId, "the title block is the agent's, not a new one")
+        #expect(try note.title() == titleBefore)
+        #expect(after.filter { $0.json.contains("\"type\":\"title\"") }.count == 1, "no second title is added")
+    }
+
+    /// Two titles (an empty one from a client that initialized the note before it synced, merged
+    /// with the agent's): the editor opens it without writing and removes neither.
+    @Test func twoMergedTitlesAreOpenedWithoutWrites() throws {
+        let note = try Self.agentNote()
+        let stray = NoteDocument(noteId: note.noteId)
+        try stray.initialize()
+        try note.crdt.applyUpdate(try stray.crdt.encodeStateAsUpdate())
+        let before = try note.crdt.encodeStateAsUpdate()
+        let ids = try Self.blocks(note).map(\.id)
+        let doc = CoreEditorDocument(note: note)
+        _ = Projection.build(doc.blocks)
+        #expect(try note.crdt.encodeStateAsUpdate() == before, "reading the document writes nothing")
+        #expect(try Self.blocks(note).map(\.id) == ids)
+
+        // The repair the editor runs on open: the agent's title stays, the stray empty one goes.
+        let agentTitle = try Self.agentNote().title()
+        #expect(EditorCommands(document: doc).repairTitles())
+        let titles = try Self.blocks(note).filter { $0.json.contains("\"type\":\"title\"") }
+        #expect(titles.count == 1)
+        // NoteMeta.title comes from the first non-empty title (the stray empty paragraph from the
+        // other client may now come first: the document is shown as it is).
+        #expect(titles.first?.json.contains(agentTitle) == true, "the remaining title is the agent's")
+        let repaired = try note.crdt.encodeStateAsUpdate()
+        #expect(!EditorCommands(document: doc).repairTitles())
+        #expect(try note.crdt.encodeStateAsUpdate() == repaired, "a second repair writes nothing")
+    }
+
+    /// The damaged note from the server: an empty title created on a device's first open (newer
+    /// id) before the agent's title, demoted to a paragraph (older id, agent-marked text). The
+    /// repair puts the text back into the title and deletes the paragraph; a second one is a no-op.
+    @Test func demotedAgentTitleIsRestored() throws {
+        let note = NoteDocument(noteId: "01a17993-3956-77ff-8066-d911b8668e4f")
+        let nodes: [XmlNode] = [
+            .element(name: "title", attributes: ["blockId": .string(value: "01a179ea-5a5a-7e49-ab53-d3acec118201")], children: []),
+            .element(name: "paragraph", attributes: ["blockId": .string(value: "01a17993-3967-77ca-99ea-592f9d133060")],
+                     children: [Self.text("Стратегия продукта — черновик")]),
+            Self.para("Первый абзац тела"),
+        ]
+        try note.crdt.transact(origin: .remote) { $0.insertNodes(nodes, into: [], at: 0) }
+        let doc = CoreEditorDocument(note: note)
+        #expect(EditorCommands(document: doc).repairTitles())
+        #expect(try note.title() == "Стратегия продукта — черновик")
+        let blocks = try Self.blocks(note)
+        #expect(blocks.map(\.id).prefix(1) == ["01a179ea-5a5a-7e49-ab53-d3acec118201"])
+        #expect(!blocks.map(\.id).contains("01a17993-3967-77ca-99ea-592f9d133060"), "the demoted paragraph is gone")
+        #expect(blocks[0].json.contains("agentEdit"), "the agent mark moves with the text")
+        let repaired = try note.crdt.encodeStateAsUpdate()
+        #expect(!EditorCommands(document: doc).repairTitles())
+        #expect(try note.crdt.encodeStateAsUpdate() == repaired)
+        #expect(!doc.canUndo, "the repair is not in undo")
+    }
+
+    /// A note in a newer format (read-only, R-03) is shown as it is, never repaired.
+    @Test func readOnlyNotesAreNotRepaired() throws {
+        let note = NoteDocument(noteId: "01a17993-3956-77ff-8066-d911b8668e4f")
+        let nodes: [XmlNode] = [
+            .element(name: "title", attributes: ["blockId": .string(value: "01a179ea-5a5a-7e49-ab53-d3acec118201")], children: []),
+            .element(name: "title", attributes: ["blockId": .string(value: "01a17993-3967-77ca-99ea-592f9d133060")],
+                     children: [Self.text("Название")]),
+        ]
+        try note.crdt.transact(origin: .remote) { txn in
+            txn.set("meta", key: "formatVersion", .number(value: 999))
+            txn.insertNodes(nodes, into: [], at: 0)
+        }
+        let before = try note.crdt.encodeStateAsUpdate()
+        let doc = CoreEditorDocument(note: note)
+        #expect(doc.isReadOnly)
+        #expect(!EditorCommands(document: doc).repairTitles())
+        #expect(try note.crdt.encodeStateAsUpdate() == before)
+    }
+
+    /// Two clients repairing the same merged document at once converge on one title.
+    @Test func concurrentRepairsConverge() throws {
+        let agent = try Self.agentNote()
+        let stray = NoteDocument(noteId: agent.noteId)
+        try stray.initialize()
+        try agent.crdt.applyUpdate(try stray.crdt.encodeStateAsUpdate())
+        let state = try agent.crdt.encodeStateAsUpdate()
+        let a = NoteDocument(noteId: agent.noteId)
+        let b = NoteDocument(noteId: agent.noteId)
+        try a.crdt.applyUpdate(state)
+        try b.crdt.applyUpdate(state)
+        EditorCommands(document: CoreEditorDocument(note: a)).repairTitles()
+        EditorCommands(document: CoreEditorDocument(note: b)).repairTitles()
+        try a.crdt.applyUpdate(try b.crdt.encodeStateAsUpdate())
+        try b.crdt.applyUpdate(try a.crdt.encodeStateAsUpdate())
+        #expect(try Self.blocks(a).map(\.json) == Self.blocks(b).map(\.json))
+        #expect(try Self.blocks(a).filter { $0.json.contains("\"type\":\"title\"") }.count == 1)
+    }
+
     /// The shared reference note (every node and mark of document-model.md §4.2) survives an edit.
     @Test(.enabled(if: FileManager.default.fileExists(atPath: Self.vector.path)))
     func referenceNoteSurvivesAnEdit() throws {
@@ -164,6 +273,47 @@ import Testing
             #expect(a.json == b.json, "block \(b.id) changed: \(b.json) → \(a.json)")
         }
     }
+
+    /// The byte-exact agents vector (`packages/test-vectors/vectors/agents/create-note.json`):
+    /// create_note output, then a replace_text on the title with agentEdit. Opening writes nothing,
+    /// the title repair has nothing to do, and the content is exactly as expected.
+    @Test(.enabled(if: FileManager.default.fileExists(atPath: Self.agentsVector.path)))
+    func agentsCreateNoteVector() throws {
+        let file = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: Self.agentsVector)) as? [String: Any])
+        func update(_ section: String) throws -> Data {
+            let s = try #require((file[section] as? [String: Any])?["update"] as? String)
+            var b64 = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+            while b64.count % 4 != 0 { b64 += "=" }
+            return try #require(Data(base64Encoded: b64))
+        }
+        func expected(_ section: String) throws -> String {
+            let e = try #require(((file[section] as? [String: Any])?["expected"] as? [String: Any])?["content"])
+            return Self.json(e)
+        }
+        let note = NoteDocument(noteId: "0192f3c4-0000-7000-8000-00000000b001")
+        try note.crdt.applyUpdate(try update("createNote"))
+        #expect(Self.json(try note.contentJSON()) == (try expected("createNote")), "content as the agent wrote it")
+
+        func openWritesNothing(_ label: String) throws {
+            let before = try note.crdt.encodeStateAsUpdate()
+            let doc = CoreEditorDocument(note: note)
+            _ = Projection.build(doc.blocks)
+            #expect(!EditorCommands(document: doc).repairTitles(), "\(label): the repair has nothing to do")
+            #expect(try note.crdt.encodeStateAsUpdate() == before, "\(label): opening writes nothing")
+        }
+        try openWritesNothing("create_note")
+
+        try note.crdt.applyUpdate(try update("editTitle"))
+        #expect(Self.json(try note.contentJSON()) == (try expected("editTitle")), "content after the agent's title edit")
+        #expect(try note.title().hasPrefix("План на месяц"))
+        try openWritesNothing("edited title")
+    }
+
+    nonisolated static let agentsVector = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("packages/test-vectors/vectors/agents/create-note.json")
 
     nonisolated static let vector = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent() // DSEditorCoreTests

@@ -16,7 +16,7 @@ struct DocumentCollectionView: View {
         @Bindable var settings = app.settings
         let notes = filtered
         Group {
-            if notes.isEmpty {
+            if notes.isEmpty && subfolders.isEmpty {
                 emptyState
             } else if settings.libraryLayout == .grid {
                 ScrollView {
@@ -80,12 +80,16 @@ struct DocumentCollectionView: View {
                 // One «New» button (D-38): the toolbar on iPad, the floating button on iPhone.
                 // (By idiom: the iPad split-view columns report a compact size class.)
                 if canCreate, !isPhone {
-                    Button {
-                        scene.newNote()
-                    } label: {
-                        Image(systemName: "square.and.pencil")
+                    NewNoteMenu {
+                        HStack(spacing: Theme.Space.s1) {
+                            Image(systemName: "square.and.pencil")
+                            if let name = scene.newNoteDestinationName {
+                                Text("in “\(name)”")
+                                    .font(Theme.Typography.footnote)
+                                    .lineLimit(1)
+                            }
+                        }
                     }
-                    .accessibilityLabel("New Note")
                     .accessibilityIdentifier("library.newNote")
                 }
             }
@@ -93,18 +97,27 @@ struct DocumentCollectionView: View {
         .safeAreaInset(edge: .bottom) {
             if isPhone, canCreate {
                 // One-handed use on iPhone: the main action sits under the thumb.
-                HStack {
+                HStack(spacing: Theme.Space.s2) {
                     Spacer()
-                    Button {
-                        scene.newNote()
-                    } label: {
+                    // Where the note goes, when the list is not that notebook (All Documents, a tag).
+                    if let name = scene.newNoteDestinationName {
+                        Text("in “\(name)”")
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                            .lineLimit(1)
+                            .padding(.horizontal, Theme.Space.s3)
+                            .padding(.vertical, Theme.Space.s2)
+                            .background(.regularMaterial, in: Capsule())
+                            .accessibilityHidden(true)
+                    }
+                    NewNoteMenu {
                         Image(systemName: "square.and.pencil")
                             .font(.title2.weight(.medium))
                             .frame(width: 56, height: 56)
                     }
+                    .menuStyle(.button)
                     .prominentGlass()
                     .buttonBorderShape(.circle)
-                    .accessibilityLabel("New Note")
                     .accessibilityIdentifier("library.newNote.floating")
                 }
                 .padding(.horizontal, Theme.Space.s5)
@@ -115,6 +128,7 @@ struct DocumentCollectionView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s3) {
+            if case .folder(let id) = source { FolderBreadcrumb(folderId: id) }
             Text(title)
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.textPrimary)
@@ -122,6 +136,7 @@ struct DocumentCollectionView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, Theme.Space.s2)
                 .accessibilityAddTraits(.isHeader)
+            if !subfolders.isEmpty { FolderStrip(folders: subfolders) }
             #if canImport(DSDesign)
             if isLocked {
                 DSCallout(tone: .info, title: String(localized: "Getting this notebook ready"),
@@ -129,12 +144,18 @@ struct DocumentCollectionView: View {
                           systemImage: "key")
                     .accessibilityIdentifier("library.notebookLocked")
             } else if let id = notebookId, app.sync.unreadableNotebookIds.contains(id) {
-                DSCallout(tone: .note, title: String(localized: "Some changes can't be read here yet"),
-                          message: String(localized: "They were saved with another key. The rest of the notebook is up to date."),
-                          systemImage: "lock.trianglebadge.exclamationmark")
-                    .accessibilityIdentifier("library.notebookUnreadable")
+                UnreadableNotice(notebookId: id, signature: app.sync.unreadableSignatures[id] ?? "")
             }
             #endif
+        }
+    }
+
+    /// Folders of the level this list shows (D-15: the folder strip above the documents).
+    private var subfolders: [Folder] {
+        switch source {
+        case .notebook(let id): library.folders(in: id, parent: nil)
+        case .folder(let id): library.folder(id).map { library.folders(in: $0.notebookId, parent: id) } ?? []
+        default: []
         }
     }
 
@@ -476,3 +497,184 @@ struct PaperPattern: View {
         .accessibilityHidden(true)
     }
 }
+
+#if canImport(DSDesign)
+/// The calm note about changes this device can't read (another key). It can be dismissed; the
+/// dismissal is remembered on this device per notebook and per set of unreadable items, so only
+/// new ones bring it back. Afterwards a one-line hint keeps the information at hand.
+struct UnreadableNotice: View {
+    let notebookId: String
+    let signature: String
+    @AppStorage("unreadableDismissed") private var dismissedJSON = ""
+    @State private var reopened = false
+
+    private var dismissed: [String: String] {
+        (try? JSONDecoder().decode([String: String].self, from: Data(dismissedJSON.utf8))) ?? [:]
+    }
+
+    var body: some View {
+        if dismissed[notebookId] == signature && !reopened {
+            Button {
+                withAnimation(Theme.Motion.snappy) { reopened = true }
+            } label: {
+                Label("Some changes can't be read here yet", systemImage: "lock.trianglebadge.exclamationmark")
+                    .font(Theme.Typography.footnote)
+                    .foregroundStyle(Theme.Palette.textSecondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("library.notebookUnreadableHint")
+        } else {
+            ZStack(alignment: .topTrailing) {
+                DSCallout(tone: .note, title: String(localized: "Some changes can't be read here yet"),
+                          message: String(localized: "They were saved with another key. The rest of the notebook is up to date."),
+                          systemImage: "lock.trianglebadge.exclamationmark")
+                Button {
+                    var map = dismissed
+                    map[notebookId] = signature
+                    if let data = try? JSONEncoder().encode(map) { dismissedJSON = String(decoding: data, as: UTF8.self) }
+                    withAnimation(Theme.Motion.snappy) { reopened = false }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(Theme.Space.s2)
+                .accessibilityLabel("Dismiss")
+                .accessibilityIdentifier("library.notebookUnreadableDismiss")
+            }
+            .accessibilityIdentifier("library.notebookUnreadable")
+        }
+    }
+}
+#endif
+
+/// The current level's folders as a strip of cards above the documents (spec/05): icon, name and
+/// document count in the notebook's tint. A tap opens the folder, a long press gives its menu.
+/// Scrolls sideways; on a wide column it wraps.
+struct FolderStrip: View {
+    @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
+    let folders: [Folder]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Theme.Space.s2) {
+                ForEach(folders) { folder in card(folder) }
+            }
+            .padding(.vertical, 2)
+        }
+        .scrollClipDisabled()
+        .accessibilityIdentifier("library.folderStrip")
+    }
+
+    private func card(_ folder: Folder) -> some View {
+        let library = app.library
+        let tint = library.notebook(folder.notebookId)?.color ?? folder.color
+        let count = library.documents(inFolder: folder.id).count
+        return Button {
+            scene.show(.folder(folder.id))
+        } label: {
+            HStack(spacing: Theme.Space.s2) {
+                Image(systemName: folder.icon)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(folder.color.foreground)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(folder.name)
+                        .font(Theme.Typography.body.weight(.medium))
+                        .foregroundStyle(Theme.Palette.textPrimary)
+                        .lineLimit(1)
+                    Text("\(count) documents")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                }
+            }
+            .padding(.horizontal, Theme.Space.s3)
+            .padding(.vertical, Theme.Space.s2)
+            .frame(minWidth: 132, alignment: .leading)
+            .background(tint.background.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(tint.foreground.opacity(0.15)))
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .contextMenu { FolderMenuItems(folder: folder) }
+        .accessibilityIdentifier("folderCard.\(folder.name)")
+    }
+}
+
+/// Notebook › folder › … above a nested folder's list; every part opens its level.
+struct FolderBreadcrumb: View {
+    @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
+    let folderId: String
+
+    var body: some View {
+        let library = app.library
+        let path = chain(library)
+        if let first = path.first, let notebook = library.notebook(first.notebookId), path.count > 1 {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Theme.Space.s1) {
+                    crumb(notebook.name) { scene.show(.notebook(notebook.id)) }
+                    ForEach(path.dropLast()) { folder in
+                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                        crumb(folder.name) { scene.show(.folder(folder.id)) }
+                    }
+                }
+            }
+            .accessibilityIdentifier("library.breadcrumb")
+        }
+    }
+
+    /// From the top-level folder down to this one.
+    private func chain(_ library: LibraryStore) -> [Folder] {
+        var result: [Folder] = []
+        var next = library.folder(folderId)
+        while let folder = next, !result.contains(where: { $0.id == folder.id }) {
+            result.insert(folder, at: 0)
+            next = folder.parentId.flatMap { library.folder($0) }
+        }
+        return result
+    }
+
+    private func crumb(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(Theme.Typography.footnote)
+                .foregroundStyle(Theme.Palette.textSecondary)
+                .lineLimit(1)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// «New Note»: a tap makes the note where `SceneModel.newNoteDestination` says; a long press
+/// picks another notebook of the space (spec/05).
+struct NewNoteMenu<Label: View>: View {
+    @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
+    @ViewBuilder var label: Label
+
+    var body: some View {
+        let library = app.library
+        Menu {
+            Section("New Note In") {
+                ForEach(library.notebooks(in: library.activeSpace?.id)) { notebook in
+                    Button(notebook.name, systemImage: "book.closed") {
+                        scene.newNote(in: notebook.id)
+                    }
+                    .disabled(library.isLocked(notebook: notebook.id))
+                }
+            }
+        } label: {
+            label
+        } primaryAction: {
+            scene.newNote()
+        }
+        .accessibilityLabel("New Note")
+        .accessibilityValue(scene.newNoteDestinationName.map { Text("in “\($0)”") } ?? Text(verbatim: ""))
+    }
+}
+

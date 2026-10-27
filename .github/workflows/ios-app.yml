@@ -44,7 +44,7 @@ jobs:
     if: needs.gate.outputs.skip != 'true'
     name: Build & test (${{ matrix.family }})
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -132,7 +132,9 @@ jobs:
             CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
 
       - name: UI tests (full)
-        timeout-minutes: 20
+        # The iPad simulator needs ~20 min for the full suite since build 17 (each test is still
+        # capped at 180 s, so a hang does not hide behind this).
+        timeout-minutes: 35
         run: |
           set -o pipefail
           ARGS=(-only-testing:DatascratchUITests)

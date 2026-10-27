@@ -94,6 +94,49 @@ final class OnboardingUITests: XCTestCase {
                       "reminder not shown; buttons: \(LibraryUITests.buttons(app))")
     }
 
+    // MARK: D-49: the server field
+
+    private func launchToSignIn(_ extra: [String]) -> XCUIApplication {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-ui-testing-server", "https://sync.example.org"] + extra
+        app.launch()
+        app.buttons["welcome.signIn"].tap()
+        XCTAssertTrue(app.textFields["signIn.server"].waitForExistence(timeout: 5), "no Server field on Sign In")
+        return app
+    }
+
+    private func replaceServer(_ app: XCUIApplication, with text: String) {
+        let field = app.textFields["signIn.server"]
+        field.tap()
+        let current = (field.value as? String) ?? ""
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2))
+        field.typeText(text + "\n")
+    }
+
+    /// The build's server is filled in.
+    func testServerFieldStartsWithTheDefaultServer() throws {
+        let app = launchToSignIn([])
+        XCTAssertEqual(app.textFields["signIn.server"].value as? String, "sync.example.org")
+    }
+
+    /// A plain http:// address (not localhost) is refused before anything is sent.
+    func testServerFieldRefusesAnInsecureAddress() throws {
+        let app = launchToSignIn([])
+        replaceServer(app, with: "http://notes.example.org")
+        XCTAssertTrue(app.descendants(matching: .any)["signIn.serverError"].firstMatch.waitForExistence(timeout: 5),
+                      "no error for an http:// address")
+    }
+
+    /// Another server is checked and shown by name and version before signing in.
+    func testServerFieldChecksACustomServer() throws {
+        let app = launchToSignIn(["-ui-testing-health-ok"])
+        replaceServer(app, with: "notes.example.net")
+        let info = app.descendants(matching: .any)["signIn.serverInfo"].firstMatch
+        XCTAssertTrue(info.waitForExistence(timeout: 5), "the server was not checked")
+        XCTAssertTrue(info.label.contains("notes.example.net"), "info: \(info.label)")
+    }
+
     private static func groupIndex(_ placeholder: String?) -> Int {
         let digits = (placeholder ?? "").filter(\.isNumber)
         return max(0, (Int(digits) ?? 1) - 1)
@@ -102,6 +145,9 @@ final class OnboardingUITests: XCTestCase {
 
 @MainActor
 final class LibraryUITests: XCTestCase {
+    /// D-51: tasks, calendar and tabs are the extended mode; their tests turn it on.
+    static let extendedMode = ["-ds-extended-mode", "YES"]
+
     private func launchSignedIn(_ extra: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -206,6 +252,76 @@ final class LibraryUITests: XCTestCase {
         }
     }
 
+    /// spec/04, like Apple Notes: a new note starts with the caret in its title; Return in an
+    /// empty title gives it the default («Note Oct 26, 2026») and goes to the text; a new note
+    /// left with nothing in it is not kept.
+    func testNewNoteTitleLikeAppleNotes() throws {
+        let app = launchSignedIn()
+        let cards = app.descendants(matching: .any).matching(identifier: "document.card")
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 10), "no document list")
+        let before = cards.count
+
+        try openNewNoteInNativeEditor(app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the new note's title did not get the caret")
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        let text = editor.textViews.firstMatch
+        XCTAssertTrue(text.waitForExistence(timeout: 5), "no text view")
+        text.typeText("\nBody")
+        let value = { (text.value as? String) ?? "" }
+        let titled = NSPredicate { _, _ in
+            let v = value()
+            return (v.hasPrefix("Note ") || v.hasPrefix("Заметка ")) && v.contains("Body")
+        }
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: titled, evaluatedWith: nil)], timeout: 5), .completed,
+                       "the empty title did not get the default; text: \(value())")
+        leaveDocument(app)
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5), "back to the list")
+        XCTAssertEqual(cards.count, before + 1, "the written note is not in the list")
+
+        // A new note left untouched is dropped.
+        try openNewNoteInNativeEditor(app)
+        settle(1)
+        leaveDocument(app)
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5), "back to the list")
+        settle(1)
+        XCTAssertEqual(cards.count, before + 1, "an empty new note was kept")
+    }
+
+    /// spec/05: in All Documents a new note goes to the notebook last opened in this space, and
+    /// the button says where.
+    func testNewNoteGoesToTheLastUsedNotebook() throws {
+        let app = launchSignedIn(["-ui-testing-many"])
+        _ = sidebarElement(app, "sidebar.allDocuments")
+        let more = app.descendants(matching: .any)["sidebar.more.notebooks"].firstMatch
+        if more.exists { more.tap() }
+        let notebook = app.cells.containing(.staticText, identifier: "nb3").firstMatch
+        let label = app.staticTexts["nb3"].firstMatch
+        XCTAssertTrue(label.waitForExistence(timeout: 5), "no notebook nb3 in the sidebar")
+        (notebook.exists ? notebook : label).tap()
+        try openNewNoteInNativeEditor(app)
+        leaveDocument(app)
+
+        let all = sidebarElement(app, "sidebar.allDocuments")
+        XCTAssertTrue(all.exists, "no All Documents; buttons: \(Self.buttons(app))")
+        all.tap()
+        let button = newNoteButton(app)
+        XCTAssertTrue(button.exists, "no New Note button")
+        let says = NSPredicate(format: "value CONTAINS 'nb3'")
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: says, evaluatedWith: button)], timeout: 5), .completed,
+                       "the New Note button does not say it goes to nb3: \(String(describing: button.value))")
+    }
+
+    /// Back to the list: the back button on iPhone, «Close Document» on iPad.
+    private func leaveDocument(_ app: XCUIApplication) {
+        let close = app.buttons["document.close"].firstMatch
+        if UIDevice.current.userInterfaceIdiom == .pad, close.waitForExistence(timeout: 3) {
+            close.tap()
+        } else {
+            app.navigationBars.buttons.firstMatch.tap()
+        }
+        settle(1)
+    }
+
     /// Native editor only (DSEditor): switching Text ↔ Pen repeatedly must not crash.
     func testSwitchingPenToolsInEditor() throws {
         let app = launchSignedIn()
@@ -249,6 +365,118 @@ final class LibraryUITests: XCTestCase {
         XCTAssertEqual(offered, .completed, "Hide Keyboard is still offered; format bar shown: \(app.descendants(matching: .any)["formatBar"].firstMatch.exists)")
         XCTAssertEqual(palette.frame.minX, x, accuracy: 1, "the palette moved when the button went")
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
+    }
+
+    /// Note links open notes (owner, build 14: nothing happened on iPhone): the chip of an
+    /// existing note opens it; a literal [[Title]] of a missing note offers to create it.
+    func testNoteLinksOpenNotes() throws {
+        let app = launchSignedIn(["-ui-testing-links"])
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "the Links note did not open")
+        let text = editor.textViews.firstMatch
+        XCTAssertTrue(text.waitForExistence(timeout: 5), "no text view")
+        settle(1)
+
+        func linkElement(_ title: String) -> XCUIElement {
+            let candidates = [text.links[title].firstMatch, editor.links[title].firstMatch,
+                              editor.buttons[title].firstMatch,
+                              editor.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", title)).firstMatch]
+            return candidates.first { $0.exists } ?? candidates[0]
+        }
+        let chip = linkElement("Target")
+        XCTAssertTrue(chip.waitForExistence(timeout: 3),
+                      "no element for the Target link; editor: \(editor.debugDescription.prefix(3000))")
+        chip.tap()
+        let opened = NSPredicate(format: "value CONTAINS 'Target body'")
+        let navigated = XCTWaiter().wait(for: [expectation(for: opened, evaluatedWith: editor.textViews.firstMatch)], timeout: 5)
+        XCTAssertEqual(navigated, .completed, "tapping the note link did not open «Target»")
+
+        // Back to Links: the literal link to a missing note offers to create it.
+        let back = app.navigationBars.buttons.firstMatch
+        if UIDevice.current.userInterfaceIdiom == .phone, back.exists { back.tap() }
+        let links = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Links'")).firstMatch
+        if links.waitForExistence(timeout: 3) { links.tap() }
+        let literal = linkElement("Nowhere")
+        XCTAssertTrue(literal.waitForExistence(timeout: 5), "no element for the [[Nowhere]] link")
+        literal.tap()
+        XCTAssertTrue(app.buttons["Create Note"].waitForExistence(timeout: 5) || app.alerts.firstMatch.waitForExistence(timeout: 2),
+                      "a link to a missing note did not offer to create it")
+    }
+
+    /// spec/12: a tap on a task's date chip opens the reschedule menu, and the app keeps running
+    /// (build 14: the tap did nothing; later it crashed in the menu's gesture).
+    func testTaskDateChipOpensTheRescheduleMenu() throws {
+        let app = launchSignedIn(["-ui-testing-task-date"] + Self.extendedMode)
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "the Dated note did not open")
+        settle(1)
+        let chip = editor.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH 'Дата: ' OR label BEGINSWITH 'Дедлайн: '")).firstMatch
+        XCTAssertTrue(chip.waitForExistence(timeout: 5), "no date chip; editor: \(editor.debugDescription.prefix(3000))")
+        chip.tap()
+        let item = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label IN {'Сегодня', 'Завтра', 'След. неделя', 'Дата…', 'Today', 'Tomorrow', 'Next Week', 'Date…'}")).firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 10), "the reschedule menu did not open")
+        XCTAssertEqual(app.state, .runningForeground, "the app quit after the tap")
+    }
+
+    /// spec/05: a notebook's folders show as a strip above its documents; a tap opens the folder,
+    /// whose own subfolders and breadcrumb then show.
+    func testFolderStripNavigates() throws {
+        let app = launchSignedIn(["-ui-testing-folders"])
+        let strip = app.descendants(matching: .any)["library.folderStrip"].firstMatch
+        // The seeded scene starts on the notebook's list (iPhone too).
+        XCTAssertTrue(strip.waitForExistence(timeout: 5), "no folder strip; buttons: \(Self.buttons(app))")
+        let projects = app.buttons["folderCard.Projects"].firstMatch
+        XCTAssertTrue(projects.exists && projects.isHittable, "no Projects card")
+        projects.tap()
+        let drafts = app.buttons["folderCard.Drafts"].firstMatch
+        XCTAssertTrue(drafts.waitForExistence(timeout: 3), "the strip did not show Projects' subfolder")
+        drafts.tap()
+        let crumb = app.descendants(matching: .any)["library.breadcrumb"].firstMatch
+        XCTAssertTrue(crumb.waitForExistence(timeout: 3), "no breadcrumb inside a nested folder")
+        XCTAssertFalse(app.descendants(matching: .any)["library.folderStrip"].firstMatch.exists, "a strip without subfolders")
+    }
+
+    /// D-48: spaces are isolated — the starred note and the open tab of «Personal» are not shown
+    /// in «Work» and come back with «Personal».
+    func testSpacesKeepTheirStarredAndTabs() throws {
+        let app = launchSignedIn(Self.extendedMode)
+        // A tab in «Personal»; first-run seeding starred the welcome note there.
+        try openNewNoteInNativeEditor(app)
+        // Written in, so leaving it keeps the note (an empty new note is dropped).
+        app.typeText("Tab note")
+        let switcher = app.descendants(matching: .any)["sidebar.spaceSwitcher"].firstMatch
+        // iPhone: choosing a space shows its documents; come back to the sidebar each time.
+        func showSidebar() {
+            for _ in 0..<3 where !(switcher.exists && switcher.isHittable) {
+                let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
+                if toggle.exists && toggle.isHittable { toggle.tap() } else if app.navigationBars.buttons.firstMatch.exists { app.navigationBars.buttons.firstMatch.tap() }
+                settle(1)
+            }
+        }
+        showSidebar()
+        XCTAssertTrue(switcher.waitForExistence(timeout: 5) && switcher.isHittable, "no space switcher; buttons: \(Self.buttons(app))")
+        let starred = app.descendants(matching: .any)["sidebar.starredNote"].firstMatch
+        let tab = app.descendants(matching: .any)["sidebar.tab"].firstMatch
+        XCTAssertTrue(starred.waitForExistence(timeout: 5), "no starred note in Personal")
+        XCTAssertTrue(tab.exists, "no tab in Personal")
+
+        func choose(_ name: String) {
+            showSidebar()
+            switcher.tap()
+            let item = app.buttons[name].firstMatch
+            XCTAssertTrue(item.waitForExistence(timeout: 3), "no \(name) in the space menu; buttons: \(Self.buttons(app))")
+            item.tap()
+            settle(1)
+            showSidebar()
+        }
+        choose("Work")
+        XCTAssertFalse(starred.exists, "Personal's starred note shows in Work")
+        XCTAssertFalse(tab.exists, "Personal's tab shows in Work")
+        choose("Personal")
+        XCTAssertTrue(starred.waitForExistence(timeout: 3), "the starred note did not come back with Personal")
+        XCTAssertTrue(tab.waitForExistence(timeout: 3), "the tab did not come back with Personal")
     }
 
     /// spec/04: the format bar shows while text is written and lights the marks it switches on.
@@ -295,6 +523,10 @@ final class LibraryUITests: XCTestCase {
         let menu = app.descendants(matching: .any)["slashMenu"].firstMatch
         XCTAssertTrue(menu.waitForExistence(timeout: 5), "no slash menu after typing /")
         text.typeText("h")
+        // The filtered menu arrives a moment later and is shorter, so it can move (above or
+        // below the caret): a tap on the unfiltered one landed where the entry no longer was (iPad).
+        XCTAssertTrue(app.buttons["slash.quote"].firstMatch.waitForNonExistence(timeout: 5), "the menu did not filter for /h")
+        settle(0.5)
         let heading = app.buttons["slash.heading2"].firstMatch
         XCTAssertTrue(heading.waitForExistence(timeout: 3) && heading.isHittable, "no «Заголовок 2» for /h")
         heading.tap()
@@ -517,7 +749,7 @@ final class LibraryUITests: XCTestCase {
     private func checkContentFullScreen(_ orientation: UIDeviceOrientation) throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
         rotate(orientation)
-        let app = launchSignedIn()
+        let app = launchSignedIn(Self.extendedMode)
         let tasks = sidebarElement(app, "sidebar.tasks")
         XCTAssertTrue(tasks.exists, "no Tasks in the sidebar; buttons: \(Self.buttons(app))")
         tasks.tap()
@@ -685,10 +917,27 @@ final class LibraryUITests: XCTestCase {
         add(shot)
     }
 
+    /// D-49: Settings shows the server of this device's account.
+    func testSettingsShowsTheServer() throws {
+        let app = launchSignedIn(["-ui-testing-server", "https://sync.example.org"])
+        let palette = sidebarElement(app, "sidebar.commandPalette")
+        XCTAssertTrue(palette.waitForExistence(timeout: 5), "command palette button not found")
+        palette.tap()
+        let field = app.textFields["palette.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
+        field.tap()
+        field.typeText("Settings\n")
+        let account = app.descendants(matching: .any)["settings.account"].firstMatch
+        XCTAssertTrue(account.waitForExistence(timeout: 5), "no Account row")
+        account.tap()
+        let server = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'sync.example.org' OR value CONTAINS 'sync.example.org'")).firstMatch
+        XCTAssertTrue(server.waitForExistence(timeout: 5), "Settings does not show the server")
+    }
+
     /// Tabs close with their own button.
     func testClosingATab() throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad: sidebar beside the document") }
-        let app = launchSignedIn()
+        let app = launchSignedIn(Self.extendedMode)
         try openNewNoteInNativeEditor(app)
         let showSidebar = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
         if showSidebar.exists { showSidebar.tap(); settle(1) }
@@ -718,7 +967,7 @@ final class LibraryUITests: XCTestCase {
     }
 
     func testCommandPaletteOpensTasks() throws {
-        let app = launchSignedIn()
+        let app = launchSignedIn(Self.extendedMode)
         let paletteButton = sidebarElement(app, "sidebar.commandPalette")
         XCTAssertTrue(paletteButton.exists, "command palette button not found; buttons: \(Self.buttons(app))")
         paletteButton.tap()
@@ -728,6 +977,78 @@ final class LibraryUITests: XCTestCase {
         field.typeText("Go to Tasks\n")
         XCTAssertTrue(app.segmentedControls["tasks.bucket"].firstMatch.waitForExistence(timeout: 5)
                       || app.otherElements["tasks.bucket"].firstMatch.waitForExistence(timeout: 2))
+    }
+
+    /// §12.6: a crowded section shows its first rows and «N more», opens in full and back, folds
+    /// from its title; tags form a tree and «All Tags» lists them all.
+    func testCrowdedSidebarSectionsFold() throws {
+        // iPad in portrait: the opened list fits on screen (rows of a lazy list off screen do not exist).
+        if UIDevice.current.userInterfaceIdiom == .pad { rotate(.portrait) }
+        let app = launchSignedIn(["-ui-testing-many"])
+        let more = sidebarElement(app, "sidebar.more.notebooks")
+        XCTAssertTrue(more.exists, "no «N more» under the notebooks; buttons: \(Self.buttons(app))")
+        let rows = app.descendants(matching: .any).matching(identifier: "sidebar.notebook")
+        let before = rows.count
+        more.tap()
+        let opened = NSPredicate { _, _ in rows.count > before }
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: opened, evaluatedWith: nil)], timeout: 5), .completed,
+                       "no more notebooks after «N more»")
+        // The list is lazy: «Show Less» at its end exists once scrolled to.
+        let less = app.descendants(matching: .any)["sidebar.less.notebooks"].firstMatch
+        if !less.waitForExistence(timeout: 2) { app.cells.firstMatch.swipeUp() }
+        XCTAssertTrue(less.waitForExistence(timeout: 3), "no «Show Less» after the notebooks")
+        less.tap()
+        if !more.waitForExistence(timeout: 2) { app.cells.firstMatch.swipeDown() }
+        XCTAssertTrue(more.waitForExistence(timeout: 3), "«Show Less» did not fold the list back")
+
+        let header = app.descendants(matching: .any)["sidebar.section.notebooks"].firstMatch
+        if !header.waitForExistence(timeout: 2) { app.cells.firstMatch.swipeDown() }
+        XCTAssertTrue(header.waitForExistence(timeout: 3), "no notebooks title")
+        header.tap()
+        XCTAssertTrue(rows.firstMatch.waitForNonExistence(timeout: 3), "the notebooks did not fold")
+        header.tap()
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 3), "the notebooks did not unfold")
+
+        // Folded again, so the tags fit on screen (rows of a lazy list off screen do not exist).
+        header.tap()
+        let allTags = app.descendants(matching: .any)["sidebar.allTags"].firstMatch
+        if !allTags.waitForExistence(timeout: 2) { app.cells.firstMatch.swipeUp() }
+        XCTAssertTrue(allTags.waitForExistence(timeout: 3), "no «All Tags»")
+        allTags.tap()
+        let tag = app.descendants(matching: .any).matching(identifier: "allTags.tag").firstMatch
+        XCTAssertTrue(tag.waitForExistence(timeout: 5), "«All Tags» lists no tags")
+        // The list is lazy (only rows on screen exist): search finds a nested tag.
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 3), "no search in «All Tags»")
+        search.tap()
+        search.typeText("group/child5")
+        let nested = app.descendants(matching: .any).matching(identifier: "allTags.tag").firstMatch
+        XCTAssertTrue(nested.waitForExistence(timeout: 3) && nested.label.contains("group/child5"),
+                      "«All Tags» does not list the nested tag; first: \(nested.label)")
+    }
+
+    /// D-51: by default the app is notes only — no Tasks, Calendar or tabs, and opening a note
+    /// leaves no tab behind.
+    func testNotesOnlyByDefault() throws {
+        let app = launchSignedIn()
+        let all = sidebarElement(app, "sidebar.allDocuments")
+        XCTAssertTrue(all.exists, "no All Documents; buttons: \(Self.buttons(app))")
+        XCTAssertFalse(app.descendants(matching: .any)["sidebar.tasks"].firstMatch.exists, "Tasks shown in the notes-only app")
+        XCTAssertFalse(app.descendants(matching: .any)["sidebar.calendar"].firstMatch.exists, "Calendar shown in the notes-only app")
+        all.tap()
+        try openNewNoteInNativeEditor(app)
+        // Something in it, so leaving does not drop it (an empty new note is not kept).
+        app.typeText("Kept")
+        // iPhone: back from the document and the list to the sidebar.
+        let allRow = app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch
+        for _ in 0..<3 where !(allRow.exists && allRow.isHittable) {
+            let back = app.navigationBars.buttons.firstMatch
+            if back.exists { back.tap() }
+            settle(1)
+        }
+        let again = sidebarElement(app, "sidebar.allDocuments")
+        XCTAssertTrue(again.exists, "the sidebar did not come back; buttons: \(Self.buttons(app))")
+        XCTAssertFalse(app.descendants(matching: .any)["sidebar.tab"].firstMatch.exists, "opening a note made a tab")
     }
 
     func testSettingsFingerDrawingToggle() throws {

@@ -86,6 +86,7 @@ export async function verifyGuestToken(
     permission: share.permission,
     target: { kind: share.targetKind, id: share.targetId },
     deviceId,
+    expiresAt: share.expiresAt,
   };
 }
 

@@ -2,9 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PRE_AUTH_MAX_PAYLOAD } from '../src/sync/connection.js';
 import {
   SyncClient,
+  api,
   b64,
   createNote,
   createNotebook,
+  newId,
   rnd,
   signup,
   sleep,
@@ -98,4 +100,43 @@ describe('flooding', () => {
     expect(limited).toBeGreaterThanOrEqual(80);
     await closeAll([c]);
   }, 30_000);
+});
+
+// Item 3: an expired share must cut off guests that are already connected.
+describe('share expiry on live guest connections', () => {
+  it('closes a guest connection when its share expires', async () => {
+    const { notebookId } = await createNotebook(s, u);
+    const noteId = await createNote(s, u, notebookId);
+    const shareId = newId();
+    const expiresAt = new Date(Date.now() + 2000).toISOString();
+    const share = await api(s, 'POST', '/shares', {
+      token: u.session.accessToken,
+      body: { shareId, target: { kind: 'note', id: noteId }, permission: 'edit', expiresAt },
+    });
+    expect(share.status).toBe(200);
+    const g = await api(s, 'POST', `/shares/${shareId}/guest`, { body: {} });
+    const guest = await SyncClient.connect(s);
+    guest.send({
+      type: 'hello',
+      protocol: 1,
+      auth: { kind: 'guest', shareId, guestToken: g.body.guestToken },
+      deviceId: 'browser-1',
+      client: { platform: 'web', version: '1' },
+    });
+    await guest.next((m) => m.type === 'welcome');
+    expect((await guest.subscribe(noteId)).error).toBeNull();
+    const err = await guest.next((m) => m.type === 'error', 5000);
+    expect(err).toMatchObject({ code: 'unauthorized', message: 'share expired' });
+    expect((await guest.waitClose()).code).toBe(4401);
+    // And a new connection with the same token is refused.
+    const again = await SyncClient.connect(s);
+    again.send({
+      type: 'hello',
+      protocol: 1,
+      auth: { kind: 'guest', shareId, guestToken: g.body.guestToken },
+      deviceId: 'browser-1',
+      client: { platform: 'web', version: '1' },
+    });
+    expect((await again.waitClose()).code).toBe(4401);
+  }, 15_000);
 });

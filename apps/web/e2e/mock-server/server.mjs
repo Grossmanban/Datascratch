@@ -14,6 +14,7 @@ const db = {
   sessions: new Map(), // accessToken -> { userId, deviceId, exp }
   refresh: new Map(), // refreshToken -> { userId, deviceId }
   usedRefresh: new Map(), // rotated refreshToken -> deviceId (reuse = theft)
+  revoked: new Map(), // deviceId -> reason (D-53: its tokens get 401 device_revoked, its sockets 4410)
   devices: new Map(), // deviceId -> { id, userId, name, createdAt, lastSeenAt }
   notebooks: new Map(), // id -> { id, userId, mode, createdAt, wrappedKey, serverKey }
   docs: new Map(), // docId -> { docId, userId, kind, notebookId, items: [{seq,payload,deviceId,createdAt}], snapshot }
@@ -24,6 +25,10 @@ const db = {
   attachments: new Map(), // id -> { id, userId, noteId, size, chunkCount, mime, chunks: Map<index, Buffer> }
 };
 
+function deviceRevoked(res, reason) {
+  res.writeHead(401, { "content-type": "application/json", ...cors });
+  res.end(JSON.stringify({ error: { code: "device_revoked", message: "this device was signed out", reason } }));
+}
 function err(res, status, code, message = code) {
   res.writeHead(status, { "content-type": "application/json", ...cors });
   res.end(JSON.stringify({ error: { code, message } }));
@@ -79,6 +84,23 @@ function authed(req) {
   if (!s || s.exp < Date.now() || !db.devices.has(s.deviceId)) return null;
   db.devices.get(s.deviceId).lastSeenAt = nowIso();
   return { ...s, user: userById(s.userId) };
+}
+/** D-53 like the real server: the device is gone, its tokens answer device_revoked, sockets close 4410. */
+function revokeDevice(deviceId, reason) {
+  if (!db.devices.has(deviceId) && !db.revoked.has(deviceId)) return;
+  db.devices.delete(deviceId);
+  db.revoked.set(deviceId, reason);
+  for (const c of clients)
+    if (c.deviceSession === deviceId) {
+      c.ws.send(JSON.stringify({ type: "error", code: "device_revoked", message: "this device was signed out", reason }));
+      c.ws.close(4410, "device_revoked");
+    }
+}
+/** The device a request's bearer token belongs to, when that device was revoked. */
+function revokedReasonOf(req) {
+  const h = req.headers.authorization ?? "";
+  const s = db.sessions.get(h.startsWith("Bearer ") ? h.slice(7) : "");
+  return s ? db.revoked.get(s.deviceId) : undefined;
 }
 async function readBody(req) {
   const chunks = [];
@@ -163,11 +185,11 @@ route("POST", "/v1/auth/login", (_q, res, { body }) => {
 route("POST", "/v1/auth/refresh", (_q, res, { body }) => {
   const used = db.usedRefresh.get(body.refreshToken);
   if (used) {
-    db.devices.delete(used);
-    for (const [t, r] of db.refresh) if (r.deviceId === used) db.refresh.delete(t);
-    return err(res, 401, "unauthorized", "refresh token reuse");
+    revokeDevice(used, "token_reuse");
+    return deviceRevoked(res, db.revoked.get(used));
   }
   const r = db.refresh.get(body.refreshToken);
+  if (r && db.revoked.has(r.deviceId)) return deviceRevoked(res, db.revoked.get(r.deviceId));
   if (!r || !db.devices.has(r.deviceId)) return err(res, 401, "unauthorized");
   db.refresh.delete(body.refreshToken);
   db.usedRefresh.set(body.refreshToken, r.deviceId);
@@ -194,6 +216,7 @@ route("POST", "/v1/auth/recovery/finish", (_q, res, { body }) => {
   db.recovery.delete(body.recoveryToken);
   const u = db.users.get(email);
   Object.assign(u, { salt: body.salt, kdf: body.kdf, loginKey: body.loginKey, wrappedMasterKeyPassword: body.wrappedMasterKeyPassword });
+  for (const d of [...db.devices.values()]) if (d.userId === u.userId) revokeDevice(d.id, "recovery");
   const session = issueSession(u, "Recovered device");
   securityEvent(u, "recovery_used", session.deviceId);
   json(res, 200, session);
@@ -203,6 +226,7 @@ route("POST", "/v1/auth/password", (_q, res, { auth, body }) => {
   if (auth.user.loginKey !== body.currentLoginKey) return err(res, 403, "forbidden", "Wrong password");
   Object.assign(auth.user, { salt: body.salt, kdf: body.kdf, loginKey: body.loginKey, wrappedMasterKeyPassword: body.wrappedMasterKeyPassword });
   securityEvent(auth.user, "password_changed", auth.deviceId);
+  for (const d of [...db.devices.values()]) if (d.userId === auth.userId && d.id !== auth.deviceId) revokeDevice(d.id, "password_change");
   json(res, 204);
 });
 // api.md: a new recovery key; the old one stops working at once.
@@ -238,10 +262,7 @@ route("DELETE", "/v1/devices/:id", (_q, res, { auth, params }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const d = db.devices.get(params.id);
   if (!d || d.userId !== auth.userId) return err(res, 404, "not_found");
-  db.devices.delete(params.id);
-  for (const [k, s] of db.sessions) if (s.deviceId === params.id) db.sessions.delete(k);
-  for (const [k, s] of db.refresh) if (s.deviceId === params.id) db.refresh.delete(k);
-  for (const c of clients) if (c.deviceSession === params.id) c.ws.close();
+  revokeDevice(params.id, "user");
   json(res, 204);
 });
 
@@ -467,6 +488,8 @@ const server = http.createServer(async (req, res) => {
     const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
     try {
       const body = await readBody(req);
+      const revoked = revokedReasonOf(req);
+      if (revoked) return deviceRevoked(res, revoked);
       return await r.handler(req, res, { params, body, auth: authed(req) });
     } catch (e) {
       console.error(e);
@@ -502,6 +525,10 @@ wss.on("connection", (ws) => {
       if (m.protocol !== 1) return send({ type: "error", code: "protocol_mismatch", message: "protocol 1 only" });
       if (m.auth?.kind === "user") {
         const s = db.sessions.get(m.auth.accessToken);
+        if (s && db.revoked.has(s.deviceId)) {
+          send({ type: "error", code: "device_revoked", message: "this device was signed out", reason: db.revoked.get(s.deviceId) });
+          return ws.close(4410, "device_revoked");
+        }
         if (!s || s.exp < Date.now() || !db.devices.has(s.deviceId)) return send({ type: "error", code: "unauthorized", message: "bad token" });
         c.userId = s.userId;
         c.deviceSession = s.deviceId;

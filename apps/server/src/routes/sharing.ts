@@ -12,6 +12,7 @@ import {
   publicKeyResponseSchema,
   putMemberKeyRequestSchema,
   rotateKeyRequestSchema,
+  sharedByMeItemSchema,
   sharedItemSchema,
   sharedNoteKeyResponseSchema,
 } from '@datascratch/shared/contracts';
@@ -581,13 +582,14 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           const t = await requireOwnTarget(tx, p.userId, req.params, true);
           if (b.version !== t.keyVersion + 1) throw conflict('version must be the current one + 1');
           const current = await tx.select().from(members).where(eq(memberTargetCol(t.kind), t.id));
-          const byUser = new Map(current.map((m) => [m.userId, m]));
-          // Everyone who holds a key needs the new one; members still waiting may be included.
-          if (b.memberKeys.some((k) => !byUser.has(k.userId))) throw conflict('memberKeys names a non-member');
+          // Exactly the active members (api.md): a member awaiting its key gets the new version
+          // later through PUT …/key, so a key never goes out without the owner's confirmation.
+          const active = new Map(current.filter((m) => hasCurrentKey(m, t)).map((m) => [m.userId, m]));
           const given = new Set(b.memberKeys.map((k) => k.userId));
-          if (current.some((m) => m.wrappedKey !== null && !given.has(m.userId))) {
-            throw conflict('memberKeys must cover every member');
+          if (given.size !== active.size || [...given].some((u) => !active.has(u))) {
+            throw conflict('memberKeys must name exactly the active members');
           }
+          const byUser = active;
           for (const k of b.memberKeys) {
             await tx
               .update(members)
@@ -665,6 +667,49 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         // Version 1 is only in NoteMeta: the server has a copy from the first rotation on.
         if (!d?.key) throw notFound('the note key was never rotated (version 1 is in NoteMeta)');
         return { version: t.keyVersion, ownerWrappedKey: toB64(d.key), keyChain: t.keyChain };
+      },
+    );
+
+    app.get(
+      '/shared-by-me',
+      { schema: { tags: ['sharing'], security, response: { 200: z.array(sharedByMeItemSchema), ...errorResponses } } },
+      async (req) => {
+        const p = await requireUser(ctx, req);
+        // Everything the caller owns that has a member or a running invitation: on start the
+        // owner's client gives keys, rotates and repairs NoteMeta from it.
+        const res = await db.execute<{
+          kind: TargetKind;
+          id: string;
+          key_version: number;
+          key_rotation_pending: boolean;
+          members: number;
+          awaiting_key: number;
+        }>(sql`
+          WITH targets AS (
+            SELECT notebook_id, note_id FROM members WHERE owner_id = ${p.userId}
+            UNION
+            SELECT notebook_id, note_id FROM invitations
+            WHERE owner_id = ${p.userId} AND status = 'pending' AND expires_at > now()
+          )
+          SELECT 'notebook' AS kind, n.id, n.key_version, n.key_rotation_pending,
+            (SELECT count(*)::int FROM members m WHERE m.notebook_id = n.id) AS members,
+            (SELECT count(*)::int FROM members m WHERE m.notebook_id = n.id
+               AND (m.wrapped_key IS NULL OR m.key_version IS DISTINCT FROM n.key_version)) AS awaiting_key
+          FROM notebooks n WHERE n.user_id = ${p.userId} AND n.id IN (SELECT notebook_id FROM targets)
+          UNION ALL
+          SELECT 'note', d.id, d.key_version, d.key_rotation_pending,
+            (SELECT count(*)::int FROM members m WHERE m.note_id = d.id),
+            (SELECT count(*)::int FROM members m WHERE m.note_id = d.id
+               AND (m.wrapped_key IS NULL OR m.key_version IS DISTINCT FROM d.key_version))
+          FROM docs d WHERE d.user_id = ${p.userId} AND d.kind = 'note' AND d.id IN (SELECT note_id FROM targets)
+          ORDER BY 1, 2`);
+        return res.rows.map((r) => ({
+          target: { kind: r.kind, id: r.id },
+          keyVersion: Number(r.key_version),
+          keyRotationPending: r.key_rotation_pending,
+          members: Number(r.members),
+          awaitingKey: Number(r.awaiting_key),
+        }));
       },
     );
 

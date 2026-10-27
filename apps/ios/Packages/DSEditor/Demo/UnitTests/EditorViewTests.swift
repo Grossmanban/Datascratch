@@ -1212,10 +1212,21 @@ final class EditorViewTests: XCTestCase {
         drainMainQueue()
         settle(editor)
         let before = try titleLineY()
+        // Every scroll change from here on, with who made it (a failure message prints them).
+        var moves: [String] = []
+        let watch = editor.textView.observe(\.contentOffset, options: [.old, .new]) { _, change in
+            guard let old = change.oldValue, let new = change.newValue, abs(old.y - new.y) > 0.5 else { return }
+            let callers = Thread.callStackSymbols.dropFirst(3).prefix(14)
+                .map { $0.split(separator: " ").dropFirst(3).prefix(2).joined(separator: " ") }
+                .joined(separator: " < ")
+            moves.append("\(Int(old.y))→\(Int(new.y)): \(callers)")
+        }
+        defer { watch.invalidate() }
         editor.textView.insertText("План")
         drainMainQueue()
         settle(editor)
-        XCTAssertEqual(try titleLineY(), before, accuracy: 1, "typing the title does not move it")
+        XCTAssertEqual(try titleLineY(), before, accuracy: 1,
+                       "typing the title does not move it; offset \(editor.textView.contentOffset.y), content \(editor.textView.contentSize.height), bounds \(editor.textView.bounds.height); moves:\n\(moves.joined(separator: "\n"))")
         // The host's header grows (its metadata row re-measures after the first keystrokes).
         height.constant = 260
         editor.headerLayoutDidChange()
@@ -1225,7 +1236,8 @@ final class EditorViewTests: XCTestCase {
         drainMainQueue()
         settle(editor)
         XCTAssertEqual(doc.flatText(of: doc.blocks[0].id), "План на неделю")
-        XCTAssertEqual(try titleLineY(), before, accuracy: 1, "the title stays put when the header changes height")
+        XCTAssertEqual(try titleLineY(), before, accuracy: 1,
+                       "the title stays put when the header changes height; moves:\n\(moves.joined(separator: "\n"))")
     }
 
     // MARK: - Photos (build 19)

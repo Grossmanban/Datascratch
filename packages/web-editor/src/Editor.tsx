@@ -14,6 +14,10 @@ import { acceptAll, blocksWithAgentEdits } from "./schema/agentReview";
 import { guardSchema } from "./schema/unknown";
 import { TASK_MENU_EVENT, type TaskMenuRequest } from "./schema/tasks";
 import { fillEmptyTitleIfNeeded, focusTitle } from "./schema/title";
+import { insertUpload, pickAndInsert, preparePastedImages, startPastedImages } from "./uploads";
+import { normalizePastedHtml, looksLikeMarkdown } from "./paste/normalize";
+import { markdownToHtml } from "./paste/markdown";
+import { DOMParser as PMDOMParser, type Slice } from "@tiptap/pm/model";
 import type { NoteStyle, StrokeAuthor } from "@datascratch/shared/contracts";
 import { filterBlocks, type BlockItem } from "./ui/blockItems";
 import { BubbleToolbar } from "./ui/BubbleToolbar";
@@ -40,6 +44,10 @@ export interface EditorApi {
   focusTitle(): void;
   /** Fills an empty title with `host.defaultTitle()` (call when the note closes); true if it did. */
   fillEmptyTitleIfNeeded(): boolean;
+  /** Opens the image picker and inserts the picked images at the caret (the palette's picture button). */
+  pickImage(): void;
+  /** Inserts files at the caret right away and uploads them behind a placeholder. */
+  insertFiles(files: File[]): void;
 }
 
 export interface DatascratchEditorProps {
@@ -172,9 +180,41 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       element: mount,
       extensions,
       editable: !readOnly,
+      // Markdown in pasted text is parsed by clipboardTextParser (and skipped on Shift+paste); the
+      // marks' own paste rules would bold `**x**` even in a plain paste. Links still autolink.
+      enablePasteRules: ["link"],
       editorProps: {
         attributes: { class: "ds-prose", spellcheck: "true", "aria-label": "Текст заметки" },
-        handlePaste: (_view, event) => uploadFiles(event.clipboardData?.files),
+        // Rich paste (spec/04 «Вставка»): HTML is tidied (normalize.ts), Markdown text goes through
+        // the same path, the title takes plain text only, Shift+paste is plain text (ProseMirror).
+        handlePaste: (view, event) => {
+          const data = event.clipboardData;
+          if (!data) return false;
+          const { $from } = view.state.selection;
+          if ($from.depth >= 1 && $from.node(1).type.name === "title") {
+            const text = data.getData("text/plain").replace(/\s*\n\s*/g, " ").trim();
+            if (text) view.dispatch(view.state.tr.insertText(text).scrollIntoView());
+            return true;
+          }
+          // A screenshot or copied image (no rich text around it) goes in as a file.
+          const html = data.getData("text/html");
+          const onlyImages = !html || !new DOMParser().parseFromString(html, "text/html").body.textContent?.trim();
+          if (data.files?.length && onlyImages) return uploadFiles(data.files);
+          return false;
+        },
+        transformPastedHTML: (html) => {
+          const out = normalizePastedHtml(html);
+          preparePastedImages(out.images);
+          return out.html;
+        },
+        clipboardTextParser: (text, $context, plain, view) => {
+          if (plain || !looksLikeMarkdown(text)) return null as unknown as Slice;
+          const out = normalizePastedHtml(markdownToHtml(text));
+          preparePastedImages(out.images);
+          const box = document.createElement("div");
+          box.innerHTML = out.html;
+          return PMDOMParser.fromSchema(view.state.schema).parseSlice(box, { context: $context });
+        },
         handleDrop: (view, event, _slice, moved) => {
           if (moved) return false;
           const files = event.dataTransfer?.files;
@@ -191,6 +231,10 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
           remountQueued = true;
           setTimeout(() => setSchemaGen((g) => g + 1), 0);
         }),
+      onTransaction: ({ transaction }) => {
+        // Placeholders of pasted images start their upload once the paste has landed.
+        if (transaction.getMeta("paste")) queueMicrotask(() => startPastedImages(editor, host));
+      },
       onUpdate: ({ editor: e }) => {
         const title = e.state.doc.firstChild?.type.name === "title" ? e.state.doc.firstChild.textContent : readTitle(doc);
         if (title !== lastTitle) {
@@ -202,12 +246,8 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
     function uploadFiles(files: FileList | null | undefined): boolean {
       const upload = host.current.uploadAttachment;
       if (!files?.length || !upload) return false;
-      for (const file of Array.from(files)) {
-        void upload(file).then((a) => {
-          if (file.type.startsWith("image/")) editor.chain().focus().insertImage({ attachmentId: a.attachmentId, alt: file.name }).run();
-          else editor.chain().focus().insertFile(a).run();
-        });
-      }
+      // The block appears at once with a local preview; the upload runs behind it (uploads.ts).
+      for (const file of Array.from(files)) insertUpload(editor, host, file);
       return true;
     }
     const pen = new PenLayer({
@@ -227,6 +267,10 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       undoManager,
       focusTitle: () => focusTitle(editor),
       fillEmptyTitleIfNeeded: () => fillEmptyTitleIfNeeded(editor, host, undoManager),
+      pickImage: () => pickAndInsert(editor, host, "image/*"),
+      insertFiles: (files) => {
+        for (const f of files) insertUpload(editor, host, f);
+      },
     };
     setApi(next);
     callbacks.current.onReady?.(next);
@@ -379,7 +423,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       {api && taskMenu && <TaskMenu editor={api.editor} request={taskMenu} host={host.current} dates={taskDates} onClose={() => setTaskMenu(null)} />}
       {api && showPalette && !readOnly && (
         <div className="ds-palette-dock">
-          <PenPalette pen={api.pen} undoManager={api.undoManager} />
+          <PenPalette pen={api.pen} undoManager={api.undoManager} onInsertImage={host.current.uploadAttachment && !readOnly ? () => api.pickImage() : undefined} />
         </div>
       )}
     </div>

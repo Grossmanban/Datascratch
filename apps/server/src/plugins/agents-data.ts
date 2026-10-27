@@ -9,24 +9,16 @@ import { ApiError, forbidden, notFound } from '../lib/errors.js';
 import { AD, getSodium, open, seal } from '../lib/sodium.js';
 import { chunkKey } from '../storage/index.js';
 import { topics } from '../sync/hub.js';
+import { noteKeyCache } from './agent-key-cache.js';
 import type { AgentDataSource, AgentEditOrigin, AgentNotebook } from './agents-context.js';
 
 /** Server-side snapshot of agent-mode documents (the server holds the key there). */
 const SNAPSHOT_AFTER_UPDATES = 500;
 const SNAPSHOT_AFTER_BYTES = 1024 * 1024;
-const KEY_CACHE_MAX = 10_000;
 
 function readWrappedKey(meta: unknown): string | null {
   const v = meta instanceof Y.Map ? meta.get('wrappedKey') : (meta as { wrappedKey?: unknown } | null)?.wrappedKey;
   return typeof v === 'string' ? v : null;
-}
-
-/** A small bounded map: oldest entries are evicted first. */
-class BoundedMap<K, V> extends Map<K, V> {
-  override set(k: K, v: V) {
-    if (!this.has(k) && this.size >= KEY_CACHE_MAX) this.delete(this.keys().next().value as K);
-    return super.set(k, v);
-  }
 }
 
 /**
@@ -36,9 +28,6 @@ class BoundedMap<K, V> extends Map<K, V> {
  * Keys: notebookKey = open(DS_KMS_KEY), noteKey = open(notebookKey, NoteMeta.wrappedKey) (crypto.md §1, §8).
  */
 export class PgAgentDataSource implements AgentDataSource {
-  /** noteId → noteKey; keys never change for a document. Access is re-checked by RLS on every call. */
-  readonly #noteKeys = new BoundedMap<string, Uint8Array>();
-
   constructor(private readonly ctx: AppContext) {}
 
   #scope<T>(userId: string, grantId: string | undefined, fn: (tx: Tx, after: (() => unknown)[]) => Promise<T>) {
@@ -121,14 +110,14 @@ export class PgAgentDataSource implements AgentDataSource {
     if (!d || !d.notebookId || d.kind === 'account') return null;
     const nbKey = await this.#notebookKey(tx, d.notebookId);
     if (d.kind === 'notebook') return { doc: d, key: nbKey };
-    let key = this.#noteKeys.get(docId);
+    let key = noteKeyCache.get(docId);
     if (!key) {
       const { doc: index } = await this.#state(tx, d.notebookId, nbKey);
       const wrapped = readWrappedKey(index.getMap('notes').get(docId));
       index.destroy();
       if (!wrapped) return null;
       key = await this.ctx.keys.noteKey(nbKey, docId, fromB64(wrapped));
-      this.#noteKeys.set(docId, key);
+      noteKeyCache.set(docId, d.notebookId, key);
     }
     return { doc: d, key };
   }
@@ -239,6 +228,7 @@ export class PgAgentDataSource implements AgentDataSource {
       await tx.update(docs).set({ notebookId: toNotebookId, updatedAt: sql`now()` }).where(eq(docs.id, noteId));
       const fromSeq = (await this.#append(tx, after, fromNotebookId, from.key, updates.from, origin)).seq;
       after.push(() => this.ctx.hub.publish(topics.doc(noteId), { type: 'doc_moved', docId: noteId }));
+      after.push(() => noteKeyCache.set(noteId, toNotebookId, note.key));
       return { fromSeq, toSeq };
     });
   }
@@ -256,7 +246,7 @@ export class PgAgentDataSource implements AgentDataSource {
       await tx.insert(docs).values({ id: noteId, userId, kind: 'note', notebookId });
       const noteKey = (await getSodium()).randombytes_buf(32);
       const wrapped = await seal(nbKey, noteKey, AD.note(noteId));
-      this.#noteKeys.set(noteId, noteKey);
+      noteKeyCache.set(noteId, notebookId, noteKey);
       return { wrappedKey: toB64(wrapped) };
     });
   }

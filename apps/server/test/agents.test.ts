@@ -9,6 +9,7 @@ import { AD, open, seal } from '../src/lib/sodium.js';
 import type { AgentGrant, AgentsContext } from '../src/plugins/agents-context.js';
 import { createAgentsContext } from '../src/plugins/loader.js';
 import { runCleanup } from '../src/jobs/index.js';
+import { noteKeyCache } from '../src/plugins/agent-key-cache.js';
 import {
   SyncClient,
   api,
@@ -326,6 +327,24 @@ describe('data source', () => {
     expect(results.map((r) => r?.reused).sort()).toEqual([false, true, true]);
     expect((await agents.store.getToken(hash))?.kind).toBe('refresh_used');
     expect(await agents.store.useRefreshToken('missing')).toBeNull();
+    client.close();
+  });
+
+  it('drops cached note keys when the notebook leaves agent mode or the grant is revoked (security audit 7)', async () => {
+    const { notebookId, noteId, client } = await setupNotebook();
+    const g = grant([notebookId], 'read');
+    await agents.store.insertGrant(g);
+    expect(await agents.data.loadDoc(u.userId, noteId, g.id)).not.toBeNull();
+    expect(noteKeyCache.get(noteId)).toBeDefined();
+    await agents.store.updateGrant(g.id, { revokedAt: new Date().toISOString() });
+    expect(noteKeyCache.get(noteId)).toBeUndefined();
+    const g2 = grant([notebookId], 'read');
+    await agents.store.insertGrant(g2);
+    expect(await agents.data.loadDoc(u.userId, noteId, g2.id)).not.toBeNull();
+    expect(noteKeyCache.get(noteId)).toBeDefined();
+    await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, { token: u.session.accessToken, body: { mode: 'private' } });
+    expect(noteKeyCache.get(noteId)).toBeUndefined();
+    expect(await agents.data.loadDoc(u.userId, noteId, g2.id)).toBeNull();
     client.close();
   });
 

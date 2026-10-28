@@ -21,7 +21,7 @@
 3. Заполните:
    - **Description:** `Datascratch`
    - **Bundle ID:** выберите **Explicit** и введите `com.datascratch.app`
-4. В списке **Capabilities** поставьте галочку **Associated Domains** (нужно для открытия ссылок в приложении).
+4. В списке **Capabilities** ничего отмечать не нужно: ссылки открывают приложение по своей схеме `ds://` (D-56), Associated Domains не используются.
 5. **Continue** → **Register**.
 
 ## Шаг 3. Создать приложение в App Store Connect
@@ -84,7 +84,6 @@
 - **«Your account has reached the maximum number of certificates»** — каждая облачная сборка получает новый сертификат разработчика, и у Apple есть лимит. Workflow сам удаляет перед сборкой сертификаты разработчика, созданные прошлыми запусками (в названии «Created via API», `asc.py prune-ci-certs`); сертификаты с вашим именем (сделанные в Xcode на Mac) и сертификаты распространения не трогаются. Владелец разрешил это 2026-10-26.
 - **Ошибка про сертификат / «No signing certificate»** — проверьте, что у ключа API роль **Admin**. Если не помогает — запасной вариант ниже.
 - **Ошибка «No suitable application records were found»** — не выполнен шаг 3 (приложение не создано в App Store Connect) или Bundle ID не совпадает.
-- **Ошибка про Associated Domains** — в шаге 2 не отмечена возможность Associated Domains; её можно добавить позже на странице идентификатора.
 
 ### Запасной вариант: свой сертификат распространения
 

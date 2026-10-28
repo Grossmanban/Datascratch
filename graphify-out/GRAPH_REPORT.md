@@ -1,17 +1,17 @@
-# Graph Report - Datascratch  (2026-10-27)
+# Graph Report - Datascratch  (2026-10-28)
 
 ## Corpus Check
-- 976 files · ~851,937 words
+- 976 files · ~852,304 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 39 file(s) not represented in the graph (top: (none) 20, .css 6, .example 4)
 
 ## Summary
-- 21940 nodes · 63889 edges · 407 communities (370 shown, 37 thin omitted)
+- 21940 nodes · 63890 edges · 407 communities (370 shown, 37 thin omitted)
 - Extraction: 84% EXTRACTED · 16% INFERRED · 0% AMBIGUOUS · INFERRED: 10046 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3770ec2a`
+- Built from commit: `80b2bb19`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1948,28 +1948,28 @@ Nodes (3): ./strokes, import, types
   docs/decisions/0048-isolated-spaces.md · relation: references
 - `D-30 БД сервера: PostgreSQL (РЕШЕНО)` → `Account-wide (shared across spaces): app settings (theme, language, pen), account, keys, devices, agent grants`  [AMBIGUOUS]
   docs/decisions/0048-isolated-spaces.md · relation: references
-- `settings.dailyNotebookBySpace { spaceId: notebookId } — daily notes and Inbox notebook per space (D-48)` → `Daily notes and Inbox live in the notebook from settings.dailyNotebookBySpace`  [AMBIGUOUS]
+- `Daily notes and Inbox live in the notebook from settings.dailyNotebookBySpace` → `settings.dailyNotebookBySpace { spaceId: notebookId } — daily notes and Inbox notebook per space (D-48)`  [AMBIGUOUS]
   docs/architecture/contracts/document-model.md · relation: conceptually_related_to
 - `Session ended from another device (refresh 401): endKeepingData("revoked") clears tokens/keys from memory but keeps account DB, writes kv revoked record; login screen offers «Удалить данные с этого устройства» (revoked.spec)` → `Revoked device wipes all its data: local DB, keys, attachments, image cache, incl. unsent changes; only when server unambiguously reports revocation (not network error or expired token)`  [AMBIGUOUS]
   docs/decisions/0053-security-audit-owner-decisions.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
 - **1526 isolated node(s):** `.body`, `onboarding`, `.phase`, `.isLocalOnlyTesting`, `.linkHost` (+1521 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 5405 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 5404 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **37 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `cn`, `DSLanguage (2)`, `@datascratch/ui — веб-компоненты «Тихая бумага»`, `tokens.test.mjs`, `0048-isolated-spaces.md`, `Foundation`?**
-  _High betweenness centrality (0.173) - this node is a cross-community bridge._
+  _High betweenness centrality (0.170) - this node is a cross-community bridge._
 - **Are the 370 inferred relationships involving `t()` (e.g. with `accept()` and `ACTION()`) actually correct?**
   _`t()` has 370 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `.body`, `onboarding`, `.phase` to the rest of the system?**
   _1526 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
   _Cohesion score 0.0018042548859934853 - nodes in this community are weakly interconnected._
-- **Why does `DSDateChipModel` connect `DSLanguage (2)` to `Sendable`, `design-tokens.md`, `Equatable`, `BlockLayoutFragment`?**
+- **Why does `el()` connect `DocPage.tsx` to `mermaid.min.js`, `actions.ts`?**
   _High betweenness centrality (0.137) - this node is a cross-community bridge._
 
 ### Low-confidence Hints

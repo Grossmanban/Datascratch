@@ -2052,9 +2052,9 @@
     "semantic_hash": "883cb82e192db0708a9333beaa233937"
   },
   "apps/web/src/data/keys.ts": {
-    "mtime": 1793138844.697125,
-    "seen": 1793138984.9088836,
-    "ast_hash": "c8935b18cb2cd8a4d4d4e36d288cdffc",
+    "mtime": 1793146102.04107,
+    "seen": 1793146260.264921,
+    "ast_hash": "2c69be5f2e6ddcb497fed01ed860d68f",
     "semantic_hash": ""
   },
   "apps/web/src/data/ops.ts": {
@@ -2070,9 +2070,9 @@
     "semantic_hash": "95db0ab636cd405363ef2658ca6ffec8"
   },
   "apps/web/src/data/runtime.ts": {
-    "mtime": 1793138844.697125,
-    "seen": 1793138984.9089892,
-    "ast_hash": "a6bab12f63c266986e81a919ad4d1313",
+    "mtime": 1793146102.04107,
+    "seen": 1793146260.2650325,
+    "ast_hash": "873d1dc0d5be71b5ffeb73515b8b6127",
     "semantic_hash": ""
   },
   "apps/web/src/data/syncStorage.test.ts": {
@@ -2256,10 +2256,10 @@
     "semantic_hash": "61ac34cec6ea9414867aefffea93ae5a"
   },
   "apps/web/src/features/doc/PresenceStack.tsx": {
-    "mtime": 1792935296.304842,
-    "seen": 1793121824.8773582,
-    "ast_hash": "6c85dc75ad7e1446144e21ff32e4d600",
-    "semantic_hash": "6c85dc75ad7e1446144e21ff32e4d600"
+    "mtime": 1793146102.04107,
+    "seen": 1793146260.2665846,
+    "ast_hash": "4bb8c9383caaf6347c98f177bc6ac4d4",
+    "semantic_hash": ""
   },
   "apps/web/src/features/doc/StylePopover.tsx": {
     "mtime": 1792952677.8432164,
@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793138858.6878982,
-    "seen": 1793138984.9304714,
-    "ast_hash": "78d61d1ae86a67b27d1c22c696920406",
+    "mtime": 1793146116.1690698,
+    "seen": 1793146260.2825918,
+    "ast_hash": "69a014eaf3a51a93facb0357a4c0b78d",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -5820,9 +5820,9 @@
     "semantic_hash": ""
   },
   "apps/web/e2e/specs/members.spec.ts": {
-    "mtime": 1793138844.697125,
-    "seen": 1793138984.906587,
-    "ast_hash": "251ca5a658cd787d22d5b1d3fb221dea",
+    "mtime": 1793146102.04107,
+    "seen": 1793146260.2631178,
+    "ast_hash": "ec0daf5550e4fc6f4fec857a289b206b",
     "semantic_hash": ""
   },
   "apps/web/src/data/ownerShares.ts": {

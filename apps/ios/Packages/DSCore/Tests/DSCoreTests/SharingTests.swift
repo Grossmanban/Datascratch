@@ -419,3 +419,18 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         #expect(server.state.withLock { $0.resources["notebook:\(nbId)"]!.pending } == false)
     }
 }
+
+@Suite(.enabled(if: FileManager.default.fileExists(atPath: Vectors.root.appendingPathComponent("api/bodies.json").path)))
+struct SharedItemVectorTests {
+    /// `agentsMode` (✨): true when given, nil from older servers; not a boolean → rejected.
+    @Test func agentsMode() throws {
+        let c = (try Vectors.json("api/bodies.json")["cases"] as! [String: Any])["sharedItem"] as! [String: Any]
+        let items = try (c["valid"] as! [Any]).map { try JSONDecoder().decode(SharedItem.self, from: try JSONSerialization.data(withJSONObject: $0)) }
+        let expected = (c["valid"] as! [[String: Any]]).map { $0["agentsMode"] as? Bool }
+        #expect(items.map(\.agentsMode) == expected)
+        #expect(expected.contains(true) && expected.contains(nil))
+        for inv in c["invalid"] as! [[String: Any]] where (inv["body"] as! [String: Any])["agentsMode"] != nil {
+            #expect(throws: (any Error).self) { try JSONDecoder().decode(SharedItem.self, from: try JSONSerialization.data(withJSONObject: inv["body"]!)) }
+        }
+    }
+}

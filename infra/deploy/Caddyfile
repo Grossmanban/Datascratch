@@ -33,15 +33,6 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 
-	# Universal Links (iOS): invitations and share links open in the app. Served as is, without
-	# a redirect; DS_APPLE_APP_ID is <team id>.<bundle id> (deploy.sh). Only these paths go to
-	# the app, everything else stays in the browser.
-	handle /.well-known/apple-app-site-association {
-		header Content-Type application/json
-		header Cache-Control "public, max-age=3600"
-		respond `{"applinks":{"details":[{"appIDs":["{$DS_APPLE_APP_ID}"],"components":[{"/":"/invite/*"},{"/":"/s/*"}]}]}}` 200
-	}
-
 	# Internal only: never exposed to the internet.
 	@internal path /metrics /metrics/*
 	handle @internal {

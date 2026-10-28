@@ -5,7 +5,6 @@
 #   remote.sh deploy       bootstrap (idempotent) + deploy.sh up $DS_TAG
 #   remote.sh info         mode of the running deployment (key=value lines)
 #   remote.sh domain       the domain the server runs with (empty before the first deploy)
-#   remote.sh probe        exits 0 when the server answers over SSH (nothing else)
 #   remote.sh smoke-local  smoke test of 127.0.0.1:<proxy port> through an SSH tunnel
 #   remote.sh check        health of Datascratch inside its web container (edge mode)
 #   remote.sh snippet      the config snippet for an existing nginx (behind-proxy mode)
@@ -15,8 +14,7 @@
 # Optional: DEPLOY_USER (root), DEPLOY_PORT (22), DS_REGISTRY_USER + DS_REGISTRY_TOKEN
 #   (GHCR pull), DS_DEPLOY_MODE (auto|standalone|behind-proxy), DS_PROXY_PORT,
 #   DS_EDGE_CADDY, DS_EDGE_SITES_DIR, DS_EDGE_NETWORK, DS_NGINX_AUTO, DS_NGINX_CERTBOT,
-#   DS_HOST_MODE, DS_MEM_PROFILE, DS_SKIP_FIREWALL, DS_APPLE_TEAM_ID + DS_IOS_BUNDLE_ID
-#   (Universal Links).
+#   DS_HOST_MODE, DS_MEM_PROFILE, DS_SKIP_FIREWALL.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -56,7 +54,7 @@ case "${1:-}" in
     echo "::group::Deploy $DS_TAG"
     vars="DS_DOMAIN=$(q "$DS_DOMAIN") DS_SERVER_IMAGE=$(q "$DS_SERVER_IMAGE") DS_WEB_IMAGE=$(q "$DS_WEB_IMAGE")"
     vars="$vars DS_POSTGRES_IMAGE=$(q "$DS_POSTGRES_IMAGE") DS_DEPLOY_MODE=$(q "${DS_DEPLOY_MODE:-auto}")"
-    for v in DS_EDGE_CADDY DS_EDGE_SITES_DIR DS_EDGE_NETWORK DS_APPLE_TEAM_ID DS_IOS_BUNDLE_ID; do
+    for v in DS_EDGE_CADDY DS_EDGE_SITES_DIR DS_EDGE_NETWORK; do
       [ -n "${!v:-}" ] && vars="$vars $v=$(q "${!v}")"
     done
     vars="$vars DS_PROXY_PORT=$(q "${DS_PROXY_PORT:-8480}") DS_NGINX_AUTO=$(q "${DS_NGINX_AUTO:-false}")"
@@ -72,9 +70,6 @@ case "${1:-}" in
     ;;
   info)
     remote "$SUDO /opt/datascratch/deploy.sh info" < /dev/null
-    ;;
-  probe)
-    remote true < /dev/null
     ;;
   domain)
     # Read-only and never failing: nothing there yet means an empty answer.

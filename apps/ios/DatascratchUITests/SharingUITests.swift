@@ -71,7 +71,9 @@ final class SharingUITests: XCTestCase {
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
         let row = revealSidebarElement(app, "sidebar.sharedNotebook")
         XCTAssertTrue(row.exists, "no shared notebook in the sidebar")
-        row.tap()
+        // The identifier lands on the row's icon and text: tap the cell holding them.
+        let cell = app.cells.containing(.any, identifier: "sidebar.sharedNotebook").firstMatch
+        (cell.exists ? cell : row).tap()
         XCTAssertTrue(app.staticTexts["Roadmap"].firstMatch.waitForExistence(timeout: 5),
                       "the shared notebook lists none of its notes")
     }

@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import * as Y from 'yjs';
 import type { AppContext } from '../context.js';
 import { withAgentScope, type Tx } from '../db/client.js';
-import { attachmentChunks, attachments, docSnapshots, docUpdates, docs, notebooks } from '../db/schema.js';
+import { attachmentChunks, attachments, docSnapshots, docUpdates, docs, members, notebooks, users } from '../db/schema.js';
 import { COMPACT_JOB } from '../jobs/index.js';
 import { fromB64, toB64 } from '../lib/encoding.js';
 import { ApiError, forbidden, notFound } from '../lib/errors.js';
@@ -23,8 +23,9 @@ function readWrappedKey(meta: unknown): string | null {
 
 /**
  * Decrypted access to agent-mode notebooks for @datascratch/agents.
- * Every call runs inside a Row-Level-Security scope (D-30): the user's
- * agent-mode notebooks, narrowed to the grant's notebooks when `grantId` is given.
+ * Every call runs inside a Row-Level-Security scope (D-30): the user's agent-mode notebooks
+ * and the agent-mode notebooks shared with the user (D-54: an editor writes, a viewer reads),
+ * narrowed to the grant's notebooks when `grantId` is given.
  * Keys: notebookKey = open(DS_KMS_KEY), noteKey = open(notebookKey, NoteMeta.wrappedKey) (crypto.md §1, §8).
  */
 export class PgAgentDataSource implements AgentDataSource {
@@ -129,13 +130,28 @@ export class PgAgentDataSource implements AgentDataSource {
   }
 
   async listAgentNotebooks(userId: string, grantId?: string): Promise<AgentNotebook[]> {
-    return this.#scope(userId, grantId, async (tx) => {
-      const rows = await tx
-        .select({ id: notebooks.id, createdAt: notebooks.createdAt })
+    const rows = await this.#scope(userId, grantId, (tx) =>
+      tx
+        .select({ id: notebooks.id, ownerId: notebooks.userId, createdAt: notebooks.createdAt })
         .from(notebooks)
-        .orderBy(asc(notebooks.createdAt));
-      // Names live in the account document (masterKey) — the server cannot read them.
-      return rows.map((r) => ({ id: r.id, name: null, icon: null, space: null, createdAt: r.createdAt.toISOString() }));
+        .orderBy(asc(notebooks.createdAt)),
+    );
+    // Notebooks of another account visible through a membership (D-54): who shares it and the
+    // member's role (outside the agent scope: the agent role cannot read members or users).
+    const foreign = rows.filter((r) => r.ownerId !== userId).map((r) => r.id);
+    const shared = new Map<string, { ownerUserId: string; ownerEmail: string | null; role: 'editor' | 'viewer' }>();
+    if (foreign.length > 0) {
+      const ms = await this.ctx.database.db
+        .select({ notebookId: members.notebookId, ownerUserId: members.ownerId, ownerEmail: users.email, role: members.role })
+        .from(members)
+        .innerJoin(users, eq(users.id, members.ownerId))
+        .where(and(eq(members.userId, userId), inArray(members.notebookId, foreign)));
+      for (const m of ms) shared.set(m.notebookId!, { ownerUserId: m.ownerUserId, ownerEmail: m.ownerEmail, role: m.role });
+    }
+    // Names live in the account document (masterKey) — the server cannot read them.
+    return rows.map((r) => {
+      const item = { id: r.id, name: null, icon: null, space: null, createdAt: r.createdAt.toISOString(), shared: shared.get(r.id) ?? null };
+      return item as AgentNotebook;
     });
   }
 
@@ -220,6 +236,8 @@ export class PgAgentDataSource implements AgentDataSource {
       const from = await this.#docAndKey(tx, fromNotebookId);
       const to = await this.#docAndKey(tx, toNotebookId);
       if (!from || !to || to.doc.kind !== 'notebook') throw notFound('notebook not found');
+      // Out of a notebook shared with the user (D-54) is the owner's move only; RLS refuses it too.
+      if (to.doc.userId !== note.doc.userId) throw forbidden('a note leaves a shared notebook only by its owner');
       for (const id of [noteId, fromNotebookId, toNotebookId]) await this.#requireWritable(tx, id);
       const wrapped = await seal(to.key, note.key, AD.note(noteId));
       const updates = move.indexUpdates(toB64(wrapped));
@@ -243,8 +261,11 @@ export class PgAgentDataSource implements AgentDataSource {
         sql`SELECT ${notebookId}::uuid IN (SELECT ds_agent_notebooks(true)) AS ok`,
       );
       if (!w.rows[0]?.ok) throw forbidden('the grant does not allow writing to this notebook');
+      // A note in a notebook shared with the user belongs to the notebook's owner (D-54, quota too).
+      const [nb] = await tx.select({ ownerId: notebooks.userId }).from(notebooks).where(eq(notebooks.id, notebookId));
+      if (!nb) throw notFound('notebook not found');
       // RLS enforces the same on the insert itself.
-      await tx.insert(docs).values({ id: noteId, userId, kind: 'note', notebookId });
+      await tx.insert(docs).values({ id: noteId, userId: nb.ownerId, kind: 'note', notebookId });
       const noteKey = (await getSodium()).randombytes_buf(32);
       const wrapped = await seal(nbKey, noteKey, AD.note(noteId));
       noteKeyCache.set(noteId, notebookId, noteKey);

@@ -149,10 +149,14 @@ export class PgAgentDataSource implements AgentDataSource {
       for (const m of ms) shared.set(m.notebookId!, { ownerUserId: m.ownerUserId, ownerEmail: m.ownerEmail, role: m.role });
     }
     // Names live in the account document (masterKey) — the server cannot read them.
-    return rows.map((r) => {
-      const item = { id: r.id, name: null, icon: null, space: null, createdAt: r.createdAt.toISOString(), shared: shared.get(r.id) ?? null };
-      return item as AgentNotebook;
-    });
+    return rows.map((r) => ({
+      id: r.id,
+      name: null,
+      icon: null,
+      space: null,
+      createdAt: r.createdAt.toISOString(),
+      shared: shared.get(r.id) ?? null,
+    }));
   }
 
   async loadDoc(userId: string, docId: string, grantId?: string) {

@@ -65,6 +65,84 @@ struct InvitationsView: View {
     }
 }
 
+/// D-54: one invitation, opened from its link (`/invite/<id>`): the same card with «Accept» and
+/// «Decline», or why it is not there — not signed in, or no longer waiting.
+struct InvitationLinkView: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    let invitationId: String
+    @State private var isLoaded = false
+    @State private var isWorking = false
+    @State private var error: String?
+
+    var body: some View {
+        let sharing = app.accountSharing
+        NavigationStack {
+            Group {
+                if !sharing.isAvailable {
+                    ContentUnavailableView {
+                        Label("Sign in to accept", systemImage: "person.crop.circle.badge.questionmark")
+                    } description: {
+                        Text("Invitations are for an account on a server. Sign in in Settings, then open the link again.")
+                    }
+                } else if let invite = sharing.incoming.first(where: { $0.id == invitationId }) {
+                    List {
+                        if let error {
+                            Section { Text(error).foregroundStyle(Theme.Palette.danger) }
+                        }
+                        Section {
+                            InvitationCard(invite: invite, isWorking: isWorking) {
+                                respond(invite, accept: true)
+                            } onDecline: {
+                                respond(invite, accept: false)
+                            }
+                        } footer: {
+                            Text("Accepted notebooks and documents appear in “Shared with me” in every space.")
+                        }
+                    }
+                } else if !isLoaded {
+                    ProgressView()
+                } else {
+                    ContentUnavailableView {
+                        Label("This invitation isn’t waiting", systemImage: "envelope.open")
+                    } description: {
+                        Text("It was accepted, declined or revoked, or it has expired. Accepted notebooks and documents are in “Shared with me”.")
+                    }
+                }
+            }
+            .navigationTitle("Invitation")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+            }
+            .task {
+                await sharing.refresh()
+                isLoaded = true
+            }
+        }
+        .accessibilityIdentifier("invitationLink")
+    }
+
+    private func respond(_ invite: IncomingInvite, accept: Bool) {
+        isWorking = true
+        error = nil
+        Task {
+            do {
+                if accept {
+                    try await app.accountSharing.accept(invite)
+                } else {
+                    try await app.accountSharing.decline(invite)
+                }
+                Haptics.success()
+                dismiss()
+            } catch {
+                self.error = error.localizedDescription
+            }
+            isWorking = false
+        }
+    }
+}
+
 private struct InvitationCard: View {
     let invite: IncomingInvite
     let isWorking: Bool

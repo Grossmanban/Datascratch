@@ -77,6 +77,9 @@ final class AppModel {
     var isSigningUp = false
     /// A route that arrived before the main UI could show it.
     var pendingRoute: AppRoute?
+    /// A link that opened the app (Universal Link or `datascratch://`), kept as it came: it is
+    /// read once the main window is up, against the server the account is on by then.
+    var pendingLink: URL?
     /// Main (library) windows on screen; a note window that closes itself reopens one when none is.
     @ObservationIgnored var mainWindowCount = 0
 
@@ -143,6 +146,8 @@ final class AppModel {
             signedInForTesting = true
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-cover") { seedCoverForTesting() }
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-sharing") { seedSharingForTesting() }
+            // `-ui-testing-open-url <url>`: the app starts from that link (cold start).
+            if let link = UserDefaults.standard.string(forKey: "ui-testing-open-url") { pendingLink = URL(string: link) }
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-folders"),
                let notebook = library.notebooks(in: library.activeSpace?.id).first {
                 // A folder with a subfolder and a note in each (folder strip, breadcrumb).
@@ -209,6 +214,9 @@ final class AppModel {
     /// `-ui-testing-links` / `-ui-testing-task-date`: the note a new scene opens.
     @ObservationIgnored var noteForTesting: String?
 
+    /// The seeded invitation (`-ui-testing-sharing`), so a test can open its link.
+    nonisolated static let invitationForTesting = "0192f3c4-0000-7000-8000-00000000a11e"
+
     /// `-ui-testing-sharing` (D-54): an invitation, a notebook «Shared plans» shared with this
     /// account «view only» with one note, and a member on the first notebook.
     private func seedSharingForTesting() {
@@ -222,7 +230,7 @@ final class AppModel {
         if arguments.contains("-ui-testing-open-own") {
             noteForTesting = library.createNote(in: own.id, title: "Plan for two", body: NoteBody(blocks: [.paragraph("Ideas")])).id
         }
-        local.seedForTesting(invitedTo: ShareTarget(kind: .notebook, id: UUIDv7.make()),
+        local.seedForTesting(invitationId: Self.invitationForTesting, invitedTo: ShareTarget(kind: .notebook, id: UUIDv7.make()),
                              viewOnly: ShareTarget(kind: .notebook, id: shared.id),
                              owned: ShareTarget(kind: .notebook, id: own.id))
     }

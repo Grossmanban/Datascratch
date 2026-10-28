@@ -61,6 +61,7 @@ struct MainSplitView: View {
         }
         .modifier(ModeChangeConfirmation())
         .modifier(MissingNoteAlert())
+        .modifier(LinkProblemAlert())
         // The server ended this device's session: say so, and offer to sign in again.
         .sheet(isPresented: $sync.showsSessionEnded) {
             SessionEndedView()
@@ -209,6 +210,50 @@ struct MissingNoteAlert: ViewModifier {
             }
             .accessibilityIdentifier("missingNote.create")
             Button("Cancel", role: .cancel) { scene.missingNoteTitle = nil }
+        }
+    }
+}
+
+/// A link that cannot open here (D-49, D-54): another server's, or a document this account
+/// does not have. Another server's link can still be opened in the browser inside the app.
+struct LinkProblemAlert: ViewModifier {
+    @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
+
+    func body(content: Content) -> some View {
+        let problem = scene.linkProblem
+        let isPresented = Binding(get: { scene.linkProblem != nil }, set: { if !$0 { scene.linkProblem = nil } })
+        content.alert(title(problem), isPresented: isPresented, presenting: problem) { problem in
+            if case .otherServer(_, let url) = problem {
+                Button("Open in Browser") {
+                    scene.linkProblem = nil
+                    scene.sheet = .webPage(url)
+                }
+                .accessibilityIdentifier("linkProblem.browser")
+            }
+            Button("OK", role: .cancel) { scene.linkProblem = nil }
+        } message: { problem in
+            Text(message(problem))
+        }
+    }
+
+    private func title(_ problem: LinkProblem?) -> String {
+        switch problem {
+        case .otherServer: String(localized: "This link is from another server")
+        case .missingDocument, nil: String(localized: "This document isn’t here")
+        }
+    }
+
+    private func message(_ problem: LinkProblem) -> String {
+        switch problem {
+        case .otherServer(let host, _):
+            if app.sync.isLocalOnly {
+                return String(localized: "It points to \(host), and you aren’t signed in to a server. Open it in the browser, or sign in to that server in Settings.")
+            }
+            let current = app.linkHost
+            return String(localized: "It points to \(host), and this account is on \(current). Open it in the browser, or sign in to that server.")
+        case .missingDocument:
+            return String(localized: "It isn’t in this account or shared with it. If someone shared it with you, accept the invitation first.")
         }
     }
 }

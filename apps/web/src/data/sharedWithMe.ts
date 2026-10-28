@@ -14,7 +14,7 @@ import { accountBoxKeys, sharingApi } from "./sharing";
 
 export type SharedState = {
   /** By "<kind>:<id>"; `keyed` once the owner's client delivered the key. */
-  items: Record<string, { target: ShareTarget; role: SharedItem["role"]; ownerUserId: string; ownerEmail: string; docIds: string[]; keyed: boolean }>;
+  items: Record<string, { target: ShareTarget; role: SharedItem["role"]; ownerUserId: string; ownerEmail: string; docIds: string[]; keyed: boolean; agentsMode: boolean }>;
 };
 
 export const useShared = create<SharedState>(() => ({ items: {} }));
@@ -90,7 +90,7 @@ async function apply(list: SharedItem[], userId: string, fromServer: boolean) {
     } catch (e) {
       console.warn("[ds] cannot open the key of a shared resource", item.target, (e as Error).message);
     }
-    items[keyOf(item.target)] = { target: item.target, role: item.role, ownerUserId: item.owner.userId, ownerEmail: item.owner.email, docIds: item.docIds, keyed };
+    items[keyOf(item.target)] = { target: item.target, role: item.role, ownerUserId: item.owner.userId, ownerEmail: item.owner.email, docIds: item.docIds, keyed, agentsMode: !!item.agentsMode };
   }
   useShared.setState({ items });
   // Accepted but not keyed yet: the owner's client delivers the key once it is online — look again soon.

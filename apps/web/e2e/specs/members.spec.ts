@@ -206,8 +206,6 @@ test("D-54: the member sees a shared notebook in «Общие со мной», a
 });
 
 test("D-54: a shared notebook open to the owner's AI agents shows ✨ to the member", async ({ page, browser }) => {
-  // The real server fills SharedItem.agentsMode in a later step; the mock already does.
-  test.skip(!!process.env.E2E_SERVER_URL, "agentsMode is not served by the real server yet");
   const owner = uniqueEmail("owner4");
   const friend = uniqueEmail("agentsee");
   const other = await browser.newContext();

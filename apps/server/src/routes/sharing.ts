@@ -494,6 +494,8 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           .returning({ id: members.id });
         if (rows.length === 0) throw notFound('member not found');
         accessChanged(req.params.userId);
+        // A member's agents work with the member's role (D-54): their cached keys go with it.
+        if (t.kind === 'notebook') noteKeyCache.forgetNotebooks([t.id]);
         return reply.code(204).send(null);
       },
     );
@@ -520,8 +522,11 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
               .returning({ id: members.id })
           : [];
         if (gone.length === 0) throw notFound('member not found');
-        // Access closes at once; the key rotation is flagged by the members_gone trigger.
+        // Access closes at once (agents of the member too: RLS checks membership on every
+        // call, and their cached keys go); the key rotation is flagged by the members_gone trigger.
         accessChanged(req.params.userId);
+        if (t!.kind === 'notebook') noteKeyCache.forgetNotebooks([t!.id]);
+        else noteKeyCache.forgetNotes([t!.id]);
         return reply.code(204).send(null);
       },
     );

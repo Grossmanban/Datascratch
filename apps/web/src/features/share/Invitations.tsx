@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { NetworkError } from "@/api/client";
 import { membersApi } from "@/api/endpoints";
 import { refreshShared } from "@/data/sharedWithMe";
+import { OpenInApp } from "./OpenInApp";
 import { useUi } from "@/hooks/useUi";
 import { formatDay, localDate } from "@/lib/dates";
 import type { IncomingInvitation } from "@/lib/shared";
@@ -69,6 +70,7 @@ export function InvitationsDialog() {
   return (
     <Dialog open={!!open} onOpenChange={(o) => !o && useUi.setState({ invitationsOpen: false })} title={t("invitations.title")}>
       <div className="flex flex-col gap-2" data-testid="invitations">
+        {highlight && <OpenInApp target={{ kind: "invite", id: highlight }} className="mb-1" />}
         {incoming.isLoading ? (
           <Spinner className="size-4 text-ink-3" />
         ) : incoming.isError ? (

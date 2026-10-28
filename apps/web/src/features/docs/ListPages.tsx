@@ -7,6 +7,7 @@ import { useIndexVersion } from "@/data/indexer";
 import { useTranslation } from "react-i18next";
 import { findNotebook, folderPath, notesInSpace, useWorkspace, visibleNotes, type NoteEntry } from "@/domain/workspace";
 import { useShared } from "@/data/sharedWithMe";
+import { OpenInApp } from "@/features/share/OpenInApp";
 import { TopBar, PageTitle } from "@/features/shell/PageHeader";
 import { setDocView, useUi } from "@/hooks/useUi";
 import { tintFg } from "@/lib/tokens";
@@ -222,7 +223,8 @@ export function NotebookPage() {
   const { t } = useTranslation();
   const { notebookId } = useParams({ from: "/app/notebook/$notebookId" });
   const nb = useWorkspace(useShallow((s) => findNotebook(s, notebookId)));
-  const readOnly = useShared((s) => s.items[`notebook:${notebookId}`]?.role === "viewer");
+  const sharedNb = useShared((s) => s.items[`notebook:${notebookId}`]);
+  const readOnly = sharedNb?.role === "viewer";
   const notes = useWorkspace((s) => s.notes);
   const folders = useWorkspace((s) => s.folders);
   const list = useMemo(() => visibleNotes(Object.values(notes).filter((n) => n.notebookId === notebookId && !n.folderId)), [notes, notebookId]);
@@ -240,6 +242,7 @@ export function NotebookPage() {
       newIn={readOnly ? null : { notebookId, folderId: null }}
       extra={
         <>
+          {sharedNb && <OpenInApp compact target={{ kind: "notebook", id: notebookId }} className="mb-4" />}
           <UnreadableNote notebookId={notebookId} />
           <FolderStrip folders={subfolders} tint={nb.color} />
         </>

@@ -18,6 +18,7 @@ import { Logo } from "@/features/shell/Splash";
 import type { NoteMeta } from "@/lib/shared";
 import { cn, EmptyState, Spinner } from "@/ui";
 import { iconGlyph } from "@/lib/glyph";
+import { OpenInApp } from "@/features/share/OpenInApp";
 
 const KEY_PREFIX = "ds.shareKey.";
 
@@ -26,6 +27,14 @@ const KEY_PREFIX = "ds.shareKey.";
  * address bar at once (audit 2026-10-27: not left in history, screenshots or a copied URL) and
  * kept for this tab only, so a reload still opens the note.
  */
+function storedShareKey(shareId: string): string | null {
+  try {
+    return sessionStorage.getItem(KEY_PREFIX + shareId);
+  } catch {
+    return null;
+  }
+}
+
 function takeShareKey(shareId: string): string | null {
   const m = /[#&]k=([A-Za-z0-9_-]+)/.exec(location.hash);
   if (m) {
@@ -101,6 +110,8 @@ function Loading() {
 
 function GuestFrame({ children, session, presence }: { children: React.ReactNode; session?: GuestSession; presence?: React.ReactNode }) {
   const { t } = useTranslation();
+  const { shareId } = useParams({ strict: false }) as { shareId: string };
+  const shareKey = storedShareKey(shareId);
   return (
     <div className="flex h-full flex-col bg-canvas">
       <header className="glass sticky top-0 z-20 flex h-12 shrink-0 items-center gap-3 border-b border-line/60 px-3 sm:px-5">
@@ -109,6 +120,7 @@ function GuestFrame({ children, session, presence }: { children: React.ReactNode
           <span className="hidden sm:inline">{t("app.name")}</span>
         </a>
         <div className="flex-1" />
+        {session && shareKey && <OpenInApp compact target={{ kind: "share", id: shareId, key: shareKey }} />}
         {presence}
         {session && (
           <span

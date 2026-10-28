@@ -18,6 +18,9 @@ final class SharingUITests: XCTestCase {
         XCTAssertTrue(banner.waitForExistence(timeout: 10), "no «view only» banner")
         XCTAssertFalse(app.descendants(matching: .any)["penPalette"].firstMatch.exists, "the pen palette is shown to a viewer")
         XCTAssertFalse(app.buttons["editor.insert"].firstMatch.exists, "Insert is offered to a viewer")
+        // The owner opened «Shared plans» to their agents: ✨ in the note's header (shown only).
+        let agents = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "AI agents")).firstMatch
+        XCTAssertTrue(agents.waitForExistence(timeout: 3), "no ✨ on a note the owner's agents read")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = "view-only"
         shot.lifetime = .keepAlways
@@ -60,6 +63,16 @@ final class SharingUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["sidebar.sharedPending"].firstMatch.waitForExistence(timeout: 5)
                       || app.descendants(matching: .any)["sidebar.sharedNotebook"].firstMatch.waitForExistence(timeout: 2),
                       "the accepted notebook is not in «Shared with me»")
+    }
+
+    /// ✨ on a shared notebook the owner opened to their agents (D-54), in «Shared with me».
+    func testSharedNotebookShowsTheAgentsBadge() throws {
+        let app = launch([])
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        let row = revealSidebarElement(app, "sidebar.sharedNotebook")
+        XCTAssertTrue(row.exists, "no shared notebook in the sidebar")
+        let agents = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "AI agents")).firstMatch
+        XCTAssertTrue(agents.waitForExistence(timeout: 3), "no ✨ on the shared notebook")
     }
 
     /// An invitation link (`ds://`, D-56) starts the app (cold start): the invitation opens with «Accept».

@@ -33,6 +33,8 @@ struct NotebookRow: View {
                         .font(.caption)
                         .foregroundStyle(Theme.Palette.textTertiary)
                         .accessibilityLabel("Open to agents")
+                } else if app.accountSharing.isOpenToAgents(ShareTarget(kind: .notebook, id: notebook.id)) {
+                    SharedAgentsBadge()
                 }
             }
         } icon: {

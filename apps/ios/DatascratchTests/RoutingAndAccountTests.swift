@@ -3,26 +3,62 @@ import Testing
 @testable import Datascratch
 
 struct RoutingTests {
-    let host = "datascratch.app"
+    let server = "notes.example.org"
 
-    @Test func parsesShareUniversalLink() {
-        let url = URL(string: "https://datascratch.app/s/0192f3c4-aaaa#k=abc_DEF-123")!
-        #expect(AppRoute.parse(url, webHost: host) == .share(shareId: "0192f3c4-aaaa", key: "abc_DEF-123"))
+    @Test func parsesTheWebsAppLinks() {
+        let share = URL(string: "ds://share/0192f3c4-aaaa?server=notes.example.org#k=abc_DEF-123")!
+        #expect(AppRoute.parse(share, server: server) == .share(shareId: "0192f3c4-aaaa", key: "abc_DEF-123", server: server))
+        #expect(AppRoute.parse(URL(string: "ds://invite/i1?server=notes.example.org")!, server: server) == .invitation("i1"))
+        #expect(AppRoute.parse(URL(string: "ds://note/n1?server=Notes.Example.org")!, server: server) == .note("n1"))
+        #expect(AppRoute.parse(URL(string: "ds://notebook/b1?server=notes.example.org")!, server: server) == .notebook("b1"))
+        // No server named: the account's.
+        #expect(AppRoute.parse(URL(string: "ds://note/n1")!, server: server) == .note("n1"))
     }
 
     @Test func shareLinkWithoutKey() {
-        let url = URL(string: "https://datascratch.app/s/abc")!
-        #expect(AppRoute.parse(url, webHost: host) == .share(shareId: "abc", key: nil))
+        let url = URL(string: "ds://share/abc?server=notes.example.org")!
+        #expect(AppRoute.parse(url, server: server) == .share(shareId: "abc", key: nil, server: server))
+    }
+
+    @Test func guestLinkOpensOnItsOwnServer() {
+        // A guest link needs no account: whatever server it names, it opens there.
+        let url = URL(string: "ds://share/abc?server=other.example#k=x")!
+        #expect(AppRoute.parse(url, server: server) == .share(shareId: "abc", key: "x", server: "other.example"))
+        #expect(AppRoute.parse(url, server: nil) == .share(shareId: "abc", key: "x", server: "other.example"))
     }
 
     @Test func parsesCustomScheme() {
-        #expect(AppRoute.parse(URL(string: "datascratch://note/n1")!, webHost: host) == .note("n1"))
-        #expect(AppRoute.parse(URL(string: "datascratch://today")!, webHost: host) == .today)
+        #expect(AppRoute.parse(URL(string: "datascratch://note/n1")!, server: server) == .note("n1"))
+        #expect(AppRoute.parse(URL(string: "datascratch://today")!, server: server) == .today)
     }
 
-    @Test func ignoresForeignHosts() {
-        #expect(AppRoute.parse(URL(string: "https://evil.example/s/abc#k=x")!, webHost: host) == nil)
-        #expect(AppRoute.parse(URL(string: "http://datascratch.app/s/abc#k=x")!, webHost: host) == nil)
+    @Test func linkOfAnotherServerIsNamedNotOpened() {
+        let url = URL(string: "ds://invite/abc?server=other.example")!
+        #expect(AppRoute.parse(url, server: server)
+            == .otherServer(server: "other.example", webURL: URL(string: "https://other.example/invite/abc")))
+        // Not signed in to any server.
+        #expect(AppRoute.parse(URL(string: "ds://note/n1?server=other.example")!, server: nil)
+            == .otherServer(server: "other.example", webURL: URL(string: "https://other.example/doc/n1")))
+        // The port counts: another port is another server.
+        #expect(AppRoute.parse(URL(string: "ds://note/n1?server=notes.example.org:8443")!, server: server)
+            == .otherServer(server: "notes.example.org:8443", webURL: URL(string: "https://notes.example.org:8443/doc/n1")))
+    }
+
+    @Test func ignoresWhatIsNotOurs() {
+        #expect(AppRoute.parse(URL(string: "https://notes.example.org/invite/abc")!, server: server) == nil)
+        #expect(AppRoute.parse(URL(string: "ds://settings/account")!, server: server) == nil)
+        #expect(AppRoute.parse(URL(string: "ds://note")!, server: server) == nil)
+        // A server value that is not a host is ignored, not followed.
+        #expect(AppRoute.linkServer(of: URL(string: "ds://note/n1?server=evil.example%2Fpath")!) == nil)
+        #expect(AppRoute.linkServer(of: URL(string: "ds://note/n1?server=user%40evil.example")!) == nil)
+    }
+
+    @Test func webPagesOfLinks() {
+        #expect(AppRoute.webURL(server: "notes.example.org", kind: "share", id: "s1", key: "k1")
+            == URL(string: "https://notes.example.org/s/s1#k=k1"))
+        #expect(AppRoute.webURL(server: "localhost:8080", kind: "note", id: "n1") == URL(string: "http://localhost:8080/doc/n1"))
+        #expect(AppRoute.authority(of: URL(string: "https://Notes.Example.org")!) == "notes.example.org")
+        #expect(AppRoute.authority(of: URL(string: "http://localhost:8080")!) == "localhost:8080")
     }
 
     @Test func base64URLRoundTrip() {
@@ -92,11 +128,9 @@ struct AccountServiceTests {
     @Test func sharingMintsLinksWithKeyFragment() async throws {
         let sharing = LocalSharingService(webHost: "datascratch.app")
         let link = try await sharing.createLink(for: ShareTarget(kind: .note, id: "n1"), permission: .edit, expiresAt: nil)
-        guard case .share(let id, let key)? = AppRoute.parse(link.url, webHost: "datascratch.app") else {
-            Issue.record("link does not parse")
-            return
-        }
-        #expect(id == link.id)
+        #expect(link.url.lastPathComponent == link.id)
+        let key = link.url.fragment()?.split(separator: "=", maxSplits: 1).last.map(String.init)
+        #expect(link.url.fragment()?.hasPrefix("k=") == true)
         #expect(Base64URL.decode(key ?? "")?.count == 32)
         try await sharing.revoke(link.id)
         #expect(sharing.links.isEmpty)

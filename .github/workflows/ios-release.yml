@@ -139,14 +139,8 @@ jobs:
           rm "$RUNNER_TEMP/dist.p12"
 
       - name: Archive
-        env:
-          # A secret, not a variable: secrets are masked, and a variable would be printed in
-          # this step's env header before anything could mask it. No domain in public logs.
-          DS_WEB_HOST_SECRET: ${{ secrets.DS_WEB_HOST }}
         run: |
           set -o pipefail
-          DS_WEB_HOST="${DS_WEB_HOST_SECRET:-datascratch.app}"
-          echo "::add-mask::$DS_WEB_HOST"
           xcodebuild archive \
             -project Datascratch.xcodeproj -scheme Datascratch -configuration Release \
             -destination "generic/platform=iOS" \
@@ -157,7 +151,6 @@ jobs:
             -authenticationKeyIssuerID "$ISSUER_ID" \
             DS_TEAM_ID="$TEAM_ID" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-            DS_WEB_HOST="$DS_WEB_HOST" \
             | xcbeautify --renderer github-actions
 
       - name: Export and upload to TestFlight

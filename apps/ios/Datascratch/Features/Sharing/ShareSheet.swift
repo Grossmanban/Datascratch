@@ -396,6 +396,19 @@ struct SharedWithMeSection: View {
                 Label(role.title, systemImage: role.systemImage)
             }
             .accessibilityIdentifier("share.myRole")
+            if app.accountSharing.isOpenToAgents(target) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Open to AI agents")
+                        Text("The owner’s AI agents can read it. Only the owner changes this.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                    }
+                } icon: {
+                    Image(systemName: "sparkles").foregroundStyle(Tint.purple.foreground)
+                }
+                .accessibilityIdentifier("share.agentsMode")
+            }
             Button("Leave", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { confirmLeave = true }
                 .accessibilityIdentifier("share.leave")
             if let error {
@@ -481,53 +494,62 @@ struct ShareLinkButton: View {
     }
 }
 
-/// Shown when a share link is opened in the app (Universal Link).
+/// A guest link opened in the app (`ds://share`, D-37, D-56): the app has no guest mode, so the
+/// web's guest page opens inside it (the key stays in the `#` part, never sent to the server).
+/// A link without its key says so.
 struct SharedLinkView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     let shareId: String
     let key: String?
+    /// The link's server; without one, the account's.
+    let server: String?
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: Theme.Space.s4) {
-                Image(systemName: "link.circle")
-                    .font(.system(size: 54, weight: .light))
-                    .foregroundStyle(Theme.Palette.accent)
-                Text("Shared document")
-                    .font(Theme.Typography.h2)
-                if key == nil {
-                    Text("This link is incomplete: the part after “#” with the key is missing. Ask for the full link.")
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Theme.Palette.danger)
-                } else if app.sync.isLocalOnly {
-                    Text("Opening shared documents needs a connection to the Datascratch server. You can open the link in the browser meanwhile.")
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Theme.Palette.textSecondary)
-                    if let url = webURL {
-                        Link(destination: url) {
-                            Label("Open in Browser", systemImage: "safari")
-                        }
-                        .prominentGlass()
-                    }
-                } else {
-                    ProgressView("Connecting…")
+        if let key, let server = server ?? app.linkServer,
+           let url = AppRoute.webURL(server: server, kind: "share", id: shareId, key: key) {
+            SafariView(url: url)
+                .ignoresSafeArea()
+        } else {
+            NavigationStack {
+                ContentUnavailableView {
+                    Label("This link is incomplete", systemImage: "link.badge.plus")
+                } description: {
+                    Text("The part after “#” with the key is missing. Ask for the full link.")
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
                 }
             }
-            .padding(Theme.Space.s8)
-            .frame(maxWidth: 480)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
-            }
+            .accessibilityIdentifier("sharedLink.incomplete")
         }
     }
+}
 
-    private var webURL: URL? {
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = app.linkHost
-        components.path = "/s/\(shareId)"
-        components.fragment = key.map { "k=\($0)" }
-        return components.url
+/// ✨ on something shared with this account that the owner opened to their AI agents (D-54):
+/// shown only, with the hint; the member cannot change it. `showsTitle`: «Open to AI agents»
+/// beside it (the document's header).
+struct SharedAgentsBadge: View {
+    var kind: ShareTarget.Kind = .notebook
+    var showsTitle = false
+
+    var body: some View {
+        Group {
+            if showsTitle {
+                Label("Open to AI agents", systemImage: "sparkles")
+            } else {
+                Image(systemName: "sparkles").font(.caption)
+            }
+        }
+        .foregroundStyle(Tint.purple.foreground)
+        .help(hint)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(hint)
+        .accessibilityIdentifier("sharedAgents.badge")
+    }
+
+    private var hint: String {
+        kind == .notebook ? String(localized: "The owner opened this notebook to AI agents")
+                          : String(localized: "The owner opened this document to AI agents")
     }
 }

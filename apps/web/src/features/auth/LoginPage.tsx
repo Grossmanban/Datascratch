@@ -1,6 +1,8 @@
 import { Link, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { OpenInApp } from "@/features/share/OpenInApp";
+import { isAppleMobile } from "@/lib/appLink";
 import { signIn } from "@/auth/flows";
 import { forgetRevokedData, useAuth } from "@/auth/session";
 import { Button, confirmDialog, Field, Input } from "@/ui";
@@ -11,6 +13,8 @@ export function LoginPage() {
   const navigate = useNavigate();
   const router = useRouter();
   const search = useSearch({ strict: false }) as { next?: string };
+  // Came from an invitation link (D-54): on iPhone/iPad the app can take it from here.
+  const inviteId = /^\/invite\/([0-9a-f-]{36})$/.exec(search.next ?? "")?.[1] ?? null;
   const revoked = useAuth((s) => s.revoked);
   const restoreFailed = useAuth((s) => s.restoreFailed);
   const [email, setEmail] = useState(revoked?.email ?? "");
@@ -37,6 +41,7 @@ export function LoginPage() {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" data-testid="login-form">
+      {inviteId && <InviteAppChoice id={inviteId} />}
       {revoked?.reason === "wiped" && <WipedNotice />}
       {revoked && revoked.reason !== "wiped" && <RevokedNotice unsent={revoked.unsent} signedOut={revoked.reason === "signedOut"} />}
       {!revoked && restoreFailed && (
@@ -45,14 +50,14 @@ export function LoginPage() {
         </p>
       )}
       <Field label={t("auth.email")}>
-        {(id) => <Input id={id} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />}
+        {(id) => <Input id={id} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus={!(inviteId && isAppleMobile())} />}
       </Field>
       <Field label={t("auth.password")} error={error}>
         {(id) => (
           <Input id={id} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         )}
       </Field>
-      <Button type="submit" variant="primary" size="lg" loading={busy} className="mt-1 w-full">
+      <Button type="submit" variant={inviteId && isAppleMobile() ? "secondary" : "primary"} size="lg" loading={busy} className="mt-1 w-full">
         {busy ? t("auth.deriving") : t("auth.signIn")}
       </Button>
       <div className="mt-1 flex items-center justify-between text-[13px]">
@@ -67,6 +72,23 @@ export function LoginPage() {
         </span>
       </div>
     </form>
+  );
+}
+
+/** An invitation link opened on iPhone/iPad: the app first, signing in here as the other way. */
+function InviteAppChoice({ id }: { id: string }) {
+  const { t } = useTranslation();
+  if (!isAppleMobile()) return null;
+  return (
+    <div className="flex flex-col gap-3" data-testid="invite-app-choice">
+      <p className="text-center text-[14px] text-ink-2">{t("openInApp.invited")}</p>
+      <OpenInApp target={{ kind: "invite", id }} />
+      <div className="flex items-center gap-3 text-[12.5px] text-ink-3">
+        <span className="h-px flex-1 bg-line" />
+        {t("openInApp.orSignInHere")}
+        <span className="h-px flex-1 bg-line" />
+      </div>
+    </div>
   );
 }
 

@@ -35,10 +35,15 @@ struct SceneSheetView: View {
                 .presentationDetents([.medium, .large])
         case .move(let noteId):
             MoveNoteSheet(noteId: noteId)
-        case .sharedLink(let shareId, let key):
-            SharedLinkView(shareId: shareId, key: key)
+        case .sharedLink(let shareId, let key, let server):
+            SharedLinkView(shareId: shareId, key: key, server: server)
         case .invitations:
             InvitationsView()
+        case .invitationLink(let id):
+            InvitationLinkView(invitationId: id)
+        case .webPage(let url):
+            SafariView(url: url)
+                .ignoresSafeArea()
         case .taskDate(let noteId, let blockId, let field):
             TaskDateSheet(noteId: noteId, blockId: blockId, field: field)
         }

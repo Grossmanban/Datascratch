@@ -18,6 +18,9 @@ final class SharingUITests: XCTestCase {
         XCTAssertTrue(banner.waitForExistence(timeout: 10), "no «view only» banner")
         XCTAssertFalse(app.descendants(matching: .any)["penPalette"].firstMatch.exists, "the pen palette is shown to a viewer")
         XCTAssertFalse(app.buttons["editor.insert"].firstMatch.exists, "Insert is offered to a viewer")
+        // The owner opened «Shared plans» to their agents: ✨ in the note's header (shown only).
+        let agents = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "opened this notebook to AI agents")).firstMatch
+        XCTAssertTrue(agents.waitForExistence(timeout: 3), "no ✨ on a note the owner's agents read")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = "view-only"
         shot.lifetime = .keepAlways
@@ -60,6 +63,38 @@ final class SharingUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["sidebar.sharedPending"].firstMatch.waitForExistence(timeout: 5)
                       || app.descendants(matching: .any)["sidebar.sharedNotebook"].firstMatch.waitForExistence(timeout: 2),
                       "the accepted notebook is not in «Shared with me»")
+    }
+
+    /// ✨ on a shared notebook the owner opened to their agents (D-54), in «Shared with me».
+    func testSharedNotebookShowsTheAgentsBadge() throws {
+        let app = launch([])
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        let row = revealSidebarElement(app, "sidebar.sharedNotebook")
+        XCTAssertTrue(row.exists, "no shared notebook in the sidebar")
+        let agents = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "opened this notebook to AI agents")).firstMatch
+        XCTAssertTrue(agents.waitForExistence(timeout: 3), "no ✨ on the shared notebook")
+    }
+
+    /// An invitation link (`ds://`, D-56) starts the app (cold start): the invitation opens with «Accept».
+    func testInvitationLinkOpensTheInvitation() throws {
+        let app = launch(["-ui-testing-open-url", "ds://invite/0192f3c4-0000-7000-8000-00000000a11e"])
+        let sheet = app.descendants(matching: .any)["invitationLink"].firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 10), "the invitation link opened nothing")
+        let accept = app.buttons["invitation.accept"].firstMatch
+        XCTAssertTrue(accept.waitForExistence(timeout: 5), "no Accept for the linked invitation")
+        accept.tap()
+        XCTAssertTrue(sheet.waitForNonExistence(timeout: 5), "the invitation stayed open after Accept")
+    }
+
+    /// A link of another server than the account's says so, with a way to the browser.
+    func testLinkOfAnotherServerSaysSo() throws {
+        let app = launch(["-ui-testing-open-url", "ds://invite/abc?server=notes.example.org"])
+        // Alert buttons carry no identifiers on iPhone: found by their titles.
+        let alert = app.alerts["This link is from another server"].firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 10), "no message about another server's link")
+        XCTAssertTrue(alert.buttons["Open in Browser"].exists, "no way to the browser in the message")
+        XCTAssertTrue(alert.staticTexts.containing(NSPredicate(format: "label CONTAINS 'notes.example.org'")).firstMatch.exists,
+                      "the message does not name the link's server")
     }
 
     private func revealSidebarElement(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {

@@ -23,8 +23,9 @@ function readWrappedKey(meta: unknown): string | null {
 
 /**
  * Decrypted access to agent-mode notebooks for @datascratch/agents.
- * Every call runs inside a Row-Level-Security scope (D-30): the user's
- * agent-mode notebooks, narrowed to the grant's notebooks when `grantId` is given.
+ * Every call runs inside a Row-Level-Security scope (D-30): the user's agent-mode notebooks
+ * and the agent-mode notebooks shared with the user (D-54: an editor writes, a viewer reads),
+ * narrowed to the grant's notebooks when `grantId` is given.
  * Keys: notebookKey = open(DS_KMS_KEY), noteKey = open(notebookKey, NoteMeta.wrappedKey) (crypto.md §1, §8).
  */
 export class PgAgentDataSource implements AgentDataSource {
@@ -220,6 +221,8 @@ export class PgAgentDataSource implements AgentDataSource {
       const from = await this.#docAndKey(tx, fromNotebookId);
       const to = await this.#docAndKey(tx, toNotebookId);
       if (!from || !to || to.doc.kind !== 'notebook') throw notFound('notebook not found');
+      // Out of a notebook shared with the user (D-54) is the owner's move only; RLS refuses it too.
+      if (to.doc.userId !== note.doc.userId) throw forbidden('a note leaves a shared notebook only by its owner');
       for (const id of [noteId, fromNotebookId, toNotebookId]) await this.#requireWritable(tx, id);
       const wrapped = await seal(to.key, note.key, AD.note(noteId));
       const updates = move.indexUpdates(toB64(wrapped));
@@ -243,8 +246,11 @@ export class PgAgentDataSource implements AgentDataSource {
         sql`SELECT ${notebookId}::uuid IN (SELECT ds_agent_notebooks(true)) AS ok`,
       );
       if (!w.rows[0]?.ok) throw forbidden('the grant does not allow writing to this notebook');
+      // A note in a notebook shared with the user belongs to the notebook's owner (D-54, quota too).
+      const [nb] = await tx.select({ ownerId: notebooks.userId }).from(notebooks).where(eq(notebooks.id, notebookId));
+      if (!nb) throw notFound('notebook not found');
       // RLS enforces the same on the insert itself.
-      await tx.insert(docs).values({ id: noteId, userId, kind: 'note', notebookId });
+      await tx.insert(docs).values({ id: noteId, userId: nb.ownerId, kind: 'note', notebookId });
       const noteKey = (await getSodium()).randombytes_buf(32);
       const wrapped = await seal(nbKey, noteKey, AD.note(noteId));
       noteKeyCache.set(noteId, notebookId, noteKey);

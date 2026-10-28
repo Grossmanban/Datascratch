@@ -781,16 +781,6 @@
         }
       }
     },
-    "Connecting…": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Подключение…"
-          }
-        }
-      }
-    },
     "Continue": {
       "localizations": {
         "ru": {
@@ -1991,6 +1981,16 @@
         }
       }
     },
+    "Invitation": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приглашение"
+          }
+        }
+      }
+    },
     "Invitation options": {
       "localizations": {
         "ru": {
@@ -2007,6 +2007,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Приглашения"
+          }
+        }
+      }
+    },
+    "Invitations are for an account on a server. Sign in in Settings, then open the link again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приглашения приходят на аккаунт на сервере. Войдите в «Настройках» и откройте ссылку ещё раз."
           }
         }
       }
@@ -2037,6 +2047,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Он исчезнет с этого устройства. Чтобы вернуть доступ, владелец должен пригласить вас снова."
+          }
+        }
+      }
+    },
+    "It isn’t in this account or shared with it. If someone shared it with you, accept the invitation first.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Его нет в этом аккаунте и среди общих с ним. Если с вами им поделились — сначала примите приглашение."
+          }
+        }
+      }
+    },
+    "It points to %@, and this account is on %@. Open it in the browser, or sign in to that server.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Она ведёт на %1$@, а этот аккаунт — на %2$@. Откройте её в браузере или войдите на тот сервер."
+          }
+        }
+      }
+    },
+    "It points to %@, and you aren’t signed in to a server. Open it in the browser, or sign in to that server in Settings.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Она ведёт на %@, а вы не вошли ни на один сервер. Откройте её в браузере или войдите на этот сервер в «Настройках»."
+          }
+        }
+      }
+    },
+    "It was accepted, declined or revoked, or it has expired. Accepted notebooks and documents are in “Shared with me”.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Его уже приняли, отклонили или отозвали, либо истёк срок. Принятые блокноты и документы — в разделе «Общие со мной»."
           }
         }
       }
@@ -2897,16 +2947,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Открыт агентам"
-          }
-        }
-      }
-    },
-    "Opening shared documents needs a connection to the Datascratch server. You can open the link in the browser meanwhile.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Чтобы открыть общий документ, нужно подключение к серверу Datascratch. Пока можно открыть ссылку в браузере."
           }
         }
       }
@@ -3841,6 +3881,16 @@
         }
       }
     },
+    "Sign in to accept": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войдите, чтобы принять"
+          }
+        }
+      }
+    },
     "Sign in to another account?": {
       "localizations": {
         "ru": {
@@ -4331,6 +4381,16 @@
         }
       }
     },
+    "The part after “#” with the key is missing. Ask for the full link.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В ней нет части после «#» с ключом. Попросите ссылку целиком."
+          }
+        }
+      }
+    },
     "The server copy of the key will be deleted. Agents will lose access, and only your devices will be able to read these notes.": {
       "localizations": {
         "ru": {
@@ -4471,6 +4531,16 @@
         }
       }
     },
+    "This document isn’t here": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Этого документа здесь нет"
+          }
+        }
+      }
+    },
     "This file is not an image.": {
       "localizations": {
         "ru": {
@@ -4501,6 +4571,16 @@
         }
       }
     },
+    "This invitation isn’t waiting": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это приглашение уже не ждёт"
+          }
+        }
+      }
+    },
     "This is not a server address.": {
       "localizations": {
         "ru": {
@@ -4511,12 +4591,22 @@
         }
       }
     },
-    "This link is incomplete: the part after “#” with the key is missing. Ask for the full link.": {
+    "This link is from another server": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ссылка неполная: нет части после «#» с ключом. Попросите полную ссылку."
+            "value": "Ссылка с другого сервера"
+          }
+        }
+      }
+    },
+    "This link is incomplete": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка неполная"
           }
         }
       }

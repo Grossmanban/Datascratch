@@ -70,12 +70,10 @@ struct RootView: View {
         .tint(Theme.Palette.accent)
         .onAppear { app.settings.applyAppearanceToWindows() }
         .onOpenURL { url in
-            app.pendingRoute = AppRoute.parse(url, webHost: app.linkHost)
+            app.pendingLink = url
         }
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-            if let url = activity.webpageURL {
-                app.pendingRoute = AppRoute.parse(url, webHost: app.linkHost)
-            }
+            if let url = activity.webpageURL { app.pendingLink = url }
         }
     }
 }
@@ -96,6 +94,12 @@ struct MainWindow: View {
                         guard let route else { return }
                         scene.handle(route)
                         app.pendingRoute = nil
+                    }
+                    // A link that started or woke the app: read now, against the account's server.
+                    .onChange(of: app.pendingLink, initial: true) { _, link in
+                        guard let link else { return }
+                        app.pendingLink = nil
+                        if let route = AppRoute.parse(link, webHost: app.linkHost) { scene.handle(route) }
                     }
             } else {
                 Theme.Palette.canvas.ignoresSafeArea()

@@ -32,9 +32,21 @@ enum SceneSheet: Identifiable, Hashable {
     case sharedLink(shareId: String, key: String?)
     /// D-54: invitations to this account.
     case invitations
+    /// D-54: one invitation, opened from its link.
+    case invitationLink(String)
+    /// A web page inside the app (another server's link, opened on purpose).
+    case webPage(URL)
     case taskDate(noteId: String, blockId: String, field: TaskDateField)
 
     var id: Self { self }
+}
+
+/// Why a link did not open (`SceneModel.linkProblem`).
+enum LinkProblem: Hashable {
+    /// The link is of `host`, and this account is on another server (or on none).
+    case otherServer(host: String, url: URL)
+    /// A document link to a note this account does not have (or no longer has).
+    case missingDocument
 }
 
 /// Per-window navigation state (every window/Stage Manager scene has its own).
@@ -127,6 +139,8 @@ final class SceneModel {
     var pendingModeChange: (notebookId: String, mode: NotebookMode)?
     /// A `[[Title]]` with no note behind it: the document offers to create one.
     var missingNoteTitle: String?
+    /// A link that cannot open here: another server's, or a document this account does not have.
+    var linkProblem: LinkProblem?
     /// A cover picker or the reposition sheet requested from a document menu.
     var coverAction: CoverAction?
     /// Open native editors by note id (`NativeEditorModel`), so a document screen that SwiftUI
@@ -332,7 +346,7 @@ final class SceneModel {
     func handle(_ route: AppRoute) {
         switch route {
         case .note(let id):
-            if library.note(id) != nil { open(id) }
+            if library.note(id) != nil { open(id) } else { linkProblem = .missingDocument }
         case .noteTitled(let title):
             let key = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let matches = { (note: NoteMeta) in
@@ -348,6 +362,10 @@ final class SceneModel {
             openToday()
         case .share(let shareId, let key):
             sheet = .sharedLink(shareId: shareId, key: key)
+        case .invitation(let id):
+            sheet = .invitationLink(id)
+        case .otherServer(let host, let url):
+            linkProblem = .otherServer(host: host, url: url)
         }
     }
 

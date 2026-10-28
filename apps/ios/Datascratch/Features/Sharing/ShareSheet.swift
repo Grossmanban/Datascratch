@@ -481,7 +481,9 @@ struct ShareLinkButton: View {
     }
 }
 
-/// Shown when a share link is opened in the app (Universal Link).
+/// A guest link opened in the app (Universal Link, D-37): the app has no guest mode, so the
+/// web's guest page opens inside it (the key stays in the `#` part, never sent to the server).
+/// A link without its key says so.
 struct SharedLinkView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
@@ -489,36 +491,21 @@ struct SharedLinkView: View {
     let key: String?
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: Theme.Space.s4) {
-                Image(systemName: "link.circle")
-                    .font(.system(size: 54, weight: .light))
-                    .foregroundStyle(Theme.Palette.accent)
-                Text("Shared document")
-                    .font(Theme.Typography.h2)
-                if key == nil {
-                    Text("This link is incomplete: the part after “#” with the key is missing. Ask for the full link.")
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Theme.Palette.danger)
-                } else if app.sync.isLocalOnly {
-                    Text("Opening shared documents needs a connection to the Datascratch server. You can open the link in the browser meanwhile.")
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Theme.Palette.textSecondary)
-                    if let url = webURL {
-                        Link(destination: url) {
-                            Label("Open in Browser", systemImage: "safari")
-                        }
-                        .prominentGlass()
-                    }
-                } else {
-                    ProgressView("Connecting…")
+        if let url = webURL, key != nil {
+            SafariView(url: url)
+                .ignoresSafeArea()
+        } else {
+            NavigationStack {
+                ContentUnavailableView {
+                    Label("This link is incomplete", systemImage: "link.badge.plus")
+                } description: {
+                    Text("The part after “#” with the key is missing. Ask for the full link.")
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
                 }
             }
-            .padding(Theme.Space.s8)
-            .frame(maxWidth: 480)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
-            }
+            .accessibilityIdentifier("sharedLink.incomplete")
         }
     }
 

@@ -62,6 +62,26 @@ final class SharingUITests: XCTestCase {
                       "the accepted notebook is not in «Shared with me»")
     }
 
+    /// An invitation link starts the app (cold start): the invitation opens with «Accept».
+    func testInvitationLinkOpensTheInvitation() throws {
+        let app = launch(["-ui-testing-open-url", "https://datascratch.app/invite/0192f3c4-0000-7000-8000-00000000a11e"])
+        let sheet = app.descendants(matching: .any)["invitationLink"].firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 10), "the invitation link opened nothing")
+        let accept = app.buttons["invitation.accept"].firstMatch
+        XCTAssertTrue(accept.waitForExistence(timeout: 5), "no Accept for the linked invitation")
+        accept.tap()
+        XCTAssertTrue(sheet.waitForNonExistence(timeout: 5), "the invitation stayed open after Accept")
+    }
+
+    /// A link of another server than the account's says so, with a way to the browser.
+    func testLinkOfAnotherServerSaysSo() throws {
+        let app = launch(["-ui-testing-open-url", "https://notes.example.org/invite/abc"])
+        let browser = app.buttons["linkProblem.browser"].firstMatch
+        XCTAssertTrue(browser.waitForExistence(timeout: 10), "no message about another server's link")
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'notes.example.org'")).firstMatch.exists,
+                      "the message does not name the link's server")
+    }
+
     private func revealSidebarElement(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
         let element = app.descendants(matching: .any)[identifier].firstMatch
         if element.waitForExistence(timeout: 5), element.isHittable { return element }

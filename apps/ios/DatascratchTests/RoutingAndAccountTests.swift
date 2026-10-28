@@ -20,9 +20,29 @@ struct RoutingTests {
         #expect(AppRoute.parse(URL(string: "datascratch://today")!, webHost: host) == .today)
     }
 
-    @Test func ignoresForeignHosts() {
-        #expect(AppRoute.parse(URL(string: "https://evil.example/s/abc#k=x")!, webHost: host) == nil)
+    @Test func linkOfAnotherServerIsNamedNotOpened() {
+        let url = URL(string: "https://notes.example.org/invite/abc")!
+        #expect(AppRoute.parse(url, webHost: host) == .otherServer(host: "notes.example.org", url: url))
+        let share = URL(string: "https://evil.example/s/abc#k=x")!
+        #expect(AppRoute.parse(share, webHost: host) == .otherServer(host: "evil.example", url: share))
+        // Not https, or a path the web does not use: not a link of ours at all.
         #expect(AppRoute.parse(URL(string: "http://datascratch.app/s/abc#k=x")!, webHost: host) == nil)
+        #expect(AppRoute.parse(URL(string: "https://datascratch.app/settings/account")!, webHost: host) == nil)
+    }
+
+    @Test func parsesTheWebsPaths() {
+        #expect(AppRoute.parse(URL(string: "https://datascratch.app/invite/0192f3c4-aaaa")!, webHost: host) == .invitation("0192f3c4-aaaa"))
+        #expect(AppRoute.parse(URL(string: "https://datascratch.app/doc/n1")!, webHost: host) == .note("n1"))
+        #expect(AppRoute.parse(URL(string: "https://datascratch.app/n/n1")!, webHost: host) == .note("n1"))
+        #expect(AppRoute.parse(URL(string: "https://www.datascratch.app/doc/n1")!, webHost: host) == .note("n1"))
+        #expect(AppRoute.parse(URL(string: "datascratch://invite/i1")!, webHost: host) == .invitation("i1"))
+    }
+
+    @Test func theAccountsServerDecides() {
+        // A self-hosted account: links of its server open, the default domain's do not.
+        let url = URL(string: "https://Notes.Example.org/doc/n1")!
+        #expect(AppRoute.parse(url, webHost: "notes.example.org") == .note("n1"))
+        #expect(AppRoute.parse(url, webHost: host) == .otherServer(host: "notes.example.org", url: url))
     }
 
     @Test func base64URLRoundTrip() {

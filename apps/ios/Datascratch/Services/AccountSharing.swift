@@ -149,9 +149,9 @@ final class LocalAccountSharingService: AccountSharingService {
 
     /// UI tests: `invitedTo` is offered as an invitation, `viewOnly` is shared with this
     /// account «view only», `owned` has a member and a pending invite.
-    func seedForTesting(invitedTo: ShareTarget?, viewOnly: ShareTarget?, owned: ShareTarget?) {
+    func seedForTesting(invitationId: String = UUIDv7.make(), invitedTo: ShareTarget?, viewOnly: ShareTarget?, owned: ShareTarget?) {
         if let invitedTo {
-            incoming = [IncomingInvite(id: UUIDv7.make(), target: invitedTo, fromEmail: "anna@example.org", role: .editor,
+            incoming = [IncomingInvite(id: invitationId, target: invitedTo, fromEmail: "anna@example.org", role: .editor,
                                        expiresAt: Date().addingTimeInterval(30 * 86_400))]
         }
         if let viewOnly {

@@ -39,6 +39,11 @@ struct SceneSheetView: View {
             SharedLinkView(shareId: shareId, key: key)
         case .invitations:
             InvitationsView()
+        case .invitationLink(let id):
+            InvitationLinkView(invitationId: id)
+        case .webPage(let url):
+            SafariView(url: url)
+                .ignoresSafeArea()
         case .taskDate(let noteId, let blockId, let field):
             TaskDateSheet(noteId: noteId, blockId: blockId, field: field)
         }

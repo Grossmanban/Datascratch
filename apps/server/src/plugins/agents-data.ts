@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import * as Y from 'yjs';
 import type { AppContext } from '../context.js';
 import { withAgentScope, type Tx } from '../db/client.js';
-import { attachmentChunks, attachments, docSnapshots, docUpdates, docs, notebooks } from '../db/schema.js';
+import { attachmentChunks, attachments, docSnapshots, docUpdates, docs, members, notebooks, users } from '../db/schema.js';
 import { COMPACT_JOB } from '../jobs/index.js';
 import { fromB64, toB64 } from '../lib/encoding.js';
 import { ApiError, forbidden, notFound } from '../lib/errors.js';
@@ -130,13 +130,28 @@ export class PgAgentDataSource implements AgentDataSource {
   }
 
   async listAgentNotebooks(userId: string, grantId?: string): Promise<AgentNotebook[]> {
-    return this.#scope(userId, grantId, async (tx) => {
-      const rows = await tx
-        .select({ id: notebooks.id, createdAt: notebooks.createdAt })
+    const rows = await this.#scope(userId, grantId, (tx) =>
+      tx
+        .select({ id: notebooks.id, ownerId: notebooks.userId, createdAt: notebooks.createdAt })
         .from(notebooks)
-        .orderBy(asc(notebooks.createdAt));
-      // Names live in the account document (masterKey) — the server cannot read them.
-      return rows.map((r) => ({ id: r.id, name: null, icon: null, space: null, createdAt: r.createdAt.toISOString() }));
+        .orderBy(asc(notebooks.createdAt)),
+    );
+    // Notebooks of another account visible through a membership (D-54): who shares it and the
+    // member's role (outside the agent scope: the agent role cannot read members or users).
+    const foreign = rows.filter((r) => r.ownerId !== userId).map((r) => r.id);
+    const shared = new Map<string, { ownerUserId: string; ownerEmail: string | null; role: 'editor' | 'viewer' }>();
+    if (foreign.length > 0) {
+      const ms = await this.ctx.database.db
+        .select({ notebookId: members.notebookId, ownerUserId: members.ownerId, ownerEmail: users.email, role: members.role })
+        .from(members)
+        .innerJoin(users, eq(users.id, members.ownerId))
+        .where(and(eq(members.userId, userId), inArray(members.notebookId, foreign)));
+      for (const m of ms) shared.set(m.notebookId!, { ownerUserId: m.ownerUserId, ownerEmail: m.ownerEmail, role: m.role });
+    }
+    // Names live in the account document (masterKey) — the server cannot read them.
+    return rows.map((r) => {
+      const item = { id: r.id, name: null, icon: null, space: null, createdAt: r.createdAt.toISOString(), shared: shared.get(r.id) ?? null };
+      return item as AgentNotebook;
     });
   }
 

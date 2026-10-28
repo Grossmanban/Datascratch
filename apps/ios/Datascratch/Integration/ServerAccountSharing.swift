@@ -92,7 +92,8 @@ final class ServerAccountSharingService: AccountSharingService {
         for item in items { names[item.owner.userId] = item.owner.email }
         sharedWithMe = items.map { item in
             SharedWithMe(target: Self.target(item.target), ownerEmail: item.owner.email,
-                         role: item.role == .viewer ? .viewer : .editor, isReadable: item.wrappedKey != nil)
+                         role: item.role == .viewer ? .viewer : .editor, isReadable: item.wrappedKey != nil,
+                         agentsMode: item.agentsMode == true)
         }
         publishShared()
     }

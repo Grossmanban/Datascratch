@@ -2931,6 +2931,16 @@
         }
       }
     },
+    "Open to AI agents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыт ИИ-агентам"
+          }
+        }
+      }
+    },
     "Open to Agents": {
       "localizations": {
         "ru": {
@@ -2947,6 +2957,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Открыт агентам"
+          }
+        }
+      }
+    },
+    "Open to the owner’s AI agents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыт ИИ-агентам владельца"
           }
         }
       }
@@ -4377,6 +4397,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Старый ключ больше не работает. Сохраните новый в менеджере паролей или на бумаге."
+          }
+        }
+      }
+    },
+    "The owner’s AI agents can read it. Only the owner changes this.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ИИ-агенты владельца могут его читать. Изменить это может только владелец."
           }
         }
       }

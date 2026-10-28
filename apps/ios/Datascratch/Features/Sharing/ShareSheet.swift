@@ -396,6 +396,19 @@ struct SharedWithMeSection: View {
                 Label(role.title, systemImage: role.systemImage)
             }
             .accessibilityIdentifier("share.myRole")
+            if app.accountSharing.isOpenToAgents(target) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Open to AI agents")
+                        Text("The owner’s AI agents can read it. Only the owner changes this.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                    }
+                } icon: {
+                    Image(systemName: "sparkles").foregroundStyle(Tint.purple.foreground)
+                }
+                .accessibilityIdentifier("share.agentsMode")
+            }
             Button("Leave", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { confirmLeave = true }
                 .accessibilityIdentifier("share.leave")
             if let error {
@@ -510,5 +523,18 @@ struct SharedLinkView: View {
             }
             .accessibilityIdentifier("sharedLink.incomplete")
         }
+    }
+}
+
+/// ✨ on something shared with this account that the owner opened to their AI agents (D-54):
+/// shown only, with the hint; the member cannot change it.
+struct SharedAgentsBadge: View {
+    var body: some View {
+        Image(systemName: "sparkles")
+            .font(.caption)
+            .foregroundStyle(Tint.purple.foreground)
+            .help("Open to the owner’s AI agents")
+            .accessibilityLabel("Open to the owner’s AI agents")
+            .accessibilityIdentifier("sharedAgents.badge")
     }
 }

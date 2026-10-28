@@ -602,7 +602,8 @@ struct NativeDocumentHeader: View {
             }
             // D-54: the owner's agents read this shared note (shown only).
             if app.accountSharing.isOpenToAgents(noteId: note.id, notebookId: note.notebookId) {
-                SharedAgentsBadge()
+                SharedAgentsBadge(kind: app.accountSharing.isOpenToAgents(ShareTarget(kind: .note, id: note.id)) ? .note : .notebook,
+                                  showsTitle: true)
             }
             if let folder = note.folderId.flatMap({ library.folder($0) }) {
                 Image(systemName: "chevron.right").font(.caption2)

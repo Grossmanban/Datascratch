@@ -44,8 +44,6 @@ targets:
         LSRequiresIPhoneOS: true
         # ProMotion: without this key iPhone apps are capped at 60 Hz.
         CADisableMinimumFrameDurationOnPhone: true
-        DSWebHost: $(DS_WEB_HOST)
-        DSServerURL: $(DS_SERVER_URL)
         DSExtendedMode: $(DS_EXTENDED_MODE)
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true

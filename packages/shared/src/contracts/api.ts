@@ -466,6 +466,11 @@ export const sharedItemSchema = z.object({
   keyChain: z.array(wrappedKeySchema),
   docIds: z.array(uuidSchema),
   addedAt: isoDateTimeSchema,
+  /**
+   * Agents can read it (✨, display only): the notebook is in agent mode, or
+   * the note lies in an owner's notebook in agent mode. Absent from older servers.
+   */
+  agentsMode: z.boolean().optional(),
 });
 export type SharedItem = z.infer<typeof sharedItemSchema>;
 

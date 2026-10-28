@@ -69,6 +69,8 @@ import { InlineRename } from "./InlineRename";
 import { AllTagsDialog, MoreList, TagRow, useSpaceCollapsed, useTagTree } from "./SidebarLists";
 import { unreadableMenuState, useUnreadable } from "@/features/docs/UnreadableNote";
 import { SyncIndicator } from "./SyncIndicator";
+import { InvitationsRow } from "@/features/share/Invitations";
+import { SharedRow, useSharedRefs } from "@/features/share/SharedWithMe";
 import { createSpaceInteractive } from "./spaces";
 import { iconGlyph, withIcon } from "@/lib/glyph";
 import { features } from "@/lib/features";
@@ -188,6 +190,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
         </div>
       </div>
 
+      <InvitationsRow />
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 pb-4">
         <div className="flex flex-col gap-px">
           <NavLink to="/all" icon={<Layers className="size-4" />} label={t("nav.allDocs")} />
@@ -223,6 +226,8 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
             </button>
           )}
         </Section>
+
+        <SharedSection />
 
         <TagsSection />
       </nav>
@@ -390,6 +395,19 @@ function SpaceSwitcher() {
         </button>
       }
     />
+  );
+}
+
+/** «Общие со мной» (D-54): what other accounts share with this one, placed in this space. */
+function SharedSection() {
+  const { t } = useTranslation();
+  const spaceId = useWorkspace((s) => s.activeSpaceId);
+  const refs = useSharedRefs(spaceId);
+  if (!refs.length) return null;
+  return (
+    <Section id="shared" title={t("shared.title")}>
+      <MoreList testId="shared" rows={refs.map((r) => ({ key: `${r.kind}:${r.id}`, node: <SharedRow shared={r} /> }))} />
+    </Section>
   );
 }
 

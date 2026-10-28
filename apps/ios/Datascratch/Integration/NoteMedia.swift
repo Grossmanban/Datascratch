@@ -146,8 +146,13 @@ extension NativeEditorModel {
     }
 
     /// The long-press entries of a photo, between the editor's «Width» and «Delete».
+    /// Read-only (D-54 viewer): sharing only; the editor shows nothing of its own then.
     func imageMenu(block: BlockID, attachmentId: String) -> [UIMenuElement] {
-        [
+        let share = UIAction(title: String(localized: "Share…"), image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in
+            self?.share(attachmentId, name: "Photo.jpg")
+        }
+        if editor.isEffectivelyReadOnly { return [share] }
+        return [
             UIAction(title: String(localized: "Caption…"), image: UIImage(systemName: "text.below.photo")) { [weak self] _ in
                 self?.captionTarget = block
             },
@@ -155,9 +160,7 @@ extension NativeEditorModel {
                 self?.replacing = block
                 self?.mediaChooser = .photos
             },
-            UIAction(title: String(localized: "Share…"), image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in
-                self?.share(attachmentId, name: "Photo.jpg")
-            },
+            share,
         ]
     }
 

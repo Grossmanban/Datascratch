@@ -4611,6 +4611,16 @@
         }
       }
     },
+    "This notebook isn’t here": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Этого блокнота здесь нет"
+          }
+        }
+      }
+    },
     "This recovery key is not valid.": {
       "localizations": {
         "ru": {

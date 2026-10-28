@@ -210,6 +210,7 @@ DSCore
 - Участник: `acceptInvitation(id:)`, `refreshSharedWithMe()` — забирает выданные ключи
   (`KeyRing.adoptSharedItem`: ключ блокнота становится ключом блокнота, заметки — ключом этой
   заметки) и регистрирует документы для синхронизации; `leave(_:)`; `safetyCode(with:publicKey:)`.
+  `SharedItem.agentsMode` — ресурс читают агенты владельца (значок ✨, только показ; старый сервер — nil).
 - Версии ключей: `NoteMeta.keyVersion`/`keyChain` (пишутся только с версии 2),
   `KeyRing.noteKey(_:notebookId:)`, `earlierNoteKeys`, `notebookKeyVersion`; старые данные
   читаются ключами из цепочки (`KeyRingDocumentKeys(keyRing:noteMeta:)` → `retiredKeys(for:)`).

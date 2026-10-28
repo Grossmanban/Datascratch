@@ -84,6 +84,36 @@ struct SharingTests {
         #expect(!core.loadSnapshot().notebooks.contains { $0.id == id })
     }
 
+    /// prod 2026-10-28: a member saw a shared notebook without its notes, and a note they made in
+    /// it left their list once closed — the lists kept only the active space's notebooks.
+    @Test func notesOfASharedNotebookAreListedInEverySpace() throws {
+        let store = LibraryStore(persistence: .inMemory)
+        store.seedIfEmpty()
+        let spaceId = try #require(store.activeSpace?.id)
+        let ownNotebooks = store.notebooks(in: spaceId)
+        let own = try #require(ownNotebooks.first)
+        let shared = store.createNotebook(in: Notebook.sharedSpaceId, name: "Team plans", mode: .private)
+        let theirs = store.createNote(in: shared.id, title: "Roadmap")
+        #expect(store.documents(inNotebook: shared.id).map(\.id) == [theirs.id])
+        #expect(store.documents.contains { $0.id == theirs.id })
+        #expect(store.search("Roadmap").contains { $0.id == theirs.id })
+
+        // A note the member makes stays listed (closing it reads the list again).
+        let mine = store.createNote(in: shared.id, title: "My idea")
+        #expect(Set(store.documents(inNotebook: shared.id).map(\.id)) == [theirs.id, mine.id])
+
+        // Another space shows them too («Shared with me» is in every space).
+        let other = store.createSpace(name: "Work", icon: "briefcase", color: .blue)
+        store.activateSpace(other.id)
+        #expect(store.documents(inNotebook: shared.id).count == 2)
+        #expect(!store.documents.contains { $0.notebookId == own.id })
+
+        // The owner's trash is theirs to empty: not in the member's.
+        store.activateSpace(own.spaceId)
+        store.trash(note: theirs.id)
+        #expect(!store.trashed.contains { $0.id == theirs.id })
+    }
+
     @Test func notesSharedOnTheirOwnHaveNoNotebookDocument() throws {
         let core = try CoreLibrary.inMemory()
         #expect(throws: (any Error).self) { _ = try core.notebookDocument(Notebook.sharedNotesId) }

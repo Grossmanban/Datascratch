@@ -180,9 +180,10 @@ final class LibraryStore {
         return result
     }
 
-    /// Visible (not trashed, ordinary) notes of the active space.
+    /// Visible (not trashed, ordinary) notes of the active space, and of what is shared with this
+    /// account (shown in every space, D-54).
     var documents: [NoteMeta] {
-        let ids = Set(notebooks(in: activeSpace?.id).map(\.id))
+        let ids = activeNotebookIds
         return data.notes.filter { ids.contains($0.notebookId) && !$0.isTrashed && $0.kind != .inbox }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
@@ -200,8 +201,17 @@ final class LibraryStore {
         documents.filter { note in note.tags.contains { $0 == tag || $0.hasPrefix(tag + "/") } }
     }
 
-    /// Notebooks of the active space (D-48: what the app shows is this space's only).
-    var activeNotebookIds: Set<String> { Set(notebooks(in: activeSpace?.id).map(\.id)) }
+    /// Notebooks whose notes the active space shows (D-48: this space's only), plus those shared
+    /// with this account: «Shared with me» is in every space (D-54). Without them the notes of a
+    /// shared notebook were listed nowhere, and a note made in it left the list once closed
+    /// (prod 2026-10-28).
+    var activeNotebookIds: Set<String> { ownNotebookIds.union(sharedWithMeNotebookIds) }
+
+    /// The active space's own notebooks.
+    var ownNotebookIds: Set<String> { Set(notebooks(in: activeSpace?.id).map(\.id)) }
+
+    /// Shared notebooks and the virtual notebook of notes shared on their own (D-54).
+    var sharedWithMeNotebookIds: Set<String> { Set(data.notebooks.filter(\.isSharedWithMe).map(\.id)) }
 
     /// Notes of the active space, trashed ones included.
     var activeSpaceNotes: [NoteMeta] {
@@ -215,8 +225,11 @@ final class LibraryStore {
             .filter { !$0.isTrashed && ids.contains($0.notebookId) }
     }
 
+    /// This space's trash: the owner of a shared notebook empties its trash, not its members.
     var trashed: [NoteMeta] {
-        activeSpaceNotes.filter(\.isTrashed).sorted { ($0.trashedAt ?? .distantPast) > ($1.trashedAt ?? .distantPast) }
+        let ids = ownNotebookIds
+        return data.notes.filter { $0.isTrashed && ids.contains($0.notebookId) }
+            .sorted { ($0.trashedAt ?? .distantPast) > ($1.trashedAt ?? .distantPast) }
     }
 
     /// Tag name → number of documents, nested tags included.
@@ -274,7 +287,8 @@ final class LibraryStore {
     }
 
     func dailyNote(for day: String) -> NoteMeta? {
-        let ids = activeNotebookIds
+        // The owner's daily notes in a shared notebook are not this account's.
+        let ids = ownNotebookIds
         return data.notes.first { $0.kind == .daily && $0.dailyDate == day && !$0.isTrashed && ids.contains($0.notebookId) }
     }
 

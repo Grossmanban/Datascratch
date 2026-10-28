@@ -111,7 +111,7 @@ export const updateTaskInput = z.object({
 
 /** Agents organise inside notebooks; they cannot create notebooks (needs the user's master key, end-to-end encryption). */
 export const NO_NOTEBOOKS_HINT =
-  "Agents cannot create, rename or delete notebooks: notebooks are end-to-end encrypted with the user's master key, which the server never has. Ask the user to create a notebook in the app and switch it to “for agents” mode, then organise inside it with folders.";
+  "Agents cannot create, rename or delete notebooks: notebooks are end-to-end encrypted with the user's master key, which the server never has. Ask the user to create a notebook in the app and switch it to “for agents” mode, then organise inside it with folders. Notebooks with `shared` belong to another person (ownerEmail) who shared them with the user: you have the user's role there (viewer → read only).";
 
 const folderIcon = z.string().min(1).max(16).describe("Optional emoji for the folder, e.g. 📁.");
 const folderName = z.string().trim().min(1).max(200);

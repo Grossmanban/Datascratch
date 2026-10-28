@@ -29,7 +29,7 @@ enum SceneSheet: Identifiable, Hashable {
     case versions(noteId: String)
     case documentStyle(noteId: String)
     case move(noteId: String)
-    case sharedLink(shareId: String, key: String?)
+    case sharedLink(shareId: String, key: String?, server: String?)
     /// D-54: invitations to this account.
     case invitations
     /// D-54: one invitation, opened from its link.
@@ -43,10 +43,12 @@ enum SceneSheet: Identifiable, Hashable {
 
 /// Why a link did not open (`SceneModel.linkProblem`).
 enum LinkProblem: Hashable {
-    /// The link is of `host`, and this account is on another server (or on none).
-    case otherServer(host: String, url: URL)
-    /// A document link to a note this account does not have (or no longer has).
+    /// The link is of `server`, and this account is on another server (or on none).
+    case otherServer(server: String, webURL: URL?)
+    /// A link to a note this account does not have (or no longer has).
     case missingDocument
+    /// A link to a notebook this account does not have.
+    case missingNotebook
 }
 
 /// Per-window navigation state (every window/Stage Manager scene has its own).
@@ -347,6 +349,8 @@ final class SceneModel {
         switch route {
         case .note(let id):
             if library.note(id) != nil { open(id) } else { linkProblem = .missingDocument }
+        case .notebook(let id):
+            if library.notebook(id) != nil { sidebar = .notebook(id) } else { linkProblem = .missingNotebook }
         case .noteTitled(let title):
             let key = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let matches = { (note: NoteMeta) in
@@ -360,12 +364,12 @@ final class SceneModel {
             }
         case .today:
             openToday()
-        case .share(let shareId, let key):
-            sheet = .sharedLink(shareId: shareId, key: key)
+        case .share(let shareId, let key, let server):
+            sheet = .sharedLink(shareId: shareId, key: key, server: server)
         case .invitation(let id):
             sheet = .invitationLink(id)
-        case .otherServer(let host, let url):
-            linkProblem = .otherServer(host: host, url: url)
+        case .otherServer(let server, let webURL):
+            linkProblem = .otherServer(server: server, webURL: webURL)
         }
     }
 

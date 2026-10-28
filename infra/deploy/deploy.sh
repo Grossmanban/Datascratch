@@ -26,7 +26,7 @@ log() { echo "[deploy] $*"; }
 HISTORY=.deploy-tags
 BEGIN='# >>> managed by deploy.sh (do not edit)'
 END='# <<< managed by deploy.sh'
-MANAGED_KEYS='COMPOSE_FILE|DS_TAG|DS_DOMAIN|DS_SERVER_IMAGE|DS_WEB_IMAGE|DS_POSTGRES_IMAGE|DS_MODE|DS_SITE|DS_PORT_HTTP|DS_PORT_HTTPS|DS_PORT_HTTPS_UDP|DS_PROXY_PORT|DS_MEM_POSTGRES|DS_MEM_SERVER|DS_MEM_CADDY|DS_NODE_HEAP_MB|DS_PG_SHARED_BUFFERS|DS_PG_CACHE_SIZE'
+MANAGED_KEYS='COMPOSE_FILE|DS_TAG|DS_DOMAIN|DS_SERVER_IMAGE|DS_WEB_IMAGE|DS_POSTGRES_IMAGE|DS_MODE|DS_SITE|DS_PORT_HTTP|DS_PORT_HTTPS|DS_PORT_HTTPS_UDP|DS_PROXY_PORT|DS_MEM_POSTGRES|DS_MEM_SERVER|DS_MEM_CADDY|DS_NODE_HEAP_MB|DS_PG_SHARED_BUFFERS|DS_PG_CACHE_SIZE|DS_APPLE_APP_ID'
 export COMPOSE_PROJECT_NAME=datascratch
 
 current() { grep -E "^($MANAGED_KEYS)=" .env 2> /dev/null | sed -n "s/^$1=//p" | tail -1; }
@@ -49,7 +49,7 @@ managed_for() {
   local tag="$1"
   echo "DS_TAG=$tag"
   for k in COMPOSE_FILE DS_DOMAIN DS_SERVER_IMAGE DS_WEB_IMAGE DS_POSTGRES_IMAGE DS_MODE DS_SITE DS_PORT_HTTP DS_PORT_HTTPS \
-    DS_PORT_HTTPS_UDP DS_PROXY_PORT DS_MEM_POSTGRES DS_MEM_SERVER DS_MEM_CADDY DS_NODE_HEAP_MB DS_PG_SHARED_BUFFERS DS_PG_CACHE_SIZE; do
+    DS_PORT_HTTPS_UDP DS_PROXY_PORT DS_MEM_POSTGRES DS_MEM_SERVER DS_MEM_CADDY DS_NODE_HEAP_MB DS_PG_SHARED_BUFFERS DS_PG_CACHE_SIZE DS_APPLE_APP_ID; do
     echo "$k=${!k:-$(current "$k")}"
   done
 }
@@ -257,6 +257,14 @@ case "${1:-}" in
     DS_DOMAIN="${DS_DOMAIN:?DS_DOMAIN is required}"
     : "${DS_SERVER_IMAGE:?}" "${DS_WEB_IMAGE:?}" "${DS_POSTGRES_IMAGE:?}"
     export DS_DOMAIN DS_SERVER_IMAGE DS_WEB_IMAGE DS_POSTGRES_IMAGE
+    # Universal Links (iOS): the app id the web container announces; kept when not given.
+    if [[ "${DS_APPLE_TEAM_ID:-}" =~ ^[A-Z0-9]{10}$ ]]; then
+      DS_APPLE_APP_ID="$DS_APPLE_TEAM_ID.${DS_IOS_BUNDLE_ID:-com.datascratch.app}"
+    else
+      [ -z "${DS_APPLE_TEAM_ID:-}" ] || log "WARNING: DS_APPLE_TEAM_ID is not a 10-character team id; Universal Links keep the previous app id"
+      DS_APPLE_APP_ID="$(current DS_APPLE_APP_ID)"
+    fi
+    export DS_APPLE_APP_ID
 
     DS_MODE=$(choose_mode)
     DS_PROXY_PORT="${DS_PROXY_PORT:-8480}"

@@ -74,6 +74,8 @@ services:
       # Direct mode: the domain (Caddy gets the certificate). Behind an existing proxy:
       # plain HTTP on 127.0.0.1 only; the existing proxy terminates TLS.
       DS_SITE: ${DS_SITE:-localhost}
+      # Universal Links: <Apple team id>.<bundle id> in /.well-known/apple-app-site-association.
+      DS_APPLE_APP_ID: ${DS_APPLE_APP_ID:-}
     deploy:
       resources:
         limits:

@@ -54,6 +54,7 @@ for _ in $(seq 1 30); do ssh-keyscan -p "$SSH_PORT" -t ed25519 127.0.0.1 > "$WOR
 ssh-keygen -lf "$WORK/known_hosts"
 
 export DEPLOY_HOST=127.0.0.1 DEPLOY_PORT="$SSH_PORT" DEPLOY_KEY_FILE="$WORK/key" DEPLOY_KNOWN_HOSTS_FILE="$WORK/known_hosts"
+export DS_APPLE_TEAM_ID=ABCDE12345
 export DS_DOMAIN=localhost DS_SERVER_IMAGE="$SRV" DS_WEB_IMAGE="$WEB" DS_POSTGRES_IMAGE="${DS_POSTGRES_IMAGE:-postgres:16-alpine}" DS_SKIP_FIREWALL=1
 export NODE_TLS_REJECT_UNAUTHORIZED=0
 vps() { docker exec "$VPS" "$@"; }
@@ -70,6 +71,33 @@ address() {
   grep -qxF "::add-mask::$value" <<< "$out"
   echo "$value"
 }
+# apple-app-site-association: JSON with the right app id, no redirect, only invite and share links.
+aasa_ok() {
+  local headers
+  headers="$(curl -sk --noproxy '*' -o "$WORK/aasa.json" -D - https://localhost/.well-known/apple-app-site-association)"
+  grep -q '^HTTP/[0-9.]* 200' <<< "$headers"
+  grep -qi '^content-type: application/json' <<< "$headers"
+  node -e '
+    const a = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    const d = a.applinks.details;
+    const ok = d.length === 1 && d[0].appIDs.join() === "ABCDE12345.com.datascratch.app"
+      && JSON.stringify(d[0].components) === JSON.stringify([{ "/": "/invite/*" }, { "/": "/s/*" }]);
+    if (!ok) { console.error("unexpected AASA", JSON.stringify(a)); process.exit(1); }' "$WORK/aasa.json"
+}
+# The iOS release's web-host step: prints DS_WEB_HOST=<value> and its exit code, fails if the
+# value showed up anywhere but in the hidden mask commands.
+web_host() {
+  local env out code=0 value
+  env="$(mktemp -p "$WORK")"
+  out="$(env -u DS_DOMAIN GITHUB_ENV="$env" RUNNER_TEMP="$WORK/rt" DEPLOY_SSH_KEY="$(cat "$WORK/key")" \
+    DEPLOY_KNOWN_HOSTS="$(cat "$WORK/known_hosts")" "$@" "$DEPLOY_DIR/web-host.sh")" || code=$?
+  value="$(sed -n 's/^DS_WEB_HOST=//p' "$env")"
+  if [ -n "$value" ] && grep -v '^::add-mask::' <<< "$out" | grep -qF "$value"; then
+    echo "web-host.sh printed the host" >&2
+    exit 1
+  fi
+  echo "$code ${value:-none}"
+}
 
 step "read-only survey of the server"
 before="$(docker exec "$VPS" sh -c 'ls -la /opt /etc/cron.d; ls /etc/apt/apt.conf.d' | sha256sum)"
@@ -81,6 +109,9 @@ if grep -Eiq 'PASSWORD=|KMS_KEY=|SECRET=' "$WORK/inspect.md"; then echo "inspect
 
 step "address before the first deploy: no secret, nothing on the server → sslip.io from the IP"
 [ "$(address)" = "127-0-0-1.sslip.io" ]
+# The iOS release cannot get a host from a server that runs nothing yet (exit 2), nor without access (1).
+[ "$(web_host)" = "2 none" ]
+[ "$(web_host env DEPLOY_SSH_KEY=not-a-key)" = "1 none" ]
 
 step "first deploy (fresh server: bootstrap + e2e1)"
 DS_HOST_MODE=fresh DS_TAG=e2e1 "$DEPLOY_DIR/remote.sh" deploy 2>&1 | tee "$WORK/first-deploy.log"
@@ -97,6 +128,11 @@ first="$(secrets_hash)"
 step "address: the secret wins; without it the server keeps its domain (no settings needed)"
 [ "$(address env DS_DOMAIN_SECRET=notes.example.org)" = "notes.example.org" ]
 [ "$(address)" = "localhost" ]
+[ "$(web_host)" = "0 localhost" ]
+[ "$(web_host env DS_WEB_HOST_SECRET=https://notes.example.org/)" = "0 notes.example.org" ]
+
+step "Universal Links: apple-app-site-association as JSON, no redirect, only invite and share links"
+aasa_ok
 
 step "second deploy (idempotent bootstrap, secrets kept)"
 DS_HOST_MODE=fresh DS_TAG=e2e2 "$DEPLOY_DIR/remote.sh" deploy
@@ -201,7 +237,8 @@ sinhron_ok() {
 # Updated Sinhron: our site is imported, served over HTTPS by its Caddy.
 sinhron_caddy "$SINHRON_SITE
 import /etc/caddy/sites/*.caddy"
-DS_TAG=e2e2 "$DEPLOY_DIR/remote.sh" deploy
+# Without the team id this time: the app id of the previous deploy is kept.
+env -u DS_APPLE_TEAM_ID DS_TAG=e2e2 "$DEPLOY_DIR/remote.sh" deploy
 info="$("$DEPLOY_DIR/remote.sh" info)"
 grep -qx 'DS_MODE=edge' <<< "$info"
 grep -q 'reverse_proxy datascratch-web:80' "$WORK/caddy-sites/datascratch.caddy"
@@ -216,6 +253,8 @@ vps grep -qx 'DS_MEM_SERVER=512m' /opt/datascratch/.env
 "$DEPLOY_DIR/remote.sh" check | grep -q '"ok":true'
 node "$DEPLOY_DIR/smoke.mjs" https://localhost 120
 sinhron_ok
+# Through Sinhron's Caddy as well (edge mode): Universal Links need it on the public address.
+aasa_ok
 
 # A broken neighbour file makes `caddy validate` fail: our site is restored as it was, nothing reloads.
 good="$(sha256sum < "$WORK/caddy-sites/datascratch.caddy")"

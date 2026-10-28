@@ -27,6 +27,7 @@ public struct EditorCommands {
 
     /// Plain typing inside one textblock (the text view already shows it).
     public func typeText(_ text: String, marks: MarkSet, at pos: TextPosition, replacing length: Int = 0) {
+        guard !document.isReadOnly else { return }
         document.transact(origin: .textInput) {
             if length > 0 { document.deleteText(block: pos.block, range: pos.offset..<(pos.offset + length)) }
             document.insertText(text, marks: marks, block: pos.block, at: pos.offset)
@@ -37,6 +38,7 @@ public struct EditorCommands {
     /// - Returns: caret position after the inserted text.
     @discardableResult
     public func replace(_ range: Range<Int>, with text: String, marks: MarkSet = .empty) -> TextPosition? {
+        guard !document.isReadOnly else { return nil }
         let p = projection
         guard !p.paragraphs.isEmpty else { return nil }
         var caret: TextPosition?
@@ -113,6 +115,7 @@ public struct EditorCommands {
     /// Splits the paragraph at `pos` like pressing Return.
     @discardableResult
     public func splitParagraph(at pos: TextPosition) -> TextPosition? {
+        guard !document.isReadOnly else { return nil }
         guard let node = document.block(pos.block), node.isTextblock else { return nil }
         let p = projection
         guard let idx = p.indexByBlock[pos.block] else { return nil }
@@ -179,6 +182,7 @@ public struct EditorCommands {
     /// Backspace at offset 0 of a paragraph.
     @discardableResult
     public func joinBackward(at pos: TextPosition) -> TextPosition? {
+        guard !document.isReadOnly else { return nil }
         let p = projection
         guard let idx = p.indexByBlock[pos.block], let node = document.block(pos.block) else { return nil }
         let ctx = p.paragraphs[idx].context
@@ -225,6 +229,7 @@ public struct EditorCommands {
     /// Turns the paragraph at `pos` (with its list item, if any) into another kind of block.
     @discardableResult
     public func setBlockKind(_ kind: BlockKind, at pos: TextPosition) -> TextPosition {
+        guard !document.isReadOnly else { return pos }
         document.stopCapturing()
         document.transact {
             var p = projection
@@ -278,6 +283,7 @@ public struct EditorCommands {
     /// Tab: nest the item under its previous sibling.
     @discardableResult
     public func indentItem(_ item: BlockID) -> Bool {
+        guard !document.isReadOnly else { return false }
         guard let loc = document.location(of: item), loc.index > 0, let listId = loc.parent,
               let list = document.block(listId) else { return false }
         let prevItem = list.children[loc.index - 1]
@@ -303,6 +309,7 @@ public struct EditorCommands {
     /// Shift-Tab: move the item one level out.
     @discardableResult
     public func outdentItem(_ item: BlockID) -> Bool {
+        guard !document.isReadOnly else { return false }
         guard let loc = document.location(of: item), let listId = loc.parent,
               let listLoc = document.location(of: listId), let parentItem = listLoc.parent,
               let parentNode = document.block(parentItem), NodeType.items.contains(parentNode.type),
@@ -356,6 +363,7 @@ public struct EditorCommands {
 
     /// Toggles a mark over a flattened range (removes it if the whole range already has it).
     public func toggleMark(_ name: String, value: JSONValue = MarkSet.plain, range: Range<Int>) {
+        guard !document.isReadOnly else { return }
         guard !range.isEmpty else { return }
         let p = projection
         let segments = textSegments(range, in: p)
@@ -372,6 +380,7 @@ public struct EditorCommands {
     }
 
     public func setMark(_ name: String, value: JSONValue?, range: Range<Int>) {
+        guard !document.isReadOnly else { return }
         let segments = textSegments(range, in: projection)
         document.transact {
             for seg in segments { document.setMark(name, value: value, block: seg.block, range: seg.range) }
@@ -419,6 +428,7 @@ public struct EditorCommands {
     // MARK: - Tasks
 
     public func toggleTask(_ item: BlockID) {
+        guard !document.isReadOnly else { return }
         guard let node = document.block(item), node.type == NodeType.taskItem else { return }
         let done = node.attrs["state"]?.stringValue == "done"
         document.stopCapturing()
@@ -428,6 +438,7 @@ public struct EditorCommands {
     }
 
     public func setTaskDates(_ item: BlockID, scheduled: String?, deadline: String?) {
+        guard !document.isReadOnly else { return }
         document.setAttributes(item, ["scheduled": scheduled.map { .string($0) } ?? .null,
                                       "deadline": deadline.map { .string($0) } ?? .null])
     }
@@ -438,6 +449,7 @@ public struct EditorCommands {
     /// Keeps an editable paragraph after the block. Returns the caret position after the insert.
     @discardableResult
     public func insertBlock(_ node: BlockNode, after pos: TextPosition) -> TextPosition? {
+        guard !document.isReadOnly else { return nil }
         guard let loc = document.location(of: pos.block), let current = document.block(pos.block) else { return nil }
         var caret: TextPosition?
         document.stopCapturing()
@@ -462,6 +474,7 @@ public struct EditorCommands {
     }
 
     public func insertInlineAtom(_ atom: InlineAtom, at pos: TextPosition, marks: MarkSet = .empty) -> TextPosition {
+        guard !document.isReadOnly else { return pos }
         document.stopCapturing()
         document.insertAtom(atom, marks: marks, block: pos.block, at: pos.offset)
         document.stopCapturing()
@@ -472,6 +485,7 @@ public struct EditorCommands {
 
     /// Replaces the text of one table cell (its first paragraph).
     public func setTableCell(_ table: BlockID, row: Int, column: Int, text: String) {
+        guard !document.isReadOnly else { return }
         guard let t = document.block(table), t.children.indices.contains(row),
               t.children[row].children.indices.contains(column) else { return }
         let cell = t.children[row].children[column]
@@ -504,6 +518,7 @@ public struct EditorCommands {
     }
 
     public func addTableRow(_ table: BlockID) {
+        guard !document.isReadOnly else { return }
         guard let t = document.block(table) else { return }
         let columns = max(1, t.children.last?.children.count ?? 1)
         let row = BlockNode(type: NodeType.tableRow, children: (0..<columns).map { _ in Self.cell(header: false) })
@@ -513,6 +528,7 @@ public struct EditorCommands {
     }
 
     public func addTableColumn(_ table: BlockID) {
+        guard !document.isReadOnly else { return }
         guard let t = document.block(table) else { return }
         document.stopCapturing()
         document.transact {

@@ -15,6 +15,11 @@ import type {
   Session,
   Share,
   SharePermission,
+  IncomingInvitation,
+  Member,
+  MemberRole,
+  OutgoingInvitation,
+  SharedItem,
   ShareTarget,
   SignupRequest,
   SecurityEvent,
@@ -59,6 +64,21 @@ export const accountApi = {
   revokeDevice: (id: string) => api.del<void>(`/devices/${id}`),
   securityEvents: () => api.get<SecurityEvent[]>("/me/security-events"),
   deleteAccount: (loginKey: string) => api.del<void>("/me", { loginKey }),
+};
+
+/** Sharing with accounts by email (D-54, api.md «Совместный доступ по аккаунтам»). */
+export const membersApi = {
+  invite: (body: { invitationId: string; target: ShareTarget; email: string; role: MemberRole }) => api.post<void>("/invitations", body),
+  outgoing: (target: ShareTarget) => api.get<OutgoingInvitation[]>(`/invitations?target=${target.kind}:${target.id}`),
+  cancelInvitation: (id: string) => api.del<void>(`/invitations/${id}`),
+  incoming: () => api.get<IncomingInvitation[]>("/invitations/incoming"),
+  accept: (id: string) => api.post<SharedItem>(`/invitations/${id}/accept`),
+  decline: (id: string) => api.post<void>(`/invitations/${id}/decline`),
+  list: (target: ShareTarget) => api.get<Member[]>(`/members/${target.kind}/${target.id}`),
+  setRole: (target: ShareTarget, userId: string, role: MemberRole) => api.patch<void>(`/members/${target.kind}/${target.id}/${userId}`, { role }),
+  /** The owner removes a member; a member passes their own id to leave. */
+  remove: (target: ShareTarget, userId: string) => api.del<void>(`/members/${target.kind}/${target.id}/${userId}`),
+  sharedWithMe: () => api.get<SharedItem[]>("/shared-with-me"),
 };
 
 export const notebooksApi = {

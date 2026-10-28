@@ -661,7 +661,8 @@
             "0192f3c4-0000-7000-8000-000000000003",
             "0192f3c4-0000-7000-8000-000000000005"
           ],
-          "addedAt": "2026-10-25T12:00:00.000Z"
+          "addedAt": "2026-10-25T12:00:00.000Z",
+          "agentsMode": true
         },
         {
           "target": {
@@ -684,6 +685,27 @@
         }
       ],
       "invalid": [
+        {
+          "reason": "agentsMode is not a boolean",
+          "body": {
+            "target": {
+              "kind": "note",
+              "id": "0192f3c4-0000-7000-8000-000000000005"
+            },
+            "owner": {
+              "userId": "0192f3c4-0000-7000-8000-000000000004",
+              "email": "o@b.co",
+              "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            },
+            "role": "viewer",
+            "keyVersion": 1,
+            "wrappedKey": null,
+            "keyChain": [],
+            "docIds": [],
+            "addedAt": "2026-10-25T12:00:00.000Z",
+            "agentsMode": "yes"
+          }
+        },
         {
           "reason": "missing owner public key",
           "body": {

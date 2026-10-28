@@ -222,7 +222,8 @@ final class AppModel {
     private func seedSharingForTesting() {
         guard let local = accountSharing as? LocalAccountSharingService, let spaceId = library.activeSpace?.id,
               let own = library.notebooks(in: spaceId).first else { return }
-        let shared = library.createNotebook(in: spaceId, name: "Shared plans", icon: "person.2", mode: .private)
+        // Where a shared notebook really is: its own space, shown in every space (D-54).
+        let shared = library.createNotebook(in: Notebook.sharedSpaceId, name: "Shared plans", icon: "person.2", mode: .private)
         let note = library.createNote(in: shared.id, title: "Roadmap",
                                       body: NoteBody(blocks: [.paragraph("Only the owner edits this.")]))
         let arguments = ProcessInfo.processInfo.arguments

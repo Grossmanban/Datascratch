@@ -89,7 +89,9 @@ struct SharingTests {
     @Test func notesOfASharedNotebookAreListedInEverySpace() throws {
         let store = LibraryStore(persistence: .inMemory)
         store.seedIfEmpty()
-        let own = try #require(store.notebooks(in: store.activeSpace?.id).first)
+        let spaceId = try #require(store.activeSpace?.id)
+        let ownNotebooks = store.notebooks(in: spaceId)
+        let own = try #require(ownNotebooks.first)
         let shared = store.createNotebook(in: Notebook.sharedSpaceId, name: "Team plans", mode: .private)
         let theirs = store.createNote(in: shared.id, title: "Roadmap")
         #expect(store.documents(inNotebook: shared.id).map(\.id) == [theirs.id])

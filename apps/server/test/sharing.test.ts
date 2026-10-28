@@ -532,3 +532,25 @@ describe('the last member leaves', () => {
     expect(noteId).toBeTruthy();
   });
 });
+
+describe('agents mode badge', () => {
+  it('shared-with-me tells members whether the owner’s agents can read it', async () => {
+    const owner = await user();
+    const m = await user();
+    const agentNb = await createNotebook(s, owner, { mode: 'agent' });
+    const privateNb = await createNotebook(s, owner);
+    const noteInAgentNb = await createNote(s, owner, agentNb.notebookId);
+    await share(owner, { kind: 'notebook', id: agentNb.notebookId }, m, 'viewer');
+    await share(owner, { kind: 'notebook', id: privateNb.notebookId }, m, 'viewer');
+    await share(owner, { kind: 'note', id: noteInAgentNb }, m, 'viewer');
+    const items = (await call(m, 'GET', '/shared-with-me')).body;
+    const badge = (id: string) => items.find((i: any) => i.target.id === id).agentsMode;
+    expect(badge(agentNb.notebookId)).toBe(true);
+    expect(badge(privateNb.notebookId)).toBe(false);
+    expect(badge(noteInAgentNb)).toBe(true);
+    // The owner switches the mode off: the next listing shows it.
+    expect((await call(owner, 'PATCH', `/notebooks/${agentNb.notebookId}/mode`, { mode: 'private' })).status).toBe(200);
+    const after = (await call(m, 'GET', '/shared-with-me')).body;
+    expect(after.find((i: any) => i.target.id === agentNb.notebookId).agentsMode).toBe(false);
+  });
+});

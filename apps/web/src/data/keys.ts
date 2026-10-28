@@ -52,11 +52,18 @@ async function fetchNotebookKey(notebookId: string): Promise<NotebookKeyResponse
   return res;
 }
 
-async function openNotebookKey(notebookId: string, res: NotebookKeyResponse) {
+/**
+ * Opens a notebook key from the cache or the server for `notebookKey()`. A key set meanwhile (by
+ * checkNotebookKeys, a rotation or another caller) wins: this one was read before it and may be
+ * the very key that was just replaced — writing it back would undo the switch to the server's key.
+ */
+async function openNotebookKey(notebookId: string, res: NotebookKeyResponse): Promise<Uint8Array> {
   await sodiumReady();
   const keys = ownerNotebookKeys(res, getMasterKey(), notebookId);
+  const current = notebookKeys.get(notebookId);
+  if (current) return current;
   setKeyring(notebookId, "notebook", keys);
-  return keys;
+  return keys.keys[0]!;
 }
 
 export function rememberNotebookKey(notebookId: string, key: Uint8Array, wrapped: string) {
@@ -86,11 +93,11 @@ export async function notebookKey(notebookId: string): Promise<Uint8Array | null
     }
   }
   try {
-    return (await openNotebookKey(notebookId, res)).keys[0]!;
+    return await openNotebookKey(notebookId, res);
   } catch {
     // A cached key from before a rotation (its version's ad no longer matches): ask the server.
     try {
-      return (await openNotebookKey(notebookId, await fetchNotebookKey(notebookId))).keys[0]!;
+      return await openNotebookKey(notebookId, await fetchNotebookKey(notebookId));
     } catch (e) {
       console.error("Cannot unwrap notebook key", notebookId, e);
       return null;

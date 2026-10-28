@@ -68,9 +68,14 @@ test("D-54: invite by email, the invitee accepts in the app, the owner changes t
   await reread;
   await expect(member.getByTestId("member-role")).toContainText("Может редактировать");
 
-  // …and closes access after a plain-language warning.
-  await member.getByTestId("member-role").click();
-  await page.getByRole("menuitem", { name: "Закрыть доступ" }).click();
+  // …and closes access after a plain-language warning. The role menu must be fully closed first:
+  // a click during its exit animation lands on the closing menu and opens nothing.
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(async () => {
+    await member.getByTestId("member-role").click();
+    await expect(page.getByRole("menu").getByRole("menuitem", { name: "Закрыть доступ" })).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
+  await page.getByRole("menu").getByRole("menuitem", { name: "Закрыть доступ" }).click();
   const confirm = page.getByRole("alertdialog").or(page.getByRole("dialog").filter({ hasText: "Закрыть доступ для" }));
   await expect(confirm).toContainText("То, что он уже видел, у него останется");
   await confirm.getByRole("button", { name: "Закрыть доступ" }).click();
@@ -178,6 +183,8 @@ test("D-54: the member sees a shared notebook in «Общие со мной», a
   await expectSynced(q);
   await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
   await expect(page.locator(".ds-prose")).toContainText("Начало и правка участника", { timeout: 20_000 });
+  // Collaborators are named, not «Гость»: the owner sees the member's name on the presence stack.
+  await expect(page.getByTestId("presence").getByLabel(friend.split("@")[0]!)).toBeVisible({ timeout: 15_000 });
   // Leaving after many edits saves a version; the owner's history names who wrote it.
   await q.getByTestId("close-tab").click();
   await expectSynced(q);

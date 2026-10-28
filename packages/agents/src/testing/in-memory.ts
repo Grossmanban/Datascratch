@@ -113,6 +113,10 @@ export class InMemoryDataSource implements AgentDataSource {
   readonly skippedFor = new Map<string, NonNullable<LoadedDoc["skipped"]>>();
   /** grantId of every agent call, as the server would use it for RLS. */
   readonly grantCalls: (string | undefined)[] = [];
+  /** notebookId → member userId → role: notebooks other accounts shared with a user (D-54). */
+  readonly members = new Map<string, Map<string, { role: "editor" | "viewer"; email: string | null }>>();
+  /** Owner e-mails reported in `shared.ownerEmail`. */
+  readonly emails = new Map<string, string>();
   /** Makes the next moveNoteDoc fail after building the updates (atomicity tests). */
   failNextMove = false;
 
@@ -151,19 +155,41 @@ export class InMemoryDataSource implements AgentDataSource {
     return this.docs.get(docId)?.history ?? [];
   }
 
-  private readable(userId: string, docId: string): StoredDoc | null {
+  /** Shares a notebook of its owner with another user (as the server's members table would). */
+  share(notebookId: string, memberUserId: string, role: "editor" | "viewer"): void {
+    const m = this.members.get(notebookId) ?? new Map();
+    m.set(memberUserId, { role, email: null });
+    this.members.set(notebookId, m);
+  }
+
+  unshare(notebookId: string, memberUserId: string): void {
+    this.members.get(notebookId)?.delete(memberUserId);
+  }
+
+  private roleIn(userId: string, nb: StoredNotebook): "owner" | "editor" | "viewer" | null {
+    if (nb.userId === userId) return "owner";
+    return this.members.get(nb.id)?.get(userId)?.role ?? null;
+  }
+
+  /** What RLS would allow: own or shared agent-mode notebooks; writes need owner or editor. */
+  private readable(userId: string, docId: string, write = false): StoredDoc | null {
     const d = this.docs.get(docId);
-    if (!d || d.userId !== userId) return null;
+    if (!d) return null;
     const nbId = d.notebookId ?? docId;
     const nb = this.notebooks.get(nbId);
     if (!nb || nb.mode !== "agent") return null; // the server cannot decrypt private notebooks
+    const role = this.roleIn(userId, nb);
+    if (!role || (write && role === "viewer")) return null;
     return d;
   }
 
   async listAgentNotebooks(userId: string): Promise<AgentNotebook[]> {
     return [...this.notebooks.values()]
-      .filter((n) => n.userId === userId && n.mode === "agent")
-      .map(({ userId: _u, mode: _m, ...rest }) => rest);
+      .filter((n) => n.mode === "agent" && this.roleIn(userId, n) !== null)
+      .map(({ userId: owner, mode: _m, ...rest }) => {
+        const role = this.roleIn(userId, { ...rest, userId: owner, mode: "agent" });
+        return role === "owner" ? rest : { ...rest, shared: { ownerUserId: owner, ownerEmail: this.emails.get(owner) ?? null, role: role as "editor" | "viewer" } };
+      });
   }
 
   async loadDoc(userId: string, docId: string, grantId?: string): Promise<LoadedDoc | null> {
@@ -188,7 +214,7 @@ export class InMemoryDataSource implements AgentDataSource {
   }
 
   async applyUpdate(userId: string, docId: string, update: Uint8Array, origin: AgentEditOrigin): Promise<{ seq: number }> {
-    const d = this.readable(userId, docId);
+    const d = this.readable(userId, docId, true);
     if (!d) throw new Error(`doc ${docId} is not writable`);
     Y.applyUpdate(d.doc, update);
     d.seq++;
@@ -198,8 +224,10 @@ export class InMemoryDataSource implements AgentDataSource {
 
   async createNoteDoc(userId: string, notebookId: string, noteId: string): Promise<{ wrappedKey: string }> {
     const nb = this.notebooks.get(notebookId);
-    if (!nb || nb.userId !== userId || nb.mode !== "agent") throw new Error("notebook not writable");
-    this.docs.set(noteId, { userId, notebookId, doc: new Y.Doc({ gc: false }), seq: 0, history: [] });
+    const role = nb ? this.roleIn(userId, nb) : null;
+    if (!nb || nb.mode !== "agent" || !role || role === "viewer") throw new Error("notebook not writable");
+    // A note in a shared notebook belongs to the notebook's owner.
+    this.docs.set(noteId, { userId: nb.userId, notebookId, doc: new Y.Doc({ gc: false }), seq: 0, history: [] });
     return { wrappedKey: `wrapped-${noteId}` };
   }
 
@@ -208,9 +236,9 @@ export class InMemoryDataSource implements AgentDataSource {
     move: Parameters<NonNullable<AgentDataSource["moveNoteDoc"]>>[1],
   ): Promise<{ fromSeq: number; toSeq: number }> {
     this.grantCalls.push(move.origin.grantId);
-    const note = this.readable(userId, move.noteId);
-    const from = this.readable(userId, move.fromNotebookId);
-    const to = this.readable(userId, move.toNotebookId);
+    const note = this.readable(userId, move.noteId, true);
+    const from = this.readable(userId, move.fromNotebookId, true);
+    const to = this.readable(userId, move.toNotebookId, true);
     if (!note || note.notebookId !== move.fromNotebookId || !from || !to) throw new Error("note or notebook not writable");
     // Stand-in for re-wrapping the note key with the target notebook key.
     const { from: fromUpdate, to: toUpdate } = move.indexUpdates(`wrapped-${move.noteId}@${move.toNotebookId}`);

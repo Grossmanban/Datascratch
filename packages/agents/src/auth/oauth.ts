@@ -480,7 +480,15 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
           return u.host || u.protocol;
         })(),
         userEmail: user.email ?? null,
-        notebooks: notebooks.map((n) => ({ id: n.id, name: n.name, space: n.space?.name ?? null, icon: n.icon, color: n.color ?? null, unavailable: n.unavailable })),
+        notebooks: notebooks.map((n) => ({
+          id: n.id,
+          name: n.name,
+          space: n.shared ? null : (n.space?.name ?? null),
+          icon: n.icon,
+          color: n.color ?? null,
+          unavailable: n.unavailable,
+          shared: n.shared ? { ownerEmail: n.shared.ownerEmail, readOnly: n.shared.role === "viewer" } : null,
+        })),
         writeRequested: requested.includes(SCOPE_WRITE),
         request: pending,
         action: "/oauth/authorize",

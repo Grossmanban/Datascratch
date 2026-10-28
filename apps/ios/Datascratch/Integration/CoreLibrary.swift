@@ -22,18 +22,31 @@ protocol CoreLibraryRemote: AnyObject {
     func noteKeysLearned()
 }
 
-/// `NoteMeta.wrappedKey` by note id, readable from the sync engine's actor.
+/// A note's key fields of `NoteMeta` (wrapped key, key version and chain, D-54) by note id,
+/// readable from the sync engine's actor.
 nonisolated final class WrappedKeyIndex: @unchecked Sendable {
+    private struct Entry: Equatable {
+        var notebookId: String
+        var wrapped: String
+        var keyVersion: Int
+        var keyChain: [String]
+    }
+
     private let lock = NSLock()
-    private var keys: [String: (notebookId: String, wrapped: String)] = [:]
+    private var keys: [String: Entry] = [:]
     private var changed = false
 
-    func set(noteId: String, notebookId: String, wrapped: String) {
+    func set(noteId: String, notebookId: String, wrapped: String, keyVersion: Int = 1, keyChain: [String] = []) {
+        let entry = Entry(notebookId: notebookId, wrapped: wrapped, keyVersion: keyVersion, keyChain: keyChain)
         lock.withLock {
-            guard keys[noteId]?.notebookId != notebookId || keys[noteId]?.wrapped != wrapped else { return }
-            keys[noteId] = (notebookId, wrapped)
+            guard keys[noteId] != entry else { return }
+            keys[noteId] = entry
             changed = true
         }
+    }
+
+    func set(_ meta: DSCore.NoteMeta, notebookId: String) {
+        set(noteId: meta.id, notebookId: notebookId, wrapped: meta.wrappedKey, keyVersion: meta.keyVersion, keyChain: meta.keyChain)
     }
 
     /// Whether a key was added or replaced since the last call.
@@ -42,7 +55,16 @@ nonisolated final class WrappedKeyIndex: @unchecked Sendable {
     }
 
     func wrapped(noteId: String, notebookId: String) -> String? {
-        lock.withLock { keys[noteId].flatMap { $0.notebookId == notebookId ? $0.wrapped : nil } }
+        meta(noteId: noteId, notebookId: notebookId)?.wrappedKey
+    }
+
+    /// Enough of the `NoteMeta` to open the note: `KeyRing.noteKey(_:notebookId:)`.
+    func meta(noteId: String, notebookId: String) -> DSCore.NoteMeta? {
+        guard let entry = lock.withLock({ keys[noteId] }), entry.notebookId == notebookId else { return nil }
+        var meta = DSCore.NoteMeta(id: noteId, wrappedKey: entry.wrapped)
+        meta.keyVersion = entry.keyVersion
+        meta.keyChain = entry.keyChain
+        return meta
     }
 }
 
@@ -107,7 +129,7 @@ final class CoreLibrary: LibraryBackend {
             subscriptions.removeAll()
             remote?.documentOpened(account.crdt, notebookId: nil)
             for (id, doc) in notebookDocs { remote?.documentOpened(doc.crdt, notebookId: id) }
-            for (id, doc) in noteDocs { remote?.documentOpened(doc.crdt, notebookId: notebookIdOfNote[id]) }
+            for (id, doc) in noteDocs { remote?.documentOpened(doc.crdt, notebookId: Self.recordNotebook(notebookIdOfNote[id])) }
         }
     }
     private var notebookIdOfNote: [String: String] = [:]
@@ -209,6 +231,8 @@ final class CoreLibrary: LibraryBackend {
 
     func notebookDocument(_ id: String) throws -> NotebookDocument {
         if let doc = notebookDocs[id] { return doc }
+        // Notes shared on their own have no notebook document on this device (D-54).
+        guard id != Notebook.sharedNotesId else { throw DSCore.AccountError.missingKey(id) }
         let isNew = try store.document(id) == nil
         let crdt = try Self.open(.notebook, docId: id, notebookId: id, store: store)
         let doc = NotebookDocument(crdt)
@@ -226,13 +250,14 @@ final class CoreLibrary: LibraryBackend {
     func noteDocument(_ id: String, notebookId: String, creating: Bool = false) throws -> NoteDocument {
         if let doc = noteDocs[id] { return doc }
         let isNew = try store.document(id) == nil
-        let crdt = try Self.open(.note, docId: id, notebookId: notebookId, store: store)
+        let recordNotebook = Self.recordNotebook(notebookId)
+        let crdt = try Self.open(.note, docId: id, notebookId: recordNotebook, store: store)
         let doc = NoteDocument(crdt)
-        attach(crdt, notebookId: notebookId)
+        attach(crdt, notebookId: recordNotebook)
         if isNew && creating { try doc.initialize() }
         noteDocs[id] = doc
         notebookIdOfNote[id] = notebookId
-        remote?.documentOpened(crdt, notebookId: notebookId)
+        remote?.documentOpened(crdt, notebookId: recordNotebook)
         return doc
     }
 
@@ -359,7 +384,10 @@ final class CoreLibrary: LibraryBackend {
             guard let key = (try? keys.notebookKey(ref.id)) ?? nil, let notebook = try? notebookDocument(ref.id) else { continue }
             for meta in notebook.notes(includeTrashed: true) {
                 if let wrapped = DSCore.Base64URL.decode(meta.wrappedKey),
-                   (try? DSCrypto.unwrapKey(wrapped, with: key, ad: CryptoAD.noteKey(meta.id))) != nil { continue }
+                   (try? DSCrypto.unwrapKey(wrapped, with: key, ad: meta.wrappedKeyAD)) != nil { continue }
+                // Wrapped under an earlier key of a shared notebook: its rotation re-keys it (D-54).
+                if meta.keyVersion > 1 || !keys.retiredNotebookKeys(ref.id).isEmpty,
+                   (try? keys.noteKey(meta, notebookId: ref.id)) != nil { continue }
                 guard let updates = try? store.updates(docId: meta.id), !updates.isEmpty,
                       let wrapped = try? keys.createNoteKey(noteId: meta.id, notebookId: ref.id).wrappedKey else { continue }
                 try? notebook.updateNote(id: meta.id, ["wrappedKey": .string(value: wrapped)])
@@ -461,9 +489,112 @@ final class CoreLibrary: LibraryBackend {
             return try keys.notebookKey(target.id)
         case .note:
             guard let notebookId = notebookIdOfNote[target.id],
-                  let wrapped = wrappedKeys.wrapped(noteId: target.id, notebookId: notebookId) else { return nil }
-            return try keys.noteKey(noteId: target.id, wrappedKey: wrapped, notebookId: notebookId)
+                  let meta = wrappedKeys.meta(noteId: target.id, notebookId: notebookId) else { return nil }
+            return try keys.noteKey(meta, notebookId: notebookId)
         }
+    }
+
+    /// A document changed outside the snapshot (a version restored): the library catches up.
+    func reload() {
+        onExternalChange?(loadSnapshot())
+    }
+
+    // MARK: - Shared with this account (D-54)
+
+    /// Notebooks other accounts share with this one whose key is on this device.
+    private(set) var sharedNotebookIds: Set<String> = []
+    /// Notes shared with this account on their own, whose key is on this device.
+    private(set) var sharedNoteIds: Set<String> = []
+
+    /// The documents DSCore registered for what is shared with this account; what is no longer
+    /// shared (left, removed) is taken off this device.
+    func setShared(notebooks: Set<String>, notes: Set<String>) {
+        guard notebooks != sharedNotebookIds || notes != sharedNoteIds else { return }
+        let goneNotebooks = sharedNotebookIds.subtracting(notebooks)
+        let goneNotes = sharedNoteIds.subtracting(notes)
+        sharedNotebookIds = notebooks
+        sharedNoteIds = notes
+        for id in goneNotebooks {
+            if let doc = try? notebookDocument(id) {
+                for meta in doc.notes(includeTrashed: true) { forgetDocument(meta.id) }
+            }
+            forgetDocument(id)
+        }
+        for id in goneNotes { forgetDocument(id) }
+        onExternalChange?(loadSnapshot())
+    }
+
+    /// Removes a document from this device only (the server keeps it).
+    private func forgetDocument(_ id: String) {
+        noteDocs[id] = nil
+        notebookDocs[id] = nil
+        notebookIdOfNote[id] = nil
+        subscriptions[id] = nil
+        remoteSubscriptions[id] = nil
+        try? store.deleteDocument(id)
+        remote?.documentDeleted(id)
+    }
+
+    private func loadShared(into snapshot: inout LibrarySnapshot) {
+        let epoch = Date(timeIntervalSince1970: 0)
+        for (index, id) in sharedNotebookIds.sorted().enumerated() {
+            guard let doc = try? notebookDocument(id) else { continue }
+            let copy = doc.metaCopy
+            snapshot.notebooks.append(Notebook(id: id, spaceId: Notebook.sharedSpaceId,
+                                               name: copy?.name ?? String(localized: "Shared notebook"),
+                                               icon: copy?.icon ?? "person.2", color: copy?.color.flatMap(Tint.init(rawValue:)) ?? .blue,
+                                               order: Double(index), mode: .private, createdAt: epoch))
+            snapshot.folders += doc.folders().map { folder in
+                Folder(id: folder.id, notebookId: id, parentId: folder.parentId, name: folder.name,
+                       icon: folder.icon ?? "folder", color: folder.color.flatMap(Tint.init(rawValue:)) ?? .gray,
+                       order: folder.order, createdAt: DSCore.DSDate.parseISO(folder.createdAt) ?? epoch)
+            }
+            for meta in doc.notes(includeTrashed: true) {
+                guard let pair = snapshotNote(meta, notebookId: id) else { continue }
+                snapshot.notes.append(pair.0)
+                snapshot.bodies[meta.id] = pair.1
+            }
+        }
+        guard !sharedNoteIds.isEmpty else { return }
+        snapshot.notebooks.append(Notebook(id: Notebook.sharedNotesId, spaceId: Notebook.sharedSpaceId,
+                                           name: String(localized: "Shared notes"), icon: "doc.on.doc", color: .gray,
+                                           order: Double(sharedNotebookIds.count), mode: .private, createdAt: epoch))
+        for id in sharedNoteIds.sorted() {
+            guard let pair = snapshotSharedNote(id) else { continue }
+            snapshot.notes.append(pair.0)
+            snapshot.bodies[id] = pair.1
+        }
+    }
+
+    /// A note shared on its own: its title comes from its own document (its index entry is the
+    /// owner's).
+    private func snapshotSharedNote(_ id: String) -> (NoteMeta, NoteBody)? {
+        guard let doc = try? noteDocument(id, notebookId: Notebook.sharedNotesId) else { return nil }
+        let title = (try? doc.title()) ?? ""
+        let epoch = DSCore.DSDate.iso(Date(timeIntervalSince1970: 0))
+        return snapshotNote(DSCore.NoteMeta(id: id, title: title, wrappedKey: "", createdAt: epoch, updatedAt: epoch),
+                            notebookId: Notebook.sharedNotesId)
+    }
+
+    /// The notebook a note's record names: none for a note shared on its own.
+    nonisolated static func recordNotebook(_ notebookId: String?) -> String? {
+        notebookId == Notebook.sharedNotesId ? nil : notebookId
+    }
+
+    /// The owner's index entry of a note of this account (sharing a note on its own).
+    func ownNoteMeta(_ noteId: String) -> (meta: DSCore.NoteMeta, notebookId: String)? {
+        guard let notebookId = notebookIdOfNote[noteId], !isShared(notebookId: notebookId),
+              let meta = try? notebookDocument(notebookId).note(id: noteId) else { return nil }
+        return (meta, notebookId)
+    }
+
+    func isShared(notebookId: String) -> Bool {
+        notebookId == Notebook.sharedNotesId || sharedNotebookIds.contains(notebookId)
+    }
+
+    /// Whether this account's notebook is in agent mode (a key change gives the server the new key).
+    func isAgentMode(notebookId: String) -> Bool {
+        account.notebooks().first { $0.id == notebookId }?.mode == .agent
     }
 
     // MARK: - Snapshot
@@ -498,6 +629,7 @@ final class CoreLibrary: LibraryBackend {
                 if let color = props.color.flatMap(Tint.init(rawValue:)) { snapshot.tagColors[props.id] = color }
             }
         }
+        loadShared(into: &snapshot)
         snapshot.starred = account.starred().map { StarRef(kind: StarRef.Kind(rawValue: $0.kind.rawValue) ?? .note, id: $0.id) }
         snapshot.tabs = account.tabs()
         snapshot.dailyNotebookId = account.dailyNotebookId
@@ -511,7 +643,7 @@ final class CoreLibrary: LibraryBackend {
     }
 
     private func snapshotNote(_ meta: DSCore.NoteMeta, notebookId: String) -> (NoteMeta, NoteBody)? {
-        wrappedKeys.set(noteId: meta.id, notebookId: notebookId, wrapped: meta.wrappedKey)
+        wrappedKeys.set(meta, notebookId: notebookId)
         guard let note = try? noteDocument(meta.id, notebookId: notebookId) else { return nil }
         let body = NoteBodyCodec.body(from: (try? note.blocks()) ?? [])
         var item = NoteMeta(id: meta.id, notebookId: notebookId, folderId: meta.folderId, parentNoteId: meta.parentNoteId,
@@ -531,6 +663,7 @@ final class CoreLibrary: LibraryBackend {
     /// After the native editor changed a note: copies title/tags into the notebook
     /// document (`syncDerived`), updates the local index and returns the fresh values.
     func refreshNote(_ noteId: String, notebookId: String) -> (NoteMeta, NoteBody)? {
+        if notebookId == Notebook.sharedNotesId { return snapshotSharedNote(noteId) }
         guard let notebook = try? notebookDocument(notebookId), let note = try? noteDocument(noteId, notebookId: notebookId)
         else { return nil }
         // A document that has not arrived yet (no blocks) says nothing about the title: never
@@ -575,7 +708,8 @@ final class CoreLibrary: LibraryBackend {
             try account.deleteSpace(id: space.id)
         }
         // Agents read the space of a notebook from the notebook document.
-        for notebook in new.notebooks where before[notebook.spaceId] != new.spaces.first(where: { $0.id == notebook.spaceId }) {
+        for notebook in new.notebooks where !notebook.isSharedWithMe
+            && before[notebook.spaceId] != new.spaces.first(where: { $0.id == notebook.spaceId }) {
             try writeNotebookMeta(notebook, in: new)
         }
     }
@@ -583,7 +717,9 @@ final class CoreLibrary: LibraryBackend {
     private func persistNotebooks(_ old: LibrarySnapshot, _ new: LibrarySnapshot) throws {
         guard old.notebooks != new.notebooks else { return }
         let before = Dictionary(old.notebooks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        for notebook in new.notebooks where before[notebook.id] != notebook {
+        // Notebooks shared with this account are the owner's: never written to this account
+        // (D-54); they come and go with `setShared`.
+        for notebook in new.notebooks where before[notebook.id] != notebook && !notebook.isSharedWithMe {
             if before[notebook.id] == nil, try keys.notebookKey(notebook.id) == nil {
                 let (key, wrapped) = try keys.createNotebookKey(notebookId: notebook.id)
                 remote?.notebookCreated(id: notebook.id, mode: notebook.mode, wrappedKey: wrapped, key: key)
@@ -599,7 +735,7 @@ final class CoreLibrary: LibraryBackend {
             try writeNotebookMeta(notebook, in: new)
         }
         let ids = Set(new.notebooks.map(\.id))
-        for notebook in old.notebooks where !ids.contains(notebook.id) {
+        for notebook in old.notebooks where !ids.contains(notebook.id) && !notebook.isSharedWithMe {
             try account.deleteNotebook(id: notebook.id)
             remote?.notebookDeleted(id: notebook.id)
             for note in old.notes where note.notebookId == notebook.id {
@@ -650,6 +786,14 @@ final class CoreLibrary: LibraryBackend {
         for meta in new.notes {
             let previous = before[meta.id]
             let body = new.bodies[meta.id] ?? .empty
+            // A note shared on its own: only its document is this account's to write (D-54).
+            if meta.notebookId == Notebook.sharedNotesId {
+                if let previous, old.bodies[meta.id] != body || previous.title != meta.title,
+                   let doc = try? noteDocument(meta.id, notebookId: meta.notebookId) {
+                    try write(body: body, title: meta.title, previous: old.bodies[meta.id], to: doc, resolve: resolve)
+                }
+                continue
+            }
             if previous == nil {
                 try createNote(meta, body: body, resolve: resolve)
                 continue
@@ -667,7 +811,7 @@ final class CoreLibrary: LibraryBackend {
             }
         }
         let ids = Set(new.notes.map(\.id))
-        for meta in old.notes where !ids.contains(meta.id) {
+        for meta in old.notes where !ids.contains(meta.id) && meta.notebookId != Notebook.sharedNotesId {
             if new.notebooks.contains(where: { $0.id == meta.notebookId }) {
                 try notebookDocument(meta.notebookId).purgeNote(id: meta.id)
             }
@@ -696,14 +840,19 @@ final class CoreLibrary: LibraryBackend {
     private func moveNote(_ meta: NoteMeta, from oldNotebookId: String) throws {
         let source = try notebookDocument(oldNotebookId)
         guard let oldMeta = source.note(id: meta.id) else { return }
-        let noteKey = try keys.noteKey(noteId: meta.id, wrappedKey: oldMeta.wrappedKey, notebookId: oldNotebookId)
+        let noteKey = try keys.noteKey(oldMeta, notebookId: oldNotebookId)
         guard let targetKey = try keys.notebookKey(meta.notebookId) else { throw DSCore.AccountError.missingKey(meta.notebookId) }
-        let wrapped = try DSCrypto.wrapKey(noteKey, with: targetKey, ad: CryptoAD.noteKey(meta.id))
+        let wrapped = try DSCrypto.wrapKey(noteKey, with: targetKey, ad: oldMeta.wrappedKeyAD)
         try source.purgeNote(id: meta.id)
         let encoded = DSCore.Base64URL.encode(wrapped)
-        wrappedKeys.set(noteId: meta.id, notebookId: meta.notebookId, wrapped: encoded)
+        wrappedKeys.set(noteId: meta.id, notebookId: meta.notebookId, wrapped: encoded,
+                        keyVersion: oldMeta.keyVersion, keyChain: oldMeta.keyChain)
         notebookIdOfNote[meta.id] = meta.notebookId
-        try notebookDocument(meta.notebookId).putNote(coreMeta(meta, wrappedKey: encoded))
+        // The key keeps its version and chain (D-54): only the wrapping notebook key changes.
+        var moved = coreMeta(meta, wrappedKey: encoded)
+        moved.keyVersion = oldMeta.keyVersion
+        moved.keyChain = oldMeta.keyChain
+        try notebookDocument(meta.notebookId).putNote(moved)
         _ = try store.ensureDocument(docId: meta.id, kind: .note, notebookId: meta.notebookId)
         // The record follows the note (registration, search, tasks), and the server is told.
         try store.setNotebook(meta.id, notebookId: meta.notebookId)

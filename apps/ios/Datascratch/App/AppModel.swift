@@ -35,9 +35,10 @@ final class AppModel {
     let sync: SyncCenter
     private(set) var sharing: any SharingService
     private(set) var access: any AccessService
+    /// D-54: sharing with other accounts by email.
+    private(set) var accountSharing: any AccountSharingService
     /// D-49: the server this device signs in to — only one the person typed, got in an invite
-    /// link, or signed in to earlier on this device. The build's `DS_SERVER_URL` is never shown
-    /// (amendment 2026-10-27); it only keeps an install that signed in before D-49 working.
+    /// link, or signed in to earlier on this device. No address is built into the app.
     private(set) var serverURL: URL?
     private static let serverKey = "account.serverURL"
     @ObservationIgnored private let isUITesting: Bool
@@ -79,16 +80,16 @@ final class AppModel {
     /// Main (library) windows on screen; a note window that closes itself reopens one when none is.
     @ObservationIgnored var mainWindowCount = 0
 
-    init(options: LaunchOptions = .fromProcess(), bundle: Bundle = .main) {
+    init(options: LaunchOptions = .fromProcess()) {
         let coreLibrary: AnyObject?
-        let info = bundle.infoDictionary ?? [:]
-        let host = (info["DSWebHost"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "datascratch.app"
-        let buildServer = (info["DSServerURL"] as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) }
+        // Links use the account's server host (`linkHost`); this one only stands in without a
+        // server. `DS_WEB_HOST` feeds the `applinks:` entitlement and nothing else.
+        let host = "datascratch.app"
         // UI tests: `-ui-testing-server <url>` stands for a server saved on this device.
         let testServer = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["ui-testing-server"]
             .flatMap { $0 as? String }.flatMap(URL.init(string:))
         let stored = options.uiTesting ? nil : UserDefaults.standard.string(forKey: Self.serverKey).flatMap(URL.init(string:))
-        var server = stored
+        let server = stored
         isUITesting = options.uiTesting
         webHost = host
         let coverImages: CoverImages = options.uiTesting ? .temporary() : .appSupport()
@@ -109,10 +110,6 @@ final class AppModel {
             let made = Self.makeLibrary(inMemory: false)
             library = made.0
             coreLibrary = made.1
-            if server == nil, let buildServer, Self.signedInBeforeServerField(made.1) {
-                server = buildServer
-                UserDefaults.standard.set(buildServer.absoluteString, forKey: Self.serverKey)
-            }
             sync = SyncCenter(serverURL: server)
         }
         serverURL = options.uiTesting ? testServer : server
@@ -126,22 +123,26 @@ final class AppModel {
             accounts = side.accounts
             sharing = side.sharing
             access = side.access
+            accountSharing = side.accountSharing
         } else {
             connection = nil
             accounts = LocalAccountService(store: secureStore)
             sharing = LocalSharingService(webHost: host)
             access = LocalAccessService()
+            accountSharing = LocalAccountSharingService(webHost: host, demo: options.uiTesting)
         }
         #else
         accounts = LocalAccountService(store: secureStore)
         sharing = LocalSharingService(webHost: host)
         access = LocalAccessService()
+        accountSharing = LocalAccountSharingService(webHost: host, demo: options.uiTesting)
         #endif
 
         if options.uiTesting, options.signedIn {
             library.seedIfEmpty()
             signedInForTesting = true
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-cover") { seedCoverForTesting() }
+            if ProcessInfo.processInfo.arguments.contains("-ui-testing-sharing") { seedSharingForTesting() }
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-folders"),
                let notebook = library.notebooks(in: library.activeSpace?.id).first {
                 // A folder with a subfolder and a note in each (folder strip, breadcrumb).
@@ -207,6 +208,24 @@ final class AppModel {
     @ObservationIgnored var notebookForTesting: String?
     /// `-ui-testing-links` / `-ui-testing-task-date`: the note a new scene opens.
     @ObservationIgnored var noteForTesting: String?
+
+    /// `-ui-testing-sharing` (D-54): an invitation, a notebook «Shared plans» shared with this
+    /// account «view only» with one note, and a member on the first notebook.
+    private func seedSharingForTesting() {
+        guard let local = accountSharing as? LocalAccountSharingService, let spaceId = library.activeSpace?.id,
+              let own = library.notebooks(in: spaceId).first else { return }
+        let shared = library.createNotebook(in: spaceId, name: "Shared plans", icon: "person.2", mode: .private)
+        let note = library.createNote(in: shared.id, title: "Roadmap",
+                                      body: NoteBody(blocks: [.paragraph("Only the owner edits this.")]))
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("-ui-testing-open-shared") { noteForTesting = note.id }
+        if arguments.contains("-ui-testing-open-own") {
+            noteForTesting = library.createNote(in: own.id, title: "Plan for two", body: NoteBody(blocks: [.paragraph("Ideas")])).id
+        }
+        local.seedForTesting(invitedTo: ShareTarget(kind: .notebook, id: UUIDv7.make()),
+                             viewOnly: ShareTarget(kind: .notebook, id: shared.id),
+                             owned: ShareTarget(kind: .notebook, id: own.id))
+    }
 
     /// `-ui-testing-cover`: the first document gets an image cover (screenshots, layout tests).
     private func seedCoverForTesting() {
@@ -287,18 +306,12 @@ final class AppModel {
         isRecoveryKeyConfirmed = false
     }
 
-    /// An install signed in (or signed out by the server) before the «Server» field existed used
-    /// the build's server without saving it: that sign-in is this device's, so it stays.
-    static func signedInBeforeServerField(_ core: AnyObject?) -> Bool {
+    /// Versions of a note: the server's (with authors, D-54) once signed in, else this device's.
+    var noteHistory: any NoteHistorySource {
         #if canImport(DSCore)
-        guard let core = core as? CoreLibrary else { return false }
-        return [ServerAccountService.emailKey, ServerAccountService.sessionEndedKey].contains { key in
-            guard let value = try? core.store.string(key) else { return false }
-            return !value.isEmpty
-        }
-        #else
-        return false
+        if let connection, accounts.isServerBacked, accounts.account != nil { return connection }
         #endif
+        return LocalNoteHistory(library: library)
     }
 
     /// UI tests with no `-ui-testing-server`: accounts stay on the device, no server is asked for.
@@ -310,14 +323,19 @@ final class AppModel {
     #if canImport(DSCore)
     private static func serverSide(_ server: URL, webHost: String, core: CoreLibrary, sync: SyncCenter, library: LibraryStore,
                                    covers: CoverImages)
-        -> (connection: ServerConnection, accounts: any AccountService, sharing: any SharingService, access: any AccessService) {
+        -> (connection: ServerConnection, accounts: any AccountService, sharing: any SharingService, access: any AccessService,
+            accountSharing: any AccountSharingService) {
         let connection = ServerConnection(serverURL: server, webHost: server.host() ?? webHost, core: core, sync: sync,
                                           attachmentsDirectory: covers.directory)
         connection.onLibraryCarried = { [library] justCarried in library.mergeCarriedDuplicates(anyName: justCarried) }
         sync.onBackOnline = { connection.reconnect() }
         covers.remote = connection
-        return (connection, ServerAccountService(connection: connection), ServerSharingService(connection: connection),
-                ServerAccessService(connection: connection))
+        let sharing = ServerSharingService(connection: connection)
+        let accountSharing = ServerAccountSharingService(connection: connection) { [weak sharing] target in
+            await sharing?.recreateLinks(for: target) ?? []
+        }
+        return (connection, ServerAccountService(connection: connection), sharing, ServerAccessService(connection: connection),
+                accountSharing)
     }
     #endif
 
@@ -355,6 +373,7 @@ final class AppModel {
         accounts = side.accounts
         sharing = side.sharing
         access = side.access
+        accountSharing = side.accountSharing
         wireLocalWipe()
         #endif
     }

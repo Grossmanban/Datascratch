@@ -84,6 +84,8 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         keyChain: t.keyChain,
         docIds: gated ? [] : await targetDocIds(db, t),
         addedAt: m.joinedAt.toISOString(),
+        // Read-only badge for the member: the owner's agents can read this (D-54, ✨).
+        agentsMode: t.mode === 'agent',
       };
     }
 

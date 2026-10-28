@@ -387,6 +387,7 @@ export function apiVectors() {
             keyChain: ["AQ"],
             docIds: [vid(3), vid(5)],
             addedAt: T,
+            agentsMode: true,
           },
           {
             target: { kind: "note", id: vid(5) },
@@ -400,6 +401,20 @@ export function apiVectors() {
           },
         ],
         invalid: [
+          {
+            reason: "agentsMode is not a boolean",
+            body: {
+              target: { kind: "note", id: vid(5) },
+              owner: { userId: vid(4), email: "o@b.co", publicKey: KEY },
+              role: "viewer",
+              keyVersion: 1,
+              wrappedKey: null,
+              keyChain: [],
+              docIds: [],
+              addedAt: T,
+              agentsMode: "yes",
+            },
+          },
           {
             reason: "missing owner public key",
             body: {

@@ -65,6 +65,17 @@ final class SharingUITests: XCTestCase {
                       "the accepted notebook is not in «Shared with me»")
     }
 
+    /// prod 2026-10-28: a shared notebook opened from «Shared with me» lists its notes.
+    func testSharedNotebookListsItsNotes() throws {
+        let app = launch([])
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        let row = revealSidebarElement(app, "sidebar.sharedNotebook")
+        XCTAssertTrue(row.exists, "no shared notebook in the sidebar")
+        row.tap()
+        XCTAssertTrue(app.staticTexts["Roadmap"].firstMatch.waitForExistence(timeout: 5),
+                      "the shared notebook lists none of its notes")
+    }
+
     /// ✨ on a shared notebook the owner opened to their agents (D-54), in «Shared with me».
     func testSharedNotebookShowsTheAgentsBadge() throws {
         let app = launch([])

@@ -298,7 +298,7 @@ struct SidebarView: View {
                 } label: {
                     HStack(spacing: Theme.Space.s2) {
                         NoteTitleLabel(note: note)
-                        if item.agentsMode { SharedAgentsBadge() }
+                        if item.agentsMode { SharedAgentsBadge(kind: .note) }
                     }
                 }
                 .buttonStyle(.plain)

@@ -527,14 +527,29 @@ struct SharedLinkView: View {
 }
 
 /// ✨ on something shared with this account that the owner opened to their AI agents (D-54):
-/// shown only, with the hint; the member cannot change it.
+/// shown only, with the hint; the member cannot change it. `showsTitle`: «Open to AI agents»
+/// beside it (the document's header).
 struct SharedAgentsBadge: View {
+    var kind: ShareTarget.Kind = .notebook
+    var showsTitle = false
+
     var body: some View {
-        Image(systemName: "sparkles")
-            .font(.caption)
-            .foregroundStyle(Tint.purple.foreground)
-            .help("Open to the owner’s AI agents")
-            .accessibilityLabel("Open to the owner’s AI agents")
-            .accessibilityIdentifier("sharedAgents.badge")
+        Group {
+            if showsTitle {
+                Label("Open to AI agents", systemImage: "sparkles")
+            } else {
+                Image(systemName: "sparkles").font(.caption)
+            }
+        }
+        .foregroundStyle(Tint.purple.foreground)
+        .help(hint)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(hint)
+        .accessibilityIdentifier("sharedAgents.badge")
+    }
+
+    private var hint: String {
+        kind == .notebook ? String(localized: "The owner opened this notebook to AI agents")
+                          : String(localized: "The owner opened this document to AI agents")
     }
 }

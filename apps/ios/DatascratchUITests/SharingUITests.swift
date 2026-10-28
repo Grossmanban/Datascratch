@@ -19,7 +19,7 @@ final class SharingUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["penPalette"].firstMatch.exists, "the pen palette is shown to a viewer")
         XCTAssertFalse(app.buttons["editor.insert"].firstMatch.exists, "Insert is offered to a viewer")
         // The owner opened «Shared plans» to their agents: ✨ in the note's header (shown only).
-        let agents = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "AI agents")).firstMatch
+        let agents = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "opened this notebook to AI agents")).firstMatch
         XCTAssertTrue(agents.waitForExistence(timeout: 3), "no ✨ on a note the owner's agents read")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = "view-only"
@@ -71,7 +71,7 @@ final class SharingUITests: XCTestCase {
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
         let row = revealSidebarElement(app, "sidebar.sharedNotebook")
         XCTAssertTrue(row.exists, "no shared notebook in the sidebar")
-        let agents = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "AI agents")).firstMatch
+        let agents = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "opened this notebook to AI agents")).firstMatch
         XCTAssertTrue(agents.waitForExistence(timeout: 3), "no ✨ on the shared notebook")
     }
 

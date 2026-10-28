@@ -77,7 +77,7 @@ final class AppModel {
     var isSigningUp = false
     /// A route that arrived before the main UI could show it.
     var pendingRoute: AppRoute?
-    /// A link that opened the app (Universal Link or `datascratch://`), kept as it came: it is
+    /// A link that opened the app (`ds://` from the web, D-56, or `datascratch://`), kept as it came: it is
     /// read once the main window is up, against the server the account is on by then.
     var pendingLink: URL?
     /// Main (library) windows on screen; a note window that closes itself reopens one when none is.
@@ -85,9 +85,9 @@ final class AppModel {
 
     init(options: LaunchOptions = .fromProcess()) {
         let coreLibrary: AnyObject?
-        // Links use the account's server host (`linkHost`); this one only stands in without a
-        // server. `DS_WEB_HOST` feeds the `applinks:` entitlement and nothing else.
-        let host = "datascratch.app"
+        // Links use the account's server (`linkHost`); this one only stands in without a server
+        // (D-56: the build carries no domain).
+        let host = "datascratch.invalid"
         // UI tests: `-ui-testing-server <url>` stands for a server saved on this device.
         let testServer = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["ui-testing-server"]
             .flatMap { $0 as? String }.flatMap(URL.init(string:))
@@ -327,6 +327,10 @@ final class AppModel {
 
     /// Share links and invites name the account's own server (the web app is served there).
     var linkHost: String { serverURL?.host() ?? webHost }
+    /// The account's server as `ds://` links name it (`host[:port]`); nil without one.
+    var linkServer: String? { serverURL.flatMap(AppRoute.authority) }
+    /// The server named by a link that is waiting for sign-in: the sign-in screens start on it.
+    var serverFromLink: String? { pendingLink.flatMap(AppRoute.linkServer) }
 
     #if canImport(DSCore)
     private static func serverSide(_ server: URL, webHost: String, core: CoreLibrary, sync: SyncCenter, library: LibraryStore,

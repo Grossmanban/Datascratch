@@ -2,7 +2,7 @@ import SafariServices
 import SwiftUI
 
 /// A web page inside the app: the guest page of a share link, another server's link. Unlike
-/// opening Safari, it never hands a Universal Link back to this app.
+/// opening Safari, the person stays in the app.
 struct SafariView: UIViewControllerRepresentable {
     @Environment(\.dismiss) private var dismiss
     let url: URL

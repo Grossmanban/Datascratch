@@ -72,9 +72,6 @@ struct RootView: View {
         .onOpenURL { url in
             app.pendingLink = url
         }
-        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-            if let url = activity.webpageURL { app.pendingLink = url }
-        }
     }
 }
 
@@ -99,7 +96,7 @@ struct MainWindow: View {
                     .onChange(of: app.pendingLink, initial: true) { _, link in
                         guard let link else { return }
                         app.pendingLink = nil
-                        if let route = AppRoute.parse(link, webHost: app.linkHost) { scene.handle(route) }
+                        if let route = AppRoute.parse(link, server: app.linkServer) { scene.handle(route) }
                     }
             } else {
                 Theme.Palette.canvas.ignoresSafeArea()

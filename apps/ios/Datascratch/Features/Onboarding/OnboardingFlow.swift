@@ -180,6 +180,14 @@ struct ServerField: View {
                             .accessibilityIdentifier("\(identifier).server")
                     }
                 }
+                // Opened from a link (D-56): its server, unless something else was typed.
+                .onChange(of: app.serverFromLink, initial: true) { _, server in
+                    guard let server, state.text == nil, server != app.linkServer else { return }
+                    // A server on this machine is plain http (local testing), as in the link.
+                    let isLocal = server.hasPrefix("localhost") || server.hasPrefix("127.0.0.1")
+                    state.text = isLocal ? "http://" + server : server
+                    state.status = .unchecked
+                }
                 switch state.status {
                 case .unchecked:
                     EmptyView()

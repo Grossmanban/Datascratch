@@ -24,49 +24,89 @@ nonisolated struct SharedLink: Codable, Identifiable, Hashable, Sendable {
     func isExpired(now: Date = Date()) -> Bool { expiresAt.map { $0 <= now } ?? false }
 }
 
-/// Routes the app can open from URLs: Universal Links (the paths the web uses) and the
-/// `datascratch://` scheme.
+/// Routes the app can open from URLs (D-56): `ds://` links the web hands over («Открыть в
+/// приложении»), which name their server, and the app's own `datascratch://`.
+///
+/// - `ds://invite/<id>?server=<host>` — an invitation to an account (D-54);
+/// - `ds://share/<shareId>?server=<host>#k=<key>` — a guest link (D-37), the key only after `#`;
+/// - `ds://note/<id>?server=<host>`, `ds://notebook/<id>?server=<host>` — a document or notebook.
+///
+/// `<host>` is `host[:port]` of the server, without a scheme.
 nonisolated enum AppRoute: Equatable, Sendable {
-    /// `https://<server>/s/<shareId>#k=<key>`: a guest link (D-37).
-    case share(shareId: String, key: String?)
-    /// `https://<server>/invite/<id>` or `datascratch://invite/<id>`: an invitation to this
-    /// account (D-54).
+    /// A guest link, opened as the web's guest page of `server` (any server: no account needed).
+    case share(shareId: String, key: String?, server: String?)
     case invitation(String)
-    /// `datascratch://note/<noteId>` or `https://<server>/doc/<noteId>` (`/n/` before D-54).
     case note(String)
+    case notebook(String)
     /// `datascratch://today`
     case today
     /// A `[[Title]]` tapped in a document: open the note with that title, or offer to create it.
     case noteTitled(String)
-    /// A link of another server than this account's (D-49): the app says so instead of
-    /// looking for it here.
-    case otherServer(host: String, url: URL)
+    /// A link of another server than this account's (D-49), or with no account: the app says so
+    /// and offers the web page instead.
+    case otherServer(server: String, webURL: URL?)
 
-    /// `webHost` is the account's server (`AppModel.linkHost`), read when the link is handled,
-    /// so a link that started the app before sign-in is checked against the right server.
-    static func parse(_ url: URL, webHost: String) -> AppRoute? {
+    /// `server` is the account's (`AppModel.linkServer`), read when the link is handled — so a
+    /// link that started the app before sign-in is checked against the server signed in to.
+    static func parse(_ url: URL, server current: String?) -> AppRoute? {
         let parts = url.pathComponents.filter { $0 != "/" }
-        if url.scheme == "datascratch" {
+        switch url.scheme?.lowercased() {
+        case "datascratch":
             let head = url.host() ?? parts.first
             let rest = url.host() == nil ? Array(parts.dropFirst()) : parts
             switch head {
             case "note": return rest.first.map(AppRoute.note)
             case "today": return .today
-            case "invite": return rest.first.map(AppRoute.invitation)
-            case "s": return rest.first.map { .share(shareId: $0, key: Self.key(from: url.fragment())) }
             default: return nil
             }
+        case "ds":
+            guard let kind = url.host()?.lowercased(), let id = parts.first, !id.isEmpty else { return nil }
+            let server = linkServer(of: url)
+            let route: AppRoute
+            switch kind {
+            case "share": return .share(shareId: id, key: key(from: url.fragment()), server: server)
+            case "invite": route = .invitation(id)
+            case "note": route = .note(id)
+            case "notebook": route = .notebook(id)
+            default: return nil
+            }
+            guard let server, server != current?.lowercased() else { return route }
+            return .otherServer(server: server, webURL: webURL(server: server, kind: kind, id: id))
+        default:
+            return nil
         }
-        guard url.scheme == "https", let rawHost = url.host()?.lowercased(), parts.count >= 2 else { return nil }
-        let route: AppRoute
-        switch parts[0] {
-        case "s": route = .share(shareId: parts[1], key: Self.key(from: url.fragment()))
-        case "invite": route = .invitation(parts[1])
-        case "doc", "n": route = .note(parts[1])
+    }
+
+    /// The `server` of a `ds://` link, as `host[:port]` in lower case.
+    static func linkServer(of url: URL) -> String? {
+        guard url.scheme?.lowercased() == "ds",
+              let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                .first(where: { $0.name == "server" })?.value?.trimmingCharacters(in: .whitespaces).lowercased(),
+              !value.isEmpty, !value.contains("/"), !value.contains("@") else { return nil }
+        return value
+    }
+
+    /// `host[:port]` of a server address, as links name it.
+    static func authority(of url: URL) -> String? {
+        guard let host = url.host()?.lowercased() else { return nil }
+        return url.port.map { "\(host):\($0)" } ?? host
+    }
+
+    /// The web page of a link on `server`: https, http only for a server on this machine.
+    static func webURL(server: String, kind: String, id: String, key: String? = nil) -> URL? {
+        let local = server.hasPrefix("localhost") || server.hasPrefix("127.0.0.1")
+        let path: String
+        switch kind {
+        case "invite": path = "/invite/"
+        case "share": path = "/s/"
+        case "note": path = "/doc/"
+        case "notebook": path = "/notebook/"
         default: return nil
         }
-        let host = rawHost.hasPrefix("www.") ? String(rawHost.dropFirst(4)) : rawHost
-        return host == webHost.lowercased() ? route : .otherServer(host: host, url: url)
+        guard var components = URLComponents(string: "\(local ? "http" : "https")://\(server)") else { return nil }
+        components.path = path + id
+        components.fragment = key.map { "k=\($0)" }
+        return components.url
     }
 
     private static func key(from fragment: String?) -> String? {

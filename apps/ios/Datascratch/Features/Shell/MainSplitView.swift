@@ -224,7 +224,7 @@ struct LinkProblemAlert: ViewModifier {
         let problem = scene.linkProblem
         let isPresented = Binding(get: { scene.linkProblem != nil }, set: { if !$0 { scene.linkProblem = nil } })
         content.alert(title(problem), isPresented: isPresented, presenting: problem) { problem in
-            if case .otherServer(_, let url) = problem {
+            if case .otherServer(_, let url?) = problem {
                 Button("Open in Browser") {
                     scene.linkProblem = nil
                     scene.sheet = .webPage(url)
@@ -240,6 +240,7 @@ struct LinkProblemAlert: ViewModifier {
     private func title(_ problem: LinkProblem?) -> String {
         switch problem {
         case .otherServer: String(localized: "This link is from another server")
+        case .missingNotebook: String(localized: "This notebook isn’t here")
         case .missingDocument, nil: String(localized: "This document isn’t here")
         }
     }
@@ -247,12 +248,11 @@ struct LinkProblemAlert: ViewModifier {
     private func message(_ problem: LinkProblem) -> String {
         switch problem {
         case .otherServer(let host, _):
-            if app.sync.isLocalOnly {
+            guard let current = app.linkServer else {
                 return String(localized: "It points to \(host), and you aren’t signed in to a server. Open it in the browser, or sign in to that server in Settings.")
             }
-            let current = app.linkHost
             return String(localized: "It points to \(host), and this account is on \(current). Open it in the browser, or sign in to that server.")
-        case .missingDocument:
+        case .missingDocument, .missingNotebook:
             return String(localized: "It isn’t in this account or shared with it. If someone shared it with you, accept the invitation first.")
         }
     }

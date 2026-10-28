@@ -62,9 +62,9 @@ final class SharingUITests: XCTestCase {
                       "the accepted notebook is not in «Shared with me»")
     }
 
-    /// An invitation link starts the app (cold start): the invitation opens with «Accept».
+    /// An invitation link (`ds://`, D-56) starts the app (cold start): the invitation opens with «Accept».
     func testInvitationLinkOpensTheInvitation() throws {
-        let app = launch(["-ui-testing-open-url", "https://datascratch.app/invite/0192f3c4-0000-7000-8000-00000000a11e"])
+        let app = launch(["-ui-testing-open-url", "ds://invite/0192f3c4-0000-7000-8000-00000000a11e"])
         let sheet = app.descendants(matching: .any)["invitationLink"].firstMatch
         XCTAssertTrue(sheet.waitForExistence(timeout: 10), "the invitation link opened nothing")
         let accept = app.buttons["invitation.accept"].firstMatch
@@ -75,7 +75,7 @@ final class SharingUITests: XCTestCase {
 
     /// A link of another server than the account's says so, with a way to the browser.
     func testLinkOfAnotherServerSaysSo() throws {
-        let app = launch(["-ui-testing-open-url", "https://notes.example.org/invite/abc"])
+        let app = launch(["-ui-testing-open-url", "ds://invite/abc?server=notes.example.org"])
         let browser = app.buttons["linkProblem.browser"].firstMatch
         XCTAssertTrue(browser.waitForExistence(timeout: 10), "no message about another server's link")
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'notes.example.org'")).firstMatch.exists,

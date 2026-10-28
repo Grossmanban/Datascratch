@@ -481,7 +481,7 @@ struct ShareLinkButton: View {
     }
 }
 
-/// A guest link opened in the app (Universal Link, D-37): the app has no guest mode, so the
+/// A guest link opened in the app (`ds://share`, D-37, D-56): the app has no guest mode, so the
 /// web's guest page opens inside it (the key stays in the `#` part, never sent to the server).
 /// A link without its key says so.
 struct SharedLinkView: View {
@@ -489,9 +489,12 @@ struct SharedLinkView: View {
     @Environment(\.dismiss) private var dismiss
     let shareId: String
     let key: String?
+    /// The link's server; without one, the account's.
+    let server: String?
 
     var body: some View {
-        if let url = webURL, key != nil {
+        if let key, let server = server ?? app.linkServer,
+           let url = AppRoute.webURL(server: server, kind: "share", id: shareId, key: key) {
             SafariView(url: url)
                 .ignoresSafeArea()
         } else {
@@ -507,14 +510,5 @@ struct SharedLinkView: View {
             }
             .accessibilityIdentifier("sharedLink.incomplete")
         }
-    }
-
-    private var webURL: URL? {
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = app.linkHost
-        components.path = "/s/\(shareId)"
-        components.fragment = key.map { "k=\($0)" }
-        return components.url
     }
 }

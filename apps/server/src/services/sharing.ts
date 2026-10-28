@@ -16,7 +16,10 @@ export interface TargetRow extends Target {
   /** Newest first: the key of version v-1 wrapped by the key of v (crypto.md §10.3). */
   keyChain: string[];
   keyRotationPending: boolean;
-  /** Notebooks only: agent mode needs the new key on rotation (crypto.md §8). */
+  /**
+   * Agent mode of the notebook, or of the notebook a note lives in: rotation of an agent-mode
+   * notebook needs the new key (crypto.md §8); members see it as a read-only badge (D-54).
+   */
   mode: 'private' | 'agent' | null;
 }
 
@@ -51,6 +54,9 @@ export async function loadTarget(db: DbOrTx, t: Target, lock = false): Promise<T
     .where(and(eq(docs.id, t.id), eq(docs.kind, 'note')));
   const [d] = lock ? await q.for('update') : await q;
   if (!d) return null;
+  const [nb] = d.notebookId
+    ? await db.select({ mode: notebooks.mode }).from(notebooks).where(eq(notebooks.id, d.notebookId))
+    : [];
   return {
     kind: 'note',
     id: d.id,
@@ -58,7 +64,7 @@ export async function loadTarget(db: DbOrTx, t: Target, lock = false): Promise<T
     keyVersion: d.keyVersion,
     keyChain: d.keyChain,
     keyRotationPending: d.keyRotationPending,
-    mode: null,
+    mode: nb?.mode ?? null,
   };
 }
 

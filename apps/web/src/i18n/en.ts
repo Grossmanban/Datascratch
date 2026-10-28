@@ -330,6 +330,8 @@ const en: Loose<Messages> = {
     waitingHint: "Opens once the owner is online",
     readOnly: "Read only",
     readOnlyHint: "The owner gave you read-only access",
+    agents: "Open to AI agents",
+    agentsHint: "The owner opened this notebook to AI agents",
     leave: "Leave",
     leaveTitle: "Leave “{{name}}”?",
     leaveText: "The documents will disappear from this device. You can come back only with a new invitation from the owner.",

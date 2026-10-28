@@ -7,6 +7,7 @@ import { useAuth } from "@/auth/session";
 import { colorFor } from "@/data/presence";
 import { runtime } from "@/data/runtime";
 import { sharedResourceOf, useShared } from "@/data/sharedWithMe";
+import { AgentsBadge } from "@/features/share/SharedWithMe";
 import { acknowledgeAgentCreated, agentCreatedOf, deleteNoteForever, openTab, restoreNote, setTitleOf, toggleStar, updateNote } from "@/domain/actions";
 import { findNotebook, folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
 import { closeDocTab, noteMenuItems } from "@/features/docs/menus";
@@ -143,6 +144,7 @@ function DocScreen({ noteId }: { noteId: string }) {
         actions={
           <>
             <PresenceStack users={others} />
+            {shared?.agentsMode && <AgentsBadge label />}
             {viewer && (
               <Tooltip content={t("shared.readOnlyHint")}>
                 <span

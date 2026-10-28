@@ -409,6 +409,8 @@ function sharedItemFor(target, m) {
     keyChain: resourceKey(target).keyChain,
     docIds,
     addedAt: m.joinedAt,
+    // The notebook (or a note's notebook) is open to the owner's AI agents.
+    agentsMode: db.notebooks.get(target.kind === "notebook" ? target.id : db.docs.get(target.id)?.notebookId)?.mode === "agent",
   };
 }
 const parseTarget = (kind, id) => (kind === "notebook" || kind === "note" ? { kind, id } : null);

@@ -56,18 +56,14 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        # `ds://` links from the web («Открыть в приложении», D-56) and the app's own `datascratch://`.
         CFBundleURLTypes:
           - CFBundleURLName: com.datascratch.app
-            CFBundleURLSchemes: [datascratch]
+            CFBundleURLSchemes: [ds, datascratch]
         NSUserActivityTypes:
           - com.datascratch.app.openNote
         NSCameraUsageDescription: Datascratch uses the camera to add photos to your notes.
         NSPhotoLibraryUsageDescription: Datascratch uses your photo library to add images and covers to your notes.
-    entitlements:
-      path: Datascratch/Resources/Datascratch.entitlements
-      properties:
-        com.apple.developer.associated-domains:
-          - applinks:$(DS_WEB_HOST)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.datascratch.app

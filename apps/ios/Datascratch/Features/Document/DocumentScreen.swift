@@ -99,6 +99,11 @@ struct DocumentScreen: View {
                         .help("Open to agents")
                 }
             }
+            if library.notebook(note.notebookId)?.mode != .agent,
+               app.accountSharing.isOpenToAgents(noteId: note.id, notebookId: note.notebookId) {
+                SharedAgentsBadge(kind: app.accountSharing.isOpenToAgents(ShareTarget(kind: .note, id: note.id)) ? .note : .notebook,
+                                  showsTitle: true)
+            }
             if let folder = note.folderId.flatMap({ library.folder($0) }) {
                 Image(systemName: "chevron.right").font(.caption2)
                 Text(folder.name)

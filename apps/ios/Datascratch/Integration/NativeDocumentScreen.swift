@@ -600,6 +600,11 @@ struct NativeDocumentHeader: View {
             if let notebook = library.notebook(note.notebookId) {
                 Label(notebook.name, systemImage: notebook.icon)
             }
+            // D-54: the owner's agents read this shared note (shown only).
+            if app.accountSharing.isOpenToAgents(noteId: note.id, notebookId: note.notebookId) {
+                SharedAgentsBadge(kind: app.accountSharing.isOpenToAgents(ShareTarget(kind: .note, id: note.id)) ? .note : .notebook,
+                                  showsTitle: true)
+            }
             if let folder = note.folderId.flatMap({ library.folder($0) }) {
                 Image(systemName: "chevron.right").font(.caption2)
                 Text(folder.name)
@@ -613,6 +618,7 @@ struct NativeDocumentHeader: View {
         .font(Theme.Typography.footnote)
         .foregroundStyle(Theme.Palette.textTertiary)
         .lineLimit(1)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("document.meta")
     }
 }

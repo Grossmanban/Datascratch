@@ -204,3 +204,39 @@ test("D-54: the member sees a shared notebook in «Общие со мной», a
   await expect(people.getByTestId("member")).toHaveCount(0);
   await other.close();
 });
+
+test("D-54: a shared notebook open to the owner's AI agents shows ✨ to the member", async ({ page, browser }) => {
+  const owner = uniqueEmail("owner4");
+  const friend = uniqueEmail("agentsee");
+  const other = await browser.newContext();
+  const q = await other.newPage();
+  await signUp(q, friend);
+
+  await signUp(page, owner);
+  await newDoc(page, "Для агентов", "текст");
+  await expectSynced(page);
+  await page.goto("/settings/notebooks");
+  await page.locator("[data-testid^=mode-]").first().click();
+  await page.getByTestId("confirm-mode").click();
+  await expect(page.locator("[data-testid^=mode-]").first()).toContainText(/Сделать приватным/, { timeout: 15_000 });
+  await page.goto("/all");
+  await page.getByTestId("sidebar").getByRole("link", { name: /Заметки/ }).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Поделиться…" }).click();
+  await page.getByTestId("invite-email").fill(friend);
+  await page.getByTestId("invite-submit").click();
+  await expect(page.getByTestId("invitation").filter({ hasText: friend })).toBeVisible();
+
+  await q.reload();
+  await q.getByTestId("invitations-row").click();
+  await q.getByTestId("invitation-in").getByTestId("accept-invitation").click();
+  await q.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
+  const row = q.getByTestId("shared-row").filter({ hasText: "Заметки" });
+  await expect(row).not.toHaveAttribute("data-waiting", "", { timeout: 30_000 });
+  await expect(row.getByTestId("agents-badge")).toBeVisible();
+  await row.click();
+  await q.getByTestId("doc-card").filter({ hasText: "Для агентов" }).click();
+  await expect(q.getByTestId("doc-page").getByTestId("agents-badge")).toContainText("Открыт ИИ-агентам");
+  await q.getByTestId("doc-page").getByTestId("agents-badge").hover();
+  await expect(q.getByText("Владелец открыл этот блокнот ИИ-агентам").first()).toBeVisible();
+  await other.close();
+});

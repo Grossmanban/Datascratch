@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Eye, FileText, Hourglass, LogOut, Users } from "lucide-react";
+import { Eye, FileText, Hourglass, LogOut, Sparkles, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { NetworkError } from "@/api/client";
@@ -58,10 +58,15 @@ export function SharedRow({ shared }: { shared: SharedRef }) {
     { label: t("shared.leave"), icon: <LogOut className="size-4" />, danger: true, onSelect: () => void leave() },
   ];
 
-  const badge = readOnly && (
-    <Tooltip content={t("shared.readOnlyHint")}>
-      <Eye className="size-3.5 shrink-0 text-ink-3" aria-label={t("shared.readOnly")} />
-    </Tooltip>
+  const badge = (
+    <>
+      {item?.agentsMode && <AgentsBadge />}
+      {readOnly && (
+        <Tooltip content={t("shared.readOnlyHint")}>
+          <Eye className="size-3.5 shrink-0 text-ink-3" aria-label={t("shared.readOnly")} />
+        </Tooltip>
+      )}
+    </>
   );
 
   // Not opened yet: the owner's client has not delivered the key (or the index is still loading).
@@ -106,5 +111,25 @@ export function SharedRow({ shared }: { shared: SharedRef }) {
         </Link>
       )}
     </ContextMenu>
+  );
+}
+
+/** ✨ The owner opened this shared notebook to AI agents (D-54); only the owner can change it. */
+export function AgentsBadge({ label = false }: { label?: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <Tooltip content={t("shared.agentsHint")}>
+      {label ? (
+        <span
+          className="flex h-7 items-center gap-1.5 rounded-full bg-[var(--ds-tint-purple-bg)] px-2.5 text-[12.5px] font-medium text-[var(--ds-tint-purple-fg)]"
+          data-testid="agents-badge"
+        >
+          <Sparkles className="size-3.5" />
+          {t("shared.agents")}
+        </span>
+      ) : (
+        <Sparkles className="size-3.5 shrink-0 text-[var(--ds-tint-purple-fg)]" aria-label={t("shared.agents")} data-testid="agents-badge" />
+      )}
+    </Tooltip>
   );
 }

@@ -120,6 +120,9 @@ jobs:
 
       # D-46: the smoke set is the release gate (the coordinator starts a TestFlight build once it
       # is green on both devices); the rest of the UI suite runs right after in the same job.
+      # Each UI test is capped at 300 s. A test takes 15–65 s, but the iPad simulator sometimes
+      # stalls before the app is up (build 24: rotating the device 13.5 s instead of 0–3, the
+      # launch 94 s instead of 6–9, the first query 50 s), and at 180 s that killed a passing test.
       - name: UI tests (smoke — release gate)
         timeout-minutes: 20
         run: |
@@ -132,12 +135,12 @@ jobs:
             -derivedDataPath build/DerivedData \
             "${ARGS[@]}" \
             -resultBundlePath build/UI-smoke-${{ matrix.family }}.xcresult \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
             CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
 
       - name: UI tests (full)
         # The iPad simulator needs ~20 min for the full suite since build 17 (each test is still
-        # capped at 180 s, so a hang does not hide behind this).
+        # capped at 300 s, so a hang does not hide behind this).
         timeout-minutes: 35
         run: |
           set -o pipefail
@@ -149,7 +152,7 @@ jobs:
             -derivedDataPath build/DerivedData \
             "${ARGS[@]}" \
             -resultBundlePath build/UI-${{ matrix.family }}.xcresult \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
             CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
 
       - name: Check Russian localization in the app bundle

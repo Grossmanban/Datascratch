@@ -89,9 +89,11 @@ final class SharingUITests: XCTestCase {
     /// A link of another server than the account's says so, with a way to the browser.
     func testLinkOfAnotherServerSaysSo() throws {
         let app = launch(["-ui-testing-open-url", "ds://invite/abc?server=notes.example.org"])
-        let browser = app.buttons["linkProblem.browser"].firstMatch
-        XCTAssertTrue(browser.waitForExistence(timeout: 10), "no message about another server's link")
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'notes.example.org'")).firstMatch.exists,
+        // Alert buttons carry no identifiers on iPhone: found by their titles.
+        let alert = app.alerts["This link is from another server"].firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 10), "no message about another server's link")
+        XCTAssertTrue(alert.buttons["Open in Browser"].exists, "no way to the browser in the message")
+        XCTAssertTrue(alert.staticTexts.containing(NSPredicate(format: "label CONTAINS 'notes.example.org'")).firstMatch.exists,
                       "the message does not name the link's server")
     }
 

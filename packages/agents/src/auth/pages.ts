@@ -67,6 +67,8 @@ export interface ConsentNotebook {
   color: string | null;
   /** The server cannot read this notebook's data right now (its name is unknown). */
   unavailable?: boolean;
+  /** Another account shared it with the user (D-54); `readOnly` — the user (and so the agent) may only read. */
+  shared?: { ownerEmail: string | null; readOnly: boolean } | null;
 }
 
 export interface ConsentPageInput {
@@ -91,6 +93,11 @@ export interface ConsentPageInput {
   appUrl: string | null;
 }
 
+/** «общий · anna@example.com · только чтение» */
+function sharedLabel(s: { ownerEmail: string | null; readOnly: boolean }): string {
+  return ["общий", s.ownerEmail ? esc(s.ownerEmail) : null, s.readOnly ? "только чтение" : null].filter(Boolean).join(" · ");
+}
+
 /** How the redirect target reads for a person: a site, an app on this computer, or a native app. */
 function describeRedirect(redirectHost: string): string {
   if (/^(127\.0\.0\.1|\[::1\]|localhost)(:\d+)?$/.test(redirectHost)) return "программа на этом компьютере";
@@ -112,7 +119,7 @@ export function consentPage(i: ConsentPageInput): string {
     ? i.notebooks
         .map(
           (n, k) =>
-            `<label class="nb"><input type="checkbox" name="notebook" value="${esc(n.id)}"${i.notebooks.length === 1 || k === 0 ? " checked" : ""}>${notebookIcon(n.icon, n.color)}<span>${esc(n.name)}</span>${n.unavailable ? `<small>данные сейчас недоступны</small>` : n.space ? `<small>${esc(n.space)}</small>` : ""}</label>`,
+            `<label class="nb"><input type="checkbox" name="notebook" value="${esc(n.id)}"${i.notebooks.length === 1 || k === 0 ? " checked" : ""}>${notebookIcon(n.icon, n.color)}<span>${esc(n.name)}</span>${n.unavailable ? `<small>данные сейчас недоступны</small>` : n.shared ? `<small>${sharedLabel(n.shared)}</small>` : n.space ? `<small>${esc(n.space)}</small>` : ""}</label>`,
         )
         .join("")
     : `<div class="empty">Нет блокнотов в режиме «для агентов». Включите этот режим у блокнота в Datascratch${i.appUrl ? ` (<a href="${esc(i.appUrl)}">открыть</a>)` : ""} и вернитесь сюда.</div>`;

@@ -121,6 +121,11 @@ function nextOrder(items: { order: number }[]): number {
   return items.reduce((max, i) => Math.max(max, typeof i.order === "number" ? i.order : 0), 0) + 1;
 }
 
+/** `shared` field of list_notebooks for a notebook another account shared with the user (D-54). */
+function sharedView(info: AgentNotebook): { shared?: { ownerEmail: string | null; role: "editor" | "viewer" } } {
+  return info.shared ? { shared: { ownerEmail: info.shared.ownerEmail, role: info.shared.role } } : {};
+}
+
 function folderPath(nb: NotebookView, folderId: string | null): string[] {
   const out: string[] = [];
   let cur = folderId ? nb.folders.get(folderId) : undefined;
@@ -246,6 +251,21 @@ export class AgentService {
     return out;
   }
 
+  /** What this agent may do in a notebook: the grant's permission, capped by the user's role in a shared notebook. */
+  private permissionIn(p: Principal, info: AgentNotebook): "read" | "read_write" {
+    return info.shared?.role === "viewer" ? "read" : p.grant.permission;
+  }
+
+  /** A notebook shared read-only with the user (D-54) cannot be changed by the user's agent either. */
+  private requireNotebookWrite(nb: NotebookView): void {
+    const shared = nb.info.shared;
+    if (shared?.role === "viewer")
+      throw new AgentError(
+        "forbidden",
+        `только чтение: notebook “${nb.name}” is shared with the user by ${shared.ownerEmail ?? "its owner"} read-only, so this agent can read it but not change it. Ask the owner for edit access, or work in another notebook.`,
+      );
+  }
+
   private origin(p: Principal, action: string): AgentEditOrigin {
     return { kind: "agent", grantId: p.grant.id, userId: p.grant.userId, agentName: p.agentName, action };
   }
@@ -299,9 +319,13 @@ export class AgentService {
     const views = [...loaded.map((v) => ({ info: v.info, name: v.name })), ...unavailable.map((u) => ({ info: u.info, name: u.info.name }))];
     const spaces = new Map<string, { id: string | null; name: string; icon: string | null; notebooks: { id: string; name: string }[] }>();
     for (const nb of views) {
-      const s = nb.info.space;
-      const key = s?.id ?? "";
-      const entry = spaces.get(key) ?? { id: s?.id ?? null, name: s?.name ?? "Без пространства", icon: s?.icon ?? null, notebooks: [] };
+      // The owner's spaces mean nothing to a member: shared notebooks are grouped like «Общие со мной» in the apps.
+      const s = nb.info.shared ? null : nb.info.space;
+      const key = nb.info.shared ? "shared" : (s?.id ?? "");
+      const entry = spaces.get(key) ??
+        (nb.info.shared
+          ? { id: null, name: "Общие со мной", icon: null, notebooks: [] }
+          : { id: s?.id ?? null, name: s?.name ?? "Без пространства", icon: s?.icon ?? null, notebooks: [] });
       entry.notebooks.push({ id: nb.info.id, name: nb.name });
       spaces.set(key, entry);
     }
@@ -316,8 +340,9 @@ export class AgentService {
           id: nb.info.id,
           name: nb.name,
           icon: nb.info.icon,
-          space: nb.info.space ? { id: nb.info.space.id, name: nb.info.space.name } : null,
-          permission: p.grant.permission,
+          space: nb.info.space && !nb.info.shared ? { id: nb.info.space.id, name: nb.info.space.name } : null,
+          permission: this.permissionIn(p, nb.info),
+          ...sharedView(nb.info),
           noteCount: [...nb.notes.values()].filter((n) => !n.trashedAt).length,
           folders: [...nb.folders.values()].map((f) => ({ id: f.id, parentId: f.parentId, name: f.name, icon: f.icon, path: folderPath(nb, f.id).join(" / ") })),
           ...(nb.skippedUpdates
@@ -328,8 +353,9 @@ export class AgentService {
           id: u.info.id,
           name: u.info.name,
           icon: u.info.icon,
-          space: u.info.space ? { id: u.info.space.id, name: u.info.space.name } : null,
-          permission: p.grant.permission,
+          space: u.info.space && !u.info.shared ? { id: u.info.space.id, name: u.info.space.name } : null,
+          permission: this.permissionIn(p, u.info),
+          ...sharedView(u.info),
           unavailable: true as const,
           reason: u.reason,
         })),
@@ -477,6 +503,7 @@ export class AgentService {
     const views = await this.notebooks(p);
     const nb = views.find((v) => v.info.id === input.notebookId);
     if (!nb) throw new AgentError("not_found", `Notebook ${input.notebookId} is not available to this agent. Call list_notebooks.`);
+    this.requireNotebookWrite(nb);
     if (input.folderId && !nb.folders.has(input.folderId)) throw new AgentError("not_found", `Folder ${input.folderId} not found in the notebook.`);
     const noteId = uuidv7(this.now().getTime());
     const { wrappedKey } = await this.ctx.data.createNoteDoc(p.grant.userId, nb.info.id, noteId, p.grant.id);
@@ -548,6 +575,7 @@ export class AgentService {
   async createFolder(p: Principal, input: CreateFolderInput) {
     requireWrite(p);
     const [nb] = await this.notebooks(p, input.notebookId);
+    this.requireNotebookWrite(nb!);
     const parentId = input.parentFolderId ?? null;
     this.requireFolder(nb!, parentId);
     this.requireUniqueName(nb!, parentId, input.name);
@@ -567,6 +595,7 @@ export class AgentService {
   async renameFolder(p: Principal, input: RenameFolderInput) {
     requireWrite(p);
     const { nb, folder } = await this.findFolder(p, input.folderId);
+    this.requireNotebookWrite(nb);
     this.requireUniqueName(nb, folder.parentId, input.name, folder.id);
     const patch: Partial<Folder> = { name: input.name };
     if (input.icon !== undefined) patch.icon = input.icon;
@@ -577,6 +606,7 @@ export class AgentService {
   async moveFolder(p: Principal, input: MoveFolderInput) {
     requireWrite(p);
     const { nb, folder } = await this.findFolder(p, input.folderId);
+    this.requireNotebookWrite(nb);
     const parentId = input.parentFolderId;
     this.requireFolder(nb, parentId);
     if (parentId && folderSubtree(nb.doc, folder.id).includes(parentId))
@@ -593,6 +623,7 @@ export class AgentService {
   async deleteFolder(p: Principal, input: DeleteFolderInput) {
     requireWrite(p);
     const { nb, folder } = await this.findFolder(p, input.folderId);
+    this.requireNotebookWrite(nb);
     const notes = [...nb.notes.values()].filter((n) => n.folderId === folder.id);
     const live = notes.filter((n) => !n.trashedAt);
     const subfolders = [...nb.folders.values()].filter((f) => f.parentId === folder.id);
@@ -626,6 +657,7 @@ export class AgentService {
   async moveNote(p: Principal, input: MoveNoteInput) {
     requireWrite(p);
     const { nb: from, meta } = await this.locate(p, input.noteId);
+    this.requireNotebookWrite(from);
     const toId = input.notebookId ?? from.info.id;
     if (toId === from.info.id) {
       this.requireFolder(from, input.folderId);
@@ -643,6 +675,13 @@ export class AgentService {
     }
 
     const [to] = await this.notebooks(p, toId);
+    this.requireNotebookWrite(to!);
+    // A note never changes owner: moves stay among one account's notebooks (own, or one owner's shared ones).
+    if ((from.info.shared?.ownerUserId ?? null) !== (to!.info.shared?.ownerUserId ?? null))
+      throw new AgentError(
+        "bad_request",
+        "Notes can only be moved between notebooks of the same owner: moving it would hand the note to another account. Copy the text with create_note instead.",
+      );
     this.requireFolder(to!, input.folderId);
     if (meta.kind !== "note")
       throw new AgentError("bad_request", `“${meta.title}” is a ${meta.kind === "daily" ? "daily note" : "task inbox"}; it stays in its notebook. It can still be moved between folders there.`);
@@ -687,6 +726,7 @@ export class AgentService {
     const views = await this.notebooks(p);
     const nb = views.find((v) => v.notes.get(input.noteId) && !v.notes.get(input.noteId)!.trashedAt);
     if (!nb) throw new AgentError("not_found", `Note ${input.noteId} not found or not available to this agent.`);
+    this.requireNotebookWrite(nb);
     const { result, seq } = await this.mutate(p, input.noteId, "edit_note", (doc) => {
       const results = applyEdits(doc, input.operations, { agentEdit: this.mark(p), resolveNoteLink: this.resolver(views) });
       const idx = buildNoteIndex(input.noteId, 0, doc);
@@ -699,6 +739,7 @@ export class AgentService {
   async addComment(p: Principal, input: AddCommentInput) {
     requireWrite(p);
     const { nb } = await this.locate(p, input.noteId);
+    this.requireNotebookWrite(nb);
     const commentId = uuidv7(this.now().getTime());
     await this.mutate(p, input.noteId, "add_comment", (doc) => {
       const loc = findBlock(doc, input.blockId);
@@ -745,6 +786,7 @@ export class AgentService {
       noteId = found.noteId;
     }
     const { nb } = await this.locate(p, noteId);
+    this.requireNotebookWrite(nb);
     const { result } = await this.mutate(p, noteId, "update_task", (doc) => {
       let el: Y.XmlElement | null = null;
       walkBlocks(doc, (b) => {

@@ -25,6 +25,19 @@ export interface AgentNotebook {
   color?: string | null;
   space: { id: string; name: string; icon: string | null } | null;
   createdAt: string;
+  /**
+   * Set when the notebook belongs to another account that shared it with this
+   * user (D-54) and opened it to agents: the user's own agent works with it
+   * with the user's role (editor: read & write; viewer: read only). Absent or
+   * null for the user's own notebooks.
+   */
+  shared?: SharedFrom | null;
+}
+
+export interface SharedFrom {
+  ownerUserId: string;
+  ownerEmail: string | null;
+  role: "editor" | "viewer";
 }
 
 /** Who caused an update — stored by the server with the update (history, highlighting). */

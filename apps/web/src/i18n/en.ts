@@ -338,6 +338,12 @@ const en: Loose<Messages> = {
     left: "You left the shared item",
     gone: "The owner closed your access",
   },
+  openInApp: {
+    invited: "You've been invited to a shared notebook or document.",
+    orSignInHere: "or sign in here",
+    button: "Open in the app",
+    missing: "The app didn't open — it may not be installed. You can carry on here in the browser.",
+  },
   invitations: {
     row: "Invitations",
     title: "Invitations",

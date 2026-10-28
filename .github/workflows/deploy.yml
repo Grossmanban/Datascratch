@@ -189,6 +189,8 @@ jobs:
       DS_NGINX_CERTBOT: ${{ vars.DS_NGINX_CERTBOT || 'false' }}
       DS_HOST_MODE: ${{ vars.DS_HOST_MODE || 'auto' }}
       DS_MEM_PROFILE: ${{ vars.DS_MEM_PROFILE || 'auto' }}
+      # Universal Links: the team id the iOS release already uses (apple-app-site-association).
+      DS_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

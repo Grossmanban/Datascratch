@@ -3060,9 +3060,9 @@
     "semantic_hash": ""
   },
   "packages/shared/src/contracts/api.ts": {
-    "mtime": 1793128119.4844735,
-    "seen": 1793128257.3566036,
-    "ast_hash": "1c22e2b52c28b7454290369593170a51",
+    "mtime": 1793149783.2451973,
+    "seen": 1793149932.0183575,
+    "ast_hash": "66f8921417d2f47bb240cc9314e7626d",
     "semantic_hash": ""
   },
   "packages/shared/src/contracts/common.ts": {
@@ -3360,9 +3360,9 @@
     "semantic_hash": "7fc8501271469c9ea5a285185a409d08"
   },
   "packages/test-vectors/src/api.ts": {
-    "mtime": 1793128119.4884734,
-    "seen": 1793128257.3596556,
-    "ast_hash": "e171634fd36b696141798dabaa9d8c4d",
+    "mtime": 1793149783.2451973,
+    "seen": 1793149932.0206835,
+    "ast_hash": "43d7de8ed9ace65a5dd2e4c2248f41c1",
     "semantic_hash": ""
   },
   "packages/test-vectors/src/crypto.ts": {
@@ -3420,9 +3420,9 @@
     "semantic_hash": "3f13d953701c8cc9ae00ac8dc702542d"
   },
   "packages/test-vectors/vectors/api/bodies.json": {
-    "mtime": 1793128119.4884734,
-    "seen": 1793128257.360176,
-    "ast_hash": "79f80467ee3a3582dce9ade701681406",
+    "mtime": 1793149783.2451973,
+    "seen": 1793149932.0210667,
+    "ast_hash": "3b4c1e5edd1dee24581ab591bb38235e",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/attachment.json": {
@@ -4284,9 +4284,9 @@
     "semantic_hash": "a22accf1e0671f24cc5e90995a0c48b4"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1793149070.2697728,
-    "seen": 1793149206.1700482,
-    "ast_hash": "752aea80726381a9ab82c1d8f6bdf051",
+    "mtime": 1793149792.2851973,
+    "seen": 1793149932.0284245,
+    "ast_hash": "42df9884d2588da05084bcec52621032",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -4308,9 +4308,9 @@
     "semantic_hash": "134fc03c006dd4264ae9619c417f9e73"
   },
   "docs/architecture/contracts/api.md": {
-    "mtime": 1793134144.428151,
-    "seen": 1793134271.3413541,
-    "ast_hash": "f5295f8572725781c05bd34253d461e0",
+    "mtime": 1793149783.1571972,
+    "seen": 1793149932.0285363,
+    "ast_hash": "8e42b8f891732014749fe88a2454db2d",
     "semantic_hash": ""
   },
   "docs/architecture/contracts/crypto.md": {

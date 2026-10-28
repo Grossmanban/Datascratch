@@ -67,6 +67,8 @@ nonisolated struct SharedWithMe: Identifiable, Hashable, Sendable {
     var role: AccessRole
     /// The owner's device has given the key: the content can be read on this device.
     var isReadable: Bool
+    /// The owner opened it to their AI agents (✨, D-54): shown only; the member cannot change it.
+    var agentsMode = false
 }
 
 /// D-54: someone registered after the owner invited them. Their access opens only once the
@@ -128,6 +130,16 @@ extension AccountSharingService {
     func owner(of target: ShareTarget) -> String? {
         sharedWithMe.first { $0.target == target }?.ownerEmail
     }
+
+    /// Shared with this account and open to the owner's AI agents (✨).
+    func isOpenToAgents(_ target: ShareTarget) -> Bool {
+        sharedWithMe.first { $0.target == target }?.agentsMode ?? false
+    }
+
+    /// A note shared on its own, or in a shared notebook, that the owner's agents read.
+    func isOpenToAgents(noteId: String, notebookId: String) -> Bool {
+        isOpenToAgents(ShareTarget(kind: .note, id: noteId)) || isOpenToAgents(ShareTarget(kind: .notebook, id: notebookId))
+    }
 }
 
 /// Without a server: nothing is shared. UI tests (`-ui-testing-sharing`) get an invitation, a
@@ -149,13 +161,14 @@ final class LocalAccountSharingService: AccountSharingService {
 
     /// UI tests: `invitedTo` is offered as an invitation, `viewOnly` is shared with this
     /// account «view only», `owned` has a member and a pending invite.
-    func seedForTesting(invitedTo: ShareTarget?, viewOnly: ShareTarget?, owned: ShareTarget?) {
+    func seedForTesting(invitationId: String = UUIDv7.make(), invitedTo: ShareTarget?, viewOnly: ShareTarget?, owned: ShareTarget?) {
         if let invitedTo {
-            incoming = [IncomingInvite(id: UUIDv7.make(), target: invitedTo, fromEmail: "anna@example.org", role: .editor,
+            incoming = [IncomingInvite(id: invitationId, target: invitedTo, fromEmail: "anna@example.org", role: .editor,
                                        expiresAt: Date().addingTimeInterval(30 * 86_400))]
         }
         if let viewOnly {
-            sharedWithMe = [SharedWithMe(target: viewOnly, ownerEmail: "boris@example.org", role: .viewer, isReadable: true)]
+            sharedWithMe = [SharedWithMe(target: viewOnly, ownerEmail: "boris@example.org", role: .viewer, isReadable: true,
+                                         agentsMode: true)]
         }
         if let owned {
             let member = ShareMember(userId: UUIDv7.make(), email: "masha@example.org", role: .editor, isAwaitingKey: false)

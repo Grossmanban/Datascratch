@@ -4,9 +4,6 @@
 MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 1
 
-// Web host for share links and Universal Links (D-13, D-40: domain not chosen yet).
-DS_WEB_HOST = datascratch.app
-
 // D-51: tasks, calendar, daily notes and tabs ("extended mode"). NO = the notes-only app.
 DS_EXTENDED_MODE = NO
 

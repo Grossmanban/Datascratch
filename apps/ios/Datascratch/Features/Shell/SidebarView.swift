@@ -296,7 +296,10 @@ struct SidebarView: View {
                 Button {
                     scene.open(note.id)
                 } label: {
-                    NoteTitleLabel(note: note)
+                    HStack(spacing: Theme.Space.s2) {
+                        NoteTitleLabel(note: note)
+                        if item.agentsMode { SharedAgentsBadge(kind: .note) }
+                    }
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("sidebar.sharedNote")

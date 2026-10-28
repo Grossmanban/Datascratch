@@ -277,8 +277,11 @@ public struct SharedItem: Codable, Hashable, Sendable {
     /// Documents of the resource (index and notes of a notebook, or the one note).
     public var docIds: [String]
     public var addedAt: String
+    /// The owner's agents read it (✨, display only; the member cannot change it): a notebook in
+    /// agent mode, or a note in such a notebook. Older servers omit it (no badge).
+    public var agentsMode: Bool?
 
-    enum CodingKeys: String, CodingKey { case target, owner, role, keyVersion, wrappedKey, keyChain, docIds, addedAt }
+    enum CodingKeys: String, CodingKey { case target, owner, role, keyVersion, wrappedKey, keyChain, docIds, addedAt, agentsMode }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -293,6 +296,7 @@ public struct SharedItem: Codable, Hashable, Sendable {
         docIds = try c.decode([String].self, forKey: .docIds)
         guard docIds.allSatisfy(EntityID.isValid) else { throw APIValidation.fail(c, .docIds, "expected lowercase UUIDv7") }
         addedAt = try APIValidation.isoDateTime(c, .addedAt)
+        agentsMode = try c.decodeIfPresent(Bool.self, forKey: .agentsMode)
     }
 
     /// Who wrapped `wrappedKey` for whom, at which version.

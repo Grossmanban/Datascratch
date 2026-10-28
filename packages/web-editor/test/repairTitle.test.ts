@@ -46,9 +46,13 @@ function demoted(): Y.Doc {
   const t = new Y.XmlText();
   t.applyDelta((title.get(0) as Y.XmlText).toDelta());
   para.insert(0, [t]);
+  // The seeded title is newer than the agent's (rule 3 compares UUIDv7 milliseconds strictly). Minted
+  // right after initNoteContent it often fell in the same millisecond — a warm, fast run then left
+  // the note unrepaired (CI 2026-10-28) — so its timestamp is set one millisecond later explicitly.
+  const seeded = uuidv7(uuidv7Time(title.getAttribute("blockId"))! + 1);
   doc.transact(() => {
     frag.delete(0, 1);
-    frag.insert(0, [emptyBlock("title"), para]);
+    frag.insert(0, [emptyBlock("title", seeded), para]);
   });
   return doc;
 }

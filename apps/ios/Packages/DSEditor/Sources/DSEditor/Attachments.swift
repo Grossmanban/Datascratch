@@ -51,6 +51,17 @@ final class AttachmentFactory {
         }
     }
 
+    /// Read-only editor (`EditorView.isReadOnly`): table cells select but do not edit, and the
+    /// add row / column buttons are hidden.
+    var isReadOnly = false {
+        didSet {
+            guard isReadOnly != oldValue else { return }
+            for view in viewCache.values {
+                if let table = view as? TableBlockView { table.readOnlyChanged() }
+            }
+        }
+    }
+
     /// Upload progress by attachment id (`EditorView.setImageProgress`).
     var uploadProgress: [String: Double] = [:]
 
@@ -688,10 +699,22 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
         }
         addRow.frame = CGRect(x: 0, y: gridHeight, width: 90, height: Self.controlsHeight)
         addColumn.frame = CGRect(x: 96, y: gridHeight, width: 100, height: Self.controlsHeight)
+        let readOnly = factory?.isReadOnly ?? false
+        addRow.isHidden = readOnly
+        addColumn.isHidden = readOnly
+    }
+
+    func readOnlyChanged() {
+        if factory?.isReadOnly == true { fields.flatMap { $0 }.forEach { $0.resignFirstResponder() } }
+        setNeedsLayout()
+    }
+
+    func textFieldShouldBeginEditing(_ textField: UITextField) -> Bool {
+        !(factory?.isReadOnly ?? false)
     }
 
     func textFieldDidEndEditing(_ textField: UITextField) {
-        guard let node else { return }
+        guard let node, !(factory?.isReadOnly ?? false) else { return }
         factory?.onTableCellEdit?(node.id, textField.tag / 1000, textField.tag % 1000, textField.text ?? "")
     }
 
@@ -704,7 +727,7 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
     }
 
     private func structure(addRow: Bool) {
-        guard let node else { return }
+        guard let node, !(factory?.isReadOnly ?? false) else { return }
         factory?.onTableStructure?(node.id, addRow)
     }
 }

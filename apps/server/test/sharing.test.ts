@@ -310,7 +310,7 @@ describe('leaving and removal', () => {
     c.close();
 
     let key = await call(owner, 'GET', `/notebooks/${notebookId}/key`);
-    expect(key.body).toMatchObject({ version: 1, keyChain: [], keyRotationPending: true });
+    expect(key.body).toMatchObject({ version: 1, keyChain: [], keyRotationPending: true, pendingSinceVersion: 1 });
 
     const rotate = (body: object) => call(owner, 'POST', `/members/notebook/${notebookId}/rotate`, body);
     const base = { ownerWrappedKey: b64(rnd(73)), previousKeyWrap: b64(rnd(73)) };
@@ -320,12 +320,22 @@ describe('leaving and removal', () => {
     expect((await call(b, 'POST', `/members/notebook/${notebookId}/rotate`, { ...base, version: 2, memberKeys: [] })).status).toBe(403);
     expect((await rotate({ ...base, version: 2, memberKeys: [{ userId: b.userId, wrappedKey: b64(rnd(73)) }] })).status).toBe(204);
     key = await call(owner, 'GET', `/notebooks/${notebookId}/key`);
-    expect(key.body).toMatchObject({ wrappedKey: base.ownerWrappedKey, version: 2, keyChain: [base.previousKeyWrap], keyRotationPending: true });
+    // Step 1 done: the version is past the one the flag was set at (a second device can tell).
+    expect(key.body).toMatchObject({
+      wrappedKey: base.ownerWrappedKey,
+      version: 2,
+      keyChain: [base.previousKeyWrap],
+      keyRotationPending: true,
+      pendingSinceVersion: 1,
+    });
     const shared = (await call(b, 'GET', '/shared-with-me')).body[0];
     expect(shared).toMatchObject({ keyVersion: 2, keyChain: [base.previousKeyWrap] });
     expect(shared.wrappedKey).not.toBeNull();
     expect((await call(owner, 'POST', `/members/notebook/${notebookId}/rotate/done`, {})).status).toBe(204);
-    expect((await call(owner, 'GET', `/notebooks/${notebookId}/key`)).body.keyRotationPending).toBe(false);
+    expect((await call(owner, 'GET', `/notebooks/${notebookId}/key`)).body).toMatchObject({
+      keyRotationPending: false,
+      pendingSinceVersion: null,
+    });
     // A key for an old version is refused.
     expect(
       (await call(owner, 'PUT', `/members/notebook/${notebookId}/${b.userId}/key`, { version: 1, wrappedKey: b64(rnd(73)) })).status,
@@ -464,8 +474,8 @@ describe('owner overview and rotation scope', () => {
 
     let list = (await call(owner, 'GET', '/shared-by-me')).body;
     expect(list).toEqual([
-      { target: { kind: 'note', id: noteId }, keyVersion: 1, keyRotationPending: false, members: 0, awaitingKey: 0 },
-      { target: nb, keyVersion: 1, keyRotationPending: false, members: 2, awaitingKey: 1 },
+      { target: { kind: 'note', id: noteId }, keyVersion: 1, keyRotationPending: false, pendingSinceVersion: null, members: 0, awaitingKey: 0 },
+      { target: nb, keyVersion: 1, keyRotationPending: false, pendingSinceVersion: null, members: 2, awaitingKey: 1 },
     ]);
     expect(list.some((x: any) => x.target.id === lonely.notebookId)).toBe(false);
     expect((await call(active, 'GET', '/shared-by-me')).body).toEqual([]);
@@ -482,11 +492,65 @@ describe('owner overview and rotation scope', () => {
     expect((await rotate([])).status).toBe(409);
     expect((await rotate([active])).status).toBe(204);
     list = (await call(owner, 'GET', '/shared-by-me')).body;
-    expect(list[1]).toMatchObject({ keyVersion: 2, keyRotationPending: true, members: 2, awaitingKey: 1 });
+    // A voluntary rotation: pending since the previous version, step 1 already done.
+    expect(list[1]).toMatchObject({ keyVersion: 2, keyRotationPending: true, pendingSinceVersion: 1, members: 2, awaitingKey: 1 });
     // The waiting member then gets the new version directly.
     expect(
       (await call(owner, 'PUT', `/members/notebook/${notebookId}/${waiting.userId}/key`, { version: 2, wrappedKey: b64(rnd(73)) })).status,
     ).toBe(204);
     expect((await call(owner, 'GET', '/shared-by-me')).body[1]).toMatchObject({ awaitingKey: 0 });
+  });
+});
+
+describe('the last member leaves', () => {
+  it('the resource stays in shared-by-me with the rotation pending until it is done', async () => {
+    const owner = await user();
+    const m = await user();
+    const { notebookId } = await createNotebook(s, owner);
+    const noteId = await createNote(s, owner, notebookId);
+    const other = await createNote(s, owner, notebookId);
+    await share(owner, { kind: 'notebook', id: notebookId }, m, 'editor');
+    await share(owner, { kind: 'note', id: other }, m, 'viewer');
+    expect((await call(owner, 'DELETE', `/members/notebook/${notebookId}/${m.userId}`)).status).toBe(204);
+    expect((await call(m, 'DELETE', `/members/note/${other}/${m.userId}`)).status).toBe(204);
+
+    const pending = (await call(owner, 'GET', '/shared-by-me')).body;
+    expect(pending).toEqual([
+      { target: { kind: 'note', id: other }, keyVersion: 1, keyRotationPending: true, pendingSinceVersion: 1, members: 0, awaitingKey: 0 },
+      { target: { kind: 'notebook', id: notebookId }, keyVersion: 1, keyRotationPending: true, pendingSinceVersion: 1, members: 0, awaitingKey: 0 },
+    ]);
+
+    const rotation = { ownerWrappedKey: b64(rnd(73)), previousKeyWrap: b64(rnd(73)), memberKeys: [], version: 2 };
+    expect((await call(owner, 'POST', `/members/note/${other}/rotate`, rotation)).status).toBe(204);
+    expect((await call(owner, 'POST', `/members/notebook/${notebookId}/rotate`, rotation)).status).toBe(204);
+    // Step 1 done, notes still to re-key: listed, version past pendingSinceVersion.
+    expect((await call(owner, 'GET', '/shared-by-me')).body).toEqual([
+      { target: { kind: 'notebook', id: notebookId }, keyVersion: 2, keyRotationPending: true, pendingSinceVersion: 1, members: 0, awaitingKey: 0 },
+    ]);
+    expect((await call(owner, 'POST', `/members/notebook/${notebookId}/rotate/done`, {})).status).toBe(204);
+    expect((await call(owner, 'GET', '/shared-by-me')).body).toEqual([]);
+    expect(noteId).toBeTruthy();
+  });
+});
+
+describe('agents mode badge', () => {
+  it('shared-with-me tells members whether the owner’s agents can read it', async () => {
+    const owner = await user();
+    const m = await user();
+    const agentNb = await createNotebook(s, owner, { mode: 'agent' });
+    const privateNb = await createNotebook(s, owner);
+    const noteInAgentNb = await createNote(s, owner, agentNb.notebookId);
+    await share(owner, { kind: 'notebook', id: agentNb.notebookId }, m, 'viewer');
+    await share(owner, { kind: 'notebook', id: privateNb.notebookId }, m, 'viewer');
+    await share(owner, { kind: 'note', id: noteInAgentNb }, m, 'viewer');
+    const items = (await call(m, 'GET', '/shared-with-me')).body;
+    const badge = (id: string) => items.find((i: any) => i.target.id === id).agentsMode;
+    expect(badge(agentNb.notebookId)).toBe(true);
+    expect(badge(privateNb.notebookId)).toBe(false);
+    expect(badge(noteInAgentNb)).toBe(true);
+    // The owner switches the mode off: the next listing shows it.
+    expect((await call(owner, 'PATCH', `/notebooks/${agentNb.notebookId}/mode`, { mode: 'private' })).status).toBe(200);
+    const after = (await call(m, 'GET', '/shared-with-me')).body;
+    expect(after.find((i: any) => i.target.id === agentNb.notebookId).agentsMode).toBe(false);
   });
 });

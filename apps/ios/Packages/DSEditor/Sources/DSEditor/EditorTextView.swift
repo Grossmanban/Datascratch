@@ -83,7 +83,22 @@ final class EditorTextView: UITextView {
         return board.hasURLs && !(board.strings ?? []).contains { URL(string: $0)?.scheme == nil }
     }
 
+    /// Read-only editor (`EditorView.isReadOnly`, also `isEditable == false`): selecting and copying
+    /// stay; pasting, cutting, deleting, formatting and the editor's key commands are off.
+    var isReadOnly = false
+
+    private static let editingActions: Set<Selector> = [
+        #selector(UIResponderStandardEditActions.paste(_:)), #selector(UIResponderStandardEditActions.cut(_:)),
+        #selector(UIResponderStandardEditActions.delete(_:)), #selector(EditorTextView.pasteWithoutFormatting(_:)),
+        #selector(UIResponderStandardEditActions.pasteAndMatchStyle(_:)),
+        #selector(UIResponderStandardEditActions.toggleBoldface(_:)),
+        #selector(UIResponderStandardEditActions.toggleItalics(_:)),
+        #selector(UIResponderStandardEditActions.toggleUnderline(_:)),
+        #selector(UIResponder.captureTextFromCamera(_:)),
+    ]
+
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if isReadOnly, Self.editingActions.contains(action) { return false }
         if action == #selector(paste(_:)), imagePaste != nil, UIPasteboard.general.hasImages { return true }
         if action == #selector(pasteWithoutFormatting(_:)) { return plainPaste != nil && UIPasteboard.general.hasStrings }
         return super.canPerformAction(action, withSender: sender)
@@ -95,6 +110,7 @@ final class EditorTextView: UITextView {
     var plainPaste: (() -> Void)?
 
     override func paste(_ sender: Any?) {
+        guard !isReadOnly else { return }
         if let imagePaste, pasteboardIsImages {
             let providers = UIPasteboard.general.itemProviders.filter { $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) }
             if !providers.isEmpty {
@@ -108,6 +124,7 @@ final class EditorTextView: UITextView {
 
     /// «Вставить без форматирования» from the keyboard (⇧⌘V).
     @objc func pasteWithoutFormatting(_ sender: Any?) {
+        guard !isReadOnly else { return }
         plainPaste?()
     }
     /// The editor's own tap recognizer (links, task boxes, date chips). The text view's own single
@@ -202,6 +219,7 @@ final class EditorTextView: UITextView {
     }
 
     override var keyCommands: [UIKeyCommand]? {
+        guard !isReadOnly else { return [] }
         func cmd(_ title: String, _ input: String, _ mods: UIKeyModifierFlags, _ action: EditorAction) -> UIKeyCommand {
             let c = UIKeyCommand(title: title, action: #selector(handleKey(_:)), input: input, modifierFlags: mods,
                                  propertyList: action.rawValue)
@@ -237,6 +255,7 @@ final class EditorTextView: UITextView {
     }
 
     @objc func handleKey(_ sender: UIKeyCommand) {
+        guard !isReadOnly else { return }
         guard let raw = sender.propertyList as? String, let action = EditorAction(rawValue: raw) else { return }
         keyHandler?(action)
     }

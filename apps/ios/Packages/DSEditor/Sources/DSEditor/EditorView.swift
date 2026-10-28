@@ -13,7 +13,29 @@ import UniformTypeIdentifiers
 /// re-renders only the paragraphs that changed.
 @MainActor
 public final class EditorView: UIView {
-    public private(set) var document: EditorDocument
+    /// The host's document (`setDocument` replaces it).
+    public var document: EditorDocument { model.base }
+    /// Every edit the editor makes goes through this, so nothing writes while `isReadOnly`.
+    let model: ReadOnlyDocument
+
+    /// Read-only mode (`spec/04-editor.md`, «Только чтение»), e.g. a viewer of a shared note
+    /// (D-54); can change at any time. Text can be selected and copied; scrolling, links, images,
+    /// files and diagrams work. Nothing changes the note: no keyboard (hardware either), paste,
+    /// cut, delete, dictation or Scribble, no pen, no format or "/" menus, no image or file
+    /// insertion or drops, no task check boxes or date menus, no table edits, no undo. Edits
+    /// arriving from elsewhere (sync) are still shown. A note in a newer format (R-03) is
+    /// read-only whatever this says (`isEffectivelyReadOnly`).
+    public var isReadOnly: Bool {
+        get { model.isLocked }
+        set {
+            guard newValue != model.isLocked else { return }
+            model.isLocked = newValue
+            applyReadOnly()
+        }
+    }
+
+    /// `isReadOnly`, or a note in a newer format than this app understands.
+    public var isEffectivelyReadOnly: Bool { model.isReadOnly }
     public let tools = InkToolState()
     public private(set) var theme: EditorTheme
 
@@ -33,7 +55,7 @@ public final class EditorView: UIView {
     /// HEIC), stores each as an attachment and calls `insertImage`. The caret is already at the drop
     /// point. Nil: the editor does not accept images.
     public var onImagesReceived: (([NSItemProvider]) -> Void)? {
-        didSet { textView.imagePaste = onImagesReceived }
+        didSet { textView.imagePaste = model.isReadOnly ? nil : onImagesReceived }
     }
     /// An image was tapped (or activated with VoiceOver): the host zooms it. The frame is the
     /// picture's frame in the editor's coordinates (for the transition).
@@ -153,12 +175,12 @@ public final class EditorView: UIView {
     private var lassoTextRange: Range<Int>?
 
     public init(document: EditorDocument, theme: EditorTheme? = nil) {
-        self.document = document
+        model = ReadOnlyDocument(document)
         let t = theme ?? EditorTheme(style: document.style)
         self.theme = t
         factory = AttachmentFactory(theme: t)
         renderer = AttributedRenderer(theme: t, attachments: factory)
-        projection = Projection.build(document.blocks)
+        projection = Projection.build(model.blocks)
         super.init(frame: .zero)
         setUp()
         load()
@@ -204,19 +226,19 @@ public final class EditorView: UIView {
 
         geometry = TextGeometry(textView: textView)
         ink = InkController(textView: textView, geometry: geometry, over: inkOver, under: inkUnder, tools: tools,
-                            document: document, projection: { [unowned self] in self.projection })
+                            document: model, projection: { [unowned self] in self.projection })
         ink.onTextChangedByGesture = { [weak self] caret in self?.select(caret) }
         ink.onLassoSelection = { [weak self] ids, range, bounds in self?.lassoSelected(ids, range: range, bounds: bounds) }
         inkOver.needsRecolor = { [weak self] in self?.ink.refresh() }
 
         textView.onLayout = { [weak self] in self?.textViewDidLayout() }
         textView.keyHandler = { [weak self] in self?.perform($0) }
-        textView.documentUndo.document = document
+        textView.documentUndo.document = model
         textView.documentUndo.afterChange = { [weak self] in self?.notifyStateChange() }
 
         inkInput = InkInputRecognizer(target: nil, action: nil)
         inkInput.shouldTrack = { [weak self] touch in
-            guard let self, self.tools.mode.capturesPen else { return false }
+            guard let self, self.tools.mode.capturesPen, !self.model.isReadOnly else { return false }
             // Controls the host lays over the editor (a floating palette) keep their touches.
             let p = touch.location(in: self)
             if p.y > self.bounds.maxY - self.overlayInsets.bottom || p.y < self.bounds.minY + self.overlayInsets.top { return false }
@@ -344,10 +366,10 @@ public final class EditorView: UIView {
         let start = CACurrentMediaTime()
         // Duplicate titles from a merge are repaired; an empty document gets nothing (its content
         // may still be on its way: nothing is created on open).
-        EditorCommands(document: document).repairTitles()
-        observation = document.observe { [weak self] change in self?.documentChanged(change) }
-        projection = Projection.build(document.blocks)
-        theme.style = document.style
+        EditorCommands(document: model).repairTitles()
+        observation = model.observe { [weak self] change in self?.documentChanged(change) }
+        projection = Projection.build(model.blocks)
+        theme.style = model.style
         theme.baseFontSize = EditorTheme.dynamicBaseSize(for: traitCollection)
         applyTheme()
         let text = renderer.render(projection, paragraphs: 0..<projection.paragraphs.count)
@@ -357,6 +379,7 @@ public final class EditorView: UIView {
         textView.selectedRange = NSRange(location: projection.paragraphs.count > 1 ? projection.starts[1] : 0, length: 0)
         updateTypingAttributes()
         updateAgentBanner()
+        applyReadOnly()
         ink.invalidateLayout()
         if bounds.width > 0 {
             layoutIfNeeded()
@@ -371,11 +394,31 @@ public final class EditorView: UIView {
         lastOpenDuration = CACurrentMediaTime() - start
     }
 
+    /// Puts the interface in or out of read-only mode (`isReadOnly`); the model rejects writes
+    /// by itself (`ReadOnlyDocument`).
+    private func applyReadOnly() {
+        let readOnly = model.isReadOnly
+        EditorDiagnostics.log("read-only: \(readOnly)")
+        if readOnly {
+            if textView.isFirstResponder { textView.resignFirstResponder() }
+            pendingMarks = nil
+            pendingShortcut = nil
+            ink.clearSelection()
+            setIndicator(nil)
+            onSlashMenu?(nil)
+        }
+        textView.isEditable = !readOnly
+        textView.isReadOnly = readOnly
+        textView.imagePaste = readOnly ? nil : onImagesReceived
+        factory.isReadOnly = readOnly
+        updateResizeHandles()
+        updateAgentBanner()
+        notifyStateChange()
+    }
+
     /// Replaces the edited document.
     public func setDocument(_ document: EditorDocument) {
-        self.document = document
-        ink.document = document
-        textView.documentUndo.document = document
+        model.base = document
         load()
         ink.refresh()
     }
@@ -383,7 +426,7 @@ public final class EditorView: UIView {
     // MARK: - Style
 
     public func setStyle(_ style: DocumentStyle) {
-        document.setStyle(style)
+        model.setStyle(style)
     }
 
     private func dynamicTypeChanged() {
@@ -642,18 +685,18 @@ public final class EditorView: UIView {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.titleRepairScheduled = false
-                EditorCommands(document: self.document).repairTitles()
+                EditorCommands(document: self.model).repairTitles()
             }
         }
         if change.styleChanged {
-            theme.style = document.style
+            theme.style = model.style
             applyTheme()
             rerenderAll()
         }
         if change.origin == .textInput {
             for block in change.textBlocks {
                 if let i = projection.indexByBlock[block] {
-                    projection.replaceContent(ofParagraph: i, inline: document.inline(of: block, range: nil))
+                    projection.replaceContent(ofParagraph: i, inline: model.inline(of: block, range: nil))
                 }
             }
         } else if !change.textBlocks.isEmpty || change.structureChanged {
@@ -688,7 +731,7 @@ public final class EditorView: UIView {
     private func reproject() -> Range<Int>? {
         let signpost = EditorSignpost.log.beginInterval("Reproject", id: EditorSignpost.log.makeSignpostID())
         defer { EditorSignpost.log.endInterval("Reproject", signpost) }
-        let new = Projection.build(document.blocks)
+        let new = Projection.build(model.blocks)
         let old = projection
         let oldP = old.paragraphs, newP = new.paragraphs
         var prefix = 0
@@ -836,7 +879,7 @@ public final class EditorView: UIView {
 
     // MARK: - Selection helpers
 
-    var commands: EditorCommands { EditorCommands(document: document) }
+    var commands: EditorCommands { EditorCommands(document: model) }
 
     func select(_ pos: TextPosition?) {
         guard let pos, let off = projection.offset(block: pos.block, offset: pos.offset) else { return }
@@ -867,6 +910,7 @@ public final class EditorView: UIView {
 
     /// Runs a formatting or structure command on the current selection.
     public func perform(_ action: EditorAction) {
+        guard !model.isReadOnly else { return }
         let range = selectionRange
         let (i, o) = projection.position(at: range.lowerBound)
         guard projection.paragraphs.indices.contains(i) else { return }
@@ -965,10 +1009,10 @@ public final class EditorView: UIView {
         let range = selectionRange
         var state: SlashMenuState?
         let (i, o) = projection.position(at: range.lowerBound)
-        if range.isEmpty, onSlashMenu != nil, projection.paragraphs.indices.contains(i), projection.paragraphs[i].kind.isText,
+        if range.isEmpty, onSlashMenu != nil, !model.isReadOnly, projection.paragraphs.indices.contains(i), projection.paragraphs[i].kind.isText,
            projection.paragraphs[i].kind.type != NodeType.codeBlock, o > 0 {
             let para = projection.paragraphs[i]
-            let before = document.inline(of: para.blockId, range: 0..<o).map { el -> String in
+            let before = model.inline(of: para.blockId, range: 0..<o).map { el -> String in
                 if case .text(let t, _) = el { return t } else { return "\u{FFFC}" }
             }.joined()
             if let hit = SlashCommands.trigger(in: before) {
@@ -994,7 +1038,7 @@ public final class EditorView: UIView {
     /// Applies a "/" menu entry: removes the typed "/query" and turns the paragraph into that
     /// block, or inserts the block after it.
     public func applySlashCommand(_ id: String) {
-        guard let menu = slashMenu else { return }
+        guard let menu = slashMenu, !model.isReadOnly else { return }
         slashMenu = nil
         onSlashMenu?(nil)
         select(commands.replace(menu.range, with: ""))
@@ -1038,6 +1082,8 @@ public final class EditorView: UIView {
     /// reads as Markdown. Returns false to leave the paste to the text view (plain text). The title
     /// takes plain text (its first line); code blocks paste their text as is.
     func pasteRich(from board: UIPasteboard = .general) -> Bool {
+        // Read-only: handled (nothing), so UIKit does not paste either.
+        guard !model.isReadOnly else { return true }
         let range = selectionRange
         let (i, _) = projection.position(at: range.lowerBound)
         guard projection.paragraphs.indices.contains(i) else { return false }
@@ -1063,7 +1109,7 @@ public final class EditorView: UIView {
 
     /// «Вставить без форматирования»: the pasteboard's plain text.
     func pastePlainText() {
-        guard let text = UIPasteboard.general.string, !text.isEmpty else { return }
+        guard !model.isReadOnly, let text = UIPasteboard.general.string, !text.isEmpty else { return }
         let range = selectionRange
         keepingScroll {
             select(commands.replace(range, with: text.replacingOccurrences(of: "\r\n", with: "\n"),
@@ -1114,17 +1160,17 @@ public final class EditorView: UIView {
     /// A pasted image could not be downloaded: its block becomes a link to the address.
     public func imageFailed(attachmentId: String) {
         guard let url = pastedImageURLs.removeValue(forKey: attachmentId) else { return }
-        let blocks = document.allBlocks.filter { $0.type == NodeType.image && $0.attrs["attachmentId"]?.stringValue == attachmentId }
+        let blocks = model.allBlocks.filter { $0.type == NodeType.image && $0.attrs["attachmentId"]?.stringValue == attachmentId }
         guard !blocks.isEmpty else { return }
-        document.stopCapturing()
-        document.transact(origin: .system) {
+        model.stopCapturing()
+        model.transact(origin: .system) {
             for b in blocks {
-                guard let loc = document.location(of: b.id) else { continue }
-                document.insertBlock(Self.linkParagraph(url, alt: b.attrs["alt"]?.stringValue ?? ""), parent: loc.parent, at: loc.index)
-                document.deleteBlock(b.id)
+                guard let loc = model.location(of: b.id) else { continue }
+                model.insertBlock(Self.linkParagraph(url, alt: b.attrs["alt"]?.stringValue ?? ""), parent: loc.parent, at: loc.index)
+                model.deleteBlock(b.id)
             }
         }
-        document.stopCapturing()
+        model.stopCapturing()
     }
 
     private static func attributedString(from board: UIPasteboard) -> NSAttributedString? {
@@ -1166,10 +1212,11 @@ public final class EditorView: UIView {
     /// Inserts an image block after the caret's paragraph (an empty paragraph is replaced) and puts
     /// the caret after it. `attachmentId` is the host's attachment, created before the upload, so
     /// the document never holds a temporary id; `preview` is shown until the host's resolver has
-    /// the image (`imageDidLoad`). Undoable. Returns the new block's id.
+    /// the image (`imageDidLoad`). Undoable. Returns the new block's id (read-only: nothing is
+    /// inserted).
     @discardableResult
     public func insertImage(attachmentId: String, preview: UIImage?, alt: String? = nil, width: Double? = nil) -> BlockID {
-        if let preview { factory.previews[attachmentId] = preview }
+        if let preview, !model.isReadOnly { factory.previews[attachmentId] = preview }
         var attrs: [String: JSONValue] = ["attachmentId": .string(attachmentId), "width": width.map { .number($0) } ?? .null]
         if let alt, !alt.isEmpty { attrs["alt"] = .string(alt) }
         let node = BlockNode(type: NodeType.image, attrs: attrs)
@@ -1196,35 +1243,35 @@ public final class EditorView: UIView {
 
     /// An image's caption and description for VoiceOver (nil or empty removes them). Undoable.
     public func setImageAttributes(_ block: BlockID, caption: String?, alt: String?) {
-        guard document.block(block)?.type == NodeType.image else { return }
+        guard model.block(block)?.type == NodeType.image else { return }
         func value(_ s: String?) -> JSONValue { s.map { $0.isEmpty ? .null : .string($0) } ?? .null }
-        document.stopCapturing()
-        document.transact(origin: .local) { document.setAttributes(block, ["caption": value(caption), "alt": value(alt)]) }
-        document.stopCapturing()
+        model.stopCapturing()
+        model.transact(origin: .local) { model.setAttributes(block, ["caption": value(caption), "alt": value(alt)]) }
+        model.stopCapturing()
     }
 
     /// Points an image block at another attachment («Заменить»); `preview` as in `insertImage`.
     /// Undoable.
     public func replaceImage(_ block: BlockID, attachmentId: String, preview: UIImage? = nil) {
-        guard document.block(block)?.type == NodeType.image else { return }
+        guard model.block(block)?.type == NodeType.image else { return }
         if let preview { factory.previews[attachmentId] = preview }
-        document.stopCapturing()
-        document.transact(origin: .local) { document.setAttributes(block, ["attachmentId": .string(attachmentId)]) }
-        document.stopCapturing()
+        model.stopCapturing()
+        model.transact(origin: .local) { model.setAttributes(block, ["attachmentId": .string(attachmentId)]) }
+        model.stopCapturing()
     }
 
     /// An image's width as a fraction of the column (0..1; nil: full width). Undoable.
     public func setImageWidth(_ block: BlockID, fraction: Double?) {
-        guard document.block(block)?.type == NodeType.image else { return }
+        guard model.block(block)?.type == NodeType.image else { return }
         let value: JSONValue = fraction.map { $0 >= 0.999 ? .null : .number(min(max($0, 0.1), 1)) } ?? .null
-        document.stopCapturing()
-        document.transact(origin: .local) { document.setAttributes(block, ["width": value]) }
-        document.stopCapturing()
+        model.stopCapturing()
+        model.transact(origin: .local) { model.setAttributes(block, ["width": value]) }
+        model.stopCapturing()
     }
 
     /// The resize handle shows on iPad in the text tool (the pen draws over images otherwise).
     private func updateResizeHandles() {
-        factory.showsResizeHandle = UIDevice.current.userInterfaceIdiom == .pad && tools.mode == .text
+        factory.showsResizeHandle = UIDevice.current.userInterfaceIdiom == .pad && tools.mode == .text && !model.isReadOnly
     }
 
     /// The image block under a point (text view coordinates) and its picture's frame there; nil on
@@ -1247,17 +1294,22 @@ public final class EditorView: UIView {
     }
 
     private func openFile(_ block: BlockID) {
-        guard let id = document.block(block)?.attrs["attachmentId"]?.stringValue else { return }
+        guard let id = model.block(block)?.attrs["attachmentId"]?.stringValue else { return }
         onFileTap?(block, id)
     }
 
     private func openImage(_ block: BlockID, frame: CGRect) {
-        guard let id = document.block(block)?.attrs["attachmentId"]?.stringValue else { return }
+        guard let id = model.block(block)?.attrs["attachmentId"]?.stringValue else { return }
         onImageTap?(block, id, frame)
     }
 
     private func menu(forImage block: BlockID) -> UIMenu? {
-        guard let node = document.block(block), node.type == NodeType.image else { return nil }
+        guard let node = model.block(block), node.type == NodeType.image else { return nil }
+        if model.isReadOnly {
+            // Only the host's items (share, save…); the host leaves out its editing ones.
+            guard let id = node.attrs["attachmentId"]?.stringValue, let extra = imageMenu?(block, id), !extra.isEmpty else { return nil }
+            return UIMenu(children: extra)
+        }
         let current = node.attrs["width"]?.numberValue ?? 1
         let widths = [(0.25, "¼"), (0.5, "½"), (0.75, "¾"), (1.0, "Во всю ширину")].map { fraction, title in
             UIAction(title: title, state: abs(current - fraction) < 0.01 ? .on : .off) { [weak self] _ in
@@ -1270,17 +1322,17 @@ public final class EditorView: UIView {
         }
         items.append(UIAction(title: "Удалить", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
             guard let self else { return }
-            self.document.stopCapturing()
-            self.document.transact(origin: .local) { self.document.deleteBlock(block) }
-            self.document.stopCapturing()
+            self.model.stopCapturing()
+            self.model.transact(origin: .local) { self.model.deleteBlock(block) }
+            self.model.stopCapturing()
         })
         return UIMenu(children: items)
     }
 
     public func undo() { textView.documentUndo.undo() }
     public func redo() { textView.documentUndo.redo() }
-    public var canUndo: Bool { document.canUndo }
-    public var canRedo: Bool { document.canRedo }
+    public var canUndo: Bool { model.canUndo }
+    public var canRedo: Bool { model.canRedo }
 
     // MARK: - Tools
 
@@ -1312,7 +1364,7 @@ public final class EditorView: UIView {
         // indicator then.
         guard !penDown else { return }
         let point = g.location(in: textView)
-        let active = (g.state == .began || g.state == .changed) && g.zOffset > 0 && tools.mode.capturesPen
+        let active = (g.state == .began || g.state == .changed) && g.zOffset > 0 && tools.mode.capturesPen && !model.isReadOnly
         setIndicator(active ? point : nil)
     }
 
@@ -1395,19 +1447,22 @@ public final class EditorView: UIView {
 
     /// Accepts every agent edit: the marks go, the text stays (one undo step).
     public func acceptAgentEdits() {
-        AgentEdits.acceptAll(in: document)
+        AgentEdits.acceptAll(in: model)
         DSHaptics.selection()
     }
 
     /// Accepts the agent's edits in one block.
     public func acceptAgentEdits(inBlock block: BlockID) {
-        AgentEdits.accept(block: block, in: document)
+        AgentEdits.accept(block: block, in: model)
     }
 
     /// Edits to accept come first; otherwise a note an agent created says so once (D-45).
     private func updateAgentBanner() {
         let mode: AgentEditsBanner.Mode?
-        if hasAgentEdits {
+        if model.isReadOnly {
+            // Accepting edits or acknowledging the agent changes the note: not for a viewer.
+            mode = nil
+        } else if hasAgentEdits {
             mode = .edits
         } else if let name = createdByAgent {
             mode = .createdBy(name)
@@ -1424,7 +1479,8 @@ public final class EditorView: UIView {
     // MARK: - Hiding the keyboard
 
     /// The text view is being edited (the keyboard is up or a hardware keyboard types into it).
-    public var isEditingText: Bool { textView.isFirstResponder }
+    /// Never while read-only (selecting text to copy it makes the text view first responder).
+    public var isEditingText: Bool { textView.isFirstResponder && !model.isReadOnly }
 
     /// Hides the keyboard (the host's "hide keyboard" control; iPhone keyboards have no such key).
     /// Dragging the text down past the keyboard also hides it (`keyboardDismissMode = .interactive`).
@@ -1452,7 +1508,8 @@ public final class EditorView: UIView {
     /// Whether a single tap at `point` acts on something (a note link, a task box or date chip):
     /// the text view's own taps (caret placement) do not begin there.
     func hasTapTarget(at point: CGPoint) -> Bool {
-        noteLink(at: point) != nil || taskCheckbox(at: point) != nil || (taskDatesEnabled && taskDateChip(at: point) != nil)
+        noteLink(at: point) != nil || (!model.isReadOnly && taskCheckbox(at: point) != nil)
+            || (taskDatesEnabled && !model.isReadOnly && taskDateChip(at: point) != nil)
             || (onImageTap != nil && image(at: point) != nil) || (onFileTap != nil && file(at: point) != nil)
     }
 
@@ -1541,7 +1598,7 @@ public final class EditorView: UIView {
         if onImageTap != nil {
             for (block, view) in factory.imageViews where view.window != nil {
                 let frame = view.convert(view.imageFrame, to: textView)
-                let alt = document.block(block)?.attrs["alt"]?.stringValue
+                let alt = model.block(block)?.attrs["alt"]?.stringValue
                 add(alt.flatMap { $0.isEmpty ? nil : $0 } ?? "Изображение", frame: frame, traits: .image, hint: "Открыть") { [weak self] in
                     guard let self else { return }
                     self.openImage(block, frame: self.textView.convert(frame, to: self))
@@ -1550,7 +1607,7 @@ public final class EditorView: UIView {
         }
         if onFileTap != nil {
             for (block, view) in factory.fileViews where view.window != nil {
-                let name = document.block(block)?.attrs["name"]?.stringValue
+                let name = model.block(block)?.attrs["name"]?.stringValue
                 add(name.flatMap { $0.isEmpty ? nil : $0 } ?? "Файл", frame: view.convert(view.bounds, to: textView),
                     traits: .button, hint: "Открыть") { [weak self] in self?.openFile(block) }
             }
@@ -1656,9 +1713,9 @@ public final class EditorView: UIView {
         let caret = textView.selectedRange.location
         let start = projection.starts[i]
         let block = projection.paragraphs[i].blockId
-        document.stopCapturing()
-        document.transact(origin: .local) { document.insertText(title, marks: .empty, block: block, at: 0) }
-        document.stopCapturing()
+        model.stopCapturing()
+        model.transact(origin: .local) { model.insertText(title, marks: .empty, block: block, at: 0) }
+        model.stopCapturing()
         selectOffset(caret > start ? caret + title.utf16.count : start + title.utf16.count)
         return true
     }
@@ -1671,11 +1728,11 @@ public final class EditorView: UIView {
         caretWasInTitle = false
         if p.paragraphs.count > 1, p.paragraphs[1].kind.isText {
             selectOffset(p.starts[1])
-        } else if let title = p.paragraphs.first?.blockId, let loc = document.location(of: title) {
+        } else if let title = p.paragraphs.first?.blockId, let loc = model.location(of: title) {
             let body = BlockNode.paragraph()
-            document.stopCapturing()
-            document.transact(origin: .local) { document.insertBlock(body, parent: loc.parent, at: loc.index + 1) }
-            document.stopCapturing()
+            model.stopCapturing()
+            model.transact(origin: .local) { model.insertBlock(body, parent: loc.parent, at: loc.index + 1) }
+            model.stopCapturing()
             select(TextPosition(block: body.id, offset: 0))
         }
         notifyStateChange()
@@ -1712,6 +1769,7 @@ public final class EditorView: UIView {
             DispatchQueue.main.async { [weak self] in self?.openFile(block) }
             return
         }
+        guard !model.isReadOnly else { return }
         if taskDatesEnabled, let chip = taskDateChip(at: point) {
             // Same choices as the task context menu (`spec/12`): reschedule or remove the date.
             DSHaptics.selection()
@@ -1801,12 +1859,12 @@ public final class EditorView: UIView {
 
     private func deleteLassoSelection() {
         let range = lassoTextRange
-        document.stopCapturing()
-        document.transact {
+        model.stopCapturing()
+        model.transact {
             ink.deleteSelectedStrokes()
             if let range { commands.replace(range, with: "") }
         }
-        document.stopCapturing()
+        model.stopCapturing()
         lassoTextRange = nil
     }
 }
@@ -1816,6 +1874,7 @@ public final class EditorView: UIView {
 extension EditorView: UITextViewDelegate {
     public func textView(_ tv: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
         if suppressDelegate { return true }
+        if model.isReadOnly { return false }
         let p = projection
         guard !p.paragraphs.isEmpty else { return true }
         let lo = range.location, hi = range.location + range.length
@@ -1838,9 +1897,9 @@ extension EditorView: UITextViewDelegate {
             var caret = range.length == 0 ? MarkdownShortcuts(commands: cmd).handleReturn(at: pos) : nil
             keepingScroll {
                 if caret == nil {
-                    document.stopCapturing()
+                    model.stopCapturing()
                     caret = cmd.splitParagraph(at: pos)
-                    document.stopCapturing()
+                    model.stopCapturing()
                 }
                 select(caret)
             }
@@ -1978,6 +2037,9 @@ extension EditorView: UITextViewDelegate {
     }
 
     public func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
+        // Read-only: the system's own items (copy, look up, share); editing ones are filtered out
+        // by the text view.
+        guard !model.isReadOnly else { return nil }
         let (i, _) = projection.position(at: range.location)
         guard projection.paragraphs.indices.contains(i) else { return nil }
         let para = projection.paragraphs[i]
@@ -1988,7 +2050,7 @@ extension EditorView: UITextViewDelegate {
                 self?.acceptAgentEdits(inBlock: block)
             })
         }
-        if let item = para.context.itemBlockId, let node = document.block(item), node.type == NodeType.taskItem {
+        if let item = para.context.itemBlockId, let node = model.block(item), node.type == NodeType.taskItem {
             extra.append(taskMenu(item: item, node: node))
         }
         if para.kind.isText, para.kind.type != NodeType.codeBlock, para.kind.type != NodeType.title {
@@ -2029,7 +2091,7 @@ extension EditorView: UITextViewDelegate {
         let toggle = UIAction(title: state == "done" ? "Вернуть в работу" : "Выполнить",
                               image: UIImage(systemName: state == "done" ? "circle" : "checkmark.circle")) { _ in cmd.toggleTask(item) }
         let cancel = UIAction(title: state == "cancelled" ? "Восстановить" : "Отменить задачу", image: UIImage(systemName: "xmark.circle")) { [weak self] _ in
-            self?.document.setAttributes(item, ["state": .string(state == "cancelled" ? "open" : "cancelled"), "completedAt": nil])
+            self?.model.setAttributes(item, ["state": .string(state == "cancelled" ? "open" : "cancelled"), "completedAt": nil])
         }
         let children: [UIMenuElement] = taskDatesEnabled ? [toggle, schedule, due, cancel] : [toggle, cancel]
         return UIMenu(title: "Задача", image: UIImage(systemName: "checklist"), options: .displayInline, children: children)
@@ -2078,12 +2140,13 @@ extension EditorView: UIGestureRecognizerDelegate {
 
 extension EditorView: @preconcurrency UIScribbleInteractionDelegate {
     public func scribbleInteraction(_ interaction: UIScribbleInteraction, shouldBeginAt location: CGPoint) -> Bool {
-        !tools.mode.capturesPen
+        !tools.mode.capturesPen && !model.isReadOnly
     }
 }
 
 extension EditorView: @preconcurrency UIPencilInteractionDelegate {
     public func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
+        guard !model.isReadOnly else { return }
         switch UIPencilInteraction.preferredTapAction {
         case .switchEraser: tools.toggleEraser()
         case .switchPrevious: tools.mode = tools.previousMode
@@ -2094,7 +2157,7 @@ extension EditorView: @preconcurrency UIPencilInteractionDelegate {
     }
 
     public func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze) {
-        guard squeeze.phase == .ended else { return }
+        guard squeeze.phase == .ended, !model.isReadOnly else { return }
         switch UIPencilInteraction.preferredSqueezeAction {
         case .ignore: return
         case .switchEraser: tools.toggleEraser()
@@ -2120,7 +2183,7 @@ extension EditorView {
     /// Menu of a tapped date chip: move the date (or deadline) or remove it.
     func dateMenu() -> UIMenu? {
         EditorDiagnostics.log("date menu requested (target \(dateMenuTarget != nil))")
-        guard let target = dateMenuTarget, let node = document.block(target.item) else { return nil }
+        guard let target = dateMenuTarget, let node = model.block(target.item) else { return nil }
         let cmd = commands
         let item = target.item
         let scheduled = node.attrs["scheduled"]?.stringValue
@@ -2310,12 +2373,13 @@ extension EditorView: @preconcurrency UIEditMenuInteractionDelegate {
 extension EditorView: @preconcurrency UITextDropDelegate {
     /// Only images (photos dragged from Photos or Files), with the host accepting them.
     private func isImageDrop(_ session: UIDropSession) -> Bool {
-        onImagesReceived != nil
+        onImagesReceived != nil && !model.isReadOnly
             && session.hasItemsConforming(toTypeIdentifiers: [UTType.image.identifier])
             && !session.canLoadObjects(ofClass: NSString.self)
     }
 
     public func textDroppableView(_ textDroppableView: UIView & UITextDroppable, proposalForDrop drop: UITextDropRequest) -> UITextDropProposal {
+        if model.isReadOnly { return UITextDropProposal(operation: .forbidden) }
         guard isImageDrop(drop.dropSession) else { return drop.suggestedProposal }
         return UITextDropProposal(operation: .copy)
     }

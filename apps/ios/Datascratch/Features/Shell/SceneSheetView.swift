@@ -37,6 +37,8 @@ struct SceneSheetView: View {
             MoveNoteSheet(noteId: noteId)
         case .sharedLink(let shareId, let key):
             SharedLinkView(shareId: shareId, key: key)
+        case .invitations:
+            InvitationsView()
         case .taskDate(let noteId, let blockId, let field):
             TaskDateSheet(noteId: noteId, blockId: blockId, field: field)
         }

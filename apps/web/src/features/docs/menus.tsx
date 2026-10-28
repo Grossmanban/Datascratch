@@ -33,6 +33,7 @@ import {
   updateFolder,
 } from "@/domain/actions";
 import { isStarred, useWorkspace, type FolderEntry } from "@/domain/workspace";
+import { sharedResourceOf } from "@/data/sharedWithMe";
 import { TINTS, tintFg } from "@/lib/tokens";
 import { useUi } from "@/hooks/useUi";
 import { confirmDialog, toast, type MenuItem } from "@/ui";
@@ -196,7 +197,12 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
   }
   const starred = isStarred(st, { kind: "note", id: noteId });
   const spaceOf = st.account.notebooks.find((nb) => nb.id === n.notebookId)?.spaceId;
-  return [
+  // Shared with this account (D-54): no sharing or moving out of the owner's notebook; a viewer
+  // only reads; a note shared on its own has no index to move it in or trash it from.
+  const shared = sharedResourceOf(noteId);
+  const canEdit = !shared || shared.role === "editor";
+  const inIndex = !!n.notebookId && canEdit;
+  const items: (MenuItem | false)[] = [
     ...(!opts.inDoc && features.tabs
       ? [
           {
@@ -214,12 +220,12 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
       icon: starred ? <StarOff className="size-3.5" /> : <Star className="size-3.5" />,
       onSelect: () => toggleStar({ kind: "note", id: noteId }),
     },
-    { label: t("docs.share"), icon: <Share2 className="size-3.5" />, onSelect: () => useUi.setState({ shareFor: { kind: "note", id: noteId } }) },
+    !shared && { label: t("docs.share"), icon: <Share2 className="size-3.5" />, onSelect: () => useUi.setState({ shareFor: { kind: "note", id: noteId } }) },
     { label: t("docs.history"), icon: <History className="size-3.5" />, onSelect: () => useUi.setState({ historyFor: noteId }) },
-    ...(opts.inDoc
+    ...(opts.inDoc && canEdit
       ? [{ label: `${t("style.cover")}…`, icon: <ImageIcon className="size-3.5" />, onSelect: () => useUi.setState({ coverFor: noteId }) }]
       : []),
-    {
+    inIndex && {
       kind: "sub",
       label: t("docs.moveTo"),
       icon: <FolderInput className="size-3.5" />,
@@ -232,7 +238,7 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
         t,
       ),
     },
-    ...(notebookTargets(noteId, n.notebookId, spaceOf, t).length
+    ...(!shared && notebookTargets(noteId, n.notebookId, spaceOf, t).length
       ? [
           {
             kind: "sub" as const,
@@ -242,7 +248,7 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
           },
         ]
       : []),
-    ...(spaceTargets(noteId, n.notebookId, spaceOf, t).length
+    ...(!shared && spaceTargets(noteId, n.notebookId, spaceOf, t).length
       ? [
           {
             kind: "sub" as const,
@@ -252,7 +258,7 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
           },
         ]
       : []),
-    {
+    !shared && {
       label: t("docs.duplicate"),
       icon: <Copy className="size-3.5" />,
       onSelect: async () => {
@@ -263,8 +269,8 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
         }
       },
     },
-    { kind: "separator" },
-    {
+    inIndex && { kind: "separator" },
+    inIndex && {
       label: t("docs.toTrash"),
       icon: <Trash2 className="size-3.5" />,
       danger: true,
@@ -275,6 +281,7 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
       },
     },
   ];
+  return items.filter((x): x is MenuItem => !!x);
 }
 
 export function folderMenuItems(folderId: string, t: TFunction, nav: Nav, startRename: () => void): MenuItem[] {

@@ -1,13 +1,15 @@
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ChevronRight, FileQuestion, ImagePlus, MoreHorizontal, Share2, Smile, Star, Undo2, X } from "lucide-react";
+import { ChevronRight, Eye, FileQuestion, ImagePlus, MoreHorizontal, Share2, Smile, Star, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/session";
 import { colorFor } from "@/data/presence";
 import { runtime } from "@/data/runtime";
+import { sharedResourceOf, useShared } from "@/data/sharedWithMe";
+import { AgentsBadge } from "@/features/share/SharedWithMe";
 import { acknowledgeAgentCreated, agentCreatedOf, deleteNoteForever, openTab, restoreNote, setTitleOf, toggleStar, updateNote } from "@/domain/actions";
-import { folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
+import { findNotebook, folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
 import { closeDocTab, noteMenuItems } from "@/features/docs/menus";
 import { isFreshNote } from "@/lib/freshNotes";
 import { rememberNotebook } from "@/lib/lastNotebook";
@@ -16,7 +18,7 @@ import { useNoteContentReady, useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc
 import { useUi } from "@/hooks/useUi";
 import { FORMAT_VERSION } from "@/lib/shared";
 import { EMOJI_CHOICES } from "@/lib/tokens";
-import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner, toast } from "@/ui";
+import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner, toast, Tooltip } from "@/ui";
 import { defaultNoteTitle, hasBody, isNoteEmpty, setNoteMeta } from "@/domain/note";
 import i18n from "@/i18n";
 import { Backlinks } from "./Backlinks";
@@ -44,7 +46,8 @@ export function DocPage() {
     if (space && space !== useWorkspace.getState().activeSpaceId) setActiveSpace(space);
     if (!note.trashedAt) openTab(noteId);
     // «Новый документ» elsewhere goes to the notebook last opened or created in (spec/05).
-    rememberNotebook(space, note.notebookId);
+    // Only an own notebook: a shared one is not where new notes of this account should go.
+    if (useWorkspace.getState().account.notebooks.some((n) => n.id === note.notebookId)) rememberNotebook(space, note.notebookId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId, !!note]);
 
@@ -68,7 +71,10 @@ function DocScreen({ noteId }: { noteId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const note = useWorkspace((s) => s.notes[noteId])!;
-  const nb = useWorkspace((s) => s.account.notebooks.find((n) => n.id === note.notebookId));
+  const nb = useWorkspace(useShallow((s) => findNotebook(s, note.notebookId)));
+  // Shared with this account (D-54): a viewer reads only; sharing further is the owner's.
+  const shared = useShared(() => sharedResourceOf(noteId));
+  const viewer = shared?.role === "viewer";
   const path = useWorkspace(useShallow((s) => folderPath(s, note.folderId)));
   const starred = useWorkspace((s) => isStarred(s, { kind: "note", id: noteId }));
   const email = useAuth((s) => s.email) ?? "";
@@ -102,7 +108,7 @@ function DocScreen({ noteId }: { noteId: string }) {
 
   const readOnlyNewer = (meta?.formatVersion ?? 1) > FORMAT_VERSION;
   const trashed = !!note.trashedAt;
-  const editable = !readOnlyNewer && !trashed;
+  const editable = !readOnlyNewer && !trashed && !viewer;
 
   // spec/04 «Название новой заметки»: the editor names an empty title (host.defaultTitle) on Enter,
   // when the caret leaves it and on blur; on close a note with text gets it too, and a note created
@@ -138,6 +144,18 @@ function DocScreen({ noteId }: { noteId: string }) {
         actions={
           <>
             <PresenceStack users={others} />
+            {shared?.agentsMode && <AgentsBadge label />}
+            {viewer && (
+              <Tooltip content={t("shared.readOnlyHint")}>
+                <span
+                  className="flex h-7 items-center gap-1.5 rounded-full bg-ink/[0.06] px-2.5 text-[12.5px] font-medium text-ink-2"
+                  data-testid="read-only-badge"
+                >
+                  <Eye className="size-3.5" />
+                  {t("shared.readOnly")}
+                </span>
+              </Tooltip>
+            )}
             <IconButton
               label={starred ? t("docs.unstar") : t("docs.star")}
               onClick={() => toggleStar({ kind: "note", id: noteId })}
@@ -147,9 +165,11 @@ function DocScreen({ noteId }: { noteId: string }) {
             </IconButton>
             {editable && editorApi && <InsertPicture api={editorApi} noteId={noteId} />}
             {doc && meta && <StylePopover doc={doc} style={meta.style} disabled={!editable} />}
-            <IconButton label={t("docs.share")} onClick={() => useUi.setState({ shareFor: { kind: "note", id: noteId } })} data-testid="share-button">
-              <Share2 className="size-4" />
-            </IconButton>
+            {!shared && (
+              <IconButton label={t("docs.share")} onClick={() => useUi.setState({ shareFor: { kind: "note", id: noteId } })} data-testid="share-button">
+                <Share2 className="size-4" />
+              </IconButton>
+            )}
             <DropdownMenu
               align="end"
               items={noteMenuItems(noteId, t, navigate, { inDoc: true })}

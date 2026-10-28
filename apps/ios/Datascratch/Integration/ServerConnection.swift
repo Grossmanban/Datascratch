@@ -7,8 +7,8 @@ import UIKit
 
 /// Everything that talks to the Datascratch server (contracts/api.md, sync-protocol.md):
 /// REST client with the stored session, DSCore's account flows, and the sync engine
-/// that persists, encrypts and exchanges document updates. Used when `DS_SERVER_URL`
-/// is set; without a server the app works on this device only.
+/// that persists, encrypts and exchanges document updates. Used once the person signed in to a
+/// server of their own (D-49); without one the app works on this device only.
 final class ServerConnection: CoreLibraryRemote {
     nonisolated private static let log = Logger(subsystem: "com.datascratch.app", category: "Server")
     /// Sync timing (connect, subscribe order, catch-up) for Instruments.
@@ -98,9 +98,9 @@ final class ServerConnection: CoreLibraryRemote {
                 }
             }
             let wrappedKeys = core.wrappedKeys
-            let keys = KeyRingDocumentKeys(keyRing: core.keys) { noteId, notebookId in
-                wrappedKeys.wrapped(noteId: noteId, notebookId: notebookId)
-            }
+            let keys = KeyRingDocumentKeys(keyRing: core.keys, noteMeta: { noteId, notebookId in
+                wrappedKeys.meta(noteId: noteId, notebookId: notebookId)
+            })
             let keyRing = core.keys
             let engine = SyncEngine(store: core.store, client: client, keyFor: keys.key(for:), register: { [core] record in
                 do {
@@ -445,6 +445,52 @@ final class ServerConnection: CoreLibraryRemote {
     }
 }
 
+// MARK: - History (D-54: who changed what, compare, restore)
+
+extension ServerConnection: NoteHistorySource {
+    func versions(of noteId: String, notebookId: String) async throws -> [HistoryVersion] {
+        let me = await api.currentSession?.userId
+        return try await api.versions(docId: noteId).sorted { $0.seq > $1.seq }.map { version in
+            HistoryVersion(id: version.seq, createdAt: DSCore.DSDate.parseISO(version.createdAt) ?? Date(),
+                           authors: (version.authors ?? []).map { author -> HistoryAuthor in
+                               switch author {
+                               case .user(let id): id == me ? .me : .user(id: id)
+                               case .guest: .guest
+                               case .agent: .agent
+                               }
+                           })
+        }
+    }
+
+    func body(of noteId: String, notebookId: String, at version: HistoryVersion) async throws -> NoteBody {
+        let doc = NoteDocument(noteId: noteId)
+        try doc.crdt.applyUpdate(try await versionState(noteId, seq: version.id), origin: .storage)
+        return NoteBodyCodec.body(from: (try? doc.blocks()) ?? [])
+    }
+
+    func restore(_ version: HistoryVersion, of noteId: String, notebookId: String) async throws {
+        let state = try await versionState(noteId, seq: version.id)
+        try core.noteDocument(noteId, notebookId: notebookId).restoreVersion(state: state)
+        core.reload()
+    }
+
+    /// A version's state, opened with the note's key or one it had before (a key change after
+    /// someone lost access, crypto.md §10.3).
+    private func versionState(_ noteId: String, seq: Int64) async throws -> Data {
+        let sealed = try await api.version(docId: noteId, seq: seq)
+        guard let record = try core.store.document(noteId) else { throw CryptoError.decryptionFailed }
+        let wrappedKeys = core.wrappedKeys
+        let keys = KeyRingDocumentKeys(keyRing: core.keys, noteMeta: { noteId, notebookId in
+            wrappedKeys.meta(noteId: noteId, notebookId: notebookId)
+        })
+        let candidates = [try keys.key(for: record)].compactMap { $0 } + keys.retiredKeys(for: record)
+        for key in candidates {
+            if let plain = try? DSCrypto.open(sealed, key: key, ad: CryptoAD.doc(noteId)) { return plain }
+        }
+        throw CryptoError.decryptionFailed
+    }
+}
+
 // MARK: - Attachments
 
 extension ServerConnection: CoverAttachmentRemote {
@@ -728,6 +774,19 @@ final class ServerSharingService: SharingService {
     func revoke(_ linkId: String) async throws {
         try await connection.api.revokeShare(id: linkId)
         links.removeAll { $0.id == linkId }
+    }
+
+    /// D-54: after a key change the guest links still carry the old key; each is made anew with
+    /// the same access and expiry, and the old one is revoked. Returns the new links.
+    func recreateLinks(for target: ShareTarget) async -> [SharedLink] {
+        await refresh()
+        var made: [SharedLink] = []
+        for old in links where old.target == target && !old.isExpired() {
+            guard let link = try? await createLink(for: target, permission: old.permission, expiresAt: old.expiresAt) else { continue }
+            try? await revoke(old.id)
+            made.append(link)
+        }
+        return made
     }
 
     /// `https://<web-host>/s/<id>#k=<key>`; the key never goes to the server.

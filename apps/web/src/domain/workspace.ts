@@ -13,19 +13,22 @@ export type WorkspaceState = {
   accountSynced: boolean;
   account: AccountSnapshot;
   notebooksData: Record<string, NotebookSnapshot>;
+  /** Notes shared with this account on their own, without their notebook (D-54); `notebookId` is "". */
+  standaloneNotes: Record<string, NoteEntry>;
   notes: Record<string, NoteEntry>;
   folders: Record<string, FolderEntry>;
   tagProps: Record<string, TagProps>;
   activeSpaceId: string | null;
 };
 
-const emptyAccount: AccountSnapshot = { formatVersion: 1, spaces: [], notebooks: [], settings: {}, starred: [], tabs: [] };
+const emptyAccount: AccountSnapshot = { formatVersion: 1, spaces: [], notebooks: [], settings: {}, starred: [], tabs: [], shared: [] };
 
 export const useWorkspace = create<WorkspaceState>(() => ({
   ready: false,
   accountSynced: false,
   account: emptyAccount,
   notebooksData: {},
+  standaloneNotes: {},
   notes: {},
   folders: {},
   tagProps: {},
@@ -55,6 +58,7 @@ export function resetWorkspace() {
     accountSynced: false,
     account: emptyAccount,
     notebooksData: {},
+    standaloneNotes: {},
     notes: {},
     folders: {},
     tagProps: {},
@@ -74,6 +78,20 @@ export function refreshNotebook(notebookId: string, doc: Y.Doc | null) {
   const notebooksData = { ...st.notebooksData };
   if (doc) notebooksData[notebookId] = readNotebook(doc);
   else delete notebooksData[notebookId];
+  rebuild(notebooksData, st.standaloneNotes);
+}
+
+/** A note shared on its own (D-54): its entry comes from the note document, not from an index. */
+export function refreshStandaloneNote(noteId: string, entry: NoteEntry | null) {
+  const st = useWorkspace.getState();
+  const standaloneNotes = { ...st.standaloneNotes };
+  if (entry) standaloneNotes[noteId] = entry;
+  else delete standaloneNotes[noteId];
+  rebuild(st.notebooksData, standaloneNotes);
+}
+
+function rebuild(notebooksData: Record<string, NotebookSnapshot>, standaloneNotes: Record<string, NoteEntry>) {
+  const st = useWorkspace.getState();
   const notes: Record<string, NoteEntry> = {};
   const folders: Record<string, FolderEntry> = {};
   const tagProps: Record<string, TagProps> = {};
@@ -96,10 +114,17 @@ export function refreshNotebook(notebookId: string, doc: Y.Doc | null) {
     }
     Object.assign(tagProps, data.tags);
   }
+  for (const [id, next] of Object.entries(standaloneNotes)) {
+    if (notes[id]) continue;
+    const prev = st.notes[id];
+    notes[id] = prev && sameEntry(prev, next) ? prev : next;
+    if (notes[id] !== prev) notesChanged = true;
+  }
   if (Object.keys(notes).length !== Object.keys(st.notes).length) notesChanged = true;
   if (Object.keys(folders).length !== Object.keys(st.folders).length) foldersChanged = true;
   useWorkspace.setState({
     notebooksData,
+    standaloneNotes,
     notes: notesChanged ? notes : st.notes,
     folders: foldersChanged ? folders : st.folders,
     tagProps,
@@ -132,11 +157,38 @@ export function activeSpace(st: WorkspaceState): Space | undefined {
 
 /** The space a notebook belongs to (D-48: membership is derived from the notebook). */
 export function spaceOfNotebook(st: WorkspaceState, notebookId: string | undefined): string | null {
-  return st.account.notebooks.find((n) => n.id === notebookId)?.spaceId ?? null;
+  // Own notebooks; a notebook shared with this account lives where «Общие со мной» puts it (D-54).
+  return (
+    st.account.notebooks.find((n) => n.id === notebookId)?.spaceId ??
+    st.account.shared.find((r) => r.kind === "notebook" && r.id === notebookId)?.spaceId ??
+    null
+  );
 }
 
 export function spaceOfNote(st: WorkspaceState, noteId: string): string | null {
-  return spaceOfNotebook(st, st.notes[noteId]?.notebookId);
+  return (
+    spaceOfNotebook(st, st.notes[noteId]?.notebookId) ?? st.account.shared.find((r) => r.kind === "note" && r.id === noteId)?.spaceId ?? null
+  );
+}
+
+/**
+ * A notebook by id: an own one, or one shared with this account (D-54) titled from its
+ * meta and placed where «Общие со мной» puts it. Use with `useShallow`.
+ */
+export function findNotebook(st: WorkspaceState, notebookId: string | undefined): NotebookRef | undefined {
+  if (!notebookId) return undefined;
+  const own = st.account.notebooks.find((n) => n.id === notebookId);
+  if (own) return own;
+  const ref = st.account.shared.find((r) => r.kind === "notebook" && r.id === notebookId);
+  const data = st.notebooksData[notebookId];
+  if (!ref || !data) return undefined;
+  return { id: notebookId, spaceId: ref.spaceId, name: data.name ?? "", icon: data.icon, color: null, order: ref.order, mode: "private", createdAt: ref.addedAt };
+}
+
+/** The resource a document belongs to if it is shared with this account (D-54), else null. */
+export function sharedRefOf(st: WorkspaceState, noteId: string) {
+  const nb = st.notes[noteId]?.notebookId;
+  return st.account.shared.find((r) => (r.kind === "note" ? r.id === noteId : r.id === nb)) ?? null;
 }
 
 /** Whether a starred item belongs to a space (D-48: everything shown is of the current space). */
@@ -149,7 +201,7 @@ export function starredInSpace(st: WorkspaceState, ref: StarredRef, spaceId: str
 export function tabsInSpace(st: WorkspaceState, spaceId: string | null): TabEntry[] {
   return st.account.tabs.filter((t) => {
     const n = st.notes[t.noteId];
-    return n && !n.trashedAt && spaceOfNotebook(st, n.notebookId) === spaceId;
+    return n && !n.trashedAt && spaceOfNote(st, n.id) === spaceId;
   });
 }
 

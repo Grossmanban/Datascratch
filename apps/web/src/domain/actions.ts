@@ -158,6 +158,22 @@ export async function deleteNotebook(id: string) {
   await enqueueOp({ method: "DELETE", path: `/notebooks/${id}` });
 }
 
+/**
+ * A notebook or note no longer shared with this account (D-54: access closed, left, deleted by
+ * its owner): its stars and tabs go (its placement is already gone from account.shared).
+ */
+export function forgetSharedResource(target: { kind: "notebook" | "note"; id: string }) {
+  const st = useWorkspace.getState();
+  const a = acc();
+  const inIt = (noteId: string) => (target.kind === "note" ? noteId === target.id : st.notes[noteId]?.notebookId === target.id);
+  runtime().account.transact(() => {
+    removeStarredWhere(a.starred, (s) =>
+      target.kind === "note" ? s.kind === "note" && s.id === target.id : (s.kind === "notebook" && s.id === target.id) || belongsTo(s, target.id),
+    );
+    removeTabsWhere(a.tabs, (t) => inIt(t.noteId));
+  });
+}
+
 function belongsTo(s: StarredRef, notebookId: string): boolean {
   const st = useWorkspace.getState();
   if (s.kind === "note") return st.notes[s.id]?.notebookId === notebookId;

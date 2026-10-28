@@ -43,16 +43,26 @@ INTERPOLATIONS = {
     r"in “\(name)”": "in “%@”",
     r"in “\($0)”": "in “%@”",
     r"\(info.host) · \(info.version)": "%@ · %@",
+    # D-54
+    r"Remove \(member.email)": "Remove %@",
+    r"\(invite.role.title) · waiting until \(expiresAt.formatted(date: .abbreviated, time: .omitted))": "%@ · waiting until %@",
+    r"\(invite.role.title) · waiting": "%@ · waiting",
+    r"Changed by \(names)": "Changed by %@",
+    r"\($0.member.email) signed up — give access?": "%@ signed up — give access?",
+    r"Opens when \(item.ownerEmail)’s device is online": "Opens when %@’s device is online",
+    r"View only · \(owner) can edit": "View only · %@ can edit",
 }
 
 # Literals that look like text but are not translated (names, formats, prefixes).
 IGNORE = {
     "Projects", "Drafts", "Plan", "Draft", "Target", "Links", "Target body", "Go to [[Target]] or [[Nowhere]].", "Dated", "Call back", "Фото", "Файл", "Вставка", "Sample Photo", "CoverImages.didArrive", "Photo.jpg", "#tag\\(index) #group/child\\(index)",
     "* ", ", ", " · ", " : ", "> ", "[ ] ", "[] ", "☐ ", "DS1", "DS1-XXXX-XXXX-…", "Datascratch", "Library.json",
-    "CFBundleShortVersionString", "CFBundleVersion", "DSServerURL", "DSWebHost", "DSExtendedMode", "MMMdy", "d MMMM y",
+    "CFBundleShortVersionString", "CFBundleVersion", "DSExtendedMode", "MMMdy", "d MMMM y",
     "XChaCha20-Poly1305 · Argon2id", "Quiet paper", "next week", "open to agents", "CoreLibrary", "Library", "Attachments", "a^2 + b^2 = c^2", "graph TD\n  A --> B",
     # First-run space names as an older build wrote them (matched when merging duplicates).
     "Личное", "Работа", "Заметки",
+    # D-54: UI-test seed and the comparison's line marks.
+    "Shared plans", "Roadmap", "Plan for two", "Ideas", "Only the owner edits this.", "• ", "☑ ", "———", "“", "”",
 }
 
 LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')

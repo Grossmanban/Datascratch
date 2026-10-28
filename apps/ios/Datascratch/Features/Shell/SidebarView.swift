@@ -54,6 +54,7 @@ struct SidebarView: View {
                 mainSection
                 starredSection
                 notebooksSection
+                sharedSection
                 tagsSection
                 trashSection
             }
@@ -195,7 +196,9 @@ struct SidebarView: View {
     }
 
     @ViewBuilder private var notebooksSection: some View {
-        let notebooks: [Notebook] = library.notebooks(in: library.activeSpace?.id)
+        let notebooks: [Notebook] = library.notebooks(in: library.activeSpace?.id).filter { (notebook: Notebook) -> Bool in
+            app.accountSharing.role(for: ShareTarget(kind: .notebook, id: notebook.id)) == nil
+        }
         let shown: (rows: [Notebook], hidden: Int) = SidebarLimit.visible(
             notebooks, showAll: showingAll.contains("notebooks"), keep: { (notebook: Notebook) -> Bool in isOpen(notebook) })
         Section {
@@ -228,6 +231,77 @@ struct SidebarView: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("New Notebook")
                 .accessibilityIdentifier("sidebar.newNotebook")
+            }
+        }
+    }
+
+    /// D-54: invitations and what other accounts share with this one, in every space.
+    @ViewBuilder private var sharedSection: some View {
+        let sharing = app.accountSharing
+        let items = sharing.sharedWithMe
+        if !items.isEmpty || !sharing.incoming.isEmpty {
+            Section {
+                if !isCollapsed("shared") {
+                    if !sharing.incoming.isEmpty {
+                        Button {
+                            scene.sheet = .invitations
+                        } label: {
+                            Label {
+                                HStack {
+                                    Text("Invitations")
+                                    Spacer()
+                                    Text(sharing.incoming.count, format: .number)
+                                        .font(Theme.Typography.footnote.weight(.semibold).monospacedDigit())
+                                        .foregroundStyle(Theme.Palette.onAccent)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 1)
+                                        .background(Capsule().fill(Theme.Palette.accent))
+                                }
+                            } icon: {
+                                Image(systemName: "envelope.badge")
+                                    .foregroundStyle(Theme.Palette.accent)
+                            }
+                            // The whole row, the gap before the badge too, opens the invitations
+                            // (as `SidebarMoreRow`: the shape on the label, not on the button).
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("sidebar.invitations")
+                    }
+                    ForEach(items) { item in
+                        sharedRow(item)
+                    }
+                }
+            } header: {
+                SidebarSectionHeader(title: "Shared with me", identifier: "shared", isCollapsed: isCollapsed("shared")) {
+                    toggle("shared")
+                }
+            }
+            .task { await sharing.refresh() }
+        }
+    }
+
+    @ViewBuilder private func sharedRow(_ item: SharedWithMe) -> some View {
+        switch item.target.kind {
+        case .notebook:
+            if let notebook = library.notebook(item.target.id) {
+                NotebookRow(notebook: notebook)
+                    .accessibilityIdentifier("sidebar.sharedNotebook")
+            } else {
+                SharedPendingRow(item: item)
+            }
+        case .note:
+            if let note = library.note(item.target.id) {
+                Button {
+                    scene.open(note.id)
+                } label: {
+                    NoteTitleLabel(note: note)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("sidebar.sharedNote")
+            } else {
+                SharedPendingRow(item: item)
             }
         }
     }
@@ -536,5 +610,28 @@ struct SyncStatusBadge: View {
             let text: LocalizedStringKey = "Not sent: \(documents)"
             return ("exclamationmark.icloud", text, Theme.Palette.danger)
         }
+    }
+}
+
+/// Shared with this account, not readable here yet: the owner's device gives the key when it is
+/// online (D-54).
+struct SharedPendingRow: View {
+    let item: SharedWithMe
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.target.kind == .notebook ? LocalizedStringKey("Shared notebook") : "Shared document")
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                Text("Opens when \(item.ownerEmail)’s device is online")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+                    .lineLimit(2)
+            }
+        } icon: {
+            Image(systemName: "hourglass")
+                .foregroundStyle(Theme.Palette.textTertiary)
+        }
+        .accessibilityIdentifier("sidebar.sharedPending")
     }
 }

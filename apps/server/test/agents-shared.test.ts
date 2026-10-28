@@ -115,7 +115,7 @@ describe('agents of a member', () => {
     const listed = await agents.data.listAgentNotebooks(member.userId, g.id);
     expect(listed.map((n) => n.id)).toEqual([notebookId]);
     // Who shares it and with which role (the plugin labels it and answers «read only» early).
-    expect((listed[0] as any).shared).toEqual({ ownerUserId: owner.userId, ownerEmail: owner.email, role: 'editor' });
+    expect(listed[0]!.shared).toEqual({ ownerUserId: owner.userId, ownerEmail: owner.email, role: 'editor' });
     expect((await agents.data.loadDoc(member.userId, noteId, g.id))!.doc.getText('t').toString()).toBe('owner text');
 
     const { seq } = await edit(member, noteId, g.id, ' + member agent');
@@ -151,9 +151,9 @@ describe('agents of a member', () => {
     const { notebookId, noteId } = await agentNotebook(owner);
     await share(owner, notebookId, member, 'viewer');
     const g = await grantFor(member, [notebookId]);
-    expect(((await agents.data.listAgentNotebooks(member.userId, g.id))[0] as any).shared.role).toBe('viewer');
+    expect((await agents.data.listAgentNotebooks(member.userId, g.id))[0]!.shared?.role).toBe('viewer');
     // The owner's own list marks nothing as shared.
-    expect(((await agents.data.listAgentNotebooks(owner.userId)).find((n) => n.id === notebookId) as any).shared).toBeNull();
+    expect((await agents.data.listAgentNotebooks(owner.userId)).find((n) => n.id === notebookId)!.shared).toBeNull();
     expect(await agents.data.loadDoc(member.userId, noteId, g.id)).not.toBeNull();
     await expect(edit(member, noteId, g.id, 'x')).rejects.toThrow(/does not allow writing/);
     await expect(agents.data.createNoteDoc(member.userId, notebookId, newId(), g.id)).rejects.toThrow(

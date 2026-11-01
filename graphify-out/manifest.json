@@ -1350,10 +1350,10 @@
     "semantic_hash": "110190da7d3b40d417cb869c13eecb76"
   },
   "apps/ios/scripts/l10n/build_catalog.py": {
-    "mtime": 1793543177.687507,
-    "seen": 1793551145.262924,
-    "ast_hash": "9011b8db309d60d08bc55c662dcb5e9d",
-    "semantic_hash": "9011b8db309d60d08bc55c662dcb5e9d"
+    "mtime": 1793553693.4235427,
+    "seen": 1793553722.0416,
+    "ast_hash": "8c1f1aa1e97cc5ec625177610fdbc180",
+    "semantic_hash": ""
   },
   "apps/ios/scripts/l10n/ru.json": {
     "mtime": 1793550314.3538768,

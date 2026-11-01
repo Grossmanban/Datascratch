@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-11-01)
 
 ## Corpus Check
-- 1000 files · ~885,729 words
+- 1000 files · ~885,747 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 39 file(s) not represented in the graph (top: (none) 20, .css 6, .example 4)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `7a702d41`
+- Built from commit: `f7e0d9ce`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -489,9 +489,9 @@
 ## Surprising Connections (you probably didn't know these)
 - `DSDesign` --semantically_similar_to--> `@datascratch/ui`  [INFERRED] [semantically similar]
   docs/CHANGELOG.md → apps/web/package.json
-- `DSEditor` --semantically_similar_to--> `@datascratch/web-editor`  [INFERRED] [semantically similar]
-  docs/CHANGELOG.md → apps/web/package.json
 - `DSCore` --semantically_similar_to--> `@datascratch/shared`  [INFERRED] [semantically similar]
+  docs/CHANGELOG.md → apps/web/package.json
+- `DSEditor` --semantically_similar_to--> `@datascratch/web-editor`  [INFERRED] [semantically similar]
   docs/CHANGELOG.md → apps/web/package.json
 - `Данные` --references--> `dailyNotebookId()`  [INFERRED]
   docs/decisions/0048-isolated-spaces.md → apps/web/src/domain/actions.ts
@@ -2123,7 +2123,7 @@ Nodes (3): Bqn(), d6r(), Oqn()
   docs/decisions/0048-isolated-spaces.md · relation: references
 
 ## Knowledge Gaps
-- **1662 isolated node(s):** `.commands`, `text`, `block`, `.eraserRadius`, `display` (+1657 more)
+- **1662 isolated node(s):** `display`, `mono`, `text`, `bold`, `medium` (+1657 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 5668 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **83 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -2131,15 +2131,15 @@ Nodes (3): Bqn(), d6r(), Oqn()
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `cn`, `05-organization-design.md`, `scripts/generate.mjs`, `DSDesign Swift package (iOS 26, Swift 6) — «Тихая бумага» design system tokens + SwiftUI components`, `DSLanguage`, `Foundation`?**
-  _High betweenness centrality (0.235) - this node is a cross-community bridge._
+  _High betweenness centrality (0.243) - this node is a cross-community bridge._
 - **Are the 370 inferred relationships involving `t()` (e.g. with `accept()` and `ACTION()`) actually correct?**
   _`t()` has 370 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `.commands`, `text`, `block` to the rest of the system?**
+- **What connects `display`, `mono`, `text` to the rest of the system?**
   _1662 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
   _Cohesion score 0.001941936640449612 - nodes in this community are weakly interconnected._
 - **Why does `DSDateChipModel` connect `DSLanguage` to `Equatable`, `Sendable`, `JSONValue`, `Foundation`, `design-tokens.md`?**
-  _High betweenness centrality (0.179) - this node is a cross-community bridge._
+  _High betweenness centrality (0.187) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._

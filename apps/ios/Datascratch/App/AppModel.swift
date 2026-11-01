@@ -182,6 +182,12 @@ final class AppModel {
                                                body: NoteBody(blocks: [.task("Call back", scheduled: DayKey.from(Date()))]))
                 noteForTesting = dated.id
             }
+            if ProcessInfo.processInfo.arguments.contains("-ui-testing-long-note"),
+               let notebook = library.notebooks(in: library.activeSpace?.id).first {
+                // A note several screens long (scroll position across app switches and full screen).
+                let blocks = (1...120).map { NoteBlock.paragraph("Paragraph \($0) of a long note.") }
+                noteForTesting = library.createNote(in: notebook.id, folder: nil, title: "Long", body: NoteBody(blocks: blocks)).id
+            }
             // The server ended this device's session (revoked elsewhere).
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-session-ended") { sync.markSessionEnded() }
         }

@@ -1655,4 +1655,39 @@ final class EditorViewTests: XCTestCase {
         }
         wait(for: [done], timeout: 10)
     }
+
+    // MARK: - Owner's feedback 2026-11-01
+
+    /// «Full screen» (and Split View, rotation) resizes the editor in animation steps; UITextView
+    /// moves the offset itself on each of them and the note ended at its top. The paragraph at the
+    /// top of the screen stays there.
+    func testReadingPositionSurvivesAnAnimatedWidthChange() {
+        let doc = InMemoryEditorDocument(blocks: [.title("Long")] + (1...150).map { .paragraph("Paragraph \($0) of a long note.") })
+        let editor = host(doc, width: 700, height: 900)
+        let tv = editor.textView
+        tv.contentOffset.y = 3000
+        settle(editor)
+        let topParagraph = { () -> String in
+            let point = CGPoint(x: tv.bounds.midX, y: tv.contentOffset.y + tv.adjustedContentInset.top + 4)
+            guard let position = tv.closestPosition(to: point) else { return "" }
+            let index = tv.offset(from: tv.beginningOfDocument, to: position)
+            let text = tv.text as NSString
+            return text.substring(with: text.paragraphRange(for: NSRange(location: min(index, text.length - 1), length: 0)))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let before = topParagraph()
+        XCTAssertTrue(before.hasPrefix("Paragraph"), "scrolled into the note: \(before)")
+        for width in stride(from: 760.0, through: 1030.0, by: 30.0) {
+            editor.frame.size.width = width
+            settle(editor)
+            drainMainQueue()
+        }
+        // The kept position is released once the width has settled.
+        let settled = expectation(description: "width settled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { settled.fulfill() }
+        wait(for: [settled], timeout: 10)
+        settle(editor)
+        XCTAssertEqual(topParagraph(), before, "the same paragraph stays at the top")
+        XCTAssertGreaterThan(tv.contentOffset.y, 1000, "not back at the top of the note")
+    }
 }

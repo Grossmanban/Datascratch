@@ -451,9 +451,27 @@ public final class EditorView: UIView {
 
     // MARK: - Layout
 
+    /// The reading position kept across a width change or a trip off screen (full screen, Split
+    /// View, rotation, the document column rebuilt around the same editor): the text reflows and
+    /// the scroll offset alone pointed somewhere else — the note jumped to its top (owner's
+    /// feedback 2026-11-01). Taken once, before the first step of the change, and held until the
+    /// width settles: UITextView moves the offset itself on every container size change, and an
+    /// animated resize (full screen) is a dozen of them — an anchor re-taken mid-way kept its error.
+    private var keptAnchor: (location: NSTextLocation, offset: CGFloat)?
+    private var releaseAnchor: DispatchWorkItem?
+
+    public override func willMove(toWindow newWindow: UIWindow?) {
+        super.willMove(toWindow: newWindow)
+        if newWindow == nil, window != nil, keptAnchor == nil { keptAnchor = visibleAnchor() }
+    }
+
     public override func layoutSubviews() {
         super.layoutSubviews()
         let shrinks = textView.frame.height > bounds.height + 0.5
+        // Measured on the old width, before the text view reflows.
+        if keptAnchor == nil, textView.frame.width > 0, abs(textView.frame.width - bounds.width) > 0.5, !userIsInteracting {
+            keptAnchor = visibleAnchor()
+        }
         textView.frame = bounds
         // The host shrank the editor (the keyboard, the format bar): keep the caret's line visible
         // (UIKit's own scroll to the caret is off, see `EditorTextView.allowsSystemScroll`).
@@ -486,6 +504,28 @@ public final class EditorView: UIView {
             }
         }
         applyKeyboardInset()
+        if keptAnchor != nil, window != nil, bounds.width > 0 {
+            // On the next turn: the text view lays out its new width first.
+            DispatchQueue.main.async { [weak self] in self?.restoreKeptAnchor() }
+            releaseAnchor?.cancel()
+            let release = DispatchWorkItem { [weak self] in
+                self?.restoreKeptAnchor()
+                self?.keptAnchor = nil
+            }
+            releaseAnchor = release
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: release)
+        }
+    }
+
+    private func restoreKeptAnchor() {
+        guard let anchor = keptAnchor, window != nil, let tlm = textView.textLayoutManager else { return }
+        guard !userIsInteracting else {
+            keptAnchor = nil
+            return
+        }
+        if textView.text.utf16.count <= Self.fullLayoutLimit { tlm.ensureLayout(for: tlm.documentRange) }
+        tlm.textViewportLayoutController.layoutViewport()
+        restore(anchor)
     }
 
     // MARK: - Keyboard

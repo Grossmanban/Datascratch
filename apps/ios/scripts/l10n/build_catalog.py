@@ -65,6 +65,8 @@ IGNORE = {
     "Личное", "Работа", "Заметки",
     # D-54: UI-test seed and the comparison's line marks.
     "Shared plans", "Roadmap", "Plan for two", "Ideas", "Only the owner edits this.", "• ", "☑ ", "———", "“", "”",
+    # UI-test seed: a long note (scroll position across full screen).
+    "Long", "Paragraph \\($0) of a long note.",
 }
 
 LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')

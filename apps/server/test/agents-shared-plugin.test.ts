@@ -48,7 +48,7 @@ async function member(owner: TestUser, notebookId: string, role: 'editor' | 'vie
   await call(m, 'POST', `/invitations/${invitationId}/accept`, {});
   await call(owner, 'PUT', `/members/notebook/${notebookId}/${m.userId}/key`, { version: 1, wrappedKey: b64(rnd(73)) });
   const g: AgentGrant = {
-    id: newId(), userId: m.userId, kind: 'static', name: 'Member agent', clientId: null, notebookIds: [notebookId], permission: 'read_write',
+    id: newId(), userId: m.userId, kind: 'static', name: 'Member agent', clientId: null, notebookIds: [notebookId], allNotebooks: false, permission: 'read_write',
     createdAt: new Date().toISOString(), expiresAt: null, revokedAt: null, lastUsedAt: null, secretHash: rnd(32).toString('hex'),
   };
   await agents.store.insertGrant(g);

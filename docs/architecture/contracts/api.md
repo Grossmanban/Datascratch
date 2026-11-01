@@ -158,8 +158,8 @@
 
 | Метод | Путь | Смысл |
 | --- | --- | --- |
-| POST | `/agent-tokens` | `{ name, notebookIds, permission: "read"\|"read_write", expiresAt? }` → `{ id, token }` (токен показывается один раз) |
-| GET | `/agent-tokens` | список (без секретов) |
+| POST | `/agent-tokens` | `{ name, notebookIds, allNotebooks?, permission: "read"\|"read_write", expiresAt? }` → `{ id, token }` (токен показывается один раз). `allNotebooks: true` — все блокноты «для агентов», включая включённые позже; `notebookIds` тогда может быть пустым |
+| GET | `/agent-tokens` | список (без секретов), у каждого — `allNotebooks` |
 | DELETE | `/agent-tokens/:id` | отзыв |
 | GET | `/agent-tokens/:id/audit` | журнал действий агента |
 

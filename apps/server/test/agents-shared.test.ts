@@ -77,6 +77,7 @@ async function grantFor(member: TestUser, notebookIds: string[], permission: 're
     name: 'Member agent',
     clientId: null,
     notebookIds,
+    allNotebooks: false,
     permission,
     createdAt: new Date().toISOString(),
     expiresAt: null,

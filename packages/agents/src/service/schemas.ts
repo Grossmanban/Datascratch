@@ -34,13 +34,21 @@ export const readNoteInput = z.object({
   includeImages: z
     .boolean()
     .default(true)
-    .describe("Attach handwriting images (PNG) to the result. Each handwritten fragment is also referenced in the Markdown as ![✍️ …](handwriting:<id>)."),
+    .describe(
+      "Attach images to the result: handwriting (PNG; each fragment is referenced in the Markdown as ![✍️ …](handwriting:<id>)) and the note's pictures (![…](attachment:<id>)).",
+    ),
 });
 
 export const handwritingImageInput = z.object({
   noteId: id,
   handwritingId: z.string().describe("Id from a ![✍️ …](handwriting:<id>) link in read_note output."),
   scale: z.number().min(1).max(4).optional().describe("Pixels per point; default 3 for small fragments, 2 for larger ones."),
+});
+
+export const imageInput = z.object({
+  noteId: id,
+  attachmentId: z.string().describe("Id from a ![…](attachment:<id>) link in read_note output."),
+  maxSize: z.number().int().min(256).max(4096).optional().describe("Longest side in pixels; default 2048. read_note attaches pictures at 1568."),
 });
 
 export const createNoteInput = z.object({
@@ -139,7 +147,7 @@ export const deleteFolderInput = z.object({
   contents: z
     .enum(["refuse", "move_to_parent"])
     .default("refuse")
-    .describe("refuse (default): delete only an empty folder. move_to_parent: move its notes and subfolders to the parent folder (or the root) first. Notes are never deleted."),
+    .describe("refuse (default): delete only an empty folder. move_to_parent: move its notes and subfolders to the parent folder (or the root) first. Notes are never deleted here (trash_note moves a note to the trash)."),
 });
 
 export const moveNoteInput = z.object({
@@ -150,10 +158,16 @@ export const moveNoteInput = z.object({
     .describe("Target notebook (another notebook of this agent, from list_notebooks); omit to move within the current notebook."),
 });
 
+export const trashNoteInput = z.object({
+  noteId: id,
+});
+
 export type ListNotesInput = z.infer<typeof listNotesInput>;
 export type SearchNotesInput = z.infer<typeof searchNotesInput>;
 export type ReadNoteInput = z.infer<typeof readNoteInput>;
 export type HandwritingImageInput = z.infer<typeof handwritingImageInput>;
+export type ImageInput = z.infer<typeof imageInput>;
+export type TrashNoteInput = z.infer<typeof trashNoteInput>;
 export type CreateNoteInput = z.infer<typeof createNoteInput>;
 export type EditNoteInput = z.infer<typeof editNoteInput>;
 export type AddCommentInput = z.infer<typeof addCommentInput>;

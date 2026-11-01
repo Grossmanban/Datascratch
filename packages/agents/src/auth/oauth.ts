@@ -508,10 +508,11 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
     const back = (params: Record<string, string>) => redirectWith(reply, pending.redirectUri, { ...params, state: pending.state, iss: cfg.issuer });
     if (body.decision !== "allow") return back({ error: "access_denied", error_description: "The user denied access." });
 
+    const allNotebooks = body.all_notebooks === "1";
     const chosen = ([] as string[]).concat(body.notebook ?? []);
     const allowed = new Set((await ctx.data.listAgentNotebooks(user.userId)).map((n) => n.id));
     const notebookIds = [...new Set(chosen)].filter((id) => allowed.has(id));
-    if (notebookIds.length === 0) return html(reply, 400, errorPage("Выберите хотя бы один блокнот в режиме «для агентов»."));
+    if (!allNotebooks && notebookIds.length === 0) return html(reply, 400, errorPage("Выберите хотя бы один блокнот в режиме «для агентов»."));
     const permission: Permission = body.permission === "read_write" ? "read_write" : "read";
     const code = randomToken("dso_code_");
     await ctx.store.insertCode({
@@ -523,6 +524,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
       resource: pending.resource,
       scope: scopeFor(permission),
       notebookIds,
+      allNotebooks,
       permission,
       expiresAt: new Date(now().getTime() + cfg.codeTtlSec * 1000).toISOString(),
     });
@@ -585,8 +587,9 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
     const existing = (await ctx.store.listGrants(code.userId)).find((g) => g.kind === "oauth" && g.clientId === client.clientId && !g.revokedAt);
     let grant: AgentGrant;
     if (existing) {
-      await ctx.store.updateGrant(existing.id, { notebookIds: code.notebookIds, permission: code.permission });
-      grant = { ...existing, notebookIds: code.notebookIds, permission: code.permission };
+      const patch = { notebookIds: code.notebookIds, allNotebooks: code.allNotebooks, permission: code.permission };
+      await ctx.store.updateGrant(existing.id, patch);
+      grant = { ...existing, ...patch };
     } else {
       grant = {
         id: uuidv7(now().getTime()),
@@ -595,6 +598,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
         name: client.clientName,
         clientId: client.clientId,
         notebookIds: code.notebookIds,
+        allNotebooks: code.allNotebooks,
         permission: code.permission,
         createdAt: now().toISOString(),
         expiresAt: null,

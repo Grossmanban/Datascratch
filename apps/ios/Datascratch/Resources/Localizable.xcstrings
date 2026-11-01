@@ -341,6 +341,16 @@
         }
       }
     },
+    "All notebooks for agents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все блокноты «для агентов»"
+          }
+        }
+      }
+    },
     "All notebooks in this space and their notes will be deleted.": {
       "localizations": {
         "ru": {

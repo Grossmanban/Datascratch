@@ -68,6 +68,7 @@ export function grant(overrides: Partial<AgentGrant> = {}): AgentGrant {
     name: "Claude",
     clientId: null,
     notebookIds: [NB_WORK, NB_PRIVATE],
+    allNotebooks: false,
     permission: "read_write",
     createdAt: "2026-10-25T00:00:00.000Z",
     expiresAt: null,

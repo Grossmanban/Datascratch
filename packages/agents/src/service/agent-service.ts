@@ -23,8 +23,9 @@ import {
   putNoteMeta,
   type Folder,
 } from "@datascratch/shared/document";
-import { blockIdOf, childElements, contentOf, findBlock, runText, TEXT_BLOCKS, walkBlocks } from "../doc/model.js";
+import { attr, blockIdOf, childElements, contentOf, findBlock, runText, TEXT_BLOCKS, walkBlocks } from "../doc/model.js";
 import { AgentError } from "../errors.js";
+import { scaleImage, type AgentImage } from "../render/attachment-image.js";
 import { renderHandwriting, type RenderedImage } from "../render/handwriting-png.js";
 import { base64url, uuidv7 } from "../util.js";
 import { requireWrite, type Principal } from "./access.js";
@@ -39,6 +40,7 @@ import {
   type DeleteFolderInput,
   type EditNoteInput,
   type HandwritingImageInput,
+  type ImageInput,
   type ListNotesInput,
   type ListTasksInput,
   type MoveFolderInput,
@@ -46,6 +48,7 @@ import {
   type ReadNoteInput,
   type RenameFolderInput,
   type SearchNotesInput,
+  type TrashNoteInput,
   type UpdateTaskInput,
 } from "./schemas.js";
 
@@ -139,7 +142,31 @@ function folderPath(nb: NotebookView, folderId: string | null): string[] {
 export interface ServiceOptions {
   /** Max handwriting images attached by read_note. */
   maxImagesPerRead?: number;
+  /** Max pictures (photos, screenshots) attached by read_note. */
+  maxPicturesPerRead?: number;
   imageCacheSize?: number;
+}
+
+/** Longest side of a picture attached by read_note (get_image goes up to 4096). */
+export const READ_PICTURE_SIDE = 1568;
+export const GET_IMAGE_SIDE = 2048;
+
+export interface NotePicture {
+  attachmentId: string;
+  blockId: string | null;
+  alt: string;
+  caption: string | null;
+}
+
+/** Picture blocks of a note, in document order. */
+function picturesOf(doc: Y.Doc): NotePicture[] {
+  const out: NotePicture[] = [];
+  walkBlocks(doc, (el) => {
+    const attachmentId = el.nodeName === "image" ? attr(el, "attachmentId") : undefined;
+    if (typeof attachmentId !== "string" || !attachmentId) return;
+    out.push({ attachmentId, blockId: blockIdOf(el), alt: String(attr(el, "alt") ?? ""), caption: attr<string | null>(el, "caption") ?? null });
+  });
+  return out;
 }
 
 export interface ReadNoteResult {
@@ -148,6 +175,9 @@ export interface ReadNoteResult {
   handwriting: { id: string; kind: HandwritingItem["kind"]; blockId: string | null; description: string }[];
   comments: { id: string; blockId: string; author: string; text: string; createdAt: string; quote: string | null }[];
   images: { handwritingId: string; png: Buffer }[];
+  pictures: NotePicture[];
+  /** Pictures attached to the result (the rest are listed in `pictures` only). */
+  pictureImages: (NotePicture & { image: AgentImage })[];
 }
 
 export interface NoteSummary {
@@ -162,6 +192,7 @@ export interface NoteSummary {
 export class AgentService {
   private readonly index = new NoteIndexCache();
   private readonly images = new Map<string, RenderedImage>();
+  private readonly pictureCache = new Map<string, AgentImage | null>();
   private readonly now: () => Date;
 
   constructor(
@@ -175,11 +206,10 @@ export class AgentService {
   // Access
   // -------------------------------------------------------------------------
 
-  /** Agent-mode notebooks the grant may use, loaded. Private or unlisted notebooks never appear. */
   /** Granted agent-mode notebooks, loaded; the ones that fail to load are reported, not dropped. */
   private async notebookStates(p: Principal, only?: string): Promise<{ views: NotebookView[]; unavailable: UnavailableNotebook[] }> {
     const all = await this.ctx.data.listAgentNotebooks(p.grant.userId, p.grant.id);
-    const allowed = all.filter((n) => p.grant.notebookIds.includes(n.id) && (!only || n.id === only));
+    const allowed = all.filter((n) => (p.grant.allNotebooks || p.grant.notebookIds.includes(n.id)) && (!only || n.id === only));
     if (only && allowed.length === 0)
       throw new AgentError("not_found", `Notebook ${only} is not available to this agent. Call list_notebooks to see the notebooks you can access.`);
     const views: NotebookView[] = [];
@@ -415,10 +445,18 @@ export class AgentService {
       });
     });
     const images: ReadNoteResult["images"] = [];
+    const pictures = picturesOf(doc);
+    const pictureImages: ReadNoteResult["pictureImages"] = [];
     if (input.includeImages) {
       for (const item of handwriting.slice(0, this.options.maxImagesPerRead ?? 6)) {
         const img = await this.image(p, input.noteId, seq, doc, item, undefined);
         images.push({ handwritingId: item.id, png: img.png });
+      }
+      // A picture written over is already in its handwriting image, with the strokes.
+      const drawnOn = new Set(handwriting.filter((h) => h.kind === "image" && images.some((i) => i.handwritingId === h.id)).map((h) => h.blockId));
+      for (const pic of pictures.filter((x) => !drawnOn.has(x.blockId)).slice(0, this.options.maxPicturesPerRead ?? 6)) {
+        const image = await this.picture(p, pic.attachmentId, READ_PICTURE_SIDE);
+        if (image) pictureImages.push({ ...pic, image });
       }
     }
     return {
@@ -427,7 +465,33 @@ export class AgentService {
       handwriting: handwriting.map((h) => ({ id: h.id, kind: h.kind, blockId: h.blockId, description: h.description })),
       comments,
       images,
+      pictures,
+      pictureImages,
     };
+  }
+
+  /** A note's picture, decrypted and scaled; null when the server cannot read or decode it. */
+  private async picture(p: Principal, attachmentId: string, maxSide: number): Promise<AgentImage | null> {
+    if (!this.ctx.data.loadAttachmentImage) return null;
+    const key = `${p.grant.userId}:${attachmentId}:${maxSide}`;
+    if (this.pictureCache.has(key)) return this.pictureCache.get(key)!;
+    const bytes = await this.ctx.data.loadAttachmentImage(p.grant.userId, attachmentId, p.grant.id);
+    const image = bytes ? await scaleImage(bytes, maxSide) : null;
+    this.pictureCache.set(key, image);
+    // Pictures are large: keep only a few (an attachment never changes, so no seq in the key).
+    while (this.pictureCache.size > 24) this.pictureCache.delete(this.pictureCache.keys().next().value!);
+    return image;
+  }
+
+  async getImage(p: Principal, input: ImageInput) {
+    await this.locate(p, input.noteId);
+    const { doc } = await this.loadNote(p, input.noteId);
+    const pic = picturesOf(doc).find((x) => x.attachmentId === input.attachmentId);
+    if (!pic) throw new AgentError("not_found", `Picture ${input.attachmentId} not found in note ${input.noteId} (it may have been removed). Call read_note for current ids.`);
+    const image = await this.picture(p, pic.attachmentId, input.maxSize ?? GET_IMAGE_SIDE);
+    if (!image)
+      throw new AgentError("conflict", "The server cannot show this picture right now: it is still uploading, too large, or in a format it cannot decode (for example HEIC).");
+    return { ...pic, ...image };
   }
 
   private async image(p: Principal, noteId: string, seq: number, doc: Y.Doc, item: HandwritingItem, scale: number | undefined): Promise<RenderedImage> {
@@ -630,7 +694,7 @@ export class AgentService {
     if (input.contents === "refuse" && (live.length > 0 || subfolders.length > 0))
       throw new AgentError(
         "conflict",
-        `Folder “${folder.name}” is not empty (${live.length} note(s), ${subfolders.length} subfolder(s)). Move them first, or call delete_folder with contents: "move_to_parent". Notes are never deleted by agents.`,
+        `Folder “${folder.name}” is not empty (${live.length} note(s), ${subfolders.length} subfolder(s)). Move them first, or call delete_folder with contents: "move_to_parent". Agents move notes to the trash only with trash_note.`,
       );
     const target = folder.parentId;
     // Trashed notes go up too, so restoring them from the trash never points at a missing folder.
@@ -651,6 +715,21 @@ export class AgentService {
       movedTo: target ? this.folderOut(nb, nb.folders.get(target)!) : null,
       movedNotes: live.length,
       movedFolders: subfolders.length,
+    };
+  }
+
+  /** Moves a note to the trash, like the apps do: the user restores it there within 30 days. Agents never delete for good. */
+  async trashNote(p: Principal, input: TrashNoteInput) {
+    requireWrite(p);
+    const { nb, meta } = await this.locate(p, input.noteId);
+    this.requireNotebookWrite(nb);
+    if (meta.kind !== "note")
+      throw new AgentError("bad_request", `“${meta.title}” is a ${meta.kind === "daily" ? "daily note" : "task inbox"}; it cannot be moved to the trash.`);
+    const at = this.now().toISOString();
+    await this.mutate(p, nb.info.id, "trash_note", (doc) => patchNoteMeta(doc, meta.id, { trashedAt: at }), { doc: nb.doc });
+    return {
+      trashed: { id: meta.id, title: meta.title, notebookId: nb.info.id, trashedAt: at },
+      hint: "The note is in the trash in Datascratch; the user can restore it there within 30 days.",
     };
   }
 

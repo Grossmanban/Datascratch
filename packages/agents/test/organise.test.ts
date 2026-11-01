@@ -126,3 +126,24 @@ describe("move_note", () => {
     await expect(bare.moveNote(p, { noteId: NOTE_PLAN, folderId: null, notebookId: NB_OTHER })).rejects.toMatchObject({ code: "bad_request" });
   });
 });
+
+describe("trash_note", () => {
+  it("moves a note to the trash like the apps do; it disappears for the agent and stays restorable", async () => {
+    const { ctx, svc, p } = setup();
+    const r = await svc.trashNote(p, { noteId: NOTE_IDEAS });
+    expect(r.trashed.id).toBe(NOTE_IDEAS);
+    const meta = getNoteMeta(ctx.data.current(NB_WORK), NOTE_IDEAS)!;
+    expect(meta.trashedAt).toBe(r.trashed.trashedAt);
+    // The note itself is untouched: the user restores it from the trash.
+    expect(ctx.data.docs.has(NOTE_IDEAS)).toBe(true);
+    await expect(svc.readNote(p, { noteId: NOTE_IDEAS, includeImages: false })).rejects.toMatchObject({ code: "not_found" });
+    expect((await svc.listNotes(p, { notebookId: NB_WORK, limit: 50, offset: 0 })).notes.map((n) => n.id)).not.toContain(NOTE_IDEAS);
+  });
+
+  it("needs write access and never reaches private or other notebooks", async () => {
+    const { svc } = setup();
+    await expect(svc.trashNote(principal({ permission: "read" }), { noteId: NOTE_PLAN })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(svc.trashNote(principal(), { noteId: NOTE_SECRET })).rejects.toMatchObject({ code: "not_found" });
+    await expect(svc.trashNote(principal(), { noteId: NOTE_TRASH })).rejects.toMatchObject({ code: "not_found" });
+  });
+});

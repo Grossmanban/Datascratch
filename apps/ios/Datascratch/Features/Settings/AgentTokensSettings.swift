@@ -55,7 +55,7 @@ struct AgentTokensSettings: View {
                                 .background(Tint.purple.background, in: Capsule())
                                 .foregroundStyle(Tint.purple.foreground)
                         }
-                        Text(notebookNames(token.notebookIds))
+                        Text(token.allNotebooks == true ? String(localized: "All notebooks for agents") : notebookNames(token.notebookIds))
                             .font(Theme.Typography.footnote)
                             .foregroundStyle(Theme.Palette.textSecondary)
                         if let lastUsed = token.lastUsedAt {

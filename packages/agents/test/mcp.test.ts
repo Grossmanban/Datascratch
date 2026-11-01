@@ -42,6 +42,7 @@ describe("MCP over Streamable HTTP", () => {
         "edit_note",
         "get_backlinks",
         "get_handwriting_image",
+        "get_image",
         "list_notebooks",
         "list_notes",
         "list_spaces",
@@ -51,6 +52,7 @@ describe("MCP over Streamable HTTP", () => {
         "read_note",
         "rename_folder",
         "search_notes",
+        "trash_note",
         "update_task",
       ].sort(),
     );

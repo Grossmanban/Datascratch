@@ -9,12 +9,16 @@ import type { AgentGrant, AgentsContext } from "../context.js";
 import { AgentError } from "../errors.js";
 import { sendError, type AgentsRuntime } from "../plugin.js";
 
-const createInput = z.object({
-  name: z.string().trim().min(1).max(100),
-  notebookIds: z.array(z.string()).min(1).max(500),
-  permission: z.enum(["read", "read_write"]),
-  expiresAt: z.iso.datetime().nullable().optional(),
-});
+const createInput = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    notebookIds: z.array(z.string()).max(500).default([]),
+    /** Every agent-mode notebook, including ones switched to that mode later. */
+    allNotebooks: z.boolean().optional(),
+    permission: z.enum(["read", "read_write"]),
+    expiresAt: z.iso.datetime().nullable().optional(),
+  })
+  .refine((v) => v.allNotebooks || v.notebookIds.length > 0, { path: ["notebookIds"], message: "choose at least one notebook or allNotebooks" });
 
 /** Public view of a grant (never includes secrets). */
 export function grantView(g: AgentGrant) {
@@ -24,6 +28,7 @@ export function grantView(g: AgentGrant) {
     name: g.name,
     clientId: g.clientId,
     notebookIds: g.notebookIds,
+    allNotebooks: g.allNotebooks,
     permission: g.permission,
     createdAt: g.createdAt,
     expiresAt: g.expiresAt,

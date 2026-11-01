@@ -146,6 +146,8 @@ public struct AgentToken: Codable, Hashable, Sendable, Identifiable {
     public var id: String
     public var name: String
     public var notebookIds: [String]
+    /// Every agent-mode notebook, including later ones (`notebookIds` is then ignored). Absent from older servers.
+    public var allNotebooks: Bool?
     public var permission: AgentPermission
     public var expiresAt: String?
     public var createdAt: String

@@ -162,6 +162,8 @@ export interface AgentGrant {
   /** OAuth client id (kind = oauth). */
   clientId: string | null;
   notebookIds: string[];
+  /** Every agent-mode notebook of the user, including ones switched to that mode later; `notebookIds` is then ignored. */
+  allNotebooks: boolean;
   permission: Permission;
   createdAt: string;
   expiresAt: string | null;
@@ -194,6 +196,7 @@ export interface AuthorizationCode {
   resource: string;
   scope: string;
   notebookIds: string[];
+  allNotebooks: boolean;
   permission: Permission;
   expiresAt: string;
 }
@@ -228,7 +231,7 @@ export interface AgentsStore {
   getGrant(id: string): Promise<AgentGrant | null>;
   findGrantBySecretHash(secretHash: string): Promise<AgentGrant | null>;
   listGrants(userId: string): Promise<AgentGrant[]>;
-  updateGrant(id: string, patch: Partial<Pick<AgentGrant, "revokedAt" | "lastUsedAt" | "notebookIds" | "permission">>): Promise<void>;
+  updateGrant(id: string, patch: Partial<Pick<AgentGrant, "revokedAt" | "lastUsedAt" | "notebookIds" | "allNotebooks" | "permission">>): Promise<void>;
 
   upsertClient(client: OAuthClient): Promise<void>;
   getClient(clientId: string): Promise<OAuthClient | null>;

@@ -16,8 +16,9 @@ export const SERVER_INSTRUCTIONS = `Datascratch is a notes app with Apple Pencil
 You can access only notebooks the user switched to "for agents" mode and granted to you.
 Workflow: list_notebooks or search_notes → read_note (Markdown; every block has a <!-- block:ID --> marker) → edit_note with those block ids.
 Handwriting appears as ![✍️ description](handwriting:ID) with attached images; call get_handwriting_image for a closer look.
+Pictures (photos, screenshots) appear as ![alt](attachment:ID) and are attached too; call get_image for a larger copy.
 Your edits apply immediately, are highlighted for the user and can be undone from version history. Prefer small, targeted edits (replace_text, insert) over replacing whole blocks: untouched text keeps the user's handwritten marks.
-Organise with folders (create_folder, nested via parentFolderId; rename_folder, move_folder, delete_folder) and move_note, also between your notebooks. You cannot create notebooks: they are end-to-end encrypted with the user's master key — ask the user to create one in the app and switch it to "for agents" mode.`;
+Organise with folders (create_folder, nested via parentFolderId; rename_folder, move_folder, delete_folder) and move_note, also between your notebooks. trash_note moves a note to the trash (the user can restore it); you cannot delete notes for good. You cannot create notebooks: they are end-to-end encrypted with the user's master key — ask the user to create one in the app and switch it to "for agents" mode.`;
 
 function json(data: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
@@ -88,7 +89,7 @@ export function buildMcpServer(ctx: AgentsContext, service: AgentService, p: Pri
     {
       title: "Read note",
       description:
-        "Note content as Markdown. Each block is followed by <!-- block:ID --> (tasks: <!-- block:ID task:TASK_ID -->) for edit_note. Handwriting is shown as ![✍️ what it marks](handwriting:ID) with the images attached.",
+        "Note content as Markdown. Each block is followed by <!-- block:ID --> (tasks: <!-- block:ID task:TASK_ID -->) for edit_note. Handwriting is shown as ![✍️ what it marks](handwriting:ID) and pictures as ![alt](attachment:ID), with the images attached.",
       inputSchema: S.readNoteInput,
     },
     async (a) => {
@@ -107,7 +108,32 @@ export function buildMcpServer(ctx: AgentsContext, service: AgentService, p: Pri
         content.push({ type: "text", text: `handwriting:${img.handwritingId} — ${h?.description ?? ""}` });
         content.push({ type: "image", data: img.png.toString("base64"), mimeType: "image/png" });
       }
+      for (const pic of r.pictureImages) {
+        content.push({ type: "text", text: `attachment:${pic.attachmentId}${pic.caption ? ` — ${pic.caption}` : pic.alt ? ` — ${pic.alt}` : ""}` });
+        content.push({ type: "image", data: pic.image.data.toString("base64"), mimeType: pic.image.mimeType });
+      }
+      const left = r.pictures.length - r.pictureImages.length;
+      if (a.includeImages && left > 0)
+        content.push({ type: "text", text: `${left} more picture(s) not attached (limit, or the server cannot show them); call get_image with their attachment ids.` });
       return { content };
+    },
+  );
+
+  tool(
+    "get_image",
+    {
+      title: "Picture",
+      description: "A picture of a note (photo, screenshot) by the id from an ![…](attachment:ID) link, scaled to fit maxSize (default 2048 px).",
+      inputSchema: S.imageInput,
+    },
+    async (a) => {
+      const r = await service.getImage(p, a);
+      return {
+        content: [
+          { type: "text", text: `attachment:${r.attachmentId} · ${r.width}×${r.height}${r.caption ? ` · ${r.caption}` : ""}${r.blockId ? ` (block ${r.blockId})` : ""}` },
+          { type: "image", data: r.data.toString("base64"), mimeType: r.mimeType },
+        ],
+      };
     },
   );
 
@@ -208,6 +234,19 @@ export function buildMcpServer(ctx: AgentsContext, service: AgentService, p: Pri
       destructive: true,
     },
     async (a) => json(await service.deleteFolder(p, a)),
+  );
+
+  tool(
+    "trash_note",
+    {
+      title: "Move note to trash",
+      description:
+        "Moves a note to the trash (the user can restore it in Datascratch within 30 days). Agents cannot delete notes for good. Confirm with the user before trashing a note they did not ask to remove.",
+      inputSchema: S.trashNoteInput,
+      write: true,
+      destructive: true,
+    },
+    async (a) => json(await service.trashNote(p, a)),
   );
 
   tool(

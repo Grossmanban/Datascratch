@@ -819,6 +819,7 @@ final class ServerAccessService: AccessService {
         if let list = try? await connection.api.agentTokens() {
             agentTokens = list.map { token in
                 AgentToken(id: token.id, name: token.name, notebookIds: token.notebookIds,
+                           allNotebooks: token.allNotebooks,
                            permission: token.permission == .readWrite ? .readWrite : .read,
                            createdAt: DSCore.DSDate.parseISO(token.createdAt) ?? Date(),
                            expiresAt: token.expiresAt.flatMap(DSCore.DSDate.parseISO),

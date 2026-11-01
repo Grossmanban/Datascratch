@@ -92,4 +92,18 @@ describe("REST /v1/agent", () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error.message).toContain("for agents");
   });
+
+  it("creates a token for every agent-mode notebook, and refuses one with no notebooks at all", async () => {
+    const { s } = await setup();
+    const post = (body: object) =>
+      fetch(`${s.base}/v1/agent-tokens`, {
+        method: "POST",
+        headers: { authorization: `Bearer user:${USER}`, "content-type": "application/json" },
+        body: JSON.stringify({ name: "all", permission: "read", ...body }),
+      });
+    const all = await post({ allNotebooks: true });
+    expect(all.status).toBe(201);
+    expect(await all.json()).toMatchObject({ allNotebooks: true, notebookIds: [] });
+    expect((await post({})).status).toBe(400);
+  });
 });

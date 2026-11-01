@@ -535,6 +535,7 @@ const en: Loose<Messages> = {
     tokenPermission: "Permission",
     tokenRead: "Read only",
     tokenReadWrite: "Read and write",
+    allAgentNotebooks: "All notebooks for agents",
     tokenCreated: "Copy the token now — it won't be shown again.",
     tokenRevoke: "Revoke",
     noTokens: "No tokens",

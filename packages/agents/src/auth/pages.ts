@@ -36,6 +36,8 @@ h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
 .nb input{width:18px;height:18px;accent-color:var(--accent);margin:0}
 .nb:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
 .nb small{color:var(--text3);margin-left:auto;font-size:13px}
+.all{margin-bottom:12px}
+form:has(.all input:checked) .pick{opacity:.45;pointer-events:none}
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .seg label{display:block;padding:12px 14px;border:1px solid var(--line);border-radius:12px;cursor:pointer;transition:border-color .2s,background .2s}
 .seg label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
@@ -118,8 +120,8 @@ export function consentPage(i: ConsentPageInput): string {
   const notebooks = i.notebooks.length
     ? i.notebooks
         .map(
-          (n, k) =>
-            `<label class="nb"><input type="checkbox" name="notebook" value="${esc(n.id)}"${i.notebooks.length === 1 || k === 0 ? " checked" : ""}>${notebookIcon(n.icon, n.color)}<span>${esc(n.name)}</span>${n.unavailable ? `<small>данные сейчас недоступны</small>` : n.shared ? `<small>${sharedLabel(n.shared)}</small>` : n.space ? `<small>${esc(n.space)}</small>` : ""}</label>`,
+          (n) =>
+            `<label class="nb"><input type="checkbox" name="notebook" value="${esc(n.id)}">${notebookIcon(n.icon, n.color)}<span>${esc(n.name)}</span>${n.unavailable ? `<small>данные сейчас недоступны</small>` : n.shared ? `<small>${sharedLabel(n.shared)}</small>` : n.space ? `<small>${esc(n.space)}</small>` : ""}</label>`,
         )
         .join("")
     : `<div class="empty">Нет блокнотов в режиме «для агентов». Включите этот режим у блокнота в Datascratch${i.appUrl ? ` (<a href="${esc(i.appUrl)}">открыть</a>)` : ""} и вернитесь сюда.</div>`;
@@ -131,13 +133,14 @@ ${i.verifiedHost ? "" : `<div class="note">Название этого аген�
 <form method="post" action="${esc(i.action)}">
 <input type="hidden" name="request" value="${esc(i.request)}">
 <h2>Блокноты</h2>
-${notebooks}
+${i.notebooks.length ? `<label class="nb all"><input type="checkbox" name="all_notebooks" value="1" checked><span>Все блокноты «для агентов»</span><small>и те, что вы откроете агентам позже</small></label>` : ""}
+<div class="pick">${notebooks}</div>
 <h2>Права</h2>
 <div class="seg">
 <label><input type="radio" name="permission" value="read"${i.writeRequested ? "" : " checked"}><b>Только чтение</b><span>искать и читать заметки</span></label>
 <label><input type="radio" name="permission" value="read_write"${i.writeRequested ? " checked" : ""}><b>Чтение и правка</b><span>создавать и менять заметки</span></label>
 </div>
-<div class="note">Агент увидит только выбранные блокноты. Его правки появляются сразу, подсвечиваются и откатываются через историю версий. Доступ можно отозвать в настройках в любой момент.</div>
+<div class="note">Агент увидит только блокноты «для агентов»: все или выбранные. Приватные блокноты ему недоступны. Его правки появляются сразу, подсвечиваются и откатываются через историю версий. Доступ можно отозвать в настройках в любой момент.</div>
 <div class="actions">
 <button class="secondary" type="submit" name="decision" value="deny">Отклонить</button>
 <button class="primary" type="submit" name="decision" value="allow"${i.notebooks.length ? "" : " disabled"}>Разрешить</button>

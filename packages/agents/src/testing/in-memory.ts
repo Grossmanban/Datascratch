@@ -119,6 +119,8 @@ export class InMemoryDataSource implements AgentDataSource {
   readonly emails = new Map<string, string>();
   /** Makes the next moveNoteDoc fail after building the updates (atomicity tests). */
   failNextMove = false;
+  /** Decrypted image attachments by id, as the server would return them. */
+  readonly attachmentImages = new Map<string, Uint8Array>();
 
   addNotebook(userId: string, nb: Partial<AgentNotebook> & { id: string; mode?: "private" | "agent" }, doc: Y.Doc): void {
     this.notebooks.set(nb.id, {
@@ -190,6 +192,11 @@ export class InMemoryDataSource implements AgentDataSource {
         const role = this.roleIn(userId, { ...rest, userId: owner, mode: "agent" });
         return role === "owner" ? rest : { ...rest, shared: { ownerUserId: owner, ownerEmail: this.emails.get(owner) ?? null, role: role as "editor" | "viewer" } };
       });
+  }
+
+  async loadAttachmentImage(_userId: string, attachmentId: string, grantId?: string): Promise<Uint8Array | null> {
+    this.grantCalls.push(grantId);
+    return this.attachmentImages.get(attachmentId) ?? null;
   }
 
   async loadDoc(userId: string, docId: string, grantId?: string): Promise<LoadedDoc | null> {

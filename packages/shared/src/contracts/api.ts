@@ -536,12 +536,16 @@ export type GuestSessionResponse = z.infer<typeof guestSessionResponseSchema>;
 export const AGENT_PERMISSIONS = ["read", "read_write"] as const;
 export type AgentPermission = (typeof AGENT_PERMISSIONS)[number];
 
-export const createAgentTokenRequestSchema = z.object({
-  name: z.string().min(1).max(200),
-  notebookIds: z.array(uuidSchema).min(1),
-  permission: z.enum(AGENT_PERMISSIONS),
-  expiresAt: isoDateTimeSchema.nullable().optional(),
-});
+export const createAgentTokenRequestSchema = z
+  .object({
+    name: z.string().min(1).max(200),
+    notebookIds: z.array(uuidSchema).default([]),
+    /** Every agent-mode notebook, including ones switched to that mode later (`notebookIds` is then ignored). */
+    allNotebooks: z.boolean().optional(),
+    permission: z.enum(AGENT_PERMISSIONS),
+    expiresAt: isoDateTimeSchema.nullable().optional(),
+  })
+  .refine((v) => v.allNotebooks || v.notebookIds.length > 0, { path: ["notebookIds"] });
 export type CreateAgentTokenRequest = z.infer<typeof createAgentTokenRequestSchema>;
 
 export const createAgentTokenResponseSchema = z.object({
@@ -556,6 +560,7 @@ export const agentTokenSchema = z.object({
   id: uuidSchema,
   name: z.string(),
   notebookIds: z.array(uuidSchema),
+  allNotebooks: z.boolean().default(false),
   permission: z.enum(AGENT_PERMISSIONS),
   expiresAt: isoDateTimeSchema.nullable(),
   createdAt: isoDateTimeSchema,

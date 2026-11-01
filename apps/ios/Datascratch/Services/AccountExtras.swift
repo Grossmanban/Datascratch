@@ -25,6 +25,8 @@ nonisolated struct AgentToken: Codable, Identifiable, Hashable, Sendable {
     var name: String
     var clientId: String?
     var notebookIds: [String]
+    /// Every agent-mode notebook, including ones opened to agents later.
+    var allNotebooks: Bool? = nil
     var permission: AgentPermission
     var createdAt: Date
     var expiresAt: Date?

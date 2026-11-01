@@ -2,7 +2,7 @@ import { Client, StreamableHTTPClientTransport, UnauthorizedError, type OAuthCli
 import { createHash, randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { startServer } from "./server.js";
-import { NB_OTHER, NB_WORK, NOTE_PLAN, USER } from "./world.js";
+import { NB_OTHER, NB_PRIVATE, NB_WORK, NOTE_PLAN, USER } from "./world.js";
 
 let close: (() => Promise<void>) | null = null;
 afterEach(async () => {
@@ -51,7 +51,7 @@ class TestProvider implements OAuthClientProvider {
 }
 
 /** Plays the user in a browser: opens the consent page with a session cookie and submits the form. */
-async function consent(authUrl: URL, choose: { notebooks: string[]; permission: "read" | "read_write"; decision?: "allow" | "deny" }) {
+async function consent(authUrl: URL, choose: { notebooks: string[]; all?: boolean; permission: "read" | "read_write"; decision?: "allow" | "deny" }) {
   const page = await fetch(authUrl, { headers: { cookie: `ds_session=${USER}` }, redirect: "manual" });
   expect(page.status).toBe(200);
   expect(page.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
@@ -60,6 +60,10 @@ async function consent(authUrl: URL, choose: { notebooks: string[]; permission: 
   const request = /name="request" value="([^"]+)"/.exec(html)![1]!;
   const form = new URLSearchParams({ request, decision: choose.decision ?? "allow", permission: choose.permission });
   for (const n of choose.notebooks) form.append("notebook", n);
+  if (choose.all) {
+    expect(html).toContain('name="all_notebooks" value="1" checked');
+    form.append("all_notebooks", "1");
+  }
   const res = await fetch(new URL("/oauth/authorize", authUrl), {
     method: "POST",
     headers: { cookie: `ds_session=${USER}`, "content-type": "application/x-www-form-urlencoded" },
@@ -163,6 +167,24 @@ describe("OAuth 2.1 for MCP clients", () => {
     const r = await client.callTool({ name: "list_notebooks", arguments: {} });
     expect(JSON.parse((r.content as { text: string }[])[0]!.text).notebooks[0].permission).toBe("read");
     expect(s.ctx.store.clients.get(cimd)?.registration).toBe("cimd");
+  });
+
+  it("«all notebooks» also covers notebooks switched to agent mode later", async () => {
+    const s = await startServer();
+    close = s.close;
+    const provider = new TestProvider("notes:read");
+    const client = await authorize(s.base, provider, { notebooks: [], all: true, permission: "read" });
+    const ids = async () =>
+      JSON.parse(((await client.callTool({ name: "list_notebooks", arguments: {} })).content as { text: string }[])[0]!.text).notebooks.map((n: { id: string }) => n.id);
+    expect((await ids()).sort()).toEqual([NB_WORK, NB_OTHER].sort());
+
+    s.ctx.data.setMode(NB_PRIVATE, "agent");
+    expect(await ids()).toContain(NB_PRIVATE);
+    s.ctx.data.setMode(NB_PRIVATE, "private");
+    expect(await ids()).not.toContain(NB_PRIVATE);
+
+    const list = await fetch(`${s.base}/v1/agent-tokens`, { headers: { authorization: `Bearer user:${USER}` } }).then((x) => x.json());
+    expect(list).toMatchObject([{ kind: "oauth", allNotebooks: true }]);
   });
 
   it("sends a scope challenge (403) when a read-only OAuth grant tries to write", async () => {

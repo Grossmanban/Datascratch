@@ -335,6 +335,8 @@ export const agentGrants = pgTable(
     name: text('name').notNull(),
     clientId: text('client_id'),
     notebookIds: uuid('notebook_ids').array().notNull(),
+    /** Every agent-mode notebook of the user, including later ones; `notebook_ids` is then ignored. */
+    allNotebooks: boolean('all_notebooks').notNull().default(false),
     permission: agentPermission('permission').notNull(),
     createdAt: ts('created_at').notNull(),
     expiresAt: ts('expires_at'),
@@ -370,6 +372,7 @@ export const oauthCodes = pgTable('oauth_codes', {
   resource: text('resource').notNull(),
   scope: text('scope').notNull(),
   notebookIds: uuid('notebook_ids').array().notNull(),
+  allNotebooks: boolean('all_notebooks').notNull().default(false),
   permission: agentPermission('permission').notNull(),
   expiresAt: ts('expires_at').notNull(),
 });

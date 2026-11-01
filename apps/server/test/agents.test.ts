@@ -64,6 +64,7 @@ function grant(notebookIds: string[], permission: 'read' | 'read_write', extra: 
     name: 'Claude',
     clientId: null,
     notebookIds,
+    allNotebooks: false,
     permission,
     createdAt: new Date().toISOString(),
     expiresAt: null,
@@ -112,6 +113,7 @@ describe('store', () => {
       resource: 'https://notes.example.com/mcp',
       scope: 'notes:read',
       notebookIds: [notebookId],
+      allNotebooks: false,
       permission: 'read' as const,
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     };
@@ -446,6 +448,32 @@ describe('data source', () => {
     expect(await agents.data.loadDoc(u.userId, a.noteId, ro.id)).toBeNull();
     a.client.close();
     b.client.close();
+  });
+
+  it('an all-notebooks grant reaches notebooks switched to agent mode later, RLS included', async () => {
+    const a = await setupNotebook();
+    const later = await setupNotebook('private');
+    const g = grant([], 'read_write', { allNotebooks: true });
+    await agents.store.insertGrant(g);
+    const ids = async () => (await agents.data.listAgentNotebooks(u.userId, g.id)).map((n) => n.id);
+    expect(await ids()).toContain(a.notebookId);
+    expect(await ids()).not.toContain(later.notebookId);
+    expect(await agents.data.loadDoc(u.userId, later.noteId, g.id)).toBeNull();
+
+    await api(s, 'PATCH', `/notebooks/${later.notebookId}/mode`, {
+      token: u.session.accessToken,
+      body: { mode: 'agent', notebookKey: b64(later.notebookKey) },
+    });
+    expect(await ids()).toEqual(expect.arrayContaining([a.notebookId, later.notebookId]));
+    expect((await agents.data.loadDoc(u.userId, later.noteId, g.id))!.doc.getText('t').toString()).toBe('from user');
+    expect(noteKeyCache.get(later.noteId)).toBeDefined();
+
+    // Back to an explicit (empty) list: nothing is reachable and the cached keys are gone.
+    await agents.store.updateGrant(g.id, { allNotebooks: false });
+    expect(noteKeyCache.get(later.noteId)).toBeUndefined();
+    expect(await ids()).toEqual([]);
+    a.client.close();
+    later.client.close();
   });
 
   it('notebook deletion removes it from grants', async () => {

@@ -56,7 +56,7 @@ export function AgentsSection() {
               }
               hint={[
                 tok.permission === "read" ? t("settings.tokenRead") : t("settings.tokenReadWrite"),
-                tok.notebookIds.map((id) => notebooks.find((n) => n.id === id)?.name ?? "—").join(", "),
+                tok.allNotebooks ? t("settings.allAgentNotebooks") : tok.notebookIds.map((id) => notebooks.find((n) => n.id === id)?.name ?? "—").join(", "),
                 tok.lastUsedAt ? t("settings.lastUsed", { when: formatRelative(tok.lastUsedAt) }) : formatRelative(tok.createdAt),
               ].join(" · ")}
             >

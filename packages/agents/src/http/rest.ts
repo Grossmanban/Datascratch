@@ -12,7 +12,7 @@ import type { Principal } from "../service/access.js";
 import * as S from "../service/schemas.js";
 import { audited, targetOf } from "./audit.js";
 
-const NUMERIC = new Set(["limit", "offset", "scale"]);
+const NUMERIC = new Set(["limit", "offset", "scale", "maxSize"]);
 
 /** Query strings carry only strings: convert the known numeric/boolean fields before validation. */
 function coerceQuery(q: Record<string, unknown>): Record<string, unknown> {
@@ -40,7 +40,7 @@ export function registerRestRoutes(app: FastifyInstance, ctx: AgentsContext, rt:
   const svc = rt.service;
 
   type Handler = (p: Principal, req: FastifyRequest) => Promise<unknown>;
-  const route = (method: "GET" | "POST" | "PATCH" | "DELETE", url: string, action: string, input: (req: FastifyRequest) => unknown, run: Handler, raw?: "png") => {
+  const route = (method: "GET" | "POST" | "PATCH" | "DELETE", url: string, action: string, input: (req: FastifyRequest) => unknown, run: Handler, raw?: "png" | "image") => {
     app.route({
       method,
       url,
@@ -53,6 +53,10 @@ export function registerRestRoutes(app: FastifyInstance, ctx: AgentsContext, rt:
           if (raw === "png") {
             const r = result as { png: Buffer; description: string };
             return reply.header("content-type", "image/png").header("x-handwriting-description", encodeURIComponent(r.description)).send(r.png);
+          }
+          if (raw === "image") {
+            const r = result as { data: Buffer; mimeType: string };
+            return reply.header("content-type", r.mimeType).header("cache-control", "no-store").send(r.data);
           }
           return reply.header("cache-control", "no-store").send(result);
         } catch (err) {
@@ -87,6 +91,7 @@ export function registerRestRoutes(app: FastifyInstance, ctx: AgentsContext, rt:
         note: res.note,
         markdown: res.markdown,
         handwriting: res.handwriting.map((h) => ({ ...h, imageUrl: `/v1/agent/notes/${res.note.id}/handwriting/${h.id}.png` })),
+        pictures: res.pictures.map((x) => ({ ...x, imageUrl: `/v1/agent/notes/${res.note.id}/images/${x.attachmentId}` })),
         comments: res.comments,
       };
     },
@@ -103,6 +108,15 @@ export function registerRestRoutes(app: FastifyInstance, ctx: AgentsContext, rt:
       ),
     "png",
   );
+  route(
+    "GET",
+    "/v1/agent/notes/:noteId/images/:attachmentId",
+    "get_image",
+    (r) => params(r),
+    (p, r) => svc.getImage(p, parse(S.imageInput, { ...query(r), noteId: params(r).noteId, attachmentId: params(r).attachmentId })),
+    "image",
+  );
+  route("DELETE", "/v1/agent/notes/:noteId", "trash_note", (r) => params(r), (p, r) => svc.trashNote(p, parse(S.trashNoteInput, params(r))));
   route("GET", "/v1/agent/notes/:noteId/backlinks", "get_backlinks", (r) => params(r), (p, r) => svc.getBacklinks(p, parse(S.backlinksInput, params(r))));
   route("GET", "/v1/agent/tasks", "list_tasks", query, (p, r) => svc.listTasks(p, parse(S.listTasksInput, query(r))));
   route("POST", "/v1/agent/notes", "create_note", body, (p, r) => svc.createNote(p, parse(S.createNoteInput, body(r))));

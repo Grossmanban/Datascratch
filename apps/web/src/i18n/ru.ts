@@ -531,6 +531,7 @@ const ru = {
     tokenPermission: "Права",
     tokenRead: "Только чтение",
     tokenReadWrite: "Чтение и правка",
+    allAgentNotebooks: "Все блокноты «для агентов»",
     tokenCreated: "Скопируйте токен сейчас — больше он не будет показан.",
     tokenRevoke: "Отозвать",
     noTokens: "Токенов нет",

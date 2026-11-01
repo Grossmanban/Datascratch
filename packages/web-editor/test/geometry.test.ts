@@ -63,6 +63,24 @@ describe("bindToText", () => {
     expect(b.anchorPositions).toEqual([2, 11]);
   });
 
+  it("anchors a frame around a line to that line, not to the heading above it (D-58)", () => {
+    // A heading (bigger font) and, under it, the framed line.
+    const lines = groupLines([
+      ...line("Heading", { baseline: 30, fontSize: 28, cw: 16, block: 1 }),
+      ...line("framed words", { baseline: 70, pos0: 20, block: 2 }),
+    ]);
+    // The top edge runs right under the heading — nearer its letters than the framed line's.
+    const frame = [pt(15, 40), pt(60, 40), pt(105, 40), pt(105, 74), pt(60, 74), pt(15, 74), pt(15, 41)];
+    const b = bindToText(frame, lines)!;
+    expect(b.anchorPositions.every((pos) => pos >= 20)).toBe(true);
+  });
+
+  it("keeps an underline on the line above it", () => {
+    const lines = groupLines([...line("aaaa", { baseline: 20 }), ...line("bbbb", { baseline: 60, pos0: 10 })]);
+    const b = bindToText([pt(5, 23), pt(25, 23), pt(35, 24)], lines)!;
+    expect(b.anchorPositions.every((pos) => pos < 10)).toBe(true);
+  });
+
   it("returns null without text", () => {
     expect(bindToText([pt(1, 1)], [])).toBeNull();
   });

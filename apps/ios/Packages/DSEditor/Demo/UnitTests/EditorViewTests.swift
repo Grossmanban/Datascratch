@@ -1690,4 +1690,48 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(topParagraph(), before, "the same paragraph stays at the top")
         XCTAssertGreaterThan(tv.contentOffset.y, 1000, "not back at the top of the note")
     }
+
+    /// A frame drawn around a phrase right under a heading: its top edge passes nearer the
+    /// heading's letters and was anchored to them, so a new font or page width skewed the frame and
+    /// cut it in pieces. Every point of a stroke that encloses a line is anchored to that line
+    /// (`strokes.md` §4, D-58), and the frame moves with the phrase.
+    func testFrameAroundAPhraseFollowsItWhenTheStyleChanges() throws {
+        let doc = InMemoryEditorDocument(blocks: [
+            .title("T"), .heading("Окружение", level: 2),
+            .paragraph("О1. Как работать с docker при root? Предлагаю остаться под root."),
+        ])
+        let editor = host(doc, width: 820)
+        let g = try XCTUnwrap(editor.geometry)
+        let phrase = flatRange(editor, of: "Как работать")
+        let first = try XCTUnwrap(g.placement(at: phrase.lowerBound))
+        let last = try XCTUnwrap(g.placement(at: phrase.upperBound - 1))
+        let heading = try XCTUnwrap(g.placement(at: flatRange(editor, of: "Окружение").lowerBound))
+        let em = first.fontSize
+        let left = first.origin.x - 4, right = last.origin.x + em * 0.6 + 4
+        // The top edge right under the heading, as a hand draws it.
+        let top = heading.origin.y + heading.fontSize * 0.3, bottom = first.origin.y + em * 0.4
+        let frame = line(from: CGPoint(x: left, y: top), to: CGPoint(x: right, y: top))
+            + line(from: CGPoint(x: right, y: top), to: CGPoint(x: right, y: bottom))
+            + line(from: CGPoint(x: right, y: bottom), to: CGPoint(x: left, y: bottom))
+            + line(from: CGPoint(x: left, y: bottom), to: CGPoint(x: left, y: top + 1))
+        penStroke(editor, frame)
+        let s = try XCTUnwrap(doc.strokes.first)
+        XCTAssertEqual(s.anchorKind, .text)
+
+        editor.setStyle(DocumentStyle(font: .sans, width: .wide))
+        settle(editor)
+        editor.ink.invalidateLayout()
+        editor.ink.refresh()
+        let segments = try XCTUnwrap(editor.ink.resolved[s.id])
+        XCTAssertEqual(segments.count, 1, "one piece: every point is anchored to the framed line")
+        let points = segments.flatMap { $0 }.map(\.location)
+        let now = flatRange(editor, of: "Как работать")
+        let a = try XCTUnwrap(g.placement(at: now.lowerBound)), b = try XCTUnwrap(g.placement(at: now.upperBound - 1))
+        let xs = points.map(\.x), ys = points.map(\.y)
+        XCTAssertLessThanOrEqual(xs.min()!, a.origin.x, "the frame still starts before the phrase")
+        XCTAssertGreaterThanOrEqual(xs.max()!, b.origin.x, "and ends after it")
+        XCTAssertLessThan(xs.max()! - xs.min()!, b.origin.x - a.origin.x + a.fontSize * 3, "not stretched over other words")
+        XCTAssertLessThan(ys.min()!, a.origin.y - a.fontSize * 0.5, "above the phrase")
+        XCTAssertGreaterThan(ys.max()!, a.origin.y, "below its baseline")
+    }
 }

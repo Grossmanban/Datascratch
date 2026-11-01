@@ -117,7 +117,33 @@ export interface TextBinding {
   referenceFontSize: number;
 }
 
-/** Binds every point to the nearest character of its line (strokes.md §4). */
+/** Middle of a line (as on iOS: 0.35 em above the baseline of its first glyph). */
+function lineMiddle(line: Line): number {
+  const g = line.glyphs[0]!;
+  return g.baseline - g.fontSize * 0.35;
+}
+
+/**
+ * The line of each point (strokes.md §4), narrowed for strokes that enclose lines (D-58): the
+ * enclosed lines are those of the points whose middle lies inside the stroke's vertical extent; a
+ * point whose own line is not one of them (a frame's edge passing nearer a heading above) goes to
+ * the nearest enclosed line. A stroke that encloses nothing (an underline) keeps its lines.
+ */
+export function linesForStroke(input: readonly InputPoint[], lines: readonly Line[]): Line[] {
+  const own = input.map((p) => lineForPoint(lines, p.x, p.y)!);
+  if (!input.length) return own;
+  const minY = Math.min(...input.map((p) => p.y));
+  const maxY = Math.max(...input.map((p) => p.y));
+  const enclosed = [...new Set(own)].filter((l) => lineMiddle(l) >= minY && lineMiddle(l) <= maxY);
+  if (!enclosed.length) return own;
+  return own.map((line, i) => {
+    if (enclosed.includes(line)) return line;
+    const y = input[i]!.y;
+    return enclosed.reduce((a, b) => (Math.abs(lineMiddle(b) - y) < Math.abs(lineMiddle(a) - y) ? b : a));
+  });
+}
+
+/** Binds every point to the nearest character of its line (strokes.md §4, D-58). */
 export function bindToText(input: readonly InputPoint[], lines: readonly Line[]): TextBinding | null {
   const usable = lines.filter((l) => l.glyphs.length > 0);
   if (!usable.length) return null;
@@ -125,8 +151,9 @@ export function bindToText(input: readonly InputPoint[], lines: readonly Line[])
   const anchorPositions: number[] = [];
   const usage: number[] = [];
   const sizes: number[] = [];
-  const points: StrokePoint[] = input.map((p) => {
-    const line = lineForPoint(usable, p.x, p.y)!;
+  const pointLines = linesForStroke(input, usable);
+  const points: StrokePoint[] = input.map((p, i) => {
+    const line = pointLines[i]!;
     const g = glyphForX(line, p.x);
     let a = indexByPos.get(g.pos);
     if (a === undefined) {

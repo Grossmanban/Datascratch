@@ -64,7 +64,14 @@ nonisolated enum AppRoute: Equatable, Sendable {
             let server = linkServer(of: url)
             let route: AppRoute
             switch kind {
-            case "share": return .share(shareId: id, key: key(from: url.fragment()), server: server)
+            case "share":
+                let key = key(from: url.fragment())
+                // Another server's guest page opens only after the app has named that server: a
+                // link in a note could otherwise open a look-alike page with no warning.
+                if let server, server != current?.lowercased() {
+                    return .otherServer(server: server, webURL: webURL(server: server, kind: kind, id: id, key: key))
+                }
+                return .share(shareId: id, key: key, server: server)
             case "invite": route = .invitation(id)
             case "note": route = .note(id)
             case "notebook": route = .notebook(id)
@@ -82,8 +89,18 @@ nonisolated enum AppRoute: Equatable, Sendable {
         guard url.scheme?.lowercased() == "ds",
               let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
                 .first(where: { $0.name == "server" })?.value?.trimmingCharacters(in: .whitespaces).lowercased(),
-              !value.isEmpty, !value.contains("/"), !value.contains("@") else { return nil }
+              value.range(of: #"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?$"#, options: .regularExpression) != nil,
+              !value.contains("xn--")
+        else { return nil }
+        // Plain ASCII only: a look-alike name with Cyrillic letters (or its punycode) is refused.
         return value
+    }
+
+    /// A server on this machine (local testing), reached over plain http: the exact host only,
+    /// so `localhost.example.com` is not one.
+    static func isLocal(_ server: String) -> Bool {
+        let host = server.split(separator: ":", maxSplits: 1).first.map(String.init) ?? server
+        return host == "localhost" || host == "127.0.0.1"
     }
 
     /// `host[:port]` of a server address, as links name it.
@@ -94,7 +111,7 @@ nonisolated enum AppRoute: Equatable, Sendable {
 
     /// The web page of a link on `server`: https, http only for a server on this machine.
     static func webURL(server: String, kind: String, id: String, key: String? = nil) -> URL? {
-        let local = server.hasPrefix("localhost") || server.hasPrefix("127.0.0.1")
+        let local = isLocal(server)
         let path: String
         switch kind {
         case "invite": path = "/invite/"

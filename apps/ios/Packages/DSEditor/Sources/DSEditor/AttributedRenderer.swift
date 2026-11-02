@@ -262,7 +262,7 @@ struct AttributedRenderer {
         }
         if marks.contains(MarkName.underline) { a[.underlineStyle] = NSUnderlineStyle.single.rawValue }
         if marks.contains(MarkName.strike) { a[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
-        if let link = marks[MarkName.link]?.objectValue?["href"]?.stringValue, let url = URL(string: link) {
+        if let link = marks[MarkName.link]?.objectValue?["href"]?.stringValue, let url = Self.safeLink(link) {
             a[.link] = url
         }
         if let hl = marks[MarkName.highlight] {
@@ -274,6 +274,17 @@ struct AttributedRenderer {
         }
         // `agentEdit` is shown per paragraph (a margin bar, `BlockLayoutFragment`), not on the text.
         return a
+    }
+
+    /// Links open only web and mail addresses, as on the web (`safeHref`): a link written by
+    /// someone else in a shared note must not run a shortcut, call, or open another app.
+    static func safeLink(_ href: String) -> URL? {
+        let trimmed = href.trimmingCharacters(in: .whitespaces)
+        guard trimmed.range(of: #"^(https?://|mailto:)"#, options: [.regularExpression, .caseInsensitive]) != nil,
+              !trimmed.unicodeScalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }),
+              let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(),
+              ["http", "https", "mailto"].contains(scheme) else { return nil }
+        return url
     }
 
     /// Typing attributes for new text with `marks` in paragraph `index`.

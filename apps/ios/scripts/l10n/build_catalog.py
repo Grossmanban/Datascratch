@@ -54,6 +54,7 @@ INTERPOLATIONS = {
     r"Opens when \(item.ownerEmail)’s device is online": "Opens when %@’s device is online",
     r"View only · \(owner) can edit": "View only · %@ can edit",
     r"Also here: \(names)": "Also here: %@",
+    r"From the link you opened: \(server). Continue only if you trust this server.": "From the link you opened: %@. Continue only if you trust this server.",
 }
 
 # Literals that look like text but are not translated (names, formats, prefixes).

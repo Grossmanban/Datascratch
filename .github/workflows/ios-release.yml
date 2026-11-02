@@ -159,6 +159,7 @@ jobs:
             -project Datascratch.xcodeproj -scheme Datascratch -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath build/Datascratch.xcarchive \
+            -disableAutomaticPackageResolution \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$KEY_PATH" \
             -authenticationKeyID "$KEY_ID" \

@@ -40,3 +40,10 @@ out=project.packages.yml
 
 echo "Linked packages: $(grep -c '^      - package' "$out" || true)"
 xcodegen generate --spec project.yml
+
+# Pinned package versions (committed): builds use exactly these, never a newer release that
+# appeared since (supply chain). Update with: xcodebuild -resolvePackageDependencies, then copy
+# the project's Package.resolved back here.
+pins=Datascratch.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+mkdir -p "$pins"
+cp Package.resolved "$pins/Package.resolved"

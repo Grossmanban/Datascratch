@@ -37,9 +37,11 @@ enum DeviceOwner {
     }
 }
 
-/// Hides its content while the screen is recorded, mirrored or shared (AirPlay, QuickTime).
+/// Hides its content while the screen is recorded, mirrored or shared (AirPlay, QuickTime), and
+/// while the app is not in front: the app switcher's snapshot must not show it.
 struct HiddenWhenCaptured: ViewModifier {
     @State private var isCaptured = Self.captured()
+    @Environment(\.scenePhase) private var phase
 
     static func captured() -> Bool {
         UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
@@ -48,7 +50,7 @@ struct HiddenWhenCaptured: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .opacity(isCaptured ? 0 : 1)
+            .opacity(isCaptured || phase != .active ? 0 : 1)
             .overlay {
                 if isCaptured {
                     Label("Hidden while the screen is recorded or shared", systemImage: "eye.slash")

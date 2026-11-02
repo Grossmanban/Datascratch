@@ -529,5 +529,6 @@
   "invites you to a document": "приглашает вас в документ",
   "invites you to a notebook": "приглашает вас в блокнот",
   "until %@": "до %@",
-  "until revoked": "до отзыва"
+  "until revoked": "до отзыва",
+  "From the link you opened: %@. Continue only if you trust this server.": "Из открытой ссылки: %@. Продолжайте, только если доверяете этому серверу."
 }

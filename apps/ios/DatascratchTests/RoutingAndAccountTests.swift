@@ -20,11 +20,15 @@ struct RoutingTests {
         #expect(AppRoute.parse(url, server: server) == .share(shareId: "abc", key: nil, server: server))
     }
 
-    @Test func guestLinkOpensOnItsOwnServer() {
-        // A guest link needs no account: whatever server it names, it opens there.
+    @Test func guestLinkOfAnotherServerNamesItFirst() {
+        // A guest link needs no account, but another server's page opens only after the app has
+        // named that server (security review 2026-11-02): a link in a note may point anywhere.
         let url = URL(string: "ds://share/abc?server=other.example#k=x")!
-        #expect(AppRoute.parse(url, server: server) == .share(shareId: "abc", key: "x", server: "other.example"))
-        #expect(AppRoute.parse(url, server: nil) == .share(shareId: "abc", key: "x", server: "other.example"))
+        let named = AppRoute.otherServer(server: "other.example", webURL: URL(string: "https://other.example/s/abc#k=x"))
+        #expect(AppRoute.parse(url, server: server) == named)
+        #expect(AppRoute.parse(url, server: nil) == named)
+        #expect(AppRoute.parse(URL(string: "ds://share/abc?server=notes.example.org#k=x")!, server: server)
+            == .share(shareId: "abc", key: "x", server: server))
     }
 
     @Test func parsesCustomScheme() {
@@ -51,12 +55,18 @@ struct RoutingTests {
         // A server value that is not a host is ignored, not followed.
         #expect(AppRoute.linkServer(of: URL(string: "ds://note/n1?server=evil.example%2Fpath")!) == nil)
         #expect(AppRoute.linkServer(of: URL(string: "ds://note/n1?server=user%40evil.example")!) == nil)
+        // Look-alike names: non-ASCII letters and punycode are refused.
+        #expect(AppRoute.linkServer(of: URL(string: "ds://note/n1?server=d%D0%B0tascratch.app")!) == nil)
+        #expect(AppRoute.linkServer(of: URL(string: "ds://note/n1?server=xn--dtascratch-8ig.app")!) == nil)
+        #expect(AppRoute.linkServer(of: URL(string: "ds://note/n1?server=notes.example.org:8443")!) == "notes.example.org:8443")
     }
 
     @Test func webPagesOfLinks() {
         #expect(AppRoute.webURL(server: "notes.example.org", kind: "share", id: "s1", key: "k1")
             == URL(string: "https://notes.example.org/s/s1#k=k1"))
         #expect(AppRoute.webURL(server: "localhost:8080", kind: "note", id: "n1") == URL(string: "http://localhost:8080/doc/n1"))
+        // Only this machine is plain http, not a name that starts like it.
+        #expect(AppRoute.webURL(server: "localhost.evil.example", kind: "note", id: "n1") == URL(string: "https://localhost.evil.example/doc/n1"))
         #expect(AppRoute.authority(of: URL(string: "https://Notes.Example.org")!) == "notes.example.org")
         #expect(AppRoute.authority(of: URL(string: "http://localhost:8080")!) == "localhost:8080")
     }

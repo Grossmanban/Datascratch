@@ -102,6 +102,7 @@ jobs:
             -project Datascratch.xcodeproj -scheme Datascratch \
             -destination "${{ steps.sim.outputs.destination }}" \
             -derivedDataPath build/DerivedData \
+            -disableAutomaticPackageResolution \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/build.log | xcbeautify --renderer github-actions || \
           (grep -E "error:" build/build.log | head -50; grep -B30 -A20 "Stack dump:" build/build.log | head -120; tail -40 build/build.log; exit 1)
 

@@ -1691,6 +1691,16 @@
         }
       }
     },
+    "From the link you opened: %@. Continue only if you trust this server.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из открытой ссылки: %@. Продолжайте, только если доверяете этому серверу."
+          }
+        }
+      }
+    },
     "Full": {
       "localizations": {
         "ru": {

@@ -230,6 +230,7 @@ extension AppSettings.Appearance {
 /// Shows the recovery key issued on this device and lets the user check it later.
 struct RecoveryKeySettings: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.scenePhase) private var phase
     @State private var isRevealed = false
     @State private var isChecking = false
     @State private var isRotating = false
@@ -295,6 +296,8 @@ struct RecoveryKeySettings: View {
         .sheet(isPresented: $isRotating) {
             RotateRecoveryKeySheet { isRevealed = true }
         }
+        // Leaving the app hides the key again: showing it once more asks for Face ID.
+        .onChange(of: phase) { _, now in if now == .background { isRevealed = false } }
     }
 }
 

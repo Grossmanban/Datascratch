@@ -148,6 +148,8 @@ struct ServerField: View {
     struct Entry: Equatable {
         var text: String?
         var status: Status = .unchecked
+        /// Filled in from a link, not typed: the field says so (anyone can send a link).
+        var fromLink = false
     }
 
     enum Status: Equatable {
@@ -160,6 +162,9 @@ struct ServerField: View {
     @Environment(AppModel.self) private var app
     @Binding var state: Entry
     let identifier: String
+    /// Sign-up only: a link never chooses where a password is typed (sign-in), and never
+    /// replaces a server this device already uses.
+    var acceptsLinkServer = false
 
     var body: some View {
         Group {
@@ -170,7 +175,7 @@ struct ServerField: View {
                             .foregroundStyle(Theme.Palette.textTertiary)
                         TextField("Your server address, e.g. notes.company.ru", text: Binding(
                             get: { state.text ?? app.serverURL.map(ServerAddress.display) ?? "" },
-                            set: { state.text = $0; state.status = .unchecked }))
+                            set: { state.text = $0; state.status = .unchecked; state.fromLink = false }))
                             .textContentType(.URL)
                             .keyboardType(.URL)
                             .textInputAutocapitalization(.never)
@@ -182,11 +187,17 @@ struct ServerField: View {
                 }
                 // Opened from a link (D-56): its server, unless something else was typed.
                 .onChange(of: app.serverFromLink, initial: true) { _, server in
-                    guard let server, state.text == nil, server != app.linkServer else { return }
+                    guard acceptsLinkServer, let server, state.text == nil, app.serverURL == nil else { return }
                     // A server on this machine is plain http (local testing), as in the link.
-                    let isLocal = server.hasPrefix("localhost") || server.hasPrefix("127.0.0.1")
-                    state.text = isLocal ? "http://" + server : server
+                    state.text = AppRoute.isLocal(server) ? "http://" + server : server
                     state.status = .unchecked
+                    state.fromLink = true
+                }
+                if state.fromLink, let server = app.serverFromLink {
+                    Label("From the link you opened: \(server). Continue only if you trust this server.", systemImage: "exclamationmark.triangle")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .accessibilityIdentifier("\(identifier).serverFromLink")
                 }
                 switch state.status {
                 case .unchecked:
@@ -319,7 +330,7 @@ struct SignUpView: View {
     var body: some View {
         AuthCard(title: "Create account",
                  subtitle: "Your password signs you in and encrypts your notes. It never leaves this device.") {
-            ServerField(state: $server, identifier: "signUp")
+            ServerField(state: $server, identifier: "signUp", acceptsLinkServer: true)
             FieldBox {
                 TextField("Email", text: $email)
                     .textContentType(.username)

@@ -4,6 +4,7 @@ import {
   AD,
   ApiRequestError,
   MemberNotConfirmedError,
+  accountRoots,
   accountVetting,
   isTrustMigrated,
   knownKeyVersion,
@@ -356,6 +357,8 @@ describe("trust record (security review 2026-11-02)", () => {
     expect(memberTrust(account, target, m, "pk1")).toBe("known");
     expect(memberTrust(account, target, m, "pk2")).toBe("key_changed");
     expect(knownKeyVersion(account, target)).toBe(0);
+    recordKeyVersion(account, target, 1);
+    expect(accountRoots(account).trust.size).toBe(3); // migrated, invite, member: version 1 is not written
     recordKeyVersion(account, target, 3);
     recordKeyVersion(account, target, 2);
     expect(knownKeyVersion(account, target)).toBe(3);

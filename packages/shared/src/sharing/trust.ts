@@ -60,6 +60,9 @@ export function memberTrust(
 }
 
 export function recordKeyVersion(account: Y.Doc, target: ShareTarget, version: number): void {
+  // Version 1 is the floor: there is nothing older to roll back to, and opening a document on a
+  // new device must not write to the account document.
+  if (version <= 1) return;
   const trust = accountRoots(account).trust;
   const key = `key|${res(target)}|${version}`;
   if (!trust.has(key)) trust.set(key, true);

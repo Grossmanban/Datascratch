@@ -1823,6 +1823,7 @@ public final class EditorView: UIView {
             }
             return
         }
+        if startParagraphBelowEnd(at: point) { return }
         guard let box = taskCheckbox(at: g.location(in: textView)) else { return }
         commands.toggleTask(box.item)
         if box.state == "done" {
@@ -1831,6 +1832,24 @@ public final class EditorView: UIView {
             DSHaptics.taskComplete()
             animateCheck(in: box.rect)
         }
+    }
+
+    /// A tap below a note that ends with a picture, code, a table, a list or a quote: an empty
+    /// paragraph starts there and takes the caret (owner's feedback 2026-11-01: «the caret does not
+    /// go after a block» — it landed inside the code or nowhere). Undoable.
+    @discardableResult
+    func startParagraphBelowEnd(at point: CGPoint) -> Bool {
+        guard !model.isReadOnly, let last = model.blocks.last,
+              last.type != NodeType.paragraph, last.type != NodeType.heading, last.type != NodeType.title,
+              let lastStart = projection.starts.last, let frame = geometry.paragraphFrame(at: lastStart),
+              point.y > frame.maxY + 4 else { return false }
+        let paragraph = BlockNode.paragraph()
+        model.stopCapturing()
+        model.transact(origin: .local) { model.insertBlock(paragraph, parent: nil, at: model.blocks.count) }
+        model.stopCapturing()
+        if !textView.isFirstResponder { textView.becomeFirstResponder() }
+        select(TextPosition(block: paragraph.id, offset: 0))
+        return true
     }
 
     /// Completion flourish over the freshly drawn check box (`DSTaskCheckbox` motion): the fill

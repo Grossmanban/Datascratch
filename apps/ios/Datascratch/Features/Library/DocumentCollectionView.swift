@@ -261,7 +261,7 @@ struct DocumentCard: View {
         let thumbId = note.coverThumb ?? note.coverImage?.attachmentId
         let image = thumbId.flatMap { app.covers.image($0, noteId: note.id) }.map { Image(uiImage: $0) }
         var detail = note.updatedAt.formatted(.relative(presentation: .named))
-        if let notebook = app.library.notebook(note.notebookId) { detail += " · " + notebook.name }
+        if let place = NoteLocation.text(of: note, app: app) { detail += " · " + place }
         return DSDocCard(title: note.title.isEmpty ? String(localized: "Untitled") : note.title,
                          subtitle: note.snippet.isEmpty ? String(localized: "No text") : note.snippet,
                          detail: detail,
@@ -318,10 +318,10 @@ struct DocumentCard: View {
                     .lineLimit(3, reservesSpace: true)
                 HStack(spacing: Theme.Space.s1) {
                     Text(note.updatedAt, format: .relative(presentation: .named))
-                    if let notebook = app.library.notebook(note.notebookId) {
+                    if let notebook = app.library.notebook(note.notebookId), let place = NoteLocation.text(of: note, app: app) {
                         Text("·")
                         Image(systemName: notebook.icon).foregroundStyle(notebook.color.foreground)
-                        Text(notebook.name).lineLimit(1)
+                        Text(place).lineLimit(1)
                     }
                 }
                 .font(Theme.Typography.caption)
@@ -353,6 +353,7 @@ struct DocumentCard: View {
 }
 
 struct DocumentRow: View {
+    @Environment(AppModel.self) private var app
     let note: NoteMeta
 
     var body: some View {
@@ -381,6 +382,13 @@ struct DocumentRow: View {
                     .font(Theme.Typography.footnote)
                     .foregroundStyle(Theme.Palette.textSecondary)
                     .lineLimit(1)
+                if let place = NoteLocation.text(of: note, app: app) {
+                    Text(place)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.textTertiary)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("document.location")
+                }
             }
             Spacer()
             Text(note.updatedAt, format: .dateTime.day().month(.abbreviated))
@@ -391,6 +399,30 @@ struct DocumentRow: View {
         .contentShape(Rectangle())
         .draggable(note.id)
         .accessibilityIdentifier("document.row")
+    }
+}
+
+/// Where a document lives, for lists that mix notebooks (owner's feedback 2026-11-01: «in All
+/// Documents it is unclear where a note is; similar titles get confused»): «Notebook › Folder»,
+/// and «shared» for a note shared with this account.
+enum NoteLocation {
+    @MainActor
+    static func text(of note: NoteMeta, app: AppModel) -> String? {
+        let library = app.library
+        guard let notebook = library.notebook(note.notebookId) else { return nil }
+        var parts = [notebook.name]
+        var folders: [String] = []
+        var next = note.folderId.flatMap { library.folder($0) }
+        while let folder = next, folders.count < 8 {
+            folders.insert(folder.name, at: 0)
+            next = folder.parentId.flatMap { library.folder($0) }
+        }
+        parts += folders
+        var text = parts.joined(separator: " › ")
+        if app.accountSharing.role(forNote: note.id, notebookId: note.notebookId) != nil {
+            text += " · " + String(localized: "shared")
+        }
+        return text
     }
 }
 

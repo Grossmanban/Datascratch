@@ -125,6 +125,21 @@ public struct EditorCommands {
         var result: TextPosition?
         document.transact {
             if node.type == NodeType.codeBlock {
+                // Return on the empty last line leaves the code (owner's feedback 2026-11-01: «Enter
+                // keeps the code going»), as in Notion and ProseMirror: the empty line goes and a
+                // paragraph follows. Return in an empty code block turns it into a paragraph.
+                if len == 0 {
+                    convertTextblock(pos.block, to: NodeType.paragraph, attrs: [:])
+                    result = TextPosition(block: pos.block, offset: 0)
+                    return
+                }
+                if off == len, node.plainText.hasSuffix("\n"), let loc = document.location(of: pos.block) {
+                    document.deleteText(block: pos.block, range: (len - 1)..<len)
+                    let paragraph = BlockNode.paragraph()
+                    document.insertBlock(paragraph, parent: loc.parent, at: loc.index + 1)
+                    result = TextPosition(block: paragraph.id, offset: 0)
+                    return
+                }
                 document.insertText("\n", marks: .empty, block: pos.block, at: off)
                 result = TextPosition(block: pos.block, offset: off + 1)
                 return
@@ -234,6 +249,20 @@ public struct EditorCommands {
         document.transact {
             var p = projection
             guard var idx = p.indexByBlock[pos.block] else { return }
+            // A line inside a list item below its first one (under a picture added in a checklist)
+            // has no marker of its own: a list button makes it its own item first (owner's feedback
+            // 2026-11-01: «after a picture the checklist button did nothing»).
+            if let item = p.paragraphs[idx].context.itemBlockId, !isFirstChild(pos.block, of: item) {
+                switch kind {
+                case .taskList, .bulletList, .orderedList:
+                    splitIntoOwnItem(pos.block, item: item)
+                    p = projection
+                    guard let i = p.indexByBlock[pos.block] else { return }
+                    idx = i
+                default:
+                    break
+                }
+            }
             // Unwrap from list items and quotes first.
             while let item = p.paragraphs[idx].context.itemBlockId {
                 if case .taskList = kind, let n = document.block(item), n.type == NodeType.taskItem { break }
@@ -324,6 +353,25 @@ public struct EditorCommands {
             re.apply(to: document, map: { $0 })
         }
         return true
+    }
+
+    /// A line of an item below its first one, with the lines after it, becomes the next item of the
+    /// same list (a new task for a task item).
+    func splitIntoOwnItem(_ block: BlockID, item: BlockID) {
+        guard let itemNode = document.block(item), let itemLoc = document.location(of: item),
+              let loc = document.location(of: block), loc.parent == item, loc.index > 0 else { return }
+        let moving = Array(itemNode.children[loc.index...])
+        var moved = Set<BlockID>()
+        for m in moving { moved.formUnion(textblockIds(m)) }
+        let re = StrokeReanchoring(document: document, blocks: moved)
+        for m in moving { document.deleteBlock(m.id) }
+        var newItem = BlockNode(type: itemNode.type, children: moving)
+        if itemNode.type == NodeType.taskItem {
+            newItem.attrs = ["taskId": .string(UUIDv7.generate()), "state": "open", "scheduled": .null,
+                             "deadline": .null, "completedAt": .null]
+        }
+        document.insertBlock(newItem, parent: itemLoc.parent, at: itemLoc.index + 1)
+        re.apply(to: document, map: { $0 })
     }
 
     /// Moves an item's content out of its list (splitting the list). Returns the first textblock id.

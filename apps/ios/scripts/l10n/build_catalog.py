@@ -58,7 +58,7 @@ INTERPOLATIONS = {
 # Literals that look like text but are not translated (names, formats, prefixes).
 IGNORE = {
     "Projects", "Drafts", "Plan", "Draft", "Target", "Links", "Target body", "Go to [[Target]] or [[Nowhere]].", "Dated", "Call back", "Фото", "Файл", "Вставка", "Sample Photo", "CoverImages.didArrive", "Photo.jpg", "#tag\\(index) #group/child\\(index)",
-    "* ", ", ", " · ", " : ", "> ", "[ ] ", "[] ", "☐ ", "DS1", "DS1-XXXX-XXXX-…", "Datascratch", "Library.json",
+    "* ", ", ", " · ", " › ", " : ", "> ", "[ ] ", "[] ", "☐ ", "DS1", "DS1-XXXX-XXXX-…", "Datascratch", "Library.json",
     "CFBundleShortVersionString", "CFBundleVersion", "DSExtendedMode", "MMMdy", "d MMMM y",
     "XChaCha20-Poly1305 · Argon2id", "Quiet paper", "next week", "open to agents", "CoreLibrary", "Library", "Attachments", "a^2 + b^2 = c^2", "graph TD\n  A --> B",
     # First-run space names as an older build wrote them (matched when merging duplicates).

@@ -1734,4 +1734,87 @@ final class EditorViewTests: XCTestCase {
         XCTAssertLessThan(ys.min()!, a.origin.y - a.fontSize * 0.5, "above the phrase")
         XCTAssertGreaterThan(ys.max()!, a.origin.y, "below its baseline")
     }
+
+    /// Types as the keyboard does: asks the delegate, applies the text when allowed, reports it.
+    /// (`insertText` does not consult the delegate in a hosted test.)
+    func typeKeys(_ editor: EditorView, _ text: String) {
+        let tv = editor.textView
+        let range = tv.selectedRange
+        if editor.textView(tv, shouldChangeTextIn: range, replacementText: text) {
+            tv.textStorage.replaceCharacters(in: range, with: text)
+            tv.selectedRange = NSRange(location: range.location + (text as NSString).length, length: 0)
+            editor.textViewDidChange(tv)
+        }
+        settle(editor)
+        drainMainQueue()
+    }
+
+    /// Owner's feedback 2026-11-01: after a picture and Return, the checklist button did nothing
+    /// until some text was typed.
+    func testChecklistRightAfterAPicture() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Список"), .paragraph("Покупки")])
+        let editor = host(doc)
+        editor.textView.selectedRange = NSRange(location: flatRange(editor, of: "Покупки").upperBound, length: 0)
+        _ = editor.insertImage(attachmentId: "att-1", preview: solidImage(CGSize(width: 400, height: 200), .red))
+        settle(editor)
+        drainMainQueue()
+        typeKeys(editor, "\n")
+        editor.perform(.taskList)
+        settle(editor)
+        XCTAssertTrue(doc.blocks.contains { $0.type == NodeType.taskList }, "a checklist starts under the picture: \(doc.blocks.map(\.type))")
+        typeKeys(editor, "Хлеб")
+        let list = try XCTUnwrap(doc.blocks.first { $0.type == NodeType.taskList })
+        XCTAssertEqual(list.children.first?.children.first?.plainText, "Хлеб", "typing goes into the new item: \(doc.blocks.map(\.type))")
+    }
+
+    /// Return in code: a new line; Return on the empty last line leaves the code block.
+    func testReturnTwiceLeavesACodeBlock() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .code("let a = 1", language: "swift")])
+        let editor = host(doc)
+        editor.textView.selectedRange = NSRange(location: flatRange(editor, of: "let a = 1").upperBound, length: 0)
+        typeKeys(editor, "\n")
+        XCTAssertEqual(doc.blocks.map(\.type), [NodeType.title, NodeType.codeBlock], "the first Return is a new code line")
+        XCTAssertEqual(doc.blocks[1].plainText, "let a = 1\n")
+        typeKeys(editor, "\n")
+        XCTAssertEqual(doc.blocks.map(\.type), [NodeType.title, NodeType.codeBlock, NodeType.paragraph], "the second leaves the code")
+        XCTAssertEqual(doc.blocks[1].plainText, "let a = 1", "the empty line is dropped")
+        typeKeys(editor, "Текст")
+        XCTAssertEqual(doc.blocks[2].plainText, "Текст")
+    }
+
+    /// The same inside a checklist: a picture added from an item, Return, then the checklist again.
+    func testChecklistAgainAfterAPictureInsideAList() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Список"), .taskList([.taskItem("Молоко")])])
+        let editor = host(doc)
+        editor.textView.selectedRange = NSRange(location: flatRange(editor, of: "Молоко").upperBound, length: 0)
+        _ = editor.insertImage(attachmentId: "att-1", preview: solidImage(CGSize(width: 400, height: 200), .red))
+        settle(editor)
+        drainMainQueue()
+        let afterImage = doc.blocks.map(\.type)
+        typeKeys(editor, "\n")
+        let afterReturn = doc.blocks.map(\.type)
+        let sel = editor.textView.selectedRange
+        let (i, _) = editor.projection.position(at: sel.location)
+        let kind = "\(editor.projection.paragraphs[i].kind)"
+        editor.perform(.taskList)
+        settle(editor)
+        typeKeys(editor, "Хлеб")
+        let items = doc.blocks.filter { $0.type == NodeType.taskList }.flatMap(\.children).map { $0.children.first?.plainText ?? "" }
+        XCTAssertTrue(items.contains("Хлеб"), "a new item takes the text: items \(items), blocks \(doc.blocks.map(\.type)); after image \(afterImage), after Return \(afterReturn), caret in \(kind)")
+    }
+
+    /// A tap below a note that ends with code (or a picture, a table) starts a paragraph after it.
+    func testTapBelowALastCodeBlockStartsAParagraph() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Текст"), .code("let a = 1", language: nil)])
+        let editor = host(doc)
+        let g = try XCTUnwrap(editor.geometry)
+        let code = try XCTUnwrap(g.paragraphFrame(at: flatRange(editor, of: "let a = 1").lowerBound))
+        XCTAssertFalse(editor.startParagraphBelowEnd(at: CGPoint(x: code.midX, y: code.midY)), "a tap on the code stays in it")
+        XCTAssertTrue(editor.startParagraphBelowEnd(at: CGPoint(x: code.midX, y: code.maxY + 40)))
+        settle(editor)
+        XCTAssertEqual(doc.blocks.map(\.type), [NodeType.title, NodeType.paragraph, NodeType.codeBlock, NodeType.paragraph])
+        typeKeys(editor, "После кода")
+        XCTAssertEqual(doc.blocks[3].plainText, "После кода")
+        XCTAssertFalse(editor.startParagraphBelowEnd(at: CGPoint(x: code.midX, y: code.maxY + 200)), "a paragraph is already last")
+    }
 }

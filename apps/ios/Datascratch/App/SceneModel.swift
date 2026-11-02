@@ -122,9 +122,9 @@ final class SceneModel {
     var preferredCompactColumn: NavigationSplitViewColumn = .sidebar {
         didSet {
             // iPhone: «Back» leaves the document without changing the selection.
-            if !isPad, oldValue == .detail, preferredCompactColumn != .detail,
-               let fresh = freshNoteId, selectedNoteId == fresh {
-                leaveFreshNote(fresh)
+            if !isPad, oldValue == .detail, preferredCompactColumn != .detail {
+                if let fresh = freshNoteId, selectedNoteId == fresh { leaveFreshNote(fresh) }
+                showContainer(ofNote: selectedNoteId)
             }
         }
     }
@@ -291,6 +291,7 @@ final class SceneModel {
 
     func closeDocument() {
         if let id = selectedNoteId { library.recordVersion(ofNote: id) }
+        showContainer(ofNote: selectedNoteId)
         withAnimation(Theme.Motion.smooth) {
             selectedNoteId = nil
             preferredCompactColumn = .content
@@ -298,6 +299,15 @@ final class SceneModel {
             fullScreen = nil
             padLevel = .list
         }
+    }
+
+    /// Owner's feedback 2026-11-01: «Back» from a document opened in All Documents goes one level
+    /// up — to the folder or notebook that holds it — not back to the whole list. A list chosen on
+    /// purpose (a tag, Starred, Trash, a folder) stays.
+    private func showContainer(ofNote id: String?) {
+        guard sidebar == nil || sidebar == .allDocuments, let id, let note = library.note(id),
+              note.kind == .note, note.trashedAt == nil else { return }
+        sidebar = note.folderId.map(SidebarItem.folder) ?? .notebook(note.notebookId)
     }
 
     /// D-48: another space — its own tabs, its own active tab (restored), its own lists.

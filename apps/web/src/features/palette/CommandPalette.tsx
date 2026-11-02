@@ -9,7 +9,7 @@ import { runtime } from "@/data/runtime";
 import { createNote, getOrCreateDaily, openTab } from "@/domain/actions";
 import { markFreshNote } from "@/lib/freshNotes";
 import { newDocTarget } from "@/features/docs/menus";
-import { noteTitle, setActiveSpace, useWorkspace } from "@/domain/workspace";
+import { noteTitle, setActiveSpace, useSpaceNoteFilter, useWorkspace } from "@/domain/workspace";
 import { toggleSidebar, useUi } from "@/hooks/useUi";
 import { today } from "@/lib/dates";
 import { toggleTheme, useTheme } from "@/lib/theme";
@@ -55,15 +55,14 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
   const notes = useWorkspace((s) => s.notes);
   const spaceId = useWorkspace((s) => s.activeSpaceId);
   const spaces = useWorkspace((s) => s.account.spaces);
-  const notebooks = useWorkspace((s) => s.account.notebooks);
+  const inSpace = useSpaceNoteFilter();
   const theme = useTheme((s) => s.resolved);
   const v = useIndexVersion((s) => s.v);
 
   const results = useMemo(() => {
     void v;
-    // Search and recents cover the current space only (D-48).
-    const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
-    const visible = Object.values(notes).filter((n) => !n.trashedAt && n.kind !== "inbox" && nbs.has(n.notebookId));
+    // Search and recents cover the current space only (D-48), with what is shared into it (D-54).
+    const visible = Object.values(notes).filter((n) => !n.trashedAt && n.kind !== "inbox" && inSpace(n));
     if (!q.trim()) {
       return visible
         .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
@@ -74,12 +73,12 @@ function PaletteBody({ onClose, label }: { onClose: () => void; label: string })
     const seen = new Set(hits.map((h) => h.noteId));
     const lower = q.toLowerCase();
     const byTitle = visible.filter((n) => !seen.has(n.id) && n.title.toLowerCase().includes(lower)).map((n) => ({ noteId: n.id, title: n.title, snippet: "" }));
-    return [...hits.filter((h) => notes[h.noteId] && !notes[h.noteId]!.trashedAt && nbs.has(notes[h.noteId]!.notebookId)), ...byTitle].slice(0, 20).map((h) => ({
+    return [...hits.filter((h) => notes[h.noteId] && !notes[h.noteId]!.trashedAt && inSpace(notes[h.noteId]!)), ...byTitle].slice(0, 20).map((h) => ({
       noteId: h.noteId,
       title: noteTitle(notes[h.noteId], t("app.untitled")),
       snippet: h.snippet,
     }));
-  }, [q, notes, notebooks, spaceId, v, t]);
+  }, [q, notes, inSpace, v, t]);
 
   const go = (fn: () => void | Promise<void>) => {
     onClose();

@@ -3,7 +3,7 @@ import { ChevronRight, Hash, Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useWorkspace, visibleNotes, notesInSpace } from "@/domain/workspace";
+import { useSpaceNoteFilter, useWorkspace, visibleNotes } from "@/domain/workspace";
 import { tintFg } from "@/lib/tokens";
 import { cn, Dialog } from "@/ui";
 
@@ -106,10 +106,8 @@ type TagNode = { name: string; path: string; count: number; recent: number; chil
 /** Tags of a space as a «/» tree, with counts (a parent counts its subtags) and last use. */
 export function useTagTree(): { roots: TagNode[]; flat: { path: string; count: number }[] } {
   const notes = useWorkspace((s) => s.notes);
-  const notebooks = useWorkspace((s) => s.account.notebooks);
-  const spaceId = useWorkspace((s) => s.activeSpaceId);
+  const inSpace = useSpaceNoteFilter();
   return useMemo(() => {
-    const st = { ...useWorkspace.getState(), notes, account: { ...useWorkspace.getState().account, notebooks } };
     const nodes = new Map<string, TagNode>();
     const roots: TagNode[] = [];
     const node = (path: string): TagNode => {
@@ -122,7 +120,7 @@ export function useTagTree(): { roots: TagNode[]; flat: { path: string; count: n
       else node(path.slice(0, i)).children.push(n);
       return n;
     };
-    for (const note of visibleNotes(notesInSpace(st, spaceId))) {
+    for (const note of visibleNotes(Object.values(notes).filter(inSpace))) {
       const when = Date.parse(note.updatedAt) || 0;
       // Each note counts once per tag path, even with #a/b and #a/c.
       const paths = new Set<string>();
@@ -142,7 +140,7 @@ export function useTagTree(): { roots: TagNode[]; flat: { path: string; count: n
     roots.sort((a, b) => b.recent - a.recent || byName(a, b));
     const flat = [...nodes.values()].map((n) => ({ path: n.path, count: n.count })).sort((a, b) => a.path.localeCompare(b.path));
     return { roots, flat };
-  }, [notes, notebooks, spaceId]);
+  }, [notes, inSpace]);
 }
 
 export function TagRow({ node, depth = 0 }: { node: TagNode; depth?: number }) {

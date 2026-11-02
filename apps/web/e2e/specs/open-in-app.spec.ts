@@ -44,3 +44,39 @@ test("invite link on iPhone before signing in: the login page offers the app", a
   expect(await button.getAttribute("href")).toMatch(new RegExp(`^ds://invite/${id}\\?server=.+$`));
   await ctx.close();
 });
+
+test("shared notebook on iPhone: «Открыть в приложении» lines up with the title and the list", async ({ page, browser }) => {
+  // Owner report 2026-11-02: on a phone the button sat on the screen edge, without the page's side padding.
+  test.setTimeout(120_000);
+  const friend = uniqueEmail("openappnb");
+  // An iPhone browser at a desktop size first: the sidebar is where invitations are accepted.
+  const ctx = await browser.newContext({ userAgent: IPHONE_UA, viewport: { width: 1360, height: 860 } });
+  const q = await ctx.newPage();
+  await signUp(q, friend);
+  await signUp(page, uniqueEmail("openappowner"));
+  await newDoc(page, "Общая заметка", "текст");
+  await page.getByTestId("sidebar").getByRole("link", { name: /Заметки/ }).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Поделиться…" }).click();
+  await page.getByTestId("invite-email").fill(friend);
+  await page.getByTestId("invite-submit").click();
+  await expect(page.getByTestId("invitation").filter({ hasText: friend })).toBeVisible();
+  await q.reload();
+  await q.getByTestId("invitations-row").click();
+  await q.getByTestId("invitation-in").getByTestId("accept-invitation").click();
+  await q.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
+  const row = q.getByTestId("shared-row").filter({ hasText: "Заметки" });
+  await expect(row).not.toHaveAttribute("data-waiting", "", { timeout: 30_000 });
+  const id = (await row.getAttribute("data-shared-id"))!;
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 }]) {
+    await q.setViewportSize(viewport);
+    await q.goto(`/notebook/${id}`);
+    const button = q.getByTestId("open-in-app");
+    await expect(button).toBeVisible({ timeout: 20_000 });
+    const [b, title, filter] = await Promise.all([button.boundingBox(), q.getByRole("heading", { level: 1 }).boundingBox(), q.getByTestId("list-filter").boundingBox()]);
+    expect(b!.x).toBeGreaterThanOrEqual(16);
+    expect(Math.abs(b!.x - title!.x)).toBeLessThan(1);
+    expect(Math.abs(b!.x - filter!.x)).toBeLessThan(1);
+  }
+  await ctx.close();
+});

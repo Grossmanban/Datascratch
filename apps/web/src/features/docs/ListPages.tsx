@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { runtime } from "@/data/runtime";
 import { useIndexVersion } from "@/data/indexer";
 import { useTranslation } from "react-i18next";
-import { findNotebook, folderPath, notesInSpace, useWorkspace, visibleNotes, type NoteEntry } from "@/domain/workspace";
+import { findNotebook, folderPath, ownNotebookIds, useSpaceNoteFilter, useWorkspace, visibleNotes, type NoteEntry } from "@/domain/workspace";
 import { useShared } from "@/data/sharedWithMe";
 import { OpenInApp } from "@/features/share/OpenInApp";
 import { TopBar, PageTitle } from "@/features/shell/PageHeader";
@@ -202,10 +202,9 @@ export function AllDocsPage() {
   const notes = useWorkspace((s) => s.notes);
   const notebooks = useWorkspace((s) => s.account.notebooks);
   const space = useWorkspace((s) => s.account.spaces.find((x) => x.id === s.activeSpaceId));
-  const list = useMemo(
-    () => visibleNotes(notesInSpace({ ...useWorkspace.getState(), notes, account: { ...useWorkspace.getState().account, notebooks } }, spaceId)),
-    [notes, notebooks, spaceId],
-  );
+  const inSpace = useSpaceNoteFilter();
+  // This space's notebooks and what «Общие со мной» shows here (D-54).
+  const list = useMemo(() => visibleNotes(Object.values(notes).filter(inSpace)), [notes, inSpace]);
   // The same place as the sidebar's «Новый документ»: the notebook last used in this space.
   const target = useMemo(() => newDocTarget("/all"), [notebooks, spaceId]);
   return (
@@ -242,7 +241,12 @@ export function NotebookPage() {
       newIn={readOnly ? null : { notebookId, folderId: null }}
       extra={
         <>
-          {sharedNb && <OpenInApp compact target={{ kind: "notebook", id: notebookId }} className="mb-4" />}
+          {/* Same side padding as the title, filter and list (it sat on the screen edge on iPhone). */}
+          {sharedNb && (
+            <div className="flex px-5 pb-4 sm:px-10">
+              <OpenInApp compact target={{ kind: "notebook", id: notebookId }} />
+            </div>
+          )}
           <UnreadableNote notebookId={notebookId} />
           <FolderStrip folders={subfolders} tint={nb.color} />
         </>
@@ -303,13 +307,11 @@ export function TagPage() {
   const params = useParams({ from: "/app/tag/$" });
   const tag = decodeURIComponent(params._splat ?? "");
   const notes = useWorkspace((s) => s.notes);
-  const spaceId = useWorkspace((s) => s.activeSpaceId);
-  const notebooks = useWorkspace((s) => s.account.notebooks);
+  const inSpace = useSpaceNoteFilter();
   const list = useMemo(() => {
-    const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
     // Nested tags: #work includes #work/project.
-    return visibleNotes(Object.values(notes).filter((n) => nbs.has(n.notebookId) && n.tags.some((x) => x === tag || x.startsWith(`${tag}/`))));
-  }, [notes, notebooks, spaceId, tag]);
+    return visibleNotes(Object.values(notes).filter((n) => inSpace(n) && n.tags.some((x) => x === tag || x.startsWith(`${tag}/`))));
+  }, [notes, inSpace, tag]);
   return (
     <ListPage
       title={
@@ -328,12 +330,11 @@ export function StarredPage() {
   const { t } = useTranslation();
   const starred = useWorkspace((s) => s.account.starred);
   const notes = useWorkspace((s) => s.notes);
-  const spaceId = useWorkspace((s) => s.activeSpaceId);
-  const notebooks = useWorkspace((s) => s.account.notebooks);
-  const list = useMemo(() => {
-    const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
-    return visibleNotes(starred.filter((s) => s.kind === "note" && notes[s.id] && nbs.has(notes[s.id]!.notebookId)).map((s) => notes[s.id]!));
-  }, [starred, notes, notebooks, spaceId]);
+  const inSpace = useSpaceNoteFilter();
+  const list = useMemo(
+    () => visibleNotes(starred.filter((s) => s.kind === "note" && notes[s.id] && inSpace(notes[s.id]!)).map((s) => notes[s.id]!)),
+    [starred, notes, inSpace],
+  );
   return (
     <ListPage
       title={t("nav.starred")}
@@ -349,7 +350,8 @@ export function TrashPage() {
   const spaceId = useWorkspace((s) => s.activeSpaceId);
   const notebooks = useWorkspace((s) => s.account.notebooks);
   const list = useMemo(() => {
-    const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
+    // Own notebooks only: a shared notebook's trash is its owner's to empty (D-54, as on iOS).
+    const nbs = ownNotebookIds({ notebooks }, spaceId);
     return Object.values(notes)
       .filter((n) => n.trashedAt && nbs.has(n.notebookId))
       .sort((a, b) => Date.parse(b.trashedAt!) - Date.parse(a.trashedAt!));

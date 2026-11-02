@@ -3,7 +3,7 @@ import type { TFunction } from "i18next";
 import { Ban, CalendarClock, CalendarDays, CircleCheck, FileText, Flag, FolderInput, RotateCcw, Trash2 } from "lucide-react";
 import type { TaskRow } from "@/data/db";
 import { deleteTask, findInbox, getOrCreateInbox, moveTask, openTab, patchTask } from "@/domain/actions";
-import { noteTitle, spaceOfNote, spaceOfNotebook, useWorkspace } from "@/domain/workspace";
+import { noteTitle, spaceNoteFilter, spaceOfNote, useWorkspace } from "@/domain/workspace";
 import { nextWeek, today, tomorrow } from "@/lib/dates";
 import type { MenuItem } from "@/ui";
 import { iconGlyph } from "@/lib/glyph";
@@ -28,8 +28,9 @@ export function taskMenuItems(
 ): MenuItem[] {
   const st = useWorkspace.getState();
   const space = spaceOfNote(st, task.noteId);
+  const inSpace = spaceNoteFilter(st.account, space);
   const recent = Object.values(st.notes)
-    .filter((n) => !n.trashedAt && n.id !== task.noteId && n.kind !== "inbox" && spaceOfNotebook(st, n.notebookId) === space)
+    .filter((n) => !n.trashedAt && n.id !== task.noteId && n.kind !== "inbox" && inSpace(n))
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
     .slice(0, 8);
   const inboxId = findInbox();

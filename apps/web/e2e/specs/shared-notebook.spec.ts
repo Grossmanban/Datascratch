@@ -62,6 +62,11 @@ test("shared notebook: existing notes listed, a member's new note stays, also af
   await shared.click();
   await expect(list.filter({ hasText: "От участника" })).toBeVisible({ timeout: 20_000 });
   await expect(list.filter({ hasText: "Уже была" })).toBeVisible();
+  // «Все документы» of the member lists the shared notebook's notes too, not only inside it
+  // (owner report 2026-11-02: the list took only the member's own notebooks).
+  await q.getByTestId("sidebar").getByRole("link", { name: "Все документы" }).click();
+  await expect(list.filter({ hasText: "Уже была" })).toBeVisible({ timeout: 20_000 });
+  await expect(list.filter({ hasText: "От участника" })).toBeVisible();
   // The owner has it.
   await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
   await sidebar.getByRole("link", { name: /Заметки/ }).first().click();

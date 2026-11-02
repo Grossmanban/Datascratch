@@ -526,6 +526,13 @@ export const guestSessionResponseSchema = z.object({
   target: shareTargetSchema,
   permission: z.enum(SHARE_PERMISSIONS),
   docIds: z.array(uuidSchema),
+  /**
+   * The target's key version and older keys, each wrapped by the next newer one (crypto.md §10.3):
+   * with the link's key (the current one) they open what was written before a key rotation.
+   * Useless without the link's key. Absent from older servers.
+   */
+  keyVersion: z.number().int().positive().optional(),
+  keyChain: z.array(z.string()).optional(),
 });
 export type GuestSessionResponse = z.infer<typeof guestSessionResponseSchema>;
 

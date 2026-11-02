@@ -1,4 +1,5 @@
-import { noteKeysFromMeta, ownerNotebookKeys, type NotebookKeyResponse, type VersionedKeys } from "@datascratch/shared";
+import { knownKeyVersion, noteKeysFromMeta, ownerNotebookKeys, recordKeyVersion, type NotebookKeyResponse, type VersionedKeys } from "@datascratch/shared";
+import type * as Y from "yjs";
 import { notebooksApi } from "@/api/endpoints";
 import { getMasterKey } from "@/auth/session";
 import { ad, sodiumReady, unwrapKey } from "@/lib/shared";
@@ -20,6 +21,26 @@ const olderKeys = new Map<string, Uint8Array[]>();
 /** The note key version each cached note key came from (a newer NoteMeta means it changed). */
 const noteKeyVersions = new Map<string, number>();
 
+/**
+ * The account document (its `trust` record, shared trust.ts): the newest key version this account
+ * has seen of each resource. The server cannot lower it — an older key it hands back after a
+ * rotation (one a removed member still holds) is refused (security review 2026-11-02).
+ */
+let trustAccount: () => Y.Doc | null = () => null;
+export function setTrustAccount(fn: () => Y.Doc | null) {
+  trustAccount = fn;
+}
+
+/** False (and logged) when `version` is older than one this account has already used. */
+export function keyVersionAcceptable(kind: "notebook" | "note", id: string, version: number): boolean {
+  const account = trustAccount();
+  if (!account) return true;
+  const known = knownKeyVersion(account, { kind, id });
+  if (version >= known) return true;
+  console.error(`[ds] refused an older key of ${kind} ${id}: version ${version}, this account already uses ${known}`);
+  return false;
+}
+
 export function clearKeys() {
   retiredNotebookKeys.clear();
   for (const k of notebookKeys.values()) k.fill(0);
@@ -40,6 +61,8 @@ export function alternateKeysFor(docId: string): Uint8Array[] {
 export function setKeyring(docId: string, kind: "notebook" | "note", keys: VersionedKeys) {
   const [current, ...older] = keys.keys;
   if (!current) return;
+  const account = trustAccount();
+  if (account) recordKeyVersion(account, { kind, id: docId }, keys.version);
   (kind === "notebook" ? notebookKeys : noteKeys).set(docId, current);
   olderKeys.set(docId, older);
   if (kind === "note") noteKeyVersions.set(docId, keys.version);
@@ -143,6 +166,7 @@ export async function checkNotebookKeys(list: { id: string; wrappedKey: string }
   for (const n of list) {
     let serverKey: Uint8Array;
     let serverRes: NotebookKeyResponse = { wrappedKey: n.wrappedKey };
+    let serverVersion = 1;
     try {
       serverKey = await unwrapKey(getMasterKey(), n.wrappedKey, ad.notebookKey(n.id));
     } catch {
@@ -152,12 +176,17 @@ export async function checkNotebookKeys(list: { id: string; wrappedKey: string }
         await sodiumReady();
         const keys = ownerNotebookKeys(serverRes, getMasterKey(), n.id);
         serverKey = keys.keys[0]!;
+        serverVersion = keys.version;
         olderKeys.set(n.id, keys.keys.slice(1));
       } catch (e) {
         console.error("[ds] cannot unwrap the server's notebook key", n.id, e);
         continue;
       }
     }
+    // A genuine but older wrap (from before a rotation) must not take this device back to that key.
+    if (!keyVersionAcceptable("notebook", n.id, serverVersion)) continue;
+    const account = trustAccount();
+    if (account) recordKeyVersion(account, { kind: "notebook", id: n.id }, serverVersion);
     let local = notebookKeys.get(n.id);
     if (!local) {
       const cached = (await db.kv.get(`nbkey:${n.id}`))?.value as string | NotebookKeyResponse | undefined;

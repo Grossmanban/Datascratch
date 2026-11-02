@@ -3,6 +3,16 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   AD,
   ApiRequestError,
+  MemberNotConfirmedError,
+  accountVetting,
+  isTrustMigrated,
+  knownKeyVersion,
+  markTrustMigrated,
+  memberTrust,
+  migrateMemberTrust,
+  recordInvite,
+  recordKeyVersion,
+  recordMemberKey,
   MemorySyncHub,
   MemorySyncStorage,
   SyncClient,
@@ -139,6 +149,7 @@ class FakeServer {
         keyChain: r.keyChain,
       });
     }
+    if (p === "/invitations" && method === "GET") return this.res(200, []);
     if (p === "/shared-by-me") {
       return this.res(
         200,
@@ -327,6 +338,71 @@ describe("member keys", () => {
     expect(later.map((m) => m.userId)).toEqual([BOB]);
     expect(asked).toEqual([BOB]);
     expect((await memberKeys(s.server, ALICE, s.alice.secretKey))!.keys).toEqual([s.nbKey]);
+  });
+});
+
+describe("trust record (security review 2026-11-02)", () => {
+  const target = { kind: "notebook" as const, id: NB };
+
+  it("knows invited addresses and pinned keys; takes over everyone only before migration", () => {
+    const account = new Y.Doc();
+    const m = { userId: ALICE, email: "Alice@X.co" };
+    expect(memberTrust(account, target, m, "pk1")).toBe("known");
+    markTrustMigrated(account);
+    expect(memberTrust(account, target, m, "pk1")).toBe("not_invited");
+    recordInvite(account, target, " alice@x.co ");
+    expect(memberTrust(account, target, m, "pk1")).toBe("known");
+    recordMemberKey(account, target, ALICE, "pk1");
+    expect(memberTrust(account, target, m, "pk1")).toBe("known");
+    expect(memberTrust(account, target, m, "pk2")).toBe("key_changed");
+    expect(knownKeyVersion(account, target)).toBe(0);
+    recordKeyVersion(account, target, 3);
+    recordKeyVersion(account, target, 2);
+    expect(knownKeyVersion(account, target)).toBe(3);
+  });
+
+  it("a member the server names but this account never invited gets no key without a yes", async () => {
+    const s = await setup();
+    const api = s.server.api(OWNER);
+    const account = new Y.Doc();
+    await migrateMemberTrust(api, account, OWNER);
+    expect(isTrustMigrated(account)).toBe(true);
+    // The migration took over Alice and Bob (they had accepted before the record existed).
+    const asked: [string, string][] = [];
+    const args = {
+      api,
+      target,
+      keys: ownerNotebookKeys(await api.getNotebookKey(NB), s.masterKey, NB),
+      owner: { userId: OWNER, secretKey: s.owner.secretKey },
+      vetting: accountVetting(() => account),
+      confirm: (m: { userId: string }, reason: string) => (asked.push([m.userId, reason]), false),
+    };
+    expect((await deliverAwaitingKeys(args)).map((m) => m.userId)).toEqual([ALICE]);
+    expect(asked).toEqual([[BOB, "late_account"]]);
+    // Someone the server adds afterwards is not taken over.
+    const MALLORY = "01900000-0000-7000-8000-00000000000f";
+    await ensureAccountKeyPair(s.server.api(MALLORY), MALLORY, generateKey());
+    s.server.resources.get(`notebook:${NB}`)!.members.set(MALLORY, { role: "viewer", wrappedKey: null });
+    asked.length = 0;
+    expect(await deliverAwaitingKeys(args)).toEqual([]);
+    expect(asked).toEqual([[BOB, "late_account"], [MALLORY, "not_invited"]]);
+    // A rotation will not hand the new key to an active member the record does not know.
+    s.server.resources.get(`notebook:${NB}`)!.members.get(MALLORY)!.wrappedKey = "x";
+    s.server.resources.get(`notebook:${NB}`)!.pending = true;
+    await expect(
+      rotateNotebookKey({
+        api,
+        notebookId: NB,
+        owner: args.owner,
+        masterKey: s.masterKey,
+        index: s.index,
+        agentMode: false,
+        onKeys: () => {},
+        whenIndexSent: async () => {},
+        vetting: args.vetting,
+        confirm: () => false,
+      }),
+    ).rejects.toBeInstanceOf(MemberNotConfirmedError);
   });
 });
 

@@ -217,6 +217,45 @@ describe('shares and guests', () => {
     owner.close();
   });
 
+  it('revoking a link flags a key rotation; a guest gets the key chain (audit 2026-11-02)', async () => {
+    const t = u.session.accessToken;
+    const { notebookId } = await createNotebook(s, u);
+    const shareId = newId();
+    await api(s, 'POST', '/shares', { token: t, body: { shareId, target: { kind: 'notebook', id: notebookId }, permission: 'view' } });
+    const g = await api(s, 'POST', `/shares/${shareId}/guest`, { body: {} });
+    expect(g.body).toMatchObject({ keyVersion: 1, keyChain: [] });
+    expect((await api(s, 'DELETE', `/shares/${shareId}`, { token: t })).status).toBe(204);
+    const mine = (await api(s, 'GET', '/shared-by-me', { token: t })).body.find((x: any) => x.target.id === notebookId);
+    expect(mine).toMatchObject({ keyRotationPending: true, pendingSinceVersion: 1 });
+    // After the rotation a new link's guest gets the chain of older keys.
+    await api(s, 'POST', `/members/notebook/${notebookId}/rotate`, {
+      token: t,
+      body: { version: 2, ownerWrappedKey: b64(rnd(73)), previousKeyWrap: b64(rnd(73)), memberKeys: [] },
+    });
+    const again = newId();
+    await api(s, 'POST', '/shares', { token: t, body: { shareId: again, target: { kind: 'notebook', id: notebookId }, permission: 'view' } });
+    const g2 = await api(s, 'POST', `/shares/${again}/guest`, { body: {} });
+    expect(g2.body.keyVersion).toBe(2);
+    expect(g2.body.keyChain).toHaveLength(1);
+  });
+
+  it('leaving agent mode, or a note leaving an agent notebook, flags a key rotation (audit 2026-11-02)', async () => {
+    const t = u.session.accessToken;
+    const { notebookId: agentNb } = await createNotebook(s, u, { mode: 'agent' });
+    const { notebookId: privateNb } = await createNotebook(s, u);
+    const noteId = await createNote(s, u, agentNb);
+    expect((await api(s, 'PATCH', `/docs/${noteId}`, { token: t, body: { notebookId: privateNb } })).status).toBe(204);
+    const byMe = async () => (await api(s, 'GET', '/shared-by-me', { token: t })).body as any[];
+    expect((await byMe()).find((x) => x.target.id === noteId)).toMatchObject({ keyRotationPending: true, pendingSinceVersion: 1 });
+    expect((await api(s, 'PATCH', `/notebooks/${agentNb}/mode`, { token: t, body: { mode: 'private' } })).status).toBe(200);
+    expect((await byMe()).find((x) => x.target.id === agentNb)).toMatchObject({ keyRotationPending: true });
+    // Private to private moves change nothing.
+    const other = await createNote(s, u, privateNb);
+    const { notebookId: second } = await createNotebook(s, u);
+    await api(s, 'PATCH', `/docs/${other}`, { token: t, body: { notebookId: second } });
+    expect((await byMe()).find((x) => x.target.id === other)).toBeUndefined();
+  });
+
   it('view-only guests cannot push; notebook shares include every note', async () => {
     const t = u.session.accessToken;
     const { notebookId } = await createNotebook(s, u);

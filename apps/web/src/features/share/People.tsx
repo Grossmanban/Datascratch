@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { ApiError, NetworkError } from "@/api/client";
 import { membersApi } from "@/api/endpoints";
 import { useAuth } from "@/auth/session";
-import { giveAccessNow, maintainShares } from "@/data/ownerShares";
+import { giveAccessNow, maintainShares, recordInvitation } from "@/data/ownerShares";
 import { formatDay, localDate } from "@/lib/dates";
 import { uuidv7, type Member, type MemberRole, type OutgoingInvitation, type ShareTarget } from "@/lib/shared";
 import { Button, confirmDialog, DropdownMenu, IconButton, Input, Spinner, toast } from "@/ui";
@@ -73,7 +73,10 @@ export function PeopleSection({ target }: { target: ShareTarget }) {
     );
 
   const invite = useMutation({
-    mutationFn: (to: string) => membersApi.invite({ invitationId: uuidv7(), target, email: to, role }),
+    mutationFn: (to: string) => {
+      recordInvitation(target, to);
+      return membersApi.invite({ invitationId: uuidv7(), target, email: to, role });
+    },
     onSuccess: () => {
       toast(t("share.people.invited"));
       setEmail("");

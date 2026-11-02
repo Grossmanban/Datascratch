@@ -27,6 +27,7 @@ export const ACCOUNT_ROOTS = {
   starred: "starred",
   tabs: "tabs",
   shared: "shared",
+  trust: "trust",
 } as const;
 
 export const NOTEBOOK_ROOTS = {

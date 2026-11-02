@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { requireUser } from '../auth/guard.js';
@@ -134,11 +134,27 @@ export function shareRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req, reply) => {
         const p = await requireUser(ctx, req);
-        const rows = await db
-          .update(shares)
-          .set({ revokedAt: new Date() })
-          .where(and(eq(shares.id, req.params.id), eq(shares.userId, p.userId), isNull(shares.revokedAt)))
-          .returning({ id: shares.id });
+        const rows = await db.transaction(async (tx) => {
+          const revoked = await tx
+            .update(shares)
+            .set({ revokedAt: new Date() })
+            .where(and(eq(shares.id, req.params.id), eq(shares.userId, p.userId), isNull(shares.revokedAt)))
+            .returning({ id: shares.id, kind: shares.targetKind, targetId: shares.targetId });
+          // The link carried the key: like a member leaving, the key changes (the owner's device
+          // rotates it and re-creates the other links, crypto.md §10.3; audit 2026-11-02).
+          for (const r of revoked) {
+            if (r.kind === 'notebook') {
+              await tx.execute(sql`UPDATE notebooks SET key_rotation_pending = true,
+                pending_since_version = CASE WHEN key_rotation_pending THEN pending_since_version ELSE key_version END
+                WHERE id = ${r.targetId}`);
+            } else {
+              await tx.execute(sql`UPDATE docs SET key_rotation_pending = true,
+                pending_since_version = CASE WHEN key_rotation_pending THEN pending_since_version ELSE key_version END
+                WHERE id = ${r.targetId}`);
+            }
+          }
+          return revoked;
+        });
         if (rows.length === 0) throw notFound('share not found');
         // Revocation immediately disconnects guests (api.md).
         ctx.hub.publish(topics.share(req.params.id), { type: 'revoked', reason: 'share revoked' });
@@ -160,6 +176,8 @@ export function shareRoutes(ctx: AppContext): FastifyPluginAsyncZod {
               target: Target,
               permission: Permission,
               docIds: z.array(id()),
+              keyVersion: z.number().int().positive(),
+              keyChain: z.array(z.string()),
             }),
             ...errorResponses,
           },
@@ -174,8 +192,18 @@ export function shareRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           target: { kind: s.targetKind, id: s.targetId },
           permission: s.permission,
           docIds: await shareDocIds(db, s),
+          ...(await targetKeyChain(db, s.targetKind, s.targetId)),
         };
       },
     );
   };
+}
+
+/** The target's key version and chain of older keys (each wrapped by the next newer key). */
+async function targetKeyChain(db: DbOrTx, kind: 'note' | 'notebook', targetId: string) {
+  const [row] =
+    kind === 'notebook'
+      ? await db.select({ v: notebooks.keyVersion, chain: notebooks.keyChain }).from(notebooks).where(eq(notebooks.id, targetId))
+      : await db.select({ v: docs.keyVersion, chain: docs.keyChain }).from(docs).where(eq(docs.id, targetId));
+  return { keyVersion: row?.v ?? 1, keyChain: row?.chain ?? [] };
 }

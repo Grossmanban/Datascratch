@@ -5,7 +5,7 @@
 import type * as Y from "yjs";
 import { AD } from "../contracts/crypto.js";
 import type { NoteMeta } from "../contracts/document.js";
-import type { Share, ShareTarget } from "../contracts/api.js";
+import type { Member, Share, ShareTarget } from "../contracts/api.js";
 import { buildShareLink } from "../crypto/share-link.js";
 import { uuidv7 } from "../ids.js";
 import { toBase64Url } from "../crypto/base64url.js";
@@ -14,7 +14,7 @@ import { wrapPreviousKey } from "../crypto/sharing.js";
 import { getNoteMetas, patchNoteMeta } from "../document/records.js";
 import type { SharingApi } from "./api.js";
 import { noteKeysFromMeta, ownerNotebookKeys, type VersionedKeys } from "./keys.js";
-import { wrapForMembers, type OwnerIdentity } from "./members.js";
+import { wrapForMembers, type ConfirmReason, type MemberVetting, type OwnerIdentity } from "./members.js";
 
 /** Only members that hold a key get the new one; `awaiting_key` ones wait for delivery. */
 async function activeMembers(
@@ -52,6 +52,9 @@ export interface RotateNotebookOptions {
   whenIndexSent: () => Promise<void>;
   /** Run step 1 even without `keyRotationPending` (e.g. a manual «сменить ключ»). */
   force?: boolean;
+  /** Members are checked against this account's record before they get the new key (members.ts). */
+  vetting?: MemberVetting;
+  confirm?: (member: Member, reason: ConfirmReason) => boolean | Promise<boolean>;
 }
 
 export interface RotateResult {
@@ -103,7 +106,8 @@ export async function rotateNotebookKey(options: RotateNotebookOptions): Promise
         key,
         version,
         owner,
-        members.map((m) => m.userId),
+        members,
+        options.vetting ? { vetting: options.vetting, ...(options.confirm ? { confirm: options.confirm } : {}) } : undefined,
       ),
       ...(options.agentMode ? { notebookKey: toBase64Url(key) } : {}),
     });
@@ -180,6 +184,8 @@ export interface RotateNoteOptions {
   index: Y.Doc;
   notebookKeys: Uint8Array[];
   onKeys: (keys: VersionedKeys) => void | Promise<void>;
+  vetting?: MemberVetting;
+  confirm?: (member: Member, reason: ConfirmReason) => boolean | Promise<boolean>;
 }
 
 /** Rotate the key of a note shared on its own; `rotate` clears the pending flag itself. */
@@ -208,7 +214,8 @@ export async function rotateSharedNoteKey(options: RotateNoteOptions): Promise<V
       key,
       version,
       owner,
-      members.map((m) => m.userId),
+      members,
+      options.vetting ? { vetting: options.vetting, ...(options.confirm ? { confirm: options.confirm } : {}) } : undefined,
     ),
   });
   patchNoteMeta(index, noteId, {

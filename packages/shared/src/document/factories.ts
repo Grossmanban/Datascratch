@@ -23,6 +23,8 @@ export interface AccountDocRoots {
   starred: Y.Array<unknown>;
   tabs: Y.Array<unknown>;
   shared: Y.Map<unknown>;
+  /** What this account itself did in sharing (sharing/trust.ts): the server cannot forge it. */
+  trust: Y.Map<unknown>;
 }
 
 export interface NotebookDocRoots {
@@ -48,6 +50,7 @@ export function accountRoots(doc: Y.Doc): AccountDocRoots {
     starred: doc.getArray(ACCOUNT_ROOTS.starred),
     tabs: doc.getArray(ACCOUNT_ROOTS.tabs),
     shared: doc.getMap(ACCOUNT_ROOTS.shared),
+    trust: doc.getMap(ACCOUNT_ROOTS.trust),
   };
 }
 

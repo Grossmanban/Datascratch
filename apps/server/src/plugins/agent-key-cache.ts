@@ -8,8 +8,14 @@
 export const KEY_TTL_MS = 10 * 60_000;
 const MAX_KEYS = 10_000;
 
+/** A note's keys, newest first (older ones open what was written before a key rotation). */
+export interface DocKeys {
+  version: number;
+  keys: Uint8Array[];
+}
+
 interface Entry {
-  key: Uint8Array;
+  key: DocKeys;
   notebookId: string;
   at: number;
 }
@@ -17,7 +23,7 @@ interface Entry {
 const entries = new Map<string, Entry>();
 
 export const noteKeyCache = {
-  get(noteId: string, now = Date.now()): Uint8Array | undefined {
+  get(noteId: string, now = Date.now()): DocKeys | undefined {
     const e = entries.get(noteId);
     if (!e) return undefined;
     if (now - e.at > KEY_TTL_MS) {
@@ -27,7 +33,7 @@ export const noteKeyCache = {
     return e.key;
   },
 
-  set(noteId: string, notebookId: string, key: Uint8Array, now = Date.now()): void {
+  set(noteId: string, notebookId: string, key: DocKeys, now = Date.now()): void {
     entries.delete(noteId);
     if (entries.size >= MAX_KEYS) entries.delete(entries.keys().next().value as string);
     entries.set(noteId, { key, notebookId, at: now });

@@ -1,7 +1,15 @@
 // D-54, the owner's side (api.md `GET /shared-by-me`, crypto.md §10): deliver keys to members who
 // accepted, change the key after someone left or was removed, and re-create guest links with it.
 // One pass of core's maintainOwnedShares, at start, every two minutes and after a change here.
-import { maintainOwnedShares, type Member, type ShareTarget } from "@datascratch/shared";
+import {
+  accountVetting,
+  maintainOwnedShares,
+  migrateMemberTrust,
+  recordInvite,
+  type ConfirmReason,
+  type Member,
+  type ShareTarget,
+} from "@datascratch/shared";
 import { getMasterKey, useAuth } from "@/auth/session";
 import { useWorkspace } from "@/domain/workspace";
 import i18n from "@/i18n";
@@ -22,6 +30,14 @@ export function giveAccessNow(target: ShareTarget, userId: string) {
   return maintainShares();
 }
 
+/**
+ * Remember that this account invites `email` to `target` (the account document's `trust` record):
+ * only invited people, or ones the owner confirms, get keys — whatever the server lists.
+ */
+export function recordInvitation(target: ShareTarget, email: string) {
+  recordInvite(runtime().account, target, email);
+}
+
 /** Run one maintenance pass now (or right after the one in progress). */
 export function maintainShares(): Promise<void> {
   if (running) {
@@ -40,13 +56,15 @@ export function maintainShares(): Promise<void> {
   return running;
 }
 
-async function confirmLateAccount(target: ShareTarget, member: Member): Promise<boolean> {
+async function confirmMember(target: ShareTarget, member: Member, reason: ConfirmReason): Promise<boolean> {
   const id = `${target.kind}:${target.id}:${member.userId}`;
   if (declined.has(id)) return false;
   // Sign-up does not verify e-mail: an account made after the invitation gets access only on «yes».
+  // So does anyone this account has no record of inviting, or whose key is not the one it knew.
+  const text = { late_account: "Late", not_invited: "NotInvited", key_changed: "KeyChanged" }[reason];
   const ok = await confirmDialog({
-    title: i18n.t("share.people.confirmLateTitle", { email: member.email }),
-    description: i18n.t("share.people.confirmLateText"),
+    title: i18n.t(`share.people.confirm${text}Title`, { email: member.email }),
+    description: i18n.t(`share.people.confirm${text}Text`),
     confirmLabel: i18n.t("share.people.confirmLateYes"),
     cancelLabel: i18n.t("share.people.confirmLateNo"),
   });
@@ -57,8 +75,11 @@ async function confirmLateAccount(target: ShareTarget, member: Member): Promise<
 async function pass() {
   const { userId } = useAuth.getState();
   if (!userId) return;
+  // The trust record lives in the account document: decide nothing before it has synced.
+  if (!useWorkspace.getState().accountSynced) return;
   const pair = await accountBoxKeys();
   const rt = runtime();
+  await migrateMemberTrust(sharingApi, rt.account, userId);
   const results = await maintainOwnedShares({
     api: sharingApi,
     owner: { userId, secretKey: pair.secretKey },
@@ -72,7 +93,8 @@ async function pass() {
       if (target.kind === "notebook") await refreshNotebookKeyCache(target.id);
       useUi.setState({ keysChangedAt: Date.now() });
     },
-    confirm: confirmLateAccount,
+    confirm: confirmMember,
+    vetting: accountVetting(() => rt.account),
     links: {
       webOrigin: location.origin,
       onRecreated: (target, urls) => {

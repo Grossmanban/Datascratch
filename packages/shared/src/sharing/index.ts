@@ -5,3 +5,4 @@ export * from "./members.js";
 export * from "./rotation.js";
 export * from "./placement.js";
 export * from "./owner.js";
+export * from "./trust.js";

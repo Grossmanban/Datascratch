@@ -2,6 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { docUpdates, docs } from '../src/db/schema.js';
+import { AD as SHARED_AD } from '@datascratch/shared/crypto';
 import { AD, seal } from '../src/lib/sodium.js';
 import type { AgentGrant, AgentsContext } from '../src/plugins/agents-context.js';
 import { createAgentsContext } from '../src/plugins/loader.js';
@@ -57,7 +58,7 @@ async function agentNotebook(owner: TestUser, mode: 'agent' | 'private' = 'agent
   note.getText('t').insert(0, 'owner text');
   await c.push(noteId, await seal(noteKey, Y.encodeStateAsUpdate(note), AD.doc(noteId)));
   c.close();
-  return { notebookId, noteId };
+  return { notebookId, noteId, notebookKey, noteKey };
 }
 
 async function share(owner: TestUser, notebookId: string, member: TestUser, role: 'editor' | 'viewer', giveKey = true) {
@@ -103,6 +104,54 @@ async function edit(member: TestUser, noteId: string, grantId: string, text: str
   loaded.doc.getText('t').insert(loaded.doc.getText('t').length, text);
   return agents.data.applyUpdate(member.userId, noteId, Y.encodeStateAsUpdate(loaded.doc, sv), originOf(member, grantId));
 }
+
+describe('after a key rotation (crypto.md §10.3)', () => {
+  it('the agent reads what was written under the old keys and the new, and writes with the new', async () => {
+    const owner = await user();
+    const { notebookId, noteId, notebookKey: k1, noteKey: n1 } = await agentNotebook(owner);
+    const g = await grantFor(owner, [notebookId]);
+    // The owner's device rotates: notebook key v2 (the server gets it: agent mode), then the note
+    // gets key v2 with v1 in its chain, and new text is written with it.
+    const k2 = rnd(32);
+    const n2 = rnd(32);
+    const rotated = await call(owner, 'POST', `/members/notebook/${notebookId}/rotate`, {
+      version: 2,
+      ownerWrappedKey: b64(rnd(73)),
+      previousKeyWrap: b64(await seal(k2, k1, SHARED_AD.previousKey('notebook', notebookId, 2))),
+      memberKeys: [],
+      notebookKey: b64(k2),
+    });
+    expect(rotated.status).toBe(204);
+    const c = await SyncClient.user(s, owner);
+    // Edit the existing NoteMeta (a second Y.Map under the same key would race with it).
+    const nb = (await agents.data.loadDoc(owner.userId, notebookId, g.id))!.doc;
+    const sv = Y.encodeStateVector(nb);
+    const meta = nb.getMap('notes').get(noteId) as Y.Map<unknown>;
+    meta.set('wrappedKey', b64(await seal(k2, n2, SHARED_AD.noteKeyVersion(noteId, 2))));
+    meta.set('keyVersion', 2);
+    meta.set('keyChain', [b64(await seal(n2, n1, SHARED_AD.previousKey('note', noteId, 2)))]);
+    await c.push(notebookId, await seal(k2, Y.encodeStateAsUpdate(nb, sv), AD.doc(notebookId)));
+    const later = new Y.Doc();
+    later.getText('t').insert(0, 'after rotation ');
+    await c.push(noteId, await seal(n2, Y.encodeStateAsUpdate(later), AD.doc(noteId)));
+    expect((await call(owner, 'POST', `/members/notebook/${notebookId}/rotate/done`, {})).status).toBe(204);
+    c.close();
+
+    const loaded = (await agents.data.loadDoc(owner.userId, noteId, g.id))!;
+    expect(loaded).not.toBeNull();
+    expect('skipped' in loaded ? loaded.skipped : []).toEqual([]);
+    const text = loaded.doc.getText('t').toString();
+    expect(text).toContain('owner text');
+    expect(text).toContain('after rotation');
+    // The agent's own edit is sealed with the newest note key.
+    await edit(owner, noteId, g.id, ' + agent');
+    const [last] = (
+      await s.ctx.database.db.execute<{ payload: Buffer }>(sql`SELECT payload FROM doc_updates WHERE doc_id = ${noteId} ORDER BY seq DESC LIMIT 1`)
+    ).rows;
+    const { open } = await import('../src/lib/sodium.js');
+    await expect(open(n2, new Uint8Array(last!.payload), AD.doc(noteId))).resolves.toBeInstanceOf(Uint8Array);
+  });
+});
 
 describe('agents of a member', () => {
   it('«all notebooks» covers only the user’s own: a shared one needs picking by name (audit 2026-11-02)', async () => {

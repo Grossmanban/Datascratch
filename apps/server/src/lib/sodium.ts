@@ -22,5 +22,7 @@ export const AD = {
   awareness: SHARED_AD.awareness,
   notebookServer: SHARED_AD.notebookKeyServer,
   note: SHARED_AD.noteKey,
+  /** A note key of `version` (≥ 2 after a rotation) under its notebook key. */
+  noteVersion: SHARED_AD.noteKeyVersion,
   attachment: SHARED_AD.attachmentChunk,
 } as const;

@@ -4,21 +4,29 @@ import type { AppContext } from '../context.js';
 import { withAgentScope, type Tx } from '../db/client.js';
 import { attachmentChunks, attachments, docSnapshots, docUpdates, docs, members, notebooks, users } from '../db/schema.js';
 import { COMPACT_JOB } from '../jobs/index.js';
-import { fromB64, toB64 } from '../lib/encoding.js';
+import { toB64 } from '../lib/encoding.js';
 import { ApiError, forbidden, notFound } from '../lib/errors.js';
 import { AD, getSodium, open, seal } from '../lib/sodium.js';
 import { chunkKey } from '../storage/index.js';
 import { topics } from '../sync/hub.js';
-import { noteKeyCache } from './agent-key-cache.js';
+import { unwrapKeyChain } from '@datascratch/shared/crypto';
+import { noteKeysFromMeta } from '@datascratch/shared/sharing';
+import { noteKeyCache, type DocKeys } from './agent-key-cache.js';
 import type { AgentDataSource, AgentEditOrigin, AgentNotebook } from './agents-context.js';
 
 /** Server-side snapshot of agent-mode documents (the server holds the key there). */
 const SNAPSHOT_AFTER_UPDATES = 500;
 const SNAPSHOT_AFTER_BYTES = 1024 * 1024;
 
-function readWrappedKey(meta: unknown): string | null {
-  const v = meta instanceof Y.Map ? meta.get('wrappedKey') : (meta as { wrappedKey?: unknown } | null)?.wrappedKey;
-  return typeof v === 'string' ? v : null;
+/** The key fields of a NoteMeta in the notebook index (crypto.md §10.3: version and older keys). */
+function readKeyFields(meta: unknown): { wrappedKey: string; keyVersion?: number; keyChain?: string[] } | null {
+  const m = (meta instanceof Y.Map ? meta.toJSON() : meta) as { wrappedKey?: unknown; keyVersion?: unknown; keyChain?: unknown } | null;
+  if (!m || typeof m.wrappedKey !== 'string') return null;
+  return {
+    wrappedKey: m.wrappedKey,
+    ...(typeof m.keyVersion === 'number' ? { keyVersion: m.keyVersion } : {}),
+    ...(Array.isArray(m.keyChain) && m.keyChain.every((k) => typeof k === 'string') ? { keyChain: m.keyChain as string[] } : {}),
+  };
 }
 
 /**
@@ -27,6 +35,8 @@ function readWrappedKey(meta: unknown): string | null {
  * and the agent-mode notebooks shared with the user (D-54: an editor writes, a viewer reads),
  * narrowed to the grant's notebooks when `grantId` is given.
  * Keys: notebookKey = open(DS_KMS_KEY), noteKey = open(notebookKey, NoteMeta.wrappedKey) (crypto.md §1, §8).
+ * After a key rotation (crypto.md §10.3) older keys come from the key chains: items written
+ * before it open with them; everything new is sealed with the newest key.
  */
 export class PgAgentDataSource implements AgentDataSource {
   constructor(private readonly ctx: AppContext) {}
@@ -45,10 +55,22 @@ export class PgAgentDataSource implements AgentDataSource {
     });
   }
 
-  async #notebookKey(tx: Tx, notebookId: string): Promise<Uint8Array> {
+  /** The notebook's keys, newest first (the server holds the current one; the chain gives the older). */
+  async #notebookKeys(tx: Tx, notebookId: string): Promise<DocKeys> {
     const key = await this.ctx.keys.notebookKey(tx, notebookId);
     if (!key) throw notFound('notebook not found');
-    return key;
+    const [nb] = await tx
+      .select({ version: notebooks.keyVersion, chain: notebooks.keyChain })
+      .from(notebooks)
+      .where(eq(notebooks.id, notebookId));
+    const version = nb?.version ?? 1;
+    await getSodium();
+    try {
+      return { version, keys: unwrapKeyChain(key, version, nb?.chain ?? [], 'notebook', notebookId) };
+    } catch (err) {
+      this.ctx.log.warn({ err, notebookId }, 'agent: the notebook key chain could not be opened; using the current key only');
+      return { version, keys: [key] };
+    }
   }
 
   /**
@@ -61,7 +83,7 @@ export class PgAgentDataSource implements AgentDataSource {
   async #state(
     tx: Tx,
     docId: string,
-    key: Uint8Array,
+    keys: Uint8Array[],
   ): Promise<{ doc: Y.Doc; seq: number; skipped: { seq: number; deviceId: string | null; reason: string }[] }> {
     const [snap] = await tx
       .select({ seq: docSnapshots.seq, payload: docSnapshots.payload, deviceId: docSnapshots.deviceId })
@@ -79,10 +101,19 @@ export class PgAgentDataSource implements AgentDataSource {
     const ad = AD.doc(docId);
     const skipped: { seq: number; deviceId: string | null; reason: string }[] = [];
     const applyOne = async (item: { seq: number; payload: Uint8Array; deviceId: string }, kind: 'snapshot' | 'update') => {
-      let plain: Uint8Array;
-      try {
-        plain = await open(key, item.payload, ad);
-      } catch (err) {
+      let plain: Uint8Array | null = null;
+      let failure: unknown;
+      // Newest key first; an item from before a rotation opens with an older one.
+      for (const key of keys) {
+        try {
+          plain = await open(key, item.payload, ad);
+          break;
+        } catch (err) {
+          failure = err;
+        }
+      }
+      if (!plain) {
+        const err = failure;
         skipped.push({ seq: item.seq, deviceId: item.deviceId, reason: 'decrypt' });
         this.ctx.log.warn(
           { err, docId, seq: item.seq, deviceId: item.deviceId, kind },
@@ -105,19 +136,26 @@ export class PgAgentDataSource implements AgentDataSource {
     return { doc, seq: rows.length ? rows[rows.length - 1]!.seq : from, skipped };
   }
 
-  /** The doc row (visible under RLS) and the key that encrypts it. */
-  async #docAndKey(tx: Tx, docId: string) {
+  /** The doc row (visible under RLS) and the keys that encrypt it, newest first. */
+  async #docAndKey(tx: Tx, docId: string): Promise<{ doc: typeof docs.$inferSelect; key: DocKeys } | null> {
     const [d] = await tx.select().from(docs).where(eq(docs.id, docId));
     if (!d || !d.notebookId || d.kind === 'account') return null;
-    const nbKey = await this.#notebookKey(tx, d.notebookId);
-    if (d.kind === 'notebook') return { doc: d, key: nbKey };
+    const nbKeys = await this.#notebookKeys(tx, d.notebookId);
+    if (d.kind === 'notebook') return { doc: d, key: nbKeys };
     let key = noteKeyCache.get(docId);
     if (!key) {
-      const { doc: index } = await this.#state(tx, d.notebookId, nbKey);
-      const wrapped = readWrappedKey(index.getMap('notes').get(docId));
+      const { doc: index } = await this.#state(tx, d.notebookId, nbKeys.keys);
+      const fields = readKeyFields(index.getMap('notes').get(docId));
       index.destroy();
-      if (!wrapped) return null;
-      key = await this.ctx.keys.noteKey(nbKey, docId, fromB64(wrapped));
+      if (!fields) return null;
+      await getSodium();
+      try {
+        const found = noteKeysFromMeta({ id: docId, ...fields }, nbKeys.keys);
+        key = { version: found.version, keys: found.keys };
+      } catch (err) {
+        this.ctx.log.warn({ err, docId }, 'agent: no notebook key opens the note key');
+        return null;
+      }
       noteKeyCache.set(docId, d.notebookId, key);
     }
     return { doc: d, key };
@@ -164,7 +202,7 @@ export class PgAgentDataSource implements AgentDataSource {
       const dk = await this.#docAndKey(tx, docId);
       if (!dk) return null;
       try {
-        const state = await this.#state(tx, docId, dk.key);
+        const state = await this.#state(tx, docId, dk.key.keys);
         return state.skipped.length ? state : { doc: state.doc, seq: state.seq };
       } catch (err) {
         this.ctx.log.warn({ err, docId }, 'agent: document could not be loaded');
@@ -195,8 +233,9 @@ export class PgAgentDataSource implements AgentDataSource {
   }
 
   /** Encrypts and stores one update, broadcasts it after commit, snapshots when due. */
-  async #append(tx: Tx, after: (() => unknown)[], docId: string, key: Uint8Array, update: Uint8Array, origin: AgentEditOrigin) {
+  async #append(tx: Tx, after: (() => unknown)[], docId: string, keys: DocKeys, update: Uint8Array, origin: AgentEditOrigin) {
     const deviceId = `agent:${origin.grantId}`;
+    const key = keys.keys[0]!;
     const payload = await seal(key, update, AD.doc(docId));
     // RLS rejects the insert when the grant is read-only.
     const author = { kind: 'agent', tokenId: origin.grantId } as const;
@@ -204,7 +243,7 @@ export class PgAgentDataSource implements AgentDataSource {
     after.push(() => this.ctx.documents.publishUpdate(docId, r.seq, payload, deviceId, author, null));
     this.ctx.metrics.syncUpdates.inc({ source: 'agent' });
     if (r.updatesSinceSnapshot >= SNAPSHOT_AFTER_UPDATES || r.bytesSinceSnapshot >= SNAPSHOT_AFTER_BYTES) {
-      const { doc, seq, skipped } = await this.#state(tx, docId, key);
+      const { doc, seq, skipped } = await this.#state(tx, docId, keys.keys);
       if (skipped.length > 0) {
         // A snapshot would let compaction delete the unreadable updates for good: leave them for a client to fix.
         doc.destroy();
@@ -243,7 +282,8 @@ export class PgAgentDataSource implements AgentDataSource {
       // Out of a notebook shared with the user (D-54) is the owner's move only; RLS refuses it too.
       if (to.doc.userId !== note.doc.userId) throw forbidden('a note leaves a shared notebook only by its owner');
       for (const id of [noteId, fromNotebookId, toNotebookId]) await this.#requireWritable(tx, id);
-      const wrapped = await seal(to.key, note.key, AD.note(noteId));
+      // The note keeps its key version and older keys (NoteMeta keyChain): only its wrap changes.
+      const wrapped = await seal(to.key.keys[0]!, note.key.keys[0]!, AD.noteVersion(noteId, note.key.version));
       const updates = move.indexUpdates(toB64(wrapped));
       // Target first: if anything below fails the transaction rolls back and nothing moved.
       const toSeq = (await this.#append(tx, after, toNotebookId, to.key, updates.to, origin)).seq;
@@ -258,7 +298,7 @@ export class PgAgentDataSource implements AgentDataSource {
 
   async createNoteDoc(userId: string, notebookId: string, noteId: string, grantId?: string) {
     return this.#scope(userId, grantId, async (tx) => {
-      const nbKey = await this.#notebookKey(tx, notebookId);
+      const nbKey = (await this.#notebookKeys(tx, notebookId)).keys[0]!;
       const [existing] = await tx.select({ id: docs.id }).from(docs).where(eq(docs.id, noteId));
       if (existing) throw new ApiError('conflict', 'document exists');
       const w = await tx.execute<{ ok: boolean }>(
@@ -272,7 +312,7 @@ export class PgAgentDataSource implements AgentDataSource {
       await tx.insert(docs).values({ id: noteId, userId: nb.ownerId, kind: 'note', notebookId });
       const noteKey = (await getSodium()).randombytes_buf(32);
       const wrapped = await seal(nbKey, noteKey, AD.note(noteId));
-      noteKeyCache.set(noteId, notebookId, noteKey);
+      noteKeyCache.set(noteId, notebookId, { version: 1, keys: [noteKey] });
       return { wrappedKey: toB64(wrapped) };
     });
   }
@@ -295,18 +335,32 @@ export class PgAgentDataSource implements AgentDataSource {
         .where(eq(attachmentChunks.attachmentId, a.id))
         .orderBy(asc(attachmentChunks.index));
       if (chunks.length !== a.chunkCount) return null;
-      return { a, key: dk.key };
+      return { a, keys: dk.key.keys };
     });
     if (!found) return null;
-    const { a, key } = found;
+    const { a, keys } = found;
     const parts: Uint8Array[] = [];
     let total = 0;
+    // An attachment is sealed with the note key of its upload: maybe one from before a rotation.
+    let key: Uint8Array | null = null;
     for (let index = 0; index < a.chunkCount; index++) {
       const blob = await this.ctx.storage.get(chunkKey(a.id, index));
       if (!blob) return null;
       total += blob.length;
       if (total > this.ctx.config.AGENT_IMAGE_MAX_BYTES + a.chunkCount * 64) return null;
-      parts.push(await open(key, blob, AD.attachment(a.id, index, index === a.chunkCount - 1)));
+      const ad = AD.attachment(a.id, index, index === a.chunkCount - 1);
+      if (!key) {
+        for (const k of keys) {
+          try {
+            parts.push(await open(k, blob, ad));
+            key = k;
+            break;
+          } catch {
+            // try an older key
+          }
+        }
+        if (!key) return null;
+      } else parts.push(await open(key, blob, ad));
     }
     return Buffer.concat(parts);
   }

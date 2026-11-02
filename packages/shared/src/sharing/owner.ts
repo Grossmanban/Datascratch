@@ -6,7 +6,7 @@ import type { Member, ShareTarget, SharedByMeItem } from "../contracts/api.js";
 import { getNoteMeta } from "../document/records.js";
 import type { SharingApi } from "./api.js";
 import { noteKeysFromMeta, ownerNotebookKeys, type VersionedKeys } from "./keys.js";
-import { deliverAwaitingKeys, type OwnerIdentity } from "./members.js";
+import { deliverAwaitingKeys, type ConfirmReason, type MemberVetting, type OwnerIdentity } from "./members.js";
 import {
   recreateShareLinks,
   repairSharedNoteMeta,
@@ -27,8 +27,13 @@ export interface OwnerMaintenanceOptions {
   whenIndexSent: (notebookId: string) => Promise<void>;
   /** New keys of a notebook or note: update the app's keyring. */
   onKeys: (target: ShareTarget, keys: VersionedKeys) => void | Promise<void>;
-  /** Asked before a key goes to an account created after its invitation. */
-  confirm?: (target: ShareTarget, member: Member) => boolean | Promise<boolean>;
+  /**
+   * Asked before a key goes to an account created after its invitation, or to a member this
+   * account's record (`vetting`) does not know.
+   */
+  confirm?: (target: ShareTarget, member: Member, reason: ConfirmReason) => boolean | Promise<boolean>;
+  /** This account's own record of whom it invited and gave keys to (trust.ts). */
+  vetting?: MemberVetting;
   /** Re-create guest links after a rotation (crypto.md §10.3); omit to skip. */
   links?: {
     webOrigin: string;
@@ -84,6 +89,7 @@ async function maintainNotebook(
         if (k.notebook) await o.onKeys(target, k.notebook);
         for (const [noteId, nk] of k.notes ?? []) await o.onKeys({ kind: "note", id: noteId }, nk);
       },
+      ...vettingOf(o, target),
     });
     keys = r.notebook;
     result.rotated = r.rotated;
@@ -126,6 +132,7 @@ async function maintainNote(
       index,
       notebookKeys,
       onKeys: (k) => o.onKeys(target, k),
+      ...vettingOf(o, target),
     });
     result.rotated = true;
     await relink(o, target, keys);
@@ -150,13 +157,21 @@ async function relink(o: OwnerMaintenanceOptions, target: ShareTarget, keys: Ver
     );
 }
 
+function vettingOf(o: OwnerMaintenanceOptions, target: ShareTarget) {
+  return {
+    ...(o.vetting ? { vetting: o.vetting } : {}),
+    ...(o.confirm ? { confirm: (m: Member, reason: ConfirmReason) => o.confirm!(target, m, reason) } : {}),
+  };
+}
+
 async function deliver(o: OwnerMaintenanceOptions, target: ShareTarget, keys: VersionedKeys) {
   const members = await deliverAwaitingKeys({
     api: o.api,
     target,
     keys,
     owner: o.owner,
-    ...(o.confirm ? { confirm: (m: Member) => o.confirm!(target, m) } : {}),
+    ...(o.confirm ? { confirm: (m: Member, reason: ConfirmReason) => o.confirm!(target, m, reason) } : {}),
+    ...(o.vetting ? { vetting: o.vetting } : {}),
   });
   return members.map((m) => m.userId);
 }

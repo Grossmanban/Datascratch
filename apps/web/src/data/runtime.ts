@@ -14,7 +14,7 @@ import { uploadPending } from "./attachments";
 import { accountDb } from "./db";
 import { DocStore, ORIGIN_LOAD, ORIGIN_REMOTE } from "./docStore";
 import { Indexer } from "./indexer";
-import { alternateKeysFor, checkNotebookKeys, clearKeys, onNotebookKeyReplaced, type ReplacedNotebookKey } from "./keys";
+import { alternateKeysFor, checkNotebookKeys, clearKeys, onNotebookKeyReplaced, setTrustAccount, type ReplacedNotebookKey } from "./keys";
 import { notebooksApi } from "@/api/endpoints";
 import { pushNotebookMode } from "@/domain/actions";
 import { ad, unwrapKey, wrapKey } from "@/lib/shared";
@@ -155,6 +155,7 @@ export class AccountRuntime {
 
     await this.store.ensureRow(this.accountDocId, "account", null, 1);
     this.account = await this.store.pin(this.accountDocId);
+    setTrustAccount(() => this.account);
     await this.attach([this.accountDocId]);
     const onAccount = () => {
       refreshAccount(this.account);

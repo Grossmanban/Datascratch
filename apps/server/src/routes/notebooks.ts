@@ -229,9 +229,21 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         const serverWrappedKey = notebookKey
           ? Buffer.from(await ctx.keys.wrapNotebookKey(req.params.id, fromB64(notebookKey)))
           : null;
+        // Back to private: the server has seen the key, so it changes (the owner's device rotates it,
+        // as after a member left; spec/07 «клиент перешифровывает»; audit 2026-11-02).
+        const leavesAgents = current.mode === 'agent' && mode === 'private';
         const [nb] = await db
           .update(notebooks)
-          .set({ mode, serverWrappedKey })
+          .set({
+            mode,
+            serverWrappedKey,
+            ...(leavesAgents
+              ? {
+                  keyRotationPending: true,
+                  pendingSinceVersion: sql`CASE WHEN ${notebooks.keyRotationPending} THEN ${notebooks.pendingSinceVersion} ELSE ${notebooks.keyVersion} END`,
+                }
+              : {}),
+          })
           .where(eq(notebooks.id, req.params.id))
           .returning();
         // Keys decrypted for agents must not outlive agent mode (crypto.md §8).
@@ -343,11 +355,26 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         // Moving a note out of a shared notebook is the owner's (members would lose it).
         if (!owner) throw forbidden('only the owner can move this note');
         if (doc.kind !== 'note') throw badRequest('only note documents can be moved');
-        await ownNotebook(p.userId, req.body.notebookId);
+        const to = await ownNotebook(p.userId, req.body.notebookId);
         if (doc.notebookId === req.body.notebookId) return reply.code(204).send(null);
+        const [from] = doc.notebookId
+          ? await db.select({ mode: notebooks.mode }).from(notebooks).where(eq(notebooks.id, doc.notebookId))
+          : [];
+        // Out of a notebook open to agents into a private one: the server has seen the note key, so
+        // it changes (the owner's device rotates it; audit 2026-11-02).
+        const leavesAgents = from?.mode === 'agent' && to.mode !== 'agent';
         await db
           .update(docs)
-          .set({ notebookId: req.body.notebookId, updatedAt: sql`now()` })
+          .set({
+            notebookId: req.body.notebookId,
+            updatedAt: sql`now()`,
+            ...(leavesAgents
+              ? {
+                  keyRotationPending: true,
+                  pendingSinceVersion: sql`CASE WHEN ${docs.keyRotationPending} THEN ${docs.pendingSinceVersion} ELSE ${docs.keyVersion} END`,
+                }
+              : {}),
+          })
           .where(eq(docs.id, doc.id));
         ctx.hub.publish(topics.doc(doc.id), { type: 'doc_moved', docId: doc.id });
         return reply.code(204).send(null);

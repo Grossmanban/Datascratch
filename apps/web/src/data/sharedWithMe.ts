@@ -8,7 +8,7 @@ import { useWorkspace } from "@/domain/workspace";
 import i18n from "@/i18n";
 import { toast } from "@/ui";
 import { kvGet, kvSet } from "./db";
-import { setKeyring } from "./keys";
+import { keyVersionAcceptable, setKeyring } from "./keys";
 import { runtime } from "./runtime";
 import { accountBoxKeys, sharingApi } from "./sharing";
 
@@ -79,11 +79,19 @@ async function pass() {
 async function apply(list: SharedItem[], userId: string, fromServer: boolean) {
   const pair = await accountBoxKeys();
   const items: SharedState["items"] = {};
+  const own = new Set(useWorkspace.getState().account.notebooks.map((n) => n.id));
   for (const item of list) {
+    // «Shared with me» never names this account's own notebooks or notes: a key for them from
+    // there would replace the real one with one the server chose (security review 2026-11-02).
+    const home = item.target.kind === "note" ? useWorkspace.getState().notes[item.target.id]?.notebookId : item.target.id;
+    if (item.owner.userId === userId || (home !== undefined && own.has(home))) {
+      console.error("[ds] ignored a shared item that points at this account's own", item.target);
+      continue;
+    }
     let keyed = false;
     try {
       const keys = sharedItemKeys(item, { userId, secretKey: pair.secretKey });
-      if (keys) {
+      if (keys && keyVersionAcceptable(item.target.kind, item.target.id, keys.version)) {
         setKeyring(item.target.id, item.target.kind, keys);
         keyed = true;
       }

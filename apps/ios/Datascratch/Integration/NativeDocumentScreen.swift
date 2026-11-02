@@ -689,6 +689,7 @@ struct FormatBarRow: View {
                     .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             }
             .frame(maxWidth: .infinity)
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("formatBar")
             .transition(.opacity)
         }

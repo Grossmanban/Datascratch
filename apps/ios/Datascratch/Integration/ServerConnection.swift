@@ -36,6 +36,11 @@ final class ServerConnection: CoreLibraryRemote {
     /// Set by `ServerAccountService`: erases the device when the session was revoked (D-53).
     var onDeviceRevoked: (() async -> Void)?
     private var isRevoked = false
+    /// The account document caught up with the server in this session (or the account is new):
+    /// sharing decisions read its `trust` record only then (`ServerAccountSharingService`).
+    private(set) var isAccountSynced = false
+    /// Called when the account document first caught up in a session (sharing waits for it).
+    var onAccountSynced: (() -> Void)?
 
     init(serverURL: URL, webHost: String, core: CoreLibrary, sync: SyncCenter, attachmentsDirectory: URL) {
         self.attachmentsDirectory = attachmentsDirectory
@@ -61,8 +66,15 @@ final class ServerConnection: CoreLibraryRemote {
     /// Starts syncing for a signed-in account.
     func start(session: AuthSession, isNewAccount: Bool) async {
         isRevoked = false
+        isAccountSynced = isNewAccount
         do {
             let carried = try core.adoptAccount(docId: session.accountDocId, isNew: isNewAccount)
+            // What the server says about members and key versions is checked against the
+            // account's own record (from here on: the notebook keys below are the first).
+            let wrappedKeys = core.wrappedKeys, store = core.store
+            accounts.useTrustRecord(core.account, notebookOfNote: { noteId in
+                wrappedKeys.notebookId(ofNote: noteId) ?? (try? store.document(noteId))?.notebookId
+            })
             let api = self.api
             // Notebooks made on this device before signing in exist on the server before any of
             // their documents is registered (otherwise POST /docs answers 404).
@@ -99,7 +111,6 @@ final class ServerConnection: CoreLibraryRemote {
                     throw APIError.notAuthenticated
                 }
             }
-            let wrappedKeys = core.wrappedKeys
             let keys = KeyRingDocumentKeys(keyRing: core.keys, noteMeta: { noteId, notebookId in
                 wrappedKeys.meta(noteId: noteId, notebookId: notebookId)
             })
@@ -127,7 +138,11 @@ final class ServerConnection: CoreLibraryRemote {
                 Task { @MainActor in await self?.deviceRevoked(reason: reason) }
             }
             let signposter = Self.signposter
-            await engine.setTraceHandler { event in signposter.emitEvent("sync", "\(String(describing: event), privacy: .public)") }
+            let accountDocId = session.accountDocId
+            await engine.setTraceHandler { [weak self] event in
+                signposter.emitEvent("sync", "\(String(describing: event), privacy: .public)")
+                if case .caughtUp(accountDocId) = event { Task { @MainActor in self?.accountCaughtUp() } }
+            }
             core.remote = self
             let presence = self.presence
             if let email = (try? core.store.string(ServerAccountService.emailKey)) ?? nil, !email.isEmpty {
@@ -189,7 +204,15 @@ final class ServerConnection: CoreLibraryRemote {
         error is DeviceRevokedError
     }
 
+    private func accountCaughtUp() {
+        guard !isAccountSynced else { return }
+        isAccountSynced = true
+        onAccountSynced?()
+    }
+
     func stop() async {
+        accounts.useTrustRecord(nil)
+        isAccountSynced = false
         statusTask?.cancel()
         sync.onRetry = nil
         await engine?.stop()

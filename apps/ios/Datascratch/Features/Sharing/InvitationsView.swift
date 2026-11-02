@@ -199,7 +199,8 @@ private struct InvitationCard: View {
 }
 
 /// D-54 prompts for the owner, on the main window: someone who registered after the invitation
-/// («… зарегистрировалась — открыть доступ?»), and new guest links after a key change.
+/// («… зарегистрировалась — открыть доступ?») or whom this account never invited or knew with
+/// another key, and new guest links after a key change.
 struct SharingPrompts: ViewModifier {
     @Environment(AppModel.self) private var app
     /// Answered or put off in this session: not asked again until the next launch.
@@ -209,7 +210,7 @@ struct SharingPrompts: ViewModifier {
         let sharing = app.accountSharing
         let confirmation = sharing.confirmations.first { !handled.contains($0.id) }
         content
-            .alert(confirmation.map { String(localized: "\($0.member.email) signed up — give access?") } ?? "",
+            .alert(confirmation.map(Self.title) ?? "",
                    isPresented: Binding(get: { confirmation != nil }, set: { _ in })) {
                 if let confirmation {
                     Button("Give Access") { respond(confirmation, allow: true) }
@@ -217,7 +218,7 @@ struct SharingPrompts: ViewModifier {
                     Button("Later", role: .cancel) { handled.insert(confirmation.id) }
                 }
             } message: {
-                Text("This account was created after you sent the invitation. Give access only if it is really this person.")
+                if let confirmation { Text(Self.message(confirmation)) }
             }
             .sheet(item: Binding(get: { sharing.refreshedLinks.first }, set: { item in
                 if item == nil, let shown = sharing.refreshedLinks.first { sharing.dismissRefreshedLinks(shown) }
@@ -233,6 +234,27 @@ struct SharingPrompts: ViewModifier {
     private func respond(_ confirmation: AccessConfirmation, allow: Bool) {
         handled.insert(confirmation.id)
         Task { try? await app.accountSharing.confirm(confirmation, allow: allow) }
+    }
+
+    /// Says why the owner is asked: the server may be the one asking for the notebook's key.
+    private static func title(_ confirmation: AccessConfirmation) -> String {
+        let email = confirmation.member.email
+        switch confirmation.reason {
+        case .lateAccount: return String(localized: "\(email) signed up — give access?")
+        case .notInvited: return String(localized: "\(email) is waiting for access, but this account never invited them — give access?")
+        case .keyChanged: return String(localized: "The key of \(email) has changed — give access?")
+        }
+    }
+
+    private static func message(_ confirmation: AccessConfirmation) -> String {
+        switch confirmation.reason {
+        case .lateAccount:
+            return String(localized: "This account was created after you sent the invitation. Give access only if it is really this person.")
+        case .notInvited:
+            return String(localized: "Your devices have no record of this invitation. If you did not invite this person, say no: the server may be asking for your notebook’s key.")
+        case .keyChanged:
+            return String(localized: "This person’s account key is not the one your devices gave access to before. Say yes only if they told you they set up their account again.")
+        }
     }
 }
 

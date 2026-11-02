@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ is waiting for access, but this account never invited them — give access?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ждёт доступа, но этот аккаунт его не приглашал — открыть доступ?"
+          }
+        }
+      }
+    },
     "%@ signed up — give access?": {
       "localizations": {
         "ru": {
@@ -4421,6 +4431,16 @@
         }
       }
     },
+    "The key of %@ has changed — give access?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У %@ сменился ключ — открыть доступ?"
+          }
+        }
+      }
+    },
     "The key was shown on the device where you created the account. If you no longer have it, create a new one.": {
       "localizations": {
         "ru": {
@@ -4737,6 +4757,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Этого блокнота здесь нет"
+          }
+        }
+      }
+    },
+    "This person’s account key is not the one your devices gave access to before. Say yes only if they told you they set up their account again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ключ аккаунта этого человека не тот, которому ваши устройства открывали доступ раньше. Соглашайтесь, только если он сам сказал, что заново настроил аккаунт."
           }
         }
       }
@@ -5197,6 +5227,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ваш доступ"
+          }
+        }
+      }
+    },
+    "Your devices have no record of this invitation. If you did not invite this person, say no: the server may be asking for your notebook’s key.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваши устройства не помнят такого приглашения. Если вы не приглашали этого человека, откажите: возможно, ключ блокнота пытается получить сервер."
           }
         }
       }

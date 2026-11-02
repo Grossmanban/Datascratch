@@ -160,4 +160,11 @@ public enum SharingError: Error, Equatable, Sendable {
     case noPublicKey(userId: String)
     /// A rotation is needed before the key can be given (server version is ahead).
     case versionMismatch(local: Int, server: Int)
+    /// The server handed out a key older than one this account already used (a wrap from
+    /// before a rotation): refused (`AccountService.knownKeyVersion`).
+    case olderKey(version: Int, known: Int)
+    /// A key rotation would give the new key to members this account does not know (not
+    /// invited from here, or with another public key): it waits for the owner's yes, or for
+    /// them to be removed.
+    case notConfirmed([MemberConfirmation])
 }

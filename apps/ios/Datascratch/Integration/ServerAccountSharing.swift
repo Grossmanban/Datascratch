@@ -18,9 +18,12 @@ final class ServerAccountSharingService: AccountSharingService {
     @ObservationIgnored private let connection: ServerConnection
     /// New guest links for a notebook or note whose key changed (`ServerSharingService`).
     @ObservationIgnored private let recreateLinks: (ShareTarget) async -> [SharedLink]
-    /// Members the owner allowed in after they registered (asked once per person).
-    @ObservationIgnored private var confirmed: [ShareTarget: Set<String>] = [:]
+    /// Members the owner allowed in (asked once per person): account id → the public key the
+    /// yes was for. A key the server swaps in afterwards is asked about again.
+    @ObservationIgnored private var confirmed: [ShareTarget: [String: String]] = [:]
     @ObservationIgnored private var declined: Set<String> = []
+    /// Key changes waiting for the owner's answer about a member (`SharingError.notConfirmed`).
+    @ObservationIgnored private var blockedRotations: Set<ShareTarget> = []
     @ObservationIgnored private var isRefreshing = false
     /// Emails by account id, from owners and members seen (history authors).
     @ObservationIgnored private var names: [String: String] = [:]
@@ -29,6 +32,8 @@ final class ServerAccountSharingService: AccountSharingService {
     init(connection: ServerConnection, recreateLinks: @escaping (ShareTarget) async -> [SharedLink]) {
         self.connection = connection
         self.recreateLinks = recreateLinks
+        // Owner duties wait for the account document (its `trust` record): run them once it is in.
+        connection.onAccountSynced = { [weak self] in Task { await self?.refresh() } }
     }
 
     private var accounts: DSCore.AccountService { connection.accounts }
@@ -50,9 +55,12 @@ final class ServerAccountSharingService: AccountSharingService {
     }
 
     /// What the owner's device does for what it shares: gives keys to those who accepted, asks
-    /// about those who registered after the invitation, finishes key changes.
+    /// about those who registered after the invitation or whom this account has no record of
+    /// (the account document's `trust`), finishes key changes. The record lives in the account
+    /// document, so nothing is decided before it has synced; members from before the record
+    /// are taken over once (`migrateMemberTrust`).
     private func ownerDuties() async {
-        guard let items = try? await api.sharedByMe() else { return }
+        guard await trustReady(), let items = try? await api.sharedByMe() else { return }
         for item in items {
             let target = Self.target(item.target)
             if item.keyRotationPending {
@@ -68,13 +76,34 @@ final class ServerAccountSharingService: AccountSharingService {
         do {
             guard let key = try await ownerKey(target) else { return }
             let waiting = try await accounts.grantPendingKeys(to: Self.sharing(target), key: key.key, version: key.version,
-                                                             confirmed: confirmed[target] ?? [])
-            for member in waiting where !declined.contains(member.userId) {
-                let request = AccessConfirmation(target: target, member: Self.member(member))
-                if !confirmations.contains(request) { confirmations.append(request) }
-            }
+                                                             confirmed: confirmed[target] ?? [:])
+            ask(waiting, about: target)
         } catch {
             Self.log.error("giving keys for \(target.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Whether members can be checked: the account document has synced (its `trust` record is
+    /// the one other devices wrote) and members from before the record were taken over.
+    private func trustReady() async -> Bool {
+        guard connection.isAccountSynced, accounts.trustRecord != nil else { return false }
+        do {
+            try await accounts.migrateMemberTrust()
+            return true
+        } catch {
+            Self.log.error("taking over the members known so far failed: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    /// Puts members the owner must decide about in front of them (once per person and key).
+    private func ask(_ members: [MemberConfirmation], about target: ShareTarget) {
+        for waiting in members where !declined.contains(waiting.member.userId) {
+            let request = AccessConfirmation(target: target, member: Self.member(waiting.member), reason: Self.reason(waiting.reason),
+                                             publicKey: waiting.publicKey)
+            guard !confirmations.contains(request) else { continue }
+            confirmations.removeAll { $0.target == target && $0.member.userId == waiting.member.userId }
+            confirmations.append(request)
         }
     }
 
@@ -163,8 +192,10 @@ final class ServerAccountSharingService: AccountSharingService {
     func confirm(_ confirmation: AccessConfirmation, allow: Bool) async throws {
         confirmations.removeAll { $0 == confirmation }
         if allow {
-            confirmed[confirmation.target, default: []].insert(confirmation.member.userId)
+            guard let publicKey = confirmation.publicKey else { return }
+            confirmed[confirmation.target, default: [:]][confirmation.member.userId] = publicKey
             await grantKeys(for: confirmation.target)
+            if blockedRotations.remove(confirmation.target) != nil { await continueRotation(of: confirmation.target) }
         } else {
             declined.insert(confirmation.member.userId)
             try? await api.removeMember(userId: confirmation.member.userId, from: Self.sharing(confirmation.target))
@@ -180,16 +211,22 @@ final class ServerAccountSharingService: AccountSharingService {
     /// A new key right after someone lost access (crypto.md §10.3); the index finishes syncing
     /// and the next refresh completes it. Guest links carry the old key: they are made anew.
     private func rotate(_ target: ShareTarget) async {
+        // Not before members can be checked: `keyRotationPending` stays, the next refresh does it.
+        guard await trustReady() else { return }
+        let confirmed = confirmed[target] ?? [:]
         do {
             switch target.kind {
             case .notebook:
                 let notebook = try connection.core.notebookDocument(target.id)
-                try await accounts.rotateNotebookKey(notebook, agentMode: connection.core.isAgentMode(notebookId: target.id))
+                try await accounts.rotateNotebookKey(notebook, agentMode: connection.core.isAgentMode(notebookId: target.id),
+                                                     confirmed: confirmed)
             case .note:
                 guard let own = connection.core.ownNoteMeta(target.id) else { return }
-                try await accounts.rotateNoteKey(target.id, in: try connection.core.notebookDocument(own.notebookId))
+                try await accounts.rotateNoteKey(target.id, in: try connection.core.notebookDocument(own.notebookId), confirmed: confirmed)
             }
             await linksChanged(target)
+        } catch SharingError.notConfirmed(let members) {
+            rotationBlocked(target, by: members)
         } catch {
             // `keyRotationPending` stays on the server: the next refresh does it.
             Self.log.error("key change of \(target.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
@@ -198,24 +235,36 @@ final class ServerAccountSharingService: AccountSharingService {
 
     /// A key change left unfinished (this device or another of the owner's).
     private func continueRotation(of target: ShareTarget) async {
+        let confirmed = confirmed[target] ?? [:]
         do {
             switch target.kind {
             case .notebook:
                 let notebook = try connection.core.notebookDocument(target.id)
                 let agentMode = connection.core.isAgentMode(notebookId: target.id)
-                if try await accounts.resumeNotebookRotation(notebook, agentMode: agentMode) {
+                if try await accounts.resumeNotebookRotation(notebook, agentMode: agentMode, confirmed: confirmed) {
                     _ = try await accounts.finishNotebookRotation(notebook)
                 }
             case .note:
                 guard let own = connection.core.ownNoteMeta(target.id) else { return }
                 let notebook = try connection.core.notebookDocument(own.notebookId)
                 try await accounts.syncSharedNoteMeta(target.id, in: notebook)
-                try await accounts.rotateNoteKey(target.id, in: notebook)
+                try await accounts.rotateNoteKey(target.id, in: notebook, confirmed: confirmed)
                 await linksChanged(target)
             }
+        } catch SharingError.notConfirmed(let members) {
+            rotationBlocked(target, by: members)
         } catch {
             Self.log.error("finishing the key change of \(target.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// The new key would reach members this account does not know: nothing was sent. The owner
+    /// is asked; a yes runs the key change again, a no removes them (the next pass rotates
+    /// without them, `keyRotationPending` stays on the server meanwhile).
+    private func rotationBlocked(_ target: ShareTarget, by members: [MemberConfirmation]) {
+        Self.log.error("key change of \(target.id, privacy: .public) waits for the owner: \(members.count) unknown member(s)")
+        blockedRotations.insert(target)
+        ask(members, about: target)
     }
 
     private func linksChanged(_ target: ShareTarget) async {
@@ -271,6 +320,14 @@ final class ServerAccountSharingService: AccountSharingService {
     }
 
     private static func role(_ role: AccessRole) -> MemberRole { role == .viewer ? .viewer : .editor }
+
+    private static func reason(_ reason: ConfirmReason) -> AccessConfirmation.Reason {
+        switch reason {
+        case .lateAccount: .lateAccount
+        case .notInvited: .notInvited
+        case .keyChanged: .keyChanged
+        }
+    }
 
     private static func member(_ member: Member) -> ShareMember {
         ShareMember(userId: member.userId, email: member.email, role: member.role == .viewer ? .viewer : .editor,

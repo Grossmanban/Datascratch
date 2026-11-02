@@ -44,12 +44,50 @@ extension AccountService {
 
     /// Invites `email` to a notebook or note this account owns. The answer is the same whether
     /// or not an account has this email. Returns the invitation id (for the
-    /// `https://<web-host>/invite/<id>` link).
+    /// `https://<web-host>/invite/<id>` link). The invitation is written to the account's
+    /// `TrustRecord` first: only invited people, or ones the owner confirms, get keys —
+    /// whatever the server lists.
     @discardableResult
     public func invite(_ email: String, role: MemberRole, to target: SharingTarget) async throws -> String {
         let id = EntityID.make()
+        try trustRecord?.recordInvite(target, email: email)
         try await api.invite(CreateInvitationRequest(invitationId: id, target: target, email: email, role: role))
         return id
+    }
+
+    /// Once per account, before the first check: takes over the members and invitations that
+    /// existed before the `TrustRecord` (trust on first use) — every member that holds a key,
+    /// with the public key it has now, and every running invitation. From then on a member the
+    /// record does not know needs the owner's yes. Call only once the account document has
+    /// synced (another device may have migrated already, or recorded invitations).
+    public func migrateMemberTrust() async throws {
+        guard let trust = trustRecord, !trust.isMigrated else { return }
+        let me = try await signedInUserId
+        for item in try await api.sharedByMe() {
+            for member in try await api.members(of: item.target) where member.userId != me {
+                if member.status == .awaitingKey {
+                    // Accepted an invitation of this account before the record existed.
+                    try trust.recordInvite(item.target, email: member.email)
+                    continue
+                }
+                let publicKey = try await api.publicKey(userId: member.userId)
+                try trust.recordMemberKey(item.target, userId: member.userId, publicKey: Base64URL.encode(publicKey))
+            }
+            for invitation in try await api.invitations(for: item.target) where invitation.status != .declined {
+                try trust.recordInvite(item.target, email: invitation.email)
+            }
+        }
+        try trust.markMigrated()
+    }
+
+    /// Why the owner must be asked before `member` gets a key wrapped for `publicKey`: the
+    /// `TrustRecord` does not know them, or their account is newer than the invitation; nil: not.
+    nonisolated func confirmReason(_ target: SharingTarget, member: Member, publicKey: String) -> ConfirmReason? {
+        switch trustRecord?.memberTrust(target, userId: member.userId, email: member.email, publicKey: publicKey) {
+        case .notInvited?: .notInvited
+        case .keyChanged?: .keyChanged
+        case .known?, nil: member.accountCreatedAfterInvite && member.status == .awaitingKey ? .lateAccount : nil
+        }
     }
 
     /// The owner's current key of a shared notebook and its version.
@@ -64,21 +102,26 @@ extension AccountService {
     }
 
     /// Gives the current key to members who accepted and wait for it (`awaiting_key`), wrapped
-    /// for each with this account's and the member's box keys (crypto.md §10.2). A member whose
-    /// account was created after the invitation gets it only once the owner confirmed it
-    /// (`confirmed`, D-54); those are returned for the «… зарегистрировалась — открыть
-    /// доступ?» prompt. Call when online and after an invitation is accepted.
+    /// for each with this account's and the member's box keys (crypto.md §10.2). A member the
+    /// account's `TrustRecord` does not know (not invited from here, or with another public
+    /// key), or whose account was created after the invitation (D-54), gets it only once the
+    /// owner said yes for that public key (`confirmed`: userId → public key); those are returned
+    /// for the prompt. The key is wrapped for exactly the public key that was checked, and
+    /// recorded. Call when online and after an invitation is accepted.
     @discardableResult
-    public func grantPendingKeys(to target: SharingTarget, key: Data, version: Int, confirmed: Set<String> = []) async throws -> [Member] {
+    public func grantPendingKeys(to target: SharingTarget, key: Data, version: Int,
+                                 confirmed: [String: String] = [:]) async throws -> [MemberConfirmation] {
         let me = try await signedInUserId
         guard let secretKey = try keys.boxSecretKey() else { throw SharingError.noBoxKey }
-        var needConfirmation: [Member] = []
+        var needConfirmation: [MemberConfirmation] = []
         for member in try await api.members(of: target) where member.status == .awaitingKey && member.userId != me {
-            if member.accountCreatedAfterInvite, !confirmed.contains(member.userId) {
-                needConfirmation.append(member)
+            let publicKey = try await api.publicKey(userId: member.userId)
+            let encoded = Base64URL.encode(publicKey)
+            if let reason = confirmReason(target, member: member, publicKey: encoded), confirmed[member.userId] != encoded {
+                needConfirmation.append(MemberConfirmation(member: member, reason: reason, publicKey: encoded))
                 continue
             }
-            let publicKey = try await api.publicKey(userId: member.userId)
+            // Wrapped for the very public key that was checked (not fetched again).
             let ref = MemberKeyRef(kind: target.kind, targetId: target.id, version: version, fromUserId: me, toUserId: member.userId)
             let wrapped = try DSCrypto.wrapKeyForMember(key, ownerSecretKey: secretKey, memberPublicKey: publicKey, ref: ref)
             do {
@@ -86,31 +129,52 @@ extension AccountService {
             } catch APIError.server(409, _, _) {
                 throw SharingError.versionMismatch(local: version, server: -1)
             }
+            try trustRecord?.recordMemberKey(target, userId: member.userId, publicKey: encoded)
         }
         return needConfirmation
     }
 
     /// Wraps `key` for the active members of `target` (rotation, api.md): members still
     /// waiting for a key get the new version through `grantPendingKeys` — after the owner's
-    /// confirmation where needed — never through a rotation.
-    func memberKeys(for target: SharingTarget, key: Data, version: Int) async throws -> [MemberKey] {
+    /// confirmation where needed — never through a rotation. A rotation must name every active
+    /// member, so one the `TrustRecord` does not know (and the owner has not said yes to for
+    /// this public key, `confirmed`) stops it: `SharingError.notConfirmed`, nothing is sent and
+    /// the rotation is retried once the owner decided or removed them. Returns the keys and
+    /// the public keys they were wrapped for (recorded once the rotation is accepted).
+    func memberKeys(for target: SharingTarget, key: Data, version: Int,
+                    confirmed: [String: String]) async throws -> (keys: [MemberKey], publicKeys: [String: String]) {
         let me = try await signedInUserId
         guard let secretKey = try keys.boxSecretKey() else { throw SharingError.noBoxKey }
         var result: [MemberKey] = []
+        var publicKeys: [String: String] = [:]
+        var unconfirmed: [MemberConfirmation] = []
         for member in try await api.members(of: target) where member.userId != me && member.status == .active {
             let publicKey = try await api.publicKey(userId: member.userId)
+            let encoded = Base64URL.encode(publicKey)
+            if let reason = confirmReason(target, member: member, publicKey: encoded), confirmed[member.userId] != encoded {
+                unconfirmed.append(MemberConfirmation(member: member, reason: reason, publicKey: encoded))
+                continue
+            }
             let ref = MemberKeyRef(kind: target.kind, targetId: target.id, version: version, fromUserId: me, toUserId: member.userId)
             result.append(MemberKey(userId: member.userId, wrappedKey: try DSCrypto.wrapKeyForMember(key, ownerSecretKey: secretKey, memberPublicKey: publicKey, ref: ref)))
+            publicKeys[member.userId] = encoded
         }
-        return result
+        guard unconfirmed.isEmpty else { throw SharingError.notConfirmed(unconfirmed) }
+        return (result, publicKeys)
+    }
+
+    /// After a rotation was accepted: whom the new key went to, and its version.
+    private nonisolated func recordRotation(_ target: SharingTarget, version: Int, publicKeys: [String: String]) {
+        for (userId, publicKey) in publicKeys { try? trustRecord?.recordMemberKey(target, userId: userId, publicKey: publicKey) }
+        recordKeyVersion(target, version)
     }
 
     /// Changes a shared notebook's key after someone lost access (crypto.md §10.3, steps 1–2):
     /// a new key `v+1` for the owner, every member and the chain in one `rotate` request, then a
     /// new key for every note, written to the index (it syncs with the new notebook key). Call
     /// `finishNotebookRotation` once the index is acknowledged. `agentMode`: the notebook is in
-    /// agent mode (the server gets the new key, crypto.md §8).
-    public func rotateNotebookKey(_ notebook: NotebookDocument, agentMode: Bool = false) async throws {
+    /// agent mode (the server gets the new key, crypto.md §8). `confirmed`: see `memberKeys`.
+    public func rotateNotebookKey(_ notebook: NotebookDocument, agentMode: Bool = false, confirmed: [String: String] = [:]) async throws {
         let id = notebook.notebookId
         let target = SharingTarget(kind: .notebook, id: id)
         guard let master = try keys.masterKey() else { throw SharingError.notSignedIn }
@@ -118,25 +182,32 @@ extension AccountService {
         let (oldKey, version) = try ownerKey(notebookId: id)
         let newKey = DSCrypto.newKey()
         let next = version + 1
+        let members = try await memberKeys(for: target, key: newKey, version: next, confirmed: confirmed)
         let request = RotateKeyRequest(
             version: next,
             ownerWrappedKey: try DSCrypto.wrapKey(newKey, with: master, ad: CryptoAD.targetKey(.notebook, id, version: next)),
             previousKeyWrap: try DSCrypto.wrapPreviousKey(oldKey, with: newKey, kind: .notebook, targetId: id, version: next),
-            memberKeys: try await memberKeys(for: target, key: newKey, version: next),
+            memberKeys: members.keys,
             notebookKey: agentMode ? newKey : nil)
         try await api.rotateKey(request, of: target)
         try keys.adoptNotebookKey(newKey, version: next, olderKeys: [oldKey], notebookId: id)
+        recordRotation(target, version: next, publicKeys: members.publicKeys)
         try rekeyNotes(in: notebook)
     }
 
     /// Takes the server's notebook key when it is newer than this device's (a rotation made on
-    /// another device, or one interrupted after `rotate` succeeded).
+    /// another device, or one interrupted after `rotate` succeeded) — never one older than this
+    /// account has used (`knownKeyVersion`).
     func adoptServerNotebookKey(_ notebookId: String) async throws {
         let state = try await api.notebookKeyState(id: notebookId)
+        let target = SharingTarget(kind: .notebook, id: notebookId)
         let serverVersion = state.version ?? 1
         let haveKey = try keys.notebookKey(notebookId) != nil
         guard serverVersion > keys.notebookKeyVersion(notebookId) || !haveKey else { return }
+        let known = knownKeyVersion(target)
+        guard serverVersion >= known else { throw SharingError.olderKey(version: serverVersion, known: known) }
         try keys.addNotebookKey(wrapped: state.wrappedKey.data, notebookId: notebookId, version: serverVersion, chain: state.keyChain?.map(\.data) ?? [])
+        recordKeyVersion(target, serverVersion)
     }
 
     /// Step 2: every note still wrapped under an earlier notebook key gets a new note key
@@ -184,7 +255,7 @@ extension AccountService {
     /// pendingSinceVersion`: rotated → the notes still on old keys get theirs. Older servers
     /// without the field: rotated if a note is still wrapped under an earlier notebook key.
     /// Returns whether a rotation is under way (`finishNotebookRotation` once the index syncs).
-    public func resumeNotebookRotation(_ notebook: NotebookDocument, agentMode: Bool = false) async throws -> Bool {
+    public func resumeNotebookRotation(_ notebook: NotebookDocument, agentMode: Bool = false, confirmed: [String: String] = [:]) async throws -> Bool {
         let id = notebook.notebookId
         let state = try await api.notebookKeyState(id: id)
         guard state.keyRotationPending == true else { return false }
@@ -198,7 +269,7 @@ extension AccountService {
         if rotated {
             try rekeyNotes(in: notebook)
         } else {
-            try await rotateNotebookKey(notebook, agentMode: agentMode)
+            try await rotateNotebookKey(notebook, agentMode: agentMode, confirmed: confirmed)
         }
         return true
     }
@@ -214,8 +285,8 @@ extension AccountService {
 
     /// A note shared on its own: new key `v+1` for the owner, members and chain in one request
     /// (it also clears `keyRotationPending`), then the new `NoteMeta` key fields in the owner's
-    /// notebook index.
-    public func rotateNoteKey(_ noteId: String, in notebook: NotebookDocument) async throws {
+    /// notebook index. `confirmed`: see `memberKeys`.
+    public func rotateNoteKey(_ noteId: String, in notebook: NotebookDocument, confirmed: [String: String] = [:]) async throws {
         guard var meta = notebook.note(id: noteId) else { throw DocumentError.notFound("note \(noteId)") }
         try await syncSharedNoteMeta(noteId, in: notebook)
         meta = notebook.note(id: noteId) ?? meta
@@ -226,8 +297,10 @@ extension AccountService {
         let ownerWrapped = try DSCrypto.wrapKey(newKey, with: nbKey, ad: CryptoAD.targetKey(.note, noteId, version: next))
         let link = try DSCrypto.wrapPreviousKey(oldKey, with: newKey, kind: .note, targetId: noteId, version: next)
         let target = SharingTarget(kind: .note, id: noteId)
+        let members = try await memberKeys(for: target, key: newKey, version: next, confirmed: confirmed)
         try await api.rotateKey(RotateKeyRequest(version: next, ownerWrappedKey: ownerWrapped, previousKeyWrap: link,
-                                                 memberKeys: try await memberKeys(for: target, key: newKey, version: next)), of: target)
+                                                 memberKeys: members.keys), of: target)
+        recordRotation(target, version: next, publicKeys: members.publicKeys)
         try notebook.updateNote(id: noteId, [
             "wrappedKey": .string(value: Base64URL.encode(ownerWrapped)),
             "keyVersion": .number(value: Double(next)),
@@ -241,6 +314,10 @@ extension AccountService {
         guard let meta = notebook.note(id: noteId) else { return }
         let state = try await api.sharedNoteKey(noteId: noteId)
         guard state.version > meta.keyVersion else { return }
+        let target = SharingTarget(kind: .note, id: noteId)
+        let known = knownKeyVersion(target)
+        guard state.version >= known else { throw SharingError.olderKey(version: state.version, known: known) }
+        recordKeyVersion(target, state.version)
         try notebook.updateNote(id: noteId, [
             "wrappedKey": .string(value: Base64URL.encode(state.ownerWrappedKey.data)),
             "keyVersion": .number(value: Double(state.version)),
@@ -261,16 +338,34 @@ extension AccountService {
     /// `GET /shared-with-me`: takes every key the owners have given (or changed) and registers
     /// the shared documents for syncing. Items without a key yet are returned too (the owner's
     /// client gives it when online); call again later. Returns the items.
+    /// Items that point at this account's own notebooks or notes are left out
+    /// (`isOwnResource`).
     public func refreshSharedWithMe() async throws -> [SharedItem] {
-        let items = try await api.sharedWithMe()
+        let me = try await signedInUserId
+        let items = try await api.sharedWithMe().filter { !isOwnResource($0, me: me) }
         for item in items { _ = try? await adoptShared(item) }
         return items
     }
 
-    /// Whether the item's key is now on this device.
+    /// «Shared with me» never names this account's own notebooks or notes: a key for them from
+    /// there would replace the real one with one the server chose (security review 2026-11-02).
+    nonisolated func isOwnResource(_ item: SharedItem, me: String) -> Bool {
+        if item.owner.userId == me { return true }
+        guard let context = trustContext.withLock({ $0 }) else { return false }
+        let notebookId = item.target.kind == .note ? context.notebookOfNote(item.target.id) : item.target.id
+        return notebookId.map { context.record.account.notebook(id: $0) != nil } ?? false
+    }
+
+    /// Whether the item's key is now on this device. Not for this account's own resources, and
+    /// never a key older than one this account already used (a replayed pre-rotation wrap).
     func adoptShared(_ item: SharedItem) async throws -> Bool {
         let me = try await signedInUserId
+        guard !isOwnResource(item, me: me) else { return false }
+        let target = item.target
+        let known = knownKeyVersion(target)
+        guard item.keyVersion >= known else { throw SharingError.olderKey(version: item.keyVersion, known: known) }
         guard try keys.adoptSharedItem(item, memberUserId: me) else { return false }
+        recordKeyVersion(target, item.keyVersion)
         let notebookId = item.target.kind == .notebook ? item.target.id : nil
         for docId in item.docIds {
             if item.target.kind == .notebook, docId == item.target.id {
@@ -294,5 +389,29 @@ extension AccountService {
         let me = try await signedInUserId
         guard let secretKey = try keys.boxSecretKey() else { throw SharingError.noBoxKey }
         return try DSCrypto.safetyCode((me, try DSCrypto.boxPublicKey(of: secretKey)), (userId, publicKey))
+    }
+}
+
+/// Why the owner is asked before a member gets a key (shared sharing/members.ts).
+public enum ConfirmReason: String, Hashable, Sendable {
+    /// The account was created after the invitation (sign-up does not verify e-mail, D-54).
+    case lateAccount = "late_account"
+    /// This account has no record of inviting them (`TrustRecord`): the server named them.
+    case notInvited = "not_invited"
+    /// Their public key is not the one this account gave a key to before.
+    case keyChanged = "key_changed"
+}
+
+/// A member who gets a key only once the owner says yes — for this public key (base64url):
+/// a yes does not carry over to a key the server swaps in afterwards.
+public struct MemberConfirmation: Hashable, Sendable {
+    public var member: Member
+    public var reason: ConfirmReason
+    public var publicKey: String
+
+    public init(member: Member, reason: ConfirmReason, publicKey: String) {
+        self.member = member
+        self.reason = reason
+        self.publicKey = publicKey
     }
 }

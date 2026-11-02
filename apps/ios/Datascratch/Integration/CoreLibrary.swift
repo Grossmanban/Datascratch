@@ -54,6 +54,11 @@ nonisolated final class WrappedKeyIndex: @unchecked Sendable {
         lock.withLock { defer { changed = false }; return changed }
     }
 
+    /// The notebook a known note belongs to (its `NoteMeta` was seen there).
+    func notebookId(ofNote noteId: String) -> String? {
+        lock.withLock { keys[noteId]?.notebookId }
+    }
+
     func wrapped(noteId: String, notebookId: String) -> String? {
         meta(noteId: noteId, notebookId: notebookId)?.wrappedKey
     }

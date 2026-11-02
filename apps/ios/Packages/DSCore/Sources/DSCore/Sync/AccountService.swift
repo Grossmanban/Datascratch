@@ -12,11 +12,49 @@ public actor AccountService {
     public nonisolated let api: APIClient
     public nonisolated let keys: KeyRing
     public nonisolated let store: LocalStore
+    /// The signed-in account's own record (`TrustRecord`) and how to find the notebook of one of
+    /// its notes; nil until the app opened that account's document (`useTrustRecord`).
+    nonisolated let trustContext = Locked<TrustContext?>(nil)
+
+    struct TrustContext {
+        var record: TrustRecord
+        var notebookOfNote: @Sendable (String) -> String?
+    }
 
     public init(api: APIClient, keys: KeyRing, store: LocalStore) {
         self.api = api
         self.keys = keys
         self.store = store
+    }
+
+    /// The account document of the signed-in account: what the server says about members and
+    /// key versions is checked against its `trust` record (security review 2026-11-02).
+    /// `notebookOfNote` names the notebook of this account's own notes (the app's index of the
+    /// notebooks it holds); without it, this device's document records are asked. Pass nil when
+    /// signed out or before the account's document is open.
+    public nonisolated func useTrustRecord(_ account: AccountDocument?, notebookOfNote: (@Sendable (String) -> String?)? = nil) {
+        let store = self.store
+        let lookup = notebookOfNote ?? { (try? store.document($0))?.notebookId }
+        trustContext.withLock { $0 = account.map { TrustContext(record: $0.trust, notebookOfNote: lookup) } }
+    }
+
+    /// See `useTrustRecord`.
+    public nonisolated var trustRecord: TrustRecord? { trustContext.withLock { $0?.record } }
+
+    /// The newest key version of `target` this account or device has used: the server cannot
+    /// take it back to an older key (one a removed member still holds) — refused below it.
+    nonisolated func knownKeyVersion(_ target: SharingTarget) -> Int {
+        let recorded = trustRecord?.knownKeyVersion(target) ?? 0
+        let local: Int
+        switch target.kind {
+        case .notebook: local = (try? keys.notebookKey(target.id)) != nil ? keys.notebookKeyVersion(target.id) : 0
+        case .note: local = (try? keys.sharedNoteKey(target.id)) != nil ? keys.sharedNoteKeyVersion(target.id) : 0
+        }
+        return max(recorded, local)
+    }
+
+    nonisolated func recordKeyVersion(_ target: SharingTarget, _ version: Int) {
+        try? trustRecord?.recordKeyVersion(target, version)
     }
 
     // MARK: Sign-up / sign-in
@@ -166,23 +204,33 @@ public actor AccountService {
     /// keys that differ. Call on every start before syncing and when the account document lists
     /// a notebook this device has no key for. Each change needs repair:
     /// `NotebookDocument.rewrapNoteKeys(from:to:)` and `SyncEngine.rekey(docId:)`.
+    /// A genuine but older wrap (from before a rotation, which a removed member still holds) never
+    /// takes the device back to that key: a version below the newest this account has used is
+    /// skipped (`knownKeyVersion`, security review 2026-11-02).
     public func reconcileNotebookKeys() async throws -> [NotebookKeyChange] {
         var changes: [NotebookKeyChange] = []
         for nb in try await api.notebooks() {
             guard let master = try keys.masterKey() else { throw AccountError.notSignedIn }
+            let target = SharingTarget(kind: .notebook, id: nb.id)
             let previous: Data?
             let key: Data
+            let version: Int
             if let k = try? DSCrypto.unwrapKey(nb.wrappedKey.data, with: master, ad: CryptoAD.notebookKey(nb.id)) {
+                guard knownKeyVersion(target) <= 1 else { continue }
                 key = k
+                version = 1
                 previous = try keys.adoptNotebookKey(k, version: 1, olderKeys: [], notebookId: nb.id)
             } else {
                 // A rotated key (shared notebook, D-54): its version and chain come with the key.
                 let state = try await api.notebookKeyState(id: nb.id)
+                version = state.version ?? 1
+                guard version >= knownKeyVersion(target) else { continue }
                 let before = try keys.notebookKey(nb.id)
-                key = try keys.addNotebookKey(wrapped: state.wrappedKey.data, notebookId: nb.id, version: state.version ?? 1,
+                key = try keys.addNotebookKey(wrapped: state.wrappedKey.data, notebookId: nb.id, version: version,
                                               chain: state.keyChain?.map(\.data) ?? [])
                 previous = before == key ? nil : before
             }
+            recordKeyVersion(target, version)
             if let previous {
                 changes.append(NotebookKeyChange(notebookId: nb.id, previousKey: previous, key: key))
             }
@@ -198,8 +246,14 @@ public actor AccountService {
         if let key = try keys.notebookKey(notebookId) { return key }
         do {
             let state = try await api.notebookKeyState(id: notebookId)
-            return try keys.addNotebookKey(wrapped: state.wrappedKey.data, notebookId: notebookId, version: state.version ?? 1,
-                                           chain: state.keyChain?.map(\.data) ?? [])
+            let target = SharingTarget(kind: .notebook, id: notebookId)
+            let version = state.version ?? 1
+            let known = knownKeyVersion(target)
+            guard version >= known else { throw SharingError.olderKey(version: version, known: known) }
+            let key = try keys.addNotebookKey(wrapped: state.wrappedKey.data, notebookId: notebookId, version: version,
+                                              chain: state.keyChain?.map(\.data) ?? [])
+            recordKeyVersion(target, version)
+            return key
         } catch APIError.server(404, _, _) {
             return nil
         }

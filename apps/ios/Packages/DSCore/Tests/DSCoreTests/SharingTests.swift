@@ -216,6 +216,22 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
             return (200, body)
         case ("GET", "shared-with-me"):
             return (200, s.resources.filter { $0.value.members[me] != nil }.map { sharedItem(s, key: $0.key, for: me) })
+        case ("GET", "shared-by-me"):
+            return (200, s.resources.filter { $0.value.owner == me }.map { key, r in
+                ["target": ["kind": String(key.split(separator: ":")[0]), "id": String(key.split(separator: ":")[1])],
+                 "keyVersion": r.version, "keyRotationPending": r.pending, "pendingSinceVersion": r.pendingSince as Any? ?? NSNull(),
+                 "members": r.members.count, "awaitingKey": r.members.values.filter { $0.status == "awaiting_key" }.count] as [String: Any]
+            })
+        case ("GET", "invitations") where p.count == 1:
+            let target = (query ?? "").replacingOccurrences(of: "target=", with: "")
+            return (200, s.invitations.filter { $0.value.target == target }.map { id, inv in
+                ["id": id, "email": inv.email, "role": inv.role, "status": "pending",
+                 "createdAt": "2026-10-27T12:00:00.000Z", "expiresAt": "2026-11-26T12:00:00.000Z"]
+            })
+        case ("GET", "notebooks") where p.count == 1:
+            return (200, s.resources.filter { $0.key.hasPrefix("notebook:") && $0.value.owner == me }.map { key, r in
+                ["id": String(key.split(separator: ":")[1]), "mode": "private", "createdAt": "2026-10-27T12:00:00.000Z", "wrappedKey": r.ownerWrapped]
+            })
         default:
             return Self.err(500, "internal \(method) \(p)")
         }
@@ -285,8 +301,8 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         let (key, version) = try await owner.service.ownerKey(notebookId: nbId)
         #expect(key == nbKey && version == 1)
         let waiting = try await owner.service.grantPendingKeys(to: target, key: key, version: version)
-        #expect(waiting.map(\.userId) == [boris.userId])
-        try await owner.service.grantPendingKeys(to: target, key: key, version: version, confirmed: [boris.userId])
+        #expect(waiting.map(\.member.userId) == [boris.userId] && waiting.map(\.reason) == [.lateAccount])
+        try await owner.service.grantPendingKeys(to: target, key: key, version: version, confirmed: [boris.userId: waiting[0].publicKey])
 
         // Members get the key; the server only ever saw it wrapped.
         _ = try await anna.service.refreshSharedWithMe()
@@ -327,8 +343,9 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         #expect(notebook.notes(includeTrashed: true).first { $0.id == note.noteId } == notebook.note(id: note.noteId))
         // The rotation did not give Clara the key; she gets v2 only once confirmed.
         #expect(server.state.withLock { $0.resources["notebook:\(nbId)"]!.members[clara.userId]!.wrappedKey } == nil)
-        #expect(try await owner.service.grantPendingKeys(to: target, key: key2, version: 2).map(\.userId) == [clara.userId])
-        try await owner.service.grantPendingKeys(to: target, key: key2, version: 2, confirmed: [clara.userId])
+        let claraWaits = try await owner.service.grantPendingKeys(to: target, key: key2, version: 2)
+        #expect(claraWaits.map(\.member.userId) == [clara.userId])
+        try await owner.service.grantPendingKeys(to: target, key: key2, version: 2, confirmed: [clara.userId: claraWaits[0].publicKey])
         _ = try await clara.service.refreshSharedWithMe()
         #expect(try clara.service.keys.notebookKey(nbId) == key2)
         #expect(clara.service.keys.retiredNotebookKeys(nbId).contains(nbKey))
@@ -417,6 +434,315 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         #expect(try await ipad.service.notesNeedingNewKeys(in: indexAfterStep1).isEmpty)
         #expect(try await ipad.service.finishNotebookRotation(indexAfterStep1))
         #expect(server.state.withLock { $0.resources["notebook:\(nbId)"]!.pending } == false)
+    }
+}
+
+/// The account's own record of its sharing (shared sharing/trust.ts, same keys).
+@Suite struct TrustRecordTests {
+    @Test func knowsInvitedAddressesAndPinnedKeysTakesOverEveryoneOnlyBeforeMigration() throws {
+        let trust = AccountDocument(accountDocId: EntityID.make()).trust
+        let target = SharingTarget(kind: .notebook, id: EntityID.make())
+        let alice = EntityID.make()
+        #expect(trust.memberTrust(target, userId: alice, email: "Alice@X.co", publicKey: "pk1") == .known)
+        try trust.markMigrated()
+        #expect(trust.memberTrust(target, userId: alice, email: "Alice@X.co", publicKey: "pk1") == .notInvited)
+        try trust.recordInvite(target, email: " alice@x.co ")
+        #expect(trust.memberTrust(target, userId: alice, email: "Alice@X.co", publicKey: "pk1") == .known)
+        try trust.recordMemberKey(target, userId: alice, publicKey: "pk1")
+        #expect(trust.memberTrust(target, userId: alice, email: "Alice@X.co", publicKey: "pk1") == .known)
+        #expect(trust.memberTrust(target, userId: alice, email: "Alice@X.co", publicKey: "pk2") == .keyChanged)
+        // Another resource knows nothing of it.
+        #expect(trust.memberTrust(SharingTarget(kind: .note, id: target.id), userId: alice, email: "alice@x.co", publicKey: "pk1") == .notInvited)
+        #expect(trust.knownKeyVersion(target) == 0)
+        try trust.recordKeyVersion(target, 1)
+        // migrated, invite, member: version 1 is not written.
+        #expect(trust.account.crdt.mapKeys("trust").count == 3)
+        try trust.recordKeyVersion(target, 3)
+        try trust.recordKeyVersion(target, 2)
+        #expect(trust.knownKeyVersion(target) == 3)
+        #expect(trust.knownKeyVersion(SharingTarget(kind: .note, id: target.id)) == 0)
+    }
+
+    /// The web reads and writes the same flat keys; two devices writing at once keep both.
+    @Test func sameKeysAsTheWebAndConcurrentWritesMerge() throws {
+        let account = AccountDocument(accountDocId: EntityID.make())
+        let noteId = EntityID.make(), user = EntityID.make()
+        let target = SharingTarget(kind: .note, id: noteId)
+        try account.trust.recordInvite(target, email: "Bob@X.co")
+        try account.trust.recordMemberKey(target, userId: user, publicKey: "pk")
+        try account.trust.recordKeyVersion(target, 2)
+        try account.trust.markMigrated()
+        #expect(Set(account.crdt.mapKeys("trust")) == ["invite|note|\(noteId)|bob@x.co", "member|note|\(noteId)|\(user)", "key|note|\(noteId)|2", "migrated"])
+        #expect(account.crdt.mapValue("trust", ["member|note|\(noteId)|\(user)"]) == .string(value: "pk"))
+        #expect(account.crdt.mapValue("trust", ["key|note|\(noteId)|2"]) == .bool(value: true))
+        #expect(account.crdt.mapValue("trust", ["migrated"])?.stringValue.flatMap(DSDate.parseISO) != nil)
+
+        let other = AccountDocument(accountDocId: account.accountDocId)
+        try other.crdt.applyUpdate(try account.crdt.encodeStateAsUpdate(), origin: .remote)
+        try other.trust.recordKeyVersion(target, 3)
+        try account.trust.recordInvite(target, email: "carol@x.co")
+        try account.crdt.applyUpdate(try other.crdt.encodeStateAsUpdate(since: account.crdt.stateVector()), origin: .remote)
+        try other.crdt.applyUpdate(try account.crdt.encodeStateAsUpdate(since: other.crdt.stateVector()), origin: .remote)
+        for doc in [account, other] {
+            #expect(doc.trust.knownKeyVersion(target) == 3)
+            #expect(doc.trust.memberTrust(target, userId: EntityID.make(), email: "Carol@x.co", publicKey: "x") == .known)
+        }
+    }
+}
+
+/// The owner's client checks the members and key versions the server names against the
+/// account's `TrustRecord` (security review 2026-11-02).
+@Suite struct SharingTrustTests {
+    typealias Device = SharingFlowTests.Device
+
+    struct Owner {
+        let device: Device
+        let account: AccountDocument
+        let notebook: NotebookDocument
+        var target: SharingTarget { SharingTarget(kind: .notebook, id: notebook.notebookId) }
+        var key: String { "notebook:\(notebook.notebookId)" }
+    }
+
+    /// An owner with a notebook on the server and its account document as the trust record.
+    static func owner(_ server: FakeSharingServer) async throws -> Owner {
+        let device = try await SharingFlowTests.device(server, userId: EntityID.make(), email: "owner@x.co")
+        try await device.service.ensureBoxKeyPair()
+        let account = AccountDocument(accountDocId: EntityID.make())
+        device.service.useTrustRecord(account)
+        let notebook = NotebookDocument(notebookId: EntityID.make())
+        try notebook.initialize()
+        let id = notebook.notebookId
+        let (_, wrapped) = try device.service.keys.createNotebookKey(notebookId: id)
+        try account.putNotebook(NotebookRef(id: id, spaceId: EntityID.make(), name: "Shared", order: 0))
+        server.state.withLock { $0.resources["notebook:\(id)"] = .init(owner: device.userId, ownerWrapped: Base64URL.encode(wrapped), docIds: [id]) }
+        return Owner(device: device, account: account, notebook: notebook)
+    }
+
+    static func person(_ server: FakeSharingServer, _ email: String) async throws -> Device {
+        let d = try await SharingFlowTests.device(server, userId: EntityID.make(), email: email)
+        try await d.service.ensureBoxKeyPair()
+        return d
+    }
+
+    /// The server lists someone as a member without this account having invited them.
+    static func slipIn(_ server: FakeSharingServer, _ who: Device, into key: String, status: String = "awaiting_key") {
+        server.state.withLock {
+            $0.resources[key]!.members[who.userId] = .init(role: "viewer", status: status, createdAfter: false, wrappedKey: status == "active" ? "x" : nil)
+        }
+    }
+
+    static func publicKey(_ server: FakeSharingServer, _ who: Device) -> String {
+        server.state.withLock { $0.boxKeys[who.userId]!.publicKey }
+    }
+
+    @Test func memberNeverInvitedOrWithAnotherKeyWaitsForTheOwner() async throws {
+        let server = FakeSharingServer()
+        let o = try await Self.owner(server)
+        try await o.device.service.migrateMemberTrust()
+        #expect(o.account.trust.isMigrated)
+        let anna = try await Self.person(server, "anna@x.co")
+        let mallory = try await Self.person(server, "mallory@x.co")
+        // The invitation is recorded before it is sent.
+        let inv = try await o.device.service.invite(" Anna@x.co", role: .editor, to: o.target)
+        #expect(o.account.trust.memberTrust(o.target, userId: anna.userId, email: "anna@x.co", publicKey: "?") == .known)
+        _ = try await anna.service.acceptInvitation(id: inv)
+        Self.slipIn(server, mallory, into: o.key)
+
+        let (key, version) = try await o.device.service.ownerKey(notebookId: o.notebook.notebookId)
+        let asked = try await o.device.service.grantPendingKeys(to: o.target, key: key, version: version)
+        #expect(asked.map(\.member.userId) == [mallory.userId] && asked.map(\.reason) == [.notInvited])
+        #expect(asked.first?.publicKey == Self.publicKey(server, mallory))
+        #expect(server.state.withLock { $0.resources[o.key]!.members[mallory.userId]!.wrappedKey } == nil)
+        // Anna got it, and her public key is pinned.
+        _ = try await anna.service.refreshSharedWithMe()
+        #expect(try anna.service.keys.notebookKey(o.notebook.notebookId) == key)
+        let annaKey = Self.publicKey(server, anna)
+        #expect(o.account.trust.memberTrust(o.target, userId: anna.userId, email: nil, publicKey: annaKey) == .known)
+
+        // The owner says yes for the key that was shown: Mallory gets it.
+        #expect(try await o.device.service.grantPendingKeys(to: o.target, key: key, version: version,
+                                                             confirmed: [mallory.userId: asked[0].publicKey]).isEmpty)
+        #expect(server.state.withLock { $0.resources[o.key]!.members[mallory.userId]!.wrappedKey } != nil)
+
+        // The server swaps Anna's public key (and has her wait for a key again).
+        let swapped = Base64URL.encode(try DSCrypto.newBoxKeyPair().publicKey)
+        server.state.withLock {
+            $0.boxKeys[anna.userId]!.publicKey = swapped
+            $0.resources[o.key]!.members[anna.userId]!.status = "awaiting_key"
+            $0.resources[o.key]!.members[anna.userId]!.wrappedKey = nil
+        }
+        let changed = try await o.device.service.grantPendingKeys(to: o.target, key: key, version: version)
+        #expect(changed.map(\.member.userId) == [anna.userId] && changed.map(\.reason) == [.keyChanged])
+        // A yes given for her earlier key does not cover the new one.
+        let again = try await o.device.service.grantPendingKeys(to: o.target, key: key, version: version, confirmed: [anna.userId: annaKey])
+        #expect(again.map(\.reason) == [.keyChanged])
+        #expect(server.state.withLock { $0.resources[o.key]!.members[anna.userId]!.wrappedKey } == nil)
+        try await o.device.service.grantPendingKeys(to: o.target, key: key, version: version, confirmed: [anna.userId: swapped])
+        #expect(o.account.trust.memberTrust(o.target, userId: anna.userId, email: nil, publicKey: swapped) == .known)
+    }
+
+    /// Members and invitations from before the record are taken over once; later ones are not.
+    @Test func migrationTakesOverExistingMembersOnce() async throws {
+        let server = FakeSharingServer()
+        let o = try await Self.owner(server)
+        let anna = try await Self.person(server, "anna@x.co")
+        let boris = try await Self.person(server, "boris@x.co")
+        // Shared before the record existed (an older build): no trust entries.
+        o.device.service.useTrustRecord(nil)
+        let invA = try await o.device.service.invite("anna@x.co", role: .editor, to: o.target)
+        _ = try await anna.service.acceptInvitation(id: invA)
+        let (key, version) = try await o.device.service.ownerKey(notebookId: o.notebook.notebookId)
+        try await o.device.service.grantPendingKeys(to: o.target, key: key, version: version)
+        let invB = try await o.device.service.invite("boris@x.co", role: .viewer, to: o.target)
+        _ = try await boris.service.acceptInvitation(id: invB)
+        _ = try await o.device.service.invite("clara@x.co", role: .viewer, to: o.target)
+        #expect(o.account.crdt.mapKeys("trust").isEmpty)
+
+        o.device.service.useTrustRecord(o.account)
+        try await o.device.service.migrateMemberTrust()
+        let trust = o.account.trust
+        #expect(trust.isMigrated)
+        #expect(trust.memberTrust(o.target, userId: anna.userId, email: nil, publicKey: Self.publicKey(server, anna)) == .known)
+        #expect(trust.memberTrust(o.target, userId: boris.userId, email: "boris@x.co", publicKey: "any") == .known)
+        #expect(trust.memberTrust(o.target, userId: EntityID.make(), email: "clara@x.co", publicKey: "any") == .known)
+        #expect(trust.memberTrust(o.target, userId: EntityID.make(), email: "mallory@x.co", publicKey: "any") == .notInvited)
+        // Boris (awaiting, invited) gets his key without a question.
+        #expect(try await o.device.service.grantPendingKeys(to: o.target, key: key, version: version).isEmpty)
+        // Once migrated, a second pass changes nothing (the server cannot slip someone in then).
+        let mallory = try await Self.person(server, "mallory@x.co")
+        Self.slipIn(server, mallory, into: o.key, status: "active")
+        try await o.device.service.migrateMemberTrust()
+        #expect(trust.memberTrust(o.target, userId: mallory.userId, email: "mallory@x.co", publicKey: Self.publicKey(server, mallory)) == .notInvited)
+    }
+
+    /// A rotation must name every active member: one the record does not know stops it until the
+    /// owner says yes (it is retried on the next pass).
+    @Test func rotationWaitsForAnUnknownActiveMember() async throws {
+        let server = FakeSharingServer()
+        let o = try await Self.owner(server)
+        try await o.device.service.migrateMemberTrust()
+        let anna = try await Self.person(server, "anna@x.co")
+        let mallory = try await Self.person(server, "mallory@x.co")
+        let inv = try await o.device.service.invite("anna@x.co", role: .editor, to: o.target)
+        _ = try await anna.service.acceptInvitation(id: inv)
+        let (key, version) = try await o.device.service.ownerKey(notebookId: o.notebook.notebookId)
+        try await o.device.service.grantPendingKeys(to: o.target, key: key, version: version)
+        Self.slipIn(server, mallory, into: o.key, status: "active")
+        server.state.withLock { $0.resources[o.key]!.pending = true; $0.resources[o.key]!.pendingSince = 1 }
+
+        do {
+            _ = try await o.device.service.resumeNotebookRotation(o.notebook)
+            Issue.record("rotated with a member nobody confirmed")
+        } catch SharingError.notConfirmed(let members) {
+            #expect(members.map(\.member.userId) == [mallory.userId] && members.map(\.reason) == [.notInvited])
+        }
+        #expect(server.state.withLock { $0.rotations.isEmpty })
+        #expect(o.device.service.keys.notebookKeyVersion(o.notebook.notebookId) == 1)
+
+        #expect(try await o.device.service.resumeNotebookRotation(o.notebook, confirmed: [mallory.userId: Self.publicKey(server, mallory)]))
+        #expect(server.state.withLock { $0.rotations.count } == 1)
+        #expect(o.account.trust.knownKeyVersion(o.target) == 2)
+        #expect(o.account.trust.memberTrust(o.target, userId: mallory.userId, email: nil, publicKey: Self.publicKey(server, mallory)) == .known)
+    }
+
+    /// After a rotation the server hands back the genuine key from before it (one a removed
+    /// member still holds): neither the owner's devices nor a member's take it.
+    @Test func olderKeyAfterARotationIsRefused() async throws {
+        let server = FakeSharingServer()
+        let o = try await Self.owner(server)
+        let nbId = o.notebook.notebookId
+        try await o.device.service.migrateMemberTrust()
+        let anna = try await Self.person(server, "anna@x.co")
+        let annaAccount = AccountDocument(accountDocId: EntityID.make())
+        anna.service.useTrustRecord(annaAccount)
+        let boris = try await Self.person(server, "boris@x.co")
+        for (d, email) in [(anna, "anna@x.co"), (boris, "boris@x.co")] {
+            let inv = try await o.device.service.invite(email, role: .editor, to: o.target)
+            _ = try await d.service.acceptInvitation(id: inv)
+        }
+        let (key1, v1) = try await o.device.service.ownerKey(notebookId: nbId)
+        try await o.device.service.grantPendingKeys(to: o.target, key: key1, version: v1)
+        _ = try await anna.service.refreshSharedWithMe()
+        let before = server.state.withLock { $0.resources[o.key]! }
+        #expect(annaAccount.trust.knownKeyVersion(o.target) == 0)
+
+        try await o.device.service.api.removeMember(userId: boris.userId, from: o.target)
+        #expect(try await o.device.service.resumeNotebookRotation(o.notebook))
+        let (key2, v2) = try await o.device.service.ownerKey(notebookId: nbId)
+        #expect(v2 == 2)
+        _ = try await anna.service.refreshSharedWithMe()
+        #expect(try anna.service.keys.notebookKey(nbId) == key2)
+        #expect(annaAccount.trust.knownKeyVersion(o.target) == 2)
+
+        // The server replays version 1: the owner's wrap and Anna's.
+        server.state.withLock {
+            $0.resources[o.key]!.version = 1
+            $0.resources[o.key]!.chain = []
+            $0.resources[o.key]!.ownerWrapped = before.ownerWrapped
+            $0.resources[o.key]!.members[anna.userId]!.wrappedKey = before.members[anna.userId]!.wrappedKey
+        }
+        #expect(try await o.device.service.reconcileNotebookKeys().isEmpty)
+        #expect(try o.device.service.keys.notebookKey(nbId) == key2)
+        #expect(o.device.service.keys.notebookKeyVersion(nbId) == 2)
+        _ = try await anna.service.refreshSharedWithMe()
+        #expect(try anna.service.keys.notebookKey(nbId) == key2)
+        #expect(anna.service.keys.notebookKeyVersion(nbId) == 2)
+
+        // Another device of the owner, with the account document synced but no key yet.
+        let ipadAccount = AccountDocument(accountDocId: o.account.accountDocId)
+        try ipadAccount.crdt.applyUpdate(try o.account.crdt.encodeStateAsUpdate(), origin: .remote)
+        let ipad = try await SharingFlowTests.device(server, userId: o.device.userId, email: "owner@x.co",
+                                                     master: try #require(try o.device.service.keys.masterKey()))
+        ipad.service.useTrustRecord(ipadAccount)
+        #expect(try await ipad.service.reconcileNotebookKeys().isEmpty)
+        #expect(try ipad.service.keys.notebookKey(nbId) == nil)
+        await #expect(throws: SharingError.olderKey(version: 1, known: 2)) { try await ipad.service.notebookKeyForWriting(nbId) }
+    }
+
+    /// «Shared with me» pointing at this account's own notebook or note (to swap its key for one
+    /// the server chose), or naming this account as the owner: ignored.
+    @Test func sharedItemForOwnNotebookOrNoteIsIgnored() async throws {
+        let server = FakeSharingServer()
+        let o = try await Self.owner(server)
+        let nbId = o.notebook.notebookId
+        let note = try await o.device.service.createNote(in: o.notebook, title: "Mine")
+        let noteId = note.noteId
+        o.device.service.useTrustRecord(o.account, notebookOfNote: { $0 == noteId ? nbId : nil })
+        let ownKey = try #require(try o.device.service.keys.notebookKey(nbId))
+        let mallory = try await Self.person(server, "mallory@x.co")
+        let mallorySecret = try #require(try mallory.service.keys.boxSecretKey())
+        let ownerPublic = try #require(Base64URL.decode(Self.publicKey(server, o.device)))
+        func forged(_ kind: ShareTargetKind, _ id: String) throws -> String {
+            let ref = MemberKeyRef(kind: kind, targetId: id, version: 1, fromUserId: mallory.userId, toUserId: o.device.userId)
+            return Base64URL.encode(try DSCrypto.wrapKeyForMember(DSCrypto.newKey(), ownerSecretKey: mallorySecret, memberPublicKey: ownerPublic, ref: ref))
+        }
+        let other = EntityID.make()
+        let notebookWrap = try forged(.notebook, nbId), noteWrap = try forged(.note, noteId)
+        server.state.withLock {
+            // The server says Mallory shares the owner's own notebook and note with the owner.
+            $0.resources["notebook:\(nbId)"] = .init(owner: mallory.userId, members: [
+                o.device.userId: .init(role: "editor", status: "active", createdAfter: false, wrappedKey: notebookWrap)], docIds: [nbId])
+            $0.resources["note:\(noteId)"] = .init(owner: mallory.userId, members: [
+                o.device.userId: .init(role: "editor", status: "active", createdAfter: false, wrappedKey: noteWrap)], docIds: [noteId])
+            // And an item "shared by" the account itself.
+            $0.resources["notebook:\(other)"] = .init(owner: o.device.userId, members: [
+                o.device.userId: .init(role: "editor", status: "active", createdAfter: false, wrappedKey: notebookWrap)], docIds: [other])
+        }
+        let items = try await o.device.service.refreshSharedWithMe()
+        #expect(items.isEmpty)
+        #expect(try o.device.service.keys.notebookKey(nbId) == ownKey)
+        #expect(try o.device.service.keys.sharedNoteKey(noteId) == nil)
+        #expect(try o.device.service.keys.notebookKey(other) == nil)
+
+        // Someone else's notebook still comes through.
+        let theirs = EntityID.make()
+        let theirWrap = try forged(.notebook, theirs)
+        server.state.withLock {
+            $0.resources["notebook:\(theirs)"] = .init(owner: mallory.userId, members: [
+                o.device.userId: .init(role: "editor", status: "active", createdAfter: false, wrappedKey: theirWrap)], docIds: [theirs])
+        }
+        #expect(try await o.device.service.refreshSharedWithMe().map(\.target.id) == [theirs])
+        #expect(try o.device.service.keys.notebookKey(theirs) != nil)
     }
 }
 

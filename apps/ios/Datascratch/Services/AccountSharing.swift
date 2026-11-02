@@ -71,13 +71,24 @@ nonisolated struct SharedWithMe: Identifiable, Hashable, Sendable {
     var agentsMode = false
 }
 
-/// D-54: someone registered after the owner invited them. Their access opens only once the
-/// owner confirms («<почта> зарегистрировалась — открыть доступ?»): email is not verified, so
-/// an invitation cannot be taken over by registering someone else's address first.
+/// D-54: a member whose access opens only once the owner confirms. Someone registered after the
+/// owner invited them («<почта> зарегистрировалась — открыть доступ?»): email is not verified,
+/// so an invitation cannot be taken over by registering someone else's address first. Or this
+/// account's own record (security review 2026-11-02) has no invitation for them — the server
+/// named them — or knows another key of theirs.
 nonisolated struct AccessConfirmation: Identifiable, Hashable, Sendable {
-    var id: String { "\(target.id)-\(member.userId)" }
+    enum Reason: String, Hashable, Sendable {
+        case lateAccount
+        case notInvited
+        case keyChanged
+    }
+
+    var id: String { "\(target.id)-\(member.userId)-\(reason.rawValue)" }
     var target: ShareTarget
     var member: ShareMember
+    var reason: Reason = .lateAccount
+    /// The member's public key that was checked: a yes gives access for this key only.
+    var publicKey: String?
 }
 
 /// D-54: after someone lost access the key changed, so the guest links of that notebook or note

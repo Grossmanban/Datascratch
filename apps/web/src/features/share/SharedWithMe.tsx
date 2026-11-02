@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { NetworkError } from "@/api/client";
 import { leaveShared, useShared } from "@/data/sharedWithMe";
-import { findNotebook, noteTitle, useWorkspace } from "@/domain/workspace";
+import { findNotebook, noteTitle, sharedRefSpace, useWorkspace } from "@/domain/workspace";
 import { openTab } from "@/domain/actions";
 import { iconGlyph } from "@/lib/glyph";
 import { ApiRequestError } from "@datascratch/shared";
@@ -13,7 +13,7 @@ import { confirmDialog, ContextMenu, toast, Tooltip, type MenuItem } from "@/ui"
 
 /** Placements of the current space in «Общие со мной» (D-54), in their order. */
 export function useSharedRefs(spaceId: string | null): SharedRef[] {
-  return useWorkspace(useShallow((s) => s.account.shared.filter((r) => r.spaceId === spaceId)));
+  return useWorkspace(useShallow((s) => s.account.shared.filter((r) => sharedRefSpace(s.account, r) === spaceId)));
 }
 
 const rowClass =

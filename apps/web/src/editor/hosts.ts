@@ -2,7 +2,7 @@ import type { useNavigate } from "@tanstack/react-router";
 import { attachmentUrl, openDecrypted, storeAttachment, svgToPng } from "@/data/attachments";
 import { runtime } from "@/data/runtime";
 import { createNote, findInbox, getOrCreateInbox, moveTask, openTab } from "@/domain/actions";
-import { allTags, noteTitle, spaceOfNote, spaceOfNotebook, useWorkspace } from "@/domain/workspace";
+import { allTags, noteTitle, spaceNoteFilter, spaceOfNote, useWorkspace } from "@/domain/workspace";
 import i18n from "@/i18n";
 import { defaultNoteTitle } from "@/domain/note";
 import { features } from "@/lib/features";
@@ -63,9 +63,8 @@ export function ownerEditorHost(noteId: string, nav: Nav): EditorHost {
       const lower = q.trim().toLowerCase();
       // [[ suggests documents of this note's space only (D-48).
       const space = spaceOfNote(st, noteId) ?? st.activeSpaceId;
-      const all = Object.values(st.notes).filter(
-        (n) => !n.trashedAt && n.kind !== "inbox" && n.id !== noteId && spaceOfNotebook(st, n.notebookId) === space,
-      );
+      const inSpace = spaceNoteFilter(st.account, space);
+      const all = Object.values(st.notes).filter((n) => !n.trashedAt && n.kind !== "inbox" && n.id !== noteId && inSpace(n));
       const hits = lower
         ? all.filter((n) => n.title.toLowerCase().includes(lower))
         : all.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));

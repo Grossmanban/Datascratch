@@ -6,7 +6,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { accountDb } from "@/data/db";
 import { addTask, findDaily, findInbox, getOrCreateDaily, getOrCreateInbox, openTab } from "@/domain/actions";
-import { useWorkspace } from "@/domain/workspace";
+import { useSpaceNoteFilter, useWorkspace } from "@/domain/workspace";
 import { ownerEditorHost } from "@/editor/hosts";
 import { DocView } from "@/features/doc/DocView";
 import { TopBar } from "@/features/shell/PageHeader";
@@ -32,13 +32,9 @@ export function CalendarPage() {
   const week = weekOf(date);
   const tasks = useLiveQuery(() => accountDb().tasks.toArray(), [], []);
   const allNotes = useWorkspace((s) => s.notes);
-  const spaceId = useWorkspace((s) => s.activeSpaceId);
-  const notebooks = useWorkspace((s) => s.account.notebooks);
-  // Days show the tasks and notes of the current space only (D-48).
-  const notes = useMemo(() => {
-    const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
-    return Object.fromEntries(Object.entries(allNotes).filter(([, n]) => nbs.has(n.notebookId)));
-  }, [allNotes, notebooks, spaceId]);
+  const inSpace = useSpaceNoteFilter();
+  // Days show the tasks and notes of the current space only (D-48), with what is shared into it (D-54).
+  const notes = useMemo(() => Object.fromEntries(Object.entries(allNotes).filter(([, n]) => inSpace(n))), [allNotes, inSpace]);
   const dailyId = useWorkspace(() => findDaily(date));
 
   const marks = useMemo(() => {

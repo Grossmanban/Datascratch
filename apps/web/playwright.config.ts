@@ -9,10 +9,11 @@ const MOCK_PORT = 8787;
 const WEB_PORT = 4173;
 const EXT_PORT = 4174;
 const realServer = process.env.E2E_SERVER_URL;
-// D-51: the default build is notes only. The extended features (tasks, calendar, tabs) are tested
-// against a second build made with VITE_DS_EXTENDED_MODE=1 into dist-ext (mock server only).
+// D-51: the default build has no tasks or calendar (tabs are on since the 2026-11-02 amendment).
+// The extended features are tested against a second build made with VITE_DS_EXTENDED_MODE=1 into
+// dist-ext (mock server only).
 const extended = !realServer && existsSync("dist-ext");
-const EXTENDED_ONLY = /(tasks|tabs)\.spec\.ts$/;
+const EXTENDED_ONLY = /tasks\.spec\.ts$/;
 // Specs that behave differently by mode run in both projects (they branch on the project name).
 const BOTH_MODES = /(spaces|layout|a11y|theme)\.spec\.ts$/;
 const desktop = { ...devices["Desktop Chrome"], viewport: { width: 1360, height: 860 } };

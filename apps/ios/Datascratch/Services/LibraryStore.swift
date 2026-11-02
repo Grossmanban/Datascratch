@@ -593,6 +593,20 @@ final class LibraryStore {
         }
     }
 
+    /// «Close Others»: only `noteId` stays open in its space (other spaces keep theirs).
+    func closeOtherTabs(keeping noteId: String) {
+        let space = data.spaceId(ofNote: noteId)
+        mutate { snapshot in
+            let others = Set(snapshot.tabs.filter { $0 != noteId && snapshot.spaceId(ofNote: $0) == space })
+            snapshot.tabs.removeAll { others.contains($0) }
+            if let space {
+                var map = snapshot.activeTabBySpace ?? [:]
+                map[space] = noteId
+                snapshot.activeTabBySpace = map
+            }
+        }
+    }
+
     func closeTab(_ noteId: String) {
         mutate { snapshot in
             snapshot.tabs.removeAll { $0 == noteId }

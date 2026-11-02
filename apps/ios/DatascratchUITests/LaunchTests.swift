@@ -478,8 +478,8 @@ final class LibraryUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["library.folderStrip"].firstMatch.exists, "a strip without subfolders")
     }
 
-    /// D-48: spaces are isolated — the starred note and the open tab of «Personal» are not shown
-    /// in «Work» and come back with «Personal».
+    /// D-48: spaces are isolated — the starred note of «Personal» is not shown in «Work» and comes
+    /// back with «Personal» (tabs per space: `CoreLibraryTests`; the sidebar no longer lists tabs).
     func testSpacesKeepTheirStarredAndTabs() throws {
         let app = launchSignedIn(Self.extendedMode)
         // A tab in «Personal»; first-run seeding starred the welcome note there.
@@ -498,9 +498,7 @@ final class LibraryUITests: XCTestCase {
         showSidebar()
         XCTAssertTrue(switcher.waitForExistence(timeout: 5) && switcher.isHittable, "no space switcher; buttons: \(Self.buttons(app))")
         let starred = app.descendants(matching: .any)["sidebar.starredNote"].firstMatch
-        let tab = app.descendants(matching: .any)["sidebar.tab"].firstMatch
         XCTAssertTrue(starred.waitForExistence(timeout: 5), "no starred note in Personal")
-        XCTAssertTrue(tab.exists, "no tab in Personal")
 
         func choose(_ name: String) {
             showSidebar()
@@ -513,10 +511,8 @@ final class LibraryUITests: XCTestCase {
         }
         choose("Work")
         XCTAssertFalse(starred.exists, "Personal's starred note shows in Work")
-        XCTAssertFalse(tab.exists, "Personal's tab shows in Work")
         choose("Personal")
         XCTAssertTrue(starred.waitForExistence(timeout: 3), "the starred note did not come back with Personal")
-        XCTAssertTrue(tab.waitForExistence(timeout: 3), "the tab did not come back with Personal")
     }
 
     /// spec/04: the format bar shows while text is written and lights the marks it switches on.
@@ -974,19 +970,22 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(server.waitForExistence(timeout: 5), "Settings does not show the server")
     }
 
-    /// Tabs close with their own button.
-    func testClosingATab() throws {
-        guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad: sidebar beside the document") }
-        let app = launchSignedIn(Self.extendedMode)
+    /// Tabs (D-51 amendment 2026-11-02): two open documents show the strip above the document; the
+    /// active tab closes with its own button and the strip goes when one is left.
+    func testTabStripShowsAndClosesTabs() throws {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad: the tab strip (iPhone: the overview button)") }
+        let app = launchSignedIn()
         try openNewNoteInNativeEditor(app)
-        let showSidebar = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
-        if showSidebar.exists { showSidebar.tap(); settle(1) }
-        let close = app.buttons["tab.close"].firstMatch
-        XCTAssertTrue(close.waitForExistence(timeout: 5), "no tab close button; buttons: \(Self.buttons(app))")
-        let count = app.buttons.matching(identifier: "tab.close").count
+        app.typeText("First tab")
+        try openNewNoteInNativeEditor(app)
+        app.typeText("Second tab")
+        let strip = app.descendants(matching: .any)["tabs.strip"].firstMatch
+        XCTAssertTrue(strip.waitForExistence(timeout: 5), "no tab strip with two documents open; buttons: \(Self.buttons(app))")
+        XCTAssertEqual(strip.descendants(matching: .any).matching(identifier: "tab").count, 2)
+        let close = strip.buttons["tab.close"].firstMatch
+        XCTAssertTrue(close.exists, "no close button on the active tab")
         close.tap()
-        settle(1)
-        XCTAssertEqual(app.buttons.matching(identifier: "tab.close").count, count - 1, "the tab did not close")
+        XCTAssertTrue(strip.waitForNonExistence(timeout: 5), "the strip stays with one document open")
     }
 
     /// «Open in New Window» shows the document, not an empty (black) window.
@@ -1088,7 +1087,6 @@ final class LibraryUITests: XCTestCase {
         }
         let again = sidebarElement(app, "sidebar.allDocuments")
         XCTAssertTrue(again.exists, "the sidebar did not come back; buttons: \(Self.buttons(app))")
-        XCTAssertFalse(app.descendants(matching: .any)["sidebar.tab"].firstMatch.exists, "opening a note made a tab")
     }
 
     func testSettingsFingerDrawingToggle() throws {

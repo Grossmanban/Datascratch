@@ -37,10 +37,9 @@ test("flexible layout: hide the sidebar, full screen per screen, close a documen
   await page.goto("/all");
   await page.getByTestId("doc-card").filter({ hasText: "Во весь экран" }).click();
   await page.getByTestId("focus-toggle").click(); // leave full screen to see the tabs
-  // The extended mode shows it as a tab; the minimal one has no tabs (D-51) and × just closes it.
+  // It is a tab (tabs are on in every build, D-51 amendment 2026-11-02); × closes it.
   const tab = page.getByTestId("tab-strip").getByTestId("tab").filter({ hasText: "Во весь экран" });
-  if (isExtended()) await expect(tab).toBeVisible();
-  else await expect(page.getByTestId("tab-strip")).toHaveCount(0);
+  await expect(tab).toBeVisible();
   await page.getByTestId("close-tab").click();
   await page.waitForURL("**/all");
   await expect(tab).toHaveCount(0);

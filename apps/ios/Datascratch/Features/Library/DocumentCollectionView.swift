@@ -16,7 +16,9 @@ struct DocumentCollectionView: View {
         @Bindable var settings = app.settings
         let notes = filtered
         Group {
-            if notes.isEmpty && subfolders.isEmpty {
+            // iPad: the search field lives under the list's title, so a search with no results
+            // keeps the header (and the field) on screen.
+            if notes.isEmpty && subfolders.isEmpty && !(Self.searchInList && !scene.searchText.isEmpty) {
                 emptyState
             } else if settings.libraryLayout == .grid {
                 ScrollView {
@@ -33,6 +35,9 @@ struct DocumentCollectionView: View {
                             }
                         }
                         .animation(Theme.Motion.smooth, value: notes.map(\.id))
+                        if notes.isEmpty, !scene.searchText.isEmpty {
+                            ContentUnavailableView.search(text: scene.searchText)
+                        }
                     }
                     .padding(Theme.Space.s4)
                 }
@@ -41,6 +46,11 @@ struct DocumentCollectionView: View {
                     header
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
+                    if notes.isEmpty, !scene.searchText.isEmpty {
+                        ContentUnavailableView.search(text: scene.searchText)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    }
                     ForEach(notes) { note in
                         Button { scene.open(note.id) } label: { DocumentRow(note: note) }
                             .buttonStyle(.plain)
@@ -65,7 +75,7 @@ struct DocumentCollectionView: View {
         .navigationBarTitleDisplayMode(.inline)
         // No system title in the bar (an empty principal item showed «Empty» behind sheets).
         .toolbar(removing: .title)
-        .searchable(text: $scene.searchText, prompt: Text("Search documents"))
+        .modifier(SystemSearch(text: $scene.searchText, isOn: !Self.searchInList))
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Menu {
@@ -136,7 +146,9 @@ struct DocumentCollectionView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, Theme.Space.s2)
                 .accessibilityAddTraits(.isHeader)
-            if !subfolders.isEmpty { FolderStrip(folders: subfolders) }
+            if Self.searchInList { ListSearchField(text: Bindable(scene).searchText) }
+            // Results come from the whole space: this level's folders would only be in the way.
+            if !subfolders.isEmpty, scene.searchText.isEmpty { FolderStrip(folders: subfolders) }
             #if canImport(DSDesign)
             if isLocked {
                 DSCallout(tone: .info, title: String(localized: "Getting this notebook ready"),
@@ -149,6 +161,10 @@ struct DocumentCollectionView: View {
             #endif
         }
     }
+
+    /// iPad: search under the list's title, as on the web (owner's feedback 2026-11-01: «why is
+    /// document search on the right»); iPhone keeps the system field at the bottom, in thumb reach.
+    static var searchInList: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
     /// Folders of the level this list shows (D-15: the folder strip above the documents).
     private var subfolders: [Folder] {
@@ -404,6 +420,53 @@ struct DocumentRow: View {
         .contentShape(Rectangle())
         .draggable(note.id)
         .accessibilityIdentifier("document.row")
+    }
+}
+
+/// The system search field (iPhone), off where the list shows its own.
+private struct SystemSearch: ViewModifier {
+    @Binding var text: String
+    let isOn: Bool
+
+    func body(content: Content) -> some View {
+        if isOn {
+            content.searchable(text: $text, prompt: Text("Search documents"))
+        } else {
+            content
+        }
+    }
+}
+
+/// Search under a list's title (iPad): a quiet rounded field, like «Search this list» on the web.
+struct ListSearchField: View {
+    @Binding var text: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: Theme.Space.s2) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(Theme.Palette.textTertiary)
+            TextField("Search documents", text: $text)
+                .focused($focused)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .accessibilityIdentifier("library.search")
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                    focused = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.Palette.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Clear"))
+            }
+        }
+        .font(Theme.Typography.body)
+        .padding(.horizontal, Theme.Space.s3)
+        .padding(.vertical, Theme.Space.s2)
+        .background(Theme.Palette.textPrimary.opacity(0.05), in: Capsule())
     }
 }
 

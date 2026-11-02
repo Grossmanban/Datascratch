@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { isExtended, newDoc, signUp, uniqueEmail } from "./helpers";
+import { newDoc, signUp, uniqueEmail } from "./helpers";
 
 async function switchSpace(page: Page, name: RegExp | string) {
   // A menu still closing from the last switch swallows the next click.
@@ -17,8 +17,8 @@ test("spaces are isolated (D-48): a starred note and a tab of one space are not 
   const sidebar = page.getByTestId("sidebar");
   const strip = page.getByTestId("tab-strip");
   const tabOf = (name: RegExp) => strip.getByTestId("tab").filter({ hasText: name });
-  // In «Избранное», and as a tab in the strip in the extended mode (the minimal one has no tabs, D-51).
-  const shown = isExtended() ? 2 : 1;
+  // In «Избранное», and as a tab in the strip (tabs are on in every build, D-51 amendment).
+  const shown = 2;
   const inSidebar = sidebar.getByRole("link", { name: /Рабочий план/ }).or(tabOf(/Рабочий план/));
   await expect(inSidebar).toHaveCount(shown);
 
@@ -42,21 +42,19 @@ test("spaces are isolated (D-48): a starred note and a tab of one space are not 
 
   // A document of the second space has its own tab.
   await newDoc(page, "Личный список");
-  await expect(tabOf(/Личный список/)).toHaveCount(isExtended() ? 1 : 0);
+  await expect(tabOf(/Личный список/)).toHaveCount(1);
   await expect(inSidebar).toHaveCount(0);
 
   // Back in the first space: its tab (opened again) and its starred note return; the other's tab hides.
   await switchSpace(page, /Личное/);
-  if (isExtended()) {
-    await expect(page).toHaveURL(noteUrl);
-    await expect(page.locator(".ds-prose")).toContainText("Рабочий план");
-  } else await expect(page).toHaveURL(/\/all$/);
+  await expect(page).toHaveURL(noteUrl);
+  await expect(page.locator(".ds-prose")).toContainText("Рабочий план");
   await expect(inSidebar).toHaveCount(shown);
   await expect(tabOf(/Личный список/)).toHaveCount(0);
 
   // A link to a document of the other space (older links) opens it and switches to its space.
   await switchSpace(page, /Новое пространство/);
-  if (isExtended()) await expect(page.locator(".ds-prose")).toContainText("Личный список");
+  await expect(page.locator(".ds-prose")).toContainText("Личный список");
   await page.goto(noteUrl);
   await expect(page.locator(".ds-prose")).toContainText("Рабочий план");
   await expect(page.getByTestId("space-switcher")).toContainText("Личное");

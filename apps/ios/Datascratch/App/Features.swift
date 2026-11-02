@@ -20,7 +20,8 @@ nonisolated enum Features {
     /// The Calendar and daily notes («Today's Note»).
     static var calendar: Bool { extendedMode }
     /// Open tabs (the sidebar section, ⌘W closing a tab, the active tab restored per space).
-    static var tabs: Bool { extendedMode }
+    /// On in every build: the owner asked for tabs back (D-51 amendment 2026-11-02).
+    static var tabs: Bool { true }
 
     private static func flag(_ value: Any?) -> Bool {
         switch value {

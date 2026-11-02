@@ -50,7 +50,6 @@ struct SidebarView: View {
         @Bindable var scene = scene
         List(selection: $scene.sidebar) {
             Group {
-                tabsSection
                 mainSection
                 starredSection
                 notebooksSection
@@ -90,48 +89,6 @@ struct SidebarView: View {
             if app.settings.hapticsEnabled { Haptics.selection() }
         }
         .sheet(isPresented: $isAllTagsPresented) { AllTagsSheet() }
-    }
-
-    @ViewBuilder private var tabsSection: some View {
-        if Features.tabs, !library.openTabs.isEmpty {
-            Section("Tabs") {
-                ForEach(library.openTabs) { note in
-                    HStack(spacing: Theme.Space.s2) {
-                        Button {
-                            scene.open(note.id)
-                        } label: {
-                            NoteTitleLabel(note: note)
-                                .fontWeight(scene.selectedNoteId == note.id ? .semibold : .regular)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("sidebar.tab")
-                        // An explicit close button on every tab (also swipe, menu and ⌘W).
-                        Button {
-                            if scene.selectedNoteId == note.id { scene.closeTab() } else { library.closeTab(note.id) }
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(Theme.Palette.textTertiary)
-                                .frame(width: 28, height: 28)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Close Tab")
-                        .accessibilityIdentifier("tab.close")
-                    }
-                    .contextMenu {
-                        Button("Open in New Window", systemImage: "macwindow.badge.plus") {
-                            openWindow(id: "note", value: note.id)
-                        }
-                        Button("Close Tab", systemImage: "xmark") { library.closeTab(note.id) }
-                    }
-                    .swipeActions {
-                        Button("Close", systemImage: "xmark") { library.closeTab(note.id) }
-                    }
-                }
-            }
-        }
     }
 
     @ViewBuilder private var mainSection: some View {

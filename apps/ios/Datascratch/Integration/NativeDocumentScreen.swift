@@ -496,6 +496,10 @@ struct NativeEditorToolbar: ToolbarContent {
             }
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
+            // iPhone: the open tabs behind a count button, as in Safari (iPad has the strip).
+            if Features.tabs, UIDevice.current.userInterfaceIdiom != .pad, app.library.openTabs.count > 1 {
+                TabOverviewButton()
+            }
             // A narrow column (next to the list on an iPad mini in portrait): Insert and Share go
             // into «…» so the bar fits the column (D-47).
             if !isNarrowColumn {

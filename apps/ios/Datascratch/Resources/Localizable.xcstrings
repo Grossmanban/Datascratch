@@ -681,6 +681,16 @@
         }
       }
     },
+    "Clear": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистить"
+          }
+        }
+      }
+    },
     "Close": {
       "localizations": {
         "ru": {
@@ -697,6 +707,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Закрыть документ"
+          }
+        }
+      }
+    },
+    "Close Other Tabs": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закрыть другие вкладки"
+          }
+        }
+      }
+    },
+    "Close Others": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закрыть остальные"
           }
         }
       }
@@ -2511,6 +2541,16 @@
         }
       }
     },
+    "No Open Tabs": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет открытых вкладок"
+          }
+        }
+      }
+    },
     "No activity yet": {
       "localizations": {
         "ru": {
@@ -3817,6 +3857,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Общий доступ…"
+          }
+        }
+      }
+    },
+    "Show All Tabs": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все вкладки"
           }
         }
       }

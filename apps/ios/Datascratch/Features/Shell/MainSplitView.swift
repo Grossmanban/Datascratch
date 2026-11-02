@@ -107,6 +107,10 @@ struct PadWorkspace: View {
                     NavigationStack {
                         DocumentScreen(noteId: noteId)
                             .id(noteId)
+                            // Open documents as tabs once there are two (spec/12 §12.6).
+                            .safeAreaInset(edge: .top, spacing: 0) {
+                                if Features.tabs, !scene.isNoteWindow, app.library.openTabs.count > 1 { TabStrip() }
+                            }
                     }
                     // Takes the width that is left, never more: its content (toolbar, format bar)
                     // must not push the column past the screen edge (iPad mini portrait).

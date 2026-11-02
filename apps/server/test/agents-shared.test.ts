@@ -69,7 +69,7 @@ async function share(owner: TestUser, notebookId: string, member: TestUser, role
   }
 }
 
-async function grantFor(member: TestUser, notebookIds: string[], permission: 'read' | 'read_write' = 'read_write') {
+async function grantFor(member: TestUser, notebookIds: string[], permission: 'read' | 'read_write' = 'read_write', allNotebooks = false) {
   const g: AgentGrant = {
     id: newId(),
     userId: member.userId,
@@ -77,7 +77,7 @@ async function grantFor(member: TestUser, notebookIds: string[], permission: 're
     name: 'Member agent',
     clientId: null,
     notebookIds,
-    allNotebooks: false,
+    allNotebooks,
     permission,
     createdAt: new Date().toISOString(),
     expiresAt: null,
@@ -105,6 +105,19 @@ async function edit(member: TestUser, noteId: string, grantId: string, text: str
 }
 
 describe('agents of a member', () => {
+  it('«all notebooks» covers only the user’s own: a shared one needs picking by name (audit 2026-11-02)', async () => {
+    const owner = await user();
+    const member = await user();
+    const theirs = await agentNotebook(owner);
+    await share(owner, theirs.notebookId, member, 'editor');
+    const mine = await agentNotebook(member);
+    const all = await grantFor(member, [], 'read_write', true);
+    expect(await agents.data.loadDoc(member.userId, mine.noteId, all.id)).not.toBeNull();
+    expect(await agents.data.loadDoc(member.userId, theirs.noteId, all.id)).toBeNull();
+    const picked = await grantFor(member, [theirs.notebookId], 'read_write', true);
+    expect(await agents.data.loadDoc(member.userId, theirs.noteId, picked.id)).not.toBeNull();
+  });
+
   it('editor: lists, reads and writes the shared notebook; edits are the member agent’s, notes the owner’s', async () => {
     const owner = await user();
     const member = await user();

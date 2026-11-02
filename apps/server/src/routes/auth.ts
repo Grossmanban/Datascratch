@@ -26,8 +26,15 @@ const authLimit = { rateLimit: { max: 20, timeWindow: '1 minute' } };
  * limits alone are bypassed by spreading over many addresses).
  */
 const PER_EMAIL_PER_MINUTE = 10;
+const PER_EMAIL_ALL_PER_MINUTE = 30;
 
 /** One message for every signup conflict: it must not tell whether an email is registered. */
+/** A new account's own limit: the smaller one for new accounts, never above the server default (none when unlimited). */
+function newAccountQuota(ctx: AppContext): number | null {
+  const { NEW_USER_STORAGE_QUOTA_BYTES: fresh, USER_STORAGE_QUOTA_BYTES: all } = ctx.config;
+  return fresh > 0 && all > 0 ? Math.min(fresh, all) : null;
+}
+
 const SIGNUP_CONFLICT = 'signup failed: this account cannot be created';
 
 async function recordEvent(
@@ -48,9 +55,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
     const inviteOk = (code: string | undefined) =>
       code !== undefined && inviteCodes.some((c) => safeEqual(c, sha256(code.trim())));
     const emailWindows = new Map<string, { start: number; count: number }>();
-    /** Fixed one-minute window per route and email address (login, prelogin, signup, recovery). */
-    const perEmail = (route: string, email: string) => {
-      const key = `${route}|${email}`;
+    const hit = (key: string, max: number) => {
       const now = Date.now();
       let w = emailWindows.get(key);
       if (!w || now - w.start >= 60_000) {
@@ -61,9 +66,18 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         emailWindows.set(key, w);
       }
       w.count += 1;
-      if (w.count > PER_EMAIL_PER_MINUTE) {
+      if (w.count > max) {
         throw new ApiError('rate_limited', 'too many attempts for this account, retry in a minute', undefined, 60_000 - (now - w.start));
       }
+    };
+    /**
+     * Fixed one-minute windows per route and email address (login, prelogin, signup, recovery):
+     * tight per client address, looser for the address overall. A stranger hammering someone's
+     * email from one place no longer locks its owner out (audit 2026-11-02).
+     */
+    const perEmail = (route: string, email: string, ip: string) => {
+      hit(`${route}|${email}|${ip}`, PER_EMAIL_PER_MINUTE);
+      hit(`${route}|${email}`, PER_EMAIL_ALL_PER_MINUTE);
     };
     const { db } = ctx.database;
 
@@ -78,7 +92,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         },
       },
       async (req) => {
-        perEmail('prelogin', req.body.email);
+        perEmail('prelogin', req.body.email, req.ip);
         const [u] = await db.select({ salt: users.salt, kdf: users.kdf }).from(users).where(eq(users.email, req.body.email));
         if (u) return { salt: toB64(u.salt), kdf: u.kdf };
         return { salt: toB64(fakeSalt(ctx.tokens.fakeSaltKey, req.body.email)), kdf: DEFAULT_KDF };
@@ -109,7 +123,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         },
       },
       async (req) => {
-        perEmail('signup', req.body.email);
+        perEmail('signup', req.body.email, req.ip);
         const b = req.body;
         const loginKey = fromB64(b.loginKey);
         const wrappedPw = fromB64(b.wrappedMasterKeyPassword);
@@ -133,11 +147,21 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           hashSecret(fromB64(b.recoveryLoginKey)),
         ]);
         return db.transaction(async (tx) => {
+          const cap = ctx.config.DS_SIGNUP === 'open' ? ctx.config.DS_SIGNUP_DAILY_LIMIT : 0;
+          if (cap > 0) {
+            // One sign-up at a time while counting, so parallel requests cannot pass the cap together.
+            await tx.execute(sql`SELECT pg_advisory_xact_lock(7478)`);
+            const [recent] = (
+              await tx.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM users WHERE created_at > now() - interval '24 hours'`)
+            ).rows;
+            if ((recent?.n ?? 0) >= cap) throw new ApiError('rate_limited', 'too many new accounts today; try again tomorrow');
+          }
           const inserted = await tx
             .insert(users)
             .values({
               id: b.userId,
               email: b.email,
+              storageQuotaBytes: newAccountQuota(ctx),
               salt: fromB64(b.salt),
               kdf: b.kdf,
               loginHash,
@@ -172,7 +196,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         },
       },
       async (req) => {
-        perEmail('login', req.body.email);
+        perEmail('login', req.body.email, req.ip);
         const loginKey = fromB64(req.body.loginKey);
         const [u] = await db.select().from(users).where(eq(users.email, req.body.email));
         const ok = u ? await verifySecret(u.loginHash, loginKey) : await verifyDummy(loginKey);
@@ -228,7 +252,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         },
       },
       async (req) => {
-        perEmail('recovery', req.body.email);
+        perEmail('recovery', req.body.email, req.ip);
         const key = fromB64(req.body.recoveryLoginKey);
         const [u] = await db.select().from(users).where(eq(users.email, req.body.email));
         const ok = u ? await verifySecret(u.recoveryHash, key) : await verifyDummy(key);
@@ -263,6 +287,18 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req) => {
         const b = req.body;
+        // Check the token before the (deliberately slow) hash, so junk tokens cost nothing.
+        const [known] = await db
+          .select({ id: recoveryTokens.id })
+          .from(recoveryTokens)
+          .where(
+            and(
+              eq(recoveryTokens.tokenHash, sha256(b.recoveryToken)),
+              isNull(recoveryTokens.usedAt),
+              sql`${recoveryTokens.expiresAt} > now()`,
+            ),
+          );
+        if (!known) throw unauthorized('invalid or expired recovery token');
         const loginHash = await hashSecret(fromB64(b.loginKey));
         let revoked: string[] = [];
         const session = await db.transaction(async (tx) => {

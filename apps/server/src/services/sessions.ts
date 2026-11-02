@@ -2,7 +2,8 @@ import { createHmac } from 'node:crypto';
 import { and, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 import type { AppContext } from '../context.js';
 import type { DbOrTx } from '../db/client.js';
-import { devices, refreshTokens, users } from '../db/schema.js';
+import { agentGrants, devices, members, notebooks, refreshTokens, users } from '../db/schema.js';
+import { noteKeyCache } from '../plugins/agent-key-cache.js';
 import { fromB64, randomToken, sha256, toB64, uuidv7 } from '../lib/encoding.js';
 import { deviceRevoked, unauthorized, type RevokeReason } from '../lib/errors.js';
 import { topics } from '../sync/hub.js';
@@ -162,7 +163,10 @@ export async function revokeDevice(
   return rows.length > 0;
 }
 
-/** Revoke every device of a user except `keep` (password change, recovery). */
+/**
+ * Revoke every device of a user except `keep` (password change, recovery), and every connected
+ * AI agent: whoever knew the old password may have connected one (audit 2026-11-02).
+ */
 export async function revokeOtherDevices(
   ctx: AppContext,
   db: DbOrTx,
@@ -179,6 +183,16 @@ export async function revokeOtherDevices(
         : and(eq(devices.userId, userId), isNull(devices.revokedAt)),
     )
     .returning({ id: devices.id });
+  const grants = await db
+    .update(agentGrants)
+    .set({ revokedAt: sql`now()` })
+    .where(and(eq(agentGrants.userId, userId), isNull(agentGrants.revokedAt)))
+    .returning({ id: agentGrants.id });
+  if (grants.length > 0) {
+    const own = await db.select({ id: notebooks.id }).from(notebooks).where(eq(notebooks.userId, userId));
+    const shared = await db.select({ id: members.notebookId }).from(members).where(eq(members.userId, userId));
+    noteKeyCache.forgetNotebooks([...own.map((n) => n.id), ...shared.flatMap((m) => (m.id ? [m.id] : []))]);
+  }
   return rows.map((r) => r.id);
 }
 

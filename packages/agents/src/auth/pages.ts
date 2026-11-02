@@ -133,7 +133,7 @@ ${i.verifiedHost ? "" : `<div class="note">Название этого аген�
 <form method="post" action="${esc(i.action)}">
 <input type="hidden" name="request" value="${esc(i.request)}">
 <h2>Блокноты</h2>
-${i.notebooks.length ? `<label class="nb all"><input type="checkbox" name="all_notebooks" value="1" checked><span>Все блокноты «для агентов»</span><small>и те, что вы откроете агентам позже</small></label>` : ""}
+${i.notebooks.length ? `<label class="nb all"><input type="checkbox" name="all_notebooks" value="1" checked><span>Все мои блокноты «для агентов»</span><small>и те, что вы откроете агентам позже; чужие общие блокноты — только отмеченные ниже</small></label>` : ""}
 <div class="pick">${notebooks}</div>
 <h2>Права</h2>
 <div class="seg">

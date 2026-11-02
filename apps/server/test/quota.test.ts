@@ -110,6 +110,35 @@ describe('signup switch and conflicts', () => {
     expect(JSON.stringify(taken.body)).not.toMatch(/email/i);
   });
 
+  it('gives new accounts the smaller limit, raisable per account', async () => {
+    const q = await startServer({ USER_STORAGE_QUOTA_BYTES: '9000', NEW_USER_STORAGE_QUOTA_BYTES: '3000' });
+    try {
+      const fresh = await signup(q);
+      const { notebookId: nb } = await createNotebook(q, fresh);
+      const noteId = await createNote(q, fresh, nb);
+      const a = await SyncClient.user(q, fresh);
+      expect((await a.push(noteId, rnd(3500))).code).toBe('payload_too_large');
+      await q.ctx.database.db.execute(sql`UPDATE users SET storage_quota_bytes = NULL WHERE id = ${fresh.userId}`);
+      expect((await a.push(noteId, rnd(3500))).type).toBe('ack');
+      a.close();
+    } finally {
+      await q.close();
+    }
+  });
+
+  it('caps new accounts per day on an open server', async () => {
+    const capped = await startServer({ DS_SIGNUP_DAILY_LIMIT: '2' });
+    try {
+      expect((await api(capped, 'POST', '/auth/signup', { body: body() })).status).toBe(200);
+      expect((await api(capped, 'POST', '/auth/signup', { body: body() })).status).toBe(200);
+      const third = await api(capped, 'POST', '/auth/signup', { body: body() });
+      expect(third.status).toBe(429);
+      expect(third.body.error.code).toBe('rate_limited');
+    } finally {
+      await capped.close();
+    }
+  });
+
   it('can be closed or need an invite code', async () => {
     const closed = await startServer({ DS_SIGNUP: 'closed' });
     try {

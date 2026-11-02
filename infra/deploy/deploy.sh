@@ -109,13 +109,14 @@ SITE
   }
   if ! docker exec "$EDGE_CADDY" caddy validate --config "$EDGE_CADDYFILE" > /tmp/ds-caddy-validate.log 2>&1; then
     log "$EDGE_CADDY rejected the Datascratch site — removing it again"
-    tail -5 /tmp/ds-caddy-validate.log >&2 || true
+    # The details may name other sites on the server: they stay there, not in the public CI log.
+    log "details on the server: /tmp/ds-caddy-validate.log"
     restore
     return 1
   fi
   if ! docker exec "$EDGE_CADDY" caddy reload --config "$EDGE_CADDYFILE" > /tmp/ds-caddy-reload.log 2>&1; then
     log "$EDGE_CADDY reload failed — restoring the previous site file"
-    tail -5 /tmp/ds-caddy-reload.log >&2 || true
+    log "details on the server: /tmp/ds-caddy-reload.log"
     restore
     docker exec "$EDGE_CADDY" caddy reload --config "$EDGE_CADDYFILE" > /dev/null 2>&1 || true
     return 1
@@ -235,7 +236,10 @@ wait_healthy() {
       [ "$state" = "healthy" ] && continue 2
       sleep 2
     done
-    docker compose logs --tail 80 "$svc" >&2 || true
+    # Request logs carry client addresses: keep them on the server, out of the public CI log.
+    mkdir -p -m 700 logs
+    docker compose logs --tail 200 "$svc" > "logs/$svc-unhealthy.log" 2>&1 || true
+    log "$svc is not healthy; its log is on the server: /opt/datascratch/logs/$svc-unhealthy.log"
     return 1
   done
 }

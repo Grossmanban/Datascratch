@@ -8,6 +8,7 @@ import type { AuthorRef } from '../db/schema.js';
 import { accessFor, docAccess, loadDocs, loadMemberships } from '../services/access.js';
 import type { CatchUpItem } from '../services/documents.js';
 import type { GuestPrincipal, UserPrincipal } from '../services/principal.js';
+import { publicAuthor } from '../lib/author.js';
 import { topics, type HubMessage } from './hub.js';
 import {
   ClientMessage,
@@ -26,7 +27,7 @@ const item = (x: CatchUpItem) => ({
   seq: x.seq,
   payload: toB64(x.payload),
   deviceId: x.deviceId,
-  ...(x.author ? { author: x.author } : {}),
+  ...(x.author ? { author: publicAuthor(x.author) } : {}),
 });
 
 type Pending =
@@ -399,9 +400,9 @@ export class SyncConnection {
   /** Read access → `false` (read-only) / `true` (write); throws doc_not_found. */
   async #canWrite(docId: string): Promise<boolean> {
     const cached = this.#access.get(docId);
-    // A guest's access can change when a note moves; only subscriptions hear about it,
-    // so for unsubscribed documents a guest's access is checked every time.
-    if (cached !== undefined && (this.#principal!.kind === 'user' || this.#subs.has(docId))) return cached;
+    // Access can change when a note moves (a member or guest of the old notebook loses it); only
+    // subscriptions hear about it, so for unsubscribed documents access is checked every time.
+    if (cached !== undefined && this.#subs.has(docId)) return cached;
     const a = await docAccess(this.ctx.database.db, this.#principal!, docId);
     if (!a) throw new SyncError('doc_not_found', 'document not found', docId);
     this.#access.set(docId, a.write);
@@ -654,7 +655,7 @@ export class SyncConnection {
         seq: e.seq,
         payload: e.payload,
         deviceId: e.deviceId,
-        ...(e.author ? { author: e.author } : {}),
+        ...(e.author ? { author: publicAuthor(e.author) } : {}),
       });
   }
 

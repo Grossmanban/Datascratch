@@ -43,6 +43,9 @@ jobs:
   secrets:
     name: Check deploy secrets
     runs-on: ubuntu-latest
+    # Deploy secrets live in the `production` environment, which only `main` may use
+    # (a pushed branch with its own workflow gets nothing).
+    environment: production
     outputs:
       inspect: ${{ steps.check.outputs.inspect }}
       ready: ${{ steps.check.outputs.ready }}
@@ -84,6 +87,7 @@ jobs:
     needs: secrets
     if: needs.secrets.outputs.inspect == 'true'
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 10
     env:
       DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -169,6 +173,7 @@ jobs:
     needs: [secrets, images]
     if: needs.secrets.outputs.ready == 'true'
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 30
     permissions:
       contents: read

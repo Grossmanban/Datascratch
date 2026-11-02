@@ -10,6 +10,9 @@ on:
       build_number:
         description: "Build number (leave empty to use the run number)"
         required: false
+      ref:
+        description: "Commit to build (must be on main; empty = the dispatched commit)"
+        required: false
   push:
     tags: ["ios-v*"]
 
@@ -25,6 +28,9 @@ jobs:
   secrets:
     name: Check signing secrets
     runs-on: ubuntu-latest
+    # Signing secrets live in the `release` environment: only `main` and `ios-v*` tags
+    # may use it, so a pushed branch with its own workflow gets nothing.
+    environment: release
     outputs:
       ready: ${{ steps.check.outputs.ready }}
     steps:
@@ -52,6 +58,7 @@ jobs:
     needs: secrets
     if: needs.secrets.outputs.ready == 'true'
     runs-on: macos-26
+    environment: release
     timeout-minutes: 60
     defaults:
       run:
@@ -63,6 +70,13 @@ jobs:
       BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+
+      # Only reviewed history ships: the commit must be on main (which can't be rewritten).
+      - name: Check the commit is on main
+        run: git merge-base --is-ancestor HEAD origin/main
 
       - name: Select Xcode 26
         run: |

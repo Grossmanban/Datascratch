@@ -64,6 +64,9 @@ describe('device revocation signal', () => {
     const u = await signup(s);
     const second = await login(u);
     const ws = await live(u, second);
+    await s.ctx.database.db.execute(sql`
+      INSERT INTO agent_grants (id, user_id, kind, name, notebook_ids, permission, created_at)
+      VALUES (${'g-' + u.userId}, ${u.userId}, 'static', 'agent', '{}', 'read', now())`);
     const r = await api(s, 'POST', '/auth/password', {
       token: u.session.accessToken,
       body: { currentLoginKey: u.loginKey, salt: b64(rnd(16)), kdf: KDF, loginKey: b64(rnd(32)), wrappedMasterKeyPassword: b64(rnd(73)) },
@@ -72,6 +75,11 @@ describe('device revocation signal', () => {
     await expectKicked(ws, 'password_change');
     await expectRevoked(second, 'password_change');
     expect((await api(s, 'GET', '/me', { token: u.session.accessToken })).status).toBe(200);
+    // Agents connected with the old password are disconnected too (audit 2026-11-02).
+    const grants = await s.ctx.database.db.execute<{ n: number }>(
+      sql`SELECT count(*)::int AS n FROM agent_grants WHERE user_id = ${u.userId} AND revoked_at IS NULL`,
+    );
+    expect(grants.rows[0]!.n).toBe(0);
   });
 
   it('recovery: the account was recovered with the recovery key', async () => {

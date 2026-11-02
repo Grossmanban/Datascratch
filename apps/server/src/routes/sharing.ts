@@ -155,7 +155,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
               SELECT 1 FROM members m
               WHERE (m.owner_id = ${p.userId} AND m.user_id = ${other})
                  OR (m.user_id = ${p.userId} AND m.owner_id = ${other})
-                 OR (m.user_id = ${p.userId} AND EXISTS (
+                 OR (m.user_id = ${p.userId} AND (NOT m.account_created_after_invite OR m.wrapped_key IS NOT NULL) AND EXISTS (
                       SELECT 1 FROM members o WHERE o.user_id = ${other}
                         AND o.notebook_id IS NOT DISTINCT FROM m.notebook_id
                         AND o.note_id IS NOT DISTINCT FROM m.note_id))
@@ -460,7 +460,11 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           .innerJoin(users, eq(users.id, members.userId))
           .where(eq(memberTargetCol(t.kind), t.id))
           .orderBy(asc(members.joinedAt));
-        return rows.map(({ m, email }) => ({
+        // A member the owner has not let in yet (account made after the invitation, no key: maybe
+        // someone who signed up with the invited address first, D-54) sees only themselves.
+        const me = rows.find((r) => r.m.userId === p.userId)?.m;
+        const gated = t.ownerId !== p.userId && me !== undefined && me.accountCreatedAfterInvite && !me.wrappedKey;
+        return rows.filter((r) => !gated || r.m.userId === p.userId).map(({ m, email }) => ({
           userId: m.userId,
           email,
           role: m.role,

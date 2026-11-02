@@ -56,6 +56,8 @@ export const users = pgTable('users', {
   accountDocId: uuid('account_doc_id').notNull(),
   /** Bytes stored for this account (updates, snapshots, attachments); kept by triggers (0004). */
   storageBytes: bigint('storage_bytes', { mode: 'number' }).notNull().default(0),
+  /** This account's storage limit; null: the server default (USER_STORAGE_QUOTA_BYTES). New accounts get NEW_USER_STORAGE_QUOTA_BYTES. */
+  storageQuotaBytes: bigint('storage_quota_bytes', { mode: 'number' }),
   /** Account X25519 key pair for sharing (D-54, crypto.md §10): public key and the secret under masterKey. */
   boxPublicKey: bytea('box_public_key'),
   boxWrappedSecretKey: bytea('box_wrapped_secret_key'),

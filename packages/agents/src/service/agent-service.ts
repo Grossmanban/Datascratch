@@ -192,7 +192,7 @@ export interface NoteSummary {
 export class AgentService {
   private readonly index = new NoteIndexCache();
   private readonly images = new Map<string, RenderedImage>();
-  private readonly pictureCache = new Map<string, AgentImage | null>();
+  private readonly pictureCache = new Map<string, AgentImage>();
   private readonly now: () => Date;
 
   constructor(
@@ -209,7 +209,11 @@ export class AgentService {
   /** Granted agent-mode notebooks, loaded; the ones that fail to load are reported, not dropped. */
   private async notebookStates(p: Principal, only?: string): Promise<{ views: NotebookView[]; unavailable: UnavailableNotebook[] }> {
     const all = await this.ctx.data.listAgentNotebooks(p.grant.userId, p.grant.id);
-    const allowed = all.filter((n) => (p.grant.allNotebooks || p.grant.notebookIds.includes(n.id)) && (!only || n.id === only));
+    // «All notebooks» means the user's own: a notebook someone else shares and opens to agents
+    // reaches this agent only when picked by name (audit 2026-11-02).
+    const allowed = all.filter(
+      (n) => ((p.grant.allNotebooks && !n.shared) || p.grant.notebookIds.includes(n.id)) && (!only || n.id === only),
+    );
     if (only && allowed.length === 0)
       throw new AgentError("not_found", `Notebook ${only} is not available to this agent. Call list_notebooks to see the notebooks you can access.`);
     const views: NotebookView[] = [];
@@ -473,10 +477,14 @@ export class AgentService {
   /** A note's picture, decrypted and scaled; null when the server cannot read or decode it. */
   private async picture(p: Principal, attachmentId: string, maxSide: number): Promise<AgentImage | null> {
     if (!this.ctx.data.loadAttachmentImage) return null;
-    const key = `${p.grant.userId}:${attachmentId}:${maxSide}`;
-    if (this.pictureCache.has(key)) return this.pictureCache.get(key)!;
+    // Per grant: a hit must not skip the access check another grant of the same user would fail.
+    const key = `${p.grant.id}:${attachmentId}:${maxSide}`;
+    const hit = this.pictureCache.get(key);
+    if (hit) return hit;
     const bytes = await this.ctx.data.loadAttachmentImage(p.grant.userId, attachmentId, p.grant.id);
     const image = bytes ? await scaleImage(bytes, maxSide) : null;
+    // Not cached when missing: it may still be uploading.
+    if (!image) return null;
     this.pictureCache.set(key, image);
     // Pictures are large: keep only a few (an attachment never changes, so no seq in the key).
     while (this.pictureCache.size > 24) this.pictureCache.delete(this.pictureCache.keys().next().value!);

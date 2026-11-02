@@ -61,6 +61,10 @@ const ConfigSchema = z
     AGENT_IMAGE_MAX_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),
     /** Bytes one account may store: updates, snapshots and attachments (0: unlimited). */
     USER_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(10 * 1024 ** 3),
+    /** The limit given to accounts created from now on (0: the server default); raise one with `ds quota <email> <GB>` on the server. */
+    NEW_USER_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(1024 ** 3),
+    /** New accounts per 24 hours on an open server (0: no cap): a flood of sign-ups cannot fill the disk. */
+    DS_SIGNUP_DAILY_LIMIT: z.coerce.number().int().nonnegative().default(100),
     /** POST /v1/fetch-image (D-52): requests per account per minute, size cap, total timeout, parallel downloads. */
     FETCH_IMAGE_PER_MINUTE: z.coerce.number().int().positive().default(60),
     FETCH_IMAGE_MAX_BYTES: z.coerce.number().int().positive().default(20 * 1024 * 1024),

@@ -79,13 +79,22 @@ export class DocumentService {
   /**
    * Refuse a write that would take the document owner's account over its storage quota
    * (guests and agents count against the owner). Snapshots get 10 % headroom so that an
-   * account at its limit can still compact its history.
+   * account at its limit can still compact its history. The account's own limit wins over the
+   * server default (new accounts get a smaller one). Inside a transaction, writes of one account
+   * are serialized until it commits, so parallel uploads cannot overshoot the limit together.
    */
   async quotaCheck(db: DbOrTx, docId: string, bytes: number, kind: 'update' | 'snapshot' | 'attachment' = 'update') {
-    if (this.quotaBytes <= 0) return;
-    const res = await db.execute<{ used: string | number | null }>(sql`SELECT ds_storage_of_doc(${docId}) AS used`);
-    const used = Number(res.rows[0]?.used ?? 0);
-    const limit = kind === 'snapshot' ? this.quotaBytes * 1.1 : this.quotaBytes;
+    const res = await db.execute<{ owner: string; used: string | number | null; quota: string | number | null }>(
+      sql`SELECT owner, used, quota FROM ds_quota_of_doc(${docId})`,
+    );
+    const row = res.rows[0];
+    if (!row) return;
+    const quota = row.quota === null ? this.quotaBytes : Number(row.quota);
+    if (quota <= 0) return;
+    await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${row.owner}::text, 7477))`);
+    const [fresh] = (await db.execute<{ used: string | number | null }>(sql`SELECT used FROM ds_quota_of_doc(${docId})`)).rows;
+    const used = Number(fresh?.used ?? 0);
+    const limit = kind === 'snapshot' ? quota * 1.1 : quota;
     if (used + bytes > limit) throw new ApiError('payload_too_large', 'storage quota exceeded');
   }
 

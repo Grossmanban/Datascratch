@@ -7,6 +7,9 @@
 #                        as pre-restore-<time>.* (restore.sh)
 #   ds key               what DS_KMS_KEY is and its value — terminal only, never in a log
 #   ds key-saved         stop reminding about DS_KMS_KEY
+#   ds quota <email> [<GB>|default]
+#                        show an account's storage, or set its limit (new accounts get 1 GB;
+#                        default = the server's USER_STORAGE_QUOTA_BYTES, 10 GB)
 set -euo pipefail
 
 DIR="${DS_DIR:-/opt/datascratch}"
@@ -88,8 +91,21 @@ case "${1:-}" in
     touch "$SAVED"
     echo "OK, no more reminders."
     ;;
+  quota)
+    email="${2:?usage: ds quota <email> [<GB>|default]}"
+    gb="${3:-}"
+    case "$gb" in
+      '') query="SELECT email, pg_size_pretty(storage_bytes) AS used, coalesce(pg_size_pretty(storage_quota_bytes), 'default') AS quota FROM users WHERE email = :'email';" ;;
+      default) query="UPDATE users SET storage_quota_bytes = NULL WHERE email = :'email' RETURNING email, 'default' AS quota;" ;;
+      *[!0-9]*) echo "GB must be a whole number or 'default'" >&2; exit 2 ;;
+      *) query="UPDATE users SET storage_quota_bytes = :gb::bigint * 1073741824 WHERE email = :'email' RETURNING email, pg_size_pretty(storage_quota_bytes) AS quota;" ;;
+    esac
+    # The e-mail goes in as a psql variable (quoted by psql), never into the SQL text.
+    echo "$query" | docker compose exec -T postgres sh -c \
+      'psql -X -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -P pager=off -v ON_ERROR_STOP=1 -v email="$1" -v gb="${2:-0}"' sh "$email" "$gb"
+    ;;
   *)
-    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

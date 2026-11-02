@@ -67,19 +67,23 @@ export function attachmentRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         const access = await docAccess(db, p, b.noteId);
         if (!access || access.doc.kind !== 'note') throw notFound('note not found');
         if (!access.write) throw forbidden('read-only access');
-        await ctx.documents.quotaCheck(db, b.noteId, b.size, 'attachment');
-        const [created] = await db
-          .insert(attachments)
-          .values({
-            id: b.attachmentId,
-            userId: access.doc.userId,
-            noteId: b.noteId,
-            size: b.size,
-            chunkCount: b.chunkCount,
-            mime: b.mime,
-          })
-          .onConflictDoNothing()
-          .returning({ id: attachments.id });
+        // Check and insert in one transaction: the check holds the account's quota lock until the
+        // row (and its bytes, via the storage trigger) is committed.
+        const [created] = await db.transaction(async (tx) => {
+          await ctx.documents.quotaCheck(tx, b.noteId, b.size, 'attachment');
+          return tx
+            .insert(attachments)
+            .values({
+              id: b.attachmentId,
+              userId: access.doc.userId,
+              noteId: b.noteId,
+              size: b.size,
+              chunkCount: b.chunkCount,
+              mime: b.mime,
+            })
+            .onConflictDoNothing()
+            .returning({ id: attachments.id });
+        });
         if (!created) {
           const [ex] = await db.select().from(attachments).where(eq(attachments.id, b.attachmentId));
           const same =
@@ -218,6 +222,9 @@ export function attachmentRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         const p = await requireUserOrGuest(ctx, req);
         if (p.kind === 'guest') throw forbidden('guests cannot delete attachments');
         const a = await load(p, req.params.id, true);
+        // Attachments of a shared note belong to its owner (and count against their quota): an
+        // editor may not wipe the owner's pictures (audit 2026-11-02). Deleting the note frees them.
+        if (a.userId !== p.userId) throw forbidden('only the owner can delete attachments of a shared note');
         await db.delete(attachments).where(eq(attachments.id, a.id));
         await ctx.jobs.enqueue(CLEANUP_JOB, {});
         return reply.code(204).send(null);

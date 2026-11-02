@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { collectHandwriting } from "../src/doc/handwriting.js";
 import { contentOf } from "../src/doc/model.js";
+import { scaleImage } from "../src/render/attachment-image.js";
 import { imagePixels, MAX_PIXELS, renderHandwriting } from "../src/render/handwriting-png.js";
 import { addBlockStroke, blockIdAt, makeNoteDoc } from "../src/testing/fixtures.js";
 
@@ -71,5 +72,16 @@ describe("handwriting PNG size is bounded", () => {
     expect(imagePixels(header)).toBe(900_000_000);
     const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x75, 0x30, 0x75, 0x30, 0x03]);
     expect(imagePixels(jpeg)).toBe(30_000 * 30_000);
+  });
+
+  it("pictures for agents: a decompression bomb and unknown formats are refused before decoding", async () => {
+    const png = new PNG({ width: 1, height: 1 });
+    const bomb = new Uint8Array(PNG.sync.write(png));
+    const dv = new DataView(bomb.buffer, bomb.byteOffset, bomb.byteLength);
+    dv.setUint32(16, 50_000);
+    dv.setUint32(20, 50_000);
+    expect(await scaleImage(bomb, 1568)).toBeNull();
+    expect(await scaleImage(new TextEncoder().encode("GIF89a........"), 1568)).toBeNull();
+    expect(await scaleImage(new Uint8Array(PNG.sync.write(png)), 1568)).not.toBeNull();
   });
 });

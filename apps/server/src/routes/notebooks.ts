@@ -16,6 +16,7 @@ import { authorSchema, notebookKeyResponseSchema } from '@datascratch/shared/con
 import { AD, open } from '../lib/sodium.js';
 import { noteKeyCache } from '../plugins/agent-key-cache.js';
 import { topics } from '../sync/hub.js';
+import { publicAuthor } from '../lib/author.js';
 import { CLEANUP_JOB } from '../jobs/index.js';
 import { Key32, WrappedKey, errorResponses, id } from './schemas.js';
 
@@ -407,7 +408,7 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           seq: r.seq,
           createdAt: r.createdAt.toISOString(),
           deviceId: r.deviceId,
-          authors: r.authors ?? [],
+          authors: (r.authors ?? []).map(publicAuthor),
         }));
       },
     );

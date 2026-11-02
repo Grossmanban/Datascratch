@@ -183,8 +183,13 @@ describe('shares and guests', () => {
     expect((await guest.subscribe(notShared)).error.code).toBe('doc_not_found');
     await owner.subscribe(shared, 1);
     expect((await guest.push(shared, rnd(5))).type).toBe('ack');
-    const gd = (await owner.next((m) => m.type === "update")).deviceId;
-    expect(gd).toMatch(/^guest:[A-Za-z0-9_-]{22}$/);
+    const upd = await owner.next((m) => m.type === "update");
+    expect(upd.deviceId).toMatch(/^guest:[A-Za-z0-9_-]{22}$/);
+    // The share id is the link: it is never shown, only an opaque stable id (audit 2026-11-02).
+    expect(upd.author.kind).toBe('guest');
+    expect(upd.author.shareId).not.toBe(shareId);
+    expect(upd.author.shareId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(JSON.stringify((await owner.subscribe(shared)).pages)).not.toContain(shareId);
 
     // Guests can upload attachments to the shared note with their token.
     const att = newId();

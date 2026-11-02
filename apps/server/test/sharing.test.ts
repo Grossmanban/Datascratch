@@ -157,7 +157,13 @@ describe('invitations', () => {
     expect(members.body).toEqual([
       expect.objectContaining({ userId: late.userId, status: 'awaiting_key', accountCreatedAfterInvite: true }),
     ]);
-    // Not confirmed yet: nothing to read or write.
+    // Not confirmed yet: nothing to read or write, and no other members to see (audit 2026-11-02).
+    const other = await user();
+    await call(owner, 'POST', '/invitations', { invitationId: newId(), target: { kind: 'notebook', id: notebookId }, email: other.email, role: 'viewer' });
+    const pending = (await call(other, 'GET', '/invitations/incoming')).body[0].id;
+    await call(other, 'POST', `/invitations/${pending}/accept`, {});
+    expect((await call(late, 'GET', `/members/notebook/${notebookId}`)).body.map((m: any) => m.userId)).toEqual([late.userId]);
+    expect((await call(owner, 'GET', `/members/notebook/${notebookId}`)).body).toHaveLength(2);
     const c = await SyncClient.user(s, late);
     expect((await c.subscribe(noteId)).error).toMatchObject({ code: 'doc_not_found' });
     // The owner confirms by giving the key; the open connection sees the notes at once.
@@ -260,7 +266,9 @@ describe('roles', () => {
     expect(
       (await call(editor, 'POST', '/attachments', { attachmentId: att, noteId: ownersNote, size: 100, chunkCount: 1, mime: 'image/png' })).status,
     ).toBe(204);
-    expect((await call(editor, 'DELETE', `/attachments/${att}`)).status).toBe(204);
+    // The owner's pictures are the owner's to delete (audit 2026-11-02).
+    expect((await call(editor, 'DELETE', `/attachments/${att}`)).status).toBe(403);
+    expect((await call(owner, 'DELETE', `/attachments/${att}`)).status).toBe(204);
     // Purge, move out, guest links, mode, notebook deletion: owner only.
     expect((await call(editor, 'DELETE', `/docs/${noteId}`)).status).toBe(403);
     const own = await createNotebook(s, editor);

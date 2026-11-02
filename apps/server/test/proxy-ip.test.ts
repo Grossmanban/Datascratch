@@ -33,9 +33,16 @@ describe('client address behind proxies', () => {
   it('limits attempts per email address across client addresses', async () => {
     const u = await signup(s);
     const statuses: number[] = [];
-    for (let i = 0; i < 12; i++) statuses.push((await login(u.email, `192.0.2.${i + 1}`)).statusCode);
+    // From one address: 10 a minute. From many: 30 a minute in all, so a stranger hammering the
+    // address from one place does not lock its owner out (audit 2026-11-02).
+    for (let i = 0; i < 11; i++) statuses.push((await login(u.email, '192.0.2.1')).statusCode);
     expect(statuses.slice(0, 10).every((c) => c === 401)).toBe(true);
-    expect(statuses.slice(10)).toEqual([429, 429]);
+    expect(statuses[10]).toBe(429);
+    expect((await login(u.email, '192.0.2.99')).statusCode).toBe(401);
+    const spread: number[] = [];
+    for (let i = 0; i < 22; i++) spread.push((await login(u.email, `198.51.100.${i + 1}`)).statusCode);
+    expect(spread.slice(0, 19).every((c) => c === 401)).toBe(true);
+    expect(spread.slice(19)).toEqual([429, 429, 429]);
     // Another account is not affected.
     expect((await login(`other-${newId().slice(-6)}@example.com`, '192.0.2.200')).statusCode).toBe(401);
   });

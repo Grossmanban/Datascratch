@@ -41,8 +41,8 @@
 
 ## Шаг 3. Добавить секреты в GitHub
 
-1. Репозиторий на GitHub → **Settings** → **Secrets and variables** → **Actions**.
-2. Вкладка **Secrets** → **New repository secret**:
+1. Репозиторий на GitHub → **Settings** → **Environments** → **production** (окружение уже создано и доступно только ветке `main`; если его нет — **New environment** `production`, **Deployment branches and tags** → **Selected branches and tags** → `main`). Секреты кладутся сюда, а не в общие секреты репозитория: так их не получит workflow из любой другой ветки (D-59).
+2. **Environment secrets** → **Add environment secret**:
 
 | Name | Значение |
 | --- | --- |
@@ -120,6 +120,7 @@ Datascratch умеет жить рядом с другими программа�
 
 | Что | Команда |
 | --- | --- |
+| Квота аккаунта | `/opt/datascratch/ds quota почта@пример.ru` — сколько занято и какой предел; `ds quota почта@пример.ru 10` — поднять до 10 ГБ; `default` — общий предел (новые аккаунты получают 1 ГБ, D-59) |
 | Сделать копию сейчас | `/opt/datascratch/ds backup` — покажет файлы копии и их размер |
 | Список копий | `/opt/datascratch/ds backups` |
 | Восстановить из копии | `/opt/datascratch/ds restore db-ДАТА.dump` — спросит подтверждение (`yes`), сначала проверит копию и сохранит текущие данные в `pre-restore-ДАТА.*` (если что-то пошло не так, их можно восстановить той же командой) |

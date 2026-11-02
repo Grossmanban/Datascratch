@@ -53,8 +53,8 @@
 
 ## Шаг 5. Добавить секреты в GitHub
 
-1. Откройте репозиторий на GitHub → **Settings** → **Secrets and variables** → **Actions**.
-2. На вкладке **Secrets** нажмите **New repository secret** и добавьте четыре секрета:
+1. Откройте репозиторий на GitHub → **Settings** → **Environments** → **release** (окружение уже создано: доступно только ветке `main` и тегам `ios-v*`; если его нет — **New environment** `release` с этими правилами). Секреты подписи кладутся сюда, а не в общие секреты репозитория (D-59).
+2. **Environment secrets** → **Add environment secret** — четыре секрета:
 
 | Name | Значение |
 | --- | --- |

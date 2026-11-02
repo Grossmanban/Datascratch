@@ -15,7 +15,7 @@
 | Метод | Путь | Тело → ответ |
 | --- | --- | --- |
 | POST | `/auth/prelogin` | `{ email }` → `{ salt, kdf }` (для неизвестного email — детерминированная фальшивая соль, чтобы нельзя было перебирать адреса) |
-| POST | `/auth/signup` | `{ email, salt, kdf, loginKey, recoveryLoginKey, wrappedMasterKeyPassword, wrappedMasterKeyRecovery, userId, accountDocId, inviteCode? }` → `Session`. `403`, если регистрация на сервере закрыта или нужен код приглашения (`DS_SIGNUP`); любой конфликт — один и тот же `409` (аудит безопасности 2026-10-27) |
+| POST | `/auth/signup` | `{ email, salt, kdf, loginKey, recoveryLoginKey, wrappedMasterKeyPassword, wrappedMasterKeyRecovery, userId, accountDocId, inviteCode? }` → `Session`. `403`, если регистрация на сервере закрыта или нужен код приглашения (`DS_SIGNUP`); любой конфликт — один и тот же `409` (аудит безопасности 2026-10-27). При открытой регистрации — не больше `DS_SIGNUP_DAILY_LIMIT` новых аккаунтов за сутки (по умолчанию 100), сверх — `429 rate_limited`; новый аккаунт получает свою квоту хранения `NEW_USER_STORAGE_QUOTA_BYTES` (по умолчанию 1 ГБ, не больше общей `USER_STORAGE_QUOTA_BYTES`), админ поднимает её командой `ds quota <почта> <ГБ>` (проверка безопасности 2026-11-02) |
 | POST | `/auth/login` | `{ email, loginKey, deviceName }` → `Session` |
 | POST | `/auth/refresh` | `{ refreshToken }` → `Session` |
 | POST | `/auth/logout` | `{ refreshToken }` → `204` |
@@ -70,7 +70,7 @@
 | PUT | `/attachments/:id/chunks/:index` | тело — двоичный кусок (`application/octet-stream`) → `204` |
 | GET | `/attachments/:id` | `{ size, chunkCount, mime, uploadedChunks: number[] }` (для докачки) |
 | GET | `/attachments/:id/chunks/:index` | двоичный кусок |
-| DELETE | `/attachments/:id` | |
+| DELETE | `/attachments/:id` | Только владелец документа: редактор общей заметки не удаляет вложения владельца (`403`; они освобождаются вместе с заметкой) |
 
 Лимит размера вложения — 200 МБ (настраивается).
 
@@ -83,7 +83,7 @@
 | POST | `/shares` | `{ shareId, target: { kind: "note"\|"notebook", id }, permission: "view"\|"edit", expiresAt: ISO \| null }` → `Share` (по умолчанию бессрочно) |
 | GET | `/shares` | мои ссылки |
 | DELETE | `/shares/:id` | отзыв (сразу отключает гостей) |
-| POST | `/shares/:id/guest` | (без авторизации) `{}` → `{ guestToken, target, permission, docIds }` — гостевой токен для `hello` в синхронизации |
+| POST | `/shares/:id/guest` | (без авторизации) `{}` → `{ guestToken, target, permission, docIds, keyVersion, keyChain }` — гостевой токен для `hello` в синхронизации; `keyVersion` и `keyChain` — версия ключа ресурса и звенья цепочки прежних ключей (`crypto.md` §7, §10.3; без ключа из ссылки бесполезны). `DELETE /shares/:id` ставит ресурсу `keyRotationPending` (в ссылке был ключ) |
 
 ## Совместный доступ по аккаунтам (D-54)
 
@@ -116,7 +116,7 @@
 
 | Метод | Путь | Тело → ответ |
 | --- | --- | --- |
-| GET | `/members/:kind/:id` | `Member[]` — видят владелец и участники |
+| GET | `/members/:kind/:id` | `Member[]` — видят владелец и участники; участник, которого владелец ещё не пустил (аккаунт создан после приглашения, ключа нет), видит только себя |
 | PATCH | `/members/:kind/:id/:userId` | `{ role }` → `204` (только владелец) |
 | DELETE | `/members/:kind/:id/:userId` | `204`. Владелец убирает участника; участник указывает себя — «Выйти». После этого сервер сразу закрывает доступ и ставит `keyRotationPending` |
 | PUT | `/members/:kind/:id/:userId/key` | (только владелец) `{ version, wrappedKey }` → `204` — выдать ключ участнику (`crypto.md` §10.2); `409`, если `version` не текущая |

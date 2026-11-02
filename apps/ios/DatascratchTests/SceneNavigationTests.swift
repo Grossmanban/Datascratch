@@ -8,7 +8,8 @@ struct SceneNavigationTests {
     @Test func closingADocumentFromAllDocumentsShowsItsFolderOrNotebook() throws {
         let app = AppModel(options: .init(uiTesting: true, signedIn: true))
         let scene = SceneModel(app: app)
-        let notebook = try #require(app.library.notebooks(in: app.library.activeSpace?.id).first)
+        let notebooks = app.library.notebooks(in: app.library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
         let folder = app.library.createFolder(in: notebook.id, parent: nil, name: "Projects", icon: "folder", color: .blue)
         let inFolder = app.library.createNote(in: notebook.id, folder: folder.id, title: "Plan")
         let loose = app.library.createNote(in: notebook.id, folder: nil, title: "Loose")

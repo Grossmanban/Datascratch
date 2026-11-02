@@ -206,10 +206,15 @@ struct DocumentCollectionView: View {
         case .tag(let name): library.documents(tagged: name)
         default: []
         }
-        let query = scene.searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let query = scene.searchText.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return base }
-        let matches = Set(library.search(query).map(\.id))
-        return base.filter { matches.contains($0.id) }
+        // The search field looks through every document of the space, not only this list (as in
+        // Apple Notes): a note in a subfolder was not found from its notebook. Rows say where each
+        // result lives.
+        switch source {
+        case .allDocuments, .starred, .notebook, .folder, .tag: return library.search(query)
+        default: return []
+        }
     }
 
     @ViewBuilder private var emptyState: some View {
@@ -605,7 +610,7 @@ struct FolderStrip: View {
     private func card(_ folder: Folder) -> some View {
         let library = app.library
         let tint = library.notebook(folder.notebookId)?.color ?? folder.color
-        let count = library.documents(inFolder: folder.id).count
+        let count = library.documents(inFolderTree: folder.id).count
         return Button {
             scene.show(.folder(folder.id))
         } label: {

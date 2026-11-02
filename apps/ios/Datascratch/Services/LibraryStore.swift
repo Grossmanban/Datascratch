@@ -192,7 +192,15 @@ final class LibraryStore {
         documents.filter { $0.notebookId == id && $0.folderId == nil }
     }
 
+    /// The folder's own documents, like a notebook's root: notes of its subfolders are reached
+    /// through the folder strip. Listing them here too showed one note in two folders (owner's
+    /// feedback 2026-11-01: «deleting it removes it from both folders, I made only one»).
     func documents(inFolder id: String) -> [NoteMeta] {
+        documents.filter { $0.folderId == id }
+    }
+
+    /// Documents of the folder and all its subfolders (the count on a folder card).
+    func documents(inFolderTree id: String) -> [NoteMeta] {
         let subtree = folderSubtree(id)
         return documents.filter { $0.folderId.map { subtree.contains($0) } ?? false }
     }
@@ -255,13 +263,26 @@ final class LibraryStore {
         }
     }
 
+    /// Every document of the space whose title, text or tags hold the query — case, diacritics and
+    /// «ё»/«е» ignored; title matches first (owner's feedback 2026-11-01: «search finds the text but
+    /// not the title»).
     func search(_ query: String) -> [NoteMeta] {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let q = Self.searchKey(query.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !q.isEmpty else { return documents }
-        return documents.filter {
-            $0.title.lowercased().contains(q) || body($0.id).plainText.lowercased().contains(q)
-                || $0.tags.contains { $0.contains(q) }
+        var byTitle: [NoteMeta] = [], byText: [NoteMeta] = []
+        for note in documents {
+            if Self.searchKey(note.title).contains(q) {
+                byTitle.append(note)
+            } else if Self.searchKey(body(note.id).plainText).contains(q) || note.tags.contains(where: { Self.searchKey($0).contains(q) }) {
+                byText.append(note)
+            }
         }
+        return byTitle + byText
+    }
+
+    nonisolated static func searchKey(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            .replacingOccurrences(of: "ё", with: "е")
     }
 
     func daysLeftInTrash(_ note: NoteMeta) -> Int {

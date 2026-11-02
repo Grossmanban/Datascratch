@@ -678,12 +678,17 @@ struct FormatBarRow: View {
         let _ = model.revision
         if model.editor.isEditingText, model.editor.tools.mode == .text {
             let state = model.editor.formatState
-            ScrollView(.horizontal, showsIndicators: false) {
-                DSFormatBar(items: items(state))
-                    .padding(.horizontal, Theme.Space.s3)
-                    .padding(.vertical, Theme.Space.s1)
+            let bar = DSFormatBar(items: items(state))
+                .padding(.horizontal, Theme.Space.s3)
+                .padding(.vertical, Theme.Space.s1)
+            // Centred like the pen palette when it fits (in full screen it hugged the screen's left
+            // edge while the text sat in the middle — owner's feedback 2026-11-01); scrolls when not.
+            ViewThatFits(in: .horizontal) {
+                bar
+                ScrollView(.horizontal, showsIndicators: false) { bar }
+                    .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             }
-            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .frame(maxWidth: .infinity)
             .accessibilityIdentifier("formatBar")
             .transition(.opacity)
         }

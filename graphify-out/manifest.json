@@ -102,10 +102,10 @@
     "semantic_hash": "60685228c0231b53241f26656543311d"
   },
   "apps/ios/Datascratch/App/SceneModel.swift": {
-    "mtime": 1793543177.614022,
-    "seen": 1793551145.262702,
-    "ast_hash": "88f4cbfb14e655bbb4db0f61ce605a67",
-    "semantic_hash": "88f4cbfb14e655bbb4db0f61ce605a67"
+    "mtime": 1793619521.3211067,
+    "seen": 1793620131.89556,
+    "ast_hash": "5a2d39a18cc5606c7971e49f221a13b5",
+    "semantic_hash": ""
   },
   "apps/ios/Datascratch/Design/Theme.swift": {
     "mtime": 1793543177.614259,
@@ -156,10 +156,10 @@
     "semantic_hash": "02e12d0bdb9bce056d988e6e059b9b64"
   },
   "apps/ios/Datascratch/Features/Library/DocumentCollectionView.swift": {
-    "mtime": 1793543177.6159208,
-    "seen": 1793551145.26271,
-    "ast_hash": "d293ee5ce96450e194e5cee8b6750e97",
-    "semantic_hash": "d293ee5ce96450e194e5cee8b6750e97"
+    "mtime": 1793619577.2907627,
+    "seen": 1793620131.895572,
+    "ast_hash": "9c3f4b768c3219b7decc1260bb1c1210",
+    "semantic_hash": ""
   },
   "apps/ios/Datascratch/Features/Library/TrashView.swift": {
     "mtime": 1793543177.6160471,
@@ -984,10 +984,10 @@
     "semantic_hash": "b94b2bdac92ca48dff93f0062e8f0b7a"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1793552771.3921523,
-    "seen": 1793553386.5165062,
-    "ast_hash": "dcb3b0b47218d76137e4f46b9fbcf012",
-    "semantic_hash": "dcb3b0b47218d76137e4f46b9fbcf012"
+    "mtime": 1793620077.888025,
+    "seen": 1793620131.895772,
+    "ast_hash": "213533b99ac1231fc748ef92740f3c91",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
     "mtime": 1793543177.660931,
@@ -1050,10 +1050,10 @@
     "semantic_hash": "ff372fbbcd56eb444ba92f26be7bdadc"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1793552366.2462747,
-    "seen": 1793553386.5165172,
-    "ast_hash": "c49c2ff69199b0d371221a60635090f0",
-    "semantic_hash": "c49c2ff69199b0d371221a60635090f0"
+    "mtime": 1793620077.8869238,
+    "seen": 1793620131.895783,
+    "ast_hash": "a92eaf9e5626c19aa8f4dc6bc4d3a3f6",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormatMenu.swift": {
     "mtime": 1793543177.663424,
@@ -1146,10 +1146,10 @@
     "semantic_hash": "a3138d54e2cf70df8c38e44f12ffe9e3"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditorModel/EditorCommands.swift": {
-    "mtime": 1793543177.6816595,
-    "seen": 1793551145.262889,
-    "ast_hash": "4f202dd367aa5d17504b51b0132ee5fa",
-    "semantic_hash": "4f202dd367aa5d17504b51b0132ee5fa"
+    "mtime": 1793620022.8414412,
+    "seen": 1793620131.895802,
+    "ast_hash": "fcb84786614fec840bf0f0a70caf30d7",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditorModel/EditorDocument.swift": {
     "mtime": 1793543177.6819835,
@@ -1350,16 +1350,16 @@
     "semantic_hash": "110190da7d3b40d417cb869c13eecb76"
   },
   "apps/ios/scripts/l10n/build_catalog.py": {
-    "mtime": 1793553693.4235427,
-    "seen": 1793553722.0416,
-    "ast_hash": "8c1f1aa1e97cc5ec625177610fdbc180",
+    "mtime": 1793619581.6205525,
+    "seen": 1793620131.895844,
+    "ast_hash": "2f41e50ad3bc3a55fdf007a8a3df8756",
     "semantic_hash": ""
   },
   "apps/ios/scripts/l10n/ru.json": {
-    "mtime": 1793550314.3538768,
-    "seen": 1793551313.1724212,
-    "ast_hash": "813c0617ae0c90a4f7f95de08f805fda",
-    "semantic_hash": "813c0617ae0c90a4f7f95de08f805fda"
+    "mtime": 1793619577.2914484,
+    "seen": 1793620131.8958452,
+    "ast_hash": "27531d894849ce3faec4f90cfdb7bf3d",
+    "semantic_hash": ""
   },
   "apps/ios/scripts/make_placeholder_icon.py": {
     "mtime": 1793543177.6878781,
@@ -6040,5 +6040,11 @@
     "seen": 1793553386.517302,
     "ast_hash": "607af443e3be7a8e69e26ddaefa9778d",
     "semantic_hash": "607af443e3be7a8e69e26ddaefa9778d"
+  },
+  "apps/ios/DatascratchTests/SceneNavigationTests.swift": {
+    "mtime": 1793619543.951567,
+    "seen": 1793620131.895635,
+    "ast_hash": "61812ddb528d3c322df66b397e41df2e",
+    "semantic_hash": ""
   }
 }

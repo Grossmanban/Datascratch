@@ -6,7 +6,12 @@ import type { Member, ShareTarget, SharedByMeItem } from "../contracts/api.js";
 import { getNoteMeta } from "../document/records.js";
 import type { SharingApi } from "./api.js";
 import { noteKeysFromMeta, ownerNotebookKeys, type VersionedKeys } from "./keys.js";
-import { deliverAwaitingKeys, type ConfirmReason, type MemberVetting, type OwnerIdentity } from "./members.js";
+import {
+  deliverAwaitingKeys,
+  type ConfirmReason,
+  type MemberVetting,
+  type OwnerIdentity,
+} from "./members.js";
 import {
   recreateShareLinks,
   repairSharedNoteMeta,
@@ -31,7 +36,11 @@ export interface OwnerMaintenanceOptions {
    * Asked before a key goes to an account created after its invitation, or to a member this
    * account's record (`vetting`) does not know.
    */
-  confirm?: (target: ShareTarget, member: Member, reason: ConfirmReason) => boolean | Promise<boolean>;
+  confirm?: (
+    target: ShareTarget,
+    member: Member,
+    reason: ConfirmReason,
+  ) => boolean | Promise<boolean>;
   /** This account's own record of whom it invited and gave keys to (trust.ts). */
   vetting?: MemberVetting;
   /** Re-create guest links after a rotation (crypto.md §10.3); omit to skip. */
@@ -160,7 +169,9 @@ async function relink(o: OwnerMaintenanceOptions, target: ShareTarget, keys: Ver
 function vettingOf(o: OwnerMaintenanceOptions, target: ShareTarget) {
   return {
     ...(o.vetting ? { vetting: o.vetting } : {}),
-    ...(o.confirm ? { confirm: (m: Member, reason: ConfirmReason) => o.confirm!(target, m, reason) } : {}),
+    ...(o.confirm
+      ? { confirm: (m: Member, reason: ConfirmReason) => o.confirm!(target, m, reason) }
+      : {}),
   };
 }
 
@@ -170,7 +181,9 @@ async function deliver(o: OwnerMaintenanceOptions, target: ShareTarget, keys: Ve
     target,
     keys,
     owner: o.owner,
-    ...(o.confirm ? { confirm: (m: Member, reason: ConfirmReason) => o.confirm!(target, m, reason) } : {}),
+    ...(o.confirm
+      ? { confirm: (m: Member, reason: ConfirmReason) => o.confirm!(target, m, reason) }
+      : {}),
     ...(o.vetting ? { vetting: o.vetting } : {}),
   });
   return members.map((m) => m.userId);

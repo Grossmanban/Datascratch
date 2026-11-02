@@ -22,11 +22,21 @@ const res = (t: ShareTarget) => `${t.kind}|${t.id}`;
 /** Why a member may not get a key without the owner saying so. */
 export type MemberTrust = "known" | "not_invited" | "key_changed";
 
-export function recordInvite(account: Y.Doc, target: ShareTarget, email: string, at = new Date()): void {
+export function recordInvite(
+  account: Y.Doc,
+  target: ShareTarget,
+  email: string,
+  at = new Date(),
+): void {
   accountRoots(account).trust.set(`invite|${res(target)}|${norm(email)}`, at.toISOString());
 }
 
-export function recordMemberKey(account: Y.Doc, target: ShareTarget, userId: string, publicKey: string): void {
+export function recordMemberKey(
+  account: Y.Doc,
+  target: ShareTarget,
+  userId: string,
+  publicKey: string,
+): void {
   const trust = accountRoots(account).trust;
   const key = `member|${res(target)}|${userId}`;
   if (trust.get(key) !== publicKey) trust.set(key, publicKey);

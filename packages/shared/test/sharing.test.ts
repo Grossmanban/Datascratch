@@ -385,10 +385,15 @@ describe("trust record (security review 2026-11-02)", () => {
     // Someone the server adds afterwards is not taken over.
     const MALLORY = "01900000-0000-7000-8000-00000000000f";
     await ensureAccountKeyPair(s.server.api(MALLORY), MALLORY, generateKey());
-    s.server.resources.get(`notebook:${NB}`)!.members.set(MALLORY, { role: "viewer", wrappedKey: null });
+    s.server.resources
+      .get(`notebook:${NB}`)!
+      .members.set(MALLORY, { role: "viewer", wrappedKey: null });
     asked.length = 0;
     expect(await deliverAwaitingKeys(args)).toEqual([]);
-    expect(asked).toEqual([[BOB, "late_account"], [MALLORY, "not_invited"]]);
+    expect(asked).toEqual([
+      [BOB, "late_account"],
+      [MALLORY, "not_invited"],
+    ]);
     // A rotation will not hand the new key to an active member the record does not know.
     s.server.resources.get(`notebook:${NB}`)!.members.get(MALLORY)!.wrappedKey = "x";
     s.server.resources.get(`notebook:${NB}`)!.pending = true;

@@ -14,7 +14,12 @@ import { wrapPreviousKey } from "../crypto/sharing.js";
 import { getNoteMetas, patchNoteMeta } from "../document/records.js";
 import type { SharingApi } from "./api.js";
 import { noteKeysFromMeta, ownerNotebookKeys, type VersionedKeys } from "./keys.js";
-import { wrapForMembers, type ConfirmReason, type MemberVetting, type OwnerIdentity } from "./members.js";
+import {
+  wrapForMembers,
+  type ConfirmReason,
+  type MemberVetting,
+  type OwnerIdentity,
+} from "./members.js";
 
 /** Only members that hold a key get the new one; `awaiting_key` ones wait for delivery. */
 async function activeMembers(
@@ -107,7 +112,9 @@ export async function rotateNotebookKey(options: RotateNotebookOptions): Promise
         version,
         owner,
         members,
-        options.vetting ? { vetting: options.vetting, ...(options.confirm ? { confirm: options.confirm } : {}) } : undefined,
+        options.vetting
+          ? { vetting: options.vetting, ...(options.confirm ? { confirm: options.confirm } : {}) }
+          : undefined,
       ),
       ...(options.agentMode ? { notebookKey: toBase64Url(key) } : {}),
     });
@@ -215,7 +222,9 @@ export async function rotateSharedNoteKey(options: RotateNoteOptions): Promise<V
       version,
       owner,
       members,
-      options.vetting ? { vetting: options.vetting, ...(options.confirm ? { confirm: options.confirm } : {}) } : undefined,
+      options.vetting
+        ? { vetting: options.vetting, ...(options.confirm ? { confirm: options.confirm } : {}) }
+        : undefined,
     ),
   });
   patchNoteMeta(index, noteId, {

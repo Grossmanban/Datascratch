@@ -10,7 +10,14 @@ export interface OwnerIdentity {
   secretKey: Uint8Array;
 }
 
-function wrapFor(target: ShareTarget, key: Uint8Array, version: number, owner: OwnerIdentity, userId: string, publicKey: string) {
+function wrapFor(
+  target: ShareTarget,
+  key: Uint8Array,
+  version: number,
+  owner: OwnerIdentity,
+  userId: string,
+  publicKey: string,
+) {
   return wrapKeyForMember(key, owner.secretKey, fromBase64Url(publicKey), {
     kind: target.kind,
     targetId: target.id,
@@ -35,13 +42,20 @@ export type ConfirmReason =
  * records a key that went to a member's public key.
  */
 export interface MemberVetting {
-  check(target: ShareTarget, member: Member, publicKey: string): ConfirmReason | null | Promise<ConfirmReason | null>;
+  check(
+    target: ShareTarget,
+    member: Member,
+    publicKey: string,
+  ): ConfirmReason | null | Promise<ConfirmReason | null>;
   given(target: ShareTarget, userId: string, publicKey: string): void | Promise<void>;
 }
 
 /** A key for `member` was refused (the owner said no, or no one could be asked). */
 export class MemberNotConfirmedError extends Error {
-  constructor(readonly member: Member, readonly reason: ConfirmReason) {
+  constructor(
+    readonly member: Member,
+    readonly reason: ConfirmReason,
+  ) {
     super(`key not given to ${member.userId}: ${reason}`);
     this.name = "MemberNotConfirmedError";
   }
@@ -59,7 +73,10 @@ export async function wrapForMembers(
   version: number,
   owner: OwnerIdentity,
   members: (string | Member)[],
-  vet?: { vetting: MemberVetting; confirm?: (member: Member, reason: ConfirmReason) => boolean | Promise<boolean> },
+  vet?: {
+    vetting: MemberVetting;
+    confirm?: (member: Member, reason: ConfirmReason) => boolean | Promise<boolean>;
+  },
 ): Promise<{ userId: string; wrappedKey: string }[]> {
   const out: { userId: string; wrappedKey: string }[] = [];
   for (const m of members) {

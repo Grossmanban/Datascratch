@@ -371,6 +371,16 @@
         }
       }
     },
+    "Also here: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Также здесь: %@"
+          }
+        }
+      }
+    },
     "An account with this email already exists on this device.": {
       "localizations": {
         "ru": {

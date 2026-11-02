@@ -21,6 +21,8 @@ final class ServerConnection: CoreLibraryRemote {
     let accounts: DSCore.AccountService
     let sync: SyncCenter
     private var engine: SyncEngine?
+    /// Who else has a note open (presence over the sync socket, never stored).
+    let presence = PresenceCenter()
     private var statusTask: Task<Void, Never>?
     /// `POST /notebooks` in flight; notebook and note documents are registered after it.
     private var notebookCreation: [String: Task<Void, Never>] = [:]
@@ -127,6 +129,16 @@ final class ServerConnection: CoreLibraryRemote {
             let signposter = Self.signposter
             await engine.setTraceHandler { event in signposter.emitEvent("sync", "\(String(describing: event), privacy: .public)") }
             core.remote = self
+            let presence = self.presence
+            if let email = (try? core.store.string(ServerAccountService.emailKey)) ?? nil, !email.isEmpty {
+                presence.me = (PresenceCenter.name(forEmail: email), PresenceCenter.color(for: email))
+            }
+            await engine.setAwarenessHandler { docId, payload, _ in
+                Task { @MainActor in presence.receive(docId, payload) }
+            }
+            presence.send = { docId, payload in
+                Task { try? await engine.sendAwareness(docId: docId, payload: payload) }
+            }
             await engine.start()
             await repairKeys(changes, engine: engine)
             observeStatus(engine)

@@ -329,6 +329,14 @@ struct NativeDocumentScreen: View {
                         NativeEditorRepresentable(editor: model.editor)
                             .accessibilityIdentifier("editor")
                             .modifier(MediaPickers(model: model))
+                            // Who else is in the note right now: small avatars, top right.
+                            .overlay(alignment: .topTrailing) {
+                                if let presence = app.connection?.presence {
+                                    PresenceAvatars(peers: presence.peers[noteId] ?? [])
+                                        .padding(.top, Theme.Space.s3)
+                                        .padding(.trailing, Theme.Space.s4)
+                                }
+                            }
                     }
                     // The column's width, never the editor's own: next to the list on an iPad mini
                     // in portrait it ran 18 pt past the screen edge.
@@ -414,8 +422,14 @@ struct NativeDocumentScreen: View {
         .navigationTitle(app.library.note(noteId)?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
-        .onAppear(perform: load)
-        .onDisappear { app.library.recordVersion(ofNote: noteId) }
+        .onAppear {
+            load()
+            app.connection?.presence.join(noteId)
+        }
+        .onDisappear {
+            app.library.recordVersion(ofNote: noteId)
+            app.connection?.presence.leave(noteId)
+        }
     }
 
     private func load() {
@@ -973,5 +987,50 @@ struct ViewOnlyBanner: View {
         .overlay(alignment: .bottom) { Rectangle().fill(Theme.Palette.separator).frame(height: 0.5) }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("viewOnly.banner")
+    }
+}
+
+/// The people in the note with you: overlapping initials in their colours, at most three and
+/// «+N»; nothing when you are alone. Quiet by design (owner: «elegant, unobtrusive»).
+struct PresenceAvatars: View {
+    let peers: [PresencePeer]
+    private var names: String { peers.map(\.name).joined(separator: ", ") }
+
+    var body: some View {
+        if !peers.isEmpty {
+            HStack(spacing: -6) {
+                ForEach(peers.prefix(3)) { peer in
+                    Text(peer.initial)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(Color(hex: peer.color) ?? Theme.Palette.accent))
+                        .overlay(Circle().strokeBorder(Theme.Palette.canvas, lineWidth: 2))
+                }
+                if peers.count > 3 {
+                    Text("+\(peers.count - 3)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(Theme.Palette.surface))
+                        .overlay(Circle().strokeBorder(Theme.Palette.canvas, lineWidth: 2))
+                }
+            }
+            .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .topTrailing)))
+            .animation(Theme.Motion.snappy, value: peers)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text("Also here: \(names)"))
+            .accessibilityIdentifier("document.presence")
+        }
+    }
+}
+
+private extension Color {
+    /// `#RGB` or `#RRGGBB` (presence colours are checked to be hex before they get here).
+    init?(hex: String) {
+        var s = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        if s.count == 3 { s = s.map { "\($0)\($0)" }.joined() }
+        guard s.count >= 6, let v = UInt64(s.prefix(6), radix: 16) else { return nil }
+        self.init(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
     }
 }

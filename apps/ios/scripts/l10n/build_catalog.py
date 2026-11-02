@@ -53,6 +53,7 @@ INTERPOLATIONS = {
     r"\($0.member.email) signed up — give access?": "%@ signed up — give access?",
     r"Opens when \(item.ownerEmail)’s device is online": "Opens when %@’s device is online",
     r"View only · \(owner) can edit": "View only · %@ can edit",
+    r"Also here: \(names)": "Also here: %@",
 }
 
 # Literals that look like text but are not translated (names, formats, prefixes).
@@ -67,6 +68,8 @@ IGNORE = {
     "Shared plans", "Roadmap", "Plan for two", "Ideas", "Only the owner edits this.", "• ", "☑ ", "———", "“", "”",
     # UI-test seed: a long note (scroll position across full screen).
     "Long", "Paragraph \\($0) of a long note.",
+    # Presence: the name sent when an account has no e-mail local part (not shown here).
+    "Me",
 }
 
 LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')

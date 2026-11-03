@@ -540,6 +540,10 @@ struct DocumentActions: ViewModifier {
     func body(content: Content) -> some View {
         let library = app.library
         content.contextMenu {
+            Button(note.folderId == nil ? LocalizedStringKey("Show in Notebook") : "Show in Folder",
+                   systemImage: "folder") {
+                scene.reveal(note.id)
+            }
             Button("Open in New Window", systemImage: "macwindow.badge.plus") {
                 openWindow(id: "note", value: note.id)
             }

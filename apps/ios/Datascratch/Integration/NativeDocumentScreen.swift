@@ -551,6 +551,10 @@ struct NativeEditorToolbar: ToolbarContent {
                     Button("Style…", systemImage: "textformat") { scene.sheet = .documentStyle(noteId: note.id) }
                     Menu("Cover", systemImage: "photo") { CoverMenuItems(note: note) }
                 }
+                Button(note.folderId == nil ? LocalizedStringKey("Show in Notebook") : "Show in Folder",
+                       systemImage: "folder") {
+                    scene.reveal(note.id)
+                }
                 Button("Version History", systemImage: "clock.arrow.circlepath") {
                     app.library.recordVersion(ofNote: note.id)
                     scene.sheet = .versions(noteId: note.id)

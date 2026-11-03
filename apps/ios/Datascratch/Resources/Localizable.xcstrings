@@ -3961,6 +3961,26 @@
         }
       }
     },
+    "Show in Folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать в папке"
+          }
+        }
+      }
+    },
+    "Show in Notebook": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать в блокноте"
+          }
+        }
+      }
+    },
     "Show your recovery key": {
       "localizations": {
         "ru": {

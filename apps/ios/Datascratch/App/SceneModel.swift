@@ -338,6 +338,13 @@ final class SceneModel {
         }
     }
 
+    /// The folder or notebook a document lives in, as the list beside it; the document stays
+    /// open (owner, 2026-11-03: «hold a document — open the folder where it is»).
+    func reveal(_ noteId: String) {
+        guard let note = library.note(noteId) else { return }
+        show(note.folderId.map(SidebarItem.folder) ?? .notebook(note.notebookId))
+    }
+
     func show(_ item: SidebarItem) {
         withAnimation(Theme.Motion.snappy) {
             if fullScreen == .content { fullScreen = nil }

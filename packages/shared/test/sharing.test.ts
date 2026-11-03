@@ -845,10 +845,14 @@ describe("shared spaces (D-62)", () => {
       addedAt: T,
     });
     expect(
-      reconcileSharedSpaces(account, [item("space", SPACE), item("notebook", NB)]).added,
+      reconcileSharedSpaces(account, [item("space", SPACE), item("notebook", NB)], ALICE).added,
     ).toEqual([SPACE]);
     expect(getSharedSpaceRefs(account).map((r) => r.spaceId)).toEqual([SPACE]);
-    expect(reconcileSharedSpaces(account, [item("notebook", NB)]).removed).toEqual([SPACE]);
+    expect(reconcileSharedSpaces(account, [item("notebook", NB)], ALICE).removed).toEqual([SPACE]);
+    // Not one's own space, nor a space of this account under another owner's name.
+    expect(reconcileSharedSpaces(account, [item("space", SPACE)], OWNER).added).toEqual([]);
+    account.getMap("spaces").set(SPACE, new Y.Map());
+    expect(reconcileSharedSpaces(account, [item("space", SPACE)], ALICE).added).toEqual([]);
   });
 
   it("opens space notebooks with the member's spaceKey and delivers it to accepted members", async () => {

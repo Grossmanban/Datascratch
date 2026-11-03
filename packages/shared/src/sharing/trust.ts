@@ -129,3 +129,18 @@ export function accountVetting(account: () => Y.Doc): MemberVetting {
     given: (target, userId, publicKey) => recordMemberKey(account(), target, userId, publicKey),
   };
 }
+
+/**
+ * May this account take a shared space from `/shared-with-me`? Not one it owns itself or that is
+ * among its own spaces (`account.spaces`): a server could otherwise slip its own key under a
+ * space of this account (crypto.md §10.6, D-62).
+ */
+export function isAcceptableSharedSpace(
+  account: Y.Doc,
+  item: { target: AccountTarget; owner: { userId: string } },
+  myUserId: string,
+): boolean {
+  if (item.target.kind !== "space") return false;
+  if (item.owner.userId === myUserId) return false;
+  return !accountRoots(account).spaces.has(item.target.id);
+}

@@ -1,4 +1,4 @@
-// Post-deploy check over the public address: web app, API health, sync WebSocket,
+// Post-deploy check over the public address: web app, API health, shared spaces API (401), sync WebSocket,
 // that image download by link refuses private addresses, and that /metrics is not exposed. Usage: node smoke.mjs https://example.com [timeoutSec]
 const base = (process.argv[2] ?? '').replace(/\/+$/, '');
 const deadline = Date.now() + Number(process.argv[3] ?? 300) * 1000;
@@ -119,6 +119,13 @@ try {
     const r = await fetch(`${base}/oauth/authorize`);
     const csp = r.headers.get('content-security-policy') ?? '';
     if (!csp.startsWith("default-src 'none'") || csp.includes("default-src 'self'")) throw new Error(`CSP: ${csp}`);
+  });
+  await retry('shared spaces API', async () => {
+    // D-62: the routes are there (an older server answers 404) and closed without a token.
+    const r = await fetch(`${base}/v1/spaces`);
+    const j = await r.json().catch(() => null);
+    if (r.status !== 401 || j?.error?.code !== 'unauthorized') throw new Error(`status ${r.status}`);
+    return 'answers 401 without a token';
   });
   await retry('sync WebSocket', wsCheck);
   await retry('image by link', fetchImageBlocksPrivate);

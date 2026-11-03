@@ -165,6 +165,12 @@ describe('a shared space', () => {
     expect((await call(editor, 'DELETE', `/notebooks/${nb.notebookId}`)).status).toBe(403);
     expect((await call(editor, 'PATCH', `/notebooks/${nb.notebookId}/mode`, { mode: 'private' })).status).toBe(403);
     expect((await call(editor, 'DELETE', `/docs/${noteId}`)).status).toBe(403);
+    // Notes move between notebooks of the space by an editor; out of the space only by the owner.
+    expect((await call(editor, 'PATCH', `/docs/${noteId}`, { notebookId: later.notebookId })).status).toBe(204);
+    expect((await call(viewer, 'PATCH', `/docs/${noteId}`, { notebookId: nb.notebookId })).status).toBe(403);
+    const editorsOwn = await personalNotebook(editor);
+    expect((await call(editor, 'PATCH', `/docs/${noteId}`, { notebookId: editorsOwn })).status).toBe(403);
+    expect((await call(owner, 'PATCH', `/docs/${noteId}`, { notebookId: nb.notebookId })).status).toBe(204);
     e.close();
     v.close();
   });
@@ -185,6 +191,13 @@ describe('a shared space', () => {
     const rotate = { version: 2, ownerWrappedKey: b64(rnd(73)), previousKeyWrap: b64(rnd(73)), memberKeys: [] };
     expect((await call(owner, 'POST', `/members/notebook/${nb.notebookId}/rotate`, rotate)).status).toBe(409);
     expect((await call(owner, 'POST', `/members/space/${spaceId}/rotate`, rotate)).status).toBe(400);
+    expect((await call(owner, 'POST', `/members/notebook/${nb.notebookId}/rotate/done`, {})).status).toBe(409);
+    expect((await call(owner, 'GET', `/members/notebook/${nb.notebookId}`)).status).toBe(409);
+    expect(
+      (await call(owner, 'PUT', `/members/notebook/${nb.notebookId}/${other.userId}/key`, { version: 1, wrappedKey: b64(rnd(73)) })).status,
+    ).toBe(409);
+    // Its key comes with the space's notebook list.
+    expect((await call(owner, 'GET', `/notebooks/${nb.notebookId}/key`)).status).toBe(409);
   });
 
   it('moves a personal notebook in (members see its history) and out with a new key (members lose it at once)', async () => {
@@ -338,7 +351,8 @@ describe('leaving, removal and the space rotation', () => {
     const late = await user(email);
     const accepted = await call(late, 'POST', `/invitations/${invitationId}/accept`, {});
     expect(accepted.body).toMatchObject({ docIds: [], wrappedKey: null });
-    expect((await call(late, 'GET', `/spaces/${spaceId}/notebooks`)).status).toBe(404);
+    // The wrappers alone open nothing (api.md): any member who accepted gets the list.
+    expect((await call(late, 'GET', `/spaces/${spaceId}/notebooks`)).status).toBe(200);
     expect((await spaceNotebook(late, spaceId)).status).toBe(404);
     const c = await SyncClient.user(s, late);
     expect((await c.subscribe(nb.notebookId)).error).toMatchObject({ code: 'doc_not_found' });

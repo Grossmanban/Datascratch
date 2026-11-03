@@ -9,18 +9,18 @@ import { CLEANUP_JOB } from '../jobs/index.js';
 import { fromB64, toB64 } from '../lib/encoding.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { noteKeyCache } from '../plugins/agent-key-cache.js';
-import { memberOf, requireOwnTarget, requireVisibleTarget } from '../services/sharing.js';
+import { requireOwnTarget, requireVisibleTarget } from '../services/sharing.js';
 import { topics } from '../sync/hub.js';
 import { errorResponses, id } from './schemas.js';
 import {
   createSpaceRequestSchema,
-  moveInRequestSchema,
-  moveOutRequestSchema,
+  moveOutNotebookRequestSchema as moveOutRequestSchema,
+  putSpaceNotebookRequestSchema as moveInRequestSchema,
+  rotateSpaceRequestSchema as spaceRotateRequestSchema,
+  sharedSpaceSchema as spaceSchema,
   spaceKeyResponseSchema,
   spaceNotebookSchema,
-  spaceRotateRequestSchema,
-  spaceSchema,
-} from './space-schemas.js';
+} from '@datascratch/shared/contracts';
 
 type SpaceRow = typeof spaces.$inferSelect;
 
@@ -135,12 +135,9 @@ export function spaceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       async (req) => {
         const p = await requireUser(ctx, req);
         const t = await requireVisibleTarget(db, p.userId, { kind: 'space', id: req.params.id });
-        if (t.ownerId !== p.userId) {
-          // Not before the owner lets a late account in (D-54). The wrappers are useless without
-          // the space key, so a member waiting for the key of a new version still gets them.
-          const m = await memberOf(db, t, p.userId);
-          if (!m || (m.accountCreatedAfterInvite && !m.wrappedKey)) throw notFound('space not found');
-        }
+        // The owner and any member who accepted, whatever the version of its key (api.md): the
+        // wrappers open nothing without the space key, and during a rotation the member keeps the list.
+
         const rows = await spaceNotebooks(db, t.id);
         return rows.map((n) => ({
           notebookId: n.id,

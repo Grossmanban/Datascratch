@@ -225,6 +225,8 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       async (req) => {
         const p = await requireUser(ctx, req);
         const nb = await ownNotebook(p.userId, req.params.id);
+        // A shared space's notebook key is under the space key: GET /spaces/:id/notebooks (api.md).
+        if (nb.spaceId) throw conflict('the notebook is in a shared space: its key comes with GET /spaces/:id/notebooks');
         return {
           wrappedKey: toB64(nb.wrappedKey),
           version: nb.keyVersion,
@@ -416,11 +418,22 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req, reply) => {
         const p = await requireUser(ctx, req);
-        const { doc, owner } = await visibleDoc(p, req.params.id);
-        // Moving a note out of a shared notebook is the owner's (members would lose it).
-        if (!owner) throw forbidden('only the owner can move this note');
+        const { doc, owner, write } = await visibleDoc(p, req.params.id);
         if (doc.kind !== 'note') throw badRequest('only note documents can be moved');
-        const to = await ownNotebook(p.userId, req.body.notebookId);
+        let to: typeof notebooks.$inferSelect;
+        if (owner) {
+          to = await ownNotebook(p.userId, req.body.notebookId);
+        } else {
+          // Moving a note out of a shared notebook is the owner's (members would lose it). Inside one
+          // shared space an editor moves notes between its notebooks: it holds both keys (D-62).
+          const [from] = doc.notebookId
+            ? await db.select({ spaceId: notebooks.spaceId }).from(notebooks).where(eq(notebooks.id, doc.notebookId))
+            : [];
+          const [target] = await db.select().from(notebooks).where(eq(notebooks.id, req.body.notebookId));
+          const sameSpace = from?.spaceId != null && target?.spaceId === from.spaceId;
+          if (!write || !sameSpace) throw forbidden('only the owner can move this note');
+          to = target!;
+        }
         if (doc.notebookId === req.body.notebookId) return reply.code(204).send(null);
         const [from] = doc.notebookId
           ? await db.select({ mode: notebooks.mode }).from(notebooks).where(eq(notebooks.id, doc.notebookId))

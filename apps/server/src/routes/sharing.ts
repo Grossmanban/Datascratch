@@ -4,12 +4,16 @@ import {
   MAX_INVITATIONS_PER_DAY,
   MAX_MEMBERS,
   boxKeySchema,
+  createInvitationRequestSchema,
+  incomingInvitationSchema,
   memberSchema,
   outgoingInvitationSchema,
   patchMemberRequestSchema,
   publicKeyResponseSchema,
   putMemberKeyRequestSchema,
   rotateKeyRequestSchema,
+  sharedByMeItemSchema,
+  sharedItemSchema,
   sharedNoteKeyResponseSchema,
 } from '@datascratch/shared/contracts';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -38,12 +42,6 @@ import {
 import { topics } from '../sync/hub.js';
 import { shareDocIds } from './shares.js';
 import { errorResponses, id } from './schemas.js';
-import {
-  incomingInvitationWithSpaceSchema as incomingInvitationSchema,
-  invitationRequestSchema as createInvitationRequestSchema,
-  sharedByMeItemWithSpaceSchema as sharedByMeItemSchema,
-  sharedItemWithSpaceSchema as sharedItemSchema,
-} from './space-schemas.js';
 
 const Kind = z.enum(['notebook', 'note', 'space']);
 const targetParams = z.object({ kind: Kind, id: id() });
@@ -493,6 +491,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       async (req) => {
         const p = await requireUser(ctx, req);
         const t = await requireVisibleTarget(db, p.userId, req.params);
+        refuseInsideSpace(t);
         const rows = await db
           .select({ m: members, email: users.email })
           .from(members)
@@ -699,6 +698,8 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         if (req.params.kind === 'space') throw badRequest('a shared space finishes with POST /spaces/:id/rotate/done');
         if (req.params.kind !== 'notebook') throw badRequest('a note rotation needs no done: rotate clears the flag');
         const t = await requireOwnTarget(db, p.userId, req.params);
+        // Inside a shared space the space's rotate/done clears it (api.md).
+        refuseInsideSpace(t);
         await db
           .update(notebooks)
           .set({ keyRotationPending: false, pendingSinceVersion: null })

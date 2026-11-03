@@ -635,7 +635,14 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
     }
 
     private var fields: [[UITextField]] = []
+    /// Wide tables scroll sideways inside the note: a column is as wide as its text (within
+    /// limits), so long cells are read by scrolling, not cut with «…» (owner, 2026-11-03 — a
+    /// finger on the text dragged the whole table away instead).
+    private let scroller = UIScrollView()
     private let grid = UIView()
+    private var columnWidths: [CGFloat] = []
+    static let minColumnWidth: CGFloat = 96
+    static let maxColumnWidth: CGFloat = 360
     private let addRow = UIButton(type: .system)
     private let addColumn = UIButton(type: .system)
     weak var factory: AttachmentFactory?
@@ -649,7 +656,13 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
         grid.layer.borderColor = EditorTheme.quoteBar.cgColor
         grid.clipsToBounds = true
         if grid.superview == nil {
-            addSubview(grid)
+            scroller.showsHorizontalScrollIndicator = true
+            scroller.showsVerticalScrollIndicator = false
+            scroller.alwaysBounceHorizontal = false
+            scroller.alwaysBounceVertical = false
+            scroller.accessibilityIdentifier = "table.scroll"
+            addSubview(scroller)
+            scroller.addSubview(grid)
             addRow.setTitle("+ строка", for: .normal)
             addColumn.setTitle("+ столбец", for: .normal)
             for b in [addRow, addColumn] {
@@ -684,17 +697,41 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
             }
             fields.append(line)
         }
+        columnWidths = Self.columnWidths(Self.rows(node), font: theme.font(size: 15, weight: .semibold))
         setNeedsLayout()
+    }
+
+    /// Each column as wide as its longest cell (with padding), between the limits.
+    static func columnWidths(_ rows: [[(text: String, header: Bool, align: NSTextAlignment)]], font: UIFont) -> [CGFloat] {
+        let count = rows.map(\.count).max() ?? 0
+        return (0..<count).map { c in
+            let widest = rows.compactMap { $0.indices.contains(c) ? $0[c].text : nil }
+                .map { ($0 as NSString).size(withAttributes: [.font: font]).width }
+                .max() ?? 0
+            return min(maxColumnWidth, max(minColumnWidth, ceil(widest) + 28))
+        }
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         let gridHeight = bounds.height - Self.controlsHeight
-        grid.frame = CGRect(x: 0, y: 0, width: bounds.width, height: gridHeight)
+        // Narrower than the note: the columns share the extra width; wider: it scrolls.
+        var widths = columnWidths
+        let natural = widths.reduce(0, +)
+        if natural > 0, natural < bounds.width {
+            let scale = bounds.width / natural
+            widths = widths.map { $0 * scale }
+        }
+        let gridWidth = max(bounds.width, widths.reduce(0, +))
+        scroller.frame = CGRect(x: 0, y: 0, width: bounds.width, height: gridHeight)
+        scroller.contentSize = CGSize(width: gridWidth, height: gridHeight)
+        grid.frame = CGRect(x: 0, y: 0, width: gridWidth, height: gridHeight)
         for (r, line) in fields.enumerated() {
-            let w = bounds.width / CGFloat(max(1, line.count))
+            var x: CGFloat = 0
             for (c, f) in line.enumerated() {
-                f.frame = CGRect(x: CGFloat(c) * w, y: CGFloat(r) * Self.rowHeight, width: w, height: Self.rowHeight)
+                let w = widths.indices.contains(c) ? widths[c] : bounds.width / CGFloat(max(1, line.count))
+                f.frame = CGRect(x: x, y: CGFloat(r) * Self.rowHeight, width: w, height: Self.rowHeight)
+                x += w
             }
         }
         addRow.frame = CGRect(x: 0, y: gridHeight, width: 90, height: Self.controlsHeight)

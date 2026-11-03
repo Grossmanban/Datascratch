@@ -297,6 +297,7 @@ public final class EditorView: UIView {
         textView.tapTargetAt = { [weak self] point in self?.hasTapTarget(at: point) ?? false }
         textView.allowsSystemScroll = { [weak self] in self?.userIsInteracting ?? true }
         textView.textDropDelegate = self
+        textView.textDragDelegate = self
         textView.richPaste = { [weak self] in self?.pasteRich() ?? false }
         textView.plainPaste = { [weak self] in self?.pastePlainText() }
         factory.imageMenu = { [weak self] block in self?.menu(forImage: block) }
@@ -2445,6 +2446,17 @@ extension EditorView: @preconcurrency UIEditMenuInteractionDelegate {
 }
 
 // MARK: - Dropping images
+
+extension EditorView: @preconcurrency UITextDragDelegate {
+    /// A table is not dragged out of the note by a finger that meant to scroll or read it (owner,
+    /// 2026-11-03: holding a cell's text lifted the whole table). Text and pictures drag as before.
+    public func textDraggableView(_ textDraggableView: UIView & UITextDraggable, itemsForDrag dragRequest: UITextDragRequest) -> [UIDragItem] {
+        let start = textView.offset(from: textView.beginningOfDocument, to: dragRequest.dragRange.start)
+        let (i, _) = projection.position(at: start)
+        if projection.paragraphs.indices.contains(i), projection.paragraphs[i].kind.type == NodeType.table { return [] }
+        return dragRequest.suggestedItems
+    }
+}
 
 extension EditorView: @preconcurrency UITextDropDelegate {
     /// Only images (photos dragged from Photos or Files), with the host accepting them.

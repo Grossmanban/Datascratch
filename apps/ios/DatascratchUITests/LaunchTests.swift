@@ -494,6 +494,9 @@ final class LibraryUITests: XCTestCase {
         let projects = app.buttons["folderCard.Projects"].firstMatch
         XCTAssertTrue(projects.exists && projects.isHittable, "no Projects card")
         projects.tap()
+        // A first-level folder shows the way back to its notebook too (owner, 2026-11-03).
+        XCTAssertTrue(app.descendants(matching: .any)["library.breadcrumb"].firstMatch.waitForExistence(timeout: 3),
+                      "no way back to the notebook from a first-level folder")
         let drafts = app.buttons["folderCard.Drafts"].firstMatch
         XCTAssertTrue(drafts.waitForExistence(timeout: 3), "the strip did not show Projects' subfolder")
         drafts.tap()

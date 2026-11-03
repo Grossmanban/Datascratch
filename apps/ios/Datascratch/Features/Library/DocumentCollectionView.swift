@@ -740,7 +740,9 @@ struct FolderBreadcrumb: View {
     var body: some View {
         let library = app.library
         let path = chain(library)
-        if let first = path.first, let notebook = library.notebook(first.notebookId), path.count > 1 {
+        // Every folder shows the way up, its notebook first — a first-level folder too (owner,
+        // 2026-11-03: from one level down there was no way back to the notebook).
+        if let first = path.first, let notebook = library.notebook(first.notebookId) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Theme.Space.s1) {
                     crumb(notebook.name) { scene.show(.notebook(notebook.id)) }

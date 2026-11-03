@@ -41,6 +41,7 @@ import {
   type BoxKeyPair,
   type Member,
   type NoteMeta,
+  type AccountSharedItem,
   type SharedItem,
   type Share,
   type SharingApi,
@@ -59,7 +60,7 @@ const NOTE2 = "0192f3c4-0000-7000-8000-00000000c002";
 const T = "2026-10-27T12:00:00.000Z";
 
 interface Resource {
-  kind: "notebook" | "note";
+  kind: "notebook" | "note" | "space";
   id: string;
   version: number;
   ownerWrappedKey: string;
@@ -132,6 +133,16 @@ class FakeServer {
       this.shares.delete(m[1]!);
       return this.res(204);
     }
+    if ((m = p.match(/^\/spaces\/([^/]+)\/key$/))) {
+      const r = this.resources.get(`space:${m[1]}`)!;
+      return this.res(200, {
+        version: r.version,
+        wrappedKey: r.ownerWrappedKey,
+        keyChain: r.keyChain,
+        keyRotationPending: r.pending,
+        pendingSinceVersion: r.pending ? (r.pendingSince ?? null) : null,
+      });
+    }
     if ((m = p.match(/^\/notebooks\/([^/]+)\/key$/))) {
       const r = this.resources.get(`notebook:${m[1]}`)!;
       return this.res(200, {
@@ -165,7 +176,7 @@ class FakeServer {
       );
     }
     if (p === "/shared-with-me") {
-      const items: SharedItem[] = [];
+      const items: AccountSharedItem[] = [];
       for (const r of this.resources.values()) {
         const mem = r.members.get(me);
         if (!mem) continue;
@@ -182,7 +193,7 @@ class FakeServer {
       }
       return this.res(200, items);
     }
-    if ((m = p.match(/^\/members\/(notebook|note)\/([^/]+)(?:\/(.*))?$/))) {
+    if ((m = p.match(/^\/members\/(notebook|note|space)\/([^/]+)(?:\/(.*))?$/))) {
       const r = this.resources.get(`${m[1]}:${m[2]}`)!;
       const rest = m[3];
       if (!rest && method === "GET") {
@@ -786,5 +797,106 @@ describe("sync client and sharing", () => {
     await until(() => dr.getText("t").toString().includes("ab"));
     await writer.stop();
     await reader.stop();
+  });
+});
+
+describe("shared spaces (D-62)", () => {
+  const SPACE = "0192f3c4-0000-7000-8000-00000000d101";
+  const NB_A = "0192f3c4-0000-7000-8000-00000000d102";
+
+  it("keeps the space document and the switcher placement", async () => {
+    const {
+      createSpaceDoc,
+      getSpaceMeta,
+      setSpaceMeta,
+      putSpaceNotebookRef,
+      getSpaceNotebookRefs,
+    } = await import("../src/index.js");
+    const doc = createSpaceDoc(SPACE, { name: "Команда", icon: "🚀" });
+    setSpaceMeta(doc, { color: "blue" });
+    expect(getSpaceMeta(doc)).toEqual({
+      formatVersion: 1,
+      spaceId: SPACE,
+      name: "Команда",
+      icon: "🚀",
+      color: "blue",
+    });
+    putSpaceNotebookRef(doc, {
+      id: NB_A,
+      name: "Планы",
+      icon: null,
+      color: null,
+      order: 1,
+      mode: "private",
+      createdAt: T,
+    });
+    expect(getSpaceNotebookRefs(doc).map((r) => r.id)).toEqual([NB_A]);
+
+    const { reconcileSharedSpaces, getSharedSpaceRefs } = await import("../src/index.js");
+    const account = new Y.Doc();
+    const item = (kind: "space" | "notebook", id: string) => ({
+      target: { kind, id },
+      owner: { userId: OWNER, email: "o@x.co", publicKey: toBase64Url(new Uint8Array(32)) },
+      role: "editor" as const,
+      keyVersion: 1,
+      wrappedKey: null,
+      keyChain: [],
+      docIds: [id],
+      addedAt: T,
+    });
+    expect(
+      reconcileSharedSpaces(account, [item("space", SPACE), item("notebook", NB)], ALICE).added,
+    ).toEqual([SPACE]);
+    expect(getSharedSpaceRefs(account).map((r) => r.spaceId)).toEqual([SPACE]);
+    expect(reconcileSharedSpaces(account, [item("notebook", NB)], ALICE).removed).toEqual([SPACE]);
+    // Not one's own space, nor a space of this account under another owner's name.
+    expect(reconcileSharedSpaces(account, [item("space", SPACE)], OWNER).added).toEqual([]);
+    account.getMap("spaces").set(SPACE, new Y.Map());
+    expect(reconcileSharedSpaces(account, [item("space", SPACE)], ALICE).added).toEqual([]);
+  });
+
+  it("opens space notebooks with the member's spaceKey and delivers it to accepted members", async () => {
+    const c = await import("../src/index.js");
+    const s = await setup();
+    const spaceKey = generateKey();
+    const nbKey = generateKey();
+    const entry = {
+      notebookId: NB_A,
+      version: 1,
+      spaceWrappedKey: c.wrapNotebookKeyForSpace(spaceKey, nbKey, SPACE, NB_A, 1),
+      keyChain: [],
+      mode: "private" as const,
+    };
+    expect(c.spaceNotebookKeys(entry, [generateKey(), spaceKey], SPACE).keys[0]).toEqual(nbKey);
+    expect(() => c.spaceNotebookKeys(entry, [generateKey()], SPACE)).toThrow();
+
+    // Owner side: the server lists the space in shared-by-me; Alice accepted, Bob is late.
+    const server = s.server as unknown as {
+      resources: Map<string, unknown>;
+    };
+    server.resources.set(`space:${SPACE}`, {
+      kind: "space",
+      id: SPACE,
+      version: 1,
+      ownerWrappedKey: c.wrapSpaceKey(s.masterKey, spaceKey, SPACE, 1),
+      keyChain: [],
+      pending: false,
+      members: new Map([
+        [ALICE, { role: "editor", wrappedKey: null }],
+        [BOB, { role: "viewer", wrappedKey: null, late: true }],
+      ]),
+    });
+    s.server.resources.delete(`notebook:${NB}`);
+    const r = await c.maintainOwnedSpaces({
+      api: s.server.api(OWNER),
+      owner: { userId: OWNER, secretKey: s.owner.secretKey },
+      masterKey: s.masterKey,
+    });
+    expect(r).toEqual([{ target: { kind: "space", id: SPACE }, delivered: [ALICE] }]);
+    const items = await s.server.api(ALICE).sharedWithMeAll();
+    const mine = c.sharedItemKeys(items[0]!, { userId: ALICE, secretKey: s.alice.secretKey })!;
+    expect(mine.keys[0]).toEqual(spaceKey);
+    // The D-54 lists leave spaces out.
+    expect(await s.server.api(ALICE).sharedWithMe()).toEqual([]);
   });
 });

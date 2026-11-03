@@ -1,5 +1,5 @@
 // Owner-side member key delivery (api.md «Совместный доступ», crypto.md §10.2).
-import type { Member, ShareTarget } from "../contracts/api.js";
+import type { Member, AccountTarget } from "../contracts/api.js";
 import { fromBase64Url } from "../crypto/base64url.js";
 import { wrapKeyForMember } from "../crypto/sharing.js";
 import type { SharingApi } from "./api.js";
@@ -11,7 +11,7 @@ export interface OwnerIdentity {
 }
 
 function wrapFor(
-  target: ShareTarget,
+  target: AccountTarget,
   key: Uint8Array,
   version: number,
   owner: OwnerIdentity,
@@ -43,11 +43,11 @@ export type ConfirmReason =
  */
 export interface MemberVetting {
   check(
-    target: ShareTarget,
+    target: AccountTarget,
     member: Member,
     publicKey: string,
   ): ConfirmReason | null | Promise<ConfirmReason | null>;
-  given(target: ShareTarget, userId: string, publicKey: string): void | Promise<void>;
+  given(target: AccountTarget, userId: string, publicKey: string): void | Promise<void>;
 }
 
 /** A key for `member` was refused (the owner said no, or no one could be asked). */
@@ -68,7 +68,7 @@ export class MemberNotConfirmedError extends Error {
  */
 export async function wrapForMembers(
   api: Pick<SharingApi, "getPublicKey">,
-  target: ShareTarget,
+  target: AccountTarget,
   key: Uint8Array,
   version: number,
   owner: OwnerIdentity,
@@ -104,7 +104,7 @@ export async function wrapForMembers(
  */
 export async function deliverAwaitingKeys(options: {
   api: Pick<SharingApi, "listMembers" | "getPublicKey" | "putMemberKey">;
-  target: ShareTarget;
+  target: AccountTarget;
   keys: VersionedKeys;
   owner: OwnerIdentity;
   confirm?: (member: Member, reason: ConfirmReason) => boolean | Promise<boolean>;

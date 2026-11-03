@@ -191,9 +191,23 @@ export function apiVectors() {
         valid: [
           { notebookId: ID, mode: "private", wrappedKey: "AQ" },
           { notebookId: ID, mode: "agent", wrappedKey: "AQ", notebookKey: KEY },
-          { notebookId: ID, mode: "private", wrappedKey: "AQ", spaceId: vid(6) },
+          {
+            notebookId: ID,
+            mode: "private",
+            wrappedKey: "AQ",
+            spaceId: vid(6),
+            spaceKeyVersion: 2,
+          },
         ],
         invalid: [
+          {
+            reason: "spaceId without spaceKeyVersion",
+            body: { notebookId: ID, mode: "private", wrappedKey: "AQ", spaceId: vid(6) },
+          },
+          {
+            reason: "spaceKeyVersion without spaceId",
+            body: { notebookId: ID, mode: "private", wrappedKey: "AQ", spaceKeyVersion: 1 },
+          },
           {
             reason: "agent mode without notebookKey",
             body: { notebookId: ID, mode: "agent", wrappedKey: "AQ" },
@@ -264,12 +278,6 @@ export function apiVectors() {
       },
       createInvitationRequest: {
         valid: [
-          {
-            invitationId: ID,
-            target: { kind: "space", id: vid(6) },
-            email: "a@b.co",
-            role: "editor",
-          },
           {
             invitationId: ID,
             target: { kind: "notebook", id: vid(3) },
@@ -517,6 +525,111 @@ export function apiVectors() {
           {
             reason: "author without kind",
             body: { seq: 9, createdAt: T, deviceId: "d", authors: [{ userId: vid(4) }] },
+          },
+        ],
+      },
+      accountCreateInvitationRequest: {
+        valid: [
+          {
+            invitationId: ID,
+            target: { kind: "space", id: vid(6) },
+            email: "a@b.co",
+            role: "editor",
+          },
+          {
+            invitationId: ID,
+            target: { kind: "notebook", id: vid(3) },
+            email: "a@b.co",
+            role: "viewer",
+          },
+        ],
+        invalid: [
+          {
+            reason: "folders cannot be shared",
+            body: {
+              invitationId: ID,
+              target: { kind: "folder", id: vid(3) },
+              email: "a@b.co",
+              role: "viewer",
+            },
+          },
+        ],
+      },
+      accountIncomingInvitation: {
+        valid: [
+          {
+            id: ID,
+            target: { kind: "space", id: vid(6) },
+            from: { userId: vid(4), email: "owner@b.co" },
+            role: "editor",
+            createdAt: T,
+            expiresAt: T,
+          },
+        ],
+        invalid: [
+          {
+            reason: "unknown kind",
+            body: {
+              id: ID,
+              target: { kind: "folder", id: vid(6) },
+              from: { userId: vid(4), email: "o@b.co" },
+              role: "editor",
+              createdAt: T,
+              expiresAt: T,
+            },
+          },
+        ],
+      },
+      accountSharedItem: {
+        valid: [
+          {
+            target: { kind: "space", id: vid(6) },
+            owner: { userId: vid(4), email: "owner@b.co", publicKey: KEY },
+            role: "editor",
+            keyVersion: 2,
+            wrappedKey: "AQ",
+            keyChain: ["AQ"],
+            docIds: [vid(6), vid(3), vid(5)],
+            addedAt: T,
+          },
+        ],
+        invalid: [
+          {
+            reason: "unknown kind",
+            body: {
+              target: { kind: "folder", id: vid(6) },
+              owner: { userId: vid(4), email: "o@b.co", publicKey: KEY },
+              role: "editor",
+              keyVersion: 1,
+              wrappedKey: null,
+              keyChain: [],
+              docIds: [],
+              addedAt: T,
+            },
+          },
+        ],
+      },
+      accountSharedByMeItem: {
+        valid: [
+          {
+            target: { kind: "space", id: vid(6) },
+            keyVersion: 1,
+            keyRotationPending: false,
+            pendingSinceVersion: null,
+            members: 2,
+            awaitingKey: 1,
+          },
+        ],
+        invalid: [
+          {
+            reason: "unknown kind",
+            body: {
+              target: { kind: "folder", id: vid(6) },
+              keyVersion: 1,
+              keyRotationPending: false,
+              members: 0,
+              awaitingKey: 0,
+            },
           },
         ],
       },

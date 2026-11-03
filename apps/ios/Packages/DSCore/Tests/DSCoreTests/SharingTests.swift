@@ -699,6 +699,35 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         await #expect(throws: SharingError.olderKey(version: 1, known: 2)) { try await ipad.service.notebookKeyForWriting(nbId) }
     }
 
+    /// A rotation made on one device of the owner reaches another that held version 1: it is a
+    /// real key change, not a key that device invented — nothing to re-wrap, the old key stays
+    /// for reading (the owner's iPad «waited for a key», 2026-11-03).
+    @Test func rotationFromAnotherDeviceIsNotAReplacedKey() async throws {
+        let server = FakeSharingServer()
+        let o = try await Self.owner(server)
+        let nbId = o.notebook.notebookId
+        try await o.device.service.migrateMemberTrust()
+        let ipad = try await SharingFlowTests.device(server, userId: o.device.userId, email: "owner@x.co",
+                                                     master: try #require(try o.device.service.keys.masterKey()))
+        #expect(try await ipad.service.reconcileNotebookKeys().isEmpty)
+        let key1 = try #require(try ipad.service.keys.notebookKey(nbId))
+
+        let anna = try await Self.person(server, "anna@x.co")
+        let inv = try await o.device.service.invite("anna@x.co", role: .editor, to: o.target)
+        _ = try await anna.service.acceptInvitation(id: inv)
+        let (k1, v1) = try await o.device.service.ownerKey(notebookId: nbId)
+        try await o.device.service.grantPendingKeys(to: o.target, key: k1, version: v1)
+        try await o.device.service.api.removeMember(userId: anna.userId, from: o.target)
+        #expect(try await o.device.service.resumeNotebookRotation(o.notebook))
+        let (key2, v2) = try await o.device.service.ownerKey(notebookId: nbId)
+        #expect(v2 == 2)
+
+        #expect(try await ipad.service.reconcileNotebookKeys().isEmpty, "a real rotation is not a replaced key")
+        #expect(try ipad.service.keys.notebookKey(nbId) == key2)
+        #expect(ipad.service.keys.notebookKeyVersion(nbId) == 2)
+        #expect(ipad.service.keys.retiredNotebookKeys(nbId).contains(key1), "the old key still opens older wrappings")
+    }
+
     /// «Shared with me» pointing at this account's own notebook or note (to swap its key for one
     /// the server chose), or naming this account as the owner: ignored.
     @Test func sharedItemForOwnNotebookOrNoteIsIgnored() async throws {

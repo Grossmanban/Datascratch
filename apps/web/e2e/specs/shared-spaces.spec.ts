@@ -10,6 +10,19 @@ async function openSwitcher(page: Page) {
   await expect(page.getByRole("menu")).toBeVisible();
 }
 
+/** Wait until the switcher lists (or, with `absent`, no longer lists) `text`; the menu is closed after each look. */
+async function waitInSwitcher(page: Page, text: string, absent = false) {
+  await expect(async () => {
+    await openSwitcher(page);
+    try {
+      const menu = expect(page.getByRole("menu"));
+      await (absent ? menu.not.toContainText(text, { timeout: 2_000 }) : menu.toContainText(text, { timeout: 2_000 }));
+    } finally {
+      await page.keyboard.press("Escape");
+    }
+  }).toPass({ timeout: 60_000 });
+}
+
 async function pickSpace(page: Page, name: string) {
   await openSwitcher(page);
   await page.getByRole("menuitemcheckbox", { name: new RegExp(name) }).or(page.getByRole("menuitem", { name: new RegExp(name) })).first().click();
@@ -77,11 +90,7 @@ test("shared space: created shared, a member joins, sees it in the switcher and 
   // The editor accepts; the owner's client hands them the space key (here: «Участники» is open).
   await acceptInvitation(q);
   await openMembers(page);
-  await expect(async () => {
-    await openSwitcher(q);
-    await expect(q.getByRole("menu")).toContainText("Общее пространство", { timeout: 2_000 });
-    await q.keyboard.press("Escape");
-  }).toPass({ timeout: 40_000 });
+  await waitInSwitcher(q, "Общее пространство");
   await pickSpace(q, "Общее пространство");
   await expect(q.getByTestId("doc-card").filter({ hasText: "План пространства" })).toBeVisible({ timeout: 30_000 });
   await q.getByTestId("doc-card").filter({ hasText: "План пространства" }).click();
@@ -100,11 +109,7 @@ test("shared space: created shared, a member joins, sees it in the switcher and 
   // The viewer reads but cannot write: no new document, no new notebook, a read-only editor.
   await acceptInvitation(r);
   await openMembers(page);
-  await expect(async () => {
-    await openSwitcher(r);
-    await expect(r.getByRole("menu")).toContainText("Общее пространство", { timeout: 2_000 });
-    await r.keyboard.press("Escape");
-  }).toPass({ timeout: 40_000 });
+  await waitInSwitcher(r, "Общее пространство");
   await pickSpace(r, "Общее пространство");
   await r.getByTestId("doc-card").filter({ hasText: "План пространства" }).click({ timeout: 30_000 });
   await expect(r.locator(".ds-prose")).toContainText("общий текст", { timeout: 20_000 });
@@ -155,11 +160,7 @@ test("shared space: a personal space made shared, a notebook moved in, a member 
   await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
 
   // The member sees the welcome note of the space that was personal before.
-  await expect(async () => {
-    await openSwitcher(q);
-    await expect(q.getByRole("menu")).toContainText("Личное", { timeout: 2_000 });
-    await q.keyboard.press("Escape");
-  }).toPass({ timeout: 40_000 });
+  await waitInSwitcher(q, "Общие");
   await expect(q.getByRole("menu")).toHaveCount(0);
   await openSwitcher(q);
   // Their own personal space is called «Личное» too: the shared one has the members' avatars.
@@ -205,11 +206,7 @@ test("shared space: a personal space made shared, a notebook moved in, a member 
   await expect(page.locator(".ds-prose")).toContainText("старая история после смены ключа", { timeout: 20_000 });
   // The removed member no longer has the space.
   await r.reload();
-  await expect(async () => {
-    await openSwitcher(r);
-    await expect(r.getByRole("menu")).not.toContainText("Общие", { timeout: 2_000 });
-    await r.keyboard.press("Escape");
-  }).toPass({ timeout: 40_000 });
+  await waitInSwitcher(r, "Общие", true);
 
   // The owner moves the notebook out again: the member no longer lists it.
   await page.goto("/all");

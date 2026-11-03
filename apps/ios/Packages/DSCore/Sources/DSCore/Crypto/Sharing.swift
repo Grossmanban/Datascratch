@@ -4,6 +4,8 @@ import Foundation
 /// What can be shared with another account (D-54).
 public enum ShareTargetKind: String, Codable, Hashable, Sendable {
     case notebook, note
+    /// A whole space (D-62, crypto.md §11).
+    case space
 }
 
 /// An account's X25519 key pair (crypto.md §10.1).
@@ -35,6 +37,12 @@ extension CryptoAD {
     /// Key of a notebook or note at `version` (§10.3): version 1 keeps the original `ad`.
     public static func targetKey(_ kind: ShareTargetKind, _ id: String, version: Int) -> String {
         version <= 1 ? "ds1|key|\(kind.rawValue)|\(id)" : "ds1|key|\(kind.rawValue)|\(id)|\(version)"
+    }
+
+    /// A notebook key of a shared space, wrapped by the space key (crypto.md §11.1): the version
+    /// is the notebook key's, always in the `ad`.
+    public static func spaceNotebookKey(spaceId: String, notebookId: String, version: Int) -> String {
+        "ds1|key|space-notebook|\(spaceId)|\(notebookId)|\(version)"
     }
 
     public static func memberKey(_ r: MemberKeyRef) -> String {

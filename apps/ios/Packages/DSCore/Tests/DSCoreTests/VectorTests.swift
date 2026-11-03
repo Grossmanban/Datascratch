@@ -408,6 +408,18 @@ struct EncodingVectorTests {
             "sharedItem": { _ = try JSONDecoder().decode(SharedItem.self, from: $0) },
             "sharedByMeItem": { _ = try JSONDecoder().decode(SharedByMeItem.self, from: $0) },
             "notebookKeyResponse": { _ = try JSONDecoder().decode(NotebookKeyState.self, from: $0) },
+            "sharedSpace": { _ = try JSONDecoder().decode(SharedSpace.self, from: $0) },
+            "createSpaceRequest": { _ = try JSONDecoder().decode(CreateSpaceRequest.self, from: $0) },
+            "spaceKeyResponse": { _ = try JSONDecoder().decode(SpaceKeyState.self, from: $0) },
+            "spaceNotebook": { _ = try JSONDecoder().decode(SpaceNotebook.self, from: $0) },
+            "putSpaceNotebookRequest": { _ = try JSONDecoder().decode(SpaceNotebookKeyRequest.self, from: $0) },
+            "rotateSpaceRequest": { _ = try JSONDecoder().decode(RotateSpaceRequest.self, from: $0) },
+            "moveOutNotebookRequest": { _ = try JSONDecoder().decode(MoveOutRequest.self, from: $0) },
+            // Sharing bodies with `space` among the kinds (D-62): the same Swift types.
+            "accountCreateInvitationRequest": { _ = try JSONDecoder().decode(CreateInvitationRequest.self, from: $0) },
+            "accountIncomingInvitation": { _ = try JSONDecoder().decode(IncomingInvitation.self, from: $0) },
+            "accountSharedItem": { _ = try JSONDecoder().decode(SharedItem.self, from: $0) },
+            "accountSharedByMeItem": { _ = try JSONDecoder().decode(SharedByMeItem.self, from: $0) },
             "docVersion": { _ = try JSONDecoder().decode(DocVersion.self, from: $0) },
         ]
         for (name, c) in cases {

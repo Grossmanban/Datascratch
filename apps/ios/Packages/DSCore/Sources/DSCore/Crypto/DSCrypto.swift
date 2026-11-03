@@ -56,6 +56,7 @@ public struct PasswordKeys: Sendable {
 /// Associated data strings binding ciphertexts to their place (crypto.md §3).
 public enum CryptoAD {
     public static func doc(_ docId: String) -> String { "ds1|doc|\(docId)" }
+    // Space key (owner, under the master key): `CryptoAD.targetKey(.space, id, version:)`.
     public static func awareness(_ docId: String) -> String { "ds1|awareness|\(docId)" }
     public static func masterByPassword(userId: String) -> String { "ds1|key|master|password|\(userId)" }
     public static func masterByRecovery(userId: String) -> String { "ds1|key|master|recovery|\(userId)" }

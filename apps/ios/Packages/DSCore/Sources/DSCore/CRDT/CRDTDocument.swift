@@ -6,6 +6,8 @@ public enum DocKind: String, Codable, Sendable, CaseIterable {
     case account
     case notebook
     case note
+    /// A shared space (D-62): name, icon, colour and its notebooks; encrypted with the space key.
+    case space
 
     /// Root shared types of this kind of document.
     public var roots: [RootDef] {
@@ -20,6 +22,8 @@ public enum DocKind: String, Codable, Sendable, CaseIterable {
                 RootDef(name: "tabs", kind: .array),
                 // What this account did in sharing, checked against the server (`TrustRecord`).
                 RootDef(name: "trust", kind: .map),
+                // Shared spaces this account is a member of: placement only (D-62).
+                RootDef(name: "sharedSpaces", kind: .map),
             ]
         case .notebook:
             return [
@@ -34,6 +38,11 @@ public enum DocKind: String, Codable, Sendable, CaseIterable {
                 RootDef(name: "meta", kind: .map),
                 RootDef(name: "strokes", kind: .map),
                 RootDef(name: "comments", kind: .map),
+            ]
+        case .space:
+            return [
+                RootDef(name: "meta", kind: .map),
+                RootDef(name: "notebooks", kind: .map),
             ]
         }
     }

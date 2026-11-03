@@ -1,8 +1,15 @@
 // «Общие со мной» placement in the account document (document-model.md §2, D-54).
 import type * as Y from "yjs";
-import type { SharedItem, ShareTarget } from "../contracts/api.js";
+import type { AccountSharedItem, SharedItem, ShareTarget } from "../contracts/api.js";
 import type { SharedRef } from "../contracts/document.js";
-import { deleteSharedRef, getSharedRefs, putSharedRef } from "../document/records.js";
+import {
+  deleteSharedRef,
+  deleteSharedSpaceRef,
+  getSharedRefs,
+  getSharedSpaceRefs,
+  putSharedRef,
+  putSharedSpaceRef,
+} from "../document/records.js";
 
 /**
  * Align `account.shared` with `GET /shared-with-me`: resources new to this
@@ -39,6 +46,37 @@ export function reconcileSharedRefs(
       if (live.has(`${ref.kind}:${ref.id}`)) continue;
       deleteSharedRef(account, ref.kind, ref.id);
       removed.push({ kind: ref.kind, id: ref.id });
+    }
+  });
+  return { added, removed };
+}
+
+/**
+ * Align `account.sharedSpaces` with `GET /shared-with-me` (document-model.md §2.1, D-62): shared
+ * spaces of others new to this account go to the end of the switcher; spaces no longer shared
+ * are removed. Returns the removed spaceIds — the app drops their tabs, stars and local data.
+ */
+export function reconcileSharedSpaces(
+  account: Y.Doc,
+  items: AccountSharedItem[],
+  now: () => Date = () => new Date(),
+): { added: string[]; removed: string[] } {
+  const refs = getSharedSpaceRefs(account);
+  const known = new Set(refs.map((r) => r.spaceId));
+  const live = new Set(items.filter((i) => i.target.kind === "space").map((i) => i.target.id));
+  const added: string[] = [];
+  const removed: string[] = [];
+  let order = refs.reduce((m, r) => Math.max(m, r.order), 0);
+  account.transact(() => {
+    for (const spaceId of live) {
+      if (known.has(spaceId)) continue;
+      putSharedSpaceRef(account, spaceId, { order: ++order, addedAt: now().toISOString() });
+      added.push(spaceId);
+    }
+    for (const ref of refs) {
+      if (live.has(ref.spaceId)) continue;
+      deleteSharedSpaceRef(account, ref.spaceId);
+      removed.push(ref.spaceId);
     }
   });
   return { added, removed };

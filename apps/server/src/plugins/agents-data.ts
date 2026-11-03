@@ -185,6 +185,16 @@ export class PgAgentDataSource implements AgentDataSource {
         .innerJoin(users, eq(users.id, members.ownerId))
         .where(and(eq(members.userId, userId), inArray(members.notebookId, foreign)));
       for (const m of ms) shared.set(m.notebookId!, { ownerUserId: m.ownerUserId, ownerEmail: m.ownerEmail, role: m.role });
+      // Notebooks of a shared space the user is a member of (D-62): the member's role on the space.
+      const inSpaces = await this.ctx.database.db
+        .select({ notebookId: notebooks.id, ownerUserId: members.ownerId, ownerEmail: users.email, role: members.role })
+        .from(notebooks)
+        .innerJoin(members, and(eq(members.spaceId, notebooks.spaceId), eq(members.userId, userId)))
+        .innerJoin(users, eq(users.id, members.ownerId))
+        .where(inArray(notebooks.id, foreign));
+      for (const m of inSpaces) {
+        if (!shared.has(m.notebookId)) shared.set(m.notebookId, { ownerUserId: m.ownerUserId, ownerEmail: m.ownerEmail, role: m.role });
+      }
     }
     // Names live in the account document (masterKey) — the server cannot read them.
     return rows.map((r) => ({

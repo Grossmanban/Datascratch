@@ -3,17 +3,17 @@ import {
   INVITATION_TTL_MS,
   MAX_INVITATIONS_PER_DAY,
   MAX_MEMBERS,
+  accountCreateInvitationRequestSchema as createInvitationRequestSchema,
+  accountIncomingInvitationSchema as incomingInvitationSchema,
+  accountSharedByMeItemSchema as sharedByMeItemSchema,
+  accountSharedItemSchema as sharedItemSchema,
   boxKeySchema,
-  createInvitationRequestSchema,
-  incomingInvitationSchema,
   memberSchema,
   outgoingInvitationSchema,
   patchMemberRequestSchema,
   publicKeyResponseSchema,
   putMemberKeyRequestSchema,
   rotateKeyRequestSchema,
-  sharedByMeItemSchema,
-  sharedItemSchema,
   sharedNoteKeyResponseSchema,
 } from '@datascratch/shared/contracts';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -32,6 +32,7 @@ import {
   memberTargetCol,
   requireOwnTarget,
   requireVisibleTarget,
+  targetOfRow,
   targetValues,
   type MemberRow,
   type Target,
@@ -42,21 +43,55 @@ import { topics } from '../sync/hub.js';
 import { shareDocIds } from './shares.js';
 import { errorResponses, id } from './schemas.js';
 
-const Kind = z.enum(['notebook', 'note']);
+const Kind = z.enum(['notebook', 'note', 'space']);
 const targetParams = z.object({ kind: Kind, id: id() });
 const DAY_MS = 86_400_000;
 
 type InvitationRow = typeof invitations.$inferSelect;
 
-const targetOf = (r: { notebookId: string | null; noteId: string | null }): Target =>
-  r.notebookId ? { kind: 'notebook', id: r.notebookId } : { kind: 'note', id: r.noteId! };
+const targetOf = targetOfRow;
 
 /** Whether a member can use the key it holds: delivered for the target's current version. */
 const hasCurrentKey = (m: MemberRow, t: TargetRow) => m.wrappedKey !== null && m.keyVersion === t.keyVersion;
 
-/** Documents of a shared target, for SharedItem.docIds (the notebook index first). */
+/**
+ * Documents of a shared target, for SharedItem.docIds (the notebook index first). A shared space
+ * (D-62): its document, then every notebook of it with its notes.
+ */
 async function targetDocIds(db: DbOrTx, t: TargetRow): Promise<string[]> {
-  return shareDocIds(db, { userId: t.ownerId, targetKind: t.kind, targetId: t.id });
+  if (t.kind !== 'space') return shareDocIds(db, { userId: t.ownerId, targetKind: t.kind, targetId: t.id });
+  const ids = [t.id];
+  for (const nb of await spaceNotebookIds(db, t.id)) {
+    ids.push(...(await shareDocIds(db, { userId: t.ownerId, targetKind: 'notebook', targetId: nb })));
+  }
+  return ids;
+}
+
+/** Notebooks of a shared space, oldest first. */
+export async function spaceNotebookIds(db: DbOrTx, spaceId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: notebooks.id })
+    .from(notebooks)
+    .where(eq(notebooks.spaceId, spaceId))
+    .orderBy(asc(notebooks.createdAt));
+  return rows.map((r) => r.id);
+}
+
+/** Drop the agents' cached keys of a target (a space: of all its notebooks). */
+async function forgetAgentKeys(db: DbOrTx, t: Target) {
+  if (t.kind === 'notebook') noteKeyCache.forgetNotebooks([t.id]);
+  else if (t.kind === 'note') noteKeyCache.forgetNotes([t.id]);
+  else noteKeyCache.forgetNotebooks(await spaceNotebookIds(db, t.id));
+}
+
+/**
+ * A notebook of a shared space, or a note in one, has no members, invitations or keys of its
+ * own: the space's members see it, and the space rotation changes its key (D-62, api.md).
+ */
+function refuseInsideSpace(t: TargetRow) {
+  if (t.kind !== 'space' && t.spaceId !== null) {
+    throw conflict(`this ${t.kind} is part of a shared space: share or rotate the space instead`);
+  }
 }
 
 export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
@@ -158,7 +193,8 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
                  OR (m.user_id = ${p.userId} AND (NOT m.account_created_after_invite OR m.wrapped_key IS NOT NULL) AND EXISTS (
                       SELECT 1 FROM members o WHERE o.user_id = ${other}
                         AND o.notebook_id IS NOT DISTINCT FROM m.notebook_id
-                        AND o.note_id IS NOT DISTINCT FROM m.note_id))
+                        AND o.note_id IS NOT DISTINCT FROM m.note_id
+                        AND o.space_id IS NOT DISTINCT FROM m.space_id))
               LIMIT 1`)
           ).rows.length > 0;
         const [u] = related
@@ -186,6 +222,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         const b = req.body;
         await db.transaction(async (tx) => {
           const t = await requireOwnTarget(tx, p.userId, b.target, true);
+          refuseInsideSpace(t);
           const [me] = await tx
             .select({ email: users.email, pk: users.boxPublicKey })
             .from(users)
@@ -269,7 +306,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         schema: {
           tags: ['sharing'],
           security,
-          querystring: z.object({ target: z.string().regex(/^(notebook|note):[0-9a-f-]{36}$/) }),
+          querystring: z.object({ target: z.string().regex(/^(notebook|note|space):[0-9a-f-]{36}$/) }),
           response: { 200: z.array(outgoingInvitationSchema), ...errorResponses },
         },
       },
@@ -454,6 +491,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       async (req) => {
         const p = await requireUser(ctx, req);
         const t = await requireVisibleTarget(db, p.userId, req.params);
+        refuseInsideSpace(t);
         const rows = await db
           .select({ m: members, email: users.email })
           .from(members)
@@ -499,7 +537,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         if (rows.length === 0) throw notFound('member not found');
         accessChanged(req.params.userId);
         // A member's agents work with the member's role (D-54): their cached keys go with it.
-        if (t.kind === 'notebook') noteKeyCache.forgetNotebooks([t.id]);
+        await forgetAgentKeys(db, t);
         return reply.code(204).send(null);
       },
     );
@@ -529,8 +567,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         // Access closes at once (agents of the member too: RLS checks membership on every
         // call, and their cached keys go); the key rotation is flagged by the members_gone trigger.
         accessChanged(req.params.userId);
-        if (t!.kind === 'notebook') noteKeyCache.forgetNotebooks([t!.id]);
-        else noteKeyCache.forgetNotes([t!.id]);
+        await forgetAgentKeys(db, t!);
         return reply.code(204).send(null);
       },
     );
@@ -550,6 +587,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         const p = await requireUser(ctx, req);
         await db.transaction(async (tx) => {
           const t = await requireOwnTarget(tx, p.userId, req.params, true);
+          refuseInsideSpace(t);
           if (req.body.version !== t.keyVersion) throw conflict('key version is not current');
           const rows = await tx
             .update(members)
@@ -578,6 +616,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       async (req, reply) => {
         const p = await requireUser(ctx, req);
         const b = req.body;
+        if (req.params.kind === 'space') throw badRequest('a shared space rotates with POST /spaces/:id/rotate');
         const t0 = await loadTarget(db, req.params);
         if (t0?.kind === 'notebook' && t0.ownerId === p.userId) {
           if (t0.mode === 'agent' && !b.notebookKey) throw badRequest('notebookKey is required for an agent-mode notebook');
@@ -591,6 +630,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         await db.transaction(async (tx) => {
           // One transaction under the target's row lock: of two concurrent rotations only one passes.
           const t = await requireOwnTarget(tx, p.userId, req.params, true);
+          refuseInsideSpace(t);
           if (b.version !== t.keyVersion + 1) throw conflict('version must be the current one + 1');
           const current = await tx.select().from(members).where(eq(memberTargetCol(t.kind), t.id));
           // Exactly the active members (api.md): a member awaiting its key gets the new version
@@ -655,8 +695,11 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req, reply) => {
         const p = await requireUser(ctx, req);
+        if (req.params.kind === 'space') throw badRequest('a shared space finishes with POST /spaces/:id/rotate/done');
         if (req.params.kind !== 'notebook') throw badRequest('a note rotation needs no done: rotate clears the flag');
         const t = await requireOwnTarget(db, p.userId, req.params);
+        // Inside a shared space the space's rotate/done clears it (api.md).
+        refuseInsideSpace(t);
         await db
           .update(notebooks)
           .set({ keyRotationPending: false, pendingSinceVersion: null })
@@ -704,16 +747,19 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           awaiting_key: number;
         }>(sql`
           WITH targets AS (
-            SELECT notebook_id, note_id FROM members WHERE owner_id = ${p.userId}
+            SELECT notebook_id, note_id, space_id FROM members WHERE owner_id = ${p.userId}
             UNION
-            SELECT notebook_id, note_id FROM invitations
+            SELECT notebook_id, note_id, space_id FROM invitations
             WHERE owner_id = ${p.userId} AND status = 'pending' AND expires_at > now()
             -- After the last member left the key must still change (and guest links be
             -- re-created): a pending rotation keeps the resource listed until it is done.
             UNION
-            SELECT id, NULL FROM notebooks WHERE user_id = ${p.userId} AND key_rotation_pending
+            SELECT id, NULL, NULL FROM notebooks WHERE user_id = ${p.userId} AND key_rotation_pending AND space_id IS NULL
             UNION
-            SELECT NULL, id FROM docs WHERE user_id = ${p.userId} AND kind = 'note' AND key_rotation_pending
+            SELECT NULL, id, NULL FROM docs WHERE user_id = ${p.userId} AND kind = 'note' AND key_rotation_pending
+            UNION
+            -- Shared spaces (D-62) are listed always: the owner's start-up pass gives keys from it.
+            SELECT NULL, NULL, id FROM spaces WHERE user_id = ${p.userId}
           )
           SELECT 'notebook' AS kind, n.id, n.key_version, n.key_rotation_pending, n.pending_since_version,
             (SELECT count(*)::int FROM members m WHERE m.notebook_id = n.id) AS members,
@@ -726,6 +772,12 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             (SELECT count(*)::int FROM members m WHERE m.note_id = d.id
                AND (m.wrapped_key IS NULL OR m.key_version IS DISTINCT FROM d.key_version))
           FROM docs d WHERE d.user_id = ${p.userId} AND d.kind = 'note' AND d.id IN (SELECT note_id FROM targets)
+          UNION ALL
+          SELECT 'space', sp.id, sp.key_version, sp.key_rotation_pending, sp.pending_since_version,
+            (SELECT count(*)::int FROM members m WHERE m.space_id = sp.id),
+            (SELECT count(*)::int FROM members m WHERE m.space_id = sp.id
+               AND (m.wrapped_key IS NULL OR m.key_version IS DISTINCT FROM sp.key_version))
+          FROM spaces sp WHERE sp.user_id = ${p.userId} AND sp.id IN (SELECT space_id FROM targets)
           ORDER BY 1, 2`);
         return res.rows.map((r) => ({
           target: { kind: r.kind, id: r.id },

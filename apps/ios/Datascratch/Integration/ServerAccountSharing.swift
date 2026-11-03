@@ -50,6 +50,9 @@ final class ServerAccountSharingService: AccountSharingService {
         }
         if let items = try? await accounts.refreshSharedWithMe() {
             apply(items)
+            // A shared notebook's new key (after the owner changed it): its documents that
+            // waited for it sync now, not at the next reconnect.
+            connection.noteKeysLearned()
         }
         await ownerDuties()
     }

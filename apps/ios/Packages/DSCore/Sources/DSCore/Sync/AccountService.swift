@@ -226,9 +226,15 @@ public actor AccountService {
                 version = state.version ?? 1
                 guard version >= knownKeyVersion(target) else { continue }
                 let before = try keys.notebookKey(nb.id)
+                let localVersion = before == nil ? 0 : keys.notebookKeyVersion(nb.id)
                 key = try keys.addNotebookKey(wrapped: state.wrappedKey.data, notebookId: nb.id, version: version,
                                               chain: state.keyChain?.map(\.data) ?? [])
-                previous = before == key ? nil : before
+                // A newer version is a real key change made on another device (D-54 §10.3): the
+                // old key is kept as retired and still opens the notes' wrappings, which that
+                // device re-keys. Taking it for a key this device invented re-wrapped the note
+                // keys under the new key with the old version's AD, racing the real re-key:
+                // notes no device could open, edits that «waited for a key» (2026-11-03).
+                previous = before == key || version > localVersion ? nil : before
             }
             recordKeyVersion(target, version)
             if let previous {

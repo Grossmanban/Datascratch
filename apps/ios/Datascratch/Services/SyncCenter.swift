@@ -126,6 +126,10 @@ final class SyncCenter {
 
     /// Sends the undelivered changes again (`SyncEngine.retryFailed`).
     @ObservationIgnored var onRetry: (() -> Void)?
+    /// Changes wait for a key: fetch the keys from the server again and send what they open.
+    @ObservationIgnored var onCheckKeys: (() -> Void)?
+
+    func checkKeys() { onCheckKeys?() }
 
     func retryFailed() {
         guard case .notSent = phase else { return }

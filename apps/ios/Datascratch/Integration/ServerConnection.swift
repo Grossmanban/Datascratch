@@ -158,6 +158,7 @@ final class ServerConnection: CoreLibraryRemote {
             await repairKeys(changes, engine: engine)
             observeStatus(engine)
             sync.onRetry = { Task { await engine.retryFailed() } }
+            sync.onCheckKeys = { [weak self] in self?.notebookKeysMissing() }
             // With the engine running, removing duplicates reaches the server too.
             // Every start: build 6 carried libraries without merging the duplicates.
             onLibraryCarried?(core.needsCarriedMerge)
@@ -215,6 +216,7 @@ final class ServerConnection: CoreLibraryRemote {
         isAccountSynced = false
         statusTask?.cancel()
         sync.onRetry = nil
+        sync.onCheckKeys = nil
         await engine?.stop()
         engine = nil
         core.remote = nil

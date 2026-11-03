@@ -547,10 +547,19 @@ struct SyncStatusBadge: View {
                 // Changes waiting for a key: a quiet line once it lasts, no spinner.
                 TimelineView(.periodic(from: .now, by: 30)) { context in
                     if app.sync.showsHeldHint(now: context.date) {
-                        Text("\(app.sync.heldChanges) changes wait for a key")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.textTertiary)
-                            .accessibilityIdentifier("sync.held")
+                        HStack(spacing: Theme.Space.s2) {
+                            Text("\(app.sync.heldChanges) changes wait for a key")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.warning)
+                                .accessibilityIdentifier("sync.held")
+                            // Fetches the keys again and sends what they open (they may not come
+                            // by themselves: a note moved elsewhere, a key changed elsewhere).
+                            Button("Check") { app.sync.checkKeys() }
+                                .font(Theme.Typography.caption.weight(.semibold))
+                                .buttonStyle(.borderless)
+                                .tint(Theme.Palette.accent)
+                                .accessibilityIdentifier("sync.checkKeys")
+                        }
                     }
                 }
             }

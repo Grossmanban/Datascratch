@@ -60,5 +60,5 @@ test("tags form a «/» tree, and «Все теги» lists them with search and
   await expect(sheet.getByRole("link")).toHaveCount(1);
   await sheet.getByRole("link", { name: /работа\/клиенты/ }).click();
   await expect(page).toHaveURL(/\/tag\//);
-  await expect(page.getByTestId("doc-card").filter({ hasText: "Встреча" })).toBeVisible();
+  await expect(page.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Встреча" })).toBeVisible();
 });

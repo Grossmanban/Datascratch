@@ -7,7 +7,7 @@ test("a document can be reached and opened with the keyboard alone, with a visib
   let onCard = false;
   for (let i = 0; i < 60 && !onCard; i++) {
     await page.keyboard.press("Tab");
-    onCard = await page.evaluate(() => document.activeElement?.getAttribute("data-testid") === "doc-card");
+    onCard = await page.evaluate(() => /^doc-(card|row)$/.test(document.activeElement?.getAttribute("data-testid") ?? ""));
     // Every stop shows where focus is.
     const ring = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement | null;

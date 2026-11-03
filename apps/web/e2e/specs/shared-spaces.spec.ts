@@ -92,8 +92,8 @@ test("shared space: created shared, a member joins, sees it in the switcher and 
   await openMembers(page);
   await waitInSwitcher(q, "Общее пространство");
   await pickSpace(q, "Общее пространство");
-  await expect(q.getByTestId("doc-card").filter({ hasText: "План пространства" })).toBeVisible({ timeout: 30_000 });
-  await q.getByTestId("doc-card").filter({ hasText: "План пространства" }).click();
+  await expect(q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "План пространства" })).toBeVisible({ timeout: 30_000 });
+  await q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "План пространства" }).click();
   await expect(q.locator(".ds-prose")).toContainText("общий текст", { timeout: 20_000 });
   await q.locator(".ds-prose p").last().click();
   await q.keyboard.press("End");
@@ -104,14 +104,14 @@ test("shared space: created shared, a member joins, sees it in the switcher and 
   await q.getByTestId("new-doc").click();
   await typeNewNote(q, "От участника", "заметка участника");
   await page.goto("/all");
-  await expect(page.getByTestId("doc-card").filter({ hasText: "От участника" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId(/^doc-(card|row)$/).filter({ hasText: "От участника" })).toBeVisible({ timeout: 20_000 });
 
   // The viewer reads but cannot write: no new document, no new notebook, a read-only editor.
   await acceptInvitation(r);
   await openMembers(page);
   await waitInSwitcher(r, "Общее пространство");
   await pickSpace(r, "Общее пространство");
-  await r.getByTestId("doc-card").filter({ hasText: "План пространства" }).click({ timeout: 30_000 });
+  await r.getByTestId(/^doc-(card|row)$/).filter({ hasText: "План пространства" }).click({ timeout: 30_000 });
   await expect(r.locator(".ds-prose")).toContainText("общий текст", { timeout: 20_000 });
   await expect(r.getByTestId("read-only-badge")).toBeVisible();
   await expect(r.locator(".ds-prose [contenteditable=true], .ds-prose[contenteditable=true]")).toHaveCount(0);
@@ -165,7 +165,7 @@ test("shared space: a personal space made shared, a notebook moved in, a member 
   await openSwitcher(q);
   // Their own personal space is called «Личное» too: the shared one has the members' avatars.
   await q.getByRole("menu").locator("[role^=menuitem]").filter({ has: q.getByTestId("space-avatars") }).click();
-  await expect(q.getByTestId("doc-card").filter({ hasText: "Добро пожаловать" })).toBeVisible({ timeout: 30_000 });
+  await expect(q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Добро пожаловать" })).toBeVisible({ timeout: 30_000 });
 
   // The owner moves the notebook with «Личный архив» into the shared space — warned about history.
   await pickSpace(page, "Новое пространство");
@@ -177,8 +177,8 @@ test("shared space: a personal space made shared, a notebook moved in, a member 
   await moveIn.getByRole("button", { name: "Перенести" }).click();
   await expect(page.getByText(/Блокнот теперь в «Личное»/).first()).toBeVisible({ timeout: 20_000 });
   await q.reload();
-  await expect(q.getByTestId("doc-card").filter({ hasText: "Личный архив" })).toBeVisible({ timeout: 30_000 });
-  await q.getByTestId("doc-card").filter({ hasText: "Личный архив" }).click();
+  await expect(q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Личный архив" })).toBeVisible({ timeout: 30_000 });
+  await q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Личный архив" }).click();
   await expect(q.locator(".ds-prose")).toContainText("старая история", { timeout: 20_000 });
 
   // The owner removes the third member: the space key changes; the remaining member reads and writes on.
@@ -196,13 +196,13 @@ test("shared space: a personal space made shared, a notebook moved in, a member 
   await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
   await page.waitForTimeout(3000);
   await q.goto("/all");
-  await q.getByTestId("doc-card").filter({ hasText: "Личный архив" }).click({ timeout: 30_000 });
+  await q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Личный архив" }).click({ timeout: 30_000 });
   await expect(q.locator(".ds-prose")).toContainText("старая история", { timeout: 20_000 });
   await q.locator(".ds-prose p").last().click();
   await q.keyboard.press("End");
   await q.keyboard.type(" после смены ключа");
   await expectSynced(q);
-  await page.getByTestId("doc-card").filter({ hasText: "Личный архив" }).click();
+  await page.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Личный архив" }).click();
   await expect(page.locator(".ds-prose")).toContainText("старая история после смены ключа", { timeout: 20_000 });
   // The removed member no longer has the space.
   await r.reload();
@@ -216,8 +216,8 @@ test("shared space: a personal space made shared, a notebook moved in, a member 
   await page.getByRole("alertdialog").or(page.getByRole("dialog").filter({ hasText: "Вынести" })).getByRole("button", { name: "Вынести" }).click();
   await expect(page.getByText(/Блокнот теперь в «Новое пространство»/).first()).toBeVisible({ timeout: 20_000 });
   await q.goto("/all");
-  await expect(q.getByTestId("doc-card").filter({ hasText: "Добро пожаловать" })).toBeVisible({ timeout: 30_000 });
-  await expect(q.getByTestId("doc-card").filter({ hasText: "Личный архив" })).toHaveCount(0, { timeout: 30_000 });
+  await expect(q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Добро пожаловать" })).toBeVisible({ timeout: 30_000 });
+  await expect(q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Личный архив" })).toHaveCount(0, { timeout: 30_000 });
 
   // The member leaves: the space is gone from their switcher.
   await openSwitcher(q);

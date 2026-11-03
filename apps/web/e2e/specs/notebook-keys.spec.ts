@@ -26,7 +26,7 @@ test("a notebook key that differs from the server's is replaced: the other devic
   const other = await browser.newContext();
   const q = await other.newPage();
   await signIn(q, email);
-  await expect(q.getByTestId("doc-card").filter({ hasText: "После замены ключа" })).toBeVisible({ timeout: 20_000 });
+  await expect(q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "После замены ключа" })).toBeVisible({ timeout: 20_000 });
   await other.close();
 });
 

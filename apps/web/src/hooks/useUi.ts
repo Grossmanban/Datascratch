@@ -51,9 +51,10 @@ export const useUi = create<UiState>(() => ({
   newNotebookFor: null,
   docView: (() => {
     try {
-      return localStorage.getItem("ds.docView") === "list" ? "list" : "grid";
+      // D-61 «Плотнее»: rows by default; cards stay one click away in «Вид» (and are remembered).
+      return localStorage.getItem("ds.docView") === "grid" ? "grid" : "list";
     } catch {
-      return "grid";
+      return "list";
     }
   })(),
   sort: "updated",

@@ -102,7 +102,7 @@ function ListPage({
       >
         {crumbs}
       </TopBar>
-      <PageTitle icon={icon} title={title} subtitle={notes.length ? t("docs.count", { count: notes.length }) : undefined} />
+      <PageTitle compact icon={icon} title={title} subtitle={notes.length ? t("docs.count", { count: notes.length }) : undefined} />
       {notes.length > 0 && <ListFilter value={q} onChange={setQ} found={filtering ? shown.length : null} />}
       {!filtering && extra}
       {shown.length ? (

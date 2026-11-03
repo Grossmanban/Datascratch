@@ -70,7 +70,7 @@ test("dialogs and menus meet contrast in the dark theme", async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeVisible();
   await check("new notebook dialog");
   await page.keyboard.press("Escape");
-  await page.getByTestId("doc-card").first().click();
+  await page.getByTestId(/^doc-(card|row)$/).first().click();
   await expect(page.locator(".ds-prose")).toBeVisible();
   await page.getByTestId("share-button").click();
   await expect(page.getByRole("dialog")).toBeVisible();

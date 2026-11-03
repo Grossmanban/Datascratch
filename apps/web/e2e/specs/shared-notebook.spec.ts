@@ -42,7 +42,7 @@ test("shared notebook: existing notes listed, a member's new note stays, also af
   const shared = q.getByTestId("shared-row").filter({ hasText: "Заметки" });
   await expect(shared).not.toHaveAttribute("data-waiting", "", { timeout: 30_000 });
   await shared.click();
-  const list = q.getByTestId("doc-card");
+  const list = q.getByTestId(/^doc-(card|row)$/);
   await expect(list.filter({ hasText: "Уже была" })).toBeVisible({ timeout: 20_000 });
   await expect(list.filter({ hasText: "Добро пожаловать" })).toBeVisible();
 
@@ -70,7 +70,7 @@ test("shared notebook: existing notes listed, a member's new note stays, also af
   // The owner has it.
   await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
   await sidebar.getByRole("link", { name: /Заметки/ }).first().click();
-  await expect(page.getByTestId("doc-card").filter({ hasText: "От участника" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId(/^doc-(card|row)$/).filter({ hasText: "От участника" })).toBeVisible({ timeout: 20_000 });
 
   // The owner closes access for the third person: the key changes (crypto.md §10.3).
   await openShare();
@@ -100,7 +100,7 @@ test("shared notebook: existing notes listed, a member's new note stays, also af
   await expectSynced(q);
   await q.getByTestId("close-tab").click();
   await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
-  await page.getByTestId("doc-card").filter({ hasText: "Уже была" }).click();
+  await page.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Уже была" }).click();
   await expect(page.locator(".ds-prose")).toContainText("старый текст после смены ключа", { timeout: 20_000 });
   // A new note by the member after the key change is listed too.
   await shared.click();

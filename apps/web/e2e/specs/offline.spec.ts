@@ -47,7 +47,7 @@ test("offline: edits are kept locally, survive reload and sync when back online"
   const ctx2 = await browser.newContext();
   const p2 = await ctx2.newPage();
   await signIn(p2, email);
-  const card = p2.getByTestId("doc-card").filter({ hasText: "Записано без сети" });
+  const card = p2.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Записано без сети" });
   await expect(card).toBeVisible({ timeout: 20_000 });
   // The words saved as the page closed reached the server too.
   await card.click();

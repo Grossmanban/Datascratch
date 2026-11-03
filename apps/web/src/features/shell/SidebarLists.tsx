@@ -154,7 +154,7 @@ export function TagRow({ node, depth = 0 }: { node: TagNode; depth?: number }) {
       <div
         style={{ paddingLeft: depth * 14 }}
         className={cn(
-          "group flex h-8 items-center gap-1 rounded-md pr-2 transition-colors",
+          "group flex h-[35px] items-center gap-1 rounded-md pr-2 transition-colors",
           active ? "bg-ink/[0.07] text-ink" : "text-ink-2 hover:bg-ink/[0.04] hover:text-ink",
         )}
         data-testid="tag-row"

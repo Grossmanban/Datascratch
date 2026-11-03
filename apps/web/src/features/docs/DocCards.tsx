@@ -40,7 +40,7 @@ export function useSnippets(ids: string[]) {
 const CARD_MIN = 210;
 const GRID_GAP = { sm: 20, base: 16 };
 const CARD_HEIGHT = 200;
-const ROW_HEIGHT = 61;
+const ROW_HEIGHT = 65;
 
 /** Cards (or rows) of a document list, virtualised: only what is on screen is rendered. */
 export function DocCollection({
@@ -188,6 +188,11 @@ const DocCard = memo(function DocCard({ note, snippet, delay }: { note: NoteEntr
 
 const DocRow = memo(function DocRow({ note, snippet, first }: { note: NoteEntry; snippet?: string; first: boolean }) {
   const { t } = useTranslation();
+  const place = useWorkspace((s) => {
+    const nb = s.account.notebooks.find((n) => n.id === note.notebookId)?.name;
+    const folder = note.folderId ? s.folders[note.folderId]?.name : undefined;
+    return [nb, folder].filter(Boolean).join(" / ");
+  });
   const navigate = useNavigate();
   const open = useOpen(note.id);
   return (
@@ -198,17 +203,21 @@ const DocRow = memo(function DocRow({ note, snippet, first }: { note: NoteEntry;
         onClick={open}
         draggable
         onDragStart={(e) => dragNote(e, note.id)}
-        className={cn("flex items-center gap-3 px-4 py-3 transition-colors hover:bg-ink/[0.025]", !first && "border-t border-line")}
+        className={cn("flex h-16 items-center gap-3 px-4 transition-colors hover:bg-ink/[0.025]", !first && "border-t border-line")}
         data-testid="doc-row"
       >
-        <span className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-ink/[0.045] text-[17px]">
+        <span className="relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[7px] bg-ink/[0.045] text-[17px]">
           {note.coverThumb ? <CardThumb noteId={note.id} attachmentId={note.coverThumb} /> : (iconGlyph(note.icon) || <FileText className="size-4 text-ink-2" />)}
         </span>
+        {/* D-61 «Плотнее»: title, the start of the text, then where it is and when — in one 64 px row. */}
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[14.5px] font-medium text-ink">{noteTitle(note, t("app.untitled"))}</div>
-          <div className="truncate text-[12.5px] text-ink-2">{snippet || " "}</div>
+          <div className="truncate text-[15px] font-semibold leading-[19px] text-ink">{noteTitle(note, t("app.untitled"))}</div>
+          <div className="truncate text-[13px] leading-[17px] text-ink-2">{snippet || " "}</div>
+          <div className="truncate text-[11.5px] leading-[15px] text-ink-3">
+            {place ? `${place} · ` : ""}
+            {formatRelative(note.updatedAt)}
+          </div>
         </div>
-        <span className="hidden shrink-0 text-[12px] text-ink-2 sm:block">{formatRelative(note.updatedAt)}</span>
       </Link>
     </ContextMenu>
   );

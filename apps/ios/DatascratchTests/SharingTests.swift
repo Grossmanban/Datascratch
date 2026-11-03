@@ -149,6 +149,10 @@ struct SharingTests {
         #expect(sharing.role(forNotebook: "nb") == .viewer)
         #expect(sharing.role(forNote: "n1", notebookId: "nb") == .viewer)
         #expect(sharing.role(forNotebook: "other") == nil)
+        // ✨ of a notebook of the space comes from the server's list of its notebooks.
+        #expect(!sharing.isOpenToAgents(noteId: "n1", notebookId: "nb"))
+        sharing.seedAgentNotebookForTesting("nb")
+        #expect(sharing.isOpenToAgents(noteId: "n1", notebookId: "nb"))
     }
 
     @Test func notesSharedOnTheirOwnHaveNoNotebookDocument() throws {

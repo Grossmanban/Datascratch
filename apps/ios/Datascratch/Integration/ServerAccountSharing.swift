@@ -17,7 +17,7 @@ final class ServerAccountSharingService: AccountSharingService {
 
     @ObservationIgnored private let connection: ServerConnection
     /// New guest links for a notebook or note whose key changed (`ServerSharingService`).
-    @ObservationIgnored private let recreateLinks: (ShareTarget) async -> [SharedLink]
+    @ObservationIgnored private let recreateLinks: (Set<ShareTarget>) async -> [ShareTarget: [SharedLink]]
     /// Members the owner allowed in (asked once per person): account id → the public key the
     /// yes was for. A key the server swaps in afterwards is asked about again.
     @ObservationIgnored private var confirmed: [ShareTarget: [String: String]] = [:]
@@ -28,9 +28,10 @@ final class ServerAccountSharingService: AccountSharingService {
     /// Emails by account id, from owners and members seen (history authors).
     @ObservationIgnored private var names: [String: String] = [:]
     @ObservationIgnored var spaceOfNotebook: (String) -> String? = { _ in nil }
+    private(set) var agentNotebooksInSpaces: Set<String> = []
     nonisolated private static let log = Logger(subsystem: "com.datascratch.app", category: "Sharing")
 
-    init(connection: ServerConnection, recreateLinks: @escaping (ShareTarget) async -> [SharedLink]) {
+    init(connection: ServerConnection, recreateLinks: @escaping (Set<ShareTarget>) async -> [ShareTarget: [SharedLink]]) {
         self.connection = connection
         self.recreateLinks = recreateLinks
         // Owner duties wait for the account document (its `trust` record): run them once it is in.
@@ -155,8 +156,19 @@ final class ServerAccountSharingService: AccountSharingService {
     private func refreshSpaces() async {
         do {
             let spaces = try await accounts.refreshSharedSpaces()
-            guard !spaces.isEmpty else { return }
+            guard !spaces.isEmpty else {
+                agentNotebooksInSpaces = []
+                return
+            }
             for space in spaces { _ = try? connection.core.spaceDocument(space.id) }
+            // ✨ of the notebooks in spaces this account joined: their mode is the server's.
+            let me = await api.currentSession?.userId
+            var agents: Set<String> = []
+            for space in spaces where space.ownerUserId != me {
+                guard let notebooks = try? await accounts.loadSpaceNotebookKeys(space.id) else { continue }
+                agents.formUnion(notebooks.filter { $0.mode == .agent }.map(\.notebookId))
+            }
+            agentNotebooksInSpaces = agents
             connection.noteKeysLearned()
             connection.core.reload()
         } catch {
@@ -268,6 +280,7 @@ final class ServerAccountSharingService: AccountSharingService {
                 // The space key and the key of every notebook in it (crypto.md §11.4).
                 try await accounts.rotateSpaceKey(target.id, notebooks: connection.core.notebookDocuments(inSpace: target.id),
                                                   confirmed: confirmed)
+                await spaceLinksChanged(target.id)
                 return
             }
             await linksChanged(target)
@@ -298,7 +311,13 @@ final class ServerAccountSharingService: AccountSharingService {
                 await linksChanged(target)
             case .space:
                 let notebooks = connection.core.notebookDocuments(inSpace: target.id)
+                let before = try? await accounts.ownerKey(spaceId: target.id).version
                 if try await accounts.resumeSpaceRotation(target.id, notebooks: notebooks, confirmed: confirmed) {
+                    // Links are made anew only when the key changed now (not at every start
+                    // while the notes still wait for theirs).
+                    if let after = try? await accounts.ownerKey(spaceId: target.id).version, after != before {
+                        await spaceLinksChanged(target.id)
+                    }
                     _ = try await accounts.finishSpaceRotation(target.id, notebooks: notebooks)
                 }
             }
@@ -319,10 +338,28 @@ final class ServerAccountSharingService: AccountSharingService {
     }
 
     private func linksChanged(_ target: ShareTarget) async {
-        let links = await recreateLinks(target)
-        guard !links.isEmpty else { return }
-        refreshedLinks.removeAll { $0.target == target }
-        refreshedLinks.append(RefreshedLinks(target: target, links: links))
+        await linksChanged([target])
+    }
+
+    /// The guest links of these notebooks and notes were made anew (their keys changed); the
+    /// owner sends the new ones.
+    private func linksChanged(_ targets: Set<ShareTarget>) async {
+        for (target, links) in await recreateLinks(targets) where !links.isEmpty {
+            refreshedLinks.removeAll { $0.target == target }
+            refreshedLinks.append(RefreshedLinks(target: target, links: links))
+        }
+    }
+
+    /// D-62 (crypto.md §11.4): a new space key gave every notebook of the space, and so every
+    /// note, a new key — the guest links of all of them are made anew, as for a notebook.
+    private func spaceLinksChanged(_ spaceId: String) async {
+        let core = connection.core
+        var targets: Set<ShareTarget> = []
+        for notebook in core.notebookDocuments(inSpace: spaceId) {
+            targets.insert(ShareTarget(kind: .notebook, id: notebook.notebookId))
+            for note in notebook.notes(includeTrashed: true) { targets.insert(ShareTarget(kind: .note, id: note.id)) }
+        }
+        await linksChanged(targets)
     }
 
     private func inviteLink(_ id: String) -> URL? {

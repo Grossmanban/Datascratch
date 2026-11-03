@@ -31,7 +31,8 @@ struct NotebookRow: View {
         return Label {
             HStack(spacing: Theme.Space.s2) {
                 Text(notebook.name).lineLimit(1)
-                if notebook.mode == .agent {
+                // In a space this account joined, ✨ is the owner's choice (the badge below).
+                if notebook.mode == .agent, space?.isJoined != true {
                     Image(systemName: "sparkles")
                         .font(.caption)
                         .foregroundStyle(Theme.Palette.textTertiary)

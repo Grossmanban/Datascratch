@@ -130,6 +130,9 @@ protocol AccountSharingService: AnyObject {
 
     /// The space a notebook is in (the library knows; set by the app).
     var spaceOfNotebook: (String) -> String? { get set }
+    /// Notebooks of shared spaces this account joined that the owner opened to agents (✨,
+    /// from the server's list of the space's notebooks).
+    var agentNotebooksInSpaces: Set<String> { get }
     /// Owner: makes a personal space shared — its key, its document, its notebooks moved in.
     /// Returns the notebooks that stay personal: they have people of their own (D-54).
     func makeShared(space spaceId: String) async throws -> [String]
@@ -165,7 +168,8 @@ extension AccountSharingService {
 
     /// Shared with this account and open to the owner's AI agents (✨).
     func isOpenToAgents(_ target: ShareTarget) -> Bool {
-        sharedWithMe.first { $0.target == target }?.agentsMode ?? false
+        if target.kind == .notebook, agentNotebooksInSpaces.contains(target.id) { return true }
+        return sharedWithMe.first { $0.target == target }?.agentsMode ?? false
     }
 
     /// A note shared on its own, or in a shared notebook, that the owner's agents read.
@@ -186,6 +190,7 @@ final class LocalAccountSharingService: AccountSharingService {
     @ObservationIgnored private var people: [ShareTarget: SharePeople] = [:]
     @ObservationIgnored private let webHost: String
     @ObservationIgnored var spaceOfNotebook: (String) -> String? = { _ in nil }
+    private(set) var agentNotebooksInSpaces: Set<String> = []
     /// The library spaces live in: without a server the stand-in changes it directly.
     @ObservationIgnored weak var library: LibraryStore?
 
@@ -273,6 +278,11 @@ final class LocalAccountSharingService: AccountSharingService {
 
     func moveNotebook(_ notebookId: String, toSpace spaceId: String) async throws {
         library?.moveNotebook(notebookId, toSpace: spaceId)
+    }
+
+    /// Tests: the owner opened this notebook of a joined space to agents (✨).
+    func seedAgentNotebookForTesting(_ notebookId: String) {
+        agentNotebooksInSpaces.insert(notebookId)
     }
 
     /// UI tests: a shared space `space` (in the library already) this account joined as

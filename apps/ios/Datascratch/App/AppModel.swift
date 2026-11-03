@@ -369,8 +369,8 @@ final class AppModel {
         sync.onBackOnline = { connection.reconnect() }
         covers.remote = connection
         let sharing = ServerSharingService(connection: connection)
-        let accountSharing = ServerAccountSharingService(connection: connection) { [weak sharing] target in
-            await sharing?.recreateLinks(for: target) ?? []
+        let accountSharing = ServerAccountSharingService(connection: connection) { [weak sharing] targets in
+            await sharing?.recreateLinks(for: targets) ?? [:]
         }
         return (connection, ServerAccountService(connection: connection), sharing, ServerAccessService(connection: connection),
                 accountSharing)

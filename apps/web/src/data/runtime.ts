@@ -790,6 +790,18 @@ export async function startRuntime(accountDocId: string) {
       Y: await import("yjs"),
       db: accountDb,
       refresh: refreshSession,
+      // e2e diagnostics: what the workspace shows (ids and names only).
+      workspace: () => {
+        const st = useWorkspace.getState();
+        return {
+          activeSpaceId: st.activeSpaceId,
+          spaces: st.account.spaces.map((s) => ({ id: s.id, name: s.name, shared: !!s.shared, role: s.role ?? null })),
+          notebooks: st.account.notebooks.map((n) => ({ id: n.id, name: n.name, spaceId: n.spaceId })),
+          spaceAccess: st.spaceAccess,
+          spaceDocs: Object.fromEntries(Object.entries(st.spaceDocs).map(([k, v]) => [k, v.notebooks.map((n) => n.id)])),
+          notes: Object.values(st.notes).map((n) => ({ id: n.id, title: n.title, notebookId: n.notebookId })),
+        };
+      },
       // e2e: this device holds its own key for a notebook (as after a POST /notebooks that got 409).
       corruptNotebookKey: async (notebookId: string) => {
         const { getMasterKey } = await import("@/auth/session");

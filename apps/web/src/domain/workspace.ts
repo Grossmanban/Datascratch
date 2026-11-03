@@ -122,7 +122,10 @@ function applyAccountView(patch: Partial<Pick<WorkspaceState, "ownAccount" | "sp
   const st = { ...useWorkspace.getState(), ...patch };
   const account = accountView(st.ownAccount, st.spaceDocs, st.spaceAccess);
   let activeSpaceId = st.activeSpaceId;
-  if (st.ready && (!activeSpaceId || !account.spaces.some((s) => s.id === activeSpaceId))) activeSpaceId = account.spaces[0]?.id ?? null;
+  // A member's shared space (D-62) joins the view only once its access is read: until then it is
+  // still the active one if this account has it placed.
+  const known = (id: string) => account.spaces.some((s) => s.id === id) || st.ownAccount.sharedSpaces.some((r) => r.spaceId === id && !st.spaceAccess[id]);
+  if (st.ready && (!activeSpaceId || !known(activeSpaceId))) activeSpaceId = account.spaces[0]?.id ?? null;
   useWorkspace.setState({ ...patch, account, activeSpaceId });
 }
 

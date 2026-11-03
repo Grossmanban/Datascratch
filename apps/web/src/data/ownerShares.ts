@@ -6,13 +6,11 @@ import {
   maintainOwnedShares,
   migrateMemberTrust,
   recordInvite,
-  sharedByMeItemSchema,
+  type AccountTarget,
   type ConfirmReason,
   type Member,
   type ShareTarget,
 } from "@datascratch/shared";
-import { z } from "zod";
-import { api } from "@/api/client";
 import { getMasterKey, useAuth } from "@/auth/session";
 import { useWorkspace } from "@/domain/workspace";
 import i18n from "@/i18n";
@@ -22,20 +20,13 @@ import { refreshNotebookKeyCache, setKeyring } from "./keys";
 import { runtime } from "./runtime";
 import { accountBoxKeys, sharingApi } from "./sharing";
 
-async function sharedByMeWithoutSpaces() {
-  const raw = await api.get<unknown[]>("/shared-by-me");
-  return z
-    .array(sharedByMeItemSchema)
-    .parse((Array.isArray(raw) ? raw : []).filter((i) => (i as { target?: { kind?: unknown } })?.target?.kind !== "space"));
-}
-
 let running: Promise<void> | null = null;
 let again = false;
 /** «Not now» for an account created after its invitation: not asked again in this session. */
 const declined = new Set<string>();
 
 /** The owner pressed «Открыть доступ» for a member: ask again even after «Не сейчас». */
-export function giveAccessNow(target: ShareTarget, userId: string) {
+export function giveAccessNow(target: AccountTarget, userId: string) {
   declined.delete(`${target.kind}:${target.id}:${userId}`);
   return maintainShares();
 }
@@ -44,7 +35,7 @@ export function giveAccessNow(target: ShareTarget, userId: string) {
  * Remember that this account invites `email` to `target` (the account document's `trust` record):
  * only invited people, or ones the owner confirms, get keys — whatever the server lists.
  */
-export function recordInvitation(target: ShareTarget, email: string) {
+export function recordInvitation(target: AccountTarget, email: string) {
   recordInvite(runtime().account, target, email);
 }
 
@@ -66,7 +57,7 @@ export function maintainShares(): Promise<void> {
   return running;
 }
 
-export async function confirmMember(target: ShareTarget, member: Member, reason: ConfirmReason): Promise<boolean> {
+export async function confirmMember(target: AccountTarget, member: Member, reason: ConfirmReason): Promise<boolean> {
   const id = `${target.kind}:${target.id}:${member.userId}`;
   if (declined.has(id)) return false;
   // Sign-up does not verify e-mail: an account made after the invitation gets access only on «yes».
@@ -91,8 +82,7 @@ async function pass() {
   const rt = runtime();
   await migrateMemberTrust(sharingApi, rt.account, userId);
   const results = await maintainOwnedShares({
-    // Whole shared spaces (D-62) are in the same list; data/sharedSpaces looks after them.
-    api: { ...sharingApi, sharedByMe: sharedByMeWithoutSpaces },
+    api: sharingApi,
     owner: { userId, secretKey: pair.secretKey },
     masterKey: getMasterKey(),
     notebookIndex: (id) => rt.store.load(id),

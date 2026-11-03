@@ -278,6 +278,8 @@ route("POST", "/v1/notebooks", (_q, res, { auth, body }) => {
   if (body.spaceId && !space) return err(res, 404, "not_found");
   const role = space ? (space.ownerUserId === auth.userId ? "owner" : membersOf({ kind: "space", id: space.id }).get(auth.userId)?.role) : "owner";
   if (role !== "owner" && role !== "editor") return err(res, 403, "forbidden");
+  // Wrapped by the space key of this version: a stale one (during a key change) is refused.
+  if (space && body.spaceKeyVersion !== space.keyVersion) return err(res, 409, "conflict", "spaceKeyVersion");
   const ownerId = space ? space.ownerUserId : auth.userId;
   if (existing) return existing.userId === ownerId ? json(res, 200, pubNotebook(existing)) : err(res, 409, "conflict");
   const nb = { id: body.notebookId, userId: ownerId, mode: body.mode, createdAt: nowIso(), wrappedKey: body.wrappedKey, serverKey: body.notebookKey ?? null, spaceId: space?.id ?? null };
@@ -293,8 +295,10 @@ route("GET", "/v1/notebooks/:id/key", (_q, res, { auth, params }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const n = db.notebooks.get(params.id);
   if (!n || n.userId !== auth.userId) return err(res, 404, "not_found");
+  // D-62: a notebook of a shared space has its key under the space key (GET /spaces/:id/notebooks).
+  if (n.spaceId) return err(res, 409, "conflict", "notebook of a shared space");
   // D-54 key versions (crypto.md §10.3): version, chain and a pending rotation.
-  json(res, 200, { wrappedKey: n.wrappedKey, version: n.keyVersion ?? 1, keyChain: n.keyChain ?? [], keyRotationPending: !!n.keyRotationPending });
+  json(res, 200, { wrappedKey: n.wrappedKey, version: n.keyVersion ?? 1, keyChain: n.keyChain ?? [], keyRotationPending: !!n.keyRotationPending, pendingSinceVersion: n.keyRotationPending ? (n.pendingSinceVersion ?? null) : null });
 });
 route("PATCH", "/v1/notebooks/:id/mode", (_q, res, { auth, params, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
@@ -484,7 +488,7 @@ route("POST", "/v1/spaces/:id/notebooks/:notebookId/move-out", (_q, res, { auth,
   const n = db.notebooks.get(params.notebookId);
   if (!sp || sp.ownerUserId !== auth.userId || !n || n.spaceId !== sp.id) return err(res, 403, "forbidden");
   if (body.version !== (n.keyVersion ?? 1) + 1) return err(res, 409, "conflict", "version");
-  Object.assign(n, { spaceId: null, wrappedKey: body.ownerWrappedKey, keyVersion: body.version, keyChain: [body.previousKeyWrap, ...(n.keyChain ?? [])], keyRotationPending: true });
+  Object.assign(n, { spaceId: null, wrappedKey: body.ownerWrappedKey, keyVersion: body.version, keyChain: [body.previousKeyWrap, ...(n.keyChain ?? [])], keyRotationPending: true, pendingSinceVersion: body.version - 1 });
   if (body.notebookKey) n.serverKey = body.notebookKey;
   json(res, 204);
 });

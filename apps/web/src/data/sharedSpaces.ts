@@ -1,34 +1,33 @@
 // Shared spaces (D-62, spec/08 «Общие пространства», crypto.md §11, api.md «Общие пространства»).
 // One pass after every «Общие со мной» read: which shared spaces this account owns or belongs to,
 // their keys (the owner's from GET /spaces/:id/key, a member's from its SharedItem), the keys of
-// their notebooks (GET /spaces/:id/notebooks), keys for members who accepted, and the owner's key
-// change after someone left. Plus the owner's commands: make a space shared, move a notebook in
-// and out, create a notebook in a shared space (domain/actions).
+// their notebooks (GET /spaces/:id/notebooks), and the owner's upkeep — keys for members who
+// accepted and the key change after someone left (core's maintainOwnedSpaces). Plus the owner's
+// commands: make a space shared, move a notebook in and out, a notebook created in a shared space.
 import {
   accountVetting,
-  deliverAwaitingKeys,
+  createSpaceDoc,
   generateKey,
-  getNoteMetas,
-  noteKeysFromMeta,
-  ownerNotebookKeys,
-  patchNoteMeta,
-  toBase64Url,
-  uuidv7,
-  wrapKey,
-  wrapPreviousKey,
-  AD,
+  maintainOwnedSpaces,
+  moveNotebookIntoSpace,
+  moveNotebookOutOfSpace,
+  ownerSpaceKeys,
+  reconcileSharedSpaces,
+  rotateNotebookKey,
+  sharedItemKeys,
+  spaceNotebookKeys,
+  wrapNotebookKeyForSpace,
+  wrapSpaceKey,
+  type AccountSharedItem,
   type Member,
-  type ShareTarget,
+  type SharedSpace,
+  type SpaceKeyResponse,
+  type SpaceNotebook,
   type VersionedKeys,
 } from "@datascratch/shared";
-import type * as Y from "yjs";
-import { z } from "zod";
-import { spacesApi, notebooksApi, type ServerSpace, type SpaceKeyResponse, type SpaceNotebookKey } from "@/api/endpoints";
 import { getMasterKey, useAuth } from "@/auth/session";
 import { accountMaps } from "@/domain/account";
-import { initSpaceDoc, spaceMaps, withoutSpace } from "@/domain/space";
 import { setSpaceAccess, useWorkspace, type SpaceAccess } from "@/domain/workspace";
-import { toYMap } from "@/domain/ymap";
 import { useUi } from "@/hooks/useUi";
 import i18n from "@/i18n";
 import { toast } from "@/ui";
@@ -37,52 +36,25 @@ import { forgetSpaceKeys, refreshNotebookKeyCache, setKeyring, setSpaceKeys, spa
 import { confirmMember } from "./ownerShares";
 import { runtime } from "./runtime";
 import { accountBoxKeys, sharingApi } from "./sharing";
-import {
-  memberSpaceKeys,
-  ownerSpaceKeys,
-  spaceNotebookKeys,
-  wrapNotebookKeyForOwner,
-  wrapNotebookKeyForSpace,
-  wrapSpaceKeyForMember,
-  wrapSpaceKeyForOwner,
-} from "./spaceCrypto";
 
-/** A `SharedItem` with `target.kind = "space"` (api.md «Общие пространства»). */
-export const spaceItemSchema = z.object({
-  target: z.object({ kind: z.literal("space"), id: z.string().uuid() }),
-  owner: z.object({ userId: z.string().uuid(), email: z.string(), publicKey: z.string() }),
-  role: z.enum(["editor", "viewer"]),
-  keyVersion: z.number().int().positive(),
-  wrappedKey: z.string().nullable(),
-  keyChain: z.array(z.string()),
-  docIds: z.array(z.string()),
-  addedAt: z.string(),
-});
-export type SpaceItem = z.infer<typeof spaceItemSchema>;
-
-const spaceTarget = (id: string) => ({ kind: "space", id }) as unknown as ShareTarget;
-
-let memberItems: SpaceItem[] = [];
+let memberItems: AccountSharedItem[] = [];
 let running: Promise<void> | null = null;
 let again = false;
+let soon: ReturnType<typeof setTimeout> | undefined;
 /** Spaces this account is leaving itself: no «access closed» notice for them. */
 const leaving = new Set<string>();
 
-/** The member side of «Общие со мной» for whole spaces, then one pass over all shared spaces. */
-export async function applySpaceItems(items: SpaceItem[], fromServer: boolean) {
+/** The member side of «Общие со мной» for whole spaces (`kind = space`), then one pass over all. */
+export async function applySpaceItems(items: AccountSharedItem[], fromServer: boolean) {
   const me = useAuth.getState().userId;
-  memberItems = items.filter((i) => {
-    if (i.owner.userId !== me) return true;
-    console.error("[ds] ignored a shared space item that points at this account's own space", i.target.id);
-    return false;
-  });
-  if (fromServer) placeMemberSpaces();
+  if (!me) return;
+  memberItems = items.filter((i) => i.target.kind === "space" && i.owner.userId !== me);
+  if (fromServer) placeMemberSpaces(items, me);
   await refreshSpaces();
   // Accepted but not keyed yet: the owner's client delivers the key once it is online — look again soon.
   clearTimeout(soon);
   if (memberItems.some((i) => !i.wrappedKey)) soon = setTimeout(() => void import("./sharedWithMe").then((m) => m.refreshShared()), 15_000);
 }
-let soon: ReturnType<typeof setTimeout> | undefined;
 
 /** Run one pass now (or right after the one in progress). */
 export function refreshSpaces(): Promise<void> {
@@ -106,13 +78,32 @@ async function pass() {
   const me = useAuth.getState().userId;
   if (!me) return;
   const pair = await accountBoxKeys();
-  let list: ServerSpace[];
-  try {
-    list = await spacesApi.list();
-    await kvSet("spaces", list);
-  } catch {
-    list = (await kvGet<ServerSpace[]>("spaces")) ?? [];
-  }
+  const owner = { userId: me, secretKey: pair.secretKey };
+  const rt = runtime();
+  // The owner's upkeep first (it may change keys); the trust record lives in the account doc.
+  if (useWorkspace.getState().accountSynced)
+    await maintainOwnedSpaces({
+      api: sharingApi,
+      owner,
+      masterKey: getMasterKey(),
+      confirm: (target, member: Member, reason) => confirmMember(target, member, reason),
+      vetting: accountVetting(() => rt.account),
+      rotation: {
+        notebookIndex: (id) => rt.store.load(id),
+        whenIndexSent: (id) => rt.client.whenSent(id),
+        onKeys: ({ space, notebooks, notes }) => {
+          for (const [id, k] of notebooks ?? []) setKeyring(id, "notebook", k);
+          for (const [id, k] of notes ?? []) setKeyring(id, "note", k);
+          void space;
+        },
+      },
+    })
+      .then((results) => {
+        for (const r of results) if ("error" in r) console.warn("[ds] shared space upkeep failed:", r.target, r.error);
+      })
+      .catch((e) => console.warn("[ds] shared space upkeep:", (e as Error).message));
+
+  const list = await cached("spaces", () => sharingApi.listSpaces()).catch(() => [] as SharedSpace[]);
   const access: Record<string, SpaceAccess> = {};
   for (const space of list) {
     const owned = space.ownerUserId === me;
@@ -120,7 +111,9 @@ async function pass() {
     if (!owned && !item) continue;
     let keys: VersionedKeys | null = null;
     try {
-      keys = owned ? ownerSpaceKeys(await cached(`spacekey:${space.id}`, () => spacesApi.key(space.id)), getMasterKey(), space.id) : memberSpaceKeys(item!, { userId: me, secretKey: pair.secretKey });
+      keys = owned
+        ? ownerSpaceKeys(await cached<SpaceKeyResponse>(`spacekey:${space.id}`, () => sharingApi.getSpaceKey(space.id)), getMasterKey(), space.id)
+        : sharedItemKeys(item!, owner);
     } catch (e) {
       console.warn("[ds] cannot open the key of a shared space", space.id, (e as Error).message);
     }
@@ -128,11 +121,11 @@ async function pass() {
     let notebookIds: string[] | null = null;
     if (keys) {
       try {
-        const nbs = await cached(`spacenbs:${space.id}`, () => spacesApi.notebooks(space.id));
+        const nbs = await cached<SpaceNotebook[]>(`spacenbs:${space.id}`, () => sharingApi.listSpaceNotebooks(space.id));
         notebookIds = [];
         for (const nb of nbs) {
           try {
-            setKeyring(nb.notebookId, "notebook", spaceNotebookKeys(nb, space.id, keys.keys));
+            setKeyring(nb.notebookId, "notebook", spaceNotebookKeys(nb, keys.keys, space.id));
             notebookIds.push(nb.notebookId);
           } catch (e) {
             console.warn("[ds] cannot open the key of a notebook in a shared space", nb.notebookId, (e as Error).message);
@@ -148,10 +141,9 @@ async function pass() {
       notebookIds,
       ...(item ? { ownerEmail: item.owner.email } : {}),
     };
-    if (owned && keys && useWorkspace.getState().accountSynced) await ownerUpkeep(space, keys, { userId: me, secretKey: pair.secretKey });
   }
   setSpaceAccess(access);
-  await runtime().syncSpaceDocs(Object.entries(access).filter(([, a]) => a.keyed).map(([id]) => id));
+  await rt.syncSpaceDocs(Object.entries(access).filter(([, a]) => a.keyed).map(([id]) => id));
   useUi.setState({ keysChangedAt: Date.now() });
 }
 
@@ -168,24 +160,16 @@ async function cached<T>(key: string, fetch: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Member spaces in the switcher (document-model.md §2.1): new ones last, gone ones cleaned up. */
-function placeMemberSpaces() {
-  const rt = runtime();
-  const placed = accountMaps(rt.account).sharedSpaces;
-  const ids = new Set(memberItems.map((i) => i.target.id));
-  rt.account.transact(() => {
-    let order = Math.max(0, ...[...placed.values()].map((v) => (v as Y.Map<number>).get?.("order") ?? 0));
-    for (const item of memberItems)
-      if (!placed.has(item.target.id)) placed.set(item.target.id, toYMap({ order: ++order, addedAt: item.addedAt }));
-  });
-  for (const spaceId of [...placed.keys()]) {
-    if (ids.has(spaceId)) continue;
+/** Member spaces in the switcher (document-model.md §2.1): new ones placed, gone ones cleaned up. */
+function placeMemberSpaces(items: AccountSharedItem[], me: string) {
+  const { removed } = reconcileSharedSpaces(runtime().account, items, me);
+  for (const spaceId of removed) {
     if (!leaving.has(spaceId)) toast(i18n.t("spaces.gone"));
     void forgetMemberSpace(spaceId);
   }
 }
 
-/** A shared space this account no longer belongs to: its placement, tabs, stars and local docs go. */
+/** A shared space this account no longer belongs to: its tabs, stars and local docs go. */
 async function forgetMemberSpace(spaceId: string) {
   const rt = runtime();
   const st = useWorkspace.getState();
@@ -212,7 +196,7 @@ export async function leaveSpace(spaceId: string) {
   if (!me) return;
   leaving.add(spaceId);
   try {
-    await sharingApi.removeMember(spaceTarget(spaceId), me);
+    await sharingApi.removeMember({ kind: "space", id: spaceId }, me);
     memberItems = memberItems.filter((i) => i.target.id !== spaceId);
     await forgetMemberSpace(spaceId);
     await refreshSpaces();
@@ -222,114 +206,6 @@ export async function leaveSpace(spaceId: string) {
 }
 
 // ---------- the owner ----------
-
-/**
- * The owner's upkeep of one shared space: the space key for members who accepted (an account made
- * after its invitation, or unknown to this account's record, only after «Открыть доступ»), and the
- * key change after someone left (crypto.md §11.4), resumed if it was interrupted.
- */
-async function ownerUpkeep(space: ServerSpace, keys: VersionedKeys, owner: { userId: string; secretKey: Uint8Array }) {
-  const rt = runtime();
-  if (space.keyRotationPending) {
-    try {
-      await rotateSpace(space, keys, owner);
-      keys = spaceKeysOf(space.id) ?? keys;
-    } catch (e) {
-      console.warn("[ds] shared space key change failed (will retry)", space.id, (e as Error).message);
-      return;
-    }
-  }
-  await deliverAwaitingKeys({
-    api: sharingApi,
-    target: spaceTarget(space.id),
-    keys,
-    owner,
-    confirm: (member: Member, reason) => confirmMember(spaceTarget(space.id), member, reason),
-    vetting: accountVetting(() => rt.account),
-  }).catch((e) => console.warn("[ds] space key delivery failed", space.id, (e as Error).message));
-}
-
-/**
- * crypto.md §11.4: a new space key for the owner and every remaining active member, and a new key
- * for every notebook of the space wrapped by it — one request; then every note gets a new key;
- * then `rotate/done`. Step 1 is skipped when the key version is already past `pendingSinceVersion`.
- */
-async function rotateSpace(space: ServerSpace, keys: VersionedKeys, owner: { userId: string; secretKey: Uint8Array }) {
-  const rt = runtime();
-  const master = getMasterKey();
-  const notebooks = await spacesApi.notebooks(space.id);
-  const resuming = space.pendingSinceVersion != null && keys.version > space.pendingSinceVersion;
-  const nbKeys = new Map<string, VersionedKeys>(notebooks.map((nb) => [nb.notebookId, spaceNotebookKeys(nb, space.id, keys.keys)]));
-  if (!resuming) {
-    const version = keys.version + 1;
-    const spaceKey = generateKey();
-    const active = (await sharingApi.listMembers(spaceTarget(space.id))).filter((m) => m.status === "active" && m.userId !== owner.userId);
-    const memberKeys = [];
-    for (const m of active) {
-      const pk = await sharingApi.getPublicKey(m.userId);
-      if (!pk) throw new Error(`no public key for member ${m.userId}`);
-      memberKeys.push({ userId: m.userId, wrappedKey: wrapSpaceKeyForMember(spaceKey, version, space.id, owner, { userId: m.userId, publicKey: pk.publicKey }) });
-    }
-    const agent = (id: string) => notebooks.find((n) => n.notebookId === id)?.mode === "agent";
-    const nextNbs = new Map<string, VersionedKeys>();
-    const body = notebooks.map((nb) => {
-      const old = nbKeys.get(nb.notebookId)!;
-      const v = old.version + 1;
-      const k = generateKey();
-      nextNbs.set(nb.notebookId, { version: v, keys: [k, ...old.keys] });
-      return {
-        notebookId: nb.notebookId,
-        version: v,
-        spaceWrappedKey: wrapNotebookKeyForSpace(spaceKey, k, space.id, nb.notebookId, v),
-        previousKeyWrap: wrapPreviousKey(k, old.keys[0]!, "notebook", nb.notebookId, v),
-        ...(agent(nb.notebookId) ? { notebookKey: toBase64Url(k) } : {}),
-      };
-    });
-    await spacesApi.rotate(space.id, {
-      version,
-      ownerWrappedKey: wrapSpaceKeyForOwner(master, spaceKey, space.id, version),
-      previousKeyWrap: wrapPreviousKey(spaceKey, keys.keys[0]!, "space" as never, space.id, version),
-      memberKeys,
-      notebooks: body,
-    });
-    const next = { version, keys: [spaceKey, ...keys.keys] };
-    setSpaceKeys(space.id, next);
-    for (const [id, k] of nextNbs) {
-      setKeyring(id, "notebook", k);
-      nbKeys.set(id, k);
-    }
-    await kvSet(`spacekey:${space.id}`, await spacesApi.key(space.id)).catch(() => undefined);
-    await kvSet(`spacenbs:${space.id}`, await spacesApi.notebooks(space.id)).catch(() => undefined);
-  }
-  // Step 2: notes still under an older notebook key get a new note key.
-  for (const [notebookId, k] of nbKeys) {
-    const index = await rt.store.load(notebookId);
-    const rekeyed = rekeyNotes(index, k);
-    await rt.client.whenSent(notebookId);
-    for (const [noteId, nk] of rekeyed) setKeyring(noteId, "note", nk);
-  }
-  await spacesApi.rotateDone(space.id);
-}
-
-/** Every note under an older notebook key gets a new noteKey, written into the index (§10.3 step 2). */
-function rekeyNotes(index: Y.Doc, notebook: VersionedKeys): Map<string, VersionedKeys> {
-  const out = new Map<string, VersionedKeys>();
-  index.transact(() => {
-    for (const meta of getNoteMetas(index, { includeTrashed: true })) {
-      const old = noteKeysFromMeta(meta, notebook.keys);
-      if (old.notebookIndex === 0) continue;
-      const version = old.version + 1;
-      const key = generateKey();
-      patchNoteMeta(index, meta.id, {
-        wrappedKey: wrapKey(notebook.keys[0]!, key, AD.noteKeyVersion(meta.id, version)),
-        keyVersion: version,
-        keyChain: [wrapPreviousKey(key, old.keys[0]!, "note", meta.id, version), ...(meta.keyChain ?? [])],
-      });
-      out.set(meta.id, { version, keys: [key, ...old.keys] });
-    }
-  });
-  return out;
-}
 
 /**
  * «Пригласить в пространство…» / «Новое общее пространство»: the space gets its key and its space
@@ -342,12 +218,12 @@ export async function makeSpaceShared(spaceId: string) {
   const space = st.ownAccount.spaces.find((s) => s.id === spaceId);
   if (!space) throw new Error("no such space");
   const key = generateKey();
-  await spacesApi.create(spaceId, wrapSpaceKeyForOwner(getMasterKey(), key, spaceId, 1));
+  await sharingApi.createSpace({ spaceId, wrappedKey: wrapSpaceKey(getMasterKey(), key, spaceId, 1) });
   setSpaceKeys(spaceId, { version: 1, keys: [key] });
   const notebooks = st.ownAccount.notebooks.filter((n) => n.spaceId === spaceId);
-  await rt.store.create(spaceId, "space" as never, null, (doc) =>
-    initSpaceDoc(doc, { spaceId, name: space.name, icon: space.icon, color: space.color }),
-  );
+  await rt.store.create(spaceId, "space", null, (doc) => {
+    createSpaceDoc(spaceId, { doc, name: space.name, icon: space.icon, color: space.color });
+  });
   for (const nb of notebooks) await moveNotebookIn(spaceId, nb.id);
   accountMaps(rt.account).spaces.get(spaceId)?.set("shared", true);
   await refreshSpaces();
@@ -356,66 +232,65 @@ export async function makeSpaceShared(spaceId: string) {
 /** One own notebook into a shared space (§11.3): its current key wrapped by the space key. */
 export async function moveNotebookIn(spaceId: string, notebookId: string) {
   const rt = runtime();
-  const spaceKey = spaceKeysOf(spaceId)?.keys[0];
-  if (!spaceKey) throw new Error("no space key");
-  const nbKeys = ownerNotebookKeys(await notebooksApi.key(notebookId), getMasterKey(), notebookId);
-  await spacesApi.moveIn(spaceId, notebookId, {
-    version: nbKeys.version,
-    spaceWrappedKey: wrapNotebookKeyForSpace(spaceKey, nbKeys.keys[0]!, spaceId, notebookId, nbKeys.version),
+  await moveNotebookIntoSpace({
+    api: sharingApi,
+    spaceId,
+    notebookId,
+    masterKey: getMasterKey(),
+    account: rt.account,
+    spaceDoc: await rt.store.pin(spaceId),
   });
-  const own = accountMaps(rt.account).notebooks;
-  const ref = own.get(notebookId)?.toJSON() as Parameters<typeof withoutSpace>[0] | undefined;
-  const spaceDoc = await rt.store.pin(spaceId);
-  rt.account.transact(() => own.delete(notebookId));
-  if (ref) spaceDoc.transact(() => spaceMaps(spaceDoc).notebooks.set(notebookId, toYMap(withoutSpace({ ...ref, spaceId }))));
 }
 
 /**
  * Out of a shared space into a personal one (§11.3): a new notebook key, the owner's again, in one
- * request; then its notes get new keys. Former members keep only what they saw.
+ * request; then its notes get new keys (§10.3 steps 2–3). Former members keep only what they saw.
  */
 export async function moveNotebookOut(spaceId: string, notebookId: string, toSpaceId: string) {
   const rt = runtime();
-  const spaceKeys = spaceKeysOf(spaceId);
-  if (!spaceKeys) throw new Error("no space key");
-  const entry = (await spacesApi.notebooks(spaceId)).find((n) => n.notebookId === notebookId);
-  if (!entry) throw new Error("notebook is not in the space");
-  const old = spaceNotebookKeys(entry, spaceId, spaceKeys.keys);
-  const version = old.version + 1;
-  const key = generateKey();
-  await spacesApi.moveOut(spaceId, notebookId, {
-    version,
-    ownerWrappedKey: wrapNotebookKeyForOwner(getMasterKey(), key, notebookId, version),
-    previousKeyWrap: wrapPreviousKey(key, old.keys[0]!, "notebook", notebookId, version),
-    ...(entry.mode === "agent" ? { notebookKey: toBase64Url(key) } : {}),
+  const masterKey = getMasterKey();
+  await moveNotebookOutOfSpace({
+    api: sharingApi,
+    spaceId,
+    notebookId,
+    masterKey,
+    account: rt.account,
+    spaceDoc: await rt.store.pin(spaceId),
+    toSpaceId,
+    onKeys: async (keys) => {
+      setKeyring(notebookId, "notebook", keys);
+      await refreshNotebookKeyCache(notebookId);
+    },
   });
-  const next = { version, keys: [key, ...old.keys] };
-  setKeyring(notebookId, "notebook", next);
-  await refreshNotebookKeyCache(notebookId);
-  const spaceDoc = await rt.store.pin(spaceId);
-  const ref = spaceMaps(spaceDoc).notebooks.get(notebookId)?.toJSON() as Record<string, unknown> | undefined;
-  spaceDoc.transact(() => spaceMaps(spaceDoc).notebooks.delete(notebookId));
-  const order = Math.max(0, ...useWorkspace.getState().ownAccount.notebooks.filter((n) => n.spaceId === toSpaceId).map((n) => n.order)) + 1;
-  if (ref) rt.account.transact(() => accountMaps(rt.account).notebooks.set(notebookId, toYMap({ ...ref, spaceId: toSpaceId, order })));
-  const index = await rt.store.load(notebookId);
-  const rekeyed = rekeyNotes(index, next);
-  await rt.client.whenSent(notebookId);
-  for (const [noteId, nk] of rekeyed) setKeyring(noteId, "note", nk);
-  await sharingApi.rotateKeyDone({ kind: "notebook", id: notebookId }).catch(() => undefined);
+  const me = useAuth.getState().userId!;
+  const pair = await accountBoxKeys();
+  await rotateNotebookKey({
+    api: sharingApi,
+    notebookId,
+    owner: { userId: me, secretKey: pair.secretKey },
+    masterKey,
+    index: await rt.store.load(notebookId),
+    agentMode: useWorkspace.getState().account.notebooks.find((n) => n.id === notebookId)?.mode === "agent",
+    whenIndexSent: () => rt.client.whenSent(notebookId),
+    onKeys: async (k) => {
+      if (k.notebook) setKeyring(notebookId, "notebook", k.notebook);
+      for (const [noteId, nk] of k.notes ?? []) setKeyring(noteId, "note", nk);
+    },
+  });
   await refreshSpaces();
 }
 
-/** A new notebook's key for a shared space (§11.2): wrapped by the space key, version 1. */
-export function wrapNewNotebookKey(spaceId: string, notebookId: string, key: Uint8Array): string {
-  const spaceKey = spaceKeysOf(spaceId)?.keys[0];
-  if (!spaceKey) throw new Error("no space key");
-  return wrapNotebookKeyForSpace(spaceKey, key, spaceId, notebookId, 1);
+/**
+ * A new notebook's key for a shared space (§11.2): wrapped by the current space key, version 1;
+ * the server checks `spaceKeyVersion` against the space's current one.
+ */
+export function wrapNewNotebookKey(spaceId: string, notebookId: string, key: Uint8Array): { wrapped: string; spaceKeyVersion: number } {
+  const keys = spaceKeysOf(spaceId);
+  if (!keys) throw new Error("no space key");
+  return { wrapped: wrapNotebookKeyForSpace(keys.keys[0]!, key, spaceId, notebookId, 1), spaceKeyVersion: keys.version };
 }
 
 /** The new notebook is in the space doc now; the server lists it (refresh its keys and lists). */
 export function notebookCreatedInSpace() {
   void refreshSpaces();
 }
-
-export type { SpaceNotebookKey, SpaceKeyResponse };
-export { uuidv7 };

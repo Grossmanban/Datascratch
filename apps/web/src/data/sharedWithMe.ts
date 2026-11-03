@@ -1,7 +1,6 @@
 // D-54, the member's side: what other accounts share with this one (`GET /shared-with-me`), its keys
 // (wrapped for this account's key pair, crypto.md §10.2), its place in «Общие со мной» and the role.
-import { reconcileSharedRefs, sharedItemKeys, sharedItemSchema, type SharedItem, type ShareTarget } from "@datascratch/shared";
-import { z } from "zod";
+import { reconcileSharedRefs, sharedItemKeys, type AccountSharedItem, type SharedItem, type ShareTarget } from "@datascratch/shared";
 import { create } from "zustand";
 import { useAuth } from "@/auth/session";
 import { forgetSharedResource } from "@/domain/actions";
@@ -12,8 +11,7 @@ import { kvGet, kvSet } from "./db";
 import { keyVersionAcceptable, setKeyring } from "./keys";
 import { runtime } from "./runtime";
 import { accountBoxKeys, sharingApi } from "./sharing";
-import { membersApi } from "@/api/endpoints";
-import { applySpaceItems, spaceItemSchema, type SpaceItem } from "./sharedSpaces";
+import { applySpaceItems } from "./sharedSpaces";
 
 export type SharedState = {
   /** By "<kind>:<id>"; `keyed` once the owner's client delivered the key. */
@@ -67,15 +65,15 @@ async function pass() {
   const { userId } = useAuth.getState();
   if (!userId) return;
   let list: SharedItem[];
-  let spaces: SpaceItem[];
+  let spaces: AccountSharedItem[];
   try {
-    ({ list, spaces } = splitShared(await membersApi.sharedWithMe()));
+    ({ list, spaces } = splitShared(await sharingApi.sharedWithMeAll()));
     await kvSet("sharedWithMe", list);
     await kvSet("sharedSpacesWithMe", spaces);
   } catch (e) {
     // Offline: the last list keeps shared notebooks readable (keys are wrapped for this account).
     list = (await kvGet<SharedItem[]>("sharedWithMe")) ?? [];
-    spaces = (await kvGet<SpaceItem[]>("sharedSpacesWithMe")) ?? [];
+    spaces = (await kvGet<AccountSharedItem[]>("sharedSpacesWithMe")) ?? [];
     if (!list.length && !spaces.length) throw e;
     await applySpaceItems(spaces, false);
     await apply(list, userId, false);
@@ -85,19 +83,13 @@ async function pass() {
   await apply(list, userId, true);
 }
 
-/**
- * Whole shared spaces (D-62) come in the same list; they have their own path (data/sharedSpaces).
- * Notebooks and notes are checked against the contract as before.
- */
-function splitShared(raw: unknown): { list: SharedItem[]; spaces: SpaceItem[] } {
-  const all = Array.isArray(raw) ? raw : [];
-  const isSpace = (i: unknown) => (i as { target?: { kind?: unknown } })?.target?.kind === "space";
+/** Whole shared spaces (D-62) come in the same list; they have their own path (data/sharedSpaces). */
+function splitShared(all: AccountSharedItem[]): { list: SharedItem[]; spaces: AccountSharedItem[] } {
   return {
-    list: z.array(sharedItemSchema).parse(all.filter((i) => !isSpace(i))),
-    spaces: z.array(spaceItemSchema).parse(all.filter(isSpace)),
+    list: all.filter((i): i is SharedItem => i.target.kind !== "space"),
+    spaces: all.filter((i) => i.target.kind === "space"),
   };
 }
-
 async function apply(list: SharedItem[], userId: string, fromServer: boolean) {
   const pair = await accountBoxKeys();
   const items: SharedState["items"] = {};

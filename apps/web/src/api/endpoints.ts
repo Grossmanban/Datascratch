@@ -32,40 +32,6 @@ const noAuth = { auth: false } as const;
 /** A sharing target, including a whole shared space (D-62, api.md «Общие пространства»). */
 export type AnyTarget = ShareTarget | { kind: "space"; id: string };
 
-/** `Space` of the REST API (D-62); its name and icon live in the space doc. */
-export type ServerSpace = {
-  id: string;
-  ownerUserId: string;
-  keyVersion: number;
-  keyRotationPending: boolean;
-  pendingSinceVersion: number | null;
-  createdAt: string;
-};
-export type SpaceKeyResponse = { version: number; wrappedKey: string; keyChain: string[]; keyRotationPending: boolean; pendingSinceVersion: number | null };
-export type SpaceNotebookKey = { notebookId: string; version: number; spaceWrappedKey: string; keyChain: string[]; mode: NotebookMode };
-
-/** Shared spaces (D-62, api.md «Общие пространства»). */
-export const spacesApi = {
-  create: (spaceId: string, wrappedKey: string) => api.post<ServerSpace>("/spaces", { spaceId, wrappedKey }),
-  list: () => api.get<ServerSpace[]>("/spaces"),
-  key: (id: string) => api.get<SpaceKeyResponse>(`/spaces/${id}/key`),
-  notebooks: (id: string) => api.get<SpaceNotebookKey[]>(`/spaces/${id}/notebooks`),
-  moveIn: (id: string, notebookId: string, body: { version: number; spaceWrappedKey: string }) => api.put<void>(`/spaces/${id}/notebooks/${notebookId}`, body),
-  moveOut: (id: string, notebookId: string, body: { version: number; ownerWrappedKey: string; previousKeyWrap: string; notebookKey?: string }) =>
-    api.post<void>(`/spaces/${id}/notebooks/${notebookId}/move-out`, body),
-  rotate: (
-    id: string,
-    body: {
-      version: number;
-      ownerWrappedKey: string;
-      previousKeyWrap: string;
-      memberKeys: { userId: string; wrappedKey: string }[];
-      notebooks: { notebookId: string; version: number; spaceWrappedKey: string; previousKeyWrap: string; notebookKey?: string }[];
-    },
-  ) => api.post<void>(`/spaces/${id}/rotate`, body),
-  rotateDone: (id: string) => api.post<void>(`/spaces/${id}/rotate/done`),
-  remove: (id: string) => api.del<void>(`/spaces/${id}`),
-};
 
 export const authApi = {
   // The KDF parameters are checked against the client bounds (crypto.md §2) before any use.

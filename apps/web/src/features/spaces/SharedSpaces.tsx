@@ -3,7 +3,8 @@ import type { TFunction } from "i18next";
 import { LogOut } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ApiError, NetworkError } from "@/api/client";
-import { membersApi, spacesApi } from "@/api/endpoints";
+import { membersApi } from "@/api/endpoints";
+import { sharingApi } from "@/data/sharing";
 import { useAuth } from "@/auth/session";
 import { leaveSpace, makeSpaceShared, moveNotebookIn, moveNotebookOut, refreshSpaces } from "@/data/sharedSpaces";
 import { accountMaps } from "@/domain/account";
@@ -161,7 +162,7 @@ export async function deleteSharedSpace(t: TFunction, spaceId: string) {
   });
   if (!ok) return;
   try {
-    await spacesApi.remove(spaceId);
+    await sharingApi.deleteSpace(spaceId);
   } catch (e) {
     return failed(t, e);
   }

@@ -87,7 +87,8 @@ export async function createNotebook(input: {
   const key = randomKey();
   // In a shared space (D-62, crypto.md §11.2) the key is wrapped by the space key, not the masterKey.
   const inShared = useWorkspace.getState().account.spaces.find((s) => s.id === input.spaceId)?.shared;
-  const wrapped = inShared ? wrapNewNotebookKey(input.spaceId, id, key) : await wrapKey(getMasterKey(), key, ad.notebookKey(id));
+  const forSpace = inShared ? wrapNewNotebookKey(input.spaceId, id, key) : null;
+  const wrapped = forSpace ? forSpace.wrapped : await wrapKey(getMasterKey(), key, ad.notebookKey(id));
   if (inShared) setKeyring(id, "notebook", { version: 1, keys: [key] });
   else rememberNotebookKey(id, key, wrapped);
   await enqueueOp({
@@ -97,7 +98,7 @@ export async function createNotebook(input: {
       notebookId: id,
       mode,
       wrappedKey: wrapped,
-      ...(inShared ? { spaceId: input.spaceId } : {}),
+      ...(forSpace ? { spaceId: input.spaceId, spaceKeyVersion: forSpace.spaceKeyVersion } : {}),
       ...(mode === "agent" ? { notebookKey: toBase64Url(key) } : {}),
     },
   });

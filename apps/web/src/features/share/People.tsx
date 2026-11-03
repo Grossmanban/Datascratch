@@ -8,7 +8,7 @@ import { refreshSpaces } from "@/data/sharedSpaces";
 import { useAuth } from "@/auth/session";
 import { giveAccessNow, maintainShares, recordInvitation } from "@/data/ownerShares";
 import { formatDay, localDate } from "@/lib/dates";
-import { uuidv7, type Member, type MemberRole, type OutgoingInvitation, type ShareTarget } from "@/lib/shared";
+import { uuidv7, type Member, type MemberRole, type OutgoingInvitation } from "@/lib/shared";
 import { Button, confirmDialog, DropdownMenu, IconButton, Input, Spinner, toast } from "@/ui";
 
 /** The link a person without the app (or not signed in) opens to reach the invitation (api.md). */
@@ -77,7 +77,7 @@ export function PeopleSection({ target }: { target: AnyTarget }) {
 
   const invite = useMutation({
     mutationFn: (to: string) => {
-      recordInvitation(target as ShareTarget, to);
+      recordInvitation(target, to);
       return membersApi.invite({ invitationId: uuidv7(), target, email: to, role });
     },
     onSuccess: () => {
@@ -202,7 +202,7 @@ export function PeopleSection({ target }: { target: AnyTarget }) {
                   className="shrink-0"
                   data-testid="give-access"
                   onClick={async () => {
-                    await giveAccessNow(target as ShareTarget, m.userId);
+                    await giveAccessNow(target, m.userId);
                     if (target.kind === "space") await refreshSpaces();
                     refresh();
                   }}

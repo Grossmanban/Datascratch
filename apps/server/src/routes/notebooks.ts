@@ -138,6 +138,8 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             notebookKey: Key32.optional(),
             /** A notebook of a shared space (D-62): wrappedKey is then under the space key. */
             spaceId: id().nullable().optional(),
+            /** The space key version that wrapped it; required with spaceId (409 when not current). */
+            spaceKeyVersion: z.number().int().positive().optional(),
           }),
           response: { 200: Notebook, ...errorResponses },
         },
@@ -152,6 +154,7 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           ? Buffer.from(await ctx.keys.wrapNotebookKey(b.notebookId, fromB64(b.notebookKey)))
           : null;
         const spaceId = b.spaceId ?? null;
+        if (spaceId && b.spaceKeyVersion === undefined) throw badRequest('spaceKeyVersion is required with spaceId');
         // In a shared space the owner or an editor creates it; it belongs to the space's owner (quota too).
         let ownerId = p.userId;
         if (spaceId) {
@@ -167,8 +170,12 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           if (b.mode === 'agent' && ownerId !== p.userId) throw forbidden('only the owner turns on agent mode');
         }
         const created = await db.transaction(async (tx) => {
-          // Not while the space's key changes: its rotation names every notebook of the space.
-          if (spaceId) await tx.select({ id: spaces.id }).from(spaces).where(eq(spaces.id, spaceId)).for('share');
+          // Not while the space's key changes (its rotation names every notebook of the space), and
+          // only under the current space key: one wrapped by the old key would be lost (api.md).
+          if (spaceId) {
+            const [sp] = await tx.select({ keyVersion: spaces.keyVersion }).from(spaces).where(eq(spaces.id, spaceId)).for('share');
+            if (b.spaceKeyVersion !== sp!.keyVersion) throw conflict('space key version is not current');
+          }
           const [row] = await tx
             .insert(notebooks)
             .values({ id: b.notebookId, userId: ownerId, spaceId, mode: b.mode, wrappedKey, serverWrappedKey })

@@ -47,13 +47,21 @@ async function space(owner: TestUser) {
   return spaceId;
 }
 
-async function spaceNotebook(u: TestUser, spaceId: string, mode: 'private' | 'agent' = 'private', notebookKey = rnd(32)) {
+async function spaceNotebook(
+  u: TestUser,
+  spaceId: string,
+  mode: 'private' | 'agent' = 'private',
+  notebookKey = rnd(32),
+  spaceKeyVersion?: number,
+) {
   const notebookId = newId();
+  const version = spaceKeyVersion ?? (await spaceRow(spaceId))!.keyVersion;
   const r = await call(u, 'POST', '/notebooks', {
     notebookId,
     mode,
     wrappedKey: b64(rnd(73)),
     spaceId,
+    spaceKeyVersion: version,
     ...(mode === 'agent' ? { notebookKey: b64(notebookKey) } : {}),
   });
   return { notebookId, status: r.status, body: r.body };
@@ -299,6 +307,12 @@ describe('leaving, removal and the space rotation', () => {
     expect(item.wrappedKey).not.toBeNull();
     expect((await call(owner, 'GET', '/shared-by-me')).body[0]).toMatchObject({ keyVersion: 2, keyRotationPending: true, awaitingKey: 1 });
 
+    // A notebook made under the old space key is refused; under the new one it is fine.
+    expect((await spaceNotebook(owner, spaceId, 'private', rnd(32), 1)).status).toBe(409);
+    const fresh = await spaceNotebook(owner, spaceId, 'private', rnd(32), 2);
+    expect(fresh.status).toBe(200);
+    expect((await call(owner, 'POST', '/notebooks', { notebookId: newId(), mode: 'private', wrappedKey: b64(rnd(73)), spaceId })).status).toBe(400);
+
     expect((await call(owner, 'POST', `/spaces/${spaceId}/rotate/done`, {})).status).toBe(204);
     expect(await spaceRow(spaceId)).toMatchObject({ keyRotationPending: false, pendingSinceVersion: null });
     const after = await s.ctx.database.db.select().from(notebooks).where(eq(notebooks.spaceId, spaceId));
@@ -351,8 +365,7 @@ describe('leaving, removal and the space rotation', () => {
     const late = await user(email);
     const accepted = await call(late, 'POST', `/invitations/${invitationId}/accept`, {});
     expect(accepted.body).toMatchObject({ docIds: [], wrappedKey: null });
-    // The wrappers alone open nothing (api.md): any member who accepted gets the list.
-    expect((await call(late, 'GET', `/spaces/${spaceId}/notebooks`)).status).toBe(200);
+    expect((await call(late, 'GET', `/spaces/${spaceId}/notebooks`)).status).toBe(404);
     expect((await spaceNotebook(late, spaceId)).status).toBe(404);
     const c = await SyncClient.user(s, late);
     expect((await c.subscribe(nb.notebookId)).error).toMatchObject({ code: 'doc_not_found' });

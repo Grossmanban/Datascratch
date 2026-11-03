@@ -56,7 +56,12 @@ final class URLSessionWebSocket: WebSocketConnection, @unchecked Sendable {
 
     func sendPing() async throws {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, any Error>) in
+            // URLSession can call the pong handler more than once (an error, then again as the
+            // task is cancelled); a continuation resumed twice stops the app (the owner's iPad,
+            // build 29, 2026-11-03). Only the first call counts.
+            let resumed = Locked(false)
             task.sendPing { error in
+                guard resumed.withLock({ let first = !$0; $0 = true; return first }) else { return }
                 if let error { c.resume(throwing: error) } else { c.resume() }
             }
         }

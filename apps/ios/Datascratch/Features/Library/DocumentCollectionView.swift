@@ -68,11 +68,17 @@ struct DocumentCollectionView: View {
                             .listRowInsets(EdgeInsets(top: 6, leading: Theme.Space.s4, bottom: 6, trailing: Theme.Space.s4))
                             .listRowBackground(scene.selectedNoteId == note.id ? Theme.Palette.textPrimary.opacity(0.08) : Theme.Palette.canvas)
                             .documentActions(note)
+                            // Icons only: in a compact row (D-61) the title under the icon
+                            // spilled below the row (owner, 2026-11-03).
                             .swipeActions(edge: .trailing) {
                                 Button("Trash", systemImage: "trash", role: .destructive) { library.trash(note: note.id) }
+                                    .labelStyle(.iconOnly)
                             }
                             .swipeActions(edge: .leading) {
-                                Button("Star", systemImage: "star") { library.toggleStar(.note, note.id) }
+                                let starred = library.isStarred(.note, note.id)
+                                Button(starred ? LocalizedStringKey("Remove from Starred") : "Star",
+                                       systemImage: starred ? "star.slash" : "star") { library.toggleStar(.note, note.id) }
+                                    .labelStyle(.iconOnly)
                                     .tint(Theme.Palette.warning)
                             }
                     }

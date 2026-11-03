@@ -30,10 +30,12 @@ struct TrashView: View {
                             }
                             .swipeActions(edge: .leading) {
                                 Button("Restore", systemImage: "arrow.uturn.backward") { library.restoreFromTrash(note.id) }
+                                    .labelStyle(.iconOnly)
                                     .tint(Theme.Palette.success)
                             }
                             .swipeActions(edge: .trailing) {
                                 Button("Delete", systemImage: "trash", role: .destructive) { library.deleteForever(note.id) }
+                                    .labelStyle(.iconOnly)
                             }
                         }
                     } footer: {

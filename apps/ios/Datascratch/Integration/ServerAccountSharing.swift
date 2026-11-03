@@ -76,6 +76,14 @@ final class ServerAccountSharingService: AccountSharingService {
                 await grantKeys(for: target)
             }
         }
+        // D-62: a notebook moved out of a shared space has a key change of its own to finish;
+        // shared notebooks were done above.
+        let done = Set(items.filter { $0.target.kind == .notebook && $0.keyRotationPending }.map(\.target.id))
+        if let pending = try? await accounts.pendingNotebookRotations() {
+            for id in pending where !done.contains(id) {
+                await continueRotation(of: ShareTarget(kind: .notebook, id: id))
+            }
+        }
     }
 
     private func grantKeys(for target: ShareTarget) async {

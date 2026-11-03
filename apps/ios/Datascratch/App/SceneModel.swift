@@ -92,8 +92,8 @@ final class SceneModel {
     // MARK: iPad columns (D-60): sidebar | list | document, as in Notesnook
     //
     // Landscape shows all three; portrait the list and the document, the sidebar over them.
-    // Navigation never closes the document. One sidebar button steps through all three →
-    // list and document → the document alone; «Full Screen» belongs to the document alone.
+    // Navigation never closes the document. The sidebar button shows or hides the sidebar;
+    // «Full Screen» (the document alone) belongs to the document.
 
     enum FullScreen { case document, content }
 
@@ -360,14 +360,10 @@ final class SceneModel {
     func toggleSidebar() {
         withAnimation(Theme.Motion.smooth) {
             if isPad {
-                // Landscape: all three → list and document → the document alone → all three.
-                // Portrait: list and document ↔ the sidebar with them (D-60).
+                // One job: show or hide the sidebar (owner, 2026-11-03 — stepping through three
+                // layouts was confusing). The document alone is «Full Screen»; swipes stay.
                 if fullScreen != nil { fullScreen = nil; padColumns = .all; return }
-                switch padColumnVisibility(landscape: isPadLandscape) {
-                case .all: padColumns = .doubleColumn
-                case .doubleColumn: padColumns = isPadLandscape && selectedNoteId != nil ? .detailOnly : .all
-                default: padColumns = .all
-                }
+                padColumns = padColumnVisibility(landscape: isPadLandscape) == .all ? .doubleColumn : .all
             } else {
                 columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
             }

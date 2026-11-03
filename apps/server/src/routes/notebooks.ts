@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { requireUser } from '../auth/guard.js';
 import type { AppContext } from '../context.js';
 import type { DbOrTx } from '../db/client.js';
-import { agentGrants, docSnapshots, docUpdates, docs, notebooks, shares, users } from '../db/schema.js';
+import { agentGrants, docSnapshots, docUpdates, docs, members, notebooks, shares, spaces, users } from '../db/schema.js';
 import { fromB64, safeEqual, toB64 } from '../lib/encoding.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { docAccess } from '../services/access.js';
@@ -22,9 +22,17 @@ import { Key32, WrappedKey, errorResponses, id } from './schemas.js';
 
 const Mode = z.enum(['private', 'agent']);
 const Notebook = z
-  .object({ id: id(), mode: Mode, createdAt: z.string(), wrappedKey: z.string(), shared: z.boolean().optional() })
+  .object({
+    id: id(),
+    mode: Mode,
+    createdAt: z.string(),
+    wrappedKey: z.string(),
+    shared: z.boolean().optional(),
+    /** The shared space it is in (D-62); null in the personal space. */
+    spaceId: id().nullable(),
+  })
   .meta({ id: 'Notebook' });
-const DocKind = z.enum(['account', 'notebook', 'note']);
+const DocKind = z.enum(['account', 'notebook', 'note', 'space']);
 
 type NotebookRow = typeof notebooks.$inferSelect;
 const dto = (n: NotebookRow) => ({
@@ -32,6 +40,7 @@ const dto = (n: NotebookRow) => ({
   mode: n.mode,
   createdAt: n.createdAt.toISOString(),
   wrappedKey: toB64(n.wrappedKey),
+  spaceId: n.spaceId,
 });
 
 /** Revoke shares pointing at the given targets and disconnect their guests. */
@@ -55,11 +64,25 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         .from(notebooks)
         .where(and(eq(notebooks.id, notebookId), eq(notebooks.userId, userId)));
       if (!nb) {
-        // Members of a shared notebook see it, but only its owner manages it (D-54).
-        if (await memberOf(db, { kind: 'notebook', id: notebookId }, userId)) throw forbidden('only the owner can do this');
+        // Members of a shared notebook or space see it, but only its owner manages it (D-54, D-62).
+        if (await notebookMember(userId, notebookId)) throw forbidden('only the owner can do this');
         throw notFound('notebook not found');
       }
       return nb;
+    }
+
+    /** Open sync connections of a space's members re-check access (a notebook came or went, D-62). */
+    async function notifySpaceMembers(spaceId: string) {
+      const ms = await db.select({ userId: members.userId }).from(members).where(eq(members.spaceId, spaceId));
+      for (const m of ms) ctx.hub.publish(topics.user(m.userId), { type: 'access_changed' });
+    }
+
+    /** The membership that opens somebody else's notebook: its own (D-54) or its shared space's (D-62). */
+    async function notebookMember(userId: string, notebookId: string) {
+      const direct = await memberOf(db, { kind: 'notebook', id: notebookId }, userId);
+      if (direct) return direct;
+      const [nb] = await db.select({ spaceId: notebooks.spaceId }).from(notebooks).where(eq(notebooks.id, notebookId));
+      return nb?.spaceId ? memberOf(db, { kind: 'space', id: nb.spaceId }, userId) : null;
     }
 
     /** A document the caller may read; `owner` tells owner-only actions apart (D-54). */
@@ -108,7 +131,16 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         schema: {
           tags: ['notebooks'],
           security,
-          body: z.object({ notebookId: id(), mode: Mode, wrappedKey: WrappedKey, notebookKey: Key32.optional() }),
+          body: z.object({
+            notebookId: id(),
+            mode: Mode,
+            wrappedKey: WrappedKey,
+            notebookKey: Key32.optional(),
+            /** A notebook of a shared space (D-62): wrappedKey is then under the space key. */
+            spaceId: id().nullable().optional(),
+            /** The space key version that wrapped it; required with spaceId (409 when not current). */
+            spaceKeyVersion: z.number().int().positive().optional(),
+          }),
           response: { 200: Notebook, ...errorResponses },
         },
       },
@@ -121,24 +153,51 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         const serverWrappedKey = b.notebookKey
           ? Buffer.from(await ctx.keys.wrapNotebookKey(b.notebookId, fromB64(b.notebookKey)))
           : null;
-        return db.transaction(async (tx) => {
-          const [created] = await tx
+        const spaceId = b.spaceId ?? null;
+        if (spaceId && b.spaceKeyVersion === undefined) throw badRequest('spaceKeyVersion is required with spaceId');
+        // In a shared space the owner or an editor creates it; it belongs to the space's owner (quota too).
+        let ownerId = p.userId;
+        if (spaceId) {
+          const [sp] = await db.select({ userId: spaces.userId }).from(spaces).where(eq(spaces.id, spaceId));
+          if (!sp) throw notFound('space not found');
+          if (sp.userId !== p.userId) {
+            const m = await memberOf(db, { kind: 'space', id: spaceId }, p.userId);
+            if (!m || (m.accountCreatedAfterInvite && !m.wrappedKey)) throw notFound('space not found');
+            if (m.role !== 'editor') throw forbidden('read-only access');
+            ownerId = sp.userId;
+          }
+          // Agent mode is the owner's to switch on (api.md).
+          if (b.mode === 'agent' && ownerId !== p.userId) throw forbidden('only the owner turns on agent mode');
+        }
+        const created = await db.transaction(async (tx) => {
+          // Not while the space's key changes (its rotation names every notebook of the space), and
+          // only under the current space key: one wrapped by the old key would be lost (api.md).
+          if (spaceId) {
+            const [sp] = await tx.select({ keyVersion: spaces.keyVersion }).from(spaces).where(eq(spaces.id, spaceId)).for('share');
+            if (b.spaceKeyVersion !== sp!.keyVersion) throw conflict('space key version is not current');
+          }
+          const [row] = await tx
             .insert(notebooks)
-            .values({ id: b.notebookId, userId: p.userId, mode: b.mode, wrappedKey, serverWrappedKey })
+            .values({ id: b.notebookId, userId: ownerId, spaceId, mode: b.mode, wrappedKey, serverWrappedKey })
             .onConflictDoNothing()
             .returning();
-          if (!created) {
+          if (!row) {
             const [ex] = await tx.select().from(notebooks).where(eq(notebooks.id, b.notebookId));
-            if (ex && ex.userId === p.userId && ex.mode === b.mode && safeEqual(ex.wrappedKey, wrappedKey)) return dto(ex);
+            const same =
+              ex && ex.userId === ownerId && ex.spaceId === spaceId && ex.mode === b.mode && safeEqual(ex.wrappedKey, wrappedKey);
+            if (same) return { row: ex, fresh: false };
             throw conflict('notebook exists');
           }
           // The notebook index document shares the notebook id (document-model.md §1).
           await tx
             .insert(docs)
-            .values({ id: b.notebookId, userId: p.userId, kind: 'notebook', notebookId: b.notebookId })
+            .values({ id: b.notebookId, userId: ownerId, kind: 'notebook', notebookId: b.notebookId })
             .onConflictDoNothing();
-          return dto(created);
+          return { row, fresh: true };
         });
+        // Members of the space reach it at once, also on open connections (sync-protocol.md §6).
+        if (spaceId && created.fresh) await notifySpaceMembers(spaceId);
+        return dto(created.row);
       },
     );
 
@@ -173,6 +232,8 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       async (req) => {
         const p = await requireUser(ctx, req);
         const nb = await ownNotebook(p.userId, req.params.id);
+        // A shared space's notebook key is under the space key: GET /spaces/:id/notebooks (api.md).
+        if (nb.spaceId) throw conflict('the notebook is in a shared space: its key comes with GET /spaces/:id/notebooks');
         return {
           wrappedKey: toB64(nb.wrappedKey),
           version: nb.keyVersion,
@@ -301,6 +362,19 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       async (req, reply) => {
         const p = await requireUser(ctx, req);
         const { docId, kind, notebookId } = req.body;
+        if (kind === 'space') {
+          // The space document (docId = spaceId) is registered by the space's owner (api.md).
+          if (notebookId !== null) throw badRequest('space document has no notebook');
+          const [sp] = await db.select({ userId: spaces.userId }).from(spaces).where(eq(spaces.id, docId));
+          if (!sp || sp.userId !== p.userId) {
+            if (sp && (await memberOf(db, { kind: 'space', id: docId }, p.userId))) throw forbidden('only the owner can do this');
+            throw notFound('space not found');
+          }
+          await db.insert(docs).values({ id: docId, userId: p.userId, kind: 'space', notebookId: null }).onConflictDoNothing();
+          const [ex] = await db.select().from(docs).where(eq(docs.id, docId));
+          if (!ex || ex.kind !== 'space' || ex.userId !== p.userId) throw conflict('document exists');
+          return reply.code(204).send(null);
+        }
         if (kind === 'account') {
           if (notebookId !== null) throw badRequest('account document has no notebook');
           const [u] = await db.select({ accountDocId: users.accountDocId }).from(users).where(eq(users.id, p.userId));
@@ -309,11 +383,11 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         }
         if (!notebookId) throw badRequest('notebookId is required');
         if (kind === 'notebook' && docId !== notebookId) throw badRequest('notebook docId must equal notebookId');
-        // An editor of a shared notebook creates notes in it; they belong to the owner (D-54).
+        // An editor of a shared notebook or space creates notes in it; they belong to the owner (D-54, D-62).
         let ownerId = p.userId;
         const [nb] = await db.select({ userId: notebooks.userId }).from(notebooks).where(eq(notebooks.id, notebookId));
         if (nb && nb.userId !== p.userId) {
-          const m = await memberOf(db, { kind: 'notebook', id: notebookId }, p.userId);
+          const m = await notebookMember(p.userId, notebookId);
           if (!m) throw notFound('notebook not found');
           if (m.role !== 'editor' || kind !== 'note') throw forbidden('read-only access');
           if (m.accountCreatedAfterInvite && !m.wrappedKey) throw notFound('notebook not found');
@@ -351,11 +425,22 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req, reply) => {
         const p = await requireUser(ctx, req);
-        const { doc, owner } = await visibleDoc(p, req.params.id);
-        // Moving a note out of a shared notebook is the owner's (members would lose it).
-        if (!owner) throw forbidden('only the owner can move this note');
+        const { doc, owner, write } = await visibleDoc(p, req.params.id);
         if (doc.kind !== 'note') throw badRequest('only note documents can be moved');
-        const to = await ownNotebook(p.userId, req.body.notebookId);
+        let to: typeof notebooks.$inferSelect;
+        if (owner) {
+          to = await ownNotebook(p.userId, req.body.notebookId);
+        } else {
+          // Moving a note out of a shared notebook is the owner's (members would lose it). Inside one
+          // shared space an editor moves notes between its notebooks: it holds both keys (D-62).
+          const [from] = doc.notebookId
+            ? await db.select({ spaceId: notebooks.spaceId }).from(notebooks).where(eq(notebooks.id, doc.notebookId))
+            : [];
+          const [target] = await db.select().from(notebooks).where(eq(notebooks.id, req.body.notebookId));
+          const sameSpace = from?.spaceId != null && target?.spaceId === from.spaceId;
+          if (!write || !sameSpace) throw forbidden('only the owner can move this note');
+          to = target!;
+        }
         if (doc.notebookId === req.body.notebookId) return reply.code(204).send(null);
         const [from] = doc.notebookId
           ? await db.select({ mode: notebooks.mode }).from(notebooks).where(eq(notebooks.id, doc.notebookId))

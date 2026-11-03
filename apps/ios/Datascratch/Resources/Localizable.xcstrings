@@ -1631,6 +1631,16 @@
         }
       }
     },
+    "Find in Note": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Найти в заметке"
+          }
+        }
+      }
+    },
     "Finish": {
       "localizations": {
         "ru": {

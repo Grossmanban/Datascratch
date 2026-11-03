@@ -139,6 +139,6 @@ struct AllTagsSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .adaptiveSheetHeight()
     }
 }

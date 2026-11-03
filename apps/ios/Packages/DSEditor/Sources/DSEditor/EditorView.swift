@@ -298,6 +298,9 @@ public final class EditorView: UIView {
         textView.allowsSystemScroll = { [weak self] in self?.userIsInteracting ?? true }
         textView.textDropDelegate = self
         textView.textDragDelegate = self
+        // Find in the note (⌘F, «Find» in the document bar): the system find bar, with every
+        // match highlighted and next / previous (owner, 2026-11-03).
+        textView.isFindInteractionEnabled = true
         textView.richPaste = { [weak self] in self?.pasteRich() ?? false }
         textView.plainPaste = { [weak self] in self?.pastePlainText() }
         factory.imageMenu = { [weak self] block in self?.menu(forImage: block) }
@@ -1382,6 +1385,11 @@ public final class EditorView: UIView {
             self.model.stopCapturing()
         })
         return UIMenu(children: items)
+    }
+
+    /// Opens the find bar over the note.
+    public func showFind() {
+        textView.findInteraction?.presentFindNavigator(showingReplace: false)
     }
 
     public func undo() { textView.documentUndo.undo() }

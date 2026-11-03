@@ -1387,19 +1387,19 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792930021.2139332,
-    "seen": 1793743319.1203973,
+    "seen": 1793743562.779297,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792930021.2139332,
-    "seen": 1793743319.1203988,
+    "seen": 1793743562.7793005,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792943412.7222087,
-    "seen": 1793743319.1204002,
+    "seen": 1793743562.7793021,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -2635,7 +2635,7 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792951191.6720402,
-    "seen": 1793743319.1208754,
+    "seen": 1793743562.7798784,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -2658,10 +2658,10 @@
     "semantic_hash": "a881cb8ca90a6ade575e2c5f5f884c33"
   },
   "infra/deploy/smoke.mjs": {
-    "mtime": 1793090208.6787388,
-    "seen": 1793743319.1208825,
-    "ast_hash": "227ab10f0271f9c55122912445aba57e",
-    "semantic_hash": "227ab10f0271f9c55122912445aba57e"
+    "mtime": 1793743504.2725081,
+    "seen": 1793743562.7798872,
+    "ast_hash": "aea4035a63039d775572f826ad7905ff",
+    "semantic_hash": ""
   },
   "infra/deploy/ssh-setup.sh": {
     "mtime": 1793113110.811855,
@@ -4993,7 +4993,7 @@
   },
   "apps/server/drizzle/0003_agent_move_note.sql": {
     "mtime": 1793089823.93909,
-    "seen": 1793743319.120403,
+    "seen": 1793743562.7793045,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -5467,7 +5467,7 @@
   },
   "apps/server/drizzle/0004_storage_quota.sql": {
     "mtime": 1793109492.887963,
-    "seen": 1793743319.1204052,
+    "seen": 1793743562.7793064,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -5917,19 +5917,19 @@
   },
   "apps/server/drizzle/0005_device_revoked_reason.sql": {
     "mtime": 1793121434.097183,
-    "seen": 1793743319.1204073,
+    "seen": 1793743562.779309,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0006_sharing.sql": {
     "mtime": 1793125756.7974398,
-    "seen": 1793743319.120409,
+    "seen": 1793743562.7793117,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0007_rotation_since.sql": {
     "mtime": 1793127830.5095632,
-    "seen": 1793743319.1204114,
+    "seen": 1793743562.7793136,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -5995,7 +5995,7 @@
   },
   "apps/server/drizzle/0008_agents_shared_notebooks.sql": {
     "mtime": 1793191561.0065098,
-    "seen": 1793743319.120413,
+    "seen": 1793743562.7793162,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -6031,7 +6031,7 @@
   },
   "apps/server/drizzle/0009_agents_all_notebooks.sql": {
     "mtime": 1793739696.3941407,
-    "seen": 1793743319.1204152,
+    "seen": 1793743562.779318,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -6133,13 +6133,13 @@
   },
   "apps/server/drizzle/0010_audit_hardening.sql": {
     "mtime": 1793739696.3941407,
-    "seen": 1793743319.1204169,
+    "seen": 1793743562.7793205,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0011_shared_spaces.sql": {
     "mtime": 1793739868.4181368,
-    "seen": 1793743319.120419,
+    "seen": 1793743562.7793229,
     "ast_hash": "",
     "semantic_hash": ""
   },

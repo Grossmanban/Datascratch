@@ -36,6 +36,7 @@ struct TrashView: View {
                             .swipeActions(edge: .trailing) {
                                 Button("Delete", systemImage: "trash", role: .destructive) { library.deleteForever(note.id) }
                                     .labelStyle(.iconOnly)
+                                    .tint(Theme.Palette.danger)
                             }
                         }
                     } footer: {

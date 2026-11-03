@@ -448,6 +448,9 @@ class Importer {
         out.push({ text: m[2], marks: { ...marks, highlight: { color: "highlight.yellow" } } });
         last = m.index + m[0].length;
       } else {
+        // A tag needs a letter: `#152`, `#1` (numbers in reports, lists, issues) stay text
+        // (owner, 2026-11-03; the same rule as typing a tag in the editors).
+        if (!/\p{L}/u.test(m[4]!)) continue;
         const start = m.index + m[3]!.length;
         if (start > last) out.push({ text: value.slice(last, start), marks });
         out.push({ atom: "tag", attrs: { name: m[4]! } });

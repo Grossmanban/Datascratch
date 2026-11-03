@@ -73,6 +73,8 @@ struct DocumentCollectionView: View {
                             .swipeActions(edge: .trailing) {
                                 Button("Trash", systemImage: "trash", role: .destructive) { library.trash(note: note.id) }
                                     .labelStyle(.iconOnly)
+                                    // The app's neutral ink tint turned it white (owner, 2026-11-03).
+                                    .tint(Theme.Palette.danger)
                             }
                             .swipeActions(edge: .leading) {
                                 let starred = library.isStarred(.note, note.id)

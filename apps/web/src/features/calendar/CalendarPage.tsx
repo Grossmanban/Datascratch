@@ -6,7 +6,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { accountDb } from "@/data/db";
 import { addTask, findDaily, findInbox, getOrCreateDaily, getOrCreateInbox, openTab } from "@/domain/actions";
-import { useWorkspace } from "@/domain/workspace";
+import { useSpaceNoteFilter, useWorkspace } from "@/domain/workspace";
 import { ownerEditorHost } from "@/editor/hosts";
 import { DocView } from "@/features/doc/DocView";
 import { TopBar } from "@/features/shell/PageHeader";
@@ -31,13 +31,16 @@ export function CalendarPage() {
   const setDate = (d: string) => void navigate({ to: "/calendar", search: { date: d === today() ? undefined : d }, replace: true });
   const week = weekOf(date);
   const tasks = useLiveQuery(() => accountDb().tasks.toArray(), [], []);
-  const notes = useWorkspace((s) => s.notes);
+  const allNotes = useWorkspace((s) => s.notes);
+  const inSpace = useSpaceNoteFilter();
+  // Days show the tasks and notes of the current space only (D-48), with what is shared into it (D-54).
+  const notes = useMemo(() => Object.fromEntries(Object.entries(allNotes).filter(([, n]) => inSpace(n))), [allNotes, inSpace]);
   const dailyId = useWorkspace(() => findDaily(date));
 
   const marks = useMemo(() => {
     const m: Record<string, number> = {};
     for (const r of tasks) {
-      if (r.state !== "open" || notes[r.noteId]?.trashedAt) continue;
+      if (r.state !== "open" || !notes[r.noteId] || notes[r.noteId]!.trashedAt) continue;
       const key = r.scheduled ?? r.deadline;
       if (key) m[key] = (m[key] ?? 0) + 1;
     }
@@ -48,7 +51,7 @@ export function CalendarPage() {
   const dayTasks = useMemo(() => {
     const t0 = today();
     return tasks
-      .filter((r) => !notes[r.noteId]?.trashedAt)
+      .filter((r) => notes[r.noteId] && !notes[r.noteId]!.trashedAt)
       .filter(
         (r) =>
           r.scheduled === date ||

@@ -38,10 +38,13 @@ final class ParagraphDecoration: NSObject, @unchecked Sendable {
     /// The paragraph has unaccepted agent edits (D-10): a bar in the left margin.
     let hasAgentEdit: Bool
     let agentEditColor: UIColor
+    /// Task date chips are actionable (pills) or quiet labels (D-51, `EditorTheme.taskDatesEnabled`).
+    let datesInteractive: Bool
 
     init(blockId: BlockID, kind: ParagraphKind, marker: ListMarker?, itemBlockId: BlockID?, indent: CGFloat, quoteDepth: Int,
          quoteIndentStep: CGFloat, callout: CalloutInfo?, calloutIsFirst: Bool, calloutIsLast: Bool, isCode: Bool,
-         codeIsFirst: Bool, codeIsLast: Bool, markerFont: UIFont, fontSize: CGFloat, hasAgentEdit: Bool = false) {
+         codeIsFirst: Bool, codeIsLast: Bool, markerFont: UIFont, fontSize: CGFloat, hasAgentEdit: Bool = false,
+         datesInteractive: Bool = true) {
         self.blockId = blockId
         self.kind = kind
         self.marker = marker
@@ -66,11 +69,14 @@ final class ParagraphDecoration: NSObject, @unchecked Sendable {
         self.fontSize = fontSize
         self.hasAgentEdit = hasAgentEdit
         self.agentEditColor = EditorTheme.agentEdit
+        self.datesInteractive = datesInteractive
     }
 
     /// Width reserved for the list marker in front of the text.
     static let markerWidth: CGFloat = 28
     static let calloutPadding: CGFloat = 14
+    /// Width kept for the callout's icon between the box's left padding and the text.
+    static let calloutIconSlot: CGFloat = 30
 
     var taskState: String? {
         if case .task(let state, _, _) = marker { return state }
@@ -164,7 +170,7 @@ struct AttributedRenderer {
 
         let quoteStep: CGFloat = 20
         var indent = CGFloat(ctx.listDepth) * ParagraphDecoration.markerWidth + CGFloat(ctx.quoteDepth) * quoteStep
-        if ctx.callout != nil { indent += ParagraphDecoration.calloutPadding + 26 }
+        if ctx.callout != nil { indent += ParagraphDecoration.calloutPadding + ParagraphDecoration.calloutIconSlot }
         if isCode { indent += 14 }
 
         func sameCallout(_ j: Int) -> Bool {
@@ -175,7 +181,7 @@ struct AttributedRenderer {
         style.firstLineHeadIndent = indent
         style.headIndent = indent
         if ctx.callout != nil || isCode { style.tailIndent = -(isCode ? 14 : ParagraphDecoration.calloutPadding) }
-        style.lineHeightMultiple = isCode ? 1.15 : (para.kind.type == NodeType.title ? 1.05 : 1.22)
+        style.lineHeightMultiple = isCode ? 1.15 : (para.kind.type == NodeType.title ? 1.05 : EditorTheme.bodyLineHeightMultiple)
         switch para.kind.type {
         case NodeType.title:
             style.paragraphSpacing = 18
@@ -192,6 +198,20 @@ struct AttributedRenderer {
             if !sameCallout(i - 1) { style.paragraphSpacingBefore = max(style.paragraphSpacingBefore, 14) }
             if !sameCallout(i + 1) { style.paragraphSpacing = max(style.paragraphSpacing, 18) }
         }
+        if let pitch = theme.paperPitch {
+            // Ruled/grid/dot paper: lines and spacing in whole pitches keep the text on the rules
+            // all the way down (a heading takes two lines, a body line one).
+            func snap(_ v: CGFloat) -> CGFloat { (v / pitch).rounded() * pitch }
+            style.paragraphSpacing = snap(style.paragraphSpacing)
+            style.paragraphSpacingBefore = snap(style.paragraphSpacingBefore)
+            if para.kind.isText {
+                let natural = font.lineHeight * style.lineHeightMultiple
+                let height = max(1, (natural / pitch - 0.15).rounded(.up)) * pitch
+                style.minimumLineHeight = height
+                style.maximumLineHeight = height
+            }
+            style.lineHeightMultiple = 0
+        }
         if let align = para.attrs["textAlign"]?.stringValue {
             style.alignment = align == "center" ? .center : align == "right" ? .right : align == "justify" ? .justified : .natural
         }
@@ -202,7 +222,8 @@ struct AttributedRenderer {
             calloutIsFirst: !sameCallout(i - 1), calloutIsLast: !sameCallout(i + 1), isCode: isCode,
             codeIsFirst: true, codeIsLast: true,
             markerFont: theme.font(size: size, weight: .regular, design: .default), fontSize: size,
-            hasAgentEdit: para.inline.contains { $0.marks.contains(MarkName.agentEdit) })
+            hasAgentEdit: para.inline.contains { $0.marks.contains(MarkName.agentEdit) },
+            datesInteractive: theme.taskDatesEnabled)
 
         if case .task(let state, let scheduled, let deadline) = ctx.marker {
             // Keep every line short of the column by the chips' width, so the date chips drawn
@@ -241,7 +262,7 @@ struct AttributedRenderer {
         }
         if marks.contains(MarkName.underline) { a[.underlineStyle] = NSUnderlineStyle.single.rawValue }
         if marks.contains(MarkName.strike) { a[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
-        if let link = marks[MarkName.link]?.objectValue?["href"]?.stringValue, let url = URL(string: link) {
+        if let link = marks[MarkName.link]?.objectValue?["href"]?.stringValue, let url = Self.safeLink(link) {
             a[.link] = url
         }
         if let hl = marks[MarkName.highlight] {
@@ -253,6 +274,17 @@ struct AttributedRenderer {
         }
         // `agentEdit` is shown per paragraph (a margin bar, `BlockLayoutFragment`), not on the text.
         return a
+    }
+
+    /// Links open only web and mail addresses, as on the web (`safeHref`): a link written by
+    /// someone else in a shared note must not run a shortcut, call, or open another app.
+    static func safeLink(_ href: String) -> URL? {
+        let trimmed = href.trimmingCharacters(in: .whitespaces)
+        guard trimmed.range(of: #"^(https?://|mailto:)"#, options: [.regularExpression, .caseInsensitive]) != nil,
+              !trimmed.unicodeScalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }),
+              let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(),
+              ["http", "https", "mailto"].contains(scheme) else { return nil }
+        return url
     }
 
     /// Typing attributes for new text with `marks` in paragraph `index`.

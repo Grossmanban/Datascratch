@@ -22,9 +22,37 @@ final class SyncCenter {
     private(set) var isOnline = true
     private(set) var phase: Phase
     private(set) var pendingChanges = 0
-    let serverURL: URL?
+    /// Notebooks with changes from other devices this device could not read (another key):
+    /// set aside, everything else syncs. A calm note on the notebook, not a global state.
+    var unreadableNotebookIds: Set<String> = []
+    /// Per notebook, what is set aside right now (item count and newest seq): the banner's
+    /// dismissal is keyed by it, so only new unreadable items bring it back.
+    var unreadableSignatures: [String: String] = [:]
+    /// Changes waiting for a key (a notebook from another device): not a spinner — they go out
+    /// by themselves once the key arrives. Since when, for a calm hint if it lasts.
+    private(set) var heldChanges = 0
+    private(set) var heldSince: Date?
+
+    func setHeld(_ count: Int, now: Date = Date()) {
+        guard count != heldChanges else { return }
+        heldChanges = count
+        heldSince = count > 0 ? (heldSince ?? now) : nil
+    }
+
+    /// Held for a while (a minute): worth a quiet line, never an alarm.
+    func showsHeldHint(now: Date = Date()) -> Bool {
+        guard heldChanges > 0, let since = heldSince else { return false }
+        return now.timeIntervalSince(since) > 60
+    }
+    private(set) var serverURL: URL?
 
     @ObservationIgnored private var monitor: NWPathMonitor?
+
+    /// D-49: signing in on another server (only while signed out).
+    func useServer(_ url: URL) {
+        serverURL = url
+        if case .localOnly = phase { phase = .offline(pending: 0) }
+    }
 
     init(serverURL: URL?, monitorNetwork: Bool = true) {
         self.serverURL = serverURL
@@ -98,6 +126,10 @@ final class SyncCenter {
 
     /// Sends the undelivered changes again (`SyncEngine.retryFailed`).
     @ObservationIgnored var onRetry: (() -> Void)?
+    /// Changes wait for a key: fetch the keys from the server again and send what they open.
+    @ObservationIgnored var onCheckKeys: (() -> Void)?
+
+    func checkKeys() { onCheckKeys?() }
 
     func retryFailed() {
         guard case .notSent = phase else { return }

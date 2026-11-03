@@ -104,6 +104,7 @@ it('agent access follows the note into and out of agent notebooks', async () => 
     name: 'x',
     clientId: null,
     notebookIds,
+    allNotebooks: false,
     permission: 'read',
     createdAt: new Date().toISOString(),
     expiresAt: null,

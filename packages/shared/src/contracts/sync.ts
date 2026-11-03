@@ -1,6 +1,7 @@
 // Messages of the WebSocket sync protocol (sync-protocol.md, v1).
 // The server and every client validate incoming frames with these schemas.
 import { z } from "zod";
+import { authorSchema, deviceRevokedReasonSchema } from "./api.js";
 import { base64UrlSchema, uuidSchema } from "./common.js";
 
 export const SYNC_PROTOCOL_VERSION = 1;
@@ -10,7 +11,7 @@ export const SYNC_PING_INTERVAL_MS = 25_000;
 
 /** Decoded payload limits (sync-protocol.md §7). */
 export const MAX_UPDATE_BYTES = 2 * 1024 * 1024;
-export const MAX_SNAPSHOT_BYTES = 50 * 1024 * 1024;
+export const MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024;
 
 /** A client compacts a document once either threshold is exceeded (sync-protocol.md §5). */
 export const SNAPSHOT_THRESHOLD_UPDATES = 500;
@@ -43,9 +44,18 @@ export const helloMessageSchema = z.object({
   client: z.object({ platform: z.enum(CLIENT_PLATFORMS), version: z.string().min(1) }),
 });
 
+/** At most this many documents per `subscribe` message; clients split larger sets. */
+export const MAX_SUBSCRIBE_DOCS = 1000;
+
 export const subscribeMessageSchema = z.object({
   type: z.literal("subscribe"),
-  docs: z.array(z.object({ docId: uuidSchema, since: sinceSchema })).min(1),
+  docs: z
+    .array(z.object({ docId: uuidSchema, since: sinceSchema }))
+    .min(1)
+    .max(MAX_SUBSCRIBE_DOCS)
+    .refine((docs) => new Set(docs.map((d) => d.docId)).size === docs.length, {
+      message: "duplicate docId in subscribe",
+    }),
 });
 
 export const unsubscribeMessageSchema = z.object({
@@ -104,10 +114,14 @@ export const welcomeMessageSchema = z.object({
   protocol: z.literal(SYNC_PROTOCOL_VERSION),
 });
 
+/** Server-stamped author (D-54); optional so older servers still parse. */
+const authorFieldSchema = authorSchema.optional();
+
 export const updateItemSchema = z.object({
   seq: seqSchema,
   payload: payloadSchema,
   deviceId: deviceIdSchema,
+  author: authorFieldSchema,
 });
 export type UpdateItem = z.infer<typeof updateItemSchema>;
 
@@ -126,6 +140,7 @@ export const updateMessageSchema = z.object({
   seq: seqSchema,
   payload: payloadSchema,
   deviceId: deviceIdSchema,
+  author: authorFieldSchema,
 });
 
 export const ackMessageSchema = z.object({
@@ -152,6 +167,7 @@ export const SYNC_ERROR_CODES = [
   "rate_limited",
   "protocol_mismatch",
   "internal",
+  "device_revoked",
 ] as const;
 export type SyncErrorCode = (typeof SYNC_ERROR_CODES)[number];
 
@@ -161,7 +177,18 @@ export const errorMessageSchema = z.object({
   message: z.string(),
   /** clientMsgId or docId the error refers to. */
   ref: z.string().optional(),
+  /** For `rate_limited`: how long to wait before reconnecting/resending. */
+  retryAfterMs: z.number().int().nonnegative().optional(),
+  /** Present with `device_revoked` (D-53). */
+  reason: deviceRevokedReasonSchema.optional(),
 });
+
+/**
+ * WebSocket close code after `error device_revoked` (D-53); the close reason
+ * string carries the DeviceRevokedReason. Clients treat this close code alone
+ * as a revocation too, in case the error frame was lost.
+ */
+export const SYNC_CLOSE_DEVICE_REVOKED = 4410;
 
 export const serverMessageSchema = z.discriminatedUnion("type", [
   welcomeMessageSchema,

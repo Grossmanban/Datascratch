@@ -28,28 +28,40 @@ struct AppCommands: Commands {
             Divider()
             Button("All Documents") { scene?.show(.allDocuments) }
                 .keyboardShortcut("1", modifiers: .command)
-            Button("Tasks") { scene?.show(.tasks) }
-                .keyboardShortcut("2", modifiers: .command)
-            Button("Calendar") { scene?.show(.calendar) }
-                .keyboardShortcut("3", modifiers: .command)
+            if Features.tasks {
+                Button("Tasks") { scene?.show(.tasks) }
+                    .keyboardShortcut("2", modifiers: .command)
+            }
+            if Features.calendar {
+                Button("Calendar") { scene?.show(.calendar) }
+                    .keyboardShortcut("3", modifiers: .command)
+            }
             Button("Starred") { scene?.show(.starred) }
                 .keyboardShortcut("4", modifiers: .command)
             Divider()
-            Button("Today's Note") { scene?.openToday() }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
+            if Features.calendar {
+                Button("Today's Note") { scene?.openToday() }
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
+            }
             Button("Toggle Sidebar") { scene?.toggleSidebar() }
                 .keyboardShortcut("s", modifiers: [.command, .control])
             Button("Full Screen") {
                 guard let scene else { return }
-                if scene.selectedNoteId != nil { scene.toggleDocumentFullScreen() } else { scene.toggleContentFullScreen() }
+                if scene.selectedNoteId != nil { scene.toggleDocumentFullScreen() }
             }
             .keyboardShortcut("f", modifiers: [.command, .control])
-            .disabled(scene == nil)
-            Button("Close Tab") { scene?.closeTab() }
-                .keyboardShortcut("w", modifiers: .command)
-            Button("Close Document") { scene?.closeDocument() }
-                .keyboardShortcut("w", modifiers: [.command, .shift])
-                .disabled(scene?.selectedNoteId == nil)
+            .disabled(scene?.selectedNoteId == nil)
+            if Features.tabs {
+                Button("Close Tab") { scene?.closeTab() }
+                    .keyboardShortcut("w", modifiers: .command)
+                Button("Close Document") { scene?.closeDocument() }
+                    .keyboardShortcut("w", modifiers: [.command, .shift])
+                    .disabled(scene?.selectedNoteId == nil)
+            } else {
+                Button("Close Document") { scene?.closeDocument() }
+                    .keyboardShortcut("w", modifiers: .command)
+                    .disabled(scene?.selectedNoteId == nil)
+            }
         }
 
         CommandGroup(replacing: .appSettings) {

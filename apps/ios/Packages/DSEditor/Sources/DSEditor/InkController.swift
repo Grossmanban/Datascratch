@@ -371,6 +371,7 @@ final class InkController {
         case .text:
             var builder = TextAnchorBuilder()
             var nearText = true
+            var hits: [CharacterHit] = []
             for sample in samples {
                 // `strokes.md` §4, free drawing: a point more than 3 em (vertically) from the
                 // nearest line with characters makes the whole stroke a free drawing.
@@ -378,7 +379,11 @@ final class InkController {
                     nearText = false
                     break
                 }
-                builder.append(sample.inkSample(start: s.startTime), hit: hit)
+                hits.append(hit)
+            }
+            if nearText {
+                hits = enclosedLineHits(samples.map(\.location), hits: hits)
+                for (sample, hit) in zip(samples, hits) { builder.append(sample.inkSample(start: s.startTime), hit: hit) }
             }
             var anchors: [Data] = []
             var ok = nearText && !builder.anchorOffsets.isEmpty
@@ -411,6 +416,29 @@ final class InkController {
         document.stopCapturing()
         // Draw immediately so there is no flicker between the live and the committed layer.
         refresh()
+    }
+
+    /// `strokes.md` §4 (D-58): a stroke that encloses lines (a frame, a circle around a phrase) is
+    /// anchored to those lines only. Its edge passing nearer a neighbouring line (a heading above)
+    /// was anchored to that line's letters, so a new font or page width skewed the frame and cut it.
+    /// The enclosed lines are the hit lines whose middle lies inside the stroke's bounding box; a
+    /// point anchored elsewhere goes to the nearest character of the nearest enclosed line. An
+    /// underline (below the middle) encloses nothing and keeps its hits.
+    func enclosedLineHits(_ locations: [CGPoint], hits: [CharacterHit]) -> [CharacterHit] {
+        guard let minY = locations.map(\.y).min(), let maxY = locations.map(\.y).max() else { return hits }
+        var enclosed: [Int: CGFloat] = [:]
+        for hit in hits {
+            let middle = hit.placement.origin.y - hit.placement.fontSize * 0.35
+            if middle >= minY, middle <= maxY { enclosed[hit.placement.lineKey] = middle }
+        }
+        guard !enclosed.isEmpty else { return hits }
+        return zip(locations, hits).map { location, hit in
+            if enclosed[hit.placement.lineKey] != nil { return hit }
+            guard let middle = enclosed.values.min(by: { abs($0 - location.y) < abs($1 - location.y) }),
+                  let onLine = geometry.characterHit(at: CGPoint(x: location.x, y: middle)),
+                  enclosed[onLine.placement.lineKey] != nil else { return hit }
+            return onLine
+        }
     }
 
     /// Whether a point is within 3 em (vertically) of the line its nearest character is on.

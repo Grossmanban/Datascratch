@@ -6,9 +6,11 @@
 import * as Y from "yjs";
 import {
   MAX_SNAPSHOT_BYTES,
+  MAX_SUBSCRIBE_DOCS,
   MAX_UPDATE_BYTES,
   SNAPSHOT_THRESHOLD_BYTES,
   SNAPSHOT_THRESHOLD_UPDATES,
+  SYNC_CLOSE_DEVICE_REVOKED,
   SYNC_PROTOCOL_VERSION,
   parseServerMessage,
   type ClientMessage,
@@ -17,6 +19,13 @@ import {
   type SyncAuth,
   type SyncErrorCode,
 } from "../contracts/sync.js";
+import {
+  deviceRevokedReasonSchema,
+  type Author,
+  type DeviceRevokedReason,
+} from "../contracts/api.js";
+
+type RemoteRef = RemoteUpdateInfo;
 import { fromBase64Url, toBase64Url } from "../crypto/base64url.js";
 import {
   decryptAwareness,
@@ -49,10 +58,21 @@ export type WebSocketFactory = (url: string) => WebSocketLike;
 
 const WS_OPEN = 1;
 
-export type SyncStatus = "idle" | "connecting" | "online" | "offline" | "unauthorized" | "stopped";
+/**
+ * `revoked`: this device was disconnected from the account (D-53); the client
+ * stopped for good and the app must wipe local data (see `deviceRevoked`).
+ */
+export type SyncStatus =
+  "idle" | "connecting" | "online" | "offline" | "unauthorized" | "stopped" | "revoked";
 
 export interface SyncClientError {
-  code: SyncErrorCode | "decrypt_failed" | "apply_failed" | "too_large";
+  code:
+    | SyncErrorCode
+    | "decrypt_failed"
+    | "apply_failed"
+    | "too_large"
+    | "key_missing"
+    | "storage_failed";
   message: string;
   docId?: string;
   ref?: string;
@@ -67,7 +87,29 @@ export interface SyncClientOptions {
   client: { platform: ClientPlatform; version: string };
   storage: SyncStorage;
   /** Encryption key of a document (masterKey / notebookKey / noteKey). */
-  keyFor: (docId: string) => Uint8Array | Promise<Uint8Array>;
+  /**
+   * Encryption key of a document. Return null (or throw KeyUnavailableError)
+   * when the key is not known yet: the document then pauses without losing
+   * anything, until `keyAvailable(docId)`.
+   */
+  keyFor: (docId: string) => Uint8Array | null | Promise<Uint8Array | null>;
+  /** Report `key_missing` when a paused document waits longer than this. Default 30 s. */
+  missingKeyReportMs?: number;
+  /** A connection must stay up this long before the reconnect backoff resets. Default 10 s. */
+  stableAfterMs?: number;
+  /** Retry interval after the outbox storage failed (quota, closed DB). Default 5 s. */
+  storageRetryMs?: number;
+  /**
+   * Retired or alternate keys tried when `keyFor` cannot decrypt an item
+   * (e.g. after a key rotation or a client that sealed with a wrong key).
+   */
+  alternateKeysFor?: (docId: string) => Uint8Array[] | Promise<Uint8Array[]>;
+  /**
+   * After a catch-up that skipped items, subscribe once more from 0 so the
+   * server can answer with its latest snapshot (which may cover the bad items).
+   * Useful only with servers that send the snapshot whenever `since` is below it.
+   */
+  recoverSkippedFromSnapshot?: boolean;
   /** Defaults to the global WebSocket (browsers, Node ≥ 22). */
   createSocket?: WebSocketFactory;
   backoff?: { initialMs?: number; maxMs?: number };
@@ -80,17 +122,89 @@ export interface SyncClientOptions {
   storedDocs?: StoredDocsHandler;
   /** Hook before a compaction snapshot of a live document (e.g. purge orphaned strokes, D-35). */
   beforeSnapshot?: (docId: string, doc: Y.Doc) => void;
+  /**
+   * Documents this account may only read (D-54 role `viewer`): local edits
+   * and compaction snapshots are not sent (the server would reject them with
+   * `forbidden`). Checked on every send, so a role change applies at once.
+   */
+  readOnly?: (docId: string) => boolean;
+  /**
+   * An item does not decrypt with any known key. Return true when the key may
+   * simply be newer than ours (D-54 key rotation of a shared notebook): the
+   * document pauses instead of skipping the item; refresh the keys and call
+   * `keyAvailable(docId)`. Asked at most once per document until an item
+   * decrypts again, so real corruption is still skipped.
+   */
+  keyMaybeStale?: (docId: string) => boolean | Promise<boolean>;
   /** Consecutive auth failures before giving up (status "unauthorized"). Default 3. */
   maxAuthFailures?: number;
   random?: () => number;
 }
 
+/**
+ * Thrown (or signalled by returning null) from `keyFor` when the key of a
+ * document is not known *yet* — e.g. a note moved into a notebook whose index
+ * has not synced. The document pauses instead of skipping; call
+ * `keyAvailable(docId)` once the key is there.
+ */
+export class KeyUnavailableError extends Error {
+  override readonly name = "KeyUnavailableError";
+  constructor(readonly docId: string) {
+    super(`key of ${docId} is not available yet`);
+  }
+}
+
+class MissingKey {}
+
+const PAUSED = Symbol("paused");
+
+/** A server item this client could not use (wrong key, corrupt data). */
+export interface SkippedUpdate {
+  docId: string;
+  seq: number;
+  /** Device that pushed it (null for snapshots). */
+  deviceId: string | null;
+  kind: "update" | "snapshot";
+  reason: "decrypt_failed" | "apply_failed";
+  message: string;
+  at: number;
+}
+
 interface Listeners {
   status: (status: SyncStatus) => void;
+  /**
+   * The server revoked this device (D-53). Fired once; the client has stopped
+   * and sends nothing more, the outbox included. The app wipes ALL local data
+   * and asks to sign in again. Never fired for an expired token or a network
+   * failure.
+   */
+  deviceRevoked: (reason: DeviceRevokedReason) => void;
+  /**
+   * Outbox storage failed (`ok: false`, e.g. quota exceeded — show «хранилище
+   * заполнено») or works again (`ok: true`). Edits are kept in memory meanwhile.
+   */
+  storage: (ok: boolean, error?: unknown) => void;
+  /** A document paused because its key is not available yet. */
+  keyMissing: (docId: string) => void;
+  /** An item was skipped; the rest of the document keeps syncing. */
+  skipped: (item: SkippedUpdate) => void;
   synced: (docId: string) => void;
   error: (error: SyncClientError) => void;
   awareness: (docId: string, payload: Uint8Array, deviceId: string) => void;
-  remoteUpdate: (docId: string, update: Uint8Array) => void;
+  /**
+   * A remote update or snapshot was applied (live doc) or queued for the
+   * app (stored doc). `info.author` is the server-stamped author (D-54) —
+   * use it for «who changed what»; absent from older servers and snapshots.
+   */
+  remoteUpdate: (docId: string, update: Uint8Array, info: RemoteUpdateInfo) => void;
+}
+
+export interface RemoteUpdateInfo {
+  seq: number;
+  kind: "update" | "snapshot";
+  /** null for snapshots. */
+  deviceId: string | null;
+  author?: Author;
 }
 
 /**
@@ -113,6 +227,8 @@ interface DocEntry {
   doc: Y.Doc | null;
   /** Remote updates of a stored document not yet handed to the app. */
   stored: Uint8Array[];
+  /** Waiting for its key: nothing is applied or skipped, the cursor stays. */
+  paused: { since: number; timer: ReturnType<typeof setTimeout> | null } | null;
   state: DocSyncState;
   synced: boolean;
   pending: Uint8Array[];
@@ -126,18 +242,40 @@ export class SyncClient {
   private readonly opts: Required<
     Omit<
       SyncClientOptions,
-      "beforeSnapshot" | "createSocket" | "backoff" | "snapshotThresholds" | "storedDocs"
+      | "beforeSnapshot"
+      | "createSocket"
+      | "backoff"
+      | "snapshotThresholds"
+      | "storedDocs"
+      | "alternateKeysFor"
+      | "recoverSkippedFromSnapshot"
+      | "readOnly"
+      | "keyMaybeStale"
     >
   > &
     SyncClientOptions;
   private readonly docs = new Map<string, DocEntry>();
   private readonly listeners: { [K in keyof Listeners]: Set<Listeners[K]> } = {
     status: new Set(),
+    deviceRevoked: new Set(),
     synced: new Set(),
     error: new Set(),
     awareness: new Set(),
     remoteUpdate: new Set(),
+    skipped: new Set(),
+    keyMissing: new Set(),
+    storage: new Set(),
   };
+  private stableTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Consecutive rate_limited answers (for its own growing delay). */
+  private rateLimits = 0;
+  private rateLimitedUntil = 0;
+  private storageFailing = false;
+  private readonly skippedLog = new Map<string, SkippedUpdate[]>();
+  private readonly recoveryTried = new Set<string>();
+  /** Documents paused once by keyMaybeStale since their last successful decrypt. */
+  private readonly staleTried = new Set<string>();
+  private readonly sentWaiters = new Map<string, (() => void)[]>();
   private socket: WebSocketLike | null = null;
   private _status: SyncStatus = "idle";
   private welcomed = false;
@@ -156,6 +294,9 @@ export class SyncClient {
   constructor(options: SyncClientOptions) {
     this.opts = {
       batchMs: 30,
+      missingKeyReportMs: 30_000,
+      stableAfterMs: 10_000,
+      storageRetryMs: 5_000,
       stateFlushMs: 200,
       maxAuthFailures: 3,
       random: Math.random,
@@ -174,7 +315,7 @@ export class SyncClient {
 
   /** Start connecting (and keep reconnecting until stop()). */
   start(): void {
-    if (this.running) return;
+    if (this.running || this._status === "revoked") return;
     this.running = true;
     this.attempt = 0;
     this.authFailures = 0;
@@ -185,6 +326,10 @@ export class SyncClient {
   async stop(): Promise<void> {
     this.running = false;
     this.clearReconnect();
+    if (this.stableTimer) clearTimeout(this.stableTimer);
+    this.stableTimer = null;
+    if (this.resendTimer) clearTimeout(this.resendTimer);
+    this.resendTimer = null;
     for (const [docId, entry] of this.docs) await this.flushPending(docId, entry);
     const s = this.socket;
     this.socket = null;
@@ -198,8 +343,30 @@ export class SyncClient {
     await this.flushStates();
   }
 
+  /** Stop for good after a revocation (D-53) and tell the app once. */
+  private revoke(reason: DeviceRevokedReason): void {
+    if (this._status === "revoked") return;
+    this.running = false;
+    this.clearReconnect();
+    if (this.stableTimer) clearTimeout(this.stableTimer);
+    this.stableTimer = null;
+    if (this.resendTimer) clearTimeout(this.resendTimer);
+    this.resendTimer = null;
+    const s = this.socket;
+    this.socket = null;
+    this.welcomed = false;
+    if (s) {
+      s.onclose = null;
+      s.close(1000, "device revoked");
+    }
+    this.setStatus("revoked");
+    for (const fn of this.listeners.deviceRevoked) fn(reason);
+  }
+
   /** Reconnect now (e.g. the OS reports the network is back, or after re-login). */
   reconnect(): void {
+    // A revoked device must sign in again; the app creates a new client after wiping.
+    if (this._status === "revoked") return;
     this.running = true;
     this.attempt = 0;
     this.authFailures = 0;
@@ -305,6 +472,7 @@ export class SyncClient {
       const entry: DocEntry = {
         doc: null,
         stored: [],
+        paused: null,
         state: states.get(docId) ?? { ...EMPTY_DOC_STATE },
         synced: false,
         pending: [],
@@ -318,10 +486,9 @@ export class SyncClient {
     }
     if (this.welcomed && list.length > 0) {
       // Subscribe before pushing (sync-protocol.md §3), then send what was queued for these docs.
-      this.send({
-        type: "subscribe",
-        docs: ids.map((docId) => ({ docId, since: this.docs.get(docId)!.state.lastSeq })),
-      });
+      this.sendSubscribe(
+        ids.map((docId) => ({ docId, since: this.docs.get(docId)!.state.lastSeq })),
+      );
       const added = new Set(ids);
       await this.serial(async () => {
         for (const item of (await this.outboxItems()).values()) {
@@ -351,6 +518,60 @@ export class SyncClient {
     if (this.welcomed) this.send({ type: "unsubscribe", docIds: [docId] });
   }
 
+  /**
+   * The key of a paused document is now available: resume from the last
+   * applied seq (nothing was skipped while it waited). Queued local edits are
+   * sent too. Safe to call for documents that are not paused.
+   */
+  async keyAvailable(docId: string): Promise<void> {
+    const entry = this.docs.get(docId);
+    if (!entry) return;
+    await this.serial(async () => {
+      if (entry.paused) {
+        if (entry.paused.timer) clearTimeout(entry.paused.timer);
+        entry.paused = null;
+        if (this.welcomed) {
+          this.sendSubscribe([{ docId, since: entry.state.lastSeq }]);
+        }
+      }
+      await this.enqueuePending(docId, entry);
+    });
+  }
+
+  /**
+   * Fetch skipped items of a document again (e.g. after the host learned a
+   * retired key and returns it from `alternateKeysFor`). Returns false when
+   * nothing was skipped. Items that fail again are logged again.
+   */
+  async retrySkipped(docId: string): Promise<boolean> {
+    const entry = this.docs.get(docId);
+    const log = this.skippedLog.get(docId);
+    if (!entry || !log || log.length === 0) return false;
+    const since = Math.max(0, Math.min(...log.map((s) => s.seq)) - 1);
+    this.skippedLog.delete(docId);
+    this.recoveryTried.delete(docId);
+    await this.serial(async () => {
+      // Re-applying already applied updates is harmless (CRDT).
+      if (this.welcomed) this.sendSubscribe([{ docId, since }]);
+    });
+    return true;
+  }
+
+  /** True while the outbox storage is failing (edits wait in memory). */
+  get storageFull(): boolean {
+    return this.storageFailing;
+  }
+
+  isPaused(docId: string): boolean {
+    return this.docs.get(docId)?.paused != null;
+  }
+
+  /** Items skipped for a document (or all documents) since this client started. */
+  getSkipped(docId?: string): SkippedUpdate[] {
+    if (docId) return [...(this.skippedLog.get(docId) ?? [])];
+    return [...this.skippedLog.values()].flat();
+  }
+
   isSynced(docId: string): boolean {
     return this.docs.get(docId)?.synced ?? false;
   }
@@ -359,11 +580,30 @@ export class SyncClient {
   async sendAwareness(docId: string, update: Uint8Array): Promise<void> {
     // Presence only makes sense for documents open on this device.
     if (!this.welcomed || !this.docs.get(docId)?.doc) return;
-    const key = await this.opts.keyFor(docId);
+    const key = await this.getKey(docId);
+    if (!key) return;
     this.send({
       type: "awareness",
       docId,
       payload: toBase64Url(encryptAwareness(key, docId, update)),
+    });
+  }
+
+  /**
+   * Resolves once every local edit of `docId` made so far has been accepted
+   * by the server (or dropped as unacceptable) — e.g. before telling the
+   * server a key rotation is done (D-54). Waits across reconnects.
+   */
+  async whenSent(docId: string): Promise<void> {
+    const entry = this.docs.get(docId);
+    if (entry) await this.flushPending(docId, entry);
+    await this.chain;
+    const outbox = await this.outboxItems();
+    if (![...outbox.values()].some((i) => i.docId === docId)) return;
+    await new Promise<void>((resolve) => {
+      const list = this.sentWaiters.get(docId) ?? [];
+      list.push(resolve);
+      this.sentWaiters.set(docId, list);
     });
   }
 
@@ -400,7 +640,7 @@ export class SyncClient {
     if (!entry) throw new Error(`document ${docId} is not synced`);
     await this.serial(async () => {
       if (!this.welcomed) return; // the next welcome subscribes anyway
-      this.send({ type: "subscribe", docs: [{ docId, since: entry.state.lastSeq }] });
+      this.sendSubscribe([{ docId, since: entry.state.lastSeq }]);
       for (const item of (await this.outboxItems()).values())
         if (item.docId === docId) this.sendItem(item);
     });
@@ -466,15 +706,27 @@ export class SyncClient {
       }
       void this.serial(() => this.handle(msg));
     };
-    socket.onclose = () => {
+    socket.onclose = (ev) => {
       if (socket !== this.socket) return;
+      if (ev?.code === SYNC_CLOSE_DEVICE_REVOKED) {
+        const reason = deviceRevokedReasonSchema.safeParse(ev.reason);
+        this.revoke(reason.success ? reason.data : "user");
+        return;
+      }
       this.socket = null;
       this.welcomed = false;
+      if (this.stableTimer) clearTimeout(this.stableTimer);
+      this.stableTimer = null;
       for (const entry of this.docs.values()) {
         entry.synced = false;
         entry.snapshotInFlight = null;
       }
-      if (this.running && this._status !== "unauthorized" && this._status !== "stopped") {
+      if (
+        this.running &&
+        this._status !== "unauthorized" &&
+        this._status !== "stopped" &&
+        this._status !== "revoked"
+      ) {
         this.setStatus("offline");
         this.scheduleReconnect();
       }
@@ -509,12 +761,24 @@ export class SyncClient {
     const max = this.opts.backoff?.maxMs ?? 30_000;
     const exp = Math.min(max, initial * 2 ** this.attempt);
     // Full jitter in [exp/2, exp] spreads reconnect storms after a server restart.
-    const delay = exp / 2 + (exp / 2) * this.opts.random();
+    let delay = exp / 2 + (exp / 2) * this.opts.random();
+    // A rate-limited client waits at least until the server's retry-after.
+    delay = Math.max(delay, this.rateLimitedUntil - Date.now());
     this.attempt++;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
     }, delay);
+  }
+
+  /** subscribe in messages of at most MAX_SUBSCRIBE_DOCS distinct documents. */
+  private sendSubscribe(docs: { docId: string; since: number }[]): void {
+    const unique = new Map<string, number>();
+    for (const d of docs) unique.set(d.docId, Math.min(d.since, unique.get(d.docId) ?? d.since));
+    const all = [...unique].map(([docId, since]) => ({ docId, since }));
+    for (let i = 0; i < all.length; i += MAX_SUBSCRIBE_DOCS) {
+      this.send({ type: "subscribe", docs: all.slice(i, i + MAX_SUBSCRIBE_DOCS) });
+    }
   }
 
   private send(msg: ClientMessage): boolean {
@@ -524,7 +788,25 @@ export class SyncClient {
     return true;
   }
 
+  private resendTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private scheduleResend(): void {
+    if (this.resendTimer) return;
+    this.resendTimer = setTimeout(
+      () => {
+        this.resendTimer = null;
+        void this.resendOutbox();
+      },
+      Math.max(0, this.rateLimitedUntil - Date.now()),
+    );
+  }
+
   private sendItem(item: OutboxItem): void {
+    if (Date.now() < this.rateLimitedUntil) {
+      // Rate limited: everything still in the outbox goes out once the delay ends.
+      this.scheduleResend();
+      return;
+    }
     // Items of documents not subscribed on this connection wait until addDoc().
     if (!this.docs.has(item.docId)) return;
     if (item.kind === "push") {
@@ -553,14 +835,40 @@ export class SyncClient {
     return this.outbox;
   }
 
-  private async enqueue(item: OutboxItem): Promise<void> {
-    await this.opts.storage.enqueue(item);
+  /** Store an outbox item; false (and storage state "failing") when storage rejects it. */
+  private async enqueue(item: OutboxItem): Promise<boolean> {
+    try {
+      await this.opts.storage.enqueue(item);
+    } catch (e) {
+      if (!this.storageFailing) {
+        this.storageFailing = true;
+        for (const fn of this.listeners.storage) fn(false, e);
+      }
+      this.emitError({ code: "storage_failed", message: String(e), docId: item.docId });
+      return false;
+    }
     (await this.outboxItems()).set(item.clientMsgId, item);
+    if (this.storageFailing) {
+      this.storageFailing = false;
+      for (const fn of this.listeners.storage) fn(true);
+    }
+    return true;
   }
 
   private async removeOutbox(clientMsgId: string): Promise<void> {
-    (await this.outboxItems()).delete(clientMsgId);
+    const outbox = await this.outboxItems();
+    const docId = outbox.get(clientMsgId)?.docId;
+    outbox.delete(clientMsgId);
     await this.opts.storage.removeOutbox(clientMsgId);
+    if (docId) this.notifySent(docId, outbox);
+  }
+
+  private notifySent(docId: string, outbox: Map<string, OutboxItem>): void {
+    const waiters = this.sentWaiters.get(docId);
+    if (!waiters) return;
+    for (const item of outbox.values()) if (item.docId === docId) return;
+    this.sentWaiters.delete(docId);
+    for (const fn of waiters) fn();
   }
 
   /** Persist cursors lazily: a lost write only means re-fetching a few updates. */
@@ -583,8 +891,18 @@ export class SyncClient {
     }
     this.dirty.clear();
     const storage = this.opts.storage;
-    if (storage.setDocStates) await storage.setDocStates(entries);
-    else for (const [id, state] of entries) await storage.setDocState(id, state);
+    try {
+      if (storage.setDocStates) await storage.setDocStates(entries);
+      else for (const [id, state] of entries) await storage.setDocState(id, state);
+    } catch (e) {
+      // Keep the cursors dirty and retry; a lost cursor write only means re-fetching.
+      for (const [id] of entries) this.dirty.add(id);
+      this.emitError({ code: "storage_failed", message: String(e) });
+      this.stateTimer ??= setTimeout(() => {
+        this.stateTimer = null;
+        void this.flushStates();
+      }, this.opts.storageRetryMs);
+    }
   }
 
   private serial<T>(fn: () => Promise<T>): Promise<T> {
@@ -601,42 +919,89 @@ export class SyncClient {
     switch (msg.type) {
       case "welcome": {
         this.welcomed = true;
-        this.attempt = 0;
         this.authFailures = 0;
         this.setStatus("online");
-        const docs = [...this.docs].map(([docId, e]) => ({ docId, since: e.state.lastSeq }));
-        if (docs.length > 0) this.send({ type: "subscribe", docs });
+        // Reset the backoff only once the connection proved stable: a server
+        // that accepts and then drops us must not cause a reconnect storm.
+        if (this.stableTimer) clearTimeout(this.stableTimer);
+        this.stableTimer = setTimeout(() => {
+          this.stableTimer = null;
+          this.attempt = 0;
+          this.rateLimits = 0;
+        }, this.opts.stableAfterMs);
+        this.sendSubscribe([...this.docs].map(([docId, e]) => ({ docId, since: e.state.lastSeq })));
         for (const item of (await this.outboxItems()).values()) this.sendItem(item);
         return;
       }
       case "updates": {
         const entry = this.docs.get(msg.docId);
-        if (!entry) return;
+        // Paused documents ignore the stream; it is re-read from lastSeq on resume.
+        if (!entry || entry.paused) return;
+        const skippedBefore = this.skippedLog.get(msg.docId)?.length ?? 0;
+        let paused = false;
         if (msg.snapshot) {
-          if (await this.applyRemote(msg.docId, entry, msg.snapshot.payload)) {
-            entry.state.updatesSinceSnapshot = 0;
-            entry.state.bytesSinceSnapshot = 0;
+          const ref: RemoteRef = { seq: msg.snapshot.seq, deviceId: null, kind: "snapshot" };
+          const r = await this.applyRemote(msg.docId, entry, msg.snapshot.payload, ref);
+          if (r === PAUSED) paused = true;
+          else {
+            if (r) {
+              entry.state.updatesSinceSnapshot = 0;
+              entry.state.bytesSinceSnapshot = 0;
+            }
+            entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.snapshot.seq);
           }
-          entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.snapshot.seq);
         }
         for (const item of msg.items) {
-          const size = await this.applyRemote(msg.docId, entry, item.payload);
+          if (paused) break;
+          const ref: RemoteRef = {
+            seq: item.seq,
+            deviceId: item.deviceId,
+            kind: "update",
+            ...(item.author ? { author: item.author } : {}),
+          };
+          const size = await this.applyRemote(msg.docId, entry, item.payload, ref);
+          if (size === PAUSED) {
+            paused = true;
+            break;
+          }
           this.count(entry, size);
           entry.state.lastSeq = Math.max(entry.state.lastSeq, item.seq);
         }
         await this.flushStored(msg.docId, entry);
+        if (paused) {
+          this.markDirty(msg.docId);
+          return;
+        }
         this.markDirty(msg.docId);
         if (msg.upToDate && !entry.synced) {
           entry.synced = true;
           for (const fn of this.listeners.synced) fn(msg.docId);
+        }
+        const skippedNow = (this.skippedLog.get(msg.docId)?.length ?? 0) > skippedBefore;
+        if (
+          skippedNow &&
+          msg.upToDate &&
+          this.opts.recoverSkippedFromSnapshot &&
+          !this.recoveryTried.has(msg.docId)
+        ) {
+          // Ask once for the server's latest snapshot; it may cover the skipped items.
+          this.recoveryTried.add(msg.docId);
+          this.sendSubscribe([{ docId: msg.docId, since: 0 }]);
         }
         await this.maybeSnapshot(msg.docId, entry);
         return;
       }
       case "update": {
         const entry = this.docs.get(msg.docId);
-        if (!entry) return;
-        const size = await this.applyRemote(msg.docId, entry, msg.payload);
+        if (!entry || entry.paused) return;
+        const ref: RemoteRef = {
+          seq: msg.seq,
+          deviceId: msg.deviceId,
+          kind: "update",
+          ...(msg.author ? { author: msg.author } : {}),
+        };
+        const size = await this.applyRemote(msg.docId, entry, msg.payload, ref);
+        if (size === PAUSED) return;
         this.count(entry, size);
         entry.state.lastSeq = Math.max(entry.state.lastSeq, msg.seq);
         await this.flushStored(msg.docId, entry);
@@ -664,7 +1029,8 @@ export class SyncClient {
       case "awareness": {
         if (!this.docs.get(msg.docId)?.doc) return;
         try {
-          const key = await this.opts.keyFor(msg.docId);
+          const key = await this.getKey(msg.docId);
+          if (!key) return;
           const payload = decryptAwareness(key, msg.docId, fromBase64Url(msg.payload));
           for (const fn of this.listeners.awareness) fn(msg.docId, payload, msg.deviceId);
         } catch {
@@ -673,12 +1039,21 @@ export class SyncClient {
         return;
       }
       case "error":
-        await this.handleError(msg.code, msg.message, msg.ref);
+        if (msg.code === "device_revoked") {
+          this.revoke(msg.reason ?? "user");
+          return;
+        }
+        await this.handleError(msg.code, msg.message, msg.ref, msg.retryAfterMs);
         return;
     }
   }
 
-  private async handleError(code: SyncErrorCode, message: string, ref?: string): Promise<void> {
+  private async handleError(
+    code: SyncErrorCode,
+    message: string,
+    ref?: string,
+    retryAfterMs?: number,
+  ): Promise<void> {
     const item = ref ? (await this.outboxItems()).get(ref) : undefined;
     const docId = item?.docId ?? (ref && this.docs.has(ref) ? ref : undefined);
     this.emitError({ code, message, ...(ref ? { ref } : {}), ...(docId ? { docId } : {}) });
@@ -696,14 +1071,22 @@ export class SyncClient {
         this.setStatus("stopped");
         this.socket?.close(1000, "protocol mismatch");
         return;
-      case "rate_limited":
-        this.socket?.close(1000, "rate limited");
+      case "rate_limited": {
+        // The server's retry-after when given; otherwise an own growing delay (5 s … 60 s).
+        this.rateLimits++;
+        const own = Math.min(60_000, 5_000 * 2 ** (this.rateLimits - 1));
+        this.rateLimitedUntil = Date.now() + (retryAfterMs ?? own);
+        // The server keeps the connection for message-rate limits (it closes with 1013
+        // only for too many connections, and the reconnect then honours the delay):
+        // hold sending and resend the outbox once the delay has passed.
+        this.scheduleResend();
         return;
+      }
       case "payload_too_large":
         if (item) {
           await this.removeOutbox(item.clientMsgId);
           const entry = this.docs.get(item.docId);
-          // An oversized update is replaced by a snapshot (limit 50 MiB), which contains it.
+          // An oversized update is replaced by a snapshot (limit 16 MiB), which contains it.
           if (item.kind === "push" && entry) await this.enqueueSnapshot(item.docId, entry, true);
           else if (entry) entry.snapshotInFlight = null;
         }
@@ -717,29 +1100,129 @@ export class SyncClient {
     }
   }
 
-  /** Decrypt and apply; returns the plaintext size (0 on failure). */
-  private async applyRemote(docId: string, entry: DocEntry, payload: string): Promise<number> {
+  /**
+   * Decrypt and apply; returns the plaintext size, 0 when the item is skipped.
+   * A bad item never stops the document: it is recorded and reported, and the
+   * cursor still advances past it.
+   */
+  private async applyRemote(
+    docId: string,
+    entry: DocEntry,
+    payload: string,
+    ref: RemoteRef,
+  ): Promise<number | typeof PAUSED> {
     let update: Uint8Array;
     try {
-      const key = await this.opts.keyFor(docId);
-      update = decryptDocUpdate(key, docId, fromBase64Url(payload));
+      update = await this.decrypt(docId, payload);
     } catch (e) {
-      this.emitError({ code: "decrypt_failed", message: String(e), docId });
+      if (e instanceof MissingKey) {
+        // No key yet is not corruption: wait for it instead of losing the update.
+        this.pause(docId, entry);
+        return PAUSED;
+      }
+      if (
+        this.opts.keyMaybeStale &&
+        !this.staleTried.has(docId) &&
+        (await this.opts.keyMaybeStale(docId))
+      ) {
+        // Possibly a newer key (rotation): wait for it, the item is re-read on resume.
+        this.staleTried.add(docId);
+        this.pause(docId, entry);
+        return PAUSED;
+      }
+      this.skip(docId, ref, "decrypt_failed", e);
       return 0;
     }
+    this.staleTried.delete(docId);
     if (!entry.doc) {
+      try {
+        // Validate before handing it to the app: a corrupt update must not poison the saved state.
+        Y.decodeUpdate(update);
+      } catch (e) {
+        this.skip(docId, ref, "apply_failed", e);
+        return 0;
+      }
       entry.stored.push(update);
-      for (const fn of this.listeners.remoteUpdate) fn(docId, update);
+      for (const fn of this.listeners.remoteUpdate) fn(docId, update, ref);
       return update.length;
     }
     try {
       Y.applyUpdate(entry.doc, update, REMOTE_ORIGIN);
     } catch (e) {
-      this.emitError({ code: "apply_failed", message: String(e), docId });
+      this.skip(docId, ref, "apply_failed", e);
       return 0;
     }
-    for (const fn of this.listeners.remoteUpdate) fn(docId, update);
+    for (const fn of this.listeners.remoteUpdate) fn(docId, update, ref);
     return update.length;
+  }
+
+  /** keyFor, with "not available yet" normalized to null. */
+  private async getKey(docId: string): Promise<Uint8Array | null> {
+    try {
+      return (await this.opts.keyFor(docId)) ?? null;
+    } catch (e) {
+      if (e instanceof KeyUnavailableError) return null;
+      throw e;
+    }
+  }
+
+  private pause(docId: string, entry: DocEntry): void {
+    if (entry.paused) return;
+    const timer = setTimeout(() => {
+      if (entry.paused) {
+        this.emitError({
+          code: "key_missing",
+          message: `waiting for the key of ${docId} for over ${this.opts.missingKeyReportMs} ms`,
+          docId,
+        });
+      }
+    }, this.opts.missingKeyReportMs);
+    entry.paused = { since: Date.now(), timer };
+    for (const fn of this.listeners.keyMissing) fn(docId);
+  }
+
+  private async decrypt(docId: string, payload: string): Promise<Uint8Array> {
+    const envelope = fromBase64Url(payload);
+    const key = await this.getKey(docId);
+    try {
+      if (!key) throw new MissingKey();
+      return decryptDocUpdate(key, docId, envelope);
+    } catch (first) {
+      for (const key of (await this.opts.alternateKeysFor?.(docId)) ?? []) {
+        try {
+          return decryptDocUpdate(key, docId, envelope);
+        } catch {
+          // try the next key
+        }
+      }
+      throw first;
+    }
+  }
+
+  private skip(
+    docId: string,
+    ref: { seq: number; deviceId: string | null; kind: "update" | "snapshot" },
+    reason: SkippedUpdate["reason"],
+    error: unknown,
+  ): void {
+    const item: SkippedUpdate = {
+      docId,
+      seq: ref.seq,
+      deviceId: ref.deviceId,
+      kind: ref.kind,
+      reason,
+      message: String(error),
+      at: Date.now(),
+    };
+    const log = this.skippedLog.get(docId) ?? [];
+    if (!log.some((s) => s.seq === item.seq && s.kind === item.kind)) log.push(item);
+    this.skippedLog.set(docId, log);
+    for (const fn of this.listeners.skipped) fn(item);
+    this.emitError({
+      code: reason,
+      message: `${ref.kind} seq ${ref.seq} skipped: ${String(error)}`,
+      docId,
+    });
   }
 
   private count(entry: DocEntry, size: number): void {
@@ -780,13 +1263,21 @@ export class SyncClient {
     const updates = entry.pending;
     entry.pending = [];
     entry.pendingBytes = 0;
+    if (this.opts.readOnly?.(docId)) return;
     {
       const update = updates.length === 1 ? updates[0]! : Y.mergeUpdates(updates);
       if (update.length > MAX_UPDATE_BYTES) {
         await this.enqueueSnapshot(docId, entry, true);
         return;
       }
-      const key = await this.opts.keyFor(docId);
+      const key = await this.getKey(docId);
+      if (!key) {
+        // Keep local edits until the key is known (keyAvailable flushes them).
+        entry.pending = [update, ...entry.pending];
+        entry.pendingBytes += update.length;
+        this.pause(docId, entry);
+        return;
+      }
       const item: OutboxItem = {
         clientMsgId: uuidv7(),
         docId,
@@ -795,7 +1286,16 @@ export class SyncClient {
         size: update.length,
         createdAt: Date.now(),
       };
-      await this.enqueue(item);
+      if (!(await this.enqueue(item))) {
+        // Never drop local edits: keep them and retry later.
+        entry.pending = [update, ...entry.pending];
+        entry.pendingBytes += update.length;
+        entry.timer ??= setTimeout(
+          () => void this.flushPending(docId, entry),
+          this.opts.storageRetryMs,
+        );
+        return;
+      }
       if (this.welcomed) this.sendItem(item);
     }
   }
@@ -814,6 +1314,7 @@ export class SyncClient {
 
   private async enqueueSnapshot(docId: string, entry: DocEntry, force: boolean): Promise<void> {
     if (entry.snapshotInFlight && !force) return;
+    if (this.opts.readOnly?.(docId)) return;
     let state: Uint8Array;
     if (entry.doc) {
       this.opts.beforeSnapshot?.(docId, entry.doc);
@@ -830,7 +1331,8 @@ export class SyncClient {
       this.emitError({ code: "too_large", message: "document exceeds the snapshot limit", docId });
       return;
     }
-    const key = await this.opts.keyFor(docId);
+    const key = await this.getKey(docId);
+    if (!key) return;
     const item: OutboxItem = {
       clientMsgId: uuidv7(),
       docId,
@@ -841,7 +1343,10 @@ export class SyncClient {
       createdAt: Date.now(),
     };
     entry.snapshotInFlight = item.clientMsgId;
-    await this.enqueue(item);
+    if (!(await this.enqueue(item))) {
+      entry.snapshotInFlight = null; // retried at the next threshold check
+      return;
+    }
     if (this.welcomed) this.sendItem(item);
   }
 }

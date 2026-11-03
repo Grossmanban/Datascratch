@@ -151,18 +151,6 @@ struct CommandPaletteView: View {
                         symbol: "square.and.pencil", keywords: ["create", "note", "document"], shortcut: "⌘N") {
                 scene.newNote()
             },
-            PaletteItem(id: "today", kind: .command, title: String(localized: "Today's Note"), subtitle: nil,
-                        symbol: "sun.max", keywords: ["daily", "journal"], shortcut: "⇧⌘T") {
-                scene.openToday()
-            },
-            PaletteItem(id: "tasks", kind: .command, title: String(localized: "Go to Tasks"), subtitle: nil,
-                        symbol: "checkmark.circle", keywords: ["todo"], shortcut: "⌘2") {
-                scene.show(.tasks)
-            },
-            PaletteItem(id: "calendar", kind: .command, title: String(localized: "Go to Calendar"), subtitle: nil,
-                        symbol: "calendar", keywords: ["days"], shortcut: "⌘3") {
-                scene.show(.calendar)
-            },
             PaletteItem(id: "all", kind: .command, title: String(localized: "All Documents"), subtitle: nil,
                         symbol: "doc.on.doc", keywords: ["library"], shortcut: "⌘1") {
                 scene.show(.allDocuments)
@@ -176,6 +164,23 @@ struct CommandPaletteView: View {
                 scene.sheet = .settings
             },
         ]
+        // D-51: extended mode only.
+        if Features.calendar {
+            items.insert(PaletteItem(id: "today", kind: .command, title: String(localized: "Today's Note"), subtitle: nil,
+                                     symbol: "sun.max", keywords: ["daily", "journal"], shortcut: "⇧⌘T") {
+                scene.openToday()
+            }, at: 1)
+            items.append(PaletteItem(id: "calendar", kind: .command, title: String(localized: "Go to Calendar"), subtitle: nil,
+                                     symbol: "calendar", keywords: ["days"], shortcut: "⌘3") {
+                scene.show(.calendar)
+            })
+        }
+        if Features.tasks {
+            items.append(PaletteItem(id: "tasks", kind: .command, title: String(localized: "Go to Tasks"), subtitle: nil,
+                                     symbol: "checkmark.circle", keywords: ["todo"], shortcut: "⌘2") {
+                scene.show(.tasks)
+            })
+        }
         if let space = library.activeSpace {
             items.append(PaletteItem(id: "new-notebook", kind: .command, title: String(localized: "New Notebook"),
                                      subtitle: space.name, symbol: "book.closed", keywords: ["create"],
@@ -187,7 +192,7 @@ struct CommandPaletteView: View {
             items.append(PaletteItem(id: "space-\(space.id)", kind: .command,
                                      title: String(localized: "Switch to \(space.name)"), subtitle: nil,
                                      symbol: space.icon, keywords: ["space", space.name], shortcut: nil) {
-                library.activateSpace(space.id)
+                scene.switchSpace(to: space.id)
                 scene.sidebar = .allDocuments
             })
         }

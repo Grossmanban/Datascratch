@@ -6,11 +6,18 @@ public enum CryptoError: Error, Equatable {
     case invalidKeyLength
     case kdfFailed
     case unsupportedKDF(String)
+    /// KDF parameters outside crypto.md §2 bounds (a server lowering them to make the login
+    /// key cheap to brute-force).
+    case unsafeKDF(ops: Int, mem: Int)
     case malformedEnvelope
     case unsupportedVersion(UInt8)
     /// Wrong key, wrong `ad` or tampered ciphertext.
     case decryptionFailed
     case invalidRecoveryKey
+    /// An account's secret box key does not match its published public key (§10.1).
+    case boxKeyMismatch
+    /// A peer public key libsodium refuses (low order).
+    case invalidPeerKey
 }
 
 /// Password KDF parameters stored next to the salt (crypto.md §2).
@@ -26,6 +33,16 @@ public struct KDFParams: Codable, Hashable, Sendable {
     }
 
     public static let v1 = KDFParams()
+
+    /// crypto.md §2: accepted from a server only within these bounds.
+    public static let opsRange = 3...10
+    public static let memRange = 67_108_864...268_435_456
+
+    /// Throws unless the parameters are within crypto.md §2 bounds.
+    public func validate() throws {
+        guard alg == "argon2id13" else { throw CryptoError.unsupportedKDF(alg) }
+        guard Self.opsRange.contains(ops), Self.memRange.contains(mem) else { throw CryptoError.unsafeKDF(ops: ops, mem: mem) }
+    }
 }
 
 /// Keys derived from the password (crypto.md §2).

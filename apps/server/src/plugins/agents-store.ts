@@ -1,6 +1,7 @@
 import { and, desc, eq, lt } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
-import { agentAudit, agentGrants, oauthClients, oauthCodes, oauthTokens } from '../db/schema.js';
+import { agentAudit, agentGrants, members, notebooks, oauthClients, oauthCodes, oauthTokens } from '../db/schema.js';
+import { noteKeyCache } from './agent-key-cache.js';
 import type {
   AgentGrant,
   AgentsStore,
@@ -21,6 +22,7 @@ const grantDto = (g: GrantRow): AgentGrant => ({
   name: g.name,
   clientId: g.clientId,
   notebookIds: g.notebookIds,
+  allNotebooks: g.allNotebooks,
   permission: g.permission,
   createdAt: g.createdAt.toISOString(),
   expiresAt: iso(g.expiresAt),
@@ -41,6 +43,7 @@ export class PgAgentsStore implements AgentsStore {
       name: g.name,
       clientId: g.clientId,
       notebookIds: g.notebookIds,
+      allNotebooks: g.allNotebooks,
       permission: g.permission,
       createdAt: new Date(g.createdAt),
       expiresAt: date(g.expiresAt),
@@ -71,15 +74,32 @@ export class PgAgentsStore implements AgentsStore {
 
   async updateGrant(
     id: string,
-    patch: Partial<Pick<AgentGrant, 'revokedAt' | 'lastUsedAt' | 'notebookIds' | 'permission'>>,
+    patch: Partial<Pick<AgentGrant, 'revokedAt' | 'lastUsedAt' | 'notebookIds' | 'allNotebooks' | 'permission'>>,
   ) {
     const set: Partial<typeof agentGrants.$inferInsert> = {};
     if ('revokedAt' in patch) set.revokedAt = date(patch.revokedAt);
     if ('lastUsedAt' in patch) set.lastUsedAt = date(patch.lastUsedAt);
     if (patch.notebookIds) set.notebookIds = patch.notebookIds;
+    if (patch.allNotebooks !== undefined) set.allNotebooks = patch.allNotebooks;
     if (patch.permission) set.permission = patch.permission;
     if (Object.keys(set).length === 0) return;
+    // A revoked or narrowed grant: drop decrypted note keys of the notebooks it covered (crypto.md §8).
+    const narrows = Boolean(patch.revokedAt || patch.notebookIds || patch.allNotebooks === false);
+    const [before] = narrows
+      ? await this.db
+          .select({ userId: agentGrants.userId, notebookIds: agentGrants.notebookIds, allNotebooks: agentGrants.allNotebooks })
+          .from(agentGrants)
+          .where(eq(agentGrants.id, id))
+      : [];
     await this.db.update(agentGrants).set(set).where(eq(agentGrants.id, id));
+    if (!before) return;
+    if (before.allNotebooks) {
+      // It reached every agent-mode notebook of the user, own and shared with them (D-54).
+      const own = await this.db.select({ id: notebooks.id }).from(notebooks).where(eq(notebooks.userId, before.userId));
+      const shared = await this.db.select({ id: members.notebookId }).from(members).where(eq(members.userId, before.userId));
+      noteKeyCache.forgetNotebooks([...own.map((n) => n.id), ...shared.flatMap((m) => (m.id ? [m.id] : []))]);
+    }
+    noteKeyCache.forgetNotebooks(before.notebookIds);
   }
 
   async upsertClient(c: OAuthClient) {
@@ -124,6 +144,21 @@ export class PgAgentsStore implements AgentsStore {
 
   async deleteToken(tokenHash: string) {
     await this.db.delete(oauthTokens).where(eq(oauthTokens.tokenHash, tokenHash));
+  }
+
+  async useRefreshToken(tokenHash: string) {
+    // UPDATE … RETURNING is atomic: of two concurrent refreshes only one gets the token.
+    const [t] = await this.db
+      .update(oauthTokens)
+      .set({ kind: 'refresh_used' })
+      .where(and(eq(oauthTokens.tokenHash, tokenHash), eq(oauthTokens.kind, 'refresh')))
+      .returning();
+    if (t) return { token: { ...t, kind: 'refresh' as const, expiresAt: t.expiresAt.toISOString() }, reused: false };
+    const [old] = await this.db
+      .select()
+      .from(oauthTokens)
+      .where(and(eq(oauthTokens.tokenHash, tokenHash), eq(oauthTokens.kind, 'refresh_used')));
+    return old ? { token: { ...old, expiresAt: old.expiresAt.toISOString() }, reused: true } : null;
   }
 
   async deleteTokensOfGrant(grantId: string) {

@@ -1,0 +1,1216 @@
+{
+  "version": 1,
+  "description": "A note exactly as the agent API writes it (create_note → initNoteContent, packages/agents) and the delta of an edit_note replace_text on its title. Decode `createNote.update` (Yjs update v1, clientID 1) into an empty doc: `content` (canonical PM JSON as in document/note.json), `meta` and the Markdown read_note returns must equal `expected`; opening the note must write nothing. Then apply `editTitle.update` (clientID 2): the title becomes “План на месяц” and the inserted text carries the agentEdit mark. Block ids are vid(0x1001…) in the order blocks are created; [[План запуска]] resolves to `linkedNoteId`.",
+  "input": {
+    "title": "План на неделю",
+    "markdown": "Короткое введение с **жирным**, *курсивом*, `кодом`, ==маркером== и ссылкой на [[План запуска]] #работа.\n\n> [!warning] ⚠️\n> Сроки сдвигаются — проверить до пятницы.\n\n| Задача | Ответственный | Статус |\n| :--- | :---: | ---: |\n| Дизайн | Аня | готово |\n| Сервер | Борис | в работе |\n\n- первый пункт\n- второй пункт\n  - вложенный\n\n1. раз\n2. два\n\n- [ ] Отправить отчёт ⏳ 2026-10-27 📅 2026-10-30\n- [x] Созвон с командой\n\n```ts\nconst total = items.reduce((a, b) => a + b, 0);\n```\n\n$$\nE = mc^2\n$$\n\nФормула в строке: $a^2 + b^2 = c^2$.\n\n```mermaid\ngraph TD; A-->B\n```",
+    "linkedNoteId": "0192f3c4-0000-7000-8000-00000000a001",
+    "agentEdit": null
+  },
+  "createNote": {
+    "update": "AcsBAQAHAQdjb250ZW50AwV0aXRsZQcAAQAGBAABARrQn9C70LDQvSDQvdCwINC90LXQtNC10LvRjigAAQAHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAwMYcBAAMJcGFyYWdyYXBoBwABEQYEAAESJdCa0L7RgNC-0YLQutC-0LUg0LLQstC10LTQtdC90LjQtSDRgSCGASYEYm9sZAJ7fYQBJwzQttC40YDQvdGL0LyGAS0EYm9sZARudWxshAEuAiwghgEwBml0YWxpYwJ7fYQBMRDQutGD0YDRgdC40LLQvtC8hgE5Bml0YWxpYwRudWxshAE6AiwghgE8BGNvZGUCe32EAT0K0LrQvtC00L7QvIYBQgRjb2RlBG51bGyEAUMCLCCGAUUJaGlnaGxpZ2h0HHsiY29sb3IiOiJoaWdobGlnaHQueWVsbG93In2EAUYQ0LzQsNGA0LrQtdGA0L7QvIYBTgloaWdobGlnaHQEbnVsbIQBTxgg0Lgg0YHRgdGL0LvQutC-0Lkg0L3QsCCHARIDCG5vdGVMaW5rKAABXgZub3RlSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMGEwMDEoAAFeBWxhYmVsAXcX0J_Qu9Cw0L0g0LfQsNC_0YPRgdC60LCHAV4GBAABYQEghwFhAwN0YWcoAAFjBG5hbWUBdwzRgNCw0LHQvtGC0LCHAWMGBAABZQEuKAABEQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDAyhwERAwdjYWxsb3V0BwABaAMJcGFyYWdyYXBoBwABaQYEAAFqS9Ch0YDQvtC60Lgg0YHQtNCy0LjQs9Cw0Y7RgtGB0Y8g4oCUINC_0YDQvtCy0LXRgNC40YLRjCDQtNC-INC_0Y_RgtC90LjRhtGLLigAAWkHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAwNCgAAWgHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAwMygAAWgEdG9uZQF3B3dhcm5pbmcoAAFoBWVtb2ppAXcG4pqg77iPhwFoAwV0YWJsZQcAAZcBAwh0YWJsZVJvdwcAAZgBAwt0YWJsZUhlYWRlcgcAAZkBAwlwYXJhZ3JhcGgHAAGaAQYEAAGbAQzQl9Cw0LTQsNGH0LAoAAGaAQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDA4KAABmQEHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAwNygAAZkBB2NvbHNwYW4BfQEoAAGZAQdyb3dzcGFuAX0BKAABmQEFYWxpZ24BdwRsZWZ0hwGZAQMLdGFibGVIZWFkZXIHAAGnAQMJcGFyYWdyYXBoBwABqAEGBAABqQEa0J7RgtCy0LXRgtGB0YLQstC10L3QvdGL0LkoAAGoAQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDBhKAABpwEHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAwOSgAAacBB2NvbHNwYW4BfQEoAAGnAQdyb3dzcGFuAX0BKAABpwEFYWxpZ24BdwZjZW50ZXKHAacBAwt0YWJsZUhlYWRlcgcAAbwBAwlwYXJhZ3JhcGgHAAG9AQYEAAG-AQzQodGC0LDRgtGD0YEoAAG9AQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDBjKAABvAEHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAwYigAAbwBB2NvbHNwYW4BfQEoAAG8AQdyb3dzcGFuAX0BKAABvAEFYWxpZ24BdwVyaWdodCgAAZgBB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMDaHAZgBAwh0YWJsZVJvdwcAAcsBAwl0YWJsZUNlbGwHAAHMAQMJcGFyYWdyYXBoBwABzQEGBAABzgEM0JTQuNC30LDQudC9KAABzQEHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAwZigAAcwBB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMGUoAAHMAQdjb2xzcGFuAX0BKAABzAEHcm93c3BhbgF9ASgAAcwBBWFsaWduAXcEbGVmdIcBzAEDCXRhYmxlQ2VsbAcAAdoBAwlwYXJhZ3JhcGgHAAHbAQYEAAHcAQbQkNC90Y8oAAHbAQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDExKAAB2gEHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAxMCgAAdoBB2NvbHNwYW4BfQEoAAHaAQdyb3dzcGFuAX0BKAAB2gEFYWxpZ24BdwZjZW50ZXKHAdoBAwl0YWJsZUNlbGwHAAHlAQMJcGFyYWdyYXBoBwAB5gEGBAAB5wEM0LPQvtGC0L7QstC-KAAB5gEHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAxMygAAeUBB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMTIoAAHlAQdjb2xzcGFuAX0BKAAB5QEHcm93c3BhbgF9ASgAAeUBBWFsaWduAXcFcmlnaHQoAAHLAQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDBkhwHLAQMIdGFibGVSb3cHAAH0AQMJdGFibGVDZWxsBwAB9QEDCXBhcmFncmFwaAcAAfYBBgQAAfcBDNCh0LXRgNCy0LXRgCgAAfYBB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMTYoAAH1AQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDE1KAAB9QEHY29sc3BhbgF9ASgAAfUBB3Jvd3NwYW4BfQEoAAH1AQVhbGlnbgF3BGxlZnSHAfUBAwl0YWJsZUNlbGwHAAGDAgMJcGFyYWdyYXBoBwABhAIGBAABhQIK0JHQvtGA0LjRgSgAAYQCB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMTgoAAGDAgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDE3KAABgwIHY29sc3BhbgF9ASgAAYMCB3Jvd3NwYW4BfQEoAAGDAgVhbGlnbgF3BmNlbnRlcocBgwIDCXRhYmxlQ2VsbAcAAZACAwlwYXJhZ3JhcGgHAAGRAgYEAAGSAg_QsiDRgNCw0LHQvtGC0LUoAAGRAgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDFhKAABkAIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAxOSgAAZACB2NvbHNwYW4BfQEoAAGQAgdyb3dzcGFuAX0BKAABkAIFYWxpZ24BdwVyaWdodCgAAfQBB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMTQoAAGXAQdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDA1hwGXAQMKYnVsbGV0TGlzdAcAAaICAwhsaXN0SXRlbQcAAaMCAwlwYXJhZ3JhcGgHAAGkAgYEAAGlAhfQv9C10YDQstGL0Lkg0L_Rg9C90LrRgigAAaQCB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMWQoAAGjAgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDFjhwGjAgMIbGlzdEl0ZW0HAAG0AgMJcGFyYWdyYXBoBwABtQIGBAABtgIX0LLRgtC-0YDQvtC5INC_0YPQvdC60YIoAAG1AgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDFmhwG1AgMKYnVsbGV0TGlzdAcAAcQCAwhsaXN0SXRlbQcAAcUCAwlwYXJhZ3JhcGgHAAHGAgYEAAHHAhLQstC70L7QttC10L3QvdGL0LkoAAHGAgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDIyKAABxQIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAyMSgAAcQCB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMjAoAAG0AgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDFlKAABogIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAxYocBogIDC29yZGVyZWRMaXN0BwAB1gIDCGxpc3RJdGVtBwAB1wIDCXBhcmFncmFwaAcAAdgCBgQAAdkCBtGA0LDQtygAAdgCB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMjUoAAHXAgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDI0hwHXAgMIbGlzdEl0ZW0HAAHfAgMJcGFyYWdyYXBoBwAB4AIGBAAB4QIG0LTQstCwKAAB4AIHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAyNygAAd8CB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMjYoAAHWAgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDIzKAAB1gIFc3RhcnQBfQGHAdYCAwh0YXNrTGlzdAcAAekCAwh0YXNrSXRlbQcAAeoCAwlwYXJhZ3JhcGgHAAHrAgYEAAHsAh3QntGC0L_RgNCw0LLQuNGC0Ywg0L7RgtGH0ZHRgigAAesCB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMmIoAAHqAgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDI5KAAB6gIFc3RhdGUBdwRvcGVuKAAB6gIJc2NoZWR1bGVkAXcKMjAyNi0xMC0yNygAAeoCCGRlYWRsaW5lAXcKMjAyNi0xMC0zMCgAAeoCBnRhc2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAyYYcB6gIDCHRhc2tJdGVtBwABggMDCXBhcmFncmFwaAcAAYMDBgQAAYQDINCh0L7Qt9Cy0L7QvSDRgSDQutC-0LzQsNC90LTQvtC5KAABgwMHYmxvY2tJZAF3JDAxOTJmM2M0LTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMTAyZSgAAYIDB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMmMoAAGCAwVzdGF0ZQF3BGRvbmUoAAGCAwZ0YXNrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMmQoAAHpAgdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDI4hwHpAgMJY29kZUJsb2NrBwABmwMGBAABnAMvY29uc3QgdG90YWwgPSBpdGVtcy5yZWR1Y2UoKGEsIGIpID0-IGEgKyBiLCAwKTsoAAGbAwdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDJmKAABmwMIbGFuZ3VhZ2UBdwJ0c4cBmwMDCW1hdGhCbG9jaygAAc4DB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMzAoAAHOAwVsYXRleAF3CEUgPSBtY14yhwHOAwMJcGFyYWdyYXBoBwAB0QMGBAAB0gMy0KTQvtGA0LzRg9C70LAg0LIg0YHRgtGA0L7QutC1OiAkYV4yICsgYl4yID0gY14yJC4oAAHRAwdibG9ja0lkAXckMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAxMDMxhwHRAwMHbWVybWFpZCgAAfgDB2Jsb2NrSWQBdyQwMTkyZjNjNC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDEwMzIoAAH4AwZzb3VyY2UBdw9ncmFwaCBURDsgQS0tPkIoAQRtZXRhDWZvcm1hdFZlcnNpb24BfQEA",
+    "expected": {
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "title",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001001"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "План на неделю"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001002"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Короткое введение с "
+              },
+              {
+                "type": "text",
+                "text": "жирным",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "курсивом",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "кодом",
+                "marks": [
+                  {
+                    "type": "code"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "маркером",
+                "marks": [
+                  {
+                    "type": "highlight",
+                    "attrs": {
+                      "color": "highlight.yellow"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " и ссылкой на "
+              },
+              {
+                "type": "noteLink",
+                "attrs": {
+                  "noteId": "0192f3c4-0000-7000-8000-00000000a001",
+                  "label": "План запуска"
+                }
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "tag",
+                "attrs": {
+                  "name": "работа"
+                }
+              },
+              {
+                "type": "text",
+                "text": "."
+              }
+            ]
+          },
+          {
+            "type": "callout",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001003",
+              "tone": "warning",
+              "emoji": "⚠️"
+            },
+            "content": [
+              {
+                "type": "paragraph",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000001004"
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Сроки сдвигаются — проверить до пятницы."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001005"
+            },
+            "content": [
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000001006"
+                },
+                "content": [
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001007",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "left"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-000000001008"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Задача"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001009",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "center"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-00000000100a"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Ответственный"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-00000000100b",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "right"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-00000000100c"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Статус"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-00000000100d"
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-00000000100e",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "left"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-00000000100f"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Дизайн"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001010",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "center"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-000000001011"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Аня"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001012",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "right"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-000000001013"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "готово"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000001014"
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001015",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "left"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-000000001016"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Сервер"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001017",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "center"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-000000001018"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Борис"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001019",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "right"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-00000000101a"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "в работе"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-00000000101b"
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-00000000101c"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-00000000101d"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "первый пункт"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-00000000101e"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-00000000101f"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "второй пункт"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "bulletList",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001020"
+                    },
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-000000001021"
+                        },
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "attrs": {
+                              "blockId": "0192f3c4-0000-7000-8000-000000001022"
+                            },
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "вложенный"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "orderedList",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001023",
+              "start": 1
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000001024"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001025"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "раз"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000001026"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001027"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "два"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "taskList",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001028"
+            },
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000001029",
+                  "state": "open",
+                  "scheduled": "2026-10-27",
+                  "deadline": "2026-10-30",
+                  "taskId": "0192f3c4-0000-7000-8000-00000000102a"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-00000000102b"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Отправить отчёт"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-00000000102c",
+                  "state": "done",
+                  "taskId": "0192f3c4-0000-7000-8000-00000000102d"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-00000000102e"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Созвон с командой"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-00000000102f",
+              "language": "ts"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "const total = items.reduce((a, b) => a + b, 0);"
+              }
+            ]
+          },
+          {
+            "type": "mathBlock",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001030",
+              "latex": "E = mc^2"
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001031"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Формула в строке: $a^2 + b^2 = c^2$."
+              }
+            ]
+          },
+          {
+            "type": "mermaid",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001032",
+              "source": "graph TD; A-->B"
+            }
+          }
+        ]
+      },
+      "meta": {
+        "formatVersion": 1
+      },
+      "markdown": "Короткое введение с **жирным**, *курсивом*, `кодом`, ==маркером== и ссылкой на [[План запуска]] #работа. <!-- block:0192f3c4-0000-7000-8000-000000001002 -->\n\n> [!warning] ⚠️ <!-- block:0192f3c4-0000-7000-8000-000000001003 -->\n> Сроки сдвигаются — проверить до пятницы. <!-- block:0192f3c4-0000-7000-8000-000000001004 -->\n\n<!-- block:0192f3c4-0000-7000-8000-000000001005 -->\n| Задача | Ответственный | Статус |\n| :--- | :---: | ---: |\n| Дизайн | Аня | готово |\n| Сервер | Борис | в работе |\n\n- первый пункт <!-- block:0192f3c4-0000-7000-8000-00000000101c -->\n- второй пункт <!-- block:0192f3c4-0000-7000-8000-00000000101e -->\n  - вложенный <!-- block:0192f3c4-0000-7000-8000-000000001021 -->\n\n1. раз <!-- block:0192f3c4-0000-7000-8000-000000001024 -->\n2. два <!-- block:0192f3c4-0000-7000-8000-000000001026 -->\n\n- [ ] Отправить отчёт ⏳ 2026-10-27 📅 2026-10-30 <!-- block:0192f3c4-0000-7000-8000-000000001029 task:0192f3c4-0000-7000-8000-00000000102a -->\n- [x] Созвон с командой <!-- block:0192f3c4-0000-7000-8000-00000000102c task:0192f3c4-0000-7000-8000-00000000102d -->\n\n```ts <!-- block:0192f3c4-0000-7000-8000-00000000102f -->\nconst total = items.reduce((a, b) => a + b, 0);\n```\n\n$$ <!-- block:0192f3c4-0000-7000-8000-000000001030 -->\nE = mc^2\n$$\n\nФормула в строке: $a^2 + b^2 = c^2$. <!-- block:0192f3c4-0000-7000-8000-000000001031 -->\n\n```mermaid <!-- block:0192f3c4-0000-7000-8000-000000001032 -->\ngraph TD; A-->B\n```\n"
+    }
+  },
+  "editTitle": {
+    "operation": {
+      "op": "replace_text",
+      "blockId": "0192f3c4-0000-7000-8000-000000001001",
+      "find": "неделю",
+      "replace": "месяц"
+    },
+    "agentEdit": {
+      "agentId": "0192f3c4-0000-7000-8000-00000000a002",
+      "at": "2026-10-26T12:00:00.000Z"
+    },
+    "update": "AQMCAIYBDwlhZ2VudEVkaXRSeyJhZ2VudElkIjoiMDE5MmYzYzQtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDBhMDAyIiwiYXQiOiIyMDI2LTEwLTI2VDEyOjAwOjAwLjAwMFoifYQCAArQvNC10YHRj9GGhgIFCWFnZW50RWRpdARudWxsAQEBCgY",
+    "expected": {
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "title",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001001"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "План на "
+              },
+              {
+                "type": "text",
+                "text": "месяц",
+                "marks": [
+                  {
+                    "type": "agentEdit",
+                    "attrs": {
+                      "agentId": "0192f3c4-0000-7000-8000-00000000a002",
+                      "at": "2026-10-26T12:00:00.000Z"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001002"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Короткое введение с "
+              },
+              {
+                "type": "text",
+                "text": "жирным",
+                "marks": [
+                  {
+                    "type": "bold"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "курсивом",
+                "marks": [
+                  {
+                    "type": "italic"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "кодом",
+                "marks": [
+                  {
+                    "type": "code"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": ", "
+              },
+              {
+                "type": "text",
+                "text": "маркером",
+                "marks": [
+                  {
+                    "type": "highlight",
+                    "attrs": {
+                      "color": "highlight.yellow"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " и ссылкой на "
+              },
+              {
+                "type": "noteLink",
+                "attrs": {
+                  "noteId": "0192f3c4-0000-7000-8000-00000000a001",
+                  "label": "План запуска"
+                }
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "tag",
+                "attrs": {
+                  "name": "работа"
+                }
+              },
+              {
+                "type": "text",
+                "text": "."
+              }
+            ]
+          },
+          {
+            "type": "callout",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001003",
+              "tone": "warning",
+              "emoji": "⚠️"
+            },
+            "content": [
+              {
+                "type": "paragraph",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000001004"
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Сроки сдвигаются — проверить до пятницы."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001005"
+            },
+            "content": [
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000001006"
+                },
+                "content": [
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001007",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "left"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-000000001008"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Задача"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001009",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "center"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-00000000100a"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Ответственный"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableHeader",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-00000000100b",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "right"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-00000000100c"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Статус"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-00000000100d"
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-00000000100e",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "left"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-00000000100f"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Дизайн"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001010",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "center"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-000000001011"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Аня"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001012",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "right"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-000000001013"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "готово"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "tableRow",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000001014"
+                },
+                "content": [
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001015",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "left"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-000000001016"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Сервер"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001017",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "center"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-000000001018"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Борис"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tableCell",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001019",
+                      "colspan": 1,
+                      "rowspan": 1,
+                      "align": "right"
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-00000000101a"
+                        },
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "в работе"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "bulletList",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-00000000101b"
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-00000000101c"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-00000000101d"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "первый пункт"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-00000000101e"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-00000000101f"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "второй пункт"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "bulletList",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001020"
+                    },
+                    "content": [
+                      {
+                        "type": "listItem",
+                        "attrs": {
+                          "blockId": "0192f3c4-0000-7000-8000-000000001021"
+                        },
+                        "content": [
+                          {
+                            "type": "paragraph",
+                            "attrs": {
+                              "blockId": "0192f3c4-0000-7000-8000-000000001022"
+                            },
+                            "content": [
+                              {
+                                "type": "text",
+                                "text": "вложенный"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "orderedList",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001023",
+              "start": 1
+            },
+            "content": [
+              {
+                "type": "listItem",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000001024"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001025"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "раз"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "listItem",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000001026"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-000000001027"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "два"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "taskList",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001028"
+            },
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-000000001029",
+                  "state": "open",
+                  "scheduled": "2026-10-27",
+                  "deadline": "2026-10-30",
+                  "taskId": "0192f3c4-0000-7000-8000-00000000102a"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-00000000102b"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Отправить отчёт"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "taskItem",
+                "attrs": {
+                  "blockId": "0192f3c4-0000-7000-8000-00000000102c",
+                  "state": "done",
+                  "taskId": "0192f3c4-0000-7000-8000-00000000102d"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "blockId": "0192f3c4-0000-7000-8000-00000000102e"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Созвон с командой"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "codeBlock",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-00000000102f",
+              "language": "ts"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "const total = items.reduce((a, b) => a + b, 0);"
+              }
+            ]
+          },
+          {
+            "type": "mathBlock",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001030",
+              "latex": "E = mc^2"
+            }
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001031"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Формула в строке: $a^2 + b^2 = c^2$."
+              }
+            ]
+          },
+          {
+            "type": "mermaid",
+            "attrs": {
+              "blockId": "0192f3c4-0000-7000-8000-000000001032",
+              "source": "graph TD; A-->B"
+            }
+          }
+        ]
+      },
+      "markdown": "Короткое введение с **жирным**, *курсивом*, `кодом`, ==маркером== и ссылкой на [[План запуска]] #работа. <!-- block:0192f3c4-0000-7000-8000-000000001002 -->\n\n> [!warning] ⚠️ <!-- block:0192f3c4-0000-7000-8000-000000001003 -->\n> Сроки сдвигаются — проверить до пятницы. <!-- block:0192f3c4-0000-7000-8000-000000001004 -->\n\n<!-- block:0192f3c4-0000-7000-8000-000000001005 -->\n| Задача | Ответственный | Статус |\n| :--- | :---: | ---: |\n| Дизайн | Аня | готово |\n| Сервер | Борис | в работе |\n\n- первый пункт <!-- block:0192f3c4-0000-7000-8000-00000000101c -->\n- второй пункт <!-- block:0192f3c4-0000-7000-8000-00000000101e -->\n  - вложенный <!-- block:0192f3c4-0000-7000-8000-000000001021 -->\n\n1. раз <!-- block:0192f3c4-0000-7000-8000-000000001024 -->\n2. два <!-- block:0192f3c4-0000-7000-8000-000000001026 -->\n\n- [ ] Отправить отчёт ⏳ 2026-10-27 📅 2026-10-30 <!-- block:0192f3c4-0000-7000-8000-000000001029 task:0192f3c4-0000-7000-8000-00000000102a -->\n- [x] Созвон с командой <!-- block:0192f3c4-0000-7000-8000-00000000102c task:0192f3c4-0000-7000-8000-00000000102d -->\n\n```ts <!-- block:0192f3c4-0000-7000-8000-00000000102f -->\nconst total = items.reduce((a, b) => a + b, 0);\n```\n\n$$ <!-- block:0192f3c4-0000-7000-8000-000000001030 -->\nE = mc^2\n$$\n\nФормула в строке: $a^2 + b^2 = c^2$. <!-- block:0192f3c4-0000-7000-8000-000000001031 -->\n\n```mermaid <!-- block:0192f3c4-0000-7000-8000-000000001032 -->\ngraph TD; A-->B\n```\n"
+    }
+  }
+}

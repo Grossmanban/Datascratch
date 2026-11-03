@@ -32,3 +32,79 @@ test("refused changes show «Не отправлено» and are sent again with
   await expect(page.locator(".ds-prose")).toContainText("Первая строка — правка");
   await expectSynced(page);
 });
+
+test("an item nobody can read is skipped: sync settles (no endless spinner), a calm note, no re-read loop", async ({ page, request }) => {
+  test.skip(!!process.env.E2E_SERVER_URL, "mock server only (it injects an unreadable item)");
+  await signUp(page, uniqueEmail("unreadable"));
+  await expectSynced(page);
+  await expect.poll(() => page.evaluate(() => "__ds" in window)).toBe(true);
+  const notebookId = await page.evaluate(() => {
+    const rt = (window as unknown as { __ds: { store: { rows: Map<string, { kind: string }> } } }).__ds;
+    return [...rt.store.rows].find(([, r]) => r.kind === "notebook")![0];
+  });
+  await request.post(`${MOCK}/v1/__test/inject-unreadable`, { data: { docId: notebookId } });
+  await request.post(`${MOCK}/v1/__test/inject-unreadable`, { data: { docId: notebookId } });
+
+  const status = page.getByTestId("sync-status");
+  await expect(status).toHaveAttribute("aria-label", /не читаются/, { timeout: 15_000 });
+  await expectSynced(page);
+  // Still settled a while later: no re-read loop keeps it busy.
+  await page.waitForTimeout(6000);
+  await expect(status).toHaveAttribute("data-status", "online");
+  const debug = (await page.evaluate(() => (window as unknown as { __dsSyncDebug: () => Promise<unknown> }).__dsSyncDebug())) as {
+    notSynced: unknown[];
+    skipped: { docId: string }[];
+  };
+  expect(debug.notSynced).toEqual([]);
+  expect(debug.skipped.filter((s) => s.docId === notebookId).length).toBe(2);
+
+  // The notebook says so calmly, can be dismissed, stays dismissed, and returns only for new items.
+  // (Within this run of the app: skipped items are known since sync started, as in SyncClient.)
+  const sidebar = page.getByTestId("sidebar");
+  const openNotebook = () => sidebar.getByRole("link", { name: /Заметки/ }).first().click();
+  await openNotebook();
+  await expect(page).toHaveURL(new RegExp(`/notebook/${notebookId}`));
+  const note = page.getByTestId("unreadable-note");
+  await expect(note).toContainText("Часть изменений здесь пока не читается");
+  await page.getByTestId("unreadable-dismiss").click();
+  await expect(note).toHaveCount(0);
+  await sidebar.getByRole("link", { name: "Все документы" }).click();
+  await openNotebook();
+  await expect(page.getByRole("main").getByRole("heading", { name: /Заметки/ })).toBeVisible();
+  await expect(note).toHaveCount(0);
+  // Still reachable from the notebook's menu.
+  await page.getByTestId("sidebar").getByRole("link", { name: /Заметки/ }).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Нечитаемые изменения" }).click();
+  await expect(note).toBeVisible();
+  await page.getByTestId("unreadable-dismiss").click();
+  await expect(note).toHaveCount(0);
+  await request.post(`${MOCK}/v1/__test/inject-unreadable`, { data: { docId: notebookId } });
+  await expect(note).toBeVisible({ timeout: 15_000 });
+});
+
+test("browser storage full: a calm banner while edits cannot be saved on the device, gone once they can", async ({ page }) => {
+  await signUp(page, uniqueEmail("storage-full"));
+  await newDoc(page, "Квота", "Текст");
+  await expect.poll(() => page.evaluate(() => "__ds" in window)).toBe(true);
+  // Make the outbox storage refuse writes the way a full IndexedDB does.
+  await page.evaluate(() => {
+    type Storage = { enqueue: (i: unknown) => Promise<void>; __enqueue?: (i: unknown) => Promise<void> };
+    const s = (window as unknown as { __ds: { client: { opts: { storage: Storage } } } }).__ds.client.opts.storage;
+    s.__enqueue = s.enqueue.bind(s);
+    s.enqueue = () => Promise.reject(new DOMException("quota", "QuotaExceededError"));
+  });
+  await page.locator(".ds-prose p").last().click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" и ещё");
+  const banner = page.getByTestId("storage-full");
+  await expect(banner).toContainText("Хранилище браузера заполнено");
+  await page.evaluate(() => {
+    type Storage = { enqueue: (i: unknown) => Promise<void>; __enqueue?: (i: unknown) => Promise<void> };
+    const s = (window as unknown as { __ds: { client: { opts: { storage: Storage } } } }).__ds.client.opts.storage;
+    s.enqueue = s.__enqueue!;
+  });
+  await page.keyboard.type(" и ещё");
+  await expect(banner).toHaveCount(0, { timeout: 15_000 });
+  await expectSynced(page);
+  await expect(page.locator(".ds-prose")).toContainText("и ещё и ещё");
+});

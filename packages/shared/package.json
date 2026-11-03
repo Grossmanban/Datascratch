@@ -1,6 +1,7 @@
 {
   "name": "@datascratch/shared",
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "Shared contracts, crypto, document model, strokes codec and sync client for Datascratch",
   "type": "module",
@@ -33,6 +34,10 @@
     "./sync": {
       "types": "./dist/sync/index.d.ts",
       "import": "./dist/sync/index.js"
+    },
+    "./sharing": {
+      "types": "./dist/sharing/index.d.ts",
+      "import": "./dist/sharing/index.js"
     },
     "./package.json": "./package.json"
   },

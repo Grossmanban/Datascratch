@@ -3,6 +3,7 @@ import DSDesign
 import DSEditorModel
 import DSInk
 import UIKit
+import UniformTypeIdentifiers
 
 /// The note editor: TextKit 2 text with the living-stroke pen layer on top.
 ///
@@ -12,7 +13,29 @@ import UIKit
 /// re-renders only the paragraphs that changed.
 @MainActor
 public final class EditorView: UIView {
-    public private(set) var document: EditorDocument
+    /// The host's document (`setDocument` replaces it).
+    public var document: EditorDocument { model.base }
+    /// Every edit the editor makes goes through this, so nothing writes while `isReadOnly`.
+    let model: ReadOnlyDocument
+
+    /// Read-only mode (`spec/04-editor.md`, «Только чтение»), e.g. a viewer of a shared note
+    /// (D-54); can change at any time. Text can be selected and copied; scrolling, links, images,
+    /// files and diagrams work. Nothing changes the note: no keyboard (hardware either), paste,
+    /// cut, delete, dictation or Scribble, no pen, no format or "/" menus, no image or file
+    /// insertion or drops, no task check boxes or date menus, no table edits, no undo. Edits
+    /// arriving from elsewhere (sync) are still shown. A note in a newer format (R-03) is
+    /// read-only whatever this says (`isEffectivelyReadOnly`).
+    public var isReadOnly: Bool {
+        get { model.isLocked }
+        set {
+            guard newValue != model.isLocked else { return }
+            model.isLocked = newValue
+            applyReadOnly()
+        }
+    }
+
+    /// `isReadOnly`, or a note in a newer format than this app understands.
+    public var isEffectivelyReadOnly: Bool { model.isReadOnly }
     public let tools = InkToolState()
     public private(set) var theme: EditorTheme
 
@@ -28,6 +51,30 @@ public final class EditorView: UIView {
     /// yet, or one typed without autocomplete). The host opens the note with that title, or offers
     /// to create it (`spec/04-editor.md`).
     public var onOpenNoteTitled: ((String) -> Void)?
+    /// Images pasted (⌘V, «Вставить») or dropped into the text: the host loads them (originals,
+    /// HEIC), stores each as an attachment and calls `insertImage`. The caret is already at the drop
+    /// point. Nil: the editor does not accept images.
+    public var onImagesReceived: (([NSItemProvider]) -> Void)? {
+        didSet { textView.imagePaste = model.isReadOnly ? nil : onImagesReceived }
+    }
+    /// An image was tapped (or activated with VoiceOver): the host zooms it. The frame is the
+    /// picture's frame in the editor's coordinates (for the transition).
+    public var onImageTap: ((_ block: BlockID, _ attachmentId: String, _ frame: CGRect) -> Void)?
+    /// The host's items for an image's long-press menu (share, save, replace, caption…), shown
+    /// after the editor's own (width, delete).
+    public var imageMenu: ((_ block: BlockID, _ attachmentId: String) -> [UIMenuElement])?
+    /// A file block was tapped (or activated with VoiceOver): the host opens or shares it.
+    public var onFileTap: ((_ block: BlockID, _ attachmentId: String) -> Void)?
+    /// "/" menu entries the host carries out («Фото», «Файл»: `SlashCommands.hostHandled`): the
+    /// typed "/query" is removed first, then this is called with the entry's id. Nil: those
+    /// entries are not offered.
+    public var onHostSlashCommand: ((String) -> Void)?
+    /// Images inside a rich paste (a web page, Notes, Mail, Word, Markdown): the host stores each
+    /// and returns its attachment id at once, before any upload or download, then calls
+    /// `imageDidLoad` when the bytes are there or `imageFailed` when a download fails. Nil for an
+    /// image skips it (an address stays as a link to it). Without a handler, addresses become
+    /// links and embedded images are dropped.
+    public var onPastedImages: (([PastedImage]) -> [String?])?
     /// Shows "Посмотреть историю" in the agent-edits banner when set.
     public var onShowHistory: (() -> Void)? {
         didSet { agentBanner.onShowHistory = onShowHistory }
@@ -41,7 +88,15 @@ public final class EditorView: UIView {
     /// "Понятно" on the created-by-agent banner (D-45): the host sets `createdByAgent = null` in
     /// the notebook index. The banner hides right away.
     public var onAcknowledgeCreatedByAgent: (() -> Void)?
-    /// Tools, undo availability, selection or editing (`isEditingText`) changed (refresh toolbars).
+    /// "/" was typed at the start of a paragraph or after a space: the host shows the block menu
+    /// (`DSSuggestionList`) near `caretRect` with `items`, and calls `applySlashCommand(_:)` on a
+    /// pick. Called again as the query changes, and with nil when the menu should close.
+    public var onSlashMenu: ((SlashMenuState?) -> Void)?
+    /// "Ссылка" in the format menu or bar with no URL on the pasteboard: the host asks for a URL and
+    /// calls `setLink(_:)` (the selection is kept until then).
+    public var onLinkRequest: (() -> Void)?
+    /// Tools, undo availability, selection, editing (`isEditingText`) or formatting (`formatState`)
+    /// changed (refresh toolbars and the format bar).
     public var onStateChange: (() -> Void)?
     private var stateChangePending = false
 
@@ -120,12 +175,12 @@ public final class EditorView: UIView {
     private var lassoTextRange: Range<Int>?
 
     public init(document: EditorDocument, theme: EditorTheme? = nil) {
-        self.document = document
+        model = ReadOnlyDocument(document)
         let t = theme ?? EditorTheme(style: document.style)
         self.theme = t
         factory = AttachmentFactory(theme: t)
         renderer = AttributedRenderer(theme: t, attachments: factory)
-        projection = Projection.build(document.blocks)
+        projection = Projection.build(model.blocks)
         super.init(frame: .zero)
         setUp()
         load()
@@ -171,24 +226,28 @@ public final class EditorView: UIView {
 
         geometry = TextGeometry(textView: textView)
         ink = InkController(textView: textView, geometry: geometry, over: inkOver, under: inkUnder, tools: tools,
-                            document: document, projection: { [unowned self] in self.projection })
+                            document: model, projection: { [unowned self] in self.projection })
         ink.onTextChangedByGesture = { [weak self] caret in self?.select(caret) }
         ink.onLassoSelection = { [weak self] ids, range, bounds in self?.lassoSelected(ids, range: range, bounds: bounds) }
         inkOver.needsRecolor = { [weak self] in self?.ink.refresh() }
 
         textView.onLayout = { [weak self] in self?.textViewDidLayout() }
         textView.keyHandler = { [weak self] in self?.perform($0) }
-        textView.documentUndo.document = document
+        textView.documentUndo.document = model
         textView.documentUndo.afterChange = { [weak self] in self?.notifyStateChange() }
 
         inkInput = InkInputRecognizer(target: nil, action: nil)
         inkInput.shouldTrack = { [weak self] touch in
-            guard let self, self.tools.mode.capturesPen else { return false }
+            guard let self, self.tools.mode.capturesPen, !self.model.isReadOnly else { return false }
             // Controls the host lays over the editor (a floating palette) keep their touches.
             let p = touch.location(in: self)
             if p.y > self.bounds.maxY - self.overlayInsets.bottom || p.y < self.bounds.minY + self.overlayInsets.top { return false }
             if let header = self.headerView, header.bounds.contains(touch.location(in: header)) { return false }
             if self.agentBannerVisible, self.agentBanner.bounds.contains(touch.location(in: self.agentBanner)) { return false }
+            if touch.type == .pencil, !Self.pencilSeen {
+                Self.pencilSeen = true
+                DispatchQueue.main.async { self.setNeedsLayout() }
+            }
             return touch.type == .pencil || (self.tools.allowsFingerDrawing && touch.type == .direct)
         }
         inkInput.onBegan = { [weak self] s in
@@ -196,11 +255,19 @@ public final class EditorView: UIView {
             // Palm rejection comes from the recognizer itself: it begins on touch down and
             // prevents the scroll recognizer for that touch, so a resting hand does not draw.
             self.ink.penBegan(s)
+            self.penDown = true
+            self.showContactIndicator(at: s.location)
         }
-        inkInput.onMoved = { [weak self] c, p in self?.ink.penMoved(c, predicted: p) }
+        inkInput.onMoved = { [weak self] c, p in
+            guard let self else { return }
+            self.ink.penMoved(c, predicted: p)
+            if let last = c.last { self.showContactIndicator(at: last.location) }
+        }
         inkInput.onEnded = { [weak self] cancelled in
             guard let self else { return }
             self.ink.penEnded(cancelled: cancelled)
+            self.penDown = false
+            self.setIndicator(nil)
             self.notifyStateChange()
         }
         inkInput.onEstimatedUpdate = { [weak self] s in self?.ink.penEstimatedUpdate(s) }
@@ -214,12 +281,31 @@ public final class EditorView: UIView {
         let hover = UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:)))
         hover.delaysTouchesEnded = false
         textView.addGestureRecognizer(hover)
+        textView.addGestureRecognizer(touchObserver)
+        // Work held back while a finger was on the text: the keyboard inset, late block heights.
+        touchObserver.onLift = { [weak self] in
+            self?.applyKeyboardInset()
+            self?.flushPendingAtomRelayout()
+        }
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
         tap.delegate = self
         tap.delaysTouchesBegan = false
         tap.delaysTouchesEnded = false
         textView.addGestureRecognizer(tap)
+        textView.editorTap = tap
+        textView.tapTargetAt = { [weak self] point in self?.hasTapTarget(at: point) ?? false }
+        textView.allowsSystemScroll = { [weak self] in self?.userIsInteracting ?? true }
+        textView.textDropDelegate = self
+        textView.richPaste = { [weak self] in self?.pasteRich() ?? false }
+        textView.plainPaste = { [weak self] in self?.pastePlainText() }
+        factory.imageMenu = { [weak self] block in self?.menu(forImage: block) }
+        factory.imageResized = { [weak self] block, fraction in self?.setImageWidth(block, fraction: fraction) }
+        factory.imageActivated = { [weak self] block, view in
+            guard let self else { return }
+            self.openImage(block, frame: view.convert(view.imageFrame, to: self))
+        }
+        updateResizeHandles()
 
         textView.addInteraction(UIScribbleInteraction(delegate: self))
         addInteraction(UIPencilInteraction(delegate: self))
@@ -253,7 +339,12 @@ public final class EditorView: UIView {
             self.dynamicTypeChanged()
         }
 
-        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
+        // The overlap is measured once the keyboard is in place (`did`, not `will`): a host that
+        // shrinks the editor for the keyboard does so in the same animation, and measuring the
+        // still full-height editor against the incoming keyboard counted the keyboard twice — the
+        // visible area collapsed for a moment, UIKit scrolled the caret to the very top, and a
+        // screen of empty space stayed under it (iPad, build 9).
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
             let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
             MainActor.assumeIsolated { self?.keyboardFrameChanged(frame) }
         }
@@ -273,9 +364,12 @@ public final class EditorView: UIView {
         let signpost = EditorSignpost.log.beginInterval("OpenNote", id: EditorSignpost.log.makeSignpostID())
         defer { EditorSignpost.log.endInterval("OpenNote", signpost) }
         let start = CACurrentMediaTime()
-        observation = document.observe { [weak self] change in self?.documentChanged(change) }
-        projection = Projection.build(document.blocks)
-        theme.style = document.style
+        // Duplicate titles from a merge are repaired; an empty document gets nothing (its content
+        // may still be on its way: nothing is created on open).
+        EditorCommands(document: model).repairTitles()
+        observation = model.observe { [weak self] change in self?.documentChanged(change) }
+        projection = Projection.build(model.blocks)
+        theme.style = model.style
         theme.baseFontSize = EditorTheme.dynamicBaseSize(for: traitCollection)
         applyTheme()
         let text = renderer.render(projection, paragraphs: 0..<projection.paragraphs.count)
@@ -285,21 +379,46 @@ public final class EditorView: UIView {
         textView.selectedRange = NSRange(location: projection.paragraphs.count > 1 ? projection.starts[1] : 0, length: 0)
         updateTypingAttributes()
         updateAgentBanner()
+        applyReadOnly()
         ink.invalidateLayout()
         if bounds.width > 0 {
             layoutIfNeeded()
-            if let viewport = textView.textLayoutManager?.textViewportLayoutController {
-                viewport.layoutViewport()
+            if let tlm = textView.textLayoutManager {
+                // A note of ordinary length is laid out whole on open: with TextKit 2's estimated
+                // heights the content size kept changing under the first swipes and the text view
+                // pulled the note back (build 15). Long notes keep the lazy layout (open time).
+                if text.length <= Self.fullLayoutLimit { tlm.ensureLayout(for: tlm.documentRange) }
+                tlm.textViewportLayoutController.layoutViewport()
             }
         }
         lastOpenDuration = CACurrentMediaTime() - start
     }
 
+    /// Puts the interface in or out of read-only mode (`isReadOnly`); the model rejects writes
+    /// by itself (`ReadOnlyDocument`).
+    private func applyReadOnly() {
+        let readOnly = model.isReadOnly
+        EditorDiagnostics.log("read-only: \(readOnly)")
+        if readOnly {
+            if textView.isFirstResponder { textView.resignFirstResponder() }
+            pendingMarks = nil
+            pendingShortcut = nil
+            ink.clearSelection()
+            setIndicator(nil)
+            onSlashMenu?(nil)
+        }
+        textView.isEditable = !readOnly
+        textView.isReadOnly = readOnly
+        textView.imagePaste = readOnly ? nil : onImagesReceived
+        factory.isReadOnly = readOnly
+        updateResizeHandles()
+        updateAgentBanner()
+        notifyStateChange()
+    }
+
     /// Replaces the edited document.
     public func setDocument(_ document: EditorDocument) {
-        self.document = document
-        ink.document = document
-        textView.documentUndo.document = document
+        model.base = document
         load()
         ink.refresh()
     }
@@ -307,11 +426,15 @@ public final class EditorView: UIView {
     // MARK: - Style
 
     public func setStyle(_ style: DocumentStyle) {
-        document.setStyle(style)
+        model.setStyle(style)
     }
 
     private func dynamicTypeChanged() {
-        let size = EditorTheme.dynamicBaseSize(for: traitCollection)
+        setBaseFontSize(EditorTheme.dynamicBaseSize(for: traitCollection))
+    }
+
+    /// Body text size (Dynamic Type); everything else scales with it.
+    func setBaseFontSize(_ size: CGFloat) {
         guard size != theme.baseFontSize else { return }
         theme.baseFontSize = size
         applyTheme()
@@ -322,27 +445,87 @@ public final class EditorView: UIView {
         renderer.theme = theme
         factory.theme = theme
         paper.paper = theme.style.paper
+        alignPaper(frame: paper.frame)
         setNeedsLayout()
     }
 
     // MARK: - Layout
 
+    /// The reading position kept across a width change or a trip off screen (full screen, Split
+    /// View, rotation, the document column rebuilt around the same editor): the text reflows and
+    /// the scroll offset alone pointed somewhere else — the note jumped to its top (owner's
+    /// feedback 2026-11-01). Taken once, before the first step of the change, and held until the
+    /// width settles: UITextView moves the offset itself on every container size change, and an
+    /// animated resize (full screen) is a dozen of them — an anchor re-taken mid-way kept its error.
+    private var keptAnchor: (location: NSTextLocation, offset: CGFloat)?
+    private var releaseAnchor: DispatchWorkItem?
+
+    public override func willMove(toWindow newWindow: UIWindow?) {
+        super.willMove(toWindow: newWindow)
+        if newWindow == nil, window != nil, keptAnchor == nil { keptAnchor = visibleAnchor() }
+    }
+
     public override func layoutSubviews() {
         super.layoutSubviews()
+        let shrinks = textView.frame.height > bounds.height + 0.5
+        // Measured on the old width, before the text view reflows.
+        if keptAnchor == nil, textView.frame.width > 0, abs(textView.frame.width - bounds.width) > 0.5, !userIsInteracting {
+            keptAnchor = visibleAnchor()
+        }
         textView.frame = bounds
+        // The host shrank the editor (the keyboard, the format bar): keep the caret's line visible
+        // (UIKit's own scroll to the caret is off, see `EditorTextView.allowsSystemScroll`).
+        if shrinks, textView.isFirstResponder {
+            DispatchQueue.main.async { [weak self] in self?.scrollCaretIntoView() }
+        }
         let available = bounds.width - theme.horizontalPadding * 2
         let column = theme.columnWidth(available: max(200, available))
         let side = max(theme.horizontalPadding, (bounds.width - column) / 2)
         layoutHeader()
-        // Room to draw below the last paragraph: at least one screen (`strokes.md` §4, free drawing).
         agentBanner.isHidden = !agentBannerVisible
         if agentBannerVisible {
             let frame = CGRect(x: side, y: headerHeight + 16, width: bounds.width - side * 2, height: AgentEditsBanner.height)
             if agentBanner.frame != frame { agentBanner.frame = frame }
         }
-        let inset = UIEdgeInsets(top: 32 + headerHeight + agentBannerSpace, left: side, bottom: max(160, bounds.height), right: side)
-        if textView.textContainerInset != inset { textView.textContainerInset = inset }
+        // Room to draw below the last paragraph — at least one screen — only while drawing is
+        // available (`strokes.md` §4: a Pencil has been used, or finger drawing is on).
+        // The window's height, not the editor's: the editor shrinks for the keyboard and the format
+        // bar, and a bottom inset following it changed the content size on every keyboard change.
+        let room = drawingAvailable ? max(160, window?.bounds.height ?? bounds.height) : 160
+        let inset = UIEdgeInsets(top: 32 + headerHeight + agentBannerSpace, left: side, bottom: room, right: side)
+        if textView.textContainerInset != inset {
+            let grownTop = inset.top - textView.textContainerInset.top
+            textView.textContainerInset = inset
+            // While typing, a header or banner that changes height above the text must not move the
+            // text (the title jumped down when the header re-measured, build 18).
+            if abs(grownTop) > 0.5, textView.isFirstResponder, !userIsInteracting, textView.contentSize.height > 0 {
+                let minY = -textView.adjustedContentInset.top
+                textView.contentOffset.y = max(minY, textView.contentOffset.y + grownTop)
+            }
+        }
         applyKeyboardInset()
+        if keptAnchor != nil, window != nil, bounds.width > 0 {
+            // On the next turn: the text view lays out its new width first.
+            DispatchQueue.main.async { [weak self] in self?.restoreKeptAnchor() }
+            releaseAnchor?.cancel()
+            let release = DispatchWorkItem { [weak self] in
+                self?.restoreKeptAnchor()
+                self?.keptAnchor = nil
+            }
+            releaseAnchor = release
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: release)
+        }
+    }
+
+    private func restoreKeptAnchor() {
+        guard let anchor = keptAnchor, window != nil, let tlm = textView.textLayoutManager else { return }
+        guard !userIsInteracting else {
+            keptAnchor = nil
+            return
+        }
+        if textView.text.utf16.count <= Self.fullLayoutLimit { tlm.ensureLayout(for: tlm.documentRange) }
+        tlm.textViewportLayoutController.layoutViewport()
+        restore(anchor)
     }
 
     // MARK: - Keyboard
@@ -391,10 +574,99 @@ public final class EditorView: UIView {
             guard let pending = self.pendingBottomInset else { return }
             self.pendingBottomInset = nil
             guard abs(self.textView.contentInset.bottom - pending.bottom) > 1 else { return }
+            if self.userIsInteracting {
+                // Changing the inset under a dragging finger moves the content: applied after.
+                // `touchObserver.onLift` applies it once the finger is up.
+                return
+            }
+            let grows = pending.bottom > self.textView.contentInset.bottom
             self.textView.contentInset.bottom = pending.bottom
             self.textView.verticalScrollIndicatorInsets.bottom = pending.overlap
+            // Full-height host: the keyboard now covers the bottom; bring the caret into view with
+            // the smallest scroll (nothing moves if it is already visible).
+            if grows, pending.overlap > 0 { self.scrollCaretIntoView() }
         }
     }
+
+    /// Ruled, grid and dot paper follow the text: the pitch is the body line height and the
+    /// rules sit under the lines, which start at the top of the text container.
+    private func alignPaper(frame: CGRect) {
+        guard let pitch = theme.paperPitch else { return }
+        let inset = textView.textContainerInset
+        paper.pitch = pitch
+        paper.ruleLift = (abs(theme.bodyFont.descender) - 2).rounded()
+        paper.phase = CGPoint(x: inset.left - frame.minX, y: inset.top - frame.minY)
+    }
+
+    // MARK: - Drawing availability
+
+    /// An Apple Pencil has drawn on this device (remembered across launches), or the system says
+    /// the person draws only with a Pencil.
+    static var pencilSeen: Bool = UserDefaults.standard.bool(forKey: "ds.pencilSeen") || UIPencilInteraction.prefersPencilOnlyDrawing {
+        didSet { if pencilSeen { UserDefaults.standard.set(true, forKey: "ds.pencilSeen") } }
+    }
+
+    /// Free drawing is possible here: a Pencil has been used, or finger drawing is on. The room
+    /// below the last paragraph (one screen for drawing) exists only then.
+    public var drawingAvailable: Bool { tools.allowsFingerDrawing || Self.pencilSeen }
+
+    /// Scrolls the least needed to show the caret line, with about a line of margin, above the
+    /// bottom obstruction (keyboard inset, the host's palette band). Never while the person is
+    /// touching the text (dragging a selection handle, scrolling): UIKit's own edge autoscroll
+    /// runs then, and scrolling on top of it made the selection run away (build 14).
+    func scrollCaretIntoView() {
+        guard textView.isFirstResponder, !userIsInteracting, let caret = caretLineFrame() else { return }
+        let margin = max(8, theme.bodyFont.lineHeight)
+        var visible = textView.bounds.inset(by: textView.adjustedContentInset)
+        visible.size.height -= overlayInsets.bottom
+        visible.origin.y += overlayInsets.top
+        visible.size.height -= overlayInsets.top
+        guard caret.minY < visible.minY || caret.maxY > visible.maxY else { return }
+        var y = textView.contentOffset.y
+        if caret.maxY > visible.maxY { y += caret.maxY + margin - visible.maxY }
+        if caret.minY < visible.minY { y -= visible.minY - caret.minY + margin }
+        let minY = -textView.adjustedContentInset.top
+        let maxY = max(minY, textView.contentSize.height + textView.adjustedContentInset.bottom - textView.bounds.height)
+        textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: min(max(y, minY), maxY)), animated: false)
+    }
+
+    /// The caret's line in text view content coordinates, from the layout (`caretRect` is wrong in
+    /// an empty paragraph).
+    func caretLineFrame() -> CGRect? {
+        let r = textView.selectedRange
+        if let line = geometry.lineFrame(at: r.location + r.length) { return line }
+        return textView.selectedTextRange.map { textView.caretRect(for: $0.end) }
+    }
+
+    /// The person has a finger (or pencil) on the text view: no programmatic scrolling then.
+    var userIsInteracting: Bool { userIsScrolling }
+
+    /// A structural edit at the caret (Return, joining paragraphs, a paste) re-renders paragraphs and
+    /// moves the selection; UIKit then scrolled on its own — often far past the keyboard. The scroll
+    /// position is kept exactly and only the least needed to show the caret is added (builds 14
+    /// and 18).
+    func keepingScroll(_ edit: () -> Void) {
+        let offset = textView.contentOffset
+        edit()
+        holdScroll(offset)
+        // UIKit scrolls to a programmatic selection on the next turn too.
+        DispatchQueue.main.async { [weak self] in self?.holdScroll(offset) }
+    }
+
+    /// Typing rule (build 18): the content does not move while the person types. The scroll
+    /// position goes back to where it was (UIKit's own scroll to the caret moved it), then the caret
+    /// gets only the scroll it needs to stay above the keyboard and the palette. A header that
+    /// changes height meanwhile is compensated in `layoutSubviews`.
+    private func holdScroll(_ offset: CGPoint) {
+        guard !userIsInteracting else { return }
+        textView.layoutIfNeeded()
+        if textView.contentOffset != offset { textView.setContentOffset(offset, animated: false) }
+        scrollCaretIntoView()
+    }
+
+    /// Plain typing is applied by the text view after `shouldChangeTextIn`: the scroll position is
+    /// held in `textViewDidChange`.
+    private var typingOffset: CGPoint?
 
     private func layoutHeader() {
         guard let header = headerView else {
@@ -413,9 +685,11 @@ public final class EditorView: UIView {
     }
 
     private func textViewDidLayout() {
+        tapTargetElementsDirty = true
         let size = CGSize(width: max(textView.contentSize.width, textView.bounds.width),
                           height: max(textView.contentSize.height, textView.bounds.height) + 400)
         let frame = CGRect(origin: CGPoint(x: 0, y: -200), size: size)
+        alignPaper(frame: frame)
         if paper.frame != frame {
             paper.frame = frame
             inkUnder.frame = CGRect(origin: .zero, size: size)
@@ -443,15 +717,26 @@ public final class EditorView: UIView {
     // MARK: - Document → view
 
     private func documentChanged(_ change: DocumentChange) {
+        tapTargetElementsDirty = true
+        if change.structureChanged, change.origin != .system, !titleRepairScheduled {
+            // Any change of the top level (content arriving for an empty note, another client's
+            // merge, a structural edit) may leave a broken start: repaired once it is over.
+            titleRepairScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.titleRepairScheduled = false
+                EditorCommands(document: self.model).repairTitles()
+            }
+        }
         if change.styleChanged {
-            theme.style = document.style
+            theme.style = model.style
             applyTheme()
             rerenderAll()
         }
         if change.origin == .textInput {
             for block in change.textBlocks {
                 if let i = projection.indexByBlock[block] {
-                    projection.replaceContent(ofParagraph: i, inline: document.inline(of: block, range: nil))
+                    projection.replaceContent(ofParagraph: i, inline: model.inline(of: block, range: nil))
                 }
             }
         } else if !change.textBlocks.isEmpty || change.structureChanged {
@@ -486,7 +771,7 @@ public final class EditorView: UIView {
     private func reproject() -> Range<Int>? {
         let signpost = EditorSignpost.log.beginInterval("Reproject", id: EditorSignpost.log.makeSignpostID())
         defer { EditorSignpost.log.endInterval("Reproject", signpost) }
-        let new = Projection.build(document.blocks)
+        let new = Projection.build(model.blocks)
         let old = projection
         let oldP = old.paragraphs, newP = new.paragraphs
         var prefix = 0
@@ -540,6 +825,7 @@ public final class EditorView: UIView {
     }
 
     private func rerenderAll() {
+        tapTargetElementsDirty = true
         let text = renderer.render(projection, paragraphs: 0..<projection.paragraphs.count)
         let selection = textView.selectedRange
         suppressDelegate = true
@@ -550,14 +836,63 @@ public final class EditorView: UIView {
         setNeedsInkRefresh()
     }
 
+    /// Notes up to this many characters are laid out whole when opened.
+    static let fullLayoutLimit = 40_000
+    /// Block types whose height changed (a late Mermaid render) while the person was scrolling.
+    private var pendingAtomRelayout: Set<String> = []
+
+    private var userIsScrolling: Bool {
+        textView.isTracking || textView.isDragging || textView.isDecelerating || touchObserver.touching
+    }
+
+    /// Lays blocks of `type` out again after their height changed. Never while the person is
+    /// scrolling (it is applied when the scroll ends), and the text at the top of the screen
+    /// stays where it is: blocks above it that grow or shrink do not move what is being read.
     private func rerenderAtoms(of type: String) {
         guard let tlm = textView.textLayoutManager else { return }
+        if userIsScrolling {
+            pendingAtomRelayout.insert(type)
+            return
+        }
+        let anchor = visibleAnchor()
         for (i, p) in projection.paragraphs.enumerated() where p.kind == .atom(type) {
             if let r = geometry.textRange(projection.starts[i]..<(projection.starts[i] + 1)) { tlm.invalidateLayout(for: r) }
+        }
+        if let anchor {
+            if textView.text.utf16.count <= Self.fullLayoutLimit { tlm.ensureLayout(for: tlm.documentRange) }
+            tlm.textViewportLayoutController.layoutViewport()
+            restore(anchor)
         }
         textView.setNeedsLayout()
         ink.invalidateLayout()
         setNeedsInkRefresh()
+    }
+
+    private func flushPendingAtomRelayout() {
+        guard !pendingAtomRelayout.isEmpty, !userIsScrolling else { return }
+        let types = pendingAtomRelayout
+        pendingAtomRelayout = []
+        for type in types { rerenderAtoms(of: type) }
+    }
+
+    /// The first fragment at the top of the visible area and its distance from that edge.
+    private func visibleAnchor() -> (location: NSTextLocation, offset: CGFloat)? {
+        guard let tlm = textView.textLayoutManager else { return nil }
+        let top = textView.contentOffset.y + textView.adjustedContentInset.top
+        // Nothing to keep at the very top of the note.
+        guard top > textView.textContainerInset.top + 1 else { return nil }
+        let point = CGPoint(x: textView.textContainer.size.width / 2, y: top - textView.textContainerInset.top)
+        guard let fragment = tlm.textLayoutFragment(for: point) else { return nil }
+        return (fragment.rangeInElement.location, fragment.layoutFragmentFrame.minY - point.y)
+    }
+
+    private func restore(_ anchor: (location: NSTextLocation, offset: CGFloat)) {
+        guard let tlm = textView.textLayoutManager, let fragment = tlm.textLayoutFragment(for: anchor.location) else { return }
+        let wantedTop = fragment.layoutFragmentFrame.minY - anchor.offset + textView.textContainerInset.top
+        let y = wantedTop - textView.adjustedContentInset.top
+        guard abs(y - textView.contentOffset.y) > 0.5 else { return }
+        textView.layoutIfNeeded()
+        textView.contentOffset.y = y
     }
 
     /// Re-applies rendered attributes of a paragraph without touching its characters.
@@ -584,7 +919,7 @@ public final class EditorView: UIView {
 
     // MARK: - Selection helpers
 
-    var commands: EditorCommands { EditorCommands(document: document) }
+    var commands: EditorCommands { EditorCommands(document: model) }
 
     func select(_ pos: TextPosition?) {
         guard let pos, let off = projection.offset(block: pos.block, offset: pos.offset) else { return }
@@ -615,6 +950,7 @@ public final class EditorView: UIView {
 
     /// Runs a formatting or structure command on the current selection.
     public func perform(_ action: EditorAction) {
+        guard !model.isReadOnly else { return }
         let range = selectionRange
         let (i, o) = projection.position(at: range.lowerBound)
         guard projection.paragraphs.indices.contains(i) else { return }
@@ -639,9 +975,10 @@ public final class EditorView: UIView {
         case .strike: mark(MarkName.strike)
         case .code: mark(MarkName.code)
         case .highlight: mark(MarkName.highlight, .object(["color": .string("highlight.yellow")]))
-        case .heading1: select(cmd.setBlockKind(.heading(1), at: pos))
-        case .heading2: select(cmd.setBlockKind(.heading(2), at: pos))
-        case .heading3: select(cmd.setBlockKind(.heading(3), at: pos))
+        // A heading button on a heading of that level turns it back into text (format bar toggles).
+        case .heading1: select(cmd.setBlockKind(BlockStyle(para) == .heading1 ? .paragraph : .heading(1), at: pos))
+        case .heading2: select(cmd.setBlockKind(BlockStyle(para) == .heading2 ? .paragraph : .heading(2), at: pos))
+        case .heading3: select(cmd.setBlockKind(BlockStyle(para) == .heading3 ? .paragraph : .heading(3), at: pos))
         case .paragraph: select(cmd.setBlockKind(.paragraph, at: pos))
         case .bulletList: select(cmd.setBlockKind(.bulletList, at: pos))
         case .orderedList: select(cmd.setBlockKind(.orderedList(start: 1), at: pos))
@@ -662,9 +999,108 @@ public final class EditorView: UIView {
                 select(pos)
             }
         case .link:
-            if !range.isEmpty, let s = UIPasteboard.general.string, let url = URL(string: s), url.scheme != nil {
-                cmd.setMark(MarkName.link, value: .object(["href": .string(s)]), range: range)
+            guard !range.isEmpty else { break }
+            if cmd.marks(at: range).contains(MarkName.link) {
+                cmd.setMark(MarkName.link, value: nil, range: range)
+            } else if let request = onLinkRequest {
+                // The host asks for the address (reading the pasteboard here would show the system
+                // paste prompt on every tap; the host can offer the pasteboard in its prompt).
+                linkRange = range
+                request()
+            } else if UIPasteboard.general.hasURLs, let url = UIPasteboard.general.url, url.scheme != nil {
+                cmd.setMark(MarkName.link, value: .object(["href": .string(url.absoluteString)]), range: range)
             }
+        }
+        notifyStateChange()
+    }
+
+    // MARK: - Formatting state (format bar)
+
+    /// Marks on at the selection (all of it) or caret (what the next typed text gets), and the
+    /// block style of the paragraph with the caret.
+    public var formatState: FormatState {
+        let range = selectionRange
+        let (i, _) = projection.position(at: range.lowerBound)
+        guard projection.paragraphs.indices.contains(i) else { return FormatState() }
+        let marks = range.isEmpty ? (pendingMarks ?? commands.marks(at: range)) : commands.marks(at: range)
+        return FormatState(marks: Set(marks.names).subtracting([MarkName.agentEdit]),
+                           block: BlockStyle(projection.paragraphs[i]), hasSelection: !range.isEmpty)
+    }
+
+    private var linkRange: Range<Int>?
+
+    /// Sets (or with nil removes) a link on the selection, or on the range saved when
+    /// `onLinkRequest` was called.
+    public func setLink(_ url: URL?) {
+        let range = linkRange ?? selectionRange
+        linkRange = nil
+        guard !range.isEmpty else { return }
+        commands.setMark(MarkName.link, value: url.map { .object(["href": .string($0.absoluteString)]) }, range: range)
+        textView.selectedRange = NSRange(location: range.lowerBound, length: range.count)
+        notifyStateChange()
+    }
+
+    // MARK: - "/" block menu
+
+    private var slashMenu: SlashMenuState?
+
+    /// Opens, updates or closes the "/" menu for the text before the caret.
+    private func updateSlashMenu() {
+        let range = selectionRange
+        var state: SlashMenuState?
+        let (i, o) = projection.position(at: range.lowerBound)
+        if range.isEmpty, onSlashMenu != nil, !model.isReadOnly, projection.paragraphs.indices.contains(i), projection.paragraphs[i].kind.isText,
+           projection.paragraphs[i].kind.type != NodeType.codeBlock, o > 0 {
+            let para = projection.paragraphs[i]
+            let before = model.inline(of: para.blockId, range: 0..<o).map { el -> String in
+                if case .text(let t, _) = el { return t } else { return "\u{FFFC}" }
+            }.joined()
+            if let hit = SlashCommands.trigger(in: before) {
+                let start = projection.starts[i] + hit.slashOffset
+                let caret = textView.selectedTextRange.map { textView.caretRect(for: $0.start) } ?? .zero
+                let items = SlashCommands.matching(hit.query).filter { onHostSlashCommand != nil || !SlashCommands.hostHandled.contains($0.id) }
+                state = SlashMenuState(query: hit.query, items: items,
+                                       range: start..<range.lowerBound, caretRect: textView.convert(caret, to: self))
+            }
+        }
+        guard state != slashMenu else { return }
+        slashMenu = state
+        onSlashMenu?(state)
+    }
+
+    /// Closes the "/" menu without applying anything (the typed text stays).
+    public func dismissSlashMenu() {
+        guard slashMenu != nil else { return }
+        slashMenu = nil
+        onSlashMenu?(nil)
+    }
+
+    /// Applies a "/" menu entry: removes the typed "/query" and turns the paragraph into that
+    /// block, or inserts the block after it.
+    public func applySlashCommand(_ id: String) {
+        guard let menu = slashMenu, !model.isReadOnly else { return }
+        slashMenu = nil
+        onSlashMenu?(nil)
+        select(commands.replace(menu.range, with: ""))
+        let (i, o) = projection.position(at: selectionRange.lowerBound)
+        guard projection.paragraphs.indices.contains(i) else { return }
+        let pos = TextPosition(block: projection.paragraphs[i].blockId, offset: o)
+        switch id {
+        case "paragraph": select(commands.setBlockKind(.paragraph, at: pos))
+        case "heading1": select(commands.setBlockKind(.heading(1), at: pos))
+        case "heading2": select(commands.setBlockKind(.heading(2), at: pos))
+        case "heading3": select(commands.setBlockKind(.heading(3), at: pos))
+        case "quote": select(commands.setBlockKind(.blockquote, at: pos))
+        case "bulletList": select(commands.setBlockKind(.bulletList, at: pos))
+        case "orderedList": select(commands.setBlockKind(.orderedList(start: 1), at: pos))
+        case "taskList": select(commands.setBlockKind(.taskList(done: false), at: pos))
+        case "code": select(commands.setBlockKind(.codeBlock(language: nil), at: pos))
+        case "math": insertBlock(.math(""))
+        case "mermaid": insertBlock(.mermaid("flowchart LR\n  A --> B"))
+        case "table": insertBlock(EditorCommands.table(rows: 3, columns: 3))
+        case "drawing": insertBlock(.drawing(height: 260))
+        case "rule": insertBlock(.rule())
+        default: if SlashCommands.hostHandled.contains(id) { onHostSlashCommand?(id) }
         }
         notifyStateChange()
     }
@@ -677,15 +1113,272 @@ public final class EditorView: UIView {
         select(caret)
     }
 
+    // MARK: - Rich paste
+
+    /// Addresses of pasted images still downloading, by attachment id (`imageFailed`).
+    private var pastedImageURLs: [String: URL] = [:]
+
+    /// Rich paste (`spec/04-editor.md`, «Вставка»): HTML first, then RTF / RTFD, then text that
+    /// reads as Markdown. Returns false to leave the paste to the text view (plain text). The title
+    /// takes plain text (its first line); code blocks paste their text as is.
+    func pasteRich(from board: UIPasteboard = .general) -> Bool {
+        // Read-only: handled (nothing), so UIKit does not paste either.
+        guard !model.isReadOnly else { return true }
+        let range = selectionRange
+        let (i, _) = projection.position(at: range.lowerBound)
+        guard projection.paragraphs.indices.contains(i) else { return false }
+        let kind = projection.paragraphs[i].kind.type
+        if kind == NodeType.codeBlock { return false }
+        if kind == NodeType.title {
+            guard let text = board.string else { return false }
+            insert(PasteFragment(blocks: [.paragraph(text)]), over: range)
+            return true
+        }
+        var fragment: PasteFragment?
+        if let data = board.data(forPasteboardType: UTType.html.identifier), let html = String(data: data, encoding: .utf8) {
+            fragment = HTMLImport.blocks(html)
+        } else if let rich = Self.attributedString(from: board) {
+            fragment = Self.fragment(from: rich)
+        } else if let text = board.string, MarkdownImport.looksLikeMarkdown(text) {
+            fragment = MarkdownImport.blocks(text, options: .init(remoteImages: true))
+        }
+        guard let fragment, !fragment.blocks.isEmpty else { return false }
+        insert(fragment, over: range)
+        return true
+    }
+
+    /// «Вставить без форматирования»: the pasteboard's plain text.
+    func pastePlainText() {
+        guard !model.isReadOnly, let text = UIPasteboard.general.string, !text.isEmpty else { return }
+        let range = selectionRange
+        keepingScroll {
+            select(commands.replace(range, with: text.replacingOccurrences(of: "\r\n", with: "\n"),
+                                    marks: (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil)))
+        }
+    }
+
+    private func insert(_ fragment: PasteFragment, over range: Range<Int>) {
+        let blocks = resolvePastedImages(fragment)
+        guard !blocks.isEmpty else { return }
+        keepingScroll {
+            select(commands.insertFragment(blocks, replacing: range))
+        }
+        notifyStateChange()
+    }
+
+    /// Image blocks of a paste get the host's attachment ids; without one, an address becomes a
+    /// link and an embedded image is dropped.
+    private func resolvePastedImages(_ fragment: PasteFragment) -> [BlockNode] {
+        guard !fragment.images.isEmpty else { return fragment.blocks }
+        let ids = onPastedImages?(fragment.images) ?? Array(repeating: nil, count: fragment.images.count)
+        func resolve(_ block: BlockNode) -> BlockNode? {
+            guard block.type == NodeType.image, case .number(let n)? = block.attrs[PasteFragment.pasteImageAttr] else {
+                var b = block
+                b.children = block.children.compactMap(resolve)
+                return b
+            }
+            let index = Int(n)
+            guard fragment.images.indices.contains(index) else { return nil }
+            let image = fragment.images[index]
+            if index < ids.count, let id = ids[index] {
+                if case .url(let url) = image.source { pastedImageURLs[id] = url }
+                var attrs = block.attrs
+                attrs[PasteFragment.pasteImageAttr] = nil
+                attrs["attachmentId"] = .string(id)
+                return BlockNode(id: block.id, type: NodeType.image, attrs: attrs)
+            }
+            if case .url(let url) = image.source { return Self.linkParagraph(url, alt: image.alt) }
+            return nil
+        }
+        return fragment.blocks.compactMap(resolve)
+    }
+
+    private static func linkParagraph(_ url: URL, alt: String) -> BlockNode {
+        .paragraph([.text(alt.isEmpty ? url.absoluteString : alt, MarkSet([MarkName.link: .object(["href": .string(url.absoluteString)])]))])
+    }
+
+    /// A pasted image could not be downloaded: its block becomes a link to the address.
+    public func imageFailed(attachmentId: String) {
+        guard let url = pastedImageURLs.removeValue(forKey: attachmentId) else { return }
+        let blocks = model.allBlocks.filter { $0.type == NodeType.image && $0.attrs["attachmentId"]?.stringValue == attachmentId }
+        guard !blocks.isEmpty else { return }
+        model.stopCapturing()
+        model.transact(origin: .system) {
+            for b in blocks {
+                guard let loc = model.location(of: b.id) else { continue }
+                model.insertBlock(Self.linkParagraph(url, alt: b.attrs["alt"]?.stringValue ?? ""), parent: loc.parent, at: loc.index)
+                model.deleteBlock(b.id)
+            }
+        }
+        model.stopCapturing()
+    }
+
+    private static func attributedString(from board: UIPasteboard) -> NSAttributedString? {
+        for (type, documentType) in [(UTType.rtfd.identifier, NSAttributedString.DocumentType.rtfd),
+                                     (UTType.flatRTFD.identifier, .rtfd), (UTType.rtf.identifier, .rtf)] {
+            if let data = board.data(forPasteboardType: type),
+               let s = try? NSAttributedString(data: data, options: [.documentType: documentType], documentAttributes: nil) {
+                return s
+            }
+        }
+        return nil
+    }
+
+    /// RTF / RTFD → blocks through HTML (one mapping): attachments become embedded images.
+    private static func fragment(from rich: NSAttributedString) -> PasteFragment? {
+        let copy = NSMutableAttributedString(attributedString: rich)
+        var images: [String] = []
+        copy.enumerateAttribute(.attachment, in: NSRange(location: 0, length: copy.length), options: .reverse) { value, range, _ in
+            guard let attachment = value as? NSTextAttachment else { return }
+            let data = attachment.fileWrapper?.regularFileContents
+                ?? attachment.contents
+                ?? (attachment.image ?? attachment.image(forBounds: attachment.bounds, textContainer: nil, characterIndex: range.location))?.pngData()
+            guard let data, UIImage(data: data) != nil else {
+                copy.replaceCharacters(in: range, with: "")
+                return
+            }
+            images.append("<img src=\"data:image/png;base64,\(data.base64EncodedString())\">")
+            copy.replaceCharacters(in: range, with: "\nDSPASTEIMAGE\(images.count - 1)X\n")
+        }
+        guard let data = try? copy.data(from: NSRange(location: 0, length: copy.length),
+                                        documentAttributes: [.documentType: NSAttributedString.DocumentType.html]),
+              var html = String(data: data, encoding: .utf8) else { return nil }
+        for (i, tag) in images.enumerated() { html = html.replacingOccurrences(of: "DSPASTEIMAGE\(i)X", with: tag) }
+        return HTMLImport.blocks(html)
+    }
+
+    // MARK: - Images
+
+    /// Inserts an image block after the caret's paragraph (an empty paragraph is replaced) and puts
+    /// the caret after it. `attachmentId` is the host's attachment, created before the upload, so
+    /// the document never holds a temporary id; `preview` is shown until the host's resolver has
+    /// the image (`imageDidLoad`). Undoable. Returns the new block's id (read-only: nothing is
+    /// inserted).
+    @discardableResult
+    public func insertImage(attachmentId: String, preview: UIImage?, alt: String? = nil, width: Double? = nil) -> BlockID {
+        if let preview, !model.isReadOnly { factory.previews[attachmentId] = preview }
+        var attrs: [String: JSONValue] = ["attachmentId": .string(attachmentId), "width": width.map { .number($0) } ?? .null]
+        if let alt, !alt.isEmpty { attrs["alt"] = .string(alt) }
+        let node = BlockNode(type: NodeType.image, attrs: attrs)
+        keepingScroll { insertBlock(node) }
+        return node.id
+    }
+
+    /// The host's resolver now has the image for `attachmentId` (stored, uploaded or downloaded):
+    /// blocks showing it are redrawn and the preview is dropped.
+    public func imageDidLoad(attachmentId: String) {
+        factory.previews[attachmentId] = nil
+        factory.refreshImages(attachmentId: attachmentId)
+        rerenderAtoms(of: NodeType.image)
+    }
+
+    /// Upload progress of an image, drawn as a small quiet ring at its bottom-right corner:
+    /// 0..1, 0 or less for "uploading" without a known amount, nil when done.
+    public func setImageProgress(attachmentId: String, _ progress: Double?) {
+        factory.uploadProgress[attachmentId] = progress
+        for (_, view) in factory.imageViews where view.node?.attrs["attachmentId"]?.stringValue == attachmentId {
+            view.updateProgress()
+        }
+    }
+
+    /// An image's caption and description for VoiceOver (nil or empty removes them). Undoable.
+    public func setImageAttributes(_ block: BlockID, caption: String?, alt: String?) {
+        guard model.block(block)?.type == NodeType.image else { return }
+        func value(_ s: String?) -> JSONValue { s.map { $0.isEmpty ? .null : .string($0) } ?? .null }
+        model.stopCapturing()
+        model.transact(origin: .local) { model.setAttributes(block, ["caption": value(caption), "alt": value(alt)]) }
+        model.stopCapturing()
+    }
+
+    /// Points an image block at another attachment («Заменить»); `preview` as in `insertImage`.
+    /// Undoable.
+    public func replaceImage(_ block: BlockID, attachmentId: String, preview: UIImage? = nil) {
+        guard model.block(block)?.type == NodeType.image else { return }
+        if let preview { factory.previews[attachmentId] = preview }
+        model.stopCapturing()
+        model.transact(origin: .local) { model.setAttributes(block, ["attachmentId": .string(attachmentId)]) }
+        model.stopCapturing()
+    }
+
+    /// An image's width as a fraction of the column (0..1; nil: full width). Undoable.
+    public func setImageWidth(_ block: BlockID, fraction: Double?) {
+        guard model.block(block)?.type == NodeType.image else { return }
+        let value: JSONValue = fraction.map { $0 >= 0.999 ? .null : .number(min(max($0, 0.1), 1)) } ?? .null
+        model.stopCapturing()
+        model.transact(origin: .local) { model.setAttributes(block, ["width": value]) }
+        model.stopCapturing()
+    }
+
+    /// The resize handle shows on iPad in the text tool (the pen draws over images otherwise).
+    private func updateResizeHandles() {
+        factory.showsResizeHandle = UIDevice.current.userInterfaceIdiom == .pad && tools.mode == .text && !model.isReadOnly
+    }
+
+    /// The image block under a point (text view coordinates) and its picture's frame there; nil on
+    /// the resize handle.
+    func image(at point: CGPoint) -> (block: BlockID, frame: CGRect)? {
+        for (block, view) in factory.imageViews where view.window != nil && !view.isHidden {
+            let frame = view.convert(view.imageFrame, to: textView)
+            guard frame.contains(point) else { continue }
+            if !view.grip.isHidden, view.grip.bounds.contains(view.grip.convert(point, from: textView)) { return nil }
+            return (block, frame)
+        }
+        return nil
+    }
+
+    /// The file block under a point (text view coordinates).
+    func file(at point: CGPoint) -> BlockID? {
+        factory.fileViews.first { _, view in
+            view.window != nil && view.convert(view.bounds, to: textView).contains(point)
+        }?.block
+    }
+
+    private func openFile(_ block: BlockID) {
+        guard let id = model.block(block)?.attrs["attachmentId"]?.stringValue else { return }
+        onFileTap?(block, id)
+    }
+
+    private func openImage(_ block: BlockID, frame: CGRect) {
+        guard let id = model.block(block)?.attrs["attachmentId"]?.stringValue else { return }
+        onImageTap?(block, id, frame)
+    }
+
+    private func menu(forImage block: BlockID) -> UIMenu? {
+        guard let node = model.block(block), node.type == NodeType.image else { return nil }
+        if model.isReadOnly {
+            // Only the host's items (share, save…); the host leaves out its editing ones.
+            guard let id = node.attrs["attachmentId"]?.stringValue, let extra = imageMenu?(block, id), !extra.isEmpty else { return nil }
+            return UIMenu(children: extra)
+        }
+        let current = node.attrs["width"]?.numberValue ?? 1
+        let widths = [(0.25, "¼"), (0.5, "½"), (0.75, "¾"), (1.0, "Во всю ширину")].map { fraction, title in
+            UIAction(title: title, state: abs(current - fraction) < 0.01 ? .on : .off) { [weak self] _ in
+                self?.setImageWidth(block, fraction: fraction)
+            }
+        }
+        var items: [UIMenuElement] = [UIMenu(title: "Ширина", image: UIImage(systemName: "arrow.left.and.right"), children: widths)]
+        if let id = node.attrs["attachmentId"]?.stringValue, let extra = imageMenu?(block, id), !extra.isEmpty {
+            items.append(UIMenu(options: .displayInline, children: extra))
+        }
+        items.append(UIAction(title: "Удалить", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
+            guard let self else { return }
+            self.model.stopCapturing()
+            self.model.transact(origin: .local) { self.model.deleteBlock(block) }
+            self.model.stopCapturing()
+        })
+        return UIMenu(children: items)
+    }
+
     public func undo() { textView.documentUndo.undo() }
     public func redo() { textView.documentUndo.redo() }
-    public var canUndo: Bool { document.canUndo }
-    public var canRedo: Bool { document.canRedo }
+    public var canUndo: Bool { model.canUndo }
+    public var canRedo: Bool { model.canRedo }
 
     // MARK: - Tools
 
     private func toolsChanged() {
         EditorDiagnostics.log("tools changed: \(tools.mode.rawValue)")
+        setNeedsLayout() // finger drawing changes the room below the text
         // The pen recognizer wins pen touches by itself (it begins on touch down and prevents
         // scrolling), so the scroll recognizer's touch types are left alone: changing them while a
         // tool button's touch is being dispatched made UIKit's gesture environment throw.
@@ -695,18 +1388,40 @@ public final class EditorView: UIView {
         // is false), so fingers type and scroll and the Pencil writes through Scribble. Disabling
         // it instead made UIKit's gesture environment throw on the next tap into the text.
         if tools.mode != .lasso { ink.clearSelection() }
-        hoverLayer.path = nil
+        updateResizeHandles()
+        setIndicator(nil)
         notifyStateChange()
     }
 
+    /// The pen is on the glass (the ink recognizer is tracking a touch).
+    private var penDown = false
+    /// Centre of the tool indicator circle in text view content coordinates, nil when hidden.
+    private(set) var indicatorCenter: CGPoint?
+
     @objc private func hovered(_ g: UIHoverGestureRecognizer) {
+        // While the pen touches the glass the hover recognizer stops moving (it kept reporting the
+        // touch-down point, so the eraser circle stuck there): the pen's own touches drive the
+        // indicator then.
+        guard !penDown else { return }
         let point = g.location(in: textView)
-        let active = (g.state == .began || g.state == .changed) && g.zOffset > 0 && tools.mode.capturesPen
-        guard active, let preview = ink.hoverPreview(at: point) else {
+        let active = (g.state == .began || g.state == .changed) && g.zOffset > 0 && tools.mode.capturesPen && !model.isReadOnly
+        setIndicator(active ? point : nil)
+    }
+
+    /// Indicator under a touching pen: the eraser's circle follows every move (what it erases);
+    /// ink tools hide it, the stroke itself shows where they draw.
+    private func showContactIndicator(at point: CGPoint) {
+        setIndicator(tools.mode.isEraser ? point : nil)
+    }
+
+    private func setIndicator(_ point: CGPoint?) {
+        guard let point, let preview = ink.hoverPreview(at: point) else {
             hoverLayer.path = nil
+            indicatorCenter = nil
             return
         }
         let r = preview.radius
+        indicatorCenter = preview.center
         hoverLayer.path = UIBezierPath(ovalIn: CGRect(x: preview.center.x - r, y: preview.center.y - r, width: r * 2, height: r * 2)).cgPath
         hoverLayer.strokeColor = preview.color.resolvedColor(with: traitCollection).cgColor
         hoverLayer.fillColor = preview.color.withAlphaComponent(tools.mode.isEraser ? 0.08 : 0.25).resolvedColor(with: traitCollection).cgColor
@@ -721,6 +1436,30 @@ public final class EditorView: UIView {
 
     /// The note link under a point (content coordinates): a `noteLink` chip, or a literal
     /// `[[Title]]` in the text. Only when the host handles that kind of link.
+    /// Frames of the note links (chips and literal `[[Title]]`) in `view`'s coordinates, for
+    /// hosts and UI tests that need to find them on screen.
+    public func noteLinkFrames(in view: UIView) -> [(kind: NoteLinkKind, frame: CGRect)] {
+        let storage = textView.textStorage
+        var out: [(kind: NoteLinkKind, frame: CGRect)] = []
+        storage.enumerateAttribute(.dsWikiLink, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard value != nil, let f = geometry.segmentFrame(range.location..<(range.location + range.length)) else { return }
+            out.append((.title, textView.convert(f, to: view)))
+        }
+        storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard let chip = value as? InlineAtomAttachment, chip.atom?.type == NodeType.noteLink,
+                  let f = geometry.segmentFrame(range.location..<(range.location + 1)) else { return }
+            out.append((.note, textView.convert(f, to: view)))
+        }
+        return out
+    }
+
+    public enum NoteLinkKind: String, Sendable {
+        /// A noteLink chip (opens by id).
+        case note
+        /// A literal `[[Title]]` (resolved by title).
+        case title
+    }
+
     func noteLink(at point: CGPoint) -> NoteLinkTarget? {
         guard onOpenNote != nil || onOpenNoteTitled != nil,
               let pos = textView.closestPosition(to: point) else { return nil }
@@ -748,19 +1487,22 @@ public final class EditorView: UIView {
 
     /// Accepts every agent edit: the marks go, the text stays (one undo step).
     public func acceptAgentEdits() {
-        AgentEdits.acceptAll(in: document)
+        AgentEdits.acceptAll(in: model)
         DSHaptics.selection()
     }
 
     /// Accepts the agent's edits in one block.
     public func acceptAgentEdits(inBlock block: BlockID) {
-        AgentEdits.accept(block: block, in: document)
+        AgentEdits.accept(block: block, in: model)
     }
 
     /// Edits to accept come first; otherwise a note an agent created says so once (D-45).
     private func updateAgentBanner() {
         let mode: AgentEditsBanner.Mode?
-        if hasAgentEdits {
+        if model.isReadOnly {
+            // Accepting edits or acknowledging the agent changes the note: not for a viewer.
+            mode = nil
+        } else if hasAgentEdits {
             mode = .edits
         } else if let name = createdByAgent {
             mode = .createdBy(name)
@@ -777,7 +1519,8 @@ public final class EditorView: UIView {
     // MARK: - Hiding the keyboard
 
     /// The text view is being edited (the keyboard is up or a hardware keyboard types into it).
-    public var isEditingText: Bool { textView.isFirstResponder }
+    /// Never while read-only (selecting text to copy it makes the text view first responder).
+    public var isEditingText: Bool { textView.isFirstResponder && !model.isReadOnly }
 
     /// Hides the keyboard (the host's "hide keyboard" control; iPhone keyboards have no such key).
     /// Dragging the text down past the keyboard also hides it (`keyboardDismissMode = .interactive`).
@@ -802,15 +1545,285 @@ public final class EditorView: UIView {
         return rect.insetBy(dx: -10, dy: -8).contains(point) ? (item, rect, state) : nil
     }
 
+    /// Whether a single tap at `point` acts on something (a note link, a task box or date chip):
+    /// the text view's own taps (caret placement) do not begin there.
+    func hasTapTarget(at point: CGPoint) -> Bool {
+        noteLink(at: point) != nil || (!model.isReadOnly && taskCheckbox(at: point) != nil)
+            || (taskDatesEnabled && !model.isReadOnly && taskDateChip(at: point) != nil)
+            || (onImageTap != nil && image(at: point) != nil) || (onFileTap != nil && file(at: point) != nil)
+    }
+
+    /// The task date chip under a point (text view coordinates): its item, whether it is the
+    /// deadline chip, and its frame.
+    func taskDateChip(at point: CGPoint) -> (item: BlockID, deadline: Bool, rect: CGRect)? {
+        // By the chips' own frames: they are drawn right of the last line, outside the fragment's
+        // frame, so looking up the fragment under the point missed them (taps did nothing).
+        guard let tlm = textView.textLayoutManager else { return nil }
+        let origin = geometry.origin
+        var hit: (item: BlockID, deadline: Bool, rect: CGRect)?
+        tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: []) { frag in
+            guard let block = frag as? BlockLayoutFragment, let d = block.decoration, let item = d.itemBlockId,
+                  case .task(_, let scheduled, let deadline) = d.marker else { return true }
+            var kinds: [Bool] = []
+            if scheduled != nil { kinds.append(false) }
+            if deadline != nil { kinds.append(true) }
+            for (frame, isDeadline) in zip(block.dateChipFrames(), kinds) {
+                let rect = frame.offsetBy(dx: frag.layoutFragmentFrame.minX + origin.x, dy: frag.layoutFragmentFrame.minY + origin.y)
+                if rect.insetBy(dx: -6, dy: -8).contains(point) {
+                    hit = (item, isDeadline, rect)
+                    return false
+                }
+            }
+            return true
+        }
+        return hit
+    }
+
+    /// Frames of the task date chips in `view`'s coordinates (hosts and UI tests).
+    public func taskDateChipFrames(in view: UIView) -> [CGRect] {
+        guard let tlm = textView.textLayoutManager else { return [] }
+        var out: [CGRect] = []
+        let origin = geometry.origin
+        tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: []) { frag in
+            if let block = frag as? BlockLayoutFragment {
+                for f in block.dateChipFrames() {
+                    let r = f.offsetBy(dx: frag.layoutFragmentFrame.minX + origin.x, dy: frag.layoutFragmentFrame.minY + origin.y)
+                    out.append(textView.convert(r, to: view))
+                }
+            }
+            return true
+        }
+        return out
+    }
+
+    // MARK: - Accessibility of tap targets
+
+    /// One accessibility element per note link and task date chip on screen, after the text view:
+    /// VoiceOver (and UI tests) find them by title and activate them like a tap (`spec/05`).
+    public override var accessibilityElements: [Any]? {
+        get {
+            // Rebuilt after layout or scrolling, never while a touch is being tracked (UI tests and
+            // VoiceOver query this often; rebuilding mid-stroke measured text under the pen).
+            if tapTargetElementsDirty, !penDown, !textView.isTracking {
+                tapTargetElementsDirty = false
+                cachedTapTargetElements = tapTargetElements()
+            }
+            return [textView] + cachedTapTargetElements
+        }
+        set {}
+    }
+
+    /// Notices fingers on the text view without taking part in any gesture.
+    let touchObserver = TouchObserver()
+
+    private var tapTargetElementsDirty = true
+    private var cachedTapTargetElements: [UIAccessibilityElement] = []
+
+    private func tapTargetElements() -> [UIAccessibilityElement] {
+        guard let tlm = textView.textLayoutManager else { return [] }
+        let storage = textView.textStorage
+        let visible = textView.bounds
+        var out: [UIAccessibilityElement] = []
+        func add(_ label: String, frame: CGRect, traits: UIAccessibilityTraits, hint: String?, action: @escaping () -> Void) {
+            guard frame.intersects(visible) else { return }
+            let e = TapTargetAccessibilityElement(accessibilityContainer: self)
+            e.accessibilityLabel = label
+            e.accessibilityTraits = traits
+            e.accessibilityHint = hint
+            e.accessibilityFrame = UIAccessibility.convertToScreenCoordinates(frame, in: textView)
+            e.activate = action
+            out.append(e)
+        }
+        // Images (zoom on activation): the text view is one element, its block views are hidden inside it.
+        if onImageTap != nil {
+            for (block, view) in factory.imageViews where view.window != nil {
+                let frame = view.convert(view.imageFrame, to: textView)
+                let alt = model.block(block)?.attrs["alt"]?.stringValue
+                add(alt.flatMap { $0.isEmpty ? nil : $0 } ?? "Изображение", frame: frame, traits: .image, hint: "Открыть") { [weak self] in
+                    guard let self else { return }
+                    self.openImage(block, frame: self.textView.convert(frame, to: self))
+                }
+            }
+        }
+        if onFileTap != nil {
+            for (block, view) in factory.fileViews where view.window != nil {
+                let name = model.block(block)?.attrs["name"]?.stringValue
+                add(name.flatMap { $0.isEmpty ? nil : $0 } ?? "Файл", frame: view.convert(view.bounds, to: textView),
+                    traits: .button, hint: "Открыть") { [weak self] in self?.openFile(block) }
+            }
+        }
+        storage.enumerateAttribute(.dsWikiLink, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard let title = value as? String, let f = geometry.segmentFrame(range.location..<(range.location + range.length)) else { return }
+            add(title, frame: f, traits: .link, hint: "Открыть заметку") { [weak self] in self?.onOpenNoteTitled?(title) }
+        }
+        storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard let chip = value as? InlineAtomAttachment, let atom = chip.atom, atom.type == NodeType.noteLink,
+                  let id = atom.attrs["noteId"]?.stringValue,
+                  let f = geometry.segmentFrame(range.location..<(range.location + 1)) else { return }
+            let title = attachmentResolver?.noteTitle(for: id) ?? atom.attrs["label"]?.stringValue ?? "Заметка"
+            add(title, frame: f, traits: .link, hint: "Открыть заметку") { [weak self] in self?.onOpenNote?(id) }
+        }
+        let origin = geometry.origin
+        tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: []) { frag in
+            guard let block = frag as? BlockLayoutFragment, let d = block.decoration, let item = d.itemBlockId,
+                  case .task(let state, let scheduled, let deadline) = d.marker else { return true }
+            var kinds: [Bool] = []
+            if scheduled != nil { kinds.append(false) }
+            if deadline != nil { kinds.append(true) }
+            let chips = BlockLayoutFragment.dateChips(scheduled: scheduled, deadline: deadline,
+                                                      completed: state == "done" || state == "cancelled", fontSize: d.fontSize)
+            for ((local, isDeadline), chip) in zip(zip(block.dateChipFrames(), kinds), chips) {
+                let rect = local.offsetBy(dx: frag.layoutFragmentFrame.minX + origin.x, dy: frag.layoutFragmentFrame.minY + origin.y)
+                let label = (isDeadline ? "Дедлайн: " : "Дата: ") + chip.text.string
+                guard self.taskDatesEnabled else {
+                    let e = UIAccessibilityElement(accessibilityContainer: self)
+                    e.accessibilityLabel = label
+                    e.accessibilityTraits = .staticText
+                    e.accessibilityFrame = UIAccessibility.convertToScreenCoordinates(rect, in: self.textView)
+                    if rect.intersects(visible) { out.append(e) }
+                    continue
+                }
+                add(label, frame: rect, traits: .button, hint: "Перенести") { [weak self] in
+                    guard let self else { return }
+                    self.dateMenuTarget = (item, isDeadline, rect)
+                    self.editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: "taskDate",
+                                                                                sourcePoint: CGPoint(x: rect.midX, y: rect.minY)))
+                }
+            }
+            return true
+        }
+        return out
+    }
+
+    /// Task dates are actionable (D-51). The notes-only app turns this off: date chips become quiet
+    /// labels without a tap or menu and menus offer no dates; check boxes still toggle and the dates
+    /// stay in the document. On by default.
+    public var taskDatesEnabled: Bool {
+        get { theme.taskDatesEnabled }
+        set {
+            guard newValue != theme.taskDatesEnabled else { return }
+            theme.taskDatesEnabled = newValue
+            applyTheme()
+            rerenderAll()
+            tapTargetElementsDirty = true
+        }
+    }
+
+    // MARK: - Title (Apple Notes style, spec/04 «Название новой заметки»)
+
+    /// The title a new note gets when it is left empty («Заметка 26 октября 2026»): the host
+    /// supplies it, localized and dated by the note's creation day. Nil (or nil returned) leaves
+    /// empty titles alone.
+    public var defaultTitle: (() -> String?)?
+    private var titleRepairScheduled = false
+    /// The caret was in the title at the last selection change (to notice it leaving).
+    private var caretWasInTitle = false
+
+    private var titleIndex: Int? { projection.paragraphs.first?.kind.type == NodeType.title ? 0 : nil }
+
+    private func caretIsInTitle(_ location: Int) -> Bool {
+        guard let i = titleIndex else { return false }
+        return location <= projection.starts[i] + projection.paragraphs[i].length
+    }
+
+    /// Puts the caret at the end of the title and brings up the keyboard (a new note).
+    public func focusTitle() {
+        guard let i = titleIndex else { return }
+        _ = textView.becomeFirstResponder()
+        selectOffset(projection.starts[i] + projection.paragraphs[i].length)
+        caretWasInTitle = true
+    }
+
+    /// Fills an empty title with `defaultTitle`; returns whether it did. Always on Return in the
+    /// title; when the caret leaves the title and when the host calls it before closing the note,
+    /// only if the note has text (an empty note stays empty, the host drops it).
+    @discardableResult
+    public func commitDefaultTitleIfNeeded() -> Bool {
+        commitDefaultTitle(requireText: true)
+    }
+
+    private var noteHasText: Bool {
+        projection.paragraphs.dropFirst().contains { $0.length > 0 || !$0.kind.isText }
+    }
+
+    @discardableResult
+    private func commitDefaultTitle(requireText: Bool) -> Bool {
+        guard let i = titleIndex, projection.paragraphs[i].length == 0, !requireText || noteHasText,
+              let title = defaultTitle?() ?? nil, !title.isEmpty else { return false }
+        let caret = textView.selectedRange.location
+        let start = projection.starts[i]
+        let block = projection.paragraphs[i].blockId
+        model.stopCapturing()
+        model.transact(origin: .local) { model.insertText(title, marks: .empty, block: block, at: 0) }
+        model.stopCapturing()
+        selectOffset(caret > start ? caret + title.utf16.count : start + title.utf16.count)
+        return true
+    }
+
+    /// Return in the title: no split — the caret goes to the start of the text (a new empty
+    /// paragraph if the note has none yet), after filling an empty title.
+    private func returnInTitle() {
+        commitDefaultTitle(requireText: false)
+        let p = projection
+        caretWasInTitle = false
+        if p.paragraphs.count > 1, p.paragraphs[1].kind.isText {
+            selectOffset(p.starts[1])
+        } else if let title = p.paragraphs.first?.blockId, let loc = model.location(of: title) {
+            let body = BlockNode.paragraph()
+            model.stopCapturing()
+            model.transact(origin: .local) { model.insertBlock(body, parent: loc.parent, at: loc.index + 1) }
+            model.stopCapturing()
+            select(TextPosition(block: body.id, offset: 0))
+        }
+        notifyStateChange()
+    }
+
+    /// The date chip whose menu is showing.
+    private var dateMenuTarget: (item: BlockID, deadline: Bool, rect: CGRect)?
+
     @objc private func tapped(_ g: UITapGestureRecognizer) {
-        if let link = noteLink(at: g.location(in: textView)) {
+        let point = g.location(in: textView)
+        EditorDiagnostics.log("tap at \(Int(point.x)),\(Int(point.y)): link \(noteLink(at: point) != nil), date chip \(taskDateChip(at: point) != nil)")
+        if let link = noteLink(at: point) {
             DSHaptics.selection()
-            switch link {
-            case .id(let id): onOpenNote?(id)
-            case .title(let title): onOpenNoteTitled?(title)
+            EditorDiagnostics.log("opening link \(link) (handlers: id \(onOpenNote != nil), title \(onOpenNoteTitled != nil))")
+            // Act on the next turn: presenting UI (the host's alert, a new screen) while UIKit is
+            // still dispatching this touch crashes its gesture environment (`_delayTouchesForEvent`).
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                EditorDiagnostics.log("link handler runs (window \(self.window != nil))")
+                switch link {
+                case .id(let id): self.onOpenNote?(id)
+                case .title(let title): self.onOpenNoteTitled?(title)
+                }
             }
             return
         }
+        if onImageTap != nil, let hit = image(at: point) {
+            // Next turn, like links: the host presents its zoom.
+            let frame = textView.convert(hit.frame, to: self)
+            DispatchQueue.main.async { [weak self] in self?.openImage(hit.block, frame: frame) }
+            return
+        }
+        if onFileTap != nil, let block = file(at: point) {
+            DispatchQueue.main.async { [weak self] in self?.openFile(block) }
+            return
+        }
+        guard !model.isReadOnly else { return }
+        if taskDatesEnabled, let chip = taskDateChip(at: point) {
+            // Same choices as the task context menu (`spec/12`): reschedule or remove the date.
+            DSHaptics.selection()
+            dateMenuTarget = chip
+            // Next turn, for the same reason as links above: the menu's own recognizers must not
+            // join a touch UIKit is still delivering.
+            DispatchQueue.main.async { [weak self] in
+                EditorDiagnostics.log("presenting date menu (editor \(self != nil), first responder \(self?.textView.isFirstResponder ?? false))")
+                self?.editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: "taskDate",
+                                                                             sourcePoint: CGPoint(x: chip.rect.midX, y: chip.rect.minY)))
+            }
+            return
+        }
+        if startParagraphBelowEnd(at: point) { return }
         guard let box = taskCheckbox(at: g.location(in: textView)) else { return }
         commands.toggleTask(box.item)
         if box.state == "done" {
@@ -819,6 +1832,24 @@ public final class EditorView: UIView {
             DSHaptics.taskComplete()
             animateCheck(in: box.rect)
         }
+    }
+
+    /// A tap below a note that ends with a picture, code, a table, a list or a quote: an empty
+    /// paragraph starts there and takes the caret (owner's feedback 2026-11-01: «the caret does not
+    /// go after a block» — it landed inside the code or nowhere). Undoable.
+    @discardableResult
+    func startParagraphBelowEnd(at point: CGPoint) -> Bool {
+        guard !model.isReadOnly, let last = model.blocks.last,
+              last.type != NodeType.paragraph, last.type != NodeType.heading, last.type != NodeType.title,
+              let lastStart = projection.starts.last, let frame = geometry.paragraphFrame(at: lastStart),
+              point.y > frame.maxY + 4 else { return false }
+        let paragraph = BlockNode.paragraph()
+        model.stopCapturing()
+        model.transact(origin: .local) { model.insertBlock(paragraph, parent: nil, at: model.blocks.count) }
+        model.stopCapturing()
+        if !textView.isFirstResponder { textView.becomeFirstResponder() }
+        select(TextPosition(block: paragraph.id, offset: 0))
+        return true
     }
 
     /// Completion flourish over the freshly drawn check box (`DSTaskCheckbox` motion): the fill
@@ -887,12 +1918,12 @@ public final class EditorView: UIView {
 
     private func deleteLassoSelection() {
         let range = lassoTextRange
-        document.stopCapturing()
-        document.transact {
+        model.stopCapturing()
+        model.transact {
             ink.deleteSelectedStrokes()
             if let range { commands.replace(range, with: "") }
         }
-        document.stopCapturing()
+        model.stopCapturing()
         lassoTextRange = nil
     }
 }
@@ -902,6 +1933,7 @@ public final class EditorView: UIView {
 extension EditorView: UITextViewDelegate {
     public func textView(_ tv: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
         if suppressDelegate { return true }
+        if model.isReadOnly { return false }
         let p = projection
         guard !p.paragraphs.isEmpty else { return true }
         let lo = range.location, hi = range.location + range.length
@@ -910,41 +1942,53 @@ extension EditorView: UITextViewDelegate {
         let cmd = commands
         let start = p.paragraphs[si]
         pendingShortcut = nil
+        typingOffset = nil
 
+        // Return in the title moves to the text (Apple Notes, spec/04).
+        if text == "\n", start.kind.type == NodeType.title, range.length == 0, tv.markedTextRange == nil {
+            returnInTitle()
+            return false
+        }
         // Return.
         if text == "\n", start.kind.isText {
             if range.length > 0 { cmd.replace(lo..<hi, with: "") }
             let pos = TextPosition(block: start.blockId, offset: so)
             var caret = range.length == 0 ? MarkdownShortcuts(commands: cmd).handleReturn(at: pos) : nil
-            if caret == nil {
-                document.stopCapturing()
-                caret = cmd.splitParagraph(at: pos)
-                document.stopCapturing()
+            keepingScroll {
+                if caret == nil {
+                    model.stopCapturing()
+                    caret = cmd.splitParagraph(at: pos)
+                    model.stopCapturing()
+                }
+                select(caret)
             }
-            select(caret)
             return false
         }
         // Backspace at the start of a paragraph (or delete at the end of the previous one).
         if text.isEmpty, range.length == 1, ei == si + 1, eo == 0, so == start.length {
-            select(cmd.joinBackward(at: TextPosition(block: p.paragraphs[ei].blockId, offset: 0)))
+            keepingScroll { select(cmd.joinBackward(at: TextPosition(block: p.paragraphs[ei].blockId, offset: 0))) }
             return false
         }
         // Plain typing inside one text paragraph: let the text view apply it, mirror to the model.
         if si == ei, start.kind.isText, !text.contains("\n"), !text.contains("\u{FFFC}"), !text.contains("\u{2028}") || start.kind.type == NodeType.codeBlock {
             let isCode = start.kind.type == NodeType.codeBlock
-            let marks: MarkSet = isCode ? .empty : (pendingMarks ?? cmd.marks(at: lo..<lo))
+            let marks: MarkSet = isCode ? .empty : (pendingMarks ?? cmd.marks(at: lo..<lo)).setting(MarkName.agentEdit, nil)
             let modelText = isCode ? text.replacingOccurrences(of: "\u{2028}", with: "\n") : text
             cmd.typeText(modelText, marks: marks, at: TextPosition(block: start.blockId, offset: so), replacing: hi - lo)
-            if text.utf16.count == 1 { pendingShortcut = (lo + 1, text) }
+            // Markdown shortcuts never fire on marked text (dictation and input methods stream
+            // their text through it; acting on it moved the caret under them).
+            if text.utf16.count == 1, tv.markedTextRange == nil { pendingShortcut = (lo + 1, text) }
+            typingOffset = tv.contentOffset
             return true
         }
         // Everything else is structural.
         let clean = text.replacingOccurrences(of: "\u{FFFC}", with: "").replacingOccurrences(of: "\u{2028}", with: "\n")
-        select(cmd.replace(lo..<hi, with: clean, marks: pendingMarks ?? .empty))
+        keepingScroll { select(cmd.replace(lo..<hi, with: clean, marks: (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil))) }
         return false
     }
 
     public func textViewDidChange(_ tv: UITextView) {
+        mirrorUnreportedEdit()
         let caret = tv.selectedRange.location
         let (i, o) = projection.position(at: caret)
         if let shortcut = pendingShortcut, projection.paragraphs.indices.contains(i) {
@@ -964,24 +2008,97 @@ extension EditorView: UITextViewDelegate {
         }
         normalizeParagraph(i)
         ink.invalidateLayout()
+        if let offset = typingOffset {
+            typingOffset = nil
+            holdScroll(offset)
+            DispatchQueue.main.async { [weak self] in self?.holdScroll(offset) }
+        }
+        updateSlashMenu()
         notifyStateChange()
     }
 
+    /// Safety net for text the text view changed without asking `shouldChangeTextIn` (some
+    /// dictation and input-method paths): the change inside the caret's paragraph is mirrored into
+    /// the document; anything else is undone by re-rendering from the document, so the text view
+    /// and the document never drift apart (a drift put the caret in the wrong paragraph).
+    private func mirrorUnreportedEdit() {
+        let storage = textView.textStorage
+        let delta = storage.length - projection.length
+        guard delta != 0, !projection.paragraphs.isEmpty else { return }
+        let caret = textView.selectedRange.location
+        let (i, _) = projection.position(at: max(0, min(projection.length, caret - max(0, delta))))
+        let para = projection.paragraphs[i]
+        let start = projection.starts[i]
+        let old = Array(renderer.paragraph(projection, index: i).string.utf16.prefix(para.length))
+        let newLength = para.length + delta
+        guard para.kind.isText, newLength >= 0, start + newLength <= storage.length else {
+            EditorDiagnostics.log("unreported edit outside a text paragraph: re-render")
+            return rerenderAll()
+        }
+        let new = Array((storage.string as NSString).substring(with: NSRange(location: start, length: newLength)).utf16)
+        var prefix = 0
+        while prefix < old.count, prefix < new.count, old[prefix] == new[prefix] { prefix += 1 }
+        var suffix = 0
+        while suffix < old.count - prefix, suffix < new.count - prefix,
+              old[old.count - 1 - suffix] == new[new.count - 1 - suffix] { suffix += 1 }
+        let inserted = String(utf16CodeUnits: Array(new[prefix..<(new.count - suffix)]), count: new.count - suffix - prefix)
+        if inserted.contains("\n") || inserted.contains("\u{FFFC}") || inserted.contains("\u{2029}") {
+            EditorDiagnostics.log("unreported structural edit: re-render")
+            return rerenderAll()
+        }
+        EditorDiagnostics.log("mirroring an unreported edit of \(inserted.utf16.count) characters")
+        let marks = (pendingMarks ?? commands.marks(at: (start + prefix)..<(start + prefix))).setting(MarkName.agentEdit, nil)
+        suppressDelegate = true
+        commands.typeText(inserted, marks: marks, at: TextPosition(block: para.blockId, offset: prefix),
+                          replacing: old.count - suffix - prefix)
+        suppressDelegate = false
+    }
+
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        tapTargetElementsDirty = true
         onScroll?(scrollView.contentOffset.y + scrollView.adjustedContentInset.top)
     }
 
+    public func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate { DispatchQueue.main.async { [weak self] in self?.flushPendingAtomRelayout() } }
+    }
+
+    public func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        DispatchQueue.main.async { [weak self] in self?.flushPendingAtomRelayout() }
+    }
+
     public func textViewDidBeginEditing(_ textView: UITextView) { notifyStateChange() }
-    public func textViewDidEndEditing(_ textView: UITextView) { notifyStateChange() }
+    public func textViewDidEndEditing(_ textView: UITextView) {
+        dismissSlashMenu()
+        notifyStateChange()
+    }
 
     public func textViewDidChangeSelection(_ tv: UITextView) {
         if suppressDelegate { return }
         pendingMarks = nil
-        updateTypingAttributes()
+        // The caret left an empty title: it gets the default name.
+        let inTitle = caretIsInTitle(tv.selectedRange.location)
+        if caretWasInTitle, !inTitle, tv.markedTextRange == nil {
+            caretWasInTitle = false
+            if commitDefaultTitleIfNeeded() {
+                notifyStateChange()
+                return
+            }
+        }
+        caretWasInTitle = inTitle && tv.isFirstResponder
+        // Typing attributes are left alone while text is marked (dictation, input methods).
+        if tv.markedTextRange == nil { updateTypingAttributes() }
+        // The caret moved without a finger (keyboard arrows, a programmatic selection): UIKit no
+        // longer scrolls to it by itself.
+        scrollCaretIntoView()
+        updateSlashMenu()
         notifyStateChange()
     }
 
     public func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
+        // Read-only: the system's own items (copy, look up, share); editing ones are filtered out
+        // by the text view.
+        guard !model.isReadOnly else { return nil }
         let (i, _) = projection.position(at: range.location)
         guard projection.paragraphs.indices.contains(i) else { return nil }
         let para = projection.paragraphs[i]
@@ -992,11 +2109,36 @@ extension EditorView: UITextViewDelegate {
                 self?.acceptAgentEdits(inBlock: block)
             })
         }
-        if let item = para.context.itemBlockId, let node = document.block(item), node.type == NodeType.taskItem {
+        if let item = para.context.itemBlockId, let node = model.block(item), node.type == NodeType.taskItem {
             extra.append(taskMenu(item: item, node: node))
         }
+        if para.kind.isText, para.kind.type != NodeType.codeBlock, para.kind.type != NodeType.title {
+            extra.append(contentsOf: formatMenu())
+        }
+        if UIPasteboard.general.hasStrings, para.kind.type != NodeType.codeBlock {
+            extra.append(UIAction(title: "Вставить без форматирования", image: UIImage(systemName: "doc.on.clipboard")) { [weak self] _ in
+                self?.pastePlainText()
+            })
+        }
         guard !extra.isEmpty else { return nil }
-        return UIMenu(children: extra + suggestedActions)
+        return Self.editMenu(extra: extra, suggestedActions: suggestedActions)
+    }
+
+    /// Cut / Copy / Paste first, as in every iOS app, then ours, then the rest of the system's
+    /// items: the horizontal edit menu shows only its first few items, and Copy must not be
+    /// pushed to the next page.
+    static func editMenu(extra: [UIMenuElement], suggestedActions: [UIMenuElement]) -> UIMenu {
+        let standardActions: Set<Selector> = [
+            #selector(UIResponderStandardEditActions.cut(_:)),
+            #selector(UIResponderStandardEditActions.copy(_:)),
+            #selector(UIResponderStandardEditActions.paste(_:)),
+        ]
+        let isStandard: (UIMenuElement) -> Bool = { element in
+            if let menu = element as? UIMenu { return menu.identifier == .standardEdit }
+            if let command = element as? UICommand { return standardActions.contains(command.action) }
+            return false
+        }
+        return UIMenu(children: suggestedActions.filter(isStandard) + extra + suggestedActions.filter { !isStandard($0) })
     }
 
     /// Craft-like task menu: complete, schedule, deadline, cancel.
@@ -1025,9 +2167,10 @@ extension EditorView: UITextViewDelegate {
         let toggle = UIAction(title: state == "done" ? "Вернуть в работу" : "Выполнить",
                               image: UIImage(systemName: state == "done" ? "circle" : "checkmark.circle")) { _ in cmd.toggleTask(item) }
         let cancel = UIAction(title: state == "cancelled" ? "Восстановить" : "Отменить задачу", image: UIImage(systemName: "xmark.circle")) { [weak self] _ in
-            self?.document.setAttributes(item, ["state": .string(state == "cancelled" ? "open" : "cancelled"), "completedAt": nil])
+            self?.model.setAttributes(item, ["state": .string(state == "cancelled" ? "open" : "cancelled"), "completedAt": nil])
         }
-        return UIMenu(title: "Задача", image: UIImage(systemName: "checklist"), options: .displayInline, children: [toggle, schedule, due, cancel])
+        let children: [UIMenuElement] = taskDatesEnabled ? [toggle, schedule, due, cancel] : [toggle, cancel]
+        return UIMenu(title: "Задача", image: UIImage(systemName: "checklist"), options: .displayInline, children: children)
     }
 
     public func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem, defaultAction: UIAction) -> UIAction? {
@@ -1042,16 +2185,22 @@ extension EditorView: UITextViewDelegate {
 // MARK: - Gestures, Scribble, Pencil, edit menu
 
 extension EditorView: UIGestureRecognizerDelegate {
+    /// The editor's tap begins only on something a tap acts on — a note link, a task box or a
+    /// task date chip (`hasTapTarget`; date chips were missing here, so their taps never began).
     public override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
         if g is UITapGestureRecognizer, g.view === textView, g.delegate === self {
             let p = g.location(in: textView)
-            return taskItem(at: p) != nil || noteLink(at: p) != nil
+            let target = hasTapTarget(at: p)
+            EditorDiagnostics.log("editor tap should begin at \(Int(p.x)),\(Int(p.y)): \(target)")
+            return target
         }
         return super.gestureRecognizerShouldBegin(g)
     }
 
     public func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-        false
+        // The editor's tap fires alongside the text view's own recognizers: a link or task box tap
+        // must not be swallowed by caret placement (note links did nothing on iPhone, build 14).
+        g === textView.editorTap && other.view === textView && !(other is UIPanGestureRecognizer)
     }
 
     /// The pen recognizer receives every touch and follows only those it draws with (it never
@@ -1067,12 +2216,13 @@ extension EditorView: UIGestureRecognizerDelegate {
 
 extension EditorView: @preconcurrency UIScribbleInteractionDelegate {
     public func scribbleInteraction(_ interaction: UIScribbleInteraction, shouldBeginAt location: CGPoint) -> Bool {
-        !tools.mode.capturesPen
+        !tools.mode.capturesPen && !model.isReadOnly
     }
 }
 
 extension EditorView: @preconcurrency UIPencilInteractionDelegate {
     public func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
+        guard !model.isReadOnly else { return }
         switch UIPencilInteraction.preferredTapAction {
         case .switchEraser: tools.toggleEraser()
         case .switchPrevious: tools.mode = tools.previousMode
@@ -1083,7 +2233,7 @@ extension EditorView: @preconcurrency UIPencilInteractionDelegate {
     }
 
     public func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze) {
-        guard squeeze.phase == .ended else { return }
+        guard squeeze.phase == .ended, !model.isReadOnly else { return }
         switch UIPencilInteraction.preferredSqueezeAction {
         case .ignore: return
         case .switchEraser: tools.toggleEraser()
@@ -1095,9 +2245,179 @@ extension EditorView: @preconcurrency UIPencilInteractionDelegate {
     }
 }
 
+extension EditorView {
+    /// A day as stored in task attributes ("2026-10-27"), `offset` days from today or a given date.
+    static func isoDay(_ date: Date) -> String {
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", c.year ?? 2026, c.month ?? 1, c.day ?? 1)
+    }
+
+    static func isoDay(offset: Int) -> String {
+        isoDay(Calendar.current.date(byAdding: .day, value: offset, to: Date()) ?? Date())
+    }
+
+    /// Menu of a tapped date chip: move the date (or deadline) or remove it.
+    func dateMenu() -> UIMenu? {
+        EditorDiagnostics.log("date menu requested (target \(dateMenuTarget != nil))")
+        guard let target = dateMenuTarget, let node = model.block(target.item) else { return nil }
+        let cmd = commands
+        let item = target.item
+        let scheduled = node.attrs["scheduled"]?.stringValue
+        let deadline = node.attrs["deadline"]?.stringValue
+        func set(_ day: String?) {
+            if target.deadline {
+                cmd.setTaskDates(item, scheduled: scheduled, deadline: day)
+            } else {
+                cmd.setTaskDates(item, scheduled: day, deadline: deadline)
+            }
+        }
+        let current = (target.deadline ? deadline : scheduled).flatMap(BlockLayoutFragment.date) ?? Date()
+        return UIMenu(title: target.deadline ? "Дедлайн" : "Перенести", children: [
+            UIAction(title: "Сегодня") { _ in set(Self.isoDay(offset: 0)) },
+            UIAction(title: "Завтра") { _ in set(Self.isoDay(offset: 1)) },
+            UIAction(title: "След. неделя") { _ in set(Self.isoDay(offset: 7)) },
+            UIAction(title: "Дата…") { [weak self] _ in
+                self?.pickDate(initial: current, from: target.rect) { set(Self.isoDay($0)) }
+            },
+            UIAction(title: target.deadline ? "Убрать дедлайн" : "Убрать дату", attributes: .destructive) { _ in set(nil) },
+        ])
+    }
+
+    /// A calendar for "Дата…": a sheet on iPhone, a popover from the chip on iPad.
+    private func pickDate(initial: Date, from rect: CGRect, done: @escaping (Date) -> Void) {
+        guard var top = window?.rootViewController else { return }
+        while let presented = top.presentedViewController { top = presented }
+        let picker = TaskDatePickerController(date: initial, onPick: done)
+        picker.modalPresentationStyle = traitCollection.horizontalSizeClass == .regular ? .popover : .pageSheet
+        if let popover = picker.popoverPresentationController {
+            popover.sourceView = textView
+            popover.sourceRect = rect
+        }
+        picker.sheetPresentationController?.detents = [.medium()]
+        top.present(picker, animated: true)
+    }
+}
+
+/// Follows whether a finger is on the text view (selection handles included) without
+/// recognizing anything or delaying touches.
+final class TouchObserver: UIGestureRecognizer, UIGestureRecognizerDelegate {
+    private(set) var touching = false
+    /// Called (on the next turn) whenever the last touch ends.
+    var onLift: (() -> Void)?
+    private var count = 0
+
+    init() {
+        super.init(target: nil, action: nil)
+        cancelsTouchesInView = false
+        delaysTouchesBegan = false
+        delaysTouchesEnded = false
+        delegate = self
+    }
+
+    /// Tests: as if a finger were down.
+    func setTouchingForTesting(_ value: Bool) {
+        touching = value
+        if !value { finish() }
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        count += touches.count
+        touching = true
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) { lift(touches.count) }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) { lift(touches.count) }
+
+    private func lift(_ n: Int) {
+        count = max(0, count - n)
+        guard count == 0 else { return }
+        touching = false
+        // Never recognizes: fails once the touches are over, so it never blocks others.
+        state = .failed
+        finish()
+    }
+
+    private func finish() {
+        guard let lift = onLift else { return }
+        DispatchQueue.main.async { lift() }
+    }
+
+    override func reset() {
+        super.reset()
+        count = 0
+        touching = false
+    }
+
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+}
+
+/// Accessibility element of a link or chip: activating it does what a tap does.
+final class TapTargetAccessibilityElement: UIAccessibilityElement {
+    var activate: (() -> Void)?
+
+    override func accessibilityActivate() -> Bool {
+        activate?()
+        return activate != nil
+    }
+}
+
+/// Inline calendar with "Готово" for picking a task date.
+final class TaskDatePickerController: UIViewController {
+    private let picker = UIDatePicker()
+    private let onPick: (Date) -> Void
+
+    init(date: Date, onPick: @escaping (Date) -> Void) {
+        self.onPick = onPick
+        super.init(nibName: nil, bundle: nil)
+        picker.date = date
+        preferredContentSize = CGSize(width: 340, height: 400)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .systemBackground
+        picker.datePickerMode = .date
+        picker.preferredDatePickerStyle = .inline
+        picker.accessibilityIdentifier = "taskDate.picker"
+        let done = UIButton(type: .system)
+        var config = UIButton.Configuration.filled()
+        config.title = "Готово"
+        done.configuration = config
+        done.accessibilityIdentifier = "taskDate.done"
+        done.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.onPick(self.picker.date)
+            self.dismiss(animated: true)
+        }, for: .primaryActionTriggered)
+        let stack = UIStackView(arrangedSubviews: [picker, done])
+        stack.axis = .vertical
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: view.layoutMarginsGuide.topAnchor, constant: 8),
+        ])
+    }
+}
+
 extension EditorView: @preconcurrency UIEditMenuInteractionDelegate {
+    public func editMenuInteraction(_ interaction: UIEditMenuInteraction, willPresentMenuFor configuration: UIEditMenuConfiguration,
+                                    animator: any UIEditMenuInteractionAnimating) {
+        EditorDiagnostics.log("edit menu will present \(configuration.identifier)")
+    }
+
+    public func editMenuInteraction(_ interaction: UIEditMenuInteraction, willDismissMenuFor configuration: UIEditMenuConfiguration,
+                                    animator: any UIEditMenuInteractionAnimating) {
+        EditorDiagnostics.log("edit menu will dismiss \(configuration.identifier)")
+    }
+
     public func editMenuInteraction(_ interaction: UIEditMenuInteraction, menuFor configuration: UIEditMenuConfiguration,
                                     suggestedActions: [UIMenuElement]) -> UIMenu? {
+        if configuration.identifier as? String == "taskDate" { return dateMenu() }
         guard configuration.identifier as? String == "lasso" else { return UIMenu(children: suggestedActions) }
         var items: [UIMenuElement] = [
             UIAction(title: "Удалить", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
@@ -1121,6 +2441,35 @@ extension EditorView: @preconcurrency UIEditMenuInteractionDelegate {
             items.append(UIMenu(title: "Цвет штрихов", image: UIImage(systemName: "paintpalette"), children: colors))
         }
         return UIMenu(children: items)
+    }
+}
+
+// MARK: - Dropping images
+
+extension EditorView: @preconcurrency UITextDropDelegate {
+    /// Only images (photos dragged from Photos or Files), with the host accepting them.
+    private func isImageDrop(_ session: UIDropSession) -> Bool {
+        onImagesReceived != nil && !model.isReadOnly
+            && session.hasItemsConforming(toTypeIdentifiers: [UTType.image.identifier])
+            && !session.canLoadObjects(ofClass: NSString.self)
+    }
+
+    public func textDroppableView(_ textDroppableView: UIView & UITextDroppable, proposalForDrop drop: UITextDropRequest) -> UITextDropProposal {
+        if model.isReadOnly { return UITextDropProposal(operation: .forbidden) }
+        guard isImageDrop(drop.dropSession) else { return drop.suggestedProposal }
+        return UITextDropProposal(operation: .copy)
+    }
+
+    public func textDroppableView(_ textDroppableView: UIView & UITextDroppable, willPerformDrop drop: UITextDropRequest) {
+        guard isImageDrop(drop.dropSession), let receive = onImagesReceived else { return }
+        // The image goes where it was dropped: the caret moves there, then the host inserts it.
+        let offset = textView.offset(from: textView.beginningOfDocument, to: drop.dropPosition)
+        textView.selectedRange = NSRange(location: max(0, min(offset, textView.textStorage.length)), length: 0)
+        let providers = drop.dropSession.items.map(\.itemProvider)
+            .filter { $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) }
+        // The text view's own insertion of the dropped attachment character is undone by the
+        // unreported-edit safety net (`mirrorUnreportedEdit` re-renders from the document).
+        DispatchQueue.main.async { receive(providers) }
     }
 }
 #endif

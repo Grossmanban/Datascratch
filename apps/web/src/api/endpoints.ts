@@ -15,16 +15,23 @@ import type {
   Session,
   Share,
   SharePermission,
+  IncomingInvitation,
+  Member,
+  MemberRole,
+  OutgoingInvitation,
+  SharedItem,
   ShareTarget,
   SignupRequest,
   SecurityEvent,
 } from "@/lib/shared";
+import { checkedPrelogin } from "@/auth/kdfBounds";
 import { api } from "./client";
 
 const noAuth = { auth: false } as const;
 
 export const authApi = {
-  prelogin: (email: string) => api.post<PreloginResponse>("/auth/prelogin", { email }, noAuth),
+  // The KDF parameters are checked against the client bounds (crypto.md §2) before any use.
+  prelogin: async (email: string): Promise<PreloginResponse> => checkedPrelogin(await api.post<unknown>("/auth/prelogin", { email }, noAuth)),
   signup: (body: SignupRequest) => api.post<Session>("/auth/signup", body, noAuth),
   login: (email: string, loginKey: string, deviceName: string) =>
     api.post<Session>("/auth/login", { email, loginKey, deviceName }, noAuth),
@@ -59,6 +66,21 @@ export const accountApi = {
   deleteAccount: (loginKey: string) => api.del<void>("/me", { loginKey }),
 };
 
+/** Sharing with accounts by email (D-54, api.md «Совместный доступ по аккаунтам»). */
+export const membersApi = {
+  invite: (body: { invitationId: string; target: ShareTarget; email: string; role: MemberRole }) => api.post<void>("/invitations", body),
+  outgoing: (target: ShareTarget) => api.get<OutgoingInvitation[]>(`/invitations?target=${target.kind}:${target.id}`),
+  cancelInvitation: (id: string) => api.del<void>(`/invitations/${id}`),
+  incoming: () => api.get<IncomingInvitation[]>("/invitations/incoming"),
+  accept: (id: string) => api.post<SharedItem>(`/invitations/${id}/accept`),
+  decline: (id: string) => api.post<void>(`/invitations/${id}/decline`),
+  list: (target: ShareTarget) => api.get<Member[]>(`/members/${target.kind}/${target.id}`),
+  setRole: (target: ShareTarget, userId: string, role: MemberRole) => api.patch<void>(`/members/${target.kind}/${target.id}/${userId}`, { role }),
+  /** The owner removes a member; a member passes their own id to leave. */
+  remove: (target: ShareTarget, userId: string) => api.del<void>(`/members/${target.kind}/${target.id}/${userId}`),
+  sharedWithMe: () => api.get<SharedItem[]>("/shared-with-me"),
+};
+
 export const notebooksApi = {
   list: () => api.get<Notebook[]>("/notebooks"),
   key: (id: string) => api.get<{ wrappedKey: string }>(`/notebooks/${id}/key`),
@@ -85,7 +107,7 @@ export const opBodies = {
 
 export const notebooksModeApi = {
   setMode: (id: string, mode: NotebookMode, notebookKey?: string) =>
-    api.patch<void>(`/notebooks/${id}/mode`, { mode, ...(notebookKey ? { notebookKey } : {}) }),
+    api.patch<void>(`/notebooks/${id}/mode`, { mode, ...(notebookKey ? { notebookKey } : {}) }, { retry: true }),
 };
 
 export const sharesApi = {

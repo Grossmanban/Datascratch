@@ -13,8 +13,48 @@ nonisolated struct LibrarySnapshot: Codable, Sendable {
     var starred: [StarRef] = []
     var tabs: [String] = []
     var activeSpaceId: String?
+    /// Legacy account-wide daily notebook (read once, D-48); new code uses `dailyNotebookBySpace`.
     var dailyNotebookId: String?
     var tagColors: [String: Tint] = [:]
+    /// D-48: each space has its own daily notebook (with its Inbox) and its own active tab.
+    var dailyNotebookBySpace: [String: String]?
+    var activeTabBySpace: [String: String]?
+}
+
+/// D-48: everything shown belongs to one space; membership is note → notebook → space.
+extension LibrarySnapshot {
+    func spaceId(ofNotebook id: String) -> String? { notebooks.first { $0.id == id }?.spaceId }
+
+    func spaceId(ofNote id: String) -> String? {
+        notes.first { $0.id == id }.flatMap { spaceId(ofNotebook: $0.notebookId) }
+    }
+
+    /// The space's daily notebook: its own entry, else the legacy one if it lives in that space.
+    func dailyNotebookId(inSpace spaceId: String?) -> String? {
+        guard let spaceId else { return dailyNotebookId }
+        if let id = dailyNotebookBySpace?[spaceId], self.spaceId(ofNotebook: id) == spaceId { return id }
+        if let legacy = dailyNotebookId, self.spaceId(ofNotebook: legacy) == spaceId { return legacy }
+        return nil
+    }
+
+    func isDailyNotebook(_ id: String) -> Bool {
+        dailyNotebookId == id || (dailyNotebookBySpace?.values.contains(id) ?? false)
+    }
+
+    mutating func setDailyNotebook(_ id: String?, inSpace spaceId: String) {
+        var map = dailyNotebookBySpace ?? [:]
+        map[spaceId] = id
+        dailyNotebookBySpace = map
+    }
+
+    /// A notebook stopped being daily: its space falls back to its first remaining notebook.
+    mutating func dropDailyNotebook(_ id: String) {
+        guard isDailyNotebook(id) else { return }
+        if dailyNotebookId == id { dailyNotebookId = nil }
+        for (space, notebook) in dailyNotebookBySpace ?? [:] where notebook == id {
+            setDailyNotebook(notebooks.filter { $0.spaceId == space && $0.id != id }.min { $0.order < $1.order }?.id, inSpace: space)
+        }
+    }
 }
 
 /// Where the snapshot lives. `nil` file = in memory only (previews, UI tests).
@@ -59,6 +99,12 @@ protocol LibraryBackend: AnyObject {
     func persist(from old: LibrarySnapshot, to new: LibrarySnapshot)
     /// Called with a fresh snapshot when documents change from outside (sync).
     var onExternalChange: ((LibrarySnapshot) -> Void)? { get set }
+    /// Notebooks this device can't write into yet (their key has not arrived).
+    var lockedNotebookIds: Set<String> { get }
+}
+
+extension LibraryBackend {
+    var lockedNotebookIds: Set<String> { [] }
 }
 
 /// The library as one observable value for the UI. All mutations go through
@@ -86,8 +132,18 @@ final class LibraryStore {
         self.persistence = .inMemory
         self.backend = backend
         self.data = backend.loadSnapshot()
-        backend.onExternalChange = { [weak self] snapshot in self?.data = snapshot }
+        self.lockedNotebookIds = backend.lockedNotebookIds
+        backend.onExternalChange = { [weak self, weak backend] snapshot in
+            self?.data = snapshot
+            self?.lockedNotebookIds = backend?.lockedNotebookIds ?? []
+        }
     }
+
+    /// Notebooks made on another device whose key this device is still fetching: shown, but
+    /// nothing can be written into them until the key is here.
+    private(set) var lockedNotebookIds: Set<String> = []
+
+    func isLocked(notebook id: String) -> Bool { lockedNotebookIds.contains(id) }
 
     // MARK: - Reading
 
@@ -124,18 +180,38 @@ final class LibraryStore {
         return result
     }
 
-    /// Visible (not trashed, ordinary) notes of the active space.
+    /// Visible (not trashed, ordinary) notes of the active space, and of what is shared with this
+    /// account (shown in every space, D-54).
     var documents: [NoteMeta] {
-        let ids = Set(notebooks(in: activeSpace?.id).map(\.id))
+        let ids = activeNotebookIds
         return data.notes.filter { ids.contains($0.notebookId) && !$0.isTrashed && $0.kind != .inbox }
             .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    /// Sidebar counts (D-61): visible notes of the active space, and of one notebook (its
+    /// folders included).
+    var documentCount: Int {
+        let ids = activeNotebookIds
+        return data.notes.reduce(0) { $0 + (ids.contains($1.notebookId) && !$1.isTrashed && $1.kind != .inbox ? 1 : 0) }
+    }
+
+    func documentCount(inNotebook id: String) -> Int {
+        data.notes.reduce(0) { $0 + ($1.notebookId == id && !$1.isTrashed && $1.kind != .inbox ? 1 : 0) }
     }
 
     func documents(inNotebook id: String) -> [NoteMeta] {
         documents.filter { $0.notebookId == id && $0.folderId == nil }
     }
 
+    /// The folder's own documents, like a notebook's root: notes of its subfolders are reached
+    /// through the folder strip. Listing them here too showed one note in two folders (owner's
+    /// feedback 2026-11-01: «deleting it removes it from both folders, I made only one»).
     func documents(inFolder id: String) -> [NoteMeta] {
+        documents.filter { $0.folderId == id }
+    }
+
+    /// Documents of the folder and all its subfolders (the count on a folder card).
+    func documents(inFolderTree id: String) -> [NoteMeta] {
         let subtree = folderSubtree(id)
         return documents.filter { $0.folderId.map { subtree.contains($0) } ?? false }
     }
@@ -144,12 +220,35 @@ final class LibraryStore {
         documents.filter { note in note.tags.contains { $0 == tag || $0.hasPrefix(tag + "/") } }
     }
 
-    var starredNotes: [NoteMeta] {
-        data.starred.filter { $0.kind == .note }.compactMap { ref in note(ref.id) }.filter { !$0.isTrashed }
+    /// Notebooks whose notes the active space shows (D-48: this space's only), plus those shared
+    /// with this account: «Shared with me» is in every space (D-54). Without them the notes of a
+    /// shared notebook were listed nowhere, and a note made in it left the list once closed
+    /// (prod 2026-10-28).
+    var activeNotebookIds: Set<String> { ownNotebookIds.union(sharedWithMeNotebookIds) }
+
+    /// The active space's own notebooks.
+    var ownNotebookIds: Set<String> { Set(notebooks(in: activeSpace?.id).map(\.id)) }
+
+    /// Shared notebooks and the virtual notebook of notes shared on their own (D-54).
+    var sharedWithMeNotebookIds: Set<String> { Set(data.notebooks.filter(\.isSharedWithMe).map(\.id)) }
+
+    /// Notes of the active space, trashed ones included.
+    var activeSpaceNotes: [NoteMeta] {
+        let ids = activeNotebookIds
+        return data.notes.filter { ids.contains($0.notebookId) }
     }
 
+    var starredNotes: [NoteMeta] {
+        let ids = activeNotebookIds
+        return data.starred.filter { $0.kind == .note }.compactMap { ref in note(ref.id) }
+            .filter { !$0.isTrashed && ids.contains($0.notebookId) }
+    }
+
+    /// This space's trash: the owner of a shared notebook empties its trash, not its members.
     var trashed: [NoteMeta] {
-        data.notes.filter(\.isTrashed).sorted { ($0.trashedAt ?? .distantPast) > ($1.trashedAt ?? .distantPast) }
+        let ids = ownNotebookIds
+        return data.notes.filter { $0.isTrashed && ids.contains($0.notebookId) }
+            .sorted { ($0.trashedAt ?? .distantPast) > ($1.trashedAt ?? .distantPast) }
     }
 
     /// Tag name → number of documents, nested tags included.
@@ -158,6 +257,9 @@ final class LibraryStore {
         for note in documents { for tag in note.tags { counts[tag, default: 0] += 1 } }
         return counts.map { ($0.key, $0.value) }.sorted { $0.name < $1.name }
     }
+
+    /// The tags of this space as a tree by `/` (§12.6), top level by recent use.
+    var tagTree: [TagNode] { TagNode.tree(of: documents.map { ($0.tags, $0.updatedAt) }) }
 
     func isStarred(_ kind: StarRef.Kind, _ id: String) -> Bool {
         data.starred.contains(StarRef(kind: kind, id: id))
@@ -172,13 +274,26 @@ final class LibraryStore {
         }
     }
 
+    /// Every document of the space whose title, text or tags hold the query — case, diacritics and
+    /// «ё»/«е» ignored; title matches first (owner's feedback 2026-11-01: «search finds the text but
+    /// not the title»).
     func search(_ query: String) -> [NoteMeta] {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let q = Self.searchKey(query.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !q.isEmpty else { return documents }
-        return documents.filter {
-            $0.title.lowercased().contains(q) || body($0.id).plainText.lowercased().contains(q)
-                || $0.tags.contains { $0.contains(q) }
+        var byTitle: [NoteMeta] = [], byText: [NoteMeta] = []
+        for note in documents {
+            if Self.searchKey(note.title).contains(q) {
+                byTitle.append(note)
+            } else if Self.searchKey(body(note.id).plainText).contains(q) || note.tags.contains(where: { Self.searchKey($0).contains(q) }) {
+                byText.append(note)
+            }
         }
+        return byTitle + byText
+    }
+
+    nonisolated static func searchKey(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            .replacingOccurrences(of: "ё", with: "е")
     }
 
     func daysLeftInTrash(_ note: NoteMeta) -> Int {
@@ -187,14 +302,26 @@ final class LibraryStore {
         return max(0, Self.trashRetentionDays - elapsed)
     }
 
-    var openTabs: [NoteMeta] { data.tabs.compactMap { note($0) }.filter { !$0.isTrashed } }
+    /// Open tabs of the active space (each space keeps its own set, D-48).
+    var openTabs: [NoteMeta] {
+        let ids = activeNotebookIds
+        return data.tabs.compactMap { note($0) }.filter { !$0.isTrashed && ids.contains($0.notebookId) }
+    }
+
+    /// The active space's active tab, if it is still open.
+    var activeTab: String? {
+        guard let space = activeSpace?.id, let id = data.activeTabBySpace?[space] else { return nil }
+        return openTabs.contains { $0.id == id } ? id : nil
+    }
 
     var dailyNotebook: Notebook? {
-        data.dailyNotebookId.flatMap { notebook($0) } ?? notebooks(in: activeSpace?.id).first
+        data.dailyNotebookId(inSpace: activeSpace?.id).flatMap { notebook($0) } ?? notebooks(in: activeSpace?.id).first
     }
 
     func dailyNote(for day: String) -> NoteMeta? {
-        data.notes.first { $0.kind == .daily && $0.dailyDate == day && !$0.isTrashed }
+        // The owner's daily notes in a shared notebook are not this account's.
+        let ids = ownNotebookIds
+        return data.notes.first { $0.kind == .daily && $0.dailyDate == day && !$0.isTrashed && ids.contains($0.notebookId) }
     }
 
     func versions(of noteId: String) -> [NoteVersion] {
@@ -245,7 +372,7 @@ final class LibraryStore {
                                 mode: mode, createdAt: now())
         mutate {
             $0.notebooks.append(notebook)
-            if $0.dailyNotebookId == nil { $0.dailyNotebookId = notebook.id }
+            if $0.dailyNotebookId(inSpace: spaceId) == nil { $0.setDailyNotebook(notebook.id, inSpace: spaceId) }
         }
         return notebook
     }
@@ -254,6 +381,31 @@ final class LibraryStore {
         mutate { snapshot in
             guard let index = snapshot.notebooks.firstIndex(where: { $0.id == id }) else { return }
             change(&snapshot.notebooks[index])
+        }
+    }
+
+    /// The sidebar's manual order of a space's notebooks (drag and drop).
+    func moveNotebooks(inSpace spaceId: String, from source: IndexSet, to destination: Int) {
+        let ids = notebooks(in: spaceId).map(\.id)
+        var ordered = ids.enumerated().filter { !source.contains($0.offset) }.map(\.element)
+        ordered.insert(contentsOf: source.map { ids[$0] }, at: destination - source.filter { $0 < destination }.count)
+        mutate { snapshot in
+            for (order, id) in ordered.enumerated() {
+                if let index = snapshot.notebooks.firstIndex(where: { $0.id == id }) { snapshot.notebooks[index].order = Double(order) }
+            }
+        }
+    }
+
+    /// D-48: «Move to Space…» — the notebook (and so its notes, starred notes and tabs) moves to
+    /// another space; it stops being the old space's daily notebook.
+    func moveNotebook(_ id: String, toSpace spaceId: String) {
+        guard let notebook = notebook(id), notebook.spaceId != spaceId else { return }
+        mutate { snapshot in
+            snapshot.dropDailyNotebook(id)
+            if let index = snapshot.notebooks.firstIndex(where: { $0.id == id }) {
+                snapshot.notebooks[index].spaceId = spaceId
+            }
+            if snapshot.dailyNotebookId(inSpace: spaceId) == nil { snapshot.setDailyNotebook(id, inSpace: spaceId) }
         }
     }
 
@@ -273,7 +425,7 @@ final class LibraryStore {
             }
             snapshot.starred.removeAll { $0.id == id || noteIds.contains($0.id) }
             snapshot.tabs.removeAll { noteIds.contains($0) }
-            if snapshot.dailyNotebookId == id { snapshot.dailyNotebookId = snapshot.notebooks.first?.id }
+            snapshot.dropDailyNotebook(id)
         }
     }
 
@@ -438,13 +590,51 @@ final class LibraryStore {
         }
     }
 
+    /// Opens a tab in the note's space and makes it that space's active tab.
     func openTab(_ noteId: String) {
-        guard !data.tabs.contains(noteId) else { return }
-        mutate { $0.tabs.append(noteId) }
+        let space = data.spaceId(ofNote: noteId)
+        guard !data.tabs.contains(noteId) || (space.map { data.activeTabBySpace?[$0] != noteId } ?? false) else { return }
+        mutate { snapshot in
+            if !snapshot.tabs.contains(noteId) { snapshot.tabs.append(noteId) }
+            if let space {
+                var map = snapshot.activeTabBySpace ?? [:]
+                map[space] = noteId
+                snapshot.activeTabBySpace = map
+            }
+        }
     }
 
-    func closeTab(_ noteId: String) {
-        mutate { $0.tabs.removeAll { $0 == noteId } }
+    /// «Close Others»: only `noteId` stays open in its space (other spaces keep theirs).
+    func closeOtherTabs(keeping noteId: String) {
+        let space = data.spaceId(ofNote: noteId)
+        mutate { snapshot in
+            let others = Set(snapshot.tabs.filter { $0 != noteId && snapshot.spaceId(ofNote: $0) == space })
+            snapshot.tabs.removeAll { others.contains($0) }
+            if let space {
+                var map = snapshot.activeTabBySpace ?? [:]
+                map[space] = noteId
+                snapshot.activeTabBySpace = map
+            }
+        }
+    }
+
+    /// Closes a tab and returns its neighbour in the same space — the next tab, or the previous
+    /// one when it was the last — which becomes active if the closed tab was (owner, 2026-11-03:
+    /// closing a tab opens the one next to it, as in a browser).
+    @discardableResult
+    func closeTab(_ noteId: String) -> String? {
+        let space = data.spaceId(ofNote: noteId)
+        let inSpace = data.tabs.filter { data.spaceId(ofNote: $0) == space }
+        let neighbour = inSpace.firstIndex(of: noteId).flatMap { i in
+            i + 1 < inSpace.count ? inSpace[i + 1] : (i > 0 ? inSpace[i - 1] : nil)
+        }
+        mutate { snapshot in
+            snapshot.tabs.removeAll { $0 == noteId }
+            var map = snapshot.activeTabBySpace ?? [:]
+            for (space, id) in map where id == noteId { map[space] = neighbour }
+            snapshot.activeTabBySpace = map
+        }
+        return neighbour
     }
 
     func setTagColor(_ color: Tint?, for tag: String) {
@@ -529,6 +719,9 @@ final class LibraryStore {
 
     static var welcomeTitle: String { String(localized: "Welcome to Datascratch") }
 
+    /// The welcome note's body as first-run seeding writes it (tests, twin repair).
+    func firstRunWelcomeBody() -> NoteBody { welcomeBody() }
+
     private func welcomeBody() -> NoteBody {
         NoteBody(blocks: [
             NoteBlock(id: UUIDv7.make(), kind: .paragraph,
@@ -543,9 +736,26 @@ final class LibraryStore {
 
     /// The welcome note exactly as `seedIfEmpty` wrote it (text and kinds; ids and dates differ).
     private func isUntouchedWelcome(_ note: NoteMeta) -> Bool {
-        guard note.kind == .note, note.title == Self.welcomeTitle else { return false }
+        note.kind == .note && Self.isFirstRunWelcome(title: note.title, body: body(note.id), seed: welcomeBody())
+    }
+
+    /// A welcome note as first-run seeding wrote it (`seed` is the current welcome body).
+    static func isFirstRunWelcome(title: String, body: NoteBody, seed: NoteBody? = nil) -> Bool {
+        guard title == welcomeTitle else { return false }
         let shape = { (body: NoteBody) in body.blocks.map { "\($0.kind.rawValue):\($0.text):\($0.task?.state == .done)" } }
-        return shape(body(note.id)) == shape(welcomeBody())
+        return shape(body) == shape(seed ?? LibraryStore(persistence: .inMemory).welcomeBody())
+    }
+
+    /// First-run names in either language, as one key: «Personal» and «Личное» are the same space
+    /// (a library seeded in English next to one seeded in Russian doubled them, prod 2026-10-26).
+    static func firstRunKey(_ name: String) -> String {
+        let key = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch key {
+        case "personal", "личное", String(localized: "Personal").lowercased(): return "first-run.personal"
+        case "work", "работа", String(localized: "Work").lowercased(): return "first-run.work"
+        case "notes", "заметки", String(localized: "Notes").lowercased(): return "first-run.notes"
+        default: return key
+        }
     }
 
     /// Only first-run content: untouched welcome notes and an empty Inbox, nothing else.
@@ -556,6 +766,35 @@ final class LibraryStore {
         } && !data.folders.contains { $0.notebookId == notebookId }
     }
 
+    /// First-run spaces of one kind («Personal»/«Личное», «Work»/«Работа»): those holding only
+    /// untouched first-run content (no notebooks, or notebooks with just the welcome note and
+    /// an empty Inbox) are removed, keeping at least one space; a space with content is never
+    /// touched.
+    private func removeEmptyFirstRunTwins(_ twins: [Space]) {
+        let isEmpty = { (space: Space) in self.notebooks(in: space.id).allSatisfy { self.holdsOnlyFirstRunContent($0.id) } }
+        var empty = twins.filter(isEmpty)
+        if empty.count == twins.count {
+            // All empty: keep the one listed first (the active one if it is among them).
+            let keep = empty.first { $0.id == data.activeSpaceId } ?? empty.min { ($0.order, $0.id) < ($1.order, $1.id) }!
+            empty.removeAll { $0.id == keep.id }
+        }
+        guard let kept = twins.first(where: { candidate in !empty.contains { $0.id == candidate.id } }) else { return }
+        for space in empty {
+            for notebook in notebooks(in: space.id) {
+                // The daily notebook moves to the kept space's first notebook.
+                let wasDaily = data.isDailyNotebook(notebook.id)
+                deleteNotebook(notebook.id)
+                if wasDaily, let replacement = notebooks(in: kept.id).first {
+                    mutate { $0.setDailyNotebook(replacement.id, inSpace: replacement.spaceId) }
+                }
+            }
+            mutate { snapshot in
+                snapshot.spaces.removeAll { $0.id == space.id }
+                if snapshot.activeSpaceId == space.id { snapshot.activeSpaceId = kept.id }
+            }
+        }
+    }
+
     /// Twins of one name that both hold notes: the notes move into the one with the most (the
     /// daily notebook first), Inboxes become one, the emptied twins go. Twins with folders stay.
     private func mergeNotebooks(_ twins: [Notebook], anyName: Bool, firstRunName: String) {
@@ -563,7 +802,7 @@ final class LibraryStore {
         let named = twins[0].name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard anyName || [firstRunName, "notes", "заметки"].contains(named) else { return }
         let count = { (id: String) in self.data.notes.filter { $0.notebookId == id }.count }
-        let kept = twins.first { $0.id == data.dailyNotebookId }
+        let kept = twins.first { data.isDailyNotebook($0.id) }
             ?? twins.max { (count($0.id), $1.id) < (count($1.id), $0.id) }!
         for other in twins where other.id != kept.id && !data.folders.contains(where: { $0.notebookId == other.id }) {
             for note in data.notes where note.notebookId == other.id {
@@ -578,9 +817,9 @@ final class LibraryStore {
                 }
             }
             if !data.notes.contains(where: { $0.notebookId == other.id }) {
-                let wasDaily = data.dailyNotebookId == other.id
+                let wasDaily = data.isDailyNotebook(other.id)
                 deleteNotebook(other.id)
-                if wasDaily { mutate { $0.dailyNotebookId = kept.id } }
+                if wasDaily { mutate { $0.setDailyNotebook(kept.id, inSpace: kept.spaceId) } }
             }
         }
     }
@@ -592,10 +831,17 @@ final class LibraryStore {
     /// carry (`anyName == false`) only spaces named like the first-run ones merge, so spaces a
     /// person named alike on purpose stay apart.
     func mergeCarriedDuplicates(anyName: Bool = true) {
-        let key = { (name: String) in name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-        let firstRunNames = Set([String(localized: "Personal"), String(localized: "Work"), "Personal", "Work", "Личное", "Работа"].map(key))
+        let key = Self.firstRunKey
+        let firstRunNames: Set<String> = ["first-run.personal", "first-run.work"]
         for (name, spaces) in Dictionary(grouping: data.spaces, by: { key($0.name) })
         where spaces.count > 1 && (anyName || firstRunNames.contains(name)) {
+            // Without a fresh carry (every start, and once the account has synced): only a twin
+            // holding nothing but first-run content goes; spaces with anything of the person's
+            // stay as they are, even when named alike (spec/02, «Стартовые пространства»).
+            guard anyName else {
+                removeEmptyFirstRunTwins(spaces)
+                continue
+            }
             // Keep the space holding the most notebooks: the fewest moves.
             let ordered = spaces.sorted {
                 (-notebooks(in: $0.id).count, $0.order, $0.id) < (-notebooks(in: $1.id).count, $1.order, $1.id)
@@ -614,14 +860,14 @@ final class LibraryStore {
                 var disposable = group.filter { holdsOnlyFirstRunContent($0.id) }
                 // Keep one: the daily notebook if it is among them.
                 if disposable.count == group.count {
-                    let keep = disposable.first { $0.id == data.dailyNotebookId } ?? disposable[0]
+                    let keep = disposable.first { data.isDailyNotebook($0.id) } ?? disposable[0]
                     disposable.removeAll { $0.id == keep.id }
                 }
                 let kept = group.first { candidate in !disposable.contains { $0.id == candidate.id } }
                 for notebook in disposable {
-                    let wasDaily = data.dailyNotebookId == notebook.id
+                    let wasDaily = data.isDailyNotebook(notebook.id)
                     deleteNotebook(notebook.id)
-                    if wasDaily, let kept { mutate { $0.dailyNotebookId = kept.id } }
+                    if wasDaily, let kept { mutate { $0.setDailyNotebook(kept.id, inSpace: kept.spaceId) } }
                 }
                 mergeNotebooks(group.filter { candidate in !disposable.contains { $0.id == candidate.id } },
                                anyName: anyName, firstRunName: key(String(localized: "Notes")))

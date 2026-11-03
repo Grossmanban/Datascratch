@@ -20,6 +20,10 @@ on:
 
 # No cancel-in-progress: cancelling a job stuck in the simulator can take many minutes and
 # would block the next run behind it.
+# Least privilege: jobs that need more ask for it themselves.
+permissions:
+  contents: read
+
 concurrency:
   group: ios-editor-${{ github.sha }}
 
@@ -163,6 +167,8 @@ jobs:
             -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
             -skip-testing:EditorDemoUITests/EditorDemoUITests/testTypingGoesToDocument \
             -skip-testing:EditorDemoUITests/EditorDemoUITests/testPaletteTapsWithKeyboardOpenDoNotScroll \
+            -skip-testing:EditorDemoUITests/EditorDemoUITests/testTappingNoteLinksOpensThem \
+            -skip-testing:EditorDemoUITests/EditorDemoUITests/testTappingATaskDateChipOpensTheRescheduleMenu \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 300 -maximum-test-execution-time-allowance 600 \
             -resultBundlePath "$RUNNER_TEMP/demo-tests.xcresult" \
             2>&1 | tee "$RUNNER_TEMP/demo-tests.log" \
@@ -236,11 +242,17 @@ jobs:
           if-no-files-found: ignore
 
       # Known demo-only defect (docs/open-questions.md): under XCUITest the demo process crashes in
-      # UIKit (_delayTouchesForEvent → insertObject nil) about a second after a tap into the text.
+      # UIKit (_delayTouchesForEvent → insertObject nil) on a touch into the text in text mode:
+      # typing, and the link / date chip tap tests (moved here by the owner's decision of 2026-10-27;
+      # the HUD shows "text view touchesBegan", then the crash). Real taps are covered in the app
+      # process (ios-app testNoteLinksOpenNotes, testTaskDateChipOpensTheRescheduleMenu).
       # The same bare EditorView in the app's process passes (ios-app BareEditorProbeTests). These
       # tests run last, on their own, so a red result here does not hide the other steps.
+      # Owner's decision D-53 (6A, 2026-10-27): the tests still run every time, but a failure here
+      # is a visible warning, not a red job; a pass raises a notice so they can come back.
       - name: Demo typing UI tests (known demo-only crash)
         timeout-minutes: 20
+        continue-on-error: true
         if: ${{ !cancelled() && hashFiles('apps/ios/Packages/DSEditor/Demo/project.yml') != '' }}
         working-directory: apps/ios/Packages/DSEditor/Demo
         run: |
@@ -253,6 +265,8 @@ jobs:
               -destination "platform=iOS Simulator,id=$dest" \
               -only-testing:EditorDemoUITests/EditorDemoUITests/testTypingGoesToDocument \
               -only-testing:EditorDemoUITests/EditorDemoUITests/testPaletteTapsWithKeyboardOpenDoNotScroll \
+              -only-testing:EditorDemoUITests/EditorDemoUITests/testTappingNoteLinksOpensThem \
+              -only-testing:EditorDemoUITests/EditorDemoUITests/testTappingATaskDateChipOpensTheRescheduleMenu \
               -test-timeouts-enabled YES -default-test-execution-time-allowance 300 -maximum-test-execution-time-allowance 600 \
               -resultBundlePath "$RUNNER_TEMP/demo-typing-$dest.xcresult" \
               2>&1 | tee "$RUNNER_TEMP/demo-typing-$dest.log" \
@@ -260,6 +274,14 @@ jobs:
             code=${PIPESTATUS[0]}
             [ $code -eq 0 ] || status=$code
           done
+          if [ $status -ne 0 ]; then
+            failed=$(grep -hoE "Test [Cc]ase '[^']+' failed" "$RUNNER_TEMP"/demo-typing-*.log 2>/dev/null | sed -E "s/Test [Cc]ase '([^']+)' failed/\1/" | sort -u | paste -sd ',' -)
+            echo "::warning title=Known demo-only crash::Demo typing UI tests failed (known demo-only defect, docs/open-questions.md): ${failed:-see logs}"
+            echo "- ⚠️ Known demo-only crash: ${failed:-see logs} (warning only, D-53)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::notice title=Known demo-only crash::The demo typing UI tests passed — they can return to the main UI test step."
+            echo "- ✅ Demo typing UI tests passed — consider moving them back (D-53)" >> "$GITHUB_STEP_SUMMARY"
+          fi
           exit $status
 
       - name: Upload logs and results

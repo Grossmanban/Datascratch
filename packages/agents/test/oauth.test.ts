@@ -2,7 +2,7 @@ import { Client, StreamableHTTPClientTransport, UnauthorizedError, type OAuthCli
 import { createHash, randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { startServer } from "./server.js";
-import { NB_OTHER, NB_WORK, NOTE_PLAN, USER } from "./world.js";
+import { NB_OTHER, NB_PRIVATE, NB_WORK, NOTE_PLAN, USER } from "./world.js";
 
 let close: (() => Promise<void>) | null = null;
 afterEach(async () => {
@@ -51,7 +51,7 @@ class TestProvider implements OAuthClientProvider {
 }
 
 /** Plays the user in a browser: opens the consent page with a session cookie and submits the form. */
-async function consent(authUrl: URL, choose: { notebooks: string[]; permission: "read" | "read_write"; decision?: "allow" | "deny" }) {
+async function consent(authUrl: URL, choose: { notebooks: string[]; all?: boolean; permission: "read" | "read_write"; decision?: "allow" | "deny" }) {
   const page = await fetch(authUrl, { headers: { cookie: `ds_session=${USER}` }, redirect: "manual" });
   expect(page.status).toBe(200);
   expect(page.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
@@ -60,6 +60,10 @@ async function consent(authUrl: URL, choose: { notebooks: string[]; permission: 
   const request = /name="request" value="([^"]+)"/.exec(html)![1]!;
   const form = new URLSearchParams({ request, decision: choose.decision ?? "allow", permission: choose.permission });
   for (const n of choose.notebooks) form.append("notebook", n);
+  if (choose.all) {
+    expect(html).toContain('name="all_notebooks" value="1" checked');
+    form.append("all_notebooks", "1");
+  }
   const res = await fetch(new URL("/oauth/authorize", authUrl), {
     method: "POST",
     headers: { cookie: `ds_session=${USER}`, "content-type": "application/x-www-form-urlencoded" },
@@ -134,9 +138,18 @@ describe("OAuth 2.1 for MCP clients", () => {
     });
     expect(again.status).toBe(400);
     expect((await again.json()).error).toBe("invalid_grant");
-
-    // Revoking the connection cuts the agent off.
-    await fetch(`${s.base}/v1/agent-tokens/${list[0].id}`, { method: "DELETE", headers: { authorization: `Bearer user:${USER}` } });
+    // Reuse of a rotated token means it leaked: the grant is revoked, so even the fresh refresh token is dead.
+    const fresh = (await refreshed.json()).refresh_token as string;
+    const afterReuse = await fetch(`${s.base}/oauth/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: fresh, client_id: provider.info.client_id }).toString(),
+    });
+    expect(afterReuse.status).toBe(400);
+    const revoked = await fetch(`${s.base}/v1/agent-tokens`, { headers: { authorization: `Bearer user:${USER}` } }).then((x) => x.json());
+    expect(revoked).toEqual([]);
+    // …and the agent is cut off (revoking from the token list does the same).
+    void list;
     await expect(client.callTool({ name: "list_notebooks", arguments: {} })).rejects.toThrow();
   });
 
@@ -154,6 +167,24 @@ describe("OAuth 2.1 for MCP clients", () => {
     const r = await client.callTool({ name: "list_notebooks", arguments: {} });
     expect(JSON.parse((r.content as { text: string }[])[0]!.text).notebooks[0].permission).toBe("read");
     expect(s.ctx.store.clients.get(cimd)?.registration).toBe("cimd");
+  });
+
+  it("«all notebooks» also covers notebooks switched to agent mode later", async () => {
+    const s = await startServer();
+    close = s.close;
+    const provider = new TestProvider("notes:read");
+    const client = await authorize(s.base, provider, { notebooks: [], all: true, permission: "read" });
+    const ids = async () =>
+      JSON.parse(((await client.callTool({ name: "list_notebooks", arguments: {} })).content as { text: string }[])[0]!.text).notebooks.map((n: { id: string }) => n.id);
+    expect((await ids()).sort()).toEqual([NB_WORK, NB_OTHER].sort());
+
+    s.ctx.data.setMode(NB_PRIVATE, "agent");
+    expect(await ids()).toContain(NB_PRIVATE);
+    s.ctx.data.setMode(NB_PRIVATE, "private");
+    expect(await ids()).not.toContain(NB_PRIVATE);
+
+    const list = await fetch(`${s.base}/v1/agent-tokens`, { headers: { authorization: `Bearer user:${USER}` } }).then((x) => x.json());
+    expect(list).toMatchObject([{ kind: "oauth", allNotebooks: true }]);
   });
 
   it("sends a scope challenge (403) when a read-only OAuth grant tries to write", async () => {
@@ -190,9 +221,11 @@ describe("OAuth 2.1 for MCP clients", () => {
     // Unregistered redirect: an error page, never a redirect.
     const evil = await fetch(url({ redirect_uri: "https://evil.example/cb" }), { redirect: "manual" });
     expect(evil.status).toBe(400);
-    // No PKCE: error goes back to the client.
+    // No PKCE: an error page too — errors before consent are never redirected (no open redirect, RFC 9700 §4.11.2).
     const noPkce = await fetch(url({ code_challenge_method: "plain" }), { redirect: "manual" });
-    expect(new URL(noPkce.headers.get("location")!).searchParams.get("error")).toBe("invalid_request");
+    expect(noPkce.status).toBe(400);
+    expect(noPkce.headers.get("location")).toBeNull();
+    expect(await noPkce.text()).toContain("invalid_request");
     // Not signed in: sent to the app login with a return URL.
     const anon = await fetch(url({}), { redirect: "manual" });
     expect(anon.headers.get("location")).toMatch(/^https:\/\/app\.example\/login\?returnTo=/);

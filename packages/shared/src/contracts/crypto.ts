@@ -18,15 +18,28 @@ export const KDF_OPS = 3;
 export const KDF_MEM = 67_108_864;
 export const KDF_OUTPUT_BYTES = 64;
 
+/**
+ * Bounds a client accepts for KDF params from `prelogin` (crypto.md §2, audit
+ * 2026-10-27): a hostile server must not be able to weaken the KDF (cheap
+ * loginKey to brute-force) or exhaust memory.
+ */
+export const KDF_BOUNDS = Object.freeze({
+  minOps: 3,
+  maxOps: 10,
+  minMem: 64 * 1024 * 1024,
+  maxMem: 256 * 1024 * 1024,
+});
+
 export const kdfParamsSchema = z.object({
   alg: z.literal(KDF_ALG),
-  ops: z.number().int().min(1).max(64),
-  mem: z
-    .number()
-    .int()
-    .min(8 * 1024 * 1024)
-    .max(4 * 1024 * 1024 * 1024),
+  ops: z.number().int().min(KDF_BOUNDS.minOps).max(KDF_BOUNDS.maxOps),
+  mem: z.number().int().min(KDF_BOUNDS.minMem).max(KDF_BOUNDS.maxMem),
 });
+
+/** True when `kdf` is within the accepted bounds (crypto.md §2). */
+export function isSafeKdf(kdf: unknown): kdf is { alg: typeof KDF_ALG; ops: number; mem: number } {
+  return kdfParamsSchema.safeParse(kdf).success;
+}
 export type KdfParams = z.infer<typeof kdfParamsSchema>;
 
 /** Current default KDF parameters (crypto.md §2). */
@@ -52,7 +65,42 @@ export const AD = {
   noteKey: (noteId: string) => `ds1|key|note|${noteId}`,
   attachmentChunk: (attachmentId: string, index: number, last: boolean) =>
     `ds1|att|${attachmentId}|${index}|${last ? 1 : 0}`,
+  /** Secret half of the account key pair under the masterKey (crypto.md §10, D-54). */
+  accountBoxKey: (userId: string) => `ds1|key|account-box|${userId}`,
+  /** notebookKey / noteKey of `version` ≥ 2 under its parent key (version 1 keeps the plain ad). */
+  notebookKeyVersion: (notebookId: string, version: number) =>
+    version <= 1 ? `ds1|key|notebook|${notebookId}` : `ds1|key|notebook|${notebookId}|${version}`,
+  noteKeyVersion: (noteId: string, version: number) =>
+    version <= 1 ? `ds1|key|note|${noteId}` : `ds1|key|note|${noteId}|${version}`,
+  /** spaceKey of a shared space under the owner's masterKey (crypto.md §11.1, D-62). */
+  spaceKey: (spaceId: string, version: number) =>
+    version <= 1 ? `ds1|key|space|${spaceId}` : `ds1|key|space|${spaceId}|${version}`,
+  /** notebookKey (of `version`) of a shared space's notebook under the spaceKey (§11.1). */
+  spaceNotebookKey: (spaceId: string, notebookId: string, version: number) =>
+    `ds1|key|space-notebook|${spaceId}|${notebookId}|${version}`,
+  /** Key of `version - 1` wrapped by the key of `version` (rotation chain). */
+  previousKey: (kind: ShareTargetKind, targetId: string, version: number) =>
+    `ds1|key|prev|${kind}|${targetId}|${version}`,
+  /** A notebook/note key wrapped for another account (owner → member). */
+  memberKey: (
+    kind: ShareTargetKind,
+    targetId: string,
+    version: number,
+    fromUserId: string,
+    toUserId: string,
+  ) => `ds1|key|member|${kind}|${targetId}|${version}|${fromUserId}|${toUserId}`,
 } as const;
+
+export type ShareTargetKind = "notebook" | "note" | "space";
+
+/** X25519 key pair of an account (crypto.md §10). */
+export const BOX_PUBLIC_KEY_BYTES = 32;
+export const BOX_SECRET_KEY_BYTES = 32;
+/** Context of the member wrapping key derived from the X25519 shared secret. */
+export const MEMBER_WRAP_CONTEXT = "ds1|member-wrap";
+/** Context of the safety code (crypto.md §10.5). */
+export const SAFETY_CODE_CONTEXT = "ds1|safety-code";
+export const SAFETY_CODE_GROUPS = 6;
 
 /** Environment variable holding the server KMS key, base64url (crypto.md §8). */
 export const SERVER_KEY_ENV = "DS_KMS_KEY";

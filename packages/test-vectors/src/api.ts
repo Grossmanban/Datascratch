@@ -1,3 +1,8 @@
+import {
+  DEVICE_REVOKED_REASONS,
+  SYNC_CLOSE_DEVICE_REVOKED,
+  classifyApiFailure,
+} from "@datascratch/shared/contracts";
 import { vid } from "./util.js";
 
 const ID = vid(1);
@@ -186,8 +191,23 @@ export function apiVectors() {
         valid: [
           { notebookId: ID, mode: "private", wrappedKey: "AQ" },
           { notebookId: ID, mode: "agent", wrappedKey: "AQ", notebookKey: KEY },
+          {
+            notebookId: ID,
+            mode: "private",
+            wrappedKey: "AQ",
+            spaceId: vid(6),
+            spaceKeyVersion: 2,
+          },
         ],
         invalid: [
+          {
+            reason: "spaceId without spaceKeyVersion",
+            body: { notebookId: ID, mode: "private", wrappedKey: "AQ", spaceId: vid(6) },
+          },
+          {
+            reason: "spaceKeyVersion without spaceId",
+            body: { notebookId: ID, mode: "private", wrappedKey: "AQ", spaceKeyVersion: 1 },
+          },
           {
             reason: "agent mode without notebookKey",
             body: { notebookId: ID, mode: "agent", wrappedKey: "AQ" },
@@ -203,9 +223,14 @@ export function apiVectors() {
           { docId: ID, kind: "account", notebookId: null },
           { docId: ID, kind: "notebook", notebookId: ID },
           { docId: vid(3), kind: "note", notebookId: ID },
+          { docId: vid(6), kind: "space", notebookId: null },
         ],
         invalid: [
           { reason: "note without notebook", body: { docId: ID, kind: "note", notebookId: null } },
+          {
+            reason: "space document inside a notebook",
+            body: { docId: vid(6), kind: "space", notebookId: ID },
+          },
           {
             reason: "notebook doc id differs from notebookId",
             body: { docId: vid(3), kind: "notebook", notebookId: ID },
@@ -239,11 +264,512 @@ export function apiVectors() {
             reason: "unknown permission",
             body: { shareId: ID, target: { kind: "note", id: vid(3) }, permission: "admin" },
           },
+          {
+            reason: "no guest links to a whole space (D-62)",
+            body: { shareId: ID, target: { kind: "space", id: vid(6) }, permission: "view" },
+          },
+        ],
+      },
+      boxKey: {
+        valid: [{ publicKey: KEY, wrappedSecretKey: "AQ" }],
+        invalid: [
+          { reason: "short public key", body: { publicKey: "AAAA", wrappedSecretKey: "AQ" } },
+        ],
+      },
+      createInvitationRequest: {
+        valid: [
+          {
+            invitationId: ID,
+            target: { kind: "notebook", id: vid(3) },
+            email: "A@B.co",
+            role: "editor",
+          },
+          {
+            invitationId: ID,
+            target: { kind: "note", id: vid(3) },
+            email: "a@b.co",
+            role: "viewer",
+          },
+        ],
+        invalid: [
+          {
+            reason: "unknown role",
+            body: {
+              invitationId: ID,
+              target: { kind: "notebook", id: vid(3) },
+              email: "a@b.co",
+              role: "admin",
+            },
+          },
+          {
+            reason: "folders cannot be shared",
+            body: {
+              invitationId: ID,
+              target: { kind: "folder", id: vid(3) },
+              email: "a@b.co",
+              role: "viewer",
+            },
+          },
+        ],
+      },
+      incomingInvitation: {
+        valid: [
+          {
+            id: ID,
+            target: { kind: "notebook", id: vid(3) },
+            from: { userId: vid(4), email: "owner@b.co" },
+            role: "viewer",
+            createdAt: T,
+            expiresAt: T,
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing from",
+            body: {
+              id: ID,
+              target: { kind: "notebook", id: vid(3) },
+              role: "viewer",
+              createdAt: T,
+              expiresAt: T,
+            },
+          },
+        ],
+      },
+      member: {
+        valid: [
+          {
+            userId: vid(4),
+            email: "m@b.co",
+            role: "editor",
+            status: "awaiting_key",
+            joinedAt: T,
+            accountCreatedAfterInvite: true,
+          },
+        ],
+        invalid: [
+          {
+            reason: "unknown status",
+            body: {
+              userId: vid(4),
+              email: "m@b.co",
+              role: "editor",
+              status: "left",
+              joinedAt: T,
+              accountCreatedAfterInvite: false,
+            },
+          },
+        ],
+      },
+      putMemberKeyRequest: {
+        valid: [{ version: 1, wrappedKey: "AQ" }],
+        invalid: [{ reason: "version 0", body: { version: 0, wrappedKey: "AQ" } }],
+      },
+      rotateKeyRequest: {
+        valid: [
+          {
+            version: 2,
+            ownerWrappedKey: "AQ",
+            previousKeyWrap: "AQ",
+            memberKeys: [{ userId: vid(4), wrappedKey: "AQ" }],
+          },
+          {
+            version: 3,
+            ownerWrappedKey: "AQ",
+            previousKeyWrap: "AQ",
+            memberKeys: [],
+            notebookKey: KEY,
+          },
+        ],
+        invalid: [
+          {
+            reason: "rotation must produce version ≥ 2",
+            body: { version: 1, ownerWrappedKey: "AQ", previousKeyWrap: "AQ", memberKeys: [] },
+          },
+          {
+            reason: "duplicate member",
+            body: {
+              version: 2,
+              ownerWrappedKey: "AQ",
+              previousKeyWrap: "AQ",
+              memberKeys: [
+                { userId: vid(4), wrappedKey: "AQ" },
+                { userId: vid(4), wrappedKey: "AQ" },
+              ],
+            },
+          },
+        ],
+      },
+      sharedItem: {
+        valid: [
+          {
+            target: { kind: "notebook", id: vid(3) },
+            owner: { userId: vid(4), email: "owner@b.co", publicKey: KEY },
+            role: "editor",
+            keyVersion: 2,
+            wrappedKey: "AQ",
+            keyChain: ["AQ"],
+            docIds: [vid(3), vid(5)],
+            addedAt: T,
+            agentsMode: true,
+          },
+          {
+            target: { kind: "note", id: vid(5) },
+            owner: { userId: vid(4), email: "owner@b.co", publicKey: KEY },
+            role: "viewer",
+            keyVersion: 1,
+            wrappedKey: null,
+            keyChain: [],
+            docIds: [vid(5)],
+            addedAt: T,
+          },
+        ],
+        invalid: [
+          {
+            reason: "agentsMode is not a boolean",
+            body: {
+              target: { kind: "note", id: vid(5) },
+              owner: { userId: vid(4), email: "o@b.co", publicKey: KEY },
+              role: "viewer",
+              keyVersion: 1,
+              wrappedKey: null,
+              keyChain: [],
+              docIds: [],
+              addedAt: T,
+              agentsMode: "yes",
+            },
+          },
+          {
+            reason: "missing owner public key",
+            body: {
+              target: { kind: "note", id: vid(5) },
+              owner: { userId: vid(4), email: "o@b.co" },
+              role: "viewer",
+              keyVersion: 1,
+              wrappedKey: null,
+              keyChain: [],
+              docIds: [],
+              addedAt: T,
+            },
+          },
+        ],
+      },
+      sharedByMeItem: {
+        valid: [
+          {
+            target: { kind: "notebook", id: vid(3) },
+            keyVersion: 2,
+            keyRotationPending: true,
+            pendingSinceVersion: 1,
+            members: 3,
+            awaitingKey: 1,
+          },
+          {
+            target: { kind: "note", id: vid(5) },
+            keyVersion: 1,
+            keyRotationPending: false,
+            pendingSinceVersion: null,
+            members: 1,
+            awaitingKey: 0,
+          },
+        ],
+        invalid: [
+          {
+            reason: "negative count",
+            body: {
+              target: { kind: "note", id: vid(3) },
+              keyVersion: 1,
+              keyRotationPending: false,
+              members: -1,
+              awaitingKey: 0,
+            },
+          },
+        ],
+      },
+      notebookKeyResponse: {
+        valid: [
+          { wrappedKey: "AQ" },
+          {
+            wrappedKey: "AQ",
+            version: 3,
+            keyChain: ["AQ", "AQ"],
+            keyRotationPending: true,
+            pendingSinceVersion: 2,
+          },
+          {
+            wrappedKey: "AQ",
+            version: 1,
+            keyChain: [],
+            keyRotationPending: false,
+            pendingSinceVersion: null,
+          },
+        ],
+        invalid: [
+          { reason: "pendingSinceVersion 0", body: { wrappedKey: "AQ", pendingSinceVersion: 0 } },
+        ],
+      },
+      docVersion: {
+        valid: [
+          { seq: 3, createdAt: T, deviceId: "dev-1" },
+          {
+            seq: 9,
+            createdAt: T,
+            deviceId: "dev-1",
+            authors: [
+              { kind: "user", userId: vid(4) },
+              { kind: "agent", tokenId: "tok-1" },
+            ],
+          },
+        ],
+        invalid: [
+          {
+            reason: "author without kind",
+            body: { seq: 9, createdAt: T, deviceId: "d", authors: [{ userId: vid(4) }] },
+          },
+        ],
+      },
+      accountCreateInvitationRequest: {
+        valid: [
+          {
+            invitationId: ID,
+            target: { kind: "space", id: vid(6) },
+            email: "a@b.co",
+            role: "editor",
+          },
+          {
+            invitationId: ID,
+            target: { kind: "notebook", id: vid(3) },
+            email: "a@b.co",
+            role: "viewer",
+          },
+        ],
+        invalid: [
+          {
+            reason: "folders cannot be shared",
+            body: {
+              invitationId: ID,
+              target: { kind: "folder", id: vid(3) },
+              email: "a@b.co",
+              role: "viewer",
+            },
+          },
+        ],
+      },
+      accountIncomingInvitation: {
+        valid: [
+          {
+            id: ID,
+            target: { kind: "space", id: vid(6) },
+            from: { userId: vid(4), email: "owner@b.co" },
+            role: "editor",
+            createdAt: T,
+            expiresAt: T,
+          },
+        ],
+        invalid: [
+          {
+            reason: "unknown kind",
+            body: {
+              id: ID,
+              target: { kind: "folder", id: vid(6) },
+              from: { userId: vid(4), email: "o@b.co" },
+              role: "editor",
+              createdAt: T,
+              expiresAt: T,
+            },
+          },
+        ],
+      },
+      accountSharedItem: {
+        valid: [
+          {
+            target: { kind: "space", id: vid(6) },
+            owner: { userId: vid(4), email: "owner@b.co", publicKey: KEY },
+            role: "editor",
+            keyVersion: 2,
+            wrappedKey: "AQ",
+            keyChain: ["AQ"],
+            docIds: [vid(6), vid(3), vid(5)],
+            addedAt: T,
+          },
+        ],
+        invalid: [
+          {
+            reason: "unknown kind",
+            body: {
+              target: { kind: "folder", id: vid(6) },
+              owner: { userId: vid(4), email: "o@b.co", publicKey: KEY },
+              role: "editor",
+              keyVersion: 1,
+              wrappedKey: null,
+              keyChain: [],
+              docIds: [],
+              addedAt: T,
+            },
+          },
+        ],
+      },
+      accountSharedByMeItem: {
+        valid: [
+          {
+            target: { kind: "space", id: vid(6) },
+            keyVersion: 1,
+            keyRotationPending: false,
+            pendingSinceVersion: null,
+            members: 2,
+            awaitingKey: 1,
+          },
+        ],
+        invalid: [
+          {
+            reason: "unknown kind",
+            body: {
+              target: { kind: "folder", id: vid(6) },
+              keyVersion: 1,
+              keyRotationPending: false,
+              members: 0,
+              awaitingKey: 0,
+            },
+          },
+        ],
+      },
+      sharedSpace: {
+        valid: [
+          {
+            id: vid(6),
+            ownerUserId: vid(4),
+            keyVersion: 1,
+            keyRotationPending: false,
+            pendingSinceVersion: null,
+            createdAt: T,
+          },
+          {
+            id: vid(6),
+            ownerUserId: vid(4),
+            keyVersion: 3,
+            keyRotationPending: true,
+            pendingSinceVersion: 2,
+            createdAt: T,
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing owner",
+            body: {
+              id: vid(6),
+              keyVersion: 1,
+              keyRotationPending: false,
+              pendingSinceVersion: null,
+              createdAt: T,
+            },
+          },
+        ],
+      },
+      createSpaceRequest: {
+        valid: [{ spaceId: vid(6), wrappedKey: "AQ" }],
+        invalid: [{ reason: "missing wrappedKey", body: { spaceId: vid(6) } }],
+      },
+      spaceKeyResponse: {
+        valid: [
+          {
+            version: 2,
+            wrappedKey: "AQ",
+            keyChain: ["AQ"],
+            keyRotationPending: false,
+            pendingSinceVersion: null,
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing keyChain",
+            body: {
+              version: 2,
+              wrappedKey: "AQ",
+              keyRotationPending: false,
+              pendingSinceVersion: null,
+            },
+          },
+        ],
+      },
+      spaceNotebook: {
+        valid: [{ notebookId: ID, version: 1, spaceWrappedKey: "AQ", keyChain: [], mode: "agent" }],
+        invalid: [
+          {
+            reason: "unknown mode",
+            body: {
+              notebookId: ID,
+              version: 1,
+              spaceWrappedKey: "AQ",
+              keyChain: [],
+              mode: "public",
+            },
+          },
+        ],
+      },
+      putSpaceNotebookRequest: {
+        valid: [{ version: 3, spaceWrappedKey: "AQ" }],
+        invalid: [{ reason: "version 0", body: { version: 0, spaceWrappedKey: "AQ" } }],
+      },
+      moveOutNotebookRequest: {
+        valid: [
+          { version: 2, ownerWrappedKey: "AQ", previousKeyWrap: "AQ" },
+          { version: 4, ownerWrappedKey: "AQ", previousKeyWrap: "AQ", notebookKey: KEY },
+        ],
+        invalid: [
+          {
+            reason: "moving out must produce version ≥ 2",
+            body: { version: 1, ownerWrappedKey: "AQ", previousKeyWrap: "AQ" },
+          },
+        ],
+      },
+      rotateSpaceRequest: {
+        valid: [
+          {
+            version: 2,
+            ownerWrappedKey: "AQ",
+            previousKeyWrap: "AQ",
+            memberKeys: [{ userId: vid(4), wrappedKey: "AQ" }],
+            notebooks: [
+              { notebookId: ID, version: 2, spaceWrappedKey: "AQ", previousKeyWrap: "AQ" },
+              {
+                notebookId: vid(3),
+                version: 5,
+                spaceWrappedKey: "AQ",
+                previousKeyWrap: "AQ",
+                notebookKey: KEY,
+              },
+            ],
+          },
+        ],
+        invalid: [
+          {
+            reason: "duplicate notebook",
+            body: {
+              version: 2,
+              ownerWrappedKey: "AQ",
+              previousKeyWrap: "AQ",
+              memberKeys: [],
+              notebooks: [
+                { notebookId: ID, version: 2, spaceWrappedKey: "AQ", previousKeyWrap: "AQ" },
+                { notebookId: ID, version: 2, spaceWrappedKey: "AQ", previousKeyWrap: "AQ" },
+              ],
+            },
+          },
         ],
       },
       apiError: {
-        valid: [{ error: { code: "conflict", message: "id exists with different content" } }],
-        invalid: [{ reason: "unknown code", body: { error: { code: "teapot", message: "" } } }],
+        valid: [
+          { error: { code: "conflict", message: "id exists with different content" } },
+          { error: { code: "device_revoked", message: "device revoked", reason: "user" } },
+          { error: { code: "rate_limited", message: "slow down", retryAfterMs: 5000 } },
+        ],
+        invalid: [
+          { reason: "unknown code", body: { error: { code: "teapot", message: "" } } },
+          {
+            reason: "unknown revocation reason",
+            body: { error: { code: "device_revoked", message: "", reason: "bored" } },
+          },
+        ],
       },
     };
   return {
@@ -252,5 +778,51 @@ export function apiVectors() {
         "REST bodies (api.md v1): every `valid` body must be accepted and every `invalid` one rejected by the schema of the same name (TS: `<name>Schema` in @datascratch/shared/contracts). Unknown extra fields are ignored.",
       cases,
     },
+    "api/failures.json": failureVectors(),
+  };
+}
+
+/** How a client classifies REST failures (D-53): only a revocation wipes data. */
+function failureVectors() {
+  const revoked = (reason: string) => ({
+    error: { code: "device_revoked", message: "device revoked", reason },
+  });
+  const inputs: { name: string; status: number | null; body: unknown }[] = [
+    ...DEVICE_REVOKED_REASONS.map((r) => ({
+      name: `revoked: ${r}`,
+      status: 401,
+      body: revoked(r),
+    })),
+    { name: "revoked body as raw text", status: 401, body: JSON.stringify(revoked("recovery")) },
+    {
+      name: "expired access token",
+      status: 401,
+      body: { error: { code: "unauthorized", message: "token expired" } },
+    },
+    {
+      name: "device_revoked without reason → reason user",
+      status: 401,
+      body: { error: { code: "device_revoked", message: "x" } },
+    },
+    { name: "unknown (newer) reason → reason user", status: 401, body: revoked("bored") },
+    { name: "device_revoked on a non-401 is not a wipe", status: 403, body: revoked("user") },
+    { name: "proxy 401 page", status: 401, body: "<html>401 Unauthorized</html>" },
+    { name: "no response (offline, timeout)", status: null, body: null },
+    { name: "gateway error page", status: 502, body: "<html>Bad Gateway</html>" },
+    { name: "gateway timeout, empty", status: 504, body: "" },
+    {
+      name: "server error with body",
+      status: 503,
+      body: { error: { code: "internal", message: "maintenance" } },
+    },
+    { name: "conflict", status: 409, body: { error: { code: "conflict", message: "exists" } } },
+    { name: "non-JSON 500", status: 500, body: "oops" },
+  ];
+  return {
+    description:
+      'REST failure classification (D-53, api.md; TS: classifyApiFailure). `status: null` = no HTTP response. `body` is parsed JSON or raw text (a string is JSON-parsed first; unparsable → no error body). A 401 with `error.code: "device_revoked"` is a revocation whatever its reason (unknown/absent → "user"); only it wipes local data; `unauthorized` → refresh the token; `network` → retry later. `syncCloseDeviceRevoked` is the WebSocket close code with the same meaning (close reason = revocation reason; unknown/absent → "user").',
+    reasons: [...DEVICE_REVOKED_REASONS],
+    syncCloseDeviceRevoked: SYNC_CLOSE_DEVICE_REVOKED,
+    cases: inputs.map((c) => ({ ...c, expected: classifyApiFailure(c.status, c.body) })),
   };
 }

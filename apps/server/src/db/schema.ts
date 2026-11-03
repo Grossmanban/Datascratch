@@ -2,6 +2,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  check,
   customType,
   index,
   integer,
@@ -14,6 +15,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 /** Raw bytes; all encrypted payloads are stored as bytea. */
 export const bytea = customType<{ data: Buffer; driverData: Buffer }>({
@@ -23,11 +25,16 @@ export const bytea = customType<{ data: Buffer; driverData: Buffer }>({
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const created = () => ts('created_at').notNull().defaultNow();
 
-export const docKind = pgEnum('doc_kind', ['account', 'notebook', 'note']);
+export const docKind = pgEnum('doc_kind', ['account', 'notebook', 'note', 'space']);
 export const notebookMode = pgEnum('notebook_mode', ['private', 'agent']);
 export const shareKind = pgEnum('share_kind', ['note', 'notebook']);
 export const sharePermission = pgEnum('share_permission', ['view', 'edit']);
 export const agentPermission = pgEnum('agent_permission', ['read', 'read_write']);
+export const memberRole = pgEnum('member_role', ['editor', 'viewer']);
+export const invitationStatus = pgEnum('invitation_status', ['pending', 'accepted', 'declined']);
+
+/** Server-stamped author of an update (D-54; api.md `Author`). */
+export type AuthorRef = { kind: 'user'; userId: string } | { kind: 'guest'; shareId: string } | { kind: 'agent'; tokenId: string };
 
 export interface KdfParams {
   alg: 'argon2id13';
@@ -47,6 +54,13 @@ export const users = pgTable('users', {
   wrappedMasterKeyPassword: bytea('wrapped_master_key_password').notNull(),
   wrappedMasterKeyRecovery: bytea('wrapped_master_key_recovery').notNull(),
   accountDocId: uuid('account_doc_id').notNull(),
+  /** Bytes stored for this account (updates, snapshots, attachments); kept by triggers (0004). */
+  storageBytes: bigint('storage_bytes', { mode: 'number' }).notNull().default(0),
+  /** This account's storage limit; null: the server default (USER_STORAGE_QUOTA_BYTES). New accounts get NEW_USER_STORAGE_QUOTA_BYTES. */
+  storageQuotaBytes: bigint('storage_quota_bytes', { mode: 'number' }),
+  /** Account X25519 key pair for sharing (D-54, crypto.md §10): public key and the secret under masterKey. */
+  boxPublicKey: bytea('box_public_key'),
+  boxWrappedSecretKey: bytea('box_wrapped_secret_key'),
   createdAt: created(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
@@ -63,6 +77,8 @@ export const devices = pgTable(
     createdAt: created(),
     lastSeenAt: ts('last_seen_at').notNull().defaultNow(),
     revokedAt: ts('revoked_at'),
+    /** Why the device was revoked (user | password_change | recovery | token_reuse): clients wipe local data on it. */
+    revokedReason: text('revoked_reason'),
   },
   (t) => [index('devices_user_idx').on(t.userId)],
 );
@@ -95,6 +111,28 @@ export const recoveryTokens = pgTable('recovery_tokens', {
   createdAt: created(),
 });
 
+/**
+ * A shared space (D-62, crypto.md §11): its key wraps the keys of its notebooks, so members get
+ * every notebook of it (also later ones) from one key. Personal spaces are not on the server.
+ */
+export const spaces = pgTable(
+  'spaces',
+  {
+    id: uuid('id').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** spaceKey wrapped by the owner's masterKey (current version). */
+    wrappedKey: bytea('wrapped_key').notNull(),
+    keyVersion: integer('key_version').notNull().default(1),
+    keyChain: jsonb('key_chain').$type<string[]>().notNull().default([]),
+    keyRotationPending: boolean('key_rotation_pending').notNull().default(false),
+    pendingSinceVersion: integer('pending_since_version'),
+    createdAt: created(),
+  },
+  (t) => [index('spaces_user_idx').on(t.userId)],
+);
+
 export const notebooks = pgTable(
   'notebooks',
   {
@@ -103,13 +141,23 @@ export const notebooks = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     mode: notebookMode('mode').notNull(),
-    /** notebookKey wrapped by the user's masterKey (opaque to the server). */
+    /** The shared space it belongs to (D-62); null: the owner's personal space. */
+    spaceId: uuid('space_id').references(() => spaces.id, { onDelete: 'cascade' }),
+    /** notebookKey wrapped by the user's masterKey, or by the space key in a shared space (opaque to the server). */
     wrappedKey: bytea('wrapped_key').notNull(),
     /** notebookKey wrapped by DS_KMS_KEY; present only in agent mode. */
     serverWrappedKey: bytea('server_wrapped_key'),
+    /** Key version (D-54, crypto.md §10.3); wrappedKey is the current version's. */
+    keyVersion: integer('key_version').notNull().default(1),
+    /** Rotation chain, newest first: the key of version v-1 wrapped by the key of v (base64). */
+    keyChain: jsonb('key_chain').$type<string[]>().notNull().default([]),
+    /** A member left or was removed: the owner's client must rotate the key. */
+    keyRotationPending: boolean('key_rotation_pending').notNull().default(false),
+    /** Key version when the flag was set (null without it): above it, step 1 of the rotation is done. */
+    pendingSinceVersion: integer('pending_since_version'),
     createdAt: created(),
   },
-  (t) => [index('notebooks_user_idx').on(t.userId)],
+  (t) => [index('notebooks_user_idx').on(t.userId), index('notebooks_space_idx').on(t.spaceId)],
 );
 
 export const docs = pgTable(
@@ -128,6 +176,15 @@ export const docs = pgTable(
     /** Number of updates and bytes accepted since the newest snapshot (compaction hints). */
     updatesSinceSnapshot: integer('updates_since_snapshot').notNull().default(0),
     bytesSinceSnapshot: bigint('bytes_since_snapshot', { mode: 'number' }).notNull().default(0),
+    /**
+     * Key of a note shared on its own (D-54, crypto.md §10.3): version, the owner's copy of the
+     * current key (null until the first rotation: version 1 lives in NoteMeta only) and the chain.
+     */
+    keyVersion: integer('key_version').notNull().default(1),
+    ownerWrappedKey: bytea('owner_wrapped_key'),
+    keyChain: jsonb('key_chain').$type<string[]>().notNull().default([]),
+    keyRotationPending: boolean('key_rotation_pending').notNull().default(false),
+    pendingSinceVersion: integer('pending_since_version'),
     createdAt: created(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
@@ -144,6 +201,8 @@ export const docUpdates = pgTable(
     payload: bytea('payload').notNull(),
     deviceId: text('device_id').notNull(),
     clientMsgId: text('client_msg_id'),
+    /** Who sent it (D-54), stamped by the server; null for updates stored before. */
+    author: jsonb('author').$type<AuthorRef>(),
     createdAt: created(),
   },
   (t) => [
@@ -162,6 +221,8 @@ export const docSnapshots = pgTable(
     seq: bigint('seq', { mode: 'number' }).notNull(),
     payload: bytea('payload').notNull(),
     deviceId: text('device_id').notNull(),
+    /** Authors of the updates since the previous snapshot, in order of their first update (D-54). */
+    authors: jsonb('authors').$type<AuthorRef[]>(),
     createdAt: created(),
   },
   (t) => [primaryKey({ columns: [t.docId, t.seq] })],
@@ -224,6 +285,70 @@ export const shares = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Account sharing (D-54, api.md «Совместный доступ»). A target is a notebook or a
+// note shared on its own, or a shared space (D-62); exactly one of notebookId / noteId /
+// spaceId is set, so deleting the target deletes its invitations and members.
+// ---------------------------------------------------------------------------
+
+export const invitations = pgTable(
+  'invitations',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    notebookId: uuid('notebook_id').references(() => notebooks.id, { onDelete: 'cascade' }),
+    noteId: uuid('note_id').references(() => docs.id, { onDelete: 'cascade' }),
+    spaceId: uuid('space_id').references(() => spaces.id, { onDelete: 'cascade' }),
+    /** Lower-cased; matched against users.email when the invitee signs up or looks at the inbox. */
+    email: text('email').notNull(),
+    role: memberRole('role').notNull(),
+    status: invitationStatus('status').notNull().default('pending'),
+    createdAt: created(),
+    expiresAt: ts('expires_at').notNull(),
+    respondedAt: ts('responded_at'),
+  },
+  (t) => [
+    index('invitations_owner_idx').on(t.ownerId, t.createdAt),
+    index('invitations_email_idx').on(t.email),
+    index('invitations_notebook_idx').on(t.notebookId),
+    index('invitations_note_idx').on(t.noteId),
+    index('invitations_space_idx').on(t.spaceId),
+    check('invitations_one_target', sql`num_nonnulls(${t.notebookId}, ${t.noteId}, ${t.spaceId}) = 1`),
+  ],
+);
+
+export const members = pgTable(
+  'members',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    notebookId: uuid('notebook_id').references(() => notebooks.id, { onDelete: 'cascade' }),
+    noteId: uuid('note_id').references(() => docs.id, { onDelete: 'cascade' }),
+    spaceId: uuid('space_id').references(() => spaces.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: memberRole('role').notNull(),
+    /** The account was registered after the invitation: no access until the owner confirms it by giving the key. */
+    accountCreatedAfterInvite: boolean('account_created_after_invite').notNull(),
+    /** The target key for this member (crypto.md §10.2) and its version; null until the owner's client delivers it. */
+    wrappedKey: bytea('wrapped_key'),
+    keyVersion: integer('key_version'),
+    joinedAt: created(),
+  },
+  (t) => [
+    uniqueIndex('members_notebook_user_idx').on(t.notebookId, t.userId),
+    uniqueIndex('members_note_user_idx').on(t.noteId, t.userId),
+    uniqueIndex('members_space_user_idx').on(t.spaceId, t.userId),
+    index('members_user_idx').on(t.userId),
+    check('members_one_target', sql`num_nonnulls(${t.notebookId}, ${t.noteId}, ${t.spaceId}) = 1`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Agents (@datascratch/agents, AgentsStore). Ids and hashes are plugin-defined
 // strings; secrets are stored only as SHA-256 hex.
 // ---------------------------------------------------------------------------
@@ -240,6 +365,8 @@ export const agentGrants = pgTable(
     name: text('name').notNull(),
     clientId: text('client_id'),
     notebookIds: uuid('notebook_ids').array().notNull(),
+    /** Every agent-mode notebook of the user, including later ones; `notebook_ids` is then ignored. */
+    allNotebooks: boolean('all_notebooks').notNull().default(false),
     permission: agentPermission('permission').notNull(),
     createdAt: ts('created_at').notNull(),
     expiresAt: ts('expires_at'),
@@ -275,6 +402,7 @@ export const oauthCodes = pgTable('oauth_codes', {
   resource: text('resource').notNull(),
   scope: text('scope').notNull(),
   notebookIds: uuid('notebook_ids').array().notNull(),
+  allNotebooks: boolean('all_notebooks').notNull().default(false),
   permission: agentPermission('permission').notNull(),
   expiresAt: ts('expires_at').notNull(),
 });
@@ -283,7 +411,7 @@ export const oauthTokens = pgTable(
   'oauth_tokens',
   {
     tokenHash: text('token_hash').primaryKey(),
-    kind: text('kind').$type<'access' | 'refresh'>().notNull(),
+    kind: text('kind').$type<'access' | 'refresh' | 'refresh_used'>().notNull(),
     grantId: text('grant_id')
       .notNull()
       .references(() => agentGrants.id, { onDelete: 'cascade' }),

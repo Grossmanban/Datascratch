@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "re
 import { useTranslation } from "react-i18next";
 import { accountDb, type TaskRow } from "@/data/db";
 import { addTask, findInbox, getOrCreateInbox } from "@/domain/actions";
-import { noteTitle, useWorkspace } from "@/domain/workspace";
+import { noteTitle, useSpaceNoteFilter, useWorkspace } from "@/domain/workspace";
 import { PageTitle, TopBar } from "@/features/shell/PageHeader";
 import { formatDay, formatLongDate, formatWeekday, today } from "@/lib/dates";
 import { cn, EmptyState } from "@/ui";
@@ -29,20 +29,20 @@ export function TasksPage() {
   const { t } = useTranslation();
   const { view } = useParams({ from: "/app/tasks/$view" });
   const notes = useWorkspace((s) => s.notes);
-  const spaceId = useWorkspace((s) => s.activeSpaceId);
-  const notebooks = useWorkspace((s) => s.account.notebooks);
+  const inSpace = useSpaceNoteFilter();
   const all = useLiveQuery(() => accountDb().tasks.toArray(), [], undefined);
   const inboxId = useWorkspace(() => findInbox());
   const linger = useLinger((s) => s.keys);
   useEffect(() => clearLinger, [view]);
 
   const tasks = useMemo(() => {
-    const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
     return (all ?? []).filter((r) => {
       const n = notes[r.noteId];
-      return n && !n.trashedAt && (r.noteKind === "inbox" || nbs.has(r.notebookId));
+      // Every space has its own Inbox (D-48): an Inbox note counts in its notebook's space like any
+      // note. Tasks of what is shared into this space count too (D-54).
+      return n && !n.trashedAt && inSpace(n);
     });
-  }, [all, notes, notebooks, spaceId]);
+  }, [all, notes, inSpace]);
   // A just-completed task keeps its place in the list (shown done) until the view changes.
   const isOpen = (r: TaskRow) => r.state === "open" || (view !== "logbook" && linger.has(r.key));
 

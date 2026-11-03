@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { docUpdates } from '../src/db/schema.js';
 import { COMPACT_JOB } from '../src/jobs/index.js';
+import { MAX_SUBSCRIBE_DOCS } from '@datascratch/shared/contracts';
 import {
   SyncClient,
   api,
@@ -228,6 +229,98 @@ describe('snapshots, compaction and history', () => {
     const sub3 = await c.subscribe(noteId, 5);
     expect(sub3.pages).toEqual([{ type: 'updates', docId: noteId, snapshot: null, items: [], upToDate: true }]);
     for (const x of [a, b, c]) x.close();
+  });
+
+  // sync-protocol §5: a client behind the newest snapshot gets that snapshot and only the
+  // updates after it, even when the updates in between are still stored. A client that
+  // cannot read some of those updates (sealed with a wrong key) heals from the snapshot.
+  it('sends the newest snapshot to a client behind it even when nothing was compacted', async () => {
+    const seqsOf = (sub: any) => sub.pages.flatMap((p: any) => p.items.map((i: any) => i.seq));
+    const a = await SyncClient.user(s, u);
+
+    // Fast path: short tail after the snapshot.
+    const shortId = await createNote(s, u, notebookId);
+    for (let i = 0; i < 5; i++) await a.push(shortId, rnd(10));
+    const snap = b64(rnd(100));
+    a.send({ type: 'snapshot', docId: shortId, clientMsgId: 'snap-short', baseSeq: 4, payload: snap });
+    expect(await a.next((m) => m.clientMsgId === 'snap-short')).toMatchObject({ type: 'ack', seq: 4 });
+    const b = await SyncClient.user(s, u);
+    const sub = await b.subscribe(shortId, 3);
+    expect(sub.pages[0].snapshot).toEqual({ seq: 4, payload: snap });
+    expect(seqsOf(sub)).toEqual([5]);
+
+    // General path: a long tail after the snapshot, `since` just before it.
+    const longId = await createNote(s, u, notebookId);
+    for (let i = 0; i < 230; i++) await a.push(longId, rnd(10));
+    a.send({ type: 'snapshot', docId: longId, clientMsgId: 'snap-long', baseSeq: 120, payload: snap });
+    expect(await a.next((m) => m.clientMsgId === 'snap-long')).toMatchObject({ type: 'ack', seq: 120 });
+    const sub2 = await b.subscribe(longId, 110);
+    expect(sub2.pages[0].snapshot).toEqual({ seq: 120, payload: snap });
+    const seqs = seqsOf(sub2);
+    expect(seqs[0]).toBe(121);
+    expect(seqs).toHaveLength(110);
+    expect(sub2.pages.at(-1).upToDate).toBe(true);
+    // Updates in between are still stored (nothing was compacted).
+    const kept = await s.ctx.database.db.select({ seq: docUpdates.seq }).from(docUpdates).where(sql`doc_id = ${longId}`);
+    expect(kept).toHaveLength(230);
+    // A client at or after the snapshot gets no snapshot, only the newer updates.
+    const sub3 = await b.subscribe(longId, 120);
+    expect(sub3.pages[0].snapshot).toBeNull();
+    expect(seqsOf(sub3)[0]).toBe(121);
+    for (const x of [a, b]) x.close();
+  });
+});
+
+describe('subscribe limits (security audit 2026-10-27)', () => {
+  it('refuses duplicate documents and more than MAX_SUBSCRIBE_DOCS in one subscribe', async () => {
+    const noteId = await createNote(s, u, notebookId);
+    const b = await SyncClient.user(s, u);
+    b.send({ type: 'subscribe', docs: Array.from({ length: 5000 }, () => ({ docId: noteId, since: 0 })) });
+    expect((await b.next((m) => m.type === 'error')).code).toBe('bad_request');
+    b.send({ type: 'subscribe', docs: Array.from({ length: MAX_SUBSCRIBE_DOCS + 1 }, () => ({ docId: newId(), since: 0 })) });
+    expect((await b.next((m) => m.type === 'error' && b.messages.filter((x) => x.type === 'error').length === 2)).code).toBe(
+      'bad_request',
+    );
+    // Nothing was subscribed or read.
+    expect(b.messages.filter((m) => m.type === 'updates')).toEqual([]);
+    b.close();
+  });
+
+  it('sends large documents the paged way, still complete', async () => {
+    const t = await startServer();
+    try {
+      const v = await signup(t);
+      const { notebookId: nb } = await createNotebook(t, v);
+      const big = await createNote(t, v, nb);
+      const small = await createNote(t, v, nb);
+      const a = await SyncClient.user(t, v);
+      const payloads = [rnd(600_000), rnd(600_000)];
+      for (const p of payloads) expect(await a.push(big, p)).toMatchObject({ type: 'ack' });
+      await a.push(small, rnd(10));
+      const spy = vi.spyOn(t.ctx.documents, 'updatesForMany');
+      const b = await SyncClient.user(t, v);
+      b.send({
+        type: 'subscribe',
+        docs: [
+          { docId: big, since: 0 },
+          { docId: small, since: 0 },
+        ],
+      });
+      const pages: any[] = [];
+      for (;;) {
+        const m = await b.next((x) => x.type === 'updates' && x.docId === big);
+        pages.push(m);
+        if (m.upToDate) break;
+      }
+      expect(pages.flatMap((p) => p.items.map((i: any) => i.payload))).toEqual(payloads.map(b64));
+      await b.next((x) => x.type === 'updates' && x.docId === small, 5000, true);
+      // The big document (1.2 MB since its last snapshot) was not loaded by the batched query.
+      expect(spy.mock.calls.flatMap(([, docs]) => docs.map((d) => d.docId))).toEqual([small]);
+      spy.mockRestore();
+      for (const x of [a, b]) x.close();
+    } finally {
+      await t.close();
+    }
   });
 });
 

@@ -1,6 +1,7 @@
 {
   "name": "@datascratch/server",
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "engines": {
@@ -37,7 +38,6 @@
     "@fastify/cors": "^11.3.1",
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/swagger": "^9.9.2",
-    "@fastify/swagger-ui": "^6.1.2",
     "@fastify/websocket": "^11.3.4",
     "@node-rs/argon2": "^2.2.2",
     "drizzle-orm": "^0.45.4",

@@ -15,6 +15,12 @@ actor FakeSyncServer {
         let incoming: AsyncStream<String>
         let continuation: AsyncStream<String>.Continuation
         let closed = Locked(false)
+        /// Died silently: frames go nowhere and pings never come back (until closed).
+        let dead = Locked(false)
+        /// What the server closed with.
+        let closedWith = Locked<(code: Int, reason: String?)?>(nil)
+        var closeCode: Int? { closedWith.withLock { $0?.code } }
+        var closeReason: String? { closedWith.withLock { $0?.reason } }
 
         init(server: FakeSyncServer) {
             self.server = server
@@ -23,6 +29,7 @@ actor FakeSyncServer {
 
         func send(_ text: String) async throws {
             guard !closed.withLock({ $0 }) else { throw SyncClientError.closed }
+            if dead.withLock({ $0 }) { return }
             await server.handle(text, from: self)
         }
 
@@ -31,7 +38,12 @@ actor FakeSyncServer {
             throw SyncClientError.closed
         }
 
-        func sendPing() async throws {}
+        func sendPing() async throws {
+            while dead.withLock({ $0 }) {
+                if closed.withLock({ $0 }) { throw SyncClientError.closed }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+        }
 
         func close() {
             closed.withLock { $0 = true }
@@ -40,6 +52,7 @@ actor FakeSyncServer {
         }
 
         func deliver(_ message: ServerMessage) {
+            if dead.withLock({ $0 }) { return }
             continuation.yield(String(decoding: try! JSONEncoder.sync.encode(message), as: UTF8.self))
         }
     }
@@ -50,6 +63,11 @@ actor FakeSyncServer {
     var nextSeq: [String: Int64] = [:]
     var conns: [UUID: (conn: Conn, deviceId: String?, subs: Set<String>)] = [:]
     var accepting = true
+    /// The next `hello` is answered with `rate_limited` and this `retryAfterMs`.
+    var rateLimitNextHello: Int?
+    var hellos: [ContinuousClock.Instant] = []
+
+    func setRateLimitNextHello(_ ms: Int?) { rateLimitNextHello = ms }
     var received: [ClientMessage] = []
     /// A client pushed into a document it had not subscribed to (protocol violation).
     var pushedWithoutSubscription = false
@@ -78,6 +96,25 @@ actor FakeSyncServer {
 
     func register(_ docId: String) { registered.insert(docId) }
 
+    /// The connections of `deviceId` die silently (no close, no error): the server keeps them.
+    func killSilently(deviceId: String) {
+        for c in conns.values where c.deviceId == deviceId { c.conn.dead.withLock { $0 = true } }
+    }
+
+    func connections(deviceId: String) -> Int { conns.values.filter { $0.deviceId == deviceId }.count }
+
+    /// Server-side close of every connection of `deviceId` with `code` (and `reason`), after
+    /// an optional frame (D-53: `device_revoked` + 4410; or 4401 for a dead token).
+    func closeConnections(deviceId: String, frame: ServerMessage?, code: Int, reason: String?) {
+        for c in conns.values where c.deviceId == deviceId {
+            if let frame { c.conn.deliver(frame) }
+            c.conn.closedWith.withLock { $0 = (code, reason) }
+            c.conn.close()
+        }
+    }
+
+    func helloCount() -> Int { hellos.count }
+
     func subscribers(_ docId: String) -> Int { conns.values.filter { $0.subs.contains(docId) }.count }
 
     func handle(_ text: String, from c: Conn) async {
@@ -86,6 +123,13 @@ actor FakeSyncServer {
         if case .snapshot = msg, let snapshotDelay { try? await Task.sleep(for: snapshotDelay) }
         switch msg {
         case .hello(_, let deviceId, _):
+            hellos.append(.now)
+            if let ms = rateLimitNextHello {
+                rateLimitNextHello = nil
+                c.deliver(.error(code: .rateLimited, message: "slow down", ref: nil, retryAfterMs: ms))
+                c.close()
+                return
+            }
             conns[c.id]?.deviceId = deviceId
             c.deliver(.welcome(userId: "0192f3c4-0000-7000-8000-00000000000a", serverTime: DSDate.iso(Date())))
         case .subscribe(let entries):
@@ -137,14 +181,16 @@ struct FakeFactory: WebSocketFactory {
     func connect(to url: URL) async throws -> any WebSocketConnection { try await server.connect() }
 }
 
-/// Polls until `condition` holds (async delivery between actors).
+/// Polls until `condition` holds (async delivery between actors). The condition is checked
+/// once more after the deadline: if the process was starved past it (a loaded CI simulator), a
+/// condition that became true meanwhile must not count as a timeout.
 func eventually(timeout: Duration = .seconds(5), _ condition: () async throws -> Bool) async throws -> Bool {
     let deadline = ContinuousClock.now + timeout
     while ContinuousClock.now < deadline {
         if try await condition() { return true }
         try await Task.sleep(for: .milliseconds(10))
     }
-    return false
+    return try await condition()
 }
 
 @Suite(.serialized) struct SyncTests {
@@ -322,16 +368,19 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
                 try await Task.sleep(for: .milliseconds(3))
             }
         }
+        // Generous waits: on a loaded CI simulator (all suites run in parallel) a round can
+        // take seconds; the test is about losing nothing, not about speed.
+        let wait = Duration.seconds(20)
         let rounds = 5
         await server.setSnapshotDelay(.milliseconds(50))
         for _ in 0..<rounds {
             for _ in 0..<LocalStore.snapshotOnCloseEdits { try current.insertText("a", at: 0, inBlock: [1]) }
             // Edits (and the previous snapshot) acknowledged: the close uploads its snapshot itself.
-            #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+            #expect(try await eventually(timeout: wait) { (try? a.store.outboxCount()) == 0 })
             let before = await server.snapshotsReceived(docId)
             let closing = Task { await a.close(docId: docId) }
             // The close is now waiting on the server inside its snapshot upload.
-            #expect(try await eventually { await server.snapshotsReceived(docId) > before })
+            #expect(try await eventually(timeout: wait) { await server.snapshotsReceived(docId) > before })
             let next = NoteDocument(noteId: docId)
             try await a.open(next.crdt, notebookId: "nb")
             await closing.value
@@ -345,7 +394,7 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
             return (text.filter { $0 == "a" }.count, text.filter { $0 == "b" }.count)
         }
         let expected = (rounds * LocalStore.snapshotOnCloseEdits, writes)
-        #expect(try await eventually { counts(current) == expected && counts(remote) == expected })
+        #expect(try await eventually(timeout: wait) { counts(current) == expected && counts(remote) == expected })
         await a.stop()
         await b.stop()
     }
@@ -415,9 +464,10 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
 
         #expect(try await eventually { await server.docs[good.noteId]?.isEmpty == false })
         #expect(try await eventually { await a.status().failed.map(\.docId) == [bad.noteId] })
+        // The refusal can come before the other document's messages are acknowledged.
+        #expect(try await eventually { let s = await a.status(); return s.pending == 0 && s.isIdle })
         let status = await a.status()
         #expect(status.failed.first?.reason == "register: not_found (404)")
-        #expect(status.pending == 0 && status.isIdle)
         #expect(status.summary == .failed(documents: 1, reason: "register: not_found (404)"))
         // Refused registrations are not retried on their own.
         try await Task.sleep(for: .milliseconds(200))

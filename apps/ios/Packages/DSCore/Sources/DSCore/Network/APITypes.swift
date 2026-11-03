@@ -7,8 +7,18 @@ public struct APIErrorBody: Codable, Sendable {
     public struct Inner: Codable, Sendable {
         public var code: String
         public var message: String
+        /// `device_revoked` (D-53).
+        public var reason: DeviceRevocationReason?
+        /// `rate_limited`.
+        public var retryAfterMs: Int?
     }
     public var error: Inner
+}
+
+/// A request path would contain an unsafe segment (an id with `..`, `/` and the like); the
+/// request is not sent.
+public struct UnsafePathError: Error, Equatable, Sendable {
+    public var path: String
 }
 
 public enum APIError: Error, Equatable, Sendable {
@@ -83,12 +93,16 @@ public struct NotebookInfo: Codable, Hashable, Sendable, Identifiable {
     public var mode: NotebookMode
     public var createdAt: String
     public var wrappedKey: Base64URLData
+    /// Shared with other accounts (D-54; older servers omit it).
+    public var shared: Bool?
 }
 
 public struct DocVersion: Codable, Hashable, Sendable {
     public var seq: Int64
     public var createdAt: String
     public var deviceId: String
+    /// Who edited since the previous version, in order of first edit (D-54; older servers omit it).
+    public var authors: [UpdateAuthor]?
 }
 
 public struct AttachmentStatus: Codable, Hashable, Sendable {
@@ -132,6 +146,8 @@ public struct AgentToken: Codable, Hashable, Sendable, Identifiable {
     public var id: String
     public var name: String
     public var notebookIds: [String]
+    /// Every agent-mode notebook, including later ones (`notebookIds` is then ignored). Absent from older servers.
+    public var allNotebooks: Bool?
     public var permission: AgentPermission
     public var expiresAt: String?
     public var createdAt: String

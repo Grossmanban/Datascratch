@@ -33,6 +33,13 @@ struct NotebookRow: View {
                         .font(.caption)
                         .foregroundStyle(Theme.Palette.textTertiary)
                         .accessibilityLabel("Open to agents")
+                } else if app.accountSharing.isOpenToAgents(ShareTarget(kind: .notebook, id: notebook.id)) {
+                    SharedAgentsBadge()
+                }
+                let count = library.documentCount(inNotebook: notebook.id)
+                if count > 0 {
+                    Spacer(minLength: Theme.Space.s1)
+                    SidebarCount(count)
                 }
             }
         } icon: {
@@ -40,12 +47,45 @@ struct NotebookRow: View {
                 .foregroundStyle(notebook.color.foreground)
         }
         .dropDestination(for: String.self) { ids, _ in
+            guard sharedRole != .viewer else { return false }
             for id in ids where library.note(id) != nil {
                 library.move(note: id, toNotebook: notebook.id, folder: nil)
             }
             return !ids.isEmpty
         }
         .contextMenu {
+            if sharedRole == nil {
+                ownerMenu
+            } else {
+                sharedMenu
+            }
+        }
+    }
+
+    /// D-54: the role this account has when the notebook is shared with it; nil for its own.
+    private var sharedRole: AccessRole? {
+        app.accountSharing.role(for: ShareTarget(kind: .notebook, id: notebook.id))
+    }
+
+    /// Shared with this account: only the owner renames, moves, deletes it or opens it to agents.
+    @ViewBuilder private var sharedMenu: some View {
+        if sharedRole == .editor {
+            Button("New Note", systemImage: "square.and.pencil") {
+                scene.sidebar = .notebook(notebook.id)
+                scene.newNote()
+            }
+            Button("New Folder", systemImage: "folder.badge.plus") {
+                scene.sheet = .newFolder(notebookId: notebook.id, parentId: nil)
+            }
+            Divider()
+        }
+        Button("Sharing…", systemImage: "person.2") {
+            scene.sheet = .share(ShareTarget(kind: .notebook, id: notebook.id))
+        }
+    }
+
+    @ViewBuilder private var ownerMenu: some View {
+        let library = app.library
             Button("New Note", systemImage: "square.and.pencil") {
                 scene.sidebar = .notebook(notebook.id)
                 scene.newNote()
@@ -70,12 +110,23 @@ struct NotebookRow: View {
                    systemImage: "star") {
                 library.toggleStar(.notebook, notebook.id)
             }
+            // D-48: the only way between spaces; its starred notes and tabs go with it.
+            let others = library.spaces.filter { $0.id != notebook.spaceId }
+            if !others.isEmpty {
+                Menu("Move to Space…", systemImage: "rectangle.stack") {
+                    ForEach(others) { space in
+                        Button(space.name) {
+                            if scene.sidebar == .notebook(notebook.id) { scene.sidebar = .allDocuments }
+                            library.moveNotebook(notebook.id, toSpace: space.id)
+                        }
+                    }
+                }
+            }
             Divider()
             Button("Delete Notebook", systemImage: "trash", role: .destructive) {
                 if scene.sidebar == .notebook(notebook.id) { scene.sidebar = .allDocuments }
                 library.deleteNotebook(notebook.id)
             }
-        }
     }
 }
 
@@ -129,24 +180,34 @@ struct FolderRow: View {
             }
             return !ids.isEmpty
         }
-        .contextMenu {
-            Button("New Note", systemImage: "square.and.pencil") {
-                scene.sidebar = .folder(folder.id)
-                scene.newNote()
-            }
-            Button("New Subfolder", systemImage: "folder.badge.plus") {
-                scene.sheet = .newFolder(notebookId: folder.notebookId, parentId: folder.id)
-            }
-            Button("Edit Folder…", systemImage: "pencil") { scene.sheet = .editFolder(folder.id) }
-            Button(library.isStarred(.folder, folder.id) ? LocalizedStringKey("Remove from Starred") : "Add to Starred",
-                   systemImage: "star") {
-                library.toggleStar(.folder, folder.id)
-            }
-            Divider()
-            Button("Delete Folder", systemImage: "trash", role: .destructive) {
-                if scene.sidebar == .folder(folder.id) { scene.sidebar = .notebook(folder.notebookId) }
-                library.deleteFolder(folder.id)
-            }
+        .contextMenu { FolderMenuItems(folder: folder) }
+    }
+}
+
+/// The folder's menu, the same in the sidebar tree and on the folder strip of a list.
+struct FolderMenuItems: View {
+    @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
+    let folder: Folder
+
+    var body: some View {
+        let library = app.library
+        Button("New Note", systemImage: "square.and.pencil") {
+            scene.sidebar = .folder(folder.id)
+            scene.newNote()
+        }
+        Button("New Subfolder", systemImage: "folder.badge.plus") {
+            scene.sheet = .newFolder(notebookId: folder.notebookId, parentId: folder.id)
+        }
+        Button("Edit Folder…", systemImage: "pencil") { scene.sheet = .editFolder(folder.id) }
+        Button(library.isStarred(.folder, folder.id) ? LocalizedStringKey("Remove from Starred") : "Add to Starred",
+               systemImage: "star") {
+            library.toggleStar(.folder, folder.id)
+        }
+        Divider()
+        Button("Delete Folder", systemImage: "trash", role: .destructive) {
+            if scene.sidebar == .folder(folder.id) { scene.sidebar = .notebook(folder.notebookId) }
+            library.deleteFolder(folder.id)
         }
     }
 }
@@ -155,12 +216,14 @@ struct TagRow: View {
     @Environment(AppModel.self) private var app
     let name: String
     let count: Int
+    /// The row's text when it is not the whole tag (the last part of `работа/клиенты` in the tree).
+    var title: String? = nil
 
     var body: some View {
         let color = app.library.data.tagColors[name] ?? .gray
         Label {
             HStack {
-                Text(name).lineLimit(1)
+                Text(title ?? name).lineLimit(1)
                 Spacer()
                 Text(count, format: .number)
                     .font(Theme.Typography.footnote.monospacedDigit())

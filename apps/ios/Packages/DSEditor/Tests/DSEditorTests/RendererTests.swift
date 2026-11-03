@@ -37,6 +37,17 @@ final class RendererTests: XCTestCase {
         XCTAssertEqual(marks?.marks, bold)
     }
 
+    /// Links open only web and mail addresses, as on the web (security review 2026-11-02).
+    func testOnlyWebAndMailLinksAreTappable() {
+        for ok in ["https://example.org/a", "HTTP://example.org", "mailto:a@example.org"] {
+            XCTAssertNotNil(AttributedRenderer.safeLink(ok), ok)
+        }
+        for bad in ["ds://share/x?server=evil.example#k=a", "shortcuts://run-shortcut?name=x", "tel:+100", "sms:+100",
+                    "itms-services://?action=download-manifest", "javascript:alert(1)", "file:///etc/passwd", "https://a\u{0}b"] {
+            XCTAssertNil(AttributedRenderer.safeLink(bad), bad)
+        }
+    }
+
     func testRenderLargeNoteQuickly() {
         let doc = SampleDocument.large()
         // Warm up fonts and the theme cache: the first run on a cold CI simulator measures system

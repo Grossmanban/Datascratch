@@ -1,31 +1,38 @@
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ChevronRight, FileQuestion, MoreHorizontal, Share2, Smile, Star, Undo2, X } from "lucide-react";
+import { ChevronRight, Eye, FileQuestion, ImagePlus, MoreHorizontal, Share2, Smile, Star, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/session";
 import { colorFor } from "@/data/presence";
 import { runtime } from "@/data/runtime";
-import { acknowledgeAgentCreated, agentCreatedOf, openTab, restoreNote, toggleStar, updateNote } from "@/domain/actions";
-import { folderPath, isStarred, noteTitle, useWorkspace } from "@/domain/workspace";
+import { sharedResourceOf, useShared } from "@/data/sharedWithMe";
+import { AgentsBadge } from "@/features/share/SharedWithMe";
+import { OpenInApp } from "@/features/share/OpenInApp";
+import { acknowledgeAgentCreated, agentCreatedOf, deleteNoteForever, openTab, restoreNote, setTitleOf, toggleStar, updateNote } from "@/domain/actions";
+import { findNotebook, folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
 import { closeDocTab, noteMenuItems } from "@/features/docs/menus";
+import { isFreshNote } from "@/lib/freshNotes";
+import { rememberNotebook } from "@/lib/lastNotebook";
 import { TopBar } from "@/features/shell/PageHeader";
-import { useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
+import { useNoteContentReady, useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc";
 import { useUi } from "@/hooks/useUi";
 import { FORMAT_VERSION } from "@/lib/shared";
 import { EMOJI_CHOICES } from "@/lib/tokens";
-import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner } from "@/ui";
-import { setNoteMeta } from "@/domain/note";
+import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner, toast, Tooltip } from "@/ui";
+import { defaultNoteTitle, hasBody, isNoteEmpty, setNoteMeta } from "@/domain/note";
+import i18n from "@/i18n";
 import { Backlinks } from "./Backlinks";
 import { CoverImage, coverError, removeCover, setCoverImage } from "./Cover";
-import type { EditorApi } from "@/editor";
-import { ownerEditorHost } from "@/editor/hosts";
+import { readTitle, type EditorApi } from "@/editor";
+import { ownerEditorHost, uploadNoteFile } from "@/editor/hosts";
 import { DocView } from "./DocView";
 import { PenPaletteToggle } from "./PenPaletteToggle";
 import { PresenceStack } from "./PresenceStack";
 import { StylePopover } from "./StylePopover";
 import { usePresence } from "./usePresence";
 import { iconGlyph, withIcon } from "@/lib/glyph";
+import { features } from "@/lib/features";
 
 export function DocPage() {
   const { t } = useTranslation();
@@ -34,7 +41,14 @@ export function DocPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (note && !note.trashedAt) openTab(noteId);
+    if (!note) return;
+    // A link to a document of another space (older links, D-48) opens it in its own space.
+    const space = spaceOfNote(useWorkspace.getState(), noteId);
+    if (space && space !== useWorkspace.getState().activeSpaceId) setActiveSpace(space);
+    if (!note.trashedAt) openTab(noteId);
+    // «Новый документ» elsewhere goes to the notebook last opened or created in (spec/05).
+    // Only an own notebook: a shared one is not where new notes of this account should go.
+    if (useWorkspace.getState().account.notebooks.some((n) => n.id === note.notebookId)) rememberNotebook(space, note.notebookId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId, !!note]);
 
@@ -58,12 +72,16 @@ function DocScreen({ noteId }: { noteId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const note = useWorkspace((s) => s.notes[noteId])!;
-  const nb = useWorkspace((s) => s.account.notebooks.find((n) => n.id === note.notebookId));
+  const nb = useWorkspace(useShallow((s) => findNotebook(s, note.notebookId)));
+  // Shared with this account (D-54): a viewer reads only; sharing further is the owner's.
+  const shared = useShared(() => sharedResourceOf(noteId));
+  const viewer = shared?.role === "viewer";
   const path = useWorkspace(useShallow((s) => folderPath(s, note.folderId)));
   const starred = useWorkspace((s) => isStarred(s, { kind: "note", id: noteId }));
   const email = useAuth((s) => s.email) ?? "";
   const doc = useNoteDoc(noteId);
   const meta = useNoteMeta(doc);
+  const contentReady = useNoteContentReady(noteId, doc);
   const edits = useRef(0);
   const [editorApi, setEditorApi] = useState<EditorApi | null>(null);
   const paletteCollapsed = useUi((s) => s.penPaletteCollapsed);
@@ -91,7 +109,26 @@ function DocScreen({ noteId }: { noteId: string }) {
 
   const readOnlyNewer = (meta?.formatVersion ?? 1) > FORMAT_VERSION;
   const trashed = !!note.trashedAt;
-  const editable = !readOnlyNewer && !trashed;
+  const editable = !readOnlyNewer && !trashed && !viewer;
+
+  // spec/04 «Название новой заметки»: the editor names an empty title (host.defaultTitle) on Enter,
+  // when the caret leaves it and on blur; on close a note with text gets it too, and a note created
+  // here that is still empty (nothing but, at most, its default title) is not kept.
+  const titleFor = () => defaultNoteTitle(useWorkspace.getState().notes[noteId]?.createdAt ?? new Date(), i18n.language);
+  useEffect(() => {
+    if (!doc || !editable) return;
+    return () => {
+      const title = readTitle(doc).trim();
+      if (!hasBody(doc)) {
+        if (isFreshNote(noteId) && (!title || title === titleFor()) && isNoteEmpty(doc, title)) void deleteNoteForever(noteId);
+        return;
+      }
+      // The editor is gone by now (fillEmptyTitleIfNeeded needs it): write the same name into the
+      // document — only for a note created here in this session, never an existing one.
+      if (!title && isFreshNote(noteId)) void setTitleOf(noteId, titleFor());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, editable, noteId]);
 
   const keyFor = () => runtime().store.keyFor(noteId);
   const openCoverDialog = () => useUi.setState({ coverFor: noteId });
@@ -108,6 +145,19 @@ function DocScreen({ noteId }: { noteId: string }) {
         actions={
           <>
             <PresenceStack users={others} />
+            {shared && <OpenInApp compact target={{ kind: "note", id: noteId }} />}
+            {shared?.agentsMode && <AgentsBadge label />}
+            {viewer && (
+              <Tooltip content={t("shared.readOnlyHint")}>
+                <span
+                  className="flex h-7 items-center gap-1.5 rounded-full bg-ink/[0.06] px-2.5 text-[12.5px] font-medium text-ink-2"
+                  data-testid="read-only-badge"
+                >
+                  <Eye className="size-3.5" />
+                  {t("shared.readOnly")}
+                </span>
+              </Tooltip>
+            )}
             <IconButton
               label={starred ? t("docs.unstar") : t("docs.star")}
               onClick={() => toggleStar({ kind: "note", id: noteId })}
@@ -115,10 +165,13 @@ function DocScreen({ noteId }: { noteId: string }) {
             >
               <Star className={cn("size-4", starred && "fill-current")} />
             </IconButton>
+            {editable && editorApi && <InsertPicture api={editorApi} noteId={noteId} />}
             {doc && meta && <StylePopover doc={doc} style={meta.style} disabled={!editable} />}
-            <IconButton label={t("docs.share")} onClick={() => useUi.setState({ shareFor: { kind: "note", id: noteId } })} data-testid="share-button">
-              <Share2 className="size-4" />
-            </IconButton>
+            {!shared && (
+              <IconButton label={t("docs.share")} onClick={() => useUi.setState({ shareFor: { kind: "note", id: noteId } })} data-testid="share-button">
+                <Share2 className="size-4" />
+              </IconButton>
+            )}
             <DropdownMenu
               align="end"
               items={noteMenuItems(noteId, t, navigate, { inDoc: true })}
@@ -128,7 +181,7 @@ function DocScreen({ noteId }: { noteId: string }) {
                 </IconButton>
               }
             />
-            <IconButton label={`${t("docs.closeTab")} (⌥W)`} onClick={() => closeDocTab(noteId, navigate)} data-testid="close-tab">
+            <IconButton label={`${features.tabs ? t("docs.closeTab") : t("common.close")} (⌥W)`} onClick={() => closeDocTab(noteId, navigate)} data-testid="close-tab">
               <X className="size-4" />
             </IconButton>
           </>
@@ -165,7 +218,7 @@ function DocScreen({ noteId }: { noteId: string }) {
       )}
 
       {/* Mount the editor once presence exists: changing `awareness` later recreates the editor. */}
-      {!doc || !meta || !awareness ? (
+      {!doc || !meta || !awareness || !contentReady ? (
         <div className="flex h-64 items-center justify-center text-ink-2">
           <Spinner className="size-5" />
         </div>
@@ -182,7 +235,8 @@ function DocScreen({ noteId }: { noteId: string }) {
           onAcknowledgeAgentCreated={editable ? () => acknowledgeAgentCreated(noteId) : undefined}
           onEditor={(api) => {
             setEditorApi(api);
-            if (editable && !note.title) api.editor.commands.focus("start");
+            if (editable && isFreshNote(noteId)) api.focusTitle();
+            else if (editable && !note.title) api.editor.commands.focus("start");
           }}
           cover={
             meta.cover ? (
@@ -244,3 +298,62 @@ function IconPicker({ icon, onPick, disabled }: { icon: string | null; onPick: (
     </div>
   );
 }
+
+/**
+ * «Вставить картинку» in the document's top bar: the same as «/» → «Картинка», reachable with
+ * one tap (narrow screens, iPad Safari). Several pictures at once; while they are being encrypted
+ * the button shows how far it got.
+ */
+function InsertPicture({ api, noteId }: { api: EditorApi; noteId: string }) {
+  const { t } = useTranslation();
+  const input = useRef<HTMLInputElement>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+  // The editor's own picker (web-editor 1e48522b) inserts a placeholder at once and fills it as
+  // the file is encrypted; until that editor is in, the same thing happens here.
+  const editorPick = (api as EditorApi & { pickImage?: () => void }).pickImage;
+  const insert = async (files: File[]) => {
+    const done: { attachmentId: string; alt: string }[] = [];
+    for (const [i, file] of files.entries()) {
+      const a = await uploadNoteFile(noteId, file, (part) => setProgress((i + part) / files.length));
+      done.push({ attachmentId: a.attachmentId, alt: file.name });
+    }
+    const ed = api.editor;
+    // At the caret in the text; never into the title (or with no caret yet): then at the end.
+    const { $from, to } = ed.state.selection;
+    const inTitle = $from.depth >= 1 && $from.node(1).type.name === "title";
+    const at = inTitle || !ed.isFocused ? ed.state.doc.content.size : to;
+    ed.chain()
+      .focus()
+      .insertContentAt(at, done.map((d) => ({ type: "image", attrs: d })))
+      .run();
+  };
+  return (
+    <>
+      <IconButton
+        label={progress === null ? t("docs.insertPicture") : `${t("docs.insertPicture")} · ${Math.round(progress * 100)}%`}
+        onClick={() => (editorPick ? editorPick.call(api) : input.current?.click())}
+        disabled={progress !== null}
+        data-testid="insert-picture"
+      >
+        {progress === null ? <ImagePlus className="size-4" /> : <span className="text-[11px] font-semibold tabular-nums">{Math.round(progress * 100)}%</span>}
+      </IconButton>
+      <input
+        ref={input}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = [...(e.target.files ?? [])];
+          e.target.value = "";
+          if (!files.length) return;
+          setProgress(0);
+          void insert(files)
+            .catch((err) => toast(t("docs.insertPictureFailed", { reason: (err as Error).message }), { tone: "danger" }))
+            .finally(() => setProgress(null));
+        }}
+      />
+    </>
+  );
+}
+

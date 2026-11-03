@@ -1,15 +1,21 @@
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ArrowDownUp, ChevronRight, FilePlus2, Folder as FolderIcon, Hash, LayoutGrid, Layers, List, Star, Trash2 } from "lucide-react";
-import { useMemo, useRef, type ReactNode } from "react";
+import { ArrowDownUp, ChevronRight, FilePlus2, Folder as FolderIcon, Hash, LayoutGrid, Layers, List, Search, Star, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { runtime } from "@/data/runtime";
+import { useIndexVersion } from "@/data/indexer";
 import { useTranslation } from "react-i18next";
-import { folderPath, notesInSpace, useWorkspace, visibleNotes, type NoteEntry } from "@/domain/workspace";
+import { findNotebook, folderPath, ownNotebookIds, useSpaceNoteFilter, useWorkspace, visibleNotes, type NoteEntry } from "@/domain/workspace";
+import { useShared } from "@/data/sharedWithMe";
+import { OpenInApp } from "@/features/share/OpenInApp";
 import { TopBar, PageTitle } from "@/features/shell/PageHeader";
 import { setDocView, useUi } from "@/hooks/useUi";
 import { tintFg } from "@/lib/tokens";
 import { Button, DropdownMenu, EmptyState, IconButton, SegmentedControl } from "@/ui";
 import { DocCollection } from "./DocCards";
-import { newNoteAndOpen } from "./menus";
+import { FolderStrip } from "./FolderStrip";
+import { UnreadableNote } from "./UnreadableNote";
+import { newDocTarget, newNoteAndOpen } from "./menus";
 import { iconGlyph, withIcon } from "@/lib/glyph";
 
 function sortNotes(notes: NoteEntry[], sort: "updated" | "created" | "title"): NoteEntry[] {
@@ -44,6 +50,18 @@ function ListPage({
   const view = useUi((s) => s.docView);
   const sort = useUi((s) => s.sort);
   const sorted = useMemo(() => (sortable ? sortNotes(notes, sort) : notes), [notes, sort, sortable]);
+  // The list's own filter (title and text, as you type); the space's global search stays in ⌘K.
+  const [q, setQ] = useState("");
+  const indexV = useIndexVersion((s) => s.v);
+  const shown = useMemo(() => {
+    const query = q.trim();
+    if (!query) return sorted;
+    const ids = runtime().indexer.matching(query);
+    const lower = query.toLowerCase();
+    return sorted.filter((n) => ids.has(n.id) || n.title.toLowerCase().includes(lower));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted, q, indexV]);
+  const filtering = !!q.trim();
   const create = newIn ? () => void newNoteAndOpen(navigate, newIn.notebookId, newIn.folderId) : undefined;
   const scrollRef = useRef<HTMLDivElement>(null);
   return (
@@ -85,9 +103,12 @@ function ListPage({
         {crumbs}
       </TopBar>
       <PageTitle icon={icon} title={title} subtitle={notes.length ? t("docs.count", { count: notes.length }) : undefined} />
-      {extra}
-      {sorted.length ? (
-        <DocCollection notes={sorted} view={view} scrollRef={scrollRef} />
+      {notes.length > 0 && <ListFilter value={q} onChange={setQ} found={filtering ? shown.length : null} />}
+      {!filtering && extra}
+      {shown.length ? (
+        <DocCollection notes={shown} view={view} scrollRef={scrollRef} />
+      ) : filtering ? (
+        <EmptyState icon={<Search className="size-7" />} title={t("docs.noMatches")} description={t("docs.noMatchesHint")} />
       ) : (
         <EmptyState
           icon={empty.icon}
@@ -106,24 +127,93 @@ function ListPage({
   );
 }
 
+/**
+ * Filters the list on screen by title and text as you type (current space only, like the list).
+ * «/» or ⌘F focuses it while no text field has the focus; Esc or × clears it.
+ */
+function ListFilter({ value, onChange, found }: { value: string; onChange: (v: string) => void; found: number | null }) {
+  const { t } = useTranslation();
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing = !!target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+      const mod = e.metaKey || e.ctrlKey;
+      // Only while the list has the focus: never steal keys from a text field (the filter included).
+      if (typing) return;
+      if ((e.key === "/" && !mod && !e.altKey) || (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f")) {
+        e.preventDefault();
+        ref.current?.focus();
+        ref.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  return (
+    <div className="px-5 pb-6 sm:px-10">
+      <div className="relative max-w-[560px] text-ink-2" data-testid="list-filter">
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2" aria-hidden />
+        {/* The field itself carries the focus ring (keyboard users see where they are). */}
+        <input
+          ref={ref}
+          type="search"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Escape") return;
+            e.stopPropagation();
+            if (value) onChange("");
+            else e.currentTarget.blur();
+          }}
+          placeholder={t("docs.filterPlaceholder")}
+          aria-label={t("docs.filterPlaceholder")}
+          className="h-10 w-full rounded-xl bg-ink/[0.045] pl-10 pr-28 text-[14.5px] text-ink outline-none transition placeholder:text-ink-3 focus:bg-surface focus:shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(40_30_10/0.06)] focus-visible:shadow-[0_0_0_2px_color-mix(in_srgb,var(--color-accent)_45%,transparent)] [&::-webkit-search-cancel-button]:hidden"
+        />
+        <div className="absolute inset-y-0 right-2 flex items-center gap-2">
+          {found !== null && <span className="text-[12.5px] tabular-nums text-ink-2">{t("docs.count", { count: found })}</span>}
+          {value ? (
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                ref.current?.focus();
+              }}
+              aria-label={t("docs.filterClear")}
+              className="flex size-6 items-center justify-center rounded-md text-ink-2 transition hover:bg-ink/10 hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+              data-testid="list-filter-clear"
+            >
+              <X className="size-3.5" />
+            </button>
+          ) : (
+            <kbd className="mr-1 hidden rounded border border-line px-1.5 text-[11px] text-ink-2 sm:inline" aria-hidden>
+              /
+            </kbd>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AllDocsPage() {
   const { t } = useTranslation();
   const spaceId = useWorkspace((s) => s.activeSpaceId);
   const notes = useWorkspace((s) => s.notes);
   const notebooks = useWorkspace((s) => s.account.notebooks);
   const space = useWorkspace((s) => s.account.spaces.find((x) => x.id === s.activeSpaceId));
-  const list = useMemo(
-    () => visibleNotes(notesInSpace({ ...useWorkspace.getState(), notes, account: { ...useWorkspace.getState().account, notebooks } }, spaceId)),
-    [notes, notebooks, spaceId],
-  );
-  const firstNb = notebooks.find((n) => n.spaceId === spaceId);
+  const inSpace = useSpaceNoteFilter();
+  // This space's notebooks and what «Общие со мной» shows here (D-54).
+  const list = useMemo(() => visibleNotes(Object.values(notes).filter(inSpace)), [notes, inSpace]);
+  // The same place as the sidebar's «Новый документ»: the notebook last used in this space.
+  const target = useMemo(() => newDocTarget("/all"), [notebooks, spaceId]);
   return (
     <ListPage
       title={t("nav.allDocs")}
       crumbs={space ? <span className="truncate">{withIcon(space.icon, space.name)}</span> : null}
       notes={list}
       empty={{ icon: <Layers className="size-7" />, title: t("docs.emptyTitle"), text: t("docs.emptyText") }}
-      newIn={firstNb ? { notebookId: firstNb.id, folderId: null } : null}
+      newIn={target ? { notebookId: target.notebookId, folderId: null } : null}
     />
   );
 }
@@ -131,7 +221,9 @@ export function AllDocsPage() {
 export function NotebookPage() {
   const { t } = useTranslation();
   const { notebookId } = useParams({ from: "/app/notebook/$notebookId" });
-  const nb = useWorkspace((s) => s.account.notebooks.find((n) => n.id === notebookId));
+  const nb = useWorkspace(useShallow((s) => findNotebook(s, notebookId)));
+  const sharedNb = useShared((s) => s.items[`notebook:${notebookId}`]);
+  const readOnly = sharedNb?.role === "viewer";
   const notes = useWorkspace((s) => s.notes);
   const folders = useWorkspace((s) => s.folders);
   const list = useMemo(() => visibleNotes(Object.values(notes).filter((n) => n.notebookId === notebookId && !n.folderId)), [notes, notebookId]);
@@ -146,8 +238,19 @@ export function NotebookPage() {
       icon={iconGlyph(nb.icon) || undefined}
       notes={list}
       empty={{ icon: <FolderIcon className="size-7" />, title: t("docs.emptyFolder") }}
-      newIn={{ notebookId, folderId: null }}
-      extra={<FolderChips folders={subfolders} />}
+      newIn={readOnly ? null : { notebookId, folderId: null }}
+      extra={
+        <>
+          {/* Same side padding as the title, filter and list (it sat on the screen edge on iPhone). */}
+          {sharedNb && (
+            <div className="flex px-5 pb-4 sm:px-10">
+              <OpenInApp compact target={{ kind: "notebook", id: notebookId }} />
+            </div>
+          )}
+          <UnreadableNote notebookId={notebookId} />
+          <FolderStrip folders={subfolders} tint={nb.color} />
+        </>
+      }
     />
   );
 }
@@ -156,7 +259,8 @@ export function FolderPage() {
   const { t } = useTranslation();
   const { folderId } = useParams({ from: "/app/folder/$folderId" });
   const folder = useWorkspace((s) => s.folders[folderId]);
-  const nb = useWorkspace((s) => s.account.notebooks.find((n) => n.id === folder?.notebookId));
+  const nb = useWorkspace(useShallow((s) => findNotebook(s, folder?.notebookId)));
+  const readOnly = useShared((s) => s.items[`notebook:${folder?.notebookId}`]?.role === "viewer");
   const path = useWorkspace(useShallow((s) => folderPath(s, folderId)));
   const notes = useWorkspace((s) => s.notes);
   const folders = useWorkspace((s) => s.folders);
@@ -187,28 +291,14 @@ export function FolderPage() {
       }
       notes={list}
       empty={{ icon: <FolderIcon className="size-7" />, title: t("docs.emptyFolder") }}
-      newIn={{ notebookId: folder.notebookId, folderId }}
-      extra={<FolderChips folders={subfolders} />}
+      newIn={readOnly ? null : { notebookId: folder.notebookId, folderId }}
+      extra={
+        <>
+          <UnreadableNote notebookId={nb.id} />
+          <FolderStrip folders={subfolders} tint={nb.color} />
+        </>
+      }
     />
-  );
-}
-
-function FolderChips({ folders }: { folders: { id: string; name: string; color: string | null; icon: string | null }[] }) {
-  if (!folders.length) return null;
-  return (
-    <div className="-mt-1 flex flex-wrap gap-2 px-5 pb-6 sm:px-10">
-      {folders.map((f) => (
-        <Link
-          key={f.id}
-          to="/folder/$folderId"
-          params={{ folderId: f.id }}
-          className="flex h-9 items-center gap-2 rounded-lg bg-surface px-3 text-[13.5px] font-medium text-ink shadow-[0_1px_2px_rgb(40_30_10/0.06)] ring-1 ring-line transition hover:ring-ink/20"
-        >
-          {iconGlyph(f.icon) ? <span>{iconGlyph(f.icon)}</span> : <FolderIcon className="size-4" style={{ color: tintFg(f.color) }} fill="currentColor" fillOpacity={0.2} />}
-          {f.name}
-        </Link>
-      ))}
-    </div>
   );
 }
 
@@ -217,13 +307,11 @@ export function TagPage() {
   const params = useParams({ from: "/app/tag/$" });
   const tag = decodeURIComponent(params._splat ?? "");
   const notes = useWorkspace((s) => s.notes);
-  const spaceId = useWorkspace((s) => s.activeSpaceId);
-  const notebooks = useWorkspace((s) => s.account.notebooks);
+  const inSpace = useSpaceNoteFilter();
   const list = useMemo(() => {
-    const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
     // Nested tags: #work includes #work/project.
-    return visibleNotes(Object.values(notes).filter((n) => nbs.has(n.notebookId) && n.tags.some((x) => x === tag || x.startsWith(`${tag}/`))));
-  }, [notes, notebooks, spaceId, tag]);
+    return visibleNotes(Object.values(notes).filter((n) => inSpace(n) && n.tags.some((x) => x === tag || x.startsWith(`${tag}/`))));
+  }, [notes, inSpace, tag]);
   return (
     <ListPage
       title={
@@ -242,9 +330,10 @@ export function StarredPage() {
   const { t } = useTranslation();
   const starred = useWorkspace((s) => s.account.starred);
   const notes = useWorkspace((s) => s.notes);
+  const inSpace = useSpaceNoteFilter();
   const list = useMemo(
-    () => visibleNotes(starred.filter((s) => s.kind === "note" && notes[s.id]).map((s) => notes[s.id]!)),
-    [starred, notes],
+    () => visibleNotes(starred.filter((s) => s.kind === "note" && notes[s.id] && inSpace(notes[s.id]!)).map((s) => notes[s.id]!)),
+    [starred, notes, inSpace],
   );
   return (
     <ListPage
@@ -261,7 +350,8 @@ export function TrashPage() {
   const spaceId = useWorkspace((s) => s.activeSpaceId);
   const notebooks = useWorkspace((s) => s.account.notebooks);
   const list = useMemo(() => {
-    const nbs = new Set(notebooks.filter((n) => n.spaceId === spaceId).map((n) => n.id));
+    // Own notebooks only: a shared notebook's trash is its owner's to empty (D-54, as on iOS).
+    const nbs = ownNotebookIds({ notebooks }, spaceId);
     return Object.values(notes)
       .filter((n) => n.trashedAt && nbs.has(n.notebookId))
       .sort((a, b) => Date.parse(b.trashedAt!) - Date.parse(a.trashedAt!));

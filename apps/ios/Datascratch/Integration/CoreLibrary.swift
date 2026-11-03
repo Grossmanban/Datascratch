@@ -15,19 +15,61 @@ protocol CoreLibraryRemote: AnyObject {
     func noteMoved(_ noteId: String, toNotebook notebookId: String)
     /// A document was opened; from now on the sync engine persists and sends its updates.
     func documentOpened(_ crdt: CRDTDocument, notebookId: String?)
+    /// The account lists notebooks whose keys this device does not hold.
+    func notebookKeysMissing()
+    /// Note keys (`NoteMeta.wrappedKey`) arrived with a notebook index: documents that waited
+    /// for them can be subscribed.
+    func noteKeysLearned()
 }
 
-/// `NoteMeta.wrappedKey` by note id, readable from the sync engine's actor.
+/// A note's key fields of `NoteMeta` (wrapped key, key version and chain, D-54) by note id,
+/// readable from the sync engine's actor.
 nonisolated final class WrappedKeyIndex: @unchecked Sendable {
-    private let lock = NSLock()
-    private var keys: [String: (notebookId: String, wrapped: String)] = [:]
+    private struct Entry: Equatable {
+        var notebookId: String
+        var wrapped: String
+        var keyVersion: Int
+        var keyChain: [String]
+    }
 
-    func set(noteId: String, notebookId: String, wrapped: String) {
-        lock.withLock { keys[noteId] = (notebookId, wrapped) }
+    private let lock = NSLock()
+    private var keys: [String: Entry] = [:]
+    private var changed = false
+
+    func set(noteId: String, notebookId: String, wrapped: String, keyVersion: Int = 1, keyChain: [String] = []) {
+        let entry = Entry(notebookId: notebookId, wrapped: wrapped, keyVersion: keyVersion, keyChain: keyChain)
+        lock.withLock {
+            guard keys[noteId] != entry else { return }
+            keys[noteId] = entry
+            changed = true
+        }
+    }
+
+    func set(_ meta: DSCore.NoteMeta, notebookId: String) {
+        set(noteId: meta.id, notebookId: notebookId, wrapped: meta.wrappedKey, keyVersion: meta.keyVersion, keyChain: meta.keyChain)
+    }
+
+    /// Whether a key was added or replaced since the last call.
+    func takeChanged() -> Bool {
+        lock.withLock { defer { changed = false }; return changed }
+    }
+
+    /// The notebook a known note belongs to (its `NoteMeta` was seen there).
+    func notebookId(ofNote noteId: String) -> String? {
+        lock.withLock { keys[noteId]?.notebookId }
     }
 
     func wrapped(noteId: String, notebookId: String) -> String? {
-        lock.withLock { keys[noteId].flatMap { $0.notebookId == notebookId ? $0.wrapped : nil } }
+        meta(noteId: noteId, notebookId: notebookId)?.wrappedKey
+    }
+
+    /// Enough of the `NoteMeta` to open the note: `KeyRing.noteKey(_:notebookId:)`.
+    func meta(noteId: String, notebookId: String) -> DSCore.NoteMeta? {
+        guard let entry = lock.withLock({ keys[noteId] }), entry.notebookId == notebookId else { return nil }
+        var meta = DSCore.NoteMeta(id: noteId, wrappedKey: entry.wrapped)
+        meta.keyVersion = entry.keyVersion
+        meta.keyChain = entry.keyChain
+        return meta
     }
 }
 
@@ -92,7 +134,7 @@ final class CoreLibrary: LibraryBackend {
             subscriptions.removeAll()
             remote?.documentOpened(account.crdt, notebookId: nil)
             for (id, doc) in notebookDocs { remote?.documentOpened(doc.crdt, notebookId: id) }
-            for (id, doc) in noteDocs { remote?.documentOpened(doc.crdt, notebookId: notebookIdOfNote[id]) }
+            for (id, doc) in noteDocs { remote?.documentOpened(doc.crdt, notebookId: Self.recordNotebook(notebookIdOfNote[id])) }
         }
     }
     private var notebookIdOfNote: [String: String] = [:]
@@ -194,6 +236,8 @@ final class CoreLibrary: LibraryBackend {
 
     func notebookDocument(_ id: String) throws -> NotebookDocument {
         if let doc = notebookDocs[id] { return doc }
+        // Notes shared on their own have no notebook document on this device (D-54).
+        guard id != Notebook.sharedNotesId else { throw DSCore.AccountError.missingKey(id) }
         let isNew = try store.document(id) == nil
         let crdt = try Self.open(.notebook, docId: id, notebookId: id, store: store)
         let doc = NotebookDocument(crdt)
@@ -204,16 +248,21 @@ final class CoreLibrary: LibraryBackend {
         return doc
     }
 
-    func noteDocument(_ id: String, notebookId: String) throws -> NoteDocument {
+    /// The note's document. Only a note created on this device (`creating`) gets the empty
+    /// title + paragraph structure: a note made elsewhere (an agent, another device) whose
+    /// document has not arrived yet stays empty until sync fills it — initializing it wrote a
+    /// second, empty title over the agent's (prod 2026-10-26, iPad build 15).
+    func noteDocument(_ id: String, notebookId: String, creating: Bool = false) throws -> NoteDocument {
         if let doc = noteDocs[id] { return doc }
         let isNew = try store.document(id) == nil
-        let crdt = try Self.open(.note, docId: id, notebookId: notebookId, store: store)
+        let recordNotebook = Self.recordNotebook(notebookId)
+        let crdt = try Self.open(.note, docId: id, notebookId: recordNotebook, store: store)
         let doc = NoteDocument(crdt)
-        attach(crdt, notebookId: notebookId)
-        if isNew { try doc.initialize() }
+        attach(crdt, notebookId: recordNotebook)
+        if isNew && creating { try doc.initialize() }
         noteDocs[id] = doc
         notebookIdOfNote[id] = notebookId
-        remote?.documentOpened(crdt, notebookId: notebookId)
+        remote?.documentOpened(crdt, notebookId: recordNotebook)
         return doc
     }
 
@@ -236,6 +285,7 @@ final class CoreLibrary: LibraryBackend {
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             onExternalChange?(loadSnapshot())
+            if !notebooksWithoutKey.isEmpty { remote?.notebookKeysMissing() }
         }
     }
 
@@ -284,6 +334,18 @@ final class CoreLibrary: LibraryBackend {
         var carried: [CarriedNotebook] = []
         for record in orphans {
             let local = AccountDocument(try Self.open(.account, docId: record.docId, notebookId: nil, store: store))
+            // A device library with nothing but untouched first-run content is not carried: it
+            // would add a second «Personal»/«Work» to an account that has its own (prod 2026-10-26).
+            if holdsOnlyFirstRunContent(local) {
+                for ref in local.notebooks() where account.notebook(id: ref.id) == nil {
+                    let notebook = NotebookDocument(try Self.open(.notebook, docId: ref.id, notebookId: ref.id, store: store))
+                    for meta in notebook.notes(includeTrashed: true) { try store.deleteDocument(meta.id) }
+                    try store.deleteDocument(ref.id)
+                    notebookDocs[ref.id] = nil
+                }
+                try store.deleteDocument(record.docId)
+                continue
+            }
             let haveSpaces = Set(account.spaces().map(\.id))
             for space in local.spaces() where !haveSpaces.contains(space.id) { try account.putSpace(space) }
             let haveNotebooks = Set(account.notebooks().map(\.id))
@@ -295,18 +357,106 @@ final class CoreLibrary: LibraryBackend {
             }
             let haveStarred = Set(account.starred())
             for item in local.starred() where !haveStarred.contains(item) { try account.star(item) }
-            if account.dailyNotebookId == nil, let daily = local.dailyNotebookId {
-                try account.setSetting("dailyNotebookId", .string(value: daily))
+            // D-48: the carried spaces bring their daily notebooks along.
+            var daily = Self.stringMap(account.setting(Self.dailyBySpaceKey))
+            for (space, notebook) in Self.stringMap(local.setting(Self.dailyBySpaceKey)) where daily[space] == nil { daily[space] = notebook }
+            if let legacy = local.dailyNotebookId, let space = local.notebook(id: legacy)?.spaceId, daily[space] == nil {
+                daily[space] = legacy
             }
+            if !daily.isEmpty { try account.setSetting(Self.dailyBySpaceKey, Self.yObject(daily)) }
             try store.deleteDocument(record.docId)
         }
         return carried
     }
 
+    var lockedNotebookIds: Set<String> { Set(notebooksWithoutKey) }
+
+    /// Notebooks of the account whose key this device does not hold (made on another device
+    /// after this one signed in): their documents can't be read or written until it arrives.
+    var notebooksWithoutKey: [String] {
+        account.notebooks().map(\.id).filter { (try? keys.notebookKey($0)) ?? nil == nil }
+    }
+
+    /// Notes whose key no device can unwrap any more (wrapped by a notebook key an earlier build
+    /// invented, lost at sign-out) but whose content this device still holds: they get a new
+    /// note key wrapped by the notebook's canonical key. Call after
+    /// `AccountService.reconcileNotebookKeys` and `rewrapNoteKeys`; each returned note needs
+    /// `SyncEngine.rekey` so its state goes up sealed with the new key.
+    @discardableResult
+    func healUnreadableNotes() -> [String] {
+        var healed: [String] = []
+        for ref in account.notebooks() where keys.isNotebookKeyVerified(ref.id) {
+            guard let key = (try? keys.notebookKey(ref.id)) ?? nil, let notebook = try? notebookDocument(ref.id) else { continue }
+            for meta in notebook.notes(includeTrashed: true) {
+                if let wrapped = DSCore.Base64URL.decode(meta.wrappedKey),
+                   (try? DSCrypto.unwrapKey(wrapped, with: key, ad: meta.wrappedKeyAD)) != nil { continue }
+                // Wrapped under an earlier key of a shared notebook: its rotation re-keys it (D-54).
+                if meta.keyVersion > 1 || !keys.retiredNotebookKeys(ref.id).isEmpty,
+                   (try? keys.noteKey(meta, notebookId: ref.id)) != nil { continue }
+                guard let updates = try? store.updates(docId: meta.id), !updates.isEmpty,
+                      let wrapped = try? keys.createNoteKey(noteId: meta.id, notebookId: ref.id).wrappedKey else { continue }
+                try? notebook.updateNote(id: meta.id, ["wrappedKey": .string(value: wrapped)])
+                wrappedKeys.set(noteId: meta.id, notebookId: ref.id, wrapped: wrapped)
+                _ = try? noteDocument(meta.id, notebookId: ref.id)
+                CoreLibrary.log.error("note \(meta.id, privacy: .public) re-keyed: its key was wrapped by a key the server does not know")
+                healed.append(meta.id)
+            }
+        }
+        return healed
+    }
+
+    private static let rekeyedNotebooksKey = "repair.notebookStates.v1"
+
+    /// Once per device (build 12): every notebook with a canonical key, for `SyncEngine.rekey` —
+    /// what an earlier build sealed with an invented key goes up again readable from this
+    /// device's copy. Empty after the first call.
+    func takeOneTimeNotebookRekey() -> [String] {
+        guard (try? store.string(Self.rekeyedNotebooksKey)) ?? nil == nil else { return [] }
+        let ids = account.notebooks().map(\.id).filter(keys.isNotebookKeyVerified)
+        guard !ids.isEmpty else { return [] }
+        try? store.setString("done", for: Self.rekeyedNotebooksKey)
+        return ids
+    }
+
+    /// Keys changed (fetched or replaced): the UI re-reads what is readable and writable.
+    func notebookKeysChanged() {
+        onExternalChange?(loadSnapshot())
+    }
+
+    /// Only what first-run seeding writes: no folders, untouched welcome notes, empty Inboxes.
+    private func holdsOnlyFirstRunContent(_ local: AccountDocument) -> Bool {
+        guard local.spaces().allSatisfy({ LibraryStore.firstRunKey($0.name).hasPrefix("first-run.") }),
+              local.notebooks().allSatisfy({ LibraryStore.firstRunKey($0.name) == "first-run.notes" }) else { return false }
+        for ref in local.notebooks() {
+            guard let notebook = try? NotebookDocument(Self.open(.notebook, docId: ref.id, notebookId: ref.id, store: store)),
+                  notebook.folders().isEmpty else { return false }
+            for meta in notebook.notes(includeTrashed: true) {
+                guard let note = try? NoteDocument(Self.open(.note, docId: meta.id, notebookId: ref.id, store: store)) else { return false }
+                let body = NoteBodyCodec.body(from: (try? note.blocks()) ?? [])
+                switch meta.kind {
+                case .inbox: if body.blocks.contains(where: { !$0.text.isEmpty }) { return false }
+                case .note: if meta.isTrashed || !LibraryStore.isFirstRunWelcome(title: meta.title, body: body) { return false }
+                case .daily: return false
+                }
+            }
+        }
+        return true
+    }
+
+    /// Changes waiting to be sent plus notebooks not yet on the server (spec/07, sign-out).
+    var unsentChangeCount: Int { (try? store.unsentChangeCount()) ?? 0 }
+
     /// Removes everything this device holds — documents, keys, pending work — and starts over
     /// with an empty device library (spec/07: «Delete data from this device», and signing in to a
     /// different account after this device was signed out).
-    func wipeLocalData() throws {
+    /// Everything of the account on this device: documents, keys, the overlay and the decrypted
+    /// attachments in `attachments` (and their records).
+    func wipeLocalData(attachments: URL? = nil) throws {
+        if let attachments {
+            try? AttachmentManager.wipeLocal(directory: attachments, store: store)
+        } else {
+            try? store.deleteAllAttachments()
+        }
         notebookDocs.removeAll()
         noteDocs.removeAll()
         subscriptions.removeAll()
@@ -344,9 +494,112 @@ final class CoreLibrary: LibraryBackend {
             return try keys.notebookKey(target.id)
         case .note:
             guard let notebookId = notebookIdOfNote[target.id],
-                  let wrapped = wrappedKeys.wrapped(noteId: target.id, notebookId: notebookId) else { return nil }
-            return try keys.noteKey(noteId: target.id, wrappedKey: wrapped, notebookId: notebookId)
+                  let meta = wrappedKeys.meta(noteId: target.id, notebookId: notebookId) else { return nil }
+            return try keys.noteKey(meta, notebookId: notebookId)
         }
+    }
+
+    /// A document changed outside the snapshot (a version restored): the library catches up.
+    func reload() {
+        onExternalChange?(loadSnapshot())
+    }
+
+    // MARK: - Shared with this account (D-54)
+
+    /// Notebooks other accounts share with this one whose key is on this device.
+    private(set) var sharedNotebookIds: Set<String> = []
+    /// Notes shared with this account on their own, whose key is on this device.
+    private(set) var sharedNoteIds: Set<String> = []
+
+    /// The documents DSCore registered for what is shared with this account; what is no longer
+    /// shared (left, removed) is taken off this device.
+    func setShared(notebooks: Set<String>, notes: Set<String>) {
+        guard notebooks != sharedNotebookIds || notes != sharedNoteIds else { return }
+        let goneNotebooks = sharedNotebookIds.subtracting(notebooks)
+        let goneNotes = sharedNoteIds.subtracting(notes)
+        sharedNotebookIds = notebooks
+        sharedNoteIds = notes
+        for id in goneNotebooks {
+            if let doc = try? notebookDocument(id) {
+                for meta in doc.notes(includeTrashed: true) { forgetDocument(meta.id) }
+            }
+            forgetDocument(id)
+        }
+        for id in goneNotes { forgetDocument(id) }
+        onExternalChange?(loadSnapshot())
+    }
+
+    /// Removes a document from this device only (the server keeps it).
+    private func forgetDocument(_ id: String) {
+        noteDocs[id] = nil
+        notebookDocs[id] = nil
+        notebookIdOfNote[id] = nil
+        subscriptions[id] = nil
+        remoteSubscriptions[id] = nil
+        try? store.deleteDocument(id)
+        remote?.documentDeleted(id)
+    }
+
+    private func loadShared(into snapshot: inout LibrarySnapshot) {
+        let epoch = Date(timeIntervalSince1970: 0)
+        for (index, id) in sharedNotebookIds.sorted().enumerated() {
+            guard let doc = try? notebookDocument(id) else { continue }
+            let copy = doc.metaCopy
+            snapshot.notebooks.append(Notebook(id: id, spaceId: Notebook.sharedSpaceId,
+                                               name: copy?.name ?? String(localized: "Shared notebook"),
+                                               icon: copy?.icon ?? "person.2", color: copy?.color.flatMap(Tint.init(rawValue:)) ?? .blue,
+                                               order: Double(index), mode: .private, createdAt: epoch))
+            snapshot.folders += doc.folders().map { folder in
+                Folder(id: folder.id, notebookId: id, parentId: folder.parentId, name: folder.name,
+                       icon: folder.icon ?? "folder", color: folder.color.flatMap(Tint.init(rawValue:)) ?? .gray,
+                       order: folder.order, createdAt: DSCore.DSDate.parseISO(folder.createdAt) ?? epoch)
+            }
+            for meta in doc.notes(includeTrashed: true) {
+                guard let pair = snapshotNote(meta, notebookId: id) else { continue }
+                snapshot.notes.append(pair.0)
+                snapshot.bodies[meta.id] = pair.1
+            }
+        }
+        guard !sharedNoteIds.isEmpty else { return }
+        snapshot.notebooks.append(Notebook(id: Notebook.sharedNotesId, spaceId: Notebook.sharedSpaceId,
+                                           name: String(localized: "Shared notes"), icon: "doc.on.doc", color: .gray,
+                                           order: Double(sharedNotebookIds.count), mode: .private, createdAt: epoch))
+        for id in sharedNoteIds.sorted() {
+            guard let pair = snapshotSharedNote(id) else { continue }
+            snapshot.notes.append(pair.0)
+            snapshot.bodies[id] = pair.1
+        }
+    }
+
+    /// A note shared on its own: its title comes from its own document (its index entry is the
+    /// owner's).
+    private func snapshotSharedNote(_ id: String) -> (NoteMeta, NoteBody)? {
+        guard let doc = try? noteDocument(id, notebookId: Notebook.sharedNotesId) else { return nil }
+        let title = (try? doc.title()) ?? ""
+        let epoch = DSCore.DSDate.iso(Date(timeIntervalSince1970: 0))
+        return snapshotNote(DSCore.NoteMeta(id: id, title: title, wrappedKey: "", createdAt: epoch, updatedAt: epoch),
+                            notebookId: Notebook.sharedNotesId)
+    }
+
+    /// The notebook a note's record names: none for a note shared on its own.
+    nonisolated static func recordNotebook(_ notebookId: String?) -> String? {
+        notebookId == Notebook.sharedNotesId ? nil : notebookId
+    }
+
+    /// The owner's index entry of a note of this account (sharing a note on its own).
+    func ownNoteMeta(_ noteId: String) -> (meta: DSCore.NoteMeta, notebookId: String)? {
+        guard let notebookId = notebookIdOfNote[noteId], !isShared(notebookId: notebookId),
+              let meta = try? notebookDocument(notebookId).note(id: noteId) else { return nil }
+        return (meta, notebookId)
+    }
+
+    func isShared(notebookId: String) -> Bool {
+        notebookId == Notebook.sharedNotesId || sharedNotebookIds.contains(notebookId)
+    }
+
+    /// Whether this account's notebook is in agent mode (a key change gives the server the new key).
+    func isAgentMode(notebookId: String) -> Bool {
+        account.notebooks().first { $0.id == notebookId }?.mode == .agent
     }
 
     // MARK: - Snapshot
@@ -381,16 +634,28 @@ final class CoreLibrary: LibraryBackend {
                 if let color = props.color.flatMap(Tint.init(rawValue:)) { snapshot.tagColors[props.id] = color }
             }
         }
+        loadShared(into: &snapshot)
         snapshot.starred = account.starred().map { StarRef(kind: StarRef.Kind(rawValue: $0.kind.rawValue) ?? .note, id: $0.id) }
         snapshot.tabs = account.tabs()
         snapshot.dailyNotebookId = account.dailyNotebookId
+        snapshot.dailyNotebookBySpace = Self.stringMap(account.setting(Self.dailyBySpaceKey))
+        snapshot.activeTabBySpace = Self.stringMap(account.setting(Self.activeTabBySpaceKey))
+        migrateToSpaceSettings(&snapshot)
         snapshot.activeSpaceId = overlay.activeSpaceId
         snapshot.versions = overlay.versions
+        if wrappedKeys.takeChanged() { remote?.noteKeysLearned() }
         return snapshot
     }
 
     private func snapshotNote(_ meta: DSCore.NoteMeta, notebookId: String) -> (NoteMeta, NoteBody)? {
-        wrappedKeys.set(noteId: meta.id, notebookId: notebookId, wrapped: meta.wrappedKey)
+        // A note moved on another device, in the web or by an agent: the local record still
+        // named the old notebook, so its key was never found and every edit of it waited
+        // for a key forever (the owner's iPad, 2026-11-03). Checked once a launch, then on a move.
+        if wrappedKeys.notebookId(ofNote: meta.id) != notebookId,
+           let record = try? store.document(meta.id), record.kind == .note, record.notebookId != notebookId {
+            try? store.setNotebook(meta.id, notebookId: notebookId)
+        }
+        wrappedKeys.set(meta, notebookId: notebookId)
         guard let note = try? noteDocument(meta.id, notebookId: notebookId) else { return nil }
         let body = NoteBodyCodec.body(from: (try? note.blocks()) ?? [])
         var item = NoteMeta(id: meta.id, notebookId: notebookId, folderId: meta.folderId, parentNoteId: meta.parentNoteId,
@@ -410,9 +675,17 @@ final class CoreLibrary: LibraryBackend {
     /// After the native editor changed a note: copies title/tags into the notebook
     /// document (`syncDerived`), updates the local index and returns the fresh values.
     func refreshNote(_ noteId: String, notebookId: String) -> (NoteMeta, NoteBody)? {
+        if notebookId == Notebook.sharedNotesId { return snapshotSharedNote(noteId) }
         guard let notebook = try? notebookDocument(notebookId), let note = try? noteDocument(noteId, notebookId: notebookId)
         else { return nil }
-        if let derived = try? note.derived() {
+        // A document that has not arrived yet (no blocks) says nothing about the title: never
+        // copy its empty title over the one the index already has.
+        if let blocks = try? note.blocks(), !blocks.isEmpty, var derived = try? note.derived() {
+            // Two title blocks can meet after a sync (an empty one from an older build): the
+            // index takes the first non-empty title; the editors remove the empty duplicates.
+            if let title = blocks.first(where: { $0.type == BlockType.title && !$0.text.isEmpty })?.text {
+                derived.title = title
+            }
             try? notebook.syncDerived(derived)
             try? store.index(derived, notebookId: notebookId)
         }
@@ -447,7 +720,8 @@ final class CoreLibrary: LibraryBackend {
             try account.deleteSpace(id: space.id)
         }
         // Agents read the space of a notebook from the notebook document.
-        for notebook in new.notebooks where before[notebook.spaceId] != new.spaces.first(where: { $0.id == notebook.spaceId }) {
+        for notebook in new.notebooks where !notebook.isSharedWithMe
+            && before[notebook.spaceId] != new.spaces.first(where: { $0.id == notebook.spaceId }) {
             try writeNotebookMeta(notebook, in: new)
         }
     }
@@ -455,7 +729,9 @@ final class CoreLibrary: LibraryBackend {
     private func persistNotebooks(_ old: LibrarySnapshot, _ new: LibrarySnapshot) throws {
         guard old.notebooks != new.notebooks else { return }
         let before = Dictionary(old.notebooks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        for notebook in new.notebooks where before[notebook.id] != notebook {
+        // Notebooks shared with this account are the owner's: never written to this account
+        // (D-54); they come and go with `setShared`.
+        for notebook in new.notebooks where before[notebook.id] != notebook && !notebook.isSharedWithMe {
             if before[notebook.id] == nil, try keys.notebookKey(notebook.id) == nil {
                 let (key, wrapped) = try keys.createNotebookKey(notebookId: notebook.id)
                 remote?.notebookCreated(id: notebook.id, mode: notebook.mode, wrappedKey: wrapped, key: key)
@@ -471,7 +747,7 @@ final class CoreLibrary: LibraryBackend {
             try writeNotebookMeta(notebook, in: new)
         }
         let ids = Set(new.notebooks.map(\.id))
-        for notebook in old.notebooks where !ids.contains(notebook.id) {
+        for notebook in old.notebooks where !ids.contains(notebook.id) && !notebook.isSharedWithMe {
             try account.deleteNotebook(id: notebook.id)
             remote?.notebookDeleted(id: notebook.id)
             for note in old.notes where note.notebookId == notebook.id {
@@ -522,6 +798,14 @@ final class CoreLibrary: LibraryBackend {
         for meta in new.notes {
             let previous = before[meta.id]
             let body = new.bodies[meta.id] ?? .empty
+            // A note shared on its own: only its document is this account's to write (D-54).
+            if meta.notebookId == Notebook.sharedNotesId {
+                if let previous, old.bodies[meta.id] != body || previous.title != meta.title,
+                   let doc = try? noteDocument(meta.id, notebookId: meta.notebookId) {
+                    try write(body: body, title: meta.title, previous: old.bodies[meta.id], to: doc, resolve: resolve)
+                }
+                continue
+            }
             if previous == nil {
                 try createNote(meta, body: body, resolve: resolve)
                 continue
@@ -539,7 +823,7 @@ final class CoreLibrary: LibraryBackend {
             }
         }
         let ids = Set(new.notes.map(\.id))
-        for meta in old.notes where !ids.contains(meta.id) {
+        for meta in old.notes where !ids.contains(meta.id) && meta.notebookId != Notebook.sharedNotesId {
             if new.notebooks.contains(where: { $0.id == meta.notebookId }) {
                 try notebookDocument(meta.notebookId).purgeNote(id: meta.id)
             }
@@ -552,10 +836,12 @@ final class CoreLibrary: LibraryBackend {
 
     private func createNote(_ meta: NoteMeta, body: NoteBody, resolve: NoteBodyCodec.LinkResolver) throws {
         let notebook = try notebookDocument(meta.notebookId)
-        if try keys.notebookKey(meta.notebookId) == nil { _ = try keys.createNotebookKey(notebookId: meta.notebookId) }
+        // Never invent a key for a notebook that exists (new notebooks got theirs in
+        // persistNotebooks): one the server does not know seals the notebook for good.
+        guard try keys.notebookKey(meta.notebookId) != nil else { throw DSCore.AccountError.missingKey(meta.notebookId) }
         let (_, wrapped) = try keys.createNoteKey(noteId: meta.id, notebookId: meta.notebookId)
         wrappedKeys.set(noteId: meta.id, notebookId: meta.notebookId, wrapped: wrapped)
-        let doc = try noteDocument(meta.id, notebookId: meta.notebookId)
+        let doc = try noteDocument(meta.id, notebookId: meta.notebookId, creating: true)
         try notebook.putNote(coreMeta(meta, wrappedKey: wrapped))
         try write(body: body, title: meta.title, previous: nil, to: doc, resolve: resolve)
         try writeStyle(meta, doc: doc)
@@ -566,15 +852,19 @@ final class CoreLibrary: LibraryBackend {
     private func moveNote(_ meta: NoteMeta, from oldNotebookId: String) throws {
         let source = try notebookDocument(oldNotebookId)
         guard let oldMeta = source.note(id: meta.id) else { return }
-        let noteKey = try keys.noteKey(noteId: meta.id, wrappedKey: oldMeta.wrappedKey, notebookId: oldNotebookId)
-        if try keys.notebookKey(meta.notebookId) == nil { _ = try keys.createNotebookKey(notebookId: meta.notebookId) }
-        guard let targetKey = try keys.notebookKey(meta.notebookId) else { return }
-        let wrapped = try DSCrypto.wrapKey(noteKey, with: targetKey, ad: CryptoAD.noteKey(meta.id))
+        let noteKey = try keys.noteKey(oldMeta, notebookId: oldNotebookId)
+        guard let targetKey = try keys.notebookKey(meta.notebookId) else { throw DSCore.AccountError.missingKey(meta.notebookId) }
+        let wrapped = try DSCrypto.wrapKey(noteKey, with: targetKey, ad: oldMeta.wrappedKeyAD)
         try source.purgeNote(id: meta.id)
         let encoded = DSCore.Base64URL.encode(wrapped)
-        wrappedKeys.set(noteId: meta.id, notebookId: meta.notebookId, wrapped: encoded)
+        wrappedKeys.set(noteId: meta.id, notebookId: meta.notebookId, wrapped: encoded,
+                        keyVersion: oldMeta.keyVersion, keyChain: oldMeta.keyChain)
         notebookIdOfNote[meta.id] = meta.notebookId
-        try notebookDocument(meta.notebookId).putNote(coreMeta(meta, wrappedKey: encoded))
+        // The key keeps its version and chain (D-54): only the wrapping notebook key changes.
+        var moved = coreMeta(meta, wrappedKey: encoded)
+        moved.keyVersion = oldMeta.keyVersion
+        moved.keyChain = oldMeta.keyChain
+        try notebookDocument(meta.notebookId).putNote(moved)
         _ = try store.ensureDocument(docId: meta.id, kind: .note, notebookId: meta.notebookId)
         // The record follows the note (registration, search, tasks), and the server is told.
         try store.setNotebook(meta.id, notebookId: meta.notebookId)
@@ -628,13 +918,20 @@ final class CoreLibrary: LibraryBackend {
     private func write(body: NoteBody, title: String, previous: NoteBody?, to doc: NoteDocument,
                        resolve: NoteBodyCodec.LinkResolver) throws {
         let current = try doc.blocks()
+        // A document that has not arrived yet (made elsewhere, not synced): nothing is written
+        // into it — writing would race the real content (prod 2026-10-26, a lost title).
+        guard !current.isEmpty else {
+            Self.log.notice("skipped writing \(doc.noteId, privacy: .public): its document has not arrived yet")
+            return
+        }
         if let titleIndex = current.firstIndex(where: { $0.type == BlockType.title }) {
-            if current[titleIndex].text != title {
+            // Never blank a title: an empty one here is a stale index value, not an edit.
+            if current[titleIndex].text != title, !title.isEmpty {
                 var block = current[titleIndex]
-                block.inline = title.isEmpty ? [] : [.text(title, marks: [])]
+                block.inline = [.text(title, marks: [])]
                 try doc.replaceBlock(at: [UInt32(titleIndex)], with: block)
             }
-        } else {
+        } else if !title.isEmpty {
             try doc.insertBlocks([.title(title)], at: 0)
         }
 
@@ -704,17 +1001,11 @@ final class CoreLibrary: LibraryBackend {
         }
     }
 
-    /// Full rewrite, only when every body block is one the stand-in editor represents.
+    /// A reorder or kind change from the list-level body (the stand-in editor): no longer written
+    /// by deleting every block and appending them again — that whole-document rewrite raced
+    /// other devices' edits (prod 2026-10-26). The native editor writes such changes itself.
     private func rewriteIfRepresentable(_ doc: NoteDocument, body: NoteBody, resolve: NoteBodyCodec.LinkResolver) throws {
-        let current = try doc.blocks()
-        guard current.allSatisfy({ $0.type == BlockType.title || NoteBodyCodec.isRepresentable($0) }) else {
-            Self.log.notice("skipped rewriting \(doc.noteId, privacy: .public): it has blocks the stand-in editor cannot show")
-            return
-        }
-        for (index, block) in current.enumerated().reversed() where block.type != BlockType.title {
-            try doc.deleteBlock(at: [UInt32(index)])
-        }
-        try doc.appendBlocks(NoteBodyCodec.blocks(from: body, resolveLink: resolve))
+        Self.log.notice("skipped rewriting \(doc.noteId, privacy: .public): reorders are written by the editor")
     }
 
     private func persistAccountLists(_ old: LibrarySnapshot, _ new: LibrarySnapshot) throws {
@@ -730,8 +1021,12 @@ final class CoreLibrary: LibraryBackend {
             for id in new.tabs where !old.tabs.contains(id) { try account.openTab(noteId: id) }
             for id in old.tabs where !new.tabs.contains(id) { try account.closeTab(noteId: id) }
         }
-        if old.dailyNotebookId != new.dailyNotebookId {
-            try account.setSetting("dailyNotebookId", .optionalString(new.dailyNotebookId))
+        // D-48: per-space keys only; the legacy `dailyNotebookId`/`activeTab` are not written.
+        if (old.dailyNotebookBySpace ?? [:]) != (new.dailyNotebookBySpace ?? [:]) {
+            try account.setSetting(Self.dailyBySpaceKey, Self.yObject(new.dailyNotebookBySpace ?? [:]))
+        }
+        if (old.activeTabBySpace ?? [:]) != (new.activeTabBySpace ?? [:]) {
+            try account.setSetting(Self.activeTabBySpaceKey, Self.yObject(new.activeTabBySpace ?? [:]))
         }
         if old.tagColors != new.tagColors {
             let changed = Set(old.tagColors.keys).union(new.tagColors.keys).filter { old.tagColors[$0] != new.tagColors[$0] }
@@ -741,6 +1036,35 @@ final class CoreLibrary: LibraryBackend {
                     try doc.setTagProperties(TagProperties(name: tag, color: new.tagColors[tag]?.rawValue))
                 }
             }
+        }
+    }
+
+    // MARK: D-48 per-space settings
+
+    static let dailyBySpaceKey = "dailyNotebookBySpace"
+    static let activeTabBySpaceKey = "activeTabBySpace"
+
+    static func stringMap(_ value: YValue?) -> [String: String] {
+        guard case .object(let entries)? = value else { return [:] }
+        return entries.compactMapValues { if case .string(let text) = $0 { text } else { nil } }
+    }
+
+    static func yObject(_ map: [String: String]) -> YValue {
+        .object(entries: map.mapValues { .string(value: $0) })
+    }
+
+    /// Once per account: the legacy account-wide `dailyNotebookId` and `activeTab` go to the space
+    /// of their notebook/note (contract `document-model.md` §2); the legacy keys stay untouched.
+    private func migrateToSpaceSettings(_ snapshot: inout LibrarySnapshot) {
+        if Self.stringMap(account.setting(Self.dailyBySpaceKey)).isEmpty, let legacy = account.dailyNotebookId,
+           let space = snapshot.spaceId(ofNotebook: legacy) {
+            snapshot.dailyNotebookBySpace = [space: legacy]
+            try? account.setSetting(Self.dailyBySpaceKey, Self.yObject([space: legacy]))
+        }
+        if Self.stringMap(account.setting(Self.activeTabBySpaceKey)).isEmpty, let legacy = account.activeTab,
+           let space = snapshot.spaceId(ofNote: legacy) {
+            snapshot.activeTabBySpace = [space: legacy]
+            try? account.setSetting(Self.activeTabBySpaceKey, Self.yObject([space: legacy]))
         }
     }
 

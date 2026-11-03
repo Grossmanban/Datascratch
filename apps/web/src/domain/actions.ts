@@ -1,7 +1,8 @@
+import { NetworkError } from "@/api/client";
 import * as Y from "yjs";
 import { docsApi, notebooksModeApi } from "@/api/endpoints";
 import { getMasterKey } from "@/auth/session";
-import { cachedNoteKey, notebookKey, rememberNotebookKey, rememberNoteKey } from "@/data/keys";
+import { cachedNoteKey, notebookKey, rememberNotebookKey, rememberNoteKey, serverNotebookKey } from "@/data/keys";
 import { enqueueOp } from "@/data/ops";
 import { runtime } from "@/data/runtime";
 import {
@@ -23,7 +24,9 @@ import { formatLongDate } from "@/lib/dates";
 import { accountMaps } from "./account";
 import { initNotebookDoc, notebookMaps } from "./notebook";
 import { appendTask, initNoteDoc, removeTask, setTaskText, setTitle, updateTask, type TaskPatch } from "./note";
-import { useWorkspace } from "./workspace";
+import { bySpace, spaceOfNote, spaceOfNotebook, tabsInSpace, useWorkspace } from "./workspace";
+import { forgetClosedTab, recordClosedTabs, tabsEpoch } from "@/lib/closedTabs";
+import { features } from "@/lib/features";
 import { orderBetween, patchYMap, toYMap } from "./ymap";
 
 const now = () => new Date().toISOString();
@@ -93,7 +96,8 @@ export async function createNotebook(input: {
     createdAt: now(),
   };
   acc().notebooks.set(id, toYMap(ref));
-  if (!useWorkspace.getState().account.settings.dailyNotebookId) acc().settings.set("dailyNotebookId", id);
+  // The first notebook of a space keeps that space's daily notes and Inbox (D-48).
+  if ((features.calendar || features.tasks) && !bySpace(useWorkspace.getState(), "dailyNotebookBySpace")[input.spaceId]) setBySpace("dailyNotebookBySpace", input.spaceId, id);
   return id;
 }
 
@@ -102,17 +106,40 @@ export function updateNotebook(id: string, patch: Partial<Pick<NotebookRef, "nam
   if (m) patchYMap(m, patch);
 }
 
+/** Move a notebook to another space (an explicit command, D-48): it goes last there, with its notes. */
+export function moveNotebookToSpace(id: string, spaceId: string) {
+  const st = useWorkspace.getState();
+  updateNotebook(id, { spaceId, order: nextOrder(st.account.notebooks.filter((n) => n.spaceId === spaceId)) });
+}
+
 /** Needs the server: switching to "agent" hands the notebook key to it (crypto.md §8). */
 export async function setNotebookMode(id: string, mode: NotebookMode) {
-  let keyText: string | undefined;
-  if (mode === "agent") {
-    const key = await notebookKey(id);
-    if (!key) throw new Error("Notebook key unavailable");
-    keyText = toBase64Url(key);
-  }
-  await notebooksModeApi.setMode(id, mode, keyText);
+  await pushNotebookMode(id, mode);
   const m = acc().notebooks.get(id);
   m?.set("mode", mode);
+}
+
+/**
+ * Tell the server a notebook's mode; for «для агентов» with the server's own copy of the key
+ * (never a key only this device holds). Retried on network failures; the account doc is the
+ * user's intent and the runtime reconciles the server with it again on every sync start.
+ */
+export async function pushNotebookMode(id: string, mode: NotebookMode) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      let keyText: string | undefined;
+      if (mode === "agent") {
+        const key = await serverNotebookKey(id);
+        if (!key) throw new Error("Notebook key unavailable");
+        keyText = toBase64Url(key);
+      }
+      await notebooksModeApi.setMode(id, mode, keyText);
+      return;
+    } catch (e) {
+      if (!(e instanceof NetworkError) || attempt >= 2) throw e;
+      await new Promise((r) => setTimeout(r, 500 * 3 ** attempt));
+    }
+  }
 }
 
 export async function deleteNotebook(id: string) {
@@ -120,14 +147,31 @@ export async function deleteNotebook(id: string) {
   const a = acc();
   runtime().account.transact(() => {
     a.notebooks.delete(id);
-    if (st.account.settings.dailyNotebookId === id) {
-      const other = st.account.notebooks.find((n) => n.id !== id);
-      a.settings.set("dailyNotebookId", other?.id ?? null);
+    const spaceId = spaceOfNotebook(st, id);
+    if (spaceId && bySpace(st, "dailyNotebookBySpace")[spaceId] === id) {
+      const other = st.account.notebooks.find((n) => n.id !== id && n.spaceId === spaceId);
+      setBySpace("dailyNotebookBySpace", spaceId, other?.id ?? null);
     }
     removeStarredWhere(a.starred, (s) => (s.kind === "notebook" && s.id === id) || belongsTo(s, id));
     removeTabsWhere(a.tabs, (t) => st.notes[t.noteId]?.notebookId === id);
   });
   await enqueueOp({ method: "DELETE", path: `/notebooks/${id}` });
+}
+
+/**
+ * A notebook or note no longer shared with this account (D-54: access closed, left, deleted by
+ * its owner): its stars and tabs go (its placement is already gone from account.shared).
+ */
+export function forgetSharedResource(target: { kind: "notebook" | "note"; id: string }) {
+  const st = useWorkspace.getState();
+  const a = acc();
+  const inIt = (noteId: string) => (target.kind === "note" ? noteId === target.id : st.notes[noteId]?.notebookId === target.id);
+  runtime().account.transact(() => {
+    removeStarredWhere(a.starred, (s) =>
+      target.kind === "note" ? s.kind === "note" && s.id === target.id : (s.kind === "notebook" && s.id === target.id) || belongsTo(s, target.id),
+    );
+    removeTabsWhere(a.tabs, (t) => inIt(t.noteId));
+  });
 }
 
 function belongsTo(s: StarredRef, notebookId: string): boolean {
@@ -391,25 +435,158 @@ export function toggleStar(ref: StarredRef) {
   else arr.push([ref]);
 }
 
-export function openTab(noteId: string) {
-  const a = acc();
-  runtime().account.transact(() => {
-    if (!a.tabs.toArray().some((t) => t.noteId === noteId)) a.tabs.push([{ noteId }]);
-    a.settings.set("activeTab", noteId);
-  });
+/** Set one space's entry of a by-space settings key (D-48); null removes it. */
+function setBySpace(key: "activeTabBySpace" | "dailyNotebookBySpace", spaceId: string, value: string | null) {
+  const cur = { ...((acc().settings.get(key) as Record<string, string> | undefined) ?? {}) };
+  if (cur[spaceId] === (value ?? undefined)) return;
+  if (value) cur[spaceId] = value;
+  else delete cur[spaceId];
+  acc().settings.set(key, cur);
 }
 
-export function closeTab(noteId: string): string | null {
+const OPENED_AT_EVERY_MS = 60 * 60 * 1000;
+
+export function openTab(noteId: string) {
+  // A minimal build (D-51) has no tabs and never writes the tab keys of the account document.
+  if (!features.tabs) return;
   const a = acc();
+  const spaceId = spaceOfNote(useWorkspace.getState(), noteId);
+  const items = a.tabs.toArray();
+  const idx = items.findIndex((t) => t.noteId === noteId);
+  const nowIso = new Date().toISOString();
+  runtime().account.transact(() => {
+    if (idx < 0) a.tabs.push([{ noteId, openedAt: nowIso }]);
+    else {
+      // When the tab was last made active, for the quiet tidy-up; at most once an hour (document-model §2).
+      const cur = items[idx]!;
+      if (!cur.openedAt || Date.now() - Date.parse(cur.openedAt) > OPENED_AT_EVERY_MS) {
+        a.tabs.delete(idx, 1);
+        a.tabs.insert(idx, [{ ...cur, openedAt: nowIso }]);
+      }
+    }
+    if (spaceId) setBySpace("activeTabBySpace", spaceId, noteId);
+  });
+  if (spaceId) forgetClosedTab(spaceId, noteId);
+}
+
+/** Close a tab; returns the tab of the same space to show next (tabs are per space, D-48). */
+export function closeTab(noteId: string): string | null {
+  if (!features.tabs) return null;
+  const a = acc();
+  const st = useWorkspace.getState();
+  const spaceId = spaceOfNote(st, noteId);
   const items = a.tabs.toArray();
   const idx = items.findIndex((t) => t.noteId === noteId);
   if (idx < 0) return null;
-  const next = items[idx + 1]?.noteId ?? items[idx - 1]?.noteId ?? null;
+  const same = tabsInSpace(st, spaceId);
+  const at = same.findIndex((t) => t.noteId === noteId);
+  const next = at < 0 ? null : (same[at + 1]?.noteId ?? same[at - 1]?.noteId ?? null);
   runtime().account.transact(() => {
     a.tabs.delete(idx, 1);
-    if (a.settings.get("activeTab") === noteId) a.settings.set("activeTab", next);
+    if (spaceId && bySpace(st, "activeTabBySpace")[spaceId] === noteId) setBySpace("activeTabBySpace", spaceId, next);
   });
+  if (spaceId) recordClosedTabs(spaceId, [noteId]);
   return next;
+}
+
+/** «Закрыть остальные»: every other tab of the space goes to «Недавно закрытые». */
+export function closeOtherTabs(keepId: string) {
+  if (!features.tabs) return;
+  const a = acc();
+  const st = useWorkspace.getState();
+  const spaceId = spaceOfNote(st, keepId);
+  if (!spaceId) return;
+  // Pinned tabs stay (spec/12 §12.6).
+  const others = new Set(tabsInSpace(st, spaceId).filter((t) => !t.pinned && t.noteId !== keepId).map((t) => t.noteId));
+  if (!others.size) return;
+  runtime().account.transact(() => {
+    for (let i = a.tabs.length - 1; i >= 0; i--) if (others.has(a.tabs.get(i).noteId)) a.tabs.delete(i, 1);
+    setBySpace("activeTabBySpace", spaceId, keepId);
+  });
+  recordClosedTabs(spaceId, [...others]);
+}
+
+/** Pin or unpin a tab: pinned tabs sit compact on the left and are never tidied or closed with the others. */
+export function setTabPinned(noteId: string, pinned: boolean) {
+  if (!features.tabs) return;
+  const a = acc();
+  const items = a.tabs.toArray();
+  const idx = items.findIndex((t) => t.noteId === noteId);
+  if (idx < 0) return;
+  const { pinned: _, ...rest } = items[idx]!;
+  void _;
+  runtime().account.transact(() => {
+    a.tabs.delete(idx, 1);
+    a.tabs.insert(idx, [pinned ? { ...rest, pinned: true } : rest]);
+  });
+}
+
+export const TAB_TIDY_DEFAULT = 7;
+
+/** `settings.tabTidyDays`: 1 | 7 | 30, or null for never (default 7). */
+export function tabTidyDays(): number | null {
+  const v = useWorkspace.getState().account.settings.tabTidyDays;
+  return v === null ? null : typeof v === "number" && v > 0 ? v : TAB_TIDY_DEFAULT;
+}
+
+/**
+ * Quiet tidy-up (spec/12 §12.6): tabs not opened for `tabTidyDays` go to «Недавно закрытые».
+ * Never pinned tabs, a space's active tab, or the document on screen. A tab without `openedAt`
+ * counts as opened when this version first ran on this device.
+ */
+export function tidyTabs(shownNoteId: string | null, now = Date.now()) {
+  if (!features.tabs) return;
+  const days = tabTidyDays();
+  if (days === null) return;
+  const st = useWorkspace.getState();
+  const active = new Set(Object.values(bySpace(st, "activeTabBySpace")));
+  const epoch = tabsEpoch();
+  const cutoff = now - days * 86_400_000;
+  const stale = st.account.tabs.filter(
+    (t) => !t.pinned && t.noteId !== shownNoteId && !active.has(t.noteId) && (t.openedAt ? Date.parse(t.openedAt) : epoch) < cutoff,
+  );
+  if (!stale.length) return;
+  const ids = new Set(stale.map((t) => t.noteId));
+  const a = acc();
+  runtime().account.transact(() => {
+    for (let i = a.tabs.length - 1; i >= 0; i--) if (ids.has(a.tabs.get(i).noteId)) a.tabs.delete(i, 1);
+  });
+  const bySpaceIds = new Map<string, string[]>();
+  for (const t of stale) {
+    const sp = spaceOfNote(st, t.noteId);
+    if (sp) bySpaceIds.set(sp, [...(bySpaceIds.get(sp) ?? []), t.noteId]);
+  }
+  for (const [sp, list] of bySpaceIds) recordClosedTabs(sp, list);
+}
+
+/** The tab a space was left on, if it is still open (restored when switching back, D-48). */
+export function activeTabOf(spaceId: string): string | null {
+  if (!features.tabs) return null;
+  const st = useWorkspace.getState();
+  const id = bySpace(st, "activeTabBySpace")[spaceId];
+  return id && tabsInSpace(st, spaceId).some((t) => t.noteId === id) ? id : (tabsInSpace(st, spaceId)[0]?.noteId ?? null);
+}
+
+/**
+ * D-48 migration: the account-wide `activeTab` / `dailyNotebookId` of older clients belong to the
+ * space of their note / notebook. Written once per space (only while that space has no entry);
+ * the legacy keys are left for older clients and never written again.
+ */
+export function migrateSpaceSettings() {
+  // Only the extended mode uses (and writes) these keys (D-51: a minimal build changes no data).
+  if (!features.tabs && !features.calendar) return;
+  const st = useWorkspace.getState();
+  const legacyDaily = st.account.settings.dailyNotebookId as string | undefined;
+  const dailySpace = legacyDaily ? spaceOfNotebook(st, legacyDaily) : null;
+  const legacyTab = st.account.settings.activeTab as string | undefined;
+  const tabSpace = legacyTab ? spaceOfNote(st, legacyTab) : null;
+  const daily = dailySpace && !bySpace(st, "dailyNotebookBySpace")[dailySpace];
+  const tab = tabSpace && !bySpace(st, "activeTabBySpace")[tabSpace];
+  if (!daily && !tab) return;
+  runtime().account.transact(() => {
+    if (daily) setBySpace("dailyNotebookBySpace", dailySpace, legacyDaily!);
+    if (tab) setBySpace("activeTabBySpace", tabSpace, legacyTab!);
+  });
 }
 
 export function reorderTab(noteId: string, toIndex: number) {
@@ -429,11 +606,22 @@ export function setSetting(key: string, value: unknown) {
 
 // ---------- daily notes & inbox ----------
 
-export function dailyNotebookId(): string | null {
+/** The notebook holding the daily notes and the Inbox of a space (default: the current one; D-48). */
+export function dailyNotebookId(spaceId: string | null = useWorkspace.getState().activeSpaceId): string | null {
   const st = useWorkspace.getState();
-  const id = st.account.settings.dailyNotebookId as string | undefined;
-  if (id && st.account.notebooks.some((n) => n.id === id)) return id;
-  return st.account.notebooks[0]?.id ?? null;
+  const inSpace = st.account.notebooks.filter((n) => n.spaceId === spaceId);
+  const id = spaceId ? bySpace(st, "dailyNotebookBySpace")[spaceId] : undefined;
+  if (id && inSpace.some((n) => n.id === id)) return id;
+  // Not migrated yet: the legacy account-wide notebook still counts for its own space.
+  const legacy = st.account.settings.dailyNotebookId as string | undefined;
+  if (legacy && inSpace.some((n) => n.id === legacy)) return legacy;
+  return inSpace[0]?.id ?? null;
+}
+
+/** Choose the daily-notes notebook of its space. */
+export function setDailyNotebook(notebookId: string) {
+  const spaceId = spaceOfNotebook(useWorkspace.getState(), notebookId);
+  if (spaceId) setBySpace("dailyNotebookBySpace", spaceId, notebookId);
 }
 
 export function findDaily(date: string): string | null {
@@ -518,7 +706,6 @@ export async function moveTask(fromNoteId: string, taskId: string, toNoteId: str
 export async function bootstrapAccount(labels: { space: string; notebook: string; welcomeTitle: string; welcomeBody: string[] }) {
   const spaceId = createSpace({ name: labels.space, icon: "🏡", color: "tint.orange" });
   const nb = await createNotebook({ spaceId, name: labels.notebook, icon: "📓", color: "tint.blue" });
-  acc().settings.set("dailyNotebookId", nb);
   await createNote({ notebookId: nb, title: labels.welcomeTitle, body: labels.welcomeBody });
   // The account document is registered by the server at signup (api.md): nothing to send.
 }

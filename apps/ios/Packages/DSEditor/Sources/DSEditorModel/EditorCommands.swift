@@ -27,6 +27,7 @@ public struct EditorCommands {
 
     /// Plain typing inside one textblock (the text view already shows it).
     public func typeText(_ text: String, marks: MarkSet, at pos: TextPosition, replacing length: Int = 0) {
+        guard !document.isReadOnly else { return }
         document.transact(origin: .textInput) {
             if length > 0 { document.deleteText(block: pos.block, range: pos.offset..<(pos.offset + length)) }
             document.insertText(text, marks: marks, block: pos.block, at: pos.offset)
@@ -37,6 +38,7 @@ public struct EditorCommands {
     /// - Returns: caret position after the inserted text.
     @discardableResult
     public func replace(_ range: Range<Int>, with text: String, marks: MarkSet = .empty) -> TextPosition? {
+        guard !document.isReadOnly else { return nil }
         let p = projection
         guard !p.paragraphs.isEmpty else { return nil }
         var caret: TextPosition?
@@ -113,6 +115,7 @@ public struct EditorCommands {
     /// Splits the paragraph at `pos` like pressing Return.
     @discardableResult
     public func splitParagraph(at pos: TextPosition) -> TextPosition? {
+        guard !document.isReadOnly else { return nil }
         guard let node = document.block(pos.block), node.isTextblock else { return nil }
         let p = projection
         guard let idx = p.indexByBlock[pos.block] else { return nil }
@@ -122,6 +125,21 @@ public struct EditorCommands {
         var result: TextPosition?
         document.transact {
             if node.type == NodeType.codeBlock {
+                // Return on the empty last line leaves the code (owner's feedback 2026-11-01: «Enter
+                // keeps the code going»), as in Notion and ProseMirror: the empty line goes and a
+                // paragraph follows. Return in an empty code block turns it into a paragraph.
+                if len == 0 {
+                    convertTextblock(pos.block, to: NodeType.paragraph, attrs: [:])
+                    result = TextPosition(block: pos.block, offset: 0)
+                    return
+                }
+                if off == len, node.plainText.hasSuffix("\n"), let loc = document.location(of: pos.block) {
+                    document.deleteText(block: pos.block, range: (len - 1)..<len)
+                    let paragraph = BlockNode.paragraph()
+                    document.insertBlock(paragraph, parent: loc.parent, at: loc.index + 1)
+                    result = TextPosition(block: paragraph.id, offset: 0)
+                    return
+                }
                 document.insertText("\n", marks: .empty, block: pos.block, at: off)
                 result = TextPosition(block: pos.block, offset: off + 1)
                 return
@@ -179,6 +197,7 @@ public struct EditorCommands {
     /// Backspace at offset 0 of a paragraph.
     @discardableResult
     public func joinBackward(at pos: TextPosition) -> TextPosition? {
+        guard !document.isReadOnly else { return nil }
         let p = projection
         guard let idx = p.indexByBlock[pos.block], let node = document.block(pos.block) else { return nil }
         let ctx = p.paragraphs[idx].context
@@ -225,10 +244,25 @@ public struct EditorCommands {
     /// Turns the paragraph at `pos` (with its list item, if any) into another kind of block.
     @discardableResult
     public func setBlockKind(_ kind: BlockKind, at pos: TextPosition) -> TextPosition {
+        guard !document.isReadOnly else { return pos }
         document.stopCapturing()
         document.transact {
             var p = projection
             guard var idx = p.indexByBlock[pos.block] else { return }
+            // A line inside a list item below its first one (under a picture added in a checklist)
+            // has no marker of its own: a list button makes it its own item first (owner's feedback
+            // 2026-11-01: «after a picture the checklist button did nothing»).
+            if let item = p.paragraphs[idx].context.itemBlockId, !isFirstChild(pos.block, of: item) {
+                switch kind {
+                case .taskList, .bulletList, .orderedList:
+                    splitIntoOwnItem(pos.block, item: item)
+                    p = projection
+                    guard let i = p.indexByBlock[pos.block] else { return }
+                    idx = i
+                default:
+                    break
+                }
+            }
             // Unwrap from list items and quotes first.
             while let item = p.paragraphs[idx].context.itemBlockId {
                 if case .taskList = kind, let n = document.block(item), n.type == NodeType.taskItem { break }
@@ -278,6 +312,7 @@ public struct EditorCommands {
     /// Tab: nest the item under its previous sibling.
     @discardableResult
     public func indentItem(_ item: BlockID) -> Bool {
+        guard !document.isReadOnly else { return false }
         guard let loc = document.location(of: item), loc.index > 0, let listId = loc.parent,
               let list = document.block(listId) else { return false }
         let prevItem = list.children[loc.index - 1]
@@ -303,6 +338,7 @@ public struct EditorCommands {
     /// Shift-Tab: move the item one level out.
     @discardableResult
     public func outdentItem(_ item: BlockID) -> Bool {
+        guard !document.isReadOnly else { return false }
         guard let loc = document.location(of: item), let listId = loc.parent,
               let listLoc = document.location(of: listId), let parentItem = listLoc.parent,
               let parentNode = document.block(parentItem), NodeType.items.contains(parentNode.type),
@@ -317,6 +353,25 @@ public struct EditorCommands {
             re.apply(to: document, map: { $0 })
         }
         return true
+    }
+
+    /// A line of an item below its first one, with the lines after it, becomes the next item of the
+    /// same list (a new task for a task item).
+    func splitIntoOwnItem(_ block: BlockID, item: BlockID) {
+        guard let itemNode = document.block(item), let itemLoc = document.location(of: item),
+              let loc = document.location(of: block), loc.parent == item, loc.index > 0 else { return }
+        let moving = Array(itemNode.children[loc.index...])
+        var moved = Set<BlockID>()
+        for m in moving { moved.formUnion(textblockIds(m)) }
+        let re = StrokeReanchoring(document: document, blocks: moved)
+        for m in moving { document.deleteBlock(m.id) }
+        var newItem = BlockNode(type: itemNode.type, children: moving)
+        if itemNode.type == NodeType.taskItem {
+            newItem.attrs = ["taskId": .string(UUIDv7.generate()), "state": "open", "scheduled": .null,
+                             "deadline": .null, "completedAt": .null]
+        }
+        document.insertBlock(newItem, parent: itemLoc.parent, at: itemLoc.index + 1)
+        re.apply(to: document, map: { $0 })
     }
 
     /// Moves an item's content out of its list (splitting the list). Returns the first textblock id.
@@ -356,6 +411,7 @@ public struct EditorCommands {
 
     /// Toggles a mark over a flattened range (removes it if the whole range already has it).
     public func toggleMark(_ name: String, value: JSONValue = MarkSet.plain, range: Range<Int>) {
+        guard !document.isReadOnly else { return }
         guard !range.isEmpty else { return }
         let p = projection
         let segments = textSegments(range, in: p)
@@ -372,6 +428,7 @@ public struct EditorCommands {
     }
 
     public func setMark(_ name: String, value: JSONValue?, range: Range<Int>) {
+        guard !document.isReadOnly else { return }
         let segments = textSegments(range, in: projection)
         document.transact {
             for seg in segments { document.setMark(name, value: value, block: seg.block, range: seg.range) }
@@ -419,6 +476,7 @@ public struct EditorCommands {
     // MARK: - Tasks
 
     public func toggleTask(_ item: BlockID) {
+        guard !document.isReadOnly else { return }
         guard let node = document.block(item), node.type == NodeType.taskItem else { return }
         let done = node.attrs["state"]?.stringValue == "done"
         document.stopCapturing()
@@ -428,6 +486,7 @@ public struct EditorCommands {
     }
 
     public func setTaskDates(_ item: BlockID, scheduled: String?, deadline: String?) {
+        guard !document.isReadOnly else { return }
         document.setAttributes(item, ["scheduled": scheduled.map { .string($0) } ?? .null,
                                       "deadline": deadline.map { .string($0) } ?? .null])
     }
@@ -438,6 +497,7 @@ public struct EditorCommands {
     /// Keeps an editable paragraph after the block. Returns the caret position after the insert.
     @discardableResult
     public func insertBlock(_ node: BlockNode, after pos: TextPosition) -> TextPosition? {
+        guard !document.isReadOnly else { return nil }
         guard let loc = document.location(of: pos.block), let current = document.block(pos.block) else { return nil }
         var caret: TextPosition?
         document.stopCapturing()
@@ -462,6 +522,7 @@ public struct EditorCommands {
     }
 
     public func insertInlineAtom(_ atom: InlineAtom, at pos: TextPosition, marks: MarkSet = .empty) -> TextPosition {
+        guard !document.isReadOnly else { return pos }
         document.stopCapturing()
         document.insertAtom(atom, marks: marks, block: pos.block, at: pos.offset)
         document.stopCapturing()
@@ -472,6 +533,7 @@ public struct EditorCommands {
 
     /// Replaces the text of one table cell (its first paragraph).
     public func setTableCell(_ table: BlockID, row: Int, column: Int, text: String) {
+        guard !document.isReadOnly else { return }
         guard let t = document.block(table), t.children.indices.contains(row),
               t.children[row].children.indices.contains(column) else { return }
         let cell = t.children[row].children[column]
@@ -479,14 +541,32 @@ public struct EditorCommands {
         guard para.plainText != text else { return }
         document.stopCapturing()
         document.transact {
-            let len = document.textLength(of: para.id)
-            if len > 0 { document.deleteText(block: para.id, range: 0..<len) }
-            if !text.isEmpty { document.insertText(text, marks: .empty, block: para.id, at: 0) }
+            let old = Array(para.plainText.utf16), new = Array(text.utf16)
+            let hasAtoms = para.inline?.contains { if case .atom = $0 { true } else { false } } ?? false
+            if hasAtoms {
+                // Atoms show as their text in the cell field; offsets differ, so replace it all.
+                let len = document.textLength(of: para.id)
+                if len > 0 { document.deleteText(block: para.id, range: 0..<len) }
+                if !text.isEmpty { document.insertText(text, marks: .empty, block: para.id, at: 0) }
+            } else {
+                // Only the changed middle is replaced: marks (bold, agentEdit, links) of the
+                // untouched text stay.
+                var prefix = 0
+                while prefix < min(old.count, new.count), old[prefix] == new[prefix] { prefix += 1 }
+                var suffix = 0
+                while suffix < min(old.count, new.count) - prefix, old[old.count - 1 - suffix] == new[new.count - 1 - suffix] { suffix += 1 }
+                let removed = prefix..<(old.count - suffix)
+                let inserted = String(utf16CodeUnits: Array(new[prefix..<(new.count - suffix)]), count: new.count - suffix - prefix)
+                let marks = prefix > 0 ? (document.inline(of: para.id, range: (prefix - 1)..<prefix).first?.marks ?? .empty) : .empty
+                if !removed.isEmpty { document.deleteText(block: para.id, range: removed) }
+                if !inserted.isEmpty { document.insertText(inserted, marks: marks.setting(MarkName.agentEdit, nil), block: para.id, at: prefix) }
+            }
         }
         document.stopCapturing()
     }
 
     public func addTableRow(_ table: BlockID) {
+        guard !document.isReadOnly else { return }
         guard let t = document.block(table) else { return }
         let columns = max(1, t.children.last?.children.count ?? 1)
         let row = BlockNode(type: NodeType.tableRow, children: (0..<columns).map { _ in Self.cell(header: false) })
@@ -496,6 +576,7 @@ public struct EditorCommands {
     }
 
     public func addTableColumn(_ table: BlockID) {
+        guard !document.isReadOnly else { return }
         guard let t = document.block(table) else { return }
         document.stopCapturing()
         document.transact {
@@ -585,6 +666,77 @@ public struct EditorCommands {
             parent = document.location(of: p)?.parent
             document.deleteBlock(p)
         }
+    }
+
+    /// Title repair on load (`document-model.md` §4 «Один title», same rule and order as
+    /// web-editor), deterministic and idempotent, creating nothing:
+    /// 1. several top-level `title` nodes: only EMPTY titles are deleted (all empty: the first
+    ///    stays); non-empty extras are untouched;
+    /// 2. EMPTY paragraphs before the first title are deleted;
+    /// 3. the note starts with an empty title T: the empty paragraphs after it are skipped; if the
+    ///    first non-empty block is a paragraph whose blockId is older (UUIDv7 time) than T's, it
+    ///    was the original title, demoted by the empty-document race — its inline content (marks,
+    ///    strokes) moves into T, and it and the skipped empty paragraphs are deleted;
+    /// 4. an empty document is never written.
+    /// One transaction, not undoable; read-only notes are left alone. Returns whether anything changed.
+    @discardableResult
+    public func repairTitles() -> Bool {
+        guard !document.isReadOnly else { return false }
+        var deletions: [BlockID] = []
+        // 1.
+        let titles = document.blocks.filter { $0.type == NodeType.title }
+        if titles.count > 1 {
+            let keep = titles.first { $0.textLength > 0 } ?? titles[0]
+            deletions += titles.filter { $0.id != keep.id && $0.textLength == 0 }.map(\.id)
+        }
+        var top = document.blocks.filter { !deletions.contains($0.id) }
+        func isEmptyParagraph(_ b: BlockNode) -> Bool { b.type == NodeType.paragraph && b.textLength == 0 }
+        // 2.
+        if let firstTitle = top.firstIndex(where: { $0.type == NodeType.title }) {
+            let leading = top[..<firstTitle].filter(isEmptyParagraph).map(\.id)
+            deletions += leading
+            top.removeAll { leading.contains($0.id) }
+        }
+        // 3.
+        var demoted: (title: BlockID, paragraph: BlockID)?
+        if let first = top.first, first.type == NodeType.title, first.textLength == 0 {
+            var i = 1
+            while i < top.count, isEmptyParagraph(top[i]) { i += 1 }
+            if i < top.count, top[i].type == NodeType.paragraph, top[i].textLength > 0,
+               let titleTime = Self.uuidV7Time(first.id), let paraTime = Self.uuidV7Time(top[i].id), paraTime < titleTime {
+                demoted = (first.id, top[i].id)
+                deletions += top[1..<i].map(\.id)
+            }
+        }
+        guard !deletions.isEmpty || demoted != nil else { return false }
+        let re = demoted.map { StrokeReanchoring(document: document, blocks: [$0.paragraph]) }
+        let inline = demoted.map { document.inline(of: $0.paragraph, range: nil) } ?? []
+        // One transaction for the whole repair, synced but not undoable.
+        document.transact(origin: .system) {
+            for id in deletions { document.deleteBlock(id) }
+            if let d = demoted {
+                let title = d.title, para = d.paragraph
+                var offset = 0
+                for el in inline {
+                    switch el {
+                    case .text(let s, let marks): document.insertText(s, marks: marks, block: title, at: offset)
+                    case .atom(let atom, let marks): document.insertAtom(atom, marks: marks, block: title, at: offset)
+                    }
+                    offset += el.length
+                }
+                document.deleteBlock(para)
+                re?.apply(to: document, map: { $0.block == para ? TextPosition(block: title, offset: $0.offset) : nil },
+                          mapBlock: { $0 == para ? title : nil })
+            }
+        }
+        return true
+    }
+
+    /// Millisecond time of a UUIDv7 block id (its first 48 bits); nil for other ids.
+    static func uuidV7Time(_ id: BlockID) -> UInt64? {
+        let hex = id.replacingOccurrences(of: "-", with: "")
+        guard hex.count == 32, hex[hex.index(hex.startIndex, offsetBy: 12)] == "7" else { return nil }
+        return UInt64(hex.prefix(12), radix: 16)
     }
 
     /// Re-creates a textblock as another type with the same blockId and content.

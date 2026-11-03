@@ -12,11 +12,49 @@ public actor AccountService {
     public nonisolated let api: APIClient
     public nonisolated let keys: KeyRing
     public nonisolated let store: LocalStore
+    /// The signed-in account's own record (`TrustRecord`) and how to find the notebook of one of
+    /// its notes; nil until the app opened that account's document (`useTrustRecord`).
+    nonisolated let trustContext = Locked<TrustContext?>(nil)
+
+    struct TrustContext {
+        var record: TrustRecord
+        var notebookOfNote: @Sendable (String) -> String?
+    }
 
     public init(api: APIClient, keys: KeyRing, store: LocalStore) {
         self.api = api
         self.keys = keys
         self.store = store
+    }
+
+    /// The account document of the signed-in account: what the server says about members and
+    /// key versions is checked against its `trust` record (security review 2026-11-02).
+    /// `notebookOfNote` names the notebook of this account's own notes (the app's index of the
+    /// notebooks it holds); without it, this device's document records are asked. Pass nil when
+    /// signed out or before the account's document is open.
+    public nonisolated func useTrustRecord(_ account: AccountDocument?, notebookOfNote: (@Sendable (String) -> String?)? = nil) {
+        let store = self.store
+        let lookup = notebookOfNote ?? { (try? store.document($0))?.notebookId }
+        trustContext.withLock { $0 = account.map { TrustContext(record: $0.trust, notebookOfNote: lookup) } }
+    }
+
+    /// See `useTrustRecord`.
+    public nonisolated var trustRecord: TrustRecord? { trustContext.withLock { $0?.record } }
+
+    /// The newest key version of `target` this account or device has used: the server cannot
+    /// take it back to an older key (one a removed member still holds) — refused below it.
+    nonisolated func knownKeyVersion(_ target: SharingTarget) -> Int {
+        let recorded = trustRecord?.knownKeyVersion(target) ?? 0
+        let local: Int
+        switch target.kind {
+        case .notebook: local = (try? keys.notebookKey(target.id)) != nil ? keys.notebookKeyVersion(target.id) : 0
+        case .note: local = (try? keys.sharedNoteKey(target.id)) != nil ? keys.sharedNoteKeyVersion(target.id) : 0
+        }
+        return max(recorded, local)
+    }
+
+    nonisolated func recordKeyVersion(_ target: SharingTarget, _ version: Int) {
+        try? trustRecord?.recordKeyVersion(target, version)
     }
 
     // MARK: Sign-up / sign-in
@@ -34,10 +72,13 @@ public actor AccountService {
         let accountDocId = EntityID.make()
         let material = try await Task.detached { try SignupMaterial.make(password: password, userId: userId) }.value
         let session = try await api.signup(email: email, material: material, userId: userId, accountDocId: accountDocId)
+        try keys.resolveKeptKeys(signingInAs: userId)
         try keys.setMasterKey(material.masterKey)
         let account = AccountDocument(accountDocId: accountDocId)
         try account.initialize()
         try store.ensureDocument(docId: accountDocId, kind: .account, notebookId: nil)
+        // The account's box key pair (crypto.md §10.1); retried on later sign-ins if this fails.
+        _ = try? await ensureBoxKeyPair()
         return SignupResult(session: session, recoveryKeyText: material.recoveryKeyText, account: account)
     }
 
@@ -47,8 +88,12 @@ public actor AccountService {
         let pre = try await api.prelogin(email: email)
         let derived = try await Task.detached { try DSCrypto.deriveKeys(password: password, salt: pre.salt.data, params: pre.kdf) }.value
         let session = try await api.login(email: email, loginKey: derived.loginKey, deviceName: deviceName)
+        try keys.resolveKeptKeys(signingInAs: session.userId)
         try keys.unlock(wrappedMasterKey: session.wrappedMasterKeyPassword.data, passwordKey: derived.passwordKey, userId: session.userId)
         try store.ensureDocument(docId: session.accountDocId, kind: .account, notebookId: nil)
+        // Created for accounts made before D-54, loaded on a new device (crypto.md §10.1). Not
+        // fatal for signing in: sharing waits until it succeeds (`ensureBoxKeyPair` again).
+        _ = try? await ensureBoxKeyPair()
         return session
     }
 
@@ -60,6 +105,7 @@ public actor AccountService {
         let master = try DSCrypto.unwrapKey(start.wrappedMasterKeyRecovery.data, with: recoveryKey, ad: CryptoAD.masterByRecovery(userId: start.userId))
         let material = try await Task.detached { try PasswordChangeMaterial.make(newPassword: newPassword, masterKey: master, userId: start.userId) }.value
         let session = try await api.recoveryFinish(recoveryToken: start.recoveryToken, material: material)
+        try keys.resolveKeptKeys(signingInAs: session.userId)
         try keys.setMasterKey(master)
         return session
     }
@@ -89,8 +135,27 @@ public actor AccountService {
     public func securityEvents() async throws -> [SecurityEvent] { try await api.securityEvents() }
 
     /// Signs out and forgets all keys on this device.
-    public func logout() async throws {
+    ///
+    /// Keys of notebooks not on the server yet survive (spec/07): signing in to the same account
+    /// uploads them; another account or `eraseDeviceKeys()` removes them. Returns their ids.
+    /// Other keys come back from the server at the next sign-in. Show
+    /// `LocalStore.unsentChangeCount()` before signing out.
+    @discardableResult
+    public func logout() async throws -> [String] {
+        let owner = await api.currentSession?.userId
+        let unsent = (try? store.unsentNotebookIds()) ?? []
         try await api.logout()
+        if let owner, !unsent.isEmpty {
+            try keys.clear(keepingNotebooks: unsent, owner: owner)
+            return keys.keptNotebookKeys?.notebookIds ?? []
+        }
+        try keys.clear()
+        return []
+    }
+
+    /// «Удалить данные с этого устройства»: forgets every key, kept ones too (the app deletes
+    /// the local database).
+    public nonisolated func eraseDeviceKeys() throws {
         try keys.clear()
     }
 
@@ -103,6 +168,7 @@ public actor AccountService {
         let id = EntityID.make()
         let (key, wrapped) = try keys.createNotebookKey(notebookId: id)
         _ = try await api.createNotebook(id: id, mode: mode, wrappedKey: wrapped, notebookKey: mode == .agent ? key : nil)
+        keys.markNotebookKeyVerified(id)
         try await api.registerDoc(docId: id, kind: .notebook, notebookId: id)
         try store.ensureDocument(docId: id, kind: .notebook, notebookId: id)
         try store.setRegistered(id)
@@ -123,8 +189,79 @@ public actor AccountService {
 
     /// Unwraps the keys of all notebooks of the account (after sign-in on a new device).
     public func loadNotebookKeys() async throws {
+        _ = try await reconcileNotebookKeys()
+    }
+
+    /// A notebook whose local key differed from the server's and was replaced.
+    public struct NotebookKeyChange: Hashable, Sendable {
+        public var notebookId: String
+        public var previousKey: Data
+        public var key: Data
+    }
+
+    /// Makes every notebook key match the server's — `GET /notebooks`, the canonical wrapping:
+    /// fills in keys this device lacks (notebooks created on other devices) and replaces local
+    /// keys that differ. Call on every start before syncing and when the account document lists
+    /// a notebook this device has no key for. Each change needs repair:
+    /// `NotebookDocument.rewrapNoteKeys(from:to:)` and `SyncEngine.rekey(docId:)`.
+    /// A genuine but older wrap (from before a rotation, which a removed member still holds) never
+    /// takes the device back to that key: a version below the newest this account has used is
+    /// skipped (`knownKeyVersion`, security review 2026-11-02).
+    public func reconcileNotebookKeys() async throws -> [NotebookKeyChange] {
+        var changes: [NotebookKeyChange] = []
         for nb in try await api.notebooks() {
-            try keys.addNotebookKey(wrapped: nb.wrappedKey.data, notebookId: nb.id)
+            guard let master = try keys.masterKey() else { throw AccountError.notSignedIn }
+            let target = SharingTarget(kind: .notebook, id: nb.id)
+            let previous: Data?
+            let key: Data
+            let version: Int
+            if let k = try? DSCrypto.unwrapKey(nb.wrappedKey.data, with: master, ad: CryptoAD.notebookKey(nb.id)) {
+                guard knownKeyVersion(target) <= 1 else { continue }
+                key = k
+                version = 1
+                previous = try keys.adoptNotebookKey(k, version: 1, olderKeys: [], notebookId: nb.id)
+            } else {
+                // A rotated key (shared notebook, D-54): its version and chain come with the key.
+                let state = try await api.notebookKeyState(id: nb.id)
+                version = state.version ?? 1
+                guard version >= knownKeyVersion(target) else { continue }
+                let before = try keys.notebookKey(nb.id)
+                let localVersion = before == nil ? 0 : keys.notebookKeyVersion(nb.id)
+                key = try keys.addNotebookKey(wrapped: state.wrappedKey.data, notebookId: nb.id, version: version,
+                                              chain: state.keyChain?.map(\.data) ?? [])
+                // A newer version is a real key change made on another device (D-54 §10.3): the
+                // old key is kept as retired and still opens the notes' wrappings, which that
+                // device re-keys. Taking it for a key this device invented re-wrapped the note
+                // keys under the new key with the old version's AD, racing the real re-key:
+                // notes no device could open, edits that «waited for a key» (2026-11-03).
+                previous = before == key || version > localVersion ? nil : before
+            }
+            recordKeyVersion(target, version)
+            if let previous {
+                changes.append(NotebookKeyChange(notebookId: nb.id, previousKey: previous, key: key))
+            }
+        }
+        return changes
+    }
+
+    /// The notebook's key for writing: this device's, else the server's (`GET /notebooks/:id/key`).
+    /// `nil` when the notebook is not on the server — only then may a new key be created
+    /// (`KeyRing.createNotebookKey` + `POST /notebooks`). Never create a key for a notebook that
+    /// came from another device.
+    public func notebookKeyForWriting(_ notebookId: String) async throws -> Data? {
+        if let key = try keys.notebookKey(notebookId) { return key }
+        do {
+            let state = try await api.notebookKeyState(id: notebookId)
+            let target = SharingTarget(kind: .notebook, id: notebookId)
+            let version = state.version ?? 1
+            let known = knownKeyVersion(target)
+            guard version >= known else { throw SharingError.olderKey(version: version, known: known) }
+            let key = try keys.addNotebookKey(wrapped: state.wrappedKey.data, notebookId: notebookId, version: version,
+                                              chain: state.keyChain?.map(\.data) ?? [])
+            recordKeyVersion(target, version)
+            return key
+        } catch APIError.server(404, _, _) {
+            return nil
         }
     }
 
@@ -155,9 +292,10 @@ public actor AccountService {
     /// `NoteMeta` from the source notebook. Content, history, attachments and the note key stay.
     public func moveNote(id noteId: String, from source: NotebookDocument, to target: NotebookDocument, folderId: String? = nil) async throws {
         guard var meta = source.note(id: noteId) else { throw DocumentError.notFound("note \(noteId)") }
-        let noteKey = try keys.noteKey(noteId: noteId, wrappedKey: meta.wrappedKey, notebookId: source.notebookId)
+        let noteKey = try keys.noteKey(meta, notebookId: source.notebookId)
         guard let targetKey = try keys.notebookKey(target.notebookId) else { throw AccountError.missingKey(target.notebookId) }
-        meta.wrappedKey = Base64URL.encode(try DSCrypto.wrapKey(noteKey, with: targetKey, ad: CryptoAD.noteKey(noteId)))
+        // Chain links are under the note keys themselves: they move as they are.
+        meta.wrappedKey = Base64URL.encode(try DSCrypto.wrapKey(noteKey, with: targetKey, ad: meta.wrappedKeyAD))
         meta.folderId = folderId
         meta.parentNoteId = nil
         try target.putNote(meta)

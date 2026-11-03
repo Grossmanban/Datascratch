@@ -10,8 +10,15 @@ on:
       build_number:
         description: "Build number (leave empty to use the run number)"
         required: false
+      ref:
+        description: "Commit to build (must be on main; empty = the dispatched commit)"
+        required: false
   push:
     tags: ["ios-v*"]
+
+# Least privilege: jobs that need more ask for it themselves.
+permissions:
+  contents: read
 
 concurrency:
   group: ios-release
@@ -21,6 +28,9 @@ jobs:
   secrets:
     name: Check signing secrets
     runs-on: ubuntu-latest
+    # Signing secrets live in the `release` environment: only `main` and `ios-v*` tags
+    # may use it, so a pushed branch with its own workflow gets nothing.
+    environment: release
     outputs:
       ready: ${{ steps.check.outputs.ready }}
     steps:
@@ -48,6 +58,7 @@ jobs:
     needs: secrets
     if: needs.secrets.outputs.ready == 'true'
     runs-on: macos-26
+    environment: release
     timeout-minutes: 60
     defaults:
       run:
@@ -57,10 +68,15 @@ jobs:
       ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
       TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
-      DS_WEB_HOST: ${{ vars.DS_WEB_HOST || 'datascratch.app' }}
-      DS_SERVER_URL: ${{ vars.DS_SERVER_URL }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+
+      # Only reviewed history ships: the commit must be on main (which can't be rewritten).
+      - name: Check the commit is on main
+        run: git merge-base --is-ancestor HEAD origin/main
 
       - name: Select Xcode 26
         run: |
@@ -68,8 +84,16 @@ jobs:
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Install XcodeGen (pinned release, checksum verified)
+        env:
+          XCODEGEN_VERSION: 2.46.0
+          XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
+          echo "$XCODEGEN_SHA256  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/xcodegen/bin/xcodegen" --version
 
       - name: Generate project
         run: scripts/generate.sh
@@ -106,6 +130,9 @@ jobs:
           # and a clear error if the app record (step 3, not possible via the API) is missing.
           python3 scripts/asc.py ensure-bundle-id com.datascratch.app "Datascratch"
           python3 scripts/asc.py check-app com.datascratch.app
+          # Development certificates left by earlier runs (Apple caps them; the owner agreed
+          # that CI clears its own). Runs are serialized by the concurrency group above.
+          python3 scripts/asc.py prune-ci-certs
 
       # Optional (plan B in RELEASE.md): a distribution certificate exported as .p12.
       - name: Import distribution certificate (optional)
@@ -132,14 +159,13 @@ jobs:
             -project Datascratch.xcodeproj -scheme Datascratch -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath build/Datascratch.xcarchive \
+            -disableAutomaticPackageResolution \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$KEY_PATH" \
             -authenticationKeyID "$KEY_ID" \
             -authenticationKeyIssuerID "$ISSUER_ID" \
             DS_TEAM_ID="$TEAM_ID" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-            DS_WEB_HOST="$DS_WEB_HOST" \
-            DS_SERVER_URL="$DS_SERVER_URL" \
             | xcbeautify --renderer github-actions
 
       - name: Export and upload to TestFlight

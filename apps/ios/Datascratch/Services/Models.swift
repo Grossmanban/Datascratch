@@ -44,6 +44,16 @@ nonisolated struct Notebook: Codable, Identifiable, Hashable, Sendable {
     var createdAt: Date
 }
 
+extension Notebook {
+    /// D-54: notebooks other accounts share with this one belong to no space here; the sidebar
+    /// lists them under «Общие со мной» in every space.
+    nonisolated static let sharedSpaceId = "shared-with-me"
+    /// D-54: notes shared on their own (without their notebook) sit in this virtual notebook.
+    nonisolated static let sharedNotesId = "shared-notes"
+
+    nonisolated var isSharedWithMe: Bool { spaceId == Self.sharedSpaceId }
+}
+
 nonisolated struct Folder: Codable, Identifiable, Hashable, Sendable {
     var id: String
     var notebookId: String
@@ -248,6 +258,23 @@ nonisolated enum UUIDv7 {
     /// UUIDv7 in lowercase with dashes (contracts/document-model.md §1).
     static func make(date: Date = Date()) -> String {
         uuid(date).uuidString.lowercased()
+    }
+
+    /// Whether `string` is such an id (the same check as DSCore's `EntityID.isValid`): ids from
+    /// documents name files, so anything else (`../`, `/`) is refused before a file is touched.
+    static func isValid(_ string: String) -> Bool {
+        let u = Array(string.utf8)
+        guard u.count == 36 else { return false }
+        func hex(_ c: UInt8) -> Bool { (c >= 48 && c <= 57) || (c >= 97 && c <= 102) }
+        for (i, c) in u.enumerated() {
+            switch i {
+            case 8, 13, 18, 23: if c != 45 { return false }
+            case 14: if c != 55 { return false }
+            case 19: if !(c == 56 || c == 57 || c == 97 || c == 98) { return false }
+            default: if !hex(c) { return false }
+            }
+        }
+        return true
     }
 
     static func uuid(_ date: Date) -> UUID {

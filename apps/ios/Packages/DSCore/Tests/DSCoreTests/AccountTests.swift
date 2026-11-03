@@ -89,6 +89,10 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
             state.withLock { $0.attachments[id] = (b["chunkCount"] as! Int, [:]) }
             return (204, nil)
         default:
+            if parts.count == 4, parts[1] == "notebooks", parts[3] == "key", method == "GET" {
+                guard let nb = state.withLock({ $0.notebooks[parts[2]] }) else { return error(404, "not_found") }
+                return (200, ["wrappedKey": nb["wrappedKey"]!])
+            }
             if parts.count >= 3, parts[1] == "notebooks", method == "PATCH" {
                 state.withLock { $0.notebooks[parts[2]]?["mode"] = b["mode"] }
                 return (204, nil)
@@ -119,6 +123,51 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
     func makeService(_ server: FakeRESTServer) throws -> AccountService {
         let api = APIClient(baseURL: URL(string: "https://example.com")!, transport: server, sessionStore: SecretSessionStore(store: InMemorySecretStore()))
         return AccountService(api: api, keys: KeyRing(store: InMemorySecretStore()), store: try LocalStore.inMemory())
+    }
+
+    /// spec/07: signing out keeps the keys of notebooks not on the server yet; signing in to the
+    /// same account keeps them as ordinary keys, another account or «Удалить данные» removes them.
+    @Test func signOutKeepsKeysOfUnsentNotebooks() async throws {
+        let server = FakeRESTServer()
+        let device = try makeService(server)
+        let signup = try await device.signup(email: "keep@example.com", password: "pw")
+        let space = Space(name: "S", order: 1)
+        try signup.account.putSpace(space)
+        let sent = try await device.createNotebook(name: "Sent", spaceId: space.id, order: 1, in: signup.account)
+        let unsent = EntityID.make()
+        try device.store.ensureDocument(docId: unsent, kind: .notebook, notebookId: unsent)
+        let (unsentKey, _) = try device.keys.createNotebookKey(notebookId: unsent)
+        try device.store.appendLocalUpdate(docId: unsent, update: Data([1]), origin: .local)
+        #expect(try device.store.unsentNotebookIds() == [unsent])
+        #expect(try device.store.unsentChangeCount() == 2)
+
+        #expect(try await device.logout() == [unsent])
+        #expect(try device.keys.notebookKey(unsent) == unsentKey)
+        #expect(try device.keys.notebookKey(sent.notebookId) == nil)
+        #expect(try device.keys.masterKey() == nil)
+        #expect(device.keys.keptNotebookKeys?.owner == signup.session.userId)
+
+        // Same account: the key stays and is ordinary again; the rest comes from the server.
+        try await device.login(email: "keep@example.com", password: "pw", deviceName: "iPad")
+        #expect(try device.keys.notebookKey(unsent) == unsentKey)
+        #expect(device.keys.keptNotebookKeys == nil)
+        try await device.loadNotebookKeys()
+        #expect(try device.keys.notebookKey(sent.notebookId) != nil)
+
+        // Another account: kept keys are removed.
+        try await device.logout()
+        #expect(try device.keys.notebookKey(unsent) == unsentKey)
+        _ = try await device.signup(email: "other@example.com", password: "pw")
+        #expect(try device.keys.notebookKey(unsent) == nil)
+
+        // «Удалить данные с этого устройства».
+        try device.store.ensureDocument(docId: unsent, kind: .notebook, notebookId: unsent)
+        _ = try device.keys.createNotebookKey(notebookId: unsent)
+        try await device.logout()
+        #expect(try device.keys.notebookKey(unsent) != nil)
+        try device.eraseDeviceKeys()
+        #expect(try device.keys.notebookKey(unsent) == nil)
+        #expect(device.keys.keptNotebookKeys == nil)
     }
 
     @Test func signupLoginNotebookNoteRecoveryAttachment() async throws {
@@ -207,5 +256,44 @@ final class FakeRESTServer: HTTPTransport, @unchecked Sendable {
 
         try await device1.logout()
         #expect(try device1.keys.masterKey() == nil)
+    }
+
+    /// Rich paste: the block gets the attachment id before the image bytes exist; the bytes are
+    /// added under that id later, or never (then nothing is stored or sent).
+    @Test func attachmentWithIdMadeBeforehand() async throws {
+        let server = FakeRESTServer()
+        let device = try makeService(server)
+        let signup = try await device.signup(email: "paste@example.com", password: "pw")
+        let space = Space(name: "Personal", order: 1)
+        try signup.account.putSpace(space)
+        let notebook = try await device.createNotebook(name: "Web", spaceId: space.id, order: 1, in: signup.account)
+        let note = try await device.createNote(in: notebook, title: "Pasted")
+        let meta = try #require(notebook.note(id: note.noteId))
+        let noteKey = try #require(try device.keys.noteKey(noteId: note.noteId, wrappedKey: meta.wrappedKey, notebookId: notebook.notebookId))
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(EntityID.make())
+        let dir2 = FileManager.default.temporaryDirectory.appendingPathComponent(EntityID.make())
+        defer { try? FileManager.default.removeItem(at: dir); try? FileManager.default.removeItem(at: dir2) }
+        let files = try AttachmentManager(api: device.api, store: device.store, directory: dir)
+
+        let filled = EntityID.make()
+        let never = EntityID.make()
+        // Nothing exists for a reserved id until its bytes are added.
+        #expect(try device.store.attachment(filled) == nil)
+        let payload = DSCrypto.randomBytes(1000)
+        #expect(try await files.add(payload, mime: "image/jpeg", noteId: note.noteId, id: filled) == filled)
+        await files.uploadPending { _ in noteKey }
+        #expect(try device.store.attachment(filled)?.state == .synced)
+        let other = try AttachmentManager(api: device.api, store: try LocalStore.inMemory(), directory: dir2)
+        #expect(try Data(contentsOf: try await other.download(filled, noteId: note.noteId, noteKey: noteKey)) == payload)
+
+        // The id that never got bytes: nothing stored, nothing uploaded.
+        #expect(try device.store.attachment(never) == nil)
+        #expect(await files.localURL(never) == nil)
+        #expect(server.state.withLock { $0.attachments[never] } == nil)
+        #expect(server.state.withLock { $0.attachments.count } == 1)
+
+        // Misuse is refused.
+        await #expect(throws: AttachmentError.alreadyExists(filled)) { try await files.add(payload, mime: "image/jpeg", noteId: note.noteId, id: filled) }
+        await #expect(throws: AttachmentError.invalidId("nope")) { try await files.add(payload, mime: "image/jpeg", noteId: note.noteId, id: "nope") }
     }
 }

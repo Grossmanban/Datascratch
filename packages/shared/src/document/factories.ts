@@ -6,9 +6,12 @@ import {
   FORMAT_VERSION,
   NOTEBOOK_ROOTS,
   NOTE_ROOTS,
+  SPACE_ROOTS,
   type NoteDocMeta,
   type NotebookMeta,
   type NotebookMetaFields,
+  type SpaceMeta,
+  type SpaceMetaFields,
   type PMNode,
 } from "../contracts/document.js";
 import type { DocKind } from "../contracts/common.js";
@@ -22,6 +25,18 @@ export interface AccountDocRoots {
   settings: Y.Map<unknown>;
   starred: Y.Array<unknown>;
   tabs: Y.Array<unknown>;
+  shared: Y.Map<unknown>;
+  /** What this account itself did in sharing (sharing/trust.ts): the server cannot forge it. */
+  trust: Y.Map<unknown>;
+  /** Others' shared spaces in this account's switcher (D-62): spaceId → SharedSpaceRef. */
+  sharedSpaces: Y.Map<unknown>;
+}
+
+/** Document of a shared space (D-62, document-model.md §2.2). */
+export interface SpaceDocRoots {
+  meta: Y.Map<unknown>;
+  /** notebookId → SpaceNotebookRef. */
+  notebooks: Y.Map<unknown>;
 }
 
 export interface NotebookDocRoots {
@@ -46,6 +61,16 @@ export function accountRoots(doc: Y.Doc): AccountDocRoots {
     settings: doc.getMap(ACCOUNT_ROOTS.settings),
     starred: doc.getArray(ACCOUNT_ROOTS.starred),
     tabs: doc.getArray(ACCOUNT_ROOTS.tabs),
+    shared: doc.getMap(ACCOUNT_ROOTS.shared),
+    trust: doc.getMap(ACCOUNT_ROOTS.trust),
+    sharedSpaces: doc.getMap(ACCOUNT_ROOTS.sharedSpaces),
+  };
+}
+
+export function spaceRoots(doc: Y.Doc): SpaceDocRoots {
+  return {
+    meta: doc.getMap(SPACE_ROOTS.meta),
+    notebooks: doc.getMap(SPACE_ROOTS.notebooks),
   };
 }
 
@@ -78,6 +103,45 @@ export function createAccountDoc(options: DocOptions = {}): Y.Doc {
     accountRoots(doc).meta.set("formatVersion", FORMAT_VERSION);
   });
   return doc;
+}
+
+export interface SpaceDocOptions extends DocOptions, Partial<SpaceMetaFields> {}
+
+/** Document of a shared space (docId = spaceId), encrypted with the spaceKey (crypto.md §11). */
+export function createSpaceDoc(spaceId: string, options: SpaceDocOptions = {}): Y.Doc {
+  const doc = options.doc ?? new Y.Doc();
+  doc.transact(() => {
+    const meta = spaceRoots(doc).meta;
+    meta.set("formatVersion", FORMAT_VERSION);
+    meta.set("spaceId", spaceId);
+    meta.set("name", options.name ?? "");
+    meta.set("icon", options.icon ?? null);
+    meta.set("color", options.color ?? null);
+  });
+  return doc;
+}
+
+/** Read the space document's `meta` (missing fields read as empty/null). */
+export function getSpaceMeta(doc: Y.Doc): SpaceMeta {
+  const m = spaceRoots(doc).meta;
+  return {
+    formatVersion: (m.get("formatVersion") as number | undefined) ?? FORMAT_VERSION,
+    spaceId: String(m.get("spaceId") ?? ""),
+    name: String(m.get("name") ?? ""),
+    icon: (m.get("icon") as string | null | undefined) ?? null,
+    color: (m.get("color") as string | null | undefined) ?? null,
+  } as SpaceMeta;
+}
+
+/** Rename or restyle the shared space (owner and editors). */
+export function setSpaceMeta(doc: Y.Doc, fields: Partial<SpaceMetaFields>): void {
+  const m = spaceRoots(doc).meta;
+  doc.transact(() => {
+    for (const [k, v] of Object.entries(fields)) {
+      if (v === undefined) continue;
+      if (m.get(k) !== v) m.set(k, v);
+    }
+  });
 }
 
 export interface NotebookDocOptions extends DocOptions, Partial<NotebookMetaFields> {}
@@ -191,5 +255,7 @@ export function rootNames(kind: DocKind): readonly string[] {
       return Object.values(NOTEBOOK_ROOTS);
     case "note":
       return Object.values(NOTE_ROOTS);
+    case "space":
+      return Object.values(SPACE_ROOTS);
   }
 }

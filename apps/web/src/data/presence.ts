@@ -1,5 +1,6 @@
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from "y-protocols/awareness";
 import type * as Y from "yjs";
+import { sanitizeAwarenessUpdate } from "./awarenessSanitize";
 
 export type PresenceUser = { name: string; color: string; kind: "user" | "guest" };
 
@@ -55,7 +56,8 @@ export function receivePresence(docId: string, update: Uint8Array) {
   const awareness = channels.get(docId);
   if (!awareness) return;
   try {
-    applyAwarenessUpdate(awareness, update, "remote");
+    // The user's name and color are checked before the editor can show them (audit 2026-10-27).
+    applyAwarenessUpdate(awareness, sanitizeAwarenessUpdate(update), "remote");
   } catch {
     // ignore malformed presence
   }

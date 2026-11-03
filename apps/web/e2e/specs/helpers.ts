@@ -1,4 +1,14 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+/** The Playwright project «extended» runs the build with VITE_DS_EXTENDED_MODE=1 (D-51). */
+export function isExtended(): boolean {
+  return test.info().project.name === "extended";
+}
+
+/** Screens of the extended mode (tasks, calendar), for specs that visit every screen. */
+export function extendedScreens(): string[] {
+  return isExtended() ? ["/tasks", "/calendar"] : [];
+}
 
 export const PASSWORD = "correct horse battery staple";
 
@@ -41,8 +51,10 @@ export async function expectSynced(page: Page) {
 
 /** Create a document from the sidebar and type a title and body. */
 export async function newDoc(page: Page, title: string, body?: string) {
+  const before = page.url();
   await page.getByTestId("new-doc").click();
-  await page.waitForURL("**/doc/**");
+  // From an open document the URL already matches «/doc/»: wait for the new one.
+  await page.waitForURL((url) => url.pathname.startsWith("/doc/") && url.href !== before);
   const editor = page.locator(".ds-prose");
   await expect(editor).toBeVisible();
   await page.keyboard.type(title);

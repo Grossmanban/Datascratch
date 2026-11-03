@@ -22,13 +22,26 @@ struct LibraryStoreTests {
         #expect(store.data.notes.count == count)
     }
 
+    @Test func searchFindsTitlesFirstIgnoringCaseAndYo() {
+        let (store, notebook) = makeStore()
+        let folder = store.createFolder(in: notebook.id, parent: nil, name: "Проекты")
+        let titled = store.createNote(in: notebook.id, folder: folder.id, title: "Ёлка и баги")
+        let mentioned = store.createNote(in: notebook.id, folder: nil, title: "Разное",
+                                         body: NoteBody(blocks: [.paragraph("Посмотреть БАГИ позже")]))
+        #expect(store.search("баги").map(\.id) == [titled.id, mentioned.id], "title matches first")
+        #expect(store.search("елка").map(\.id) == [titled.id], "«ё» is found as «е»")
+        #expect(store.search("ЁЛКА").map(\.id) == [titled.id])
+    }
+
     @Test func createsNotesInFoldersAndCountsSubtree() {
         let (store, notebook) = makeStore()
         let parent = store.createFolder(in: notebook.id, parent: nil, name: "Projects")
         let child = store.createFolder(in: notebook.id, parent: parent.id, name: "App")
         let note = store.createNote(in: notebook.id, folder: child.id, title: "Spec")
         #expect(store.folderSubtree(parent.id) == [parent.id, child.id])
-        #expect(store.documents(inFolder: parent.id).map(\.id) == [note.id])
+        #expect(store.documents(inFolderTree: parent.id).map(\.id) == [note.id], "the folder card counts its subtree")
+        #expect(store.documents(inFolder: parent.id).isEmpty, "the list shows one level, like a notebook")
+        #expect(store.documents(inFolder: child.id).map(\.id) == [note.id])
         #expect(store.documents(inNotebook: notebook.id).isEmpty)
     }
 

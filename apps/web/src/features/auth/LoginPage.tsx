@@ -1,6 +1,8 @@
 import { Link, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { OpenInApp } from "@/features/share/OpenInApp";
+import { isAppleMobile } from "@/lib/appLink";
 import { signIn } from "@/auth/flows";
 import { forgetRevokedData, useAuth } from "@/auth/session";
 import { Button, confirmDialog, Field, Input } from "@/ui";
@@ -11,7 +13,10 @@ export function LoginPage() {
   const navigate = useNavigate();
   const router = useRouter();
   const search = useSearch({ strict: false }) as { next?: string };
+  // Came from an invitation link (D-54): on iPhone/iPad the app can take it from here.
+  const inviteId = /^\/invite\/([0-9a-f-]{36})$/.exec(search.next ?? "")?.[1] ?? null;
   const revoked = useAuth((s) => s.revoked);
+  const restoreFailed = useAuth((s) => s.restoreFailed);
   const [email, setEmail] = useState(revoked?.email ?? "");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -36,16 +41,23 @@ export function LoginPage() {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" data-testid="login-form">
-      {revoked && <RevokedNotice unsent={revoked.unsent} />}
+      {inviteId && <InviteAppChoice id={inviteId} />}
+      {revoked?.reason === "wiped" && <WipedNotice />}
+      {revoked && revoked.reason !== "wiped" && <RevokedNotice unsent={revoked.unsent} signedOut={revoked.reason === "signedOut"} />}
+      {!revoked && restoreFailed && (
+        <p role="status" className="rounded-lg bg-[var(--ds-tint-yellow-bg)] px-3.5 py-3 text-[13.5px] text-ink" data-testid="restore-failed">
+          {t("app.restoreFailed")}
+        </p>
+      )}
       <Field label={t("auth.email")}>
-        {(id) => <Input id={id} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />}
+        {(id) => <Input id={id} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus={!(inviteId && isAppleMobile())} />}
       </Field>
       <Field label={t("auth.password")} error={error}>
         {(id) => (
           <Input id={id} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         )}
       </Field>
-      <Button type="submit" variant="primary" size="lg" loading={busy} className="mt-1 w-full">
+      <Button type="submit" variant={inviteId && isAppleMobile() ? "secondary" : "primary"} size="lg" loading={busy} className="mt-1 w-full">
         {busy ? t("auth.deriving") : t("auth.signIn")}
       </Button>
       <div className="mt-1 flex items-center justify-between text-[13px]">
@@ -63,8 +75,36 @@ export function LoginPage() {
   );
 }
 
+/** An invitation link opened on iPhone/iPad: the app first, signing in here as the other way. */
+function InviteAppChoice({ id }: { id: string }) {
+  const { t } = useTranslation();
+  if (!isAppleMobile()) return null;
+  return (
+    <div className="flex flex-col gap-3" data-testid="invite-app-choice">
+      <p className="text-center text-[14px] text-ink-2">{t("openInApp.invited")}</p>
+      <OpenInApp target={{ kind: "invite", id }} />
+      <div className="flex items-center gap-3 text-[12.5px] text-ink-3">
+        <span className="h-px flex-1 bg-line" />
+        {t("openInApp.orSignInHere")}
+        <span className="h-px flex-1 bg-line" />
+      </div>
+    </div>
+  );
+}
+
+/** D-53: the device was disconnected from another device and its data deleted; say so plainly. */
+function WipedNotice() {
+  const { t } = useTranslation();
+  return (
+    <div role="alert" className="rounded-lg bg-[var(--ds-tint-yellow-bg)] px-3.5 py-3 text-[13.5px] text-ink" data-testid="wiped-notice">
+      <p className="font-semibold">{t("auth.wipedTitle")}</p>
+      <p className="mt-0.5 text-ink-2">{t("auth.wipedText")}</p>
+    </div>
+  );
+}
+
 /** The session was ended from another device (spec/07): say so plainly, keep local data until sign-in. */
-function RevokedNotice({ unsent }: { unsent: number }) {
+function RevokedNotice({ unsent, signedOut }: { unsent: number; signedOut?: boolean }) {
   const { t } = useTranslation();
   async function forget() {
     const ok = await confirmDialog({
@@ -78,8 +118,8 @@ function RevokedNotice({ unsent }: { unsent: number }) {
   }
   return (
     <div role="alert" className="rounded-lg bg-[var(--ds-tint-yellow-bg)] px-3.5 py-3 text-[13.5px] text-ink" data-testid="revoked-notice">
-      <p className="font-semibold">{t("auth.revokedTitle")}</p>
-      <p className="mt-0.5 text-ink-2">{t("auth.revokedText")}</p>
+      <p className="font-semibold">{signedOut ? t("auth.keptTitle") : t("auth.revokedTitle")}</p>
+      <p className="mt-0.5 text-ink-2">{signedOut ? t("auth.keptText") : t("auth.revokedText")}</p>
       {unsent > 0 && <p className="mt-1.5 text-ink-2">{t("auth.revokedUnsent", { count: unsent })}</p>}
       <button type="button" onClick={() => void forget()} className="mt-2 text-[12.5px] font-medium text-ink-2 underline-offset-2 hover:text-ink hover:underline">
         {t("auth.revokedForget")}

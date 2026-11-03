@@ -9,6 +9,7 @@ export function SyncIndicator({ compact }: { compact?: boolean }) {
   const status = useSyncStatus((s) => s.status);
   const pending = useSyncStatus((s) => s.pending);
   const notSent = useSyncStatus((s) => Object.keys(s.failed).length);
+  const unreadable = useSyncStatus((s) => Object.keys(s.skipped).length);
   // Undelivered changes are an alert: shown with text even in the compact sidebar footer (as on iOS).
   if (notSent > 0) return <NotSent count={notSent} />;
   const label =
@@ -20,7 +21,9 @@ export function SyncIndicator({ compact }: { compact?: boolean }) {
           ? t("sync.syncing")
           : pending > 0
             ? t("sync.pending", { count: pending })
-            : t("sync.online");
+            : unreadable > 0
+              ? `${t("sync.online")} · ${t("sync.unreadable", { count: unreadable })}`
+              : t("sync.online");
   const dot =
     status === "online" && pending === 0
       ? "bg-success"
@@ -75,6 +78,26 @@ function NotSent({ count }: { count: number }) {
       >
         {t("sync.retry")}
       </button>
+    </div>
+  );
+}
+
+/** «Хранилище браузера заполнено»: shown above the screen while SyncClient cannot save to IndexedDB. */
+export function StorageFullBanner() {
+  const { t } = useTranslation();
+  const full = useSyncStatus((s) => s.storageFull);
+  if (!full) return null;
+  return (
+    <div
+      role="status"
+      data-testid="storage-full"
+      className="flex shrink-0 items-center gap-2 border-b border-warning/25 bg-warning/10 px-4 py-2 text-[13px] text-ink"
+    >
+      <CloudAlert className="size-4 shrink-0 text-warning" />
+      <span className="min-w-0">
+        <span className="font-medium">{t("sync.storageFull")}</span>
+        <span className="text-ink-2"> {t("sync.storageFullHint")}</span>
+      </span>
     </div>
   );
 }

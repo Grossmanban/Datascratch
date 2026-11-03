@@ -116,6 +116,8 @@ struct AccountSettings: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var confirmSignOut = false
+    @State private var isSending = false
+    @State private var unsent = 0
 
     var body: some View {
         SettingsPage(title: String(localized: "Account")) {
@@ -123,12 +125,13 @@ struct AccountSettings: View {
                 .padding(.vertical, -DSSpace.s4)
             DSSettingsSection(String(localized: "Sync"),
                               footer: app.sync.isLocalOnly
-                                ? String(localized: "Notes are stored only on this device until the Datascratch server is connected.")
+                                ? String(localized: "Notes are stored only on this device until you sign in to your server.")
                                 : nil) {
                 DSSettingsRow(String(localized: "Status"), systemImage: "arrow.triangle.2.circlepath",
                               accessory: .custom(AnyView(DSSyncChip(app.sync.dsState).accessibilityIdentifier("sync.status"))))
                 DSSettingsRow(String(localized: "Server"), systemImage: "server.rack",
-                              value: app.sync.serverURL?.host() ?? String(localized: "Not connected"))
+                              value: app.serverURL.map(ServerAddress.display) ?? String(localized: "Not connected"))
+                    .accessibilityIdentifier("settings.server")
                 if case .notSent = app.sync.phase {
                     Button { app.sync.retryFailed() } label: {
                         DSSettingsRow(String(localized: "Retry"), systemImage: "arrow.clockwise", accessory: .chevron)
@@ -154,13 +157,27 @@ struct AccountSettings: View {
             }
             .buttonStyle(.dsSettingsRow)
             DSSettingsSection(footer: String(localized: "You will need your password to sign in again.")) {
-                Button { confirmSignOut = true } label: {
+                Button {
+                    unsent = app.accounts.unsentChanges
+                    confirmSignOut = true
+                } label: {
                     DSSettingsRow(String(localized: "Sign Out"), systemImage: "rectangle.portrait.and.arrow.right", role: .destructive)
                 }
                 .accessibilityIdentifier("settings.signOut")
             }
             .buttonStyle(.dsSettingsRow)
             .confirmationDialog("Sign out of Datascratch?", isPresented: $confirmSignOut, titleVisibility: .visible) {
+                if unsent > 0 {
+                    Button("Send First") {
+                        Task {
+                            isSending = true
+                            _ = await app.accounts.sendPending(timeout: .seconds(30))
+                            isSending = false
+                            await app.signOut()
+                            dismiss()
+                        }
+                    }
+                }
                 Button("Sign Out", role: .destructive) {
                     Task {
                         await app.signOut()
@@ -168,7 +185,18 @@ struct AccountSettings: View {
                     }
                 }
             } message: {
-                Text("You will need your password to sign in again.")
+                if unsent > 0 {
+                    Text("Unsent changes on this device: \(unsent). They will be sent after you sign in to this same account.")
+                } else {
+                    Text("You will need your password to sign in again.")
+                }
+            }
+            if isSending {
+                HStack(spacing: DSSpace.s2) {
+                    ProgressView()
+                    Text("Sending changes…").dsFont(.footnote).foregroundStyle(Color.dsSecondary)
+                }
+                .frame(maxWidth: .infinity)
             }
         }
     }
@@ -202,6 +230,7 @@ extension AppSettings.Appearance {
 /// Shows the recovery key issued on this device and lets the user check it later.
 struct RecoveryKeySettings: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.scenePhase) private var phase
     @State private var isRevealed = false
     @State private var isChecking = false
     @State private var isRotating = false
@@ -216,8 +245,13 @@ struct RecoveryKeySettings: View {
                             .listRowBackground(Color.clear)
                         RecoveryKeyActions(key: key)
                     } else {
-                        Button("Show Key", systemImage: "eye") { withAnimation { isRevealed = true } }
-                            .accessibilityIdentifier("recoveryKey.show")
+                        Button("Show Key", systemImage: "eye") {
+                            Task {
+                                guard await DeviceOwner.authenticate(reason: String(localized: "Show your recovery key")) else { return }
+                                withAnimation { isRevealed = true }
+                            }
+                        }
+                        .accessibilityIdentifier("recoveryKey.show")
                     }
                 } footer: {
                     Text("If you forget your password, this key is the only way back to your notes. Keep it in a password manager or on paper.")
@@ -262,6 +296,8 @@ struct RecoveryKeySettings: View {
         .sheet(isPresented: $isRotating) {
             RotateRecoveryKeySheet { isRevealed = true }
         }
+        // Leaving the app hides the key again: showing it once more asks for Face ID.
+        .onChange(of: phase) { _, now in if now == .background { isRevealed = false } }
     }
 }
 
@@ -272,7 +308,7 @@ struct RecoveryKeyActions: View {
     var body: some View {
         HStack {
             Button("Copy", systemImage: "doc.on.doc") {
-                UIPasteboard.general.string = key.formatted
+                SecretPasteboard.copy(key.formatted)
                 Haptics.success()
             }
             Spacer()
@@ -465,7 +501,7 @@ struct ChangePasswordView: View {
             DSSettingsSection {
                 field(SecureField("Current password", text: $current).textContentType(.password))
             }
-            DSSettingsSection(footer: String(localized: "At least 10 characters. Only the key wrapper is re-encrypted; your notes stay as they are.")) {
+            DSSettingsSection(footer: String(localized: "At least 10 characters. Only the key wrapper is re-encrypted; your notes stay as they are. Other devices will be signed out and their data deleted.")) {
                 field(SecureField("New password", text: $new).textContentType(.newPassword))
                 if !new.isEmpty {
                     PasswordStrengthMeter(password: new)
@@ -514,19 +550,18 @@ struct ChangePasswordView: View {
 
 struct DevicesSettings: View {
     @Environment(AppModel.self) private var app
+    @State private var deviceToSignOut: Device?
 
     var body: some View {
         SettingsPage(title: String(localized: "Devices")) {
-            DSSettingsSection(footer: String(localized: "Signing a device out removes its access immediately.")) {
+            DSSettingsSection(footer: String(localized: "Ending a session removes that device's access immediately and deletes the data on it.")) {
                 ForEach(app.access.devices) { device in
                     DSSettingsRow(device.name,
                                   subtitle: device.isCurrent ? String(localized: "This device")
                                       : device.lastSeenAt.formatted(.relative(presentation: .named)),
                                   systemImage: device.platform == "iPadOS" ? "ipad" : device.platform == "web" ? "globe" : "iphone",
                                   accessory: device.isCurrent ? .none : .custom(AnyView(
-                                      Button("Sign Out", role: .destructive) {
-                                          Task { try? await app.access.revokeDevice(device.id) }
-                                      }
+                                      Button("End Session", role: .destructive) { deviceToSignOut = device }
                                       .buttonStyle(.borderless)
                                       .font(Theme.Typography.footnote.weight(.semibold))
                                   )))
@@ -534,6 +569,15 @@ struct DevicesSettings: View {
             }
         }
         .task { await app.access.refresh() }
+        .confirmationDialog("End the session on this device?",
+                            isPresented: Binding(get: { deviceToSignOut != nil }, set: { if !$0 { deviceToSignOut = nil } }),
+                            titleVisibility: .visible, presenting: deviceToSignOut) { device in
+            Button("End Session and Delete Its Data", role: .destructive) {
+                Task { try? await app.access.revokeDevice(device.id) }
+            }
+        } message: { _ in
+            Text("All data on that device will be deleted, including unsent changes.")
+        }
     }
 }
 

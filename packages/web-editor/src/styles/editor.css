@@ -47,20 +47,158 @@
   min-height: 100%;
 }
 
-.ds-editor[data-paper="dots"] .ds-editor-root {
-  background-image: radial-gradient(circle, var(--ds-paper-dot) 1.1px, transparent 1.3px);
-  background-size: 24px 24px;
+/* Paper (spec/12 §12.3): rules, grid and dots on the text's own line pitch, anchored to the first
+   baseline of the text column (--ds-paper-x/y are measured by paper.ts). */
+.ds-editor[data-paper="lines"] .ds-editor-root {
+  background-image: linear-gradient(to bottom, var(--ds-paper-rule) 1px, transparent 1px);
+  background-size: 100% var(--ds-pitch, 26px);
+  background-position: 0 var(--ds-paper-y, 0px);
 }
 .ds-editor[data-paper="grid"] .ds-editor-root {
   background-image:
-    linear-gradient(var(--ds-paper-dot) 1px, transparent 1px),
-    linear-gradient(90deg, var(--ds-paper-dot) 1px, transparent 1px);
-  background-size: 24px 24px;
+    linear-gradient(to bottom, var(--ds-paper-grid) 1px, transparent 1px),
+    linear-gradient(to right, var(--ds-paper-grid) 1px, transparent 1px);
+  background-size: var(--ds-pitch, 26px) var(--ds-pitch, 26px);
+  background-position: var(--ds-paper-x, 0px) var(--ds-paper-y, 0px);
 }
-.ds-editor[data-paper="lines"] .ds-editor-root {
-  background-image: linear-gradient(transparent calc(1.5em * 1 - 1px), var(--ds-paper-dot) 1px);
-  background-size: 100% 1.5em;
-  background-position: 0 0.35em;
+.ds-editor[data-paper="dots"] .ds-editor-root {
+  background-image: radial-gradient(circle at 0.5px 0.5px, var(--ds-paper-dot) 1.2px, transparent 1.6px);
+  background-size: var(--ds-pitch, 26px) var(--ds-pitch, 26px);
+  background-position: var(--ds-paper-x, 0px) var(--ds-paper-y, 0px);
+}
+.ds-editor {
+  --ds-paper-rule: color-mix(in srgb, var(--ds-accent, #2e5bdb) 16%, transparent);
+  --ds-paper-grid: color-mix(in srgb, var(--ds-ink) 9%, transparent);
+}
+
+/* ---------- ruled typesetting: every line on the pitch, every block on the grid ---------- */
+.ds-editor[data-ruled] .ds-prose {
+  display: flex;
+  flex-direction: column;
+  line-height: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose > * {
+  --ds-mb: 0px;
+  margin-top: 0;
+  margin-bottom: calc(var(--ds-mb) + var(--ds-snap, 0px));
+}
+.ds-editor[data-ruled] .ds-prose > .ds-title {
+  --ds-mb: var(--ds-pitch, 26px);
+  line-height: calc(2 * var(--ds-pitch, 26px));
+}
+.ds-editor[data-ruled] .ds-prose > h1:not(.ds-title) {
+  margin-top: var(--ds-pitch, 26px);
+  line-height: calc(2 * var(--ds-pitch, 26px));
+}
+.ds-editor[data-ruled] .ds-prose > h2,
+.ds-editor[data-ruled] .ds-prose > h3 {
+  margin-top: var(--ds-pitch, 26px);
+  line-height: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose :is(p, li, h2, h3, blockquote, td, th) {
+  line-height: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose :is(ul, ol, blockquote) {
+  margin-block: 0;
+  padding-block: 0;
+}
+.ds-editor[data-ruled] .ds-task-control,
+.ds-editor[data-ruled] .ds-task-chips {
+  height: var(--ds-pitch, 26px);
+}
+/* Boxed blocks keep text on the rules: their background reaches half a pitch above and below the
+   text with shadows (no layout), and a pitch of space separates them from the neighbours. */
+.ds-editor[data-ruled] .ds-prose > :is(.ds-callout, pre) {
+  --ds-mb: var(--ds-pitch, 26px);
+  margin-top: var(--ds-pitch, 26px);
+  padding-block: 0;
+  border: 0;
+  line-height: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose > .ds-callout {
+  box-shadow:
+    0 calc(var(--ds-pitch, 26px) / -2) 0 0 var(--ds-callout-bg, var(--ds-tint-yellow-bg, #fbf3d6)),
+    0 calc(var(--ds-pitch, 26px) / 2) 0 0 var(--ds-callout-bg, var(--ds-tint-yellow-bg, #fbf3d6));
+}
+.ds-editor[data-ruled] .ds-prose > pre {
+  --ds-pre-bg: color-mix(in srgb, var(--ds-ink) 5%, var(--ds-paper));
+  box-shadow:
+    0 calc(var(--ds-pitch, 26px) / -2) 0 0 var(--ds-pre-bg),
+    0 calc(var(--ds-pitch, 26px) / 2) 0 0 var(--ds-pre-bg);
+}
+.ds-editor[data-ruled] .ds-callout-icon {
+  height: var(--ds-pitch, 26px);
+  line-height: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose > .tableWrapper,
+.ds-editor[data-ruled] .ds-prose > table {
+  --ds-mb: var(--ds-pitch, 26px);
+  margin-top: var(--ds-pitch, 26px);
+}
+.ds-editor[data-ruled] .ds-prose table {
+  margin-block: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.ds-editor[data-ruled] .ds-prose :is(td, th) {
+  padding-block: 0;
+  border: 0;
+  box-shadow: inset -1px 0 0 var(--ds-rule), inset 0 -1px 0 var(--ds-rule);
+}
+.ds-editor[data-ruled] .ds-prose > .ds-hr {
+  padding: 0;
+  height: var(--ds-pitch, 26px);
+  display: flex;
+  align-items: center;
+}
+.ds-editor[data-ruled] .ds-prose > .ds-hr hr {
+  flex: 1;
+}
+/* Nested blocks (quotes, lists, tasks, callouts, cells) stack without fractional margins: every
+   line inside stays one pitch tall. */
+.ds-editor[data-ruled] .ds-prose * > :is(p, h1, h2, h3, ul, ol, blockquote, pre) {
+  margin-block: 0;
+}
+.ds-editor[data-ruled] .ds-prose :is(blockquote, li, .ds-callout-content, td, th) h1 {
+  line-height: calc(2 * var(--ds-pitch, 26px));
+}
+/* Inline chips and marks with their own font or size (tags, note links, code, highlights…) must
+   not make their line taller than the pitch: a line-height of 0 keeps their box inside the line's
+   strut while their background still covers the glyphs. */
+.ds-editor[data-ruled] .ds-prose :is(code, mark, a, sub, sup, .ds-tag, .ds-note-link, .ds-missing-link, .ds-agent-edit, .ds-unsupported) {
+  line-height: 0;
+}
+/* Inline formulas: KaTeX struts are taller than a line; a zero-height box aligned on the baseline
+   keeps the line one pitch tall and lets the formula overhang it. */
+.ds-editor[data-ruled] .ds-prose .ds-inline-math {
+  display: inline-flex;
+  align-items: baseline;
+  height: 0;
+  overflow: visible;
+  vertical-align: baseline;
+}
+/* Headings and the title use a bigger font: paper.ts measures how far their baseline sits from
+   the rule and shifts the text onto it (visual only, the grid does not move). */
+.ds-editor[data-ruled] .ds-prose .ds-title {
+  position: relative;
+  top: var(--ds-shift-title, 0px);
+}
+.ds-editor[data-ruled] .ds-prose h1:not(.ds-title) {
+  position: relative;
+  top: var(--ds-shift-h1, 0px);
+}
+.ds-editor[data-ruled] .ds-prose h2 {
+  position: relative;
+  top: var(--ds-shift-h2, 0px);
+}
+.ds-editor[data-ruled] .ds-prose h3 {
+  position: relative;
+  top: var(--ds-shift-h3, 0px);
+}
+/* Blocks without lines start a pitch below the text; paper.ts rounds their height up (--ds-snap). */
+.ds-editor[data-ruled] .ds-prose > :is(.ds-atom, .ds-image, .ds-file, .ds-drawing, .ds-page-card, .ds-unsupported) {
+  --ds-mb: var(--ds-pitch, 26px);
+  margin-top: var(--ds-pitch, 26px);
 }
 
 .ds-prose {
@@ -69,17 +207,13 @@
   box-sizing: border-box;
   max-width: var(--ds-doc-width, 720px);
   margin: 0 auto;
-  /* strokes.md §4: free room to draw below the last paragraph — at least the visible height. */
-  padding: 24px 56px max(var(--ds-doc-bottom, 160px), 100vh);
+  padding: 24px 56px var(--ds-doc-bottom, 160px);
   outline: none;
   font-size: 17px;
   line-height: 1.5;
   caret-color: var(--ds-accent-c);
   word-wrap: break-word;
   white-space: pre-wrap;
-}
-.ds-editor[data-paper="lines"] .ds-prose {
-  font-size: 17px;
 }
 .ds-editor[data-font="serif"] .ds-prose {
   font-size: 18px;
@@ -210,6 +344,14 @@
   font-weight: 600;
   cursor: pointer;
 }
+/* Inline $…$ math: the source is hidden (not removed) while its KaTeX rendering is shown. */
+.ds-prose .ds-inline-math-src {
+  display: none;
+}
+.ds-prose .ds-inline-math {
+  padding: 0 1px;
+  cursor: text;
+}
 .ds-prose .ds-missing-link {
   color: var(--ds-accent-c);
   text-decoration: underline dashed color-mix(in srgb, var(--ds-accent-c) 45%, transparent);
@@ -221,6 +363,25 @@
 .ds-prose ol {
   padding-left: 1.5em;
   margin: 0.25em 0;
+}
+/* Explicit markers: CSS resets (Tailwind preflight in the design system) set list-style: none. */
+.ds-prose ul:not([data-type="taskList"]) {
+  list-style: disc;
+}
+.ds-prose ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
+  list-style: circle;
+}
+.ds-prose ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
+  list-style: square;
+}
+.ds-prose ol {
+  list-style: decimal;
+}
+.ds-prose ol ol {
+  list-style: lower-alpha;
+}
+.ds-prose li::marker {
+  color: var(--ds-muted);
 }
 .ds-prose li > p {
   margin: 0;
@@ -325,26 +486,36 @@
   background: color-mix(in srgb, var(--ds-ink) 4%, transparent);
 }
 
+/* D-51 notes-only mode: date chips are quiet, inert labels. */
+.ds-editor[data-task-dates="off"] .ds-task-chips {
+  cursor: default;
+}
+.ds-editor[data-task-dates="off"] .ds-chip {
+  cursor: default;
+  pointer-events: none;
+}
+
 /* ---------- callout ---------- */
 .ds-callout {
+  --ds-callout-bg: var(--ds-tint-yellow-bg, #fbf3d6);
   display: flex;
   gap: 0.6em;
   padding: 0.8em 1em;
   border-radius: var(--ds-radius-lg, 14px);
-  background: var(--ds-tint-yellow-bg, #fbf3d6);
+  background: var(--ds-callout-bg);
   margin: 0.6em 0;
 }
 .ds-callout[data-tone="info"] {
-  background: var(--ds-tint-blue-bg, #e5ecfb);
+  --ds-callout-bg: var(--ds-tint-blue-bg, #e5ecfb);
 }
 .ds-callout[data-tone="success"] {
-  background: var(--ds-tint-green-bg, #e5f2e8);
+  --ds-callout-bg: var(--ds-tint-green-bg, #e5f2e8);
 }
 .ds-callout[data-tone="warning"] {
-  background: var(--ds-tint-orange-bg, #fceedf);
+  --ds-callout-bg: var(--ds-tint-orange-bg, #fceedf);
 }
 .ds-callout[data-tone="danger"] {
-  background: var(--ds-tint-red-bg, #fbe7e3);
+  --ds-callout-bg: var(--ds-tint-red-bg, #fbe7e3);
 }
 .ds-callout-icon {
   flex: none;
@@ -752,6 +923,118 @@ span.ds-unsupported {
   margin: 0;
 }
 
+/* ---------- upload placeholder (uploads.ts) ---------- */
+.ds-image-frame {
+  position: relative;
+}
+.ds-image-frame.is-uploading img {
+  opacity: 0.85;
+  filter: saturate(0.9);
+  transition: opacity 240ms var(--ds-ease), filter 240ms var(--ds-ease);
+}
+.ds-image-frame.is-empty {
+  min-height: 120px;
+  border-radius: var(--ds-radius, 10px);
+  background: color-mix(in srgb, var(--ds-ink) 4%, transparent);
+}
+.ds-upload {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.ds-upload[hidden] {
+  display: none;
+}
+.ds-upload-ring {
+  width: 22px;
+  height: 22px;
+  padding: 5px;
+  box-sizing: content-box;
+  border-radius: 999px;
+  background: var(--ds-glass-bg, color-mix(in srgb, var(--ds-paper) 80%, transparent));
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.12);
+  transform: rotate(-90deg);
+}
+.ds-upload-ring circle {
+  fill: none;
+  stroke-width: 2.5;
+}
+.ds-upload-track {
+  stroke: color-mix(in srgb, var(--ds-ink) 12%, transparent);
+}
+.ds-upload-bar {
+  stroke: var(--ds-accent-c);
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  transition: stroke-dashoffset 200ms var(--ds-ease);
+}
+.ds-upload-ring.is-indeterminate {
+  animation: ds-upload-spin 900ms linear infinite;
+}
+@keyframes ds-upload-spin {
+  to {
+    transform: rotate(270deg);
+  }
+}
+.ds-upload-failed {
+  display: none;
+}
+.ds-upload[data-status="failed"] {
+  pointer-events: auto;
+  inset: 0;
+  justify-content: center;
+}
+.ds-upload[data-status="failed"] .ds-upload-ring {
+  display: none;
+}
+.ds-upload[data-status="failed"] .ds-upload-failed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--ds-glass-bg, color-mix(in srgb, var(--ds-paper) 85%, transparent));
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow: var(--ds-shadow-pop, 0 8px 24px rgb(0 0 0 / 0.14));
+  font: 500 13px/1.2 var(--ds-font-text, "Inter", system-ui, sans-serif);
+  color: var(--ds-muted);
+}
+.ds-upload-failed button {
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font: inherit;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--ds-ink) 7%, transparent);
+  color: var(--ds-ink);
+}
+.ds-upload-failed button:first-of-type {
+  background: var(--ds-accent-c);
+  color: #fff;
+}
+/* The file block: the ring sits at the end of the row; a failure replaces the size. */
+.ds-file {
+  position: relative;
+}
+.ds-file .ds-upload {
+  position: static;
+  margin-left: auto;
+}
+.ds-file .ds-upload[data-status="failed"] {
+  inset: auto;
+}
+.ds-file .ds-upload[data-status="failed"] .ds-upload-failed {
+  padding: 4px 6px 4px 10px;
+  box-shadow: none;
+}
+
 /* ---------- collaboration ---------- */
 .ds-collab-caret {
   position: relative;
@@ -797,6 +1080,11 @@ span.ds-unsupported {
 .ds-pen-live {
   z-index: 3;
 }
+/* strokes.md §4: free room to draw below the last paragraph (at least the visible height) whenever
+   drawing is possible — finger/mouse drawing on, or a stylus seen. Otherwise the note ends normally. */
+.ds-pen-room .ds-prose {
+  padding-bottom: max(var(--ds-doc-bottom, 160px), 100vh);
+}
 .ds-pen-draw-any .ds-prose {
   touch-action: none;
   cursor: crosshair;
@@ -832,6 +1120,73 @@ span.ds-unsupported {
 .ds-handle-btn:hover {
   background: color-mix(in srgb, var(--ds-ink) 7%, transparent);
   color: var(--ds-muted);
+}
+
+/* Touch: one quiet grip at the caret's block (never on scroll or touch-move). */
+.ds-block-handle.is-touch {
+  animation: ds-fade 220ms var(--ds-ease);
+}
+.ds-block-handle.is-touch .ds-handle-grip {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  color: color-mix(in srgb, var(--ds-faint) 80%, transparent);
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  transition:
+    transform 180ms var(--ds-ease),
+    color 180ms var(--ds-ease),
+    background 180ms var(--ds-ease);
+}
+/* A finger-sized target around the small grip. */
+.ds-block-handle.is-touch .ds-handle-grip::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+.ds-block-handle.is-lifted .ds-handle-grip {
+  transform: scale(1.15);
+  color: var(--ds-accent-c);
+  background: color-mix(in srgb, var(--ds-accent-c) 10%, transparent);
+}
+.ds-block-lifted-source {
+  opacity: 0.35;
+  transition: opacity 160ms var(--ds-ease);
+}
+.ds-block-ghost {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  padding: 0;
+  margin: 0;
+  border-radius: 10px;
+  background: var(--ds-paper);
+  box-shadow:
+    0 18px 40px -12px rgb(0 0 0 / 0.28),
+    0 2px 8px rgb(0 0 0 / 0.08);
+  opacity: 0.96;
+  transform-origin: 30% 50%;
+  transform: scale(1.02);
+  animation: ds-lift 180ms var(--ds-ease);
+}
+.ds-block-ghost > * {
+  margin: 0 !important;
+}
+@keyframes ds-lift {
+  from {
+    transform: scale(1);
+    box-shadow: none;
+  }
+}
+.ds-drop-indicator {
+  position: absolute;
+  z-index: 5;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ds-accent-c);
+  pointer-events: none;
 }
 
 /* ---------- floating glass UI ---------- */

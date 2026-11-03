@@ -111,14 +111,7 @@ crontab -e
 
 Копии складываются в `/opt/datascratch/infra/backups/` и хранятся 14 дней (`BACKUP_KEEP_DAYS`). Проверить вручную: `./backup.sh`.
 
-**Копии должны храниться вне этого сервера** (R-11). Проще всего — Hetzner Storage Box (от ~4 €/мес) через `rclone`:
-
-```bash
-apt install -y rclone
-rclone config        # n → имя storagebox → тип sftp → host: uXXXXX.your-storagebox.de, user: uXXXXX, порт 23, пароль Storage Box
-```
-
-Потом в `.env`: `BACKUP_RCLONE_REMOTE=storagebox:datascratch` — `backup.sh` будет сам копировать каждую новую копию туда. Подойдёт любое хранилище, которое понимает rclone (S3, Backblaze B2, Google Drive…).
+**Унести копии с сервера** — дело администратора (D-55), например `rsync -av root@АДРЕС:/opt/datascratch/infra/backups/ ./datascratch-backups/` со своего компьютера. Если сервер пропадёт вместе с копиями, данные восстановить будет нельзя.
 
 ### 8. Обновление сервера
 
@@ -138,7 +131,7 @@ ls backups/                                     # выбрать копию
 ./restore.sh backups/db-ДАТА.dump backups/files-ДАТА.tar.gz
 ```
 
-Скрипт спросит подтверждение (`yes`) — текущие данные будут заменены. На новом сервере: шаги 3–5 (тот же `DS_KMS_KEY`!), затем `docker compose up -d postgres`, скопировать файлы копий в `infra/backups/` и запустить `restore.sh`.
+Скрипт спросит подтверждение (`yes`) — текущие данные будут заменены. Сначала он проверит, что копия читается (`pg_restore --list`, `tar -t`; если нет — ничего не трогает), и сохранит текущую базу (и файлы, если они тоже восстанавливаются) в `backups/pre-restore-ДАТА.*` — так неудачное восстановление можно откатить тем же `restore.sh`. На новом сервере: шаги 3–5 (тот же `DS_KMS_KEY`!), затем `docker compose up -d postgres`, скопировать файлы копий в `infra/backups/` и запустить `restore.sh`.
 
 Что восстановление работает, проверяет CI при каждом изменении сервера (`smoke-test.sh`).
 

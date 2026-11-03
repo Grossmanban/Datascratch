@@ -12,6 +12,7 @@
 | `@datascratch/shared/document` | Фабрики `account`/`notebook`/`note` (с копией имени, иконки и пространства в `meta` блокнота),  доступ к записям (пространства, блокноты, папки, мета заметок, теги, избранное, вкладки), PM-JSON ↔ Yjs (как y-prosemirror), задачи, бэклинки, теги, текст для поиска, экспорт в Markdown, блочные операции для агентов (`applyBlockOperations`) | `document-model.md` |
 | `@datascratch/shared/strokes` | Упаковка точек, якоря (Yjs RelativePosition) и D-35, раскладка по строкам при заданной платформой геометрии глифов, толщина, хранение штрихов, `rebaseRedoneAnchors` и `attachAnchorRebase` после undo, `restoreNoteVersion`, перепривязка при перестройке блоков (`captureAnchorOffsets` → `reanchorStrokes`) | `strokes.md` |
 | `@datascratch/shared/sync` | `SyncClient` (WebSocket браузера/Node, офлайн-очередь через `SyncStorage`, шифрование, переподключение с backoff, снимки по порогам), `MemorySyncStorage`, `MemorySyncHub` — эталонный сервер протокола в памяти для тестов | `sync-protocol.md` |
+| `@datascratch/shared/sharing` | Совместный доступ по аккаунтам (D-54): REST-клиент (`createHttpClient` + `createSharingApi`, ошибки — `ApiRequestError` с `classifyApiFailure`), пара ключей аккаунта (`ensureAccountKeyPair`), ключи общих блокнотов и заметок (`ownerNotebookKeys`, `sharedItemKeys`, `noteKeysFromMeta`), выдача ключей участникам (`deliverAwaitingKeys`), смена ключа (`rotateNotebookKey`, `rotateSharedNoteKey`, `repairSharedNoteMeta`), «Общие со мной» в документе аккаунта (`reconcileSharedRefs`) | `crypto.md` §10, `api.md` |
 
 Корневой импорт `@datascratch/shared` реэкспортирует всё.
 
@@ -44,7 +45,26 @@ sync.start();
 
 Для тысяч заметок — **режим хранения** (не держать `Y.Doc` каждой в памяти): индексы `account`/`notebook` — `addDocs`, заметки — `addStoredDocs(ids)` с опцией `storedDocs: { onUpdates, loadState }` (приложение склеивает обновления в своё хранилище через `Y.mergeUpdates`). При открытии заметки — `openDoc(id, load)`, при закрытии — `closeDoc(id, save)`; оба переходят без потери обновлений, пришедших во время перехода. Индексы задач/поиска — `createNoteIndexer({ loadState, onIndex })` (временный `Y.Doc` на заметку, пачками). Память клиента на 10 000 заметок ≈ 49 МБ против ≈ 490 МБ с живыми документами (`pnpm --filter @datascratch/shared test:memory`, проверяется в CI с порогом 80 МБ).
 
-Обновления, применённые из сети, помечены origin `REMOTE_ORIGIN` — редактор и undo-менеджер могут их отличать.
+**Ключа ещё нет — это не порча.** Если `keyFor` вернул `null` (или бросил `KeyUnavailableError`) — например, заметку перенесли, а индекс блокнота с её ключом ещё не пришёл, — документ встаёт на паузу: ничего не пропускается, курсор не двигается, локальные правки ждут в очереди, хост получает событие `keyMissing` (и ошибку `key_missing`, если ожидание дольше `missingKeyReportMs`). Как только ключ появился — `keyAvailable(docId)`: клиент дочитывает документ с последнего применённого `seq`. Пропуск (ниже) — только когда ключ есть, но не подходит или данные испорчены; `retrySkipped(docId)` перечитывает пропущенное, когда у хоста появился старый ключ.
+
+**Испорченные элементы не останавливают синхронизацию.** Если обновление или снимок не расшифровывается (сначала пробуются ключи `alternateKeysFor`) или не применяется, клиент пропускает его, двигает курсор дальше, пишет запись `{ docId, seq, deviceId, kind, reason }` (`getSkipped(docId)`) и шлёт событие `skipped` — хост показывает предупреждение по документу. С опцией `recoverSkippedFromSnapshot` клиент после такой догоняющей подписки один раз переподписывается с `since: 0`, чтобы получить последний снимок сервера, который может покрывать пропущенное.
+
+Обновления, применённые из сети, помечены origin `REMOTE_ORIGIN` — редактор и undo-менеджер могут их отличать. Событие `remoteUpdate(docId, update, info)` несёт `info.author` — автора, которого поставил сервер (D-54: «кто что изменил»).
+
+### Совместный доступ (D-54)
+
+```ts
+import { createHttpClient, createSharingApi, ensureAccountKeyPair, rotateNotebookKey } from "@datascratch/shared/sharing";
+
+const api = createSharingApi(createHttpClient({ baseUrl, accessToken: () => tokens.access() }));
+// После регистрации и при каждом входе: старые аккаунты получают пару ключей здесь же.
+const me = await ensureAccountKeyPair(api, userId, masterKey);
+// Обязательно до приглашений и до принятия приглашения: без пары сервер отвечает 409.
+```
+
+- **Участник:** ключи общих ресурсов — `sharedItemKeys(item, { userId, secretKey })` для каждого из `api.sharedWithMe()` (`null`, пока владелец не выдал ключ); ключи заметок общего блокнота — `noteKeysFromMeta(noteMeta, notebookKeys.keys)`. Первый ключ списка — для `keyFor`, остальные — для `alternateKeysFor`. Роль `viewer` — опция `readOnly: (docId) => …` у `SyncClient` (правки и снимки не отправляются). `reconcileSharedRefs(accountDoc, items, currentSpaceId)` раскладывает «Общие со мной» и возвращает исчезнувшие ресурсы — их вкладки, избранное и локальные данные удаляет приложение.
+- **Смена ключа у участников.** Чтобы обновление, зашифрованное уже новым ключом, не пропускалось, передайте `keyMaybeStale: (docId) => документ общий`: документ встанет на паузу, приложение заново читает `sharedWithMe()` (и индекс блокнота) и вызывает `keyAvailable(docId)`.
+- **Владелец при запуске:** проще всего — `maintainOwnedShares({ api, owner, masterKey, notebookIndex, notebookOfNote, isAgentMode, whenIndexSent, onKeys, confirm, links })`: один проход по `GET /shared-by-me` делает всё ниже. По отдельности: `deliverAwaitingKeys` для ресурсов, где кто-то ждёт ключ (аккаунтам, созданным после приглашения, — только после «да» владельца в `confirm`), и `rotateNotebookKey` для общих блокнотов (сам проверяет `keyRotationPending`, продолжает прерванную смену и не делает лишней версии ключа). `onKeys` обновляет keyring приложения, `whenIndexSent: () => sync.whenSent(notebookId)`. Отдельно расшаренная заметка — `rotateSharedNoteKey`; после сбоя — `repairSharedNoteMeta`. После смены ключа — `recreateShareLinks` (гостевые ссылки ресурса пересоздаются с новым ключом).
 
 ### Особенности, о которых стоит знать
 
@@ -52,6 +72,15 @@ sync.start();
 - Якорь штриха на удалённом символе разрешается с `deleted: true`; точки на нём не рисуются, но штрих остаётся (D-35). Восстановление текста отменой видно другим устройствам только после `rebaseRedoneAnchors(doc)` (ссылки redone в Yjs локальны).
 - Производительность первой синхронизации: `pnpm --filter @datascratch/shared bench 10000 <задержка хранилища, мс>`; 10 000 заметок ≈ 6 с на клиенте (цель spec/11 — до минуты). Реализациям `SyncStorage` стоит поддержать пакетные `getDocStates`/`setDocStates`: курсоры пишутся пачками раз в 200 мс.
 - Клиент синхронизации считает `lastSeq` по максимуму полученных `seq` (из `update`, `updates`, `ack`): сервер обязан рассылать обновления документа в порядке `seq`.
+
+### Общие пространства (D-62)
+
+- **Ключи** (`crypto.md` §11): `wrapSpaceKey` / `unwrapSpaceKey` — ключ пространства под мастер-ключом владельца; участник получает его обёрткой §10.2 с `kind = "space"` (`wrapKeyForMember`, у участника — `sharedItemKeys`). Ключи блокнотов пространства — `wrapNotebookKeyForSpace` / `unwrapNotebookKeyFromSpace`; из ответа `GET /spaces/:id/notebooks` — `spaceNotebookKeys(entry, spaceKeys.keys, spaceId)`. Владелец: `ownerSpaceKeys(api.getSpaceKey(id), masterKey, id)`.
+- **Документ пространства:** `createSpaceDoc` / `getSpaceMeta` / `setSpaceMeta`, блокноты — `getSpaceNotebookRefs` / `putSpaceNotebookRef` (`SpaceNotebookRef` = `NotebookRef` без `spaceId`). Переключатель у участника — `account.sharedSpaces`: `reconcileSharedSpaces(accountDoc, await api.sharedWithMeAll())`.
+- **Типы:** D-54-схемы (`shareTargetSchema`, `sharedItemSchema`, `sharedByMeItemSchema`, …) по-прежнему только про блокноты и заметки; `account…`-схемы (`accountTargetSchema`, `accountSharedItemSchema`, …) принимают и `kind = "space"`. `api.sharedWithMe()` / `sharedByMe()` / `incomingInvitations()` отдают только блокноты и заметки, `…All()` — всё. Сервер пространства — `SharedSpace` (`Space` занято записью пространства в документе аккаунта).
+- **Владелец:** `maintainOwnedSpaces({ …, rotation: { notebookIndex, whenIndexSent, onKeys } })` — один проход при запуске: доделывает или начинает смену ключа пространства и выдаёт ключ принявшим приглашение (с записью доверия и `confirm`); без `rotation` пространство со сменой ключа пропускается (`skipped`).
+- **Смена ключа пространства** (§11.4) — `rotateSpaceKey`: новый ключ пространства и новые ключи всех его блокнотов одним `rotate`, затем новые ключи заметок в каждом индексе, затем `rotate/done`; прерванную смену доделывает на любом устройстве владельца по `pendingSinceVersion`, без лишней версии.
+- **Перенос блокнота** (§11.3): `moveNotebookIntoSpace` (ключ блокнота под ключом пространства, `NotebookRef` из документа аккаунта в документ пространства; участники увидят всю историю — предупредите) и `moveNotebookOutOfSpace` (новый ключ под мастер-ключом, `NotebookRef` обратно в аккаунт; шаги 2–3 — затем `rotateNotebookKey`).
 
 ## Разработка
 

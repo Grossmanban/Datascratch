@@ -26,6 +26,16 @@ export const ACCOUNT_ROOTS = {
   settings: "settings",
   starred: "starred",
   tabs: "tabs",
+  shared: "shared",
+  trust: "trust",
+  /** Shared spaces of others in this account's space switcher (D-62, §2.1). */
+  sharedSpaces: "sharedSpaces",
+} as const;
+
+/** Document of a shared space (D-62, document-model.md §2.2). */
+export const SPACE_ROOTS = {
+  meta: "meta",
+  notebooks: "notebooks",
 } as const;
 
 export const NOTEBOOK_ROOTS = {
@@ -55,6 +65,8 @@ export const spaceSchema = z.object({
   color: z.string().nullable(),
   order: z.number(),
   createdAt: isoDateTimeSchema,
+  /** The space is shared (D-62): the space document is the source of name and icon. */
+  shared: z.boolean().optional(),
 });
 export type Space = z.infer<typeof spaceSchema>;
 
@@ -138,8 +150,49 @@ export const noteMetaSchema = z.object({
     .object({ agentId: z.string(), agentName: z.string(), at: isoDateTimeSchema })
     .nullable()
     .optional(),
+  /** Version of the noteKey (D-54, crypto.md §10.3); absent = 1. */
+  keyVersion: z.number().int().positive().optional(),
+  /** Wrapped previous noteKeys, newest first (crypto.md §10.3); absent = []. */
+  keyChain: z.array(z.string()).optional(),
 });
 export type NoteMeta = z.infer<typeof noteMetaSchema>;
+
+/**
+ * Placement of a notebook/note shared with this account (D-54): which space
+ * shows it under «Общие со мной». Access and keys live on the server.
+ */
+export const sharedRefSchema = z.object({
+  kind: z.enum(["notebook", "note"]),
+  id: uuidSchema,
+  spaceId: uuidSchema,
+  order: z.number(),
+  addedAt: isoDateTimeSchema,
+});
+export type SharedRef = z.infer<typeof sharedRefSchema>;
+/** Key of a SharedRef in `account.shared`. */
+export const sharedRefKey = (kind: "notebook" | "note", id: string) => `${kind}:${id}`;
+
+/** A shared space of another account in the switcher (`account.sharedSpaces`, D-62). */
+export const sharedSpaceRefSchema = z.object({
+  order: z.number(),
+  addedAt: isoDateTimeSchema,
+});
+export type SharedSpaceRef = z.infer<typeof sharedSpaceRefSchema>;
+
+/** `meta` of a space document (document-model.md §2.2). */
+export const spaceMetaSchema = z.object({
+  formatVersion: z.literal(FORMAT_VERSION),
+  spaceId: uuidSchema,
+  name: z.string(),
+  icon: z.string().nullable(),
+  color: z.string().nullable(),
+});
+export type SpaceMeta = z.infer<typeof spaceMetaSchema>;
+export type SpaceMetaFields = Pick<SpaceMeta, "name" | "icon" | "color">;
+
+/** A notebook in a space document: a NotebookRef without `spaceId` (it is that space). */
+export const spaceNotebookRefSchema = notebookRefSchema.omit({ spaceId: true });
+export type SpaceNotebookRef = Omit<NotebookRef, "spaceId">;
 
 /**
  * `meta` of a notebook document. `name`, `icon` and `space` duplicate the

@@ -31,6 +31,12 @@ struct DatascratchApp: App {
                 app.settings.applyAppearanceToWindows()
                 app.refreshRecoveryKeyState()
             }
+            // iOS drops the sync socket while the app is suspended, and a socket that looks alive
+            // may no longer deliver: coming back checks it and replaces a dead one at once
+            // (remote edits showed only after a relaunch, 2026-10-26).
+            #if canImport(DSCore)
+            if phase == .active { app.connection?.checkConnection() }
+            #endif
         }
 
         // A single document in its own window (Stage Manager, split view).
@@ -64,12 +70,7 @@ struct RootView: View {
         .tint(Theme.Palette.accent)
         .onAppear { app.settings.applyAppearanceToWindows() }
         .onOpenURL { url in
-            app.pendingRoute = AppRoute.parse(url, webHost: app.webHost)
-        }
-        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-            if let url = activity.webpageURL {
-                app.pendingRoute = AppRoute.parse(url, webHost: app.webHost)
-            }
+            app.pendingLink = url
         }
     }
 }
@@ -85,10 +86,17 @@ struct MainWindow: View {
                 MainSplitView()
                     .environment(scene)
                     .focusedSceneValue(\.sceneModel, scene)
+                    .modifier(SharingPrompts())
                     .onChange(of: app.pendingRoute, initial: true) { _, route in
                         guard let route else { return }
                         scene.handle(route)
                         app.pendingRoute = nil
+                    }
+                    // A link that started or woke the app: read now, against the account's server.
+                    .onChange(of: app.pendingLink, initial: true) { _, link in
+                        guard let link else { return }
+                        app.pendingLink = nil
+                        if let route = AppRoute.parse(link, server: app.linkServer) { scene.handle(route) }
                     }
             } else {
                 Theme.Palette.canvas.ignoresSafeArea()

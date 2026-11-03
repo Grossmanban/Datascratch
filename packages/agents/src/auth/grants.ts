@@ -43,7 +43,7 @@ export class GrantService {
     return grant;
   }
 
-  async createStatic(userId: string, input: { name: string; notebookIds: string[]; permission: Permission; expiresAt?: string | null }): Promise<{ grant: AgentGrant; token: string }> {
+  async createStatic(userId: string, input: { name: string; notebookIds: string[]; allNotebooks?: boolean; permission: Permission; expiresAt?: string | null }): Promise<{ grant: AgentGrant; token: string }> {
     const token = randomToken(STATIC_PREFIX);
     const grant: AgentGrant = {
       id: uuidv7(this.now().getTime()),
@@ -52,6 +52,7 @@ export class GrantService {
       name: input.name,
       clientId: null,
       notebookIds: [...new Set(input.notebookIds)],
+      allNotebooks: input.allNotebooks ?? false,
       permission: input.permission,
       createdAt: this.now().toISOString(),
       expiresAt: input.expiresAt ?? null,

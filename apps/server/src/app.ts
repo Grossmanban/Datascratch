@@ -19,8 +19,11 @@ import { loadPlugins, type LoadedPlugin } from './plugins/loader.js';
 import { accountRoutes } from './routes/account.js';
 import { attachmentRoutes } from './routes/attachments.js';
 import { authRoutes } from './routes/auth.js';
+import { fetchImageRoutes } from './routes/fetch-image.js';
 import { notebookRoutes } from './routes/notebooks.js';
 import { shareRoutes } from './routes/shares.js';
+import { sharingRoutes } from './routes/sharing.js';
+import { spaceRoutes } from './routes/spaces.js';
 import { registerSync } from './sync/server.js';
 import { VERSION } from './version.js';
 
@@ -51,7 +54,10 @@ export interface BuildOptions {
 export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
     loggerInstance: ctx.log,
-    trustProxy: true,
+    // Only proxies on private hops are trusted (our Caddy, a host nginx, Sinhron's Caddy):
+    // the client address is the rightmost untrusted X-Forwarded-For entry, so a client
+    // cannot choose its own address by sending the header itself.
+    trustProxy: ctx.config.TRUST_PROXY.split(',').map((s) => s.trim()).filter(Boolean),
     bodyLimit: 1024 * 1024,
   }).withTypeProvider<ZodTypeProvider>();
 
@@ -60,7 +66,16 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
 
   app.setErrorHandler((err: FastifyError, req, reply) => {
     if (err instanceof ApiError) {
-      return reply.code(err.statusCode).send({ error: { code: err.code, message: err.message } });
+      return reply
+        .code(err.statusCode)
+        .send({
+          error: {
+            code: err.code,
+            message: err.message,
+            ...(err.reason ? { reason: err.reason } : {}),
+            ...(err.retryAfterMs !== undefined ? { retryAfterMs: err.retryAfterMs } : {}),
+          },
+        });
     }
     if (hasZodFastifySchemaValidationErrors(err)) {
       const issue = err.validation[0];
@@ -96,10 +111,9 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
 
   await app.register(rateLimit, {
     global: false,
-    errorResponseBuilder: (_req, c) => ({
-      statusCode: 429,
-      error: { code: 'rate_limited', message: `rate limit exceeded, retry in ${Math.ceil(c.ttl / 1000)} s` },
-    }),
+    // Thrown by the plugin; an ApiError goes through the error handler as a proper 429.
+    errorResponseBuilder: (_req, c) =>
+      new ApiError('rate_limited', `rate limit exceeded, retry in ${Math.ceil(c.ttl / 1000)} s`, undefined, c.ttl),
   });
 
   await app.register(swagger, {
@@ -152,7 +166,10 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
       await v1.register(accountRoutes(ctx));
       await v1.register(notebookRoutes(ctx));
       await v1.register(attachmentRoutes(ctx));
+      await v1.register(fetchImageRoutes(ctx));
       await v1.register(shareRoutes(ctx));
+      await v1.register(sharingRoutes(ctx));
+      await v1.register(spaceRoutes(ctx));
       await registerSync(v1, ctx);
     },
     { prefix: '/v1' },

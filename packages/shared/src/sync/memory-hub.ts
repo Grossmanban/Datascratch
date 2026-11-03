@@ -4,9 +4,11 @@
 import {
   MAX_SNAPSHOT_BYTES,
   MAX_UPDATE_BYTES,
+  SYNC_CLOSE_DEVICE_REVOKED,
   SYNC_PROTOCOL_VERSION,
   base64UrlDecodedLength,
   parseClientMessage,
+  type DeviceRevokedReason,
   type ServerMessage,
   type SyncAuth,
   type SyncErrorCode,
@@ -29,6 +31,11 @@ export interface MemorySyncHubOptions {
   catchUpChunk?: number;
   /** Server clock (default Date.now). */
   now?: () => number;
+  /**
+   * Send the latest snapshot whenever `since` is below its seq (sync-protocol
+   * §5, default); false = only when older updates were compacted away.
+   */
+  preferSnapshot?: boolean;
 }
 
 interface HubDoc {
@@ -39,7 +46,7 @@ interface HubDoc {
 
 interface Connection {
   send: (msg: ServerMessage) => void;
-  close: () => void;
+  close: (code?: number, reason?: string) => void;
   principal: HubPrincipal | null;
   deviceId: string | null;
   subscriptions: Set<string>;
@@ -48,11 +55,18 @@ interface Connection {
 export class MemorySyncHub {
   readonly docs = new Map<string, HubDoc>();
   private readonly connections = new Set<Connection>();
+  private readonly revoked = new Map<string, DeviceRevokedReason>();
   private readonly opts: Required<Omit<MemorySyncHubOptions, "authenticate">> &
     MemorySyncHubOptions;
 
   constructor(options: MemorySyncHubOptions = {}) {
-    this.opts = { autoCreateDocs: true, catchUpChunk: 100, now: Date.now, ...options };
+    this.opts = {
+      autoCreateDocs: true,
+      catchUpChunk: 100,
+      now: Date.now,
+      preferSnapshot: true,
+      ...options,
+    };
   }
 
   /** Register a document (the equivalent of `POST /v1/docs`). */
@@ -63,7 +77,7 @@ export class MemorySyncHub {
   /** Attach a transport. `send` delivers a text frame to the client. */
   connect(
     send: (raw: string) => void,
-    close: () => void,
+    close: (code?: number, reason?: string) => void,
   ): { receive(raw: string): void; disconnect(): void } {
     const conn: Connection = {
       send: (msg) => send(JSON.stringify(msg)),
@@ -87,6 +101,23 @@ export class MemorySyncHub {
     }
   }
 
+  /**
+   * Revoke a device (D-53): its open connections get `error device_revoked`
+   * and close 4410; later hellos from it are refused the same way.
+   */
+  revokeDevice(deviceId: string, reason: DeviceRevokedReason): void {
+    this.revoked.set(deviceId, reason);
+    for (const c of [...this.connections]) {
+      if (c.deviceId === deviceId) this.kickRevoked(c, reason);
+    }
+  }
+
+  private kickRevoked(conn: Connection, reason: DeviceRevokedReason): void {
+    conn.send({ type: "error", code: "device_revoked", message: "device revoked", reason });
+    this.connections.delete(conn);
+    conn.close(SYNC_CLOSE_DEVICE_REVOKED, reason);
+  }
+
   get connectionCount(): number {
     return this.connections.size;
   }
@@ -107,19 +138,19 @@ export class MemorySyncHub {
         close: () => shut(),
       };
       let closed = false;
-      const shut = () => {
+      const shut = (code = 1000, reason = "") => {
         if (closed) return;
         closed = true;
         socket.readyState = 3;
         link.disconnect();
-        deliver(() => socket.onclose?.({ code: 1000, reason: "" }));
+        deliver(() => socket.onclose?.({ code, reason }));
       };
       const link = this.connect(
         (raw) => {
           // Frames sent before close() are still delivered, as on a real socket.
           if (!closed) deliver(() => socket.onmessage?.({ data: raw }));
         },
-        () => shut(),
+        (code, reason) => shut(code, reason),
       );
       deliver(() => {
         if (closed) return;
@@ -163,6 +194,11 @@ export class MemorySyncHub {
       return;
     }
     if (msg.type === "hello") {
+      const revoked = this.revoked.get(msg.deviceId);
+      if (revoked) {
+        this.kickRevoked(conn, revoked);
+        return;
+      }
       const principal = this.opts.authenticate
         ? this.opts.authenticate(msg.auth)
         : {
@@ -221,7 +257,14 @@ export class MemorySyncHub {
         const d = this.doc(conn, msg.docId, msg.clientMsgId);
         if (!d) return;
         if (msg.type === "push") {
-          const item = { seq: ++d.seq, payload: msg.payload, deviceId: conn.deviceId! };
+          const userId = conn.principal?.userId;
+          // The server stamps the author (sync-protocol §4, D-54).
+          const item: UpdateItem = {
+            seq: ++d.seq,
+            payload: msg.payload,
+            deviceId: conn.deviceId!,
+            ...(userId ? { author: { kind: "user" as const, userId } } : {}),
+          };
           d.items.push(item);
           conn.send({ type: "ack", docId: msg.docId, clientMsgId: msg.clientMsgId, seq: item.seq });
           for (const other of this.connections) {
@@ -263,7 +306,10 @@ export class MemorySyncHub {
 
   private catchUp(conn: Connection, docId: string, d: HubDoc, since: number): void {
     const oldest = d.items[0]?.seq ?? d.seq + 1;
-    const useSnapshot = d.snapshot !== null && since < d.snapshot.seq && since < oldest - 1;
+    const useSnapshot =
+      d.snapshot !== null &&
+      since < d.snapshot.seq &&
+      (this.opts.preferSnapshot || since < oldest - 1);
     const from = useSnapshot ? d.snapshot!.seq : since;
     const items = d.items.filter((i) => i.seq > from);
     const chunk = this.opts.catchUpChunk;

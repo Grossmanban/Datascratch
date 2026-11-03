@@ -7,7 +7,7 @@ import type { DbOrTx } from '../db/client.js';
 import type { UserPrincipal } from '../services/principal.js';
 import { devices, docs, recoveryTokens, refreshTokens, securityEvents, users } from '../db/schema.js';
 import { fromB64, randomToken, safeEqual, sha256, toB64, uuidv7 } from '../lib/encoding.js';
-import { conflict, unauthorized } from '../lib/errors.js';
+import { ApiError, conflict, forbidden, unauthorized } from '../lib/errors.js';
 import { fakeSalt, hashSecret, verifyDummy, verifySecret } from '../lib/password.js';
 import {
   createSession,
@@ -21,6 +21,21 @@ import { DeviceName, Email, Key32, Kdf, Salt, Session, WrappedKey, errorResponse
 const DEFAULT_KDF = { alg: 'argon2id13', ops: 3, mem: 67_108_864 } as const;
 const RECOVERY_TTL_MS = 15 * 60_000;
 const authLimit = { rateLimit: { max: 20, timeWindow: '1 minute' } };
+/**
+ * Attempts per email address per minute, whatever address they come from (the per-IP
+ * limits alone are bypassed by spreading over many addresses).
+ */
+const PER_EMAIL_PER_MINUTE = 10;
+const PER_EMAIL_ALL_PER_MINUTE = 30;
+
+/** One message for every signup conflict: it must not tell whether an email is registered. */
+/** A new account's own limit: the smaller one for new accounts, never above the server default (none when unlimited). */
+function newAccountQuota(ctx: AppContext): number | null {
+  const { NEW_USER_STORAGE_QUOTA_BYTES: fresh, USER_STORAGE_QUOTA_BYTES: all } = ctx.config;
+  return fresh > 0 && all > 0 ? Math.min(fresh, all) : null;
+}
+
+const SIGNUP_CONFLICT = 'signup failed: this account cannot be created';
 
 async function recordEvent(
   tx: DbOrTx,
@@ -33,6 +48,37 @@ async function recordEvent(
 
 export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
   return async (app) => {
+    const inviteCodes = ctx.config.DS_INVITE_CODES.split(',')
+      .map((c) => c.trim())
+      .filter(Boolean)
+      .map((c) => sha256(c));
+    const inviteOk = (code: string | undefined) =>
+      code !== undefined && inviteCodes.some((c) => safeEqual(c, sha256(code.trim())));
+    const emailWindows = new Map<string, { start: number; count: number }>();
+    const hit = (key: string, max: number) => {
+      const now = Date.now();
+      let w = emailWindows.get(key);
+      if (!w || now - w.start >= 60_000) {
+        if (emailWindows.size > 50_000) {
+          for (const [k, v] of emailWindows) if (now - v.start >= 60_000) emailWindows.delete(k);
+        }
+        w = { start: now, count: 0 };
+        emailWindows.set(key, w);
+      }
+      w.count += 1;
+      if (w.count > max) {
+        throw new ApiError('rate_limited', 'too many attempts for this account, retry in a minute', undefined, 60_000 - (now - w.start));
+      }
+    };
+    /**
+     * Fixed one-minute windows per route and email address (login, prelogin, signup, recovery):
+     * tight per client address, looser for the address overall. A stranger hammering someone's
+     * email from one place no longer locks its owner out (audit 2026-11-02).
+     */
+    const perEmail = (route: string, email: string, ip: string) => {
+      hit(`${route}|${email}|${ip}`, PER_EMAIL_PER_MINUTE);
+      hit(`${route}|${email}`, PER_EMAIL_ALL_PER_MINUTE);
+    };
     const { db } = ctx.database;
 
     app.post(
@@ -46,6 +92,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         },
       },
       async (req) => {
+        perEmail('prelogin', req.body.email, req.ip);
         const [u] = await db.select({ salt: users.salt, kdf: users.kdf }).from(users).where(eq(users.email, req.body.email));
         if (u) return { salt: toB64(u.salt), kdf: u.kdf };
         return { salt: toB64(fakeSalt(ctx.tokens.fakeSaltKey, req.body.email)), kdf: DEFAULT_KDF };
@@ -69,11 +116,14 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             userId: id(),
             accountDocId: id(),
             deviceName: DeviceName.optional(),
+            /** Required when DS_SIGNUP=invite. */
+            inviteCode: z.string().min(1).max(200).optional(),
           }),
           response: { 200: Session, ...errorResponses },
         },
       },
       async (req) => {
+        perEmail('signup', req.body.email, req.ip);
         const b = req.body;
         const loginKey = fromB64(b.loginKey);
         const wrappedPw = fromB64(b.wrappedMasterKeyPassword);
@@ -85,19 +135,33 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             existing.accountDocId === b.accountDocId &&
             safeEqual(existing.wrappedMasterKeyPassword, wrappedPw) &&
             (await verifySecret(existing.loginHash, loginKey));
-          if (!same) throw conflict('account exists');
+          if (!same) throw conflict(SIGNUP_CONFLICT);
           return createSession(ctx, db, existing, b.deviceName ?? 'Unknown device');
+        }
+        if (ctx.config.DS_SIGNUP === 'closed') throw forbidden('signup is closed on this server');
+        if (ctx.config.DS_SIGNUP === 'invite' && !inviteOk(b.inviteCode)) {
+          throw forbidden('a valid invite code is required');
         }
         const [loginHash, recoveryHash] = await Promise.all([
           hashSecret(loginKey),
           hashSecret(fromB64(b.recoveryLoginKey)),
         ]);
         return db.transaction(async (tx) => {
+          const cap = ctx.config.DS_SIGNUP === 'open' ? ctx.config.DS_SIGNUP_DAILY_LIMIT : 0;
+          if (cap > 0) {
+            // One sign-up at a time while counting, so parallel requests cannot pass the cap together.
+            await tx.execute(sql`SELECT pg_advisory_xact_lock(7478)`);
+            const [recent] = (
+              await tx.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM users WHERE created_at > now() - interval '24 hours'`)
+            ).rows;
+            if ((recent?.n ?? 0) >= cap) throw new ApiError('rate_limited', 'too many new accounts today; try again tomorrow');
+          }
           const inserted = await tx
             .insert(users)
             .values({
               id: b.userId,
               email: b.email,
+              storageQuotaBytes: newAccountQuota(ctx),
               salt: fromB64(b.salt),
               kdf: b.kdf,
               loginHash,
@@ -109,13 +173,13 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             .onConflictDoNothing()
             .returning();
           const user = inserted[0];
-          if (!user) throw conflict('email already registered');
+          if (!user) throw conflict(SIGNUP_CONFLICT);
           const doc = await tx
             .insert(docs)
             .values({ id: b.accountDocId, userId: user.id, kind: 'account', notebookId: null })
             .onConflictDoNothing()
             .returning({ id: docs.id });
-          if (doc.length === 0) throw conflict('accountDocId already in use');
+          if (doc.length === 0) throw conflict(SIGNUP_CONFLICT);
           return createSession(ctx, tx, user, b.deviceName ?? 'Unknown device');
         });
       },
@@ -132,6 +196,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         },
       },
       async (req) => {
+        perEmail('login', req.body.email, req.ip);
         const loginKey = fromB64(req.body.loginKey);
         const [u] = await db.select().from(users).where(eq(users.email, req.body.email));
         const ok = u ? await verifySecret(u.loginHash, loginKey) : await verifyDummy(loginKey);
@@ -187,6 +252,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         },
       },
       async (req) => {
+        perEmail('recovery', req.body.email, req.ip);
         const key = fromB64(req.body.recoveryLoginKey);
         const [u] = await db.select().from(users).where(eq(users.email, req.body.email));
         const ok = u ? await verifySecret(u.recoveryHash, key) : await verifyDummy(key);
@@ -221,6 +287,18 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req) => {
         const b = req.body;
+        // Check the token before the (deliberately slow) hash, so junk tokens cost nothing.
+        const [known] = await db
+          .select({ id: recoveryTokens.id })
+          .from(recoveryTokens)
+          .where(
+            and(
+              eq(recoveryTokens.tokenHash, sha256(b.recoveryToken)),
+              isNull(recoveryTokens.usedAt),
+              sql`${recoveryTokens.expiresAt} > now()`,
+            ),
+          );
+        if (!known) throw unauthorized('invalid or expired recovery token');
         const loginHash = await hashSecret(fromB64(b.loginKey));
         let revoked: string[] = [];
         const session = await db.transaction(async (tx) => {
@@ -248,7 +326,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             .where(eq(users.id, rt.userId))
             .returning();
           // A forgotten (or stolen) password: sign out everywhere.
-          revoked = await revokeOtherDevices(ctx, tx, rt.userId, null);
+          revoked = await revokeOtherDevices(ctx, tx, rt.userId, null, 'recovery');
           const session = await createSession(ctx, tx, user!, b.deviceName ?? 'Recovered device');
           await tx.insert(securityEvents).values({
             userId: rt.userId,
@@ -258,7 +336,7 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           });
           return session;
         });
-        publishDeviceRevocations(ctx, revoked, 'password reset');
+        publishDeviceRevocations(ctx, revoked, 'recovery');
         return session;
       },
     );
@@ -300,9 +378,9 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             })
             .where(eq(users.id, p.userId));
           await recordEvent(tx, p, 'password_changed');
-          return revokeOtherDevices(ctx, tx, p.userId, p.deviceId);
+          return revokeOtherDevices(ctx, tx, p.userId, p.deviceId, 'password_change');
         });
-        publishDeviceRevocations(ctx, revoked, 'password changed');
+        publishDeviceRevocations(ctx, revoked, 'password_change');
         return reply.code(204).send(null);
       },
     );

@@ -1,11 +1,15 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 import { withAgentScope } from '../src/db/client.js';
 import { docs } from '../src/db/schema.js';
 import { AD, open, seal } from '../src/lib/sodium.js';
 import type { AgentGrant, AgentsContext } from '../src/plugins/agents-context.js';
 import { createAgentsContext } from '../src/plugins/loader.js';
+import { runCleanup } from '../src/jobs/index.js';
+import { noteKeyCache } from '../src/plugins/agent-key-cache.js';
 import {
   SyncClient,
   api,
@@ -19,6 +23,8 @@ import {
   type TestServer,
   type TestUser,
 } from './helpers.js';
+
+const execFileAsync = promisify(execFile);
 
 let s: TestServer;
 let u: TestUser;
@@ -58,6 +64,7 @@ function grant(notebookIds: string[], permission: 'read' | 'read_write', extra: 
     name: 'Claude',
     clientId: null,
     notebookIds,
+    allNotebooks: false,
     permission,
     createdAt: new Date().toISOString(),
     expiresAt: null,
@@ -106,6 +113,7 @@ describe('store', () => {
       resource: 'https://notes.example.com/mcp',
       scope: 'notes:read',
       notebookIds: [notebookId],
+      allNotebooks: false,
       permission: 'read' as const,
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     };
@@ -178,6 +186,69 @@ describe('data source', () => {
     priv.client.close();
   });
 
+  it('skips an undecryptable update instead of hiding the whole document', async () => {
+    const { notebookId, noteId, client } = await setupNotebook();
+    const g = grant([notebookId], 'read_write');
+    await agents.store.insertGrant(g);
+    // A client seals an update of the notebook index with a wrong key.
+    await client.push(notebookId, await seal(rnd(32), new Uint8Array([1, 2, 3]), AD.doc(notebookId)));
+    const nb = (await agents.data.loadDoc(u.userId, notebookId, g.id))!;
+    expect(nb).not.toBeNull();
+    expect(nb.skipped).toEqual([{ seq: 2, deviceId: expect.any(String), reason: 'decrypt' }]);
+    expect((nb.doc.getMap('notes').get(noteId) as Y.Map<unknown>).get('title')).toBe('Hello');
+    // The note still loads: its key comes from the partly readable notebook index.
+    const note = (await agents.data.loadDoc(u.userId, noteId, g.id))!;
+    expect(note.doc.getText('t').toString()).toBe('from user');
+    expect(note.skipped).toBeUndefined();
+    client.close();
+  });
+
+  it('refuses to switch to agent mode with a key that does not open the notebook data', async () => {
+    const { notebookId, notebookKey, client } = await setupNotebook();
+    const t = u.session.accessToken;
+    await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, { token: t, body: { mode: 'private' } });
+    const wrong = await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, {
+      token: t,
+      body: { mode: 'agent', notebookKey: b64(rnd(32)) },
+    });
+    expect(wrong.status).toBe(409);
+    expect(wrong.body.error.message).toContain('key mismatch');
+    const right = await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, {
+      token: t,
+      body: { mode: 'agent', notebookKey: b64(notebookKey) },
+    });
+    expect(right.status).toBe(200);
+    expect(right.body.mode).toBe('agent');
+    // A brand-new notebook without data accepts any key.
+    const { notebookId: empty } = await createNotebook(s, u, { mode: 'private', notebookKey: rnd(32) });
+    const fresh = await api(s, 'PATCH', `/notebooks/${empty}/mode`, {
+      token: t,
+      body: { mode: 'agent', notebookKey: b64(rnd(32)) },
+    });
+    expect(fresh.status).toBe(200);
+    client.close();
+  });
+
+  it('diag CLI names the unreadable items of a document', async () => {
+    const { notebookId, client } = await setupNotebook();
+    await client.push(notebookId, await seal(rnd(32), new Uint8Array([1, 2, 3]), AD.doc(notebookId)));
+    const env = {
+      ...process.env,
+      NODE_ENV: 'test',
+      LOG_LEVEL: 'silent',
+      DATABASE_URL: s.ctx.config.DATABASE_URL,
+      DS_JWT_SECRET: s.ctx.config.DS_JWT_SECRET,
+      DS_KMS_KEY: s.ctx.config.DS_KMS_KEY,
+      STORAGE_DIR: s.ctx.config.STORAGE_DIR,
+    };
+    const { stdout } = await execFileAsync('npx', ['tsx', 'src/diag-agent-doc-cli.ts', notebookId], { env, cwd: process.cwd() });
+    expect(stdout).toContain(`kind=notebook`);
+    expect(stdout).toMatch(/update\s+seq=1 .*decrypt=ok\s+apply=ok/);
+    expect(stdout).toMatch(/update\s+seq=2 .*decrypt=FAIL/);
+    expect(stdout).toContain('UNREADABLE items: seq 2');
+    client.close();
+  });
+
   it('creates notes whose wrapped key the notebook key opens', async () => {
     const { notebookId, notebookKey, client } = await setupNotebook();
     const g = grant([notebookId], 'read_write');
@@ -200,6 +271,111 @@ describe('data source', () => {
     client.close();
   });
 
+  it('moves a note to another granted notebook atomically, re-wrapping its key', async () => {
+    const a = await setupNotebook();
+    const b = await setupNotebook();
+    const c = await setupNotebook();
+    const g = grant([a.notebookId, b.notebookId], 'read_write');
+    await agents.store.insertGrant(g);
+    const build = (src: Y.Doc, dst: Y.Doc) => (wrappedKey: string) => {
+      const sb = Y.encodeStateVector(src);
+      const db = Y.encodeStateVector(dst);
+      const m = new Y.Map();
+      dst.getMap('notes').set(a.noteId, m);
+      m.set('title', 'Hello');
+      m.set('wrappedKey', wrappedKey);
+      src.getMap('notes').delete(a.noteId);
+      return { from: Y.encodeStateAsUpdate(src, sb), to: Y.encodeStateAsUpdate(dst, db) };
+    };
+    const load = async (id: string) => (await agents.data.loadDoc(u.userId, id, g.id))!.doc;
+    // Outside the grant: refused, nothing changes.
+    const outside = grant([a.notebookId, c.notebookId], 'read');
+    await agents.store.insertGrant(outside);
+    await expect(
+      agents.data.moveNoteDoc!(u.userId, {
+        noteId: a.noteId,
+        fromNotebookId: a.notebookId,
+        toNotebookId: c.notebookId,
+        origin: origin(outside.id),
+        indexUpdates: build(await load(a.notebookId), new Y.Doc()),
+      }),
+    ).rejects.toThrow(/does not allow writing/);
+
+    await agents.data.moveNoteDoc!(u.userId, {
+      noteId: a.noteId,
+      fromNotebookId: a.notebookId,
+      toNotebookId: b.notebookId,
+      origin: { ...origin(g.id), action: 'move_note' },
+      indexUpdates: build(await load(a.notebookId), await load(b.notebookId)),
+    });
+    const [row] = await s.ctx.database.db.select().from(docs).where(sql`${docs.id} = ${a.noteId}`);
+    expect(row!.notebookId).toBe(b.notebookId);
+    expect((await load(a.notebookId)).getMap('notes').has(a.noteId)).toBe(false);
+    const meta = (await load(b.notebookId)).getMap('notes').get(a.noteId) as Y.Map<unknown>;
+    // The owner's device opens the same note key with the target notebook key.
+    const key = await open(b.notebookKey, Buffer.from(meta.get('wrappedKey') as string, 'base64url'), AD.note(a.noteId));
+    expect(Buffer.from(key).equals(Buffer.from(a.noteKey))).toBe(true);
+    expect((await load(a.noteId)).getText('t').toString()).toBe('from user');
+    for (const x of [a, b, c]) x.client.close();
+  });
+
+  it('rotates refresh tokens atomically: of two concurrent uses one wins, the other is reuse (security audit 6)', async () => {
+    const { notebookId, client } = await setupNotebook();
+    const g = grant([notebookId], 'read', { kind: 'oauth', clientId: 'c-rot' });
+    await agents.store.insertGrant(g);
+    const hash = rnd(32).toString('hex');
+    await agents.store.insertToken({ tokenHash: hash, kind: 'refresh', grantId: g.id, clientId: 'c-rot', scope: 'notes:read', resource: 'r', expiresAt: new Date(Date.now() + 3600_000).toISOString() });
+    const results = await Promise.all([agents.store.useRefreshToken(hash), agents.store.useRefreshToken(hash), agents.store.useRefreshToken(hash)]);
+    expect(results.map((r) => r?.reused).sort()).toEqual([false, true, true]);
+    expect((await agents.store.getToken(hash))?.kind).toBe('refresh_used');
+    expect(await agents.store.useRefreshToken('missing')).toBeNull();
+    client.close();
+  });
+
+  it('drops cached note keys when the notebook leaves agent mode or the grant is revoked (security audit 7)', async () => {
+    const { notebookId, noteId, client } = await setupNotebook();
+    const g = grant([notebookId], 'read');
+    await agents.store.insertGrant(g);
+    expect(await agents.data.loadDoc(u.userId, noteId, g.id)).not.toBeNull();
+    expect(noteKeyCache.get(noteId)).toBeDefined();
+    await agents.store.updateGrant(g.id, { revokedAt: new Date().toISOString() });
+    expect(noteKeyCache.get(noteId)).toBeUndefined();
+    const g2 = grant([notebookId], 'read');
+    await agents.store.insertGrant(g2);
+    expect(await agents.data.loadDoc(u.userId, noteId, g2.id)).not.toBeNull();
+    expect(noteKeyCache.get(noteId)).toBeDefined();
+    await api(s, 'PATCH', `/notebooks/${notebookId}/mode`, { token: u.session.accessToken, body: { mode: 'private' } });
+    expect(noteKeyCache.get(noteId)).toBeUndefined();
+    expect(await agents.data.loadDoc(u.userId, noteId, g2.id)).toBeNull();
+    client.close();
+  });
+
+  it('removes OAuth clients nobody granted access to after a day (security audit 3)', async () => {
+    const { notebookId, client } = await setupNotebook();
+    const old = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    const mk = (clientId: string, createdAt: string) => ({
+      clientId,
+      clientSecretHash: null,
+      clientName: 'x',
+      clientUri: null,
+      logoUri: null,
+      redirectUris: ['https://a.example/cb'],
+      tokenEndpointAuthMethod: 'none' as const,
+      registration: 'dcr' as const,
+      createdAt,
+    });
+    const [unused, used, fresh] = [newId(), newId(), newId()];
+    await agents.store.upsertClient(mk(unused, old));
+    await agents.store.upsertClient(mk(used, old));
+    await agents.store.upsertClient(mk(fresh, new Date().toISOString()));
+    await agents.store.insertGrant(grant([notebookId], 'read', { kind: 'oauth', clientId: used }));
+    await runCleanup(s.ctx);
+    expect(await agents.store.getClient(unused)).toBeNull();
+    expect(await agents.store.getClient(used)).not.toBeNull();
+    expect(await agents.store.getClient(fresh)).not.toBeNull();
+    client.close();
+  });
+
   it('decrypts image attachments', async () => {
     const { notebookId, noteId, noteKey, client } = await setupNotebook();
     const img = rnd(5000);
@@ -213,6 +389,17 @@ describe('data source', () => {
     await api(s, 'PUT', `/attachments/${attachmentId}/chunks/0`, { token: t, binary: Buffer.from(chunk) });
     const out = await agents.data.loadAttachmentImage!(u.userId, attachmentId);
     expect(Buffer.from(out!).equals(img)).toBe(true);
+    // Above AGENT_IMAGE_MAX_BYTES nothing is read or decrypted (security audit 2026-10-27).
+    const limit = s.ctx.config.AGENT_IMAGE_MAX_BYTES;
+    s.ctx.config.AGENT_IMAGE_MAX_BYTES = 1000;
+    try {
+      const get = vi.spyOn(s.ctx.storage, 'get');
+      expect(await agents.data.loadAttachmentImage!(u.userId, attachmentId)).toBeNull();
+      expect(get).not.toHaveBeenCalled();
+      get.mockRestore();
+    } finally {
+      s.ctx.config.AGENT_IMAGE_MAX_BYTES = limit;
+    }
     void notebookId;
     client.close();
   });
@@ -261,6 +448,32 @@ describe('data source', () => {
     expect(await agents.data.loadDoc(u.userId, a.noteId, ro.id)).toBeNull();
     a.client.close();
     b.client.close();
+  });
+
+  it('an all-notebooks grant reaches notebooks switched to agent mode later, RLS included', async () => {
+    const a = await setupNotebook();
+    const later = await setupNotebook('private');
+    const g = grant([], 'read_write', { allNotebooks: true });
+    await agents.store.insertGrant(g);
+    const ids = async () => (await agents.data.listAgentNotebooks(u.userId, g.id)).map((n) => n.id);
+    expect(await ids()).toContain(a.notebookId);
+    expect(await ids()).not.toContain(later.notebookId);
+    expect(await agents.data.loadDoc(u.userId, later.noteId, g.id)).toBeNull();
+
+    await api(s, 'PATCH', `/notebooks/${later.notebookId}/mode`, {
+      token: u.session.accessToken,
+      body: { mode: 'agent', notebookKey: b64(later.notebookKey) },
+    });
+    expect(await ids()).toEqual(expect.arrayContaining([a.notebookId, later.notebookId]));
+    expect((await agents.data.loadDoc(u.userId, later.noteId, g.id))!.doc.getText('t').toString()).toBe('from user');
+    expect(noteKeyCache.get(later.noteId)).toBeDefined();
+
+    // Back to an explicit (empty) list: nothing is reachable and the cached keys are gone.
+    await agents.store.updateGrant(g.id, { allNotebooks: false });
+    expect(noteKeyCache.get(later.noteId)).toBeUndefined();
+    expect(await ids()).toEqual([]);
+    a.client.close();
+    later.client.close();
   });
 
   it('notebook deletion removes it from grants', async () => {

@@ -32,13 +32,90 @@ export const API_ERROR_CODES = [
   "rate_limited",
   "payload_too_large",
   "internal",
+  "device_revoked",
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
+/**
+ * Why a device session was revoked (D-53, api.md). The client wipes all local
+ * data for every reason; the reason only picks the wording / security note.
+ */
+export const DEVICE_REVOKED_REASONS = [
+  /** Disconnected in the device list on another device, or logged out. */
+  "user",
+  /** The password was changed on another device. */
+  "password_change",
+  /** Access was restored with the recovery key. */
+  "recovery",
+  /** A used refresh token was presented again outside the 60 s grace: a sign of theft. */
+  "token_reuse",
+  /** The account was deleted (a still-valid access token; `/auth/refresh` then answers `unauthorized`). */
+  "account_deleted",
+] as const;
+export type DeviceRevokedReason = (typeof DEVICE_REVOKED_REASONS)[number];
+export const deviceRevokedReasonSchema = z.enum(DEVICE_REVOKED_REASONS);
+
 export const apiErrorSchema = z.object({
-  error: z.object({ code: z.enum(API_ERROR_CODES), message: z.string() }),
+  error: z.object({
+    code: z.enum(API_ERROR_CODES),
+    message: z.string(),
+    /** Present with `device_revoked` (HTTP 401). */
+    reason: deviceRevokedReasonSchema.optional(),
+    /** For `rate_limited`. */
+    retryAfterMs: z.number().int().nonnegative().optional(),
+  }),
 });
 export type ApiError = z.infer<typeof apiErrorSchema>;
+
+/**
+ * How a client must react to a failed REST call (D-53). `device_revoked` is
+ * strictly separate from an expired token (`unauthorized` → refresh) and from
+ * network failures (`network` → retry later): only it wipes local data.
+ */
+export type ApiFailure =
+  | { kind: "device_revoked"; reason: DeviceRevokedReason }
+  | { kind: "unauthorized" }
+  | { kind: "network" }
+  | { kind: "error"; status: number; code: ApiErrorCode | null; message: string };
+
+/**
+ * Classify a REST failure. Pass `status: null` when no HTTP response arrived
+ * (fetch threw, timeout, offline). `body` is the parsed JSON or raw text.
+ * Only a 401 whose JSON body has `error.code: "device_revoked"` yields
+ * `device_revoked`; a proxy's 401 or garbage never does.
+ */
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+export function classifyApiFailure(status: number | null, body: unknown): ApiFailure {
+  if (status === null) return { kind: "network" };
+  let json = body;
+  if (typeof body === "string") {
+    try {
+      json = JSON.parse(body);
+    } catch {
+      json = null;
+    }
+  }
+  if (status === 401 && isRecord(json) && isRecord(json.error)) {
+    if (json.error.code === "device_revoked") {
+      // A reason added by a newer server still means "revoked" (fallback "user").
+      const reason = deviceRevokedReasonSchema.safeParse(json.error.reason);
+      return { kind: "device_revoked", reason: reason.success ? reason.data : "user" };
+    }
+  }
+  const parsed = apiErrorSchema.safeParse(json);
+  const error = parsed.success ? parsed.data.error : null;
+  if (status === 401) return { kind: "unauthorized" };
+  if (status >= 502 && status <= 504 && !error) return { kind: "network" };
+  return {
+    kind: "error",
+    status,
+    code: error?.code ?? null,
+    message: error?.message ?? `HTTP ${status}`,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Shared pieces
@@ -196,6 +273,17 @@ export const createNotebookRequestSchema = z
     wrappedKey: wrappedKeySchema,
     /** Raw notebookKey, only for mode = "agent" (crypto.md §8). */
     notebookKey: key32Schema.optional(),
+    /**
+     * Notebook of a shared space (D-62): `wrappedKey` is then the notebookKey under the
+     * spaceKey (crypto.md §11.2).
+     */
+    spaceId: uuidSchema.optional(),
+    /** Version of the spaceKey that wraps `wrappedKey`; not the current one → 409 (D-62). */
+    spaceKeyVersion: z.number().int().positive().optional(),
+  })
+  .refine((b) => (b.spaceId === undefined) === (b.spaceKeyVersion === undefined), {
+    message: "spaceId and spaceKeyVersion go together",
+    path: ["spaceKeyVersion"],
   })
   .refine((b) => (b.mode === "agent") === (b.notebookKey !== undefined), {
     message: "notebookKey is required for mode=agent and forbidden for mode=private",
@@ -208,10 +296,27 @@ export const notebookSchema = z.object({
   mode: notebookModeSchema,
   createdAt: isoDateTimeSchema,
   wrappedKey: wrappedKeySchema,
+  /** The notebook has members (D-54); absent from older servers. */
+  shared: z.boolean().optional(),
+  /**
+   * Shared space of the notebook (D-62): `wrappedKey` is then under the spaceKey, not the
+   * masterKey. null or absent = personal.
+   */
+  spaceId: uuidSchema.nullable().optional(),
 });
 export type Notebook = z.infer<typeof notebookSchema>;
 
-export const notebookKeyResponseSchema = z.object({ wrappedKey: wrappedKeySchema });
+const keyVersionSchema = z.number().int().positive();
+
+export const notebookKeyResponseSchema = z.object({
+  wrappedKey: wrappedKeySchema,
+  /** D-54 key rotation (crypto.md §10.3); absent = version 1, empty chain. */
+  version: keyVersionSchema.optional(),
+  keyChain: z.array(wrappedKeySchema).optional(),
+  keyRotationPending: z.boolean().optional(),
+  /** Key version when the rotation became pending; a higher `version` = step 1 done. */
+  pendingSinceVersion: keyVersionSchema.nullable().optional(),
+});
 export type NotebookKeyResponse = z.infer<typeof notebookKeyResponseSchema>;
 
 export const patchNotebookModeRequestSchema = z
@@ -224,8 +329,8 @@ export type PatchNotebookModeRequest = z.infer<typeof patchNotebookModeRequestSc
 
 export const registerDocRequestSchema = z
   .object({ docId: uuidSchema, kind: docKindSchema, notebookId: uuidSchema.nullable() })
-  .refine((b) => (b.kind === "account") === (b.notebookId === null), {
-    message: "notebookId must be null for account documents and set otherwise",
+  .refine((b) => (b.kind === "account" || b.kind === "space") === (b.notebookId === null), {
+    message: "notebookId must be null for account and space documents and set otherwise",
     path: ["notebookId"],
   })
   .refine((b) => b.kind !== "notebook" || b.docId === b.notebookId, {
@@ -238,15 +343,271 @@ export type RegisterDocRequest = z.infer<typeof registerDocRequestSchema>;
 export const moveDocRequestSchema = z.object({ notebookId: uuidSchema });
 export type MoveDocRequest = z.infer<typeof moveDocRequestSchema>;
 
+/** Who wrote an update — stamped by the server, never claimed by the client (D-54). */
+export const authorSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("user"), userId: uuidSchema }),
+  z.object({ kind: z.literal("guest"), shareId: uuidSchema }),
+  z.object({ kind: z.literal("agent"), tokenId: z.string().min(1) }),
+]);
+export type Author = z.infer<typeof authorSchema>;
+
 export const docVersionSchema = z.object({
   seq: z.number().int().nonnegative(),
   createdAt: isoDateTimeSchema,
   deviceId: z.string(),
+  /** Who changed the document since the previous version (D-54); absent from older servers. */
+  authors: z.array(authorSchema).optional(),
 });
 export type DocVersion = z.infer<typeof docVersionSchema>;
 
 export const docVersionPayloadSchema = z.object({ payload: base64UrlSchema });
 export type DocVersionPayload = z.infer<typeof docVersionPayloadSchema>;
+
+// ---------------------------------------------------------------------------
+// Account sharing (D-54, api.md «Совместный доступ», crypto.md §10)
+// ---------------------------------------------------------------------------
+
+export const MEMBER_ROLES = ["editor", "viewer"] as const;
+export type MemberRole = (typeof MEMBER_ROLES)[number];
+export const memberRoleSchema = z.enum(MEMBER_ROLES);
+/** People per shared notebook/note, pending invitations included. */
+export const MAX_MEMBERS = 50;
+export const INVITATION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const MAX_INVITATIONS_PER_DAY = 50;
+
+/** A notebook or a note (D-54 sharing and guest links). */
+export const shareTargetSchema = z.object({
+  kind: z.enum(["note", "notebook"]),
+  id: uuidSchema,
+});
+/** Guest links (`/shares`) target a note or a notebook only, never a whole space (D-62). */
+export const linkTargetSchema = shareTargetSchema;
+/**
+ * Any resource of account sharing, shared spaces included (D-62). The narrower D-54 schemas
+ * (`shareTargetSchema`, `sharedItemSchema`, …) stay as they are for code that handles notebooks
+ * and notes only; the `account…` ones below also accept `kind = "space"`.
+ */
+export const accountTargetSchema = z.object({
+  kind: z.enum(["note", "notebook", "space"]),
+  id: uuidSchema,
+});
+export type AccountTarget = z.infer<typeof accountTargetSchema>;
+export type ShareTarget = z.infer<typeof shareTargetSchema>;
+
+export const boxKeySchema = z.object({
+  publicKey: key32Schema,
+  wrappedSecretKey: wrappedKeySchema,
+});
+export type BoxKey = z.infer<typeof boxKeySchema>;
+
+export const publicKeyResponseSchema = z.object({ userId: uuidSchema, publicKey: key32Schema });
+
+export const createInvitationRequestSchema = z.object({
+  invitationId: uuidSchema,
+  target: shareTargetSchema,
+  email: emailSchema,
+  role: memberRoleSchema,
+});
+export type CreateInvitationRequest = z.infer<typeof createInvitationRequestSchema>;
+/** Invitations to shared spaces too (D-62). */
+export const accountCreateInvitationRequestSchema = createInvitationRequestSchema.extend({
+  target: accountTargetSchema,
+});
+export type AccountCreateInvitationRequest = z.infer<typeof accountCreateInvitationRequestSchema>;
+
+export const INVITATION_STATUSES = ["pending", "accepted", "declined", "expired"] as const;
+
+export const outgoingInvitationSchema = z.object({
+  id: uuidSchema,
+  email: z.string(),
+  role: memberRoleSchema,
+  status: z.enum(INVITATION_STATUSES),
+  createdAt: isoDateTimeSchema,
+  expiresAt: isoDateTimeSchema,
+});
+export type OutgoingInvitation = z.infer<typeof outgoingInvitationSchema>;
+
+export const incomingInvitationSchema = z.object({
+  id: uuidSchema,
+  target: shareTargetSchema,
+  from: z.object({ userId: uuidSchema, email: z.string() }),
+  role: memberRoleSchema,
+  createdAt: isoDateTimeSchema,
+  expiresAt: isoDateTimeSchema,
+});
+export type IncomingInvitation = z.infer<typeof incomingInvitationSchema>;
+export const accountIncomingInvitationSchema = incomingInvitationSchema.extend({
+  target: accountTargetSchema,
+});
+export type AccountIncomingInvitation = z.infer<typeof accountIncomingInvitationSchema>;
+
+export const memberSchema = z.object({
+  userId: uuidSchema,
+  email: z.string(),
+  role: memberRoleSchema,
+  status: z.enum(["active", "awaiting_key"]),
+  joinedAt: isoDateTimeSchema,
+  accountCreatedAfterInvite: z.boolean(),
+});
+export type Member = z.infer<typeof memberSchema>;
+
+export const patchMemberRequestSchema = z.object({ role: memberRoleSchema });
+
+export const putMemberKeyRequestSchema = z.object({
+  version: keyVersionSchema,
+  wrappedKey: wrappedKeySchema,
+});
+export type PutMemberKeyRequest = z.infer<typeof putMemberKeyRequestSchema>;
+
+export const rotateKeyRequestSchema = z
+  .object({
+    version: keyVersionSchema.min(2),
+    ownerWrappedKey: wrappedKeySchema,
+    previousKeyWrap: wrappedKeySchema,
+    memberKeys: z
+      .array(z.object({ userId: uuidSchema, wrappedKey: wrappedKeySchema }))
+      .max(MAX_MEMBERS),
+    notebookKey: key32Schema.optional(),
+  })
+  .refine((b) => new Set(b.memberKeys.map((m) => m.userId)).size === b.memberKeys.length, {
+    message: "duplicate userId in memberKeys",
+    path: ["memberKeys"],
+  });
+export type RotateKeyRequest = z.infer<typeof rotateKeyRequestSchema>;
+
+/** `GET /shared-by-me`: everything the caller shares as owner. */
+export const sharedByMeItemSchema = z.object({
+  target: shareTargetSchema,
+  keyVersion: keyVersionSchema,
+  keyRotationPending: z.boolean(),
+  /** See notebookKeyResponseSchema; absent from older servers. */
+  pendingSinceVersion: keyVersionSchema.nullable().optional(),
+  members: z.number().int().nonnegative(),
+  awaitingKey: z.number().int().nonnegative(),
+});
+export type SharedByMeItem = z.infer<typeof sharedByMeItemSchema>;
+export const accountSharedByMeItemSchema = sharedByMeItemSchema.extend({
+  target: accountTargetSchema,
+});
+export type AccountSharedByMeItem = z.infer<typeof accountSharedByMeItemSchema>;
+
+export const sharedNoteKeyResponseSchema = z.object({
+  version: keyVersionSchema,
+  ownerWrappedKey: wrappedKeySchema,
+  keyChain: z.array(wrappedKeySchema),
+});
+export type SharedNoteKeyResponse = z.infer<typeof sharedNoteKeyResponseSchema>;
+
+export const sharedItemSchema = z.object({
+  target: shareTargetSchema,
+  owner: z.object({ userId: uuidSchema, email: z.string(), publicKey: key32Schema }),
+  role: memberRoleSchema,
+  keyVersion: keyVersionSchema,
+  /** null while the owner's client has not delivered the key yet. */
+  wrappedKey: wrappedKeySchema.nullable(),
+  keyChain: z.array(wrappedKeySchema),
+  docIds: z.array(uuidSchema),
+  addedAt: isoDateTimeSchema,
+  /**
+   * Agents can read it (✨, display only): the notebook is in agent mode, or
+   * the note lies in an owner's notebook in agent mode. Absent from older servers.
+   */
+  agentsMode: z.boolean().optional(),
+});
+export type SharedItem = z.infer<typeof sharedItemSchema>;
+/**
+ * `/shared-with-me` items of every kind (D-62). For `kind = "space"`, `wrappedKey` is the
+ * spaceKey for this member and `docIds` covers the space document and all its notebooks.
+ */
+export const accountSharedItemSchema = sharedItemSchema.extend({ target: accountTargetSchema });
+export type AccountSharedItem = z.infer<typeof accountSharedItemSchema>;
+
+// ---------------------------------------------------------------------------
+// Shared spaces (D-62, api.md «Общие пространства», crypto.md §11)
+// ---------------------------------------------------------------------------
+
+/** A shared space as the server sees it (named `SharedSpace`: `Space` is the account record). */
+export const sharedSpaceSchema = z.object({
+  id: uuidSchema,
+  ownerUserId: uuidSchema,
+  keyVersion: keyVersionSchema,
+  keyRotationPending: z.boolean(),
+  pendingSinceVersion: keyVersionSchema.nullable(),
+  createdAt: isoDateTimeSchema,
+});
+export type SharedSpace = z.infer<typeof sharedSpaceSchema>;
+
+/** `POST /spaces`: make an own space shared; `wrappedKey` = spaceKey v1 under the masterKey. */
+export const createSpaceRequestSchema = z.object({
+  spaceId: uuidSchema,
+  wrappedKey: wrappedKeySchema,
+});
+export type CreateSpaceRequest = z.infer<typeof createSpaceRequestSchema>;
+
+/** `GET /spaces/:id/key` (owner). */
+export const spaceKeyResponseSchema = z.object({
+  version: keyVersionSchema,
+  wrappedKey: wrappedKeySchema,
+  keyChain: z.array(wrappedKeySchema),
+  keyRotationPending: z.boolean(),
+  pendingSinceVersion: keyVersionSchema.nullable(),
+});
+export type SpaceKeyResponse = z.infer<typeof spaceKeyResponseSchema>;
+
+/** An item of `GET /spaces/:id/notebooks`: a notebook's key under the spaceKey. */
+export const spaceNotebookSchema = z.object({
+  notebookId: uuidSchema,
+  version: keyVersionSchema,
+  spaceWrappedKey: wrappedKeySchema,
+  keyChain: z.array(wrappedKeySchema),
+  mode: notebookModeSchema,
+});
+export type SpaceNotebook = z.infer<typeof spaceNotebookSchema>;
+
+/** `PUT /spaces/:id/notebooks/:notebookId`: move an own personal notebook into the space. */
+export const putSpaceNotebookRequestSchema = z.object({
+  version: keyVersionSchema,
+  spaceWrappedKey: wrappedKeySchema,
+});
+export type PutSpaceNotebookRequest = z.infer<typeof putSpaceNotebookRequestSchema>;
+
+/** `POST /spaces/:id/notebooks/:notebookId/move-out`: back to personal, with a new key. */
+export const moveOutNotebookRequestSchema = z.object({
+  version: keyVersionSchema.min(2),
+  ownerWrappedKey: wrappedKeySchema,
+  previousKeyWrap: wrappedKeySchema,
+  notebookKey: key32Schema.optional(),
+});
+export type MoveOutNotebookRequest = z.infer<typeof moveOutNotebookRequestSchema>;
+
+/** `POST /spaces/:id/rotate`: new spaceKey and new keys of all its notebooks, atomically. */
+export const rotateSpaceRequestSchema = z
+  .object({
+    version: keyVersionSchema.min(2),
+    ownerWrappedKey: wrappedKeySchema,
+    previousKeyWrap: wrappedKeySchema,
+    memberKeys: z
+      .array(z.object({ userId: uuidSchema, wrappedKey: wrappedKeySchema }))
+      .max(MAX_MEMBERS),
+    notebooks: z.array(
+      z.object({
+        notebookId: uuidSchema,
+        version: keyVersionSchema.min(2),
+        spaceWrappedKey: wrappedKeySchema,
+        previousKeyWrap: wrappedKeySchema,
+        notebookKey: key32Schema.optional(),
+      }),
+    ),
+  })
+  .refine((b) => new Set(b.memberKeys.map((m) => m.userId)).size === b.memberKeys.length, {
+    message: "duplicate userId in memberKeys",
+    path: ["memberKeys"],
+  })
+  .refine((b) => new Set(b.notebooks.map((n) => n.notebookId)).size === b.notebooks.length, {
+    message: "duplicate notebookId in notebooks",
+    path: ["notebooks"],
+  });
+export type RotateSpaceRequest = z.infer<typeof rotateSpaceRequestSchema>;
 
 // ---------------------------------------------------------------------------
 // Attachments (crypto.md §6)
@@ -277,15 +638,9 @@ export type AttachmentStatus = z.infer<typeof attachmentStatusSchema>;
 export const SHARE_PERMISSIONS = ["view", "edit"] as const;
 export type SharePermission = (typeof SHARE_PERMISSIONS)[number];
 
-export const shareTargetSchema = z.object({
-  kind: z.enum(["note", "notebook"]),
-  id: uuidSchema,
-});
-export type ShareTarget = z.infer<typeof shareTargetSchema>;
-
 export const createShareRequestSchema = z.object({
   shareId: uuidSchema,
-  target: shareTargetSchema,
+  target: linkTargetSchema,
   permission: z.enum(SHARE_PERMISSIONS),
   expiresAt: isoDateTimeSchema.nullable().default(null),
 });
@@ -294,7 +649,7 @@ export type CreateShareRequest = z.input<typeof createShareRequestSchema>;
 /** The contract names `Share` without fields; this shape is the core stream's proposal. */
 export const shareSchema = z.object({
   id: uuidSchema,
-  target: shareTargetSchema,
+  target: linkTargetSchema,
   permission: z.enum(SHARE_PERMISSIONS),
   expiresAt: isoDateTimeSchema.nullable(),
   createdAt: isoDateTimeSchema,
@@ -303,9 +658,16 @@ export type Share = z.infer<typeof shareSchema>;
 
 export const guestSessionResponseSchema = z.object({
   guestToken: z.string().min(1),
-  target: shareTargetSchema,
+  target: linkTargetSchema,
   permission: z.enum(SHARE_PERMISSIONS),
   docIds: z.array(uuidSchema),
+  /**
+   * The target's key version and older keys, each wrapped by the next newer one (crypto.md §10.3):
+   * with the link's key (the current one) they open what was written before a key rotation.
+   * Useless without the link's key. Absent from older servers.
+   */
+  keyVersion: z.number().int().positive().optional(),
+  keyChain: z.array(z.string()).optional(),
 });
 export type GuestSessionResponse = z.infer<typeof guestSessionResponseSchema>;
 
@@ -316,12 +678,16 @@ export type GuestSessionResponse = z.infer<typeof guestSessionResponseSchema>;
 export const AGENT_PERMISSIONS = ["read", "read_write"] as const;
 export type AgentPermission = (typeof AGENT_PERMISSIONS)[number];
 
-export const createAgentTokenRequestSchema = z.object({
-  name: z.string().min(1).max(200),
-  notebookIds: z.array(uuidSchema).min(1),
-  permission: z.enum(AGENT_PERMISSIONS),
-  expiresAt: isoDateTimeSchema.nullable().optional(),
-});
+export const createAgentTokenRequestSchema = z
+  .object({
+    name: z.string().min(1).max(200),
+    notebookIds: z.array(uuidSchema).default([]),
+    /** Every agent-mode notebook, including ones switched to that mode later (`notebookIds` is then ignored). */
+    allNotebooks: z.boolean().optional(),
+    permission: z.enum(AGENT_PERMISSIONS),
+    expiresAt: isoDateTimeSchema.nullable().optional(),
+  })
+  .refine((v) => v.allNotebooks || v.notebookIds.length > 0, { path: ["notebookIds"] });
 export type CreateAgentTokenRequest = z.infer<typeof createAgentTokenRequestSchema>;
 
 export const createAgentTokenResponseSchema = z.object({
@@ -336,6 +702,7 @@ export const agentTokenSchema = z.object({
   id: uuidSchema,
   name: z.string(),
   notebookIds: z.array(uuidSchema),
+  allNotebooks: z.boolean().default(false),
   permission: z.enum(AGENT_PERMISSIONS),
   expiresAt: isoDateTimeSchema.nullable(),
   createdAt: isoDateTimeSchema,
@@ -385,6 +752,33 @@ export const API_ROUTES = {
   listShares: { method: "GET", path: "/shares" },
   deleteShare: { method: "DELETE", path: "/shares/:id" },
   createGuestSession: { method: "POST", path: "/shares/:id/guest" },
+  putBoxKey: { method: "PUT", path: "/me/box-key" },
+  getBoxKey: { method: "GET", path: "/me/box-key" },
+  getPublicKey: { method: "GET", path: "/users/:userId/public-key" },
+  createInvitation: { method: "POST", path: "/invitations" },
+  listInvitations: { method: "GET", path: "/invitations" },
+  deleteInvitation: { method: "DELETE", path: "/invitations/:id" },
+  incomingInvitations: { method: "GET", path: "/invitations/incoming" },
+  acceptInvitation: { method: "POST", path: "/invitations/:id/accept" },
+  declineInvitation: { method: "POST", path: "/invitations/:id/decline" },
+  listMembers: { method: "GET", path: "/members/:kind/:id" },
+  patchMember: { method: "PATCH", path: "/members/:kind/:id/:userId" },
+  deleteMember: { method: "DELETE", path: "/members/:kind/:id/:userId" },
+  putMemberKey: { method: "PUT", path: "/members/:kind/:id/:userId/key" },
+  rotateKey: { method: "POST", path: "/members/:kind/:id/rotate" },
+  getSharedNoteKey: { method: "GET", path: "/members/note/:id/key" },
+  rotateKeyDone: { method: "POST", path: "/members/:kind/:id/rotate/done" },
+  sharedWithMe: { method: "GET", path: "/shared-with-me" },
+  sharedByMe: { method: "GET", path: "/shared-by-me" },
+  createSpace: { method: "POST", path: "/spaces" },
+  listSpaces: { method: "GET", path: "/spaces" },
+  getSpaceKey: { method: "GET", path: "/spaces/:id/key" },
+  listSpaceNotebooks: { method: "GET", path: "/spaces/:id/notebooks" },
+  putSpaceNotebook: { method: "PUT", path: "/spaces/:id/notebooks/:notebookId" },
+  moveOutSpaceNotebook: { method: "POST", path: "/spaces/:id/notebooks/:notebookId/move-out" },
+  rotateSpace: { method: "POST", path: "/spaces/:id/rotate" },
+  rotateSpaceDone: { method: "POST", path: "/spaces/:id/rotate/done" },
+  deleteSpace: { method: "DELETE", path: "/spaces/:id" },
   createAgentToken: { method: "POST", path: "/agent-tokens" },
   listAgentTokens: { method: "GET", path: "/agent-tokens" },
   deleteAgentToken: { method: "DELETE", path: "/agent-tokens/:id" },

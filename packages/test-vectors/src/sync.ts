@@ -44,11 +44,37 @@ export function syncVectors() {
       },
       { type: "updates", docId: doc, snapshot: null, items: [], upToDate: true },
       { type: "update", docId: doc, seq: 43, payload: P, deviceId: "dev-3" },
+      {
+        type: "updates",
+        docId: doc,
+        snapshot: null,
+        items: [
+          { seq: 45, payload: P, deviceId: "dev-1", author: { kind: "user", userId: vid(10) } },
+          {
+            seq: 46,
+            payload: P,
+            deviceId: "guest:abc",
+            author: { kind: "guest", shareId: vid(5) },
+          },
+          { seq: 47, payload: P, deviceId: "agent", author: { kind: "agent", tokenId: "tok-1" } },
+        ],
+        upToDate: true,
+      },
+      {
+        type: "update",
+        docId: doc,
+        seq: 48,
+        payload: P,
+        deviceId: "dev-3",
+        author: { kind: "user", userId: vid(11) },
+      },
       { type: "ack", docId: doc, clientMsgId: vid(30), seq: 44 },
       { type: "awareness", docId: doc, payload: P, deviceId: "dev-3" },
       { type: "error", code: "payload_too_large", message: "update exceeds 2 MiB", ref: vid(30) },
       { type: "error", code: "unauthorized", message: "token expired" },
       { type: "error", code: "bad_request", message: "invalid message" },
+      { type: "error", code: "rate_limited", message: "too many messages", retryAfterMs: 5000 },
+      { type: "error", code: "device_revoked", message: "device revoked", reason: "token_reuse" },
       { type: "update", docId: doc, seq: 45, payload: P, deviceId: "guest:AAECAwQFBgcICQoLDA0ODw" },
     ],
   };
@@ -72,6 +98,23 @@ export function syncVectors() {
         reason: "negative since",
         message: { type: "subscribe", docs: [{ docId: doc, since: -1 }] },
       },
+      {
+        reason: "duplicate docId in subscribe",
+        message: {
+          type: "subscribe",
+          docs: [
+            { docId: doc, since: 0 },
+            { docId: doc, since: 5 },
+          ],
+        },
+      },
+      {
+        reason: "more than 1000 documents in one subscribe",
+        message: {
+          type: "subscribe",
+          docs: Array.from({ length: 1001 }, (_, i) => ({ docId: vid(10_000 + i), since: 0 })),
+        },
+      },
       { reason: "empty subscribe", message: { type: "subscribe", docs: [] } },
       {
         reason: "fractional baseSeq",
@@ -84,6 +127,21 @@ export function syncVectors() {
         message: { type: "update", docId: doc, seq: 0, payload: P, deviceId: "d" },
       },
       { reason: "unknown error code", message: { type: "error", code: "teapot", message: "" } },
+      {
+        reason: "unknown author kind",
+        message: {
+          type: "update",
+          docId: doc,
+          seq: 1,
+          payload: P,
+          deviceId: "d",
+          author: { kind: "robot", id: "x" },
+        },
+      },
+      {
+        reason: "unknown revocation reason",
+        message: { type: "error", code: "device_revoked", message: "", reason: "bored" },
+      },
       {
         reason: "missing upToDate",
         message: { type: "updates", docId: doc, snapshot: null, items: [] },

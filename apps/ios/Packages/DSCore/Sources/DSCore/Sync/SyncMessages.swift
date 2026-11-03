@@ -11,6 +11,8 @@ public enum SyncProtocol {
     /// Decoded payload limits (§7).
     public static let maxUpdateBytes = 2 * 1024 * 1024
     public static let maxSnapshotBytes = 50 * 1024 * 1024
+    /// Documents in one `subscribe` (§2): more go in several messages.
+    public static let maxSubscribeDocs = 1000
 }
 
 public enum SyncAuth: Codable, Hashable, Sendable {
@@ -171,7 +173,10 @@ public enum ClientMessage: Codable, Hashable, Sendable {
                           client: try c.decode(ClientInfo.self, forKey: .client))
         case "subscribe":
             let docs = try c.decode([SubscribeEntry].self, forKey: .docs)
-            guard !docs.isEmpty else { throw DecodingError.dataCorruptedError(forKey: .docs, in: c, debugDescription: "empty") }
+            guard (1...SyncProtocol.maxSubscribeDocs).contains(docs.count) else {
+                throw DecodingError.dataCorruptedError(forKey: .docs, in: c, debugDescription: "1–\(SyncProtocol.maxSubscribeDocs) documents")
+            }
+            guard Set(docs.map(\.docId)).count == docs.count else { throw DecodingError.dataCorruptedError(forKey: .docs, in: c, debugDescription: "duplicate docId") }
             self = .subscribe(docs: docs)
         case "unsubscribe":
             let ids = try c.decode([String].self, forKey: .docIds)
@@ -192,12 +197,38 @@ public struct UpdateItem: Hashable, Sendable {
     public var seq: Int64
     public var payload: Data
     public var deviceId: String
+    /// Who sent it, set by the server (D-54; older servers omit it).
+    public var author: UpdateAuthor?
+
+    public init(seq: Int64, payload: Data, deviceId: String, author: UpdateAuthor? = nil) {
+        self.seq = seq
+        self.payload = payload
+        self.deviceId = deviceId
+        self.author = author
+    }
 }
 
 public enum SyncErrorCode: String, Codable, Sendable {
     case badRequest = "bad_request"
     case unauthorized, forbidden, docNotFound = "doc_not_found", payloadTooLarge = "payload_too_large"
     case rateLimited = "rate_limited", protocolMismatch = "protocol_mismatch", `internal`
+    /// D-53: this device was revoked (`reason`); the connection is closed with 4410.
+    case deviceRevoked = "device_revoked"
+}
+
+/// Timing events of `SyncEngine` (`setTraceHandler`), e.g. for `os_signpost` intervals:
+/// subscribe → caught up per document.
+public enum SyncTraceEvent: Sendable, Equatable {
+    /// `welcome` received; subscriptions follow.
+    case connected
+    /// One subscribe frame sent, in this order.
+    case subscribed(docIds: [String])
+    /// A document's catch-up finished (`upToDate`).
+    case caughtUp(docId: String)
+    /// Registered after the server did not know it (`doc_not_found`).
+    case registered(docId: String)
+    /// Not subscribed: its key is not on this device yet.
+    case keyMissing(docId: String)
 }
 
 /// Server → client (§4).
@@ -207,10 +238,12 @@ public enum ServerMessage: Codable, Hashable, Sendable {
     case update(docId: String, item: UpdateItem)
     case ack(docId: String, clientMsgId: String, seq: Int64)
     case awareness(docId: String, payload: Data, deviceId: String)
-    case error(code: SyncErrorCode, message: String, ref: String?)
+    /// `retryAfterMs` (`rate_limited` only, §7): do not resend or reconnect sooner.
+    /// `reason` (`device_revoked` only, D-53).
+    case error(code: SyncErrorCode, message: String, ref: String?, retryAfterMs: Int? = nil, reason: DeviceRevocationReason? = nil)
 
-    enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref }
-    struct Item: Encodable { var seq: Int64; var payload: String; var deviceId: String }
+    enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref, retryAfterMs, reason, author }
+    struct Item: Encodable { var seq: Int64; var payload: String; var deviceId: String; var author: UpdateAuthor? }
     struct Snap: Encodable { var seq: Int64; var payload: String }
 
     public init(from decoder: any Decoder) throws {
@@ -233,19 +266,23 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             var items: [UpdateItem] = []
             while !itemsC.isAtEnd {
                 let i = try itemsC.nestedContainer(keyedBy: CodingKeys.self)
-                items.append(UpdateItem(seq: try V.positive(i, .seq), payload: try V.bytes(i, .payload), deviceId: try V.shortId(i, .deviceId)))
+                items.append(UpdateItem(seq: try V.positive(i, .seq), payload: try V.bytes(i, .payload), deviceId: try V.shortId(i, .deviceId),
+                                        author: try i.decodeIfPresent(UpdateAuthor.self, forKey: .author)))
             }
             self = .updates(docId: try V.uuid(c, .docId), snapshot: snapshot, items: items, upToDate: try c.decode(Bool.self, forKey: .upToDate))
         case "update":
             self = .update(docId: try V.uuid(c, .docId), item: UpdateItem(
-                seq: try V.positive(c, .seq), payload: try V.bytes(c, .payload), deviceId: try V.shortId(c, .deviceId)))
+                seq: try V.positive(c, .seq), payload: try V.bytes(c, .payload), deviceId: try V.shortId(c, .deviceId),
+                author: try c.decodeIfPresent(UpdateAuthor.self, forKey: .author)))
         case "ack":
             self = .ack(docId: try V.uuid(c, .docId), clientMsgId: try V.shortId(c, .clientMsgId), seq: try V.positive(c, .seq))
         case "awareness":
             self = .awareness(docId: try V.uuid(c, .docId), payload: try V.bytes(c, .payload), deviceId: try V.shortId(c, .deviceId))
         case "error":
             self = .error(code: try c.decode(SyncErrorCode.self, forKey: .code), message: try c.decode(String.self, forKey: .message),
-                          ref: try c.decodeIfPresent(String.self, forKey: .ref))
+                          ref: try c.decodeIfPresent(String.self, forKey: .ref),
+                          retryAfterMs: try c.decodeIfPresent(Int.self, forKey: .retryAfterMs).map { max(0, $0) },
+                          reason: try c.decodeIfPresent(DeviceRevocationReason.self, forKey: .reason))
         case let t: throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(t)")
         }
     }
@@ -262,7 +299,7 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             try c.encode("updates", forKey: .type)
             try c.encode(docId, forKey: .docId)
             try c.encode(snapshot.map { Snap(seq: $0.seq, payload: Base64URL.encode($0.payload)) }, forKey: .snapshot)
-            try c.encode(items.map { Item(seq: $0.seq, payload: Base64URL.encode($0.payload), deviceId: $0.deviceId) }, forKey: .items)
+            try c.encode(items.map { Item(seq: $0.seq, payload: Base64URL.encode($0.payload), deviceId: $0.deviceId, author: $0.author) }, forKey: .items)
             try c.encode(upToDate, forKey: .upToDate)
         case .update(let docId, let item):
             try c.encode("update", forKey: .type)
@@ -270,6 +307,7 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             try c.encode(item.seq, forKey: .seq)
             try c.encode(Base64URL.encode(item.payload), forKey: .payload)
             try c.encode(item.deviceId, forKey: .deviceId)
+            try c.encodeIfPresent(item.author, forKey: .author)
         case .ack(let docId, let id, let seq):
             try c.encode("ack", forKey: .type)
             try c.encode(docId, forKey: .docId)
@@ -280,11 +318,13 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             try c.encode(docId, forKey: .docId)
             try c.encode(Base64URL.encode(payload), forKey: .payload)
             try c.encode(deviceId, forKey: .deviceId)
-        case .error(let code, let message, let ref):
+        case .error(let code, let message, let ref, let retryAfterMs, let reason):
             try c.encode("error", forKey: .type)
             try c.encode(code, forKey: .code)
             try c.encode(message, forKey: .message)
             try c.encodeIfPresent(ref, forKey: .ref)
+            try c.encodeIfPresent(retryAfterMs, forKey: .retryAfterMs)
+            try c.encodeIfPresent(reason, forKey: .reason)
         }
     }
 

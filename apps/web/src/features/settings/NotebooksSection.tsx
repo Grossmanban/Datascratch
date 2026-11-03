@@ -2,22 +2,23 @@ import { Lock, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NetworkError } from "@/api/client";
-import { dailyNotebookId, setNotebookMode, setSetting } from "@/domain/actions";
+import { dailyNotebookId, setDailyNotebook, setNotebookMode } from "@/domain/actions";
 import { useWorkspace } from "@/domain/workspace";
 import { AgentWarning } from "@/features/shell/ModeChoice";
 import type { NotebookMode, NotebookRef } from "@/lib/shared";
 import { Button, Dialog, DialogActions, DropdownMenu, toast } from "@/ui";
 import { Card, Row } from "./SettingsPage";
 import { iconGlyph, withIcon } from "@/lib/glyph";
+import { features } from "@/lib/features";
 
 export function NotebooksSection() {
   const { t } = useTranslation();
   const spaces = useWorkspace((s) => s.account.spaces);
   const notebooks = useWorkspace((s) => s.account.notebooks);
-  const dailyId = useWorkspace(() => dailyNotebookId());
+  // Each space has its own daily-notes notebook (D-48); re-read when the account changes.
+  const settings = useWorkspace((s) => s.account.settings);
   const [switching, setSwitching] = useState<{ nb: NotebookRef; to: NotebookMode } | null>(null);
   const [busy, setBusy] = useState(false);
-  const daily = notebooks.find((n) => n.id === dailyId);
 
   async function apply() {
     if (!switching) return;
@@ -26,7 +27,11 @@ export function NotebooksSection() {
       await setNotebookMode(switching.nb.id, switching.to);
       setSwitching(null);
     } catch (e) {
-      toast(e instanceof NetworkError ? t("common.requiresOnline") : String((e as Error).message), { tone: "danger" });
+      console.warn("[ds] notebook mode change failed", e, (e as { cause?: unknown }).cause);
+      // The confirmation stays open: its button is the retry.
+      toast(e instanceof NetworkError ? t("notebook.modeNotChangedOffline") : t("notebook.modeNotChanged", { reason: (e as Error).message }), {
+        tone: "danger",
+      });
     } finally {
       setBusy(false);
     }
@@ -69,16 +74,29 @@ export function NotebooksSection() {
         );
       })}
 
-      <Card title={t("settings.dailyNotebook")} description={t("notebook.dailyHere")}>
-        <DropdownMenu
-          items={notebooks.map((nb) => ({
-            label: withIcon(nb.icon, nb.name),
-            checked: nb.id === dailyId,
-            onSelect: () => setSetting("dailyNotebookId", nb.id),
-          }))}
-          trigger={<Button size="sm">{daily ? withIcon(daily.icon, daily.name) : "—"}</Button>}
-        />
-      </Card>
+      {(features.calendar || features.tasks) && (
+        <Card title={t("settings.dailyNotebook")} description={t("notebook.dailyHere")}>
+          {spaces.map((space) => {
+            const list = notebooks.filter((n) => n.spaceId === space.id);
+            if (!list.length) return null;
+            void settings;
+            const dailyId = dailyNotebookId(space.id);
+            const daily = list.find((n) => n.id === dailyId);
+            return (
+              <Row key={space.id} label={withIcon(space.icon, space.name)}>
+                <DropdownMenu
+                  items={list.map((nb) => ({
+                    label: withIcon(nb.icon, nb.name),
+                    checked: nb.id === dailyId,
+                    onSelect: () => setDailyNotebook(nb.id),
+                  }))}
+                  trigger={<Button size="sm">{daily ? withIcon(daily.icon, daily.name) : "—"}</Button>}
+                />
+              </Row>
+            );
+          })}
+        </Card>
+      )}
 
       <Dialog
         open={!!switching}

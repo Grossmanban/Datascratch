@@ -3,11 +3,19 @@
 # the managed block of .env (secrets in .env are generated once on the server).
 name: datascratch
 
+# Bounded container logs: request logs carry client addresses and the disk is shared.
+x-logging: &logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "3"
+
 services:
   # Every image comes from GHCR: the server never pulls from Docker Hub.
   # Memory limits come from deploy.sh (smaller on a server shared with other apps).
   # Everything (containers, volumes, network) is prefixed by the project name.
   postgres:
+    logging: *logging
     image: ${DS_POSTGRES_IMAGE:-ghcr.io/grossmanban/datascratch-postgres:16-alpine}
     restart: unless-stopped
     command:
@@ -25,7 +33,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: ${DS_MEM_POSTGRES:-1g}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-datascratch}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing in .env}
@@ -33,13 +41,14 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 20
     shm_size: 128mb
 
   server:
+    logging: *logging
     image: ${DS_SERVER_IMAGE:-ghcr.io/grossmanban/datascratch-server}:${DS_TAG:-latest}
     restart: unless-stopped
     env_file: .env
@@ -66,6 +75,7 @@ services:
   # The web app + Caddy. Fixed name: an existing reverse proxy on the shared `edge`
   # network reaches it as datascratch-web:80 (mode "edge", docker-compose.edge.yml).
   web:
+    logging: *logging
     image: ${DS_WEB_IMAGE:-ghcr.io/grossmanban/datascratch-web}:${DS_TAG:-latest}
     container_name: datascratch-web
     restart: unless-stopped

@@ -1,13 +1,38 @@
 import { Extension, Mark, Node, mergeAttributes } from "@tiptap/core";
 import Link from "@tiptap/extension-link";
 import HorizontalRule from "@tiptap/extension-horizontal-rule";
-import { colorTokenVar } from "../tokens";
+import { colorTokenVar, safeColor } from "../tokens";
 
-/** `doc = title block+` (document-model.md §4.2). */
+const TEXT_ALIGNS = ["left", "center", "right", "justify"] as const;
+const CELL_ALIGNS = ["left", "center", "right"] as const;
+
+/** An alignment from the document or pasted HTML, if it is one of `allowed` (never raw into a style). */
+function alignOf(value: unknown, allowed: readonly string[]): string | null {
+  const v = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return allowed.includes(v) ? v : null;
+}
+
+/** Links open only web and mail addresses (`javascript:`, `data:` and the like are never links). */
+export function safeHref(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const href = value.trim();
+  // eslint-disable-next-line no-control-regex
+  return /^(https?:\/\/|mailto:)/i.test(href) && !/[\u0000-\u001f\u007f]/.test(href) ? href : null;
+}
+
+/**
+ * `doc = title block+` (document-model.md §4.2) is what clients write; the editor reads more
+ * leniently. A document whose first block is not the title — no title, a block inserted before it,
+ * two titles from two clients creating the note at once — must open and stay exactly as it is
+ * ("never delete or rewrite what we do not expect"). With the strict expression ProseMirror fitted
+ * such a document on the first edit: it inserted a new empty title and turned the real one into a
+ * paragraph (data bug 2026-10-26). A new empty document still starts with a title (the first
+ * alternative).
+ */
 export const DocumentNode = Node.create({
   name: "doc",
   topNode: true,
-  content: "title block+",
+  content: "(title | block)+",
 });
 
 export const Title = Node.create({
@@ -17,29 +42,7 @@ export const Title = Node.create({
   defining: true,
   parseHTML: () => [{ tag: "h1[data-type=title]" }],
   renderHTML: ({ HTMLAttributes }) => ["h1", mergeAttributes(HTMLAttributes, { "data-type": "title", class: "ds-title" }), 0],
-  addKeyboardShortcuts() {
-    return {
-      // Enter at the end of the title jumps into the body instead of splitting the title.
-      Enter: ({ editor }) => {
-        const { $from, empty } = editor.state.selection;
-        if (!empty || $from.parent.type.name !== "title") return false;
-        const after = $from.after();
-        return editor
-          .chain()
-          .command(({ tr, state }) => {
-            const next = tr.doc.resolve(after).nodeAfter;
-            if (!next || next.type.name !== "paragraph" || next.content.size > 0 || $from.parentOffset < $from.parent.content.size) {
-              const rest = $from.parent.content.cut($from.parentOffset);
-              tr.delete($from.pos, $from.end());
-              tr.insert(tr.mapping.map(after), state.schema.nodes.paragraph!.create(null, rest));
-            }
-            return true;
-          })
-          .setTextSelection(after + 1)
-          .run();
-      },
-    };
-  },
+  // Enter in the title (no split, move to the text, default name): schema/title.ts.
 });
 
 /** Optional `textAlign` on paragraphs and headings (null = natural alignment). */
@@ -52,8 +55,11 @@ export const TextAlign = Extension.create({
         attributes: {
           textAlign: {
             default: null,
-            parseHTML: (el) => (el as HTMLElement).style.textAlign || null,
-            renderHTML: (attrs) => (attrs.textAlign ? { style: `text-align: ${attrs.textAlign}` } : {}),
+            parseHTML: (el) => alignOf((el as HTMLElement).style.textAlign, TEXT_ALIGNS),
+            renderHTML: (attrs) => {
+              const align = alignOf(attrs.textAlign, TEXT_ALIGNS);
+              return align ? { style: `text-align: ${align}` } : {};
+            },
           },
         },
       },
@@ -69,9 +75,44 @@ export const TextAlign = Extension.create({
   },
 });
 
+/**
+ * Column alignment of a table (document-model.md §4.2): the cell attribute `align` on
+ * `tableHeader`/`tableCell`, as Markdown writes it (`:---`, `:---:`, `---:`). No attribute =
+ * default alignment. Agents and iOS write the same attribute.
+ */
+export const TableCellAlign = Extension.create({
+  name: "dsTableAlign",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["tableHeader", "tableCell"],
+        attributes: {
+          align: {
+            default: null,
+            parseHTML: (el) => alignOf((el as HTMLElement).style.textAlign || (el as HTMLElement).getAttribute("align"), CELL_ALIGNS),
+            renderHTML: (attrs) => {
+              const align = alignOf(attrs.align, CELL_ALIGNS);
+              return align ? { style: `text-align: ${align}` } : {};
+            },
+          },
+        },
+      },
+    ];
+  },
+  addCommands() {
+    return {
+      setColumnAlign:
+        (align: "left" | "center" | "right" | null) =>
+        ({ commands }) =>
+          ["tableHeader", "tableCell"].map((t) => commands.updateAttributes(t, { align })).some(Boolean),
+    };
+  },
+});
+
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     dsTextAlign: { setTextAlign: (align: "left" | "center" | "right" | "justify" | null) => ReturnType };
+    dsTableAlign: { setColumnAlign: (align: "left" | "center" | "right" | null) => ReturnType };
     dsHighlight: { toggleHighlight: (color?: string) => ReturnType; unsetHighlight: () => ReturnType };
     dsTextColor: { setTextColor: (color: string) => ReturnType; unsetTextColor: () => ReturnType };
     dsAgentEdit: { acceptAgentEdits: () => ReturnType };
@@ -85,14 +126,20 @@ export const DsLink = Link.extend({
     return {
       href: {
         default: null,
-        parseHTML: (el: HTMLElement) => el.getAttribute("href"),
+        parseHTML: (el: HTMLElement) => safeHref(el.getAttribute("href")),
       },
     };
   },
-  renderHTML({ HTMLAttributes }) {
-    return ["a", mergeAttributes(HTMLAttributes, { rel: "noopener noreferrer nofollow", target: "_blank" }), 0];
+  // A pasted or loaded <a> with any other scheme is plain text.
+  parseHTML() {
+    return [{ tag: "a[href]", getAttrs: (el) => (safeHref((el as HTMLElement).getAttribute("href")) ? null : false) }];
   },
-}).configure({ openOnClick: false, autolink: true, linkOnPaste: true });
+  renderHTML({ HTMLAttributes }) {
+    // The document may carry any href (other clients, agents): only a safe one is rendered.
+    const href = safeHref(HTMLAttributes.href);
+    return ["a", mergeAttributes({ ...HTMLAttributes, href }, { rel: "noopener noreferrer nofollow", target: "_blank" }), 0];
+  },
+}).configure({ openOnClick: false, autolink: true, linkOnPaste: true, isAllowedUri: (url) => safeHref(url) !== null });
 
 /** `highlight` mark with a colour token (`highlight.yellow`, …). */
 export const Highlight = Mark.create({
@@ -101,7 +148,7 @@ export const Highlight = Mark.create({
     return {
       color: {
         default: "highlight.yellow",
-        parseHTML: (el) => el.getAttribute("data-color") ?? "highlight.yellow",
+        parseHTML: (el) => safeColor(el.getAttribute("data-color")) ?? "highlight.yellow",
         renderHTML: (attrs) => ({ "data-color": attrs.color, style: `--ds-mark-bg: ${colorTokenVar(attrs.color)}` }),
       },
     };
@@ -132,7 +179,7 @@ export const TextColor = Mark.create({
     return {
       color: {
         default: null,
-        parseHTML: (el) => el.getAttribute("data-text-color"),
+        parseHTML: (el) => safeColor(el.getAttribute("data-text-color")),
         renderHTML: (attrs) => ({ "data-text-color": attrs.color, style: `color: ${colorTokenVar(attrs.color)}` }),
       },
     };

@@ -109,13 +109,14 @@ SITE
   }
   if ! docker exec "$EDGE_CADDY" caddy validate --config "$EDGE_CADDYFILE" > /tmp/ds-caddy-validate.log 2>&1; then
     log "$EDGE_CADDY rejected the Datascratch site — removing it again"
-    tail -5 /tmp/ds-caddy-validate.log >&2 || true
+    # The details may name other sites on the server: they stay there, not in the public CI log.
+    log "details on the server: /tmp/ds-caddy-validate.log"
     restore
     return 1
   fi
   if ! docker exec "$EDGE_CADDY" caddy reload --config "$EDGE_CADDYFILE" > /tmp/ds-caddy-reload.log 2>&1; then
     log "$EDGE_CADDY reload failed — restoring the previous site file"
-    tail -5 /tmp/ds-caddy-reload.log >&2 || true
+    log "details on the server: /tmp/ds-caddy-reload.log"
     restore
     docker exec "$EDGE_CADDY" caddy reload --config "$EDGE_CADDYFILE" > /dev/null 2>&1 || true
     return 1
@@ -163,7 +164,8 @@ $listen6
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        # The client address as nginx sees it; a client-supplied X-Forwarded-For is dropped.
+        proxy_set_header X-Forwarded-For \$remote_addr;
         proxy_set_header X-Forwarded-Proto \$scheme;
         # WebSocket (sync) and long-lived connections.
         proxy_set_header Upgrade \$http_upgrade;
@@ -227,13 +229,19 @@ nginx_auto() {
 }
 
 wait_healthy() {
-  for _ in $(seq 1 90); do
-    state=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q server)" 2> /dev/null || echo starting)
-    [ "$state" = "healthy" ] && return 0
-    sleep 2
+  local svc state
+  for svc in server web; do
+    for _ in $(seq 1 90); do
+      state=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q "$svc")" 2> /dev/null || echo starting)
+      [ "$state" = "healthy" ] && continue 2
+      sleep 2
+    done
+    # Request logs carry client addresses: keep them on the server, out of the public CI log.
+    mkdir -p -m 700 logs
+    docker compose logs --tail 200 "$svc" > "logs/$svc-unhealthy.log" 2>&1 || true
+    log "$svc is not healthy; its log is on the server: /opt/datascratch/logs/$svc-unhealthy.log"
+    return 1
   done
-  docker compose logs --tail 80 server >&2 || true
-  return 1
 }
 
 # Every step checks its result explicitly: `set -e` does not apply inside `if start`.
@@ -241,6 +249,8 @@ start() {
   docker compose up -d --wait postgres || return 1
   # Explicit migration step: a failing migration stops the deploy before the switch.
   docker compose run --rm --no-deps -T server node dist/db/migrate-cli.js || return 1
+  # Caddy runs unprivileged (uid 10001); volumes of older deployments belong to root.
+  docker compose run --rm --no-deps -T --user 0 --entrypoint sh web -c 'chown -R 10001:10001 /data /config' || return 1
   docker compose up -d --remove-orphans || return 1
   wait_healthy
 }
@@ -293,9 +303,16 @@ case "${1:-}" in
       # The short-lived workflow token arrives on stdin; it is used for this pull only.
       docker login ghcr.io -u "$DS_REGISTRY_USER" --password-stdin > /dev/null
     fi
-    for img in "$DS_SERVER_IMAGE:$tag" "$DS_WEB_IMAGE:$tag" "$DS_POSTGRES_IMAGE"; do
+    # Server and web tags are immutable (one per commit): pulled once. The PostgreSQL tag
+    # (16-alpine) moves with security releases: pulled every time, the local copy is used
+    # only if the registry cannot be reached.
+    for img in "$DS_SERVER_IMAGE:$tag" "$DS_WEB_IMAGE:$tag"; do
       docker image inspect "$img" > /dev/null 2>&1 || docker pull -q "$img"
     done
+    if ! docker pull -q "$DS_POSTGRES_IMAGE" > /dev/null; then
+      docker image inspect "$DS_POSTGRES_IMAGE" > /dev/null 2>&1 || { log "cannot pull $DS_POSTGRES_IMAGE"; exit 1; }
+      log "WARNING: could not refresh $DS_POSTGRES_IMAGE, using the local copy"
+    fi
     [ -n "${DS_REGISTRY_USER:-}" ] && docker logout ghcr.io > /dev/null 2>&1 || true
 
     prev=$(current DS_TAG || true)

@@ -6,9 +6,10 @@ import { CoverDialog } from "@/features/doc/CoverDialog";
 import { syncRecoveryFlag } from "@/auth/recovery";
 import { consumeFreshAccount, useAuth } from "@/auth/session";
 import { hasRuntime, startRuntime } from "@/data/runtime";
-import { bootstrapAccount, purgeOldTrash } from "@/domain/actions";
-import { useWorkspace } from "@/domain/workspace";
+import { activeTabOf, bootstrapAccount, migrateSpaceSettings, purgeOldTrash, tidyTabs } from "@/domain/actions";
+import { spaceOfNote, spaceOfNotebook, useWorkspace } from "@/domain/workspace";
 import { CommandPalette } from "@/features/palette/CommandPalette";
+import { InvitationsDialog } from "@/features/share/Invitations";
 import { ShareDialog } from "@/features/share/ShareDialog";
 import { HistoryDialog } from "@/features/doc/HistoryDialog";
 import { NewNotebookDialog } from "@/features/shell/NewNotebookDialog";
@@ -16,8 +17,12 @@ import { useIsMobile } from "@/hooks/useMedia";
 import { focusKindOf, toggleSidebar, useUi } from "@/hooks/useUi";
 import { cn } from "@/ui";
 import { Sidebar } from "./Sidebar";
+import { TabOverview } from "./TabOverview";
+import { TabStrip } from "./TabStrip";
+import { StorageFullBanner } from "./SyncIndicator";
 import { Splash } from "./Splash";
 import { useShortcuts } from "./shortcuts";
+import { features } from "@/lib/features";
 
 export function AppShell() {
   const { t } = useTranslation();
@@ -29,6 +34,7 @@ export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const focusKind = focusKindOf(pathname);
   // Full screen on this kind of screen hides the sidebar without changing its own setting.
+  const focused = useUi((s) => !!focusKind && s.focus[focusKind]);
   const sidebarOpen = useUi((s) => s.sidebarOpen && !(focusKind && s.focus[focusKind]));
   const mobileNavOpen = useUi((s) => s.mobileNavOpen);
   const isMobile = useIsMobile();
@@ -70,6 +76,50 @@ export function AppShell() {
   useEffect(() => {
     if (ready) void purgeOldTrash();
   }, [ready]);
+
+  // D-48: the legacy account-wide active tab / daily notebook move to their space (once per space).
+  const notes = useWorkspace((s) => s.notes);
+  const settings = useWorkspace((s) => s.account.settings);
+  useEffect(() => {
+    if (ready && synced && hasRuntime()) migrateSpaceSettings();
+  }, [ready, synced, notes, settings]);
+
+  // Quiet tab tidy-up (spec/12 §12.6): at start and then hourly; never the document on screen.
+  useEffect(() => {
+    if (!ready || !synced || !hasRuntime()) return;
+    const run = () => {
+      const p = window.location.pathname;
+      tidyTabs(p.startsWith("/doc/") ? p.slice(5) : null);
+    };
+    run();
+    const timer = window.setInterval(run, 60 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [ready, synced]);
+
+  // Switching spaces swaps the screen too: the space's own last tab, or its documents (D-48).
+  const activeSpaceId = useWorkspace((s) => s.activeSpaceId);
+  const shownSpace = useRef(activeSpaceId);
+  useEffect(() => {
+    const prev = shownSpace.current;
+    shownSpace.current = activeSpaceId;
+    // Only a real switch (not the first choice of a space on this device) moves the screen.
+    if (!ready || !prev || !activeSpaceId || prev === activeSpaceId) return;
+    const st = useWorkspace.getState();
+    const [, kind, id] = pathname.split("/");
+    const shownIn =
+      kind === "doc" && id
+        ? spaceOfNote(st, id)
+        : kind === "notebook" && id
+          ? spaceOfNotebook(st, id)
+          : kind === "folder" && id
+            ? spaceOfNotebook(st, st.folders[id]?.notebookId)
+            : activeSpaceId;
+    // Unknown yet (its notebook index has not arrived): leave the screen as it is.
+    if (shownIn === null || shownIn === activeSpaceId) return;
+    const tab = activeTabOf(activeSpaceId);
+    void navigate(tab ? { to: "/doc/$noteId", params: { noteId: tab } } : { to: "/all" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSpaceId, ready]);
 
   // The signup screen runs before the account doc syncs: carry its recovery-key note over.
   useEffect(() => {
@@ -126,20 +176,27 @@ export function AppShell() {
           </div>
         </motion.aside>
       )}
-      <main className="relative flex min-w-0 flex-1 flex-col">
-        {/* A short fade when the screen changes (tabs inside a screen keep their own motion). */}
-        <motion.div
-          key={screenKey}
-          className="flex min-h-0 flex-1 flex-col"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.16, ease: "easeOut" }}
-        >
-          <Outlet />
-        </motion.div>
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Tabs of the current space above the screen; full screen hides them like the sidebar. */}
+        {features.tabs && !isMobile && !(focusKind && focused) && <TabStrip />}
+        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <StorageFullBanner />
+          {/* A short fade when the screen changes (tabs inside a screen keep their own motion). */}
+          <motion.div
+            key={screenKey}
+            className="flex min-h-0 flex-1 flex-col"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
+          >
+            <Outlet />
+          </motion.div>
+        </main>
+      </div>
       <CommandPalette />
+      {features.tabs && <TabOverview />}
       <ShareDialog />
+      <InvitationsDialog />
       <HistoryDialog />
       <CoverDialog />
       <NewNotebookDialog />

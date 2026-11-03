@@ -522,7 +522,7 @@ describe("PenToolbar compact", () => {
     const on = vi.fn();
     renderUI(<PenToolbar value={defaultPenSelection} onChange={on} compact />);
     expect(screen.queryByRole("radio", { name: "Синий" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Цвет, Толщина" }));
+    await userEvent.click(screen.getByRole("button", { name: "Цвет, толщина и другие настройки" }));
     await userEvent.click(await screen.findByRole("radio", { name: "Синий" }));
     expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, color: "blue" });
   });
@@ -540,5 +540,126 @@ describe("DocCard asChild", () => {
     expect(link).toHaveAttribute("href", "/doc/7");
     expect(link.querySelector("article")).toBeNull();
     expect(screen.getByRole("heading", { name: "План квартала" })).toBeInTheDocument();
+  });
+});
+
+describe("PenToolbar custom colours and collapse", () => {
+  it("picks a custom colour and remembers it as recent", async () => {
+    const { PenToolbar, defaultPenSelection } = await import("../src");
+    localStorage.clear();
+    const on = vi.fn();
+    renderUI(<PenToolbar value={defaultPenSelection} onChange={on} compact={false} />);
+    await userEvent.click(screen.getByRole("button", { name: "Свой цвет" }));
+    const hex = await screen.findByLabelText("HEX");
+    await userEvent.clear(hex);
+    await userEvent.type(hex, "#12AB34");
+    await userEvent.click(screen.getByRole("button", { name: "Выбрать" }));
+    expect(on).toHaveBeenLastCalledWith({ ...defaultPenSelection, color: "#12AB34" });
+    expect(JSON.parse(localStorage.getItem("ds.pen.recent.ink")!)).toEqual(["#12AB34"]);
+    expect(await screen.findByRole("radio", { name: "Недавний цвет #12AB34" })).toBeInTheDocument();
+  });
+  it("keeps recent colours newest first, unique, at most six", async () => {
+    const { pushRecentColor } = await import("../src");
+    let list: string[] = [];
+    for (const c of [
+      "#111111",
+      "#222222",
+      "#333333",
+      "#444444",
+      "#555555",
+      "#666666",
+      "#777777",
+      "#222222",
+    ])
+      list = pushRecentColor(list, c);
+    expect(list).toEqual(["#222222", "#777777", "#666666", "#555555", "#444444", "#333333"]);
+    expect(pushRecentColor([], "#abcdef")).toEqual(["#ABCDEF"]);
+  });
+  it("maps colours to stroke tokens", async () => {
+    const { penColorToken } = await import("../src");
+    expect(penColorToken("black", "ink")).toBe("ink.black");
+    expect(penColorToken("yellow", "highlight")).toBe("highlight.yellow");
+    expect(penColorToken("#a1b2c3", "ink")).toBe("#A1B2C3");
+  });
+  it("collapses into one round button and expands back", async () => {
+    const { PenToolbar, defaultPenSelection } = await import("../src");
+    function T() {
+      const [c, setC] = useState(false);
+      return (
+        <PenToolbar
+          value={defaultPenSelection}
+          onChange={() => {}}
+          collapsed={c}
+          onCollapsedChange={setC}
+          compact={false}
+        />
+      );
+    }
+    renderUI(<T />);
+    await userEvent.click(screen.getByRole("button", { name: "Свернуть палитру" }));
+    expect(screen.queryByRole("toolbar")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Развернуть палитру" }));
+    expect(screen.getByRole("toolbar")).toBeInTheDocument();
+  });
+  it("converts between hex and HSV", async () => {
+    const { hexToHsv, hsvToHex } = await import("../src");
+    for (const h of ["#2B58DA", "#FFFFFF", "#000000", "#12AB34"])
+      expect(hsvToHex(hexToHsv(h))).toBe(h);
+  });
+});
+
+describe("Menu rows", () => {
+  it("keep icon, label and trailing check in one row structure", async () => {
+    const { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, SpaceTile } =
+      await import("../src");
+    renderUI(
+      <DropdownMenu open>
+        <DropdownMenuTrigger>open</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem icon={<SpaceTile icon="🏡" />} checked shortcut="mod+1">
+            Личное
+          </DropdownMenuItem>
+          <DropdownMenuItem checked={false}>Работа</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    const [first, second] = screen.getAllByRole("menuitem");
+    const label = first!.querySelector("[data-menu-label]")!;
+    const trailing = first!.querySelector("[data-menu-trailing]")!;
+    expect(label).toHaveClass("flex", "min-w-0", "flex-1", "whitespace-nowrap");
+    expect(trailing).toHaveClass("shrink-0");
+    expect(trailing.querySelector("svg")).not.toHaveClass("invisible");
+    expect(trailing).toHaveTextContent(/1/);
+    expect(label.nextElementSibling).toBe(trailing);
+    // Unchecked rows keep the check's width so names stay aligned.
+    expect(second!.querySelector("[data-menu-trailing] svg")).toHaveClass("invisible");
+  });
+});
+
+describe("PenToolbar image button", () => {
+  it("shows «Картинка» only when onInsertImage is set, inline and in the compact popover", async () => {
+    const { PenToolbar, defaultPenSelection } = await import("../src");
+    const insert = vi.fn();
+    const { rerender } = renderUI(
+      <PenToolbar value={defaultPenSelection} onChange={() => {}} compact={false} />,
+    );
+    expect(screen.queryByRole("button", { name: "Картинка" })).not.toBeInTheDocument();
+    rerender(
+      <PenToolbar
+        value={defaultPenSelection}
+        onChange={() => {}}
+        compact={false}
+        onInsertImage={insert}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Картинка" }));
+    expect(insert).toHaveBeenCalledOnce();
+    rerender(
+      <PenToolbar value={defaultPenSelection} onChange={() => {}} compact onInsertImage={insert} />,
+    );
+    expect(screen.queryByRole("button", { name: "Картинка" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Цвет, толщина и другие настройки" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Картинка" }));
+    expect(insert).toHaveBeenCalledTimes(2);
   });
 });

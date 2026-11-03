@@ -13,7 +13,13 @@ type UiState = {
   sidebarOpen: boolean;
   mobileNavOpen: boolean;
   paletteOpen: boolean;
+  /** The tab overview (spec/12 §12.6): «+N», ⌘⇧\\ or the tab count on a phone. */
+  tabOverviewOpen: boolean;
   shareFor: { kind: "note" | "notebook"; id: string } | null;
+  /** Incoming invitations dialog (D-54); a string highlights that invitation (/invite/:id). */
+  invitationsOpen: boolean | string;
+  /** Bumped when keys of a shared resource changed (D-54): views holding a key or a link re-read them. */
+  keysChangedAt: number;
   historyFor: string | null;
   /** Note whose cover dialog is open (spec/12 §12.7). */
   coverFor: string | null;
@@ -33,7 +39,10 @@ export const useUi = create<UiState>(() => ({
   sidebarOpen: readBool("ds.sidebar", true),
   mobileNavOpen: false,
   paletteOpen: false,
+  tabOverviewOpen: false,
   shareFor: null,
+  invitationsOpen: false,
+  keysChangedAt: 0,
   historyFor: null,
   coverFor: null,
   newNotebookFor: null,

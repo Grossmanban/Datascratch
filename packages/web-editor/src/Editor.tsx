@@ -6,15 +6,22 @@ import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 import { setEditorAwareness } from "./collab/collaboration";
 import { buildExtensions } from "./editorCore";
+import { alignPaper, clearPaper, PaperSnap } from "./paper";
 import type { EditorHost, HostRef } from "./host";
 import { readNoteMeta, readTitle, setNoteCover, SUPPORTED_FORMAT_VERSION, useNoteMeta } from "./meta";
 import { PenLayer, type PenSettings } from "./pen/PenLayer";
 import { acceptAll, blocksWithAgentEdits } from "./schema/agentReview";
 import { guardSchema } from "./schema/unknown";
 import { TASK_MENU_EVENT, type TaskMenuRequest } from "./schema/tasks";
+import { fillEmptyTitleIfNeeded, focusTitle } from "./schema/title";
+import { insertUpload, pickAndInsert, preparePastedImages, startPastedImages } from "./uploads";
+import { normalizePastedHtml, looksLikeMarkdown, untitleSlice } from "./paste/normalize";
+import { markdownToHtml } from "./paste/markdown";
+import { DOMParser as PMDOMParser, type Slice } from "@tiptap/pm/model";
 import type { NoteStyle, StrokeAuthor } from "@datascratch/shared/contracts";
 import { filterBlocks, type BlockItem } from "./ui/blockItems";
 import { BubbleToolbar } from "./ui/BubbleToolbar";
+import { BlockLift } from "./ui/blockLift";
 import { DragHandle } from "./ui/DragHandle";
 import { PenPalette } from "./ui/PenPalette";
 import { NoteLinkMenu, SlashMenu, type LinkItem } from "./ui/Popups";
@@ -33,6 +40,14 @@ export interface EditorApi {
   editor: Editor;
   pen: PenLayer;
   undoManager: Y.UndoManager;
+  /** Caret at the end of the title, editor focused (a new note). */
+  focusTitle(): void;
+  /** Fills an empty title with `host.defaultTitle()` (call when the note closes); true if it did. */
+  fillEmptyTitleIfNeeded(): boolean;
+  /** Opens the image picker and inserts the picked images at the caret (the palette's picture button). */
+  pickImage(): void;
+  /** Inserts files at the caret right away and uploads them behind a placeholder. */
+  insertFiles(files: File[]): void;
 }
 
 export interface DatascratchEditorProps {
@@ -93,6 +108,7 @@ function useHostRef(host: EditorHost | undefined): HostRef {
  */
 export function DatascratchEditor(props: DatascratchEditorProps) {
   const { doc, awareness = null, user, editable = true, showPalette = true, showCover = true, className = "", bottomPadding = 160 } = props;
+  const taskDates = (props.host?.taskDates ?? "full") === "full";
   const host = useHostRef(props.host);
   const meta = useNoteMeta(doc);
   const readOnly = !editable || meta.formatVersion > SUPPORTED_FORMAT_VERSION;
@@ -122,7 +138,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
         const $from = state.doc.resolve(range.from);
         return $from.parent.type.name !== "title" && !$from.parent.type.spec.code;
       },
-      items: (q) => filterBlocks(q, host.current),
+      items: (q) => filterBlocks(q, host.current).map((b) => (b.id === "task" && host.current.taskDates === "inert" ? { ...b, hint: "Чек-бокс" } : b)),
       command: ({ editor, range, item }) => item.run(editor, range, host.current),
     });
     const links = createSuggestionExtension<LinkItem>({
@@ -156,7 +172,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       host,
       awareness: awarenessRef.current,
       user: user ? { name: user.name, color: user.color } : null,
-      extensions: [slash, links],
+      extensions: [slash, links, PaperSnap, BlockLift],
     });
     let remountQueued = false;
     let lastTitle = readTitle(doc);
@@ -164,9 +180,43 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       element: mount,
       extensions,
       editable: !readOnly,
+      // Markdown in pasted text is parsed by clipboardTextParser (and skipped on Shift+paste); the
+      // marks' own paste rules would bold `**x**` even in a plain paste. Links still autolink.
+      enablePasteRules: ["link"],
       editorProps: {
         attributes: { class: "ds-prose", spellcheck: "true", "aria-label": "Текст заметки" },
-        handlePaste: (_view, event) => uploadFiles(event.clipboardData?.files),
+        // Rich paste (spec/04 «Вставка»): HTML is tidied (normalize.ts), Markdown text goes through
+        // the same path, the title takes plain text only, Shift+paste is plain text (ProseMirror).
+        handlePaste: (view, event) => {
+          const data = event.clipboardData;
+          if (!data) return false;
+          const { $from } = view.state.selection;
+          if ($from.depth >= 1 && $from.node(1).type.name === "title") {
+            const text = data.getData("text/plain").replace(/\s*\n\s*/g, " ").trim();
+            if (text) view.dispatch(view.state.tr.insertText(text).scrollIntoView());
+            return true;
+          }
+          // A screenshot or copied image (no rich text around it) goes in as a file.
+          const html = data.getData("text/html");
+          const onlyImages = !html || !new DOMParser().parseFromString(html, "text/html").body.textContent?.trim();
+          if (data.files?.length && onlyImages) return uploadFiles(data.files);
+          return false;
+        },
+        transformPasted: (slice, view) => untitleSlice(slice, view.state.schema),
+        transformPastedHTML: (html) => {
+          const out = normalizePastedHtml(html);
+          preparePastedImages(out.images);
+          return out.html;
+        },
+        clipboardTextParser: (text, $context, plain, view) => {
+          if (plain || !looksLikeMarkdown(text)) return null as unknown as Slice;
+          const out = normalizePastedHtml(markdownToHtml(text), { markdown: true });
+          preparePastedImages(out.images);
+          // Parsed in an inert document: nothing in it loads or runs (never the live page).
+          const box = document.implementation.createHTMLDocument("").createElement("div");
+          box.innerHTML = out.html;
+          return PMDOMParser.fromSchema(view.state.schema).parseSlice(box, { context: $context });
+        },
         handleDrop: (view, event, _slice, moved) => {
           if (moved) return false;
           const files = event.dataTransfer?.files;
@@ -183,6 +233,10 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
           remountQueued = true;
           setTimeout(() => setSchemaGen((g) => g + 1), 0);
         }),
+      onTransaction: ({ transaction }) => {
+        // Placeholders of pasted images start their upload once the paste has landed.
+        if (transaction.getMeta("paste")) queueMicrotask(() => startPastedImages(editor, host));
+      },
       onUpdate: ({ editor: e }) => {
         const title = e.state.doc.firstChild?.type.name === "title" ? e.state.doc.firstChild.textContent : readTitle(doc);
         if (title !== lastTitle) {
@@ -194,12 +248,8 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
     function uploadFiles(files: FileList | null | undefined): boolean {
       const upload = host.current.uploadAttachment;
       if (!files?.length || !upload) return false;
-      for (const file of Array.from(files)) {
-        void upload(file).then((a) => {
-          if (file.type.startsWith("image/")) editor.chain().focus().insertImage({ attachmentId: a.attachmentId, alt: file.name }).run();
-          else editor.chain().focus().insertFile(a).run();
-        });
-      }
+      // The block appears at once with a local preview; the upload runs behind it (uploads.ts).
+      for (const file of Array.from(files)) insertUpload(editor, host, file);
       return true;
     }
     const pen = new PenLayer({
@@ -213,7 +263,17 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
     const onTaskMenu = (e: Event) => setTaskMenu((e as CustomEvent<TaskMenuRequest>).detail);
     editor.view.dom.addEventListener(TASK_MENU_EVENT, onTaskMenu);
     attachedAwareness.current.set(editor, awarenessRef.current);
-    const next = { editor, pen, undoManager };
+    const next: EditorApi = {
+      editor,
+      pen,
+      undoManager,
+      focusTitle: () => focusTitle(editor),
+      fillEmptyTitleIfNeeded: () => fillEmptyTitleIfNeeded(editor, host, undoManager),
+      pickImage: () => pickAndInsert(editor, host, "image/*"),
+      insertFiles: (files) => {
+        for (const f of files) insertUpload(editor, host, f);
+      },
+    };
     setApi(next);
     callbacks.current.onReady?.(next);
     return () => {
@@ -275,6 +335,40 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
     api?.pen.invalidate();
   }, [api, style.font, style.width, style.paper]);
 
+  // Ruled paper: keep the rules under the text after any relayout (paper.ts).
+  const ruled = style.paper !== "plain";
+  const editorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = editorRef.current;
+    const root = rootRef.current;
+    if (!api || !el || !root) return;
+    const { editor } = api;
+    if (!ruled) {
+      clearPaper(editor.view, el);
+      return;
+    }
+    let frame = 0;
+    const align = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => !editor.isDestroyed && alignPaper(editor.view, el, root));
+    };
+    align();
+    const ro = new ResizeObserver(align);
+    ro.observe(editor.view.dom);
+    ro.observe(root);
+    editor.on("update", align);
+    root.addEventListener("ds-layout", align);
+    document.fonts?.addEventListener("loadingdone", align);
+    void document.fonts?.ready.then(align);
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      editor.off("update", align);
+      root.removeEventListener("ds-layout", align);
+      document.fonts?.removeEventListener("loadingdone", align);
+    };
+  }, [api, ruled, style.font, style.width, style.paper]);
+
   const cssVars = {
     "--ds-doc-font": FONT_VARS[style.font],
     "--ds-doc-width": WIDTHS[style.width],
@@ -285,7 +379,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
   return (
     // Design-system popovers use Radix tooltips; a local provider keeps the editor usable without UIProvider.
     <TooltipProvider delayDuration={500} skipDelayDuration={200}>
-    <div className={`ds-editor ${className}`} data-paper={style.paper} data-font={style.font} data-width={style.width} data-readonly={readOnly || undefined} style={cssVars}>
+    <div ref={editorRef} className={`ds-editor ${className}`} data-paper={style.paper} data-ruled={ruled || undefined} data-font={style.font} data-width={style.width} data-readonly={readOnly || undefined} data-task-dates={taskDates ? undefined : "off"} style={cssVars}>
       {showCover && meta.cover && <Cover doc={doc} host={host.current} editable={!readOnly} onRequestCover={props.onRequestCover} />}
       {meta.formatVersion > SUPPORTED_FORMAT_VERSION && (
         <div className="ds-readonly-banner" role="status">
@@ -328,10 +422,10 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
       {api && <BubbleToolbar editor={api.editor} />}
       <SlashMenu store={slashStore} />
       <NoteLinkMenu store={linkStore} />
-      {api && taskMenu && <TaskMenu editor={api.editor} request={taskMenu} host={host.current} onClose={() => setTaskMenu(null)} />}
+      {api && taskMenu && <TaskMenu editor={api.editor} request={taskMenu} host={host.current} dates={taskDates} onClose={() => setTaskMenu(null)} />}
       {api && showPalette && !readOnly && (
         <div className="ds-palette-dock">
-          <PenPalette pen={api.pen} undoManager={api.undoManager} />
+          <PenPalette pen={api.pen} undoManager={api.undoManager} onInsertImage={host.current.uploadAttachment && !readOnly ? () => api.pickImage() : undefined} />
         </div>
       )}
     </div>

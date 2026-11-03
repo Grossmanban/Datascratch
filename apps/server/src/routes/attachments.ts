@@ -3,13 +3,20 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { requireUserOrGuest } from '../auth/guard.js';
 import type { AppContext } from '../context.js';
-import { attachmentChunks, attachments } from '../db/schema.js';
+import { attachmentChunks, attachments, storageTrash } from '../db/schema.js';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { docAccess } from '../services/access.js';
 import type { GuestPrincipal, UserPrincipal } from '../services/principal.js';
 import { chunkKey } from '../storage/index.js';
 import { CLEANUP_JOB } from '../jobs/index.js';
 import { errorResponses, id } from './schemas.js';
+
+function isForeignKeyViolation(e: unknown): boolean {
+  for (let cur = e; cur && typeof cur === 'object'; cur = (cur as { cause?: unknown }).cause) {
+    if ((cur as { code?: unknown }).code === '23503') return true;
+  }
+  return false;
+}
 
 /** crypto.md §6: 1 MiB of plaintext per chunk + envelope overhead (1 + 24 + 16). */
 export const CHUNK_PLAINTEXT = 1024 * 1024;
@@ -60,18 +67,23 @@ export function attachmentRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         const access = await docAccess(db, p, b.noteId);
         if (!access || access.doc.kind !== 'note') throw notFound('note not found');
         if (!access.write) throw forbidden('read-only access');
-        const [created] = await db
-          .insert(attachments)
-          .values({
-            id: b.attachmentId,
-            userId: access.doc.userId,
-            noteId: b.noteId,
-            size: b.size,
-            chunkCount: b.chunkCount,
-            mime: b.mime,
-          })
-          .onConflictDoNothing()
-          .returning({ id: attachments.id });
+        // Check and insert in one transaction: the check holds the account's quota lock until the
+        // row (and its bytes, via the storage trigger) is committed.
+        const [created] = await db.transaction(async (tx) => {
+          await ctx.documents.quotaCheck(tx, b.noteId, b.size, 'attachment');
+          return tx
+            .insert(attachments)
+            .values({
+              id: b.attachmentId,
+              userId: access.doc.userId,
+              noteId: b.noteId,
+              size: b.size,
+              chunkCount: b.chunkCount,
+              mime: b.mime,
+            })
+            .onConflictDoNothing()
+            .returning({ id: attachments.id });
+        });
         if (!created) {
           const [ex] = await db.select().from(attachments).where(eq(attachments.id, b.attachmentId));
           const same =
@@ -110,22 +122,32 @@ export function attachmentRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           .where(and(eq(attachmentChunks.attachmentId, a.id), sql`${attachmentChunks.index} <> ${index}`));
         if (Number(others!.bytes) + body.length > a.size) throw badRequest('chunks exceed declared size');
         await ctx.storage.put(chunkKey(a.id, index), body);
-        await db.transaction(async (tx) => {
-          await tx
-            .insert(attachmentChunks)
-            .values({ attachmentId: a.id, index, size: body.length })
-            .onConflictDoUpdate({
-              target: [attachmentChunks.attachmentId, attachmentChunks.index],
-              set: { size: body.length },
-            });
-          const [c] = await tx
-            .select({ n: sql<number>`count(*)::int` })
-            .from(attachmentChunks)
-            .where(eq(attachmentChunks.attachmentId, a.id));
-          if (c!.n === a.chunkCount) {
-            await tx.update(attachments).set({ completedAt: sql`now()` }).where(eq(attachments.id, a.id));
-          }
-        });
+        try {
+          await db.transaction(async (tx) => {
+            await tx
+              .insert(attachmentChunks)
+              .values({ attachmentId: a.id, index, size: body.length })
+              .onConflictDoUpdate({
+                target: [attachmentChunks.attachmentId, attachmentChunks.index],
+                set: { size: body.length },
+              });
+            const [c] = await tx
+              .select({ n: sql<number>`count(*)::int` })
+              .from(attachmentChunks)
+              .where(eq(attachmentChunks.attachmentId, a.id));
+            if (c!.n === a.chunkCount) {
+              await tx.update(attachments).set({ completedAt: sql`now()` }).where(eq(attachments.id, a.id));
+            }
+          });
+        } catch (e) {
+          // The attachment was deleted while the blob was being written: nothing can point at
+          // the blob any more, so hand it to the cleanup job. (Other failures keep it: an
+          // existing row of a re-uploaded chunk may still point at this key.)
+          if (!isForeignKeyViolation(e)) throw e;
+          await db.insert(storageTrash).values({ key: chunkKey(a.id, index) });
+          await ctx.jobs.enqueue(CLEANUP_JOB, {});
+          throw notFound('attachment not found');
+        }
         return reply.code(204).send(null);
       },
     );
@@ -200,6 +222,9 @@ export function attachmentRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         const p = await requireUserOrGuest(ctx, req);
         if (p.kind === 'guest') throw forbidden('guests cannot delete attachments');
         const a = await load(p, req.params.id, true);
+        // Attachments of a shared note belong to its owner (and count against their quota): an
+        // editor may not wipe the owner's pictures (audit 2026-11-02). Deleting the note frees them.
+        if (a.userId !== p.userId) throw forbidden('only the owner can delete attachments of a shared note');
         await db.delete(attachments).where(eq(attachments.id, a.id));
         await ctx.jobs.enqueue(CLEANUP_JOB, {});
         return reply.code(204).send(null);

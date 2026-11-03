@@ -9,6 +9,8 @@ import { apiVectors } from "./api.js";
 import { cryptoExtraVectors, cryptoVectors } from "./crypto.js";
 import { documentVectors } from "./document.js";
 import { idVectors } from "./ids.js";
+import { sharingVectors } from "./sharing.js";
+import { spaceVectors } from "./spaces.js";
 import { strokeVectors } from "./strokes.js";
 import { syncVectors } from "./sync.js";
 
@@ -26,6 +28,8 @@ const files: Record<string, unknown> = {
   ...strokeVectors(),
   ...documentVectors(),
   ...syncVectors(),
+  ...sharingVectors(),
+  ...spaceVectors(),
 };
 
 let stale = 0;

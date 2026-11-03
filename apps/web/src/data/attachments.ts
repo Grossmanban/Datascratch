@@ -1,6 +1,7 @@
-import { ApiError, NetworkError, request } from "@/api/client";
+import { ApiError, NetworkError, request, timedFetch } from "@/api/client";
 import { apiBase } from "@/config";
 import { getSession } from "@/auth/session";
+import { opensInline, safeBlobType } from "@/lib/safeMime";
 import { ad, open, seal, uuidv7 } from "@/lib/shared";
 import { accountDb, type AttachmentRow, type ChunkRow } from "./db";
 
@@ -12,8 +13,16 @@ const chunkKey = (id: string, index: number) => `${id}:${index}`;
 /**
  * Encrypt a file with the note key, keep the encrypted chunks locally (works offline) and
  * upload them in the background. Returns the attachmentId to reference from the document.
+ * `onProgress` gets 0…1 as the chunks are sealed (what the user waits for before the block can
+ * point at the attachment); the upload itself runs in the background afterwards.
  */
-export async function storeAttachment(noteId: string, noteKey: Uint8Array, data: Uint8Array, mime: string): Promise<string> {
+export async function storeAttachment(
+  noteId: string,
+  noteKey: Uint8Array,
+  data: Uint8Array,
+  mime: string,
+  onProgress?: (done: number) => void,
+): Promise<string> {
   if (data.length > MAX_ATTACHMENT) throw new Error("payload_too_large");
   const id = uuidv7();
   const chunkCount = Math.max(1, Math.ceil(data.length / CHUNK_PLAIN));
@@ -25,6 +34,11 @@ export async function storeAttachment(noteId: string, noteKey: Uint8Array, data:
     const env = await seal(noteKey, data.subarray(i * CHUNK_PLAIN, (i + 1) * CHUNK_PLAIN), ad.attachmentChunk(id, i, last));
     size += env.length;
     rows.push({ key: chunkKey(id, i), attachmentId: id, index: i, data: env });
+    if (onProgress) {
+      onProgress((i + 1) / chunkCount);
+      // Let the page paint the progress between chunks of a big file.
+      if (!last) await new Promise((r) => setTimeout(r, 0));
+    }
   }
   const row: AttachmentRow = {
     id,
@@ -50,7 +64,7 @@ async function putChunk(id: string, index: number, data: Uint8Array) {
   const session = getSession();
   let res: Response;
   try {
-    res = await fetch(`${apiBase()}/attachments/${id}/chunks/${index}`, {
+    res = await timedFetch(`${apiBase()}/attachments/${id}/chunks/${index}`, {
       method: "PUT",
       headers: { "content-type": "application/octet-stream", ...(session ? { authorization: `Bearer ${session.accessToken}` } : {}) },
       body: data as BodyInit,
@@ -118,7 +132,7 @@ async function runUploads(): Promise<boolean> {
 async function fetchChunk(id: string, index: number, auth: string | null): Promise<Uint8Array> {
   let res: Response;
   try {
-    res = await fetch(`${apiBase()}/attachments/${id}/chunks/${index}`, { headers: auth ? { authorization: `Bearer ${auth}` } : {} });
+    res = await timedFetch(`${apiBase()}/attachments/${id}/chunks/${index}`, { headers: auth ? { authorization: `Bearer ${auth}` } : {} });
   } catch (e) {
     throw new NetworkError(e);
   }
@@ -127,6 +141,12 @@ async function fetchChunk(id: string, index: number, auth: string | null): Promi
 }
 
 const urlCache = new Map<string, Promise<string>>();
+
+/** Signing out (or a wiped device, D-53): decrypted attachments leave memory too. */
+export function forgetDecryptedAttachments() {
+  for (const p of urlCache.values()) void p.then((url) => URL.revokeObjectURL(url)).catch(() => undefined);
+  urlCache.clear();
+}
 
 /**
  * Decrypt an attachment into an object URL. Encrypted chunks are cached locally so images
@@ -160,7 +180,7 @@ async function loadAttachment(id: string, key: Uint8Array, opts: { mime?: string
     let meta: Meta;
     if (opts.auth === undefined) meta = await request<Meta>("GET", `/attachments/${id}`);
     else {
-      const res = await fetch(`${apiBase()}/attachments/${id}`, { headers: opts.auth ? { authorization: `Bearer ${opts.auth}` } : {} }).catch((e) => {
+      const res = await timedFetch(`${apiBase()}/attachments/${id}`, { headers: opts.auth ? { authorization: `Bearer ${opts.auth}` } : {} }).catch((e) => {
         throw new NetworkError(e);
       });
       if (!res.ok) throw new ApiError(res.status, "not_found", res.statusText);
@@ -192,7 +212,8 @@ async function loadAttachment(id: string, key: Uint8Array, opts: { mime?: string
       createdAt: Date.now(),
     });
   }
-  return URL.createObjectURL(new Blob(parts as BlobPart[], { type: mime }));
+  // Never the stored type as is: a document type would run scripts on our origin (lib/safeMime).
+  return URL.createObjectURL(new Blob(parts as BlobPart[], { type: safeBlobType(mime) }));
 }
 
 /** Downscale an image file (keeps covers and thumbnails light). */
@@ -207,4 +228,48 @@ export async function resizeImage(file: Blob, maxWidth: number, quality = 0.86):
   bitmap.close();
   const blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
   return { data: new Uint8Array(await blob.arrayBuffer()), mime: "image/jpeg" };
+}
+
+/**
+ * Show a decrypted attachment: a raster image, PDF or text opens in a tab; anything else is
+ * downloaded under its name, never rendered on our origin (lib/safeMime).
+ */
+export async function openDecrypted(url: string, name: string, mime: string) {
+  if (opensInline(mime)) {
+    window.open(url, "_blank", "noopener");
+    return;
+  }
+  // The blob already carries only an allowlisted type (attachmentUrl → safeBlobType), so the same
+  // URL is downloaded as is (fetching a blob: URL would be refused by the CSP's connect-src).
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name || "file";
+  a.rel = "noopener";
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+
+/**
+ * An SVG is never stored as SVG (it is a document that can carry scripts): it is drawn into a PNG
+ * (an <img> renders SVG without running scripts), at most `maxSide` pixels on its longer side.
+ */
+export async function svgToPng(file: Blob, name: string, maxSide = 2048): Promise<File> {
+  const url = URL.createObjectURL(new Blob([await file.arrayBuffer()], { type: "image/svg+xml" }));
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const w0 = img.naturalWidth || 1024;
+    const h0 = img.naturalHeight || 1024;
+    const scale = Math.min(1, maxSide / Math.max(w0, h0));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(w0 * scale));
+    canvas.height = Math.max(1, Math.round(h0 * scale));
+    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const png = await new Promise<Blob>((ok, fail) => canvas.toBlob((b) => (b ? ok(b) : fail(new Error("svg could not be drawn"))), "image/png"));
+    return new File([png], name.replace(/\.svgz?$/i, "") + ".png", { type: "image/png" });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }

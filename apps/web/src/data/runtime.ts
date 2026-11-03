@@ -1,18 +1,26 @@
-import { SyncClient } from "@datascratch/shared";
-import type * as Y from "yjs";
+import { getTitle, SyncClient } from "@datascratch/shared";
+import * as Y from "yjs";
 import { deviceId } from "@/auth/deviceKey";
-import { getSession, refreshSession } from "@/auth/session";
+import { getSession, refreshSession, wipeRevokedDevice } from "@/auth/session";
+import { accountBoxKeys } from "./sharing";
+import { maintainShares } from "./ownerShares";
+import { isReadOnlyDoc, refreshShared, sharedResourceOf, useShared } from "./sharedWithMe";
 import { APP_VERSION, syncUrl } from "@/config";
 import { notebookMaps, syncNotebookMetaCopy } from "@/domain/notebook";
 import { sodiumReady } from "@/lib/shared";
-import { refreshAccount, refreshNotebook, resetWorkspace, useWorkspace } from "@/domain/workspace";
+import { refreshAccount, refreshNotebook, refreshStandaloneNote, resetWorkspace, useWorkspace } from "@/domain/workspace";
 import { uiStatus, useSyncStatus } from "@/sync/engine";
 import { uploadPending } from "./attachments";
 import { accountDb } from "./db";
-import { DocStore, ORIGIN_REMOTE } from "./docStore";
+import { DocStore, ORIGIN_LOAD, ORIGIN_REMOTE } from "./docStore";
 import { Indexer } from "./indexer";
-import { clearKeys, prefetchNotebookKeys } from "./keys";
-import { flushOps, onDocRegistered, onOpsChanged } from "./ops";
+import { alternateKeysFor, checkNotebookKeys, clearKeys, onNotebookKeyReplaced, setTrustAccount, type ReplacedNotebookKey } from "./keys";
+import { notebooksApi } from "@/api/endpoints";
+import { pushNotebookMode } from "@/domain/actions";
+import { ad, unwrapKey, wrapKey } from "@/lib/shared";
+import { enqueueOp } from "./ops";
+import { flushOps, onDocRegistered, onNotebookConflict, onOpsChanged } from "./ops";
+import { connectWithTimeout } from "@/sync/socket";
 import { receivePresence } from "./presence";
 import { DexieSyncStorage } from "./syncStorage";
 
@@ -32,6 +40,8 @@ export class AccountRuntime {
   account!: Y.Doc;
   private cleanups: (() => void)[] = [];
   private observedNotebooks = new Map<string, () => void>();
+  /** Notes shared on their own (D-54), observed for their title. */
+  private observedStandalone = new Map<string, () => void>();
   private knownNotes = new Map<string, Set<string>>();
   private notebookPass: Promise<void> = Promise.resolve();
   private attached = new Set<string>();
@@ -54,21 +64,43 @@ export class AccountRuntime {
   async start() {
     // SyncClient encrypts synchronously with libsodium: it must be ready first.
     await sodiumReady();
+    // Closing the tab or reloading right after typing: the last edits still reach IndexedDB.
+    const leave = () => this.store.flushUnsaved();
+    const hidden = () => document.visibilityState === "hidden" && leave();
+    window.addEventListener("pagehide", leave);
+    document.addEventListener("visibilitychange", hidden);
+    this.cleanups.push(() => {
+      window.removeEventListener("pagehide", leave);
+      document.removeEventListener("visibilitychange", hidden);
+    });
     this.client = new SyncClient({
       url: syncUrl(),
       deviceId: getSession()?.deviceId ?? (await deviceId()),
       client: { platform: "web", version: APP_VERSION },
       storage: this.storage,
+      createSocket: connectWithTimeout,
+      // Older key versions (D-54 rotation) and keys this device used before switching to the
+      // server's: items sealed with them stay readable.
+      alternateKeysFor: (docId) => alternateKeysFor(docId),
+      // After skipping unreadable items, ask once for the server's latest snapshot (it may cover them).
+      recoverSkippedFromSnapshot: true,
       auth: async () => {
         let s = getSession();
         if (s && Date.parse(s.accessExpiresAt) - Date.now() < 60_000) s = await refreshSession();
         if (!s) throw new Error("signed out");
         return { kind: "user", accessToken: s.accessToken };
       },
-      keyFor: async (docId) => {
-        const key = await this.store.keyFor(docId);
-        if (!key) throw new Error(`no key for ${docId}`);
-        return key;
+      // null = «no key yet» (e.g. a moved note whose new index has not arrived): SyncClient pauses
+      // the document without skipping anything until keyAvailable(docId) (see resumeKeyed).
+      keyFor: (docId) => this.store.keyFor(docId),
+      // D-54: «Только чтение» — edits of these documents are not sent (the server would refuse them).
+      readOnly: (docId) => isReadOnlyDoc(docId),
+      // A shared document that no key opens may simply have a newer key (the owner changed it):
+      // pause it, re-read «Общие со мной», then keyAvailable.
+      keyMaybeStale: (docId) => {
+        if (!sharedResourceOf(docId)) return false;
+        void refreshShared();
+        return true;
       },
       // Notes sync in stored mode: no Y.Doc unless open (10 000 notes stay on disk, not in memory).
       storedDocs: {
@@ -87,12 +119,35 @@ export class AccountRuntime {
       this.client.on("status", () => this.updateStatus()),
       this.client.on("synced", (docId) => {
         if (docId === this.accountDocId) useWorkspace.setState({ accountSynced: true });
+        // A notebook index caught up: its meta copy can be checked now (copyNotebookNames).
+        if (this.store.rowKind(docId) === "notebook") this.copyNotebookNames();
         this.updateStatus();
       }),
       this.client.on("awareness", (docId, payload) => receivePresence(docId, payload)),
+      this.client.on("skipped", (item) => this.onSkipped(item)),
+      // D-53: the server closed the socket with device_revoked (4410): this device was disconnected
+      // from another one. The client has stopped for good; the app wipes everything of the account.
+      this.client.on("deviceRevoked", () => void wipeRevokedDevice()),
+      // The outbox storage failed (quota) or recovered: a calm banner while edits only live in memory.
+      this.client.on("storage", (ok) => useSyncStatus.setState({ storageFull: !ok })),
       this.client.on("error", (e) => {
         if (e.code === "unauthorized") void refreshSession().then((s) => s && this.client.reconnect());
         useSyncStatus.setState({ error: `${e.code}: ${e.message}` });
+        // An update that cannot be decrypted or applied is otherwise invisible (it is skipped).
+        if ((e.code === "decrypt_failed" || e.code === "apply_failed") && e.docId) {
+          const id = e.docId;
+          void this.store.row(id).then((r) => console.warn(`[ds] sync ${e.code}`, r?.kind ?? "unknown", id, e.message));
+        }
+        // Waiting for a key for long: the indicator stops spinning for it (it resumes when the key comes).
+        if (e.code === "key_missing" && e.docId) {
+          this.longWaiting.add(e.docId);
+          this.updateStatus();
+        }
+        // A document the server does not know never becomes «synced»: it must not keep the spinner.
+        if (e.code === "doc_not_found" && e.docId && e.ref === e.docId) {
+          this.unknownOnServer.add(e.docId);
+          this.updateStatus();
+        }
         // A push the server refused (`ref` is its clientMsgId): the change has not reached the server.
         if (e.docId && e.ref && e.ref !== e.docId && REFUSED.has(e.code)) void this.markFailed(e.docId, e.code, e.message);
       }),
@@ -100,6 +155,7 @@ export class AccountRuntime {
 
     await this.store.ensureRow(this.accountDocId, "account", null, 1);
     this.account = await this.store.pin(this.accountDocId);
+    setTrustAccount(() => this.account);
     await this.attach([this.accountDocId]);
     const onAccount = () => {
       refreshAccount(this.account);
@@ -119,7 +175,14 @@ export class AccountRuntime {
         void this.reattach(docId);
         void uploadPending();
       }),
+      this.client.on("keyMissing", (docId) => {
+        this.waitingForKey.add(docId);
+        this.updateStatus();
+        this.resumeKeyed(); // the index may have arrived between keyFor and the pause
+      }),
       this.store.onChange((docId, origin) => {
+        // A notebook index changed: a paused note may have its key now.
+        if (this.waitingForKey.size && this.store.rowKind(docId) === "notebook") this.resumeKeyed();
         if (!useWorkspace.getState().notes[docId]) return;
         this.indexer.schedule(docId);
         if (origin !== ORIGIN_REMOTE) this.touch(docId);
@@ -141,8 +204,43 @@ export class AccountRuntime {
 
     await this.indexer.loadFromDisk();
     void this.indexer.reconcile(Object.keys(useWorkspace.getState().notes));
-    void prefetchNotebookKeys();
+    this.cleanups.push(
+      onNotebookKeyReplaced((r) => void this.adoptNotebookKey(r)),
+      onNotebookConflict(() => void this.reconcileNotebooks()),
+      // Back online after a drop: whatever did not reach the server meanwhile is reconciled.
+      this.client.on("status", (s) => {
+        if (s === "online" && this.wasOffline) void this.reconcileNotebooks();
+        this.wasOffline = s !== "online";
+      }),
+    );
     this.client.start();
+    void this.reconcileNotebooks();
+    // D-54: this account's key pair exists (created once, crypto.md §10.1); offline it waits. Then
+    // the owner's upkeep of what it shares (keys for members, key changes, guest links).
+    void accountBoxKeys()
+      .then(() => Promise.all([maintainShares(), refreshShared()]))
+      .catch((e) => console.warn("[ds] account key pair not ready:", (e as Error).message));
+    const upkeep = setInterval(() => {
+      void maintainShares();
+      void refreshShared();
+    }, 120_000);
+    this.cleanups.push(() => clearInterval(upkeep));
+    // Back to the tab: roles, keys and access may have changed meanwhile.
+    const back = () => {
+      if (document.visibilityState !== "visible") return;
+      void maintainShares();
+      void refreshShared();
+    };
+    document.addEventListener("visibilitychange", back);
+    this.cleanups.push(() => document.removeEventListener("visibilitychange", back));
+    // Notes with edits saved as the page last closed: opened once so the tail is written and sent
+    // even if the note is not opened again (indexes get theirs when they are attached).
+    for (const docId of this.store.tailDocIds())
+      if (this.store.rowKind(docId) === "note")
+        void this.store
+          .acquire(docId)
+          .then(() => this.store.release(docId))
+          .catch(() => undefined);
     this.scheduleFlush();
     this.pendingTimer = setInterval(() => void this.updatePending(), 2000);
   }
@@ -150,6 +248,8 @@ export class AccountRuntime {
   async stop() {
     for (const c of this.cleanups) c();
     for (const c of this.observedNotebooks.values()) c();
+    for (const c of this.observedStandalone.values()) c();
+    this.observedStandalone.clear();
     for (const t of this.touchTimers.values()) clearTimeout(t);
     if (this.pendingTimer) clearInterval(this.pendingTimer);
     this.cleanups = [];
@@ -159,6 +259,163 @@ export class AccountRuntime {
     this.store.destroyAll();
     clearKeys();
     resetWorkspace();
+  }
+
+  private reconciling: Promise<void> | null = null;
+  private wasOffline = false;
+
+  /**
+   * Make the server agree with this device (on every sync start and reconnect, and after a
+   * notebook registration conflict): notebook keys are the server's (see checkNotebookKeys);
+   * a notebook the account lists but the server lacks is registered; the server's mode follows
+   * the account doc's NotebookRef.mode (a mode change may not have reached it).
+   */
+  reconcileNotebooks(): Promise<void> {
+    this.reconciling ??= (async () => {
+      try {
+        const list = await notebooksApi.list();
+        for (const r of await checkNotebookKeys(list)) await this.adoptNotebookKey(r);
+        const onServer = new Map(list.map((n) => [n.id, n]));
+        const pending = new Set((await accountDb().ops.toArray()).filter((o) => o.path === "/notebooks").map((o) => (o.body as { notebookId?: string })?.notebookId));
+        for (const ref of useWorkspace.getState().account.notebooks) {
+          const server = onServer.get(ref.id);
+          if (!server) {
+            // Registration lost (dropped op): register the key this device holds.
+            const wrapped = (await accountDb().kv.get(`nbkey:${ref.id}`))?.value as string | undefined;
+            if (wrapped && !pending.has(ref.id)) await enqueueOp({ method: "POST", path: "/notebooks", body: { notebookId: ref.id, mode: "private", wrappedKey: wrapped } });
+            continue;
+          }
+          if (server.mode !== ref.mode) {
+            await pushNotebookMode(ref.id, ref.mode).catch((e) => console.warn("[ds] notebook mode not synced to the server yet", ref.id, e));
+          }
+        }
+      } catch (e) {
+        console.warn("[ds] notebook reconciliation postponed", e);
+      } finally {
+        this.reconciling = null;
+      }
+    })();
+    return this.reconciling;
+  }
+
+  private covered = new Set<string>();
+  private unknownOnServer = new Set<string>();
+  private waitingForKey = new Set<string>();
+  private longWaiting = new Set<string>();
+  private resuming = false;
+
+  /** Paused documents whose key is known now resume (SyncClient.keyAvailable). */
+  private resumeKeyed() {
+    if (this.resuming) return;
+    this.resuming = true;
+    setTimeout(async () => {
+      try {
+        for (const docId of [...this.waitingForKey]) {
+          if (!(await this.store.keyFor(docId).catch(() => null))) continue;
+          this.waitingForKey.delete(docId);
+          this.longWaiting.delete(docId);
+          await this.client.keyAvailable(docId).catch(() => undefined);
+        }
+      } finally {
+        this.resuming = false;
+        this.updateStatus();
+      }
+    }, 100);
+  }
+
+  /**
+   * A server item this device could not read with the key it has (sealed with a key nobody
+   * holds, e.g. from a wiped device): SyncClient skips it and keeps going. It is counted for a calm
+   * note, and once this device's key is confirmed canonical it uploads a snapshot of what it did
+   * read, so other clients stop meeting the item.
+   */
+  private onSkipped(item: { docId: string }) {
+    const skipped = useSyncStatus.getState().skipped;
+    useSyncStatus.setState({ skipped: { ...skipped, [item.docId]: (skipped[item.docId] ?? 0) + 1 } });
+    if (this.covered.has(item.docId)) return;
+    this.covered.add(item.docId);
+    // Only with the server's key (reconciliation done): a snapshot sealed otherwise would add to the problem.
+    setTimeout(async () => {
+      await this.reconciling?.catch(() => undefined);
+      if (this.attached.has(item.docId)) await this.client.requestSnapshot(item.docId).catch(() => false);
+    }, 3000);
+  }
+
+  /** The client is caught up with the server for this document (nothing more to receive). */
+  isDocSynced(docId: string): boolean {
+    return this.client.isSynced(docId);
+  }
+
+  /** What keeps sync busy (console: `__dsSyncDebug()`); ids only, no content. */
+  async syncDebug() {
+    const outbox = await this.storage.listOutbox();
+    const byDoc: Record<string, number> = {};
+    for (const i of outbox) byDoc[i.docId] = (byDoc[i.docId] ?? 0) + 1;
+    const rows = await Promise.all([...this.attached].map(async (id) => [id, (await this.store.row(id))?.kind] as const));
+    return {
+      status: this.client.status,
+      notSynced: rows.filter(([id]) => !this.client.isSynced(id) && !this.unknownOnServer.has(id)).map(([id, kind]) => ({ id, kind, paused: this.client.isPaused(id) })),
+      unknownOnServer: [...this.unknownOnServer],
+      outbox: byDoc,
+      ops: (await accountDb().ops.toArray()).map((o) => `${o.method} ${o.path}`),
+      skipped: this.client.getSkipped().map((s) => ({ docId: s.docId, seq: s.seq, reason: s.reason })),
+      failed: useSyncStatus.getState().failed,
+    };
+  }
+
+  /** Read a document again from seq 0 (updates that could not be decrypted were skipped). */
+  private async rereadDoc(docId: string) {
+    // While the doc is out of the client its local edits are not queued (removeDoc detaches the
+    // listener): collect them and hand them over once it is back, or they never reach the server.
+    const pinned = this.store.get(docId);
+    const missed: Uint8Array[] = [];
+    const collect = (update: Uint8Array, origin: unknown) => {
+      if (origin !== ORIGIN_REMOTE && origin !== ORIGIN_LOAD) missed.push(update);
+    };
+    pinned?.on("update", collect);
+    try {
+      await this.client.removeDoc(docId).catch(() => undefined);
+      const st = await this.storage.getDocState(docId);
+      if (st) await this.storage.setDocState(docId, { ...st, lastSeq: 0 });
+      this.attached.delete(docId);
+      await this.attach([docId]);
+    } finally {
+      pinned?.off("update", collect);
+    }
+    // Already stored locally; ORIGIN_LOAD keeps DocStore from saving them twice. Updates are
+    // idempotent, so those queued before the detach are harmless to send again.
+    if (pinned && missed.length) pinned.emit("update", [Y.mergeUpdates(missed), ORIGIN_LOAD, pinned, null as unknown as Y.Transaction]);
+    // An open note is live in the client again only through openDoc.
+    const live = this.store.get(docId);
+    if (live && (await this.store.row(docId))?.kind === "note") await this.client.openDoc(docId, () => live).catch(() => undefined);
+  }
+
+  /**
+   * This device sealed a notebook's index with a key the server (and other devices) don't use.
+   * Note keys wrapped with the old key are rewrapped with the server's, the index is re-read from
+   * the start (others' updates were unreadable here) and re-uploaded whole with the right key.
+   */
+  private async adoptNotebookKey({ notebookId, oldKey, newKey }: ReplacedNotebookKey) {
+    const doc = this.store.get(notebookId);
+    if (!doc) return;
+    if (this.attached.has(notebookId)) {
+      await this.rereadDoc(notebookId);
+      // Items skipped with the old key are fetched again (the old key is an alternate key now).
+      await this.client.retrySkipped(notebookId).catch(() => false);
+    }
+    const notes = notebookMaps(doc).notes;
+    const rewrapped: [Y.Map<unknown>, string][] = [];
+    for (const [noteId, m] of notes) {
+      const wrapped = m.get("wrappedKey") as string | undefined;
+      if (!wrapped) continue;
+      const ok = await unwrapKey(newKey, wrapped, ad.noteKey(noteId)).then(() => true, () => false);
+      if (ok) continue;
+      const key = await unwrapKey(oldKey, wrapped, ad.noteKey(noteId)).catch(() => null);
+      if (key) rewrapped.push([m, await wrapKey(newKey, key, ad.noteKey(noteId))]);
+    }
+    if (rewrapped.length) doc.transact(() => rewrapped.forEach(([m, w]) => m.set("wrappedKey", w)));
+    await this.client.requestSnapshot(notebookId).catch(() => false);
+    console.warn(`[ds] notebook ${notebookId}: switched to the server's key, ${rewrapped.length} note key(s) rewrapped`);
   }
 
   /** Version snapshot (history) when leaving a document after many own edits (sync-protocol.md §5). */
@@ -181,6 +438,7 @@ export class AccountRuntime {
       // Account and notebook indexes are live Y.Docs; notes are stored (opened on demand).
       if (notes.length) await this.client.addStoredDocs(notes);
       if (live.length) await this.client.addDocs(await Promise.all(live.map(async (docId) => ({ docId, doc: await this.store.pin(docId) }))));
+      for (const docId of live) this.store.applyTail(docId);
     })();
     for (const id of fresh) this.attaching.set(id, done);
     try {
@@ -208,7 +466,7 @@ export class AccountRuntime {
   }
 
   private updateStatus() {
-    const allSynced = [...this.attached].every((id) => this.client.isSynced(id));
+    const allSynced = [...this.attached].every((id) => this.unknownOnServer.has(id) || this.longWaiting.has(id) || this.client.isSynced(id));
     const status = uiStatus(this.client.status, allSynced);
     useSyncStatus.setState({ status, ...(status === "online" ? { lastSyncedAt: Date.now(), error: null } : {}) });
   }
@@ -302,6 +560,9 @@ export class AccountRuntime {
     for (const ref of account.notebooks) {
       const doc = this.store.get(ref.id);
       if (!doc) continue;
+      // Only into a notebook doc whose server state is here: writing into one still loading is a
+      // blind write on every new device (and the copy is usually already there).
+      if (!this.client.isSynced(ref.id)) continue;
       const space = account.spaces.find((s) => s.id === ref.spaceId) ?? null;
       syncNotebookMetaCopy(doc, ref, space);
     }
@@ -315,8 +576,79 @@ export class AccountRuntime {
     return this.notebookPass;
   }
 
+  /** Notebooks to keep live: this account's and the shared ones whose key arrived (D-54). */
+  private notebookIds(): string[] {
+    const own = useWorkspace.getState().account.notebooks.map((r) => r.id);
+    const shared = Object.values(useShared.getState().items)
+      .filter((i) => i.target.kind === "notebook" && i.keyed)
+      .map((i) => i.target.id);
+    return [...new Set([...own, ...shared])];
+  }
+
+  /**
+   * D-54: shared notebooks join the observed ones (their notes follow from the index); a note
+   * shared on its own is attached by itself. Called after «Общие со мной» is re-read.
+   */
+  async syncSharedDocs() {
+    await this.syncNotebookDocs();
+    for (const item of Object.values(useShared.getState().items)) {
+      if (item.target.kind !== "note" || !item.keyed) continue;
+      // A note of a notebook that is shared too already has its entry from the index.
+      const id = item.target.id;
+      await this.store.ensureRow(id, "note", null, 1);
+      await this.attach([id]);
+      if (this.observedStandalone.has(id)) continue;
+      this.observedStandalone.set(id, () => undefined);
+      const doc = await this.store.pin(id);
+      const addedAt = useWorkspace.getState().account.shared.find((r) => r.kind === "note" && r.id === id)?.addedAt ?? new Date().toISOString();
+      const handler = () =>
+        refreshStandaloneNote(id, {
+          id,
+          notebookId: "",
+          folderId: null,
+          parentNoteId: null,
+          title: getTitle(doc),
+          kind: "note",
+          dailyDate: null,
+          tags: [],
+          icon: null,
+          coverThumb: null,
+          wrappedKey: "",
+          createdAt: addedAt,
+          updatedAt: addedAt,
+          trashedAt: null,
+          order: 0,
+        });
+      doc.on("afterTransaction", handler);
+      this.observedStandalone.set(id, () => doc.off("afterTransaction", handler));
+      handler();
+    }
+    // Keys that arrived (or changed) for documents paused waiting for one.
+    for (const item of Object.values(useShared.getState().items))
+      if (item.keyed) for (const docId of item.docIds) if (this.attached.has(docId)) void this.client.keyAvailable(docId).catch(() => undefined);
+  }
+
+  /** A shared resource this account no longer has: detach and forget its documents here. */
+  async dropShared(target: { kind: "notebook" | "note"; id: string }) {
+    const ids = target.kind === "note" ? [target.id] : [target.id, ...(this.knownNotes.get(target.id) ?? [])];
+    for (const id of ids) void this.indexer.remove(id);
+    await this.detach(ids);
+    if (target.kind === "note") {
+      this.observedStandalone.get(target.id)?.();
+      this.observedStandalone.delete(target.id);
+      refreshStandaloneNote(target.id, null);
+    }
+    if (target.kind === "notebook") {
+      this.observedNotebooks.get(target.id)?.();
+      this.observedNotebooks.delete(target.id);
+      this.knownNotes.delete(target.id);
+      refreshNotebook(target.id, null);
+    }
+    await this.store.forget(ids);
+  }
+
   private async syncNotebookDocsNow() {
-    const refs = useWorkspace.getState().account.notebooks;
+    const refs = this.notebookIds().map((id) => ({ id }));
     for (const ref of refs) {
       if (this.observedNotebooks.has(ref.id)) continue;
       this.observedNotebooks.set(ref.id, () => undefined);
@@ -331,7 +663,7 @@ export class AccountRuntime {
       handler();
       await this.attach([ref.id]);
     }
-    const ids = new Set(useWorkspace.getState().account.notebooks.map((r) => r.id));
+    const ids = new Set(this.notebookIds());
     for (const [id, off] of [...this.observedNotebooks]) {
       if (ids.has(id)) continue;
       off();
@@ -397,11 +729,28 @@ export async function startRuntime(accountDocId: string) {
   if (current?.accountDocId === accountDocId) return current;
   void current?.stop();
   current = new AccountRuntime(accountDocId);
+  // Support readout in the browser console (ids and counts only).
+  (window as unknown as { __dsSyncDebug?: () => Promise<unknown> }).__dsSyncDebug = async () => {
+    const d = await current?.syncDebug();
+    console.log("[ds] sync debug", d);
+    return d;
+  };
   // Dev tools and e2e performance tests (a build with VITE_DS_TEST_HOOKS=1) reach the runtime here.
   if (import.meta.env.DEV || import.meta.env.VITE_DS_TEST_HOOKS) {
     const w = window as unknown as { __ds?: unknown; __dsTest?: unknown };
     w.__ds = current;
-    w.__dsTest = { Y: await import("yjs"), db: accountDb, refresh: refreshSession };
+    w.__dsTest = {
+      Y: await import("yjs"),
+      db: accountDb,
+      refresh: refreshSession,
+      // e2e: this device holds its own key for a notebook (as after a POST /notebooks that got 409).
+      corruptNotebookKey: async (notebookId: string) => {
+        const { getMasterKey } = await import("@/auth/session");
+        const { randomKey } = await import("@/lib/shared");
+        const wrapped = await wrapKey(getMasterKey(), randomKey(), ad.notebookKey(notebookId));
+        await accountDb().kv.put({ key: `nbkey:${notebookId}`, value: wrapped });
+      },
+    };
   }
   await current.start();
   return current;

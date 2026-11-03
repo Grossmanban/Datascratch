@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, lte, lt, sql } from 'drizzle-orm';
 import type { DbOrTx } from '../db/client.js';
-import { docSnapshots, docUpdates, docs } from '../db/schema.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { docSnapshots, docUpdates, docs, type AuthorRef } from '../db/schema.js';
+import { ApiError, badRequest, notFound } from '../lib/errors.js';
 import { toB64 } from '../lib/encoding.js';
 import { topics, type Broadcaster } from '../sync/hub.js';
 
@@ -10,6 +10,8 @@ export interface AppendInput {
   payload: Uint8Array;
   deviceId: string;
   clientMsgId?: string | null;
+  /** Who sent the update (D-54), from the authenticated connection or token, never from the client. */
+  author: AuthorRef;
 }
 
 export interface AppendResult {
@@ -32,6 +34,8 @@ export interface CatchUpItem {
   seq: number;
   payload: Buffer;
   deviceId: string;
+  /** null for guest updates stored before authors were recorded (D-54). */
+  author: AuthorRef | null;
 }
 
 export interface CatchUpPage {
@@ -50,7 +54,6 @@ export interface RetentionPolicy {
 const PAGE_ITEMS = 500;
 const PAGE_BYTES = 4 * 1024 * 1024;
 const DAY = 86_400_000;
-const SNAPSHOT_PREFERRED_AFTER = 100;
 
 function isUniqueViolation(e: unknown): boolean {
   let cur: unknown = e;
@@ -69,7 +72,31 @@ export class DocumentService {
   constructor(
     private readonly hub: Broadcaster,
     private readonly retention: RetentionPolicy,
+    /** Bytes an account may store (0: unlimited); see quotaCheck. */
+    private readonly quotaBytes = 0,
   ) {}
+
+  /**
+   * Refuse a write that would take the document owner's account over its storage quota
+   * (guests and agents count against the owner). Snapshots get 10 % headroom so that an
+   * account at its limit can still compact its history. The account's own limit wins over the
+   * server default (new accounts get a smaller one). Inside a transaction, writes of one account
+   * are serialized until it commits, so parallel uploads cannot overshoot the limit together.
+   */
+  async quotaCheck(db: DbOrTx, docId: string, bytes: number, kind: 'update' | 'snapshot' | 'attachment' = 'update') {
+    const res = await db.execute<{ owner: string; used: string | number | null; quota: string | number | null }>(
+      sql`SELECT owner, used, quota FROM ds_quota_of_doc(${docId})`,
+    );
+    const row = res.rows[0];
+    if (!row) return;
+    const quota = row.quota === null ? this.quotaBytes : Number(row.quota);
+    if (quota <= 0) return;
+    await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${row.owner}::text, 7477))`);
+    const [fresh] = (await db.execute<{ used: string | number | null }>(sql`SELECT used FROM ds_quota_of_doc(${docId})`)).rows;
+    const used = Number(fresh?.used ?? 0);
+    const limit = kind === 'snapshot' ? quota * 1.1 : quota;
+    if (used + bytes > limit) throw new ApiError('payload_too_large', 'storage quota exceeded');
+  }
 
   /** Append an update with the next seq. The doc row lock serializes writers per document. */
   async append(db: DbOrTx, input: AppendInput): Promise<AppendResult> {
@@ -111,6 +138,7 @@ export class DocumentService {
           };
         }
       }
+      await this.quotaCheck(tx, input.docId, input.payload.byteLength);
       const [row] = await tx
         .update(docs)
         .set({
@@ -131,19 +159,28 @@ export class DocumentService {
         payload: Buffer.from(input.payload),
         deviceId: input.deviceId,
         clientMsgId: input.clientMsgId ?? null,
+        author: input.author,
       });
       return { ...row!, duplicate: false };
     });
   }
 
   /** Relay an accepted update to live subscribers (call after the transaction committed). */
-  publishUpdate(docId: string, seq: number, payload: Uint8Array | string, deviceId: string, origin: string | null) {
+  publishUpdate(
+    docId: string,
+    seq: number,
+    payload: Uint8Array | string,
+    deviceId: string,
+    author: AuthorRef,
+    origin: string | null,
+  ) {
     this.hub.publish(topics.doc(docId), {
       type: 'update',
       docId,
       seq,
       payload: typeof payload === 'string' ? payload : toB64(payload),
       deviceId,
+      author,
       origin,
     });
   }
@@ -157,6 +194,14 @@ export class DocumentService {
       const [doc] = await tx.select().from(docs).where(eq(docs.id, input.docId)).for('update');
       if (!doc) throw notFound('document not registered');
       if (input.baseSeq < 1 || input.baseSeq > doc.lastSeq) throw badRequest('baseSeq out of range');
+      await this.quotaCheck(tx, input.docId, input.payload.byteLength, 'snapshot');
+      // Version history shows who changed the document since the previous version (D-54):
+      // the authors of the updates after the previous snapshot, in order of their first update.
+      const authors = await tx.execute<{ author: AuthorRef }>(sql`
+        SELECT author FROM doc_updates
+        WHERE doc_id = ${input.docId} AND author IS NOT NULL AND seq <= ${input.baseSeq}
+          AND seq > coalesce((SELECT max(seq) FROM doc_snapshots WHERE doc_id = ${input.docId} AND seq < ${input.baseSeq}), 0)
+        GROUP BY author ORDER BY min(seq)`);
       await tx
         .insert(docSnapshots)
         .values({
@@ -164,6 +209,7 @@ export class DocumentService {
           seq: input.baseSeq,
           payload: Buffer.from(input.payload),
           deviceId: input.deviceId,
+          authors: authors.rows.map((r) => r.author),
         })
         .onConflictDoNothing();
       if (input.baseSeq <= doc.snapshotSeq) return { newest: false };
@@ -188,8 +234,8 @@ export class DocumentService {
   }
 
   /**
-   * Catch-up for `subscribe { since }`, yielded in pages. If the updates right
-   * after `since` were compacted away, the newest snapshot comes first.
+   * Catch-up for `subscribe { since }`, yielded in pages. If `since` is older than the
+   * newest snapshot, that snapshot comes first and the pages continue after it.
    */
   async *catchUp(db: DbOrTx, docId: string, since: number): AsyncGenerator<CatchUpPage> {
     const [doc] = await db.select().from(docs).where(eq(docs.id, docId));
@@ -197,31 +243,24 @@ export class DocumentService {
     // A client ahead of the server (e.g. restored from another backup) starts over.
     let cursor = since > doc.lastSeq ? 0 : since;
     let snapshot: CatchUpPage['snapshot'] = null;
-    if (cursor < doc.lastSeq) {
-      const [first] = await db
-        .select({ seq: docUpdates.seq })
-        .from(docUpdates)
-        .where(and(eq(docUpdates.docId, docId), gt(docUpdates.seq, cursor)))
-        .orderBy(asc(docUpdates.seq))
+    // A client behind the newest snapshot always gets it first, then the updates after it
+    // (not the updates in between): if some of those updates cannot be decrypted, the client
+    // still heals from a later snapshot (sync-protocol §5).
+    if (doc.snapshotSeq > cursor) {
+      const [snap] = await db
+        .select({ seq: docSnapshots.seq, payload: docSnapshots.payload })
+        .from(docSnapshots)
+        .where(eq(docSnapshots.docId, docId))
+        .orderBy(desc(docSnapshots.seq))
         .limit(1);
-      const gap = !first || first.seq > cursor + 1;
-      // Prefer the snapshot when the updates are gone or replaying them would be long.
-      if (doc.snapshotSeq > cursor && (gap || doc.snapshotSeq - cursor > SNAPSHOT_PREFERRED_AFTER)) {
-        const [snap] = await db
-          .select({ seq: docSnapshots.seq, payload: docSnapshots.payload })
-          .from(docSnapshots)
-          .where(eq(docSnapshots.docId, docId))
-          .orderBy(desc(docSnapshots.seq))
-          .limit(1);
-        if (snap) {
-          snapshot = snap;
-          cursor = snap.seq;
-        }
+      if (snap) {
+        snapshot = snap;
+        cursor = snap.seq;
       }
     }
     for (;;) {
       const rows = await db
-        .select({ seq: docUpdates.seq, payload: docUpdates.payload, deviceId: docUpdates.deviceId })
+        .select({ seq: docUpdates.seq, payload: docUpdates.payload, deviceId: docUpdates.deviceId, author: docUpdates.author })
         .from(docUpdates)
         .where(and(eq(docUpdates.docId, docId), gt(docUpdates.seq, cursor)))
         .orderBy(asc(docUpdates.seq))
@@ -251,14 +290,33 @@ export class DocumentService {
     if (docs.length === 0) return out;
     const ids = `{${docs.map((d) => d.docId).join(',')}}`;
     const sinces = `{${docs.map((d) => d.since).join(',')}}`;
-    const res = await db.execute<{ doc_id: string; seq: string | number; payload: Buffer; device_id: string }>(sql`
-      SELECT u.doc_id, u.seq, u.payload, u.device_id
+    const res = await db.execute<{
+      doc_id: string;
+      seq: string | number;
+      payload: Buffer;
+      device_id: string;
+      author: AuthorRef | null;
+    }>(sql`
+      SELECT u.doc_id, u.seq, u.payload, u.device_id, u.author
       FROM unnest(${ids}::uuid[], ${sinces}::bigint[]) AS q(doc_id, since)
       JOIN doc_updates u ON u.doc_id = q.doc_id AND u.seq > q.since
       ORDER BY u.doc_id, u.seq`);
     for (const r of res.rows) {
-      out.get(r.doc_id)!.push({ seq: Number(r.seq), payload: r.payload, deviceId: r.device_id });
+      out.get(r.doc_id)!.push({ seq: Number(r.seq), payload: r.payload, deviceId: r.device_id, author: r.author });
     }
+    return out;
+  }
+
+  /** Size in bytes of the newest snapshot of each document, without loading the payloads. */
+  async snapshotSizes(db: DbOrTx, docIds: string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (docIds.length === 0) return out;
+    const res = await db.execute<{ doc_id: string; bytes: string | number }>(sql`
+      SELECT DISTINCT ON (doc_id) doc_id, octet_length(payload) AS bytes
+      FROM doc_snapshots
+      WHERE doc_id = ANY(${`{${docIds.join(',')}}`}::uuid[])
+      ORDER BY doc_id, seq DESC`);
+    for (const r of res.rows) out.set(r.doc_id, Number(r.bytes));
     return out;
   }
 
@@ -278,7 +336,7 @@ export class DocumentService {
   /** Updates with after < seq < before, in order (gap filling for live delivery). */
   async range(db: DbOrTx, docId: string, after: number, before: number): Promise<CatchUpItem[]> {
     return db
-      .select({ seq: docUpdates.seq, payload: docUpdates.payload, deviceId: docUpdates.deviceId })
+      .select({ seq: docUpdates.seq, payload: docUpdates.payload, deviceId: docUpdates.deviceId, author: docUpdates.author })
       .from(docUpdates)
       .where(and(eq(docUpdates.docId, docId), gt(docUpdates.seq, after), lt(docUpdates.seq, before)))
       .orderBy(asc(docUpdates.seq));
@@ -286,7 +344,12 @@ export class DocumentService {
 
   async listVersions(db: DbOrTx, docId: string) {
     return db
-      .select({ seq: docSnapshots.seq, createdAt: docSnapshots.createdAt, deviceId: docSnapshots.deviceId })
+      .select({
+        seq: docSnapshots.seq,
+        createdAt: docSnapshots.createdAt,
+        deviceId: docSnapshots.deviceId,
+        authors: docSnapshots.authors,
+      })
       .from(docSnapshots)
       .where(eq(docSnapshots.docId, docId))
       .orderBy(desc(docSnapshots.seq));

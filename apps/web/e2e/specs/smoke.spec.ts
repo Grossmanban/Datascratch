@@ -5,7 +5,7 @@ test("sign up, write a note, sign in on another device and see it", async ({ pag
   const email = uniqueEmail("smoke");
   await signUp(page, email);
   await newDoc(page, "Первая заметка", "Чернила на тёплой бумаге");
-  await expect(page.locator("[data-testid=sidebar]")).toContainText("Первая заметка");
+  await expect(page.locator(".ds-prose")).toContainText("Первая заметка");
   await expectSynced(page);
 
   const other = await browser.newContext();
@@ -49,6 +49,8 @@ test("recover access with the recovery key", async ({ page, browser }) => {
   await p2.locator("button[type=submit]").click();
   await p2.waitForURL("**/all", { timeout: 20_000 });
   await expect(p2.getByTestId("doc-card").filter({ hasText: "Важное" })).toBeVisible({ timeout: 20_000 });
+  // D-53: recovery disconnects every other device, which wipes its data and says so.
+  await expect(page.getByTestId("wiped-notice")).toBeVisible({ timeout: 20_000 });
 
   // The old password no longer works, the new one does.
   const ctx3 = await browser.newContext();

@@ -1,7 +1,9 @@
 import { ApiError, NetworkError } from "@/api/client";
+import { isUnsafeKdf } from "@/auth/kdfBounds";
 import i18n from "@/i18n";
 
 export function authErrorMessage(e: unknown, fallbackKey: string): string {
+  if (isUnsafeKdf(e)) return i18n.t("auth.unsafeKdf");
   if (e instanceof NetworkError) return i18n.t("auth.serverUnavailable");
   if (e instanceof ApiError) {
     if (e.status === 401 || e.code === "unauthorized") return i18n.t(fallbackKey);

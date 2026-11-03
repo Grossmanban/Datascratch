@@ -12,6 +12,10 @@ on:
       - ".github/workflows/ios-app.yml"
   workflow_dispatch:
 
+# Least privilege: jobs that need more ask for it themselves.
+permissions:
+  contents: read
+
 concurrency:
   group: ios-app-${{ github.ref }}
   cancel-in-progress: true
@@ -44,7 +48,7 @@ jobs:
     if: needs.gate.outputs.skip != 'true'
     name: Build & test (${{ matrix.family }})
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -98,8 +102,9 @@ jobs:
             -project Datascratch.xcodeproj -scheme Datascratch \
             -destination "${{ steps.sim.outputs.destination }}" \
             -derivedDataPath build/DerivedData \
-            CODE_SIGNING_ALLOWED=NO | tee build/build.log | xcbeautify --renderer github-actions || \
-          (grep -E "error:" build/build.log | head -50; tail -40 build/build.log; exit 1)
+            -disableAutomaticPackageResolution \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/build.log | xcbeautify --renderer github-actions || \
+          (grep -E "error:" build/build.log | head -50; grep -B30 -A20 "Stack dump:" build/build.log | head -120; tail -40 build/build.log; exit 1)
 
       - name: Unit tests
         timeout-minutes: 15
@@ -116,6 +121,9 @@ jobs:
 
       # D-46: the smoke set is the release gate (the coordinator starts a TestFlight build once it
       # is green on both devices); the rest of the UI suite runs right after in the same job.
+      # Each UI test is capped at 300 s. A test takes 15–65 s, but the iPad simulator sometimes
+      # stalls before the app is up (build 24: rotating the device 13.5 s instead of 0–3, the
+      # launch 94 s instead of 6–9, the first query 50 s), and at 180 s that killed a passing test.
       - name: UI tests (smoke — release gate)
         timeout-minutes: 20
         run: |
@@ -128,11 +136,13 @@ jobs:
             -derivedDataPath build/DerivedData \
             "${ARGS[@]}" \
             -resultBundlePath build/UI-smoke-${{ matrix.family }}.xcresult \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
             CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
 
       - name: UI tests (full)
-        timeout-minutes: 20
+        # The iPad simulator needs ~20 min for the full suite since build 17 (each test is still
+        # capped at 300 s, so a hang does not hide behind this).
+        timeout-minutes: 35
         run: |
           set -o pipefail
           ARGS=(-only-testing:DatascratchUITests)
@@ -143,7 +153,7 @@ jobs:
             -derivedDataPath build/DerivedData \
             "${ARGS[@]}" \
             -resultBundlePath build/UI-${{ matrix.family }}.xcresult \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
             CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
 
       - name: Check Russian localization in the app bundle
@@ -175,3 +185,12 @@ jobs:
           name: xcresult-${{ matrix.family }}
           path: apps/ios/build/*.xcresult
           retention-days: 7
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.family }}
+          path: apps/ios/build/build.log
+          retention-days: 7
+          if-no-files-found: ignore

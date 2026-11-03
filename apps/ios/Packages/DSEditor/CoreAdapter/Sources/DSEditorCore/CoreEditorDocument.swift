@@ -231,6 +231,8 @@ public final class CoreEditorDocument: EditorDocument {
 
     // MARK: Transactions
 
+    public var isReadOnly: Bool { note.isReadOnly }
+
     public func transact(origin: ChangeOrigin, _ body: () -> Void) {
         if txDepth == 0 {
             txOrigin = origin
@@ -267,6 +269,7 @@ public final class CoreEditorDocument: EditorDocument {
         case .local, .textInput: .local
         case .undo, .redo: .undo
         case .remote: .remote
+        case .system: .system
         }
     }
 

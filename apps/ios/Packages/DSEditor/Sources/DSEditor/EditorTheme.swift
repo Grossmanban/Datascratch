@@ -7,6 +7,9 @@ import UIKit
 /// names follow `design-tokens.md` so swapping to DSDesign is mechanical.
 public struct EditorTheme: Sendable {
     public var style: DocumentStyle
+    /// Task dates are actionable (D-51: off in the notes-only app): date chips open the reschedule
+    /// menu and menus offer dates. Off, the chips are quiet labels and the dates stay in the document.
+    public var taskDatesEnabled = true
     public var baseFontSize: CGFloat = 17
 
     public init(style: DocumentStyle = DocumentStyle()) { self.style = style }
@@ -94,6 +97,14 @@ public struct EditorTheme: Sendable {
     }
 
     public var bodyFont: UIFont { font(size: baseFontSize) }
+
+    /// Line pitch of ruled, grid and dot paper: the body line height, so text sits on the rules.
+    /// Every text line, paragraph spacing and block height is a whole number of pitches on such
+    /// paper (`spec/03-pencil.md`, «Бумага»). Nil on plain paper.
+    public var paperPitch: CGFloat? {
+        style.paper == .plain ? nil : (bodyFont.lineHeight * Self.bodyLineHeightMultiple).rounded()
+    }
+    static let bodyLineHeightMultiple: CGFloat = 1.22
 
     /// Type token of a paragraph kind (`design-tokens.md`: title, h1–h3), nil for body text.
     static func typeToken(for kind: ParagraphKind, attrs: [String: JSONValue]) -> DSTypeToken? {

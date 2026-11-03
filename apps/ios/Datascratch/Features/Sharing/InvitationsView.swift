@@ -1,0 +1,302 @@
+import SwiftUI
+import UIKit
+
+/// D-54: invitations to this account — who invites, to what, with which role; accept or decline.
+struct InvitationsView: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    @State private var working: String?
+    @State private var error: String?
+
+    var body: some View {
+        let invites = app.accountSharing.incoming
+        NavigationStack {
+            List {
+                if let error {
+                    Section { Text(error).foregroundStyle(Theme.Palette.danger) }
+                }
+                Section {
+                    ForEach(invites) { invite in
+                        InvitationCard(invite: invite, isWorking: working == invite.id) {
+                            respond(invite, accept: true)
+                        } onDecline: {
+                            respond(invite, accept: false)
+                        }
+                    }
+                } footer: {
+                    if !invites.isEmpty {
+                        Text("Accepted notebooks and documents appear in “Shared with me” in every space.")
+                    }
+                }
+            }
+            .overlay {
+                if invites.isEmpty {
+                    ContentUnavailableView("No invitations", systemImage: "envelope.open",
+                                           description: Text("When someone shares a notebook or a document with you, it appears here."))
+                }
+            }
+            .navigationTitle("Invitations")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .task { await app.accountSharing.refresh() }
+        }
+        .accessibilityIdentifier("invitations")
+    }
+
+    private func respond(_ invite: IncomingInvite, accept: Bool) {
+        working = invite.id
+        error = nil
+        Task {
+            do {
+                if accept {
+                    try await app.accountSharing.accept(invite)
+                } else {
+                    try await app.accountSharing.decline(invite)
+                }
+                Haptics.success()
+                if app.accountSharing.incoming.isEmpty { dismiss() }
+            } catch {
+                self.error = error.localizedDescription
+            }
+            working = nil
+        }
+    }
+}
+
+/// D-54: one invitation, opened from its link (`/invite/<id>`): the same card with «Accept» and
+/// «Decline», or why it is not there — not signed in, or no longer waiting.
+struct InvitationLinkView: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    let invitationId: String
+    @State private var isLoaded = false
+    @State private var isWorking = false
+    @State private var error: String?
+
+    var body: some View {
+        let sharing = app.accountSharing
+        NavigationStack {
+            Group {
+                if !sharing.isAvailable {
+                    ContentUnavailableView {
+                        Label("Sign in to accept", systemImage: "person.crop.circle.badge.questionmark")
+                    } description: {
+                        Text("Invitations are for an account on a server. Sign in in Settings, then open the link again.")
+                    }
+                } else if let invite = sharing.incoming.first(where: { $0.id == invitationId }) {
+                    List {
+                        if let error {
+                            Section { Text(error).foregroundStyle(Theme.Palette.danger) }
+                        }
+                        Section {
+                            InvitationCard(invite: invite, isWorking: isWorking) {
+                                respond(invite, accept: true)
+                            } onDecline: {
+                                respond(invite, accept: false)
+                            }
+                        } footer: {
+                            Text("Accepted notebooks and documents appear in “Shared with me” in every space.")
+                        }
+                    }
+                } else if !isLoaded {
+                    ProgressView()
+                } else {
+                    ContentUnavailableView {
+                        Label("This invitation isn’t waiting", systemImage: "envelope.open")
+                    } description: {
+                        Text("It was accepted, declined or revoked, or it has expired. Accepted notebooks and documents are in “Shared with me”.")
+                    }
+                }
+            }
+            .navigationTitle("Invitation")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+            }
+            .task {
+                await sharing.refresh()
+                isLoaded = true
+            }
+        }
+        .accessibilityIdentifier("invitationLink")
+    }
+
+    private func respond(_ invite: IncomingInvite, accept: Bool) {
+        isWorking = true
+        error = nil
+        Task {
+            do {
+                if accept {
+                    try await app.accountSharing.accept(invite)
+                } else {
+                    try await app.accountSharing.decline(invite)
+                }
+                Haptics.success()
+                dismiss()
+            } catch {
+                self.error = error.localizedDescription
+            }
+            isWorking = false
+        }
+    }
+}
+
+private struct InvitationCard: View {
+    let invite: IncomingInvite
+    let isWorking: Bool
+    let onAccept: () -> Void
+    let onDecline: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s3) {
+            HStack(alignment: .top, spacing: Theme.Space.s3) {
+                PersonBadge(email: invite.fromEmail)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(invite.fromEmail)
+                        .font(Theme.Typography.body.weight(.semibold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(invite.target.kind == .notebook ? LocalizedStringKey("invites you to a notebook")
+                                                          : "invites you to a document")
+                        .font(Theme.Typography.callout)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                    HStack(spacing: Theme.Space.s2) {
+                        Label(invite.role.title, systemImage: invite.role.systemImage)
+                        if let expiresAt = invite.expiresAt {
+                            Text("·")
+                            Text("until \(expiresAt.formatted(date: .abbreviated, time: .omitted))")
+                        }
+                    }
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.textTertiary)
+                }
+            }
+            HStack(spacing: Theme.Space.s3) {
+                Button(action: onAccept) {
+                    HStack {
+                        if isWorking { ProgressView().controlSize(.small) }
+                        Text("Accept")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("invitation.accept")
+                Button("Decline", role: .destructive, action: onDecline)
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("invitation.decline")
+            }
+            .disabled(isWorking)
+            .controlSize(.regular)
+        }
+        .padding(.vertical, Theme.Space.s2)
+        // Keep Accept and Decline as their own elements: an identifier on a plain container
+        // would be given to every child and hide theirs.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("invitation")
+    }
+}
+
+/// D-54 prompts for the owner, on the main window: someone who registered after the invitation
+/// («… зарегистрировалась — открыть доступ?») or whom this account never invited or knew with
+/// another key, and new guest links after a key change.
+struct SharingPrompts: ViewModifier {
+    @Environment(AppModel.self) private var app
+    /// Answered or put off in this session: not asked again until the next launch.
+    @State private var handled: Set<String> = []
+
+    func body(content: Content) -> some View {
+        let sharing = app.accountSharing
+        let confirmation = sharing.confirmations.first { !handled.contains($0.id) }
+        content
+            .alert(confirmation.map(Self.title) ?? "",
+                   isPresented: Binding(get: { confirmation != nil }, set: { _ in })) {
+                if let confirmation {
+                    Button("Give Access") { respond(confirmation, allow: true) }
+                    Button("Don’t Give Access", role: .destructive) { respond(confirmation, allow: false) }
+                    Button("Later", role: .cancel) { handled.insert(confirmation.id) }
+                }
+            } message: {
+                if let confirmation { Text(Self.message(confirmation)) }
+            }
+            .sheet(item: Binding(get: { sharing.refreshedLinks.first }, set: { item in
+                if item == nil, let shown = sharing.refreshedLinks.first { sharing.dismissRefreshedLinks(shown) }
+            })) { item in
+                RefreshedLinksSheet(item: item)
+            }
+            .task { await sharing.refresh() }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                Task { await sharing.refresh() }
+            }
+    }
+
+    private func respond(_ confirmation: AccessConfirmation, allow: Bool) {
+        handled.insert(confirmation.id)
+        Task { try? await app.accountSharing.confirm(confirmation, allow: allow) }
+    }
+
+    /// Says why the owner is asked: the server may be the one asking for the notebook's key.
+    private static func title(_ confirmation: AccessConfirmation) -> String {
+        let email = confirmation.member.email
+        switch confirmation.reason {
+        case .lateAccount: return String(localized: "\(email) signed up — give access?")
+        case .notInvited: return String(localized: "\(email) is waiting for access, but this account never invited them — give access?")
+        case .keyChanged: return String(localized: "The key of \(email) has changed — give access?")
+        }
+    }
+
+    private static func message(_ confirmation: AccessConfirmation) -> String {
+        switch confirmation.reason {
+        case .lateAccount:
+            return String(localized: "This account was created after you sent the invitation. Give access only if it is really this person.")
+        case .notInvited:
+            return String(localized: "Your devices have no record of this invitation. If you did not invite this person, say no: the server may be asking for your notebook’s key.")
+        case .keyChanged:
+            return String(localized: "This person’s account key is not the one your devices gave access to before. Say yes only if they told you they set up their account again.")
+        }
+    }
+}
+
+/// «Ссылки обновлены — отправьте новые» (D-54): the old guest links stopped working with the key.
+private struct RefreshedLinksSheet: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    let item: RefreshedLinks
+    @State private var copiedId: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(item.links) { link in
+                        ShareLinkRow(link: link, isCopied: copiedId == link.id) {
+                            SecretPasteboard.copy(link.url)
+                            withAnimation { copiedId = link.id }
+                            Haptics.success()
+                        } onRevoke: {
+                            Task { try? await app.sharing.revoke(link.id) }
+                        }
+                    }
+                } header: {
+                    Text(title)
+                } footer: {
+                    Text("Someone lost access, so the key changed and the old guest links stopped working. Send these new ones to the people who should keep access.")
+                }
+            }
+            .navigationTitle("Links Updated")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+        .accessibilityIdentifier("sharing.refreshedLinks")
+    }
+
+    private var title: String {
+        switch item.target.kind {
+        case .notebook: app.library.notebook(item.target.id)?.name ?? String(localized: "Notebook")
+        case .note: app.library.note(item.target.id)?.title ?? String(localized: "Document")
+        }
+    }
+}

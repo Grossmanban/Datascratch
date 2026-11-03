@@ -12,6 +12,8 @@ import { GuestPage } from "@/features/guest/GuestPage";
 import { SettingsPage, type SettingsSection } from "@/features/settings/SettingsPage";
 import { AppShell } from "@/features/shell/AppShell";
 import { TasksPage, type TaskView } from "@/features/tasks/TasksPage";
+import { features } from "@/lib/features";
+import { useUi } from "@/hooks/useUi";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -72,6 +74,10 @@ const tasksRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/tasks/$view",
   component: TasksPage,
+  // Extended mode only (D-51); a minimal build lands on the documents.
+  beforeLoad: () => {
+    if (!features.tasks) throw redirect({ to: "/all" });
+  },
   params: {
     parse: (p) => ({ view: (["inbox", "today", "upcoming", "all", "logbook"].includes(p.view) ? p.view : "today") as TaskView }),
     stringify: (p) => ({ view: p.view }),
@@ -81,6 +87,7 @@ const tasksIndex = createRoute({
   getParentRoute: () => appLayout,
   path: "/tasks",
   beforeLoad: () => {
+    if (!features.tasks) throw redirect({ to: "/all" });
     throw redirect({ to: "/tasks/$view", params: { view: "today" } });
   },
 });
@@ -88,11 +95,23 @@ const calendarRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/calendar",
   component: CalendarPage,
+  beforeLoad: () => {
+    if (!features.calendar) throw redirect({ to: "/all" });
+  },
   validateSearch: (s: Record<string, unknown>): { date?: string } => ({
     date: typeof s.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.date) ? s.date : undefined,
   }),
 });
 const docRoute = createRoute({ getParentRoute: () => appLayout, path: "/doc/$noteId", component: DocPage });
+// D-54: the link an inviter sends (api.md): it only opens the incoming invitations, it grants nothing.
+const inviteRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: "/invite/$invitationId",
+  beforeLoad: ({ params }) => {
+    useUi.setState({ invitationsOpen: params.invitationId });
+    throw redirect({ to: "/all", replace: true });
+  },
+});
 const settingsRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/settings/$section",
@@ -129,6 +148,7 @@ const routeTree = rootRoute.addChildren([
     tasksRoute,
     calendarRoute,
     docRoute,
+    inviteRoute,
     settingsIndex,
     settingsRoute,
   ]),

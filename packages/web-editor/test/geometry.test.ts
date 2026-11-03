@@ -63,6 +63,24 @@ describe("bindToText", () => {
     expect(b.anchorPositions).toEqual([2, 11]);
   });
 
+  it("anchors a frame around a line to that line, not to the heading above it (D-58)", () => {
+    // A heading (bigger font) and, under it, the framed line.
+    const lines = groupLines([
+      ...line("Heading", { baseline: 30, fontSize: 28, cw: 16, block: 1 }),
+      ...line("framed words", { baseline: 70, pos0: 20, block: 2 }),
+    ]);
+    // The top edge runs right under the heading — nearer its letters than the framed line's.
+    const frame = [pt(15, 40), pt(60, 40), pt(105, 40), pt(105, 74), pt(60, 74), pt(15, 74), pt(15, 41)];
+    const b = bindToText(frame, lines)!;
+    expect(b.anchorPositions.every((pos) => pos >= 20)).toBe(true);
+  });
+
+  it("keeps an underline on the line above it", () => {
+    const lines = groupLines([...line("aaaa", { baseline: 20 }), ...line("bbbb", { baseline: 60, pos0: 10 })]);
+    const b = bindToText([pt(5, 23), pt(25, 23), pt(35, 24)], lines)!;
+    expect(b.anchorPositions.every((pos) => pos < 10)).toBe(true);
+  });
+
   it("returns null without text", () => {
     expect(bindToText([pt(1, 1)], [])).toBeNull();
   });
@@ -202,5 +220,14 @@ describe("free drawings far from text (strokes.md §4)", () => {
     expect(isFreeDrawing([{ y: 22 }, { y: 24 }], lines)).toBe(false); // an underline
     expect(isFreeDrawing([{ y: 22 }, { y: 20 + 3 * 17 + 1 }], lines)).toBe(true); // runs far below
     expect(isFreeDrawing([{ y: 10 }], [])).toBe(true); // no text at all
+  });
+});
+
+describe("inline math detection", () => {
+  it("finds $…$ but not prices or escaped dollars", async () => {
+    const { findInlineMath } = await import("../src/schema/inlineMath");
+    expect(findInlineMath("Энергия $E=mc^2$ и $a_i$.").map((m) => m.latex)).toEqual(["E=mc^2", "a_i"]);
+    expect(findInlineMath("Стоит $5 и $10")).toEqual([]);
+    expect(findInlineMath("не формула \\$x$ и $ x $")).toEqual([]);
   });
 });

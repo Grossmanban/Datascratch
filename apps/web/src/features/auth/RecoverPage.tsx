@@ -43,6 +43,9 @@ export function RecoverPage() {
       <div>
         <h2 className="font-display text-[22px] font-semibold tracking-[-0.01em]">{t("auth.recoverTitle")}</h2>
         <p className="mt-1.5 text-[14px] leading-relaxed text-ink-2">{t("auth.recoverText")}</p>
+        <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2" data-testid="recover-others-wiped">
+          {t("auth.recoverOthersWiped")}
+        </p>
       </div>
       <Field label={t("auth.email")}>
         {(id) => <Input id={id} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />}

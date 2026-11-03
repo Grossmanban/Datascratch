@@ -51,6 +51,21 @@ final class TextGeometry {
         return frag
     }
 
+    /// The line holding a caret at `offset`, from the layout itself (content coordinates).
+    /// `UITextView.caretRect` put the caret of an empty title hundreds of points below the line, and
+    /// scrolling to it moved a fresh note's title off screen (build 18).
+    func lineFrame(at offset: Int) -> CGRect? {
+        guard let frag = fragment(at: offset) else { return nil }
+        let lines = frag.textLineFragments
+        guard !lines.isEmpty else { return nil }
+        let local = offset - self.offset(of: frag.rangeInElement.location)
+        let line = lines.first { NSLocationInRange(local, $0.characterRange) } ?? lines[lines.count - 1]
+        let frame = frag.layoutFragmentFrame
+        let bounds = line.typographicBounds
+        return CGRect(x: frame.minX + origin.x, y: frame.minY + bounds.minY + origin.y,
+                      width: max(frame.width, 1), height: max(bounds.height, 1))
+    }
+
     /// Current glyph placement of the character at `offset` (leading edge on the baseline).
     func placement(at offset: Int) -> GlyphPlacement? {
         if let cached = placementCache[offset] { return cached }

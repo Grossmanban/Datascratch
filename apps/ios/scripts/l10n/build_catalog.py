@@ -23,6 +23,9 @@ RU = pathlib.Path(__file__).with_name("ru.json")
 INTERPOLATIONS = {
     r"Offline · \(pending) waiting": "Offline · %lld waiting",
     r"Not sent: \(documents)": "Not sent: %lld",
+    r"\(count) documents": "%lld documents",
+    r"\(app.sync.heldChanges) changes wait for a key": "%lld changes wait for a key",
+    r"Unsent changes on this device: \(unsent). They will be sent after you sign in to this same account.": "Unsent changes on this device: %lld. They will be sent after you sign in to this same account.",
     r"No note called “\(title)”": "No note called “%@”",
     r"Unsent changes kept on this device: \(app.sync.pendingChanges)": "Unsent changes kept on this device: %lld",
     r"Delete documents forever: \(count)?": "Delete documents forever: %lld?",
@@ -35,15 +38,41 @@ INTERPOLATIONS = {
     r"Group \(indices.1 + 1)": "Group %lld",
     r"\(strength) of 4": "%lld of 4",
     r"Last used \(lastUsed.formatted(.relative(presentation: .named)))": "Last used %@",
+    r"\(hidden) more": "%lld more",
+    r"Note \(formatter.string(from: created))": "Note %@",
+    r"in “\(name)”": "in “%@”",
+    r"in “\($0)”": "in “%@”",
+    r"\(info.host) · \(info.version)": "%@ · %@",
+    # D-54
+    r"Remove \(member.email)": "Remove %@",
+    r"\(invite.role.title) · waiting until \(expiresAt.formatted(date: .abbreviated, time: .omitted))": "%@ · waiting until %@",
+    r"\(invite.role.title) · waiting": "%@ · waiting",
+    r"Changed by \(names)": "Changed by %@",
+    r"It points to \(host), and you aren’t signed in to a server. Open it in the browser, or sign in to that server in Settings.": "It points to %@, and you aren’t signed in to a server. Open it in the browser, or sign in to that server in Settings.",
+    r"It points to \(host), and this account is on \(current). Open it in the browser, or sign in to that server.": "It points to %@, and this account is on %@. Open it in the browser, or sign in to that server.",
+    r"\(email) signed up — give access?": "%@ signed up — give access?",
+    r"\(email) is waiting for access, but this account never invited them — give access?": "%@ is waiting for access, but this account never invited them — give access?",
+    r"The key of \(email) has changed — give access?": "The key of %@ has changed — give access?",
+    r"Opens when \(item.ownerEmail)’s device is online": "Opens when %@’s device is online",
+    r"View only · \(owner) can edit": "View only · %@ can edit",
+    r"Also here: \(names)": "Also here: %@",
+    r"From the link you opened: \(server). Continue only if you trust this server.": "From the link you opened: %@. Continue only if you trust this server.",
 }
 
 # Literals that look like text but are not translated (names, formats, prefixes).
 IGNORE = {
-    "* ", ", ", " · ", " : ", "> ", "[ ] ", "[] ", "☐ ", "DS1", "DS1-XXXX-XXXX-…", "Datascratch", "Library.json",
-    "CFBundleShortVersionString", "CFBundleVersion", "DSServerURL", "DSWebHost",
+    "Projects", "Drafts", "Plan", "Draft", "Target", "Links", "Target body", "Go to [[Target]] or [[Nowhere]].", "Dated", "Call back", "Фото", "Файл", "Вставка", "Sample Photo", "CoverImages.didArrive", "Photo.jpg", "#tag\\(index) #group/child\\(index)",
+    "* ", ", ", " · ", " › ", " : ", "> ", "[ ] ", "[] ", "☐ ", "DS1", "DS1-XXXX-XXXX-…", "Datascratch", "Library.json",
+    "CFBundleShortVersionString", "CFBundleVersion", "DSExtendedMode", "MMMdy", "d MMMM y",
     "XChaCha20-Poly1305 · Argon2id", "Quiet paper", "next week", "open to agents", "CoreLibrary", "Library", "Attachments", "a^2 + b^2 = c^2", "graph TD\n  A --> B",
     # First-run space names as an older build wrote them (matched when merging duplicates).
     "Личное", "Работа", "Заметки",
+    # D-54: UI-test seed and the comparison's line marks.
+    "Shared plans", "Roadmap", "Plan for two", "Ideas", "Only the owner edits this.", "• ", "☑ ", "———", "“", "”",
+    # UI-test seed: a long note (scroll position across full screen).
+    "Long", "Paragraph \\($0) of a long note.",
+    # Presence: the name sent when an account has no e-mail local part (not shown here).
+    "Me",
 }
 
 LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')

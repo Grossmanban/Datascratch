@@ -69,6 +69,13 @@ export class InMemoryAgentsStore implements AgentsStore {
   async deleteToken(tokenHash: string) {
     this.tokens.delete(tokenHash);
   }
+  async useRefreshToken(tokenHash: string) {
+    const t = this.tokens.get(tokenHash);
+    if (!t || (t.kind !== "refresh" && t.kind !== "refresh_used")) return null;
+    if (t.kind === "refresh_used") return { token: t, reused: true };
+    this.tokens.set(tokenHash, { ...t, kind: "refresh_used" });
+    return { token: t, reused: false };
+  }
   async deleteTokensOfGrant(grantId: string) {
     for (const [k, t] of this.tokens) if (t.grantId === grantId) this.tokens.delete(k);
   }
@@ -100,8 +107,20 @@ export class InMemoryDataSource implements AgentDataSource {
   readonly docs = new Map<string, StoredDoc>();
   readonly notebooks = new Map<string, StoredNotebook>();
   loads = 0;
+  /** Docs the "server" fails to decrypt (loadDoc → null), to test degraded paths. */
+  readonly broken = new Set<string>();
+  /** Updates reported as skipped by loadDoc, per doc. */
+  readonly skippedFor = new Map<string, NonNullable<LoadedDoc["skipped"]>>();
   /** grantId of every agent call, as the server would use it for RLS. */
   readonly grantCalls: (string | undefined)[] = [];
+  /** notebookId → member userId → role: notebooks other accounts shared with a user (D-54). */
+  readonly members = new Map<string, Map<string, { role: "editor" | "viewer"; email: string | null }>>();
+  /** Owner e-mails reported in `shared.ownerEmail`. */
+  readonly emails = new Map<string, string>();
+  /** Makes the next moveNoteDoc fail after building the updates (atomicity tests). */
+  failNextMove = false;
+  /** Decrypted image attachments by id, as the server would return them. */
+  readonly attachmentImages = new Map<string, Uint8Array>();
 
   addNotebook(userId: string, nb: Partial<AgentNotebook> & { id: string; mode?: "private" | "agent" }, doc: Y.Doc): void {
     this.notebooks.set(nb.id, {
@@ -138,29 +157,58 @@ export class InMemoryDataSource implements AgentDataSource {
     return this.docs.get(docId)?.history ?? [];
   }
 
-  private readable(userId: string, docId: string): StoredDoc | null {
+  /** Shares a notebook of its owner with another user (as the server's members table would). */
+  share(notebookId: string, memberUserId: string, role: "editor" | "viewer"): void {
+    const m = this.members.get(notebookId) ?? new Map();
+    m.set(memberUserId, { role, email: null });
+    this.members.set(notebookId, m);
+  }
+
+  unshare(notebookId: string, memberUserId: string): void {
+    this.members.get(notebookId)?.delete(memberUserId);
+  }
+
+  private roleIn(userId: string, nb: StoredNotebook): "owner" | "editor" | "viewer" | null {
+    if (nb.userId === userId) return "owner";
+    return this.members.get(nb.id)?.get(userId)?.role ?? null;
+  }
+
+  /** What RLS would allow: own or shared agent-mode notebooks; writes need owner or editor. */
+  private readable(userId: string, docId: string, write = false): StoredDoc | null {
     const d = this.docs.get(docId);
-    if (!d || d.userId !== userId) return null;
+    if (!d) return null;
     const nbId = d.notebookId ?? docId;
     const nb = this.notebooks.get(nbId);
     if (!nb || nb.mode !== "agent") return null; // the server cannot decrypt private notebooks
+    const role = this.roleIn(userId, nb);
+    if (!role || (write && role === "viewer")) return null;
     return d;
   }
 
   async listAgentNotebooks(userId: string): Promise<AgentNotebook[]> {
     return [...this.notebooks.values()]
-      .filter((n) => n.userId === userId && n.mode === "agent")
-      .map(({ userId: _u, mode: _m, ...rest }) => rest);
+      .filter((n) => n.mode === "agent" && this.roleIn(userId, n) !== null)
+      .map(({ userId: owner, mode: _m, ...rest }) => {
+        const role = this.roleIn(userId, { ...rest, userId: owner, mode: "agent" });
+        return role === "owner" ? rest : { ...rest, shared: { ownerUserId: owner, ownerEmail: this.emails.get(owner) ?? null, role: role as "editor" | "viewer" } };
+      });
+  }
+
+  async loadAttachmentImage(_userId: string, attachmentId: string, grantId?: string): Promise<Uint8Array | null> {
+    this.grantCalls.push(grantId);
+    return this.attachmentImages.get(attachmentId) ?? null;
   }
 
   async loadDoc(userId: string, docId: string, grantId?: string): Promise<LoadedDoc | null> {
     this.grantCalls.push(grantId);
+    if (this.broken.has(docId)) return null;
     const d = this.readable(userId, docId);
     if (!d) return null;
     this.loads++;
     const doc = new Y.Doc({ gc: false });
     Y.applyUpdate(doc, Y.encodeStateAsUpdate(d.doc));
-    return { doc, seq: d.seq };
+    const skipped = this.skippedFor.get(docId);
+    return skipped ? { doc, seq: d.seq, skipped } : { doc, seq: d.seq };
   }
 
   async docSeqs(userId: string, docIds: string[]): Promise<Record<string, number>> {
@@ -173,7 +221,7 @@ export class InMemoryDataSource implements AgentDataSource {
   }
 
   async applyUpdate(userId: string, docId: string, update: Uint8Array, origin: AgentEditOrigin): Promise<{ seq: number }> {
-    const d = this.readable(userId, docId);
+    const d = this.readable(userId, docId, true);
     if (!d) throw new Error(`doc ${docId} is not writable`);
     Y.applyUpdate(d.doc, update);
     d.seq++;
@@ -183,9 +231,32 @@ export class InMemoryDataSource implements AgentDataSource {
 
   async createNoteDoc(userId: string, notebookId: string, noteId: string): Promise<{ wrappedKey: string }> {
     const nb = this.notebooks.get(notebookId);
-    if (!nb || nb.userId !== userId || nb.mode !== "agent") throw new Error("notebook not writable");
-    this.docs.set(noteId, { userId, notebookId, doc: new Y.Doc({ gc: false }), seq: 0, history: [] });
+    const role = nb ? this.roleIn(userId, nb) : null;
+    if (!nb || nb.mode !== "agent" || !role || role === "viewer") throw new Error("notebook not writable");
+    // A note in a shared notebook belongs to the notebook's owner.
+    this.docs.set(noteId, { userId: nb.userId, notebookId, doc: new Y.Doc({ gc: false }), seq: 0, history: [] });
     return { wrappedKey: `wrapped-${noteId}` };
+  }
+
+  async moveNoteDoc(
+    userId: string,
+    move: Parameters<NonNullable<AgentDataSource["moveNoteDoc"]>>[1],
+  ): Promise<{ fromSeq: number; toSeq: number }> {
+    this.grantCalls.push(move.origin.grantId);
+    const note = this.readable(userId, move.noteId, true);
+    const from = this.readable(userId, move.fromNotebookId, true);
+    const to = this.readable(userId, move.toNotebookId, true);
+    if (!note || note.notebookId !== move.fromNotebookId || !from || !to) throw new Error("note or notebook not writable");
+    // Stand-in for re-wrapping the note key with the target notebook key.
+    const { from: fromUpdate, to: toUpdate } = move.indexUpdates(`wrapped-${move.noteId}@${move.toNotebookId}`);
+    if (this.failNextMove) {
+      this.failNextMove = false;
+      throw new Error("simulated failure: nothing stored");
+    }
+    note.notebookId = move.toNotebookId;
+    const toSeq = (await this.applyUpdate(userId, move.toNotebookId, toUpdate, move.origin)).seq;
+    const fromSeq = (await this.applyUpdate(userId, move.fromNotebookId, fromUpdate, move.origin)).seq;
+    return { fromSeq, toSeq };
   }
 }
 

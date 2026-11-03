@@ -1,8 +1,12 @@
 import * as Y from "yjs";
+import type { SharedRef } from "@datascratch/shared";
 import { FORMAT_VERSION, type NotebookRef, type Space, type StarredRef } from "@/lib/shared";
 import { readMapOfMaps } from "./ymap";
 
 // Account doc layout: document-model.md §2.
+
+/** An open tab (document-model.md §2): `openedAt` is written at most once an hour per tab. */
+export type TabEntry = { noteId: string; pinned?: boolean; openedAt?: string };
 
 export const accountMaps = (doc: Y.Doc) => ({
   meta: doc.getMap<unknown>("meta"),
@@ -10,7 +14,9 @@ export const accountMaps = (doc: Y.Doc) => ({
   notebooks: doc.getMap<Y.Map<unknown>>("notebooks"),
   settings: doc.getMap<unknown>("settings"),
   starred: doc.getArray<StarredRef>("starred"),
-  tabs: doc.getArray<{ noteId: string }>("tabs"),
+  tabs: doc.getArray<TabEntry>("tabs"),
+  /** «Общие со мной» placement (D-54): "<kind>:<id>" -> SharedRef. */
+  shared: doc.getMap<Y.Map<unknown>>("shared"),
 });
 
 export type AccountSnapshot = {
@@ -19,7 +25,9 @@ export type AccountSnapshot = {
   notebooks: NotebookRef[];
   settings: Record<string, unknown>;
   starred: StarredRef[];
-  tabs: { noteId: string }[];
+  tabs: TabEntry[];
+  /** Notebooks and notes shared with this account and the space showing them (D-54). */
+  shared: SharedRef[];
 };
 
 export function readAccount(doc: Y.Doc): AccountSnapshot {
@@ -31,6 +39,7 @@ export function readAccount(doc: Y.Doc): AccountSnapshot {
     settings: m.settings.toJSON() as Record<string, unknown>,
     starred: m.starred.toArray(),
     tabs: m.tabs.toArray(),
+    shared: readMapOfMaps<SharedRef>(m.shared).sort((a, b) => a.order - b.order),
   };
 }
 

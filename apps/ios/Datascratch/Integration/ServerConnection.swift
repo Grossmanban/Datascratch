@@ -7,10 +7,12 @@ import UIKit
 
 /// Everything that talks to the Datascratch server (contracts/api.md, sync-protocol.md):
 /// REST client with the stored session, DSCore's account flows, and the sync engine
-/// that persists, encrypts and exchanges document updates. Used when `DS_SERVER_URL`
-/// is set; without a server the app works on this device only.
+/// that persists, encrypts and exchanges document updates. Used once the person signed in to a
+/// server of their own (D-49); without one the app works on this device only.
 final class ServerConnection: CoreLibraryRemote {
     nonisolated private static let log = Logger(subsystem: "com.datascratch.app", category: "Server")
+    /// Sync timing (connect, subscribe order, catch-up) for Instruments.
+    nonisolated private static let signposter = OSSignposter(subsystem: "com.datascratch.app", category: "Sync")
 
     let serverURL: URL
     let webHost: String
@@ -19,13 +21,29 @@ final class ServerConnection: CoreLibraryRemote {
     let accounts: DSCore.AccountService
     let sync: SyncCenter
     private var engine: SyncEngine?
+    /// Who else has a note open (presence over the sync socket, never stored).
+    let presence = PresenceCenter()
     private var statusTask: Task<Void, Never>?
     /// `POST /notebooks` in flight; notebook and note documents are registered after it.
     private var notebookCreation: [String: Task<Void, Never>] = [:]
     /// Encrypted attachments (cover images) in the same directory as `CoverImages`.
     let attachments: AttachmentManager?
 
+    /// Plaintext attachments on this device (also `CoverImages.directory`).
+    let attachmentsDirectory: URL
+    /// Called after the local data was erased: images held in memory go too.
+    var onLocalDataWiped: (() -> Void)?
+    /// Set by `ServerAccountService`: erases the device when the session was revoked (D-53).
+    var onDeviceRevoked: (() async -> Void)?
+    private var isRevoked = false
+    /// The account document caught up with the server in this session (or the account is new):
+    /// sharing decisions read its `trust` record only then (`ServerAccountSharingService`).
+    private(set) var isAccountSynced = false
+    /// Called when the account document first caught up in a session (sharing waits for it).
+    var onAccountSynced: (() -> Void)?
+
     init(serverURL: URL, webHost: String, core: CoreLibrary, sync: SyncCenter, attachmentsDirectory: URL) {
+        self.attachmentsDirectory = attachmentsDirectory
         self.serverURL = serverURL
         self.webHost = webHost
         self.core = core
@@ -33,6 +51,12 @@ final class ServerConnection: CoreLibraryRemote {
         api = APIClient(baseURL: serverURL, sessionStore: SecretSessionStore(store: core.secrets))
         accounts = DSCore.AccountService(api: api, keys: core.keys, store: core.store)
         attachments = try? AttachmentManager(api: api, store: core.store, directory: attachmentsDirectory)
+        let api = api
+        Task { [weak self] in
+            await api.setDeviceRevokedHandler { reason in
+                Task { @MainActor in await self?.deviceRevoked(reason: reason) }
+            }
+        }
     }
 
     /// Merges what doubled up when the device library was carried into the account.
@@ -41,8 +65,16 @@ final class ServerConnection: CoreLibraryRemote {
 
     /// Starts syncing for a signed-in account.
     func start(session: AuthSession, isNewAccount: Bool) async {
+        isRevoked = false
+        isAccountSynced = isNewAccount
         do {
             let carried = try core.adoptAccount(docId: session.accountDocId, isNew: isNewAccount)
+            // What the server says about members and key versions is checked against the
+            // account's own record (from here on: the notebook keys below are the first).
+            let wrappedKeys = core.wrappedKeys, store = core.store
+            accounts.useTrustRecord(core.account, notebookOfNote: { noteId in
+                wrappedKeys.notebookId(ofNote: noteId) ?? (try? store.document(noteId))?.notebookId
+            })
             let api = self.api
             // Notebooks made on this device before signing in exist on the server before any of
             // their documents is registered (otherwise POST /docs answers 404).
@@ -50,12 +82,17 @@ final class ServerConnection: CoreLibraryRemote {
                 do {
                     _ = try await api.createNotebook(id: notebook.id, mode: notebook.mode, wrappedKey: notebook.wrappedKey,
                                                      notebookKey: notebook.mode == .agent ? notebook.key : nil)
+                    core.keys.markNotebookKeyVerified(notebook.id)
                 } catch APIError.server(409, _, _) {
-                    // Already there (an earlier attempt).
+                    // Already there (an earlier attempt, or another device): its key is the
+                    // server's — reconcileNotebookKeys below takes it.
                 } catch {
                     Self.log.error("carrying notebook \(notebook.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
                 }
             }
+            // The server's notebook keys are the truth: fetch the ones this device lacks and
+            // replace any it invented, before anything is sealed.
+            let changes = await reconcileNotebookKeys()
             let client = SyncClient(
                 configuration: .init(url: SyncClient.Configuration.url(forServer: serverURL),
                                      deviceId: try core.store.deviceId(),
@@ -63,17 +100,22 @@ final class ServerConnection: CoreLibraryRemote {
             ) { [weak self] in
                 do {
                     return .user(accessToken: try await api.accessToken())
+                } catch let error as DeviceRevokedError {
+                    // D-53: the session was revoked (another device, a password change, a
+                    // recovery): everything on this device goes.
+                    await self?.deviceRevoked(reason: error.reason)
+                    throw error
                 } catch APIError.notAuthenticated {
                     // The refresh token was refused: the session was ended on the server.
                     await self?.sessionEnded()
                     throw APIError.notAuthenticated
                 }
             }
-            let wrappedKeys = core.wrappedKeys
-            let keys = KeyRingDocumentKeys(keyRing: core.keys) { noteId, notebookId in
-                wrappedKeys.wrapped(noteId: noteId, notebookId: notebookId)
-            }
-            let engine = SyncEngine(store: core.store, client: client, keyFor: keys.key(for:)) { [core] record in
+            let keys = KeyRingDocumentKeys(keyRing: core.keys, noteMeta: { noteId, notebookId in
+                wrappedKeys.meta(noteId: noteId, notebookId: notebookId)
+            })
+            let keyRing = core.keys
+            let engine = SyncEngine(store: core.store, client: client, keyFor: keys.key(for:), register: { [core] record in
                 do {
                     try await api.registerDoc(docId: record.docId, kind: record.kind, notebookId: record.notebookId)
                 } catch {
@@ -84,21 +126,47 @@ final class ServerConnection: CoreLibraryRemote {
                     do {
                         _ = try await api.createNotebook(id: notebook.id, mode: notebook.mode, wrappedKey: notebook.wrappedKey,
                                                          notebookKey: notebook.mode == .agent ? notebook.key : nil)
+                        keyRing.markNotebookKeyVerified(notebook.id)
                     } catch APIError.server(409, _, _) {
-                        // Created meanwhile.
+                        // Created meanwhile; the next reconcile settles whose key it is.
                     }
                     try await api.registerDoc(docId: record.docId, kind: record.kind, notebookId: record.notebookId)
                 }
-            }
+            }, retiredKeysFor: keys.retiredKeys(for:), isKeyCanonical: keys.isCanonical)
             self.engine = engine
+            await engine.setDeviceRevokedHandler { [weak self] reason in
+                Task { @MainActor in await self?.deviceRevoked(reason: reason) }
+            }
+            let signposter = Self.signposter
+            let accountDocId = session.accountDocId
+            await engine.setTraceHandler { [weak self] event in
+                signposter.emitEvent("sync", "\(String(describing: event), privacy: .public)")
+                if case .caughtUp(accountDocId) = event { Task { @MainActor in self?.accountCaughtUp() } }
+            }
             core.remote = self
+            let presence = self.presence
+            if let email = (try? core.store.string(ServerAccountService.emailKey)) ?? nil, !email.isEmpty {
+                presence.me = (PresenceCenter.name(forEmail: email), PresenceCenter.color(for: email))
+            }
+            await engine.setAwarenessHandler { docId, payload, _ in
+                Task { @MainActor in presence.receive(docId, payload) }
+            }
+            presence.send = { docId, payload in
+                Task { try? await engine.sendAwareness(docId: docId, payload: payload) }
+            }
             await engine.start()
+            await repairKeys(changes, engine: engine)
             observeStatus(engine)
             sync.onRetry = { Task { await engine.retryFailed() } }
+            sync.onCheckKeys = { [weak self] in self?.notebookKeysMissing() }
             // With the engine running, removing duplicates reaches the server too.
             // Every start: build 6 carried libraries without merging the duplicates.
             onLibraryCarried?(core.needsCarriedMerge)
             core.needsCarriedMerge = false
+            // Notebook modes changed while sync was stopped (signed out, signed out by the server,
+            // offline at the switch) never reached the server: agents would not see a notebook
+            // the app shows as open to them.
+            Task { await reconcileNotebookModes() }
             // Moves made offline or before a restart.
             let moves = core.pendingMoves
             Task { for (noteId, notebookId) in moves { await deliverMove(noteId, to: notebookId) } }
@@ -109,9 +177,9 @@ final class ServerConnection: CoreLibraryRemote {
         }
     }
 
-    /// The server ended this device's session (revoked from another device or the web, or the
-    /// refresh token expired). Sync stops; the library and the keys stay on the device, and
-    /// signing in again picks up where it stopped.
+    /// The server refused the refresh token without saying the device was revoked (it expired,
+    /// or an older server). Sync stops; the library and the keys stay on the device, and signing
+    /// in again picks up where it stopped. A revocation erases the device (`deviceRevoked`, D-53).
     func sessionEnded() async {
         guard !sync.isSessionEnded else { return }
         sync.markSessionEnded()
@@ -120,12 +188,62 @@ final class ServerConnection: CoreLibraryRemote {
         await stop()
     }
 
+    /// D-53: the server said for certain that this device's session was revoked (DSCore's
+    /// handlers on the API client and the sync engine — either may come first — or a
+    /// `DeviceRevokedError`). Unlike `sessionEnded` (an expired or refused refresh token),
+    /// everything on the device is erased, once; the account service does it
+    /// (`ServerAccountService.deviceRevoked`).
+    func deviceRevoked(reason: DeviceRevocationReason) async {
+        guard !isRevoked else { return }
+        isRevoked = true
+        Self.log.notice("device revoked (\(reason.rawValue, privacy: .public)): erasing local data")
+        await onDeviceRevoked?()
+    }
+
+    /// A revocation, not an expired token or a network error (DSCore classifies the response).
+    nonisolated static func isDeviceRevoked(_ error: any Error) -> Bool {
+        error is DeviceRevokedError
+    }
+
+    private func accountCaughtUp() {
+        guard !isAccountSynced else { return }
+        isAccountSynced = true
+        onAccountSynced?()
+    }
+
     func stop() async {
+        accounts.useTrustRecord(nil)
+        isAccountSynced = false
         statusTask?.cancel()
         sync.onRetry = nil
+        sync.onCheckKeys = nil
         await engine?.stop()
         engine = nil
         core.remote = nil
+    }
+
+    /// D-49: the version a server reports at `GET /v1/health` (before signing in to it).
+    static func healthVersion(of url: URL) async throws -> String {
+        let api = APIClient(baseURL: url, sessionStore: SecretSessionStore(store: InMemorySecretStore()))
+        let health = try await api.health()
+        guard health.ok else { throw URLError(.badServerResponse) }
+        return health.version
+    }
+
+    /// App back in the foreground: a socket that died silently while suspended is replaced at
+    /// once, a live one is kept (DSCore pings it).
+    func checkConnection() {
+        guard let engine else { return }
+        Task { await engine.client.checkConnection() }
+        // Uploads cut off while the app was in the background (another app opened mid-upload)
+        // went up only after a relaunch: pictures were missing on other devices (2026-11-03).
+        uploadPendingAttachments()
+    }
+
+    /// The person opened a note: it is caught up before the other documents.
+    func focus(_ noteId: String) {
+        guard let engine else { return }
+        Task { await engine.focus(noteId) }
     }
 
     /// Network came back: reconnect right away instead of waiting for the back-off.
@@ -148,8 +266,16 @@ final class ServerConnection: CoreLibraryRemote {
 
     private func observeStatus(_ engine: SyncEngine) {
         statusTask?.cancel()
-        statusTask = Task { [sync] in
+        statusTask = Task { [weak self, sync] in
+            var catching = false, caughtUp = false
             for await status in await engine.statusUpdates() {
+                // Once the account has caught up with the server: first-run twins are judged on
+                // what it really holds, not on what this device had before the first sync.
+                if status.catchingUp > 0 { catching = true }
+                if !caughtUp, catching, status.catchingUp == 0, case .connected = status.connection {
+                    caughtUp = true
+                    self?.onLibraryCarried?(false)
+                }
                 let summary: SyncCenter.Summary = switch status.summary {
                 case .offline: .offline
                 case .syncing: .syncing
@@ -157,6 +283,16 @@ final class ServerConnection: CoreLibraryRemote {
                 case .failed(let documents, let reason): .failed(documents: documents, reason: reason)
                 }
                 sync.apply(summary: summary, pending: status.pending)
+                let unreadable = Set(status.unreadable.compactMap { $0.notebookId ?? nil })
+                if sync.unreadableNotebookIds != unreadable { sync.unreadableNotebookIds = unreadable }
+                var signatures: [String: String] = [:]
+                for (notebook, items) in Dictionary(grouping: status.unreadable, by: { $0.notebookId ?? $0.docId }) {
+                    let count = items.reduce(0) { $0 + $1.count }
+                    let newest = items.map(\.lastSeq).max() ?? 0
+                    signatures[notebook] = "\(count)-\(newest)-\(items.count)"
+                }
+                if sync.unreadableSignatures != signatures { sync.unreadableSignatures = signatures }
+                sync.setHeld(status.held)
             }
         }
     }
@@ -169,6 +305,10 @@ final class ServerConnection: CoreLibraryRemote {
             do {
                 _ = try await api.createNotebook(id: id, mode: mode == .agent ? .agent : .private,
                                                  wrappedKey: wrappedKey, notebookKey: mode == .agent ? key : nil)
+                core.keys.markNotebookKeyVerified(id)
+            } catch APIError.server(409, _, _) {
+                // The id is taken on the server: its key there is the notebook's key.
+                await reconcileAndRepair()
             } catch {
                 ServerConnection.log.error("POST /notebooks \(id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             }
@@ -179,8 +319,19 @@ final class ServerConnection: CoreLibraryRemote {
         let api = self.api
         Task {
             await notebookCreation[id]?.value
+            // Agents get the key the server holds, never this device's own copy: one an earlier
+            // build invented would lock everyone else out of the notebook.
+            var agentKey: Data?
+            if mode == .agent {
+                if !core.keys.isNotebookKeyVerified(id) { await reconcileAndRepair() }
+                guard core.keys.isNotebookKeyVerified(id), let canonical = (try? core.keys.notebookKey(id)) ?? nil else {
+                    ServerConnection.log.error("PATCH mode \(id, privacy: .public) postponed: the server's key is not available")
+                    return
+                }
+                agentKey = canonical
+            }
             do {
-                try await api.setNotebookMode(id: id, mode: mode == .agent ? .agent : .private, notebookKey: key)
+                try await api.setNotebookMode(id: id, mode: mode == .agent ? .agent : .private, notebookKey: agentKey)
             } catch {
                 ServerConnection.log.error("PATCH mode \(id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             }
@@ -203,6 +354,82 @@ final class ServerConnection: CoreLibraryRemote {
         Task {
             await pending?.value
             await deliverMove(noteId, to: notebookId)
+        }
+    }
+
+    /// Brings the server's notebook modes in line with the account document (what the apps
+    /// show and the person chose); a notebook the server does not have yet is created by the
+    /// registration of its documents.
+    /// `AccountService.reconcileNotebookKeys`: keys this device lacks are stored, a key that
+    /// differs from the server's is replaced (the old one kept as retired, for reading) and the
+    /// note keys it wrapped are re-wrapped. Returns the replaced keys.
+    private func reconcileNotebookKeys() async -> [DSCore.AccountService.NotebookKeyChange] {
+        let changes: [DSCore.AccountService.NotebookKeyChange]
+        do {
+            changes = try await accounts.reconcileNotebookKeys()
+        } catch {
+            Self.log.error("reconciling notebook keys failed: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
+        for change in changes {
+            Self.log.error("notebook \(change.notebookId, privacy: .public) held a key the server does not know; replaced")
+            _ = try? core.notebookDocument(change.notebookId).rewrapNoteKeys(from: change.previousKey, to: change.key)
+        }
+        core.notebookKeysChanged()
+        return changes
+    }
+
+    /// After the keys are right: re-read and re-upload what was sealed with a wrong key — the
+    /// replaced notebooks, notes whose key only an invented (lost) notebook key opened, and
+    /// once per device every notebook (build 12, prod 2026-10-26) — then fetch set-aside items.
+    private func repairKeys(_ changes: [DSCore.AccountService.NotebookKeyChange], engine: SyncEngine) async {
+        // Documents that waited for a key (a notebook from another device) start syncing now.
+        await engine.resumeDocumentsWaitingForKeys()
+        var docs = changes.map(\.notebookId)
+        docs += core.healUnreadableNotes()
+        docs += core.takeOneTimeNotebookRekey()
+        for docId in Set(docs) { await engine.rekey(docId: docId) }
+        await engine.resumeDocumentsWaitingForKeys()
+        await engine.retryUnreadable()
+    }
+
+    private func reconcileAndRepair() async {
+        let changes = await reconcileNotebookKeys()
+        if let engine { await repairKeys(changes, engine: engine) }
+    }
+
+    /// The account document brought notebooks whose keys this device lacks (made on another
+    /// device): fetch them, then let the engine pick their documents up.
+    func noteKeysLearned() {
+        guard let engine else { return }
+        Task { await engine.resumeDocumentsWaitingForKeys() }
+    }
+
+    func notebookKeysMissing() {
+        guard engine != nil, !isFetchingKeys else { return }
+        isFetchingKeys = true
+        Task {
+            await reconcileAndRepair()
+            isFetchingKeys = false
+            reconnect()
+        }
+    }
+
+    private var isFetchingKeys = false
+
+    private func reconcileNotebookModes() async {
+        guard let server = try? await api.notebooks() else { return }
+        let modes = Dictionary(server.map { ($0.id, $0.mode) }, uniquingKeysWith: { a, _ in a })
+        for ref in core.account.notebooks() {
+            guard let serverMode = modes[ref.id], serverMode != ref.mode else { continue }
+            let key = ref.mode == .agent && core.keys.isNotebookKeyVerified(ref.id) ? (try? core.keys.notebookKey(ref.id)) ?? nil : nil
+            if ref.mode == .agent, key == nil { continue }
+            do {
+                try await api.setNotebookMode(id: ref.id, mode: ref.mode, notebookKey: key)
+                ServerConnection.log.info("notebook \(ref.id, privacy: .public) mode set to \(ref.mode.rawValue, privacy: .public) on the server")
+            } catch {
+                ServerConnection.log.error("PATCH mode \(ref.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
@@ -258,12 +485,58 @@ final class ServerConnection: CoreLibraryRemote {
     }
 }
 
+// MARK: - History (D-54: who changed what, compare, restore)
+
+extension ServerConnection: NoteHistorySource {
+    func versions(of noteId: String, notebookId: String) async throws -> [HistoryVersion] {
+        let me = await api.currentSession?.userId
+        return try await api.versions(docId: noteId).sorted { $0.seq > $1.seq }.map { version in
+            HistoryVersion(id: version.seq, createdAt: DSCore.DSDate.parseISO(version.createdAt) ?? Date(),
+                           authors: (version.authors ?? []).map { author -> HistoryAuthor in
+                               switch author {
+                               case .user(let id): id == me ? .me : .user(id: id)
+                               case .guest: .guest
+                               case .agent: .agent
+                               }
+                           })
+        }
+    }
+
+    func body(of noteId: String, notebookId: String, at version: HistoryVersion) async throws -> NoteBody {
+        let doc = NoteDocument(noteId: noteId)
+        try doc.crdt.applyUpdate(try await versionState(noteId, seq: version.id), origin: .storage)
+        return NoteBodyCodec.body(from: (try? doc.blocks()) ?? [])
+    }
+
+    func restore(_ version: HistoryVersion, of noteId: String, notebookId: String) async throws {
+        let state = try await versionState(noteId, seq: version.id)
+        try core.noteDocument(noteId, notebookId: notebookId).restoreVersion(state: state)
+        core.reload()
+    }
+
+    /// A version's state, opened with the note's key or one it had before (a key change after
+    /// someone lost access, crypto.md §10.3).
+    private func versionState(_ noteId: String, seq: Int64) async throws -> Data {
+        let sealed = try await api.version(docId: noteId, seq: seq)
+        guard let record = try core.store.document(noteId) else { throw CryptoError.decryptionFailed }
+        let wrappedKeys = core.wrappedKeys
+        let keys = KeyRingDocumentKeys(keyRing: core.keys, noteMeta: { noteId, notebookId in
+            wrappedKeys.meta(noteId: noteId, notebookId: notebookId)
+        })
+        let candidates = [try keys.key(for: record)].compactMap { $0 } + keys.retiredKeys(for: record)
+        for key in candidates {
+            if let plain = try? DSCrypto.open(sealed, key: key, ad: CryptoAD.doc(noteId)) { return plain }
+        }
+        throw CryptoError.decryptionFailed
+    }
+}
+
 // MARK: - Attachments
 
 extension ServerConnection: CoverAttachmentRemote {
-    func addAttachment(_ data: Data, mime: String, noteId: String) async throws -> String {
+    func addAttachment(_ data: Data, mime: String, noteId: String, id: String?) async throws -> String {
         guard let attachments else { throw APIError.notAuthenticated }
-        return try await attachments.add(data, mime: mime, noteId: noteId)
+        return try await attachments.add(data, mime: mime, noteId: noteId, id: id)
     }
 
     func uploadAttachment(_ attachmentId: String, noteId: String) async {
@@ -277,7 +550,13 @@ extension ServerConnection: CoverAttachmentRemote {
 
     func downloadAttachment(_ attachmentId: String, noteId: String) async -> URL? {
         guard let attachments, engine != nil, let key = noteKey(noteId) else { return nil }
-        return try? await attachments.download(attachmentId, noteId: noteId, noteKey: key)
+        do {
+            return try await attachments.download(attachmentId, noteId: noteId, noteKey: key)
+        } catch {
+            // A bad id or a download that does not add up (AttachmentError) shows as not loaded.
+            Self.log.error("attachment download \(attachmentId, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     func deleteAttachment(_ attachmentId: String) async {
@@ -302,7 +581,23 @@ final class ServerAccountService: AccountService {
 
     init(connection: ServerConnection) {
         self.connection = connection
+        connection.onDeviceRevoked = { [weak self] in await self?.deviceRevoked() }
         Task { await restore() }
+    }
+
+    /// D-53: this device was signed out from another device (or by a password change or a
+    /// recovery). Everything goes — the library, unsent changes, keys, attachments — and the
+    /// welcome screen says why. The session is already dead on the server: no logout call.
+    func deviceRevoked() async {
+        guard account != nil else { return }
+        await connection.stop()
+        try? connection.accounts.eraseDeviceKeys()
+        try? connection.core.wipeLocalData(attachments: connection.attachmentsDirectory)
+        connection.onLocalDataWiped?()
+        try? connection.core.store.setString(nil, for: Self.emailKey)
+        sessionResumed()
+        account = nil
+        DeviceRevokedNotice.shared.isPending = true
     }
 
     /// A stored session survives restarts: resume syncing without asking for the password.
@@ -330,7 +625,7 @@ final class ServerAccountService: AccountService {
             account = Account(userId: result.session.userId, email: email, createdAt: Date())
             await connection.start(session: result.session, isNewAccount: true)
             return key
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -340,7 +635,8 @@ final class ServerAccountService: AccountService {
         // Signed out on this device, now signing in to a different account: what the previous
         // account left here is removed first, so none of it reaches the new one (spec/07).
         if let previous = signedOutEmail, previous != email {
-            try? connection.core.wipeLocalData()
+            try? connection.core.wipeLocalData(attachments: connection.attachmentsDirectory)
+            connection.onLocalDataWiped?()
         }
         do {
             let session = try await connection.accounts.login(email: email, password: password, deviceName: UIDevice.current.name)
@@ -349,7 +645,7 @@ final class ServerAccountService: AccountService {
             account = Account(userId: session.userId, email: email, createdAt: Date())
             sessionResumed()
             await connection.start(session: session, isNewAccount: false)
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -363,8 +659,13 @@ final class ServerAccountService: AccountService {
     /// «Delete data from this device» (spec/07): documents, keys and the stored session go; the
     /// app starts over at the welcome screen.
     func deleteLocalData() async {
+        // The server forgets this device's session first (a stolen refresh token stops working).
+        try? await connection.api.logout()
         await connection.stop()
-        try? connection.core.wipeLocalData()
+        // Every key, kept ones of unsent notebooks too; then the database and the attachments.
+        try? connection.accounts.eraseDeviceKeys()
+        try? connection.core.wipeLocalData(attachments: connection.attachmentsDirectory)
+        connection.onLocalDataWiped?()
         try? connection.core.store.setString(nil, for: Self.emailKey)
         sessionResumed()
         account = nil
@@ -386,7 +687,7 @@ final class ServerAccountService: AccountService {
             account = Account(userId: session.userId, email: email, createdAt: Date())
             sessionResumed()
             await connection.start(session: session, isNewAccount: false)
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error, recovering: true)
         }
     }
@@ -396,7 +697,7 @@ final class ServerAccountService: AccountService {
         guard new.count >= Credentials.minimumPasswordLength else { throw AccountError.weakPassword }
         do {
             try await connection.accounts.changePassword(email: email, currentPassword: current, newPassword: new)
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -408,7 +709,7 @@ final class ServerAccountService: AccountService {
                                                                        account: connection.core.account)
             guard let key = RecoveryKey(text) else { throw AccountError.invalidRecoveryKey }
             return key
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -424,7 +725,7 @@ final class ServerAccountService: AccountService {
                 }
                 return SecurityEvent(kind: kind, date: date, deviceName: event.deviceName)
             }
-        } catch let error as APIError {
+        } catch {
             throw Self.map(error)
         }
     }
@@ -432,8 +733,32 @@ final class ServerAccountService: AccountService {
     func signOut() async {
         sessionResumed()
         await connection.stop()
-        try? await connection.accounts.logout()
+        // DSCore keeps the keys of notebooks still only on this device: signing in to the same
+        // account uploads them; another account or «Delete data» removes them (spec/07).
+        _ = try? await connection.accounts.logout()
         account = nil
+    }
+
+    var unsentChanges: Int { connection.core.unsentChangeCount }
+
+    /// «Send first»: waits (up to `timeout`) until nothing is left to send.
+    func sendPending(timeout: Duration) async -> Bool {
+        connection.reconnect()
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
+            if unsentChanges == 0 { return true }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        return unsentChanges == 0
+    }
+
+    /// DSCore errors as the person should read them; anything else as it is.
+    static func map(_ error: any Error, recovering: Bool = false) -> any Error {
+        if let api = error as? APIError { return map(api, recovering: recovering) }
+        if case .unsafeKDF? = error as? CryptoError { return AccountError.unsafeServerParameters }
+        if error is UnsafePathError { return AccountError.server(String(localized: "The server sent a response this app cannot use.")) }
+        return error
     }
 
     private static func map(_ error: APIError, recovering: Bool = false) -> AccountError {
@@ -491,6 +816,19 @@ final class ServerSharingService: SharingService {
         links.removeAll { $0.id == linkId }
     }
 
+    /// D-54: after a key change the guest links still carry the old key; each is made anew with
+    /// the same access and expiry, and the old one is revoked. Returns the new links.
+    func recreateLinks(for target: ShareTarget) async -> [SharedLink] {
+        await refresh()
+        var made: [SharedLink] = []
+        for old in links where old.target == target && !old.isExpired() {
+            guard let link = try? await createLink(for: target, permission: old.permission, expiresAt: old.expiresAt) else { continue }
+            try? await revoke(old.id)
+            made.append(link)
+        }
+        return made
+    }
+
     /// `https://<web-host>/s/<id>#k=<key>`; the key never goes to the server.
     private func url(shareId: String, target: ShareTarget) -> URL? {
         guard let host = URL(string: "https://\(connection.webHost)"),
@@ -521,6 +859,7 @@ final class ServerAccessService: AccessService {
         if let list = try? await connection.api.agentTokens() {
             agentTokens = list.map { token in
                 AgentToken(id: token.id, name: token.name, notebookIds: token.notebookIds,
+                           allNotebooks: token.allNotebooks,
                            permission: token.permission == .readWrite ? .readWrite : .read,
                            createdAt: DSCore.DSDate.parseISO(token.createdAt) ?? Date(),
                            expiresAt: token.expiresAt.flatMap(DSCore.DSDate.parseISO),

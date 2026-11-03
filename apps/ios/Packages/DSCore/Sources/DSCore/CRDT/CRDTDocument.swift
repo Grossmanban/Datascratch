@@ -18,6 +18,8 @@ public enum DocKind: String, Codable, Sendable, CaseIterable {
                 RootDef(name: "settings", kind: .map),
                 RootDef(name: "starred", kind: .array),
                 RootDef(name: "tabs", kind: .array),
+                // What this account did in sharing, checked against the server (`TrustRecord`).
+                RootDef(name: "trust", kind: .map),
             ]
         case .notebook:
             return [

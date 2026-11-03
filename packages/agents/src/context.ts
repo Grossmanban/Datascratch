@@ -25,6 +25,19 @@ export interface AgentNotebook {
   color?: string | null;
   space: { id: string; name: string; icon: string | null } | null;
   createdAt: string;
+  /**
+   * Set when the notebook belongs to another account that shared it with this
+   * user (D-54) and opened it to agents: the user's own agent works with it
+   * with the user's role (editor: read & write; viewer: read only). Absent or
+   * null for the user's own notebooks.
+   */
+  shared?: SharedFrom | null;
+}
+
+export interface SharedFrom {
+  ownerUserId: string;
+  ownerEmail: string | null;
+  role: "editor" | "viewer";
 }
 
 /** Who caused an update — stored by the server with the update (history, highlighting). */
@@ -43,6 +56,12 @@ export interface LoadedDoc {
   doc: Y.Doc;
   /** Last server seq included in `doc`; used as a cache key. */
   seq: number;
+  /**
+   * Updates the server could not decrypt or apply and left out (logged with
+   * docId, seq and deviceId). The rest of the document is still returned, so
+   * one bad update never hides a whole notebook or note.
+   */
+  skipped?: { seq: number; deviceId: string | null; reason: string }[];
 }
 
 /**
@@ -79,6 +98,25 @@ export interface AgentDataSource {
    * which the plugin writes to `NoteMeta.wrappedKey` in the notebook index.
    */
   createNoteDoc(userId: string, notebookId: string, noteId: string, grantId?: string): Promise<{ wrappedKey: string }>;
+  /**
+   * Optional: moves a note document to another agent-mode notebook of the
+   * grant, atomically (one transaction): re-wraps the note key with the
+   * target notebook key (the key itself, history and attachments stay),
+   * calls `indexUpdates` with the new wrapped key and appends the returned
+   * Yjs updates to both notebook indexes, and changes the document's
+   * notebook (as `PATCH /v1/docs/:id` does). Either everything is stored or
+   * nothing. Without it, notes can only be moved between folders of one notebook.
+   */
+  moveNoteDoc?(
+    userId: string,
+    move: {
+      noteId: string;
+      fromNotebookId: string;
+      toNotebookId: string;
+      origin: AgentEditOrigin;
+      indexUpdates(wrappedKey: string): { from: Uint8Array; to: Uint8Array };
+    },
+  ): Promise<{ fromSeq: number; toSeq: number }>;
   /**
    * Optional: decrypted bytes of an image attachment (PNG/JPEG), used to draw
    * handwriting made on top of pictures. When absent a placeholder is drawn.
@@ -124,6 +162,8 @@ export interface AgentGrant {
   /** OAuth client id (kind = oauth). */
   clientId: string | null;
   notebookIds: string[];
+  /** Every agent-mode notebook of the user, including ones switched to that mode later; `notebookIds` is then ignored. */
+  allNotebooks: boolean;
   permission: Permission;
   createdAt: string;
   expiresAt: string | null;
@@ -156,13 +196,15 @@ export interface AuthorizationCode {
   resource: string;
   scope: string;
   notebookIds: string[];
+  allNotebooks: boolean;
   permission: Permission;
   expiresAt: string;
 }
 
 export interface OAuthToken {
   tokenHash: string;
-  kind: "access" | "refresh";
+  /** `refresh_used`: a rotated refresh token, kept until it expires to detect reuse (RFC 9700 §4.14.2). */
+  kind: "access" | "refresh" | "refresh_used";
   grantId: string;
   clientId: string;
   scope: string;
@@ -189,7 +231,7 @@ export interface AgentsStore {
   getGrant(id: string): Promise<AgentGrant | null>;
   findGrantBySecretHash(secretHash: string): Promise<AgentGrant | null>;
   listGrants(userId: string): Promise<AgentGrant[]>;
-  updateGrant(id: string, patch: Partial<Pick<AgentGrant, "revokedAt" | "lastUsedAt" | "notebookIds" | "permission">>): Promise<void>;
+  updateGrant(id: string, patch: Partial<Pick<AgentGrant, "revokedAt" | "lastUsedAt" | "notebookIds" | "allNotebooks" | "permission">>): Promise<void>;
 
   upsertClient(client: OAuthClient): Promise<void>;
   getClient(clientId: string): Promise<OAuthClient | null>;
@@ -201,6 +243,13 @@ export interface AgentsStore {
   insertToken(token: OAuthToken): Promise<void>;
   getToken(tokenHash: string): Promise<OAuthToken | null>;
   deleteToken(tokenHash: string): Promise<void>;
+  /**
+   * Refresh-token rotation, atomically (server: one UPDATE … RETURNING): an
+   * unused refresh token becomes `refresh_used` and is returned with
+   * `reused: false`; a token that was already used is returned with
+   * `reused: true` (the caller revokes the grant); unknown → null.
+   */
+  useRefreshToken(tokenHash: string): Promise<{ token: OAuthToken; reused: boolean } | null>;
   deleteTokensOfGrant(grantId: string): Promise<void>;
 
   appendAudit(entry: AuditEntry): Promise<void>;

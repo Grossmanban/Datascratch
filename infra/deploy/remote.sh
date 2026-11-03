@@ -4,6 +4,7 @@
 #   remote.sh inspect      read-only survey of the server (Markdown on stdout)
 #   remote.sh deploy       bootstrap (idempotent) + deploy.sh up $DS_TAG
 #   remote.sh info         mode of the running deployment (key=value lines)
+#   remote.sh domain       the domain the server runs with (empty before the first deploy)
 #   remote.sh smoke-local  smoke test of 127.0.0.1:<proxy port> through an SSH tunnel
 #   remote.sh check        health of Datascratch inside its web container (edge mode)
 #   remote.sh snippet      the config snippet for an existing nginx (behind-proxy mode)
@@ -30,19 +31,24 @@ q() { printf '%q' "$1"; }
 case "${1:-}" in
   inspect)
     # Read-only: the script runs as the SSH user; it uses sudo -n only to read.
-    remote 'bash -s' < "$HERE/inspect.sh"
+    remote "DS_DIAG_DOCS=$(q "${DS_DIAG_DOCS:-}") bash -s" < "$HERE/inspect.sh"
     ;;
   deploy)
     echo "::group::Upload deployment files"
-    tar -C "$HERE" -cf - docker-compose.yml docker-compose.edge.yml bootstrap.sh deploy.sh inspect.sh -C "$HERE/.." backup.sh restore.sh \
-      | remote "rm -rf /tmp/ds-deploy && mkdir -p /tmp/ds-deploy && tar -xf - -C /tmp/ds-deploy"
+    # A fresh private directory (not a fixed /tmp path another user could prepare).
+    tmp=$(remote 'mktemp -d /tmp/ds-deploy.XXXXXXXX' < /dev/null)
+    case "$tmp" in /tmp/ds-deploy.*) ;; *) echo "unexpected temporary directory: $tmp" >&2; exit 1 ;; esac
+    t=$(q "$tmp")
+    trap 'remote "rm -rf $t" < /dev/null > /dev/null 2>&1 || true' EXIT
+    tar -C "$HERE" -cf - docker-compose.yml docker-compose.edge.yml bootstrap.sh deploy.sh inspect.sh ds -C "$HERE/.." backup.sh restore.sh \
+      | remote "tar -xf - -C $t"
     echo "::endgroup::"
 
     echo "::group::Prepare the server (bootstrap)"
-    remote "$SUDO env DS_DEPLOY_USER=$(q "$USER_") DS_HOST_MODE=$(q "${DS_HOST_MODE:-auto}") DS_SKIP_FIREWALL=$(q "${DS_SKIP_FIREWALL:-0}") bash /tmp/ds-deploy/bootstrap.sh"
-    remote "$SUDO install -m 0644 /tmp/ds-deploy/docker-compose.yml /tmp/ds-deploy/docker-compose.edge.yml /opt/datascratch/ \
-      && $SUDO install -m 0755 /tmp/ds-deploy/deploy.sh /tmp/ds-deploy/inspect.sh /tmp/ds-deploy/backup.sh /tmp/ds-deploy/restore.sh /opt/datascratch/ \
-      && rm -rf /tmp/ds-deploy"
+    remote "$SUDO env DS_DEPLOY_USER=$(q "$USER_") DS_HOST_MODE=$(q "${DS_HOST_MODE:-auto}") DS_SKIP_FIREWALL=$(q "${DS_SKIP_FIREWALL:-0}") bash $t/bootstrap.sh" < /dev/null
+    remote "$SUDO install -m 0644 $t/docker-compose.yml $t/docker-compose.edge.yml /opt/datascratch/ \
+      && $SUDO install -m 0755 $t/deploy.sh $t/inspect.sh $t/ds $t/backup.sh $t/restore.sh /opt/datascratch/ \
+      && rm -rf $t" < /dev/null
     echo "::endgroup::"
 
     echo "::group::Deploy $DS_TAG"
@@ -64,6 +70,10 @@ case "${1:-}" in
     ;;
   info)
     remote "$SUDO /opt/datascratch/deploy.sh info" < /dev/null
+    ;;
+  domain)
+    # Read-only and never failing: nothing there yet means an empty answer.
+    remote "$SUDO sh -c 'grep -E \"^DS_DOMAIN=\" /opt/datascratch/.env 2> /dev/null | tail -1 | cut -d= -f2-'" < /dev/null || true
     ;;
   snippet)
     remote "$SUDO cat /opt/datascratch/proxy/nginx.conf" < /dev/null

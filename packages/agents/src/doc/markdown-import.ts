@@ -7,6 +7,21 @@ import type * as Mdast from "mdast";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { gfmFromMarkdown } from "mdast-util-gfm";
 import { gfm } from "micromark-extension-gfm";
+import { AgentError } from "../errors.js";
+
+/** Deeper quotes/lists/emphasis are refused: deep trees cost stack and render time and no note needs them. */
+export const MAX_NESTING = 50;
+
+/** Link targets kept on import; anything else (javascript:, data:, vbscript:, file:…) loses the link, keeps the text. */
+const SAFE_SCHEMES = new Set(["http", "https", "mailto", "tel"]);
+
+export function safeHref(url: string): string | null {
+  // Browsers ignore control characters and spaces inside the scheme («java\tscript:»).
+  const compact = url.replace(/[\u0000-\u0020\u007f]/g, "");
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(compact)?.[1]?.toLowerCase();
+  if (scheme === undefined) return url; // relative link or #anchor
+  return SAFE_SCHEMES.has(scheme) ? url : null;
+}
 
 export type InlineSpec =
   | { text: string; marks: Record<string, unknown> }
@@ -64,7 +79,50 @@ export const CALLOUT_TONE: Record<string, string> = {
 };
 const CALLOUT_RE = /^\[!([a-z]+)\][+-]?[ \t]*([^\s]+)?[ \t]*/i;
 
+/**
+ * The Markdown parser (micromark) is quadratic inside one paragraph for some
+ * inputs («*a*a*a…», very long «a_a_a…» words): 20 000 such characters take
+ * ~1.5 s and would stall the single server process for everyone. The cost of a
+ * paragraph is estimated as its length squared; the sum over the text is
+ * capped. Code fences are not inline-parsed and table rows are parsed cell by
+ * cell, so each of them counts on its own. Normal notes stay far below.
+ */
+export const MAX_PARAGRAPH_COST = 2.5e8; // ≈ one 15 800-character paragraph, or 1 000 of 500
+
+export function markdownCost(markdown: string): number {
+  let cost = 0;
+  let run = 0;
+  let fence: string | null = null;
+  const end = () => {
+    cost += run * run;
+    run = 0;
+  };
+  for (const line of markdown.split("\n")) {
+    const f = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence !== null) {
+      if (f && f[0] === fence[0] && f.length >= fence.length) fence = null;
+      continue;
+    }
+    if (f) {
+      end();
+      fence = f;
+    } else if (line.trim() === "") end();
+    else if (/^\s*\|/.test(line)) {
+      end();
+      run = line.length;
+      end();
+    } else run += line.length + 1;
+  }
+  end();
+  return cost;
+}
+
 export function markdownToBlocks(markdown: string, options: ImportOptions = {}): BlockSpec[] {
+  if (markdownCost(markdown) > MAX_PARAGRAPH_COST)
+    throw new AgentError(
+      "payload_too_large",
+      "The Markdown has very long paragraphs. Split them with blank lines (keep each paragraph under about 10 000 characters).",
+    );
   const tree = fromMarkdown(markdown, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
   const blocks = new Importer(options, markdown).blocks(tree.children);
   // An empty paragraph at the end is noise (e.g. a trailing image without alt text).
@@ -112,10 +170,26 @@ class Importer {
     return a === undefined || b === undefined ? null : this.src.slice(a, b);
   }
 
+  private depth = 0;
+
+  private nested<T>(run: () => T): T {
+    if (++this.depth > MAX_NESTING) {
+      this.depth = 0;
+      throw new AgentError("bad_request", `Markdown is nested deeper than ${MAX_NESTING} levels (quotes, lists or emphasis). Flatten the structure.`);
+    }
+    try {
+      return run();
+    } finally {
+      this.depth = Math.max(0, this.depth - 1);
+    }
+  }
+
   blocks(nodes: Mdast.RootContent[]): BlockSpec[] {
-    const out: BlockSpec[] = [];
-    for (const n of nodes) out.push(...this.block(n));
-    return out;
+    return this.nested(() => {
+      const out: BlockSpec[] = [];
+      for (const n of nodes) out.push(...this.block(n));
+      return out;
+    });
   }
 
   block(node: Mdast.RootContent): BlockSpec[] {
@@ -152,8 +226,9 @@ class Importer {
         return [this.table(node)];
       case "html":
         return [{ type: "paragraph", attrs: {}, inline: [{ text: node.value, marks: {} }] }];
-      case "definition":
       case "footnoteDefinition":
+        return this.footnote(node);
+      case "definition":
       case "yaml" as never:
         return [];
       default:
@@ -237,10 +312,15 @@ class Importer {
     const last = inl[inl.length - 1];
     if (last && "text" in last) {
       let t = last.text;
-      for (let m = /\s*(⏳|📅)\s*(\d{4}-\d{2}-\d{2})\s*$/u.exec(t); m; m = /\s*(⏳|📅)\s*(\d{4}-\d{2}-\d{2})\s*$/u.exec(t)) {
+      // Look only at the end of the text: an unanchored `\s*…$` regex is quadratic on long whitespace.
+      for (;;) {
+        const end = t.trimEnd();
+        const tail = end.slice(-32);
+        const m = /(⏳|📅)[ \t]{0,8}(\d{4}-\d{2}-\d{2})$/u.exec(tail);
+        if (!m) break;
         if (m[1] === "⏳") scheduled = m[2]!;
         else deadline = m[2]!;
-        t = t.slice(0, m.index);
+        t = end.slice(0, end.length - tail.length + m.index).trimEnd();
       }
       inl[inl.length - 1] = { ...last, text: t };
     }
@@ -252,6 +332,7 @@ class Importer {
     };
   }
 
+  /** Column alignment (`:---`, `:---:`, `---:`) is the cell's `align` attribute (document-model.md, tableHeader/tableCell). */
   private table(node: Mdast.Table): BlockSpec {
     return {
       type: "table",
@@ -259,22 +340,41 @@ class Importer {
       children: node.children.map((row, r) => ({
         type: "tableRow",
         attrs: {},
-        children: row.children.map((cell) => ({
-          type: r === 0 ? "tableHeader" : "tableCell",
-          attrs: { colspan: 1, rowspan: 1, colwidth: null },
-          children: [{ type: "paragraph", attrs: {}, inline: this.inline(cell.children) }],
-        })),
+        children: row.children.map((cell, c) => {
+          const align = node.align?.[c] ?? null;
+          return {
+            type: r === 0 ? "tableHeader" : "tableCell",
+            attrs: align ? { colspan: 1, rowspan: 1, colwidth: null, align } : { colspan: 1, rowspan: 1, colwidth: null },
+            children: [{ type: "paragraph", attrs: {}, inline: this.inline(cell.children) }],
+          };
+        }),
       })),
     };
   }
 
+  /** Footnotes have no node in the schema: keep the definition as a paragraph «[^1]: …». */
+  private footnote(node: Mdast.FootnoteDefinition): BlockSpec[] {
+    const [first, ...rest] = this.blocks(node.children);
+    const head: InlineSpec = { text: `[^${node.label ?? node.identifier}]: `, marks: {} };
+    if (first && first.type === "paragraph") return [{ ...first, inline: [head, ...(first.inline ?? [])] }, ...rest];
+    return [{ type: "paragraph", attrs: {}, inline: [head] }, ...(first ? [first] : []), ...rest];
+  }
+
   inline(nodes: Mdast.PhrasingContent[], marks: Record<string, unknown> = {}): InlineSpec[] {
+    return this.nested(() => this.inlineFlat(nodes, marks));
+  }
+
+  private inlineFlat(nodes: Mdast.PhrasingContent[], marks: Record<string, unknown>): InlineSpec[] {
     const out: InlineSpec[] = [];
     for (const n of nodes) {
       switch (n.type) {
         case "text": {
           const raw = this.raw(n);
-          out.push(...this.text(n.value, marks, raw === null ? null : escapeMask(raw, n.value)));
+          const mask = raw === null ? null : escapeMask(raw, n.value);
+          if (raw !== null && mask !== null && raw.includes("$")) {
+            const m = withVerbatimMath(raw);
+            out.push(...this.text(m.value, marks, m.escaped));
+          } else out.push(...this.text(n.value, marks, mask));
           break;
         }
         case "strong":
@@ -292,12 +392,18 @@ class Importer {
         case "break":
           out.push({ atom: "hardBreak", attrs: {} });
           break;
+        case "footnoteReference":
+          out.push({ text: `[^${n.label ?? n.identifier}]`, marks });
+          break;
         case "link": {
           const m = /^note:([0-9a-f-]{36})$/.exec(n.url);
           if (m) {
             const label = n.children.map((c) => ("value" in c ? c.value : "")).join("");
             out.push({ atom: "noteLink", attrs: { noteId: m[1]!, label } });
-          } else out.push(...this.inline(n.children, { ...marks, link: { href: n.url } }));
+          } else {
+            const href = safeHref(n.url);
+            out.push(...this.inline(n.children, href === null ? marks : { ...marks, link: { href } }));
+          }
           break;
         }
         case "image":
@@ -322,7 +428,8 @@ class Importer {
    */
   private text(value: string, marks: Record<string, unknown>, escaped: boolean[] | null): InlineSpec[] {
     const out: InlineSpec[] = [];
-    const re = /\[\[([^\]\n]+)\]\]|==([^=\n]+)==|(^|[\s(])#([\p{L}\p{N}_][\p{L}\p{N}_/-]*)/gu;
+    // Bounded repetitions: `[[[[…` or `==…` without a closing pair must not rescan the rest of the text from every start.
+    const re = /\[\[([^\]\n]{1,300})\]\]|==([^=\n]{1,1000})==|(^|[\s(])#([\p{L}\p{N}_][\p{L}\p{N}_/-]*)/gu;
     let last = 0;
     for (let m = re.exec(value); m; m = re.exec(value)) {
       const trigger = m[3] !== undefined ? m.index + m[3].length : m.index;
@@ -350,6 +457,39 @@ class Importer {
     if (last < value.length) out.push({ text: value.slice(last), marks });
     return out;
   }
+}
+
+const INLINE_MATH_RE = /\$\$[^$]+?\$\$|\$(?=[^\s$])[^$\n]*?[^\s$\\]\$|\$[^\s$]\$/y;
+
+/**
+ * Decodes Markdown escapes of a text node's source but keeps inline math
+ * (`$…$`, `$$…$$`) verbatim: `$\sqrt{x}\,dx$` must keep its backslashes.
+ * Math characters are flagged as escaped so no tag/link/highlight is made inside.
+ */
+function withVerbatimMath(raw: string): { value: string; escaped: boolean[] } {
+  let value = "";
+  const escaped: boolean[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === "$" && (i === 0 || raw[i - 1] !== "\\")) {
+      INLINE_MATH_RE.lastIndex = i;
+      const m = INLINE_MATH_RE.exec(raw);
+      if (m) {
+        value += m[0];
+        for (let k = 0; k < m[0].length; k++) escaped.push(true);
+        i += m[0].length - 1;
+        continue;
+      }
+    }
+    if (raw[i] === "\\" && i + 1 < raw.length && ASCII_PUNCT.test(raw[i + 1]!)) {
+      value += raw[i + 1];
+      escaped.push(true);
+      i++;
+    } else {
+      value += raw[i];
+      escaped.push(false);
+    }
+  }
+  return { value, escaped };
 }
 
 /**

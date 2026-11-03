@@ -32,19 +32,46 @@ const WORD = /[\p{L}\p{N}]/u;
  * that read_note → edit/create_note round-trips literally. `lineStart`
  * additionally escapes block markers (`>`, `#`, `-`, `1.`) at the start of a line.
  */
-export function escapeText(text: string, lineStart: boolean): string {
+/**
+ * Spans copied verbatim: inline math (`$…$`, `$$…$$`, LaTeX backslashes are not
+ * Markdown escapes), wiki links `[[…]]` (the link syntax agents use) and
+ * footnote references `[^1]`.
+ */
+export const VERBATIM_RE = /\$\$[^$]+?\$\$|\$(?=[^\s$])[^$\n]*?[^\s$\\]\$|\$[^\s$]\$|\[\[[^\]\n]{1,300}\]\]|\[\^[^\]\s]{1,100}\]/g;
+
+function escapePlain(text: string): string {
   let out = "";
   for (let i = 0; i < text.length; i++) {
     const c = text[i]!;
     const prev = text[i - 1];
     const next = text[i + 1];
-    if ("\\`*[]<".includes(c)) out += "\\" + c;
+    // A backslash is literal in Markdown unless it precedes ASCII punctuation.
+    if (c === "\\") out += next === undefined || /[!-/:-@[-`{-~]/.test(next) ? "\\\\" : "\\";
+    else if ("`*[]<".includes(c)) out += "\\" + c;
     else if (c === "_" && !(prev && WORD.test(prev) && next && WORD.test(next))) out += "\\_";
     else if ((c === "~" || c === "=" || c === "$") && (next === c || prev === c)) out += "\\" + c;
     else if (c === "#" && next && /[\p{L}\p{N}_]/u.test(next) && (!prev || /[\s(]/.test(prev))) out += "\\#";
-    else if (c === "&" && /^&#?\w+;/.test(text.slice(i))) out += "\\&";
+    // Entities are short: look at a bounded window, never the whole rest of the text.
+    else if (c === "&" && /^&#?\w{1,32};/.test(text.slice(i, i + 36))) out += "\\&";
     else out += c;
   }
+  return out;
+}
+
+/**
+ * Backslash-escapes characters that would otherwise turn plain text into
+ * Markdown syntax (emphasis, code, links, tags, highlights, HTML), so that
+ * read_note → edit/create_note round-trips literally. `lineStart`
+ * additionally escapes block markers (`>`, `#`, `-`, `1.`) at the start of a line.
+ */
+export function escapeText(text: string, lineStart: boolean): string {
+  let out = "";
+  let last = 0;
+  for (const m of text.matchAll(VERBATIM_RE)) {
+    out += escapePlain(text.slice(last, m.index)) + m[0];
+    last = m.index + m[0].length;
+  }
+  out += escapePlain(text.slice(last));
   if (lineStart) {
     out = out
       .replace(/^(\s*)([>#+-])(?=\s|$)/, "$1\\$2")
@@ -54,7 +81,8 @@ export function escapeText(text: string, lineStart: boolean): string {
 }
 
 function codeSpan(text: string): string {
-  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((r) => r.length));
+  let longest = 0;
+  for (let i = 0, run = 0; i < text.length; i++) longest = Math.max(longest, (run = text[i] === "`" ? run + 1 : 0));
   const fence = "`".repeat(longest + 1);
   const pad = text.startsWith("`") || text.endsWith("`") ? " " : "";
   return `${fence}${pad}${text}${pad}${fence}`;
@@ -67,9 +95,15 @@ function wrapMarks(text: string, marks: Marks, lineStart: boolean): string {
   if (names.has("code")) return codeSpan(text);
   text = escapeText(text, lineStart);
   // Keep surrounding whitespace outside of emphasis markers (`** bold**` is not bold in Markdown).
-  const m = /^(\s*)(.*?)(\s*)$/s.exec(text)!;
-  let core = m[2]!;
-  if (core.length === 0) return text;
+  // Index loops, not a regex: `/^(\s*)(.*?)(\s*)$/s` is quadratic on long whitespace runs.
+  let a = 0;
+  while (a < text.length && /\s/.test(text[a]!)) a++;
+  if (a === text.length) return text;
+  let b = text.length;
+  while (b > a && /\s/.test(text[b - 1]!)) b--;
+  const lead = text.slice(0, a);
+  const trail = text.slice(b);
+  let core = text.slice(a, b);
   for (const name of [...MARK_ORDER].reverse()) {
     if (!names.has(name)) continue;
     switch (name) {
@@ -96,7 +130,7 @@ function wrapMarks(text: string, marks: Marks, lineStart: boolean): string {
       }
     }
   }
-  return m[1]! + core + m[3]!;
+  return lead + core + trail;
 }
 
 /** Inline content; hard breaks become `\\` + newline. `lineStart` = the text starts a Markdown line. */
@@ -134,11 +168,23 @@ class Writer {
     return id ? ` <!-- block:${id}${extra} -->` : "";
   }
 
+  private readonly emitted = new Set<string>();
+
   private handwritingLines(el: Y.XmlElement): string[] {
     const id = blockIdOf(el);
     const list = id ? this.hw.get(id) : undefined;
     if (!list) return [];
-    return list.map((h) => `![✍️ ${h.description}](handwriting:${h.id})`);
+    const fresh = list.filter((h) => !this.emitted.has(h.id));
+    for (const h of fresh) this.emitted.add(h.id);
+    return fresh.map((h) => `![✍️ ${h.description}](handwriting:${h.id})`);
+  }
+
+  /** Handwriting of a top-level block that no inner block showed (table cells, quotes…). */
+  leftoverHandwriting(top: Y.XmlElement): string[] {
+    const id = blockIdOf(top);
+    const rest = (this.opts.handwriting ?? []).filter((h) => h.topBlockId === id && !this.emitted.has(h.id));
+    for (const h of rest) this.emitted.add(h.id);
+    return rest.map((h) => `![✍️ ${h.description}](handwriting:${h.id})`);
   }
 
   /** Lines of a block (without trailing blank line); multi-line strings are split. */
@@ -267,9 +313,15 @@ class Writer {
       ),
     );
     if (rows.length === 0) return [`|  |${idc}`];
-    const width = Math.max(...rows.map((r) => r.length));
+    const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
     const line = (r: string[]) => "| " + Array.from({ length: width }, (_, i) => r[i] ?? "").join(" | ") + " |";
-    const out = [line(rows[0]!), "|" + " --- |".repeat(width)];
+    // Column alignment: the `align` attribute of the cells of the first row.
+    const firstRow = childElements(childElements(el)[0]!);
+    const align = Array.from({ length: width }, (_, i) => {
+      const a = firstRow[i] ? attr<string>(firstRow[i]!, "align") : undefined;
+      return a === "center" ? " :---: |" : a === "right" ? " ---: |" : a === "left" ? " :--- |" : " --- |";
+    });
+    const out = [line(rows[0]!), "|" + align.join("")];
     for (const r of rows.slice(1)) out.push(line(r));
     if (idc) out.unshift(idc.trim());
     return out;
@@ -282,7 +334,7 @@ export function noteToMarkdown(doc: Y.Doc, options: MarkdownOptions = {}): strin
   const out: string[] = [];
   for (const el of childElements(contentOf(doc))) {
     if (el.nodeName === "title") continue;
-    out.push(...w.block(el), "");
+    out.push(...w.block(el), ...w.leftoverHandwriting(el), "");
   }
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
 }

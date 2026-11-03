@@ -1,3 +1,4 @@
+import DSDesign
 import DSEditor
 import SwiftUI
 
@@ -13,6 +14,14 @@ struct DemoView: View {
             .navigationTitle("Живой штрих")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            // On its own view: two alerts on the same view, and SwiftUI showed only one of them.
+            .background {
+                Color.clear
+                    .alert("Открыть «\(model.openedNoteTitle ?? "")»",
+                           isPresented: Binding(get: { model.openedNoteTitle != nil }, set: { if !$0 { model.openedNoteTitle = nil } })) {
+                        Button("OK", role: .cancel) {}
+                    }
+            }
             .alert("Заметки «\(model.pendingNoteTitle ?? "")» нет",
                    isPresented: Binding(get: { model.pendingNoteTitle != nil }, set: { if !$0 { model.pendingNoteTitle = nil } })) {
                 Button("Создать заметку") { model.status = "Создана «\(model.pendingNoteTitle ?? "")» (демо)" }
@@ -20,6 +29,14 @@ struct DemoView: View {
             } message: {
                 Text("В приложении ссылка откроет заметку с этим названием или предложит её создать.")
             }
+            .alert("Ссылка", isPresented: Binding(get: { model.askingForLink }, set: { model.askingForLink = $0 })) {
+                TextField("https://", text: Binding(get: { model.linkText }, set: { model.linkText = $0 }))
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                Button("Готово") { model.editor.setLink(URL(string: model.linkText)) }
+                Button("Отмена", role: .cancel) {}
+            }
+            .overlay(alignment: .topLeading) { SlashMenuOverlay(model: model) }
             .sheet(isPresented: Binding(get: { model.showPalette }, set: { model.showPalette = $0 })) {
                 PaletteSheet(model: model)
                     .presentationDetents([.height(300)])
@@ -34,9 +51,15 @@ struct DemoView: View {
             EditorRepresentable(editor: model.editor)
                 .accessibilityIdentifier("editor")
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    ToolPalette(model: model)
-                        .padding(.top, 8)
-                        .padding(.bottom, 12)
+                    VStack(spacing: 8) {
+                        // While typing: the format bar above the palette (`spec/04-editor.md`).
+                        if model.editor.isEditingText {
+                            FormatBar(model: model)
+                        }
+                        ToolPalette(model: model)
+                    }
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
                 }
             if model.showHUD {
                 HUDView(model: model)
@@ -111,6 +134,8 @@ struct DemoView: View {
                 Toggle("Жесты пером", isOn: Binding(get: { model.editor.tools.gesturesEnabled },
                                                     set: { model.editor.tools.gesturesEnabled = $0 }))
                 Toggle("Замеры", isOn: Binding(get: { model.showHUD }, set: { model.showHUD = $0 }))
+                Toggle("Даты задач", isOn: Binding(get: { model.editor.taskDatesEnabled },
+                                                   set: { model.editor.taskDatesEnabled = $0 }))
                 if !model.status.isEmpty { Text(model.status) }
             } label: { Image(systemName: "ellipsis.circle") }
                 .accessibilityIdentifier("more")
@@ -149,6 +174,67 @@ struct EditorRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: EditorView, context: Context) {}
 }
 
+/// Format bar over the keyboard (DSDesign `DSFormatBar`): marks act on the selection, or on the
+/// next typed text at a caret; headings toggle.
+struct FormatBar: View {
+    let model: DemoModel
+
+    private func item(_ id: String, _ image: String, _ label: String, _ action: EditorAction, _ on: Bool) -> DSFormatBarElement {
+        let editor = model.editor
+        return .item(DSFormatBarItem(id: id, systemImage: image, label: label, isActive: on) {
+            // After the button's touch is delivered (same rule as the tool palette).
+            DispatchQueue.main.async { editor.perform(action) }
+        })
+    }
+
+    var body: some View {
+        let _ = model.revision
+        let state = model.editor.formatState
+        DSFormatBar(items: [
+            item("bold", "bold", "Жирный", .bold, state.has(MarkName.bold)),
+            item("italic", "italic", "Курсив", .italic, state.has(MarkName.italic)),
+            item("underline", "underline", "Подчёркнутый", .underline, state.has(MarkName.underline)),
+            item("strike", "strikethrough", "Зачёркнутый", .strike, state.has(MarkName.strike)),
+            item("highlight", "highlighter", "Выделение", .highlight, state.has(MarkName.highlight)),
+            .separator(id: "blocks"),
+            item("h1", "textformat.size.larger", "Заголовок 1", .heading1, state.block == .heading1),
+            item("h2", "textformat.size", "Заголовок 2", .heading2, state.block == .heading2),
+            item("list", "list.bullet", "Список", .bulletList, state.block == .bulletList),
+            item("task", "checkmark.circle", "Задача", .taskList, state.block == .taskList),
+            .separator(id: "link"),
+            item("link", "link", "Ссылка", .link, state.has(MarkName.link)),
+        ])
+        .accessibilityIdentifier("formatBar")
+    }
+}
+
+/// The "/" block menu under the caret (DSDesign `DSSuggestionList`).
+struct SlashMenuOverlay: View {
+    let model: DemoModel
+
+    var body: some View {
+        if let menu = model.slashMenu {
+            let groups = Dictionary(grouping: menu.items, by: \.group)
+            let order = ["Текст", "Списки", "Вставка"]
+            DSSuggestionList(
+                groups: order.compactMap { name in
+                    groups[name].map { cmds in
+                        DSSuggestionGroup(heading: name, items: cmds.map {
+                            DSSuggestionItem(id: $0.id, title: $0.title, systemImage: $0.systemImage, hint: $0.hint)
+                        })
+                    }
+                },
+                selectedID: Binding(get: { model.slashSelection }, set: { model.slashSelection = $0 }),
+                onPick: { item in DispatchQueue.main.async { model.editor.applySlashCommand(item.id) } }
+            )
+            .frame(width: 280)
+            .frame(maxHeight: 320)
+            .offset(x: max(8, menu.caretRect.minX), y: menu.caretRect.maxY + 6)
+            .accessibilityIdentifier("slashMenu")
+        }
+    }
+}
+
 /// Floating glass tool palette.
 struct ToolPalette: View {
     let model: DemoModel
@@ -158,6 +244,10 @@ struct ToolPalette: View {
     var body: some View {
         let _ = model.revision
         let tools = model.editor.tools
+        // The rows read the mode as a value: reading it through the `tools` reference (the same
+        // object every time) let SwiftUI keep the old rows — the body ran with the new tool while
+        // the buttons still showed the previous one selected (CI UI test, iOS 26.2 simulator).
+        let current = tools.mode
         // UI-test diagnostics: does the palette re-render after a tool change (iOS 26.2 simulator)?
         let _ = model.isUITesting ? NSLog("DIAG palette body mode=%@ revision=%d", tools.mode.rawValue, model.revision) : ()
         HStack(spacing: 6) {
@@ -173,12 +263,12 @@ struct ToolPalette: View {
                         .frame(width: 40, height: 40)
                         // Selected like `bg.selected` in the design system: a quiet tint, not accent.
                         .foregroundStyle(Color.primary)
-                        .background(tools.mode == mode ? Color.primary.opacity(0.08) : Color.clear, in: Circle())
+                        .background(current == mode ? Color.primary.opacity(0.08) : Color.clear, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("tool.\(mode.rawValue)")
                 .accessibilityLabel(mode.title)
-                .accessibilityAddTraits(tools.mode == mode ? .isSelected : [])
+                .accessibilityAddTraits(current == mode ? .isSelected : [])
             }
             // The swatch row is always present (dimmed when the tool has no ink) so the palette never
             // changes its structure under the finger: removing buttons while a tool button's touch
@@ -239,6 +329,16 @@ struct HUDView: View {
     let model: DemoModel
     @State private var fps = FPSCounter()
 
+    /// "note:x,y;title:x,y" — centres of the note links in window points.
+    private var linkCentres: String {
+        guard let window = model.editor.window else { return "" }
+        let links = model.editor.noteLinkFrames(in: window).map { ($0.kind.rawValue, $0.frame) }
+        let chips = model.editor.taskDateChipFrames(in: window).map { ("date", $0) }
+        return (links + chips)
+            .map { "\($0.0):\(Int($0.1.midX)),\(Int($0.1.midY))" }
+            .joined(separator: ";")
+    }
+
     var body: some View {
         let _ = model.revision
         VStack(alignment: .trailing, spacing: 2) {
@@ -249,6 +349,19 @@ struct HUDView: View {
             Text("кадров/с: \(fps.fps)")
             Text("прокрутка: \(Int(model.scrollOffset.rounded()))")
                 .accessibilityIdentifier("hud.offset")
+            // UI tests: the last tapped note link, and where the links are on screen (window points).
+            Text("ссылка: \(model.openedNote)")
+                .accessibilityIdentifier("hud.openedNote")
+            Text(linkCentres)
+                .accessibilityIdentifier("hud.links")
+                .opacity(0.01)
+            // UI tests print this when they fail (the unified log keeps its arguments compressed).
+            // Visible (tiny): near-transparent HUD text is not exposed to UI tests.
+            Text("diag " + model.diagnostics.joined(separator: " | "))
+                .font(.system(size: 5))
+                .lineLimit(4)
+                .frame(maxWidth: 260, alignment: .trailing)
+                .accessibilityIdentifier("hud.diag")
         }
         .font(.caption.monospacedDigit())
         .padding(8)

@@ -708,7 +708,7 @@ struct FolderStrip: View {
             scene.show(.folder(folder.id))
         } label: {
             HStack(spacing: Theme.Space.s3) {
-                Image(systemName: folder.icon)
+                Image(systemName: folder.displaySymbol)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(folder.color.foreground)
                     .frame(width: 28, height: 28)

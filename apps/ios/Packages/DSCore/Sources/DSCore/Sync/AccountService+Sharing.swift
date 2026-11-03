@@ -274,6 +274,23 @@ extension AccountService {
         return true
     }
 
+    /// This account's notebooks in personal spaces whose key change is unfinished on the server
+    /// (`keyRotationPending`) — including those `/shared-by-me` does not list: a notebook moved
+    /// out of a shared space (D-62) gets a new key with `keyRotationPending` until its notes have
+    /// new keys and `rotate/done`. Each goes through `resumeNotebookRotation` and then
+    /// `finishNotebookRotation`, like a shared notebook's. Only notebooks whose key is past
+    /// version 1 (or that are shared) can be pending, so only those are asked about.
+    public func pendingNotebookRotations() async throws -> [String] {
+        guard let master = try keys.masterKey() else { throw AccountError.notSignedIn }
+        var ids: [String] = []
+        for nb in try await api.notebooks() where nb.spaceId == nil {
+            let firstVersion = (try? DSCrypto.unwrapKey(nb.wrappedKey.data, with: master, ad: CryptoAD.notebookKey(nb.id))) != nil
+            guard !firstVersion || nb.shared == true else { continue }
+            if try await api.notebookKeyState(id: nb.id).keyRotationPending == true { ids.append(nb.id) }
+        }
+        return ids
+    }
+
     /// Notes still wrapped under an earlier notebook key (crypto.md §10.3, step 2 not done).
     func notesNeedingNewKeys(in notebook: NotebookDocument) throws -> [NoteMeta] {
         guard let nbKey = try keys.notebookKey(notebook.notebookId) else { throw AccountError.missingKey(notebook.notebookId) }

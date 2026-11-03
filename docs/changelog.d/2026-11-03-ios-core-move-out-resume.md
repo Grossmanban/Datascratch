@@ -1,0 +1,1 @@
+- DSCore, D-62: `pendingNotebookRotations()` — свои блокноты с незаконченной сменой ключа, которых нет в «Поделился я» (например, вынесенный из общего пространства): при запуске они доделываются через `resumeNotebookRotation`/`finishNotebookRotation`.

@@ -25,7 +25,7 @@ export const bytea = customType<{ data: Buffer; driverData: Buffer }>({
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const created = () => ts('created_at').notNull().defaultNow();
 
-export const docKind = pgEnum('doc_kind', ['account', 'notebook', 'note']);
+export const docKind = pgEnum('doc_kind', ['account', 'notebook', 'note', 'space']);
 export const notebookMode = pgEnum('notebook_mode', ['private', 'agent']);
 export const shareKind = pgEnum('share_kind', ['note', 'notebook']);
 export const sharePermission = pgEnum('share_permission', ['view', 'edit']);
@@ -111,6 +111,28 @@ export const recoveryTokens = pgTable('recovery_tokens', {
   createdAt: created(),
 });
 
+/**
+ * A shared space (D-62, crypto.md §11): its key wraps the keys of its notebooks, so members get
+ * every notebook of it (also later ones) from one key. Personal spaces are not on the server.
+ */
+export const spaces = pgTable(
+  'spaces',
+  {
+    id: uuid('id').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** spaceKey wrapped by the owner's masterKey (current version). */
+    wrappedKey: bytea('wrapped_key').notNull(),
+    keyVersion: integer('key_version').notNull().default(1),
+    keyChain: jsonb('key_chain').$type<string[]>().notNull().default([]),
+    keyRotationPending: boolean('key_rotation_pending').notNull().default(false),
+    pendingSinceVersion: integer('pending_since_version'),
+    createdAt: created(),
+  },
+  (t) => [index('spaces_user_idx').on(t.userId)],
+);
+
 export const notebooks = pgTable(
   'notebooks',
   {
@@ -119,7 +141,9 @@ export const notebooks = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     mode: notebookMode('mode').notNull(),
-    /** notebookKey wrapped by the user's masterKey (opaque to the server). */
+    /** The shared space it belongs to (D-62); null: the owner's personal space. */
+    spaceId: uuid('space_id').references(() => spaces.id, { onDelete: 'cascade' }),
+    /** notebookKey wrapped by the user's masterKey, or by the space key in a shared space (opaque to the server). */
     wrappedKey: bytea('wrapped_key').notNull(),
     /** notebookKey wrapped by DS_KMS_KEY; present only in agent mode. */
     serverWrappedKey: bytea('server_wrapped_key'),
@@ -133,7 +157,7 @@ export const notebooks = pgTable(
     pendingSinceVersion: integer('pending_since_version'),
     createdAt: created(),
   },
-  (t) => [index('notebooks_user_idx').on(t.userId)],
+  (t) => [index('notebooks_user_idx').on(t.userId), index('notebooks_space_idx').on(t.spaceId)],
 );
 
 export const docs = pgTable(
@@ -262,8 +286,8 @@ export const shares = pgTable(
 
 // ---------------------------------------------------------------------------
 // Account sharing (D-54, api.md «Совместный доступ»). A target is a notebook or a
-// note shared on its own; exactly one of notebookId / noteId is set, so deleting the
-// target deletes its invitations and members.
+// note shared on its own, or a shared space (D-62); exactly one of notebookId / noteId /
+// spaceId is set, so deleting the target deletes its invitations and members.
 // ---------------------------------------------------------------------------
 
 export const invitations = pgTable(
@@ -275,6 +299,7 @@ export const invitations = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     notebookId: uuid('notebook_id').references(() => notebooks.id, { onDelete: 'cascade' }),
     noteId: uuid('note_id').references(() => docs.id, { onDelete: 'cascade' }),
+    spaceId: uuid('space_id').references(() => spaces.id, { onDelete: 'cascade' }),
     /** Lower-cased; matched against users.email when the invitee signs up or looks at the inbox. */
     email: text('email').notNull(),
     role: memberRole('role').notNull(),
@@ -288,7 +313,8 @@ export const invitations = pgTable(
     index('invitations_email_idx').on(t.email),
     index('invitations_notebook_idx').on(t.notebookId),
     index('invitations_note_idx').on(t.noteId),
-    check('invitations_one_target', sql`num_nonnulls(${t.notebookId}, ${t.noteId}) = 1`),
+    index('invitations_space_idx').on(t.spaceId),
+    check('invitations_one_target', sql`num_nonnulls(${t.notebookId}, ${t.noteId}, ${t.spaceId}) = 1`),
   ],
 );
 
@@ -301,6 +327,7 @@ export const members = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     notebookId: uuid('notebook_id').references(() => notebooks.id, { onDelete: 'cascade' }),
     noteId: uuid('note_id').references(() => docs.id, { onDelete: 'cascade' }),
+    spaceId: uuid('space_id').references(() => spaces.id, { onDelete: 'cascade' }),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
@@ -315,8 +342,9 @@ export const members = pgTable(
   (t) => [
     uniqueIndex('members_notebook_user_idx').on(t.notebookId, t.userId),
     uniqueIndex('members_note_user_idx').on(t.noteId, t.userId),
+    uniqueIndex('members_space_user_idx').on(t.spaceId, t.userId),
     index('members_user_idx').on(t.userId),
-    check('members_one_target', sql`num_nonnulls(${t.notebookId}, ${t.noteId}) = 1`),
+    check('members_one_target', sql`num_nonnulls(${t.notebookId}, ${t.noteId}, ${t.spaceId}) = 1`),
   ],
 );
 

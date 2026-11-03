@@ -23,6 +23,7 @@ import { fetchImageRoutes } from './routes/fetch-image.js';
 import { notebookRoutes } from './routes/notebooks.js';
 import { shareRoutes } from './routes/shares.js';
 import { sharingRoutes } from './routes/sharing.js';
+import { spaceRoutes } from './routes/spaces.js';
 import { registerSync } from './sync/server.js';
 import { VERSION } from './version.js';
 
@@ -168,6 +169,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
       await v1.register(fetchImageRoutes(ctx));
       await v1.register(shareRoutes(ctx));
       await v1.register(sharingRoutes(ctx));
+      await v1.register(spaceRoutes(ctx));
       await registerSync(v1, ctx);
     },
     { prefix: '/v1' },

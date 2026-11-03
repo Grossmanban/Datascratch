@@ -101,7 +101,7 @@ export function PageTitle({
   if (compact)
     return (
       <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5 sm:px-10 sm:pt-7">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5" data-testid="list-title">
           {icon && <span className="flex shrink-0 items-center text-[20px] leading-none [&_svg]:size-6">{icon}</span>}
           <h1 className="truncate font-display text-[22px] font-semibold leading-tight tracking-[-0.01em] text-ink">{title}</h1>
           {subtitle && <span className="shrink-0 pt-0.5 text-[12.5px] tabular-nums text-ink-3">{subtitle}</span>}

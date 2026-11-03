@@ -869,7 +869,7 @@ final class LibraryUITests: XCTestCase {
         } else {
             XCTAssertTrue(sidebarIsShown(app), "portrait: the press shows the sidebar")
             // Picking in the sidebar changes the list, never the document; the sidebar goes again.
-            sidebarElement(app, "sidebar.allDocuments").tap()
+            sidebarElement(app, "sidebar.notebook").tap()
             settle(1.5)
             XCTAssertTrue(editor.exists, "picking in the sidebar closed the document")
             XCTAssertFalse(sidebarIsShown(app), "portrait: the sidebar stayed after a pick")

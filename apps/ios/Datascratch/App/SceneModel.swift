@@ -58,6 +58,9 @@ final class SceneModel {
 
     var sidebar: SidebarItem? = .allDocuments {
         didSet {
+            // iPad portrait (D-60): the sidebar shown over the list goes once something is picked
+            // in it — the same row again too.
+            if isPad, !isPadLandscape, padColumns == .all { padColumns = nil }
             guard oldValue != sidebar else { return }
             searchText = ""
         }

@@ -5,7 +5,7 @@
 import type * as Y from "yjs";
 import { AD } from "../contracts/crypto.js";
 import type { NoteMeta } from "../contracts/document.js";
-import type { Member, Share, ShareTarget } from "../contracts/api.js";
+import type { AccountTarget, Member, Share, ShareTarget } from "../contracts/api.js";
 import { buildShareLink } from "../crypto/share-link.js";
 import { uuidv7 } from "../ids.js";
 import { toBase64Url } from "../crypto/base64url.js";
@@ -22,9 +22,9 @@ import {
 } from "./members.js";
 
 /** Only members that hold a key get the new one; `awaiting_key` ones wait for delivery. */
-async function activeMembers(
+export async function activeMembers(
   api: Pick<SharingApi, "listMembers">,
-  target: ShareTarget,
+  target: AccountTarget,
   ownerId: string,
 ) {
   return (await api.listMembers(target)).filter(
@@ -122,10 +122,22 @@ export async function rotateNotebookKey(options: RotateNotebookOptions): Promise
     await options.onKeys({ notebook });
   }
 
-  // Step 2: every note still under an older notebook key gets a new noteKey.
+  const notes = rekeyNotes(index, notebook);
+  await options.whenIndexSent();
+  if (notes.size) await options.onKeys({ notes });
+  await api.rotateKeyDone(target);
+  return { rotated: true, newVersion: !resuming, notebook, rekeyedNotes: notes.size };
+}
+
+/**
+ * Step 2 of a rotation (crypto.md §10.3): every note of the index still under an older notebook
+ * key gets a new noteKey, written into its NoteMeta under the current notebook key (one Yjs
+ * transaction, sent by the SyncClient). Returns the notes' new keys.
+ */
+export function rekeyNotes(index: Y.Doc, notebook: VersionedKeys): Map<string, VersionedKeys> {
   const notes = new Map<string, VersionedKeys>();
   index.transact(() => {
-    for (const meta of metas) {
+    for (const meta of getNoteMetas(index, { includeTrashed: true })) {
       const old = noteKeysFromMeta(meta, notebook.keys);
       // Under the current notebook key: re-keyed already, or created after step 1.
       if (old.notebookIndex === 0) continue;
@@ -142,10 +154,7 @@ export async function rotateNotebookKey(options: RotateNotebookOptions): Promise
       notes.set(meta.id, { version, keys: [key, ...old.keys] });
     }
   });
-  await options.whenIndexSent();
-  if (notes.size) await options.onKeys({ notes });
-  await api.rotateKeyDone(target);
-  return { rotated: true, newVersion: !resuming, notebook, rekeyedNotes: notes.size };
+  return notes;
 }
 
 /**
@@ -169,7 +178,7 @@ export async function recreateShareLinks(options: {
   for (const old of shares) {
     const share = await api.createShare({
       shareId: (options.newId ?? uuidv7)(),
-      target,
+      target: old.target,
       permission: old.permission,
       expiresAt: old.expiresAt,
     });

@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "description": "Shared spaces (crypto.md §11, D-62). Accounts as in crypto/sharing.json (owner/member seeds and owner masterKey). Owner: spaceKey under the masterKey, ad ds1|key|space|<spaceId> for version 1 and ds1|key|space|<spaceId>|<v> from 2. Member: wrap §10.2 with kind = space. keyChain[i] wraps the spaceKey of version (current - i - 1) with that of (current - i), ad ds1|key|prev|space|<spaceId>|<v>. Notebook of the space: notebookKey under the spaceKey, ad ds1|key|space-notebook|<spaceId>|<notebookId>|<notebook key version>; its own chain as in crypto/sharing.json (kind notebook). Fixed nonces, never in production.",
+  "ownerId": "0192f3c4-0000-7000-8000-000000000065",
+  "memberId": "0192f3c4-0000-7000-8000-000000000066",
+  "spaceId": "0192f3c4-0000-7000-8000-0000000000c9",
+  "spaceKeys": [
+    {
+      "version": 1,
+      "key": "c243c561e801f0d863566aeca1e5cd304901e6fed431004033914a43c4d6b31f"
+    },
+    {
+      "version": 2,
+      "key": "fa0afcd7e2154d277241af345d815883d67d4f8359ec50fec39fca4f3c96338e"
+    }
+  ],
+  "ownerWraps": [
+    {
+      "version": 1,
+      "ad": "ds1|key|space|0192f3c4-0000-7000-8000-0000000000c9",
+      "nonce": "3886528389e7c9a31a04d0f1b1662220a4b1ec0579ca129a",
+      "wrappedKey": "ATiGUoOJ58mjGgTQ8bFmIiCksewFecoSmkKWEJW8FpyHeCG4Izabsu7xh6SR-yDKcfPZoE0RLT5aM-soNrhBzxvni2VwgPrmbg"
+    },
+    {
+      "version": 2,
+      "ad": "ds1|key|space|0192f3c4-0000-7000-8000-0000000000c9|2",
+      "nonce": "9e7094150b1a455793249a43a3269429ceb8623724d21b70",
+      "wrappedKey": "AZ5wlBULGkVXkySaQ6MmlCnOuGI3JNIbcKgLkKJ3ltd-YKPyyCMk4Y9Ao7FtJjFAeU5fXE9i0uaXsFAE5aJ15hUT99AZJ9UkmA"
+    }
+  ],
+  "memberWrap": {
+    "kind": "space",
+    "targetId": "0192f3c4-0000-7000-8000-0000000000c9",
+    "version": 2,
+    "fromUserId": "0192f3c4-0000-7000-8000-000000000065",
+    "toUserId": "0192f3c4-0000-7000-8000-000000000066",
+    "ad": "ds1|key|member|space|0192f3c4-0000-7000-8000-0000000000c9|2|0192f3c4-0000-7000-8000-000000000065|0192f3c4-0000-7000-8000-000000000066",
+    "nonce": "a1e360cc9067ff1526754ed74cdf5392b18458ccba7244df",
+    "wrappedKey": "AaHjYMyQZ_8VJnVO10zfU5KxhFjMunJE33RooSjk41hHz9OOlLyKvKb8gcswasz859YixVxitd573gH9o0Sm7Om_EQf194uK2g"
+  },
+  "keyChain": [
+    "Afw-umZ9lL9Dlr75KGyuWOZ18SPGEvannL19Rn4v9XUGgfzhHlj0pQNm5eH2Dx-heCscXbGE5TBexfhqMmpo9fKpI35VusRomw"
+  ],
+  "keyChainAds": [
+    "ds1|key|prev|space|0192f3c4-0000-7000-8000-0000000000c9|2"
+  ],
+  "notebook": {
+    "notebookId": "0192f3c4-0000-7000-8000-0000000000ca",
+    "keys": [
+      {
+        "version": 1,
+        "key": "79abfc8aae6538cc44554b497ed0521e13c73701cfcd5acf65fcf45dbd0ecf36"
+      },
+      {
+        "version": 2,
+        "key": "da82beb815d5cab2eeee5d3a0fa59f98fe5485b47c083f7a7fd34c36a0247fb3"
+      }
+    ],
+    "entry": {
+      "notebookId": "0192f3c4-0000-7000-8000-0000000000ca",
+      "version": 2,
+      "spaceWrappedKey": "AaKFVBL2WL-AjQMCFvPbzKz5F3b0uliwFvoSpT-_9XPt2m3uCXm1ikQku_fAY8SlFj5__usyp6SNhUooGP3SlosKzeOld1Eawg",
+      "keyChain": [
+        "ARNX0OhWEdE-yuegeiapn62vZgAEIpSnjFOxWmWMNc9N_LgMM13Yyqprtl_1S9RqGDnnCr8h4qwZvhMZLR-JNEd5lU6k7TCuRw"
+      ],
+      "mode": "private"
+    },
+    "ad": "ds1|key|space-notebook|0192f3c4-0000-7000-8000-0000000000c9|0192f3c4-0000-7000-8000-0000000000ca|2",
+    "nonce": "a2855412f658bf808d030216f3dbccacf91776f4ba58b016",
+    "olderEntry": {
+      "notebookId": "0192f3c4-0000-7000-8000-0000000000ca",
+      "version": 1,
+      "spaceWrappedKey": "AdfdWnc5FBnVcS1qdf-7cfgUDC75fyqZFf2OI0uIF1wDh5DSSXW9A4b-kQ3aTjN7_ohaj1t5IvJ542amakne0efnzQODVKApag",
+      "keyChain": [],
+      "mode": "private"
+    }
+  },
+  "invalid": [
+    {
+      "reason": "owner wrap v2 opened with the version-1 ad",
+      "wrap": "ownerWraps[1]",
+      "ad": "ds1|key|space|0192f3c4-0000-7000-8000-0000000000c9"
+    },
+    {
+      "reason": "member wrap opened with kind notebook",
+      "wrap": "memberWrap",
+      "ad": "ds1|key|member|notebook|0192f3c4-0000-7000-8000-0000000000c9|2|0192f3c4-0000-7000-8000-000000000065|0192f3c4-0000-7000-8000-000000000066"
+    },
+    {
+      "reason": "space notebook wrap opened with another notebookId",
+      "wrap": "notebook.entry",
+      "ad": "ds1|key|space-notebook|0192f3c4-0000-7000-8000-0000000000c9|0192f3c4-0000-7000-8000-0000000000cb|2"
+    }
+  ]
+}

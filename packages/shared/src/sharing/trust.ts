@@ -12,19 +12,19 @@
 //                                              were taken over once (trust on first use)
 import type * as Y from "yjs";
 import { accountRoots } from "../document/factories.js";
-import type { ShareTarget } from "../contracts/api.js";
+import type { AccountTarget } from "../contracts/api.js";
 import type { SharingApi } from "./api.js";
 import type { MemberVetting } from "./members.js";
 
 const norm = (email: string) => email.trim().toLowerCase();
-const res = (t: ShareTarget) => `${t.kind}|${t.id}`;
+const res = (t: AccountTarget) => `${t.kind}|${t.id}`;
 
 /** Why a member may not get a key without the owner saying so. */
 export type MemberTrust = "known" | "not_invited" | "key_changed";
 
 export function recordInvite(
   account: Y.Doc,
-  target: ShareTarget,
+  target: AccountTarget,
   email: string,
   at = new Date(),
 ): void {
@@ -33,7 +33,7 @@ export function recordInvite(
 
 export function recordMemberKey(
   account: Y.Doc,
-  target: ShareTarget,
+  target: AccountTarget,
   userId: string,
   publicKey: string,
 ): void {
@@ -58,7 +58,7 @@ export function markTrustMigrated(account: Y.Doc, at = new Date()): void {
  */
 export function memberTrust(
   account: Y.Doc,
-  target: ShareTarget,
+  target: AccountTarget,
   member: { userId: string; email?: string | null },
   publicKey: string,
 ): MemberTrust {
@@ -69,7 +69,7 @@ export function memberTrust(
   return isTrustMigrated(account) ? "not_invited" : "known";
 }
 
-export function recordKeyVersion(account: Y.Doc, target: ShareTarget, version: number): void {
+export function recordKeyVersion(account: Y.Doc, target: AccountTarget, version: number): void {
   // Version 1 is the floor: there is nothing older to roll back to, and opening a document on a
   // new device must not write to the account document.
   if (version <= 1) return;
@@ -79,7 +79,7 @@ export function recordKeyVersion(account: Y.Doc, target: ShareTarget, version: n
 }
 
 /** The newest key version of `target` this account has seen (0: none recorded). */
-export function knownKeyVersion(account: Y.Doc, target: ShareTarget): number {
+export function knownKeyVersion(account: Y.Doc, target: AccountTarget): number {
   const prefix = `key|${res(target)}|`;
   let max = 0;
   for (const k of accountRoots(account).trust.keys()) {
@@ -128,4 +128,19 @@ export function accountVetting(account: () => Y.Doc): MemberVetting {
     },
     given: (target, userId, publicKey) => recordMemberKey(account(), target, userId, publicKey),
   };
+}
+
+/**
+ * May this account take a shared space from `/shared-with-me`? Not one it owns itself or that is
+ * among its own spaces (`account.spaces`): a server could otherwise slip its own key under a
+ * space of this account (crypto.md §10.6, D-62).
+ */
+export function isAcceptableSharedSpace(
+  account: Y.Doc,
+  item: { target: AccountTarget; owner: { userId: string } },
+  myUserId: string,
+): boolean {
+  if (item.target.kind !== "space") return false;
+  if (item.owner.userId === myUserId) return false;
+  return !accountRoots(account).spaces.has(item.target.id);
 }

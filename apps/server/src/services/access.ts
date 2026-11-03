@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNotNull, isNull, or } from 'drizzle-orm';
 import type { DbOrTx } from '../db/client.js';
-import { docs, members, shares } from '../db/schema.js';
+import { docs, members, notebooks, shares } from '../db/schema.js';
 import type { GuestPrincipal, Principal } from './principal.js';
 
 export type DocRow = typeof docs.$inferSelect;
@@ -33,19 +33,28 @@ export function docInShare(doc: DocRow, share: Pick<GuestPrincipal, 'ownerId' | 
 }
 
 /**
- * Notebooks and notes shared with an account (D-54), by target id. A member whose account was
- * registered after the invitation gets nothing until the owner confirms by giving the key.
+ * Notebooks, notes and shared spaces shared with an account (D-54, D-62), by target id. The
+ * notebooks of a shared space are in `notebooks` too, with the member's role on the space (all of
+ * them, also ones created later: they are read every time). A member whose account was registered
+ * after the invitation gets nothing until the owner confirms by giving the key.
  */
 export interface Memberships {
   notebooks: Map<string, { ownerId: string; role: MemberRole }>;
   notes: Map<string, { ownerId: string; role: MemberRole }>;
+  spaces: Map<string, { ownerId: string; role: MemberRole }>;
 }
 
 export type MemberRole = 'editor' | 'viewer';
 
 export async function loadMemberships(db: DbOrTx, userId: string): Promise<Memberships> {
   const rows = await db
-    .select({ notebookId: members.notebookId, noteId: members.noteId, ownerId: members.ownerId, role: members.role })
+    .select({
+      notebookId: members.notebookId,
+      noteId: members.noteId,
+      spaceId: members.spaceId,
+      ownerId: members.ownerId,
+      role: members.role,
+    })
     .from(members)
     .where(
       and(
@@ -53,10 +62,22 @@ export async function loadMemberships(db: DbOrTx, userId: string): Promise<Membe
         or(eq(members.accountCreatedAfterInvite, false), isNotNull(members.wrappedKey)),
       ),
     );
-  const m: Memberships = { notebooks: new Map(), notes: new Map() };
+  const m: Memberships = { notebooks: new Map(), notes: new Map(), spaces: new Map() };
   for (const r of rows) {
     if (r.notebookId) m.notebooks.set(r.notebookId, { ownerId: r.ownerId, role: r.role });
     else if (r.noteId) m.notes.set(r.noteId, { ownerId: r.ownerId, role: r.role });
+    else if (r.spaceId) m.spaces.set(r.spaceId, { ownerId: r.ownerId, role: r.role });
+  }
+  if (m.spaces.size > 0) {
+    const nbs = await db
+      .select({ id: notebooks.id, spaceId: notebooks.spaceId })
+      .from(notebooks)
+      .where(inArray(notebooks.spaceId, [...m.spaces.keys()]));
+    for (const nb of nbs) {
+      const sp = m.spaces.get(nb.spaceId!)!;
+      // A notebook of a shared space has no members of its own (api.md), so this does not overwrite.
+      m.notebooks.set(nb.id, sp);
+    }
   }
   return m;
 }
@@ -71,6 +92,11 @@ export function memberRoleFor(m: Memberships, doc: DocRow): MemberRole | null {
   if (doc.kind === 'note') {
     const n = m.notes.get(doc.id);
     if (n && n.ownerId === doc.userId) roles.push(n.role);
+  }
+  if (doc.kind === 'space') {
+    // The space document (docId = spaceId): editors write it (order, names), viewers read (D-62).
+    const sp = m.spaces.get(doc.id);
+    if (sp && sp.ownerId === doc.userId) roles.push(sp.role);
   }
   if (roles.length === 0) return null;
   return roles.includes('editor') ? 'editor' : 'viewer';

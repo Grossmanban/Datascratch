@@ -2,7 +2,8 @@ import { NetworkError } from "@/api/client";
 import * as Y from "yjs";
 import { docsApi, notebooksModeApi } from "@/api/endpoints";
 import { getMasterKey } from "@/auth/session";
-import { cachedNoteKey, notebookKey, rememberNotebookKey, rememberNoteKey, serverNotebookKey } from "@/data/keys";
+import { cachedNoteKey, notebookKey, rememberNotebookKey, rememberNoteKey, serverNotebookKey, setKeyring } from "@/data/keys";
+import { notebookCreatedInSpace, wrapNewNotebookKey } from "@/data/sharedSpaces";
 import { enqueueOp } from "@/data/ops";
 import { runtime } from "@/data/runtime";
 import {
@@ -24,7 +25,8 @@ import { formatLongDate } from "@/lib/dates";
 import { accountMaps } from "./account";
 import { initNotebookDoc, notebookMaps } from "./notebook";
 import { appendTask, initNoteDoc, removeTask, setTaskText, setTitle, updateTask, type TaskPatch } from "./note";
-import { bySpace, spaceOfNote, spaceOfNotebook, tabsInSpace, useWorkspace } from "./workspace";
+import { bySpace, sharedSpaceOfNotebook, spaceOfNote, spaceOfNotebook, tabsInSpace, useWorkspace } from "./workspace";
+import { spaceMaps, withoutSpace } from "./space";
 import { forgetClosedTab, recordClosedTabs, tabsEpoch } from "@/lib/closedTabs";
 import { features } from "@/lib/features";
 import { orderBetween, patchYMap, toYMap } from "./ymap";
@@ -55,6 +57,12 @@ export function createSpace(input: { name: string; icon?: string; color?: string
 export function updateSpace(id: string, patch: Partial<Omit<Space, "id">>) {
   const m = acc().spaces.get(id);
   if (m) patchYMap(m, patch);
+  // A shared space (D-62): every member reads its name and icon from the space doc.
+  const doc = useWorkspace.getState().account.spaces.find((s) => s.id === id)?.shared ? runtime().store.get(id) : undefined;
+  if (doc) {
+    const { name, icon, color } = patch;
+    patchYMap(spaceMaps(doc).meta, { name, icon, color });
+  }
 }
 
 export function deleteSpace(id: string): boolean {
@@ -77,12 +85,21 @@ export async function createNotebook(input: {
   const id = uuidv7();
   const mode = input.mode ?? "private";
   const key = randomKey();
-  const wrapped = await wrapKey(getMasterKey(), key, ad.notebookKey(id));
-  rememberNotebookKey(id, key, wrapped);
+  // In a shared space (D-62, crypto.md §11.2) the key is wrapped by the space key, not the masterKey.
+  const inShared = useWorkspace.getState().account.spaces.find((s) => s.id === input.spaceId)?.shared;
+  const wrapped = inShared ? wrapNewNotebookKey(input.spaceId, id, key) : await wrapKey(getMasterKey(), key, ad.notebookKey(id));
+  if (inShared) setKeyring(id, "notebook", { version: 1, keys: [key] });
+  else rememberNotebookKey(id, key, wrapped);
   await enqueueOp({
     method: "POST",
     path: "/notebooks",
-    body: { notebookId: id, mode, wrappedKey: wrapped, ...(mode === "agent" ? { notebookKey: toBase64Url(key) } : {}) },
+    body: {
+      notebookId: id,
+      mode,
+      wrappedKey: wrapped,
+      ...(inShared ? { spaceId: input.spaceId } : {}),
+      ...(mode === "agent" ? { notebookKey: toBase64Url(key) } : {}),
+    },
   });
   await rt.store.create(id, "notebook", null, (doc) => initNotebookDoc(doc, id));
   const ref: NotebookRef = {
@@ -95,15 +112,33 @@ export async function createNotebook(input: {
     mode,
     createdAt: now(),
   };
-  acc().notebooks.set(id, toYMap(ref));
+  if (inShared) {
+    const spaceDoc = await rt.store.pin(input.spaceId);
+    spaceMaps(spaceDoc).notebooks.set(id, toYMap(withoutSpace(ref)));
+    notebookCreatedInSpace();
+  } else acc().notebooks.set(id, toYMap(ref));
   // The first notebook of a space keeps that space's daily notes and Inbox (D-48).
   if ((features.calendar || features.tasks) && !bySpace(useWorkspace.getState(), "dailyNotebookBySpace")[input.spaceId]) setBySpace("dailyNotebookBySpace", input.spaceId, id);
   return id;
 }
 
+/** Where a notebook's NotebookRef lives: the account doc, or its shared space's doc (D-62). */
+function notebookMap(id: string): Y.Map<unknown> | undefined {
+  const space = sharedSpaceOfNotebook(useWorkspace.getState(), id);
+  if (!space) return acc().notebooks.get(id);
+  const doc = runtime().store.get(space.id);
+  return doc ? spaceMaps(doc).notebooks.get(id) : undefined;
+}
+
 export function updateNotebook(id: string, patch: Partial<Pick<NotebookRef, "name" | "icon" | "color" | "order" | "spaceId">>) {
-  const m = acc().notebooks.get(id);
-  if (m) patchYMap(m, patch);
+  const m = notebookMap(id);
+  if (!m) return;
+  // In a space doc the space is implied (document-model.md §2.2).
+  if (sharedSpaceOfNotebook(useWorkspace.getState(), id)) {
+    const { spaceId: _s, ...rest } = patch;
+    void _s;
+    patchYMap(m, rest);
+  } else patchYMap(m, patch);
 }
 
 /** Move a notebook to another space (an explicit command, D-48): it goes last there, with its notes. */
@@ -115,7 +150,7 @@ export function moveNotebookToSpace(id: string, spaceId: string) {
 /** Needs the server: switching to "agent" hands the notebook key to it (crypto.md §8). */
 export async function setNotebookMode(id: string, mode: NotebookMode) {
   await pushNotebookMode(id, mode);
-  const m = acc().notebooks.get(id);
+  const m = notebookMap(id);
   m?.set("mode", mode);
 }
 
@@ -145,6 +180,11 @@ export async function pushNotebookMode(id: string, mode: NotebookMode) {
 export async function deleteNotebook(id: string) {
   const st = useWorkspace.getState();
   const a = acc();
+  const space = sharedSpaceOfNotebook(st, id);
+  if (space) {
+    const doc = runtime().store.get(space.id);
+    if (doc) doc.transact(() => spaceMaps(doc).notebooks.delete(id));
+  }
   runtime().account.transact(() => {
     a.notebooks.delete(id);
     const spaceId = spaceOfNotebook(st, id);

@@ -46,6 +46,8 @@ export function clearKeys() {
   for (const k of notebookKeys.values()) k.fill(0);
   for (const k of noteKeys.values()) k.fill(0);
   for (const ks of olderKeys.values()) for (const k of ks) k.fill(0);
+  for (const ks of spaceKeys.values()) for (const k of ks.keys) k.fill(0);
+  spaceKeys.clear();
   notebookKeys.clear();
   noteKeys.clear();
   olderKeys.clear();
@@ -54,7 +56,21 @@ export function clearKeys() {
 
 /** Older versions of a doc's key and keys this device used before (SyncClient alternateKeysFor). */
 export function alternateKeysFor(docId: string): Uint8Array[] {
-  return [...(olderKeys.get(docId) ?? []), ...retiredKeysFor(docId)];
+  return [...(olderKeys.get(docId) ?? []), ...(spaceKeys.get(docId)?.keys.slice(1) ?? []), ...retiredKeysFor(docId)];
+}
+
+/** Keys of shared spaces (D-62, crypto.md §11), newest first; also the key of the space doc. */
+const spaceKeys = new Map<string, VersionedKeys>();
+
+export function setSpaceKeys(spaceId: string, keys: VersionedKeys) {
+  spaceKeys.set(spaceId, keys);
+}
+
+export const spaceKeysOf = (spaceId: string): VersionedKeys | undefined => spaceKeys.get(spaceId);
+
+export function forgetSpaceKeys(spaceId: string) {
+  for (const k of spaceKeys.get(spaceId)?.keys ?? []) k.fill(0);
+  spaceKeys.delete(spaceId);
 }
 
 /** New keys of a notebook or note (a rotation, a member's delivered key): current + older versions. */

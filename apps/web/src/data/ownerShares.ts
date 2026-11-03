@@ -6,10 +6,13 @@ import {
   maintainOwnedShares,
   migrateMemberTrust,
   recordInvite,
+  sharedByMeItemSchema,
   type ConfirmReason,
   type Member,
   type ShareTarget,
 } from "@datascratch/shared";
+import { z } from "zod";
+import { api } from "@/api/client";
 import { getMasterKey, useAuth } from "@/auth/session";
 import { useWorkspace } from "@/domain/workspace";
 import i18n from "@/i18n";
@@ -18,6 +21,13 @@ import { confirmDialog, toast } from "@/ui";
 import { refreshNotebookKeyCache, setKeyring } from "./keys";
 import { runtime } from "./runtime";
 import { accountBoxKeys, sharingApi } from "./sharing";
+
+async function sharedByMeWithoutSpaces() {
+  const raw = await api.get<unknown[]>("/shared-by-me");
+  return z
+    .array(sharedByMeItemSchema)
+    .parse((Array.isArray(raw) ? raw : []).filter((i) => (i as { target?: { kind?: unknown } })?.target?.kind !== "space"));
+}
 
 let running: Promise<void> | null = null;
 let again = false;
@@ -56,7 +66,7 @@ export function maintainShares(): Promise<void> {
   return running;
 }
 
-async function confirmMember(target: ShareTarget, member: Member, reason: ConfirmReason): Promise<boolean> {
+export async function confirmMember(target: ShareTarget, member: Member, reason: ConfirmReason): Promise<boolean> {
   const id = `${target.kind}:${target.id}:${member.userId}`;
   if (declined.has(id)) return false;
   // Sign-up does not verify e-mail: an account made after the invitation gets access only on «yes».
@@ -81,7 +91,8 @@ async function pass() {
   const rt = runtime();
   await migrateMemberTrust(sharingApi, rt.account, userId);
   const results = await maintainOwnedShares({
-    api: sharingApi,
+    // Whole shared spaces (D-62) are in the same list; data/sharedSpaces looks after them.
+    api: { ...sharingApi, sharedByMe: sharedByMeWithoutSpaces },
     owner: { userId, secretKey: pair.secretKey },
     masterKey: getMasterKey(),
     notebookIndex: (id) => rt.store.load(id),

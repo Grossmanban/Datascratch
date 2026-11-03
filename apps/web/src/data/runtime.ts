@@ -1,4 +1,4 @@
-import { getTitle, SyncClient } from "@datascratch/shared";
+import { getTitle, SyncClient, type DocKind } from "@datascratch/shared";
 import * as Y from "yjs";
 import { deviceId } from "@/auth/deviceKey";
 import { getSession, refreshSession, wipeRevokedDevice } from "@/auth/session";
@@ -8,7 +8,7 @@ import { isReadOnlyDoc, refreshShared, sharedResourceOf, useShared } from "./sha
 import { APP_VERSION, syncUrl } from "@/config";
 import { notebookMaps, syncNotebookMetaCopy } from "@/domain/notebook";
 import { sodiumReady } from "@/lib/shared";
-import { refreshAccount, refreshNotebook, refreshStandaloneNote, resetWorkspace, useWorkspace } from "@/domain/workspace";
+import { refreshAccount, refreshNotebook, refreshSpaceDoc, refreshStandaloneNote, resetWorkspace, useWorkspace } from "@/domain/workspace";
 import { uiStatus, useSyncStatus } from "@/sync/engine";
 import { uploadPending } from "./attachments";
 import { accountDb } from "./db";
@@ -42,6 +42,8 @@ export class AccountRuntime {
   private observedNotebooks = new Map<string, () => void>();
   /** Notes shared on their own (D-54), observed for their title. */
   private observedStandalone = new Map<string, () => void>();
+  /** Space docs of shared spaces (D-62), observed for their name and notebooks. */
+  private observedSpaces = new Map<string, () => void>();
   private knownNotes = new Map<string, Set<string>>();
   private notebookPass: Promise<void> = Promise.resolve();
   private attached = new Set<string>();
@@ -250,6 +252,8 @@ export class AccountRuntime {
     for (const c of this.observedNotebooks.values()) c();
     for (const c of this.observedStandalone.values()) c();
     this.observedStandalone.clear();
+    for (const c of this.observedSpaces.values()) c();
+    this.observedSpaces.clear();
     for (const t of this.touchTimers.values()) clearTimeout(t);
     if (this.pendingTimer) clearInterval(this.pendingTimer);
     this.cleanups = [];
@@ -273,11 +277,13 @@ export class AccountRuntime {
   reconcileNotebooks(): Promise<void> {
     this.reconciling ??= (async () => {
       try {
-        const list = await notebooksApi.list();
+        // Notebooks of shared spaces (D-62) have their keys under the space key, and their refs in
+        // the space doc: they are not this check's business (data/sharedSpaces).
+        const list = (await notebooksApi.list()).filter((n) => !(n as { spaceId?: string | null }).spaceId);
         for (const r of await checkNotebookKeys(list)) await this.adoptNotebookKey(r);
         const onServer = new Map(list.map((n) => [n.id, n]));
         const pending = new Set((await accountDb().ops.toArray()).filter((o) => o.path === "/notebooks").map((o) => (o.body as { notebookId?: string })?.notebookId));
-        for (const ref of useWorkspace.getState().account.notebooks) {
+        for (const ref of useWorkspace.getState().ownAccount.notebooks) {
           const server = onServer.get(ref.id);
           if (!server) {
             // Registration lost (dropped op): register the key this device holds.
@@ -564,6 +570,9 @@ export class AccountRuntime {
       // blind write on every new device (and the copy is usually already there).
       if (!this.client.isSynced(ref.id)) continue;
       const space = account.spaces.find((s) => s.id === ref.spaceId) ?? null;
+      // The copy is the owner's to keep (it is for the owner's agents): a member of a shared space
+      // (D-62) does not write it, or two views of the names could keep rewriting each other.
+      if (space?.memberOf) continue;
       syncNotebookMetaCopy(doc, ref, space);
     }
   }
@@ -626,6 +635,44 @@ export class AccountRuntime {
     // Keys that arrived (or changed) for documents paused waiting for one.
     for (const item of Object.values(useShared.getState().items))
       if (item.keyed) for (const docId of item.docIds) if (this.attached.has(docId)) void this.client.keyAvailable(docId).catch(() => undefined);
+  }
+
+  /**
+   * D-62: the space docs of shared spaces whose key this account holds; their notebooks join the
+   * observed ones through the account view (domain/workspace), and the ones that were waiting
+   * for a key get it now.
+   */
+  async syncSpaceDocs(spaceIds: string[]) {
+    for (const id of spaceIds) {
+      if (this.observedSpaces.has(id)) {
+        if (this.attached.has(id)) void this.client.keyAvailable(id).catch(() => undefined);
+        continue;
+      }
+      this.observedSpaces.set(id, () => undefined);
+      await this.store.ensureRow(id, "space" as DocKind, null, 1);
+      const doc = await this.store.pin(id);
+      const handler = () => {
+        refreshSpaceDoc(id, doc);
+        void this.syncNotebookDocs();
+      };
+      doc.on("afterTransaction", handler);
+      this.observedSpaces.set(id, () => doc.off("afterTransaction", handler));
+      handler();
+      await this.attach([id]);
+    }
+    await this.syncNotebookDocs();
+    const inSpaces = new Set(spaceIds);
+    for (const nb of useWorkspace.getState().account.notebooks)
+      if (inSpaces.has(nb.spaceId) && this.attached.has(nb.id)) void this.client.keyAvailable(nb.id).catch(() => undefined);
+  }
+
+  /** A shared space this account no longer belongs to: its space doc goes from here (D-62). */
+  async dropSpaceDoc(spaceId: string) {
+    this.observedSpaces.get(spaceId)?.();
+    this.observedSpaces.delete(spaceId);
+    refreshSpaceDoc(spaceId, null);
+    await this.detach([spaceId]);
+    await this.store.forget([spaceId]);
   }
 
   /** A shared resource this account no longer has: detach and forget its documents here. */

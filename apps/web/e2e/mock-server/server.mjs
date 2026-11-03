@@ -16,7 +16,8 @@ const db = {
   usedRefresh: new Map(), // rotated refreshToken -> deviceId (reuse = theft)
   revoked: new Map(), // deviceId -> reason (D-53: its tokens get 401 device_revoked, its sockets 4410)
   devices: new Map(), // deviceId -> { id, userId, name, createdAt, lastSeenAt }
-  notebooks: new Map(), // id -> { id, userId, mode, createdAt, wrappedKey, serverKey }
+  notebooks: new Map(), // id -> { id, userId, mode, createdAt, wrappedKey, serverKey, spaceId? }
+  spaces: new Map(), // D-62: id -> { id, ownerUserId, wrappedKey, keyVersion, keyChain, keyRotationPending, pendingSinceVersion, createdAt }
   docs: new Map(), // docId -> { docId, userId, kind, notebookId, items: [{seq,payload,deviceId,createdAt}], snapshot }
   shares: new Map(),
   guests: new Map(), // guestToken -> shareId
@@ -272,12 +273,18 @@ route("DELETE", "/v1/devices/:id", (_q, res, { auth, params }) => {
 route("POST", "/v1/notebooks", (_q, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const existing = db.notebooks.get(body.notebookId);
-  if (existing) return existing.userId === auth.userId ? json(res, 200, pubNotebook(existing)) : err(res, 409, "conflict");
-  const nb = { id: body.notebookId, userId: auth.userId, mode: body.mode, createdAt: nowIso(), wrappedKey: body.wrappedKey, serverKey: body.notebookKey ?? null };
+  // D-62: a notebook of a shared space — created by the owner or an editor, owned by the space owner.
+  const space = body.spaceId ? db.spaces.get(body.spaceId) : null;
+  if (body.spaceId && !space) return err(res, 404, "not_found");
+  const role = space ? (space.ownerUserId === auth.userId ? "owner" : membersOf({ kind: "space", id: space.id }).get(auth.userId)?.role) : "owner";
+  if (role !== "owner" && role !== "editor") return err(res, 403, "forbidden");
+  const ownerId = space ? space.ownerUserId : auth.userId;
+  if (existing) return existing.userId === ownerId ? json(res, 200, pubNotebook(existing)) : err(res, 409, "conflict");
+  const nb = { id: body.notebookId, userId: ownerId, mode: body.mode, createdAt: nowIso(), wrappedKey: body.wrappedKey, serverKey: body.notebookKey ?? null, spaceId: space?.id ?? null };
   db.notebooks.set(nb.id, nb);
   json(res, 200, pubNotebook(nb));
 });
-const pubNotebook = (n) => ({ id: n.id, mode: n.mode, createdAt: n.createdAt, wrappedKey: n.wrappedKey });
+const pubNotebook = (n) => ({ id: n.id, mode: n.mode, createdAt: n.createdAt, wrappedKey: n.wrappedKey, spaceId: n.spaceId ?? null });
 route("GET", "/v1/notebooks", (_q, res, { auth }) => {
   if (!auth) return err(res, 401, "unauthorized");
   json(res, 200, [...db.notebooks.values()].filter((n) => n.userId === auth.userId).map(pubNotebook));
@@ -308,9 +315,13 @@ route("POST", "/v1/docs", (_q, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const d = db.docs.get(body.docId);
   // D-54: an editor of a shared notebook creates notes in it; they belong to its owner.
-  const shared = body.kind === "note" && body.notebookId ? db.members.get(`notebook:${body.notebookId}`)?.get(auth.userId) : null;
+  const sharedNb = body.kind === "note" && body.notebookId ? db.members.get(`notebook:${body.notebookId}`)?.get(auth.userId) : null;
+  // D-62: notes (and indexes) of a shared space's notebooks belong to the space owner.
+  const nbSpace = body.notebookId ? db.spaces.get(db.notebooks.get(body.notebookId)?.spaceId) : null;
+  const spaceRole = nbSpace && nbSpace.ownerUserId !== auth.userId ? membersOf({ kind: "space", id: nbSpace.id }).get(auth.userId)?.role : null;
+  const shared = sharedNb ?? (spaceRole ? { role: spaceRole } : null);
   if (shared && shared.role !== "editor") return err(res, 403, "forbidden");
-  const ownerId = shared ? ownerOf({ kind: "notebook", id: body.notebookId }) : auth.userId;
+  const ownerId = nbSpace ? nbSpace.ownerUserId : sharedNb ? ownerOf({ kind: "notebook", id: body.notebookId }) : auth.userId;
   if (d) return d.userId === ownerId ? json(res, 204) : err(res, 409, "conflict");
   db.docs.set(body.docId, { docId: body.docId, userId: ownerId, kind: body.kind, notebookId: body.notebookId ?? null, items: [], snapshot: null, history: [] });
   json(res, 204);
@@ -335,7 +346,10 @@ function memberRoleOf(userId, doc) {
   const viaNote = db.members.get(`note:${doc.docId}`)?.get(userId);
   const nbId = doc.kind === "notebook" ? doc.docId : doc.notebookId;
   const viaNotebook = nbId ? db.members.get(`notebook:${nbId}`)?.get(userId) : null;
-  const m = viaNote ?? viaNotebook;
+  // D-62: a member of a shared space reaches its space doc and all of its notebooks and notes.
+  const spaceId = doc.kind === "space" ? doc.docId : db.notebooks.get(nbId)?.spaceId;
+  const viaSpace = spaceId ? db.members.get(`space:${spaceId}`)?.get(userId) : null;
+  const m = viaNote ?? viaNotebook ?? viaSpace;
   return m && m.status === "active" ? m.role : null;
 }
 const canRead = (auth, d) => d && (d.userId === auth.userId || !!memberRoleOf(auth.userId, d));
@@ -387,6 +401,7 @@ route("POST", "/v1/fetch-image", (_q, res, { auth, body }) => {
 // ---------- D-54: sharing with accounts ----------
 const targetKey = (t) => `${t.kind}:${t.id}`;
 function ownerOf(target) {
+  if (target.kind === "space") return db.spaces.get(target.id)?.ownerUserId ?? null;
   if (target.kind === "notebook") return db.notebooks.get(target.id)?.userId ?? null;
   return db.docs.get(target.id)?.userId ?? null;
 }
@@ -398,8 +413,10 @@ const membersOf = (target) => {
 const liveInvitation = (i) => i.status === "pending" && Date.parse(i.expiresAt) > Date.now();
 function sharedItemFor(target, m) {
   const owner = userById(ownerOf(target));
+  const notesOf = (nbId) => [...db.docs.values()].filter((d) => d.notebookId === nbId && d.kind === "note").map((d) => d.docId);
+  const spaceNbs = target.kind === "space" ? [...db.notebooks.values()].filter((n) => n.spaceId === target.id).map((n) => n.id) : [];
   const docIds =
-    target.kind === "note" ? [target.id] : [target.id, ...[...db.docs.values()].filter((d) => d.notebookId === target.id && d.kind === "note").map((d) => d.docId)];
+    target.kind === "note" ? [target.id] : target.kind === "space" ? [target.id, ...spaceNbs.flatMap((nb) => [nb, ...notesOf(nb)])] : [target.id, ...notesOf(target.id)];
   return {
     target,
     owner: { userId: owner.userId, email: owner.email, publicKey: owner.boxKey?.publicKey ?? b64u(Buffer.alloc(32)) },
@@ -413,12 +430,106 @@ function sharedItemFor(target, m) {
     agentsMode: db.notebooks.get(target.kind === "notebook" ? target.id : db.docs.get(target.id)?.notebookId)?.mode === "agent",
   };
 }
-const parseTarget = (kind, id) => (kind === "notebook" || kind === "note" ? { kind, id } : null);
+const parseTarget = (kind, id) => (kind === "notebook" || kind === "note" || kind === "space" ? { kind, id } : null);
 /** Key state of a shared resource: a notebook's lives on the notebook, a shared note's on its doc. */
 function resourceKey(target) {
-  const r = target.kind === "notebook" ? db.notebooks.get(target.id) : db.docs.get(target.id);
+  const r = target.kind === "space" ? db.spaces.get(target.id) : target.kind === "notebook" ? db.notebooks.get(target.id) : db.docs.get(target.id);
   return { r, version: r?.keyVersion ?? 1, keyChain: r?.keyChain ?? [], pending: !!r?.keyRotationPending };
 }
+
+// ---------- D-62: shared spaces (api.md «Общие пространства») ----------
+const pubSpace = (sp) => ({ id: sp.id, ownerUserId: sp.ownerUserId, keyVersion: sp.keyVersion ?? 1, keyRotationPending: !!sp.keyRotationPending, pendingSinceVersion: sp.keyRotationPending ? (sp.pendingSinceVersion ?? null) : null, createdAt: sp.createdAt });
+const spaceRole = (sp, userId) => (sp.ownerUserId === userId ? "owner" : membersOf({ kind: "space", id: sp.id }).get(userId)?.role ?? null);
+const spaceKeyed = (sp, userId) => {
+  if (sp.ownerUserId === userId) return true;
+  const m = membersOf({ kind: "space", id: sp.id }).get(userId);
+  return !!m && m.status === "active" && m.keyVersion === (sp.keyVersion ?? 1);
+};
+route("POST", "/v1/spaces", (_q, res, { auth, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  if (db.spaces.has(body.spaceId)) return err(res, 409, "conflict");
+  const sp = { id: body.spaceId, ownerUserId: auth.userId, wrappedKey: body.wrappedKey, keyVersion: 1, keyChain: [], keyRotationPending: false, pendingSinceVersion: null, createdAt: nowIso() };
+  db.spaces.set(sp.id, sp);
+  json(res, 200, pubSpace(sp));
+});
+route("GET", "/v1/spaces", (_q, res, { auth }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  json(res, 200, [...db.spaces.values()].filter((sp) => spaceRole(sp, auth.userId)).map(pubSpace));
+});
+route("GET", "/v1/spaces/:id/key", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const sp = db.spaces.get(params.id);
+  if (!sp || sp.ownerUserId !== auth.userId) return err(res, 404, "not_found");
+  json(res, 200, { version: sp.keyVersion, wrappedKey: sp.wrappedKey, keyChain: sp.keyChain, keyRotationPending: !!sp.keyRotationPending, pendingSinceVersion: sp.keyRotationPending ? sp.pendingSinceVersion : null });
+});
+route("GET", "/v1/spaces/:id/notebooks", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const sp = db.spaces.get(params.id);
+  if (!sp || !spaceRole(sp, auth.userId) || !spaceKeyed(sp, auth.userId)) return err(res, 404, "not_found");
+  json(res, 200, [...db.notebooks.values()].filter((n) => n.spaceId === sp.id).map((n) => ({ notebookId: n.id, version: n.keyVersion ?? 1, spaceWrappedKey: n.wrappedKey, keyChain: n.keyChain ?? [], mode: n.mode })));
+});
+route("PUT", "/v1/spaces/:id/notebooks/:notebookId", (_q, res, { auth, params, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const sp = db.spaces.get(params.id);
+  const n = db.notebooks.get(params.notebookId);
+  if (!sp || sp.ownerUserId !== auth.userId || !n || n.userId !== auth.userId) return err(res, 403, "forbidden");
+  if (body.version !== (n.keyVersion ?? 1)) return err(res, 409, "conflict", "version");
+  if (membersOf({ kind: "notebook", id: n.id }).size) return err(res, 409, "conflict", "the notebook has its own members");
+  Object.assign(n, { spaceId: sp.id, wrappedKey: body.spaceWrappedKey });
+  json(res, 204);
+});
+route("POST", "/v1/spaces/:id/notebooks/:notebookId/move-out", (_q, res, { auth, params, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const sp = db.spaces.get(params.id);
+  const n = db.notebooks.get(params.notebookId);
+  if (!sp || sp.ownerUserId !== auth.userId || !n || n.spaceId !== sp.id) return err(res, 403, "forbidden");
+  if (body.version !== (n.keyVersion ?? 1) + 1) return err(res, 409, "conflict", "version");
+  Object.assign(n, { spaceId: null, wrappedKey: body.ownerWrappedKey, keyVersion: body.version, keyChain: [body.previousKeyWrap, ...(n.keyChain ?? [])], keyRotationPending: true });
+  if (body.notebookKey) n.serverKey = body.notebookKey;
+  json(res, 204);
+});
+route("POST", "/v1/spaces/:id/rotate", (_q, res, { auth, params, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const sp = db.spaces.get(params.id);
+  if (!sp || sp.ownerUserId !== auth.userId) return err(res, 403, "forbidden");
+  if (body.version !== sp.keyVersion + 1) return err(res, 409, "conflict", "version");
+  const members = membersOf({ kind: "space", id: sp.id });
+  const given = new Map(body.memberKeys.map((k) => [k.userId, k.wrappedKey]));
+  const active = [...members.values()].filter((m) => m.status === "active");
+  if (active.length !== given.size || active.some((m) => !given.has(m.userId))) return err(res, 409, "conflict", "memberKeys");
+  const nbs = [...db.notebooks.values()].filter((n) => n.spaceId === sp.id);
+  const byId = new Map(body.notebooks.map((n) => [n.notebookId, n]));
+  if (nbs.length !== byId.size || nbs.some((n) => byId.get(n.id)?.version !== (n.keyVersion ?? 1) + 1)) return err(res, 409, "conflict", "notebooks");
+  Object.assign(sp, { keyVersion: body.version, wrappedKey: body.ownerWrappedKey, keyChain: [body.previousKeyWrap, ...sp.keyChain] });
+  for (const n of nbs) {
+    const b = byId.get(n.id);
+    Object.assign(n, { keyVersion: b.version, wrappedKey: b.spaceWrappedKey, keyChain: [b.previousKeyWrap, ...(n.keyChain ?? [])] });
+    if (b.notebookKey) n.serverKey = b.notebookKey;
+  }
+  for (const [userId, m] of members) if (given.has(userId)) Object.assign(m, { wrappedKey: given.get(userId), keyVersion: body.version, status: "active" });
+  json(res, 204);
+});
+route("POST", "/v1/spaces/:id/rotate/done", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const sp = db.spaces.get(params.id);
+  if (!sp || sp.ownerUserId !== auth.userId) return err(res, 403, "forbidden");
+  sp.keyRotationPending = false;
+  for (const n of db.notebooks.values()) if (n.spaceId === sp.id) n.keyRotationPending = false;
+  json(res, 204);
+});
+route("DELETE", "/v1/spaces/:id", (_q, res, { auth, params }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  const sp = db.spaces.get(params.id);
+  if (!sp || sp.ownerUserId !== auth.userId) return err(res, 403, "forbidden");
+  for (const n of [...db.notebooks.values()]) if (n.spaceId === sp.id) {
+    db.notebooks.delete(n.id);
+    for (const [id, d] of db.docs) if (d.notebookId === n.id || id === n.id) db.docs.delete(id);
+  }
+  db.docs.delete(sp.id);
+  db.members.delete(`space:${sp.id}`);
+  db.spaces.delete(sp.id);
+  json(res, 204);
+});
 
 // crypto.md §10.1: one key pair per account, published once.
 route("GET", "/v1/me/box-key", (_q, res, { auth }) => {
@@ -455,6 +566,9 @@ route("POST", "/v1/invitations", (_q, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const target = body.target;
   if (!target || ownerOf(target) !== auth.userId) return err(res, 403, "forbidden");
+  // D-62: a notebook or note of a shared space is seen by all its members, never shared alone.
+  const inSpace = target.kind === "notebook" ? db.notebooks.get(target.id)?.spaceId : target.kind === "note" ? db.notebooks.get(db.docs.get(target.id)?.notebookId)?.spaceId : null;
+  if (inSpace) return err(res, 409, "conflict", "in a shared space");
   const email = String(body.email ?? "").trim().toLowerCase();
   if (!email || !["editor", "viewer"].includes(body.role)) return err(res, 400, "bad_request");
   const pending = [...db.invitations.values()].filter((i) => targetKey(i.target) === targetKey(target) && liveInvitation(i));
@@ -539,7 +653,10 @@ route("DELETE", "/v1/members/:kind/:id/:userId", (_q, res, { auth, params }) => 
   if (ownerOf(target) !== auth.userId && params.userId !== auth.userId) return err(res, 403, "forbidden");
   if (!membersOf(target).delete(params.userId)) return err(res, 404, "not_found");
   const { r } = resourceKey(target);
-  if (r) r.keyRotationPending = true;
+  if (r) {
+    if (!r.keyRotationPending) r.pendingSinceVersion = r.keyVersion ?? 1;
+    r.keyRotationPending = true;
+  }
   json(res, 204);
 });
 route("PUT", "/v1/members/:kind/:id/:userId/key", (_q, res, { auth, params, body }) => {

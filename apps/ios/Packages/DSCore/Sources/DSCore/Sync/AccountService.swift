@@ -49,6 +49,7 @@ public actor AccountService {
         switch target.kind {
         case .notebook: local = (try? keys.notebookKey(target.id)) != nil ? keys.notebookKeyVersion(target.id) : 0
         case .note: local = (try? keys.sharedNoteKey(target.id)) != nil ? keys.sharedNoteKeyVersion(target.id) : 0
+        case .space: local = (try? keys.spaceKey(target.id)) != nil ? keys.spaceKeyVersion(target.id) : 0
         }
         return max(recorded, local)
     }
@@ -209,8 +210,14 @@ public actor AccountService {
     /// skipped (`knownKeyVersion`, security review 2026-11-02).
     public func reconcileNotebookKeys() async throws -> [NotebookKeyChange] {
         var changes: [NotebookKeyChange] = []
+        var spaces: Set<String> = []
         for nb in try await api.notebooks() {
             guard let master = try keys.masterKey() else { throw AccountError.notSignedIn }
+            if let spaceId = nb.spaceId {
+                // A notebook of a shared space: its key is under the space key (D-62).
+                spaces.insert(spaceId)
+                continue
+            }
             let target = SharingTarget(kind: .notebook, id: nb.id)
             let previous: Data?
             let key: Data
@@ -240,6 +247,11 @@ public actor AccountService {
             if let previous {
                 changes.append(NotebookKeyChange(notebookId: nb.id, previousKey: previous, key: key))
             }
+        }
+        for spaceId in spaces.sorted() {
+            if try keys.spaceKey(spaceId) == nil { try? await adoptOwnerSpaceKey(spaceId) }
+            guard try keys.spaceKey(spaceId) != nil else { continue }
+            try await loadSpaceNotebookKeys(spaceId)
         }
         return changes
     }

@@ -181,12 +181,26 @@ public struct CreateNotebookRequest: Codable, Sendable {
     public var wrappedKey: Base64URLData
     /// Raw notebook key — only (and always) for `mode = .agent` (crypto.md §8).
     public var notebookKey: Base64URLData?
+    /// A notebook of this shared space (D-62): `wrappedKey` is then under the space key.
+    public var spaceId: String?
 
-    public init(notebookId: String, mode: NotebookMode, wrappedKey: Data, notebookKey: Data?) {
+    enum CodingKeys: String, CodingKey { case notebookId, mode, wrappedKey, notebookKey, spaceId }
+
+    public init(notebookId: String, mode: NotebookMode, wrappedKey: Data, notebookKey: Data?, spaceId: String? = nil) {
         self.notebookId = notebookId
         self.mode = mode
         self.wrappedKey = .init(wrappedKey)
         self.notebookKey = notebookKey.map(Base64URLData.init)
+        self.spaceId = spaceId
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(notebookId, forKey: .notebookId)
+        try c.encode(mode, forKey: .mode)
+        try c.encode(wrappedKey, forKey: .wrappedKey)
+        try c.encodeIfPresent(notebookKey, forKey: .notebookKey)
+        try c.encodeIfPresent(spaceId, forKey: .spaceId)
     }
 
     public init(from decoder: any Decoder) throws {
@@ -196,6 +210,7 @@ public struct CreateNotebookRequest: Codable, Sendable {
         mode = try c.decode(NotebookMode.self, forKey: .mode)
         wrappedKey = try V.bytes(c, .wrappedKey, nonEmpty: true)
         notebookKey = c.contains(.notebookKey) ? try V.bytes(c, .notebookKey, length: 32) : nil
+        spaceId = try V.optionalUUID(c, .spaceId)
         guard (mode == .agent) == (notebookKey != nil) else {
             throw V.fail(c, .notebookKey, "notebookKey is required for mode=agent and forbidden for mode=private")
         }
@@ -229,8 +244,9 @@ public struct RegisterDocRequest: Codable, Sendable {
         docId = try V.uuid(c, .docId)
         kind = try c.decode(DocKind.self, forKey: .kind)
         notebookId = try V.optionalUUID(c, .notebookId)
-        guard (kind == .account) == (notebookId == nil) else {
-            throw V.fail(c, .notebookId, "notebookId must be null for account documents and set otherwise")
+        // The account and space (D-62) documents belong to no notebook.
+        guard (kind == .account || kind == .space) == (notebookId == nil) else {
+            throw V.fail(c, .notebookId, "notebookId must be null for account and space documents and set otherwise")
         }
         guard kind != .notebook || docId == notebookId else { throw V.fail(c, .docId, "a notebook document's docId equals its notebookId") }
     }

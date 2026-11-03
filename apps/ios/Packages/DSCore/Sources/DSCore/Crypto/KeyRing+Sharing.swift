@@ -138,6 +138,9 @@ extension KeyRing {
             try store.set(key, for: Self.sharedNoteKeyName(id))
             try setVersion(item.keyVersion, name: Self.sharedNoteKeyVersionName(id))
             cache.withLock { $0[Self.sharedNoteKeyName(id)] = key }
+        case .space:
+            // The space key; its notebooks' keys come from the space (`addSpaceNotebookKey`).
+            try adoptSpaceKey(key, version: item.keyVersion, olderKeys: older, spaceId: item.target.id)
         }
         return true
     }
@@ -158,6 +161,8 @@ public enum SharingError: Error, Equatable, Sendable {
     case notSignedIn
     /// The member's public key could not be fetched.
     case noPublicKey(userId: String)
+    /// No key of this shared space on this device yet (D-62).
+    case noSpaceKey(spaceId: String)
     /// A rotation is needed before the key can be given (server version is ahead).
     case versionMismatch(local: Int, server: Int)
     /// The server handed out a key older than one this account already used (a wrap from

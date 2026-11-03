@@ -185,6 +185,31 @@ DSCore
   `wipeLocal()` / `AttachmentManager.wipeLocal(directory:store:)` — все локальные файлы и записи
   вложений («Удалить данные с этого устройства»). `uploadPending(noteKey:)` / `upload` (куски по
   1 MiB, докачка), `download(...)`, `localURL`, `delete`.
+### Общие пространства (D-62, crypto.md §11)
+
+- Ключ пространства между ключами аккаунтов и ключами блокнотов: владелец хранит его под
+  мастер-ключом (`ds1|key|space|<id>[|v]`), участник получает обёрткой §10.2 (`kind = space`);
+  ключи блокнотов пространства — под ключом пространства (`ds1|key|space-notebook|…`), у
+  владельца тоже. `KeyRing.spaceKey/spaceKeyVersion/retiredSpaceKeys`, `addSpaceNotebookKey`
+  (ключ блокнота хранится как обычный — с версией и цепочкой), `spaceOfNotebook`.
+- Владелец: `shareSpace(_:in:)` — `POST /spaces`, документ пространства (`SpaceDocument`: название,
+  иконка, цвет, `NotebookRef` блокнотов без `spaceId`), перенос блокнотов из документа аккаунта
+  (у блокнота со своими участниками D-54 — `409`, остаётся личным), `Space.shared = true`;
+  приглашения и выдача ключа — те же `invite`/`grantPendingKeys` с `SharingTarget(kind: .space)`
+  и `ownerKey(spaceId:)`; `moveNotebookIntoSpace`, `moveNotebookOutOfSpace` (новый ключ под
+  мастер-ключом, затем `finishNotebookRotation`); смена ключа §11.4: `rotateSpaceKey` (ключ
+  пространства и ключи всех блокнотов одним запросом), `resumeSpaceRotation` при запуске (по
+  `pendingSinceVersion`, у старого сервера — по заметкам), `finishSpaceRotation`.
+- Владелец и `editor`: `createNotebook(name:in:…)` — блокнот пространства (ключ под ключом
+  пространства, `POST /notebooks` со `spaceId`).
+- Все: `refreshSharedSpaces()` при запуске — ключи своих общих пространств и ключи их блокнотов,
+  документы для синхронизации; `loadSpaceNotebookKeys(_:)`; участник получает ключ пространства
+  из «Общих со мной» (`refreshSharedWithMe`, `SharedItem` с `kind = space`), регистрируются документ
+  пространства и индексы блокнотов (заметки — из индексов). `placeSharedSpaces(_:in:)` — размещение
+  в `sharedSpaces` документа аккаунта (возвращает пропавшие). Своё же пространство из «Общих со
+  мной» не принимается. `reconcileNotebookKeys` берёт ключи блокнотов пространств через ключ
+  пространства. Документ `space` синхронизируется ключом пространства (`DocKind.space`).
+
 - `ShareLink(url:)` / `.url` — ссылки `https://<host>/s/<shareId>#k=<ключ>` (crypto.md §7).
 
 ### Совместный доступ по аккаунтам (D-54, crypto.md §10)

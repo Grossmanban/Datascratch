@@ -260,6 +260,21 @@ public final class AccountDocument: Sendable {
         try crdt.transact(origin: origin) { $0.delete("notebooks", key: id) }
     }
 
+    // MARK: Shared spaces (D-62)
+
+    /// Shared spaces this account is a member of — placement in the switcher only.
+    public func sharedSpaces() -> [SharedSpaceRef] {
+        crdt.records("sharedSpaces", as: SharedSpaceRef.self).sorted { ($0.order, $0.id) < ($1.order, $1.id) }
+    }
+
+    public func putSharedSpace(_ ref: SharedSpaceRef, origin: TransactionOrigin = .local) throws {
+        try crdt.transact(origin: origin) { $0.put("sharedSpaces", ref) }
+    }
+
+    public func removeSharedSpace(id: String, origin: TransactionOrigin = .local) throws {
+        try crdt.transact(origin: origin) { $0.delete("sharedSpaces", key: id) }
+    }
+
     // MARK: Settings
 
     public func setting(_ key: String) -> YValue? { crdt.mapValue("settings", [key]) }

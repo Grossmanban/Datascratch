@@ -947,9 +947,8 @@ final class LibraryUITests: XCTestCase {
         let footer = app.descendants(matching: .any)["sidebar.footer"].firstMatch
         XCTAssertTrue(trash.exists && footer.exists, "no Trash or footer")
         // Scroll the sidebar to its end: the last row must stop above the footer.
-        let firstRow = app.cells.containing(.any, identifier: "sidebar.allDocuments").firstMatch
-        firstRow.swipeUp()
-        firstRow.swipeUp()
+        trash.swipeUp()
+        trash.swipeUp()
         settle(1)
         XCTAssertLessThanOrEqual(trash.frame.maxY, footer.frame.minY + 1, "Trash is under the footer")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -1106,9 +1105,10 @@ final class LibraryUITests: XCTestCase {
         try openNewNoteInNativeEditor(app)
         // Something in it, so leaving does not drop it (an empty new note is not kept).
         app.typeText("Kept")
-        // iPhone: back from the document and the list to the sidebar.
+        // iPhone: back from the document and the list to the sidebar (on iPad the first bar
+        // button is the sidebar button, D-60 — `sidebarElement` below brings the sidebar).
         let allRow = app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch
-        for _ in 0..<3 where !(allRow.exists && allRow.isHittable) {
+        for _ in 0..<3 where UIDevice.current.userInterfaceIdiom == .phone && !(allRow.exists && allRow.isHittable) {
             let back = app.navigationBars.buttons.firstMatch
             if back.exists { back.tap() }
             settle(1)

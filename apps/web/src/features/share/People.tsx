@@ -3,23 +3,26 @@ import { Check, ChevronDown, Copy, Mail, UserPlus, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError, NetworkError } from "@/api/client";
-import { membersApi } from "@/api/endpoints";
+import { membersApi, type AnyTarget } from "@/api/endpoints";
+import { refreshSpaces } from "@/data/sharedSpaces";
 import { useAuth } from "@/auth/session";
 import { giveAccessNow, maintainShares, recordInvitation } from "@/data/ownerShares";
 import { formatDay, localDate } from "@/lib/dates";
-import { uuidv7, type Member, type MemberRole, type OutgoingInvitation, type ShareTarget } from "@/lib/shared";
+import { uuidv7, type Member, type MemberRole, type OutgoingInvitation } from "@/lib/shared";
 import { Button, confirmDialog, DropdownMenu, IconButton, Input, Spinner, toast } from "@/ui";
 
 /** The link a person without the app (or not signed in) opens to reach the invitation (api.md). */
 export const inviteUrl = (id: string) => `${location.origin}/invite/${id}`;
 
-const keyOf = (t: ShareTarget) => `${t.kind}:${t.id}`;
+const keyOf = (t: AnyTarget) => `${t.kind}:${t.id}`;
+/** The owner's upkeep that delivers keys and changes them: per shared space (D-62) or D-54's. */
+const upkeep = (t: AnyTarget) => (t.kind === "space" ? refreshSpaces() : maintainShares());
 
 /**
  * D-54 «Люди»: the owner invites a person by email with a role, sees who has access and who is
  * invited, changes a role, closes access, withdraws an invitation or copies its link.
  */
-export function PeopleSection({ target }: { target: ShareTarget }) {
+export function PeopleSection({ target }: { target: AnyTarget }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const myEmail = useAuth((s) => s.email);
@@ -57,7 +60,7 @@ export function PeopleSection({ target }: { target: ShareTarget }) {
   const waiting = (members.data ?? []).filter((m) => m.status === "awaiting_key" && !m.accountCreatedAfterInvite).length;
   useEffect(() => {
     if (!waiting) return;
-    void maintainShares().then(refresh);
+    void upkeep(target).then(refresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waiting]);
   const failed = (e: unknown) =>
@@ -95,7 +98,7 @@ export function PeopleSection({ target }: { target: ShareTarget }) {
       toast(t("share.people.removed"));
       refresh();
       // The key changes now (crypto.md §10.3), and guest links are re-created with it.
-      await maintainShares();
+      await upkeep(target);
       refresh();
     },
     onError: failed,
@@ -200,6 +203,7 @@ export function PeopleSection({ target }: { target: ShareTarget }) {
                   data-testid="give-access"
                   onClick={async () => {
                     await giveAccessNow(target, m.userId);
+                    if (target.kind === "space") await refreshSpaces();
                     refresh();
                   }}
                 >

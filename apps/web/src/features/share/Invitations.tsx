@@ -86,7 +86,7 @@ export function InvitationsDialog() {
             >
               <div className="text-[13.5px] leading-snug">
                 <span className="font-medium text-ink">{i.from.email}</span>{" "}
-                <span className="text-ink-2">{i.target.kind === "notebook" ? t("invitations.toNotebook") : t("invitations.toNote")}</span>
+                <span className="text-ink-2">{(i.target.kind as string) === "space" ? t("invitations.toSpace") : i.target.kind === "notebook" ? t("invitations.toNotebook") : t("invitations.toNote")}</span>
                 <div className="mt-0.5 text-[12.5px] text-ink-2">
                   {i.role === "editor" ? t("share.people.editor") : t("share.people.viewer")}
                   {" · "}

@@ -16,6 +16,8 @@ type UiState = {
   /** The tab overview (spec/12 §12.6): «+N», ⌘⇧\\ or the tab count on a phone. */
   tabOverviewOpen: boolean;
   shareFor: { kind: "note" | "notebook"; id: string } | null;
+  /** «Участники пространства» of a shared space (D-62). */
+  spaceMembersFor: string | null;
   /** Incoming invitations dialog (D-54); a string highlights that invitation (/invite/:id). */
   invitationsOpen: boolean | string;
   /** Bumped when keys of a shared resource changed (D-54): views holding a key or a link re-read them. */
@@ -41,6 +43,7 @@ export const useUi = create<UiState>(() => ({
   paletteOpen: false,
   tabOverviewOpen: false,
   shareFor: null,
+  spaceMembersFor: null,
   invitationsOpen: false,
   keysChangedAt: 0,
   historyFor: null,

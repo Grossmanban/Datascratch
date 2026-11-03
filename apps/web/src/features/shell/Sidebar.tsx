@@ -24,6 +24,8 @@ import {
   Pencil,
   FileText,
   LockKeyhole,
+  UserPlus,
+  Users,
 } from "lucide-react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { AnimatePresence, motion } from "motion/react";
@@ -70,6 +72,14 @@ import { AllTagsDialog, MoreList, TagRow, useSpaceCollapsed, useTagTree } from "
 import { unreadableMenuState, useUnreadable } from "@/features/docs/UnreadableNote";
 import { SyncIndicator } from "./SyncIndicator";
 import { InvitationsRow } from "@/features/share/Invitations";
+import {
+  createSharedSpaceInteractive,
+  deleteSharedSpace,
+  inviteToSpace,
+  moveNotebookIntoSharedSpace,
+  moveNotebookToPersonalSpace,
+  SpaceAvatars,
+} from "@/features/spaces/SharedSpaces";
 import { SharedRow, useSharedRefs } from "@/features/share/SharedWithMe";
 import { createSpaceInteractive } from "./spaces";
 import { iconGlyph, withIcon } from "@/lib/glyph";
@@ -101,6 +111,8 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const space = useWorkspace(activeSpace);
+  // D-62: in a shared space the owner and editors create notebooks, a viewer only reads.
+  const canCreateNotebook = !space?.shared || space.role !== "viewer";
   const notebooks = useWorkspace((s) => s.account.notebooks);
   const spaceId = useWorkspace((s) => s.activeSpaceId);
   const nbs = useMemo(() => notebooks.filter((n) => n.spaceId === spaceId), [notebooks, spaceId]);
@@ -206,6 +218,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
           id="folders"
           title={t("nav.folders")}
           action={
+            canCreateNotebook && (
             <IconButton
               label={t("nav.newNotebook")}
               size="sm"
@@ -214,10 +227,11 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
             >
               <Plus className="size-3.5" />
             </IconButton>
+            )
           }
         >
           <MoreList testId="notebooks" rows={nbs.map((nb) => ({ key: nb.id, node: <NotebookNode nb={nb} />, keep: nb.id === openNotebook }))} />
-          {!nbs.length && space && (
+          {!nbs.length && space && canCreateNotebook && (
             <button
               className="mx-2 my-1 text-left text-[12.5px] text-ink-2 hover:text-ink"
               onClick={() => useUi.setState({ newNotebookFor: spaceId })}
@@ -342,32 +356,50 @@ function SpaceSwitcher() {
   const [renaming, setRenaming] = useState(false);
   // Spaces with the same name (e.g. after a migration) are told apart by their document count.
   const sameName = new Set(spaces.filter((s, i) => spaces.some((o, j) => j !== i && o.name === s.name)).map((s) => s.id));
-  const items: MenuItem[] = [
-    { kind: "label", label: t("nav.spaces") },
-    ...spaces.map((s) => ({
-      label: sameName.has(s.id)
-        ? `${s.name} · ${t("docs.count", { count: visibleNotes(notesInSpace(useWorkspace.getState(), s.id)).length })}`
-        : s.name,
-      icon: <SpaceTile icon={spaceGlyph(s)} tint={tintName(s.color)} size={18} />,
-      checked: s.id === current?.id,
-      onSelect: () => setActiveSpace(s.id),
-    })),
-    { kind: "separator" },
-    { label: t("nav.newSpace"), icon: <Plus className="size-3.5" />, onSelect: () => void createSpaceInteractive(t) },
-    ...(current
-      ? [
+  const spaceItem = (s: (typeof spaces)[number]): MenuItem => ({
+    label: (
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="truncate">
+          {sameName.has(s.id) ? `${s.name} · ${t("docs.count", { count: visibleNotes(notesInSpace(useWorkspace.getState(), s.id)).length })}` : s.name || "…"}
+        </span>
+        {s.shared && <SpaceAvatars spaceId={s.id} size={16} />}
+      </span>
+    ),
+    icon: <SpaceTile icon={spaceGlyph(s)} tint={tintName(s.color)} size={18} />,
+    checked: s.id === current?.id,
+    onSelect: () => setActiveSpace(s.id),
+  });
+  const personal = spaces.filter((s) => !s.shared);
+  const sharedSpaces = spaces.filter((s) => s.shared);
+  // D-62: what can be done with the current space depends on whose it is and the role in it.
+  const currentItems: MenuItem[] = !current
+    ? []
+    : current.memberOf
+      ? [{ label: t("spaces.members"), icon: <Users className="size-3.5" />, onSelect: () => useUi.setState({ spaceMembersFor: current.id }) }]
+      : [
+          current.shared
+            ? { label: t("spaces.members"), icon: <Users className="size-3.5" />, onSelect: () => useUi.setState({ spaceMembersFor: current.id }) }
+            : { label: t("spaces.invite"), icon: <UserPlus className="size-3.5" />, onSelect: () => void inviteToSpace(t, current.id) },
           { label: t("common.rename"), icon: <Pencil className="size-3.5" />, onSelect: () => setRenaming(true) },
           {
             label: t("common.delete"),
             icon: <Trash2 className="size-3.5" />,
             danger: true,
-            disabled: spaces.length <= 1,
+            disabled: personal.length <= 1 && !current.shared,
             onSelect: () => {
-              if (!deleteSpace(current.id)) toast(t("space.deleteNotEmpty"));
+              if (current.shared) void deleteSharedSpace(t, current.id);
+              else if (!deleteSpace(current.id)) toast(t("space.deleteNotEmpty"));
             },
           },
-        ]
-      : []),
+        ];
+  const items: MenuItem[] = [
+    { kind: "label", label: t("nav.spaces") },
+    ...personal.map(spaceItem),
+    ...(sharedSpaces.length ? [{ kind: "label" as const, label: t("spaces.shared") }, ...sharedSpaces.map(spaceItem)] : []),
+    { kind: "separator" },
+    { label: t("nav.newSpace"), icon: <Plus className="size-3.5" />, onSelect: () => void createSpaceInteractive(t) },
+    { label: t("spaces.newShared"), icon: <Users className="size-3.5" />, onSelect: () => void createSharedSpaceInteractive(t) },
+    ...(currentItems.length ? [{ kind: "separator" as const }, ...currentItems] : []),
   ];
   if (renaming && current)
     return (
@@ -390,7 +422,7 @@ function SpaceSwitcher() {
           data-testid="space-switcher"
         >
           <SpaceTile icon={spaceGlyph(current)} tint={tintName(current?.color)} />
-          <span className="truncate">{current?.name ?? "…"}</span>
+          <span className="truncate">{current?.name || "…"}</span>
           <ChevronDown className="size-3.5 shrink-0 text-ink-3" />
         </button>
       }
@@ -527,35 +559,55 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
   const active = pathname === `/notebook/${nb.id}`;
   const unreadable = useUnreadable(nb.id);
   const spaces = useWorkspace((s) => s.account.spaces);
+  // D-62: in a shared space a viewer only reads, an editor writes, the owner also moves and opens to agents.
+  const inSpace = spaces.find((s) => s.id === nb.spaceId);
+  const role = inSpace?.shared ? (inSpace.role ?? "owner") : "owner";
+  const canWrite = role !== "viewer";
+  const ownSpaces = spaces.filter((s) => s.id !== nb.spaceId && !s.memberOf);
   const menu: MenuItem[] = [
-    { label: t("nav.newDoc"), icon: <FileText className="size-3.5" />, onSelect: () => void newNoteAndOpen(navigate, nb.id) },
-    {
-      label: t("nav.newFolder"),
-      icon: <FolderPlus className="size-3.5" />,
-      onSelect: () => createFolder({ notebookId: nb.id, parentId: null, name: t("folder.newName") }),
-    },
-    { kind: "separator" },
-    { label: t("common.rename"), icon: <Pencil className="size-3.5" />, onSelect: () => setRenaming(true) },
-    { label: t("docs.share"), icon: <Share2 className="size-3.5" />, onSelect: () => useUi.setState({ shareFor: { kind: "notebook", id: nb.id } }) },
-    {
-      label: nb.mode === "agent" ? t("notebook.agent") : t("notebook.private"),
-      icon: nb.mode === "agent" ? <Sparkles className="size-3.5" /> : <Lock className="size-3.5" />,
-      onSelect: () => void navigate({ to: "/settings/$section", params: { section: "notebooks" } }),
-    },
-    ...(spaces.length > 1
+    ...(canWrite
+      ? [
+          { label: t("nav.newDoc"), icon: <FileText className="size-3.5" />, onSelect: () => void newNoteAndOpen(navigate, nb.id) },
+          {
+            label: t("nav.newFolder"),
+            icon: <FolderPlus className="size-3.5" />,
+            onSelect: () => createFolder({ notebookId: nb.id, parentId: null, name: t("folder.newName") }),
+          },
+          { kind: "separator" as const },
+          { label: t("common.rename"), icon: <Pencil className="size-3.5" />, onSelect: () => setRenaming(true) },
+        ]
+      : []),
+    // A notebook of a shared space is seen by all its members, it is not shared on its own (D-62).
+    ...(!inSpace?.shared
+      ? [{ label: t("docs.share"), icon: <Share2 className="size-3.5" />, onSelect: () => useUi.setState({ shareFor: { kind: "notebook" as const, id: nb.id } }) }]
+      : []),
+    ...(role === "owner"
+      ? [
+          {
+            label: nb.mode === "agent" ? t("notebook.agent") : t("notebook.private"),
+            icon: nb.mode === "agent" ? <Sparkles className="size-3.5" /> : <Lock className="size-3.5" />,
+            onSelect: () => void navigate({ to: "/settings/$section", params: { section: "notebooks" } }),
+          },
+        ]
+      : []),
+    ...(role === "owner" && ownSpaces.length
       ? [
           {
             kind: "sub" as const,
-            label: t("docs.moveToSpace"),
+            label: inSpace?.shared ? t("spaces.moveToPersonal") : t("docs.moveToSpace"),
             icon: <Layers className="size-3.5" />,
-            items: spaces
-              .filter((s) => s.id !== nb.spaceId)
+            items: ownSpaces
+              .filter((s) => !inSpace?.shared || !s.shared)
               .map((s) => ({
-                label: s.name,
+                label: s.shared ? `${s.name} · ${t("spaces.shared")}` : s.name,
                 icon: <SpaceTile icon={spaceGlyph(s)} tint={tintName(s.color)} size={16} />,
                 onSelect: () => {
-                  moveNotebookToSpace(nb.id, s.id);
-                  toast(t("docs.movedTo", { name: s.name }));
+                  if (inSpace?.shared) void moveNotebookToPersonalSpace(t, nb.id, s.id);
+                  else if (s.shared) void moveNotebookIntoSharedSpace(t, nb.id, s.id);
+                  else {
+                    moveNotebookToSpace(nb.id, s.id);
+                    toast(t("docs.movedTo", { name: s.name }));
+                  }
                 },
               })),
           },

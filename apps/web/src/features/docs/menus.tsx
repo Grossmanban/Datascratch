@@ -32,7 +32,7 @@ import {
   trashNote,
   updateFolder,
 } from "@/domain/actions";
-import { isStarred, useWorkspace, type FolderEntry } from "@/domain/workspace";
+import { isStarred, spaceRoleOfDoc, useWorkspace, type FolderEntry } from "@/domain/workspace";
 import { sharedResourceOf } from "@/data/sharedWithMe";
 import { TINTS, tintFg } from "@/lib/tokens";
 import { useUi } from "@/hooks/useUi";
@@ -60,6 +60,8 @@ export type NewDocTarget = { notebookId: string; folderId: string | null; tag: s
  */
 export function newDocTarget(pathname: string): NewDocTarget | null {
   const st = useWorkspace.getState();
+  // A viewer of a shared space (D-62) writes nowhere in it.
+  if (st.activeSpaceId && st.spaceAccess[st.activeSpaceId]?.role === "viewer") return null;
   const inSpace = st.account.notebooks.filter((n) => n.spaceId === st.activeSpaceId);
   const [, kind, raw] = pathname.split("/");
   const id = raw ? decodeURIComponent(pathname.slice(kind!.length + 2)) : "";
@@ -200,7 +202,9 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
   // Shared with this account (D-54): no sharing or moving out of the owner's notebook; a viewer
   // only reads; a note shared on its own has no index to move it in or trash it from.
   const shared = sharedResourceOf(noteId);
-  const canEdit = !shared || shared.role === "editor";
+  // In a shared space (D-62): a viewer only reads; nobody moves a note out of the space's keys.
+  const spaceRole = spaceRoleOfDoc(st, noteId);
+  const canEdit = (!shared || shared.role === "editor") && spaceRole !== "viewer";
   const inIndex = !!n.notebookId && canEdit;
   const items: (MenuItem | false)[] = [
     ...(!opts.inDoc && features.tabs
@@ -238,7 +242,7 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
         t,
       ),
     },
-    ...(!shared && notebookTargets(noteId, n.notebookId, spaceOf, t).length
+    ...(!shared && !spaceRole && notebookTargets(noteId, n.notebookId, spaceOf, t).length
       ? [
           {
             kind: "sub" as const,
@@ -248,7 +252,7 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
           },
         ]
       : []),
-    ...(!shared && spaceTargets(noteId, n.notebookId, spaceOf, t).length
+    ...(!shared && !spaceRole && spaceTargets(noteId, n.notebookId, spaceOf, t).length
       ? [
           {
             kind: "sub" as const,
@@ -258,7 +262,7 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
           },
         ]
       : []),
-    !shared && {
+    !shared && canEdit && {
       label: t("docs.duplicate"),
       icon: <Copy className="size-3.5" />,
       onSelect: async () => {

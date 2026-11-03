@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import type * as Y from "yjs";
 import type { Folder, NoteMeta, NotebookRef, SharedRef, Space, StarredRef } from "@/lib/shared";
-import { readAccount, type AccountSnapshot, type TabEntry } from "./account";
+import { readAccount, type AccountSnapshot, type SpaceEntry, type TabEntry } from "./account";
+import { readSpaceDoc, type SpaceDocSnapshot } from "./space";
 import { readNotebook, type NotebookSnapshot, type TagProps } from "./notebook";
 
 export type NoteEntry = NoteMeta & { notebookId: string };
@@ -12,7 +13,18 @@ export type WorkspaceState = {
   ready: boolean;
   /** Account doc has synced at least once (or was created here). */
   accountSynced: boolean;
+  /**
+   * What the app shows: the account doc plus shared spaces (D-62) — other accounts' spaces this
+   * one is a member of, and every shared space's notebooks from its space doc. Writes go to the
+   * account doc (`ownAccount`) or a space doc, see domain/actions.
+   */
   account: AccountSnapshot;
+  /** The account doc as it is. */
+  ownAccount: AccountSnapshot;
+  /** Space docs of shared spaces (D-62), by spaceId. */
+  spaceDocs: Record<string, SpaceDocSnapshot>;
+  /** This account's place in shared spaces (D-62), by spaceId — set by data/sharedSpaces. */
+  spaceAccess: Record<string, SpaceAccess>;
   notebooksData: Record<string, NotebookSnapshot>;
   /** Notes shared with this account on their own, without their notebook (D-54); `notebookId` is "". */
   standaloneNotes: Record<string, NoteEntry>;
@@ -22,12 +34,33 @@ export type WorkspaceState = {
   activeSpaceId: string | null;
 };
 
-const emptyAccount: AccountSnapshot = { formatVersion: 1, spaces: [], notebooks: [], settings: {}, starred: [], tabs: [], shared: [] };
+export type SpaceAccess = {
+  role: "owner" | "editor" | "viewer";
+  /** The space's notebooks the server lists (GET /spaces/:id/notebooks); null until known. */
+  notebookIds: string[] | null;
+  /** This account holds the space key (a member: delivered by the owner's client). */
+  keyed: boolean;
+  ownerEmail?: string;
+};
+
+const emptyAccount: AccountSnapshot = {
+  formatVersion: 1,
+  spaces: [],
+  notebooks: [],
+  settings: {},
+  starred: [],
+  tabs: [],
+  shared: [],
+  sharedSpaces: [],
+};
 
 export const useWorkspace = create<WorkspaceState>(() => ({
   ready: false,
   accountSynced: false,
   account: emptyAccount,
+  ownAccount: emptyAccount,
+  spaceDocs: {},
+  spaceAccess: {},
   notebooksData: {},
   standaloneNotes: {},
   notes: {},
@@ -58,6 +91,9 @@ export function resetWorkspace() {
     ready: false,
     accountSynced: false,
     account: emptyAccount,
+    ownAccount: emptyAccount,
+    spaceDocs: {},
+    spaceAccess: {},
     notebooksData: {},
     standaloneNotes: {},
     notes: {},
@@ -67,11 +103,80 @@ export function resetWorkspace() {
 }
 
 export function refreshAccount(doc: Y.Doc) {
-  const account = readAccount(doc);
-  const st = useWorkspace.getState();
+  applyAccountView({ ownAccount: readAccount(doc), ready: true });
+}
+
+/** A shared space's doc changed (or is gone: null). */
+export function refreshSpaceDoc(spaceId: string, doc: Y.Doc | null) {
+  const spaceDocs = { ...useWorkspace.getState().spaceDocs };
+  if (doc) spaceDocs[spaceId] = readSpaceDoc(doc, spaceId);
+  else delete spaceDocs[spaceId];
+  applyAccountView({ spaceDocs });
+}
+
+export function setSpaceAccess(spaceAccess: Record<string, SpaceAccess>) {
+  applyAccountView({ spaceAccess });
+}
+
+function applyAccountView(patch: Partial<Pick<WorkspaceState, "ownAccount" | "spaceDocs" | "spaceAccess" | "ready">>) {
+  const st = { ...useWorkspace.getState(), ...patch };
+  const account = accountView(st.ownAccount, st.spaceDocs, st.spaceAccess);
   let activeSpaceId = st.activeSpaceId;
-  if (!activeSpaceId || !account.spaces.some((s) => s.id === activeSpaceId)) activeSpaceId = account.spaces[0]?.id ?? null;
-  useWorkspace.setState({ account, activeSpaceId, ready: true });
+  // A member's shared space (D-62) joins the view only once its access is read: until then it is
+  // still the active one if this account has it placed.
+  const known = (id: string) => account.spaces.some((s) => s.id === id) || st.ownAccount.sharedSpaces.some((r) => r.spaceId === id && !st.spaceAccess[id]);
+  if (st.ready && (!activeSpaceId || !known(activeSpaceId))) activeSpaceId = account.spaces[0]?.id ?? null;
+  useWorkspace.setState({ ...patch, account, activeSpaceId });
+}
+
+/**
+ * The account as shown (D-62): own spaces (a shared one marked so, this account its owner), the
+ * shared spaces it is a member of after them, and the notebooks of every shared space from its
+ * space doc — only those the server still lists, once known (document-model.md §2.2).
+ */
+export function accountView(own: AccountSnapshot, docs: Record<string, SpaceDocSnapshot>, access: Record<string, SpaceAccess>): AccountSnapshot {
+  if (!Object.keys(docs).length && !own.sharedSpaces.length && !own.spaces.some((s) => (s as SpaceEntry).shared)) return own;
+  const lastOwn = own.spaces.reduce((m, s) => Math.max(m, s.order), 0);
+  const memberSpaces: SpaceEntry[] = own.sharedSpaces
+    .filter((r) => access[r.spaceId] && access[r.spaceId]!.role !== "owner")
+    .map((r, i) => {
+      const doc = docs[r.spaceId];
+      return {
+        id: r.spaceId,
+        name: doc?.name ?? "",
+        icon: doc?.icon ?? null,
+        color: doc?.color ?? null,
+        order: lastOwn + 1 + i,
+        createdAt: r.addedAt,
+        shared: true,
+        memberOf: true,
+        role: access[r.spaceId]!.role,
+      };
+    });
+  const spaces = [...own.spaces.map((s) => ((s as SpaceEntry).shared ? { ...s, role: "owner" as const } : s)), ...memberSpaces];
+  const sharedIds = new Set(spaces.filter((s) => s.shared).map((s) => s.id));
+  const fromDocs = Object.entries(docs).flatMap(([spaceId, d]) => {
+    if (!sharedIds.has(spaceId)) return [];
+    const listed = access[spaceId]?.notebookIds;
+    return listed ? d.notebooks.filter((n) => listed.includes(n.id)) : d.notebooks;
+  });
+  const inDocs = new Set(fromDocs.map((n) => n.id));
+  return { ...own, spaces, notebooks: [...own.notebooks.filter((n) => !inDocs.has(n.id)), ...fromDocs] };
+}
+
+/** This account's role in the shared space a document (space doc, index or note) belongs to (D-62). */
+export function spaceRoleOfDoc(st: WorkspaceState, docId: string): SpaceAccess["role"] | null {
+  if (st.spaceAccess[docId]) return st.spaceAccess[docId]!.role;
+  const nb = st.notes[docId]?.notebookId ?? docId;
+  const spaceId = st.account.notebooks.find((n) => n.id === nb)?.spaceId;
+  return (spaceId && st.spaceAccess[spaceId]?.role) || null;
+}
+
+/** The shared space a notebook belongs to (D-62), or null for an own personal one. */
+export function sharedSpaceOfNotebook(st: WorkspaceState, notebookId: string | undefined): SpaceEntry | null {
+  const spaceId = st.account.notebooks.find((n) => n.id === notebookId)?.spaceId;
+  const space = st.account.spaces.find((s) => s.id === spaceId);
+  return space?.shared ? space : null;
 }
 
 export function refreshNotebook(notebookId: string, doc: Y.Doc | null) {
@@ -152,7 +257,7 @@ export function spaceNotebooks(st: WorkspaceState, spaceId: string | null): Note
   return st.account.notebooks.filter((n) => n.spaceId === spaceId);
 }
 
-export function activeSpace(st: WorkspaceState): Space | undefined {
+export function activeSpace(st: WorkspaceState): SpaceEntry | undefined {
   return st.account.spaces.find((s) => s.id === st.activeSpaceId);
 }
 

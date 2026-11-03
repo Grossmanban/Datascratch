@@ -188,6 +188,17 @@ final class LibraryStore {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    /// Sidebar counts (D-61): visible notes of the active space, and of one notebook (its
+    /// folders included).
+    var documentCount: Int {
+        let ids = activeNotebookIds
+        return data.notes.reduce(0) { $0 + (ids.contains($1.notebookId) && !$1.isTrashed && $1.kind != .inbox ? 1 : 0) }
+    }
+
+    func documentCount(inNotebook id: String) -> Int {
+        data.notes.reduce(0) { $0 + ($1.notebookId == id && !$1.isTrashed && $1.kind != .inbox ? 1 : 0) }
+    }
+
     func documents(inNotebook id: String) -> [NoteMeta] {
         documents.filter { $0.notebookId == id && $0.folderId == nil }
     }

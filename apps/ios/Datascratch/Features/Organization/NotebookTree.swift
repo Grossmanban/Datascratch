@@ -36,6 +36,11 @@ struct NotebookRow: View {
                 } else if app.accountSharing.isOpenToAgents(ShareTarget(kind: .notebook, id: notebook.id)) {
                     SharedAgentsBadge()
                 }
+                let count = library.documentCount(inNotebook: notebook.id)
+                if count > 0 {
+                    Spacer(minLength: Theme.Space.s1)
+                    SidebarCount(count)
+                }
             }
         } icon: {
             Image(systemName: notebook.icon)

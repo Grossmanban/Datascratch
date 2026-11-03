@@ -103,6 +103,9 @@ final class AppModel {
             settings = AppSettings(defaults: UserDefaults(suiteName: "ui-testing-\(UUID().uuidString)") ?? .standard)
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-dark") { settings.appearance = .dark }
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-no-finger") { settings.fingerDrawing = false }
+            // The UI tests were written against cards (`document.card`); rows are the default
+            // for people (D-61) and have their own tests (`-ui-testing-rows`).
+            if !ProcessInfo.processInfo.arguments.contains("-ui-testing-rows") { settings.libraryLayout = .grid }
             let made = Self.makeLibrary(inMemory: true)
             library = made.0
             coreLibrary = made.1

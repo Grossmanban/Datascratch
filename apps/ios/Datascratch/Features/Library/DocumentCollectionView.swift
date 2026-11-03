@@ -54,6 +54,7 @@ struct DocumentCollectionView: View {
                     ForEach(notes) { note in
                         Button { scene.open(note.id) } label: { DocumentRow(note: note) }
                             .buttonStyle(.plain)
+                            .listRowInsets(EdgeInsets(top: 6, leading: Theme.Space.s4, bottom: 6, trailing: Theme.Space.s4))
                             .listRowBackground(scene.selectedNoteId == note.id ? Theme.Palette.textPrimary.opacity(0.08) : Theme.Palette.canvas)
                             .documentActions(note)
                             .swipeActions(edge: .trailing) {
@@ -77,9 +78,7 @@ struct DocumentCollectionView: View {
         .toolbar(removing: .title)
         .modifier(SystemSearch(text: $scene.searchText, isOn: !Self.searchInList))
         .toolbar {
-            // iPad: the list's buttons on the bar's left, over the list; the right side is the
-            // document's when it is open beside it (owner, 2026-11-03: the two mixed up).
-            ToolbarItemGroup(placement: isPhone ? .topBarTrailing : .topBarLeading) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
                 Menu {
                     Picker("Layout", selection: $settings.libraryLayout) {
                         Label("Cards", systemImage: "square.grid.2x2").tag(AppSettings.LibraryLayout.grid)
@@ -91,7 +90,7 @@ struct DocumentCollectionView: View {
                 .accessibilityLabel("Layout")
                 // The open tabs are reachable with no document on screen too (owner, 2026-11-03).
                 if Features.tabs, !scene.isNoteWindow, !app.library.openTabs.isEmpty,
-                   scene.selectedNoteId == nil || (!isPhone && scene.padLevel == .list) {
+                   !scene.isDocumentShown {
                     TabOverviewButton()
                 }
                 // One «New» button (D-38): the toolbar on iPad, the floating button on iPhone.
@@ -144,14 +143,15 @@ struct DocumentCollectionView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.s3) {
+        VStack(alignment: .leading, spacing: Theme.Space.s2) {
             if case .folder(let id) = source { FolderBreadcrumb(folderId: id) }
+            // D-61: a compact title (22 pt, was 34) — the list starts higher, more fits.
             Text(title)
-                .font(Theme.Typography.title)
+                .font(Theme.Typography.h2)
                 .foregroundStyle(Theme.Palette.textPrimary)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, Theme.Space.s2)
+                .padding(.top, Theme.Space.s1)
                 .accessibilityAddTraits(.isHeader)
             if Self.searchInList { ListSearchField(text: Bindable(scene).searchText) }
             // Results come from the whole space: this level's folders would only be in the way.
@@ -402,8 +402,9 @@ struct DocumentRow: View {
                 Text(icon).font(.system(size: 22)).frame(width: 32)
             }
             VStack(alignment: .leading, spacing: 2) {
+                // D-61: compact rows (15 pt title, 13 pt text, 11–12 pt place and date).
                 Text(note.title.isEmpty ? String(localized: "Untitled") : note.title)
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.Palette.textPrimary)
                     .lineLimit(1)
                 Text(note.snippet.isEmpty ? String(localized: "No text") : note.snippet)
@@ -420,10 +421,10 @@ struct DocumentRow: View {
             }
             Spacer()
             Text(note.updatedAt, format: .dateTime.day().month(.abbreviated))
-                .font(Theme.Typography.caption)
+                .font(.caption2)
                 .foregroundStyle(Theme.Palette.textTertiary)
         }
-        .padding(.vertical, Theme.Space.s1)
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
         .draggable(note.id)
         .accessibilityIdentifier("document.row")

@@ -169,7 +169,7 @@ export async function recreateShareLinks(options: {
   for (const old of shares) {
     const share = await api.createShare({
       shareId: (options.newId ?? uuidv7)(),
-      target,
+      target: old.target,
       permission: old.permission,
       expiresAt: old.expiresAt,
     });

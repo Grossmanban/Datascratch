@@ -18,6 +18,8 @@ export function reconcileSharedRefs(
 ): { added: SharedRef[]; removed: ShareTarget[] } {
   const refs = getSharedRefs(account);
   const known = new Set(refs.map((r) => `${r.kind}:${r.id}`));
+  // Shared spaces have their own placement (`reconcileSharedSpaces`).
+  items = items.filter((i) => i.target.kind !== "space");
   const live = new Set(items.map((i) => `${i.target.kind}:${i.target.id}`));
   const added: SharedRef[] = [];
   const removed: ShareTarget[] = [];
@@ -26,7 +28,7 @@ export function reconcileSharedRefs(
     for (const item of items) {
       if (known.has(`${item.target.kind}:${item.target.id}`)) continue;
       const ref: SharedRef = {
-        kind: item.target.kind,
+        kind: item.target.kind as SharedRef["kind"],
         id: item.target.id,
         spaceId,
         order: ++order,

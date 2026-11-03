@@ -191,6 +191,7 @@ export function apiVectors() {
         valid: [
           { notebookId: ID, mode: "private", wrappedKey: "AQ" },
           { notebookId: ID, mode: "agent", wrappedKey: "AQ", notebookKey: KEY },
+          { notebookId: ID, mode: "private", wrappedKey: "AQ", spaceId: vid(6) },
         ],
         invalid: [
           {
@@ -208,9 +209,14 @@ export function apiVectors() {
           { docId: ID, kind: "account", notebookId: null },
           { docId: ID, kind: "notebook", notebookId: ID },
           { docId: vid(3), kind: "note", notebookId: ID },
+          { docId: vid(6), kind: "space", notebookId: null },
         ],
         invalid: [
           { reason: "note without notebook", body: { docId: ID, kind: "note", notebookId: null } },
+          {
+            reason: "space document inside a notebook",
+            body: { docId: vid(6), kind: "space", notebookId: ID },
+          },
           {
             reason: "notebook doc id differs from notebookId",
             body: { docId: vid(3), kind: "notebook", notebookId: ID },
@@ -244,6 +250,10 @@ export function apiVectors() {
             reason: "unknown permission",
             body: { shareId: ID, target: { kind: "note", id: vid(3) }, permission: "admin" },
           },
+          {
+            reason: "no guest links to a whole space (D-62)",
+            body: { shareId: ID, target: { kind: "space", id: vid(6) }, permission: "view" },
+          },
         ],
       },
       boxKey: {
@@ -254,6 +264,12 @@ export function apiVectors() {
       },
       createInvitationRequest: {
         valid: [
+          {
+            invitationId: ID,
+            target: { kind: "space", id: vid(6) },
+            email: "a@b.co",
+            role: "editor",
+          },
           {
             invitationId: ID,
             target: { kind: "notebook", id: vid(3) },
@@ -278,10 +294,10 @@ export function apiVectors() {
             },
           },
           {
-            reason: "spaces cannot be shared",
+            reason: "folders cannot be shared",
             body: {
               invitationId: ID,
-              target: { kind: "space", id: vid(3) },
+              target: { kind: "folder", id: vid(3) },
               email: "a@b.co",
               role: "viewer",
             },
@@ -501,6 +517,130 @@ export function apiVectors() {
           {
             reason: "author without kind",
             body: { seq: 9, createdAt: T, deviceId: "d", authors: [{ userId: vid(4) }] },
+          },
+        ],
+      },
+      sharedSpace: {
+        valid: [
+          {
+            id: vid(6),
+            ownerUserId: vid(4),
+            keyVersion: 1,
+            keyRotationPending: false,
+            pendingSinceVersion: null,
+            createdAt: T,
+          },
+          {
+            id: vid(6),
+            ownerUserId: vid(4),
+            keyVersion: 3,
+            keyRotationPending: true,
+            pendingSinceVersion: 2,
+            createdAt: T,
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing owner",
+            body: {
+              id: vid(6),
+              keyVersion: 1,
+              keyRotationPending: false,
+              pendingSinceVersion: null,
+              createdAt: T,
+            },
+          },
+        ],
+      },
+      createSpaceRequest: {
+        valid: [{ spaceId: vid(6), wrappedKey: "AQ" }],
+        invalid: [{ reason: "missing wrappedKey", body: { spaceId: vid(6) } }],
+      },
+      spaceKeyResponse: {
+        valid: [
+          {
+            version: 2,
+            wrappedKey: "AQ",
+            keyChain: ["AQ"],
+            keyRotationPending: false,
+            pendingSinceVersion: null,
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing keyChain",
+            body: {
+              version: 2,
+              wrappedKey: "AQ",
+              keyRotationPending: false,
+              pendingSinceVersion: null,
+            },
+          },
+        ],
+      },
+      spaceNotebook: {
+        valid: [{ notebookId: ID, version: 1, spaceWrappedKey: "AQ", keyChain: [], mode: "agent" }],
+        invalid: [
+          {
+            reason: "unknown mode",
+            body: {
+              notebookId: ID,
+              version: 1,
+              spaceWrappedKey: "AQ",
+              keyChain: [],
+              mode: "public",
+            },
+          },
+        ],
+      },
+      putSpaceNotebookRequest: {
+        valid: [{ version: 3, spaceWrappedKey: "AQ" }],
+        invalid: [{ reason: "version 0", body: { version: 0, spaceWrappedKey: "AQ" } }],
+      },
+      moveOutNotebookRequest: {
+        valid: [
+          { version: 2, ownerWrappedKey: "AQ", previousKeyWrap: "AQ" },
+          { version: 4, ownerWrappedKey: "AQ", previousKeyWrap: "AQ", notebookKey: KEY },
+        ],
+        invalid: [
+          {
+            reason: "moving out must produce version ≥ 2",
+            body: { version: 1, ownerWrappedKey: "AQ", previousKeyWrap: "AQ" },
+          },
+        ],
+      },
+      rotateSpaceRequest: {
+        valid: [
+          {
+            version: 2,
+            ownerWrappedKey: "AQ",
+            previousKeyWrap: "AQ",
+            memberKeys: [{ userId: vid(4), wrappedKey: "AQ" }],
+            notebooks: [
+              { notebookId: ID, version: 2, spaceWrappedKey: "AQ", previousKeyWrap: "AQ" },
+              {
+                notebookId: vid(3),
+                version: 5,
+                spaceWrappedKey: "AQ",
+                previousKeyWrap: "AQ",
+                notebookKey: KEY,
+              },
+            ],
+          },
+        ],
+        invalid: [
+          {
+            reason: "duplicate notebook",
+            body: {
+              version: 2,
+              ownerWrappedKey: "AQ",
+              previousKeyWrap: "AQ",
+              memberKeys: [],
+              notebooks: [
+                { notebookId: ID, version: 2, spaceWrappedKey: "AQ", previousKeyWrap: "AQ" },
+                { notebookId: ID, version: 2, spaceWrappedKey: "AQ", previousKeyWrap: "AQ" },
+              ],
+            },
           },
         ],
       },

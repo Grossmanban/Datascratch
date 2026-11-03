@@ -197,7 +197,9 @@ DSCore
   (у блокнота со своими участниками D-54 — `409`, остаётся личным), `Space.shared = true`;
   приглашения и выдача ключа — те же `invite`/`grantPendingKeys` с `SharingTarget(kind: .space)`
   и `ownerKey(spaceId:)`; `moveNotebookIntoSpace`, `moveNotebookOutOfSpace` (новый ключ под
-  мастер-ключом, затем `finishNotebookRotation`); смена ключа §11.4: `rotateSpaceKey` (ключ
+  мастер-ключом, затем `finishNotebookRotation`; если приложение остановилось раньше, при запуске
+  `pendingNotebookRotations()` найдёт такой блокнот — в `/shared-by-me` его уже нет — и он идёт в
+  `resumeNotebookRotation` → `finishNotebookRotation`, как общий); смена ключа §11.4: `rotateSpaceKey` (ключ
   пространства и ключи всех блокнотов одним запросом), `resumeSpaceRotation` при запуске (по
   `pendingSinceVersion`, у старого сервера — по заметкам), `finishSpaceRotation`.
 - Владелец и `editor`: `createNotebook(name:in:…)` — блокнот пространства (ключ под ключом

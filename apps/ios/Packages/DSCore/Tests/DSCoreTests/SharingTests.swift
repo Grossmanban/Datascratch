@@ -222,7 +222,7 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         case ("GET", "shared-with-me"):
             return (200, s.resources.filter { $0.value.members[me] != nil }.map { sharedItem(s, key: $0.key, for: me) })
         case ("GET", "shared-by-me"):
-            return (200, s.resources.filter { $0.value.owner == me }.map { key, r in
+            return (200, s.resources.filter { $0.value.owner == me && !$0.value.members.isEmpty }.map { key, r in
                 ["target": ["kind": String(key.split(separator: ":")[0]), "id": String(key.split(separator: ":")[1])],
                  "keyVersion": r.version, "keyRotationPending": r.pending, "pendingSinceVersion": r.pendingSince as Any? ?? NSNull(),
                  "members": r.members.count, "awaitingKey": r.members.values.filter { $0.status == "awaiting_key" }.count] as [String: Any]

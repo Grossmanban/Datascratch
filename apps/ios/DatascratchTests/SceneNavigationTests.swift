@@ -36,7 +36,8 @@ struct SceneNavigationTests {
     @Test func closingATabOpensItsNeighbour() throws {
         let app = AppModel(options: .init(uiTesting: true, signedIn: true))
         let scene = SceneModel(app: app)
-        let notebook = try #require(app.library.notebooks(in: app.library.activeSpace?.id).first)
+        let notebooks = app.library.notebooks(in: app.library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
         let a = app.library.createNote(in: notebook.id, folder: nil, title: "A")
         let b = app.library.createNote(in: notebook.id, folder: nil, title: "B")
         let c = app.library.createNote(in: notebook.id, folder: nil, title: "C")

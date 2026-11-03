@@ -314,6 +314,8 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         case ("POST", "notebooks", 1):
             guard let spaceId = b["spaceId"] as? String else { return Self.err(500, "only space notebooks here") }
             guard let r = space(spaceId), r.owner == me || r.members[me]?.role == "editor" else { return Self.err(403, "forbidden") }
+            guard let version = b["spaceKeyVersion"] as? Int else { return Self.err(400, "bad_request") }
+            guard version == r.version else { return Self.err(409, "conflict") }
             let id = b["notebookId"] as! String
             s.spaceNotebooks[spaceId, default: [:]][id] = .init(version: 1, wrapped: b["wrappedKey"] as! String, chain: [], mode: b["mode"] as! String)
             s.resources["space:\(spaceId)"]!.docIds.append(id)

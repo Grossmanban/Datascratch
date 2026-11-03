@@ -183,15 +183,19 @@ public struct CreateNotebookRequest: Codable, Sendable {
     public var notebookKey: Base64URLData?
     /// A notebook of this shared space (D-62): `wrappedKey` is then under the space key.
     public var spaceId: String?
+    /// The version of the space key `wrappedKey` is under; not the current one → `409` (a
+    /// notebook made during a space key rotation would stay under the old key).
+    public var spaceKeyVersion: Int?
 
-    enum CodingKeys: String, CodingKey { case notebookId, mode, wrappedKey, notebookKey, spaceId }
+    enum CodingKeys: String, CodingKey { case notebookId, mode, wrappedKey, notebookKey, spaceId, spaceKeyVersion }
 
-    public init(notebookId: String, mode: NotebookMode, wrappedKey: Data, notebookKey: Data?, spaceId: String? = nil) {
+    public init(notebookId: String, mode: NotebookMode, wrappedKey: Data, notebookKey: Data?, spaceId: String? = nil, spaceKeyVersion: Int? = nil) {
         self.notebookId = notebookId
         self.mode = mode
         self.wrappedKey = .init(wrappedKey)
         self.notebookKey = notebookKey.map(Base64URLData.init)
         self.spaceId = spaceId
+        self.spaceKeyVersion = spaceKeyVersion
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -201,6 +205,7 @@ public struct CreateNotebookRequest: Codable, Sendable {
         try c.encode(wrappedKey, forKey: .wrappedKey)
         try c.encodeIfPresent(notebookKey, forKey: .notebookKey)
         try c.encodeIfPresent(spaceId, forKey: .spaceId)
+        try c.encodeIfPresent(spaceKeyVersion, forKey: .spaceKeyVersion)
     }
 
     public init(from decoder: any Decoder) throws {
@@ -211,6 +216,8 @@ public struct CreateNotebookRequest: Codable, Sendable {
         wrappedKey = try V.bytes(c, .wrappedKey, nonEmpty: true)
         notebookKey = c.contains(.notebookKey) ? try V.bytes(c, .notebookKey, length: 32) : nil
         spaceId = try V.optionalUUID(c, .spaceId)
+        spaceKeyVersion = try c.decodeIfPresent(Int.self, forKey: .spaceKeyVersion)
+        if let v = spaceKeyVersion, v < 1 { throw V.fail(c, .spaceKeyVersion, "version ≥ 1") }
         guard (mode == .agent) == (notebookKey != nil) else {
             throw V.fail(c, .notebookKey, "notebookKey is required for mode=agent and forbidden for mode=private")
         }

@@ -201,7 +201,8 @@ DSCore
   пространства и ключи всех блокнотов одним запросом), `resumeSpaceRotation` при запуске (по
   `pendingSinceVersion`, у старого сервера — по заметкам), `finishSpaceRotation`.
 - Владелец и `editor`: `createNotebook(name:in:…)` — блокнот пространства (ключ под ключом
-  пространства, `POST /notebooks` со `spaceId`).
+  пространства, `POST /notebooks` со `spaceId` и `spaceKeyVersion`; при `409` — ключ сменился —
+  берёт новый ключ пространства и оборачивает заново).
 - Все: `refreshSharedSpaces()` при запуске — ключи своих общих пространств и ключи их блокнотов,
   документы для синхронизации; `loadSpaceNotebookKeys(_:)`; участник получает ключ пространства
   из «Общих со мной» (`refreshSharedWithMe`, `SharedItem` с `kind = space`), регистрируются документ

@@ -46,7 +46,8 @@ final class ServerAccountSharingService: AccountSharingService {
         isRefreshing = true
         defer { isRefreshing = false }
         if let invitations = try? await api.incomingInvitations() {
-            incoming = invitations.map(Self.incoming)
+            // Shared spaces (D-62) are not shown by this version yet.
+            incoming = invitations.filter { $0.target.kind != .space }.map(Self.incoming)
         }
         if let items = try? await accounts.refreshSharedWithMe() {
             apply(items)
@@ -64,7 +65,8 @@ final class ServerAccountSharingService: AccountSharingService {
     /// are taken over once (`migrateMemberTrust`).
     private func ownerDuties() async {
         guard await trustReady(), let items = try? await api.sharedByMe() else { return }
-        for item in items {
+        // Shared spaces (D-62) are not handled by this version yet.
+        for item in items where item.target.kind != .space {
             let target = Self.target(item.target)
             if item.keyRotationPending {
                 await continueRotation(of: target)
@@ -122,7 +124,8 @@ final class ServerAccountSharingService: AccountSharingService {
 
     private func apply(_ items: [SharedItem]) {
         for item in items { names[item.owner.userId] = item.owner.email }
-        sharedWithMe = items.map { item in
+        // Shared spaces (D-62) are not shown by this version yet: never mapped to a note.
+        sharedWithMe = items.filter { $0.target.kind != .space }.map { item in
             SharedWithMe(target: Self.target(item.target), ownerEmail: item.owner.email,
                          role: item.role == .viewer ? .viewer : .editor, isReadable: item.wrappedKey != nil,
                          agentsMode: item.agentsMode == true)

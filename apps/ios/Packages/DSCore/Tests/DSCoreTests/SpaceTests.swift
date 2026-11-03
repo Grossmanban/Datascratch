@@ -154,6 +154,36 @@ import Testing
         #expect(try await ipad.service.finishSpaceRotation(spaceId, notebooks: [indexAfterStep1]))
     }
 
+    /// A notebook made with a stale space key (a rotation happened meanwhile): `409`, the new
+    /// key is taken and the notebook wrapped again — it never stays under the old key.
+    @Test func notebookCreatedDuringASpaceRotationUsesTheNewKey() async throws {
+        let server = FakeSharingServer()
+        let owner = try await device(server, email: "o@x.co")
+        let anna = try await device(server, email: "a@x.co")
+        let leaving = try await device(server, email: "l@x.co")
+        let (account, spaceId, notebook, _) = try await ownerLibrary(owner, server: server)
+        _ = try await owner.service.shareSpace(spaceId, in: account)
+        let target = SharingTarget(kind: .space, id: spaceId)
+        for (d, email) in [(anna, "a@x.co"), (leaving, "l@x.co")] {
+            let inv = try await owner.service.invite(email, role: .editor, to: target)
+            _ = try await d.service.acceptInvitation(id: inv)
+        }
+        let (k1, v1) = try await owner.service.ownerKey(spaceId: spaceId)
+        try await owner.service.grantPendingKeys(to: target, key: k1, version: v1)
+        _ = try await anna.service.refreshSharedWithMe()
+        try await owner.service.api.removeMember(userId: leaving.userId, from: target)
+        try await owner.service.rotateSpaceKey(spaceId, notebooks: [notebook])
+        // Anna still holds version 1.
+        #expect(anna.service.keys.spaceKeyVersion(spaceId) == 1)
+        let created = try await anna.service.createNotebook(name: "Late", in: SpaceDocument(spaceId: spaceId), order: 3)
+        #expect(anna.service.keys.spaceKeyVersion(spaceId) == 2)
+        let entry = try #require(server.state.withLock { $0.spaceNotebooks[spaceId]?[created.notebookId] })
+        let (k2, _) = try await owner.service.ownerKey(spaceId: spaceId)
+        let opened = try DSCrypto.unwrapKey(try #require(Base64URL.decode(entry.wrapped)), with: k2,
+                                            ad: CryptoAD.spaceNotebookKey(spaceId: spaceId, notebookId: created.notebookId, version: 1))
+        #expect(opened == (try anna.service.keys.notebookKey(created.notebookId)))
+    }
+
     /// «Shared with me» never hands this account a key for one of its own spaces.
     @Test func ownSpaceFromSharedWithMeIsRefused() async throws {
         let server = FakeSharingServer()

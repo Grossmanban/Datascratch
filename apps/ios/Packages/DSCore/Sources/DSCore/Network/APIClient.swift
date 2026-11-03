@@ -178,8 +178,11 @@ public actor APIClient {
 
     /// `notebookKey` only for `mode = .agent` (crypto.md §8).
     /// `spaceId`: a notebook of that shared space, `wrappedKey` under the space key (D-62).
-    public func createNotebook(id: String, mode: NotebookMode, wrappedKey: Data, notebookKey: Data? = nil, spaceId: String? = nil) async throws -> NotebookInfo {
-        try await call("POST", "/notebooks", body: CreateNotebookRequest(notebookId: id, mode: mode, wrappedKey: wrappedKey, notebookKey: notebookKey, spaceId: spaceId),
+    /// `spaceKeyVersion`: the space key version `wrappedKey` is under (with `spaceId`).
+    public func createNotebook(id: String, mode: NotebookMode, wrappedKey: Data, notebookKey: Data? = nil, spaceId: String? = nil,
+                               spaceKeyVersion: Int? = nil) async throws -> NotebookInfo {
+        try await call("POST", "/notebooks", body: CreateNotebookRequest(notebookId: id, mode: mode, wrappedKey: wrappedKey, notebookKey: notebookKey,
+                                                                         spaceId: spaceId, spaceKeyVersion: spaceKeyVersion),
                        idempotent: true)
     }
 

@@ -102,11 +102,21 @@ extension AccountService {
     public func createNotebook(name: String, in space: SpaceDocument, mode: NotebookMode = .private, icon: String? = nil, color: String? = nil,
                                order: Double) async throws -> NotebookDocument {
         let spaceId = space.spaceId
-        let (spaceKey, _) = try ownerKey(spaceId: spaceId)
         let id = EntityID.make()
         let key = DSCrypto.newKey()
-        let wrapped = try DSCrypto.wrapKey(key, with: spaceKey, ad: CryptoAD.spaceNotebookKey(spaceId: spaceId, notebookId: id, version: 1))
-        _ = try await api.createNotebook(id: id, mode: mode, wrappedKey: wrapped, notebookKey: mode == .agent ? key : nil, spaceId: spaceId)
+        var wrapped = Data()
+        for attempt in 0..<2 {
+            let (spaceKey, spaceVersion) = try ownerKey(spaceId: spaceId)
+            wrapped = try DSCrypto.wrapKey(key, with: spaceKey, ad: CryptoAD.spaceNotebookKey(spaceId: spaceId, notebookId: id, version: 1))
+            do {
+                _ = try await api.createNotebook(id: id, mode: mode, wrappedKey: wrapped, notebookKey: mode == .agent ? key : nil,
+                                                 spaceId: spaceId, spaceKeyVersion: spaceVersion)
+                break
+            } catch APIError.server(409, _, _) where attempt == 0 {
+                // The space key changed meanwhile: take the new one and wrap again.
+                try await refreshSpaceKey(spaceId)
+            }
+        }
         try keys.addSpaceNotebookKey(spaceWrapped: wrapped, spaceId: spaceId, notebookId: id, version: 1, chain: [])
         keys.markNotebookKeyVerified(id)
         try await api.registerDoc(docId: id, kind: .notebook, notebookId: id)
@@ -146,6 +156,17 @@ extension AccountService {
             try store.ensureDocument(docId: nb.notebookId, kind: .notebook, notebookId: nb.notebookId)
         }
         return notebooks
+    }
+
+    /// The current space key from the server: the owner's (`GET /spaces/:id/key`), else a
+    /// member's (from «Shared with me»).
+    func refreshSpaceKey(_ spaceId: String) async throws {
+        let me = try await signedInUserId
+        if try await api.sharedSpaces().first(where: { $0.id == spaceId })?.ownerUserId == me {
+            try await adoptOwnerSpaceKey(spaceId)
+        } else if let item = try await api.sharedWithMe().first(where: { $0.target == spaceTarget(spaceId) }) {
+            _ = try await adoptShared(item)
+        }
     }
 
     /// The owner's space key from the server (another device of the owner made the space shared

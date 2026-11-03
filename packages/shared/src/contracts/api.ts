@@ -369,16 +369,23 @@ export const MAX_MEMBERS = 50;
 export const INVITATION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const MAX_INVITATIONS_PER_DAY = 50;
 
-/** `space`: a shared space (D-62); only in account sharing, not in guest links (`/shares`). */
+/** A notebook or a note (D-54 sharing and guest links). */
 export const shareTargetSchema = z.object({
-  kind: z.enum(["note", "notebook", "space"]),
-  id: uuidSchema,
-});
-/** Guest links (`/shares`) target a note or a notebook only. */
-export const linkTargetSchema = z.object({
   kind: z.enum(["note", "notebook"]),
   id: uuidSchema,
 });
+/** Guest links (`/shares`) target a note or a notebook only, never a whole space (D-62). */
+export const linkTargetSchema = shareTargetSchema;
+/**
+ * Any resource of account sharing, shared spaces included (D-62). The narrower D-54 schemas
+ * (`shareTargetSchema`, `sharedItemSchema`, …) stay as they are for code that handles notebooks
+ * and notes only; the `account…` ones below also accept `kind = "space"`.
+ */
+export const accountTargetSchema = z.object({
+  kind: z.enum(["note", "notebook", "space"]),
+  id: uuidSchema,
+});
+export type AccountTarget = z.infer<typeof accountTargetSchema>;
 export type ShareTarget = z.infer<typeof shareTargetSchema>;
 
 export const boxKeySchema = z.object({
@@ -396,6 +403,11 @@ export const createInvitationRequestSchema = z.object({
   role: memberRoleSchema,
 });
 export type CreateInvitationRequest = z.infer<typeof createInvitationRequestSchema>;
+/** Invitations to shared spaces too (D-62). */
+export const accountCreateInvitationRequestSchema = createInvitationRequestSchema.extend({
+  target: accountTargetSchema,
+});
+export type AccountCreateInvitationRequest = z.infer<typeof accountCreateInvitationRequestSchema>;
 
 export const INVITATION_STATUSES = ["pending", "accepted", "declined", "expired"] as const;
 
@@ -418,6 +430,10 @@ export const incomingInvitationSchema = z.object({
   expiresAt: isoDateTimeSchema,
 });
 export type IncomingInvitation = z.infer<typeof incomingInvitationSchema>;
+export const accountIncomingInvitationSchema = incomingInvitationSchema.extend({
+  target: accountTargetSchema,
+});
+export type AccountIncomingInvitation = z.infer<typeof accountIncomingInvitationSchema>;
 
 export const memberSchema = z.object({
   userId: uuidSchema,
@@ -464,6 +480,10 @@ export const sharedByMeItemSchema = z.object({
   awaitingKey: z.number().int().nonnegative(),
 });
 export type SharedByMeItem = z.infer<typeof sharedByMeItemSchema>;
+export const accountSharedByMeItemSchema = sharedByMeItemSchema.extend({
+  target: accountTargetSchema,
+});
+export type AccountSharedByMeItem = z.infer<typeof accountSharedByMeItemSchema>;
 
 export const sharedNoteKeyResponseSchema = z.object({
   version: keyVersionSchema,
@@ -489,6 +509,12 @@ export const sharedItemSchema = z.object({
   agentsMode: z.boolean().optional(),
 });
 export type SharedItem = z.infer<typeof sharedItemSchema>;
+/**
+ * `/shared-with-me` items of every kind (D-62). For `kind = "space"`, `wrappedKey` is the
+ * spaceKey for this member and `docIds` covers the space document and all its notebooks.
+ */
+export const accountSharedItemSchema = sharedItemSchema.extend({ target: accountTargetSchema });
+export type AccountSharedItem = z.infer<typeof accountSharedItemSchema>;
 
 // ---------------------------------------------------------------------------
 // Shared spaces (D-62, api.md «Общие пространства», crypto.md §11)

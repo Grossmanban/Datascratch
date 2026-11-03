@@ -397,3 +397,74 @@ describe("account sharing vectors (D-54)", () => {
     expect(v.safetyCode).toMatch(/^\d{5}( \d{5}){5}$/);
   });
 });
+
+describe("shared space vectors (D-62)", () => {
+  it("opens the spaceKey as owner and member, its chain and the space's notebook keys", async () => {
+    const c = await import("../src/index.js");
+    const s = load("crypto/sharing.json");
+    const v = load("crypto/spaces.json");
+    const masterKey = fromHex(s.accounts.owner.masterKey);
+    const owner = c.generateBoxKeyPair(fromHex(s.accounts.owner.seed));
+    const member = c.generateBoxKeyPair(fromHex(s.accounts.member.seed));
+    const keys = v.spaceKeys.map((k: Json) => k.key as string);
+    for (const w of v.ownerWraps) {
+      expect(c.toHex(c.unwrapSpaceKey(masterKey, w.wrappedKey, v.spaceId, w.version))).toBe(
+        keys[w.version - 1],
+      );
+      expect(
+        c.wrapSpaceKey(masterKey, fromHex(keys[w.version - 1]), v.spaceId, w.version, {
+          nonce: fromHex(w.nonce),
+        }),
+      ).toBe(w.wrappedKey);
+    }
+    const owned = c.ownerSpaceKeys(
+      {
+        version: 2,
+        wrappedKey: v.ownerWraps[1].wrappedKey,
+        keyChain: v.keyChain,
+        keyRotationPending: false,
+        pendingSinceVersion: null,
+      },
+      masterKey,
+      v.spaceId,
+    );
+    expect(owned.keys.map(c.toHex)).toEqual([keys[1], keys[0]]);
+
+    // The member's SharedItem for the space.
+    const item = {
+      target: { kind: "space" as const, id: v.spaceId },
+      owner: { userId: v.ownerId, email: "o@x.co", publicKey: c.toBase64Url(owner.publicKey) },
+      role: "editor" as const,
+      keyVersion: 2,
+      wrappedKey: v.memberWrap.wrappedKey,
+      keyChain: v.keyChain,
+      docIds: [v.spaceId],
+      addedAt: "2026-11-03T12:00:00.000Z",
+    };
+    const mine = c.sharedItemKeys(item, { userId: v.memberId, secretKey: member.secretKey })!;
+    expect(mine.keys.map(c.toHex)).toEqual([keys[1], keys[0]]);
+
+    const nb = v.notebook;
+    const nk = c.spaceNotebookKeys(nb.entry, mine.keys, v.spaceId);
+    expect(nk.keys.map(c.toHex)).toEqual([nb.keys[1].key, nb.keys[0].key]);
+    // An entry still under the older spaceKey opens through the space chain.
+    expect(c.spaceNotebookKeys(nb.olderEntry, mine.keys, v.spaceId).keys.map(c.toHex)).toEqual([
+      nb.keys[0].key,
+    ]);
+    const wraps: Record<string, string> = {
+      "ownerWraps[1]": v.ownerWraps[1].wrappedKey,
+      memberWrap: v.memberWrap.wrappedKey,
+      "notebook.entry": nb.entry.spaceWrappedKey,
+    };
+    const wrapKeys: Record<string, Uint8Array> = {
+      "ownerWraps[1]": masterKey,
+      memberWrap: c.memberWrapKey(member.secretKey, owner.publicKey),
+      "notebook.entry": fromHex(keys[1]),
+    };
+    for (const bad of v.invalid)
+      expect(
+        () => c.unwrapKey(wrapKeys[bad.wrap]!, wraps[bad.wrap]!, bad.ad),
+        bad.reason,
+      ).toThrow();
+  });
+});

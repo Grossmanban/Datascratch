@@ -73,6 +73,13 @@ const me = await ensureAccountKeyPair(api, userId, masterKey);
 - Производительность первой синхронизации: `pnpm --filter @datascratch/shared bench 10000 <задержка хранилища, мс>`; 10 000 заметок ≈ 6 с на клиенте (цель spec/11 — до минуты). Реализациям `SyncStorage` стоит поддержать пакетные `getDocStates`/`setDocStates`: курсоры пишутся пачками раз в 200 мс.
 - Клиент синхронизации считает `lastSeq` по максимуму полученных `seq` (из `update`, `updates`, `ack`): сервер обязан рассылать обновления документа в порядке `seq`.
 
+### Общие пространства (D-62)
+
+- **Ключи** (`crypto.md` §11): `wrapSpaceKey` / `unwrapSpaceKey` — ключ пространства под мастер-ключом владельца; участник получает его обёрткой §10.2 с `kind = "space"` (`wrapKeyForMember`, у участника — `sharedItemKeys`). Ключи блокнотов пространства — `wrapNotebookKeyForSpace` / `unwrapNotebookKeyFromSpace`; из ответа `GET /spaces/:id/notebooks` — `spaceNotebookKeys(entry, spaceKeys.keys, spaceId)`. Владелец: `ownerSpaceKeys(api.getSpaceKey(id), masterKey, id)`.
+- **Документ пространства:** `createSpaceDoc` / `getSpaceMeta` / `setSpaceMeta`, блокноты — `getSpaceNotebookRefs` / `putSpaceNotebookRef` (`SpaceNotebookRef` = `NotebookRef` без `spaceId`). Переключатель у участника — `account.sharedSpaces`: `reconcileSharedSpaces(accountDoc, await api.sharedWithMeAll())`.
+- **Типы:** D-54-схемы (`shareTargetSchema`, `sharedItemSchema`, `sharedByMeItemSchema`, …) по-прежнему только про блокноты и заметки; `account…`-схемы (`accountTargetSchema`, `accountSharedItemSchema`, …) принимают и `kind = "space"`. `api.sharedWithMe()` / `sharedByMe()` / `incomingInvitations()` отдают только блокноты и заметки, `…All()` — всё. Сервер пространства — `SharedSpace` (`Space` занято записью пространства в документе аккаунта).
+- **Владелец:** `maintainOwnedSpaces` выдаёт ключ пространства принявшим приглашение (с записью доверия и `confirm`). Смена ключа пространства (§11.4) — следующим шагом.
+
 ## Разработка
 
 ```bash

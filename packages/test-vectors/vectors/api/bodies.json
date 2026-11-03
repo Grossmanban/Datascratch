@@ -500,15 +500,6 @@
         {
           "invitationId": "0192f3c4-0000-7000-8000-000000000001",
           "target": {
-            "kind": "space",
-            "id": "0192f3c4-0000-7000-8000-000000000006"
-          },
-          "email": "a@b.co",
-          "role": "editor"
-        },
-        {
-          "invitationId": "0192f3c4-0000-7000-8000-000000000001",
-          "target": {
             "kind": "notebook",
             "id": "0192f3c4-0000-7000-8000-000000000003"
           },
@@ -875,6 +866,158 @@
                 "userId": "0192f3c4-0000-7000-8000-000000000004"
               }
             ]
+          }
+        }
+      ]
+    },
+    "accountCreateInvitationRequest": {
+      "valid": [
+        {
+          "invitationId": "0192f3c4-0000-7000-8000-000000000001",
+          "target": {
+            "kind": "space",
+            "id": "0192f3c4-0000-7000-8000-000000000006"
+          },
+          "email": "a@b.co",
+          "role": "editor"
+        },
+        {
+          "invitationId": "0192f3c4-0000-7000-8000-000000000001",
+          "target": {
+            "kind": "notebook",
+            "id": "0192f3c4-0000-7000-8000-000000000003"
+          },
+          "email": "a@b.co",
+          "role": "viewer"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "folders cannot be shared",
+          "body": {
+            "invitationId": "0192f3c4-0000-7000-8000-000000000001",
+            "target": {
+              "kind": "folder",
+              "id": "0192f3c4-0000-7000-8000-000000000003"
+            },
+            "email": "a@b.co",
+            "role": "viewer"
+          }
+        }
+      ]
+    },
+    "accountIncomingInvitation": {
+      "valid": [
+        {
+          "id": "0192f3c4-0000-7000-8000-000000000001",
+          "target": {
+            "kind": "space",
+            "id": "0192f3c4-0000-7000-8000-000000000006"
+          },
+          "from": {
+            "userId": "0192f3c4-0000-7000-8000-000000000004",
+            "email": "owner@b.co"
+          },
+          "role": "editor",
+          "createdAt": "2026-10-25T12:00:00.000Z",
+          "expiresAt": "2026-10-25T12:00:00.000Z"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "unknown kind",
+          "body": {
+            "id": "0192f3c4-0000-7000-8000-000000000001",
+            "target": {
+              "kind": "folder",
+              "id": "0192f3c4-0000-7000-8000-000000000006"
+            },
+            "from": {
+              "userId": "0192f3c4-0000-7000-8000-000000000004",
+              "email": "o@b.co"
+            },
+            "role": "editor",
+            "createdAt": "2026-10-25T12:00:00.000Z",
+            "expiresAt": "2026-10-25T12:00:00.000Z"
+          }
+        }
+      ]
+    },
+    "accountSharedItem": {
+      "valid": [
+        {
+          "target": {
+            "kind": "space",
+            "id": "0192f3c4-0000-7000-8000-000000000006"
+          },
+          "owner": {
+            "userId": "0192f3c4-0000-7000-8000-000000000004",
+            "email": "owner@b.co",
+            "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          },
+          "role": "editor",
+          "keyVersion": 2,
+          "wrappedKey": "AQ",
+          "keyChain": [
+            "AQ"
+          ],
+          "docIds": [
+            "0192f3c4-0000-7000-8000-000000000006",
+            "0192f3c4-0000-7000-8000-000000000003",
+            "0192f3c4-0000-7000-8000-000000000005"
+          ],
+          "addedAt": "2026-10-25T12:00:00.000Z"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "unknown kind",
+          "body": {
+            "target": {
+              "kind": "folder",
+              "id": "0192f3c4-0000-7000-8000-000000000006"
+            },
+            "owner": {
+              "userId": "0192f3c4-0000-7000-8000-000000000004",
+              "email": "o@b.co",
+              "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            },
+            "role": "editor",
+            "keyVersion": 1,
+            "wrappedKey": null,
+            "keyChain": [],
+            "docIds": [],
+            "addedAt": "2026-10-25T12:00:00.000Z"
+          }
+        }
+      ]
+    },
+    "accountSharedByMeItem": {
+      "valid": [
+        {
+          "target": {
+            "kind": "space",
+            "id": "0192f3c4-0000-7000-8000-000000000006"
+          },
+          "keyVersion": 1,
+          "keyRotationPending": false,
+          "pendingSinceVersion": null,
+          "members": 2,
+          "awaitingKey": 1
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "unknown kind",
+          "body": {
+            "target": {
+              "kind": "folder",
+              "id": "0192f3c4-0000-7000-8000-000000000006"
+            },
+            "keyVersion": 1,
+            "keyRotationPending": false,
+            "members": 0,
+            "awaitingKey": 0
           }
         }
       ]

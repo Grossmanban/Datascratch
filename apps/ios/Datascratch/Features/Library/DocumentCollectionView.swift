@@ -11,6 +11,15 @@ struct DocumentCollectionView: View {
 
     private var library: LibraryStore { app.library }
 
+    /// Where a note lives, under its title: not in its own notebook's or folder's list, where it
+    /// only repeats the title above (owner, 2026-11-03); a search there spans the space.
+    private var showsLocation: Bool {
+        switch source {
+        case .notebook, .folder: !scene.searchText.isEmpty
+        default: true
+        }
+    }
+
     var body: some View {
         @Bindable var scene = scene
         @Bindable var settings = app.settings
@@ -52,7 +61,7 @@ struct DocumentCollectionView: View {
                             .listRowSeparator(.hidden)
                     }
                     ForEach(notes) { note in
-                        Button { scene.open(note.id) } label: { DocumentRow(note: note) }
+                        Button { scene.open(note.id) } label: { DocumentRow(note: note, showsLocation: showsLocation) }
                             .buttonStyle(.plain)
                             .listRowInsets(EdgeInsets(top: 6, leading: Theme.Space.s4, bottom: 6, trailing: Theme.Space.s4))
                             .listRowBackground(scene.selectedNoteId == note.id ? Theme.Palette.textPrimary.opacity(0.08) : Theme.Palette.canvas)
@@ -383,6 +392,7 @@ struct DocumentCard: View {
 struct DocumentRow: View {
     @Environment(AppModel.self) private var app
     let note: NoteMeta
+    var showsLocation = true
 
     var body: some View {
         HStack(spacing: Theme.Space.s3) {
@@ -411,7 +421,7 @@ struct DocumentRow: View {
                     .font(Theme.Typography.footnote)
                     .foregroundStyle(Theme.Palette.textSecondary)
                     .lineLimit(1)
-                if let place = NoteLocation.text(of: note, app: app) {
+                if showsLocation, let place = NoteLocation.text(of: note, app: app) {
                     Text(place)
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.textTertiary)
@@ -667,44 +677,53 @@ struct FolderStrip: View {
     @Environment(SceneModel.self) private var scene
     let folders: [Folder]
 
+    /// Owner, 2026-11-03: the chips looked unfinished. Folders are rows in one quiet card, as
+    /// in Notes and Files — icon in the folder's colour, name, how many documents, chevron.
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Theme.Space.s2) {
-                ForEach(folders) { folder in card(folder) }
+        VStack(spacing: 0) {
+            ForEach(Array(folders.enumerated()), id: \.element.id) { index, folder in
+                row(folder)
+                if index < folders.count - 1 {
+                    Divider().padding(.leading, 52)
+                }
             }
-            .padding(.vertical, 2)
         }
-        .scrollClipDisabled()
+        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md, style: .continuous).strokeBorder(Theme.Palette.separator))
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("library.folderStrip")
     }
 
-    private func card(_ folder: Folder) -> some View {
-        let library = app.library
-        let tint = library.notebook(folder.notebookId)?.color ?? folder.color
-        let count = library.documents(inFolderTree: folder.id).count
+    private func row(_ folder: Folder) -> some View {
+        let count = app.library.documents(inFolderTree: folder.id).count
         return Button {
             scene.show(.folder(folder.id))
         } label: {
-            HStack(spacing: Theme.Space.s2) {
+            HStack(spacing: Theme.Space.s3) {
                 Image(systemName: folder.icon)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(folder.color.foreground)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(folder.name)
-                        .font(Theme.Typography.body.weight(.medium))
-                        .foregroundStyle(Theme.Palette.textPrimary)
-                        .lineLimit(1)
-                    Text("\(count) documents")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.textSecondary)
+                    .frame(width: 28, height: 28)
+                    .background(folder.color.background.opacity(0.7),
+                                in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                Text(folder.name)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: Theme.Space.s2)
+                if count > 0 {
+                    Text(count, format: .number)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(Theme.Palette.textTertiary)
+                        .accessibilityLabel(Text("\(count) documents"))
                 }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.textTertiary)
             }
             .padding(.horizontal, Theme.Space.s3)
             .padding(.vertical, Theme.Space.s2)
-            .frame(minWidth: 132, alignment: .leading)
-            .background(tint.background.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(tint.foreground.opacity(0.15)))
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .contextMenu { FolderMenuItems(folder: folder) }

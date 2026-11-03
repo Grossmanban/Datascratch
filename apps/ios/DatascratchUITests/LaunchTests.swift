@@ -1032,6 +1032,25 @@ final class LibraryUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(editors.count, 2, "the new window shows no document")
     }
 
+    /// The ⌘K search finds a document by a Cyrillic title and leaves the commands that do not
+    /// match out (owner's iPad, 2026-11-03: the typed word listed the default commands).
+    func testCommandPaletteFindsADocument() throws {
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        app.typeText("Баги\nТекст")
+        settle(1)
+        let paletteButton = sidebarElement(app, "sidebar.commandPalette")
+        XCTAssertTrue(paletteButton.exists, "command palette button not found; buttons: \(Self.buttons(app))")
+        paletteButton.tap()
+        let field = app.textFields["palette.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
+        field.typeText("Баги")
+        let found = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Баги'")).firstMatch
+        XCTAssertTrue(found.waitForExistence(timeout: 5), "the document is not in the results")
+        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Open Trash'")).firstMatch.exists,
+                       "a command that does not match is still listed")
+    }
+
     func testCommandPaletteOpensTasks() throws {
         let app = launchSignedIn(Self.extendedMode)
         let paletteButton = sidebarElement(app, "sidebar.commandPalette")

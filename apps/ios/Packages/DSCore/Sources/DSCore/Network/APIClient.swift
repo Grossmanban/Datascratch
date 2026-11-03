@@ -177,8 +177,13 @@ public actor APIClient {
     // MARK: Notebooks and documents
 
     /// `notebookKey` only for `mode = .agent` (crypto.md §8).
-    public func createNotebook(id: String, mode: NotebookMode, wrappedKey: Data, notebookKey: Data? = nil) async throws -> NotebookInfo {
-        try await call("POST", "/notebooks", body: CreateNotebookRequest(notebookId: id, mode: mode, wrappedKey: wrappedKey, notebookKey: notebookKey), idempotent: true)
+    /// `spaceId`: a notebook of that shared space, `wrappedKey` under the space key (D-62).
+    /// `spaceKeyVersion`: the space key version `wrappedKey` is under (with `spaceId`).
+    public func createNotebook(id: String, mode: NotebookMode, wrappedKey: Data, notebookKey: Data? = nil, spaceId: String? = nil,
+                               spaceKeyVersion: Int? = nil) async throws -> NotebookInfo {
+        try await call("POST", "/notebooks", body: CreateNotebookRequest(notebookId: id, mode: mode, wrappedKey: wrappedKey, notebookKey: notebookKey,
+                                                                         spaceId: spaceId, spaceKeyVersion: spaceKeyVersion),
+                       idempotent: true)
     }
 
     public func notebooks() async throws -> [NotebookInfo] { try await call("GET", "/notebooks") }
@@ -363,6 +368,45 @@ public actor APIClient {
     public func sharedWithMe() async throws -> [SharedItem] { try await call("GET", "/shared-with-me") }
 
     public func sharedByMe() async throws -> [SharedByMeItem] { try await call("GET", "/shared-by-me") }
+
+    // MARK: Shared spaces (D-62)
+
+    /// Makes this account's space shared: `wrappedKey` is the space key under the master key.
+    public func createSharedSpace(id: String, wrappedKey: Data) async throws -> SharedSpace {
+        try await call("POST", "/spaces", body: CreateSpaceRequest(spaceId: id, wrappedKey: wrappedKey), idempotent: true)
+    }
+
+    /// Shared spaces this account owns or is a member of (with or without a key).
+    public func sharedSpaces() async throws -> [SharedSpace] { try await call("GET", "/spaces") }
+
+    /// The owner's space key with its version, chain and rotation state.
+    public func spaceKeyState(id: String) async throws -> SpaceKeyState { try await call("GET", "/spaces/\(seg(id))/key") }
+
+    /// The space's notebooks and their keys under the space key.
+    public func spaceNotebooks(id: String) async throws -> [SpaceNotebook] { try await call("GET", "/spaces/\(seg(id))/notebooks") }
+
+    /// The owner moves a personal notebook into the shared space (`409`: not the current
+    /// version, or the notebook has its own members).
+    public func moveNotebookIntoSpace(_ request: SpaceNotebookKeyRequest, notebookId: String, spaceId: String) async throws {
+        _ = try await send("PUT", "/spaces/\(seg(spaceId))/notebooks/\(seg(notebookId))", body: request)
+    }
+
+    /// The owner moves a notebook out of the shared space with a new notebook key.
+    public func moveNotebookOutOfSpace(_ request: MoveOutRequest, notebookId: String, spaceId: String) async throws {
+        _ = try await send("POST", "/spaces/\(seg(spaceId))/notebooks/\(seg(notebookId))/move-out", body: request)
+    }
+
+    /// Atomic rotation of the space key and every notebook key of the space (crypto.md §11.4).
+    public func rotateSpaceKey(_ request: RotateSpaceRequest, spaceId: String) async throws {
+        _ = try await send("POST", "/spaces/\(seg(spaceId))/rotate", body: request)
+    }
+
+    public func spaceRotationDone(spaceId: String) async throws {
+        _ = try await send("POST", "/spaces/\(seg(spaceId))/rotate/done", body: [String: String](), idempotent: true)
+    }
+
+    /// The owner deletes the shared space, its notebooks and documents.
+    public func deleteSharedSpace(id: String) async throws { _ = try await send("DELETE", "/spaces/\(seg(id))") }
 
     /// Called once when the server reports this device revoked (D-53), from any request; the
     /// app wipes local data. Not called for expired or rejected tokens or network failures.

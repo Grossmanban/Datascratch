@@ -413,7 +413,7 @@ public actor SyncEngine: SyncClientDelegate {
         if let i = focused.firstIndex(of: record.docId) { return 2 + i }
         switch record.kind {
         case .account: return 0
-        case .notebook: return 1
+        case .notebook, .space: return 1
         case .note: return 100
         }
     }
@@ -884,6 +884,9 @@ public struct KeyRingDocumentKeys: Sendable {
             if let shared = try keyRing.sharedNoteKey(record.docId) { return shared }
             guard let nb = record.notebookId, let meta = noteMeta(record.docId, nb) else { return nil }
             return try keyRing.noteKey(meta, notebookId: nb)
+        case .space:
+            // The space document: the space key (crypto.md §11.1); docId = spaceId.
+            return try keyRing.spaceKey(record.docId)
         }
     }
 
@@ -894,6 +897,8 @@ public struct KeyRingDocumentKeys: Sendable {
         switch record.kind {
         case .account: true
         case .notebook, .note: record.notebookId.map(keyRing.isNotebookKeyVerified) ?? keyRing.isNotebookKeyVerified(record.docId)
+        // Only ever from the server (the owner's master-key wrap or the owner's member wrap).
+        case .space: (try? keyRing.spaceKey(record.docId)) != nil
         }
     }
 
@@ -907,6 +912,7 @@ public struct KeyRingDocumentKeys: Sendable {
             if (try? keyRing.sharedNoteKey(record.docId)) != nil { return keyRing.retiredSharedNoteKeys(record.docId) }
             guard let nb = record.notebookId, let meta = noteMeta(record.docId, nb) else { return [] }
             return keyRing.earlierNoteKeys(meta, notebookId: nb)
+        case .space: return keyRing.retiredSpaceKeys(record.docId)
         }
     }
 }

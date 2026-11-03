@@ -51,23 +51,51 @@ public struct Space: MapRecord {
     public var color: String?
     public var order: Double
     public var createdAt: String
+    /// The owner made it a shared space (D-62, document-model.md §2.1); absent = false. Its
+    /// notebooks then live in the space document, not in `notebooks` of the account.
+    public var shared: Bool = false
 
-    public init(id: String = EntityID.make(), name: String, icon: String? = nil, color: String? = nil, order: Double, createdAt: String = DSDate.iso(Date())) {
+    public init(id: String = EntityID.make(), name: String, icon: String? = nil, color: String? = nil, order: Double, createdAt: String = DSDate.iso(Date()),
+                shared: Bool = false) {
         self.id = id
         self.name = name
         self.icon = icon
         self.color = color
         self.order = order
         self.createdAt = createdAt
+        self.shared = shared
     }
 
     public var fields: [String: YValue] {
-        ["id": .string(value: id), "name": .string(value: name), "icon": .optionalString(icon), "color": .optionalString(color),
-         "order": .number(value: order), "createdAt": .string(value: createdAt)]
+        var f: [String: YValue] = ["id": .string(value: id), "name": .string(value: name), "icon": .optionalString(icon), "color": .optionalString(color),
+                                   "order": .number(value: order), "createdAt": .string(value: createdAt)]
+        if shared { f["shared"] = .bool(value: true) }
+        return f
     }
 
     public init?(id: String, fields f: [String: YValue]) {
-        self.init(id: id, name: str(f, "name") ?? "", icon: str(f, "icon"), color: str(f, "color"), order: num(f, "order") ?? 0, createdAt: str(f, "createdAt") ?? "")
+        self.init(id: id, name: str(f, "name") ?? "", icon: str(f, "icon"), color: str(f, "color"), order: num(f, "order") ?? 0, createdAt: str(f, "createdAt") ?? "",
+                  shared: f["shared"]?.boolValue ?? false)
+    }
+}
+
+/// A shared space this account is a member of (`sharedSpaces` of the account document, D-62):
+/// placement in the space switcher only — access and key are on the server.
+public struct SharedSpaceRef: MapRecord {
+    public var id: String
+    public var order: Double
+    public var addedAt: String
+
+    public init(id: String, order: Double, addedAt: String = DSDate.iso(Date())) {
+        self.id = id
+        self.order = order
+        self.addedAt = addedAt
+    }
+
+    public var fields: [String: YValue] { ["order": .number(value: order), "addedAt": .string(value: addedAt)] }
+
+    public init?(id: String, fields f: [String: YValue]) {
+        self.init(id: id, order: num(f, "order") ?? 0, addedAt: str(f, "addedAt") ?? "")
     }
 }
 
@@ -322,7 +350,15 @@ struct RecordJSON {
 extension Space: Decodable {
     public init(from decoder: any Decoder) throws {
         let r = try RecordJSON(decoder)
-        self.init(id: r.id, name: r.str("name") ?? "", icon: r.str("icon"), color: r.str("color"), order: r.num("order") ?? 0, createdAt: r.str("createdAt") ?? "")
+        self.init(id: r.id, name: r.str("name") ?? "", icon: r.str("icon"), color: r.str("color"), order: r.num("order") ?? 0, createdAt: r.str("createdAt") ?? "",
+                  shared: r.object("shared", as: Bool.self) ?? false)
+    }
+}
+
+extension SharedSpaceRef: Decodable {
+    public init(from decoder: any Decoder) throws {
+        let r = try RecordJSON(decoder)
+        self.init(id: r.id, order: r.num("order") ?? 0, addedAt: r.str("addedAt") ?? "")
     }
 }
 

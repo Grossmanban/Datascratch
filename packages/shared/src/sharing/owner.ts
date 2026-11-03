@@ -2,16 +2,17 @@
 // finish or start key rotations, repair NoteMeta of shared notes, re-create
 // guest links after a rotation and deliver keys to accepted members.
 import type * as Y from "yjs";
-import type { Member, ShareTarget, SharedByMeItem } from "../contracts/api.js";
+import type { AccountTarget, Member, ShareTarget, SharedByMeItem } from "../contracts/api.js";
 import { getNoteMeta } from "../document/records.js";
 import type { SharingApi } from "./api.js";
-import { noteKeysFromMeta, ownerNotebookKeys, type VersionedKeys } from "./keys.js";
+import { noteKeysFromMeta, ownerNotebookKeys, ownerSpaceKeys, type VersionedKeys } from "./keys.js";
 import {
   deliverAwaitingKeys,
   type ConfirmReason,
   type MemberVetting,
   type OwnerIdentity,
 } from "./members.js";
+import { rotateSpaceKey, type RotateSpaceOptions } from "./spaces.js";
 import {
   recreateShareLinks,
   repairSharedNoteMeta,
@@ -187,4 +188,95 @@ async function deliver(o: OwnerMaintenanceOptions, target: ShareTarget, keys: Ve
     ...(o.vetting ? { vetting: o.vetting } : {}),
   });
   return members.map((m) => m.userId);
+}
+
+/**
+ * The owner's pass over shared spaces (D-62, `GET /shared-by-me` items of kind `space`): a pending
+ * rotation of the spaceKey is run or resumed (crypto.md §11.4, needs `rotation`; without it the
+ * space is `skipped` — no new member gets a key that is about to be replaced), then the spaceKey
+ * goes to members that accepted, vetted like any key (trust.ts, `confirm`).
+ */
+export async function maintainOwnedSpaces(options: {
+  api: Pick<
+    SharingApi,
+    | "sharedByMeAll"
+    | "getSpaceKey"
+    | "listSpaceNotebooks"
+    | "listMembers"
+    | "getPublicKey"
+    | "putMemberKey"
+    | "rotateSpace"
+    | "rotateSpaceDone"
+  >;
+  owner: OwnerIdentity;
+  masterKey: Uint8Array;
+  confirm?: (
+    target: AccountTarget,
+    member: Member,
+    reason: ConfirmReason,
+  ) => boolean | Promise<boolean>;
+  vetting?: MemberVetting;
+  rotation?: Pick<RotateSpaceOptions, "notebookIndex" | "whenIndexSent" | "onKeys">;
+}): Promise<
+  (
+    | { target: AccountTarget; delivered: string[]; rotated?: boolean; skipped?: string }
+    | { target: AccountTarget; error: unknown }
+  )[]
+> {
+  const o = options;
+  const out: (
+    | { target: AccountTarget; delivered: string[]; rotated?: boolean; skipped?: string }
+    | { target: AccountTarget; error: unknown }
+  )[] = [];
+  for (const item of await o.api.sharedByMeAll()) {
+    const { target } = item;
+    if (target.kind !== "space") continue;
+    try {
+      let rotated = false;
+      let keys;
+      if (item.keyRotationPending) {
+        if (!o.rotation) {
+          out.push({ target, delivered: [], skipped: "space key rotation pending" });
+          continue;
+        }
+        keys = (
+          await rotateSpaceKey({
+            api: o.api,
+            spaceId: target.id,
+            owner: o.owner,
+            masterKey: o.masterKey,
+            ...o.rotation,
+            ...(o.vetting ? { vetting: o.vetting } : {}),
+            ...(o.confirm
+              ? { confirm: (m: Member, r: ConfirmReason) => o.confirm!(target, m, r) }
+              : {}),
+          })
+        ).space;
+        rotated = true;
+      } else {
+        keys = ownerSpaceKeys(await o.api.getSpaceKey(target.id), o.masterKey, target.id);
+      }
+      const delivered =
+        item.awaitingKey > 0
+          ? await deliverAwaitingKeys({
+              api: o.api,
+              target,
+              keys,
+              owner: o.owner,
+              ...(o.vetting ? { vetting: o.vetting } : {}),
+              ...(o.confirm
+                ? { confirm: (m: Member, r: ConfirmReason) => o.confirm!(target, m, r) }
+                : {}),
+            })
+          : [];
+      out.push({
+        target,
+        delivered: delivered.map((m) => m.userId),
+        ...(rotated ? { rotated } : {}),
+      });
+    } catch (error) {
+      out.push({ target, error });
+    }
+  }
+  return out;
 }

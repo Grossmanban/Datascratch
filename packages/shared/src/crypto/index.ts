@@ -9,3 +9,4 @@ export * from "./attachments.js";
 export * from "./share-link.js";
 export * from "../contracts/crypto.js";
 export * from "./sharing.js";
+export * from "./spaces.js";

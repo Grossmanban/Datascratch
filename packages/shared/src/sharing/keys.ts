@@ -1,7 +1,14 @@
 // Keys of account sharing (crypto.md §10, D-54): the account key pair and the
 // notebook/note keys of shared resources, newest first with their old versions.
 import { AD } from "../contracts/crypto.js";
-import type { NotebookKeyResponse, SharedItem } from "../contracts/api.js";
+import type {
+  AccountSharedItem,
+  NotebookKeyResponse,
+  SharedItem,
+  SpaceKeyResponse,
+  SpaceNotebook,
+} from "../contracts/api.js";
+import { unwrapNotebookKeyFromSpace, unwrapSpaceKey } from "../crypto/spaces.js";
 import type { NoteMeta } from "../contracts/document.js";
 import { fromBase64Url, toBase64Url } from "../crypto/base64url.js";
 import { CryptoError } from "../crypto/errors.js";
@@ -80,7 +87,7 @@ export function ownerNotebookKeys(
 
 /** A member's keys of a shared notebook/note; null until the owner delivered them. */
 export function sharedItemKeys(
-  item: SharedItem,
+  item: SharedItem | AccountSharedItem,
   me: { userId: string; secretKey: Uint8Array },
 ): VersionedKeys | null {
   if (!item.wrappedKey) return null;
@@ -128,4 +135,51 @@ export function noteKeysFromMeta(
     };
   }
   throw new CryptoError("decrypt_failed", `no notebook key opens the key of note ${meta.id}`);
+}
+
+/** The owner's keys of a shared space from `GET /spaces/:id/key` (crypto.md §11.1). */
+export function ownerSpaceKeys(
+  res: SpaceKeyResponse,
+  masterKey: Uint8Array,
+  spaceId: string,
+): VersionedKeys {
+  const current = unwrapSpaceKey(masterKey, res.wrappedKey, spaceId, res.version);
+  return {
+    version: res.version,
+    keys: unwrapKeyChain(current, res.version, res.keyChain, "space", spaceId),
+  };
+}
+
+/**
+ * Keys of a notebook of a shared space from `GET /spaces/:id/notebooks`. The wrap is under the
+ * spaceKey current when it was made, so every known spaceKey is tried, newest first; the
+ * notebook's own older keys come from its chain (crypto.md §10.3).
+ */
+export function spaceNotebookKeys(
+  entry: SpaceNotebook,
+  spaceKeys: Uint8Array[],
+  spaceId: string,
+): VersionedKeys {
+  for (const spaceKey of spaceKeys) {
+    let current: Uint8Array;
+    try {
+      current = unwrapNotebookKeyFromSpace(
+        spaceKey,
+        entry.spaceWrappedKey,
+        spaceId,
+        entry.notebookId,
+        entry.version,
+      );
+    } catch {
+      continue;
+    }
+    return {
+      version: entry.version,
+      keys: unwrapKeyChain(current, entry.version, entry.keyChain, "notebook", entry.notebookId),
+    };
+  }
+  throw new CryptoError(
+    "decrypt_failed",
+    `no key of space ${spaceId} opens the key of notebook ${entry.notebookId}`,
+  );
 }

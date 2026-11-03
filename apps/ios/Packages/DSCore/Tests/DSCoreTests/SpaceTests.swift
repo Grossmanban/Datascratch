@@ -222,3 +222,84 @@ import Testing
         #expect(account.spaces().first?.shared == true)
     }
 }
+
+/// crypto.md §11 against core's crypto/spaces.json (same bytes as TS).
+@Suite(.enabled(if: FileManager.default.fileExists(atPath: Vectors.root.appendingPathComponent("crypto/spaces.json").path)))
+struct SpaceVectorTests {
+    let f: [String: Any]
+    let accounts: [String: [String: String]]
+    init() throws {
+        f = try Vectors.json("crypto/spaces.json")
+        accounts = try Vectors.json("crypto/sharing.json")["accounts"] as! [String: [String: String]]
+    }
+
+    var spaceId: String { f["spaceId"] as! String }
+    func spaceKey(_ v: Int) throws -> Data { try Vectors.hex((f["spaceKeys"] as! [[String: Any]]).first { $0["version"] as! Int == v }!["key"]) }
+
+    @Test func ownerWrapsAndChainThroughTheKeyRing() throws {
+        let master = try Vectors.hex(accounts["owner"]!["masterKey"])
+        for w in f["ownerWraps"] as! [[String: Any]] {
+            let v = w["version"] as! Int
+            #expect(CryptoAD.targetKey(.space, spaceId, version: v) == w["ad"] as! String)
+            #expect(try DSCrypto.wrapKey(try spaceKey(v), with: master, ad: w["ad"] as! String, nonce: try Vectors.hex(w["nonce"])) == (try Vectors.b64(w["wrappedKey"])))
+        }
+        // The owner's device: v2 under the master key with its chain → v1 kept for older data.
+        let keys = KeyRing(store: InMemorySecretStore())
+        try keys.setMasterKey(master)
+        let v2 = (f["ownerWraps"] as! [[String: Any]]).first { $0["version"] as! Int == 2 }!
+        #expect(CryptoAD.previousKey(.space, spaceId, version: 2) == (f["keyChainAds"] as! [String])[0])
+        try keys.addSpaceKey(wrapped: try Vectors.b64(v2["wrappedKey"]), spaceId: spaceId, version: 2,
+                             chain: try (f["keyChain"] as! [Any]).map { try Vectors.b64($0) })
+        #expect(try keys.spaceKey(spaceId) == spaceKey(2) && keys.spaceKeyVersion(spaceId) == 2)
+        #expect(keys.retiredSpaceKeys(spaceId) == [try spaceKey(1)])
+    }
+
+    @Test func memberWrap() throws {
+        let m = f["memberWrap"] as! [String: Any]
+        let ref = MemberKeyRef(kind: .space, targetId: spaceId, version: m["version"] as! Int, fromUserId: m["fromUserId"] as! String, toUserId: m["toUserId"] as! String)
+        #expect(CryptoAD.memberKey(ref) == m["ad"] as! String)
+        let wrapped = try DSCrypto.wrapKeyForMember(try spaceKey(2), ownerSecretKey: try Vectors.hex(accounts["owner"]!["secretKey"]),
+                                                    memberPublicKey: try Vectors.hex(accounts["member"]!["publicKey"]), ref: ref, nonce: try Vectors.hex(m["nonce"]))
+        #expect(wrapped == (try Vectors.b64(m["wrappedKey"])))
+        #expect(try DSCrypto.unwrapKeyFromOwner(wrapped, memberSecretKey: try Vectors.hex(accounts["member"]!["secretKey"]),
+                                                ownerPublicKey: try Vectors.hex(accounts["owner"]!["publicKey"]), ref: ref) == spaceKey(2))
+    }
+
+    /// `GET /spaces/:id/notebooks` entries: the current one under spaceKey v2 with its chain, an
+    /// older one under v1 (every space key is tried, newest first).
+    @Test func notebookEntries() throws {
+        let nb = f["notebook"] as! [String: Any]
+        let nbId = nb["notebookId"] as! String
+        let nbKeys = Dictionary(uniqueKeysWithValues: try (nb["keys"] as! [[String: Any]]).map { ($0["version"] as! Int, try Vectors.hex($0["key"])) })
+        #expect(CryptoAD.spaceNotebookKey(spaceId: spaceId, notebookId: nbId, version: 2) == nb["ad"] as! String)
+        let entry = try JSONDecoder().decode(SpaceNotebook.self, from: try JSONSerialization.data(withJSONObject: nb["entry"]!))
+        #expect(try DSCrypto.wrapKey(nbKeys[2]!, with: try spaceKey(2), ad: nb["ad"] as! String, nonce: try Vectors.hex(nb["nonce"])) == entry.spaceWrappedKey.data)
+
+        let keys = KeyRing(store: InMemorySecretStore())
+        try keys.adoptSpaceKey(try spaceKey(2), version: 2, olderKeys: [try spaceKey(1)], spaceId: spaceId)
+        try keys.addSpaceNotebookKey(spaceWrapped: entry.spaceWrappedKey.data, spaceId: spaceId, notebookId: nbId, version: entry.version, chain: entry.keyChain.map(\.data))
+        #expect(try keys.notebookKey(nbId) == nbKeys[2] && keys.notebookKeyVersion(nbId) == 2)
+        #expect(keys.retiredNotebookKeys(nbId) == [nbKeys[1]!])
+        #expect(keys.spaceOfNotebook(nbId) == spaceId)
+
+        let older = try JSONDecoder().decode(SpaceNotebook.self, from: try JSONSerialization.data(withJSONObject: nb["olderEntry"]!))
+        let other = KeyRing(store: InMemorySecretStore())
+        try other.adoptSpaceKey(try spaceKey(2), version: 2, olderKeys: [try spaceKey(1)], spaceId: spaceId)
+        try other.addSpaceNotebookKey(spaceWrapped: older.spaceWrappedKey.data, spaceId: spaceId, notebookId: nbId, version: older.version, chain: [])
+        #expect(try other.notebookKey(nbId) == nbKeys[1])
+    }
+
+    @Test func wrongAdsAreRefused() throws {
+        let master = try Vectors.hex(accounts["owner"]!["masterKey"])
+        let wraps: [String: (Data, Data)] = [
+            "ownerWraps[1]": (try Vectors.b64((f["ownerWraps"] as! [[String: Any]])[1]["wrappedKey"]), master),
+            "memberWrap": (try Vectors.b64((f["memberWrap"] as! [String: Any])["wrappedKey"]),
+                           try DSCrypto.memberWrapKey(mySecretKey: try Vectors.hex(accounts["member"]!["secretKey"]), peerPublicKey: try Vectors.hex(accounts["owner"]!["publicKey"]))),
+            "notebook.entry": (try Vectors.b64(((f["notebook"] as! [String: Any])["entry"] as! [String: Any])["spaceWrappedKey"]), try spaceKey(2)),
+        ]
+        for c in f["invalid"] as! [[String: String]] {
+            let (wrapped, key) = try #require(wraps[c["wrap"]!], "\(c["wrap"]!)")
+            #expect(throws: (any Error).self, "\(c["reason"]!)") { try DSCrypto.unwrapKey(wrapped, with: key, ad: c["ad"]!) }
+        }
+    }
+}

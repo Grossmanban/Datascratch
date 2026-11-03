@@ -218,6 +218,7 @@ public struct CreateNotebookRequest: Codable, Sendable {
         spaceId = try V.optionalUUID(c, .spaceId)
         spaceKeyVersion = try c.decodeIfPresent(Int.self, forKey: .spaceKeyVersion)
         if let v = spaceKeyVersion, v < 1 { throw V.fail(c, .spaceKeyVersion, "version ≥ 1") }
+        if (spaceId == nil) != (spaceKeyVersion == nil) { throw V.fail(c, .spaceKeyVersion, "spaceId and spaceKeyVersion come together") }
         guard (mode == .agent) == (notebookKey != nil) else {
             throw V.fail(c, .notebookKey, "notebookKey is required for mode=agent and forbidden for mode=private")
         }

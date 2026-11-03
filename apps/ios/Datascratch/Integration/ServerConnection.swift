@@ -233,6 +233,9 @@ final class ServerConnection: CoreLibraryRemote {
     func checkConnection() {
         guard let engine else { return }
         Task { await engine.client.checkConnection() }
+        // Uploads cut off while the app was in the background (another app opened mid-upload)
+        // went up only after a relaunch: pictures were missing on other devices (2026-11-03).
+        uploadPendingAttachments()
     }
 
     /// The person opened a note: it is caught up before the other documents.

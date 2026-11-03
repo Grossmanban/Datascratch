@@ -80,9 +80,21 @@ struct SidebarView: View {
                 .accessibilityIdentifier("sidebar.commandPalette")
             }
         }
+        // Rows scrolling past the space switcher and the footer are hidden, not shown through
+        // them (owner, 2026-11-03: a note's name under «Личное», a tag under the footer).
+        .scrollEdgeEffectStyle(.hard, for: [.top, .bottom])
         .contentMargins(.bottom, footerHeight, for: .scrollContent)
         .overlay(alignment: .bottom) {
             SidebarFooter()
+                .background(alignment: .bottom) {
+                    // The sidebar's paper behind the glass, fading in above it.
+                    LinearGradient(stops: [.init(color: Theme.Palette.sidebar.opacity(0), location: 0),
+                                           .init(color: Theme.Palette.sidebar, location: 0.35)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .padding(.top, -Theme.Space.s4)
+                        .ignoresSafeArea(edges: .bottom)
+                        .allowsHitTesting(false)
+                }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { footerHeight = $0 }
         }
         .onChange(of: scene.sidebar) { _, _ in

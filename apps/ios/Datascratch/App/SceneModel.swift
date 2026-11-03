@@ -282,11 +282,17 @@ final class SceneModel {
         }
     }
 
-    /// Closes the open document and its tab (⌘W).
+    /// Closes the open document's tab (⌘W, × on the tab or in the document bar): the tab next to
+    /// it opens; after the last one, the folder or notebook the document was in.
     func closeTab() {
         guard let id = selectedNoteId else { return }
-        closeDocument()
-        if Features.tabs { library.closeTab(id) }
+        guard Features.tabs, let next = library.closeTab(id) else {
+            closeDocument()
+            if Features.tabs { library.closeTab(id) }
+            return
+        }
+        library.recordVersion(ofNote: id)
+        open(next)
     }
 
     func closeDocument() {

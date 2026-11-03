@@ -351,6 +351,30 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
     }
 
+    /// «Insert → File» opens the Files picker (it never opened: two file importers on one screen).
+    func testAttachFileOpensFilesPicker() throws {
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        app.typeText("File note\n")
+        let insert = app.buttons["editor.insert"].firstMatch
+        if insert.waitForExistence(timeout: 3) {
+            insert.tap()
+        } else {
+            app.buttons["document.more"].firstMatch.tap()
+            app.buttons["Insert"].firstMatch.tap()
+        }
+        let file = app.buttons["insert.file"].firstMatch
+        XCTAssertTrue(file.waitForExistence(timeout: 5), "no File entry in Insert; buttons: \(Self.buttons(app))")
+        file.tap()
+        let picker = app.descendants(matching: .any)["files.picker"].firstMatch
+        let cancel = app.buttons["Cancel"].firstMatch
+        let shown = NSPredicate { _, _ in picker.exists || cancel.exists }
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: shown, evaluatedWith: nil)], timeout: 10), .completed,
+                       "the Files picker did not open; buttons: \(Self.buttons(app))")
+        if cancel.exists { cancel.tap() } else { app.swipeDown(velocity: .fast) }
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
+    }
+
     /// Back to the list: the back button on iPhone, «Close Document» on iPad.
     private func leaveDocument(_ app: XCUIApplication) {
         let close = app.buttons["document.close"].firstMatch

@@ -66,8 +66,20 @@ public actor AttachmentManager {
         return id
     }
 
+    /// Uploads running now, so a retry (the app back in the foreground) joins an upload in
+    /// progress instead of sending the same chunks twice.
+    private var running: [String: Task<Void, Error>] = [:]
+
     /// Uploads (or resumes) one attachment with the note key.
     public func upload(_ attachmentId: String, noteKey: Data) async throws {
+        if let task = running[attachmentId] { return try await task.value }
+        let task = Task { try await self.performUpload(attachmentId, noteKey: noteKey) }
+        running[attachmentId] = task
+        defer { running[attachmentId] = nil }
+        try await task.value
+    }
+
+    private func performUpload(_ attachmentId: String, noteKey: Data) async throws {
         let file = try fileURL(attachmentId)
         guard let record = try store.attachment(attachmentId), record.localPath != nil else { return }
         let data = try Data(contentsOf: file)

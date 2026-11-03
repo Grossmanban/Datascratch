@@ -108,11 +108,6 @@ struct DocumentScreen: View {
                 Image(systemName: "chevron.right").font(.caption2)
                 Text(folder.name)
             }
-            ForEach(note.tags, id: \.self) { tag in
-                Button("#" + tag) { scene.show(.tag(tag)) }
-                    .buttonStyle(.plain)
-                    .foregroundStyle((library.data.tagColors[tag] ?? .gray).foreground)
-            }
         }
         .font(Theme.Typography.footnote)
         .foregroundStyle(Theme.Palette.textTertiary)
@@ -121,8 +116,6 @@ struct DocumentScreen: View {
 
     @ToolbarContentBuilder
     private func toolbar(_ note: NoteMeta) -> some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) { CloseDocumentButton() }
-        ToolbarItem(placement: .topBarLeading) { FullScreenButton() }
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button {
                 library.toggleStar(.note, note.id)
@@ -165,6 +158,10 @@ struct DocumentScreen: View {
             }
             .accessibilityLabel("More")
             .accessibilityIdentifier("document.more")
+        }
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            FullScreenButton()
+            CloseDocumentButton()
         }
     }
 }
@@ -218,14 +215,15 @@ struct BacklinksSection: View {
     }
 }
 
-/// iPad: closes the document; what was beside it takes the whole width.
+/// iPad: closes the document's tab — the tab next to it opens; after the last one, what was
+/// beside it takes the whole width (owner, 2026-11-03: × left the tab open).
 struct CloseDocumentButton: View {
     @Environment(SceneModel.self) private var scene
 
     var body: some View {
         if UIDevice.current.userInterfaceIdiom == .pad, scene.selectedNoteId != nil, !scene.isNoteWindow {
-            Button { scene.closeDocument() } label: { Image(systemName: "xmark") }
-                .accessibilityLabel("Close Document")
+            Button { scene.closeTab() } label: { Image(systemName: "xmark") }
+                .accessibilityLabel("Close Tab")
                 .accessibilityIdentifier("document.close")
         }
     }

@@ -607,16 +607,23 @@ final class LibraryStore {
         }
     }
 
-    func closeTab(_ noteId: String) {
+    /// Closes a tab and returns its neighbour in the same space — the next tab, or the previous
+    /// one when it was the last — which becomes active if the closed tab was (owner, 2026-11-03:
+    /// closing a tab opens the one next to it, as in a browser).
+    @discardableResult
+    func closeTab(_ noteId: String) -> String? {
+        let space = data.spaceId(ofNote: noteId)
+        let inSpace = data.tabs.filter { data.spaceId(ofNote: $0) == space }
+        let neighbour = inSpace.firstIndex(of: noteId).flatMap { i in
+            i + 1 < inSpace.count ? inSpace[i + 1] : (i > 0 ? inSpace[i - 1] : nil)
+        }
         mutate { snapshot in
             snapshot.tabs.removeAll { $0 == noteId }
             var map = snapshot.activeTabBySpace ?? [:]
-            for (space, id) in map where id == noteId {
-                // The space's last other tab becomes active.
-                map[space] = snapshot.tabs.last { snapshot.spaceId(ofNote: $0) == space }
-            }
+            for (space, id) in map where id == noteId { map[space] = neighbour }
             snapshot.activeTabBySpace = map
         }
+        return neighbour
     }
 
     func setTagColor(_ color: Tint?, for tag: String) {

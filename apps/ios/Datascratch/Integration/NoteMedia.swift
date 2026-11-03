@@ -215,6 +215,7 @@ struct MediaInsertItems: View {
             Button("Take Photo", systemImage: "camera") { model.mediaChooser = .camera }
         }
         Button("File", systemImage: "paperclip") { model.mediaChooser = .files }
+            .accessibilityIdentifier("insert.file")
         if UIPasteboard.general.hasImages {
             Button("Paste Image", systemImage: "doc.on.clipboard") { Task { await model.insertPastedImages() } }
         }
@@ -268,9 +269,13 @@ struct MediaPickers: ViewModifier {
                     await model.insertImages(data)
                 }
             }
-            .fileImporter(isPresented: showing(.files), allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-                guard case .success(let urls) = result else { return }
-                Task { await model.insertFiles(urls) }
+            // UIKit's picker, not `.fileImporter`: SwiftUI honours one file importer per view
+            // chain, and the document screen already has the cover's — this one never opened.
+            .sheet(isPresented: showing(.files)) {
+                DocumentPicker(onFiles: { urls in Task { await model.insertFiles(urls) } },
+                               onClose: { model.mediaChooser = nil })
+                    .ignoresSafeArea()
+                    .accessibilityIdentifier("files.picker")
             }
             .fullScreenCover(isPresented: showing(.camera)) {
                 CameraPicker(onPhoto: { data in Task { await model.insertImages([data]) } },
@@ -396,6 +401,35 @@ struct CameraPicker: UIViewControllerRepresentable {
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { parent.onClose() }
+    }
+}
+
+/// The Files picker for note attachments; copies, so no security-scoped access is needed.
+struct DocumentPicker: UIViewControllerRepresentable {
+    let onFiles: ([URL]) -> Void
+    let onClose: () -> Void
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+        picker.allowsMultipleSelection = true
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let parent: DocumentPicker
+        init(_ parent: DocumentPicker) { self.parent = parent }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            parent.onFiles(urls)
+            parent.onClose()
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { parent.onClose() }
     }
 }
 #endif

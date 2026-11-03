@@ -494,9 +494,10 @@ struct NativeEditorToolbar: ToolbarContent {
     }
 
     var body: some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarLeading) {
-            CloseDocumentButton()
-            FullScreenButton()
+        // Everything of the document on its right, as in Notesnook and Notes: the bar's left
+        // side belongs to the list beside it (owner, 2026-11-03 — ×, ⤢, ↶ ↷ on the left read as
+        // the list's).
+        ToolbarItemGroup(placement: .topBarTrailing) {
             let _ = model.revision
             if !isViewOnly {
             Button { model.editor.undo() } label: { Image(systemName: "arrow.uturn.backward") }
@@ -573,6 +574,10 @@ struct NativeEditorToolbar: ToolbarContent {
             .accessibilityLabel("More")
             .accessibilityIdentifier("document.more")
         }
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            FullScreenButton()
+            CloseDocumentButton()
+        }
     }
 }
 
@@ -615,8 +620,13 @@ struct NativeDocumentHeader: View {
     private func meta(_ note: NoteMeta) -> some View {
         let library = app.library
         return HStack(spacing: Theme.Space.s2) {
+            // Where the document lives, each part opens its list. Tags are in the text itself:
+            // next to the path they read as part of it (owner, 2026-11-03).
             if let notebook = library.notebook(note.notebookId) {
-                Label(notebook.name, systemImage: notebook.icon)
+                Button { scene.show(.notebook(notebook.id)) } label: {
+                    Label(notebook.name, systemImage: notebook.icon)
+                }
+                .buttonStyle(.plain)
             }
             // D-54: the owner's agents read this shared note (shown only).
             if app.accountSharing.isOpenToAgents(noteId: note.id, notebookId: note.notebookId) {
@@ -625,12 +635,8 @@ struct NativeDocumentHeader: View {
             }
             if let folder = note.folderId.flatMap({ library.folder($0) }) {
                 Image(systemName: "chevron.right").font(.caption2)
-                Text(folder.name)
-            }
-            ForEach(note.tags, id: \.self) { tag in
-                Button("#" + tag) { scene.show(.tag(tag)) }
+                Button(folder.name) { scene.show(.folder(folder.id)) }
                     .buttonStyle(.plain)
-                    .foregroundStyle((library.data.tagColors[tag] ?? .gray).foreground)
             }
         }
         .font(Theme.Typography.footnote)

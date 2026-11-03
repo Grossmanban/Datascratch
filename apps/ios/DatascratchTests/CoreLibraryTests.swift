@@ -266,6 +266,27 @@ struct CoreLibraryTests {
         #expect(try core.notebookDocument(notebook.id).note(id: noteId)?.title == "Agent note")
     }
 
+    /// A note moved on another device (the web, an agent): the local record follows it, or the
+    /// note's key was never found and its edits waited for a key forever (2026-11-03).
+    @Test func aNoteMovedElsewhereFollowsInTheLocalRecord() throws {
+        let keys = KeyRing(store: InMemorySecretStore())
+        let store = try LocalStore.inMemory()
+        let core = try CoreLibrary(store: store, keys: keys)
+        let library = LibraryStore(backend: core)
+        let space = library.createSpace(name: "S")
+        let a = library.createNotebook(in: space.id, name: "A")
+        let b = library.createNotebook(in: space.id, name: "B")
+        let note = library.createNote(in: a.id, folder: nil, title: "Moved")
+        _ = core.loadSnapshot()
+        #expect(try store.document(note.id)?.notebookId == a.id)
+
+        let meta = try #require(try core.notebookDocument(a.id).note(id: note.id))
+        try core.notebookDocument(a.id).purgeNote(id: note.id, origin: .remote)
+        try core.notebookDocument(b.id).putNote(meta, origin: .remote)
+        _ = core.loadSnapshot()
+        #expect(try store.document(note.id)?.notebookId == b.id)
+    }
+
     /// After a sync merged an empty title block in front of the real one, the index keeps the
     /// first non-empty title.
     @Test func indexTakesTheFirstNonEmptyTitle() throws {

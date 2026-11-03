@@ -30,4 +30,30 @@ struct SceneNavigationTests {
         scene.closeDocument()
         #expect(scene.sidebar == .starred)
     }
+
+    /// Owner's feedback 2026-11-03: closing a tab opens the tab next to it; the last one closed
+    /// shows the document's folder or notebook.
+    @Test func closingATabOpensItsNeighbour() throws {
+        let app = AppModel(options: .init(uiTesting: true, signedIn: true))
+        let scene = SceneModel(app: app)
+        let notebooks = app.library.notebooks(in: app.library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
+        let a = app.library.createNote(in: notebook.id, folder: nil, title: "A")
+        let b = app.library.createNote(in: notebook.id, folder: nil, title: "B")
+        let c = app.library.createNote(in: notebook.id, folder: nil, title: "C")
+        for note in [a, b, c] { scene.open(note.id) }
+        let others = app.library.openTabs.map(\.id).filter { ![a.id, b.id, c.id].contains($0) }
+        for id in others { app.library.closeTab(id) }
+
+        scene.open(b.id)
+        scene.closeTab()
+        #expect(scene.selectedNoteId == c.id, "the next tab")
+        scene.closeTab()
+        #expect(scene.selectedNoteId == a.id, "the previous one when the closed tab was last")
+        scene.show(.allDocuments)
+        scene.closeTab()
+        #expect(scene.selectedNoteId == nil)
+        #expect(scene.sidebar == .notebook(notebook.id), "the last tab: back to its notebook")
+        #expect(app.library.openTabs.isEmpty)
+    }
 }

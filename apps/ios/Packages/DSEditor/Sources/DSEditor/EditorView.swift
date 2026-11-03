@@ -2121,7 +2121,24 @@ extension EditorView: UITextViewDelegate {
             })
         }
         guard !extra.isEmpty else { return nil }
-        return UIMenu(children: extra + suggestedActions)
+        return Self.editMenu(extra: extra, suggestedActions: suggestedActions)
+    }
+
+    /// Cut / Copy / Paste first, as in every iOS app, then ours, then the rest of the system's
+    /// items: the horizontal edit menu shows only its first few items, and Copy must not be
+    /// pushed to the next page.
+    static func editMenu(extra: [UIMenuElement], suggestedActions: [UIMenuElement]) -> UIMenu {
+        let standardActions: Set<Selector> = [
+            #selector(UIResponderStandardEditActions.cut(_:)),
+            #selector(UIResponderStandardEditActions.copy(_:)),
+            #selector(UIResponderStandardEditActions.paste(_:)),
+        ]
+        let isStandard: (UIMenuElement) -> Bool = { element in
+            if let menu = element as? UIMenu { return menu.identifier == .standardEdit }
+            if let command = element as? UICommand { return standardActions.contains(command.action) }
+            return false
+        }
+        return UIMenu(children: suggestedActions.filter(isStandard) + extra + suggestedActions.filter { !isStandard($0) })
     }
 
     /// Craft-like task menu: complete, schedule, deadline, cancel.

@@ -1817,4 +1817,34 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(doc.blocks[3].plainText, "После кода")
         XCTAssertFalse(editor.startParagraphBelowEnd(at: CGPoint(x: code.midX, y: code.maxY + 200)), "a paragraph is already last")
     }
+
+    /// Cut / Copy / Paste come first in the selection menu, before Format and Style (the owner
+    /// had to page the menu to find Copy).
+    func testSelectionMenuPutsCopyFirst() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Слово и ещё слово")])
+        let editor = host(doc)
+        let tv = editor.textView
+        let word = flatRange(editor, of: "Слово")
+        tv.selectedRange = NSRange(location: word.lowerBound, length: word.count)
+        UIPasteboard.general.string = "x"
+        let standard = UIMenu(identifier: .standardEdit, options: .displayInline, children: [
+            UICommand(title: "Cut", action: #selector(UIResponderStandardEditActions.cut(_:))),
+            UICommand(title: "Copy", action: #selector(UIResponderStandardEditActions.copy(_:))),
+            UICommand(title: "Paste", action: #selector(UIResponderStandardEditActions.paste(_:))),
+        ])
+        let lookup = UIMenu(identifier: .lookup, options: .displayInline, children: [
+            UICommand(title: "Look Up", action: #selector(UIResponderStandardEditActions.select(_:))),
+        ])
+        let menu = try XCTUnwrap(editor.textView(tv, editMenuForTextIn: tv.selectedRange, suggestedActions: [standard, lookup]))
+        XCTAssertEqual((menu.children.first as? UIMenu)?.identifier, .standardEdit, "Cut / Copy / Paste first")
+        XCTAssertEqual((menu.children.last as? UIMenu)?.identifier, .lookup, "the rest of the system items last")
+        XCTAssertTrue(menu.children.contains { $0.title == "Формат" || $0.title == "Стиль" }, "our items stay")
+
+        // Flattened system items: the cut / copy / paste commands still lead.
+        let flat = EditorView.editMenu(extra: [UIAction(title: "Ours") { _ in }], suggestedActions: [
+            UICommand(title: "Look Up", action: #selector(UIResponderStandardEditActions.select(_:))),
+            UICommand(title: "Copy", action: #selector(UIResponderStandardEditActions.copy(_:))),
+        ])
+        XCTAssertEqual(flat.children.map(\.title), ["Copy", "Ours", "Look Up"])
+    }
 }

@@ -648,6 +648,13 @@ final class CoreLibrary: LibraryBackend {
     }
 
     private func snapshotNote(_ meta: DSCore.NoteMeta, notebookId: String) -> (NoteMeta, NoteBody)? {
+        // A note moved on another device, in the web or by an agent: the local record still
+        // named the old notebook, so its key was never found and every edit of it waited
+        // for a key forever (the owner's iPad, 2026-11-03). Checked once a launch, then on a move.
+        if wrappedKeys.notebookId(ofNote: meta.id) != notebookId,
+           let record = try? store.document(meta.id), record.kind == .note, record.notebookId != notebookId {
+            try? store.setNotebook(meta.id, notebookId: notebookId)
+        }
         wrappedKeys.set(meta, notebookId: notebookId)
         guard let note = try? noteDocument(meta.id, notebookId: notebookId) else { return nil }
         let body = NoteBodyCodec.body(from: (try? note.blocks()) ?? [])

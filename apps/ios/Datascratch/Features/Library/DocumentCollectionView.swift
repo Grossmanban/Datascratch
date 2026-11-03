@@ -77,7 +77,9 @@ struct DocumentCollectionView: View {
         .toolbar(removing: .title)
         .modifier(SystemSearch(text: $scene.searchText, isOn: !Self.searchInList))
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            // iPad: the list's buttons on the bar's left, over the list; the right side is the
+            // document's when it is open beside it (owner, 2026-11-03: the two mixed up).
+            ToolbarItemGroup(placement: isPhone ? .topBarTrailing : .topBarLeading) {
                 Menu {
                     Picker("Layout", selection: $settings.libraryLayout) {
                         Label("Cards", systemImage: "square.grid.2x2").tag(AppSettings.LibraryLayout.grid)
@@ -87,6 +89,11 @@ struct DocumentCollectionView: View {
                     Image(systemName: settings.libraryLayout == .grid ? "square.grid.2x2" : "list.bullet")
                 }
                 .accessibilityLabel("Layout")
+                // The open tabs are reachable with no document on screen too (owner, 2026-11-03).
+                if Features.tabs, !scene.isNoteWindow, !app.library.openTabs.isEmpty,
+                   scene.selectedNoteId == nil || (!isPhone && scene.padLevel == .list) {
+                    TabOverviewButton()
+                }
                 // One «New» button (D-38): the toolbar on iPad, the floating button on iPhone.
                 // (By idiom: the iPad split-view columns report a compact size class.)
                 if canCreate, !isPhone {

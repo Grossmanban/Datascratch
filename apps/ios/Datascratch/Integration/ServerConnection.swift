@@ -158,6 +158,7 @@ final class ServerConnection: CoreLibraryRemote {
             await repairKeys(changes, engine: engine)
             observeStatus(engine)
             sync.onRetry = { Task { await engine.retryFailed() } }
+            sync.onCheckKeys = { [weak self] in self?.notebookKeysMissing() }
             // With the engine running, removing duplicates reaches the server too.
             // Every start: build 6 carried libraries without merging the duplicates.
             onLibraryCarried?(core.needsCarriedMerge)
@@ -215,6 +216,7 @@ final class ServerConnection: CoreLibraryRemote {
         isAccountSynced = false
         statusTask?.cancel()
         sync.onRetry = nil
+        sync.onCheckKeys = nil
         await engine?.stop()
         engine = nil
         core.remote = nil
@@ -233,6 +235,9 @@ final class ServerConnection: CoreLibraryRemote {
     func checkConnection() {
         guard let engine else { return }
         Task { await engine.client.checkConnection() }
+        // Uploads cut off while the app was in the background (another app opened mid-upload)
+        // went up only after a relaunch: pictures were missing on other devices (2026-11-03).
+        uploadPendingAttachments()
     }
 
     /// The person opened a note: it is caught up before the other documents.

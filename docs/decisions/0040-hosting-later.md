@@ -4,7 +4,7 @@
 - **Дата:** 2026-10-25
 - **Связано:** D-18, D-26, `docs/spec/06-data-server.md`
 
-> **Обновление 2026-10-25:** VPS и домен появились — сервер развёрнут на https://сервер владельца рядом с мессенджером Sinhron (workflow `deploy`, режим edge за Caddy Sinhron; `infra/DEPLOY.md`).
+> **Обновление 2026-10-25:** VPS и домен появились — сервер развёрнут на сервер владельца рядом с мессенджером Sinhron (workflow `deploy`, режим edge за Caddy Sinhron; `infra/DEPLOY.md`).
 
 ## Решение
 

@@ -14,6 +14,13 @@ struct NotebookEditor: View {
     @State private var color: Tint = .blue
     @State private var mode: NotebookMode = .private
     @State private var spaceSelection = ""
+    @State private var isSaving = false
+    @State private var error: String?
+
+    /// D-62: the notebook is (or will be) in a shared space.
+    private var inSharedSpace: Bool {
+        app.library.spaces.first { $0.id == (notebook?.spaceId ?? spaceId) }?.isShared == true
+    }
 
     var body: some View {
         NavigationStack {
@@ -32,7 +39,16 @@ struct NotebookEditor: View {
                 }
                 Section("Color") { TintPicker(selection: $color) }
                 Section("Icon") { SymbolPicker(selection: $icon, tint: color) }
-                if notebook == nil {
+                if let error {
+                    Section { Text(error).foregroundStyle(Theme.Palette.danger) }
+                }
+                if notebook == nil && inSharedSpace {
+                    Section {
+                        Label("Everyone in this space will see it.", systemImage: "person.2")
+                            .font(Theme.Typography.callout)
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                    }
+                } else if notebook == nil {
                     Section {
                         ModeOption(mode: .private, selection: $mode)
                         ModeOption(mode: .agent, selection: $mode)
@@ -41,10 +57,12 @@ struct NotebookEditor: View {
                     } footer: {
                         Text("You can change this later in the notebook menu.")
                     }
-                } else if app.library.spaces.count > 1 {
+                } else if !inSharedSpace, app.library.spaces.filter({ !$0.isShared }).count > 1 {
+                    // Between personal spaces only: into a shared one is «Move to Space…», with
+                    // its warning (D-62).
                     Section("Space") {
                         Picker("Space", selection: $spaceSelection) {
-                            ForEach(app.library.spaces) { space in
+                            ForEach(app.library.spaces.filter { !$0.isShared }) { space in
                                 Text(space.name).tag(space.id)
                             }
                         }
@@ -59,7 +77,7 @@ struct NotebookEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(notebook == nil ? LocalizedStringKey("Create") : "Done") { save() }
-                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
                         .accessibilityIdentifier("notebook.save")
                 }
             }
@@ -83,6 +101,22 @@ struct NotebookEditor: View {
                 $0.color = color
                 $0.spaceId = spaceSelection
             }
+        } else if inSharedSpace {
+            // D-62: made on the server first (its key is under the space key).
+            isSaving = true
+            error = nil
+            let sharing = app.accountSharing
+            Task {
+                do {
+                    try await sharing.createNotebook(inSharedSpace: spaceId, name: trimmed, icon: icon, color: color)
+                    Haptics.success()
+                    dismiss()
+                } catch {
+                    self.error = error.localizedDescription
+                }
+                isSaving = false
+            }
+            return
         } else {
             let created = app.library.createNotebook(in: spaceId, name: trimmed, icon: icon, color: color, mode: mode)
             scene.show(.notebook(created.id))
@@ -134,6 +168,8 @@ struct SpaceEditor: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     let space: Space?
+    /// D-62: «New Shared Space» — made shared on creation, then its people sheet opens.
+    var startsShared = false
 
     @State private var name = ""
     @State private var icon = "square.stack"
@@ -148,11 +184,13 @@ struct SpaceEditor: View {
                         .font(Theme.Typography.h3)
                         .accessibilityIdentifier("space.name")
                 } footer: {
-                    Text("Spaces keep contexts apart — for example Personal, Work and Study.")
+                    Text(startsShared ? "A space you share with people: everyone you invite sees its notebooks and works in them with you."
+                                      : "Spaces keep contexts apart — for example Personal, Work and Study.")
                 }
                 Section("Color") { TintPicker(selection: $color) }
                 Section("Icon") { SymbolPicker(selection: $icon, tint: color) }
-                if let space, app.library.spaces.count > 1 {
+                // A shared space is not deleted from here: its people would lose it at once.
+                if let space, !space.isShared, app.library.spaces.count > 1 {
                     Section {
                         Button("Delete Space", role: .destructive) { confirmDelete = true }
                     }
@@ -166,7 +204,7 @@ struct SpaceEditor: View {
                     }
                 }
             }
-            .navigationTitle(space == nil ? LocalizedStringKey("New Space") : "Edit Space")
+            .navigationTitle(space != nil ? LocalizedStringKey("Edit Space") : startsShared ? "New Shared Space" : "New Space")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -182,6 +220,15 @@ struct SpaceEditor: View {
                         } else {
                             let created = app.library.createSpace(name: trimmed, icon: icon, color: color)
                             scene.switchSpace(to: created.id)
+                            if startsShared {
+                                // Shared at once (or, offline, with the first invitation); its
+                                // people sheet opens to invite them.
+                                app.library.flush()
+                                let sharing = app.accountSharing
+                                Task { _ = try? await sharing.makeShared(space: created.id) }
+                                scene.sheet = .spaceMembers(created.id)
+                                return
+                            }
                         }
                         dismiss()
                     }

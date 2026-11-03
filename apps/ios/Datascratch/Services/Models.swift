@@ -31,6 +31,20 @@ nonisolated struct Space: Codable, Identifiable, Hashable, Sendable {
     var color: Tint
     var order: Double
     var createdAt: Date
+    /// D-62: nil for a personal space.
+    var sharing: SpaceSharing? = nil
+}
+
+/// D-62: a shared space this account made (its owner) or one it was invited to.
+nonisolated enum SpaceSharing: String, Codable, Sendable {
+    case owned
+    case joined
+}
+
+extension Space {
+    nonisolated var isShared: Bool { sharing != nil }
+    /// Invited to it: the space is another account's; this one never writes its record.
+    nonisolated var isJoined: Bool { sharing == .joined }
 }
 
 nonisolated struct Notebook: Codable, Identifiable, Hashable, Sendable {

@@ -110,6 +110,61 @@ final class SharingUITests: XCTestCase {
                       "the message does not name the link's server")
     }
 
+    // MARK: D-62 shared spaces
+
+    private func openSpaceMenu(_ app: XCUIApplication) -> XCUIElement {
+        let switcher = revealSidebarElement(app, "sidebar.spaceSwitcher")
+        XCTAssertTrue(switcher.exists, "no space switcher")
+        switcher.tap()
+        return switcher
+    }
+
+    /// A shared space this account joined is in the switcher; its notebook and note open.
+    func testJoinedSharedSpaceIsInTheSwitcher() throws {
+        let app = launch([])
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        _ = openSpaceMenu(app)
+        let team = app.buttons["Team"].firstMatch
+        XCTAssertTrue(team.waitForExistence(timeout: 3), "no shared space «Team» in the switcher")
+        team.tap()
+        let notebook = revealSidebarElement(app, "sidebar.notebook")
+        XCTAssertTrue(notebook.exists, "the shared space shows no notebook")
+        let cell = app.cells.containing(.any, identifier: "sidebar.notebook").firstMatch
+        (cell.exists ? cell : notebook).tap()
+        XCTAssertTrue(app.staticTexts["Kickoff"].firstMatch.waitForExistence(timeout: 5),
+                      "the shared space's notebook lists none of its notes")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "shared-space"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
+    /// «Invite to Space…» on a personal space: the invitation is listed; the space is shared.
+    func testInvitingToAPersonalSpace() throws {
+        let app = launch([])
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        _ = openSpaceMenu(app)
+        let invite = app.buttons["Invite to Space…"].firstMatch
+        XCTAssertTrue(invite.waitForExistence(timeout: 3), "no «Invite to Space…» for a personal space")
+        invite.tap()
+        let sheet = app.descendants(matching: .any)["spaceMembers"].firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5), "the space's people sheet did not open")
+        let email = app.textFields["share.email"].firstMatch
+        XCTAssertTrue(email.waitForExistence(timeout: 5), "no email field")
+        email.tap()
+        email.typeText("lena@example.org")
+        app.buttons["share.invite"].firstMatch.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["share.invite.row"].firstMatch.waitForExistence(timeout: 5),
+                      "the invitation is not listed")
+        // Now shared: the sheet is the space's members.
+        XCTAssertTrue(app.navigationBars["Space Members"].firstMatch.waitForExistence(timeout: 3),
+                      "inviting did not make the space shared")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "space-members"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     private func revealSidebarElement(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
         let element = app.descendants(matching: .any)[identifier].firstMatch
         if element.waitForExistence(timeout: 5), element.isHittable { return element }

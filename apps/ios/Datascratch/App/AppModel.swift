@@ -201,6 +201,15 @@ final class AppModel {
         let sync = self.sync
         library.onLocalChange = { sync.noteLocalChange() }
         wireLocalWipe()
+        wireSharing()
+    }
+
+    /// D-62: sharing learns which space a notebook is in (roles in a shared space); the
+    /// stand-in without a server changes the library itself.
+    private func wireSharing() {
+        let library = self.library
+        accountSharing.spaceOfNotebook = { [weak library] id in library?.notebook(id)?.spaceId }
+        (accountSharing as? LocalAccountSharingService)?.library = library
     }
 
     /// Erasing the device (D-53 revocation, «Delete data») also forgets the recovery key kept
@@ -227,7 +236,8 @@ final class AppModel {
     nonisolated static let invitationForTesting = "0192f3c4-0000-7000-8000-00000000a11e"
 
     /// `-ui-testing-sharing` (D-54): an invitation, a notebook «Shared plans» shared with this
-    /// account «view only» with one note, and a member on the first notebook.
+    /// account «view only» with one note, a member on the first notebook, and (D-62) a shared
+    /// space «Team» joined as an editor.
     private func seedSharingForTesting() {
         guard let local = accountSharing as? LocalAccountSharingService, let spaceId = library.activeSpace?.id,
               let own = library.notebooks(in: spaceId).first else { return }
@@ -240,9 +250,15 @@ final class AppModel {
         if arguments.contains("-ui-testing-open-own") {
             noteForTesting = library.createNote(in: own.id, title: "Plan for two", body: NoteBody(blocks: [.paragraph("Ideas")])).id
         }
+        // D-62: a shared space «Team» this account joined as an editor: a notebook with a note.
+        let team = library.createSpace(name: "Team", icon: "person.2", color: .teal)
+        library.updateSpace(team.id) { $0.sharing = .joined }
+        let teamNotes = library.createNotebook(in: team.id, name: "Team notes", icon: "person.2", mode: .private)
+        _ = library.createNote(in: teamNotes.id, title: "Kickoff", body: NoteBody(blocks: [.paragraph("Agenda")]))
         local.seedForTesting(invitationId: Self.invitationForTesting, invitedTo: ShareTarget(kind: .notebook, id: UUIDv7.make()),
                              viewOnly: ShareTarget(kind: .notebook, id: shared.id),
                              owned: ShareTarget(kind: .notebook, id: own.id))
+        local.seedJoinedSpaceForTesting(ShareTarget(kind: .space, id: team.id), role: .editor)
     }
 
     /// `-ui-testing-cover`: the first document gets an image cover (screenshots, layout tests).
@@ -397,6 +413,7 @@ final class AppModel {
         access = side.access
         accountSharing = side.accountSharing
         wireLocalWipe()
+        wireSharing()
         #endif
     }
 

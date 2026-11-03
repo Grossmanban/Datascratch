@@ -121,6 +121,16 @@
         }
       }
     },
+    "A space you share with people: everyone you invite sees its notebooks and works in them with you.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пространство для работы вместе: все, кого вы пригласите, видят его блокноты и работают в них с вами."
+          }
+        }
+      }
+    },
     "AI agent": {
       "localizations": {
         "ru": {
@@ -1571,6 +1581,46 @@
         }
       }
     },
+    "Everyone in this space sees it.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Его видят все в этом пространстве."
+          }
+        }
+      }
+    },
+    "Everyone in this space will see it.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Его увидят все в этом пространстве."
+          }
+        }
+      }
+    },
+    "Everyone in «%@» will see this notebook and all of its history.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все в «%@» увидят этот блокнот и всю его историю."
+          }
+        }
+      }
+    },
+    "Everyone you invite works in this space with you: they see all of its notebooks, with their history. Notebooks you already share with people of their own stay personal.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все, кого вы пригласите, работают в этом пространстве вместе с вами: видят все его блокноты вместе с историей. Блокноты, которыми вы уже поделились с отдельными людьми, останутся личными."
+          }
+        }
+      }
+    },
     "Expanded": {
       "localizations": {
         "ru": {
@@ -2011,6 +2061,16 @@
         }
       }
     },
+    "In a shared space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В общем пространстве"
+          }
+        }
+      }
+    },
     "Inbox": {
       "localizations": {
         "ru": {
@@ -2097,6 +2157,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пригласить"
+          }
+        }
+      }
+    },
+    "Invite to Space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пригласить в пространство"
+          }
+        }
+      }
+    },
+    "Invite to Space…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пригласить в пространство…"
           }
         }
       }
@@ -2261,6 +2341,16 @@
         }
       }
     },
+    "Leave this space?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выйти из пространства?"
+          }
+        }
+      }
+    },
     "Light": {
       "localizations": {
         "ru": {
@@ -2381,6 +2471,16 @@
         }
       }
     },
+    "Move": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перенести"
+          }
+        }
+      }
+    },
     "Move To": {
       "localizations": {
         "ru": {
@@ -2401,6 +2501,26 @@
         }
       }
     },
+    "Move and Share": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перенести и открыть доступ"
+          }
+        }
+      }
+    },
+    "Move out of the shared space?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вынести из общего пространства?"
+          }
+        }
+      }
+    },
     "Move to Space…": {
       "localizations": {
         "ru": {
@@ -2417,6 +2537,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "В корзину"
+          }
+        }
+      }
+    },
+    "Move to a shared space?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перенести в общее пространство?"
           }
         }
       }
@@ -2477,6 +2607,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Новый ключ восстановления"
+          }
+        }
+      }
+    },
+    "New Shared Space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новое общее пространство"
+          }
+        }
+      }
+    },
+    "New Shared Space…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новое общее пространство…"
           }
         }
       }
@@ -2941,6 +3091,16 @@
         }
       }
     },
+    "Only the owner invites and removes people.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приглашает и удаляет людей только владелец."
+          }
+        }
+      }
+    },
     "Only the owner manages access and guest links.": {
       "localizations": {
         "ru": {
@@ -3181,6 +3341,26 @@
         }
       }
     },
+    "People are invited to the whole space, not to one notebook.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Людей приглашают во всё пространство, а не в один блокнот."
+          }
+        }
+      }
+    },
+    "People of the shared space will no longer see new changes. The notebook gets a new key.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Участники общего пространства больше не увидят новых изменений. У блокнота будет новый ключ."
+          }
+        }
+      }
+    },
     "Permission": {
       "localizations": {
         "ru": {
@@ -3197,6 +3377,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Личное"
+          }
+        }
+      }
+    },
+    "Personal space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Личное пространство"
           }
         }
       }
@@ -3831,6 +4021,16 @@
         }
       }
     },
+    "Shared": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общие"
+          }
+        }
+      }
+    },
     "Shared document": {
       "localizations": {
         "ru": {
@@ -3857,6 +4057,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Общие заметки"
+          }
+        }
+      }
+    },
+    "Shared space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общее пространство"
+          }
+        }
+      }
+    },
+    "Shared space · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общее пространство · %@"
+          }
+        }
+      }
+    },
+    "Shared space · yours": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общее пространство · ваше"
           }
         }
       }
@@ -4107,6 +4337,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пространство"
+          }
+        }
+      }
+    },
+    "Space Members": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Участники пространства"
+          }
+        }
+      }
+    },
+    "Space Members…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Участники пространства…"
           }
         }
       }
@@ -4467,6 +4717,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ключ блокнота будет храниться на сервере, чтобы агенты с токеном могли читать и править его. Сервер технически сможет прочитать эти заметки."
+          }
+        }
+      }
+    },
+    "The notebook was not moved": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Блокнот не перенесён"
           }
         }
       }
@@ -5327,6 +5587,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "приглашает вас в блокнот"
+          }
+        }
+      }
+    },
+    "invites you to a shared space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "приглашает вас в общее пространство"
           }
         }
       }

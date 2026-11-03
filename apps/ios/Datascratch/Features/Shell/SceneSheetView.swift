@@ -16,6 +16,10 @@ struct SceneSheetView: View {
             }
         case .newSpace:
             SpaceEditor(space: nil)
+        case .newSharedSpace:
+            SpaceEditor(space: nil, startsShared: true)
+        case .spaceMembers(let id):
+            SpaceMembersSheet(spaceId: id)
         case .editSpace(let id):
             SpaceEditor(space: library.spaces.first { $0.id == id })
         case .newFolder(let notebookId, let parentId):

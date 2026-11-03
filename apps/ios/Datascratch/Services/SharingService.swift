@@ -6,7 +6,8 @@ nonisolated enum SharePermission: String, Codable, CaseIterable, Sendable {
 }
 
 nonisolated struct ShareTarget: Codable, Hashable, Sendable {
-    nonisolated enum Kind: String, Codable, Sendable { case note, notebook }
+    /// `space`: a shared space (D-62); only people are invited to it, never guest links.
+    nonisolated enum Kind: String, Codable, Sendable { case note, notebook, space }
     var kind: Kind
     var id: String
 }

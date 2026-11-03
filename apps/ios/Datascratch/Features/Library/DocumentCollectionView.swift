@@ -33,10 +33,12 @@ struct DocumentCollectionView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Theme.Space.s4) {
                         header
-                        // Cards start at the leading edge, as on the web.
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 168, maximum: 260), spacing: Theme.Space.s4,
+                        // Cards fill the column evenly — two side by side in the list column
+                        // beside a document (D-60); a single narrow card with a gap beside it
+                        // looked unfinished (owner, 2026-11-03).
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: Theme.Space.s3,
                                                      alignment: .top)],
-                                  alignment: .leading, spacing: Theme.Space.s4) {
+                                  alignment: .leading, spacing: Theme.Space.s3) {
                             ForEach(notes) { note in
                                 DocumentCard(note: note, isSelected: scene.selectedNoteId == note.id)
                                     .onTapGesture { scene.open(note.id) }

@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import type * as SharedIndex from "../src/index.js";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   AD,
@@ -45,6 +46,7 @@ import {
   type SharedItem,
   type Share,
   type SharingApi,
+  type SpaceNotebook,
 } from "../src/index.js";
 
 beforeAll(async () => {
@@ -68,6 +70,8 @@ interface Resource {
   pending: boolean;
   pendingSince?: number | null;
   members: Map<string, { role: "editor" | "viewer"; wrappedKey: string | null; late?: boolean }>;
+  /** kind = space: its notebooks' keys under the spaceKey. */
+  notebooks?: Map<string, SpaceNotebook>;
 }
 
 /** In-memory server for the D-54 endpoints (api.md), enough for client flows. */
@@ -102,6 +106,76 @@ class FakeServer {
     const p = path.replace(/^\/v1/, "");
     this.calls.push(`${method} ${p}`);
     let m: RegExpMatchArray | null;
+    if (
+      (m = p.match(
+        /^\/spaces\/([^/]+)\/(notebooks|rotate\/done|rotate)(?:\/([^/]+)(\/move-out)?)?$/,
+      ))
+    ) {
+      const r = this.resources.get(`space:${m[1]}`)!;
+      const [, , what, nbId, moveOut] = m;
+      if (what === "notebooks" && !nbId) return this.res(200, [...r.notebooks!.values()]);
+      if (what === "notebooks" && moveOut) {
+        const e = r.notebooks!.get(nbId!)!;
+        if (body.version !== e.version + 1)
+          return this.res(409, { error: { code: "conflict", message: "version" } });
+        r.notebooks!.delete(nbId!);
+        this.resources.set(`notebook:${nbId}`, {
+          kind: "notebook",
+          id: nbId!,
+          version: body.version,
+          ownerWrappedKey: body.ownerWrappedKey,
+          keyChain: [body.previousKeyWrap, ...e.keyChain],
+          pending: true,
+          pendingSince: e.version,
+          members: new Map(),
+        });
+        return this.res(204);
+      }
+      if (what === "notebooks" && method === "PUT") {
+        const nb = this.resources.get(`notebook:${nbId}`)!;
+        if (body.version !== nb.version)
+          return this.res(409, { error: { code: "conflict", message: "version" } });
+        this.resources.delete(`notebook:${nbId}`);
+        r.notebooks!.set(nbId!, {
+          notebookId: nbId!,
+          version: nb.version,
+          spaceWrappedKey: body.spaceWrappedKey,
+          keyChain: nb.keyChain,
+          mode: "private",
+        });
+        return this.res(204);
+      }
+      if (what === "rotate") {
+        if (body.version !== r.version + 1)
+          return this.res(409, { error: { code: "conflict", message: "version" } });
+        const ids = new Set(body.notebooks.map((n: { notebookId: string }) => n.notebookId));
+        if (ids.size !== r.notebooks!.size)
+          return this.res(409, { error: { code: "conflict", message: "notebooks" } });
+        r.version = body.version;
+        r.ownerWrappedKey = body.ownerWrappedKey;
+        r.keyChain = [body.previousKeyWrap, ...r.keyChain];
+        for (const k of body.memberKeys) r.members.get(k.userId)!.wrappedKey = k.wrappedKey;
+        for (const n of body.notebooks) {
+          const e = r.notebooks!.get(n.notebookId)!;
+          if (n.version !== e.version + 1)
+            return this.res(409, { error: { code: "conflict", message: "nb version" } });
+          r.notebooks!.set(n.notebookId, {
+            ...e,
+            version: n.version,
+            spaceWrappedKey: n.spaceWrappedKey,
+            keyChain: [n.previousKeyWrap, ...e.keyChain],
+          });
+        }
+        if (!r.pending) r.pendingSince = r.version - 1;
+        r.pending = true;
+        return this.res(204);
+      }
+      if (what === "rotate/done") {
+        r.pending = false;
+        r.pendingSince = null;
+        return this.res(204);
+      }
+    }
     if (p === "/me/box-key") {
       if (method === "GET")
         return this.boxKeys.has(me)
@@ -845,10 +919,14 @@ describe("shared spaces (D-62)", () => {
       addedAt: T,
     });
     expect(
-      reconcileSharedSpaces(account, [item("space", SPACE), item("notebook", NB)]).added,
+      reconcileSharedSpaces(account, [item("space", SPACE), item("notebook", NB)], ALICE).added,
     ).toEqual([SPACE]);
     expect(getSharedSpaceRefs(account).map((r) => r.spaceId)).toEqual([SPACE]);
-    expect(reconcileSharedSpaces(account, [item("notebook", NB)]).removed).toEqual([SPACE]);
+    expect(reconcileSharedSpaces(account, [item("notebook", NB)], ALICE).removed).toEqual([SPACE]);
+    // Not one's own space, nor a space of this account under another owner's name.
+    expect(reconcileSharedSpaces(account, [item("space", SPACE)], OWNER).added).toEqual([]);
+    account.getMap("spaces").set(SPACE, new Y.Map());
+    expect(reconcileSharedSpaces(account, [item("space", SPACE)], ALICE).added).toEqual([]);
   });
 
   it("opens space notebooks with the member's spaceKey and delivers it to accepted members", async () => {
@@ -894,5 +972,179 @@ describe("shared spaces (D-62)", () => {
     expect(mine.keys[0]).toEqual(spaceKey);
     // The D-54 lists leave spaces out.
     expect(await s.server.api(ALICE).sharedWithMe()).toEqual([]);
+  });
+});
+
+describe("shared space rotation and moves (D-62)", () => {
+  const SPACE = "0192f3c4-0000-7000-8000-00000000d201";
+  const NB_A = "0192f3c4-0000-7000-8000-00000000d202";
+  const NB_B = "0192f3c4-0000-7000-8000-00000000d203";
+  const NOTE_A = "0192f3c4-0000-7000-8000-00000000d204";
+
+  async function spaceSetup() {
+    const c = await import("../src/index.js");
+    const s = await setup();
+    const spaceKey = generateKey();
+    const indexes = new Map<string, Y.Doc>();
+    const notebooks = new Map<string, SpaceNotebook>();
+    for (const nb of [NB_A, NB_B]) {
+      const nbKey = generateKey();
+      const index = new Y.Doc();
+      if (nb === NB_A)
+        putNoteMeta(index, meta(NOTE_A, wrapKey(nbKey, generateKey(), AD.noteKey(NOTE_A))));
+      indexes.set(nb, index);
+      notebooks.set(nb, {
+        notebookId: nb,
+        version: 1,
+        spaceWrappedKey: c.wrapNotebookKeyForSpace(spaceKey, nbKey, SPACE, nb, 1),
+        keyChain: [],
+        mode: nb === NB_B ? "agent" : "private",
+      });
+    }
+    // Alice holds the space key, Bob held it and left: rotation pending since v1.
+    s.server.resources.set(`space:${SPACE}`, {
+      kind: "space",
+      id: SPACE,
+      version: 1,
+      ownerWrappedKey: c.wrapSpaceKey(s.masterKey, spaceKey, SPACE, 1),
+      keyChain: [],
+      pending: true,
+      pendingSince: 1,
+      members: new Map([[ALICE, { role: "editor", wrappedKey: "set below" }]]),
+      notebooks,
+    });
+    await deliverNow(s, c, spaceKey);
+    return { c, s, spaceKey, indexes };
+  }
+
+  async function deliverNow(
+    s: Awaited<ReturnType<typeof setup>>,
+    c: typeof SharedIndex,
+    spaceKey: Uint8Array,
+  ) {
+    const r = s.server.resources.get(`space:${SPACE}`)!;
+    r.members.get(ALICE)!.wrappedKey = c.wrapKeyForMember(
+      spaceKey,
+      s.owner.secretKey,
+      s.alice.publicKey,
+      {
+        kind: "space",
+        targetId: SPACE,
+        version: 1,
+        fromUserId: OWNER,
+        toUserId: ALICE,
+      },
+    );
+  }
+
+  it("rotates the space key with all its notebooks, re-keys notes and resumes without a second version", async () => {
+    const { c, s, spaceKey, indexes } = await spaceSetup();
+    const api = s.server.api(OWNER);
+    const opts = {
+      api,
+      spaceId: SPACE,
+      owner: { userId: OWNER, secretKey: s.owner.secretKey },
+      masterKey: s.masterKey,
+      notebookIndex: async (id: string) => indexes.get(id)!,
+      whenIndexSent: async () => {},
+    };
+    // Device A dies right after step 1.
+    await expect(
+      c.rotateSpaceKey({
+        ...opts,
+        onKeys: () => {
+          throw new Error("crash");
+        },
+      }),
+    ).rejects.toThrow("crash");
+    const r0 = s.server.resources.get(`space:${SPACE}`)!;
+    expect(r0.version).toBe(2);
+    expect(r0.pending).toBe(true);
+    // Device B finishes it.
+    const seen: string[] = [];
+    const r = await c.rotateSpaceKey({
+      ...opts,
+      onKeys: (k) => void seen.push(k.space ? "space" : `notes:${k.notes!.size}`),
+    });
+    expect(r).toMatchObject({ rotated: true, newVersion: false, rekeyedNotes: 1 });
+    expect(seen).toEqual(["notes:1"]);
+    expect(s.server.calls.filter((x) => x.endsWith("/rotate"))).toHaveLength(1);
+    expect(r0.pending).toBe(false);
+
+    // Alice opens the new space key, then every notebook (v2) with the old one in its chain.
+    const item = (await s.server.api(ALICE).sharedWithMeAll()).find(
+      (i) => i.target.kind === "space",
+    )!;
+    const sk = c.sharedItemKeys(item, { userId: ALICE, secretKey: s.alice.secretKey })!;
+    expect(sk.version).toBe(2);
+    expect(sk.keys[1]).toEqual(spaceKey);
+    for (const e of await api.listSpaceNotebooks(SPACE)) {
+      const nk = c.spaceNotebookKeys(e, sk.keys, SPACE);
+      expect(nk.version).toBe(2);
+      expect(nk.keys).toHaveLength(2);
+    }
+    const noteMeta = getNoteMeta(indexes.get(NB_A)!, NOTE_A)!;
+    expect(noteMeta.keyVersion).toBe(2);
+  });
+
+  it("moves a personal notebook into the space and back out", async () => {
+    const { c, s } = await spaceSetup();
+    s.server.resources.get(`space:${SPACE}`)!.pending = false;
+    const api = s.server.api(OWNER);
+    const account = new Y.Doc();
+    const spaceDoc = c.createSpaceDoc(SPACE, { name: "Команда" });
+    c.putNotebookRef(account, {
+      id: NB,
+      spaceId: "0192f3c4-0000-7000-8000-00000000d299",
+      name: "Личный",
+      icon: null,
+      color: null,
+      order: 1,
+      mode: "private",
+      createdAt: T,
+    });
+    const moved = await c.moveNotebookIntoSpace({
+      api,
+      spaceId: SPACE,
+      notebookId: NB,
+      masterKey: s.masterKey,
+      account,
+      spaceDoc,
+    });
+    expect(moved.keys[0]).toEqual(s.nbKey);
+    expect(c.getNotebookRef(account, NB)).toBeNull();
+    expect(c.getSpaceNotebookRef(spaceDoc, NB)?.name).toBe("Личный");
+    // Members open it with the space key.
+    const sk = c.ownerSpaceKeys(await api.getSpaceKey(SPACE), s.masterKey, SPACE);
+    const entry = (await api.listSpaceNotebooks(SPACE)).find((e) => e.notebookId === NB)!;
+    expect(c.spaceNotebookKeys(entry, sk.keys, SPACE).keys[0]).toEqual(s.nbKey);
+
+    // Back out: a new key under the master key; steps 2–3 resume through rotateNotebookKey.
+    const PERSONAL = "0192f3c4-0000-7000-8000-00000000d298";
+    const out = await c.moveNotebookOutOfSpace({
+      api,
+      spaceId: SPACE,
+      notebookId: NB,
+      masterKey: s.masterKey,
+      account,
+      spaceDoc,
+      toSpaceId: PERSONAL,
+      onKeys: () => {},
+    });
+    expect(out.version).toBe(2);
+    expect(c.getNotebookRef(account, NB)?.spaceId).toBe(PERSONAL);
+    expect(c.getSpaceNotebookRef(spaceDoc, NB)).toBeNull();
+    const rest = await rotateNotebookKey({
+      api,
+      notebookId: NB,
+      owner: { userId: OWNER, secretKey: s.owner.secretKey },
+      masterKey: s.masterKey,
+      index: s.index,
+      agentMode: false,
+      onKeys: () => {},
+      whenIndexSent: async () => {},
+    });
+    expect(rest).toMatchObject({ rotated: true, newVersion: false, rekeyedNotes: 2 });
+    expect(s.server.resources.get(`notebook:${NB}`)!.pending).toBe(false);
   });
 });

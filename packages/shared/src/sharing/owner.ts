@@ -12,6 +12,7 @@ import {
   type MemberVetting,
   type OwnerIdentity,
 } from "./members.js";
+import { rotateSpaceKey, type RotateSpaceOptions } from "./spaces.js";
 import {
   recreateShareLinks,
   repairSharedNoteMeta,
@@ -190,15 +191,22 @@ async function deliver(o: OwnerMaintenanceOptions, target: ShareTarget, keys: Ve
 }
 
 /**
- * The owner's pass over shared spaces (D-62, `GET /shared-by-me` items of kind `space`): the
- * spaceKey goes to members that accepted, vetted like any key (trust.ts, `confirm`). A pending
- * space rotation (crypto.md §11.4) is reported as `skipped` — no new member gets a key that is
- * about to be replaced.
+ * The owner's pass over shared spaces (D-62, `GET /shared-by-me` items of kind `space`): a pending
+ * rotation of the spaceKey is run or resumed (crypto.md §11.4, needs `rotation`; without it the
+ * space is `skipped` — no new member gets a key that is about to be replaced), then the spaceKey
+ * goes to members that accepted, vetted like any key (trust.ts, `confirm`).
  */
 export async function maintainOwnedSpaces(options: {
   api: Pick<
     SharingApi,
-    "sharedByMeAll" | "getSpaceKey" | "listMembers" | "getPublicKey" | "putMemberKey"
+    | "sharedByMeAll"
+    | "getSpaceKey"
+    | "listSpaceNotebooks"
+    | "listMembers"
+    | "getPublicKey"
+    | "putMemberKey"
+    | "rotateSpace"
+    | "rotateSpaceDone"
   >;
   owner: OwnerIdentity;
   masterKey: Uint8Array;
@@ -208,26 +216,46 @@ export async function maintainOwnedSpaces(options: {
     reason: ConfirmReason,
   ) => boolean | Promise<boolean>;
   vetting?: MemberVetting;
+  rotation?: Pick<RotateSpaceOptions, "notebookIndex" | "whenIndexSent" | "onKeys">;
 }): Promise<
   (
-    | { target: AccountTarget; delivered: string[]; skipped?: string }
+    | { target: AccountTarget; delivered: string[]; rotated?: boolean; skipped?: string }
     | { target: AccountTarget; error: unknown }
   )[]
 > {
   const o = options;
   const out: (
-    | { target: AccountTarget; delivered: string[]; skipped?: string }
+    | { target: AccountTarget; delivered: string[]; rotated?: boolean; skipped?: string }
     | { target: AccountTarget; error: unknown }
   )[] = [];
   for (const item of await o.api.sharedByMeAll()) {
     const { target } = item;
     if (target.kind !== "space") continue;
     try {
+      let rotated = false;
+      let keys;
       if (item.keyRotationPending) {
-        out.push({ target, delivered: [], skipped: "space key rotation pending" });
-        continue;
+        if (!o.rotation) {
+          out.push({ target, delivered: [], skipped: "space key rotation pending" });
+          continue;
+        }
+        keys = (
+          await rotateSpaceKey({
+            api: o.api,
+            spaceId: target.id,
+            owner: o.owner,
+            masterKey: o.masterKey,
+            ...o.rotation,
+            ...(o.vetting ? { vetting: o.vetting } : {}),
+            ...(o.confirm
+              ? { confirm: (m: Member, r: ConfirmReason) => o.confirm!(target, m, r) }
+              : {}),
+          })
+        ).space;
+        rotated = true;
+      } else {
+        keys = ownerSpaceKeys(await o.api.getSpaceKey(target.id), o.masterKey, target.id);
       }
-      const keys = ownerSpaceKeys(await o.api.getSpaceKey(target.id), o.masterKey, target.id);
       const delivered =
         item.awaitingKey > 0
           ? await deliverAwaitingKeys({
@@ -241,7 +269,11 @@ export async function maintainOwnedSpaces(options: {
                 : {}),
             })
           : [];
-      out.push({ target, delivered: delivered.map((m) => m.userId) });
+      out.push({
+        target,
+        delivered: delivered.map((m) => m.userId),
+        ...(rotated ? { rotated } : {}),
+      });
     } catch (error) {
       out.push({ target, error });
     }

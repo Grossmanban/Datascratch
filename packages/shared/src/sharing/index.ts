@@ -6,3 +6,4 @@ export * from "./rotation.js";
 export * from "./placement.js";
 export * from "./owner.js";
 export * from "./trust.js";
+export * from "./spaces.js";

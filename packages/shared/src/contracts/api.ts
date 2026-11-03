@@ -278,6 +278,12 @@ export const createNotebookRequestSchema = z
      * spaceKey (crypto.md §11.2).
      */
     spaceId: uuidSchema.optional(),
+    /** Version of the spaceKey that wraps `wrappedKey`; not the current one → 409 (D-62). */
+    spaceKeyVersion: z.number().int().positive().optional(),
+  })
+  .refine((b) => (b.spaceId === undefined) === (b.spaceKeyVersion === undefined), {
+    message: "spaceId and spaceKeyVersion go together",
+    path: ["spaceKeyVersion"],
   })
   .refine((b) => (b.mode === "agent") === (b.notebookKey !== undefined), {
     message: "notebookKey is required for mode=agent and forbidden for mode=private",

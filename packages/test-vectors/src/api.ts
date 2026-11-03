@@ -191,9 +191,23 @@ export function apiVectors() {
         valid: [
           { notebookId: ID, mode: "private", wrappedKey: "AQ" },
           { notebookId: ID, mode: "agent", wrappedKey: "AQ", notebookKey: KEY },
-          { notebookId: ID, mode: "private", wrappedKey: "AQ", spaceId: vid(6) },
+          {
+            notebookId: ID,
+            mode: "private",
+            wrappedKey: "AQ",
+            spaceId: vid(6),
+            spaceKeyVersion: 2,
+          },
         ],
         invalid: [
+          {
+            reason: "spaceId without spaceKeyVersion",
+            body: { notebookId: ID, mode: "private", wrappedKey: "AQ", spaceId: vid(6) },
+          },
+          {
+            reason: "spaceKeyVersion without spaceId",
+            body: { notebookId: ID, mode: "private", wrappedKey: "AQ", spaceKeyVersion: 1 },
+          },
           {
             reason: "agent mode without notebookKey",
             body: { notebookId: ID, mode: "agent", wrappedKey: "AQ" },

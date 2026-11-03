@@ -10,6 +10,7 @@ import {
   putSharedRef,
   putSharedSpaceRef,
 } from "../document/records.js";
+import { isAcceptableSharedSpace } from "./trust.js";
 
 /**
  * Align `account.shared` with `GET /shared-with-me`: resources new to this
@@ -59,11 +60,15 @@ export function reconcileSharedRefs(
 export function reconcileSharedSpaces(
   account: Y.Doc,
   items: AccountSharedItem[],
+  myUserId: string,
   now: () => Date = () => new Date(),
 ): { added: string[]; removed: string[] } {
   const refs = getSharedSpaceRefs(account);
   const known = new Set(refs.map((r) => r.spaceId));
-  const live = new Set(items.filter((i) => i.target.kind === "space").map((i) => i.target.id));
+  // Never one's own space or a space of this account under another owner's name.
+  const live = new Set(
+    items.filter((i) => isAcceptableSharedSpace(account, i, myUserId)).map((i) => i.target.id),
+  );
   const added: string[] = [];
   const removed: string[] = [];
   let order = refs.reduce((m, r) => Math.max(m, r.order), 0);

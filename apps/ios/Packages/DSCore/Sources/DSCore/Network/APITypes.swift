@@ -95,6 +95,9 @@ public struct NotebookInfo: Codable, Hashable, Sendable, Identifiable {
     public var wrappedKey: Base64URLData
     /// Shared with other accounts (D-54; older servers omit it).
     public var shared: Bool?
+    /// The shared space it belongs to (D-62): `wrappedKey` is then under the space key, not the
+    /// master key. nil for a notebook of a personal space (and from older servers).
+    public var spaceId: String?
 }
 
 public struct DocVersion: Codable, Hashable, Sendable {

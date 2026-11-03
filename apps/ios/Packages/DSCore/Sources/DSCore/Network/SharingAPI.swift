@@ -379,3 +379,198 @@ public struct SharedByMeItem: Codable, Hashable, Sendable {
         guard members >= 0, awaitingKey >= 0, awaitingKey <= members else { throw APIValidation.fail(c, .members, "counts ≥ 0") }
     }
 }
+
+// MARK: Shared spaces (D-62, api.md «Общие пространства»)
+
+/// A shared space (`GET /spaces`). Name, icon and order are in the space document.
+public struct SharedSpace: Codable, Hashable, Sendable {
+    public var id: String
+    public var ownerUserId: String
+    public var keyVersion: Int
+    public var keyRotationPending: Bool
+    public var pendingSinceVersion: Int?
+    public var createdAt: String
+
+    enum CodingKeys: String, CodingKey { case id, ownerUserId, keyVersion, keyRotationPending, pendingSinceVersion, createdAt }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try APIValidation.uuid(c, .id)
+        ownerUserId = try APIValidation.uuid(c, .ownerUserId)
+        keyVersion = try c.decode(Int.self, forKey: .keyVersion)
+        guard keyVersion >= 1 else { throw APIValidation.fail(c, .keyVersion, "version ≥ 1") }
+        keyRotationPending = try c.decode(Bool.self, forKey: .keyRotationPending)
+        pendingSinceVersion = try c.decodeIfPresent(Int.self, forKey: .pendingSinceVersion)
+        if let p = pendingSinceVersion, p < 1 { throw APIValidation.fail(c, .pendingSinceVersion, "version ≥ 1") }
+        createdAt = try APIValidation.isoDateTime(c, .createdAt)
+    }
+}
+
+public struct CreateSpaceRequest: Codable, Hashable, Sendable {
+    public var spaceId: String
+    public var wrappedKey: Base64URLData
+
+    public init(spaceId: String, wrappedKey: Data) {
+        self.spaceId = spaceId
+        self.wrappedKey = .init(wrappedKey)
+    }
+
+    enum CodingKeys: String, CodingKey { case spaceId, wrappedKey }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        spaceId = try APIValidation.uuid(c, .spaceId)
+        wrappedKey = try APIValidation.bytes(c, .wrappedKey, nonEmpty: true)
+    }
+}
+
+/// The owner's `GET /spaces/:id/key`.
+public struct SpaceKeyState: Codable, Hashable, Sendable {
+    public var version: Int
+    public var wrappedKey: Base64URLData
+    public var keyChain: [Base64URLData]
+    public var keyRotationPending: Bool
+    public var pendingSinceVersion: Int?
+
+    enum CodingKeys: String, CodingKey { case version, wrappedKey, keyChain, keyRotationPending, pendingSinceVersion }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        guard version >= 1 else { throw APIValidation.fail(c, .version, "version ≥ 1") }
+        wrappedKey = try APIValidation.bytes(c, .wrappedKey, nonEmpty: true)
+        keyChain = try c.decode([Base64URLData].self, forKey: .keyChain)
+        keyRotationPending = try c.decode(Bool.self, forKey: .keyRotationPending)
+        pendingSinceVersion = try c.decodeIfPresent(Int.self, forKey: .pendingSinceVersion)
+        if let p = pendingSinceVersion, p < 1 { throw APIValidation.fail(c, .pendingSinceVersion, "version ≥ 1") }
+    }
+}
+
+/// A notebook of a shared space and its key under the space key (`GET /spaces/:id/notebooks`).
+public struct SpaceNotebook: Codable, Hashable, Sendable {
+    public var notebookId: String
+    public var version: Int
+    public var spaceWrappedKey: Base64URLData
+    public var keyChain: [Base64URLData]
+    public var mode: NotebookMode
+
+    enum CodingKeys: String, CodingKey { case notebookId, version, spaceWrappedKey, keyChain, mode }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        notebookId = try APIValidation.uuid(c, .notebookId)
+        version = try c.decode(Int.self, forKey: .version)
+        guard version >= 1 else { throw APIValidation.fail(c, .version, "version ≥ 1") }
+        spaceWrappedKey = try APIValidation.bytes(c, .spaceWrappedKey, nonEmpty: true)
+        keyChain = try c.decode([Base64URLData].self, forKey: .keyChain)
+        mode = try c.decode(NotebookMode.self, forKey: .mode)
+    }
+}
+
+/// `PUT /spaces/:id/notebooks/:notebookId`: the notebook key (current version) under the space key.
+public struct SpaceNotebookKeyRequest: Codable, Hashable, Sendable {
+    public var version: Int
+    public var spaceWrappedKey: Base64URLData
+
+    public init(version: Int, spaceWrappedKey: Data) {
+        self.version = version
+        self.spaceWrappedKey = .init(spaceWrappedKey)
+    }
+
+    enum CodingKeys: String, CodingKey { case version, spaceWrappedKey }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        guard version >= 1 else { throw APIValidation.fail(c, .version, "version ≥ 1") }
+        spaceWrappedKey = try APIValidation.bytes(c, .spaceWrappedKey, nonEmpty: true)
+    }
+}
+
+/// `POST /spaces/:id/notebooks/:notebookId/move-out`: a new notebook key under the owner's
+/// master key, the chain link, and the key itself for agent mode.
+public struct MoveOutRequest: Codable, Hashable, Sendable {
+    public var version: Int
+    public var ownerWrappedKey: Base64URLData
+    public var previousKeyWrap: Base64URLData
+    public var notebookKey: Base64URLData?
+
+    public init(version: Int, ownerWrappedKey: Data, previousKeyWrap: Data, notebookKey: Data? = nil) {
+        self.version = version
+        self.ownerWrappedKey = .init(ownerWrappedKey)
+        self.previousKeyWrap = .init(previousKeyWrap)
+        self.notebookKey = notebookKey.map(Base64URLData.init)
+    }
+
+    enum CodingKeys: String, CodingKey { case version, ownerWrappedKey, previousKeyWrap, notebookKey }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        guard version >= 2 else { throw APIValidation.fail(c, .version, "a new key: version ≥ 2") }
+        ownerWrappedKey = try APIValidation.bytes(c, .ownerWrappedKey, nonEmpty: true)
+        previousKeyWrap = try APIValidation.bytes(c, .previousKeyWrap, nonEmpty: true)
+        notebookKey = c.contains(.notebookKey) ? try APIValidation.bytes(c, .notebookKey, length: DSCrypto.keyLength) : nil
+    }
+}
+
+/// One notebook in a space rotation: its new key (`version`) under the new space key.
+public struct RotateSpaceNotebook: Codable, Hashable, Sendable {
+    public var notebookId: String
+    public var version: Int
+    public var spaceWrappedKey: Base64URLData
+    public var previousKeyWrap: Base64URLData
+    /// Agent mode only: the new key for the server (crypto.md §8).
+    public var notebookKey: Base64URLData?
+
+    public init(notebookId: String, version: Int, spaceWrappedKey: Data, previousKeyWrap: Data, notebookKey: Data? = nil) {
+        self.notebookId = notebookId
+        self.version = version
+        self.spaceWrappedKey = .init(spaceWrappedKey)
+        self.previousKeyWrap = .init(previousKeyWrap)
+        self.notebookKey = notebookKey.map(Base64URLData.init)
+    }
+
+    enum CodingKeys: String, CodingKey { case notebookId, version, spaceWrappedKey, previousKeyWrap, notebookKey }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        notebookId = try APIValidation.uuid(c, .notebookId)
+        version = try c.decode(Int.self, forKey: .version)
+        guard version >= 2 else { throw APIValidation.fail(c, .version, "a rotation produces version ≥ 2") }
+        spaceWrappedKey = try APIValidation.bytes(c, .spaceWrappedKey, nonEmpty: true)
+        previousKeyWrap = try APIValidation.bytes(c, .previousKeyWrap, nonEmpty: true)
+        notebookKey = c.contains(.notebookKey) ? try APIValidation.bytes(c, .notebookKey, length: DSCrypto.keyLength) : nil
+    }
+}
+
+/// `POST /spaces/:id/rotate` (crypto.md §11.4): one request, one transaction.
+public struct RotateSpaceRequest: Codable, Hashable, Sendable {
+    public var version: Int
+    public var ownerWrappedKey: Base64URLData
+    public var previousKeyWrap: Base64URLData
+    public var memberKeys: [MemberKey]
+    public var notebooks: [RotateSpaceNotebook]
+
+    public init(version: Int, ownerWrappedKey: Data, previousKeyWrap: Data, memberKeys: [MemberKey], notebooks: [RotateSpaceNotebook]) {
+        self.version = version
+        self.ownerWrappedKey = .init(ownerWrappedKey)
+        self.previousKeyWrap = .init(previousKeyWrap)
+        self.memberKeys = memberKeys
+        self.notebooks = notebooks
+    }
+
+    enum CodingKeys: String, CodingKey { case version, ownerWrappedKey, previousKeyWrap, memberKeys, notebooks }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        guard version >= 2 else { throw APIValidation.fail(c, .version, "a rotation produces version ≥ 2") }
+        ownerWrappedKey = try APIValidation.bytes(c, .ownerWrappedKey, nonEmpty: true)
+        previousKeyWrap = try APIValidation.bytes(c, .previousKeyWrap, nonEmpty: true)
+        memberKeys = try c.decode([MemberKey].self, forKey: .memberKeys)
+        guard Set(memberKeys.map(\.userId)).count == memberKeys.count else { throw APIValidation.fail(c, .memberKeys, "duplicate member") }
+        notebooks = try c.decode([RotateSpaceNotebook].self, forKey: .notebooks)
+        guard Set(notebooks.map(\.notebookId)).count == notebooks.count else { throw APIValidation.fail(c, .notebooks, "duplicate notebook") }
+    }
+}

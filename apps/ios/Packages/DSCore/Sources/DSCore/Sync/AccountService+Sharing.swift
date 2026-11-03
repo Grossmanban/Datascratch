@@ -164,7 +164,7 @@ extension AccountService {
     }
 
     /// After a rotation was accepted: whom the new key went to, and its version.
-    private nonisolated func recordRotation(_ target: SharingTarget, version: Int, publicKeys: [String: String]) {
+    nonisolated func recordRotation(_ target: SharingTarget, version: Int, publicKeys: [String: String]) {
         for (userId, publicKey) in publicKeys { try? trustRecord?.recordMemberKey(target, userId: userId, publicKey: publicKey) }
         recordKeyVersion(target, version)
     }
@@ -352,6 +352,8 @@ extension AccountService {
     nonisolated func isOwnResource(_ item: SharedItem, me: String) -> Bool {
         if item.owner.userId == me { return true }
         guard let context = trustContext.withLock({ $0 }) else { return false }
+        // One of this account's own spaces (D-62).
+        if item.target.kind == .space { return context.record.account.spaces().contains { $0.id == item.target.id } }
         let notebookId = item.target.kind == .note ? context.notebookOfNote(item.target.id) : item.target.id
         return notebookId.map { context.record.account.notebook(id: $0) != nil } ?? false
     }
@@ -366,6 +368,13 @@ extension AccountService {
         guard item.keyVersion >= known else { throw SharingError.olderKey(version: item.keyVersion, known: known) }
         guard try keys.adoptSharedItem(item, memberUserId: me) else { return false }
         recordKeyVersion(target, item.keyVersion)
+        if target.kind == .space {
+            // The space document and its notebooks' indexes (keys under the space key); notes
+            // from the indexes, like any notebook — `docIds` do not say which is which.
+            try store.ensureDocument(docId: target.id, kind: .space, notebookId: nil)
+            try await loadSpaceNotebookKeys(target.id)
+            return true
+        }
         let notebookId = item.target.kind == .notebook ? item.target.id : nil
         for docId in item.docIds {
             if item.target.kind == .notebook, docId == item.target.id {

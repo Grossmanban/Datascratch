@@ -118,7 +118,12 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
         var rotations: [[String: Any]] = []
         /// An older server: no `pendingSinceVersion`.
         var withoutPendingSince = false
+        /// Notebooks of shared spaces (D-62): spaceId → notebookId → key under the space key.
+        var spaceNotebooks: [String: [String: SpaceNotebookEntry]] = [:]
+        var spaceRotations: [[String: Any]] = []
+        var registeredDocs: [String: String] = [:]    // docId → kind
     }
+    struct SpaceNotebookEntry { var version: Int; var wrapped: String; var chain: [String]; var mode: String }
     let state = Locked(State())
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
@@ -233,7 +238,93 @@ final class FakeSharingServer: HTTPTransport, @unchecked Sendable {
                 ["id": String(key.split(separator: ":")[1]), "mode": "private", "createdAt": "2026-10-27T12:00:00.000Z", "wrappedKey": r.ownerWrapped]
             })
         default:
-            return Self.err(500, "internal \(method) \(p)")
+            return handleSpaces(&s, me, method, p, b) ?? Self.err(500, "internal \(method) \(p)")
+        }
+    }
+
+    /// D-62 endpoints (api.md «Общие пространства»).
+    func handleSpaces(_ s: inout State, _ me: String, _ method: String, _ p: [String], _ b: [String: Any]) -> (Int, Any?)? {
+        func space(_ id: String) -> Resource? { s.resources["space:\(id)"] }
+        func isMember(_ id: String) -> Bool { space(id).map { $0.owner == me || $0.members[me]?.wrappedKey != nil } ?? false }
+        switch (method, p.first ?? "", p.count) {
+        case ("POST", "spaces", 1):
+            let id = b["spaceId"] as! String
+            if s.resources["space:\(id)"] != nil { return Self.err(409, "conflict") }
+            s.resources["space:\(id)"] = .init(owner: me, ownerWrapped: b["wrappedKey"] as! String, docIds: [id])
+            s.spaceNotebooks[id] = [:]
+            return (200, ["id": id, "ownerUserId": me, "keyVersion": 1, "keyRotationPending": false, "pendingSinceVersion": NSNull(),
+                          "createdAt": "2026-11-03T12:00:00.000Z"])
+        case ("GET", "spaces", 1):
+            return (200, s.resources.filter { $0.key.hasPrefix("space:") && ($0.value.owner == me || $0.value.members[me] != nil) }.map { key, r in
+                ["id": String(key.dropFirst("space:".count)), "ownerUserId": r.owner, "keyVersion": r.version, "keyRotationPending": r.pending,
+                 "pendingSinceVersion": r.pendingSince as Any? ?? NSNull(), "createdAt": "2026-11-03T12:00:00.000Z"] as [String: Any]
+            })
+        case ("GET", "spaces", 3) where p[2] == "key":
+            guard let r = space(p[1]), r.owner == me else { return Self.err(404, "not_found") }
+            var body: [String: Any] = ["version": r.version, "wrappedKey": r.ownerWrapped, "keyChain": r.chain, "keyRotationPending": r.pending]
+            if !s.withoutPendingSince { body["pendingSinceVersion"] = r.pendingSince as Any? ?? NSNull() }
+            return (200, body)
+        case ("GET", "spaces", 3) where p[2] == "notebooks":
+            guard isMember(p[1]) else { return Self.err(403, "forbidden") }
+            return (200, (s.spaceNotebooks[p[1]] ?? [:]).map { id, e in
+                ["notebookId": id, "version": e.version, "spaceWrappedKey": e.wrapped, "keyChain": e.chain, "mode": e.mode] as [String: Any]
+            })
+        case ("PUT", "spaces", 4):
+            guard space(p[1])?.owner == me else { return Self.err(403, "forbidden") }
+            let nbVersion = s.resources["notebook:\(p[3])"]?.version ?? 1
+            guard b["version"] as? Int == nbVersion else { return Self.err(409, "conflict") }
+            if let r = s.resources["notebook:\(p[3])"], !r.members.isEmpty { return Self.err(409, "conflict") }
+            s.spaceNotebooks[p[1], default: [:]][p[3]] = .init(version: nbVersion, wrapped: b["spaceWrappedKey"] as! String,
+                                                                 chain: s.resources["notebook:\(p[3])"]?.chain ?? [], mode: "private")
+            s.resources["space:\(p[1])"]!.docIds.append(p[3])
+            return (204, nil)
+        case ("POST", "spaces", 5) where p[4] == "move-out":
+            guard space(p[1])?.owner == me, let e = s.spaceNotebooks[p[1]]?[p[3]] else { return Self.err(403, "forbidden") }
+            guard b["version"] as? Int == e.version + 1 else { return Self.err(409, "conflict") }
+            s.spaceNotebooks[p[1]]![p[3]] = nil
+            s.resources["notebook:\(p[3])"] = .init(owner: me, version: e.version + 1, ownerWrapped: b["ownerWrappedKey"] as! String,
+                                                     chain: [b["previousKeyWrap"] as! String] + e.chain, pending: true, pendingSince: e.version)
+            return (204, nil)
+        case ("POST", "spaces", 3) where p[2] == "rotate":
+            guard var r = space(p[1]), r.owner == me else { return Self.err(403, "forbidden") }
+            let keysFor = b["memberKeys"] as! [[String: String]]
+            let nbs = b["notebooks"] as! [[String: Any]]
+            let current = s.spaceNotebooks[p[1]] ?? [:]
+            guard b["version"] as? Int == r.version + 1,
+                  Set(keysFor.map { $0["userId"]! }) == Set(r.members.filter { $0.value.status == "active" }.keys),
+                  Set(nbs.map { $0["notebookId"] as! String }) == Set(current.keys),
+                  nbs.allSatisfy({ ($0["version"] as! Int) == current[$0["notebookId"] as! String]!.version + 1 }) else { return Self.err(409, "conflict") }
+            r.version += 1
+            r.ownerWrapped = b["ownerWrappedKey"] as! String
+            r.chain.insert(b["previousKeyWrap"] as! String, at: 0)
+            for k in keysFor { r.members[k["userId"]!]!.wrappedKey = k["wrappedKey"] }
+            s.resources["space:\(p[1])"] = r
+            for nb in nbs {
+                let id = nb["notebookId"] as! String
+                let old = current[id]!
+                s.spaceNotebooks[p[1]]![id] = .init(version: nb["version"] as! Int, wrapped: nb["spaceWrappedKey"] as! String,
+                                                     chain: [nb["previousKeyWrap"] as! String] + old.chain, mode: old.mode)
+            }
+            s.spaceRotations.append(b)
+            return (204, nil)
+        case ("POST", "spaces", 4) where p[2] == "rotate":
+            s.resources["space:\(p[1])"]!.pending = false
+            s.resources["space:\(p[1])"]!.pendingSince = nil
+            return (204, nil)
+        case ("POST", "notebooks", 1):
+            guard let spaceId = b["spaceId"] as? String else { return Self.err(500, "only space notebooks here") }
+            guard let r = space(spaceId), r.owner == me || r.members[me]?.role == "editor" else { return Self.err(403, "forbidden") }
+            guard let version = b["spaceKeyVersion"] as? Int else { return Self.err(400, "bad_request") }
+            guard version == r.version else { return Self.err(409, "conflict") }
+            let id = b["notebookId"] as! String
+            s.spaceNotebooks[spaceId, default: [:]][id] = .init(version: 1, wrapped: b["wrappedKey"] as! String, chain: [], mode: b["mode"] as! String)
+            s.resources["space:\(spaceId)"]!.docIds.append(id)
+            return (200, ["id": id, "mode": b["mode"]!, "createdAt": "2026-11-03T12:00:00.000Z", "wrappedKey": b["wrappedKey"]!, "spaceId": spaceId])
+        case ("POST", "docs", 1):
+            s.registeredDocs[b["docId"] as! String] = b["kind"] as? String
+            return (204, nil)
+        default:
+            return nil
         }
     }
 }

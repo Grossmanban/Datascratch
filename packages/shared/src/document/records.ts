@@ -8,13 +8,15 @@ import type {
   NoteMeta,
   NotebookRef,
   SharedRef,
+  SharedSpaceRef,
+  SpaceNotebookRef,
   Space,
   StarredItem,
   TabItem,
   TagProps,
 } from "../contracts/document.js";
 import { sharedRefKey } from "../contracts/document.js";
-import { accountRoots, notebookRoots } from "./factories.js";
+import { accountRoots, notebookRoots, spaceRoots } from "./factories.js";
 import { readRecord, readRecords, writeRecord } from "./yjs.js";
 
 function sortByOrder<T extends { order: number; id: string }>(items: T[]): T[] {
@@ -75,6 +77,32 @@ export const putSharedRef = (doc: Y.Doc, ref: SharedRef) =>
   void writeRecord(accountRoots(doc).shared, sharedRefKey(ref.kind, ref.id), ref);
 export const deleteSharedRef = (doc: Y.Doc, kind: SharedRef["kind"], id: string) =>
   accountRoots(doc).shared.delete(sharedRefKey(kind, id));
+
+/** Others' shared spaces in the switcher (D-62, `account.sharedSpaces`), by order. */
+export function getSharedSpaceRefs(doc: Y.Doc): (SharedSpaceRef & { spaceId: string })[] {
+  const out: (SharedSpaceRef & { spaceId: string })[] = [];
+  accountRoots(doc).sharedSpaces.forEach((v, spaceId) => {
+    if (v instanceof Y.Map) out.push({ ...(v.toJSON() as SharedSpaceRef), spaceId });
+  });
+  return out.sort((a, b) => a.order - b.order || (a.spaceId < b.spaceId ? -1 : 1));
+}
+export const putSharedSpaceRef = (doc: Y.Doc, spaceId: string, ref: SharedSpaceRef) =>
+  void writeRecord(accountRoots(doc).sharedSpaces, spaceId, ref);
+export const deleteSharedSpaceRef = (doc: Y.Doc, spaceId: string) =>
+  accountRoots(doc).sharedSpaces.delete(spaceId);
+
+// --- space document (D-62, document-model.md §2.2) ------------------------
+
+export const getSpaceNotebookRefs = (doc: Y.Doc): SpaceNotebookRef[] =>
+  sortByOrder(readRecords<SpaceNotebookRef>(spaceRoots(doc).notebooks));
+export const getSpaceNotebookRef = (doc: Y.Doc, id: string) =>
+  readRecord<SpaceNotebookRef>(spaceRoots(doc).notebooks, id);
+export const putSpaceNotebookRef = (doc: Y.Doc, ref: SpaceNotebookRef) =>
+  void writeRecord(spaceRoots(doc).notebooks, ref.id, ref);
+export const patchSpaceNotebookRef = (doc: Y.Doc, id: string, patch: Partial<SpaceNotebookRef>) =>
+  patchRecord(spaceRoots(doc).notebooks, id, patch);
+export const deleteSpaceNotebookRef = (doc: Y.Doc, id: string) =>
+  spaceRoots(doc).notebooks.delete(id);
 
 export const getStarred = (doc: Y.Doc): StarredItem[] =>
   accountRoots(doc).starred.toJSON() as StarredItem[];

@@ -308,6 +308,12 @@
           "mode": "agent",
           "wrappedKey": "AQ",
           "notebookKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        },
+        {
+          "notebookId": "0192f3c4-0000-7000-8000-000000000001",
+          "mode": "private",
+          "wrappedKey": "AQ",
+          "spaceId": "0192f3c4-0000-7000-8000-000000000006"
         }
       ],
       "invalid": [
@@ -346,6 +352,11 @@
           "docId": "0192f3c4-0000-7000-8000-000000000003",
           "kind": "note",
           "notebookId": "0192f3c4-0000-7000-8000-000000000001"
+        },
+        {
+          "docId": "0192f3c4-0000-7000-8000-000000000006",
+          "kind": "space",
+          "notebookId": null
         }
       ],
       "invalid": [
@@ -355,6 +366,14 @@
             "docId": "0192f3c4-0000-7000-8000-000000000001",
             "kind": "note",
             "notebookId": null
+          }
+        },
+        {
+          "reason": "space document inside a notebook",
+          "body": {
+            "docId": "0192f3c4-0000-7000-8000-000000000006",
+            "kind": "space",
+            "notebookId": "0192f3c4-0000-7000-8000-000000000001"
           }
         },
         {
@@ -445,6 +464,17 @@
             },
             "permission": "admin"
           }
+        },
+        {
+          "reason": "no guest links to a whole space (D-62)",
+          "body": {
+            "shareId": "0192f3c4-0000-7000-8000-000000000001",
+            "target": {
+              "kind": "space",
+              "id": "0192f3c4-0000-7000-8000-000000000006"
+            },
+            "permission": "view"
+          }
         }
       ]
     },
@@ -467,6 +497,15 @@
     },
     "createInvitationRequest": {
       "valid": [
+        {
+          "invitationId": "0192f3c4-0000-7000-8000-000000000001",
+          "target": {
+            "kind": "space",
+            "id": "0192f3c4-0000-7000-8000-000000000006"
+          },
+          "email": "a@b.co",
+          "role": "editor"
+        },
         {
           "invitationId": "0192f3c4-0000-7000-8000-000000000001",
           "target": {
@@ -500,11 +539,11 @@
           }
         },
         {
-          "reason": "spaces cannot be shared",
+          "reason": "folders cannot be shared",
           "body": {
             "invitationId": "0192f3c4-0000-7000-8000-000000000001",
             "target": {
-              "kind": "space",
+              "kind": "folder",
               "id": "0192f3c4-0000-7000-8000-000000000003"
             },
             "email": "a@b.co",
@@ -834,6 +873,198 @@
             "authors": [
               {
                 "userId": "0192f3c4-0000-7000-8000-000000000004"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "sharedSpace": {
+      "valid": [
+        {
+          "id": "0192f3c4-0000-7000-8000-000000000006",
+          "ownerUserId": "0192f3c4-0000-7000-8000-000000000004",
+          "keyVersion": 1,
+          "keyRotationPending": false,
+          "pendingSinceVersion": null,
+          "createdAt": "2026-10-25T12:00:00.000Z"
+        },
+        {
+          "id": "0192f3c4-0000-7000-8000-000000000006",
+          "ownerUserId": "0192f3c4-0000-7000-8000-000000000004",
+          "keyVersion": 3,
+          "keyRotationPending": true,
+          "pendingSinceVersion": 2,
+          "createdAt": "2026-10-25T12:00:00.000Z"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing owner",
+          "body": {
+            "id": "0192f3c4-0000-7000-8000-000000000006",
+            "keyVersion": 1,
+            "keyRotationPending": false,
+            "pendingSinceVersion": null,
+            "createdAt": "2026-10-25T12:00:00.000Z"
+          }
+        }
+      ]
+    },
+    "createSpaceRequest": {
+      "valid": [
+        {
+          "spaceId": "0192f3c4-0000-7000-8000-000000000006",
+          "wrappedKey": "AQ"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing wrappedKey",
+          "body": {
+            "spaceId": "0192f3c4-0000-7000-8000-000000000006"
+          }
+        }
+      ]
+    },
+    "spaceKeyResponse": {
+      "valid": [
+        {
+          "version": 2,
+          "wrappedKey": "AQ",
+          "keyChain": [
+            "AQ"
+          ],
+          "keyRotationPending": false,
+          "pendingSinceVersion": null
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing keyChain",
+          "body": {
+            "version": 2,
+            "wrappedKey": "AQ",
+            "keyRotationPending": false,
+            "pendingSinceVersion": null
+          }
+        }
+      ]
+    },
+    "spaceNotebook": {
+      "valid": [
+        {
+          "notebookId": "0192f3c4-0000-7000-8000-000000000001",
+          "version": 1,
+          "spaceWrappedKey": "AQ",
+          "keyChain": [],
+          "mode": "agent"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "unknown mode",
+          "body": {
+            "notebookId": "0192f3c4-0000-7000-8000-000000000001",
+            "version": 1,
+            "spaceWrappedKey": "AQ",
+            "keyChain": [],
+            "mode": "public"
+          }
+        }
+      ]
+    },
+    "putSpaceNotebookRequest": {
+      "valid": [
+        {
+          "version": 3,
+          "spaceWrappedKey": "AQ"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "version 0",
+          "body": {
+            "version": 0,
+            "spaceWrappedKey": "AQ"
+          }
+        }
+      ]
+    },
+    "moveOutNotebookRequest": {
+      "valid": [
+        {
+          "version": 2,
+          "ownerWrappedKey": "AQ",
+          "previousKeyWrap": "AQ"
+        },
+        {
+          "version": 4,
+          "ownerWrappedKey": "AQ",
+          "previousKeyWrap": "AQ",
+          "notebookKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "moving out must produce version ≥ 2",
+          "body": {
+            "version": 1,
+            "ownerWrappedKey": "AQ",
+            "previousKeyWrap": "AQ"
+          }
+        }
+      ]
+    },
+    "rotateSpaceRequest": {
+      "valid": [
+        {
+          "version": 2,
+          "ownerWrappedKey": "AQ",
+          "previousKeyWrap": "AQ",
+          "memberKeys": [
+            {
+              "userId": "0192f3c4-0000-7000-8000-000000000004",
+              "wrappedKey": "AQ"
+            }
+          ],
+          "notebooks": [
+            {
+              "notebookId": "0192f3c4-0000-7000-8000-000000000001",
+              "version": 2,
+              "spaceWrappedKey": "AQ",
+              "previousKeyWrap": "AQ"
+            },
+            {
+              "notebookId": "0192f3c4-0000-7000-8000-000000000003",
+              "version": 5,
+              "spaceWrappedKey": "AQ",
+              "previousKeyWrap": "AQ",
+              "notebookKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            }
+          ]
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "duplicate notebook",
+          "body": {
+            "version": 2,
+            "ownerWrappedKey": "AQ",
+            "previousKeyWrap": "AQ",
+            "memberKeys": [],
+            "notebooks": [
+              {
+                "notebookId": "0192f3c4-0000-7000-8000-000000000001",
+                "version": 2,
+                "spaceWrappedKey": "AQ",
+                "previousKeyWrap": "AQ"
+              },
+              {
+                "notebookId": "0192f3c4-0000-7000-8000-000000000001",
+                "version": 2,
+                "spaceWrappedKey": "AQ",
+                "previousKeyWrap": "AQ"
               }
             ]
           }

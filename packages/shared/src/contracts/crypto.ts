@@ -72,6 +72,12 @@ export const AD = {
     version <= 1 ? `ds1|key|notebook|${notebookId}` : `ds1|key|notebook|${notebookId}|${version}`,
   noteKeyVersion: (noteId: string, version: number) =>
     version <= 1 ? `ds1|key|note|${noteId}` : `ds1|key|note|${noteId}|${version}`,
+  /** spaceKey of a shared space under the owner's masterKey (crypto.md §11.1, D-62). */
+  spaceKey: (spaceId: string, version: number) =>
+    version <= 1 ? `ds1|key|space|${spaceId}` : `ds1|key|space|${spaceId}|${version}`,
+  /** notebookKey (of `version`) of a shared space's notebook under the spaceKey (§11.1). */
+  spaceNotebookKey: (spaceId: string, notebookId: string, version: number) =>
+    `ds1|key|space-notebook|${spaceId}|${notebookId}|${version}`,
   /** Key of `version - 1` wrapped by the key of `version` (rotation chain). */
   previousKey: (kind: ShareTargetKind, targetId: string, version: number) =>
     `ds1|key|prev|${kind}|${targetId}|${version}`,
@@ -85,7 +91,7 @@ export const AD = {
   ) => `ds1|key|member|${kind}|${targetId}|${version}|${fromUserId}|${toUserId}`,
 } as const;
 
-export type ShareTargetKind = "notebook" | "note";
+export type ShareTargetKind = "notebook" | "note" | "space";
 
 /** X25519 key pair of an account (crypto.md §10). */
 export const BOX_PUBLIC_KEY_BYTES = 32;

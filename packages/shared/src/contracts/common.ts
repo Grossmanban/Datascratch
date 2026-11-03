@@ -65,7 +65,8 @@ export type AuthorKind = (typeof AUTHOR_KINDS)[number];
 export const authorKindSchema = z.enum(AUTHOR_KINDS);
 
 /** Kinds of synchronized Yjs documents (document-model.md §1). */
-export const DOC_KINDS = ["account", "notebook", "note"] as const;
+/** `space`: document of a shared space (D-62, document-model.md §2.2), docId = spaceId. */
+export const DOC_KINDS = ["account", "notebook", "note", "space"] as const;
 export type DocKind = (typeof DOC_KINDS)[number];
 export const docKindSchema = z.enum(DOC_KINDS);
 

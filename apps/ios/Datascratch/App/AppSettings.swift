@@ -42,7 +42,8 @@ final class AppSettings {
         appearance = Appearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         defaultFont = NoteStyle.Font(rawValue: defaults.string(forKey: "defaultFont") ?? "") ?? .serif
         defaultPaper = NoteStyle.Paper(rawValue: defaults.string(forKey: "defaultPaper") ?? "") ?? .plain
-        libraryLayout = LibraryLayout(rawValue: defaults.string(forKey: "libraryLayout") ?? "") ?? .grid
+        // D-61: rows by default — more fits on screen; cards stay a choice in «Layout».
+        libraryLayout = LibraryLayout(rawValue: defaults.string(forKey: "libraryLayout") ?? "") ?? .list
         hapticsEnabled = defaults.object(forKey: "haptics") as? Bool ?? true
         penPaletteCollapsed = defaults.bool(forKey: "penPaletteCollapsed")
     }

@@ -58,6 +58,9 @@ final class SceneModel {
 
     var sidebar: SidebarItem? = .allDocuments {
         didSet {
+            // iPad portrait (D-60): the sidebar shown over the list goes once something is picked
+            // in it — the same row again too.
+            if isPad, !isPadLandscape, padColumns == .all { padColumns = nil }
             guard oldValue != sidebar else { return }
             searchText = ""
         }
@@ -86,35 +89,41 @@ final class SceneModel {
         library.deleteForever(id)
     }
 
-    // MARK: iPad levels (D-47): 1 sidebar → 2 list (Tasks, Calendar) → 3 document
+    // MARK: iPad columns (D-60): sidebar | list | document, as in Notesnook
     //
-    // At most two neighbouring levels on screen: sidebar | list, or list | document — never the
-    // sidebar with a document. Opening a document slides the sidebar away; the sidebar button
-    // slides it back (the document stays open and returns when picked); × closes the document;
-    // «Full Screen» belongs to the document alone.
+    // Landscape shows all three; portrait the list and the document, the sidebar over them.
+    // Navigation never closes the document. One sidebar button steps through all three →
+    // list and document → the document alone; «Full Screen» belongs to the document alone.
 
-    enum PadLevel { case list, document }
     enum FullScreen { case document, content }
 
-    /// The rightmost level shown: `.list` = sidebar | list, `.document` = list | document.
-    var padLevel: PadLevel = .list
+    /// The columns the person chose with the sidebar button (`nil`: by orientation).
+    var padColumns: NavigationSplitViewVisibility?
     /// The document alone on the screen.
     var fullScreen: FullScreen?
 
     var isDocumentFullScreen: Bool { fullScreen == .document }
     var isContentFullScreen: Bool { fullScreen == .content }
 
-    /// What the iPad split view shows (sidebar | workspace).
-    var padColumnVisibility: NavigationSplitViewVisibility {
-        get { fullScreen != nil || (padLevel == .document && selectedNoteId != nil) ? .detailOnly : .all }
-        set {
-            // The sidebar button or the edge swipe.
-            if fullScreen != nil {
-                if newValue != .detailOnly { fullScreen = nil; padLevel = .list }
-                return
-            }
-            padLevel = newValue == .detailOnly && selectedNoteId != nil ? .document : .list
+    /// What the iPad split view shows; `landscape` picks the default.
+    func padColumnVisibility(landscape: Bool) -> NavigationSplitViewVisibility {
+        if fullScreen == .document, selectedNoteId != nil { return .detailOnly }
+        // Nothing open: never an empty column alone.
+        if padColumns == .detailOnly, selectedNoteId == nil { return .doubleColumn }
+        return padColumns ?? (landscape ? .all : .doubleColumn)
+    }
+
+    /// iPad orientation, kept by the split view: in portrait the sidebar shown with the button
+    /// goes again once something is picked in it.
+    var isPadLandscape = true
+
+    /// The split view changed the columns itself (an edge swipe, the sidebar shown over the list).
+    func setPadColumnVisibility(_ visibility: NavigationSplitViewVisibility) {
+        if fullScreen != nil {
+            if visibility != .detailOnly { fullScreen = nil }
+            return
         }
+        padColumns = visibility
     }
 
     /// iPhone (and the compact width of a narrow window): the system's three-column stack.
@@ -168,7 +177,6 @@ final class SceneModel {
         }
         if let id = app.noteForTesting {
             selectedNoteId = id
-            padLevel = .document
             preferredCompactColumn = .detail
         }
     }
@@ -263,9 +271,8 @@ final class SceneModel {
         withAnimation(Theme.Motion.snappy) {
             selectedNoteId = noteId
             preferredCompactColumn = .detail
-            // List | document: the sidebar slides away (D-47).
+            // The columns stay as they are (D-60): opening a document never hides them.
             if fullScreen == .content { fullScreen = nil }
-            padLevel = .document
         }
         // The notes-only app (D-51) neither shows nor writes tabs.
         if Features.tabs { library.openTab(noteId) }
@@ -301,9 +308,8 @@ final class SceneModel {
         withAnimation(Theme.Motion.smooth) {
             selectedNoteId = nil
             preferredCompactColumn = .content
-            // Back to sidebar | list.
+            // Nothing to show alone any more.
             fullScreen = nil
-            padLevel = .list
         }
     }
 
@@ -327,7 +333,6 @@ final class SceneModel {
             }
             selectedNoteId = restoringTab && Features.tabs ? library.activeTab : nil
             if selectedNoteId == nil {
-                padLevel = .list
                 preferredCompactColumn = .content
             }
         }
@@ -336,6 +341,7 @@ final class SceneModel {
     func show(_ item: SidebarItem) {
         withAnimation(Theme.Motion.snappy) {
             if fullScreen == .content { fullScreen = nil }
+            if isPad, !isPadLandscape, padColumns == .all { padColumns = nil }
             sidebar = item
             preferredCompactColumn = .content
         }
@@ -354,7 +360,14 @@ final class SceneModel {
     func toggleSidebar() {
         withAnimation(Theme.Motion.smooth) {
             if isPad {
-                padColumnVisibility = padColumnVisibility == .detailOnly ? .all : .detailOnly
+                // Landscape: all three → list and document → the document alone → all three.
+                // Portrait: list and document ↔ the sidebar with them (D-60).
+                if fullScreen != nil { fullScreen = nil; padColumns = .all; return }
+                switch padColumnVisibility(landscape: isPadLandscape) {
+                case .all: padColumns = .doubleColumn
+                case .doubleColumn: padColumns = isPadLandscape && selectedNoteId != nil ? .detailOnly : .all
+                default: padColumns = .all
+                }
             } else {
                 columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
             }

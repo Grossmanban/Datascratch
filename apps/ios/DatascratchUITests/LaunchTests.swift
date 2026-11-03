@@ -777,7 +777,7 @@ final class LibraryUITests: XCTestCase {
             XCTAssertLessThanOrEqual(palette.frame.maxX, column.maxX + 1, "\(label): palette past the column's right edge")
         }
 
-        // List | document (D-47): the narrowest editor.
+        // Beside the list (D-60): the narrowest editor.
         checkInside("list and document")
         let narrow = editor.frame.width
 
@@ -804,8 +804,8 @@ final class LibraryUITests: XCTestCase {
         try checkContentFullScreen(.landscapeLeft)
     }
 
-    /// D-47: Tasks are level 2 — beside the sidebar, the rest of the width; lists carry no
-    /// document buttons (no «Full Screen» of their own).
+    /// D-60: Tasks are in the list column; lists carry no document buttons (no «Full Screen»
+    /// of their own).
     private func checkContentFullScreen(_ orientation: UIDeviceOrientation) throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
         rotate(orientation)
@@ -816,9 +816,7 @@ final class LibraryUITests: XCTestCase {
         settle(1.5)
         let bucket = app.descendants(matching: .any)["tasks.bucket"].firstMatch
         XCTAssertTrue(bucket.waitForExistence(timeout: 3))
-        let window = app.windows.firstMatch.frame
-        XCTAssertTrue(sidebarIsShown(app), "choosing Tasks hid the sidebar")
-        XCTAssertGreaterThan(bucket.frame.midX, window.width * 0.35, "Tasks did not take the rest of the width")
+        XCTAssertTrue(bucket.isHittable, "Tasks are not on screen")
         let truncated = app.buttons.allElementsBoundByIndex.prefix(40).filter { $0.label.hasSuffix("…") && $0.label.count <= 3 }
         XCTAssertTrue(truncated.isEmpty, "cut-off labels: \(truncated.map(\.label))")
         XCTAssertEqual(app.buttons.matching(identifier: "content.fullScreen").count, 0, "a list has its own Full Screen")
@@ -830,9 +828,9 @@ final class LibraryUITests: XCTestCase {
         return row.exists && row.isHittable && row.frame.minX >= 0
     }
 
-    /// D-15 column rules: only the sidebar button hides the sidebar; opening and closing a
-    /// document leave it alone; Full Screen hides it and the list, and leaving brings back the
-    /// same layout.
+    /// D-60 columns: landscape shows sidebar | list | document, portrait list | document;
+    /// navigation never closes the document; one sidebar button steps through the layouts;
+    /// Full Screen is the document's alone and comes back to the same layout; × closes the tab.
     func testColumnRulesOnIPad() throws {
         try checkColumnRules(.portrait)
     }
@@ -844,70 +842,76 @@ final class LibraryUITests: XCTestCase {
     private func checkColumnRules(_ orientation: UIDeviceOrientation) throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
         rotate(orientation)
+        let landscape = orientation != .portrait
         let app = launchSignedIn()
         let window = app.windows.firstMatch.frame
-        XCTAssertTrue(app.cells.containing(.any, identifier: "sidebar.allDocuments").firstMatch.waitForExistence(timeout: 5))
-        XCTAssertTrue(sidebarIsShown(app), "no sidebar at launch (sidebar | list)")
+        let list = app.descendants(matching: .any)["workspace.list"].firstMatch
+        XCTAssertTrue(list.waitForExistence(timeout: 5), "no list at launch; buttons: \(Self.buttons(app))")
+        if landscape { XCTAssertTrue(sidebarIsShown(app), "no sidebar at launch in landscape (three columns)") }
 
-        // Opening a document: list | document, the sidebar slides away.
+        // Opening a document keeps the columns: the list stays beside it.
         try openNewNoteInNativeEditor(app)
         settle(1)
         let editor = app.descendants(matching: .any)["editor"].firstMatch
-        XCTAssertFalse(sidebarIsShown(app), "the sidebar stayed beside the document")
-        XCTAssertTrue(app.descendants(matching: .any)["workspace.list"].firstMatch.exists, "no list beside the document")
+        XCTAssertTrue(list.exists, "no list beside the document")
+        if landscape { XCTAssertTrue(sidebarIsShown(app), "opening a document hid the sidebar") }
         XCTAssertEqual(app.buttons.matching(identifier: "document.fullScreen").count, 1, "Full Screen is not the document's alone")
         let beside = editor.frame
 
-        // The sidebar button: back to sidebar | list, the document waits.
+        // The sidebar button: the document stays open whatever the columns.
         let sidebarButton = app.buttons["workspace.sidebar"].firstMatch
         XCTAssertTrue(sidebarButton.waitForExistence(timeout: 3), "no sidebar button; buttons: \(Self.buttons(app))")
         sidebarButton.tap()
         settle(1.5)
-        XCTAssertTrue(sidebarIsShown(app), "the sidebar button did not bring the sidebar back")
-        XCTAssertFalse(editor.exists, "the sidebar is beside the document")
-        let card = app.descendants(matching: .any)["document.card"].firstMatch
-        XCTAssertTrue(card.waitForExistence(timeout: 3), "no document card")
-        card.tap()
-        XCTAssertTrue(editor.waitForExistence(timeout: 5), "the document did not come back")
-        settle(1)
-        XCTAssertFalse(sidebarIsShown(app), "the sidebar stayed beside the document")
+        XCTAssertTrue(editor.exists, "the sidebar button closed the document")
+        if landscape {
+            XCTAssertFalse(sidebarIsShown(app), "landscape: the first press hides the sidebar")
+        } else {
+            XCTAssertTrue(sidebarIsShown(app), "portrait: the press shows the sidebar")
+            // Picking in the sidebar changes the list, never the document; the sidebar goes again.
+            sidebarElement(app, "sidebar.notebook").tap()
+            settle(1.5)
+            XCTAssertTrue(editor.exists, "picking in the sidebar closed the document")
+            XCTAssertFalse(sidebarIsShown(app), "portrait: the sidebar stayed after a pick")
+        }
 
-        // Full Screen and back: the same list | document.
+        // Full Screen and back: the same layout.
         let fullScreen = app.buttons["document.fullScreen"].firstMatch
         fullScreen.tap()
         settle(1.5)
         XCTAssertGreaterThan(editor.frame.width, window.width * 0.9, "the document is not alone on screen")
         fullScreen.tap()
         settle(1.5)
-        XCTAssertEqual(editor.frame.minX, beside.minX, accuracy: 2, "the layout is not as before")
-        XCTAssertEqual(editor.frame.width, beside.width, accuracy: 2, "the layout is not as before")
+        if !landscape {
+            XCTAssertEqual(editor.frame.minX, beside.minX, accuracy: 2, "the layout is not as before")
+            XCTAssertEqual(editor.frame.width, beside.width, accuracy: 2, "the layout is not as before")
+        }
 
-        // × closes the document itself: sidebar | list.
+        // × closes the tab: the list stays, the document goes.
         let close = app.buttons["document.close"].firstMatch
-        XCTAssertTrue(close.waitForExistence(timeout: 3), "no Close Document button")
+        XCTAssertTrue(close.waitForExistence(timeout: 3), "no Close Tab button")
         close.tap()
         settle(1.5)
         XCTAssertFalse(editor.exists, "the document is still open")
-        XCTAssertTrue(sidebarIsShown(app), "closing the document did not bring the sidebar back")
+        XCTAssertTrue(list.exists, "closing the tab hid the list")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        shot.name = "levels-\(orientation == .portrait ? "portrait" : "landscape")"
+        shot.name = "columns-\(landscape ? "landscape" : "portrait")"
         shot.lifetime = .keepAlways
         add(shot)
     }
 
-    /// iPad: closing the document gives the screen beside it the whole width.
+    /// iPad: closing the document (its tab) leaves the list in place.
     func testClosingTheDocumentOnIPad() throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
         let app = launchSignedIn()
         try openNewNoteInNativeEditor(app)
         let close = app.buttons["document.close"].firstMatch
-        XCTAssertTrue(close.waitForExistence(timeout: 3), "no Close Document button; buttons: \(Self.buttons(app))")
+        XCTAssertTrue(close.waitForExistence(timeout: 3), "no Close Tab button; buttons: \(Self.buttons(app))")
         close.tap()
         settle(1.5)
         XCTAssertFalse(app.descendants(matching: .any)["editor"].firstMatch.exists, "the document is still open")
         let card = app.descendants(matching: .any)["document.card"].firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 3), "the document list is not shown")
-        XCTAssertTrue(sidebarIsShown(app), "closing the document did not bring back sidebar | list")
     }
 
     /// iPad (build 8 feedback): after closing a document (list on the whole width), showing the
@@ -943,9 +947,8 @@ final class LibraryUITests: XCTestCase {
         let footer = app.descendants(matching: .any)["sidebar.footer"].firstMatch
         XCTAssertTrue(trash.exists && footer.exists, "no Trash or footer")
         // Scroll the sidebar to its end: the last row must stop above the footer.
-        let firstRow = app.cells.containing(.any, identifier: "sidebar.allDocuments").firstMatch
-        firstRow.swipeUp()
-        firstRow.swipeUp()
+        trash.swipeUp()
+        trash.swipeUp()
         settle(1)
         XCTAssertLessThanOrEqual(trash.frame.maxY, footer.frame.minY + 1, "Trash is under the footer")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -1102,9 +1105,10 @@ final class LibraryUITests: XCTestCase {
         try openNewNoteInNativeEditor(app)
         // Something in it, so leaving does not drop it (an empty new note is not kept).
         app.typeText("Kept")
-        // iPhone: back from the document and the list to the sidebar.
+        // iPhone: back from the document and the list to the sidebar (on iPad the first bar
+        // button is the sidebar button, D-60 — `sidebarElement` below brings the sidebar).
         let allRow = app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch
-        for _ in 0..<3 where !(allRow.exists && allRow.isHittable) {
+        for _ in 0..<3 where UIDevice.current.userInterfaceIdiom == .phone && !(allRow.exists && allRow.isHittable) {
             let back = app.navigationBars.buttons.firstMatch
             if back.exists { back.tap() }
             settle(1)

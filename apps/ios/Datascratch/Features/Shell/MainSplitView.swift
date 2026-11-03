@@ -10,17 +10,31 @@ struct MainSplitView: View {
         @Bindable var sync = app.sync
         Group {
             if UIDevice.current.userInterfaceIdiom == .pad, sizeClass == .regular {
-                // iPad: sidebar | workspace (list and document side by side, D-15).
-                NavigationSplitView(columnVisibility: $scene.padColumnVisibility) {
-                    SidebarView()
-                        .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 340)
-                        // One sidebar button, ours, in the workspace (the system one moved around).
-                        .toolbar(removing: .sidebarToggle)
-                } detail: {
-                    PadWorkspace()
+                // iPad (D-60): sidebar | list | document at once in landscape, list | document
+                // in portrait — as in Notesnook. Navigation never closes the document.
+                GeometryReader { proxy in
+                    let landscape = proxy.size.width > proxy.size.height
+                    NavigationSplitView(columnVisibility: Binding(
+                        get: { scene.padColumnVisibility(landscape: landscape) },
+                        set: { scene.setPadColumnVisibility($0) })) {
+                        SidebarView()
+                            .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
+                            // One sidebar button, ours (it steps through the three layouts).
+                            .toolbar(removing: .sidebarToggle)
+                    } content: {
+                        ContentColumn()
+                            .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 440)
+                            .toolbar {
+                                ToolbarItem(placement: .topBarLeading) { SidebarToggleButton() }
+                            }
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("workspace.list")
+                    } detail: {
+                        PadDocumentColumn()
+                    }
+                    .navigationSplitViewStyle(.balanced)
+                    .onChange(of: landscape, initial: true) { _, value in scene.isPadLandscape = value }
                 }
-                // Side by side in both orientations: the sidebar never covers the workspace.
-                .navigationSplitViewStyle(.balanced)
             } else {
                 NavigationSplitView(columnVisibility: $scene.columnVisibility,
                                     preferredCompactColumn: $scene.preferredCompactColumn) {
@@ -71,70 +85,48 @@ struct MainSplitView: View {
     }
 }
 
-/// iPad workspace beside the sidebar (D-47): the list (or Tasks, Calendar) alone at level 2, the
-/// list and the document at level 3, the document alone in full screen.
-struct PadWorkspace: View {
+/// iPad document column (D-60): the open document with its tab strip, or «Nothing open».
+struct PadDocumentColumn: View {
     @Environment(AppModel.self) private var app
     @Environment(SceneModel.self) private var scene
+    @State private var width: CGFloat = 1000
 
     var body: some View {
-        let noteId = scene.selectedNoteId.flatMap { app.library.note($0) != nil ? $0 : nil }
-        // D-47: the document shows at level 3 (list | document) or alone in full screen; at level 2
-        // (sidebar | list) it stays open off screen and comes back when picked.
-        let showsDocument = noteId != nil && (scene.padLevel == .document || scene.isDocumentFullScreen)
-        GeometryReader { proxy in
-            // Too narrow for both (portrait with the sidebar): the document alone, the list comes
-            // back when it closes.
-            let showsList = !(showsDocument && (scene.isDocumentFullScreen || proxy.size.width < 640))
-            // 300 at the least: on an iPad mini in portrait the document beside it then has
-            // room for the pen palette's narrowest row (with 320 it ran 9 pt off screen).
-            let listWidth = min(420, max(300, proxy.size.width * 0.38))
-            HStack(spacing: 0) {
-                if showsList {
-                    NavigationStack {
-                        ContentColumn()
-                            .toolbar {
-                                ToolbarItem(placement: .topBarLeading) { SidebarToggleButton() }
-                            }
+        NavigationStack {
+            if let noteId = scene.selectedNoteId, app.library.note(noteId) != nil {
+                DocumentScreen(noteId: noteId)
+                    .id(noteId)
+                    // Open documents as tabs once there are two (spec/12 §12.6).
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        if Features.tabs, !scene.isNoteWindow, app.library.openTabs.count > 1 { TabStrip() }
                     }
-                    .frame(width: showsDocument ? listWidth : nil)
-                    .frame(maxWidth: showsDocument ? nil : .infinity)
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("workspace.list")
-                    if showsDocument { Divider().ignoresSafeArea() }
-                }
-                if showsDocument, let noteId {
-                    NavigationStack {
-                        DocumentScreen(noteId: noteId)
-                            .id(noteId)
-                            // Open documents as tabs once there are two (spec/12 §12.6).
-                            .safeAreaInset(edge: .top, spacing: 0) {
-                                if Features.tabs, !scene.isNoteWindow, app.library.openTabs.count > 1 { TabStrip() }
-                            }
+                    .toolbar {
+                        // The list hidden (the document alone): the way back to the columns.
+                        if scene.padColumnVisibility(landscape: scene.isPadLandscape) == .detailOnly, !scene.isDocumentFullScreen {
+                            ToolbarItem(placement: .topBarLeading) { SidebarToggleButton() }
+                        }
                     }
-                    // Takes the width that is left, never more: its content (toolbar, format bar)
-                    // must not push the column past the screen edge (iPad mini portrait).
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                    // Beside the list on an iPad mini in portrait the column is ~420 pt: the
-                    // document's toolbar folds Insert and Share into «…» to fit it.
-                    .environment(\.isNarrowDocumentColumn, showsList && proxy.size.width - listWidth < 480)
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("workspace.document")
-                }
+            } else {
+                EmptyDetailView()
             }
         }
         .background(Theme.Palette.canvas.ignoresSafeArea())
+        // Takes the width that is left, never more (iPad mini portrait).
+        .frame(minWidth: 0, maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        // A narrow column (iPad mini, portrait): Insert and Share fold into «…».
+        .environment(\.isNarrowDocumentColumn, width < 480)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("workspace.document")
     }
 }
 
-/// Back to sidebar | list (D-47); an open document stays open and returns when picked. In full
-/// screen it brings the columns back.
+/// iPad (D-60): steps through all three columns → list and document → the document alone.
 struct SidebarToggleButton: View {
     @Environment(SceneModel.self) private var scene
 
     var body: some View {
-        // Only where the sidebar is off screen (list | document, or the document alone).
-        if scene.padColumnVisibility == .detailOnly {
+        if UIDevice.current.userInterfaceIdiom == .pad, !scene.isDocumentFullScreen {
             Button { scene.toggleSidebar() } label: {
                 Image(systemName: "sidebar.left")
             }

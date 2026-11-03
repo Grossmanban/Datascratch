@@ -105,7 +105,7 @@ struct SidebarView: View {
 
     @ViewBuilder private var mainSection: some View {
         Section {
-            SidebarLabel("All Documents", systemImage: "doc.on.doc")
+            SidebarLabel("All Documents", systemImage: "doc.on.doc", count: library.documentCount)
                 .tag(SidebarItem.allDocuments)
                 .accessibilityIdentifier("sidebar.allDocuments")
             if Features.tasks {
@@ -346,19 +346,39 @@ struct NoteTitleLabel: View {
 struct SidebarLabel: View {
     let title: LocalizedStringKey
     let systemImage: String
+    var count: Int?
 
-    init(_ title: LocalizedStringKey, systemImage: String) {
+    init(_ title: LocalizedStringKey, systemImage: String, count: Int? = nil) {
         self.title = title
         self.systemImage = systemImage
+        self.count = count
     }
 
     var body: some View {
         Label {
-            Text(title)
+            HStack {
+                Text(title)
+                if let count, count > 0 {
+                    Spacer()
+                    SidebarCount(count)
+                }
+            }
         } icon: {
             Image(systemName: systemImage)
                 .foregroundStyle(Theme.Palette.textSecondary)
         }
+    }
+}
+
+/// How many notes a row holds (D-61), quiet and right-aligned, as in Notesnook.
+struct SidebarCount: View {
+    let count: Int
+    init(_ count: Int) { self.count = count }
+
+    var body: some View {
+        Text(count, format: .number)
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(Theme.Palette.textTertiary)
     }
 }
 
@@ -368,12 +388,19 @@ struct SidebarListStyle: ViewModifier {
     let isCompact: Bool
 
     func body(content: Content) -> some View {
+        // D-61: denser rows on both (15 pt, ~36 pt high), sections close together.
         if isCompact {
             content
                 .listStyle(.plain)
-                .environment(\.defaultMinListRowHeight, 40)
+                .environment(\.defaultMinListRowHeight, 36)
+                .font(.subheadline)
+                .listSectionSpacing(.compact)
         } else {
-            content.listStyle(.sidebar)
+            content
+                .listStyle(.sidebar)
+                .environment(\.defaultMinListRowHeight, 34)
+                .font(.subheadline)
+                .listSectionSpacing(.compact)
         }
     }
 }

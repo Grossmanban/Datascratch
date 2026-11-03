@@ -259,7 +259,7 @@ struct NativeEditorRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: EditorView, context: Context) {}
 
     /// Exactly the space it is given: the editor's own preferred width (its text column) must
-    /// not push the document past the screen edge next to the list (iPad mini portrait, D-47).
+    /// not push the document past the screen edge next to the list (iPad mini portrait, D-60).
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: EditorView, context: Context) -> CGSize? {
         guard let width = proposal.width, let height = proposal.height else { return nil }
         return CGSize(width: width, height: height)
@@ -516,7 +516,7 @@ struct NativeEditorToolbar: ToolbarContent {
                 TabOverviewButton()
             }
             // A narrow column (next to the list on an iPad mini in portrait): Insert and Share go
-            // into «…» so the bar fits the column (D-47).
+            // into «…» so the bar fits the column (D-60).
             if !isNarrowColumn {
                 if !isViewOnly {
                 Menu { insertItems } label: {

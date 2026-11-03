@@ -1327,6 +1327,20 @@ public final class EditorView: UIView {
         return nil
     }
 
+    /// The rendered diagram under a point (text view coordinates).
+    func diagram(at point: CGPoint) -> UIImage? {
+        factory.mermaidViews.first { _, view in
+            view.window != nil && view.renderedImage != nil && view.convert(view.bounds, to: textView).contains(point)
+        }?.view.renderedImage
+    }
+
+    /// A diagram on the whole screen, zoomable.
+    private func openDiagram(_ image: UIImage) {
+        var top = window?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        top?.present(DiagramViewerController(image: image), animated: true)
+    }
+
     /// The file block under a point (text view coordinates).
     func file(at point: CGPoint) -> BlockID? {
         factory.fileViews.first { _, view in
@@ -1552,6 +1566,7 @@ public final class EditorView: UIView {
         noteLink(at: point) != nil || (!model.isReadOnly && taskCheckbox(at: point) != nil)
             || (taskDatesEnabled && !model.isReadOnly && taskDateChip(at: point) != nil)
             || (onImageTap != nil && image(at: point) != nil) || (onFileTap != nil && file(at: point) != nil)
+            || diagram(at: point) != nil
     }
 
     /// The task date chip under a point (text view coordinates): its item, whether it is the
@@ -1808,6 +1823,10 @@ public final class EditorView: UIView {
         }
         if onFileTap != nil, let block = file(at: point) {
             DispatchQueue.main.async { [weak self] in self?.openFile(block) }
+            return
+        }
+        if let diagram = diagram(at: point) {
+            DispatchQueue.main.async { [weak self] in self?.openDiagram(diagram) }
             return
         }
         guard !model.isReadOnly else { return }

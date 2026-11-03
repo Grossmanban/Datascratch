@@ -70,6 +70,11 @@ final class AttachmentFactory {
         viewCache.compactMap { id, view in (view as? FileBlockView).map { (id, $0) } }
     }
 
+    /// Live diagram views, for opening a diagram full screen on a tap.
+    var mermaidViews: [(block: BlockID, view: MermaidBlockView)] {
+        viewCache.compactMap { id, view in (view as? MermaidBlockView).map { (id, $0) } }
+    }
+
     /// Live image views, for hit-testing taps (by block).
     var imageViews: [(block: BlockID, view: ImageBlockView)] {
         viewCache.compactMap { id, view in (view as? ImageBlockView).map { (id, $0) } }

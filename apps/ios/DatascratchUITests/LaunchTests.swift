@@ -954,8 +954,12 @@ final class LibraryUITests: XCTestCase {
         let footer = app.descendants(matching: .any)["sidebar.footer"].firstMatch
         XCTAssertTrue(trash.exists && footer.exists, "no Trash or footer")
         // Scroll the sidebar to its end: the last row must stop above the footer.
-        trash.swipeUp()
-        trash.swipeUp()
+        // Swipe the list, not the row: a row being scrolled can drop out of the query mid-swipe.
+        let sidebarList = app.collectionViews.containing(.any, identifier: "sidebar.trash").firstMatch
+        for _ in 0..<2 {
+            (sidebarList.exists ? sidebarList : trash).swipeUp()
+            settle(0.5)
+        }
         settle(1)
         XCTAssertLessThanOrEqual(trash.frame.maxY, footer.frame.minY + 1, "Trash is under the footer")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

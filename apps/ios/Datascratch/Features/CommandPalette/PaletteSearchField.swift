@@ -29,8 +29,14 @@ struct PaletteSearchField: UIViewRepresentable {
         field.accessibilityIdentifier = "palette.field"
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        DispatchQueue.main.async { field.becomeFirstResponder() }
+        field.setContentHuggingPriority(.required, for: .vertical)
         return field
+    }
+
+    /// One line high, as wide as offered: a UIKit view otherwise takes all the height it is given.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView field: KeyField, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? field.intrinsicContentSize.width,
+               height: field.intrinsicContentSize.height)
     }
 
     func updateUIView(_ field: KeyField, context: Context) {
@@ -61,10 +67,30 @@ struct PaletteSearchField: UIViewRepresentable {
         }
     }
 
-    /// ↑ ↓ and Esc from a hardware keyboard go to the results, not to the text.
+    /// ↑ ↓ and Esc from a hardware keyboard go to the results, not to the text. Takes focus once
+    /// it is in a window (before that the request is ignored, and typing went to the editor).
     final class KeyField: UITextField {
         var onMove: ((Int) -> Void)?
         var onEscape: (() -> Void)?
+        private var focusesOnAppear = true
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil, focusesOnAppear else { return }
+            focusesOnAppear = false
+            focus(attempts: 5)
+        }
+
+        /// The sheet may still be presenting: ask again shortly until the field has the keyboard.
+        private func focus(attempts: Int) {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(50))
+                guard let self, self.window != nil, !self.isFirstResponder else { return }
+                if !self.becomeFirstResponder(), attempts > 1 {
+                    self.focus(attempts: attempts - 1)
+                }
+            }
+        }
 
         override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
             for press in presses {

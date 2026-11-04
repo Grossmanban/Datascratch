@@ -1057,7 +1057,8 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
         field.typeText("Баги")
         let found = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Баги'")).firstMatch
-        XCTAssertTrue(found.waitForExistence(timeout: 5), "the document is not in the results")
+        XCTAssertTrue(found.waitForExistence(timeout: 5),
+                      "the document is not in the results; field: \(field.value ?? "nil"); results: \(Self.buttons(app))")
         XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Open Trash'")).firstMatch.exists,
                        "a command that does not match is still listed")
     }

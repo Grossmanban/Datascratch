@@ -58,9 +58,10 @@ struct CommandPaletteView: View {
                     // listed nothing for it (2026-11-03): SwiftUI's field reported the word only
                     // once it was committed. This one reads the text on every edit.
                     PaletteSearchField(text: $query, placeholder: String(localized: "Search documents or type a command"),
-                                       onSubmit: { run(results, at: highlighted) },
+                                       // The results of now, not of the render that made this closure.
+                                       onSubmit: { run(ranked, at: highlighted) },
                                        onMove: { step in
-                                           highlighted = min(max(highlighted + step, 0), max(results.count - 1, 0))
+                                           highlighted = min(max(highlighted + step, 0), max(ranked.count - 1, 0))
                                        },
                                        onEscape: { dismiss() })
                     Text("esc")
@@ -77,10 +78,11 @@ struct CommandPaletteView: View {
 
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 2) {
+                        // A plain stack, rows known by their item: a lazy one keyed by position kept
+                        // showing the old first row after the query changed.
+                        VStack(spacing: 2) {
                             ForEach(Array(results.enumerated()), id: \.element.id) { index, item in
                                 PaletteRow(item: item, isHighlighted: index == highlighted)
-                                    .id(index)
                                     .onTapGesture { run(results, at: index) }
                             }
                             if results.isEmpty {
@@ -92,7 +94,9 @@ struct CommandPaletteView: View {
                         }
                         .padding(Theme.Space.s2)
                     }
-                    .onChange(of: highlighted) { _, index in proxy.scrollTo(index) }
+                    .onChange(of: highlighted) { _, index in
+                        if results.indices.contains(index) { proxy.scrollTo(results[index].id) }
+                    }
                 }
                 .frame(maxHeight: 420)
             }

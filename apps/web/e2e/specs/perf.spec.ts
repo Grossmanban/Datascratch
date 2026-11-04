@@ -47,10 +47,12 @@ test("lists stay fast with 10 000 notes", async ({ page }) => {
   test.setTimeout(180_000);
   await signUp(page, uniqueEmail("perf"));
   await expect.poll(() => page.evaluate(() => "__ds" in window)).toBe(true);
+  // Rows are the default (D-61): this measures cards first, then rows.
+  await page.getByRole("radio", { name: /Сетка|Grid/ }).click();
 
   const seedMs = await seedNotes(page, COUNT);
   const renderMs = await untilFrame(page, `[...document.querySelectorAll('[data-testid=doc-card] h3')].some((h) => h.textContent === 'Заметка ${COUNT - 1}')`);
-  const cards = await page.getByTestId("doc-card").count();
+  const cards = await page.getByTestId(/^doc-(card|row)$/).count();
 
   await page.waitForTimeout(3000); // let background indexing / sync attach settle
   // Editing one note's title must not re-render the whole collection slowly.
@@ -88,7 +90,7 @@ test("lists stay fast with 10 000 notes", async ({ page }) => {
   // Cold start: reload with 10 000 notes stored on the device.
   const t0 = Date.now();
   await page.reload();
-  await expect(page.getByTestId("doc-card").filter({ hasText: "Заметка 9998" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Заметка 9998" })).toBeVisible({ timeout: 30_000 });
   const coldMs = Date.now() - t0;
 
   console.log(`perf: list ${listMs.toFixed(0)} ms (${rows} rows), cold start ${coldMs} ms`);
@@ -122,7 +124,7 @@ test("cold start with 10 000 notes that have content keeps notes out of memory",
 
   const t0 = Date.now();
   await page.reload();
-  await expect(page.getByTestId("doc-card").filter({ hasText: "Заметка 9999" })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Заметка 9999" })).toBeVisible({ timeout: 60_000 });
   const coldMs = Date.now() - t0;
   await page.waitForTimeout(Number(process.env.PERF_SETTLE_MS ?? 8000)); // background attach / indexing
   const cdp = await page.context().newCDPSession(page);

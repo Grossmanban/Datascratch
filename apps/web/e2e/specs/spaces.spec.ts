@@ -29,11 +29,11 @@ test("spaces are isolated (D-48): a starred note and a tab of one space are not 
   await expect(page).toHaveURL(/\/all$/);
   await expect(inSidebar).toHaveCount(0);
   await expect(page.getByText("Здесь пока пусто")).toBeVisible();
-  await expect(page.getByTestId("doc-card")).toHaveCount(0);
+  await expect(page.getByTestId(/^doc-(card|row)$/)).toHaveCount(0);
   await page.goto("/starred");
   await expect(page.getByTestId("space-switcher")).toContainText("Новое пространство");
   await expect(page.getByText(/Отмечайте важное звёздочкой/)).toBeVisible();
-  await expect(page.getByTestId("doc-card")).toHaveCount(0);
+  await expect(page.getByTestId(/^doc-(card|row)$/)).toHaveCount(0);
   // Search covers the current space only.
   await page.keyboard.press("ControlOrMeta+k");
   await page.getByTestId("palette-input").fill("Рабочий");

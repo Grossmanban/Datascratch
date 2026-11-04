@@ -32,7 +32,7 @@ struct SceneSheetView: View {
             VersionHistoryView(noteId: noteId)
         case .documentStyle(let noteId):
             DocumentStyleSheet(noteId: noteId)
-                .presentationDetents([.medium, .large])
+                .adaptiveSheetHeight()
         case .move(let noteId):
             MoveNoteSheet(noteId: noteId)
         case .sharedLink(let shareId, let key, let server):

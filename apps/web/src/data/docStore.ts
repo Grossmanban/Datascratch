@@ -3,7 +3,7 @@ import * as Y from "yjs";
 import { getMasterKey } from "@/auth/session";
 import { fromBase64Url, toBase64Url, type DocKind } from "@/lib/shared";
 import { accountDb, hasAccountDb, type DocRow } from "./db";
-import { cachedNoteKey, notebookKey, noteKey } from "./keys";
+import { cachedNoteKey, notebookKey, noteKey, spaceKeysOf } from "./keys";
 import { enqueueOp, flushOps } from "./ops";
 
 /** Transaction origins. REMOTE comes from SyncClient; anything else is a local edit. */
@@ -423,6 +423,8 @@ export class DocStore {
     if (!row) return null;
     if (row.kind === "account") return getMasterKey();
     if (row.kind === "notebook") return notebookKey(docId);
+    // A shared space's own doc (D-62): sealed with the space key.
+    if ((row.kind as string) === "space") return spaceKeysOf(docId)?.keys[0] ?? null;
     // A note shared on its own (D-54): its key came with «Общие со мной».
     if (!row.notebookId) return cachedNoteKey(docId) ?? null;
     let notebookId = row.notebookId;

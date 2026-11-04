@@ -19,7 +19,7 @@ struct MainSplitView: View {
                         set: { scene.setPadColumnVisibility($0) })) {
                         SidebarView()
                             .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
-                            // One sidebar button, ours (it steps through the three layouts).
+                            // One sidebar button, ours (it shows or hides the sidebar).
                             .toolbar(removing: .sidebarToggle)
                     } content: {
                         ContentColumn()
@@ -121,7 +121,7 @@ struct PadDocumentColumn: View {
     }
 }
 
-/// iPad (D-60): steps through all three columns → list and document → the document alone.
+/// iPad (D-60): shows or hides the sidebar.
 struct SidebarToggleButton: View {
     @Environment(SceneModel.self) private var scene
 

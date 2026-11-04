@@ -168,10 +168,17 @@ struct FolderRow: View {
 
     private var label: some View {
         let library = app.library
+        let count = library.documents(inFolderTree: folder.id).count
         return Label {
-            Text(folder.name).lineLimit(1)
+            HStack(spacing: Theme.Space.s2) {
+                Text(folder.name).lineLimit(1)
+                if count > 0 {
+                    Spacer(minLength: Theme.Space.s1)
+                    SidebarCount(count)
+                }
+            }
         } icon: {
-            Image(systemName: folder.icon)
+            Image(systemName: folder.displaySymbol)
                 .foregroundStyle(folder.color.foreground)
         }
         .dropDestination(for: String.self) { ids, _ in
@@ -242,4 +249,10 @@ struct TagRow: View {
             }
         }
     }
+}
+
+extension Folder {
+    /// The plain outline folder reads as unfinished next to the notebooks' coloured symbols
+    /// (owner, 2026-11-03): the default folder is drawn filled, a chosen symbol as it is.
+    var displaySymbol: String { icon == "folder" ? "folder.fill" : icon }
 }

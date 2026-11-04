@@ -214,7 +214,7 @@ struct TaskDateSheet: View {
                     }
                 }
         }
-        .presentationDetents([.medium, .large])
+        .adaptiveSheetHeight()
         .onAppear {
             let attributes = app.library.body(noteId).blocks.first { $0.id == blockId }?.task
             let current = field == .scheduled ? attributes?.scheduled : attributes?.deadline

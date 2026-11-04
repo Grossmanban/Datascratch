@@ -1847,4 +1847,17 @@ final class EditorViewTests: XCTestCase {
         ])
         XCTAssertEqual(flat.children.map(\.title), ["Copy", "Ours", "Look Up"])
     }
+
+    /// A table's columns fit their text within limits, so a wide table scrolls sideways instead
+    /// of cutting long cells with «…» (owner, 2026-11-03).
+    func testTableColumnsFitTheirText() {
+        let rows: [[(text: String, header: Bool, align: NSTextAlignment)]] = [
+            [("A", true, .natural), (String(repeating: "Длинный текст ", count: 12), true, .natural), ("Среднее значение", true, .natural)],
+        ]
+        let widths = TableBlockView.columnWidths(rows, font: .systemFont(ofSize: 15, weight: .semibold))
+        XCTAssertEqual(widths.count, 3)
+        XCTAssertEqual(widths[0], TableBlockView.minColumnWidth, "a short column keeps the minimum")
+        XCTAssertEqual(widths[1], TableBlockView.maxColumnWidth, "a long column stops at the maximum")
+        XCTAssertTrue(widths[2] > TableBlockView.minColumnWidth && widths[2] < TableBlockView.maxColumnWidth)
+    }
 }

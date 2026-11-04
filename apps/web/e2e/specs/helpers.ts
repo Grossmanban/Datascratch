@@ -31,7 +31,7 @@ export async function signUp(page: Page, email: string, password = PASSWORD): Pr
   await step.locator("input").fill(key.replace(/-/g, "").slice(-4));
   await step.locator("button[type=submit]").click();
   await page.waitForURL("**/all");
-  await expect(page.getByTestId("doc-card").first()).toBeVisible();
+  await expect(page.getByTestId(/^doc-(card|row)$/).first()).toBeVisible();
   return key;
 }
 

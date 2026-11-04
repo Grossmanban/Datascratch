@@ -6,7 +6,7 @@ const today = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", 
 
 test("a new note: the cursor is in the title, Enter fills an empty title with the date, an empty note is not kept", async ({ page }) => {
   await signUp(page, uniqueEmail("title"));
-  const cards = page.getByTestId("doc-card");
+  const cards = page.getByTestId(/^doc-(card|row)$/);
   await expect(cards).toHaveCount(1); // the welcome note
 
   // Enter in an empty title: the title becomes «Заметка <today>» and the cursor goes to the text.

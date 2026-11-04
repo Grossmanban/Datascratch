@@ -1,16 +1,17 @@
 // D-54, the member's side: what other accounts share with this one (`GET /shared-with-me`), its keys
 // (wrapped for this account's key pair, crypto.md §10.2), its place in «Общие со мной» and the role.
-import { reconcileSharedRefs, sharedItemKeys, type SharedItem, type ShareTarget } from "@datascratch/shared";
+import { reconcileSharedRefs, sharedItemKeys, type AccountSharedItem, type SharedItem, type ShareTarget } from "@datascratch/shared";
 import { create } from "zustand";
 import { useAuth } from "@/auth/session";
 import { forgetSharedResource } from "@/domain/actions";
-import { useWorkspace } from "@/domain/workspace";
+import { spaceRoleOfDoc, useWorkspace } from "@/domain/workspace";
 import i18n from "@/i18n";
 import { toast } from "@/ui";
 import { kvGet, kvSet } from "./db";
 import { keyVersionAcceptable, setKeyring } from "./keys";
 import { runtime } from "./runtime";
 import { accountBoxKeys, sharingApi } from "./sharing";
+import { applySpaceItems } from "./sharedSpaces";
 
 export type SharedState = {
   /** By "<kind>:<id>"; `keyed` once the owner's client delivered the key. */
@@ -29,7 +30,8 @@ export function sharedResourceOf(docId: string) {
 }
 
 /** Documents of a «Только чтение» resource: SyncClient does not send their edits (D-54). */
-export const isReadOnlyDoc = (docId: string) => sharedResourceOf(docId)?.role === "viewer";
+export const isReadOnlyDoc = (docId: string) =>
+  sharedResourceOf(docId)?.role === "viewer" || spaceRoleOfDoc(useWorkspace.getState(), docId) === "viewer";
 
 let running: Promise<void> | null = null;
 let soon: ReturnType<typeof setTimeout> | undefined;
@@ -63,19 +65,31 @@ async function pass() {
   const { userId } = useAuth.getState();
   if (!userId) return;
   let list: SharedItem[];
+  let spaces: AccountSharedItem[];
   try {
-    list = await sharingApi.sharedWithMe();
+    ({ list, spaces } = splitShared(await sharingApi.sharedWithMeAll()));
     await kvSet("sharedWithMe", list);
+    await kvSet("sharedSpacesWithMe", spaces);
   } catch (e) {
     // Offline: the last list keeps shared notebooks readable (keys are wrapped for this account).
     list = (await kvGet<SharedItem[]>("sharedWithMe")) ?? [];
-    if (!list.length) throw e;
+    spaces = (await kvGet<AccountSharedItem[]>("sharedSpacesWithMe")) ?? [];
+    if (!list.length && !spaces.length) throw e;
+    await applySpaceItems(spaces, false);
     await apply(list, userId, false);
     return;
   }
+  await applySpaceItems(spaces, true);
   await apply(list, userId, true);
 }
 
+/** Whole shared spaces (D-62) come in the same list; they have their own path (data/sharedSpaces). */
+function splitShared(all: AccountSharedItem[]): { list: SharedItem[]; spaces: AccountSharedItem[] } {
+  return {
+    list: all.filter((i): i is SharedItem => i.target.kind !== "space"),
+    spaces: all.filter((i) => i.target.kind === "space"),
+  };
+}
 async function apply(list: SharedItem[], userId: string, fromServer: boolean) {
   const pair = await accountBoxKeys();
   const items: SharedState["items"] = {};

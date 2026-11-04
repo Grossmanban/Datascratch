@@ -17,7 +17,7 @@ test("move a note to another notebook and open it on another device", async ({ p
   await expectSynced(page);
 
   await page.goto("/all");
-  await page.getByTestId("doc-card").filter({ hasText: "Переезд" }).click({ button: "right" });
+  await page.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Переезд" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Переместить в блокнот…" }).click();
   await page.getByRole("menuitem", { name: "Архив" }).click();
   await page.getByRole("menuitem", { name: "Корень блокнота" }).click();

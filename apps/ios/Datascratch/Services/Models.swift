@@ -208,8 +208,9 @@ nonisolated enum TextScanner {
             previous = ch
         }
         if let tag = current, !tag.isEmpty { result.append(tag.lowercased()) }
+        // A tag needs a letter: «#152» is a number, not a tag (owner, 2026-11-03).
         return result.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
-            .filter { !$0.isEmpty }
+            .filter { $0.contains(where: \.isLetter) }
     }
 
     static func wikiLinks(in text: String) -> [String] {

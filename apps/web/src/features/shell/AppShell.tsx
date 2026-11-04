@@ -1,3 +1,4 @@
+import { SpaceMembersDialog } from "@/features/spaces/SharedSpaces";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef } from "react";
@@ -197,6 +198,7 @@ export function AppShell() {
       {features.tabs && <TabOverview />}
       <ShareDialog />
       <InvitationsDialog />
+      <SpaceMembersDialog />
       <HistoryDialog />
       <CoverDialog />
       <NewNotebookDialog />

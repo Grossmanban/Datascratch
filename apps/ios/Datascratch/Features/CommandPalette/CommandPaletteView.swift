@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// One entry of the ⌘K palette: an action or a document.
 struct PaletteItem: Identifiable {
@@ -134,8 +135,15 @@ struct CommandPaletteView: View {
     private func run(_ results: [PaletteItem], at index: Int) {
         guard results.indices.contains(index) else { return }
         let item = results[index]
+        // The search field gives up the keyboard first, and the command runs once the palette has
+        // gone: on the iPad the keyboard focus, coming back to the sidebar as the field left,
+        // put the sidebar back on its old row after «Go to Tasks».
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         dismiss()
-        item.action()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            item.action()
+        }
     }
 
     private var ranked: [PaletteItem] { ranked(for: query) }

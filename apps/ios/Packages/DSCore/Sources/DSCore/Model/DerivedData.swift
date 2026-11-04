@@ -67,7 +67,9 @@ public struct NoteDerivedData: Hashable, Sendable {
                 guard case .node(let name, let attrs) = item else { continue }
                 if name == "noteLink", let target = nonEmpty(attrs["noteId"]?.stringValue) {
                     links.append(NoteLinkEntry(sourceNoteId: noteId, targetNoteId: target, blockId: blockId, label: attrs["label"]?.stringValue ?? ""))
-                } else if name == "tag", let tag = nonEmpty(attrs["name"]?.stringValue), seenTags.insert(tag).inserted {
+                } else if name == "tag", let tag = nonEmpty(attrs["name"]?.stringValue), tag.contains(where: \.isLetter),
+                          seenTags.insert(tag).inserted {
+                    // A tag without a letter («#152», made by an older import) is not listed.
                     tags.append(tag)
                 }
             }

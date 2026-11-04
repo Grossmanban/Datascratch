@@ -157,7 +157,8 @@ export function extractTags(doc: Y.Doc): string[] {
   walkElements(doc, (el) => {
     if (el.nodeName !== "tag") return;
     const name = str(el.getAttribute("name"));
-    if (name) seen.add(name);
+    // A tag without a letter («#152», made by an older import) is not listed (owner, 2026-11-03).
+    if (name && /\p{L}/u.test(name)) seen.add(name);
   });
   return [...seen];
 }

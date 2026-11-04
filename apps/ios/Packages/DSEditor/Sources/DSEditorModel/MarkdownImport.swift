@@ -738,7 +738,8 @@ struct MarkdownInlineParser {
                 while j < chars.count, chars[j].isLetter || chars[j].isNumber || chars[j] == "_" || (j > i + 1 && (chars[j] == "/" || chars[j] == "-")) {
                     j += 1
                 }
-                if j > i + 1 {
+                // A tag needs a letter: «#152» stays text, as when typing (owner, 2026-11-03).
+                if j > i + 1, chars[(i + 1)..<j].contains(where: \.isLetter) {
                     flush()
                     out.append(.atom(.tag(String(chars[(i + 1)..<j])), marks))
                     i = j

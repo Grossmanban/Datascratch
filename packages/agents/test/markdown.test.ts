@@ -26,6 +26,13 @@ function bodyBlocks(doc: Y.Doc) {
 }
 
 describe("Markdown escapes and verbatim content", () => {
+  it("keeps numbers after # as text: a tag needs a letter", async () => {
+    const { md, tags } = await roundTrip("Задача #152, пункт #1 и раздел #3.2 — а #отчёт и #v2 — теги.");
+    expect(tags).toEqual(["отчёт", "v2"]);
+    expect(md).toContain("#152");
+    expect(md).toContain("#1 ");
+  });
+
   it("keeps backslash-escaped characters literal and escapes them again on read", async () => {
     const { doc, md, tags } = await roundTrip("\\#не тег, \\*не курсив\\*, \\`не код\\`, \\[\\[не ссылка\\]\\], \\=\\=не маркер\\=\\=, а #тег — настоящий.");
     expect(tags).toEqual(["тег"]);

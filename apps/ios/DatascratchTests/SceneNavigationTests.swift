@@ -56,4 +56,24 @@ struct SceneNavigationTests {
         #expect(scene.sidebar == .notebook(notebook.id), "the last tab: back to its notebook")
         #expect(app.library.openTabs.isEmpty)
     }
+
+    /// «Show in Folder»: the list shows the document's folder (or notebook) and it stays open.
+    @Test func revealShowsTheFolderAndKeepsTheDocument() throws {
+        let app = AppModel(options: .init(uiTesting: true, signedIn: true))
+        let scene = SceneModel(app: app)
+        let notebooks = app.library.notebooks(in: app.library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
+        let folder = app.library.createFolder(in: notebook.id, parent: nil, name: "Projects", icon: "folder", color: .blue)
+        let inFolder = app.library.createNote(in: notebook.id, folder: folder.id, title: "Plan")
+        let loose = app.library.createNote(in: notebook.id, folder: nil, title: "Loose")
+
+        scene.show(.allDocuments)
+        scene.open(inFolder.id)
+        scene.reveal(inFolder.id)
+        #expect(scene.sidebar == .folder(folder.id))
+        #expect(scene.selectedNoteId == inFolder.id)
+
+        scene.reveal(loose.id)
+        #expect(scene.sidebar == .notebook(notebook.id))
+    }
 }

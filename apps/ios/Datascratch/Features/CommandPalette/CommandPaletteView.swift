@@ -55,24 +55,17 @@ struct CommandPaletteView: View {
                 HStack(spacing: Theme.Space.s3) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(Theme.Palette.textTertiary)
+                    // No autocorrection or inline predictions: the owner's search on the iPad
+                    // (Russian keyboard) showed the typed word but listed nothing for it
+                    // (2026-11-03). Arrow and Escape keys are handled on the panel, not the field.
                     TextField("Search documents or type a command", text: $query)
                         .textFieldStyle(.plain)
                         .font(.system(size: 19))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
                         .focused($fieldFocused)
                         .submitLabel(.go)
                         .onSubmit { run(results, at: highlighted) }
-                        .onKeyPress(.downArrow) {
-                            highlighted = min(highlighted + 1, max(results.count - 1, 0))
-                            return .handled
-                        }
-                        .onKeyPress(.upArrow) {
-                            highlighted = max(highlighted - 1, 0)
-                            return .handled
-                        }
-                        .onKeyPress(.escape) {
-                            dismiss()
-                            return .handled
-                        }
                         .accessibilityIdentifier("palette.field")
                     Text("esc")
                         .font(Theme.Typography.caption.monospaced())
@@ -108,6 +101,18 @@ struct CommandPaletteView: View {
                 .frame(maxHeight: 420)
             }
             .frame(maxWidth: 620)
+            .onKeyPress(.downArrow) {
+                highlighted = min(highlighted + 1, max(results.count - 1, 0))
+                return .handled
+            }
+            .onKeyPress(.upArrow) {
+                highlighted = max(highlighted - 1, 0)
+                return .handled
+            }
+            .onKeyPress(.escape) {
+                dismiss()
+                return .handled
+            }
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: Theme.Radius.xl, style: .continuous))
             .shadow(color: .black.opacity(0.18), radius: 40, y: 20)
             .padding(.horizontal, Theme.Space.s4)

@@ -18,7 +18,8 @@ const tag: TokenizerAndRendererExtension = {
   },
   tokenizer(src) {
     const m = /^#([\p{L}\p{N}_][\p{L}\p{N}_/-]*)/u.exec(src);
-    return m ? { type: "dsTag", raw: m[0], name: m[1] } : undefined;
+    // A tag needs a letter: `#152` stays text (owner, 2026-11-03).
+    return m && /\p{L}/u.test(m[1]!) ? { type: "dsTag", raw: m[0], name: m[1] } : undefined;
   },
   renderer: (t) => `<span data-type="tag" data-name="${escapeAttr(t.name as string)}">#${escapeAttr(t.name as string)}</span>`,
 };

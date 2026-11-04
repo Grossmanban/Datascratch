@@ -84,7 +84,31 @@ export function TopBar({ children, actions, className }: { children?: ReactNode;
   );
 }
 
-export function PageTitle({ icon, title, subtitle, children }: { icon?: ReactNode; title: ReactNode; subtitle?: ReactNode; children?: ReactNode }) {
+export function PageTitle({
+  icon,
+  title,
+  subtitle,
+  children,
+  compact,
+}: {
+  icon?: ReactNode;
+  title: ReactNode;
+  subtitle?: ReactNode;
+  children?: ReactNode;
+  /** Document lists (D-61 «Плотнее»): a 22 px title with its icon and count on one line. */
+  compact?: boolean;
+}) {
+  if (compact)
+    return (
+      <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5 sm:px-10 sm:pt-7">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5" data-testid="list-title">
+          {icon && <span className="flex shrink-0 items-center text-[20px] leading-none [&_svg]:size-6">{icon}</span>}
+          <h1 className="truncate font-display text-[22px] font-semibold leading-tight tracking-[-0.01em] text-ink">{title}</h1>
+          {subtitle && <span className="shrink-0 pt-0.5 text-[12.5px] tabular-nums text-ink-3">{subtitle}</span>}
+        </div>
+        {children}
+      </div>
+    );
   return (
     <div className="flex flex-wrap items-end gap-3 px-5 pb-5 pt-8 sm:px-10 sm:pt-12">
       <div className="min-w-0 flex-1">

@@ -6,6 +6,7 @@ import {
   maintainOwnedShares,
   migrateMemberTrust,
   recordInvite,
+  type AccountTarget,
   type ConfirmReason,
   type Member,
   type ShareTarget,
@@ -25,7 +26,7 @@ let again = false;
 const declined = new Set<string>();
 
 /** The owner pressed «Открыть доступ» for a member: ask again even after «Не сейчас». */
-export function giveAccessNow(target: ShareTarget, userId: string) {
+export function giveAccessNow(target: AccountTarget, userId: string) {
   declined.delete(`${target.kind}:${target.id}:${userId}`);
   return maintainShares();
 }
@@ -34,7 +35,7 @@ export function giveAccessNow(target: ShareTarget, userId: string) {
  * Remember that this account invites `email` to `target` (the account document's `trust` record):
  * only invited people, or ones the owner confirms, get keys — whatever the server lists.
  */
-export function recordInvitation(target: ShareTarget, email: string) {
+export function recordInvitation(target: AccountTarget, email: string) {
   recordInvite(runtime().account, target, email);
 }
 
@@ -56,7 +57,7 @@ export function maintainShares(): Promise<void> {
   return running;
 }
 
-async function confirmMember(target: ShareTarget, member: Member, reason: ConfirmReason): Promise<boolean> {
+export async function confirmMember(target: AccountTarget, member: Member, reason: ConfirmReason): Promise<boolean> {
   const id = `${target.kind}:${target.id}:${member.userId}`;
   if (declined.has(id)) return false;
   // Sign-up does not verify e-mail: an account made after the invitation gets access only on «yes».

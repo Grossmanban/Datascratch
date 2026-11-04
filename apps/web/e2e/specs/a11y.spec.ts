@@ -28,7 +28,7 @@ for (const [scheme, phone] of [["light", false], ["dark", false], ["light", true
       found[path] = await violations(page);
     }
     await page.goto("/all");
-    await page.getByTestId("doc-card").first().click();
+    await page.getByTestId(/^doc-(card|row)$/).first().click();
     await expect(page.locator(".ds-prose")).toBeVisible();
     found.doc = await violations(page);
     for (const [k, v] of Object.entries(found)) if (v.length) console.log(`[${scheme}] ${k}:\n  ${v.join("\n  ")}`);

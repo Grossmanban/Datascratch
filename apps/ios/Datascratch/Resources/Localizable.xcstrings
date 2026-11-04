@@ -1681,6 +1681,16 @@
         }
       }
     },
+    "Find in Note": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Найти в заметке"
+          }
+        }
+      }
+    },
     "Finish": {
       "localizations": {
         "ru": {
@@ -4177,6 +4187,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Показать боковую панель"
+          }
+        }
+      }
+    },
+    "Show in Folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать в папке"
+          }
+        }
+      }
+    },
+    "Show in Notebook": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать в блокноте"
           }
         }
       }

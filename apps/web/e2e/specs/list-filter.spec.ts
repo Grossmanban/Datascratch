@@ -6,7 +6,7 @@ test("the document list filters by title and text as you type; / and ⌘F focus 
   await newDoc(page, "План запуска", "Бюджет и сроки");
   await newDoc(page, "Список покупок", "Молоко, хлеб");
   await page.getByTestId("sidebar").getByRole("link", { name: "Все документы" }).click();
-  const cards = page.getByTestId("doc-card");
+  const cards = page.getByTestId(/^doc-(card|row)$/);
   await expect(cards).toHaveCount(3);
   const field = page.getByTestId("list-filter").getByRole("searchbox");
 

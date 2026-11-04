@@ -518,6 +518,10 @@ struct NativeEditorToolbar: ToolbarContent {
             // A narrow column (next to the list on an iPad mini in portrait): Insert and Share go
             // into «…» so the bar fits the column (D-60).
             if !isNarrowColumn {
+                Button { model.editor.showFind() } label: { Image(systemName: "magnifyingglass") }
+                    .accessibilityLabel("Find in Note")
+                    .accessibilityIdentifier("document.find")
+                    .keyboardShortcut("f", modifiers: .command)
                 if !isViewOnly {
                 Menu { insertItems } label: {
                     Image(systemName: "plus.circle")
@@ -536,6 +540,7 @@ struct NativeEditorToolbar: ToolbarContent {
 
             Menu {
                 if isNarrowColumn {
+                    Button("Find in Note", systemImage: "magnifyingglass") { model.editor.showFind() }
                     if !isViewOnly { Menu("Insert", systemImage: "plus.circle") { insertItems } }
                     Button("Share", systemImage: "square.and.arrow.up") {
                         scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
@@ -545,6 +550,10 @@ struct NativeEditorToolbar: ToolbarContent {
                 if !isViewOnly {
                     Button("Style…", systemImage: "textformat") { scene.sheet = .documentStyle(noteId: note.id) }
                     Menu("Cover", systemImage: "photo") { CoverMenuItems(note: note) }
+                }
+                Button(note.folderId == nil ? LocalizedStringKey("Show in Notebook") : "Show in Folder",
+                       systemImage: "folder") {
+                    scene.reveal(note.id)
                 }
                 Button("Version History", systemImage: "clock.arrow.circlepath") {
                     app.library.recordVersion(ofNote: note.id)

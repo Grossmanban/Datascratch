@@ -168,3 +168,21 @@ extension View {
             .foregroundStyle(Theme.Palette.onAccent)
     }
 }
+
+extension View {
+    /// iPhone: a sheet that opens half way and pulls up to full. iPad: a whole form sheet in the
+    /// middle — the half-height sheet there looked cut off at the bottom (owner, 2026-11-03).
+    func adaptiveSheetHeight() -> some View {
+        modifier(AdaptiveSheetHeight())
+    }
+}
+
+private struct AdaptiveSheetHeight: ViewModifier {
+    func body(content: Content) -> some View {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            content.presentationSizing(.form)
+        } else {
+            content.presentationDetents([.medium, .large])
+        }
+    }
+}

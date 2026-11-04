@@ -36,7 +36,7 @@ test("document cover: encrypted upload, visible on another device", async ({ pag
   const ctx = await browser.newContext();
   const p2 = await ctx.newPage();
   await signIn(p2, email);
-  const card = p2.getByTestId("doc-card").filter({ hasText: "С обложкой" });
+  const card = p2.getByTestId(/^doc-(card|row)$/).filter({ hasText: "С обложкой" });
   await expect(card.locator("img")).toBeVisible({ timeout: 20_000 });
   await card.click();
   await expect(p2.getByTestId("doc-cover").locator("img")).toBeVisible({ timeout: 15_000 });
@@ -45,7 +45,7 @@ test("document cover: encrypted upload, visible on another device", async ({ pag
 
 test("cover from the clipboard; cards without a cover have no picture", async ({ page }) => {
   await signUp(page, uniqueEmail("cover-paste"));
-  await expect(page.getByTestId("doc-card").first().locator("img")).toHaveCount(0);
+  await expect(page.getByTestId(/^doc-(card|row)$/).first().locator("img")).toHaveCount(0);
   await newDoc(page, "Скриншот", "Текст");
   const png = await makePng(page);
   await page.getByRole("button", { name: /Ещё|More/ }).click();

@@ -10,7 +10,7 @@ import { sharedResourceOf, useShared } from "@/data/sharedWithMe";
 import { AgentsBadge } from "@/features/share/SharedWithMe";
 import { OpenInApp } from "@/features/share/OpenInApp";
 import { acknowledgeAgentCreated, agentCreatedOf, deleteNoteForever, openTab, restoreNote, setTitleOf, toggleStar, updateNote } from "@/domain/actions";
-import { findNotebook, folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
+import { findNotebook, spaceRoleOfDoc, folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
 import { closeDocTab, noteMenuItems } from "@/features/docs/menus";
 import { isFreshNote } from "@/lib/freshNotes";
 import { rememberNotebook } from "@/lib/lastNotebook";
@@ -75,7 +75,8 @@ function DocScreen({ noteId }: { noteId: string }) {
   const nb = useWorkspace(useShallow((s) => findNotebook(s, note.notebookId)));
   // Shared with this account (D-54): a viewer reads only; sharing further is the owner's.
   const shared = useShared(() => sharedResourceOf(noteId));
-  const viewer = shared?.role === "viewer";
+  const spaceRole = useWorkspace((s) => spaceRoleOfDoc(s, noteId));
+  const viewer = shared?.role === "viewer" || spaceRole === "viewer";
   const path = useWorkspace(useShallow((s) => folderPath(s, note.folderId)));
   const starred = useWorkspace((s) => isStarred(s, { kind: "note", id: noteId }));
   const email = useAuth((s) => s.email) ?? "";
@@ -167,7 +168,7 @@ function DocScreen({ noteId }: { noteId: string }) {
             </IconButton>
             {editable && editorApi && <InsertPicture api={editorApi} noteId={noteId} />}
             {doc && meta && <StylePopover doc={doc} style={meta.style} disabled={!editable} />}
-            {!shared && (
+            {!shared && !viewer && (
               <IconButton label={t("docs.share")} onClick={() => useUi.setState({ shareFor: { kind: "note", id: noteId } })} data-testid="share-button">
                 <Share2 className="size-4" />
               </IconButton>

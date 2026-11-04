@@ -17,17 +17,29 @@ export const accountMaps = (doc: Y.Doc) => ({
   tabs: doc.getArray<TabEntry>("tabs"),
   /** «Общие со мной» placement (D-54): "<kind>:<id>" -> SharedRef. */
   shared: doc.getMap<Y.Map<unknown>>("shared"),
+  /** Shared spaces of other accounts in the space switcher (D-62): spaceId -> { order, addedAt }. */
+  sharedSpaces: doc.getMap<Y.Map<unknown>>("sharedSpaces"),
 });
+
+/** Placement of another account's shared space in this one's switcher (document-model.md §2.1). */
+export type SharedSpaceRef = { spaceId: string; order: number; addedAt: string };
+
+/**
+ * A space as the app shows it (D-62): an own one (`shared` once it is made shared) or another
+ * account's shared space this one is a member of (`memberOf`), with this account's role there.
+ */
+export type SpaceEntry = Space & { shared?: boolean; memberOf?: boolean; role?: "owner" | "editor" | "viewer" };
 
 export type AccountSnapshot = {
   formatVersion: number;
-  spaces: Space[];
+  spaces: SpaceEntry[];
   notebooks: NotebookRef[];
   settings: Record<string, unknown>;
   starred: StarredRef[];
   tabs: TabEntry[];
   /** Notebooks and notes shared with this account and the space showing them (D-54). */
   shared: SharedRef[];
+  sharedSpaces: SharedSpaceRef[];
 };
 
 export function readAccount(doc: Y.Doc): AccountSnapshot {
@@ -40,6 +52,9 @@ export function readAccount(doc: Y.Doc): AccountSnapshot {
     starred: m.starred.toArray(),
     tabs: m.tabs.toArray(),
     shared: readMapOfMaps<SharedRef>(m.shared).sort((a, b) => a.order - b.order),
+    sharedSpaces: [...m.sharedSpaces.entries()]
+      .map(([spaceId, v]) => ({ spaceId, ...((v instanceof Y.Map ? v.toJSON() : v) as { order: number; addedAt: string }) }))
+      .sort((a, b) => a.order - b.order),
   };
 }
 

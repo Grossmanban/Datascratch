@@ -237,8 +237,12 @@ final class LibraryUITests: XCTestCase {
         if any.waitForExistence(timeout: 3), best().isHittable { return best() }
         let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
         if toggle.exists { toggle.tap() }
+        // iPhone: from a document, back to its list, then back to the sidebar (one step each).
         let back = app.navigationBars.buttons.firstMatch
-        if !any.waitForExistence(timeout: 3), back.exists { back.tap() }
+        for _ in 0..<3 where !(any.waitForExistence(timeout: 2) && best().isHittable) {
+            guard back.exists, back.isHittable else { break }
+            back.tap()
+        }
         _ = any.waitForExistence(timeout: 5)
         return best()
     }

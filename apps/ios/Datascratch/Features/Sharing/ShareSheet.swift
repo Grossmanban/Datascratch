@@ -24,10 +24,23 @@ struct ShareSheet: View {
         return nil
     }
 
+    /// D-62: the shared space the notebook (or the note's notebook) is in.
+    private var sharedSpace: Space? {
+        let notebookId = target.kind == .notebook ? target.id : app.library.note(target.id)?.notebookId
+        guard let spaceId = notebookId.flatMap({ app.library.notebook($0)?.spaceId }) else { return nil }
+        return app.library.spaces.first { $0.id == spaceId && $0.isShared }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
-                if let sharedTarget {
+                if let sharedSpace {
+                    // People come with the whole space; guest links stay for those who may edit.
+                    SpaceAccessSection(space: sharedSpace)
+                    if app.accountSharing.role(for: ShareTarget(kind: .space, id: sharedSpace.id)) != .viewer {
+                        linkSections
+                    }
+                } else if let sharedTarget {
                     SharedWithMeSection(target: sharedTarget, isThis: sharedTarget == target) { dismiss() }
                 } else {
                     if app.accountSharing.isAvailable {
@@ -354,12 +367,13 @@ private struct InviteRow: View {
 struct PersonBadge: View {
     let email: String
     var isPending = false
+    var size: CGFloat = 30
 
     var body: some View {
         Text(email.first.map { String($0).uppercased() } ?? "?")
-            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .font(.system(size: size * 0.47, weight: .semibold, design: .rounded))
             .foregroundStyle(isPending ? Theme.Palette.textTertiary : Theme.Palette.accent)
-            .frame(width: 30, height: 30)
+            .frame(width: size, height: size)
             .background(Circle().fill(isPending ? Theme.Palette.sidebar : Theme.Palette.accent.opacity(0.14)))
             .overlay {
                 if isPending { Circle().strokeBorder(Theme.Palette.separator, style: StrokeStyle(lineWidth: 1, dash: [3, 3])) }
@@ -415,15 +429,30 @@ struct SharedWithMeSection: View {
                 Text(error).font(Theme.Typography.footnote).foregroundStyle(Theme.Palette.danger)
             }
         } header: {
-            Text(target.kind == .notebook ? (isThis ? "Shared notebook" : "In a shared notebook") : "Shared document")
+            Text(header)
         } footer: {
-            Text("Only the owner manages access and guest links.")
+            Text(target.kind == .space ? "Only the owner invites and removes people." : "Only the owner manages access and guest links.")
         }
-        .confirmationDialog(target.kind == .notebook ? "Leave this notebook?" : "Leave this document?",
-                            isPresented: $confirmLeave, titleVisibility: .visible) {
+        .confirmationDialog(leaveTitle, isPresented: $confirmLeave, titleVisibility: .visible) {
             Button("Leave", role: .destructive) { leave() }
         } message: {
             Text("It disappears from this device. To get it back, the owner invites you again.")
+        }
+    }
+
+    private var header: LocalizedStringKey {
+        switch target.kind {
+        case .notebook: isThis ? "Shared notebook" : "In a shared notebook"
+        case .note: "Shared document"
+        case .space: "Shared space"
+        }
+    }
+
+    private var leaveTitle: LocalizedStringKey {
+        switch target.kind {
+        case .notebook: "Leave this notebook?"
+        case .note: "Leave this document?"
+        case .space: "Leave this space?"
         }
     }
 

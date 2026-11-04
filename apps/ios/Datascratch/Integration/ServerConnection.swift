@@ -818,13 +818,15 @@ final class ServerSharingService: SharingService {
 
     /// D-54: after a key change the guest links still carry the old key; each is made anew with
     /// the same access and expiry, and the old one is revoked. Returns the new links.
-    func recreateLinks(for target: ShareTarget) async -> [SharedLink] {
+    /// New links, under the new keys, for the links of `targets` (after a key change); the old
+    /// ones are revoked. One look at the server's list for all of them (a whole space, D-62).
+    func recreateLinks(for targets: Set<ShareTarget>) async -> [ShareTarget: [SharedLink]] {
         await refresh()
-        var made: [SharedLink] = []
-        for old in links where old.target == target && !old.isExpired() {
-            guard let link = try? await createLink(for: target, permission: old.permission, expiresAt: old.expiresAt) else { continue }
+        var made: [ShareTarget: [SharedLink]] = [:]
+        for old in links where targets.contains(old.target) && !old.isExpired() {
+            guard let link = try? await createLink(for: old.target, permission: old.permission, expiresAt: old.expiresAt) else { continue }
             try? await revoke(old.id)
-            made.append(link)
+            made[old.target, default: []].append(link)
         }
         return made
     }

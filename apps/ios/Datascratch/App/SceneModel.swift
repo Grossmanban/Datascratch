@@ -32,6 +32,10 @@ enum SceneSheet: Identifiable, Hashable {
     case sharedLink(shareId: String, key: String?, server: String?)
     /// D-54: invitations to this account.
     case invitations
+    /// D-62: a new space that is shared from the start.
+    case newSharedSpace
+    /// D-62: the people of a space (inviting to a personal space makes it shared).
+    case spaceMembers(String)
     /// D-54: one invitation, opened from its link.
     case invitationLink(String)
     /// A web page inside the app (another server's link, opened on purpose).
@@ -213,7 +217,7 @@ final class SceneModel {
     /// in «view only» ones, nor among notes shared on their own.
     func canCreate(in notebookId: String) -> Bool {
         guard notebookId != Notebook.sharedNotesId else { return false }
-        return app.accountSharing.role(for: ShareTarget(kind: .notebook, id: notebookId)) != .viewer
+        return app.accountSharing.role(forNotebook: notebookId) != .viewer
     }
 
     /// Whether the list shown is a notebook or folder (then the «New Note» button needs no «in …»).

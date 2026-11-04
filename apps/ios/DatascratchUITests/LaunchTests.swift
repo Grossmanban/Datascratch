@@ -237,8 +237,12 @@ final class LibraryUITests: XCTestCase {
         if any.waitForExistence(timeout: 3), best().isHittable { return best() }
         let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
         if toggle.exists { toggle.tap() }
+        // iPhone: from a document, back to its list, then back to the sidebar (one step each).
         let back = app.navigationBars.buttons.firstMatch
-        if !any.waitForExistence(timeout: 3), back.exists { back.tap() }
+        for _ in 0..<3 where !(any.waitForExistence(timeout: 2) && best().isHittable) {
+            guard back.exists, back.isHittable else { break }
+            back.tap()
+        }
         _ = any.waitForExistence(timeout: 5)
         return best()
     }
@@ -950,8 +954,12 @@ final class LibraryUITests: XCTestCase {
         let footer = app.descendants(matching: .any)["sidebar.footer"].firstMatch
         XCTAssertTrue(trash.exists && footer.exists, "no Trash or footer")
         // Scroll the sidebar to its end: the last row must stop above the footer.
-        trash.swipeUp()
-        trash.swipeUp()
+        // Swipe the list, not the row: a row being scrolled can drop out of the query mid-swipe.
+        let sidebarList = app.collectionViews.containing(.any, identifier: "sidebar.trash").firstMatch
+        for _ in 0..<2 {
+            (sidebarList.exists ? sidebarList : trash).swipeUp()
+            settle(0.5)
+        }
         settle(1)
         XCTAssertLessThanOrEqual(trash.frame.maxY, footer.frame.minY + 1, "Trash is under the footer")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -1049,7 +1057,8 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
         field.typeText("Баги")
         let found = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Баги'")).firstMatch
-        XCTAssertTrue(found.waitForExistence(timeout: 5), "the document is not in the results")
+        XCTAssertTrue(found.waitForExistence(timeout: 5),
+                      "the document is not in the results; field: \(field.value ?? "nil"); results: \(Self.buttons(app))")
         XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Open Trash'")).firstMatch.exists,
                        "a command that does not match is still listed")
     }

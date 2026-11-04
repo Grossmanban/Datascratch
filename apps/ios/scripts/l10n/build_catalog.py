@@ -56,6 +56,8 @@ INTERPOLATIONS = {
     r"Opens when \(item.ownerEmail)’s device is online": "Opens when %@’s device is online",
     r"View only · \(owner) can edit": "View only · %@ can edit",
     r"Also here: \(names)": "Also here: %@",
+    r"Shared space · \(owner)": "Shared space · %@",
+    r"Everyone in «\(name)» will see this notebook and all of its history.": "Everyone in «%@» will see this notebook and all of its history.",
     r"From the link you opened: \(server). Continue only if you trust this server.": "From the link you opened: %@. Continue only if you trust this server.",
 }
 
@@ -69,6 +71,8 @@ IGNORE = {
     "Личное", "Работа", "Заметки",
     # D-54: UI-test seed and the comparison's line marks.
     "Shared plans", "Roadmap", "Plan for two", "Ideas", "Only the owner edits this.", "• ", "☑ ", "———", "“", "”",
+    # D-62: UI-test seed of a joined shared space.
+    "Team", "Team notes", "Kickoff", "Agenda",
     # UI-test seed: a long note (scroll position across full screen).
     "Long", "Paragraph \\($0) of a long note.",
     # Presence: the name sent when an account has no e-mail local part (not shown here).

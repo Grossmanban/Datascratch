@@ -191,7 +191,9 @@ struct SidebarView: View {
         SidebarSectionHeader(title: "Notebooks", identifier: "notebooks", isCollapsed: isCollapsed("notebooks")) {
             toggle("notebooks")
         } accessory: {
-            if let space = library.activeSpace {
+            // D-62: in a shared space only those who may edit make notebooks.
+            if let space = library.activeSpace,
+               app.accountSharing.role(for: ShareTarget(kind: .space, id: space.id)) != .viewer {
                 Button {
                     scene.sheet = .newNotebook(spaceId: space.id)
                 } label: {
@@ -207,7 +209,8 @@ struct SidebarView: View {
     /// D-54: invitations and what other accounts share with this one, in every space.
     @ViewBuilder private var sharedSection: some View {
         let sharing = app.accountSharing
-        let items = sharing.sharedWithMe
+        // Shared spaces are in the space switcher (D-62).
+        let items = sharing.sharedWithMe.filter { $0.target.kind != .space }
         if !items.isEmpty || !sharing.incoming.isEmpty {
             Section {
                 if !isCollapsed("shared") {
@@ -275,6 +278,9 @@ struct SidebarView: View {
             } else {
                 SharedPendingRow(item: item)
             }
+        case .space:
+            // A shared space is in the space switcher, not in «Shared with me» (D-62).
+            EmptyView()
         }
     }
 
@@ -427,25 +433,36 @@ struct SpaceSwitcher: View {
 
     var body: some View {
         let library = app.library
+        let personal = library.spaces.filter { !$0.isShared }
+        let shared = library.spaces.filter(\.isShared)
         Menu {
-            ForEach(library.spaces) { space in
-                Button {
-                    withAnimation(Theme.Motion.smooth) {
-                        scene.switchSpace(to: space.id)
-                        scene.sidebar = .allDocuments
-                    }
-                } label: {
-                    if space.id == library.activeSpace?.id {
-                        Label(space.name, systemImage: "checkmark")
-                    } else {
-                        Label(space.name, systemImage: space.icon)
-                    }
+            Section {
+                ForEach(personal) { space in spaceButton(space) }
+            }
+            // D-62: shared spaces, the account's own and those it joined.
+            if !shared.isEmpty {
+                Section("Shared") {
+                    ForEach(shared) { space in spaceButton(space) }
                 }
             }
-            Divider()
-            Button("New Space…", systemImage: "plus") { scene.sheet = .newSpace }
+            Section {
+                Button("New Space…", systemImage: "plus") { scene.sheet = .newSpace }
+                if app.accountSharing.isAvailable {
+                    Button("New Shared Space…", systemImage: "person.2.badge.plus") { scene.sheet = .newSharedSpace }
+                }
+            }
             if let space = library.activeSpace {
-                Button("Edit Space…", systemImage: "pencil") { scene.sheet = .editSpace(space.id) }
+                Section {
+                    if space.isShared {
+                        Button("Space Members…", systemImage: "person.2") { scene.sheet = .spaceMembers(space.id) }
+                    } else if app.accountSharing.isAvailable {
+                        Button("Invite to Space…", systemImage: "person.badge.plus") { scene.sheet = .spaceMembers(space.id) }
+                    }
+                    // A space this account joined is the owner's to rename.
+                    if !space.isJoined {
+                        Button("Edit Space…", systemImage: "pencil") { scene.sheet = .editSpace(space.id) }
+                    }
+                }
             }
         } label: {
             HStack(spacing: Theme.Space.s2) {
@@ -456,6 +473,9 @@ struct SpaceSwitcher: View {
                         .font(.system(.callout, design: .serif).weight(.semibold))
                         .foregroundStyle(Theme.Palette.textPrimary)
                         .lineLimit(1)
+                    if space.isShared {
+                        SpaceMembersAvatars(spaceId: space.id, size: 18)
+                    }
                 }
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption2.weight(.semibold))
@@ -464,6 +484,22 @@ struct SpaceSwitcher: View {
         }
         .accessibilityLabel("Switch Space")
         .accessibilityIdentifier("sidebar.spaceSwitcher")
+    }
+
+    private func spaceButton(_ space: Space) -> some View {
+        Button {
+            withAnimation(Theme.Motion.smooth) {
+                scene.switchSpace(to: space.id)
+                scene.sidebar = .allDocuments
+            }
+        } label: {
+            if space.id == app.library.activeSpace?.id {
+                Label(space.name, systemImage: "checkmark")
+            } else {
+                Label(space.name, systemImage: space.isShared ? "person.2" : space.icon)
+            }
+        }
+        .accessibilityIdentifier(space.isShared ? "space.shared" : "space.personal")
     }
 }
 

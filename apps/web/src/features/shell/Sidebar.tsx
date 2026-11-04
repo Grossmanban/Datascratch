@@ -49,12 +49,14 @@ import {
   activeSpace,
   allTags,
   folderCounts,
+  notebookCounts,
   noteTitle,
   setActiveSpace,
   notesInSpace,
   spaceNotebooks,
   starredInSpace,
   tabsInSpace,
+  useSpaceNoteFilter,
   useWorkspace,
   visibleNotes,
   type FolderEntry,
@@ -111,6 +113,10 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const space = useWorkspace(activeSpace);
+  // «Все документы» counts what its list shows: the space's live notes (D-61).
+  const spaceFilter = useSpaceNoteFilter();
+  const allNotes = useWorkspace((s) => s.notes);
+  const allCount = useMemo(() => visibleNotes(Object.values(allNotes).filter(spaceFilter)).length, [allNotes, spaceFilter]);
   // D-62: in a shared space the owner and editors create notebooks, a viewer only reads.
   const canCreateNotebook = !space?.shared || space.role !== "viewer";
   const notebooks = useWorkspace((s) => s.account.notebooks);
@@ -149,7 +155,8 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   };
 
   return (
-    <div className="flex h-full flex-col bg-sidebar text-[13.5px] text-ink" data-testid="sidebar">
+    // D-61 «Плотнее»: 15 px text in 35 px rows, close sections, note counts as in Notesnook.
+    <div className="flex h-full flex-col bg-sidebar text-[15px] text-ink" data-testid="sidebar">
       <div className="flex items-center gap-1 px-3 pb-2 pt-3">
         <SpaceSwitcher />
         <div className="flex-1" />
@@ -205,7 +212,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
       <InvitationsRow />
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 pb-4">
         <div className="flex flex-col gap-px">
-          <NavLink to="/all" icon={<Layers className="size-4" />} label={t("nav.allDocs")} />
+          <NavLink to="/all" icon={<Layers className="size-4" />} label={t("nav.allDocs")} count={allCount} />
           {features.tasks && (
             <NavLink to="/tasks/today" match="/tasks" icon={<SquareCheck className="size-4" />} label={t("nav.tasks")} badge={todayCount || undefined} />
           )}
@@ -276,6 +283,7 @@ function NavLink({
   icon,
   label,
   badge,
+  count,
   compact,
 }: {
   to: string;
@@ -283,6 +291,8 @@ function NavLink({
   icon: ReactNode;
   label: string;
   badge?: number;
+  /** A quiet note count at the end of the row (D-61). */
+  count?: number;
   compact?: boolean;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -293,14 +303,15 @@ function NavLink({
       title={compact ? label : undefined}
       aria-label={compact ? label : undefined}
       className={cn(
-        "flex h-8 items-center gap-2.5 rounded-md px-2 transition-colors",
-        compact && "w-8 justify-center px-0",
+        "flex items-center gap-2.5 rounded-md px-2 transition-colors",
+        compact ? "h-8 w-8 justify-center px-0" : "h-[35px]",
         active ? "bg-ink/[0.07] font-medium text-ink" : "text-ink-2 hover:bg-ink/[0.04] hover:text-ink",
       )}
     >
       <span className={cn("shrink-0", active ? "text-ink" : "text-ink-3")}>{icon}</span>
       {!compact && <span className="flex-1 truncate">{label}</span>}
       {!compact && badge ? <span className="rounded-full bg-ink/[0.07] px-1.5 text-[11px] font-semibold text-ink-2">{badge}</span> : null}
+      {!compact && !badge && count ? <span className="text-[12px] tabular-nums text-ink-3">{count}</span> : null}
     </Link>
   );
 }
@@ -309,12 +320,12 @@ function Section({ id, title, action, children }: { id: string; title: string; a
   // Kept per space on this device (spec/12 §12.6, D-48).
   const [collapsed, toggle] = useSpaceCollapsed(id);
   return (
-    <section className="mt-5">
-      <div className="group flex h-7 items-center px-2">
+    <section className="mt-3.5">
+      <div className="group flex h-6 items-center px-2">
         <button
           onClick={toggle}
           aria-expanded={!collapsed}
-          className="flex flex-1 items-center gap-1 text-[12.5px] font-semibold text-ink-3 hover:text-ink-2"
+          className="flex flex-1 items-center gap-1 text-[12px] font-semibold text-ink-3 hover:text-ink-2"
         >
           {title}
           {/* The chevron shows on hover (and while collapsed, so the section can be found again). */}
@@ -472,7 +483,7 @@ function StarredSection() {
                 to="/doc/$noteId"
                 params={{ noteId: s.id }}
                 onClick={() => openTab(s.id)}
-                className="flex h-8 items-center gap-2 rounded-md px-2 text-ink-2 hover:bg-ink/[0.04] hover:text-ink [&.active]:bg-ink/[0.07] [&.active]:text-ink"
+                className="flex h-[35px] items-center gap-2 rounded-md px-2 text-ink-2 hover:bg-ink/[0.04] hover:text-ink [&.active]:bg-ink/[0.07] [&.active]:text-ink"
               >
                 <span className="shrink-0 text-[13px] leading-none">{iconGlyph(n.icon) || <Star className="size-3.5 text-[var(--ds-tint-yellow-fg)]" />}</span>
                 <span className="truncate">{noteTitle(n, t("app.untitled"))}</span>
@@ -487,7 +498,7 @@ function StarredSection() {
               key={s.id}
               to="/folder/$folderId"
               params={{ folderId: s.id }}
-              className="flex h-8 items-center gap-2 rounded-md px-2 text-ink-2 hover:bg-ink/[0.04] hover:text-ink [&.active]:bg-ink/[0.07] [&.active]:text-ink"
+              className="flex h-[35px] items-center gap-2 rounded-md px-2 text-ink-2 hover:bg-ink/[0.04] hover:text-ink [&.active]:bg-ink/[0.07] [&.active]:text-ink"
             >
               <FolderIcon className="size-3.5 shrink-0" style={{ color: tintFg(f.color) }} fill="currentColor" fillOpacity={0.18} />
               <span className="truncate">{f.name}</span>
@@ -500,7 +511,7 @@ function StarredSection() {
             key={s.id}
             to="/notebook/$notebookId"
             params={{ notebookId: s.id }}
-            className="flex h-8 items-center gap-2 rounded-md px-2 text-ink-2 hover:bg-ink/[0.04] hover:text-ink"
+            className="flex h-[35px] items-center gap-2 rounded-md px-2 text-ink-2 hover:bg-ink/[0.04] hover:text-ink"
           >
             <span className="text-[13px] leading-none">{iconGlyph(nb.icon)}</span>
             <span className="truncate">{nb.name}</span>
@@ -540,6 +551,7 @@ function useDropTarget(onDrop: (kind: "note" | "folder", id: string) => void) {
 
 function NotebookNode({ nb }: { nb: NotebookRef }) {
   const { t } = useTranslation();
+  const count = useWorkspace((s) => notebookCounts(s.notes).get(nb.id) ?? 0);
   const navigate = useNavigate();
   const [collapsed, toggle] = useCollapsed(`nb.${nb.id}`);
   const [renaming, setRenaming] = useState(false);
@@ -648,7 +660,7 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
         <div
           {...drop.props}
           className={cn(
-            "group flex h-8 items-center gap-1 rounded-md pl-0.5 pr-1 transition-colors",
+            "group flex h-[35px] items-center gap-1 rounded-md pl-0.5 pr-1 transition-colors",
             active ? "bg-ink/[0.07] text-ink" : "text-ink hover:bg-ink/[0.04]",
             drop.over && "bg-accent/10 ring-1 ring-accent/40",
           )}
@@ -681,11 +693,12 @@ function NotebookNode({ nb }: { nb: NotebookRef }) {
               className="flex min-w-0 flex-1 items-center gap-2 font-medium"
               onDoubleClick={() => setRenaming(true)}
             >
-              <span className="text-[14px] leading-none">{iconGlyph(nb.icon)}</span>
+              <span className="text-[15px] leading-none">{iconGlyph(nb.icon)}</span>
               <span className="truncate">{nb.name}</span>
               {nb.mode === "agent" && <Sparkles className="size-3 shrink-0 text-[var(--ds-tint-purple-fg)]" aria-label={t("notebook.agent")} />}
             </Link>
           )}
+          {count > 0 && <span className="pr-1 text-[12px] tabular-nums text-ink-3 group-hover:hidden">{count}</span>}
           <DropdownMenu
             items={menu}
             align="end"
@@ -752,7 +765,7 @@ function FolderNode({ folder, depth }: { folder: FolderEntry; depth: number }) {
           }}
           style={{ paddingLeft: depth * 14 }}
           className={cn(
-            "group flex h-8 items-center gap-1 rounded-md pr-1 transition-colors",
+            "group flex h-[35px] items-center gap-1 rounded-md pr-1 transition-colors",
             active ? "bg-ink/[0.07] text-ink" : "text-ink-2 hover:bg-ink/[0.04] hover:text-ink",
             drop.over && "bg-accent/10 ring-1 ring-accent/40",
           )}

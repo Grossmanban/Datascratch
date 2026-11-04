@@ -51,7 +51,7 @@ test("«Новый документ» goes to the open notebook or folder, else 
   await page.keyboard.type("#идея ");
   await expectSynced(page);
   await page.goto(`/tag/${encodeURIComponent("идея")}`);
-  await expect(page.getByTestId("doc-card")).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.getByTestId(/^doc-(card|row)$/)).toHaveCount(1, { timeout: 15_000 });
   await newDocHere(page);
   await expect(page.locator(".ds-prose")).toContainText("#идея");
 });

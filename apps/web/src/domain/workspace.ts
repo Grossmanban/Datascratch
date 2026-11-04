@@ -372,6 +372,18 @@ export function folderCounts(notes: Record<string, NoteEntry>): Map<string, numb
   return counts;
 }
 
+const notebookCountsCache = new WeakMap<Record<string, NoteEntry>, Map<string, number>>();
+/** Live documents per notebook (as lists show them: not in the trash, no Inbox), once per snapshot. */
+export function notebookCounts(notes: Record<string, NoteEntry>): Map<string, number> {
+  let counts = notebookCountsCache.get(notes);
+  if (!counts) {
+    counts = new Map();
+    for (const n of Object.values(notes)) if (!n.trashedAt && n.kind !== "inbox") counts.set(n.notebookId, (counts.get(n.notebookId) ?? 0) + 1);
+    notebookCountsCache.set(notes, counts);
+  }
+  return counts;
+}
+
 export function isStarred(st: WorkspaceState, ref: StarredRef): boolean {
   return st.account.starred.some((s) => s.kind === ref.kind && s.id === ref.id);
 }

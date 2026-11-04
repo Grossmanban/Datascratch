@@ -65,7 +65,7 @@ test("signing in on a new device and opening a note made elsewhere (as an agent 
   await q.locator(".ds-prose").click(); // focusing is not editing
   await q.waitForTimeout(3000);
   await q.goto("/all");
-  await expect(q.getByTestId("doc-card").filter({ hasText: "Стратегия продукта — черновик" })).toBeVisible();
+  await expect(q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Стратегия продукта — черновик" })).toBeVisible();
   await q.waitForTimeout(2000);
   expect(pushes).toEqual([]);
   await other.close();

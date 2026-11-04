@@ -10,7 +10,7 @@ test("flexible layout: hide the sidebar, full screen per screen, close a documen
   await page.keyboard.press("Control+\\");
   await expect(panel).toHaveAttribute("data-open", "false");
   await page.reload();
-  await expect(page.getByTestId("doc-card").first()).toBeVisible();
+  await expect(page.getByTestId(/^doc-(card|row)$/).first()).toBeVisible();
   await expect(panel).toHaveAttribute("data-open", "false");
   await page.keyboard.press("Control+\\");
   await expect(panel).toHaveAttribute("data-open", "true");
@@ -35,7 +35,7 @@ test("flexible layout: hide the sidebar, full screen per screen, close a documen
 
   // Explicit close of the document's tab.
   await page.goto("/all");
-  await page.getByTestId("doc-card").filter({ hasText: "Во весь экран" }).click();
+  await page.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Во весь экран" }).click();
   await page.getByTestId("focus-toggle").click(); // leave full screen to see the tabs
   // It is a tab (tabs are on in every build, D-51 amendment 2026-11-02); × closes it.
   const tab = page.getByTestId("tab-strip").getByTestId("tab").filter({ hasText: "Во весь экран" });

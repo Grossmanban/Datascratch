@@ -159,7 +159,7 @@ test("D-54: the member sees a shared notebook in «Общие со мной», a
   await expect(shared).toBeVisible({ timeout: 30_000 });
   await expect(shared).not.toHaveAttribute("data-waiting", "", { timeout: 30_000 });
   await shared.click();
-  const card = q.getByTestId("doc-card").filter({ hasText: "Совместная заметка" });
+  const card = q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Совместная заметка" });
   await expect(card).toBeVisible({ timeout: 20_000 });
   await card.click();
   await expect(q.locator(".ds-prose")).toContainText("Начало", { timeout: 20_000 });
@@ -234,7 +234,7 @@ test("D-54: a shared notebook open to the owner's AI agents shows ✨ to the mem
   await expect(row).not.toHaveAttribute("data-waiting", "", { timeout: 30_000 });
   await expect(row.getByTestId("agents-badge")).toBeVisible();
   await row.click();
-  await q.getByTestId("doc-card").filter({ hasText: "Для агентов" }).click();
+  await q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Для агентов" }).click();
   await expect(q.getByTestId("doc-page").getByTestId("agents-badge")).toContainText("Открыт ИИ-агентам");
   await q.getByTestId("doc-page").getByTestId("agents-badge").hover();
   await expect(q.getByText("Владелец открыл этот блокнот ИИ-агентам").first()).toBeVisible();

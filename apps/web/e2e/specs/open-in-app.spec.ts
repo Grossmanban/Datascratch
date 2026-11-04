@@ -73,7 +73,7 @@ test("shared notebook on iPhone: «Открыть в приложении» line
     await q.goto(`/notebook/${id}`);
     const button = q.getByTestId("open-in-app");
     await expect(button).toBeVisible({ timeout: 20_000 });
-    const [b, title, filter] = await Promise.all([button.boundingBox(), q.getByRole("heading", { level: 1 }).boundingBox(), q.getByTestId("list-filter").boundingBox()]);
+    const [b, title, filter] = await Promise.all([button.boundingBox(), q.getByTestId("list-title").boundingBox(), q.getByTestId("list-filter").boundingBox()]);
     expect(b!.x).toBeGreaterThanOrEqual(16);
     expect(Math.abs(b!.x - title!.x)).toBeLessThan(1);
     expect(Math.abs(b!.x - filter!.x)).toBeLessThan(1);

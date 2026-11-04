@@ -11,8 +11,8 @@ test("sign up, write a note, sign in on another device and see it", async ({ pag
   const other = await browser.newContext();
   const page2 = await other.newPage();
   await signIn(page2, email);
-  await expect(page2.getByTestId("doc-card").filter({ hasText: "Первая заметка" })).toBeVisible({ timeout: 20_000 });
-  await page2.getByTestId("doc-card").filter({ hasText: "Первая заметка" }).click();
+  await expect(page2.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Первая заметка" })).toBeVisible({ timeout: 20_000 });
+  await page2.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Первая заметка" }).click();
   await expect(page2.locator(".ds-prose")).toContainText("Чернила на тёплой бумаге");
 
   // Live sync between the two devices.
@@ -48,7 +48,7 @@ test("recover access with the recovery key", async ({ page, browser }) => {
   await p2.locator("input[type=password]").fill("a brand new password");
   await p2.locator("button[type=submit]").click();
   await p2.waitForURL("**/all", { timeout: 20_000 });
-  await expect(p2.getByTestId("doc-card").filter({ hasText: "Важное" })).toBeVisible({ timeout: 20_000 });
+  await expect(p2.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Важное" })).toBeVisible({ timeout: 20_000 });
   // D-53: recovery disconnects every other device, which wipes its data and says so.
   await expect(page.getByTestId("wiped-notice")).toBeVisible({ timeout: 20_000 });
 

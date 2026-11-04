@@ -17,7 +17,7 @@ export function useSharedRefs(spaceId: string | null): SharedRef[] {
 }
 
 const rowClass =
-  "group/row flex h-8 items-center gap-2 rounded-md px-2 text-ink-2 hover:bg-ink/[0.04] hover:text-ink [&.active]:bg-ink/[0.07] [&.active]:text-ink";
+  "group/row flex h-[35px] items-center gap-2 rounded-md px-2 text-ink-2 hover:bg-ink/[0.04] hover:text-ink [&.active]:bg-ink/[0.07] [&.active]:text-ink";
 
 /** One shared notebook or note: a link once its key is here, otherwise a quiet «waiting» row. */
 export function SharedRow({ shared }: { shared: SharedRef }) {

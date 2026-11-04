@@ -98,6 +98,7 @@ public actor SyncEngine: SyncClientDelegate {
 
     private var open: [String: OpenDoc] = [:]
     private var inFlight: Set<String> = []
+    private var acksSincePublish = 0
     /// A flush is running; calls made meanwhile only ask it for another pass. Bulk edits
     /// (hundreds of updates in a row) then cost a few outbox scans instead of one per update.
     private var flushing = false
@@ -317,6 +318,8 @@ public actor SyncEngine: SyncClientDelegate {
     }
 
     private func publish() {
+        // Three queries per call: skipped when nobody listens (`status()` computes it anyway).
+        guard !statusContinuations.isEmpty else { return }
         let s = currentStatus()
         for c in statusContinuations.values { c.yield(s) }
     }
@@ -710,8 +713,16 @@ public actor SyncEngine: SyncClientDelegate {
         case .ack(let docId, let clientMsgId, let seq):
             inFlight.remove(clientMsgId)
             try? store.acknowledge(clientMsgId: clientMsgId, seq: seq)
-            publish()
-            if backlog { await flush() }
+            // A burst of acks updates the status every few acks and when the window empties,
+            // not after each one (the count of what is left changes with every ack).
+            acksSincePublish += 1
+            if inFlight.isEmpty || acksSincePublish >= Self.maxInFlight / 4 {
+                acksSincePublish = 0
+                publish()
+            }
+            // The window is refilled in batches, not by a pass (re-reading the next 200 queued
+            // messages) after every ack.
+            if backlog, inFlight.count <= Self.maxInFlight / 2 { await flush() }
             await snapshotIfNeeded(docId: docId)
         case .awareness(let docId, let payload, let deviceId):
             guard open[docId] != nil, let record = try? store.document(docId), let key = try? keyFor(record),

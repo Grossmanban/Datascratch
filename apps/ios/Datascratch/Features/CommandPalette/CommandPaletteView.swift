@@ -41,7 +41,6 @@ struct CommandPaletteView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var query = ""
     @State private var highlighted = 0
-    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         let results = ranked
@@ -55,18 +54,15 @@ struct CommandPaletteView: View {
                 HStack(spacing: Theme.Space.s3) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(Theme.Palette.textTertiary)
-                    // No autocorrection or inline predictions: the owner's search on the iPad
-                    // (Russian keyboard) showed the typed word but listed nothing for it
-                    // (2026-11-03). Arrow and Escape keys are handled on the panel, not the field.
-                    TextField("Search documents or type a command", text: $query)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 19))
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .focused($fieldFocused)
-                        .submitLabel(.go)
-                        .onSubmit { run(results, at: highlighted) }
-                        .accessibilityIdentifier("palette.field")
+                    // The owner's search on the iPad (Russian keyboard) showed the typed word but
+                    // listed nothing for it (2026-11-03): SwiftUI's field reported the word only
+                    // once it was committed. This one reads the text on every edit.
+                    PaletteSearchField(text: $query, placeholder: String(localized: "Search documents or type a command"),
+                                       onSubmit: { run(results, at: highlighted) },
+                                       onMove: { step in
+                                           highlighted = min(max(highlighted + step, 0), max(results.count - 1, 0))
+                                       },
+                                       onEscape: { dismiss() })
                     Text("esc")
                         .font(Theme.Typography.caption.monospaced())
                         .foregroundStyle(Theme.Palette.textTertiary)
@@ -118,7 +114,6 @@ struct CommandPaletteView: View {
             .padding(.horizontal, Theme.Space.s4)
             .padding(.top, 80)
         }
-        .onAppear { fieldFocused = true }
         .onChange(of: query) { _, _ in highlighted = 0 }
         .accessibilityAddTraits(.isModal)
     }

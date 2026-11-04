@@ -181,14 +181,26 @@ struct FakeFactory: WebSocketFactory {
     func connect(to url: URL) async throws -> any WebSocketConnection { try await server.connect() }
 }
 
-/// Polls until `condition` holds (async delivery between actors). The condition is checked
-/// once more after the deadline: if the process was starved past it (a loaded CI simulator), a
-/// condition that became true meanwhile must not count as a timeout.
+/// Polls until `condition` holds (async delivery between actors).
+///
+/// `timeout` is time this waiter was actually given to run, not wall-clock time. On CI the
+/// whole suite runs at once on a ~3-core simulator and some tests do seconds of synchronous
+/// work (Argon2id at 64 MiB) on the shared concurrency pool: a 10 ms sleep then wakes seconds
+/// late, and a wall-clock deadline ran out while neither the code under test nor this check
+/// could run (`expiredTokenOrDroppedConnectionIsNotARevocation`, `noteWithoutKeyYet…`,
+/// 2026-11-04). A late wake counts as two intervals at most, so starvation stops the clock and
+/// a real hang still fails. Wall time is capped at 10 × `timeout` so a stuck run ends. Speed
+/// is not asserted here: wall-clock targets are in `SyncPerfTests`/`LiveSyncTests`, which CI
+/// runs alone.
 func eventually(timeout: Duration = .seconds(5), _ condition: () async throws -> Bool) async throws -> Bool {
-    let deadline = ContinuousClock.now + timeout
-    while ContinuousClock.now < deadline {
+    let interval = Duration.milliseconds(10)
+    let hardDeadline = ContinuousClock.now + timeout * 10
+    var budget = timeout
+    while budget > .zero, ContinuousClock.now < hardDeadline {
         if try await condition() { return true }
-        try await Task.sleep(for: .milliseconds(10))
+        let slept = ContinuousClock.now
+        try await Task.sleep(for: interval)
+        budget -= min(ContinuousClock.now - slept, interval * 2)
     }
     return try await condition()
 }
@@ -298,17 +310,23 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         for i in 0...SnapshotPolicy.maxUpdates {
             try nb.putFolder(Folder(id: "f\(i % 10)", parentId: nil, name: "F\(i)", order: Double(i)))
         }
-        #expect(try await eventually(timeout: .seconds(20)) {
+        // Every edit acknowledged (the server's last seq) and the snapshot stored.
+        let edits = Int64(SnapshotPolicy.maxUpdates + 1)
+        #expect(try await eventually {
+            let lastSeq = await server.nextSeq[docId] ?? 0
             let snap = await server.snapshots[docId]
-            return snap != nil && (try? a.store.outboxCount()) == 0
+            return lastSeq == edits && snap != nil && (try? a.store.outboxCount()) == 0
         })
         #expect(try a.store.needsSnapshot(docId: docId) == false)
 
+        // B is caught up when it has the last seq, not when it has ten folders (it had them
+        // after the first ten edits: «F490» ≠ «F500», 2026-11-04).
         let b = try device("B", server: server)
         await b.start()
         let copy = NotebookDocument(notebookId: docId)
         try await b.open(copy.crdt, notebookId: docId)
-        #expect(try await eventually { copy.folders().count == 10 })
+        #expect(try await eventually { (try? b.store.document(docId)?.lastSeq) == edits })
+        #expect(copy.folders().count == 10)
         #expect(copy.folder(id: "f0")?.name == "F500")
         await a.stop()
         await b.stop()

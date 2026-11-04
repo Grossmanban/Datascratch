@@ -8,7 +8,8 @@ import UIKit
 struct PaletteSearchField: UIViewRepresentable {
     @Binding var text: String
     let placeholder: String
-    let onSubmit: () -> Void
+    /// Gets the field's text as it is now.
+    let onSubmit: (String) -> Void
     let onMove: (Int) -> Void
     let onEscape: () -> Void
 
@@ -24,6 +25,7 @@ struct PaletteSearchField: UIViewRepresentable {
         field.smartQuotesType = .no
         field.inlinePredictionType = .no
         field.returnKeyType = .go
+        field.textContentType = .init(rawValue: "")   // not a login field: no AutoFill bar
         field.delegate = context.coordinator
         field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
         field.accessibilityIdentifier = "palette.field"
@@ -61,8 +63,9 @@ struct PaletteSearchField: UIViewRepresentable {
         }
 
         func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-            parent.text = textField.text ?? ""
-            parent.onSubmit()
+            let text = textField.text ?? ""
+            parent.text = text
+            parent.onSubmit(text)
             return false
         }
     }

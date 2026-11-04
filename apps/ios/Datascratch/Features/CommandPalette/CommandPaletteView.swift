@@ -58,8 +58,12 @@ struct CommandPaletteView: View {
                     // listed nothing for it (2026-11-03): SwiftUI's field reported the word only
                     // once it was committed. This one reads the text on every edit.
                     PaletteSearchField(text: $query, placeholder: String(localized: "Search documents or type a command"),
-                                       // The results of now, not of the render that made this closure.
-                                       onSubmit: { run(ranked, at: highlighted) },
+                                       // Ranked for the field's own text: Return can come before the
+                                       // last letters reached `query` (typed fast, «Go to Tasks» ran
+                                       // «Go to Calendar»). The highlight counts only for that text.
+                                       onSubmit: { text in
+                                           run(ranked(for: text), at: text == query ? highlighted : 0)
+                                       },
                                        onMove: { step in
                                            highlighted = min(max(highlighted + step, 0), max(ranked.count - 1, 0))
                                        },
@@ -134,9 +138,11 @@ struct CommandPaletteView: View {
         item.action()
     }
 
-    private var ranked: [PaletteItem] {
+    private var ranked: [PaletteItem] { ranked(for: query) }
+
+    private func ranked(for text: String) -> [PaletteItem] {
         let all = commands + documents
-        let q = query.trimmingCharacters(in: .whitespaces)
+        let q = text.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return commands + Array(documents.prefix(8)) }
         return all.compactMap { item -> (PaletteItem, Int)? in
             let candidates = [item.title] + item.keywords

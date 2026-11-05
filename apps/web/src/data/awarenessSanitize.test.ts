@@ -36,4 +36,43 @@ describe("remote awareness is validated (audit 2026-10-27)", () => {
     const arr = new TextEncoder().encode("[1]");
     expect(() => sanitizeAwarenessUpdate(Uint8Array.of(1, 5, 1, arr.length, ...arr))).toThrow();
   });
+
+  it("keeps user.account (a string up to 64 characters) and drops anything else there", () => {
+    expect(sanitizeUser({ name: "Аня", color: "#2E5BDB", kind: "user", account: "0192f3c4-acc" })).toEqual({ name: "Аня", color: "#2E5BDB", kind: "user", account: "0192f3c4-acc" });
+    expect(sanitizeUser({ name: "Аня", color: "#2E5BDB", account: "x".repeat(65) })).toEqual({ name: "Аня", color: "#2E5BDB", kind: "guest" });
+    expect(sanitizeUser({ name: "Аня", color: "#2E5BDB", account: { id: 1 } })).toEqual({ name: "Аня", color: "#2E5BDB", kind: "guest" });
+    expect(sanitizeUser({ name: "Аня", color: "#2E5BDB", account: "" })).toEqual({ name: "Аня", color: "#2E5BDB", kind: "guest" });
+  });
+});
+
+describe("own other devices are not another person", () => {
+  const receivedAs = (self: string | null, state: Record<string, unknown>) => {
+    const { update, clientID } = updateWith(state);
+    const b = new Awareness(new Y.Doc());
+    applyAwarenessUpdate(b, sanitizeAwarenessUpdate(update, { selfAccount: self }), "remote");
+    return b.getStates().get(clientID);
+  };
+  const me = "acc-me";
+
+  it("a peer on my account is dropped (no avatar, no caret)", () => {
+    expect(receivedAs(me, { user: { name: "я", color: "#2E5BDB", kind: "user", account: me }, cursor: { anchor: 1 } })).toBeUndefined();
+  });
+
+  it("a stranger and a state without an account (old clients, guests) are shown", () => {
+    expect(receivedAs(me, { user: { name: "Аня", color: "#D2453B", kind: "user", account: "acc-anya" } })).toEqual({ user: { name: "Аня", color: "#D2453B", kind: "user", account: "acc-anya" } });
+    expect(receivedAs(me, { user: { name: "Старый", color: "#3E8E5A", kind: "user" } })).toEqual({ user: { name: "Старый", color: "#3E8E5A", kind: "user" } });
+    // Without a known own account (a guest) nobody is dropped.
+    expect(receivedAs(null, { user: { name: "я", color: "#2E5BDB", kind: "user", account: me } })?.user).toMatchObject({ account: me });
+  });
+
+  it("a device of mine that was shown before (e.g. an old state) disappears when its account arrives", () => {
+    const a = new Awareness(new Y.Doc());
+    const b = new Awareness(new Y.Doc());
+    a.setLocalState({ user: { name: "я", color: "#2E5BDB", kind: "user" } });
+    applyAwarenessUpdate(b, sanitizeAwarenessUpdate(encodeAwarenessUpdate(a, [a.clientID]), { selfAccount: me }), "remote");
+    expect(b.getStates().has(a.clientID)).toBe(true);
+    a.setLocalStateField("user", { name: "я", color: "#2E5BDB", kind: "user", account: me });
+    applyAwarenessUpdate(b, sanitizeAwarenessUpdate(encodeAwarenessUpdate(a, [a.clientID]), { selfAccount: me }), "remote");
+    expect(b.getStates().has(a.clientID)).toBe(false);
+  });
 });

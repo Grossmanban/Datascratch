@@ -693,8 +693,9 @@ struct HideKeyboardButton: View {
             button
         } else {
             // The slot keeps its size (nothing moves under the finger) but holds no button: an
-            // invisible disabled one still counted as offered on iPad (run 40331980802).
-            button.hidden().disabled(true)
+            // invisible disabled one still counted as offered on iPad (run 40331980802), and a
+            // hidden one stayed in the accessibility tree as hittable (iPhone, run 42036579509).
+            button.hidden().disabled(true).accessibilityHidden(true)
         }
     }
 }

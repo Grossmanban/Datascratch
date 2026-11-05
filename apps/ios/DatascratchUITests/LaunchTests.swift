@@ -428,7 +428,7 @@ final class LibraryUITests: XCTestCase {
         hide.tap()
         settle(1)
         XCTAssertFalse(app.keyboards.firstMatch.exists, "the keyboard is still up")
-        let gone = NSPredicate(format: "isHittable == false")
+        let gone = NSPredicate(format: "exists == false OR isHittable == false")
         let offered = XCTWaiter().wait(for: [expectation(for: gone, evaluatedWith: app.buttons["editor.hideKeyboard"].firstMatch)], timeout: 3)
         XCTAssertEqual(offered, .completed, "Hide Keyboard is still offered; format bar shown: \(app.descendants(matching: .any)["formatBar"].firstMatch.exists)")
         XCTAssertEqual(palette.frame.minX, x, accuracy: 1, "the palette moved when the button went")

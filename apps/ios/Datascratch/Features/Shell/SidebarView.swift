@@ -576,10 +576,17 @@ struct SyncStatusBadge: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 2) {
-                let (icon, text, color) = describe(app.sync.phase)
-                label(icon: icon, text: text, color: color)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("sync.status")
+                Group {
+                    // Photos on their way say so, with a count (not a bare «Syncing…»).
+                    if let transfer = app.sync.transferLine, !isProblem(app.sync.phase) {
+                        label(icon: transfer.icon, text: Text(verbatim: transfer.text), color: Theme.Palette.accent, pulses: true)
+                    } else {
+                        let (icon, text, color) = describe(app.sync.phase)
+                        label(icon: icon, text: text, color: color)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("sync.status")
                 // Changes waiting for a key: a quiet line once it lasts, no spinner.
                 TimelineView(.periodic(from: .now, by: 30)) { context in
                     if app.sync.showsHeldHint(now: context.date) {
@@ -603,14 +610,26 @@ struct SyncStatusBadge: View {
     }
 
     private func label(icon: String, text: LocalizedStringKey, color: Color) -> some View {
+        label(icon: icon, text: Text(text), color: color, pulses: app.sync.phase == .syncing)
+    }
+
+    private func label(icon: String, text: Text, color: Color, pulses: Bool) -> some View {
         Label {
-            Text(text)
+            text
                 .font(Theme.Typography.footnote)
                 .foregroundStyle(Theme.Palette.textSecondary)
         } icon: {
             Image(systemName: icon)
                 .foregroundStyle(color)
-                .symbolEffect(.pulse, isActive: app.sync.phase == .syncing)
+                .symbolEffect(.pulse, isActive: pulses)
+        }
+    }
+
+    /// A problem outranks the photo count: it needs the person.
+    private func isProblem(_ phase: SyncCenter.Phase) -> Bool {
+        switch phase {
+        case .failed, .sessionEnded, .notSent: true
+        default: false
         }
     }
 

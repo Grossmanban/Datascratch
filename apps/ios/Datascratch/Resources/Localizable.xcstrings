@@ -1331,6 +1331,16 @@
         }
       }
     },
+    "Downloading photos: %lld of %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загружаются фото: %lld из %lld"
+          }
+        }
+      }
+    },
     "Drag the image to choose what the header shows.": {
       "localizations": {
         "ru": {
@@ -3441,6 +3451,16 @@
         }
       }
     },
+    "Photos": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фото"
+          }
+        }
+      }
+    },
     "Pick a Date…": {
       "localizations": {
         "ru": {
@@ -5267,6 +5287,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Скоро"
+          }
+        }
+      }
+    },
+    "Uploading photos: %lld of %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправляются фото: %lld из %lld"
           }
         }
       }

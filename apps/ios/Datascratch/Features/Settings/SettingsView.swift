@@ -129,6 +129,10 @@ struct AccountSettings: View {
                                 : nil) {
                 DSSettingsRow(String(localized: "Status"), systemImage: "arrow.triangle.2.circlepath",
                               accessory: .custom(AnyView(DSSyncChip(app.sync.dsState).accessibilityIdentifier("sync.status"))))
+                if let transfer = app.sync.transferLine {
+                    DSSettingsRow(String(localized: "Photos"), systemImage: transfer.icon, value: transfer.text)
+                        .accessibilityIdentifier("sync.transfers")
+                }
                 DSSettingsRow(String(localized: "Server"), systemImage: "server.rack",
                               value: app.serverURL.map(ServerAddress.display) ?? String(localized: "Not connected"))
                     .accessibilityIdentifier("settings.server")

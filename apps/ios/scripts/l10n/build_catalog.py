@@ -21,6 +21,8 @@ RU = pathlib.Path(__file__).with_name("ru.json")
 
 # Swift literal with interpolation -> catalog key
 INTERPOLATIONS = {
+    r"Uploading photos: \(transfers.sent) of \(transfers.toSend)": "Uploading photos: %lld of %lld",
+    r"Downloading photos: \(transfers.received) of \(transfers.toReceive)": "Downloading photos: %lld of %lld",
     r"Offline · \(pending) waiting": "Offline · %lld waiting",
     r"Not sent: \(documents)": "Not sent: %lld",
     r"\(count) documents": "%lld documents",

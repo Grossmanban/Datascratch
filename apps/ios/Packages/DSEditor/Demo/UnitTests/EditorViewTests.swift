@@ -1546,14 +1546,19 @@ final class EditorViewTests: XCTestCase {
         let button = try XCTUnwrap(editor.remoteCursorMarks.button(7))
         XCTAssertEqual(button.accessibilityLabel, "Борис ниже")
         XCTAssertGreaterThan(button.frame.minY, editor.bounds.midY, "at the bottom edge")
+        // The mark's tap scrolls to the caret (animated in the app; checked here without animation).
+        var tapped: UInt64?
+        let scroll = editor.remoteCursorMarks.onTap
+        editor.remoteCursorMarks.onTap = { tapped = $0 }
         button.sendActions(for: .primaryActionTriggered)
-        // The scroll is animated (unless Reduce Motion is on).
-        let scrolled = expectation(description: "scroll animation finished")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { scrolled.fulfill() }
-        wait(for: [scrolled], timeout: 5)
+        XCTAssertEqual(tapped, 7, "the mark asks to scroll to its caret")
+        editor.remoteCursorMarks.onTap = scroll
+        let before = editor.textView.contentOffset
+        editor.scrollToRemoteCursor(7, animated: false)
         settle(editor)
         let caret = try XCTUnwrap(editor.remoteCursorLayer.caretFrame(7))
-        XCTAssertTrue(editor.visibleTextRect().contains(caret), "scrolled to the caret")
+        let visible = editor.visibleTextRect()
+        XCTAssertTrue(visible.contains(caret), "scrolled to the caret: caret \(caret), visible \(visible), offset \(before) → \(editor.textView.contentOffset), content \(editor.textView.contentSize), insets \(editor.textView.adjustedContentInset)")
         XCTAssertTrue(editor.remoteCursorMarks.marks.isEmpty, "no mark once it is on screen")
 
         // A caret above the visible text: a mark at the top.

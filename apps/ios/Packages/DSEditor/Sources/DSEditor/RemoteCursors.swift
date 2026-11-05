@@ -244,13 +244,21 @@ public extension EditorView {
     }
 
     /// Scrolls so that a co-author's caret is in the middle of the visible text.
-    func scrollToRemoteCursor(_ id: UInt64) {
+    func scrollToRemoteCursor(_ id: UInt64, animated: Bool = true) {
+        guard let head = remoteCursorOffsets[id]?.head else { return }
+        // Text off screen has estimated heights (TextKit 2 lays out lazily): the text up to the
+        // caret is laid out first, so the target is where the caret really is.
+        if let tlm = textView.textLayoutManager, let end = geometry.location(at: min(head + 1, projection.length)),
+           let range = NSTextRange(location: tlm.documentRange.location, end: end) {
+            tlm.ensureLayout(for: range)
+        }
+        layoutRemoteCursors()
         guard let caret = remoteCaretFrames.first(where: { $0.id == id })?.caret else { return }
         let visible = visibleTextRect()
         let minY = -textView.adjustedContentInset.top
         let maxY = max(minY, textView.contentSize.height + textView.adjustedContentInset.bottom - textView.bounds.height)
         let y = textView.contentOffset.y + caret.midY - visible.midY
-        textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: min(max(y, minY), maxY)), animated: !UIAccessibility.isReduceMotionEnabled)
+        textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: min(max(y, minY), maxY)), animated: animated && !UIAccessibility.isReduceMotionEnabled)
         movedRemoteCursors.insert(id)
         layoutRemoteCursors()
     }

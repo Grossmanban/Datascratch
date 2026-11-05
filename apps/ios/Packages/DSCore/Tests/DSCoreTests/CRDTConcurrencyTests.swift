@@ -87,6 +87,8 @@ import Foundation
                     } catch { errors.withLock { $0.append("\(error)") } }
                 }
                 i += 1
+                // A frame's worth of work at most; the gate is fair either way.
+                Thread.sleep(forTimeInterval: 0.001)
             }
         }
         ui.start()

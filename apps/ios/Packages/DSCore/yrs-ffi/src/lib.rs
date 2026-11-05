@@ -36,13 +36,54 @@ uniffi::setup_scaffolding!();
 /// while the UI was reading the same document). With every call behind this gate no
 /// transaction of another thread can be open meanwhile. Re-entrant so that what worked on one
 /// thread keeps working (calls made from inside observers are already forbidden).
+/// Fair: callers get in in the order they arrived (a ticket each), so a thread that reads in
+/// a loop cannot keep the sync engine out.
 #[derive(Default)]
 struct Gate {
-    state: Mutex<(Option<std::thread::ThreadId>, usize)>,
+    state: Mutex<GateState>,
     released: std::sync::Condvar,
 }
 
+#[derive(Default)]
+struct GateState {
+    owner: Option<std::thread::ThreadId>,
+    depth: usize,
+    next_ticket: u64,
+    serving: u64,
+}
+
 struct GateGuard<'a>(&'a Gate);
+
+impl Gate {
+    fn enter(&self) -> GateGuard<'_> {
+        let me = std::thread::current().id();
+        let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if s.owner == Some(me) {
+            s.depth += 1;
+            return GateGuard(self);
+        }
+        let ticket = s.next_ticket;
+        s.next_ticket += 1;
+        while s.owner.is_some() || s.serving != ticket {
+            s = self.released.wait(s).unwrap_or_else(|e| e.into_inner());
+        }
+        s.owner = Some(me);
+        s.depth = 1;
+        GateGuard(self)
+    }
+}
+
+impl Drop for GateGuard<'_> {
+    fn drop(&mut self) {
+        let mut s = self.0.state.lock().unwrap_or_else(|e| e.into_inner());
+        s.depth -= 1;
+        if s.depth == 0 {
+            s.owner = None;
+            s.serving += 1;
+            self.0.released.notify_all();
+        }
+    }
+}
 
 impl YDocument {
     /// Runs `body` holding the gate. A closure, not a guard local: with edition 2021 the
@@ -52,38 +93,6 @@ impl YDocument {
     fn gated<R>(&self, body: impl FnOnce() -> R) -> R {
         let _gate = self.gate.enter();
         body()
-    }
-}
-
-impl Gate {
-    fn enter(&self) -> GateGuard<'_> {
-        let me = std::thread::current().id();
-        let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        loop {
-            match s.0 {
-                None => {
-                    *s = (Some(me), 1);
-                    break;
-                }
-                Some(owner) if owner == me => {
-                    s.1 += 1;
-                    break;
-                }
-                Some(_) => s = self.released.wait(s).unwrap_or_else(|e| e.into_inner()),
-            }
-        }
-        GateGuard(self)
-    }
-}
-
-impl Drop for GateGuard<'_> {
-    fn drop(&mut self) {
-        let mut s = self.0.state.lock().unwrap_or_else(|e| e.into_inner());
-        s.1 -= 1;
-        if s.1 == 0 {
-            s.0 = None;
-            self.0.released.notify_one();
-        }
     }
 }
 

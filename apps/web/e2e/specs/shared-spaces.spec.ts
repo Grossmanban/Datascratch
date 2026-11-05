@@ -44,6 +44,19 @@ async function openMembers(page: Page) {
   await expect(page.getByTestId("space-members")).toBeVisible();
 }
 
+/** Enter at the end of the last paragraph makes a new paragraph (bug 2026-11-05: it did nothing). */
+async function enterMakesParagraph(p: Page, text: string) {
+  const paras = p.locator(".ds-prose p");
+  const before = await paras.count();
+  await paras.last().click();
+  await p.keyboard.press("End");
+  await p.keyboard.press("Enter");
+  await p.keyboard.type(text);
+  await expect(paras).toHaveCount(before + 1);
+  await expect(paras.last()).toHaveText(text);
+  await expectSynced(p);
+}
+
 async function typeNewNote(p: Page, title: string, body: string) {
   await p.waitForURL(/\/doc\//);
   await expect(p.locator(".ds-prose")).toBeVisible();
@@ -100,6 +113,14 @@ test("shared space: created shared, a member joins, sees it in the switcher and 
   await q.keyboard.type(" и правка участника");
   await expectSynced(q);
   await expect(page.locator(".ds-prose")).toContainText("общий текст и правка участника", { timeout: 20_000 });
+  // Enter makes a paragraph in a shared-space note, for the editor and the owner, both ways.
+  await enterMakesParagraph(q, "абзац участника");
+  await expect(page.locator(".ds-prose p", { hasText: "абзац участника" })).toHaveCount(1, { timeout: 20_000 });
+  // «Участники» stays open on the owner's side (it hands the space key over); close it to type.
+  await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
+  await enterMakesParagraph(page, "абзац владельца");
+  await expect(q.locator(".ds-prose p", { hasText: "абзац владельца" })).toHaveCount(1, { timeout: 20_000 });
+  await openMembers(page);
   // The editor creates a note of their own there; the owner gets it.
   await q.getByTestId("new-doc").click();
   await typeNewNote(q, "От участника", "заметка участника");

@@ -65,6 +65,37 @@ test("an image appears at once with a local preview and a progress ring, then ge
   await expect(page.locator(".ds-image")).toHaveCount(0);
 });
 
+test("after it is stored, the picture and the file keep a quiet ring while they go up to the server (as on iOS)", async ({ mount, page }) => {
+  await mount(<UploadEditor />);
+  await ready(page);
+  // The app queues the upload as soon as the file is stored: 0 = waiting, the ring spins.
+  await page.evaluate(() => window.__up!.send("att-1", 0));
+  await insert(page, "image");
+  await page.evaluate(() => window.__up!.calls[0]!.resolve({ attachmentId: "att-1", name: "фото.png", size: 68, mime: "image/png" }));
+  const ring = page.locator(".ds-image .ds-upload");
+  await expect(ring).toBeVisible();
+  await expect(ring).toHaveAttribute("data-status", "sending");
+  await expect(page.locator(".ds-image .ds-upload-ring")).toHaveClass(/is-indeterminate/);
+  // The picture itself is shown as it is (not dimmed like a placeholder).
+  await expect(page.locator(".ds-image-frame")).not.toHaveClass(/is-uploading/);
+  await expect(page.locator(".ds-image img")).toHaveAttribute("src", /^data:image\/png/);
+  await page.evaluate(() => window.__up!.send("att-1", 0.5));
+  await expect(ring).toHaveAttribute("aria-label", "Отправляется на сервер 50%");
+  await expect(page.locator(".ds-image .ds-upload-bar")).toHaveCSS("stroke-dashoffset", "50px");
+  await expect(page.locator(".ds-image .ds-upload-ring")).not.toHaveClass(/is-indeterminate/);
+  await page.evaluate(() => window.__up!.send("att-1", null));
+  await expect(ring).toBeHidden();
+
+  // A file row the same way.
+  await page.evaluate(() => window.__up!.send("att-2", 0.25));
+  await insert(page, "pdf");
+  await page.evaluate(() => window.__up!.calls[1]!.resolve({ attachmentId: "att-2", name: "отчёт.pdf", size: 2048, mime: "application/pdf" }));
+  const fileRing = page.locator(".ds-file .ds-upload");
+  await expect(fileRing).toHaveAttribute("aria-label", "Отправляется на сервер 25%");
+  await page.evaluate(() => window.__up!.send("att-2", null));
+  await expect(fileRing).toBeHidden();
+});
+
 test("a failed upload offers «Повторить» and «Удалить»; retry stores it, remove drops the block", async ({ mount, page }) => {
   await mount(<UploadEditor />);
   await ready(page);

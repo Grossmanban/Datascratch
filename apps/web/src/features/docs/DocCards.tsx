@@ -107,7 +107,10 @@ export function DocCollection({
                 ))}
               </div>
             ) : (
-              notes[row.index] && <DocRow note={notes[row.index]!} snippet={snippet(notes[row.index]!.id)} first={row.index === 0} />
+              // Keyed by the note: when the list re-sorts (a sync bumps another note's time), a row
+              // must not turn into another note under an open context menu (it then moved the wrong
+              // note — e2e move.spec, 2026-11-05).
+              notes[row.index] && <DocRow key={notes[row.index]!.id} note={notes[row.index]!} snippet={snippet(notes[row.index]!.id)} first={row.index === 0} />
             )}
           </div>
         ))}

@@ -208,7 +208,7 @@ final class PresenceCenter {
         guard !name.isEmpty else { return nil }
         let raw = user["color"] as? String ?? ""
         let isHex = raw.range(of: "^#[0-9a-fA-F]{3,8}$", options: .regularExpression) != nil
-        let account = (user["account"] as? String).flatMap { $0.isEmpty || $0.count > 128 ? nil : $0 }
+        let account = (user["account"] as? String).flatMap { $0.isEmpty || $0.count > 64 ? nil : $0 }
         return PresencePeer(id: client, name: name, color: isHex ? raw : color(for: name), account: account)
     }
 

@@ -87,7 +87,11 @@ function DocScreen({ noteId }: { noteId: string }) {
   const [editorApi, setEditorApi] = useState<EditorApi | null>(null);
   const paletteCollapsed = useUi((s) => s.penPaletteCollapsed);
 
-  const user = useMemo(() => ({ name: email.split("@")[0] || "Me", color: colorFor(email), kind: "user" as const }), [email]);
+  const accountId = useAuth((s) => s.userId) ?? "";
+  const user = useMemo(
+    () => ({ name: email.split("@")[0] || "Me", color: colorFor(email), kind: "user" as const, ...(accountId ? { account: accountId } : {}) }),
+    [email, accountId],
+  );
   const { awareness, others } = usePresence(
     noteId,
     doc,

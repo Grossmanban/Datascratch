@@ -26,6 +26,13 @@ export interface EditorHost {
    */
   uploadAttachment?: (file: File, opts?: { onProgress?: (fraction: number) => void }) => Promise<UploadedAttachment>;
   /**
+   * Server upload of a stored attachment, which runs in the background after `uploadAttachment`
+   * resolved: `onProgress(0..1)` while its chunks go up (0 = queued, the ring spins), `null` once it
+   * is on the server or not uploading. The image or file block shows a quiet ring meanwhile, as on
+   * iOS. Returns the unsubscribe function.
+   */
+  watchAttachmentUpload?: (attachmentId: string, onProgress: (fraction: number | null) => void) => () => void;
+  /**
    * Downloads an image found in pasted HTML (http/https) so it can be stored as an attachment.
    * Rejects (or absent) when it cannot be fetched (CORS, offline): the image then stays as a link to
    * its URL.

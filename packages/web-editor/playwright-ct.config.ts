@@ -19,6 +19,6 @@ export default defineConfig({
     { name: "chromium", use: { ...devices["Desktop Chrome"], launchOptions: executablePath ? { executablePath } : {} } },
     // Safari's layout (line-height rounding, font metrics) differs from Chromium: the paper must
     // line up there too (iPad Safari is a main client).
-    { name: "webkit", use: { ...devices["Desktop Safari"] }, testMatch: /paper.*\.spec\.tsx$/ },
+    { name: "webkit", use: { ...devices["Desktop Safari"] }, testMatch: /(paper.*|enter)\.spec\.tsx$/ },
   ],
 });

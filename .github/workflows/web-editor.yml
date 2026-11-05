@@ -106,7 +106,7 @@ jobs:
       - name: Install WebKit
         timeout-minutes: 8
         run: pnpm exec playwright install webkit
-      - name: Paper alignment in WebKit (lines, grid, chips, nested blocks, headings)
+      - name: WebKit (Safari) — paper alignment and Enter in the text
         run: pnpm run test:ct --project=webkit
         env:
           CI: "true"

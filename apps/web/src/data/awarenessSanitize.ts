@@ -6,6 +6,7 @@
 
 const COLOR = /^#[0-9a-f]{3,8}$/i;
 const MAX_NAME = 64;
+const MAX_ACCOUNT = 64;
 const MAX_ENTRIES = 256;
 const MAX_STATE_BYTES = 16 * 1024;
 
@@ -41,18 +42,27 @@ function writeUint(out: number[], n: number) {
   out.push(n);
 }
 
-/** A clean `user` field, or null to drop it (the editor then shows no caret label). */
-export function sanitizeUser(u: unknown): { name: string; color: string; kind: "user" | "guest" } | null {
+/**
+ * A clean `user` field, or null to drop it (the editor then shows no caret label). `account` (the
+ * sender's accountId, a string up to 64 characters; old clients do not send it) is kept, anything
+ * else in that place is dropped.
+ */
+export function sanitizeUser(u: unknown): { name: string; color: string; kind: "user" | "guest"; account?: string } | null {
   if (!u || typeof u !== "object") return null;
   const o = u as Record<string, unknown>;
   if (typeof o.color !== "string" || !COLOR.test(o.color)) return null;
   // Control and bidi-override characters are stripped; the label is plain text in the editor.
   const name = typeof o.name === "string" ? o.name.replace(/[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/g, "").trim().slice(0, MAX_NAME) : "";
-  return { name: name || "Гость", color: o.color, kind: o.kind === "user" ? "user" : "guest" };
+  const account = typeof o.account === "string" && o.account.length > 0 && o.account.length <= MAX_ACCOUNT ? o.account : undefined;
+  return { name: name || "Гость", color: o.color, kind: o.kind === "user" ? "user" : "guest", ...(account ? { account } : {}) };
 }
 
-/** The update with every state's `user` validated; throws on a malformed update. */
-export function sanitizeAwarenessUpdate(update: Uint8Array): Uint8Array {
+/**
+ * The update with every state's `user` validated; throws on a malformed update. A state whose
+ * `user.account` is `selfAccount` (the user's own other device) arrives as a removal: neither an
+ * avatar nor a caret is shown for it.
+ */
+export function sanitizeAwarenessUpdate(update: Uint8Array, opts: { selfAccount?: string | null } = {}): Uint8Array {
   const r = new Reader(update);
   const count = r.uint();
   if (count > MAX_ENTRIES) throw new Error("too many states");
@@ -67,7 +77,7 @@ export function sanitizeAwarenessUpdate(update: Uint8Array): Uint8Array {
       if (typeof raw !== "object" || Array.isArray(raw)) throw new Error("bad state");
       const { user, ...rest } = raw as Record<string, unknown>;
       const clean = sanitizeUser(user);
-      state = clean ? { ...rest, user: clean } : rest;
+      state = clean && opts.selfAccount && clean.account === opts.selfAccount ? null : clean ? { ...rest, user: clean } : rest;
     }
     writeUint(out, clientID);
     writeUint(out, clock);

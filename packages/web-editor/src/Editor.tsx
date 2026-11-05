@@ -4,7 +4,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
-import { setEditorAwareness } from "./collab/collaboration";
+import { setAwarenessUser, setEditorAwareness } from "./collab/collaboration";
 import { buildExtensions } from "./editorCore";
 import { alignPaper, clearPaper, PaperSnap } from "./paper";
 import type { EditorHost, HostRef } from "./host";
@@ -326,7 +326,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
 
   useEffect(() => {
     if (!awareness || !user) return;
-    awareness.setLocalStateField("user", { name: user.name, color: user.color });
+    setAwarenessUser(awareness, user);
   }, [awareness, user?.name, user?.color]);
 
   const style = { ...meta.style, ...props.styleOverride };

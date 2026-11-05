@@ -1,5 +1,6 @@
 import type { useNavigate } from "@tanstack/react-router";
-import { attachmentUrl, openDecrypted, storeAttachment, svgToPng } from "@/data/attachments";
+import { attachmentUrl, openDecrypted, storeAttachment, svgToPng, watchAttachmentUpload } from "@/data/attachments";
+import { prepareNoteImage } from "@/data/imagePrep";
 import { runtime } from "@/data/runtime";
 import { createNote, findInbox, getOrCreateInbox, moveTask, openTab } from "@/domain/actions";
 import { allTags, noteTitle, spaceNoteFilter, spaceOfNote, useWorkspace } from "@/domain/workspace";
@@ -23,8 +24,9 @@ function summary(noteId: string): NoteSummary | null {
 export async function uploadNoteFile(noteId: string, input: File, onProgress?: (done: number) => void) {
   const k = await runtime().store.keyFor(noteId);
   if (!k) throw new Error("no key");
-  // An SVG (a picked file or a pasted data:image/svg+xml) is stored as a PNG, never as SVG.
-  const file = isSvg(input) ? await svgToPng(input, input.name) : input;
+  // An SVG (a picked file or a pasted data:image/svg+xml) is stored as a PNG, never as SVG; a
+  // picture is stored at most 2560 px on its longer side, as on iOS (data/imagePrep.ts).
+  const file = isSvg(input) ? await svgToPng(input, input.name) : await prepareNoteImage(input);
   onProgress?.(0);
   const mime = file.type || "application/octet-stream";
   const id = await storeAttachment(noteId, k, new Uint8Array(await file.arrayBuffer()), mime, onProgress);
@@ -51,6 +53,8 @@ export function ownerEditorHost(noteId: string, nav: Nav): EditorHost {
     fetchRemoteImage: (url: string) => fetchRemoteImage(url),
     uploadAttachment: (file: File, progress?: ((done: number) => void) | { onProgress?: (done: number) => void }) =>
       uploadNoteFile(noteId, file, typeof progress === "function" ? progress : progress?.onProgress),
+    // The ring on a picture while its chunks go up to the server (as on iOS).
+    watchAttachmentUpload: (id, onProgress) => watchAttachmentUpload(id, onProgress),
     // Only a raster image, PDF or text opens in a tab; anything else is downloaded (audit 2026-10-27).
     onOpenAttachment: async ({ attachmentId, name, mime }) => {
       const k = await key();

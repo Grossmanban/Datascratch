@@ -40,6 +40,14 @@ public protocol EditorDocument: AnyObject {
     func anchor(block: BlockID, offset: Int) -> Data?
     /// Current position of an anchored character; nil when the character is deleted (D-35).
     func resolveAnchor(_ anchor: Data) -> TextPosition?
+    /// Current position of a caret (a co-author's, `RemoteCursor`): any Yjs relative position in
+    /// the content (a character, the end of a text, an empty block, between blocks); a deleted
+    /// character still gives the place where it was. Nil when it cannot be placed.
+    func resolveCursor(_ position: Data) -> TextPosition?
+    /// The relative position the web's cursor plugin would send for a caret at `offset` of
+    /// `block` (y-prosemirror `absolutePositionToRelativePosition`): this device's own caret for
+    /// co-authors. Nil when it cannot be expressed.
+    func cursorPosition(block: BlockID, offset: Int) -> Data?
 
     // MARK: Strokes
 
@@ -118,4 +126,8 @@ public extension EditorDocument {
 
 public extension EditorDocument {
     var isReadOnly: Bool { false }
+    /// Character positions only (documents without Yjs block positions).
+    func resolveCursor(_ position: Data) -> TextPosition? { resolveAnchor(position) }
+    /// Character positions only.
+    func cursorPosition(block: BlockID, offset: Int) -> Data? { anchor(block: block, offset: offset) }
 }

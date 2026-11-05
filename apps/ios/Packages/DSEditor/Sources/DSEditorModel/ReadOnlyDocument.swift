@@ -83,6 +83,8 @@ public final class ReadOnlyDocument: EditorDocument {
 
     public func anchor(block: BlockID, offset: Int) -> Data? { base.anchor(block: block, offset: offset) }
     public func resolveAnchor(_ anchor: Data) -> TextPosition? { base.resolveAnchor(anchor) }
+    public func resolveCursor(_ position: Data) -> TextPosition? { base.resolveCursor(position) }
+    public func cursorPosition(block: BlockID, offset: Int) -> Data? { base.cursorPosition(block: block, offset: offset) }
 
     // MARK: Strokes
 

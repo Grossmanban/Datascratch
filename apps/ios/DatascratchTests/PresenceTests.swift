@@ -84,6 +84,33 @@ struct PresenceTests {
         #expect(center.peers["doc"]?.count == 1)
     }
 
+    /// Carets: this device's goes out with its state at once and goes away with nil; the others'
+    /// states are kept as sent for the editor (`RemoteCursor.parse`).
+    @Test func caretsTravelWithTheState() throws {
+        let center = PresenceCenter()
+        var sent: [Data] = []
+        center.send = { _, payload in sent.append(payload) }
+        center.me = ("me", "#2E5BDB", "acc-me")
+        center.join("doc")
+        let caret = #"{"anchor":{"type":null,"tname":"content","item":null,"assoc":0},"head":{"type":null,"tname":"content","item":null,"assoc":0}}"#
+        center.setLocalCursor(caret, in: "doc")
+        #expect(sent.count == 2, "a moved caret is sent at once")
+        let withCaret = try #require(AwarenessCodec.decode(sent[1])?.first?.json)
+        let object = try #require(try JSONSerialization.jsonObject(with: Data(withCaret.utf8)) as? [String: Any])
+        #expect(object["cursor"] != nil)
+        center.setLocalCursor(caret, in: "doc")
+        #expect(sent.count == 2, "the same caret is not sent again")
+        center.setLocalCursor(nil, in: "doc")
+        let without = try #require(AwarenessCodec.decode(sent[2])?.first?.json)
+        #expect(!without.contains("cursor"), "editing ended: no caret")
+
+        let theirs = ##"{"user":{"name":"mark","color":"#3E8E5A","account":"acc-mark"},"cursor":{"anchor":null,"head":null}}"##
+        center.receive("doc", AwarenessCodec.encode([.init(client: 30, clock: 1, json: theirs)]))
+        #expect(center.states["doc"]?[30] == theirs)
+        center.receive("doc", AwarenessCodec.encode([.init(client: 30, clock: 2, json: nil)]))
+        #expect(center.states["doc"]?[30] == nil, "a client that left takes its caret along")
+    }
+
     @Test func rejectsWhatIsNotAPersonOrNotAColour() {
         #expect(PresenceCenter.peer(client: 1, json: #"{"cursor":{}}"#) == nil)
         #expect(PresenceCenter.peer(client: 1, json: #"{"user":{"name":"  "}}"#) == nil)

@@ -54,6 +54,10 @@ final class NativeEditorModel: ClosingEditor {
             DispatchQueue.main.async { self?.changed() }
         }
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
+        // This device's caret goes to the others with its presence state (nil: editing ended).
+        editor.onLocalCursorChange = { [weak app] json in
+            DispatchQueue.main.async { app?.presence?.setLocalCursor(json, in: noteId) }
+        }
         // «Link» on the format bar: the screen asks for the address.
         editor.onLinkRequest = { [weak self] in self?.isAskingForLink = true }
         // The "/" block menu: the screen shows it at the caret (spec/04).
@@ -401,6 +405,12 @@ struct NativeDocumentScreen: View {
                 .onChange(of: app.settings.fingerDrawing) { _, _ in
                     model.editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
                 }
+                // Co-authors' carets in the text, never this person's own other devices.
+                .onChange(of: app.presence?.states[noteId] ?? [:], initial: true) { _, states in
+                    let mine = app.presence?.me?.account
+                    let cursors = states.compactMap { RemoteCursor.parse(client: $0.key, json: $0.value, excludingAccount: mine) }
+                    model.editor.setRemoteCursors(cursors.sorted { $0.id < $1.id })
+                }
                 .toolbar { NativeEditorToolbar(model: model, note: note) }
                 .modifier(LinkPrompt(model: model))
                 .coverPickers()
@@ -416,11 +426,11 @@ struct NativeDocumentScreen: View {
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .onAppear {
             load()
-            app.connection?.presence.join(noteId)
+            app.presence?.join(noteId)
         }
         .onDisappear {
             app.library.recordVersion(ofNote: noteId)
-            app.connection?.presence.leave(noteId)
+            app.presence?.leave(noteId)
         }
     }
 
@@ -533,7 +543,9 @@ struct NativeEditorToolbar: ToolbarContent {
             // Who else is in the note right now: in the bar, never over the text (owner, build
             // 35: a circle over the cover read as stuck there, and said nothing of who it was).
             if let presence = app.presence {
-                PresenceAvatars(peers: presence.people(in: note.id))
+                PresenceAvatars(peers: presence.people(in: note.id)) { peer in
+                    model.editor.scrollToRemoteCursor(peer.id)
+                }
             }
 
             Menu {
@@ -1010,6 +1022,8 @@ struct ViewOnlyBanner: View {
 /// unobtrusive»).
 struct PresenceAvatars: View {
     let peers: [PresencePeer]
+    /// A person in the list was tapped: the text scrolls to their caret.
+    var onSelect: (PresencePeer) -> Void = { _ in }
     @State private var isListShown = false
     private var names: String { peers.map(\.name).joined(separator: ", ") }
     private var shown: Int { UIDevice.current.userInterfaceIdiom == .pad ? 3 : 2 }
@@ -1032,8 +1046,11 @@ struct PresenceAvatars: View {
                 }
             }
             .popover(isPresented: $isListShown) {
-                PresenceList(peers: peers)
-                    .presentationCompactAdaptation(.popover)
+                PresenceList(peers: peers) { peer in
+                    isListShown = false
+                    onSelect(peer)
+                }
+                .presentationCompactAdaptation(.popover)
             }
             .transition(.opacity.combined(with: .scale(scale: 0.8)))
             .animation(Theme.Motion.snappy, value: peers)
@@ -1061,6 +1078,7 @@ private struct PresenceInitial: View {
 /// Who is in the note: name, colour, «editing now».
 private struct PresenceList: View {
     let peers: [PresencePeer]
+    let onSelect: (PresencePeer) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s3) {
@@ -1068,6 +1086,7 @@ private struct PresenceList: View {
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Palette.textTertiary)
             ForEach(peers) { peer in
+                Button { onSelect(peer) } label: {
                 HStack(spacing: Theme.Space.s3) {
                     PresenceInitial(peer: peer, size: 28)
                     VStack(alignment: .leading, spacing: 1) {
@@ -1079,6 +1098,9 @@ private struct PresenceList: View {
                             .foregroundStyle(Theme.Palette.textSecondary)
                     }
                 }
+                .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("presence.person")
             }

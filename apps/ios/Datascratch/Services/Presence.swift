@@ -82,6 +82,9 @@ nonisolated enum AwarenessCodec {
 final class PresenceCenter {
     /// Other people in each open note (by doc id), in arrival order.
     private(set) var peers: [String: [PresencePeer]] = [:]
+    /// Every other client's awareness state as sent (JSON, by client id), for the editor's
+    /// co-author carets (`RemoteCursor.parse`), which read more of it than a name and colour.
+    private(set) var states: [String: [UInt64: String]] = [:]
     /// Sends an awareness update for a doc (the sync engine encrypts it).
     @ObservationIgnored var send: ((_ docId: String, _ payload: Data) -> Void)?
     /// How this device shows to others: the account's name, colour and id, as on the web.
@@ -89,7 +92,9 @@ final class PresenceCenter {
 
     @ObservationIgnored private let myClient = UInt64(UInt32.random(in: 1...UInt32.max))
     @ObservationIgnored private var clock: [String: UInt64] = [:]
-    @ObservationIgnored private var seen: [String: [UInt64: (clock: UInt64, peer: PresencePeer, at: Date)]] = [:]
+    @ObservationIgnored private var seen: [String: [UInt64: (clock: UInt64, peer: PresencePeer, json: String, at: Date)]] = [:]
+    /// This device's caret in each note (the `cursor` JSON the editor gives), sent with its state.
+    @ObservationIgnored private var cursor: [String: String] = [:]
     /// The last clock of clients that left: a late, older update must not bring them back.
     @ObservationIgnored private var gone: [String: [UInt64: UInt64]] = [:]
     @ObservationIgnored private var heartbeat: Timer?
@@ -128,7 +133,9 @@ final class PresenceCenter {
         send?(docId, AwarenessCodec.encode([.init(client: myClient, clock: c + 1, json: nil)]))
         seen[docId] = nil
         gone[docId] = nil
+        cursor[docId] = nil
         peers[docId] = nil
+        states[docId] = nil
         if clock.isEmpty {
             heartbeat?.invalidate()
             heartbeat = nil
@@ -145,7 +152,7 @@ final class PresenceCenter {
             // Newer clocks win (y-protocols); a removal at the same clock wins too.
             if e.clock < known || (e.clock == known && e.json != nil && (states[e.client] != nil || left[e.client] != nil)) { continue }
             if let json = e.json, let peer = Self.peer(client: e.client, json: json) {
-                states[e.client] = (e.clock, peer, now())
+                states[e.client] = (e.clock, peer, json, now())
                 left[e.client] = nil
             } else {
                 states[e.client] = nil
@@ -172,7 +179,10 @@ final class PresenceCenter {
         clock[docId] = next
         var user: [String: Any] = ["name": me.name, "color": me.color, "kind": "user"]
         if let account = me.account { user["account"] = account }
-        let state: [String: Any] = ["user": user, "ts": Int(now().timeIntervalSince1970 * 1000)]
+        var state: [String: Any] = ["user": user, "ts": Int(now().timeIntervalSince1970 * 1000)]
+        if let json = cursor[docId], let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) {
+            state["cursor"] = object
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8) else { return }
         send?(docId, AwarenessCodec.encode([.init(client: myClient, clock: next, json: json)]))
@@ -189,7 +199,17 @@ final class PresenceCenter {
         }
     }
 
+    /// This device's caret moved in a note (the editor reports at most every 0.1 s while text is
+    /// being edited), or editing ended (nil): the others see it at once, not at the next beat.
+    func setLocalCursor(_ json: String?, in docId: String) {
+        guard clock[docId] != nil, cursor[docId] != json else { return }
+        cursor[docId] = json
+        announce(docId)
+    }
+
     private func publish(_ docId: String) {
+        let raw = (seen[docId] ?? [:]).mapValues(\.json)
+        if states[docId] != raw { states[docId] = raw }
         let mine = me?.account
         let list = (seen[docId] ?? [:]).values.sorted { $0.at < $1.at }.map(\.peer)
             .filter { mine == nil || $0.account != mine }

@@ -146,7 +146,7 @@ final class ServerConnection: CoreLibraryRemote {
             core.remote = self
             let presence = self.presence
             if let email = (try? core.store.string(ServerAccountService.emailKey)) ?? nil, !email.isEmpty {
-                presence.me = (PresenceCenter.name(forEmail: email), PresenceCenter.color(for: email))
+                presence.me = (PresenceCenter.name(forEmail: email), PresenceCenter.color(for: email), session.userId)
             }
             await engine.setAwarenessHandler { docId, payload, _ in
                 Task { @MainActor in presence.receive(docId, payload) }

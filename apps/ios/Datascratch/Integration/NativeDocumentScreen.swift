@@ -329,14 +329,6 @@ struct NativeDocumentScreen: View {
                         NativeEditorRepresentable(editor: model.editor)
                             .accessibilityIdentifier("editor")
                             .modifier(MediaPickers(model: model))
-                            // Who else is in the note right now: small avatars, top right.
-                            .overlay(alignment: .topTrailing) {
-                                if let presence = app.connection?.presence {
-                                    PresenceAvatars(peers: presence.peers[noteId] ?? [])
-                                        .padding(.top, Theme.Space.s3)
-                                        .padding(.trailing, Theme.Space.s4)
-                                }
-                            }
                     }
                     // The column's width, never the editor's own: next to the list on an iPad mini
                     // in portrait it ran 18 pt past the screen edge.
@@ -536,6 +528,12 @@ struct NativeEditorToolbar: ToolbarContent {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .accessibilityLabel("Share")
+            }
+
+            // Who else is in the note right now: in the bar, never over the text (owner, build
+            // 35: a circle over the cover read as stuck there, and said nothing of who it was).
+            if let presence = app.presence {
+                PresenceAvatars(peers: presence.people(in: note.id))
             }
 
             Menu {
@@ -1005,38 +1003,88 @@ struct ViewOnlyBanner: View {
     }
 }
 
-/// The people in the note with you: overlapping initials in their colours, at most three and
-/// «+N»; nothing when you are alone. Quiet by design (owner: «elegant, unobtrusive»).
+/// The people in the note with you, in the document's bar: overlapping initials in their colours
+/// (two and «+N» on the iPhone, three on the iPad); a tap lists them. Nothing when you are alone,
+/// and never your own other devices (`PresenceCenter`). Quiet by design (owner: «elegant,
+/// unobtrusive»).
 struct PresenceAvatars: View {
     let peers: [PresencePeer]
+    @State private var isListShown = false
     private var names: String { peers.map(\.name).joined(separator: ", ") }
+    private var shown: Int { UIDevice.current.userInterfaceIdiom == .pad ? 3 : 2 }
 
     var body: some View {
         if !peers.isEmpty {
-            HStack(spacing: -6) {
-                ForEach(peers.prefix(3)) { peer in
-                    Text(peer.initial)
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .frame(width: 24, height: 24)
-                        .background(Circle().fill(Color(hex: peer.color) ?? Theme.Palette.accent))
-                        .overlay(Circle().strokeBorder(Theme.Palette.canvas, lineWidth: 2))
-                }
-                if peers.count > 3 {
-                    Text("+\(peers.count - 3)")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.Palette.textSecondary)
-                        .frame(width: 24, height: 24)
-                        .background(Circle().fill(Theme.Palette.surface))
-                        .overlay(Circle().strokeBorder(Theme.Palette.canvas, lineWidth: 2))
+            Button { isListShown = true } label: {
+                HStack(spacing: -6) {
+                    ForEach(peers.prefix(shown)) { peer in
+                        PresenceInitial(peer: peer, size: 24)
+                    }
+                    if peers.count > shown {
+                        Text("+\(peers.count - shown)")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(Theme.Palette.surface))
+                            .overlay(Circle().strokeBorder(Theme.Palette.canvas, lineWidth: 2))
+                    }
                 }
             }
-            .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .topTrailing)))
+            .popover(isPresented: $isListShown) {
+                PresenceList(peers: peers)
+                    .presentationCompactAdaptation(.popover)
+            }
+            .transition(.opacity.combined(with: .scale(scale: 0.8)))
             .animation(Theme.Motion.snappy, value: peers)
-            .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text("Also here: \(names)"))
             .accessibilityIdentifier("document.presence")
         }
+    }
+}
+
+/// A person's initial in their colour.
+private struct PresenceInitial: View {
+    let peer: PresencePeer
+    let size: CGFloat
+
+    var body: some View {
+        Text(peer.initial)
+            .font(.system(size: size * 0.46, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(Circle().fill(Color(hex: peer.color) ?? Theme.Palette.accent))
+            .overlay(Circle().strokeBorder(Theme.Palette.canvas, lineWidth: 2))
+    }
+}
+
+/// Who is in the note: name, colour, «editing now».
+private struct PresenceList: View {
+    let peers: [PresencePeer]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s3) {
+            Text("In this note")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.textTertiary)
+            ForEach(peers) { peer in
+                HStack(spacing: Theme.Space.s3) {
+                    PresenceInitial(peer: peer, size: 28)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(peer.name)
+                            .foregroundStyle(Theme.Palette.textPrimary)
+                            .lineLimit(1)
+                        Text("Editing now")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("presence.person")
+            }
+        }
+        .padding(Theme.Space.s4)
+        .frame(minWidth: 200, alignment: .leading)
+        .accessibilityIdentifier("presence.list")
     }
 }
 

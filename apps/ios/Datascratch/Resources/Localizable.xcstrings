@@ -1431,6 +1431,16 @@
         }
       }
     },
+    "Editing now": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Редактирует сейчас"
+          }
+        }
+      }
+    },
     "Email": {
       "localizations": {
         "ru": {
@@ -2077,6 +2087,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "В общем пространстве"
+          }
+        }
+      }
+    },
+    "In this note": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В заметке"
           }
         }
       }

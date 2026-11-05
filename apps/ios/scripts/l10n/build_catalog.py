@@ -75,6 +75,8 @@ IGNORE = {
     "Team", "Team notes", "Kickoff", "Agenda",
     # UI-test seed: a long note (scroll position across full screen).
     "Long", "Paragraph \\($0) of a long note.",
+    # UI-test seed: people in a note (`-ui-testing-presence`).
+    "Lena", "Mark",
     # Presence: the name sent when an account has no e-mail local part (not shown here).
     "Me",
 }

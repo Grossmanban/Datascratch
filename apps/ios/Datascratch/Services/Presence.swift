@@ -5,12 +5,16 @@ import Observation
 /// visible who is editing in real time, elegantly and unobtrusively»). The web's presence
 /// protocol (y-protocols awareness, `apps/web/src/data/presence.ts`), sent encrypted over the sync
 /// socket (`ds1|awareness|<docId>`): each device announces `{ "user": { name, color, kind } }`
-/// every 15 s and `null` when it leaves; a device silent for 30 s is gone.
+/// every 15 s and `null` when it leaves; a device silent for 30 s is gone. `user.account` (the
+/// account id, optional — older clients have none) keeps your own other devices out of the list:
+/// you are not «someone else» in your note (owner, build 35).
 struct PresencePeer: Identifiable, Hashable, Sendable {
     let id: UInt64
     let name: String
     /// `#RRGGBB` as sent; checked before it reaches a view.
     let color: String
+    /// The sender's account id, when its client sends one.
+    var account: String? = nil
     var initial: String { name.first.map { String($0).uppercased() } ?? "?" }
 }
 
@@ -80,8 +84,8 @@ final class PresenceCenter {
     private(set) var peers: [String: [PresencePeer]] = [:]
     /// Sends an awareness update for a doc (the sync engine encrypts it).
     @ObservationIgnored var send: ((_ docId: String, _ payload: Data) -> Void)?
-    /// How this device shows to others: the account's name and colour, as on the web.
-    @ObservationIgnored var me: (name: String, color: String)?
+    /// How this device shows to others: the account's name, colour and id, as on the web.
+    @ObservationIgnored var me: (name: String, color: String, account: String?)?
 
     @ObservationIgnored private let myClient = UInt64(UInt32.random(in: 1...UInt32.max))
     @ObservationIgnored private var clock: [String: UInt64] = [:]
@@ -166,7 +170,9 @@ final class PresenceCenter {
         guard let me, let c = clock[docId] else { return }
         let next = c + 1
         clock[docId] = next
-        let state: [String: Any] = ["user": ["name": me.name, "color": me.color, "kind": "user"], "ts": Int(now().timeIntervalSince1970 * 1000)]
+        var user: [String: Any] = ["name": me.name, "color": me.color, "kind": "user"]
+        if let account = me.account { user["account"] = account }
+        let state: [String: Any] = ["user": user, "ts": Int(now().timeIntervalSince1970 * 1000)]
         guard let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8) else { return }
         send?(docId, AwarenessCodec.encode([.init(client: myClient, clock: next, json: json)]))
@@ -184,10 +190,12 @@ final class PresenceCenter {
     }
 
     private func publish(_ docId: String) {
+        let mine = me?.account
         let list = (seen[docId] ?? [:]).values.sorted { $0.at < $1.at }.map(\.peer)
+            .filter { mine == nil || $0.account != mine }
         // One avatar per person even with two of their devices in the note.
-        var names = Set<String>()
-        let unique = list.filter { names.insert($0.name).inserted }
+        var people = Set<String>()
+        let unique = list.filter { people.insert($0.account ?? "name:" + $0.name).inserted }
         if peers[docId] != unique { peers[docId] = unique }
     }
 
@@ -200,6 +208,19 @@ final class PresenceCenter {
         guard !name.isEmpty else { return nil }
         let raw = user["color"] as? String ?? ""
         let isHex = raw.range(of: "^#[0-9a-fA-F]{3,8}$", options: .regularExpression) != nil
-        return PresencePeer(id: client, name: name, color: isHex ? raw : color(for: name))
+        let account = (user["account"] as? String).flatMap { $0.isEmpty || $0.count > 128 ? nil : $0 }
+        return PresencePeer(id: client, name: name, color: isHex ? raw : color(for: name), account: account)
+    }
+
+    /// The people in a note, for the document's bar.
+    func people(in docId: String) -> [PresencePeer] {
+        peers[docId] ?? inEveryNoteForTesting
+    }
+
+    /// UI tests (`-ui-testing-presence`): people in every note, with no server to send them.
+    private(set) var inEveryNoteForTesting: [PresencePeer] = []
+
+    func showForTesting(_ list: [PresencePeer]) {
+        inEveryNoteForTesting = list
     }
 }

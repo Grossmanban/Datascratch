@@ -307,7 +307,7 @@ function formatSize(size: number): string {
  * The upload state of a placeholder block (uploads.ts): a quiet progress ring while the file is
  * being stored, «Повторить» / «Удалить» when it failed. Local to this client.
  */
-function uploadOverlay(editor: Editor, blockId: () => string | null, onState: (state: UploadState | null) => void) {
+function uploadOverlay(editor: Editor, host: HostRef, blockId: () => string | null, attachmentId: () => string | null, onState: (state: UploadState | null) => void) {
   const el = document.createElement("div");
   el.className = "ds-upload";
   el.contentEditable = "false";
@@ -339,14 +339,32 @@ function uploadOverlay(editor: Editor, blockId: () => string | null, onState: (s
   });
   let unsubscribe: (() => void) | null = null;
   let subscribed: string | null = null;
-  const show = (state: UploadState | null) => {
-    el.hidden = !state;
-    el.dataset.status = state?.status ?? "";
-    ring.classList.toggle("is-indeterminate", !!state && state.progress === null);
+  // After the file is stored locally it still goes up to the server (host.watchAttachmentUpload):
+  // the same quiet ring, without dimming the picture.
+  let local: UploadState | null = null;
+  let sending: number | null = null;
+  let unwatch: (() => void) | null = null;
+  let watched: string | null = null;
+  const paint = () => {
+    const progress = local ? local.progress : sending === null ? null : sending > 0 ? sending : null;
+    const visible = !!local || sending !== null;
+    el.hidden = !visible;
+    el.dataset.status = local?.status ?? (sending !== null ? "sending" : "");
+    ring.classList.toggle("is-indeterminate", visible && progress === null);
     const bar = ring.querySelector<SVGCircleElement>(".ds-upload-bar")!;
-    bar.style.strokeDashoffset = String(100 - Math.round((state?.progress ?? 0.25) * 100));
-    el.setAttribute("aria-label", state?.status === "failed" ? "Не удалось загрузить" : `Загрузка${state?.progress != null ? ` ${Math.round(state.progress * 100)}%` : ""}`);
+    bar.style.strokeDashoffset = String(100 - Math.round((progress ?? 0.25) * 100));
+    const pct = progress != null ? ` ${Math.round(progress * 100)}%` : "";
+    el.setAttribute("aria-label", local?.status === "failed" ? "Не удалось загрузить" : local ? `Загрузка${pct}` : `Отправляется на сервер${pct}`);
+    el.title = local ? "" : sending !== null ? `Отправляется на сервер${pct}` : "";
+  };
+  const show = (state: UploadState | null) => {
+    local = state;
+    paint();
     onState(state);
+  };
+  const setSending = (fraction: number | null) => {
+    sending = fraction === null ? null : Math.max(0, Math.min(1, fraction));
+    paint();
   };
   return {
     el,
@@ -359,8 +377,19 @@ function uploadOverlay(editor: Editor, blockId: () => string | null, onState: (s
       unsubscribe = id ? uploads.subscribe(id, show) : null;
       show(id ? uploads.get(id) : null);
     },
+    /** (Re)watches the server upload when the attachment id is known or changes. */
+    syncAttachment() {
+      const id = attachmentId();
+      if (id === watched) return;
+      unwatch?.();
+      watched = id;
+      sending = null;
+      unwatch = id ? (host.current.watchAttachmentUpload?.(id, setSending) ?? null) : null;
+      paint();
+    },
     destroy() {
       unsubscribe?.();
+      unwatch?.();
     },
   };
 }
@@ -413,7 +442,9 @@ export const Image = Node.create<HostOptions>({
       let uploading = false;
       const overlay = uploadOverlay(
         editor,
+        host,
         () => current.attrs.blockId ?? null,
+        () => (current.attrs.attachmentId as string | null) ?? null,
         (state) => {
           uploading = !!state;
           frame.classList.toggle("is-uploading", state?.status === "uploading");
@@ -435,6 +466,7 @@ export const Image = Node.create<HostOptions>({
         if (document.activeElement !== caption) caption.value = current.attrs.caption ?? "";
         caption.hidden = !editor.isEditable && !current.attrs.caption;
         overlay.sync();
+        overlay.syncAttachment();
         const id = current.attrs.attachmentId as string | null;
         frame.classList.toggle("is-empty", !id && !uploading);
         if (id && id !== resolvedFor) {
@@ -547,7 +579,9 @@ export const FileBlock = Node.create<HostOptions>({
       // Placeholder while the file is stored: progress ring / retry (uploads.ts).
       const overlay = uploadOverlay(
         editor,
+        host,
         () => current.attrs.blockId ?? null,
+        () => (current.attrs.attachmentId as string | null) ?? null,
         (state) => {
           dom.classList.toggle("is-uploading", state?.status === "uploading");
           dom.classList.toggle("is-failed", state?.status === "failed");
@@ -556,6 +590,7 @@ export const FileBlock = Node.create<HostOptions>({
       dom.append(icon, name, meta, overlay.el);
       const render = () => {
         overlay.sync();
+        overlay.syncAttachment();
         const mime = String(current.attrs.mime);
         icon.textContent = mime === "application/pdf" ? "PDF" : (mime.split("/")[1] ?? "file").slice(0, 4).toUpperCase();
         name.textContent = current.attrs.name || "Файл";

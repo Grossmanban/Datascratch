@@ -3,10 +3,89 @@ import { apiBase } from "@/config";
 import { getSession } from "@/auth/session";
 import { opensInline, safeBlobType } from "@/lib/safeMime";
 import { ad, open, seal, uuidv7 } from "@/lib/shared";
+import { create } from "zustand";
 import { accountDb, type AttachmentRow, type ChunkRow } from "./db";
 
 export const CHUNK_PLAIN = 1024 * 1024; // crypto.md §6: 1 MiB of plaintext per envelope
 export const MAX_ATTACHMENT = 200 * 1024 * 1024; // api.md default limit
+/**
+ * Chunks in flight at once, uploads and downloads. One request per chunk costs ~0.5 s of latency;
+ * one at a time made a paste of eight screenshots take minutes.
+ */
+export const CHUNK_CONCURRENCY = 3;
+
+/**
+ * Runs `work` over `items` with at most `limit` running at once, in order of start. A rejection
+ * stops new starts; the ones in flight finish, then the first rejection is thrown.
+ */
+export async function inPool<T>(items: readonly T[], limit: number, work: (item: T, index: number) => Promise<void>): Promise<void> {
+  let next = 0;
+  let failure: { error: unknown } | null = null;
+  const lane = async () => {
+    while (!failure && next < items.length) {
+      const i = next++;
+      try {
+        await work(items[i]!, i);
+      } catch (error) {
+        failure ??= { error };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+  if (failure) throw (failure as { error: unknown }).error;
+}
+
+/**
+ * Attachments on their way to the server, for the sync indicator («Отправляются картинки: 3 из 8»)
+ * and the ring on a picture (EditorHost.watchAttachmentUpload). `progress` holds 0…1 per attachment
+ * still to upload (0 = queued); `batch`/`done` count the attachments since the last time
+ * everything was uploaded.
+ */
+interface UploadProgress {
+  progress: Record<string, number>;
+  batch: Record<string, { image: boolean }>;
+  done: Record<string, true>;
+}
+export const useAttachmentUploads = create<UploadProgress>(() => ({ progress: {}, batch: {}, done: {} }));
+
+function trackPending(rows: Pick<AttachmentRow, "id" | "mime" | "chunkCount" | "uploaded">[]) {
+  useAttachmentUploads.setState((s) => {
+    // A new batch starts once the previous one has gone up completely.
+    const finished = Object.keys(s.batch).every((id) => s.done[id]);
+    const batch = finished ? {} : { ...s.batch };
+    const done = finished ? {} : { ...s.done };
+    const progress = { ...s.progress };
+    for (const r of rows) {
+      progress[r.id] = r.uploaded.length / Math.max(1, r.chunkCount);
+      batch[r.id] ??= { image: r.mime.startsWith("image/") };
+    }
+    return { progress, batch, done };
+  });
+}
+
+function trackChunk(id: string, uploaded: number, chunkCount: number) {
+  useAttachmentUploads.setState((s) => {
+    if (uploaded < chunkCount) return { progress: { ...s.progress, [id]: uploaded / chunkCount } };
+    const { [id]: _, ...progress } = s.progress;
+    return { progress, done: { ...s.done, [id]: true } };
+  });
+}
+
+/** Calls `onProgress` with 0…1 while the attachment is still to upload, `null` once it is on the server. */
+export function watchAttachmentUpload(id: string, onProgress: (fraction: number | null) => void): () => void {
+  let last: number | null | undefined;
+  const emit = (s: UploadProgress) => {
+    const v = s.progress[id] ?? null;
+    if (v !== last) onProgress((last = v));
+  };
+  emit(useAttachmentUploads.getState());
+  return useAttachmentUploads.subscribe(emit);
+}
+
+/** Sign-out: nothing of the previous account is shown as uploading. */
+export function resetAttachmentUploads() {
+  useAttachmentUploads.setState({ progress: {}, batch: {}, done: {} });
+}
 
 const chunkKey = (id: string, index: number) => `${id}:${index}`;
 
@@ -56,6 +135,7 @@ export async function storeAttachment(
     await db.attachments.put(row);
     await db.chunks.bulkPut(rows);
   });
+  trackPending([row]);
   void uploadPending();
   return id;
 }
@@ -95,9 +175,16 @@ export function uploadPending(): Promise<boolean> {
   return uploading;
 }
 
+/** Offline, signed out or the server is down: stop and try again later (the chunks stay queued). */
+const isRetryable = (e: unknown) => e instanceof NetworkError || (e instanceof ApiError && (e.status === 401 || e.status >= 500));
+
 async function runUploads(): Promise<boolean> {
   const db = accountDb();
   const pending = (await db.attachments.toArray()).filter((a) => !a.registered || a.uploaded.length < a.chunkCount);
+  trackPending(pending);
+  // Register each attachment (cheap, in order), then send all their missing chunks through one
+  // pool of CHUNK_CONCURRENCY requests: eight one-chunk screenshots go up three at a time too.
+  const work: { a: AttachmentRow; index: number }[] = [];
   for (const a of pending) {
     try {
       if (!a.registered) {
@@ -112,19 +199,40 @@ async function runUploads(): Promise<boolean> {
         await db.attachments.update(a.id, { registered: 1 });
       }
       const done = new Set(a.uploaded);
-      for (let i = 0; i < a.chunkCount; i++) {
-        if (done.has(i)) continue;
-        const chunk = await db.chunks.get(chunkKey(a.id, i));
-        if (!chunk) break;
-        await putChunk(a.id, i, chunk.data);
-        done.add(i);
-        await db.attachments.update(a.id, { uploaded: [...done] });
-      }
+      for (let i = 0; i < a.chunkCount; i++) if (!done.has(i)) work.push({ a, index: i });
     } catch (e) {
-      if (e instanceof NetworkError) return false;
-      if (e instanceof ApiError && (e.status === 401 || e.status >= 500)) return false;
+      if (isRetryable(e)) return false;
       console.warn("Attachment upload failed", a.id, e);
     }
+  }
+  const broken = new Set<string>();
+  try {
+    await inPool(work, CHUNK_CONCURRENCY, async ({ a, index }) => {
+      if (broken.has(a.id)) return;
+      try {
+        const chunk = await db.chunks.get(chunkKey(a.id, index));
+        if (!chunk) throw new Error(`chunk ${index} is missing locally`);
+        await putChunk(a.id, index, chunk.data);
+        // Chunks of one attachment finish in any order: record each one atomically (resume after a
+        // break sends only what is missing).
+        let uploaded = 0;
+        await db.attachments
+          .where("id")
+          .equals(a.id)
+          .modify((row) => {
+            if (!row.uploaded.includes(index)) row.uploaded.push(index);
+            uploaded = row.uploaded.length;
+          });
+        trackChunk(a.id, uploaded, a.chunkCount);
+      } catch (e) {
+        if (isRetryable(e)) throw e;
+        broken.add(a.id);
+        console.warn("Attachment upload failed", a.id, e);
+      }
+    });
+  } catch (e) {
+    if (isRetryable(e)) return false;
+    throw e;
   }
   return true;
 }
@@ -189,15 +297,16 @@ async function loadAttachment(id: string, key: Uint8Array, opts: { mime?: string
     chunkCount = meta.chunkCount;
     mime = meta.mime ?? mime;
   }
-  const parts: Uint8Array[] = [];
-  for (let i = 0; i < chunkCount; i++) {
+  const parts: Uint8Array[] = new Array(chunkCount);
+  const total = chunkCount;
+  await inPool(Array.from({ length: total }, (_, i) => i), CHUNK_CONCURRENCY, async (i) => {
     let env = db ? (await db.chunks.get(chunkKey(id, i)))?.data : undefined;
     if (!env) {
       env = await fetchChunk(id, i, auth);
       if (db) await db.chunks.put({ key: chunkKey(id, i), attachmentId: id, index: i, data: env });
     }
-    parts.push(await open(key, env, ad.attachmentChunk(id, i, i === chunkCount - 1)));
-  }
+    parts[i] = await open(key, env, ad.attachmentChunk(id, i, i === total - 1));
+  });
   if (db && !local) {
     await db.attachments.put({
       id,

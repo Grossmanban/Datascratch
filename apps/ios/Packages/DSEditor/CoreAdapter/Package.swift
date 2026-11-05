@@ -22,6 +22,7 @@ let package = Package(
                 .product(name: "DSCore", package: "DSCore"),
             ]
         ),
-        .testTarget(name: "DSEditorCoreTests", dependencies: ["DSEditorCore"]),
+        // Fixtures are read from the source tree (`#filePath`), not bundled.
+        .testTarget(name: "DSEditorCoreTests", dependencies: ["DSEditorCore"], exclude: ["Fixtures"]),
     ]
 )

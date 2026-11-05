@@ -179,6 +179,13 @@ public final class EditorView: UIView {
     var remoteCursorOffsets: [UInt64: (anchor: Int, head: Int)] = [:]
     var movedRemoteCursors: Set<UInt64> = []
     var remoteCaretFrames: [RemoteCaretFrame] = []
+    var localCursorScheduled = false
+    var lastLocalCursorJSON: String?
+    /// This device's caret for co-authors, as the web's cursor plugin puts it into awareness:
+    /// the JSON of `cursor` (`{"anchor":…,"head":…}`, `Y.relativePositionToJSON`), at most every
+    /// 0.1 s while editing; nil when the editor stops editing. The host adds it to this device's
+    /// awareness state.
+    public var onLocalCursorChange: ((String?) -> Void)?
     private var remoteCursorResolveScheduled = false
     private var lassoTextRange: Range<Int>?
 
@@ -2123,13 +2130,18 @@ extension EditorView: UITextViewDelegate {
         DispatchQueue.main.async { [weak self] in self?.flushPendingAtomRelayout() }
     }
 
-    public func textViewDidBeginEditing(_ textView: UITextView) { notifyStateChange() }
+    public func textViewDidBeginEditing(_ textView: UITextView) {
+        localCursorChanged()
+        notifyStateChange()
+    }
     public func textViewDidEndEditing(_ textView: UITextView) {
         dismissSlashMenu()
+        localCursorEnded()
         notifyStateChange()
     }
 
     public func textViewDidChangeSelection(_ tv: UITextView) {
+        localCursorChanged()
         if suppressDelegate { return }
         pendingMarks = nil
         // The caret left an empty title: it gets the default name.

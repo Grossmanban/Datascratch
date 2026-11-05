@@ -1561,6 +1561,35 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(editor.remoteCursorMarks.button(8)?.accessibilityLabel, "Вера выше")
     }
 
+    /// This device's caret goes out as the web's cursor JSON (at most every 0.1 s) and reads back
+    /// as a co-author's caret at the same place; nil when editing stops.
+    func testLocalCaretIsSentAsTheWebsCursorJSON() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Своя каретка"), .paragraph("Hello brave new world")])
+        let para = doc.blocks[1].id
+        let editor = host(doc)
+        var sent: [String?] = []
+        editor.onLocalCursorChange = { sent.append($0) }
+        let tv = editor.textView
+        XCTAssertTrue(tv.becomeFirstResponder())
+        let offset = try XCTUnwrap(editor.projection.offset(block: para, offset: 6))
+        for o in [offset - 2, offset - 1, offset] {
+            tv.selectedRange = NSRange(location: o, length: 0)
+            editor.textViewDidChangeSelection(tv)
+        }
+        let sentOnce = expectation(description: "throttle interval passed")
+        DispatchQueue.main.asyncAfter(deadline: .now() + EditorView.localCursorInterval + 0.3) { sentOnce.fulfill() }
+        wait(for: [sentOnce], timeout: 5)
+        XCTAssertEqual(sent.count, 1, "three moves within 0.1 s are one update")
+        let json = try XCTUnwrap(sent.last ?? nil)
+        let state = #"{"user":{"name":"iPad"},"cursor":"# + json + "}"
+        let back = try XCTUnwrap(RemoteCursor.parse(client: 5, json: state))
+        XCTAssertEqual(back.resolve(in: doc, projection: editor.projection)?.head, offset, "lands on the same place")
+        tv.resignFirstResponder()
+        editor.textViewDidEndEditing(tv)
+        XCTAssertEqual(sent.count, 2)
+        XCTAssertNil(sent.last ?? "x", "nil once editing stops")
+    }
+
     // MARK: - Read-only mode (D-54 viewer)
 
     /// Read-only: no typing, keys, paste, cut, formatting, "/" or undo; copying works; switching

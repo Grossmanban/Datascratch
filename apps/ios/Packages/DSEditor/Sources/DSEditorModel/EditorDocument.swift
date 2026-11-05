@@ -44,6 +44,10 @@ public protocol EditorDocument: AnyObject {
     /// the content (a character, the end of a text, an empty block, between blocks); a deleted
     /// character still gives the place where it was. Nil when it cannot be placed.
     func resolveCursor(_ position: Data) -> TextPosition?
+    /// The relative position the web's cursor plugin would send for a caret at `offset` of
+    /// `block` (y-prosemirror `absolutePositionToRelativePosition`): this device's own caret for
+    /// co-authors. Nil when it cannot be expressed.
+    func cursorPosition(block: BlockID, offset: Int) -> Data?
 
     // MARK: Strokes
 
@@ -124,4 +128,6 @@ public extension EditorDocument {
     var isReadOnly: Bool { false }
     /// Character positions only (documents without Yjs block positions).
     func resolveCursor(_ position: Data) -> TextPosition? { resolveAnchor(position) }
+    /// Character positions only.
+    func cursorPosition(block: BlockID, offset: Int) -> Data? { anchor(block: block, offset: offset) }
 }

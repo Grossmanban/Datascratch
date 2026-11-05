@@ -310,6 +310,46 @@ extension EditorView {
     }
 }
 
+// MARK: - This device's caret
+
+extension EditorView {
+    static let localCursorInterval: TimeInterval = 0.1
+
+    /// The selection moved: sent after `localCursorInterval` (changes in between are coalesced).
+    func localCursorChanged() {
+        guard onLocalCursorChange != nil, !localCursorScheduled else { return }
+        localCursorScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.localCursorInterval) { [weak self] in
+            guard let self else { return }
+            self.localCursorScheduled = false
+            self.sendLocalCursor()
+        }
+    }
+
+    /// Editing ended: co-authors stop seeing this caret right away.
+    func localCursorEnded() {
+        guard lastLocalCursorJSON != nil else { return }
+        lastLocalCursorJSON = nil
+        onLocalCursorChange?(nil)
+    }
+
+    func sendLocalCursor() {
+        let json = textView.isFirstResponder ? localCursorJSON() : nil
+        guard json != lastLocalCursorJSON else { return }
+        lastLocalCursorJSON = json
+        onLocalCursorChange?(json)
+    }
+
+    /// The selection as the web's cursor plugin sends it (start as `anchor`, end as `head`).
+    func localCursorJSON() -> String? {
+        let r = textView.selectedRange
+        guard let a = projection.textPosition(at: r.location), let h = projection.textPosition(at: r.location + r.length),
+              let anchor = model.cursorPosition(block: a.block, offset: a.offset),
+              let head = r.length == 0 ? anchor : model.cursorPosition(block: h.block, offset: h.offset) else { return nil }
+        return RelativePositionCodec.cursorJSON(anchor: anchor, head: head)
+    }
+}
+
 extension TextGeometry {
     /// The x of a caret before the character at `offset` (content coordinates).
     func caretX(at offset: Int) -> CGFloat? {

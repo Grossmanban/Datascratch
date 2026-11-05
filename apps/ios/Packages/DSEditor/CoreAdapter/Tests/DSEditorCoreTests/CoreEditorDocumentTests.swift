@@ -140,3 +140,41 @@ func makeCoreDoc(_ text: String = "Hello brave new world") throws -> (CoreEditor
         #expect(r.head == p.offset(block: b, offset: 21), "the end of the note (the root, assoc 0)")
     }
 }
+
+/// Compatibility with the web (`Fixtures/web-cursors.json`, made by `make-web-cursors.mjs` with
+/// y-prosemirror itself): the web's carets land where the web put them, and this device's carets
+/// are encoded exactly as the web encodes the same places.
+@MainActor
+@Suite struct WebCursorFixtureTests {
+    @Test func webCaretsResolveAndOurCaretsMatchTheWeb() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/web-cursors.json")
+        let fixture = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let update = try #require((fixture["update"] as? String).flatMap { Data(base64Encoded: $0) })
+        let cases = try #require(fixture["cases"] as? [[String: Any]])
+        let note = NoteDocument(noteId: UUIDv7.generate())
+        try note.crdt.applyUpdate(update)
+        let doc = CoreEditorDocument(note: note)
+        #expect(doc.blocks.count == 4)
+        let p = Projection.build(doc.blocks)
+        for c in cases {
+            let name = c["name"] as? String ?? "?"
+            let json = try #require(c["state"] as? String)
+            func place(_ key: String) throws -> (block: BlockID, offset: Int) {
+                let o = try #require(c[key] as? [String: Any])
+                return (doc.blocks[try #require(o["block"] as? Int)].id, try #require(o["offset"] as? Int))
+            }
+            let (ab, ao) = try place("anchor"), (hb, ho) = try place("head")
+            // The web's caret, read here.
+            let cursor = try #require(RemoteCursor.parse(client: 1, json: json, excludingAccount: "acc-ios"), "\(name)")
+            let r = try #require(cursor.resolve(in: doc, projection: p), "\(name)")
+            #expect(r.anchor == p.offset(block: ab, offset: ao), "\(name): anchor")
+            #expect(r.head == p.offset(block: hb, offset: ho), "\(name): head")
+            #expect(RemoteCursor.parse(client: 1, json: json, excludingAccount: "acc-web") == nil, "own account")
+            // This device's caret at the same places: the same bytes the web sends.
+            let state = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+            let web = try #require(state["cursor"] as? [String: Any])
+            #expect(doc.cursorPosition(block: ab, offset: ao) == web["anchor"].flatMap(RelativePositionCodec.encode(json:)), "\(name): our anchor")
+            #expect(doc.cursorPosition(block: hb, offset: ho) == web["head"].flatMap(RelativePositionCodec.encode(json:)), "\(name): our head")
+        }
+    }
+}

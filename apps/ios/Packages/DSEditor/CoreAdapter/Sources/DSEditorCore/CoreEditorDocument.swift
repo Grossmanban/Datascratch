@@ -219,6 +219,30 @@ public final class CoreEditorDocument: EditorDocument {
         return TextPosition(block: block, offset: inlineLength(at: blockPath, children: Int(textIndex)) + Int(r.index))
     }
 
+    public func cursorPosition(block: BlockID, offset: Int) -> Data? {
+        guard let path = current().paths[block], let children = try? note.crdt.xmlChildren(at: path) else { return nil }
+        // y-prosemirror: a character inside a text, the text itself (assoc 0) at its end, the
+        // element itself when it has no children. Yrs creates node positions only with assoc -1,
+        // so their assoc is set to the web's 0 afterwards.
+        func node(_ nodePath: [UInt32]) -> Data? {
+            (try? note.crdt.relativePosition(at: nodePath, index: 0, assoc: -1)).flatMap { RelativePositionCodec.settingAssoc($0, 0) }
+        }
+        var remaining = max(0, offset)
+        for (i, child) in children.enumerated() {
+            switch child {
+            case .text(let chunks):
+                let length = chunks.reduce(0) { $0 + ($1.embed == nil ? $1.text.utf16.count : 1) }
+                if remaining < length { return try? note.crdt.relativePosition(at: path + [UInt32(i)], index: UInt32(remaining)) }
+                if remaining == length { return node(path + [UInt32(i)]) }
+                remaining -= length
+            case .element:
+                if remaining == 0 { return try? note.crdt.relativePosition(at: path, index: UInt32(i)) }
+                remaining -= 1
+            }
+        }
+        return node(path)
+    }
+
     /// Editor length of the first `count` children (text runs and inline nodes) of the element at `path`.
     private func inlineLength(at path: [UInt32], children count: Int) -> Int {
         guard let children = try? note.crdt.xmlChildren(at: path) else { return 0 }

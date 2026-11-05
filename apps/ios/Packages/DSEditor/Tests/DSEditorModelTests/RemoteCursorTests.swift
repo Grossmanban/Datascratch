@@ -36,6 +36,32 @@ import Testing
         #expect(RelativePositionCodec.nestedTypeStart(of: Data([0, 5, 9, 0])) == nil)
     }
 
+    @Test func positionsGoBackToTheWebsJSON() throws {
+        for data in [RelativePositionCodec.encode(item: ItemID(client: 4242, clock: 18)), Data([2, 5, 9, 0]), Data([2, 5, 9, 0x41]),
+                     Data([1, 7] + Array("content".utf8) + [0])] {
+            let json = try #require(RelativePositionCodec.json(data))
+            #expect(RelativePositionCodec.encode(json: json) == data)
+        }
+        #expect(RelativePositionCodec.json(Data([7])) == nil)
+        #expect(RelativePositionCodec.settingAssoc(Data([2, 5, 9, 0x41]), 0) == Data([2, 5, 9, 0]))
+        let cursor = try #require(RelativePositionCodec.cursorJSON(anchor: Data([2, 5, 9, 0]), head: RelativePositionCodec.encode(item: ItemID(client: 1, clock: 2))))
+        #expect(cursor == #"{"anchor":{"assoc":0,"type":{"client":5,"clock":9}},"head":{"assoc":0,"item":{"client":1,"clock":2}}}"#)
+    }
+
+    /// This device's caret, sent as JSON and read back as a co-author's, lands on the same place.
+    @Test func localCaretRoundTripsThroughJSON() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello brave new world")])
+        let para = doc.blocks[1].id
+        let a = try #require(doc.cursorPosition(block: para, offset: 6))
+        let h = try #require(doc.cursorPosition(block: para, offset: 11))
+        let cursor = try #require(RelativePositionCodec.cursorJSON(anchor: a, head: h))
+        let state = ##"{"user":{"name":"iPad","color":"#2E5BDB"},"cursor":"## + cursor + "}"
+        let c = try #require(RemoteCursor.parse(client: 9, json: state))
+        let p = Projection.build(doc.blocks)
+        let r = try #require(c.resolve(in: doc, projection: p))
+        #expect(r.anchor == p.offset(block: para, offset: 6) && r.head == p.offset(block: para, offset: 11))
+    }
+
     @Test func nameAndColourAreSanitizedLikeTheWeb() {
         #expect(RemoteCursor.sanitizedName("  Анна\u{202E}\u{0007} ") == "Анна")
         #expect(RemoteCursor.sanitizedName("\u{2066}\u{0001}") == "Гость")

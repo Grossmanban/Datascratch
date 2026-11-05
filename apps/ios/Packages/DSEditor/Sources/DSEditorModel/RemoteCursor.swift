@@ -124,11 +124,51 @@ public extension RelativePositionCodec {
         return out
     }
 
+    /// `Y.relativePositionToJSON` of an encoded position: `{ item }`, `{ tname }` or `{ type }`,
+    /// with `assoc`. Nil for undecodable data.
+    public static func json(_ data: Data) -> [String: Any]? {
+        let bytes = [UInt8](data)
+        var i = 0
+        guard let kind = readVarUint(bytes, &i) else { return nil }
+        var out: [String: Any] = [:]
+        switch kind {
+        case 0, 2:
+            guard let client = readVarUint(bytes, &i), let clock = readVarUint(bytes, &i) else { return nil }
+            out[kind == 0 ? "item" : "type"] = ["client": client, "clock": clock]
+        case 1:
+            guard let length = readVarUint(bytes, &i), length <= 256, i + Int(length) <= bytes.count,
+                  let name = String(bytes: bytes[i..<(i + Int(length))], encoding: .utf8) else { return nil }
+            i += Int(length)
+            out["tname"] = name
+        default:
+            return nil
+        }
+        out["assoc"] = i < bytes.count ? (readVarInt(bytes, &i) ?? 0) : 0
+        return out
+    }
+
+    /// The same position with another `assoc` (0: after, -1: before). Nil for undecodable data.
+    public static func settingAssoc(_ data: Data, _ assoc: Int) -> Data? {
+        guard let object = json(data) else { return nil }
+        var o = object
+        o["assoc"] = assoc
+        return encode(json: o)
+    }
+
+    /// The JSON the web's cursor plugin puts into awareness as `cursor`: `{ anchor, head }`.
+    public static func cursorJSON(anchor: Data, head: Data) -> String? {
+        guard let a = json(anchor), let h = json(head),
+              let data = try? JSONSerialization.data(withJSONObject: ["anchor": a, "head": h], options: [.sortedKeys]) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     /// A JSON number that is a whole number within 0…2^53.
     private static func uint(_ v: Any?) -> UInt64? {
         let d: Double
         switch v {
         case let i as Int: d = Double(i)
+        case let u as UInt64: d = Double(u)
+        case let u as UInt32: d = Double(u)
         case let x as Double: d = x
         case let n as NSNumber: d = n.doubleValue
         default: return nil

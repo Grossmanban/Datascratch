@@ -1,0 +1,64 @@
+name: symbolicate-35
+
+# One-off (ios-core): rebuild build 35 (main 66f870d8) unsigned with the release
+# settings, check the binary UUID against the crash report and symbolicate it.
+on:
+  push:
+    branches: [claude/symbolicate-35]
+
+permissions:
+  contents: read
+
+jobs:
+  symbolicate:
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/ios
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 66f870d8023d3f2d52c400100571c03ce9e750e1
+          fetch-depth: 0
+      - name: Select Xcode 26 (as ios-release)
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+      - name: Install XcodeGen (pinned, as ios-release)
+        env:
+          XCODEGEN_VERSION: 2.46.0
+          XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
+          echo "$XCODEGEN_SHA256  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
+      - name: Generate project
+        run: scripts/generate.sh
+      - name: Archive (unsigned, release settings)
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project Datascratch.xcodeproj -scheme Datascratch -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/Datascratch.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CURRENT_PROJECT_VERSION=35 | xcbeautify --renderer github-actions
+      - name: UUID and symbols
+        run: |
+          A=build/Datascratch.xcarchive
+          BIN=$A/Products/Applications/Datascratch.app/Datascratch
+          DSYM=$(ls -d $A/dSYMs/Datascratch.app.dSYM)
+          echo "## UUIDs"; dwarfdump --uuid "$BIN"; dwarfdump --uuid "$DSYM"
+          echo "Crash report UUID: 9446ebac-71f1-334d-aaa1-2b2fa2530e48"
+          LOAD=0x100000000
+          sym() { echo "### $1"; shift; for o in "$@"; do printf '+%-9s ' "$o"; atos -o "$DSYM/Contents/Resources/DWARF/Datascratch" -arch arm64 -l $LOAD -i $(printf '0x%x' $((LOAD + o))); done; }
+          sym "Thread 3 (crashed)" 4435404 4239348 2226061 54565 316777 54565
+          sym "Thread 0" 4486728 4490708 4491092 4405132 4441188 3405000 485200 454712 2120604 2087940 2086552 33989 191153 54565
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsym-build35-rebuild
+          path: apps/ios/build/Datascratch.xcarchive/dSYMs
+          retention-days: 14

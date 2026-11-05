@@ -18,10 +18,10 @@ const blocks = (page: Page) =>
   });
 
 for (const start of [
-  { name: "a new note (empty title seeded)", html: "<h1 data-type=title></h1><p></p>" },
-  { name: "a note with text", html: "<h1 data-type=title>Есть</h1><p>текст</p>" },
+  { name: "a new note (empty title seeded)", html: "<h1 data-type=title></h1><p></p>", body: "" },
+  { name: "a note with text", html: "<h1 data-type=title>Есть</h1><p>текст</p>", body: "текст" },
 ]) {
-  test(`${start.name}: title → Enter → text → Enter splits, again and again`, async ({ mount, page }) => {
+  test(`${start.name}: title → Enter → text → Enter splits, again and again`, async ({ mount, page, browserName }) => {
     await mount(<TestEditor width={700} html={start.html} defaultTitle="Заметка" />);
     await ready(page);
     await page.evaluate(() => window.__ct!.api.focusTitle());
@@ -29,7 +29,9 @@ for (const start of [
     await page.keyboard.type(" Заголовок");
     await page.keyboard.press("Enter");
     // Text that arrives without key presses (an input method / dictation) before Enter, too.
-    await page.keyboard.press("End");
+    // To the end of the line: End on Windows/Linux, ⌘→ on a Mac (End does not move the caret in
+    // WebKit on macOS).
+    await page.keyboard.press(browserName === "webkit" ? "Meta+ArrowRight" : "End");
     await page.keyboard.insertText("первый");
     await page.keyboard.press("Enter");
     await page.keyboard.type("второй");
@@ -38,7 +40,7 @@ for (const start of [
     await page.keyboard.type("третий");
     const out = await blocks(page);
     expect(out.filter((b) => b.startsWith("title"))).toHaveLength(1);
-    expect(out.slice(-4)).toEqual([expect.stringMatching(/^paragraph:.*первый$/), "paragraph:второй", "paragraph:", "paragraph:третий"]);
+    expect(out.slice(-4)).toEqual([`paragraph:${start.body}первый`, "paragraph:второй", "paragraph:", "paragraph:третий"]);
     await expect(page.locator(".ds-prose p")).toHaveCount(out.filter((b) => b.startsWith("paragraph")).length);
   });
 }

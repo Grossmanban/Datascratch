@@ -46,4 +46,61 @@ import Foundation
         #expect(errors.withLock { $0 }.isEmpty)
         #expect(doc.mapJSON("meta")?["title"] as? String == "t\(rounds - 1)")
     }
+
+    /// What the owner did on build 35 ("quick actions right after launch"): notes opened and
+    /// closed one after another by the sync engine (observer attached and detached) while the
+    /// UI thread keeps reading and editing them and remote edits arrive.
+    @Test func fastNoteSwitchingWhileSyncing() async throws {
+        let server = FakeSyncServer()
+        let key = DSCrypto.newKey()
+        func device(_ name: String) throws -> SyncEngine {
+            var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: name, clientVersion: "test")
+            config.minBackoff = .milliseconds(10)
+            let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
+            return SyncEngine(store: try LocalStore.inMemory(), client: client, keyFor: { _ in key }, register: { await server.register($0.docId) })
+        }
+        let a = try device("A"), b = try device("B")
+        await a.start()
+        await b.start()
+        let ids = (0..<5).map { _ in EntityID.make() }
+        var remote: [NoteDocument] = []
+        for id in ids {
+            let n = NoteDocument(noteId: id)
+            try await a.open(n.crdt, notebookId: "nb")
+            try n.initialize(title: "Note")
+            remote.append(n)
+        }
+        let local = ids.map { NoteDocument(noteId: $0) }
+        let stop = Locked(false)
+        let errors = Locked<[String]>([])
+        // The UI: reads every note and types into them, on its own thread.
+        let ui = Thread {
+            var i = 0
+            while !stop.withLock({ $0 }) {
+                for n in local {
+                    do {
+                        let blocks = try n.blocks()
+                        _ = try n.title()
+                        // Types only once the note's content has arrived.
+                        if i % 7 == 0, blocks.count > 1 { try n.insertText("u", at: 0, inBlock: [1]) }
+                    } catch DocumentError.notFound {
+                    } catch { errors.withLock { $0.append("\(error)") } }
+                }
+                i += 1
+            }
+        }
+        ui.start()
+        for round in 0..<60 {
+            let n = local[round % local.count]
+            try await b.open(n.crdt, notebookId: "nb")
+            try remote[round % remote.count].insertText("r", at: 0, inBlock: [1])
+            await b.close(docId: n.noteId)
+        }
+        stop.withLock { $0 = true }
+        while !ui.isFinished { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(errors.withLock { $0 }.isEmpty)
+        await a.stop()
+        await b.stop()
+    }
 }
+

@@ -467,6 +467,13 @@ struct NativeEditorToolbar: ToolbarContent {
 
     /// D-54 «view only»: nothing that edits (insert, style, cover, undo, move, trash).
     private var isViewOnly: Bool { model.isViewOnly }
+    /// Who else is in the note (presence), for the bar.
+    private var peopleHere: [PresencePeer] { app.presence?.people(in: note.id) ?? [] }
+    /// The iPhone bar has no room for the avatars and Share both (they pushed «…» into the
+    /// system's overflow): with people here, Share goes into «…».
+    private var shareInMenu: Bool {
+        isNarrowColumn || (UIDevice.current.userInterfaceIdiom == .phone && !peopleHere.isEmpty)
+    }
     /// Shared with this account: the owner moves it; a note shared on its own has no notebook here.
     private var isShared: Bool { app.accountSharing.role(forNote: note.id, notebookId: note.notebookId) != nil }
 
@@ -532,26 +539,28 @@ struct NativeEditorToolbar: ToolbarContent {
                 .accessibilityIdentifier("editor.insert")
                 }
 
+                if !shareInMenu {
                 Button {
                     scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .accessibilityLabel("Share")
+                }
             }
 
             // Who else is in the note right now: in the bar, never over the text (owner, build
             // 35: a circle over the cover read as stuck there, and said nothing of who it was).
-            if let presence = app.presence {
-                PresenceAvatars(peers: presence.people(in: note.id)) { peer in
-                    model.editor.scrollToRemoteCursor(peer.id)
-                }
+            PresenceAvatars(peers: peopleHere) { peer in
+                model.editor.scrollToRemoteCursor(peer.id)
             }
 
             Menu {
                 if isNarrowColumn {
                     Button("Find in Note", systemImage: "magnifyingglass") { model.editor.showFind() }
                     if !isViewOnly { Menu("Insert", systemImage: "plus.circle") { insertItems } }
+                }
+                if shareInMenu {
                     Button("Share", systemImage: "square.and.arrow.up") {
                         scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
                     }
@@ -1027,19 +1036,20 @@ struct PresenceAvatars: View {
     @State private var isListShown = false
     private var names: String { peers.map(\.name).joined(separator: ", ") }
     private var shown: Int { UIDevice.current.userInterfaceIdiom == .pad ? 3 : 2 }
+    private var side: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 24 : 22 }
 
     var body: some View {
         if !peers.isEmpty {
             Button { isListShown = true } label: {
                 HStack(spacing: -6) {
                     ForEach(peers.prefix(shown)) { peer in
-                        PresenceInitial(peer: peer, size: 24)
+                        PresenceInitial(peer: peer, size: side)
                     }
                     if peers.count > shown {
                         Text("+\(peers.count - shown)")
                             .font(.system(size: 11, weight: .semibold, design: .rounded))
                             .foregroundStyle(Theme.Palette.textSecondary)
-                            .frame(width: 24, height: 24)
+                            .frame(width: side, height: side)
                             .background(Circle().fill(Theme.Palette.surface))
                             .overlay(Circle().strokeBorder(Theme.Palette.canvas, lineWidth: 2))
                     }
@@ -1107,6 +1117,8 @@ private struct PresenceList: View {
         }
         .padding(Theme.Space.s4)
         .frame(minWidth: 200, alignment: .leading)
+        // A container: its id must not cover the rows' own.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("presence.list")
     }
 }

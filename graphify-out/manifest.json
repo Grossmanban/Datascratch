@@ -984,10 +984,10 @@
     "semantic_hash": "b94b2bdac92ca48dff93f0062e8f0b7a"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1793886539.205673,
-    "seen": 1793886703.76457,
-    "ast_hash": "626fd813ee4f39bf2f91261c21c75833",
-    "semantic_hash": "626fd813ee4f39bf2f91261c21c75833"
+    "mtime": 1793888983.5048618,
+    "seen": 1793889024.0365958,
+    "ast_hash": "3e8978c086d24fdb919e7334210aa8a6",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
     "mtime": 1793011608.2055936,

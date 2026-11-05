@@ -1469,6 +1469,98 @@ final class EditorViewTests: XCTestCase {
         UIPasteboard.general.items = []
     }
 
+    // MARK: - Co-authors' carets
+
+    func remoteCursor(_ doc: EditorDocument, id: UInt64 = 7, block: BlockID, offset: Int, head: Int? = nil,
+                      name: String = "Анна", color: String = "#D2453B") throws -> RemoteCursor {
+        let a = try XCTUnwrap(doc.anchor(block: block, offset: offset))
+        let h = try XCTUnwrap(doc.anchor(block: block, offset: head ?? offset))
+        return RemoteCursor(id: id, name: name, color: color, anchor: a, head: h)
+    }
+
+    /// A co-author's caret is a thin line at their character with their name above it; it stays on
+    /// that character when text is added before it, and a selection is tinted.
+    func testRemoteCaretIsDrawnAtItsCharacterAndFollowsEdits() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Совместно"), .paragraph("Hello brave new world")])
+        let para = doc.blocks[1].id
+        let editor = host(doc)
+        editor.setRemoteCursors([try remoteCursor(doc, block: para, offset: 6, name: "\u{202E}Анна")])
+        settle(editor)
+        func expectedX() throws -> CGFloat {
+            let o = try XCTUnwrap(editor.projection.offset(block: para, offset: doc.flatText(of: para).utf16.count - 15))
+            return try XCTUnwrap(editor.geometry.placement(at: o)).origin.x
+        }
+        let caret = try XCTUnwrap(editor.remoteCursorLayer.caretFrame(7), "the caret is drawn")
+        XCTAssertEqual(caret.midX, try expectedX(), accuracy: 2, "before «brave»")
+        XCTAssertLessThan(caret.width, 3, "a thin line")
+        XCTAssertTrue(editor.remoteCursorLayer.isLabelVisible(7), "the name shows while the caret moves")
+        XCTAssertTrue(editor.remoteCursorMarks.marks.isEmpty, "on screen: no edge mark")
+
+        // Text typed before the caret (here or by anyone) moves it along with its character.
+        doc.transact(origin: .remote) { doc.insertText("Oh, ", marks: .empty, block: para, at: 0) }
+        drainMainQueue()
+        settle(editor)
+        let moved = try XCTUnwrap(editor.remoteCursorLayer.caretFrame(7))
+        XCTAssertEqual(moved.midX, try expectedX(), accuracy: 2, "still before «brave»")
+        XCTAssertGreaterThan(moved.midX, caret.midX)
+
+        // A selection is tinted in the person's colour.
+        editor.setRemoteCursors([try remoteCursor(doc, block: para, offset: 4, head: 9)])
+        settle(editor)
+        XCTAssertNotNil(editor.remoteCursorLayer.selectionPath(7))
+        editor.setRemoteCursors([])
+        XCTAssertNil(editor.remoteCursorLayer.caretFrame(7), "gone with the list")
+    }
+
+    /// The name label fades after a few seconds without movement; the caret stays.
+    func testRemoteCaretLabelFadesWhenIdle() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Тишина"), .paragraph("Hello brave new world")])
+        let para = doc.blocks[1].id
+        let editor = host(doc)
+        let c = try remoteCursor(doc, block: para, offset: 3)
+        editor.setRemoteCursors([c])
+        settle(editor)
+        XCTAssertTrue(editor.remoteCursorLayer.isLabelVisible(7))
+        let idle = expectation(description: "label delay passed")
+        DispatchQueue.main.asyncAfter(deadline: .now() + RemoteCursorLayerView.labelDelay + 0.8) { idle.fulfill() }
+        wait(for: [idle], timeout: 10)
+        XCTAssertFalse(editor.remoteCursorLayer.isLabelVisible(7), "the label faded")
+        XCTAssertNotNil(editor.remoteCursorLayer.caretFrame(7), "the caret stays")
+        editor.setRemoteCursors([c])
+        XCTAssertFalse(editor.remoteCursorLayer.isLabelVisible(7), "the same position is no movement")
+        editor.setRemoteCursors([try remoteCursor(doc, block: para, offset: 4)])
+        XCTAssertTrue(editor.remoteCursorLayer.isLabelVisible(7), "a move shows it again")
+    }
+
+    /// A caret below or above the visible text shows a small mark at that edge; a tap on it scrolls
+    /// to the caret.
+    func testOffscreenRemoteCaretShowsAMarkThatScrollsToIt() throws {
+        let body = (1...60).map { BlockNode.paragraph("Абзац номер \($0), в нём немного текста.") }
+        let doc = InMemoryEditorDocument(blocks: [.title("Длинная заметка")] + body)
+        let editor = host(doc, width: 600, height: 700)
+        let last = doc.blocks[60].id
+        editor.setRemoteCursors([try remoteCursor(doc, block: last, offset: 5, name: "Борис", color: "#3E8E5A")])
+        settle(editor)
+        let mark = try XCTUnwrap(editor.remoteCursorMarks.marks.first, "a mark for the caret below")
+        XCTAssertEqual(mark.edge, .bottom)
+        let button = try XCTUnwrap(editor.remoteCursorMarks.button(7))
+        XCTAssertEqual(button.accessibilityLabel, "Борис ниже")
+        XCTAssertGreaterThan(button.frame.minY, editor.bounds.midY, "at the bottom edge")
+        button.sendActions(for: .primaryActionTriggered)
+        drainMainQueue()
+        settle(editor)
+        let caret = try XCTUnwrap(editor.remoteCursorLayer.caretFrame(7))
+        XCTAssertTrue(editor.visibleTextRect().contains(caret), "scrolled to the caret")
+        XCTAssertTrue(editor.remoteCursorMarks.marks.isEmpty, "no mark once it is on screen")
+
+        // A caret above the visible text: a mark at the top.
+        let title = doc.blocks[0].id
+        editor.setRemoteCursors([try remoteCursor(doc, id: 8, block: title, offset: 2, name: "Вера")])
+        settle(editor)
+        XCTAssertEqual(editor.remoteCursorMarks.marks.first?.edge, .top)
+        XCTAssertEqual(editor.remoteCursorMarks.button(8)?.accessibilityLabel, "Вера выше")
+    }
+
     // MARK: - Read-only mode (D-54 viewer)
 
     /// Read-only: no typing, keys, paste, cut, formatting, "/" or undo; copying works; switching

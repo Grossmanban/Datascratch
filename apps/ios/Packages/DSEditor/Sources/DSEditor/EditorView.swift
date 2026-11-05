@@ -172,6 +172,14 @@ public final class EditorView: UIView {
     private(set) var inkInput: InkInputRecognizer!
     private var toolsChangePending = false
     private var editMenu: UIEditMenuInteraction!
+    // Co-authors' carets (`RemoteCursors.swift`).
+    let remoteCursorLayer = RemoteCursorLayerView()
+    let remoteCursorMarks = RemoteCursorMarksView()
+    var remoteCursors: [RemoteCursor] = []
+    var remoteCursorOffsets: [UInt64: (anchor: Int, head: Int)] = [:]
+    var movedRemoteCursors: Set<UInt64> = []
+    var remoteCaretFrames: [RemoteCaretFrame] = []
+    private var remoteCursorResolveScheduled = false
     private var lassoTextRange: Range<Int>?
 
     public init(document: EditorDocument, theme: EditorTheme? = nil) {
@@ -205,9 +213,12 @@ public final class EditorView: UIView {
         textView.textLayoutManager?.delegate = fragmentProvider
         textView.accessibilityIdentifier = "editor.text"
         addSubview(textView)
+        addSubview(remoteCursorMarks)
+        remoteCursorMarks.onTap = { [weak self] id in self?.scrollToRemoteCursor(id) }
 
         textView.insertSubview(paper, at: 0)
         textView.insertSubview(inkUnder, aboveSubview: paper)
+        textView.insertSubview(remoteCursorLayer, aboveSubview: inkUnder)
         textView.addSubview(inkOver)
         agentBanner.isHidden = true
         agentBanner.onAcceptAll = { [weak self] in self?.acceptAgentEdits() }
@@ -420,6 +431,10 @@ public final class EditorView: UIView {
     /// Replaces the edited document.
     public func setDocument(_ document: EditorDocument) {
         model.base = document
+        // Carets belong to the note: the host sets the new note's ones.
+        remoteCursors = []
+        remoteCursorOffsets = [:]
+        layoutRemoteCursors()
         load()
         ink.refresh()
     }
@@ -713,6 +728,8 @@ public final class EditorView: UIView {
         }
         ink.refreshIfNeeded()
         applyKeyboardInset()
+        if remoteCursorLayer.frame != inkOver.frame { remoteCursorLayer.frame = inkOver.frame }
+        if !remoteCursors.isEmpty { layoutRemoteCursors() }
     }
 
     // MARK: - Document → view
@@ -747,6 +764,16 @@ public final class EditorView: UIView {
             }
         }
         updateAgentBanner()
+        if !remoteCursors.isEmpty, !remoteCursorResolveScheduled {
+            // After the text view has laid the change out.
+            remoteCursorResolveScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.remoteCursorResolveScheduled = false
+                self.textView.layoutIfNeeded()
+                self.resolveRemoteCursors()
+            }
+        }
         ink.invalidateLayout()
         if !change.strokesAdded.isEmpty || !change.strokesRemoved.isEmpty || change.origin != .textInput {
             setNeedsInkRefresh()
@@ -2084,6 +2111,7 @@ extension EditorView: UITextViewDelegate {
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
         tapTargetElementsDirty = true
+        if !remoteCaretFrames.isEmpty { updateRemoteCursorMarks() }
         onScroll?(scrollView.contentOffset.y + scrollView.adjustedContentInset.top)
     }
 

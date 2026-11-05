@@ -1331,6 +1331,16 @@
         }
       }
     },
+    "Downloading photos: %lld of %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загружаются фото: %lld из %lld"
+          }
+        }
+      }
+    },
     "Drag the image to choose what the header shows.": {
       "localizations": {
         "ru": {
@@ -1427,6 +1437,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Изменить пространство…"
+          }
+        }
+      }
+    },
+    "Editing now": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Редактирует сейчас"
           }
         }
       }
@@ -2077,6 +2097,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "В общем пространстве"
+          }
+        }
+      }
+    },
+    "In this note": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В заметке"
           }
         }
       }
@@ -3417,6 +3447,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Медиатека"
+          }
+        }
+      }
+    },
+    "Photos": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фото"
           }
         }
       }
@@ -5247,6 +5287,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Скоро"
+          }
+        }
+      }
+    },
+    "Uploading photos: %lld of %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправляются фото: %lld из %lld"
           }
         }
       }

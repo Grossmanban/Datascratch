@@ -30,6 +30,9 @@ final class AppModel {
     let core: CoreLibrary?
     /// The connection to `serverURL` (none in a local-only build without a server).
     private(set) var connection: ServerConnection?
+    /// Who else is in a note: the server connection's, or the UI tests' stand-in.
+    var presence: PresenceCenter? { connection?.presence ?? presenceForTesting }
+    private(set) var presenceForTesting: PresenceCenter?
     #endif
     private(set) var accounts: any AccountService
     let sync: SyncCenter
@@ -149,6 +152,13 @@ final class AppModel {
             signedInForTesting = true
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-cover") { seedCoverForTesting() }
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-sharing") { seedSharingForTesting() }
+            // Two people in every note (the document's bar shows them).
+            if ProcessInfo.processInfo.arguments.contains("-ui-testing-presence") {
+                let center = PresenceCenter()
+                center.showForTesting([PresencePeer(id: 1, name: "Lena", color: "#2E5BDB", account: "acc-lena"),
+                                       PresencePeer(id: 2, name: "Mark", color: "#3E8E5A", account: "acc-mark")])
+                presenceForTesting = center
+            }
             // `-ui-testing-open-url <url>`: the app starts from that link (cold start).
             if let link = UserDefaults.standard.string(forKey: "ui-testing-open-url") { pendingLink = URL(string: link) }
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-folders"),

@@ -1547,7 +1547,10 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(button.accessibilityLabel, "Борис ниже")
         XCTAssertGreaterThan(button.frame.minY, editor.bounds.midY, "at the bottom edge")
         button.sendActions(for: .primaryActionTriggered)
-        drainMainQueue()
+        // The scroll is animated (unless Reduce Motion is on).
+        let scrolled = expectation(description: "scroll animation finished")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { scrolled.fulfill() }
+        wait(for: [scrolled], timeout: 5)
         settle(editor)
         let caret = try XCTUnwrap(editor.remoteCursorLayer.caretFrame(7))
         XCTAssertTrue(editor.visibleTextRect().contains(caret), "scrolled to the caret")

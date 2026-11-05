@@ -245,20 +245,29 @@ public extension EditorView {
 
     /// Scrolls so that a co-author's caret is in the middle of the visible text.
     func scrollToRemoteCursor(_ id: UInt64, animated: Bool = true) {
-        guard let head = remoteCursorOffsets[id]?.head else { return }
-        // Text off screen has estimated heights (TextKit 2 lays out lazily): the text up to the
-        // caret is laid out first, so the target is where the caret really is.
-        if let tlm = textView.textLayoutManager, let end = geometry.location(at: min(head + 1, projection.length)),
-           let range = NSTextRange(location: tlm.documentRange.location, end: end) {
-            tlm.ensureLayout(for: range)
+        guard remoteCursorOffsets[id] != nil else { return }
+        // Off-screen text has estimated heights (TextKit 2 lays out lazily), and scrolling there
+        // lays it out for real: the caret moved hundreds of points from its estimate. The target
+        // is found in a few unanimated steps (nothing is drawn in between), then the scroll is
+        // played from the start as one animation.
+        let start = textView.contentOffset
+        for _ in 0..<5 {
+            layoutRemoteCursors()
+            guard let caret = remoteCaretFrames.first(where: { $0.id == id })?.caret else { break }
+            let visible = visibleTextRect()
+            let minY = -textView.adjustedContentInset.top
+            let maxY = max(minY, textView.contentSize.height + textView.adjustedContentInset.bottom - textView.bounds.height)
+            let y = min(max(textView.contentOffset.y + caret.midY - visible.midY, minY), maxY)
+            if abs(y - textView.contentOffset.y) < 1 { break }
+            textView.setContentOffset(CGPoint(x: start.x, y: y), animated: false)
+            textView.layoutIfNeeded()
+            textView.textLayoutManager?.textViewportLayoutController.layoutViewport()
         }
-        layoutRemoteCursors()
-        guard let caret = remoteCaretFrames.first(where: { $0.id == id })?.caret else { return }
-        let visible = visibleTextRect()
-        let minY = -textView.adjustedContentInset.top
-        let maxY = max(minY, textView.contentSize.height + textView.adjustedContentInset.bottom - textView.bounds.height)
-        let y = textView.contentOffset.y + caret.midY - visible.midY
-        textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: min(max(y, minY), maxY)), animated: animated && !UIAccessibility.isReduceMotionEnabled)
+        let target = textView.contentOffset
+        if animated, !UIAccessibility.isReduceMotionEnabled, target != start {
+            textView.setContentOffset(start, animated: false)
+            textView.setContentOffset(target, animated: true)
+        }
         movedRemoteCursors.insert(id)
         layoutRemoteCursors()
     }

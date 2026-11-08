@@ -442,6 +442,14 @@ struct EncodingVectorTests {
             "accountSharedItem": { _ = try JSONDecoder().decode(SharedItem.self, from: $0) },
             "accountSharedByMeItem": { _ = try JSONDecoder().decode(SharedByMeItem.self, from: $0) },
             "docVersion": { _ = try JSONDecoder().decode(DocVersion.self, from: $0) },
+            // Voice (D-65).
+            "voiceTranscribeFields": { _ = try JSONDecoder().decode(VoiceTranscribeFields.self, from: $0) },
+            "voiceTranscribeResponse": { _ = try JSONDecoder().decode(VoiceTranscribeResponse.self, from: $0) },
+            "voiceTextRequest": { _ = try JSONDecoder().decode(VoiceTextRequest.self, from: $0) },
+            "voiceTextResponse": { _ = try JSONDecoder().decode(VoiceTextResponse.self, from: $0) },
+            "voiceMe": { _ = try JSONDecoder().decode(VoiceMe.self, from: $0) },
+            "adminVoiceAccount": { _ = try JSONDecoder().decode(AdminVoiceAccount.self, from: $0) },
+            "putAdminVoiceRequest": { _ = try JSONDecoder().decode(PutAdminVoiceRequest.self, from: $0) },
         ]
         for (name, c) in cases {
             guard let decode = decoders[name] else {
@@ -508,5 +516,28 @@ struct FlowVectorTests {
         for (k, v) in expected["body"] as! [String: Any] {
             #expect(jsonEqual(json[k], v), "\(k)")
         }
+    }
+}
+
+@Suite(.enabled(if: FileManager.default.fileExists(atPath: Vectors.root.appendingPathComponent("voice/timestamps.json").path)))
+struct VoiceVectorTests {
+    @Test func timestampsAndSpeakers() throws {
+        let file = try Vectors.json("voice/timestamps.json")
+        for c in file["timestamps"] as! [[String: Any]] {
+            #expect(Voice.timestamp((c["sec"] as! NSNumber).doubleValue) == c["text"] as! String, "\(c["sec"]!)")
+        }
+        for c in file["speakers"] as! [[String: String]] {
+            #expect(Voice.speakerLabel(c["id"]!) == c["label"]!)
+        }
+    }
+
+    /// `voiceTextRequest` defaults (style document on the server, profanity soften here) and the
+    /// multipart fields of `voiceTranscribeFields`.
+    @Test func defaultsAndForm() throws {
+        let r = try JSONDecoder().decode(VoiceTextRequest.self, from: Data(#"{"task":"format","text":"x"}"#.utf8))
+        #expect(r.profanity == .soften && r.quality == .standard && r.style == nil)
+        let f = try JSONDecoder().decode(VoiceTranscribeFields.self, from: Data(#"{"mode":"conversation","speakers":"3"}"#.utf8))
+        #expect(f.speakers == 3 && f.language == .ru)
+        #expect(f.formFields.map(\.name) == ["mode", "language", "speakers"])
     }
 }

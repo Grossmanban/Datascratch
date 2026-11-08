@@ -1,0 +1,1 @@
+- DSCore, D-65: типы голосового API по векторам core (`api/bodies.json`, `voice/timestamps.json`), коды ошибок голоса и `account_changed` со значением `voice` — CI DSCore остаётся зелёным, когда векторы придут в main.

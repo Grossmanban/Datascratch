@@ -193,6 +193,18 @@ DSCore
   `AttachmentTransferProgress` с `uploads`/`downloads` (`done`, `total`, `remaining`,
   `bytesDone`, `bytesTotal`, `isActive`); счёт идёт пачками — пачка кончается, когда в этом
   направлении ничего не передаётся.
+### Голос (D-65): типы контракта
+
+- `VoiceTranscribeFields` (поля multipart `POST /voice/transcribe`, `formFields`), `VoiceTurn`,
+  `VoiceTranscribeResponse`, `VoiceTextRequest` (ровно одно из `turns`/`text`, `style` только для
+  `format`, `profanity` по умолчанию `soften`), `VoiceTextResponse`, `VoiceMe`, `AdminVoiceAccount`,
+  `PutAdminVoiceRequest` — строгий разбор по векторам `api/bodies.json`; `Voice.timestamp(_:)`
+  («мм:сс», с часа «ч:мм:сс») и `Voice.speakerLabel("S2")` = «Собеседник 2» по
+  `voice/timestamps.json`; `Voice.agentId` = `voice` (метка `agentEdit` «Голос»). Коды ошибок
+  `voice_disabled`, `voice_quota`, `voice_too_long`, `voice_upstream`, `voice_unavailable`;
+  `AccountChange.voice` в `account_changed`. Запросы к серверу (`APIClient`) — когда голос
+  поручат iOS.
+
 ### «Общие со мной»: размещение и «новое» (D-54, D-63)
 
 - `account.shared` — корень документа аккаунта (`"<kind>:<id>"` → `SharedRef { kind, id, spaceId,

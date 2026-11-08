@@ -218,7 +218,7 @@
         "reason": "wrong protocol",
         "message": {
           "type": "hello",
-          "protocol": 2,
+          "protocol": 3,
           "auth": {
             "kind": "user",
             "accessToken": "at-123"

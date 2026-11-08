@@ -198,6 +198,30 @@
 - Прерванная смена ключа пространства: шаг 1 сделан, если `Space.keyVersion > pendingSinceVersion`; тогда — ключи заметок всех блокнотов и `rotate/done`.
 - Запись доверия: `invite|space|…`, `member|space|…`, `key|space|<id>|<v>`; версии ключей блокнотов пространства — по-прежнему `key|notebook|<id>|<v>` (граница отката каждого). `SharedItem` пространства, владелец которого — сам участник или которое есть в его `account.spaces`, не принимается.
 
+## Уведомления об изменениях аккаунта (D-62)
+
+Поручение координатора 2026-11-08 (жалобы владельца: приглашение видно только после перезапуска, блокноты пространства появляются через пару минут). После перечисленных вызовов сервер шлёт всем устройствам затронутых аккаунтов `account_changed` по сокету синхронизации (`sync-protocol.md` §4, §6; только клиентам с `protocol: 2`). Уведомление уходит после фиксации изменения: клиент, который сразу перечитает, его увидит. Опрос по таймеру остаётся запасным путём (старые клиенты, оборванный сокет).
+
+| Вызов | Кому | `what` |
+| --- | --- | --- |
+| `POST /invitations` (и повтор) | приглашающему; приглашённому, если аккаунт с этим адресом уже есть | `invitations` |
+| `DELETE /invitations/:id` | приглашающему; приглашённому | `invitations` |
+| `POST /invitations/:id/decline` | приглашённому; приглашающему | `invitations` |
+| `POST /invitations/:id/accept` | приглашённому и владельцу — `invitations`; владельцу и всем участникам ресурса (с новым) | `members` (+ `spaces` для пространства) |
+| `PATCH /members/:kind/:id/:userId` | владельцу и всем участникам ресурса | `members` (+ `spaces`) |
+| `DELETE /members/:kind/:id/:userId` (в том числе «Выйти») | убранному; владельцу и оставшимся участникам | `members` (+ `spaces`) |
+| `PUT /members/:kind/:id/:userId/key` | участнику — `keys`; владельцу и всем участникам | `members` (+ `spaces`) |
+| `POST /members/:kind/:id/rotate`, `POST /members/notebook/:id/rotate/done` | владельцу и всем участникам | `keys` |
+| `POST /spaces` | владельцу | `spaces` |
+| `POST /docs` с `kind = space` | владельцу и участникам пространства | `spaces` |
+| `POST /notebooks` со `spaceId` | владельцу и участникам пространства | `notebooks` |
+| `PUT /spaces/:id/notebooks/:notebookId` | владельцу и участникам пространства | `notebooks`, `keys` |
+| `POST /spaces/:id/notebooks/:notebookId/move-out`, `DELETE /notebooks/:id` (блокнот пространства) | владельцу и участникам пространства | `notebooks` |
+| `POST /spaces/:id/rotate`, `POST /spaces/:id/rotate/done` | владельцу и участникам пространства | `spaces`, `keys` |
+| `DELETE /spaces/:id` | владельцу и бывшим участникам | `spaces`, `members`, `notebooks` |
+
+Что перечитывать: `invitations` — `/invitations/incoming` и списки приглашений своих ресурсов; `members` — `/shared-with-me`, `/shared-by-me`, `/members/:kind/:id`; `spaces` — `/spaces` и `SharedItem` пространств; `keys` — обёртки ключей (`SharedItem.wrappedKey`, `/spaces/:id/notebooks`, `/members/note/:id/key`); `notebooks` — `/spaces/:id/notebooks` и `docIds`. Новые документы клиент сразу подписывает (`subscribe`) — переподключаться не нужно: отказ `doc_not_found` сервер не запоминает.
+
 ## Токены агентов (`spec/09-agents-api.md`)
 
 | Метод | Путь | Смысл |

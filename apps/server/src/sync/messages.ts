@@ -1,5 +1,6 @@
 import {
   SYNC_PROTOCOL_VERSION,
+  SYNC_PROTOCOL_VERSIONS,
   clientMessageSchema,
   type ClientMessage as SharedClientMessage,
   type ServerMessage as SharedServerMessage,
@@ -27,6 +28,10 @@ export type ServerMessage =
   | { type: 'error'; code: SyncErrorCode; message: string; ref?: string; retryAfterMs?: number; reason?: string };
 
 export const PROTOCOL_VERSION = SYNC_PROTOCOL_VERSION;
+/** Versions accepted in `hello`; `welcome` echoes the client's (v2 adds `account_changed`). */
+export const PROTOCOL_VERSIONS: readonly number[] = SYNC_PROTOCOL_VERSIONS;
+/** The first version that receives `account_changed` (sync-protocol.md §6). */
+export const ACCOUNT_CHANGED_SINCE = 2;
 
 /** WebSocket close codes used by the server. */
 export const CloseCode = {

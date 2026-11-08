@@ -81,7 +81,7 @@ export function syncVectors() {
   const invalid = {
     client: [
       { reason: "unknown type", message: { type: "bogus" } },
-      { reason: "wrong protocol", message: { ...valid.client[0], protocol: 2 } },
+      { reason: "wrong protocol", message: { ...valid.client[0], protocol: 3 } },
       {
         reason: "unknown platform",
         message: { ...valid.client[0], client: { platform: "android", version: "1" } },

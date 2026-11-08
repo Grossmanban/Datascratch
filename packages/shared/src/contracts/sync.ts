@@ -1,10 +1,14 @@
-// Messages of the WebSocket sync protocol (sync-protocol.md, v1).
+// Messages of the WebSocket sync protocol (sync-protocol.md, v2; the server also speaks v1).
 // The server and every client validate incoming frames with these schemas.
 import { z } from "zod";
 import { authorSchema, deviceRevokedReasonSchema } from "./api.js";
 import { base64UrlSchema, uuidSchema } from "./common.js";
 
-export const SYNC_PROTOCOL_VERSION = 1;
+export const SYNC_PROTOCOL_VERSION = 2;
+/** Versions a server accepts in `hello` and echoes in `welcome`: v2 adds `account_changed` (D-62). */
+export const SYNC_PROTOCOL_VERSIONS = [1, 2] as const;
+export type SyncProtocolVersion = (typeof SYNC_PROTOCOL_VERSIONS)[number];
+const protocolSchema = z.union([z.literal(1), z.literal(2)]);
 export const SYNC_PATH = "/v1/sync";
 /** WebSocket ping interval. */
 export const SYNC_PING_INTERVAL_MS = 25_000;
@@ -38,7 +42,7 @@ export type ClientPlatform = (typeof CLIENT_PLATFORMS)[number];
 
 export const helloMessageSchema = z.object({
   type: z.literal("hello"),
-  protocol: z.literal(SYNC_PROTOCOL_VERSION),
+  protocol: protocolSchema,
   auth: syncAuthSchema,
   deviceId: deviceIdSchema,
   client: z.object({ platform: z.enum(CLIENT_PLATFORMS), version: z.string().min(1) }),
@@ -111,7 +115,8 @@ export const welcomeMessageSchema = z.object({
   /** null for guests. */
   userId: uuidSchema.nullable(),
   serverTime: z.string(),
-  protocol: z.literal(SYNC_PROTOCOL_VERSION),
+  /** The version of the client's `hello`. */
+  protocol: protocolSchema,
 });
 
 /** Server-stamped author (D-54); optional so older servers still parse. */
@@ -190,6 +195,32 @@ export const errorMessageSchema = z.object({
  */
 export const SYNC_CLOSE_DEVICE_REVOKED = 4410;
 
+/** What `account_changed` says changed (sync-protocol.md §6); clients ignore values they do not know. */
+export const ACCOUNT_CHANGED_WHAT = [
+  "invitations",
+  "spaces",
+  "members",
+  "keys",
+  "notebooks",
+] as const;
+export type AccountChangedWhat = (typeof ACCOUNT_CHANGED_WHAT)[number];
+
+/**
+ * Protocol v2 (D-62): something about the account changed (invitations, memberships, keys,
+ * notebooks of a shared space); the client re-reads it over REST and subscribes to new documents.
+ * Unknown `what` values are dropped, so the list can grow without breaking clients.
+ */
+export const accountChangedMessageSchema = z.object({
+  type: z.literal("account_changed"),
+  what: z
+    .array(z.string())
+    .transform((w) =>
+      [...new Set(w)].filter((x): x is AccountChangedWhat =>
+        (ACCOUNT_CHANGED_WHAT as readonly string[]).includes(x),
+      ),
+    ),
+});
+
 export const serverMessageSchema = z.discriminatedUnion("type", [
   welcomeMessageSchema,
   updatesMessageSchema,
@@ -197,6 +228,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
   ackMessageSchema,
   serverAwarenessMessageSchema,
   errorMessageSchema,
+  accountChangedMessageSchema,
 ]);
 
 export type WelcomeMessage = z.infer<typeof welcomeMessageSchema>;
@@ -205,6 +237,7 @@ export type UpdateMessage = z.infer<typeof updateMessageSchema>;
 export type AckMessage = z.infer<typeof ackMessageSchema>;
 export type ServerAwarenessMessage = z.infer<typeof serverAwarenessMessageSchema>;
 export type ErrorMessage = z.infer<typeof errorMessageSchema>;
+export type AccountChangedMessage = z.infer<typeof accountChangedMessageSchema>;
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 
 /** Parse a text frame received from the server; returns null for invalid JSON or schema. */

@@ -9,11 +9,17 @@ import { accessFor, docAccess, loadDocs, loadMemberships } from '../services/acc
 import type { CatchUpItem } from '../services/documents.js';
 import type { GuestPrincipal, UserPrincipal } from '../services/principal.js';
 import { publicAuthor } from '../lib/author.js';
+import {
+  ACCOUNT_CHANGED_WHAT,
+  type AccountChangedWhat,
+  type SyncProtocolVersion,
+} from '@datascratch/shared/contracts';
 import { topics, type HubMessage } from './hub.js';
 import {
   ClientMessage,
   CloseCode,
-  PROTOCOL_VERSION,
+  ACCOUNT_CHANGED_SINCE,
+  PROTOCOL_VERSIONS,
   b64Size,
   type ServerMessage,
   type SyncErrorCode,
@@ -47,6 +53,8 @@ interface Subscription {
 }
 
 const HELLO_TIMEOUT_MS = 10_000;
+/** Account changes within this window reach a client as one `account_changed` (D-62). */
+export const ACCOUNT_CHANGED_WINDOW_MS = 250;
 /** Largest frame accepted before `hello` succeeds (a hello is well under 4 KB). */
 export const PRE_AUTH_MAX_PAYLOAD = 64 * 1024;
 /** Messages waiting to be handled before the socket stops reading (and when it reads again). */
@@ -100,6 +108,11 @@ export class SyncConnection {
   #lastRefill = Date.now();
   readonly #helloTimer: NodeJS.Timeout;
   #expiryTimer: NodeJS.Timeout | null = null;
+  /** Protocol version of the client's hello. */
+  #protocol = 1;
+  /** `account_changed` reasons waiting for the coalescing window (D-62). */
+  readonly #accountWhat = new Set<AccountChangedWhat>();
+  #accountTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly ctx: AppContext,
@@ -163,6 +176,7 @@ export class SyncConnection {
     this.#closed = true;
     clearTimeout(this.#helloTimer);
     if (this.#expiryTimer) clearTimeout(this.#expiryTimer);
+    if (this.#accountTimer) clearTimeout(this.#accountTimer);
     for (const s of this.#subs.values()) s.unsubscribe();
     this.#subs.clear();
     for (const off of this.#control) off();
@@ -245,9 +259,9 @@ export class SyncConnection {
       return;
     }
     const r = raw as { type?: unknown; protocol?: unknown } | null;
-    if (r && typeof r === 'object' && r.type === 'hello' && r.protocol !== PROTOCOL_VERSION) {
+    if (r && typeof r === 'object' && r.type === 'hello' && !PROTOCOL_VERSIONS.includes(r.protocol as number)) {
       clearTimeout(this.#helloTimer);
-      return this.#fail('protocol_mismatch', `protocol ${PROTOCOL_VERSION} required`, CloseCode.protocol);
+      return this.#fail('protocol_mismatch', `protocol ${PROTOCOL_VERSIONS.join(' or ')} required`, CloseCode.protocol);
     }
     const parsed = ClientMessage.safeParse(raw);
     if (!parsed.success && !this.#principal) {
@@ -311,6 +325,7 @@ export class SyncConnection {
 
   async #hello(msg: Extract<ClientMessage, { type: 'hello' }>) {
     clearTimeout(this.#helloTimer);
+    this.#protocol = msg.protocol;
     let p: SyncPrincipal | null;
     if (msg.auth.kind === 'user') {
       try {
@@ -346,6 +361,7 @@ export class SyncConnection {
       this.#control.push(
         this.ctx.hub.subscribe(topics.user(p.userId), (m) => {
           if (m.type === 'access_changed') this.#recheckAccess();
+          else if (m.type === 'account_changed') this.#accountChanged(m.what);
         }),
       );
     } else {
@@ -356,8 +372,26 @@ export class SyncConnection {
       type: 'welcome',
       userId: p.kind === 'user' ? p.userId : null,
       serverTime: new Date().toISOString(),
-      protocol: PROTOCOL_VERSION,
+      protocol: this.#protocol as SyncProtocolVersion,
     });
+  }
+
+  /**
+   * Tell a v2 client what about its account changed (sync-protocol.md §6, D-62). Reasons within
+   * ACCOUNT_CHANGED_WINDOW_MS are sent as one message; v1 clients would show an unknown frame as
+   * a sync error, so they get nothing (they keep polling).
+   */
+  #accountChanged(what: readonly AccountChangedWhat[]) {
+    if (this.#protocol < ACCOUNT_CHANGED_SINCE || this.#closed) return;
+    for (const w of what) this.#accountWhat.add(w);
+    if (this.#accountTimer || this.#accountWhat.size === 0) return;
+    this.#accountTimer = setTimeout(() => {
+      this.#accountTimer = null;
+      const list = ACCOUNT_CHANGED_WHAT.filter((w) => this.#accountWhat.has(w));
+      this.#accountWhat.clear();
+      if (!this.#closed && list.length > 0) this.#send({ type: 'account_changed', what: list });
+    }, ACCOUNT_CHANGED_WINDOW_MS);
+    this.#accountTimer.unref();
   }
 
   /**

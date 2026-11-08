@@ -1,3 +1,4 @@
+import type { AccountChangedWhat } from '@datascratch/shared/contracts';
 import type { AuthorRef } from '../db/schema.js';
 
 /**
@@ -9,7 +10,8 @@ import type { AuthorRef } from '../db/schema.js';
  *   doc:<docId>        live updates, awareness, deletion and moves of a document
  *   device:<deviceId>  control: the device was revoked
  *   share:<shareId>    control: the share was revoked
- *   user:<userId>      control: the account's memberships changed (D-54): re-check access
+ *   user:<userId>      control: the account's memberships changed (D-54): re-check access;
+ *                      account_changed: tell the account's v2 clients what to re-read (D-62)
  */
 export type HubMessage =
   | {
@@ -25,7 +27,8 @@ export type HubMessage =
   | { type: 'revoked'; reason: string }
   | { type: 'doc_deleted'; docId: string }
   | { type: 'doc_moved'; docId: string }
-  | { type: 'access_changed' };
+  | { type: 'access_changed' }
+  | { type: 'account_changed'; what: AccountChangedWhat[] };
 
 export type HubListener = (msg: HubMessage) => void;
 

@@ -1851,16 +1851,6 @@
         }
       }
     },
-    "Getting the key for %lld changes…": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Получаем ключ для изменений: %lld…"
-          }
-        }
-      }
-    },
     "Getting this notebook ready": {
       "localizations": {
         "ru": {

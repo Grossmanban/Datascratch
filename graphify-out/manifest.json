@@ -3354,9 +3354,9 @@
     "semantic_hash": "7fc8501271469c9ea5a285185a409d08"
   },
   "packages/test-vectors/src/api.ts": {
-    "mtime": 1794170146.9671493,
-    "seen": 1794171780.1334393,
-    "ast_hash": "fc24cec256c4b929b9f3ee42acb21e69",
+    "mtime": 1794171823.9405692,
+    "seen": 1794171934.5570135,
+    "ast_hash": "0febb9d75d84c29c9fdd27f940ce1888",
     "semantic_hash": ""
   },
   "packages/test-vectors/src/crypto.ts": {
@@ -3414,9 +3414,9 @@
     "semantic_hash": "3f13d953701c8cc9ae00ac8dc702542d"
   },
   "packages/test-vectors/vectors/api/bodies.json": {
-    "mtime": 1794170146.9671493,
-    "seen": 1794171780.133464,
-    "ast_hash": "27d284ce8e54dd1bfb0af6ee62581434",
+    "mtime": 1794171823.9405692,
+    "seen": 1794171934.5574324,
+    "ast_hash": "a8d409450021452f09db5d1956a5dd68",
     "semantic_hash": ""
   },
   "packages/test-vectors/vectors/crypto/attachment.json": {
@@ -4194,8 +4194,8 @@
     "semantic_hash": "38f4d0b3d4c12f3d57d33fb9a433cb9c"
   },
   "tools/graphify_docs.py": {
-    "mtime": 1794171691.5245612,
-    "seen": 1794171780.133811,
+    "mtime": 1794171834.1525698,
+    "seen": 1794171934.563214,
     "ast_hash": "a8a77ee48fa9237b55284fd37bb4745f",
     "semantic_hash": "a8a77ee48fa9237b55284fd37bb4745f"
   },
@@ -4278,9 +4278,9 @@
     "semantic_hash": "732d553485d69e47690678cc4c398206"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1794171693.2174215,
-    "seen": 1794171780.1338348,
-    "ast_hash": "9fe43927a906f2c1b6e77207e06751e0",
+    "mtime": 1794171834.517397,
+    "seen": 1794171934.5637813,
+    "ast_hash": "46df8fbcfd28c86797db0dbfa3aeb283",
     "semantic_hash": ""
   },
   "docs/README.md": {
@@ -4302,9 +4302,9 @@
     "semantic_hash": "2d421e8fe80dbe798fbacff2cf6d56f2"
   },
   "docs/architecture/contracts/api.md": {
-    "mtime": 1794170146.9573407,
-    "seen": 1794171780.1338418,
-    "ast_hash": "875ec305097e71654a7ea9ba31467656",
+    "mtime": 1794171823.856569,
+    "seen": 1794171934.5638773,
+    "ast_hash": "374f8debd37baa0a7844c931aad7e352",
     "semantic_hash": ""
   },
   "docs/architecture/contracts/crypto.md": {
@@ -6600,9 +6600,9 @@
     "semantic_hash": "71f6dc5d89824d9b6f9ad360ce4d6607"
   },
   "packages/shared/src/contracts/voice.ts": {
-    "mtime": 1794170146.9671493,
-    "seen": 1794171780.1333406,
-    "ast_hash": "2b24e5349620364cb81c4f9a21473ba4",
+    "mtime": 1794171823.9405692,
+    "seen": 1794171934.5550368,
+    "ast_hash": "b98d061b591e604bb2cb8fc238396083",
     "semantic_hash": ""
   },
   "packages/shared/src/voice/index.ts": {
@@ -6618,9 +6618,9 @@
     "semantic_hash": ""
   },
   "packages/shared/test/voice.test.ts": {
-    "mtime": 1794170146.9671493,
-    "seen": 1794171780.1334326,
-    "ast_hash": "f75f94e2db9fda221dafa94ad477fce4",
+    "mtime": 1794171823.9405692,
+    "seen": 1794171934.5568967,
+    "ast_hash": "35e0c3951622b38add6057fe869720aa",
     "semantic_hash": ""
   },
   "packages/test-vectors/src/voice.ts": {
@@ -6636,9 +6636,9 @@
     "semantic_hash": "76b1d3df77502c115a997dd6fd0a1a7b"
   },
   "docs/decisions/0065-voice.md": {
-    "mtime": 1794170146.9573407,
-    "seen": 1794171780.1339521,
-    "ast_hash": "46538ea5cdc854b17c7a13ea64944e5e",
+    "mtime": 1794171823.856569,
+    "seen": 1794171934.5659714,
+    "ast_hash": "0d49730233f7607ffa436a298990bda6",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Network/VoiceAPI.swift": {

@@ -163,13 +163,16 @@
     ];
     var root = document.getElementById("root");
     if (root) {
-      // The app settles from a hair larger: on a phone that must not make the page scroll sideways.
-      var html = document.documentElement;
-      // «hidden», not «clip»: Safari still lets the page move sideways with clip on the root.
-      html.style.overflowX = "hidden";
+      // The app settles from a hair larger: on a phone that must not make the page wider than the
+      // screen. Pinned to the viewport meanwhile, the zoomed app adds nothing to the page's size
+      // (overflow on the root does not stop Safari from scrolling it).
+      var rs = root.style;
+      rs.position = "fixed";
+      rs.inset = "0";
       var zoom = root.animate([{ transform: "scale(1.025)" }, { transform: "none" }], { duration: flight, easing: SNAP });
       var unclip = function () {
-        html.style.overflowX = "";
+        rs.position = "";
+        rs.inset = "";
       };
       zoom.finished.then(unclip, unclip);
       anims.push(zoom);

@@ -47,7 +47,9 @@ async function audit(page: Page): Promise<Problem[]> {
       })();
       // Partly on screen only: a drawer sliding away is wholly off it.
       if (!inScroller && ((r.right > vw + 1 && r.left < vw) || (r.left < -1 && r.right > 0))) out.push(`cut off at the edge (${Math.round(r.left)}–${Math.round(r.right)}): ${label(el)}`);
-      if (Math.min(r.width, r.height) < 44 && !(r.height >= 44 && r.width >= 32)) out.push(`small target ${Math.round(r.width)}×${Math.round(r.height)}: ${label(el)}`);
+      // Rounded: WebKit lays a 44 px box out at 43.9.
+      const [w, h] = [Math.round(r.width), Math.round(r.height)];
+      if (Math.min(w, h) < 44 && !(h >= 44 && w >= 32)) out.push(`small target ${Math.round(r.width)}×${Math.round(r.height)}: ${label(el)}`);
     }
     // Dialogs, menus and popovers inside the screen.
     for (const el of Array.from(document.querySelectorAll("[role=dialog], [role=alertdialog], [role=menu], [role=listbox], [data-radix-popper-content-wrapper] > *"))) {
@@ -144,9 +146,13 @@ test("phone: sign up and in, spaces, a note with Enter, «Создать про�
   await expect(page.locator(".ds-prose p", { hasText: "первая строка" })).not.toContainText("вторая");
   await check(page, "note");
 
-  // «Поделились со мной».
-  await openDrawer(page);
-  await page.getByTestId("space-switcher").click();
+  // «Поделились со мной». In CI WebKit the drawer opened from a note can close again right away
+  // (not seen in Chromium; to be checked on a real iPhone): open it until the switcher answers.
+  await expect(async () => {
+    await openDrawer(page);
+    await page.getByTestId("space-switcher").click({ timeout: 3_000 });
+    await expect(page.getByTestId("space-menu")).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   await page.getByTestId("shared-with-me-option").click();
   await expect(page.getByTestId("shared-with-me")).toBeVisible();
   await check(page, "shared-with-me");

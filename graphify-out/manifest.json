@@ -1938,9 +1938,9 @@
     "semantic_hash": "71bbb586c35205709218bfc6a61fe334"
   },
   "apps/web/playwright.config.ts": {
-    "mtime": 1794149651.8127892,
-    "seen": 1794151824.9354587,
-    "ast_hash": "5d7e928b3873574c2e196c89c3383028",
+    "mtime": 1794155340.5580058,
+    "seen": 1794155698.7573159,
+    "ast_hash": "bae20d3eaee927bf3fd84311f9b5ccaa",
     "semantic_hash": ""
   },
   "apps/web/public/theme-init.js": {
@@ -6330,9 +6330,9 @@
     "semantic_hash": ""
   },
   "apps/web/public/boot-anim.js": {
-    "mtime": 1794150289.7572315,
-    "seen": 1794151824.9354606,
-    "ast_hash": "fdf964ab64fcfc55bdc21f3f13c1e199",
+    "mtime": 1794155332.3896015,
+    "seen": 1794155698.7573183,
+    "ast_hash": "8baa2d1c74e22d67771d7557a8a63b71",
     "semantic_hash": ""
   },
   "apps/web/src/app/boot.ts": {
@@ -6492,9 +6492,9 @@
     "semantic_hash": "5241e98d3303d0f123dab65b9e81e84e"
   },
   "apps/web/e2e/specs/mobile.spec.ts": {
-    "mtime": 1794153418.4220378,
-    "seen": 1794153455.8634496,
-    "ast_hash": "1e17b66dbb8b5a3288faeb9aef673fc3",
+    "mtime": 1794155332.3900454,
+    "seen": 1794155698.7572603,
+    "ast_hash": "58bbd6d59cd417ca0e683193b5ef10dd",
     "semantic_hash": ""
   },
   "apps/web/e2e/screenshots/key-android-note.png": {

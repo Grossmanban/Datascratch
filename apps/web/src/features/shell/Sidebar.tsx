@@ -178,7 +178,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
 
       {!inShared && (
       <div className="px-3 pb-2">
-        <div className="flex h-8 w-full items-stretch rounded-md bg-surface text-[13.5px] shadow-[0_1px_2px_rgb(40_30_10/0.06)] ring-1 ring-line transition hover:ring-ink/15">
+        <div className="flex h-8 w-full items-stretch rounded-md pointer-coarse:h-11 bg-surface text-[13.5px] shadow-[0_1px_2px_rgb(40_30_10/0.06)] ring-1 ring-line transition hover:ring-ink/15">
           <button
             onClick={() => newDoc()}
             className={cn("group flex shrink-0 items-center gap-2 rounded-l-md px-2.5 font-medium text-ink transition active:scale-[0.99]", !(targetNb && nbs.length > 1) && "flex-1")}

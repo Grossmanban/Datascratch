@@ -86,7 +86,7 @@ nonisolated struct DiagnosticsSnapshot: Sendable {
             isOnline: sync.isOnline,
             hasServer: !sync.isLocalOnly,
             pendingChanges: sync.pendingChanges,
-            heldChanges: sync.heldChanges,
+            heldChanges: sync.awaited.changes,
             notSentDocuments: notSent,
             failedDocumentIds: sync.failedDocumentIds,
             unreadableNotebookIds: sync.unreadableNotebookIds.sorted(),

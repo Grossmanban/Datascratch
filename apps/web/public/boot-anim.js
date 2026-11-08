@@ -162,7 +162,21 @@
       bg.animate([{ opacity: 1 }, { opacity: 0 }], { duration: flight - 40, delay: 40, easing: "ease-out", fill: "forwards" }),
     ];
     var root = document.getElementById("root");
-    if (root) anims.push(root.animate([{ transform: "scale(1.025)" }, { transform: "none" }], { duration: flight, easing: SNAP }));
+    if (root) {
+      // The app settles from a hair larger: on a phone that must not make the page wider than the
+      // screen. Pinned to the viewport meanwhile, the zoomed app adds nothing to the page's size
+      // (overflow on the root does not stop Safari from scrolling it).
+      var rs = root.style;
+      rs.position = "fixed";
+      rs.inset = "0";
+      var zoom = root.animate([{ transform: "scale(1.025)" }, { transform: "none" }], { duration: flight, easing: SNAP });
+      var unclip = function () {
+        rs.position = "";
+        rs.inset = "";
+      };
+      zoom.finished.then(unclip, unclip);
+      anims.push(zoom);
+    }
     Promise.all(
       anims.map(function (a) {
         return a.finished;

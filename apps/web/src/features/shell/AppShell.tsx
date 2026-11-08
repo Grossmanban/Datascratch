@@ -137,7 +137,8 @@ export function AppShell() {
   if (!ready) return <Splash />;
 
   return (
-    <div className="flex h-full overflow-hidden bg-canvas">
+    // iPhone safe areas (viewport-fit=cover): nothing under the notch, the rounded corners or the home indicator.
+    <div className="flex h-full overflow-hidden bg-canvas pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]">
       {isMobile ? (
         <AnimatePresence>
           {mobileNavOpen && (
@@ -150,7 +151,7 @@ export function AppShell() {
                 onClick={() => useUi.setState({ mobileNavOpen: false })}
               />
               <motion.aside
-                className="fixed inset-y-0 left-0 z-50 w-[86vw] max-w-[320px] shadow-popover"
+                className="fixed inset-y-0 left-0 z-50 w-[86vw] max-w-[320px] bg-sidebar pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pt-[env(safe-area-inset-top)] shadow-popover"
                 initial={{ x: "-100%" }}
                 animate={{ x: 0 }}
                 exit={{ x: "-100%" }}

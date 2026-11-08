@@ -328,7 +328,10 @@ final class ServerConnection: CoreLibraryRemote {
                     signatures[notebook] = "\(count)-\(newest)-\(items.count)"
                 }
                 if sync.unreadableSignatures != signatures { sync.unreadableSignatures = signatures }
-                sync.setHeld(status.held)
+                let reasons = status.waiting.values
+                sync.setAwaited(.init(changes: status.held,
+                                      keyDocuments: reasons.filter { $0 == .key }.count,
+                                      accessDocuments: reasons.filter { $0 == .access }.count))
             }
         }
     }

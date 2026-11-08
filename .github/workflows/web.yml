@@ -33,7 +33,7 @@ concurrency:
 jobs:
   web:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: apps/web
@@ -68,10 +68,19 @@ jobs:
           VITE_DS_SERVER_URL: http://localhost:8787
           VITE_DS_TEST_HOOKS: "1"
           VITE_DS_EXTENDED_MODE: "1"
-      - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium
+      # WebKit for the «iphone» project (spec/05 «Веб на телефоне»); «android» runs in Chromium.
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium webkit
       - name: E2E (mock server + production build with service worker)
         run: pnpm e2e
+      - name: Upload phone screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phone-screenshots
+          path: apps/web/e2e/screenshots
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
@@ -109,6 +118,8 @@ jobs:
       STORAGE_DRIVER: disk
       STORAGE_DIR: /tmp/ds-files
       E2E_SERVER_URL: http://localhost:8080
+      # Phones run in the mock job (WebKit is installed there only).
+      E2E_NO_PHONES: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4

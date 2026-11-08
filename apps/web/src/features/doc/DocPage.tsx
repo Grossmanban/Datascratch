@@ -167,10 +167,11 @@ function DocScreen({ noteId }: { noteId: string }) {
                 </span>
               </Tooltip>
             )}
+            {/* On a phone the bar has room for 44 px targets only: «В избранное» stays in «Ещё». */}
             <IconButton
               label={starred ? t("docs.unstar") : t("docs.star")}
               onClick={() => toggleStar({ kind: "note", id: noteId })}
-              className={starred ? "text-[var(--ds-tint-yellow-fg)]" : undefined}
+              className={cn("max-sm:hidden", starred && "text-[var(--ds-tint-yellow-fg)]")}
             >
               <Star className={cn("size-4", starred && "fill-current")} />
             </IconButton>
@@ -196,7 +197,8 @@ function DocScreen({ noteId }: { noteId: string }) {
           </>
         }
       >
-        <nav className="flex min-w-0 items-center gap-1">
+        {/* On a phone the title is right below; the bar keeps its room for the buttons. */}
+        <nav className="flex min-w-0 items-center gap-1 max-sm:hidden">
           {nb && (
             <Link to="/notebook/$notebookId" params={{ notebookId: nb.id }} className="hidden shrink-0 hover:text-ink sm:inline">
               {withIcon(nb.icon, nb.name)}

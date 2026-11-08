@@ -55,17 +55,45 @@ struct RootView: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        Group {
-            switch app.phase {
-            case .onboarding:
-                OnboardingFlow()
-                    .transition(.opacity)
-            case .ready:
-                MainWindow()
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+        ZStack {
+            Group {
+                switch app.phase {
+                case .launching:
+                    // A stored session is being looked up: the launch screen covers it, so the
+                    // welcome screen never flashes.
+                    Theme.Palette.canvas.ignoresSafeArea()
+                case .onboarding:
+                    OnboardingFlow()
+                        .transition(.opacity)
+                case .ready:
+                    MainWindow()
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
+            }
+            .animation(Theme.Motion.smooth, value: app.phase)
+            // Built under the launch screen and shown as the mark moves into place.
+            .opacity(app.launchHandedOff ? 1 : 0)
+            .scaleEffect(app.launchHandedOff ? 1 : 1.025)
+            .allowsHitTesting(app.launchHandedOff)
+            if !app.launchFinished {
+                LaunchOverlay(isReady: app.isLaunchReady, forceReduceMotion: app.reduceMotionForTesting) {
+                    let reduce = UIAccessibility.isReduceMotionEnabled || app.reduceMotionForTesting
+                    withAnimation(reduce ? .easeOut(duration: LaunchTiming.crossFade) : .easeOut(duration: LaunchTiming.handoff)) {
+                        app.launchHandedOff = true
+                    }
+                } onFinished: {
+                    withAnimation(.easeOut(duration: LaunchTiming.crossFade)) { app.launchFinished = true }
+                }
+                .transition(.opacity)
+                .zIndex(1)
             }
         }
-        .animation(Theme.Motion.smooth, value: app.phase)
+        .task {
+            // UI tests (`-ui-testing-launch`): the data «arrives» after 3 s.
+            guard !app.launchFinished, !app.isLaunchReady, app.phase != .launching else { return }
+            try? await Task.sleep(for: .seconds(3))
+            app.releaseLaunchHoldForTesting()
+        }
         .preferredColorScheme(app.settings.colorScheme)
         .tint(Theme.Palette.accent)
         .onAppear { app.settings.applyAppearanceToWindows() }

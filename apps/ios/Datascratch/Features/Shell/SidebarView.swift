@@ -79,6 +79,11 @@ struct SidebarView: View {
                 .accessibilityLabel("Search and Commands")
                 .accessibilityIdentifier("sidebar.commandPalette")
             }
+            // Settings live on the account (owner, build 36: the small gear in the footer sat
+            // next to Trash and the trash opened instead): the opposite corner, 44 pt.
+            ToolbarItem(placement: .topBarTrailing) {
+                AccountSettingsButton()
+            }
         }
         // Rows scrolling past the space switcher and the footer are hidden, not shown through
         // them (owner, 2026-11-03: a note's name under «Личное», a tag under the footer).
@@ -528,6 +533,42 @@ struct SpaceTile: View {
     }
 }
 
+/// The account's avatar (its initial on the person's colour, as other people see it) at the
+/// top of the sidebar: opens Settings. A 44 pt target.
+struct AccountSettingsButton: View {
+    @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
+
+    private var email: String { app.accounts.account?.email ?? "" }
+
+    var body: some View {
+        Button {
+            scene.sheet = .settings
+        } label: {
+            ZStack {
+                if let initial = email.first {
+                    Circle()
+                        .fill(Color(hex: PresenceCenter.color(for: email.lowercased())) ?? Theme.Palette.accent)
+                    Text(String(initial).uppercased())
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                } else {
+                    Image(systemName: "person.crop.circle")
+                        .font(.system(size: 22, weight: .regular))
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                }
+            }
+            .frame(width: 28, height: 28)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Settings")
+        .accessibilityHint(email.isEmpty ? "" : email)
+        .accessibilityIdentifier("sidebar.settings")
+    }
+}
+
 struct SidebarFooter: View {
     @Environment(AppModel.self) private var app
     @Environment(SceneModel.self) private var scene
@@ -535,16 +576,7 @@ struct SidebarFooter: View {
     var body: some View {
         HStack(spacing: Theme.Space.s3) {
             SyncStatusBadge()
-            Spacer()
-            Button {
-                scene.sheet = .settings
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.body)
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Settings")
-            .accessibilityIdentifier("sidebar.settings")
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, Theme.Space.s4)
         .padding(.vertical, Theme.Space.s3)

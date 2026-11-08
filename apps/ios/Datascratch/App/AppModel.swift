@@ -6,6 +6,8 @@ import UIKit
 @Observable
 final class AppModel {
     enum Phase: Equatable {
+        /// Cold start: a stored session is still being looked up (the launch screen shows).
+        case launching
         case onboarding
         case ready
     }
@@ -83,6 +85,16 @@ final class AppModel {
     /// A link that opened the app (`ds://` from the web, D-56, or `datascratch://`), kept as it came: it is
     /// read once the main window is up, against the server the account is on by then.
     var pendingLink: URL?
+    /// The launch animation (`LaunchOverlay`) is over: cold start only, never on returning from
+    /// the background (this model lives as long as the process). UI tests skip it unless
+    /// `-ui-testing-launch`.
+    var launchFinished = false
+    /// The mark moves into place: the interface underneath fades in.
+    var launchHandedOff = false
+    /// `-ui-testing-launch`: readiness held back 3 s, so a test can see the launch screen.
+    private(set) var launchHeldForTesting = false
+    /// `-ui-testing-reduce-motion`: the launch screen's Reduce Motion path.
+    var reduceMotionForTesting: Bool { isUITesting && ProcessInfo.processInfo.arguments.contains("-ui-testing-reduce-motion") }
     /// Main (library) windows on screen; a note window that closes itself reopens one when none is.
     @ObservationIgnored var mainWindowCount = 0
 
@@ -97,6 +109,12 @@ final class AppModel {
         let stored = options.uiTesting ? nil : UserDefaults.standard.string(forKey: Self.serverKey).flatMap(URL.init(string:))
         let server = stored
         isUITesting = options.uiTesting
+        if options.uiTesting {
+            let showsLaunch = ProcessInfo.processInfo.arguments.contains("-ui-testing-launch")
+            launchFinished = !showsLaunch
+            launchHandedOff = !showsLaunch
+            launchHeldForTesting = showsLaunch
+        }
         webHost = host
         let coverImages: CoverImages = options.uiTesting ? .temporary() : .appSupport()
         covers = coverImages
@@ -313,8 +331,15 @@ final class AppModel {
         return (LibraryStore(persistence: inMemory ? .inMemory : .appSupport()), nil)
     }
 
+    /// The launch screen may give way: the session is known and the library is open.
+    var isLaunchReady: Bool { phase != .launching && !launchHeldForTesting }
+
+    /// Ends the UI tests' hold on the launch screen.
+    func releaseLaunchHoldForTesting() { launchHeldForTesting = false }
+
     var phase: Phase {
         if pendingRecoveryKey != nil || isSigningUp { return .onboarding }
+        if accounts.isRestoringSession, !signedInForTesting { return .launching }
         return accounts.account != nil || signedInForTesting ? .ready : .onboarding
     }
 
@@ -425,6 +450,24 @@ final class AppModel {
         wireLocalWipe()
         wireSharing()
         #endif
+    }
+
+    // MARK: Diagnostics (spec/10)
+
+    /// «Проверить сейчас»: the sync socket is checked (a dead one replaced), keys fetched again,
+    /// undelivered changes sent again.
+    func checkSyncNow() {
+        sync.record("check.manual")
+        #if canImport(DSCore)
+        connection?.checkConnection()
+        #endif
+        sync.checkKeys()
+        if case .notSent = sync.phase { sync.retryFailed() }
+    }
+
+    /// What «Диагностика» shows and reports: codes, counts and ids only.
+    func diagnosticsSnapshot(now: Date = Date()) -> DiagnosticsSnapshot {
+        DiagnosticsSnapshot.make(sync: sync, recoveryKeyConfirmed: isRecoveryKeyConfirmed, now: now)
     }
 
     func signOut() async {

@@ -5710,6 +5710,386 @@
           }
         }
       }
+    },
+    "A change was too large for the server.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменение оказалось слишком большим для сервера."
+          }
+        }
+      }
+    },
+    "AI Agents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Агенты ИИ"
+          }
+        }
+      }
+    },
+    "Changes to send": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменений к отправке"
+          }
+        }
+      }
+    },
+    "Changes wait for a notebook key from another device.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменения ждут ключ блокнота с другого устройства."
+          }
+        }
+      }
+    },
+    "Check Now": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверить сейчас"
+          }
+        }
+      }
+    },
+    "Checked": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверен"
+          }
+        }
+      }
+    },
+    "Checked now.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверено вручную."
+          }
+        }
+      }
+    },
+    "Connected": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключён"
+          }
+        }
+      }
+    },
+    "Connection": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Соединение"
+          }
+        }
+      }
+    },
+    "Copy Report": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скопировать отчёт"
+          }
+        }
+      }
+    },
+    "Diagnostics": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Диагностика"
+          }
+        }
+      }
+    },
+    "Keys and Uploads": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ключи и загрузки"
+          }
+        }
+      }
+    },
+    "Links": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылки"
+          }
+        }
+      }
+    },
+    "Network": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сеть"
+          }
+        }
+      }
+    },
+    "Not delivered": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не доставлено"
+          }
+        }
+      }
+    },
+    "Notebooks without a key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Блокнотов без ключа"
+          }
+        }
+      }
+    },
+    "Nothing went wrong": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибок не было"
+          }
+        }
+      }
+    },
+    "Online": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В сети"
+          }
+        }
+      }
+    },
+    "Open Source Licenses": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лицензии открытого ПО"
+          }
+        }
+      }
+    },
+    "Open on the Web": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть в вебе"
+          }
+        }
+      }
+    },
+    "Outbox": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очередь отправки"
+          }
+        }
+      }
+    },
+    "Photos received": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фото получено"
+          }
+        }
+      }
+    },
+    "Photos sent": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фото отправлено"
+          }
+        }
+      }
+    },
+    "Recent Problems": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последние ошибки"
+          }
+        }
+      }
+    },
+    "Share Report": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поделиться отчётом"
+          }
+        }
+      }
+    },
+    "Some changes could not be delivered; they stay on this device and are sent again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Часть изменений не доставлена: они остаются на устройстве и отправятся снова."
+          }
+        }
+      }
+    },
+    "Some changes from other devices could not be read with the keys on this device.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Часть изменений с других устройств не открывается ключами этого устройства."
+          }
+        }
+      }
+    },
+    "Something went wrong in sync.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В синхронизации что-то пошло не так."
+          }
+        }
+      }
+    },
+    "Sync & Diagnostics": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Синхронизация и диагностика"
+          }
+        }
+      }
+    },
+    "Sync could not start; it is retried on the next connection.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Синхронизация не запустилась; попробуем снова при следующем подключении."
+          }
+        }
+      }
+    },
+    "The device went offline; changes wait on the device.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Устройство осталось без сети; изменения ждут на устройстве."
+          }
+        }
+      }
+    },
+    "The report lists states, codes, document ids, times, the app version and the device model — no note text, names, addresses or keys.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В отчёте — состояния, коды, номера документов, время, версия приложения и модель устройства. Ни текста заметок, ни имён, ни адресов, ни ключей."
+          }
+        }
+      }
+    },
+    "The server asked to slow down; changes will be sent again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер попросил притормозить; изменения отправятся снова."
+          }
+        }
+      }
+    },
+    "The server ended this device's session; sign in again to sync.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер завершил сеанс этого устройства; войдите снова, чтобы синхронизировать."
+          }
+        }
+      }
+    },
+    "The server refused changes: this account may have lost access to the notebook.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер не принял изменения: возможно, у аккаунта больше нет доступа к блокноту."
+          }
+        }
+      }
+    },
+    "This device only": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только это устройство"
+          }
+        }
+      }
+    },
+    "Waiting for a key": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ждут ключ"
+          }
+        }
+      }
+    },
+    "What sync is doing and what went wrong recently. The report has no note text, names or keys.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что делает синхронизация и что недавно пошло не так. В отчёте нет текста заметок, имён и ключей."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

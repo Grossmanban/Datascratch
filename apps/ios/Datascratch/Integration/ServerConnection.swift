@@ -299,6 +299,8 @@ final class ServerConnection: CoreLibraryRemote {
                 case .synced: .synced
                 case .failed(let documents, let reason): .failed(documents: documents, reason: reason)
                 }
+                let failedIds = status.failed.map(\.docId)
+                if sync.failedDocumentIds != failedIds { sync.failedDocumentIds = failedIds }
                 sync.apply(summary: summary, pending: status.pending)
                 let unreadable = Set(status.unreadable.compactMap { $0.notebookId ?? nil })
                 if sync.unreadableNotebookIds != unreadable { sync.unreadableNotebookIds = unreadable }
@@ -589,6 +591,9 @@ extension ServerConnection: CoverAttachmentRemote {
 @Observable
 final class ServerAccountService: AccountService {
     private(set) var account: Account?
+    /// Until `restore` knows whether a session is stored (a Keychain read, then the start of
+    /// sync): the launch screen covers it (no flash of the welcome screen).
+    private(set) var isRestoringSession = true
     var isServerBacked: Bool { true }
     @ObservationIgnored private let connection: ServerConnection
     static let emailKey = "app.email"
@@ -624,10 +629,13 @@ final class ServerAccountService: AccountService {
                 account = Account(userId: "", email: email, createdAt: Date())
                 connection.sync.markSessionEnded()
             }
+            isRestoringSession = false
             return
         }
         let email = (try? connection.core.store.string(Self.emailKey)) ?? ""
         account = Account(userId: session.userId, email: email, createdAt: Date())
+        // The library is local: it shows at once; sync connects behind it (offline too).
+        isRestoringSession = false
         await connection.start(session: session, isNewAccount: false)
     }
 

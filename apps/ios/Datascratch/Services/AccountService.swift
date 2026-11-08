@@ -40,6 +40,9 @@ nonisolated enum AccountError: LocalizedError, Equatable, Sendable {
 /// `LocalAccountService` keeps the same flow working on one device meanwhile.
 protocol AccountService: AnyObject {
     var account: Account? { get }
+    /// A stored session is still being looked up at launch: neither signed in nor out yet, so
+    /// the launch screen stays instead of flashing the welcome screen.
+    var isRestoringSession: Bool { get }
     /// `true` when accounts live on a server (sync available).
     var isServerBacked: Bool { get }
     func signUp(email: String, password: String) async throws -> RecoveryKey
@@ -63,6 +66,7 @@ protocol AccountService: AnyObject {
 }
 
 extension AccountService {
+    var isRestoringSession: Bool { false }
     var signedOutEmail: String? { nil }
     func deleteLocalData() async {}
     var unsentChanges: Int { 0 }

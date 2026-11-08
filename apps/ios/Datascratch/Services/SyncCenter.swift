@@ -24,7 +24,13 @@ final class SyncCenter {
     private(set) var pendingChanges = 0
     /// Notebooks with changes from other devices this device could not read (another key):
     /// set aside, everything else syncs. A calm note on the notebook, not a global state.
-    var unreadableNotebookIds: Set<String> = []
+    var unreadableNotebookIds: Set<String> = [] {
+        didSet {
+            if !unreadableNotebookIds.isSubset(of: oldValue) {
+                record("keys.unreadable", documentId: unreadableNotebookIds.subtracting(oldValue).sorted().first)
+            }
+        }
+    }
     /// Per notebook, what is set aside right now (item count and newest seq): the banner's
     /// dismissal is keyed by it, so only new unreadable items bring it back.
     var unreadableSignatures: [String: String] = [:]
@@ -35,6 +41,7 @@ final class SyncCenter {
 
     func setHeld(_ count: Int, now: Date = Date()) {
         guard count != heldChanges else { return }
+        if count > 0, heldChanges == 0 { record("keys.waiting", at: now) }
         heldChanges = count
         heldSince = count > 0 ? (heldSince ?? now) : nil
     }
@@ -45,6 +52,35 @@ final class SyncCenter {
         return now.timeIntervalSince(since) > 60
     }
     private(set) var serverURL: URL?
+
+    // MARK: Diagnostics (spec/10)
+
+    /// Recent sync problems and state changes, newest first (codes and ids only).
+    private(set) var recentEvents: [DiagnosticEvent] = []
+    static let maxEvents = 50
+    /// Documents whose changes could not be delivered (ids, from the sync engine).
+    var failedDocumentIds: [String] = []
+
+    func record(_ code: String, documentId: String? = nil, at date: Date = Date()) {
+        // The same problem reported again and again (each status update) is one entry.
+        if let last = recentEvents.first, last.code == code, last.documentId == documentId,
+           date.timeIntervalSince(last.date) < 60 { return }
+        recentEvents.insert(DiagnosticEvent(date: date, code: code, documentId: documentId), at: 0)
+        if recentEvents.count > Self.maxEvents { recentEvents.removeLast(recentEvents.count - Self.maxEvents) }
+    }
+
+    /// The connection as a code for the report.
+    var phaseCode: String {
+        switch phase {
+        case .localOnly: "local_only"
+        case .offline: "offline"
+        case .syncing: "syncing"
+        case .upToDate: "up_to_date"
+        case .failed: "failed"
+        case .notSent: "not_sent"
+        case .sessionEnded: "session_ended"
+        }
+    }
 
     /// Photos and files on their way, counted per batch (DSCore: a batch is what goes together,
     /// e.g. photos pasted at once; zero again when nothing moves).
@@ -112,6 +148,7 @@ final class SyncCenter {
     var showsSessionEnded = false
 
     func markSessionEnded() {
+        record("session.ended")
         isSessionEnded = true
         showsSessionEnded = true
         phase = .sessionEnded
@@ -133,7 +170,11 @@ final class SyncCenter {
         case .synced:
             if case .upToDate = phase { break }
             phase = .upToDate(Date())
-        case .failed(let documents, let reason): phase = .notSent(documents: documents, reason: reason)
+        case .failed(let documents, let reason):
+            if phase != .notSent(documents: documents, reason: reason) {
+                record("sync.not_sent." + DiagnosticCode.from(reason: reason), documentId: failedDocumentIds.first)
+            }
+            phase = .notSent(documents: documents, reason: reason)
         }
     }
 
@@ -160,11 +201,14 @@ final class SyncCenter {
     @ObservationIgnored var onBackOnline: (() -> Void)?
 
     func markFailed(_ message: String) {
+        // The message is an error description (free text): only the fact is recorded.
+        record("sync.start_failed")
         phase = .failed(message)
     }
 
     func setOnline(_ online: Bool) {
         let cameBack = online && !isOnline
+        if !online, isOnline, !isLocalOnly { record("network.offline") }
         isOnline = online
         if cameBack { onBackOnline?() }
         refreshPhase()

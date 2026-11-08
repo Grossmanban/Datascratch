@@ -18,6 +18,12 @@ export function useShortcuts(navigate: ReturnType<typeof useNavigate>) {
         useUi.setState((s) => ({ paletteOpen: !s.paletteOpen }));
         return;
       }
+      // ⌘, — settings, as in every desktop app.
+      if (mod && key === "," && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        void navigate({ to: "/settings" });
+        return;
+      }
       // ⌘⇧\ — the tab overview (spec/12 §12.6); the shifted key varies by layout, the code does not.
       if (features.tabs && mod && e.shiftKey && e.code === "Backslash") {
         e.preventDefault();

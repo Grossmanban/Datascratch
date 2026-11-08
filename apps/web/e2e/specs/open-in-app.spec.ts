@@ -1,5 +1,5 @@
 import { expect, test, type Browser } from "@playwright/test";
-import { newDoc, signUp, uniqueEmail } from "./helpers";
+import { newDoc, signUp, uniqueEmail, openSharedWithMe } from "./helpers";
 
 // «Открыть в приложении» on iPhone/iPad: invite and guest links hand over to the iOS app by its
 // scheme (ds://…?server=<host>), the guest key stays in the fragment; without the app the page stays.
@@ -64,6 +64,7 @@ test("shared notebook on iPhone: «Открыть в приложении» line
   await q.getByTestId("invitations-row").click();
   await q.getByTestId("invitation-in").getByTestId("accept-invitation").click();
   await q.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
+  await openSharedWithMe(q);
   const row = q.getByTestId("shared-row").filter({ hasText: "Заметки" });
   await expect(row).not.toHaveAttribute("data-waiting", "", { timeout: 30_000 });
   const id = (await row.getAttribute("data-shared-id"))!;

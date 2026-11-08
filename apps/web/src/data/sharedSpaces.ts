@@ -4,6 +4,7 @@
 // their notebooks (GET /spaces/:id/notebooks), and the owner's upkeep — keys for members who
 // accepted and the key change after someone left (core's maintainOwnedSpaces). Plus the owner's
 // commands: make a space shared, move a notebook in and out, a notebook created in a shared space.
+import { growingDelay } from "@/lib/growingDelay";
 import {
   accountVetting,
   createSpaceDoc,
@@ -41,6 +42,8 @@ let memberItems: AccountSharedItem[] = [];
 let running: Promise<void> | null = null;
 let again = false;
 let soon: ReturnType<typeof setTimeout> | undefined;
+/** Waiting for an owner to deliver a key: 2 s at first, then longer (the two-minute poll is the floor). */
+const keyWait = growingDelay([2_000, 4_000, 8_000, 15_000, 30_000]);
 /** Spaces this account is leaving itself: no «access closed» notice for them. */
 const leaving = new Set<string>();
 
@@ -53,7 +56,8 @@ export async function applySpaceItems(items: AccountSharedItem[], fromServer: bo
   await refreshSpaces();
   // Accepted but not keyed yet: the owner's client delivers the key once it is online — look again soon.
   clearTimeout(soon);
-  if (memberItems.some((i) => !i.wrappedKey)) soon = setTimeout(() => void import("./sharedWithMe").then((m) => m.refreshShared()), 15_000);
+  if (memberItems.some((i) => !i.wrappedKey)) soon = setTimeout(() => void import("./sharedWithMe").then((m) => m.refreshShared()), keyWait.next());
+  else keyWait.reset();
 }
 
 /** Run one pass now (or right after the one in progress). */
@@ -144,6 +148,7 @@ async function pass() {
   }
   setSpaceAccess(access);
   await rt.syncSpaceDocs(Object.entries(access).filter(([, a]) => a.keyed).map(([id]) => id));
+  rt.keysChanged();
   useUi.setState({ keysChangedAt: Date.now() });
 }
 

@@ -3,6 +3,7 @@ import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
 import { Collaboration, createNoteUndoManager } from "./collab/collaboration";
 import { TitleRepair } from "./collab/repairTitle";
+import { KeySelection } from "./schema/keySelection";
 import { Reanchor } from "./collab/reanchor";
 import type { HostRef } from "./host";
 import { createSchemaExtensions, type SchemaOptions } from "./schema";
@@ -28,6 +29,7 @@ export function buildExtensions(opts: CoreOptions): { extensions: AnyExtension[]
   const scan = scanUnknown(opts.doc.getXmlFragment("content"), new Set(Object.keys(known.nodes)), new Set(Object.keys(known.marks)));
   const undoManager = opts.undoManager ?? createNoteUndoManager(opts.doc);
   const extensions = [
+    KeySelection,
     ...base,
     ...createUnknownExtensions(scan),
     ...(opts.extensions ?? []),

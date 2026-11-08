@@ -1,3 +1,4 @@
+import { markSharedOpened } from "@/data/sharedOpened";
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { ArrowDownUp, ChevronRight, FilePlus2, Folder as FolderIcon, Hash, LayoutGrid, Layers, List, Search, Star, Trash2, X } from "lucide-react";
@@ -223,6 +224,7 @@ export function NotebookPage() {
   const { notebookId } = useParams({ from: "/app/notebook/$notebookId" });
   const nb = useWorkspace(useShallow((s) => findNotebook(s, notebookId)));
   const sharedNb = useShared((s) => s.items[`notebook:${notebookId}`]);
+  useEffect(() => markSharedOpened("notebook", notebookId), [notebookId, !!nb]);
   const spaceViewer = useWorkspace((s) => spaceRoleOfDoc(s, notebookId) === "viewer");
   const readOnly = sharedNb?.role === "viewer" || spaceViewer;
   const notes = useWorkspace((s) => s.notes);

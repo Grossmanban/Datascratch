@@ -1,3 +1,4 @@
+import { markSharedOpened } from "@/data/sharedOpened";
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { ChevronRight, Eye, FileQuestion, ImagePlus, MoreHorizontal, Share2, Smile, Star, Undo2, X } from "lucide-react";
@@ -46,6 +47,9 @@ export function DocPage() {
     const space = spaceOfNote(useWorkspace.getState(), noteId);
     if (space && space !== useWorkspace.getState().activeSpaceId) setActiveSpace(space);
     if (!note.trashedAt) openTab(noteId);
+    // «Поделились со мной» (D-63): opened once, no longer new — the note or its shared notebook.
+    markSharedOpened("note", noteId);
+    markSharedOpened("notebook", note.notebookId);
     // «Новый документ» elsewhere goes to the notebook last opened or created in (spec/05).
     // Only an own notebook: a shared one is not where new notes of this account should go.
     if (useWorkspace.getState().account.notebooks.some((n) => n.id === note.notebookId)) rememberNotebook(space, note.notebookId);

@@ -67,9 +67,9 @@
   },
   ".github/workflows/web.yml": {
     "mtime": 1794151738.6346853,
-    "seen": 1794151824.934499,
+    "seen": 1794159921.3625715,
     "ast_hash": "e72398c7bef80cbf7206b32ff9f549f0",
-    "semantic_hash": ""
+    "semantic_hash": "e72398c7bef80cbf7206b32ff9f549f0"
   },
   ".prettierrc.json": {
     "mtime": 1792930822.2900407,
@@ -1387,19 +1387,19 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792932836.5381606,
-    "seen": 1794148898.728971,
+    "seen": 1794159921.3631172,
     "ast_hash": "24098989e922515ff0fa0aac07aa956f",
     "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792932836.5381606,
-    "seen": 1794148898.7289724,
+    "seen": 1794159921.3631186,
     "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
     "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792945948.7857802,
-    "seen": 1794148898.7289746,
+    "seen": 1794159921.3631196,
     "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
     "semantic_hash": "a66fd1a5c043c1420b26f520d2b23c56"
   },
@@ -1939,9 +1939,9 @@
   },
   "apps/web/playwright.config.ts": {
     "mtime": 1794155340.5580058,
-    "seen": 1794155698.7573159,
+    "seen": 1794159921.36338,
     "ast_hash": "bae20d3eaee927bf3fd84311f9b5ccaa",
-    "semantic_hash": ""
+    "semantic_hash": "bae20d3eaee927bf3fd84311f9b5ccaa"
   },
   "apps/web/public/theme-init.js": {
     "mtime": 1794147578.9102972,
@@ -2233,9 +2233,9 @@
   },
   "apps/web/src/features/doc/DocPage.tsx": {
     "mtime": 1794151371.3225894,
-    "seen": 1794151824.9355989,
+    "seen": 1794159921.363494,
     "ast_hash": "2519eaa328cea7394c87fbc04b4ed9d0",
-    "semantic_hash": ""
+    "semantic_hash": "2519eaa328cea7394c87fbc04b4ed9d0"
   },
   "apps/web/src/features/doc/DocView.tsx": {
     "mtime": 1793005905.6876018,
@@ -2341,9 +2341,9 @@
   },
   "apps/web/src/features/shell/AppShell.tsx": {
     "mtime": 1794149202.24997,
-    "seen": 1794151824.9356608,
+    "seen": 1794159921.3635364,
     "ast_hash": "e7dc98553a51ff05b5cfdd825c1bb7ac",
-    "semantic_hash": ""
+    "semantic_hash": "e7dc98553a51ff05b5cfdd825c1bb7ac"
   },
   "apps/web/src/features/shell/InlineRename.tsx": {
     "mtime": 1792928897.2529018,
@@ -2365,9 +2365,9 @@
   },
   "apps/web/src/features/shell/PageHeader.tsx": {
     "mtime": 1794150995.3084474,
-    "seen": 1794151824.9356678,
+    "seen": 1794159921.363542,
     "ast_hash": "8be9073b8904ccffe3a4b443dc5624c1",
-    "semantic_hash": ""
+    "semantic_hash": "8be9073b8904ccffe3a4b443dc5624c1"
   },
   "apps/web/src/features/shell/PwaPrompt.tsx": {
     "mtime": 1793015446.8075585,
@@ -2377,9 +2377,9 @@
   },
   "apps/web/src/features/shell/Sidebar.tsx": {
     "mtime": 1794150995.309117,
-    "seen": 1794151824.9356713,
+    "seen": 1794159921.3635457,
     "ast_hash": "0e301036d8b9437b7122a5efa29ec1d3",
-    "semantic_hash": ""
+    "semantic_hash": "0e301036d8b9437b7122a5efa29ec1d3"
   },
   "apps/web/src/features/shell/Splash.tsx": {
     "mtime": 1794147578.9216409,
@@ -2575,9 +2575,9 @@
   },
   "apps/web/src/ui/primitives.tsx": {
     "mtime": 1794149318.041209,
-    "seen": 1794151824.9357774,
+    "seen": 1794159921.3636382,
     "ast_hash": "66ac29ad0ced78e082ceb7260318057a",
-    "semantic_hash": ""
+    "semantic_hash": "66ac29ad0ced78e082ceb7260318057a"
   },
   "apps/web/tsconfig.json": {
     "mtime": 1792929257.160398,
@@ -2629,7 +2629,7 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792958570.0839062,
-    "seen": 1794148898.729593,
+    "seen": 1794159921.3636532,
     "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
     "semantic_hash": "c9f780dd0f9b83af1132086b539b65c4"
   },
@@ -4267,15 +4267,15 @@
   },
   "apps/web/README.md": {
     "mtime": 1794151758.5795028,
-    "seen": 1794151824.9364524,
+    "seen": 1794159921.3641737,
     "ast_hash": "3cf0ae11997864596fd6ec853cd66d3a",
-    "semantic_hash": ""
+    "semantic_hash": "3cf0ae11997864596fd6ec853cd66d3a"
   },
   "apps/web/index.html": {
     "mtime": 1794149823.471057,
-    "seen": 1794151824.936454,
+    "seen": 1794159921.3641748,
     "ast_hash": "732d553485d69e47690678cc4c398206",
-    "semantic_hash": ""
+    "semantic_hash": "732d553485d69e47690678cc4c398206"
   },
   "docs/CHANGELOG.md": {
     "mtime": 1794148365.7375078,
@@ -4711,9 +4711,9 @@
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1794151758.5562522,
-    "seen": 1794151824.936676,
+    "seen": 1794159921.3641763,
     "ast_hash": "d7066fb7cb70a5e332853b435bb4ae79",
-    "semantic_hash": ""
+    "semantic_hash": "d7066fb7cb70a5e332853b435bb4ae79"
   },
   "docs/spec/06-data-server.md": {
     "mtime": 1793739716.5667276,
@@ -4987,7 +4987,7 @@
   },
   "apps/server/drizzle/0003_agent_move_note.sql": {
     "mtime": 1793027141.894629,
-    "seen": 1794148898.7289767,
+    "seen": 1794159921.3631208,
     "ast_hash": "dc7975f711d91ebab97fb9b5b28fc1d1",
     "semantic_hash": "dc7975f711d91ebab97fb9b5b28fc1d1"
   },
@@ -5461,7 +5461,7 @@
   },
   "apps/server/drizzle/0004_storage_quota.sql": {
     "mtime": 1793114433.367732,
-    "seen": 1794148898.7289784,
+    "seen": 1794159921.3631227,
     "ast_hash": "21621440da5d8eb9298c5822ed5892f8",
     "semantic_hash": "21621440da5d8eb9298c5822ed5892f8"
   },
@@ -5911,19 +5911,19 @@
   },
   "apps/server/drizzle/0005_device_revoked_reason.sql": {
     "mtime": 1793124487.140216,
-    "seen": 1794148898.7289805,
+    "seen": 1794159921.3631244,
     "ast_hash": "bf8befdc979b04a047a8b41a5fecaad2",
     "semantic_hash": "bf8befdc979b04a047a8b41a5fecaad2"
   },
   "apps/server/drizzle/0006_sharing.sql": {
     "mtime": 1793133318.8100307,
-    "seen": 1794148898.728982,
+    "seen": 1794159921.3631265,
     "ast_hash": "31990867a10a28e773e24842d832c13c",
     "semantic_hash": "31990867a10a28e773e24842d832c13c"
   },
   "apps/server/drizzle/0007_rotation_since.sql": {
     "mtime": 1793133318.8100307,
-    "seen": 1794148898.7289844,
+    "seen": 1794159921.3631277,
     "ast_hash": "ff5b757438f90d1e336d63485e0b0208",
     "semantic_hash": "ff5b757438f90d1e336d63485e0b0208"
   },
@@ -5989,7 +5989,7 @@
   },
   "apps/server/drizzle/0008_agents_shared_notebooks.sql": {
     "mtime": 1793739716.4306588,
-    "seen": 1794148898.728986,
+    "seen": 1794159921.3631308,
     "ast_hash": "ce38ed0cf53dc88a3a88809fe9f74f00",
     "semantic_hash": "ce38ed0cf53dc88a3a88809fe9f74f00"
   },
@@ -6025,7 +6025,7 @@
   },
   "apps/server/drizzle/0009_agents_all_notebooks.sql": {
     "mtime": 1793739716.4306588,
-    "seen": 1794148898.7289877,
+    "seen": 1794159921.3631327,
     "ast_hash": "514dd065b0f2022aae2bce77da06a692",
     "semantic_hash": "514dd065b0f2022aae2bce77da06a692"
   },
@@ -6235,13 +6235,13 @@
   },
   "apps/server/drizzle/0010_audit_hardening.sql": {
     "mtime": 1793739716.4306588,
-    "seen": 1794148898.7289894,
+    "seen": 1794159921.3631341,
     "ast_hash": "4b31b7e470e3e14d807fc196165e136e",
     "semantic_hash": "4b31b7e470e3e14d807fc196165e136e"
   },
   "apps/server/drizzle/0011_shared_spaces.sql": {
     "mtime": 1793744527.9644475,
-    "seen": 1794148898.7289915,
+    "seen": 1794159921.3631356,
     "ast_hash": "61242e6afcdc2b369ee0cdef7c119ad6",
     "semantic_hash": "61242e6afcdc2b369ee0cdef7c119ad6"
   },
@@ -6325,15 +6325,15 @@
   },
   "apps/web/e2e/specs/settings.spec.ts": {
     "mtime": 1794152132.9907048,
-    "seen": 1794152205.2541137,
+    "seen": 1794159921.363349,
     "ast_hash": "39ed538f97e6d121a57496b88afbaa7a",
-    "semantic_hash": ""
+    "semantic_hash": "39ed538f97e6d121a57496b88afbaa7a"
   },
   "apps/web/public/boot-anim.js": {
     "mtime": 1794157476.2307007,
-    "seen": 1794157845.4430532,
+    "seen": 1794159921.3633819,
     "ast_hash": "2caeb1756673e52364de008a4df4648d",
-    "semantic_hash": ""
+    "semantic_hash": "2caeb1756673e52364de008a4df4648d"
   },
   "apps/web/src/app/boot.ts": {
     "mtime": 1794147578.9102972,
@@ -6463,9 +6463,9 @@
   },
   "apps/web/src/features/spaces/SpaceDialog.tsx": {
     "mtime": 1794149202.2517078,
-    "seen": 1794151824.9356892,
+    "seen": 1794159921.3635595,
     "ast_hash": "325ef8e467bcc777bfb7a456277aa058",
-    "semantic_hash": ""
+    "semantic_hash": "325ef8e467bcc777bfb7a456277aa058"
   },
   "apps/web/src/features/spaces/SpaceSwitcher.tsx": {
     "mtime": 1794143923.9650407,
@@ -6493,32 +6493,8 @@
   },
   "apps/web/e2e/specs/mobile.spec.ts": {
     "mtime": 1794157476.2312822,
-    "seen": 1794157845.442971,
+    "seen": 1794159921.3633265,
     "ast_hash": "b9fcf1d264cb64f1e47e3d2b2dabd1e2",
-    "semantic_hash": ""
-  },
-  "apps/web/e2e/screenshots/key-android-note.png": {
-    "mtime": 1794151738.6478014,
-    "seen": 1794151824.9367206,
-    "ast_hash": "6b56eeb39b204e8de823bacee296aeb5",
-    "semantic_hash": ""
-  },
-  "apps/web/e2e/screenshots/key-iphone-drawer.png": {
-    "mtime": 1794151738.6449158,
-    "seen": 1794151824.936723,
-    "ast_hash": "b989f4a26b698e7469091c9bd5e73ab7",
-    "semantic_hash": ""
-  },
-  "apps/web/e2e/screenshots/key-iphone-shared-with-me.png": {
-    "mtime": 1794151738.6498938,
-    "seen": 1794151824.9367247,
-    "ast_hash": "bde0e5d052d4338c78aa290bf9fe8c1c",
-    "semantic_hash": ""
-  },
-  "apps/web/e2e/screenshots/key-iphone-space-dialog.png": {
-    "mtime": 1794151738.6464982,
-    "seen": 1794151824.9367275,
-    "ast_hash": "71f6dc5d89824d9b6f9ad360ce4d6607",
-    "semantic_hash": ""
+    "semantic_hash": "b9fcf1d264cb64f1e47e3d2b2dabd1e2"
   }
 }

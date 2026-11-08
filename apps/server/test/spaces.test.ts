@@ -233,7 +233,7 @@ describe('a shared space', () => {
     expect((await call(member, 'POST', `/spaces/${spaceId}/notebooks/${nbId}/move-out`, out)).status).toBe(403);
     expect((await call(owner, 'POST', `/spaces/${spaceId}/notebooks/${nbId}/move-out`, { ...out, version: 3 })).status).toBe(409);
     expect((await call(owner, 'POST', `/spaces/${spaceId}/notebooks/${nbId}/move-out`, out)).status).toBe(204);
-    expect(await c.next((m) => m.type === 'error' && m.ref === noteId)).toMatchObject({ code: 'doc_not_found' });
+    expect(await c.next((m) => m.type === 'error' && m.ref === noteId, 5000, true)).toMatchObject({ code: 'doc_not_found' });
     expect((await call(member, 'GET', `/spaces/${spaceId}/notebooks`)).body).toEqual([]);
     expect((await call(owner, 'GET', `/notebooks/${nbId}/key`)).body).toMatchObject({
       version: 2,
@@ -261,7 +261,7 @@ describe('leaving, removal and the space rotation', () => {
     const c = await SyncClient.user(s, a);
     expect((await c.subscribe(noteId)).error).toBeNull();
     expect((await call(owner, 'DELETE', `/members/space/${spaceId}/${a.userId}`)).status).toBe(204);
-    expect(await c.next((m) => m.type === 'error' && m.ref === noteId)).toMatchObject({ code: 'doc_not_found' });
+    expect(await c.next((m) => m.type === 'error' && m.ref === noteId, 5000, true)).toMatchObject({ code: 'doc_not_found' });
     expect((await call(a, 'GET', '/shared-with-me')).body).toEqual([]);
     c.close();
     expect(await spaceRow(spaceId)).toMatchObject({ keyRotationPending: true, pendingSinceVersion: 1 });
@@ -347,7 +347,7 @@ describe('leaving, removal and the space rotation', () => {
     expect((await c.subscribe(noteId)).error).toBeNull();
     expect((await call(viewer, 'DELETE', `/spaces/${spaceId}`)).status).toBe(403);
     expect((await call(owner, 'DELETE', `/spaces/${spaceId}`)).status).toBe(204);
-    expect(await c.next((m) => m.type === 'error' && m.ref === noteId)).toMatchObject({ code: 'doc_not_found' });
+    expect(await c.next((m) => m.type === 'error' && m.ref === noteId, 5000, true)).toMatchObject({ code: 'doc_not_found' });
     expect(await spaceRow(spaceId)).toBeUndefined();
     expect((await call(viewer, 'GET', '/shared-with-me')).body).toEqual([]);
     expect((await call(owner, 'GET', '/notebooks')).body.find((n: any) => n.id === nb.notebookId)).toBeUndefined();

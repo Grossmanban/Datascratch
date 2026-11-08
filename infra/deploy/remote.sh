@@ -63,7 +63,7 @@ case "${1:-}" in
     # Secrets travel on stdin as KEY=VALUE lines (printf is a shell builtin): never on a command
     # line or in a log. Voice keys (D-65) that are not set leave the server's .env as it is.
     {
-      for k in DS_REGISTRY_TOKEN ELEVENLABS_API_KEY OPENROUTER_API_KEY; do
+      for k in DS_REGISTRY_TOKEN ELEVENLABS_API_KEY OPENROUTER_API_KEY DS_ADMIN_EMAILS; do
         [ -n "${!k:-}" ] && printf '%s=%s\n' "$k" "${!k}"
       done
       true

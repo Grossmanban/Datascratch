@@ -2,9 +2,9 @@ import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { users, voiceUsage } from '../src/db/schema.js';
-import { groupTurns, speakerLabel } from '../src/voice/service.js';
-import { api, rnd, signup, startServer, type TestServer, type TestUser } from './helpers.js';
+import { voiceAccess, voiceUsage } from '../src/db/schema.js';
+import { groupTurns, VoiceService } from '../src/voice/service.js';
+import { SyncClient, api, rnd, signup, startServer, type TestServer, type TestUser } from './helpers.js';
 
 // D-65: voice through the server (api.md «Голос»); ElevenLabs and OpenRouter are fakes here.
 
@@ -85,6 +85,7 @@ beforeAll(async () => {
       ELEVENLABS_URL: stt.url,
       OPENROUTER_URL: `${llm.url}/api`,
       DS_VOICE_USERS: 'voice-on@example.com',
+      DS_ADMIN_EMAILS: 'owner@example.com, Second-Admin@example.com',
       VOICE_PER_MINUTE: '1000',
     },
     [],
@@ -108,10 +109,18 @@ beforeEach(() => {
   });
 });
 
-/** An account with voice on (`ds voice <email> on`). */
+/** Set an account's voice access directly (what an admin's PUT or `ds voice` does). */
+async function setAccess(u: TestUser, enabled: boolean, monthlyMinutes: number | null = null, server = s) {
+  await server.ctx.database.db
+    .insert(voiceAccess)
+    .values({ userId: u.userId, enabled, monthlyMinutes })
+    .onConflictDoUpdate({ target: voiceAccess.userId, set: { enabled, monthlyMinutes } });
+}
+
+/** An account with voice on. */
 async function voiceUser(server = s): Promise<TestUser> {
   const u = await signup(server, undefined, address());
-  await server.ctx.database.db.update(users).set({ voiceEnabled: true }).where(eq(users.id, u.userId));
+  await setAccess(u, true, null, server);
   return u;
 }
 
@@ -169,19 +178,21 @@ describe('voice: transcribe', () => {
     expect(row).toMatchObject({ seconds: 62, requests: 1 });
   });
 
-  it('dictation: one speaker, no diarization, the language left to the service', async () => {
+  it('dictation: one speaker, no diarization; `auto` leaves the language to the service, `ru` is the default', async () => {
     const u = await voiceUser();
     sttReply = () => ({
       status: 200,
       json: { words: [{ text: 'Купить', start: 0, end: 0.4, type: 'word' }, { text: ' ', type: 'spacing' }, { text: 'хлеб', start: 0.5, end: 0.9, type: 'word' }] },
     });
     stt.seen.length = 0;
-    const r = await transcribe(u, { mode: 'dictation' });
+    const r = await transcribe(u, { mode: 'dictation', language: 'auto' });
     expect(await json(r)).toEqual({ durationSec: 0.9, turns: [{ speaker: 'S1', start: 0, end: 0.9, text: 'Купить хлеб' }] });
     const { fields } = parseMultipart(stt.seen[0]!);
     expect(fields.diarize).toBe('false');
     expect(fields.language_code).toBeUndefined();
     expect(fields.num_speakers).toBeUndefined();
+    await transcribe(u, { mode: 'dictation' });
+    expect(parseMultipart(stt.seen.at(-1)!).fields.language_code).toBe('rus');
   });
 
   it('refuses bad requests before anything reaches the service', async () => {
@@ -204,10 +215,10 @@ describe('voice: transcribe', () => {
 
   it('a speech-to-text model the service refuses: 502, then the fallback model', async () => {
     const other = await startServer(
-      { ELEVENLABS_API_KEY: 'k', OPENROUTER_API_KEY: 'k', ELEVENLABS_URL: stt.url, DS_VOICE_USERS: '*' },
+      { ELEVENLABS_API_KEY: 'k', OPENROUTER_API_KEY: 'k', ELEVENLABS_URL: stt.url },
     );
     try {
-      const u = await signup(other, undefined, address());
+      const u = await voiceUser(other);
       sttReply = (x) =>
         parseMultipart(x).fields.model_id === 'scribe_v2'
           ? { status: 422, json: { detail: { message: 'invalid model_id' } } }
@@ -245,7 +256,7 @@ describe('voice: text', () => {
       provider: { data_collection: 'deny' },
     });
     expect(sent.messages[0].role).toBe('system');
-    expect(sent.messages[1].content).toContain(`S1: ${MARK}`);
+    expect(sent.messages[1].content).toContain(MARK);
   });
 
   it('validates the body: exactly one of turns and text, known tasks', async () => {
@@ -253,19 +264,21 @@ describe('voice: text', () => {
     expect((await text(u, { task: 'clean', profanity: 'keep' })).status).toBe(400);
     expect((await text(u, { task: 'clean', profanity: 'keep', text: 'a', turns: [{ speaker: 'S1', start: 0, end: 1, text: 'b' }] })).status).toBe(400);
     expect((await text(u, { task: 'poem', profanity: 'keep', text: 'a' })).status).toBe(400);
+    // `format` needs a style (shared contract).
+    expect((await text(u, { task: 'format', profanity: 'keep', text: 'a' })).status).toBe(400);
   });
 
   it('a failing model is 502 voice_upstream', async () => {
     const u = await voiceUser();
     llmReply = () => ({ status: 500, json: { error: { message: `upstream echoes ${MARK}` } } });
-    const r = await text(u, { task: 'format', profanity: 'keep', text: 'abc' });
+    const r = await text(u, { task: 'format', style: 'notes', profanity: 'keep', text: 'abc' });
     expect(r.status).toBe(502);
     expect(r.body.error.code).toBe('voice_upstream');
   });
 });
 
 describe('voice: access and limits', () => {
-  it('is off unless the account is listed or switched on; `ds voice off` wins over the list', async () => {
+  it('is off unless switched on; admins have it by default; DS_VOICE_USERS switches listed accounts on once', async () => {
     const stranger = await signup(s, undefined, address());
     stt.seen.length = 0;
     const r = await transcribe(stranger, { mode: 'dictation' });
@@ -274,15 +287,21 @@ describe('voice: access and limits', () => {
     expect((await text(stranger, { task: 'clean', profanity: 'keep', text: 'a' })).body.error.code).toBe('voice_disabled');
     expect(stt.seen).toHaveLength(0);
 
+    expect((await transcribe(await getAdmin(), { mode: 'dictation' })).status).toBe(200);
+
+    // The seed runs at startup for accounts that exist then; an admin's later choice stays.
     const listed = await signup(s, 'voice-on@example.com', address());
+    expect((await transcribe(listed, { mode: 'dictation' })).status).toBe(403);
+    expect(await new VoiceService(s.ctx).seed()).toBe(1);
     expect((await transcribe(listed, { mode: 'dictation' })).status).toBe(200);
-    await s.ctx.database.db.update(users).set({ voiceEnabled: false }).where(eq(users.id, listed.userId));
+    await setAccess(listed, false);
+    expect(await new VoiceService(s.ctx).seed()).toBe(0);
     expect((await transcribe(listed, { mode: 'dictation' })).status).toBe(403);
   });
 
   it('counts minutes per month: a used-up quota is 429 voice_quota until the next month', async () => {
-    const u = await voiceUser();
-    await s.ctx.database.db.update(users).set({ voiceMinutesQuota: 1 }).where(eq(users.id, u.userId));
+    const u = await signup(s, undefined, address());
+    await setAccess(u, true, 1);
     // 61.5 s: the request that crosses the quota still goes through, the next one does not.
     expect((await transcribe(u, { mode: 'conversation' })).status).toBe(200);
     const over = await transcribe(u, { mode: 'conversation' });
@@ -298,12 +317,11 @@ describe('voice: access and limits', () => {
     const small = await startServer({
       ELEVENLABS_API_KEY: 'k',
       ELEVENLABS_URL: stt.url,
-      DS_VOICE_USERS: '*',
       VOICE_MAX_BYTES: '1000',
       VOICE_PER_MINUTE: '3',
     });
     try {
-      const u = await signup(small, undefined, address());
+      const u = await voiceUser(small);
       const big = await transcribe(u, { mode: 'dictation' }, rnd(5000), 'big.m4a', small);
       expect(big.status).toBe(413);
       expect((await transcribe(u, { mode: 'dictation' }, rnd(100), 'ok.m4a', small)).status).toBe(200);
@@ -319,6 +337,17 @@ describe('voice: access and limits', () => {
     } finally {
       await small.close();
     }
+  });
+});
+
+describe('voice: long recordings', () => {
+  it('longer than 3 hours: 413 voice_too_long, and the minutes are not counted', async () => {
+    const u = await voiceUser();
+    sttReply = () => ({ status: 200, json: { audio_duration_secs: 3 * 3600 + 1, words: [] } });
+    const r = await transcribe(u, { mode: 'dictation' });
+    expect(r.status).toBe(413);
+    expect((await json(r)).error.code).toBe('voice_too_long');
+    expect((await api(s, 'GET', '/voice/me', { token: u.session.accessToken })).body.usedMinutes).toBe(0);
   });
 });
 
@@ -351,10 +380,13 @@ describe('voice: privacy', () => {
 });
 
 describe('voice: grouping', () => {
-  it('labels speakers S1… and skips empty turns', () => {
-    expect(speakerLabel('speaker_0')).toBe('S1');
-    expect(speakerLabel('speaker_7')).toBe('S8');
-    expect(speakerLabel(undefined)).toBe('S1');
+  it('labels speakers S1, S2… in order of first appearance and skips empty turns', () => {
+    const w = (speaker_id: string, text: string, start: number) => ({ text, start, end: start + 0.5, type: 'word', speaker_id });
+    expect(groupTurns({ words: [w('speaker_3', 'а', 0), w('speaker_0', 'б', 1), w('speaker_3', 'в', 2)] }).turns.map((t) => t.speaker)).toEqual([
+      'S1',
+      'S2',
+      'S1',
+    ]);
     expect(groupTurns({ words: [{ text: ' ', type: 'spacing' }] })).toEqual({ durationSec: 0, turns: [] });
   });
 });
@@ -366,3 +398,81 @@ describe('voice: smoke', () => {
     expect(r.body.error.code).toBe('unauthorized');
   });
 });
+
+describe('voice: what an account sees, and the admin screen', () => {
+  it('GET /voice/me: on or off, minutes and when they reset', async () => {
+    const u = await signup(s, undefined, address());
+    const off = await api(s, 'GET', '/voice/me', { token: u.session.accessToken });
+    expect(off.body).toMatchObject({ enabled: false, available: true, monthlyMinutes: 120, usedMinutes: 0, admin: false });
+    expect(new Date(off.body.resetsAt).getUTCDate()).toBe(1);
+    await setAccess(u, true);
+    await transcribe(u, { mode: 'conversation' });
+    const on = await api(s, 'GET', '/voice/me', { token: u.session.accessToken });
+    expect(on.body).toMatchObject({ enabled: true, monthlyMinutes: 120, usedMinutes: 1 });
+    const owner = await signup(s, 'second-admin@example.com', address());
+    expect((await api(s, 'GET', '/voice/me', { token: owner.session.accessToken })).body).toMatchObject({
+      enabled: true,
+      monthlyMinutes: 600,
+      admin: true,
+    });
+  });
+
+  it('only admins list and change access; a change reaches the account at once and applies to the next request', async () => {
+    const ownerAdmin = await getAdmin();
+    const member = await signup(s, undefined, address());
+    const other = await signup(s, undefined, address());
+    const as = (u: TestUser) => ({ token: u.session.accessToken });
+
+    // Not an admin: 403 on both.
+    expect((await api(s, 'GET', '/admin/voice', as(member))).status).toBe(403);
+    expect((await api(s, 'PUT', `/admin/voice/${other.userId}`, { ...as(member), body: { enabled: true } })).status).toBe(403);
+
+    const list = await api(s, 'GET', '/admin/voice', as(ownerAdmin));
+    expect(list.status).toBe(200);
+    expect(list.body.month).toMatch(/^\d{4}-\d{2}$/);
+    const row = list.body.accounts.find((a: any) => a.userId === member.userId);
+    expect(row).toEqual({
+      userId: member.userId,
+      email: member.email,
+      name: null,
+      admin: false,
+      enabled: false,
+      monthlyMinutes: 120,
+      customMinutes: false,
+      usedMinutes: 0,
+      costUsd: 0,
+      requests: 0,
+    });
+    expect(list.body.totals).toMatchObject({ usedMinutes: expect.any(Number), costUsd: expect.any(Number) });
+
+    const sync = await SyncClient.user(s, member, 2);
+    const put = await api(s, 'PUT', `/admin/voice/${member.userId}`, { ...as(ownerAdmin), body: { enabled: true, monthlyMinutes: 1 } });
+    expect(put.status).toBe(200);
+    expect(put.body).toMatchObject({ enabled: true, monthlyMinutes: 1, customMinutes: true });
+    expect(await sync.next((m) => m.type === 'account_changed' && m.what.includes('voice'), 5000, true)).toEqual({ type: 'account_changed', what: ['voice'] });
+    sync.close();
+
+    // The new quota counts at once: 61.5 s go through, then the minute is used up.
+    expect((await transcribe(member, { mode: 'conversation' })).status).toBe(200);
+    expect((await json(await transcribe(member, { mode: 'conversation' }))).error.code).toBe('voice_quota');
+    // Usage and cost show up: transcription estimated from the duration, text from OpenRouter.
+    expect((await text(member, { task: 'clean', profanity: 'keep', text: 'a' })).status).toBe(200);
+    const after = (await api(s, 'GET', '/admin/voice', as(ownerAdmin))).body.accounts.find((a: any) => a.userId === member.userId);
+    expect(after).toMatchObject({ usedMinutes: 1, requests: 2 });
+    expect(after.costUsd).toBeCloseTo(61.5 / 3600 * 0.4 + 0.0042, 4);
+
+    // Back to the default minutes; switched off: 403 again.
+    await api(s, 'PUT', `/admin/voice/${member.userId}`, { ...as(ownerAdmin), body: { enabled: false, monthlyMinutes: null } });
+    const me = await api(s, 'GET', '/voice/me', as(member));
+    expect(me.body).toMatchObject({ enabled: false, monthlyMinutes: 120 });
+    expect((await transcribe(member, { mode: 'dictation' })).status).toBe(403);
+    expect((await api(s, 'PUT', `/admin/voice/${'0'.repeat(8)}-0000-7000-8000-000000000000`, { ...as(ownerAdmin), body: { enabled: true } })).status).toBe(404);
+  });
+});
+
+/** The admin of the main test server (`owner@example.com` is in DS_ADMIN_EMAILS), signed up once. */
+let adminUser: Promise<TestUser> | null = null;
+function getAdmin(): Promise<TestUser> {
+  adminUser ??= signup(s, 'owner@example.com', address());
+  return adminUser;
+}

@@ -100,11 +100,13 @@ step "address: the secret wins; without it the server keeps its domain (no setti
 
 step "second deploy (idempotent bootstrap, secrets kept; voice keys from GitHub secrets land in .env, never in the log)"
 DS_HOST_MODE=fresh DS_TAG=e2e2 ELEVENLABS_API_KEY=el-e2e-key-1234 OPENROUTER_API_KEY=sk-or-v1-e2e5678 \
+  DS_ADMIN_EMAILS='owner@example.com, second@example.com' \
   "$DEPLOY_DIR/remote.sh" deploy 2>&1 | tee "$WORK/second-deploy.log"
 node "$DEPLOY_DIR/smoke.mjs" https://localhost 120
 [ "$(secrets_hash)" = "$first" ] || { echo "secrets changed on redeploy" >&2; exit 1; }
 vps grep -qx 'ELEVENLABS_API_KEY=el-e2e-key-1234' /opt/datascratch/.env
 vps grep -qx 'OPENROUTER_API_KEY=sk-or-v1-e2e5678' /opt/datascratch/.env
+vps grep -qx 'DS_ADMIN_EMAILS=owner@example.com, second@example.com' /opt/datascratch/.env
 if grep -qE 'el-e2e-key-1234|sk-or-v1-e2e5678' "$WORK/second-deploy.log"; then echo "a voice key leaked into the deploy log" >&2; exit 1; fi
 vps sh -c 'test "$(stat -c %a /opt/datascratch/.env)" = 600'
 # The server container got them.
@@ -140,6 +142,8 @@ vps /opt/datascratch/ds key-saved > /dev/null
 step "voice by hand: ds voice (D-65)"
 vps /opt/datascratch/ds voice nobody@example.com | grep -q 'used_this_month'
 vps /opt/datascratch/ds voice nobody@example.com on > /dev/null
+vps /opt/datascratch/ds voice nobody@example.com 90 > /dev/null
+vps /opt/datascratch/ds voice nobody@example.com default > /dev/null
 if vps /opt/datascratch/ds voice nobody@example.com 5x 2> /dev/null; then echo "ds voice took a bad number" >&2; exit 1; fi
 
 step "shared server: an existing app behind nginx owns ports 80/443"

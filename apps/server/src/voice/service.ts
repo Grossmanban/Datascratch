@@ -1,10 +1,22 @@
 import { randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, or, sql } from 'drizzle-orm';
+import {
+  buildVoiceTextPrompt,
+  type VoiceQuality,
+  type VoiceTextRequest,
+  type VoiceTurn,
+} from '@datascratch/shared/voice';
 import type { AppContext } from '../context.js';
-import { users, voiceUsage } from '../db/schema.js';
+import { users, voiceAccess, voiceUsage } from '../db/schema.js';
 import { ApiError } from '../lib/errors.js';
-import { buildMessages, type PromptInput, type Turn } from './prompts.js';
+import { accountChanged } from '../services/account-events.js';
+
+const listOf = (v: string) =>
+  v
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
 
 /**
  * Voice (D-65): a proxy to ElevenLabs (speech to text) and OpenRouter (text from transcripts).
@@ -22,10 +34,21 @@ export const currentMonth = (now = new Date()) => `${now.toISOString().slice(0, 
 /** First day of the next month, UTC: when a quota resets. */
 const nextMonthStart = (now = new Date()) => Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
 
-export interface VoiceAccount {
+export const resetsAt = (now = new Date()) => new Date(nextMonthStart(now)).toISOString();
+
+/** An account's voice setting as it applies now (D-65). */
+export interface VoiceStatus {
   userId: string;
-  /** Seconds left this month (may be ≤ 0). */
-  remainingSec: number;
+  email: string;
+  admin: boolean;
+  enabled: boolean;
+  /** The account's own minutes, or the default for it. */
+  monthlyMinutes: number;
+  /** The account has minutes of its own (not the server default). */
+  customMinutes: boolean;
+  usedSec: number;
+  costUsd: number;
+  requests: number;
 }
 
 export class VoiceService {
@@ -40,37 +63,99 @@ export class VoiceService {
     return this.ctx.config;
   }
 
+  isAdmin(email: string): boolean {
+    return listOf(this.#config.DS_ADMIN_EMAILS).includes(email.toLowerCase());
+  }
+
+  /** Voice settings and this month's usage of the given accounts (all accounts when omitted). */
+  async statuses(userIds?: string[]): Promise<VoiceStatus[]> {
+    const db = this.ctx.database.db;
+    const rows = await db
+      .select({
+        userId: users.id,
+        email: users.email,
+        enabled: voiceAccess.enabled,
+        minutes: voiceAccess.monthlyMinutes,
+        seconds: voiceUsage.seconds,
+        costUsd: voiceUsage.costUsd,
+        requests: voiceUsage.requests,
+      })
+      .from(users)
+      .leftJoin(voiceAccess, eq(voiceAccess.userId, users.id))
+      .leftJoin(voiceUsage, and(eq(voiceUsage.userId, users.id), eq(voiceUsage.month, currentMonth())))
+      .where(userIds ? inArray(users.id, userIds) : undefined)
+      .orderBy(asc(users.email));
+    return rows.map((r) => {
+      const admin = this.isAdmin(r.email);
+      return {
+        userId: r.userId,
+        email: r.email,
+        admin,
+        // No setting: on for admins, off for the others.
+        enabled: r.enabled ?? admin,
+        monthlyMinutes: r.minutes ?? (admin ? this.#config.VOICE_ADMIN_MONTHLY_MINUTES : this.#config.VOICE_MONTHLY_MINUTES),
+        customMinutes: r.minutes !== null,
+        usedSec: r.seconds ?? 0,
+        costUsd: r.costUsd ?? 0,
+        requests: r.requests ?? 0,
+      };
+    });
+  }
+
+  async status(userId: string): Promise<VoiceStatus | null> {
+    return (await this.statuses([userId]))[0] ?? null;
+  }
+
   /**
    * The caller may use voice now: enabled for the account, under the rate limit and with minutes
    * left (403 voice_disabled, 429 rate_limited / voice_quota).
    */
-  async admit(userId: string, opts: { needsMinutes: boolean }): Promise<VoiceAccount> {
-    const db = this.ctx.database.db;
-    const [u] = await db
-      .select({ email: users.email, enabled: users.voiceEnabled, quota: users.voiceMinutesQuota })
-      .from(users)
-      .where(eq(users.id, userId));
-    if (!u || !this.#enabled(userId, u.email, u.enabled)) throw voiceDisabled();
+  async admit(userId: string, opts: { needsMinutes: boolean }): Promise<VoiceStatus> {
+    const st = await this.status(userId);
+    if (!st || !st.enabled) throw voiceDisabled();
     const wait = this.#rate(userId);
     if (wait > 0) throw new ApiError('rate_limited', 'too many voice requests, retry in a minute', undefined, wait);
-    const quotaSec = (u.quota ?? this.#config.VOICE_MONTHLY_MINUTES) * 60;
-    const [row] = await db
-      .select({ seconds: voiceUsage.seconds })
-      .from(voiceUsage)
-      .where(sql`${voiceUsage.userId} = ${userId} AND ${voiceUsage.month} = ${currentMonth()}`);
-    const remainingSec = quotaSec - (row?.seconds ?? 0);
-    if (opts.needsMinutes && remainingSec <= 0) {
+    if (opts.needsMinutes && st.monthlyMinutes * 60 - st.usedSec <= 0) {
       throw new ApiError('voice_quota', 'the monthly voice minutes are used up', undefined, nextMonthStart() - Date.now());
     }
-    return { userId, remainingSec };
+    return st;
   }
 
-  #enabled(userId: string, email: string, flag: boolean | null): boolean {
-    if (flag !== null) return flag;
-    const list = this.#config.DS_VOICE_USERS.split(',')
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    return list.includes('*') || list.includes(userId) || list.includes(email.toLowerCase());
+  /** An admin's change; `monthlyMinutes` null returns the account to the default. */
+  async setAccess(userId: string, set: { enabled: boolean; monthlyMinutes?: number | null | undefined }, by: string | null) {
+    const minutes = set.monthlyMinutes === undefined ? {} : { monthlyMinutes: set.monthlyMinutes };
+    await this.ctx.database.db
+      .insert(voiceAccess)
+      .values({ userId, enabled: set.enabled, ...minutes, updatedBy: by })
+      .onConflictDoUpdate({
+        target: voiceAccess.userId,
+        set: { enabled: set.enabled, ...minutes, updatedBy: by, updatedAt: new Date() },
+      });
+    // The account's devices show the button and the minutes left at once (sync v2).
+    accountChanged(this.ctx, [userId], ['voice']);
+  }
+
+  /**
+   * DS_VOICE_USERS (ids or e-mails): voice on for listed accounts that have no setting yet.
+   * Runs at startup; an admin's later choice stays.
+   */
+  async seed(): Promise<number> {
+    const list = listOf(this.#config.DS_VOICE_USERS);
+    if (list.length === 0) return 0;
+    const db = this.ctx.database.db;
+    const ids = list.filter((x) => /^[0-9a-f-]{36}$/.test(x));
+    const emails = list.filter((x) => x.includes('@'));
+    const found = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(or(ids.length ? inArray(users.id, ids) : sql`false`, emails.length ? inArray(sql`lower(${users.email})`, emails) : sql`false`));
+    if (found.length === 0) return 0;
+    const added = await db
+      .insert(voiceAccess)
+      .values(found.map((u) => ({ userId: u.id, enabled: true })))
+      .onConflictDoNothing()
+      .returning({ userId: voiceAccess.userId });
+    return added.length;
   }
 
   /** Fixed one-minute window per account over both endpoints; how long to wait (0: allowed). */
@@ -105,15 +190,26 @@ export class VoiceService {
     };
   }
 
-  async addUsage(userId: string, seconds: number): Promise<void> {
+  /** Count a request: seconds of audio (transcription) and what it cost (USD). */
+  async addUsage(userId: string, seconds: number, costUsd: number): Promise<void> {
     const s = Math.max(0, Math.ceil(seconds));
+    const c = Math.max(0, Math.round(costUsd * 1e6) / 1e6);
     await this.ctx.database.db
       .insert(voiceUsage)
-      .values({ userId, month: currentMonth(), seconds: s, requests: 1 })
+      .values({ userId, month: currentMonth(), seconds: s, requests: 1, costUsd: c })
       .onConflictDoUpdate({
         target: [voiceUsage.userId, voiceUsage.month],
-        set: { seconds: sql`${voiceUsage.seconds} + ${s}`, requests: sql`${voiceUsage.requests} + 1` },
+        set: {
+          seconds: sql`${voiceUsage.seconds} + ${s}`,
+          requests: sql`${voiceUsage.requests} + 1`,
+          costUsd: sql`${voiceUsage.costUsd} + ${c}`,
+        },
       });
+  }
+
+  /** Estimated speech-to-text cost of a recording (the service does not report one). */
+  sttCost(seconds: number): number {
+    return (seconds / 3600) * this.#config.VOICE_STT_USD_PER_HOUR;
   }
 
   // ------------------------------------------------------------------ speech to text
@@ -134,7 +230,7 @@ export class VoiceService {
     mode: 'dictation' | 'conversation';
     speakers?: number | undefined;
     language: 'ru' | 'auto';
-  }): Promise<{ durationSec: number; turns: Turn[]; model: string }> {
+  }): Promise<{ durationSec: number; turns: VoiceTurn[]; model: string }> {
     const key = this.#config.ELEVENLABS_API_KEY;
     if (!key) throw voiceUnavailable();
     const model = this.sttModel();
@@ -190,7 +286,10 @@ export class VoiceService {
 
   // ------------------------------------------------------------------ text
 
-  async text(input: PromptInput, quality: 'standard' | 'best'): Promise<{ markdown: string; model: string; cost: number | null }> {
+  async text(
+    input: Pick<VoiceTextRequest, 'task' | 'style' | 'profanity' | 'turns' | 'text'>,
+    quality: VoiceQuality,
+  ): Promise<{ markdown: string; model: string; cost: number | null }> {
     const key = this.#config.OPENROUTER_API_KEY;
     if (!key) throw voiceUnavailable();
     const model = quality === 'best' ? this.#config.VOICE_TEXT_MODEL_BEST : this.#config.VOICE_TEXT_MODEL_STANDARD;
@@ -201,7 +300,13 @@ export class VoiceService {
         headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
         body: JSON.stringify({
           model,
-          messages: buildMessages(input),
+          messages: (() => {
+            const prompt = buildVoiceTextPrompt(input);
+            return [
+              { role: 'system', content: prompt.system },
+              { role: 'user', content: prompt.user },
+            ];
+          })(),
           temperature: 0.2,
           usage: { include: true },
           // Providers that keep or train on prompts are not used.
@@ -247,15 +352,22 @@ interface ChatResponse {
   usage?: { cost?: unknown };
 }
 
-/** `speaker_0` → `S1`, `speaker_1` → `S2`…; no speaker (dictation) → `S1`. */
-export function speakerLabel(id: string | null | undefined): string {
-  const m = typeof id === 'string' ? /(\d+)$/.exec(id) : null;
-  return `S${m ? Number(m[1]) + 1 : 1}`;
-}
-
-/** Consecutive words of one speaker make a turn; spacing goes with the turn it is in. */
-export function groupTurns(r: SttResponse): { durationSec: number; turns: Turn[] } {
-  const turns: Turn[] = [];
+/**
+ * Consecutive words of one speaker make a turn; spacing goes with the turn it is in. Speakers are
+ * `S1`, `S2`, … in order of first appearance (api.md «Голос»); no speaker (dictation) is `S1`.
+ */
+export function groupTurns(r: SttResponse): { durationSec: number; turns: VoiceTurn[] } {
+  const labels = new Map<string, string>();
+  const label = (id: string | null | undefined) => {
+    const key = id ?? '';
+    let l = labels.get(key);
+    if (!l) {
+      l = `S${labels.size + 1}`;
+      labels.set(key, l);
+    }
+    return l;
+  };
+  const turns: VoiceTurn[] = [];
   let maxEnd = 0;
   for (const w of r.words) {
     if (w.type === 'audio_event') continue;
@@ -266,13 +378,14 @@ export function groupTurns(r: SttResponse): { durationSec: number; turns: Turn[]
       if (last) last.text += w.text ?? ' ';
       continue;
     }
-    const speaker = speakerLabel(w.speaker_id);
+    if (!(w.text ?? '').trim()) continue;
+    const speaker = label(w.speaker_id);
     const start = typeof w.start === 'number' ? w.start : end;
     if (last && last.speaker === speaker) {
       last.text += w.text ?? '';
       last.end = Math.max(last.end, end);
     } else {
-      turns.push({ speaker, start, end, text: w.text ?? '' });
+      turns.push({ speaker, start, end: Math.max(start, end), text: w.text ?? '' });
     }
   }
   for (const t of turns) t.text = t.text.replace(/\s+/g, ' ').trim();

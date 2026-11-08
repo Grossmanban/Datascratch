@@ -1,10 +1,21 @@
 import { eq } from 'drizzle-orm';
-import type { AccountChange } from '@datascratch/shared/contracts';
+import { ACCOUNT_CHANGES, type AccountChange as SharedAccountChange } from '@datascratch/shared/contracts';
 import type { AppContext } from '../context.js';
 import type { DbOrTx } from '../db/client.js';
 import { members } from '../db/schema.js';
 import { topics } from '../sync/hub.js';
 import { memberTargetCol, type TargetKind } from './sharing.js';
+
+/**
+ * What `account_changed` names. `voice` (D-65) is sent before the shared list has it: older clients
+ * drop values they do not know (sync-protocol.md §4).
+ */
+export type AccountChange = SharedAccountChange | 'voice';
+/** The order of `what` in a frame: the shared list, then the server's additions. */
+export const SERVER_ACCOUNT_CHANGES: readonly AccountChange[] = [
+  ...ACCOUNT_CHANGES,
+  ...(['voice'] as const).filter((v) => !(ACCOUNT_CHANGES as readonly string[]).includes(v)),
+];
 
 /**
  * Tell every device of these accounts what to re-read (sync-protocol.md §6, D-62). Only sent

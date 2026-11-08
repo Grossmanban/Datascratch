@@ -11,8 +11,8 @@
 #                        show an account's storage, or set its limit (new accounts get 1 GB;
 #                        default = the server's USER_STORAGE_QUOTA_BYTES, 10 GB)
 #   ds voice <email> [on|off|default|<minutes>]
-#                        voice (D-65) for an account: show it, switch it on or off (default:
-#                        DS_VOICE_USERS decides), or set its minutes per month
+#                        voice (D-65), also in the app for admins: show an account's access,
+#                        switch it on or off, back to default, or set its minutes per month
 set -euo pipefail
 
 DIR="${DS_DIR:-/opt/datascratch}"
@@ -111,17 +111,21 @@ case "${1:-}" in
     email="${2:?usage: ds voice <email> [on|off|default|<minutes>]}"
     arg="${3:-}"
     month="date_trunc('month', now() AT TIME ZONE 'UTC')::date"
+    ins="INSERT INTO voice_access (user_id, enabled, monthly_minutes) SELECT id"
+    from="FROM users WHERE email = :'email' ON CONFLICT (user_id) DO UPDATE SET updated_at = now(), updated_by = NULL"
     case "$arg" in
-      '') query="SELECT u.email, coalesce(u.voice_enabled::text, 'default') AS voice,
-            coalesce(u.voice_minutes_quota::text, 'default') AS minutes_per_month,
-            round(coalesce(v.seconds, 0) / 60.0, 1) AS used_this_month
-          FROM users u LEFT JOIN voice_usage v ON v.user_id = u.id AND v.month = $month
+      '') query="SELECT u.email, coalesce(a.enabled::text, 'default') AS voice,
+            coalesce(a.monthly_minutes::text, 'default') AS minutes_per_month,
+            round(coalesce(v.seconds, 0) / 60.0, 1) AS used_this_month, coalesce(v.cost_usd, 0) AS cost_usd
+          FROM users u LEFT JOIN voice_access a ON a.user_id = u.id
+          LEFT JOIN voice_usage v ON v.user_id = u.id AND v.month = $month
           WHERE u.email = :'email';" ;;
-      on) query="UPDATE users SET voice_enabled = true WHERE email = :'email' RETURNING email, 'on' AS voice;" ;;
-      off) query="UPDATE users SET voice_enabled = false WHERE email = :'email' RETURNING email, 'off' AS voice;" ;;
-      default) query="UPDATE users SET voice_enabled = NULL, voice_minutes_quota = NULL WHERE email = :'email' RETURNING email, 'default' AS voice;" ;;
+      on) query="$ins, true, NULL $from, enabled = true RETURNING 'on' AS voice;" ;;
+      off) query="$ins, false, NULL $from, enabled = false RETURNING 'off' AS voice;" ;;
+      default) query="DELETE FROM voice_access WHERE user_id = (SELECT id FROM users WHERE email = :'email') RETURNING 'default' AS voice;" ;;
       *[!0-9]*) echo "minutes must be a whole number, or on / off / default" >&2; exit 2 ;;
-      *) query="UPDATE users SET voice_minutes_quota = :gb::int WHERE email = :'email' RETURNING email, voice_minutes_quota AS minutes_per_month;" ;;
+      # A new setting with minutes only keeps voice off until it is switched on.
+      *) query="$ins, false, :gb::int $from, monthly_minutes = EXCLUDED.monthly_minutes RETURNING monthly_minutes AS minutes_per_month;" ;;
     esac
     echo "$query" | docker compose exec -T postgres sh -c \
       'psql -X -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -P pager=off -v ON_ERROR_STOP=1 -v email="$1" -v gb="${2:-0}"' sh "$email" "$arg"

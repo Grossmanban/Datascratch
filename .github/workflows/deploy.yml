@@ -224,6 +224,8 @@ jobs:
           # leave the server as it is (without keys voice answers 503 and the rest works).
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Server admins (e-mails, comma-separated): they manage voice access in the app.
+          DS_ADMIN_EMAILS: ${{ secrets.DS_ADMIN_EMAILS }}
         run: |
           infra/deploy/remote.sh deploy
           # Only these keys with plain values may reach $GITHUB_ENV (the server's answer is not trusted);

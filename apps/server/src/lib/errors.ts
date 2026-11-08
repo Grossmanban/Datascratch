@@ -9,6 +9,7 @@ export type ApiErrorCode =
   | 'device_revoked'
   | 'voice_disabled'
   | 'voice_quota'
+  | 'voice_too_long'
   | 'voice_upstream'
   | 'voice_unavailable'
   | 'internal';
@@ -24,6 +25,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   device_revoked: 401,
   voice_disabled: 403,
   voice_quota: 429,
+  voice_too_long: 413,
   voice_upstream: 502,
   voice_unavailable: 503,
   internal: 500,

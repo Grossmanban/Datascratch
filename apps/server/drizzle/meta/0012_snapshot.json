@@ -1,5 +1,5 @@
 {
-  "id": "8cdf80c2-6165-4c30-9271-5d70ebb53d4a",
+  "id": "4d960970-c0f5-4ff2-8c92-880f0ef86f33",
   "prevId": "f6daf43f-c681-49c8-afc5-ee45948e229f",
   "version": "7",
   "dialect": "postgresql",
@@ -2280,18 +2280,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "voice_enabled": {
-          "name": "voice_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "voice_minutes_quota": {
-          "name": "voice_minutes_quota",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2323,6 +2311,84 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.voice_access": {
+      "name": "voice_access",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "monthly_minutes": {
+          "name": "monthly_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "voice_access_user_id_users_id_fk": {
+          "name": "voice_access_user_id_users_id_fk",
+          "tableFrom": "voice_access",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "voice_access_updated_by_users_id_fk": {
+          "name": "voice_access_updated_by_users_id_fk",
+          "tableFrom": "voice_access",
+          "tableTo": "users",
+          "columnsFrom": [
+            "updated_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.voice_usage": {
       "name": "voice_usage",
       "schema": "",
@@ -2349,6 +2415,13 @@
         "requests": {
           "name": "requests",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "cost_usd": {
+          "name": "cost_usd",
+          "type": "numeric(12, 6)",
           "primaryKey": false,
           "notNull": true,
           "default": 0

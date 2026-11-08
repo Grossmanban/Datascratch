@@ -4,3 +4,7 @@ dev-dist/
 test-results/
 playwright-report/
 *.tsbuildinfo
+
+# Phone screenshots from e2e/specs/mobile.spec.ts (CI artifact «phone-screenshots»); key ones are committed.
+e2e/screenshots/*.png
+!e2e/screenshots/key-*.png

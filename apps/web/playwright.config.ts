@@ -17,6 +17,17 @@ const EXTENDED_ONLY = /tasks\.spec\.ts$/;
 // Specs that behave differently by mode run in both projects (they branch on the project name).
 const BOTH_MODES = /(spaces|layout|a11y|theme)\.spec\.ts$/;
 const desktop = { ...devices["Desktop Chrome"], viewport: { width: 1360, height: 860 } };
+// spec/05 «Веб на телефоне»: the key scenarios on an iPhone (WebKit) and an Android phone
+// (Chromium). E2E_PHONE_CHROMIUM=1 runs «iphone» in Chromium where WebKit is not installed.
+const PHONE = /(mobile|launch)\.spec\.ts$/;
+const iphone = { ...devices["iPhone 15"], ...(process.env.E2E_PHONE_CHROMIUM ? { browserName: "chromium" as const } : {}) };
+const phones = process.env.E2E_NO_PHONES
+  ? []
+  : [
+      { name: "iphone", use: iphone, testMatch: PHONE },
+      // The smallest common Android screen (360 × 800), with Pixel 7 touch and user agent.
+      { name: "android", use: { ...devices["Pixel 7"], viewport: { width: 360, height: 800 } }, testMatch: PHONE },
+    ];
 
 export default defineConfig({
   testDir: "./e2e/specs",
@@ -33,7 +44,8 @@ export default defineConfig({
     locale: "ru-RU",
   },
   projects: [
-    { name: "desktop", use: desktop, testIgnore: EXTENDED_ONLY },
+    { name: "desktop", use: desktop, testIgnore: [EXTENDED_ONLY, /mobile\.spec\.ts$/] },
+    ...phones,
     ...(extended
       ? [{ name: "extended", use: { ...desktop, baseURL: `http://localhost:${EXT_PORT}` }, testMatch: [EXTENDED_ONLY, BOTH_MODES] }]
       : []),

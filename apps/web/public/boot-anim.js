@@ -162,7 +162,17 @@
       bg.animate([{ opacity: 1 }, { opacity: 0 }], { duration: flight - 40, delay: 40, easing: "ease-out", fill: "forwards" }),
     ];
     var root = document.getElementById("root");
-    if (root) anims.push(root.animate([{ transform: "scale(1.025)" }, { transform: "none" }], { duration: flight, easing: SNAP }));
+    if (root) {
+      // The app settles from a hair larger: on a phone that must not make the page scroll sideways.
+      var html = document.documentElement;
+      html.style.overflowX = "clip";
+      var zoom = root.animate([{ transform: "scale(1.025)" }, { transform: "none" }], { duration: flight, easing: SNAP });
+      var unclip = function () {
+        html.style.overflowX = "";
+      };
+      zoom.finished.then(unclip, unclip);
+      anims.push(zoom);
+    }
     Promise.all(
       anims.map(function (a) {
         return a.finished;

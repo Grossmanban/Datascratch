@@ -151,3 +151,20 @@
 [data-theme-switching] *::after {
   transition: none !important;
 }
+
+/* spec/05 «Веб на телефоне» (2026-11-08): with a finger, every control is a 44 px target (Apple's
+   minimum; rows grow, icon buttons get a square hit area) and fields have 16 px text — smaller text
+   makes iOS Safari zoom in on focus. The editor's own content, the pen palette (its pens are tall
+   targets already, sized to fit a phone) and controls opting out with [data-tap-exempt] keep their size. */
+@media (pointer: coarse) {
+  :where(button, [role="button"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="tab"], [role="switch"], a[href]:not(:where(p, li, span) > a)):not(:where(.ds-prose *, .ds-palette *, [data-tap-exempt], [data-tap-exempt] *)) {
+    min-height: 44px;
+  }
+  /* An icon alone (a close ×, a menu ⋯, a +): a square target, the icon stays its size. */
+  :where(button, [role="button"]):has(> svg:only-child):not(:where(.ds-prose *, .ds-palette *, [data-tap-exempt], [data-tap-exempt] *)) {
+    min-width: 44px;
+  }
+  :where(input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, select):not(:where(.ds-prose *)) {
+    font-size: max(16px, 1em);
+  }
+}

@@ -146,7 +146,7 @@ export function SpaceDialog() {
 
           <div className="flex flex-col gap-1.5">
             <span className="text-[13px] font-medium text-ink-2">{t("spaceDialog.icon")}</span>
-            <div className="grid grid-cols-12 gap-1" role="radiogroup" aria-label={t("spaceDialog.icon")} data-testid="space-icons">
+            <div className="grid grid-cols-12 gap-1 pointer-coarse:grid-cols-6" role="radiogroup" aria-label={t("spaceDialog.icon")} data-testid="space-icons">
               {SPACE_ICONS.map((e) => (
                 <button
                   key={e}
@@ -181,7 +181,7 @@ export function SpaceDialog() {
                       aria-label={t(`colors.${c}`)}
                       onClick={() => setColor(token)}
                       className={cn(
-                        "flex size-7 items-center justify-center rounded-full ring-offset-2 ring-offset-surface transition-shadow duration-150",
+                        "flex size-7 items-center justify-center rounded-full ring-offset-2 pointer-coarse:size-11 ring-offset-surface transition-shadow duration-150",
                         on ? "ring-2 ring-ink/40" : "hover:ring-2 hover:ring-ink/15",
                       )}
                       style={{ background: tintFg(token) }}

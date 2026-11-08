@@ -1,5 +1,6 @@
 // D-54, the member's side: what other accounts share with this one (`GET /shared-with-me`), its keys
 // (wrapped for this account's key pair, crypto.md §10.2), its place in «Общие со мной» and the role.
+import { growingDelay } from "@/lib/growingDelay";
 import { reconcileSharedRefs, sharedItemKeys, type AccountSharedItem, type SharedItem, type ShareTarget } from "@datascratch/shared";
 import { create } from "zustand";
 import { useAuth } from "@/auth/session";
@@ -35,6 +36,8 @@ export const isReadOnlyDoc = (docId: string) =>
 
 let running: Promise<void> | null = null;
 let soon: ReturnType<typeof setTimeout> | undefined;
+/** Waiting for an owner to deliver a key: 2 s at first, then longer (the two-minute poll is the floor). */
+const keyWait = growingDelay([2_000, 4_000, 8_000, 15_000, 30_000]);
 /** Targets this account is leaving itself: no «access closed» notice for them. */
 const leaving = new Set<string>();
 
@@ -117,11 +120,14 @@ async function apply(list: SharedItem[], userId: string, fromServer: boolean) {
   useShared.setState({ items });
   // Accepted but not keyed yet: the owner's client delivers the key once it is online — look again soon.
   clearTimeout(soon);
-  if (Object.values(items).some((i) => !i.keyed)) soon = setTimeout(() => void refreshShared(), 15_000);
+  if (Object.values(items).some((i) => !i.keyed)) soon = setTimeout(() => void refreshShared(), keyWait.next());
+  else keyWait.reset();
   const rt = runtime();
   // Placement in «Общие со мной»: new ones go to the current space; gone ones are cleaned up.
   if (fromServer) {
-    const spaceId = useWorkspace.getState().activeSpaceId;
+    // `SharedRef.spaceId` is legacy since D-63 (shown in «Поделились со мной»), still a real space id.
+    const st = useWorkspace.getState();
+    const spaceId = st.account.spaces.some((s) => s.id === st.activeSpaceId && !s.memberOf) ? st.activeSpaceId : (st.account.spaces.find((s) => !s.memberOf)?.id ?? null);
     if (spaceId) {
       const { removed } = reconcileSharedRefs(rt.account, list, spaceId);
       for (const target of removed) {
@@ -132,4 +138,5 @@ async function apply(list: SharedItem[], userId: string, fromServer: boolean) {
     }
   }
   await rt.syncSharedDocs();
+  rt.keysChanged();
 }

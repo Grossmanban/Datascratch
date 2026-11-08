@@ -99,6 +99,57 @@ public struct SharedSpaceRef: MapRecord {
     }
 }
 
+/// What a `SharedRef` points at.
+public enum SharedRefKind: String, Codable, Hashable, Sendable { case notebook, note }
+
+/// A notebook or note shared with this account (D-54, document-model.md §2), in
+/// `account.shared` under `"<kind>:<id>"`: where and when it showed up, and since D-63 when
+/// this person first opened it (on any of their devices) — «new» until then.
+public struct SharedRef: MapRecord {
+    public var kind: SharedRefKind
+    public var targetId: String
+    public var spaceId: String
+    public var order: Double
+    public var addedAt: String
+    /// First opened (ISO date), nil while new.
+    public var openedAt: String?
+
+    public init(kind: SharedRefKind, targetId: String, spaceId: String, order: Double, addedAt: String = DSDate.iso(Date()), openedAt: String? = nil) {
+        self.kind = kind
+        self.targetId = targetId
+        self.spaceId = spaceId
+        self.order = order
+        self.addedAt = addedAt
+        self.openedAt = openedAt
+    }
+
+    public static func key(_ kind: SharedRefKind, _ id: String) -> String { "\(kind.rawValue):\(id)" }
+
+    /// The map key.
+    public var id: String { Self.key(kind, targetId) }
+    public var isNew: Bool { openedAt == nil }
+
+    public var fields: [String: YValue] {
+        var f: [String: YValue] = ["kind": .string(value: kind.rawValue), "id": .string(value: targetId), "spaceId": .string(value: spaceId),
+                                   "order": .number(value: order), "addedAt": .string(value: addedAt)]
+        if let openedAt { f["openedAt"] = .string(value: openedAt) }
+        return f
+    }
+
+    public init?(id key: String, fields f: [String: YValue]) {
+        self.init(key: key, kind: str(f, "kind"), id: str(f, "id"), spaceId: str(f, "spaceId"), order: num(f, "order"),
+                  addedAt: str(f, "addedAt"), openedAt: str(f, "openedAt"))
+    }
+
+    /// Kind and id from the fields, else from the key; a record naming neither is dropped.
+    init?(key: String, kind: String?, id: String?, spaceId: String?, order: Double?, addedAt: String?, openedAt: String?) {
+        let parts = key.split(separator: ":", maxSplits: 1).map(String.init)
+        guard let kind = (kind ?? parts.first).flatMap(SharedRefKind.init(rawValue:)),
+              let id = id ?? (parts.count == 2 ? parts[1] : nil), EntityID.isValid(id) else { return nil }
+        self.init(kind: kind, targetId: id, spaceId: spaceId ?? "", order: order ?? 0, addedAt: addedAt ?? "", openedAt: openedAt)
+    }
+}
+
 /// Notebook mode (D-09).
 public enum NotebookMode: String, Codable, Sendable { case `private`, agent }
 
@@ -359,6 +410,17 @@ extension SharedSpaceRef: Decodable {
     public init(from decoder: any Decoder) throws {
         let r = try RecordJSON(decoder)
         self.init(id: r.id, order: r.num("order") ?? 0, addedAt: r.str("addedAt") ?? "")
+    }
+}
+
+extension SharedRef: Decodable {
+    public init(from decoder: any Decoder) throws {
+        let r = try RecordJSON(decoder)
+        guard let ref = SharedRef(key: r.id, kind: r.str("kind"), id: r.str("id"), spaceId: r.str("spaceId"), order: r.num("order"),
+                                  addedAt: r.str("addedAt"), openedAt: r.str("openedAt")) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "SharedRef"))
+        }
+        self = ref
     }
 }
 

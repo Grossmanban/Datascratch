@@ -64,26 +64,11 @@ export function SpaceAvatars({ spaceId, size = 18 }: { spaceId: string; size?: n
 
 const offline = (e: unknown) => e instanceof NetworkError || (e instanceof ApiError && e.status === 0);
 
-function failed(t: TFunction, e: unknown, fallback = "spaces.failed") {
+export function spaceFailed(t: TFunction, e: unknown, fallback = "spaces.failed") {
   if (offline(e)) return toast(t("common.requiresOnline"), { tone: "danger" });
   if (e instanceof ApiError && e.status === 409) return toast(t("spaces.conflict"), { tone: "danger" });
   console.warn("[ds] shared space:", e);
   toast(t(fallback), { tone: "danger" });
-}
-
-/** «Новое общее пространство»: a space made shared at once, with a first notebook, then «Участники». */
-export async function createSharedSpaceInteractive(t: TFunction) {
-  const id = createSpace({ name: t("spaces.newSharedName"), icon: "👥" });
-  try {
-    await makeSpaceShared(id);
-  } catch (e) {
-    deleteSpace(id);
-    failed(t, e);
-    return;
-  }
-  await createNotebook({ spaceId: id, name: t("notebook.newName"), icon: "📓" });
-  setActiveSpace(id);
-  useUi.setState({ spaceMembersFor: id });
 }
 
 /** «Пригласить в пространство…» on a personal space: it becomes shared — after a plain warning. */
@@ -101,7 +86,7 @@ export async function inviteToSpace(t: TFunction, spaceId: string) {
   try {
     await makeSpaceShared(spaceId);
   } catch (e) {
-    return failed(t, e);
+    return spaceFailed(t, e);
   }
   useUi.setState({ spaceMembersFor: spaceId });
 }
@@ -124,7 +109,7 @@ export async function moveNotebookIntoSharedSpace(t: TFunction, notebookId: stri
     await refreshSpaces();
     toast(t("spaces.movedIn", { space: space.name }));
   } catch (e) {
-    failed(t, e);
+    spaceFailed(t, e);
   }
 }
 
@@ -145,7 +130,7 @@ export async function moveNotebookToPersonalSpace(t: TFunction, notebookId: stri
     await moveNotebookOut(nb.spaceId, notebookId, toSpaceId);
     toast(t("spaces.movedOut", { space: to.name }));
   } catch (e) {
-    failed(t, e);
+    spaceFailed(t, e);
   }
 }
 
@@ -164,7 +149,7 @@ export async function deleteSharedSpace(t: TFunction, spaceId: string) {
   try {
     await sharingApi.deleteSpace(spaceId);
   } catch (e) {
-    return failed(t, e);
+    return spaceFailed(t, e);
   }
   const rt = runtime();
   const a = accountMaps(rt.account);
@@ -199,7 +184,7 @@ export function SpaceMembersDialog() {
       close();
       toast(t("spaces.left"));
     } catch (e) {
-      failed(t, e);
+      spaceFailed(t, e);
     }
   }
 

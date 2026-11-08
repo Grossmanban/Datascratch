@@ -1,3 +1,4 @@
+import prefs from "./prefs.en";
 import type { Messages } from "./ru";
 
 type Loose<T> = { [K in keyof T]: T[K] extends string ? string : Loose<T[K]> };
@@ -274,6 +275,39 @@ const en: Loose<Messages> = {
     dailyHere: "Daily notes and Inbox",
   },
   space: { newName: "New space", deleteNotEmpty: "Delete or move this space's notebooks first." },
+  sharedWithMe: {
+    title: "Shared with me",
+    search: "Search shared",
+    emptyTitle: "Nothing here yet",
+    emptyText: "When someone shares a document or a notebook with you, it will appear here",
+    noResults: "Nothing found",
+    role: { editor: "can edit", commenter: "can comment", viewer: "view only" },
+    newCount: "New: {{count}}",
+    items: "Documents and notebooks",
+    document: "Document",
+    notebook: "Notebook",
+  },
+  spaceDialog: {
+    createTitle: "New space",
+    editTitle: "Space settings",
+    inviteTitle: "Invite people",
+    inviteText: "Invite people by email — they will see every notebook in the space. You can also do this later.",
+    type: "Space type",
+    personal: "Personal",
+    personalText: "Just for you. You can share it later.",
+    shared: "For collaboration",
+    sharedText: "Invite people — they will see every notebook.",
+    name: "Name",
+    namePlaceholder: "For example, Work",
+    icon: "Icon",
+    color: "Color",
+    preview: "Preview",
+    create: "Create space",
+    createAndInvite: "Create and invite",
+    skip: "Skip",
+    done: "Done",
+  },
+  colors: { red: "Red", orange: "Orange", yellow: "Yellow", green: "Green", teal: "Teal", blue: "Blue", indigo: "Indigo", purple: "Purple", pink: "Pink", gray: "Gray" },
   spaces: {
     newShared: "New shared space",
     newSharedName: "Shared space",
@@ -599,6 +633,7 @@ const en: Loose<Messages> = {
     badLinkText: "Start the connection again from your agent app (Claude, ChatGPT…).",
     failed: "Couldn't connect the agent",
   },
+  prefs,
   pwa: { update: "A new version is available", reload: "Reload", offlineReady: "Ready to work offline" },
 };
 

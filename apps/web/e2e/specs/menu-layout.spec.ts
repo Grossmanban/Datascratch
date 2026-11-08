@@ -1,12 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { signUp, uniqueEmail } from "./helpers";
+import { createSpaceVia, signUp, uniqueEmail } from "./helpers";
 
 // The selected space's ✓ wrapped under its name (owner's screenshot, 2026-10-26).
 test("menu rows: icon | name | ✓ on one line, the check right-aligned and centred, long names ellipsised", async ({ page }) => {
   await signUp(page, uniqueEmail("menu"));
-  await page.getByTestId("space-switcher").click();
-  await page.getByRole("menuitem", { name: "Новое пространство" }).click();
-  await expect(page.getByRole("menu")).toHaveCount(0);
+  await createSpaceVia(page, "Новое пространство");
   // A long name for the current space.
   await expect.poll(() => page.evaluate(() => "__ds" in window)).toBe(true);
   await page.evaluate(() => {

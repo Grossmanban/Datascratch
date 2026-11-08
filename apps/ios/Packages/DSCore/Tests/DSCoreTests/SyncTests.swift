@@ -66,6 +66,10 @@ actor FakeSyncServer {
     /// The next `hello` is answered with `rate_limited` and this `retryAfterMs`.
     var rateLimitNextHello: Int?
     var hellos: [ContinuousClock.Instant] = []
+    var helloVersions: [Int] = []
+    /// Newest protocol this server speaks; a newer hello gets `protocol_mismatch` (an old server).
+    var maxProtocol = SyncProtocol.latest
+    func setMaxProtocol(_ v: Int) { maxProtocol = v }
 
     func setRateLimitNextHello(_ ms: Int?) { rateLimitNextHello = ms }
     var received: [ClientMessage] = []
@@ -115,6 +119,20 @@ actor FakeSyncServer {
 
     func helloCount() -> Int { hellos.count }
 
+    /// Documents a device may not reach (yet): its subscriptions get `doc_not_found`.
+    var denied: [String: Set<String>] = [:]
+    func deny(_ docId: String, to deviceId: String) { denied[deviceId, default: []].insert(docId) }
+    func allow(_ docId: String, to deviceId: String) { denied[deviceId]?.remove(docId) }
+
+    /// Sends `message` (or raw `text`) to every connection of `deviceId`.
+    func send(_ message: ServerMessage, to deviceId: String) {
+        for c in conns.values where c.deviceId == deviceId { c.conn.deliver(message) }
+    }
+
+    func sendRaw(_ text: String, to deviceId: String) {
+        for c in conns.values where c.deviceId == deviceId { c.conn.continuation.yield(text) }
+    }
+
     func subscribers(_ docId: String) -> Int { conns.values.filter { $0.subs.contains(docId) }.count }
 
     func handle(_ text: String, from c: Conn) async {
@@ -122,8 +140,14 @@ actor FakeSyncServer {
         received.append(msg)
         if case .snapshot = msg, let snapshotDelay { try? await Task.sleep(for: snapshotDelay) }
         switch msg {
-        case .hello(_, let deviceId, _):
+        case .hello(_, let deviceId, _, let version):
             hellos.append(.now)
+            helloVersions.append(version)
+            if version > maxProtocol {
+                c.deliver(.error(code: .protocolMismatch, message: "unsupported protocol", ref: nil))
+                c.close()
+                return
+            }
             if let ms = rateLimitNextHello {
                 rateLimitNextHello = nil
                 c.deliver(.error(code: .rateLimited, message: "slow down", ref: nil, retryAfterMs: ms))
@@ -131,11 +155,15 @@ actor FakeSyncServer {
                 return
             }
             conns[c.id]?.deviceId = deviceId
-            c.deliver(.welcome(userId: "0192f3c4-0000-7000-8000-00000000000a", serverTime: DSDate.iso(Date())))
+            c.deliver(.welcome(userId: "0192f3c4-0000-7000-8000-00000000000a", serverTime: DSDate.iso(Date()), protocolVersion: version))
         case .subscribe(let entries):
             for e in entries {
                 guard registered.contains(e.docId) else {
                     c.deliver(.error(code: .docNotFound, message: "unknown doc", ref: e.docId))
+                    continue
+                }
+                if let device = conns[c.id]?.deviceId, denied[device]?.contains(e.docId) == true {
+                    c.deliver(.error(code: .docNotFound, message: "document not found", ref: e.docId))
                     continue
                 }
                 conns[c.id]?.subs.insert(e.docId)
@@ -225,11 +253,11 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         #expect(text == #"{"clientMsgId":"m","docId":"0192f3c4-0000-7000-8000-000000000001","payload":"-_8","type":"push"}"#)
         #expect(try JSONDecoder().decode(ClientMessage.self, from: Data(text.utf8)) == push)
         let hello = try SyncFrame.encode(.hello(auth: .guest(shareId: doc, guestToken: "g"), deviceId: "dev", client: ClientInfo(version: "1")))
-        #expect(hello.contains(#""protocol":1"#) && hello.contains(#""kind":"guest""#) && hello.contains(#""platform":"ios""#))
+        #expect(hello.contains(#""protocol":2"#) && hello.contains(#""kind":"guest""#) && hello.contains(#""platform":"ios""#))
 
         let updates = SyncFrame.decode(#"{"type":"updates","docId":"0192f3c4-0000-7000-8000-000000000001","snapshot":null,"items":[{"seq":3,"payload":"AQ","deviceId":"x"}],"upToDate":true}"#)
         #expect(updates == .updates(docId: doc, snapshot: nil, items: [UpdateItem(seq: 3, payload: Data([1]), deviceId: "x")], upToDate: true))
-        #expect(SyncFrame.decode(#"{"type":"welcome","userId":null,"serverTime":"t","protocol":1}"#) == .welcome(userId: nil, serverTime: "t"))
+        #expect(SyncFrame.decode(#"{"type":"welcome","userId":null,"serverTime":"t","protocol":1}"#) == .welcome(userId: nil, serverTime: "t", protocolVersion: 1))
         #expect(SyncFrame.decode(#"{"type":"error","code":"doc_not_found","message":"x","ref":"m"}"#) == .error(code: .docNotFound, message: "x", ref: "m"))
         #expect(SyncFrame.decode(#"{"type":"nope"}"#) == nil)
         #expect(SyncFrame.decode("not json") == nil)

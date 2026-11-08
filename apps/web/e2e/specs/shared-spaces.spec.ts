@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectSynced, signUp, uniqueEmail } from "./helpers";
+import { createSpaceVia, expectSynced, signUp, uniqueEmail } from "./helpers";
 
 // D-62 «Общие пространства» (spec/08): a whole space shared with people, its notebooks seen by all.
 
@@ -49,7 +49,8 @@ async function enterMakesParagraph(p: Page, text: string) {
   const paras = p.locator(".ds-prose p");
   const before = await paras.count();
   await paras.last().click();
-  await p.keyboard.press("End");
+  // The end of the whole note: a click can land a line off when a co-author's caret label is near.
+  await p.keyboard.press("ControlOrMeta+End");
   await p.keyboard.press("Enter");
   await p.keyboard.type(text);
   await expect(paras).toHaveCount(before + 1);
@@ -79,12 +80,9 @@ test("shared space: created shared, a member joins, sees it in the switcher and 
   await signUp(r, reader);
 
   await signUp(page, owner);
-  await openSwitcher(page);
-  await page.getByRole("menuitem", { name: "Новое общее пространство" }).click();
-  // It opens with its members right away.
-  const dialog = page.getByTestId("space-members");
-  await expect(dialog).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId("space-switcher")).toContainText("Общее пространство");
+  // «Создать пространство» → «Для совместной работы»: it goes on to «Пригласить людей».
+  await createSpaceVia(page, "Общее пространство", { shared: true, icon: "👥" });
+  const dialog = page.getByTestId("space-invite-step");
   for (const [email, role] of [
     [friend, "Может редактировать"],
     [reader, "Только чтение"],
@@ -95,7 +93,7 @@ test("shared space: created shared, a member joins, sees it in the switcher and 
     await page.getByTestId("invite-submit").click();
     await expect(dialog.getByTestId("invitation").filter({ hasText: email })).toBeVisible();
   }
-  await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
+  await page.getByTestId("space-invite-done").click();
   // The owner writes a note in the space's notebook.
   await page.getByTestId("new-doc").click();
   await typeNewNote(page, "План пространства", "общий текст");
@@ -155,9 +153,7 @@ test("shared space: a personal space made shared, a notebook moved in, a member 
 
   await signUp(page, owner);
   // A second personal space with a notebook and a note in it, to be moved in later.
-  await openSwitcher(page);
-  await page.getByRole("menuitem", { name: "Новое пространство" }).click();
-  await expect(page.getByTestId("space-switcher")).toContainText("Новое пространство");
+  await createSpaceVia(page, "Новое пространство");
   await page.getByTestId("new-doc").click();
   await typeNewNote(page, "Личный архив", "старая история");
   // The first space («Личное») becomes shared: a plain warning first.

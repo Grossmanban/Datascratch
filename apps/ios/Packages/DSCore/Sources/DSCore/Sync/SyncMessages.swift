@@ -1,11 +1,18 @@
 import Foundation
 
-// Messages of the WebSocket sync protocol (sync-protocol.md v1; mirrors
+// Messages of the WebSocket sync protocol (sync-protocol.md, versions 1–2; mirrors
 // packages/shared/src/contracts/sync.ts). Text frames, one JSON object each, `type` field.
 // Binary payloads are base64url without padding.
 
 public enum SyncProtocol {
-    public static let version = 1
+    /// Versions this client speaks (§2). It says `latest` in `hello`; the server answers in
+    /// `welcome` with the version of the connection (≤ the client's). A server that does not
+    /// know `latest` answers `protocol_mismatch`, and the client tries once more one lower.
+    /// Version 2 adds `account_changed`.
+    public static let min = 1
+    public static let latest = 2
+    public static let version = latest
+    public static let supported = min...latest
     public static let path = "/v1/sync"
     public static let pingInterval: Duration = .seconds(25)
     /// Decoded payload limits (§7).
@@ -119,7 +126,7 @@ enum SyncValidation {
 
 /// Client → server (§3).
 public enum ClientMessage: Codable, Hashable, Sendable {
-    case hello(auth: SyncAuth, deviceId: String, client: ClientInfo)
+    case hello(auth: SyncAuth, deviceId: String, client: ClientInfo, protocolVersion: Int = SyncProtocol.latest)
     case subscribe(docs: [SubscribeEntry])
     case unsubscribe(docIds: [String])
     case push(docId: String, clientMsgId: String, payload: Data)
@@ -131,9 +138,9 @@ public enum ClientMessage: Codable, Hashable, Sendable {
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case .hello(let auth, let deviceId, let client):
+        case .hello(let auth, let deviceId, let client, let version):
             try c.encode("hello", forKey: .type)
-            try c.encode(SyncProtocol.version, forKey: .protocolVersion)
+            try c.encode(version, forKey: .protocolVersion)
             try c.encode(auth, forKey: .auth)
             try c.encode(deviceId, forKey: .deviceId)
             try c.encode(client, forKey: .client)
@@ -166,11 +173,12 @@ public enum ClientMessage: Codable, Hashable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(String.self, forKey: .type) {
         case "hello":
-            guard try c.decode(Int.self, forKey: .protocolVersion) == SyncProtocol.version else {
+            let version = try c.decode(Int.self, forKey: .protocolVersion)
+            guard SyncProtocol.supported.contains(version) else {
                 throw DecodingError.dataCorruptedError(forKey: .protocolVersion, in: c, debugDescription: "protocol")
             }
             self = .hello(auth: try c.decode(SyncAuth.self, forKey: .auth), deviceId: try V.shortId(c, .deviceId),
-                          client: try c.decode(ClientInfo.self, forKey: .client))
+                          client: try c.decode(ClientInfo.self, forKey: .client), protocolVersion: version)
         case "subscribe":
             let docs = try c.decode([SubscribeEntry].self, forKey: .docs)
             guard (1...SyncProtocol.maxSubscribeDocs).contains(docs.count) else {
@@ -238,7 +246,8 @@ public enum SyncTraceEvent: Sendable, Equatable {
 
 /// Server → client (§4).
 public enum ServerMessage: Codable, Hashable, Sendable {
-    case welcome(userId: String?, serverTime: String)
+    /// `protocolVersion`: the version of this connection (§2).
+    case welcome(userId: String?, serverTime: String, protocolVersion: Int = SyncProtocol.latest)
     case updates(docId: String, snapshot: (seq: Int64, payload: Data)?, items: [UpdateItem], upToDate: Bool)
     case update(docId: String, item: UpdateItem)
     case ack(docId: String, clientMsgId: String, seq: Int64)
@@ -260,11 +269,12 @@ public enum ServerMessage: Codable, Hashable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(String.self, forKey: .type) {
         case "welcome":
-            guard try c.decode(Int.self, forKey: .protocolVersion) == SyncProtocol.version else {
+            let version = try c.decode(Int.self, forKey: .protocolVersion)
+            guard SyncProtocol.supported.contains(version) else {
                 throw DecodingError.dataCorruptedError(forKey: .protocolVersion, in: c, debugDescription: "protocol")
             }
             let userId = try c.decodeNil(forKey: .userId) ? nil : try V.uuid(c, .userId)
-            self = .welcome(userId: userId, serverTime: try c.decode(String.self, forKey: .serverTime))
+            self = .welcome(userId: userId, serverTime: try c.decode(String.self, forKey: .serverTime), protocolVersion: version)
         case "updates":
             var snapshot: (seq: Int64, payload: Data)?
             if !(try c.decodeNil(forKey: .snapshot)) {
@@ -293,9 +303,11 @@ public enum ServerMessage: Codable, Hashable, Sendable {
                           retryAfterMs: try c.decodeIfPresent(Int.self, forKey: .retryAfterMs).map { max(0, $0) },
                           reason: try c.decodeIfPresent(DeviceRevocationReason.self, forKey: .reason))
         case "account_changed":
-            // Tolerant: a newer server may name things this client does not know yet.
-            let names = (try? c.decodeIfPresent([String].self, forKey: .what)) ?? nil
-            self = .accountChanged(Set((names ?? []).compactMap(AccountChange.init(rawValue:))))
+            // A list of at most 8 names (§4); names this client does not know are dropped (a newer
+            // server may add some), so what is left can be empty: «something changed».
+            let names = try c.decode([String].self, forKey: .what)
+            guard names.count <= 8 else { throw DecodingError.dataCorruptedError(forKey: .what, in: c, debugDescription: "what: at most 8") }
+            self = .accountChanged(Set(names.compactMap(AccountChange.init(rawValue:))))
         case let t: throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(t)")
         }
     }
@@ -303,11 +315,11 @@ public enum ServerMessage: Codable, Hashable, Sendable {
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case .welcome(let userId, let serverTime):
+        case .welcome(let userId, let serverTime, let version):
             try c.encode("welcome", forKey: .type)
             try c.encode(userId, forKey: .userId)
             try c.encode(serverTime, forKey: .serverTime)
-            try c.encode(SyncProtocol.version, forKey: .protocolVersion)
+            try c.encode(version, forKey: .protocolVersion)
         case .updates(let docId, let snapshot, let items, let upToDate):
             try c.encode("updates", forKey: .type)
             try c.encode(docId, forKey: .docId)
@@ -344,6 +356,9 @@ public enum ServerMessage: Codable, Hashable, Sendable {
         }
     }
 
+    /// Types of server messages this client knows (frames of others are ignored, §4).
+    static let knownTypes: Set<String> = ["welcome", "updates", "update", "ack", "awareness", "error", "account_changed"]
+
     public static func == (a: ServerMessage, b: ServerMessage) -> Bool {
         (try? JSONEncoder.sync.encode(a)) == (try? JSONEncoder.sync.encode(b))
     }
@@ -363,6 +378,21 @@ extension JSONEncoder {
 }
 
 public enum SyncFrame {
+    /// What a server frame is (§4): a message; a frame of a type this client does not know,
+    /// which it ignores (a newer server); or a broken frame (not JSON, no type, bad fields).
+    public enum Parsed: Equatable, Sendable {
+        case message(ServerMessage)
+        case ignored(type: String)
+        case broken
+    }
+
+    public static func parse(_ text: String) -> Parsed {
+        if let message = decode(text) { return .message(message) }
+        struct Head: Decodable { var type: String }
+        guard let head = try? JSONDecoder().decode(Head.self, from: Data(text.utf8)) else { return .broken }
+        return ServerMessage.knownTypes.contains(head.type) ? .broken : .ignored(type: head.type)
+    }
+
     public static func encode(_ message: ClientMessage) throws -> String {
         String(decoding: try JSONEncoder.sync.encode(message), as: UTF8.self)
     }

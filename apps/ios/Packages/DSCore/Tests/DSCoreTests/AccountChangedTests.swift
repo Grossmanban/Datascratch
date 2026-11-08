@@ -18,12 +18,16 @@ import Foundation
         #expect(decode(#"{"type":"account_changed","what":["invitations","keys"]}"#) == .accountChanged([.invitations, .keys]))
         // Names a newer server may add are dropped; no list means «something changed».
         #expect(decode(#"{"type":"account_changed","what":["spaces","colours"]}"#) == .accountChanged([.spaces]))
-        #expect(decode(#"{"type":"account_changed"}"#) == .accountChanged([]))
+        // A list is required (at most 8); unknown names can leave it empty: «something».
+        #expect(decode(#"{"type":"account_changed","what":["future_thing"]}"#) == .accountChanged([]))
+        #expect(decode(#"{"type":"account_changed"}"#) == nil)
+        #expect(SyncFrame.parse(#"{"type":"account_changed"}"#) == .broken)
         // Round trip through the encoder.
         let all = ServerMessage.accountChanged(Set(AccountChange.allCases))
         #expect(decode(String(decoding: try JSONEncoder.sync.encode(all), as: UTF8.self)) == all)
         // An unknown type is not a message: the client skips it.
         #expect(decode(#"{"type":"presence_v2","x":1}"#) == nil)
+        #expect(SyncFrame.parse(#"{"type":"presence_v2","x":1}"#) == .ignored(type: "presence_v2"))
     }
 
     /// An unknown frame does not break the connection, and `account_changed` reaches the app.
@@ -151,5 +155,31 @@ import Foundation
         let firstIndex = try #require(pushes.firstIndex(of: nbId))
         #expect(firstIndex < firstNote)
         await a.stop()
+    }
+
+    /// Protocol 2 with an older server: `protocol_mismatch` on hello 2, the client says 1 next
+    /// and connects; not shown as a failure.
+    @Test func olderServerGetsProtocolOne() async throws {
+        let server = FakeSyncServer()
+        await server.setMaxProtocol(1)
+        let key = DSCrypto.newKey()
+        let b = device("B", server: server) { _ in key }
+        await b.start()
+        #expect(try await eventually { await b.client.isConnected })
+        #expect(await server.helloVersions.prefix(2) == [2, 1])
+        #expect(await b.client.protocolVersion == 1)
+        #expect(await b.client.consecutiveFailures == 0)
+        await b.stop()
+    }
+
+    @Test func currentServerSpeaksProtocolTwo() async throws {
+        let server = FakeSyncServer()
+        let key = DSCrypto.newKey()
+        let b = device("B", server: server) { _ in key }
+        await b.start()
+        #expect(try await eventually { await b.client.isConnected })
+        #expect(await server.helloVersions == [2])
+        #expect(await b.client.protocolVersion == 2)
+        await b.stop()
     }
 }

@@ -403,9 +403,14 @@ keep-alive), новых TLS-рукопожатий меньше; `waitsForConnec
 
 ### Изменения аккаунта и ожидание ключа или доступа (D-62)
 
+- Протокол синхронизации версии 2 (sync-protocol.md §2): `hello` говорит `SyncProtocol.latest`
+  (2), `welcome` — версию соединения (`SyncClient.protocolVersion`). Старый сервер отвечает
+  `protocol_mismatch` — клиент сразу подключается снова с версией на 1 ниже (не ошибка и не
+  неудача подключения); `account_changed` приходит только на версии 2. Кадр незнакомого типа
+  пропускается, испорченный — ошибка (`SyncFrame.parse` → `.message` / `.ignored` / `.broken`).
 - Сервер шлёт по сокету `{"type":"account_changed","what":[…]}` (`ServerMessage.accountChanged`,
   `AccountChange`: `invitations`, `spaces`, `members`, `keys`, `notebooks`; незнакомые значения
-  отбрасываются, пустой набор — «что-то изменилось»). Приложение подписывается
+  отбрасываются, так что набор бывает пустым — «что-то изменилось»; список обязателен, не больше 8). Приложение подписывается
   `engine.setAccountChangedHandler { what in … }`: обновляет приглашения, пространства, ключи,
   затем `noteKeysLearned()`. Незнакомый тип сообщения соединение не рвёт — кадр пропускается.
 - `setKeysMissingHandler { docIds in … }` — через ~0,2 с после того, как документ остался без

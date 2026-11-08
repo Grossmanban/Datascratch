@@ -216,6 +216,11 @@ public enum SyncErrorCode: String, Codable, Sendable {
     case deviceRevoked = "device_revoked"
 }
 
+/// What changed for the account (`account_changed`, D-62).
+public enum AccountChange: String, Codable, Hashable, Sendable, CaseIterable {
+    case invitations, spaces, members, keys, notebooks
+}
+
 /// Timing events of `SyncEngine` (`setTraceHandler`), e.g. for `os_signpost` intervals:
 /// subscribe → caught up per document.
 public enum SyncTraceEvent: Sendable, Equatable {
@@ -241,8 +246,12 @@ public enum ServerMessage: Codable, Hashable, Sendable {
     /// `retryAfterMs` (`rate_limited` only, §7): do not resend or reconnect sooner.
     /// `reason` (`device_revoked` only, D-53).
     case error(code: SyncErrorCode, message: String, ref: String?, retryAfterMs: Int? = nil, reason: DeviceRevocationReason? = nil)
+    /// Something about this account changed on the server (D-62): an invitation came, a space
+    /// or its members or keys changed, a notebook was shared or moved. The app refreshes what
+    /// is named; values this client does not know are dropped, an empty set means «something».
+    case accountChanged(Set<AccountChange>)
 
-    enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref, retryAfterMs, reason, author }
+    enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref, retryAfterMs, reason, author, what }
     struct Item: Encodable { var seq: Int64; var payload: String; var deviceId: String; var author: UpdateAuthor? }
     struct Snap: Encodable { var seq: Int64; var payload: String }
 
@@ -283,6 +292,10 @@ public enum ServerMessage: Codable, Hashable, Sendable {
                           ref: try c.decodeIfPresent(String.self, forKey: .ref),
                           retryAfterMs: try c.decodeIfPresent(Int.self, forKey: .retryAfterMs).map { max(0, $0) },
                           reason: try c.decodeIfPresent(DeviceRevocationReason.self, forKey: .reason))
+        case "account_changed":
+            // Tolerant: a newer server may name things this client does not know yet.
+            let names = (try? c.decodeIfPresent([String].self, forKey: .what)) ?? nil
+            self = .accountChanged(Set((names ?? []).compactMap(AccountChange.init(rawValue:))))
         case let t: throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(t)")
         }
     }
@@ -325,6 +338,9 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             try c.encodeIfPresent(ref, forKey: .ref)
             try c.encodeIfPresent(retryAfterMs, forKey: .retryAfterMs)
             try c.encodeIfPresent(reason, forKey: .reason)
+        case .accountChanged(let what):
+            try c.encode("account_changed", forKey: .type)
+            try c.encode(what.map(\.rawValue).sorted(), forKey: .what)
         }
     }
 

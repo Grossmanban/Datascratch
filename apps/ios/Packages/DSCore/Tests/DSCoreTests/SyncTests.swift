@@ -115,6 +115,20 @@ actor FakeSyncServer {
 
     func helloCount() -> Int { hellos.count }
 
+    /// Documents a device may not reach (yet): its subscriptions get `doc_not_found`.
+    var denied: [String: Set<String>] = [:]
+    func deny(_ docId: String, to deviceId: String) { denied[deviceId, default: []].insert(docId) }
+    func allow(_ docId: String, to deviceId: String) { denied[deviceId]?.remove(docId) }
+
+    /// Sends `message` (or raw `text`) to every connection of `deviceId`.
+    func send(_ message: ServerMessage, to deviceId: String) {
+        for c in conns.values where c.deviceId == deviceId { c.conn.deliver(message) }
+    }
+
+    func sendRaw(_ text: String, to deviceId: String) {
+        for c in conns.values where c.deviceId == deviceId { c.conn.continuation.yield(text) }
+    }
+
     func subscribers(_ docId: String) -> Int { conns.values.filter { $0.subs.contains(docId) }.count }
 
     func handle(_ text: String, from c: Conn) async {
@@ -136,6 +150,10 @@ actor FakeSyncServer {
             for e in entries {
                 guard registered.contains(e.docId) else {
                     c.deliver(.error(code: .docNotFound, message: "unknown doc", ref: e.docId))
+                    continue
+                }
+                if let device = conns[c.id]?.deviceId, denied[device]?.contains(e.docId) == true {
+                    c.deliver(.error(code: .docNotFound, message: "document not found", ref: e.docId))
                     continue
                 }
                 conns[c.id]?.subs.insert(e.docId)

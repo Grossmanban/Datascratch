@@ -164,9 +164,18 @@ export type NoteMeta = z.infer<typeof noteMetaSchema>;
 export const sharedRefSchema = z.object({
   kind: z.enum(["notebook", "note"]),
   id: uuidSchema,
+  /**
+   * Space that was current when the item arrived. Since D-63 «Поделились со мной» is one section
+   * outside spaces, so this no longer decides where the item is shown; kept for compatibility.
+   */
   spaceId: uuidSchema,
   order: z.number(),
   addedAt: isoDateTimeSchema,
+  /**
+   * First time this account opened the item on any device (D-63): until then it is «new» (bold).
+   * Absent or null = not opened yet. Older clients leave it alone.
+   */
+  openedAt: isoDateTimeSchema.nullable().optional(),
 });
 export type SharedRef = z.infer<typeof sharedRefSchema>;
 /** Key of a SharedRef in `account.shared`. */

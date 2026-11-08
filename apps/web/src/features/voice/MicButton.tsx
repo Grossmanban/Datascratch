@@ -1,3 +1,4 @@
+import { useVoiceAccess } from "./access";
 import type { EditorApi } from "@datascratch/web-editor";
 import { Loader2, Mic, ShieldCheck, Square } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
@@ -47,11 +48,14 @@ export function MicButton({ api, floating = false }: { api: EditorApi; floating?
   const pressedAt = useRef(0);
   const holding = useRef(false);
   const listening = phase === "listening";
+  // D-65: the server admin turns voice on per account; off — the button stays, greyed, and says so.
+  const off = useVoiceAccess((s) => s.loaded && !!s.me && !s.me.enabled);
 
   // ⌥M toggles from anywhere in the note; Esc cancels while there is something to cancel.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey && !e.metaKey && !e.ctrlKey && (e.code === "KeyM" || e.key.toLowerCase() === "m")) {
+        if (useVoiceAccess.getState().me?.enabled === false) return;
         e.preventDefault();
         if (useDictation.getState().phase === "listening") void stopDictation(api);
         else startDictation(api);
@@ -70,7 +74,7 @@ export function MicButton({ api, floating = false }: { api: EditorApi; floating?
   // Pressing while listening stops. Otherwise a press starts; let go after HOLD_MS (push-to-talk)
   // and the take is sent, a short tap keeps listening until the next tap.
   function down(e: ReactPointerEvent) {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || off) return;
     e.preventDefault();
     if (listening) {
       holding.current = false;
@@ -96,6 +100,8 @@ export function MicButton({ api, floating = false }: { api: EditorApi; floating?
     <button
       type="button"
       aria-label={listening ? t("voice.stop") : t("voice.dictate")}
+      aria-disabled={off || undefined}
+      data-off={off || undefined}
       aria-pressed={listening}
       data-testid="mic-button"
       data-phase={phase}
@@ -103,7 +109,7 @@ export function MicButton({ api, floating = false }: { api: EditorApi; floating?
       onPointerUp={up}
       onPointerCancel={up}
       onKeyDown={(e) => {
-        if ((e.key === " " || e.key === "Enter") && !e.repeat) {
+        if ((e.key === " " || e.key === "Enter") && !e.repeat && !off) {
           e.preventDefault();
           if (listening) void stopDictation(api);
           else startDictation(api);
@@ -116,6 +122,7 @@ export function MicButton({ api, floating = false }: { api: EditorApi; floating?
           ? "size-14 shadow-popover"
           : "h-8 min-w-8 px-2 text-ink-2 hover:bg-ink/5 hover:text-ink",
         floating && !listening && "bg-surface text-ink ring-1 ring-line",
+        off && "cursor-not-allowed opacity-45",
         listening && "bg-[var(--ds-accent)] text-white shadow-[0_0_0_6px_color-mix(in_srgb,var(--ds-accent)_22%,transparent),0_0_24px_color-mix(in_srgb,var(--ds-accent)_45%,transparent)]",
       )}
     >
@@ -135,7 +142,7 @@ export function MicButton({ api, floating = false }: { api: EditorApi; floating?
   return (
     // The status floats under the button: nothing in the bar moves while the finger is on it.
     <div className={cn("relative flex items-center", floating && "flex-col-reverse gap-2")} data-testid="mic">
-      {floating ? button : <Tooltip content={`${t("voice.dictate")} · ⌥M — ${hint}`}>{button}</Tooltip>}
+      {floating && !off ? button : <Tooltip content={off ? t("voice.off") : `${t("voice.dictate")} · ⌥M — ${hint}`}>{button}</Tooltip>}
       {(phase !== "idle" || error) && (
         <span
           role="status"

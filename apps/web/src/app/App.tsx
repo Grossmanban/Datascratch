@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { onSignedOut, restore, useAuth } from "@/auth/session";
 import { forgetDecryptedAttachments, resetAttachmentUploads } from "@/data/attachments";
 import { forgetBoxKeys } from "@/data/sharing";
+import { resetVoiceAccess } from "@/features/voice/access";
 import { stopRuntime } from "@/data/runtime";
 import { Splash } from "@/features/shell/Splash";
 import { PwaPrompt } from "@/features/shell/PwaPrompt";
@@ -32,6 +33,7 @@ export function App() {
       forgetDecryptedAttachments();
       resetAttachmentUploads();
       forgetBoxKeys();
+      resetVoiceAccess();
       queryClient.clear();
       void router.navigate({ to: "/login" });
     });

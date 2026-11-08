@@ -5,6 +5,7 @@ import { setSetting } from "@/domain/actions";
 import { useWorkspace } from "@/domain/workspace";
 import { MicFailure, Recording, type MicError } from "./recorder";
 import { turnsText, voiceApi, type VoiceProfanity, type VoiceQuality } from "./voiceApi";
+import { refreshVoiceMe } from "./access";
 
 // D-65 dictation (spec/04 «Голос»): hold the button (or press Space / ⌥M to start and stop),
 // speak, let go — the audio goes to /voice/transcribe, the words to /voice/text «clean», and the
@@ -16,13 +17,17 @@ export const VOICE_SETTINGS = { consent: "voiceConsentAt", quality: "voiceQualit
 export function voiceSettings(): { quality: VoiceQuality; profanity: VoiceProfanity; consented: boolean } {
   const s = useWorkspace.getState().account.settings;
   return {
-    quality: s[VOICE_SETTINGS.quality] === "fast" ? "fast" : "best",
-    profanity: s[VOICE_SETTINGS.profanity] === "keep" ? "keep" : "mask",
+    quality: s[VOICE_SETTINGS.quality] === "best" ? "best" : "standard",
+    profanity: s[VOICE_SETTINGS.profanity] === "keep" ? "keep" : "soften",
     consented: typeof s[VOICE_SETTINGS.consent] === "string",
   };
 }
 
-export type DictationError = MicError | "offline" | "too-short" | "server" | "quota" | "too-long";
+export type DictationError = MicError | "offline" | "too-short" | "server" | "quota" | "too-long" | "disabled" | "upstream" | "unavailable";
+
+/** One dictation take is cut off at 10 minutes (api.md «Голос»: the client stops it itself). */
+export const MAX_TAKE_SEC = 600;
+let takeTimer: ReturnType<typeof setTimeout> | null = null;
 
 type State = {
   phase: "idle" | "listening" | "working";
@@ -76,6 +81,7 @@ export function startDictation(api: EditorApi): void {
     .then((r) => {
       recording = r;
       useDictation.setState({ phase: "listening" });
+      takeTimer = setTimeout(() => void stopDictation(api), MAX_TAKE_SEC * 1000);
     })
     .catch((e) => {
       setError(e instanceof MicFailure ? e.kind : "unsupported");
@@ -89,6 +95,8 @@ export function startDictation(api: EditorApi): void {
 /** Stops listening and sends the take; the text lands at the caret when it is ready. */
 export async function stopDictation(api: EditorApi): Promise<void> {
   if (starting) await starting;
+  if (takeTimer) clearTimeout(takeTimer);
+  takeTimer = null;
   const r = recording;
   if (!r) return;
   recording = null;
@@ -118,6 +126,8 @@ async function processTake(api: EditorApi, audio: Blob, signal: AbortSignal) {
     if (signal.aborted) return;
     console.warn("[ds] voice take failed:", (e as Error)?.message ?? e);
     setError(errorOf(e));
+    // Access or quota may have changed: the button and the settings follow.
+    void refreshVoiceMe();
   } finally {
     useDictation.setState((s) => {
       const pending = Math.max(0, s.pending - 1);
@@ -130,14 +140,20 @@ export function errorOf(e: unknown): DictationError {
   if (e instanceof NetworkError) return "offline";
   if (e instanceof ApiError) {
     if (e.status === 0) return "offline";
-    if (e.status === 413) return "too-long";
-    if (e.status === 402 || e.status === 429 || e.code === "quota_exceeded") return "quota";
+    // api.md «Голос»: voice_disabled 403, voice_quota 429, voice_too_long 413, voice_upstream 502, voice_unavailable 503.
+    if (e.code === "voice_disabled" || e.status === 403) return "disabled";
+    if (e.code === "voice_too_long" || e.status === 413) return "too-long";
+    if (e.code === "voice_quota" || e.status === 429) return "quota";
+    if (e.code === "voice_upstream" || e.status === 502) return "upstream";
+    if (e.code === "voice_unavailable" || e.status === 503) return "unavailable";
   }
   return "server";
 }
 
 /** Esc: the take being recorded is dropped, and so are those still being processed. */
 export function cancelDictation() {
+  if (takeTimer) clearTimeout(takeTimer);
+  takeTimer = null;
   recording?.cancel();
   recording = null;
   aborter.abort();

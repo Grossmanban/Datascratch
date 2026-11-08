@@ -1,3 +1,4 @@
+import { useVoiceAccess } from "@/features/voice/access";
 import { useFormat } from "@/features/voice/format";
 import type { useNavigate } from "@tanstack/react-router";
 import type { TFunction } from "i18next";
@@ -232,7 +233,9 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
       ? [
           { label: `${t("style.cover")}…`, icon: <ImageIcon className="size-3.5" />, onSelect: () => useUi.setState({ coverFor: noteId }) },
           // D-65: the selection, or the whole note, tidied in a chosen style.
-          { label: `${t("voice.format")}…`, icon: <Wand2 className="size-3.5" />, onSelect: () => useFormat.setState({ openFor: noteId, error: null }) },
+          ...(useVoiceAccess.getState().me?.enabled === false
+            ? []
+            : [{ label: `${t("voice.format")}…`, icon: <Wand2 className="size-3.5" />, onSelect: () => useFormat.setState({ openFor: noteId, error: null }) }]),
         ]
       : []),
     inIndex && {

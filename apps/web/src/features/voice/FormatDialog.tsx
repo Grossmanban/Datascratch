@@ -5,12 +5,13 @@ import { useTranslation } from "react-i18next";
 import { Button, cn, Dialog, IconButton } from "@/ui";
 import { errorOf } from "./dictation";
 import { FORMAT_STYLES, formatNote, undoFormat, useFormat, type FormatStyle } from "./format";
+import { DEFAULT_VOICE_STYLE } from "./voiceApi";
 
 /** «Как оформить?»: a style, then the note (or the selection) is tidied as one highlighted edit. */
 export function FormatDialog({ api, noteId }: { api: EditorApi; noteId: string }) {
   const { t } = useTranslation();
   const { openFor, busy, error } = useFormat();
-  const [style, setStyle] = useState<FormatStyle>("structured");
+  const [style, setStyle] = useState<FormatStyle>(DEFAULT_VOICE_STYLE);
   const aborter = useRef<AbortController | null>(null);
   const open = openFor === noteId;
   const close = () => {
@@ -82,7 +83,7 @@ export function FormatResult({ api, noteId }: { api: EditorApi; noteId: string }
         <Wand2 className="size-4 shrink-0 text-[var(--ds-accent)]" />
         <span className="flex-1 text-ink-2">{t("voice.formatDone")}</span>
         <Button type="button" variant="ghost" icon={<Undo2 className="size-4" />} onClick={() => undoFormat(api)} data-testid="format-undo">
-          {t("voice.undo")}
+          {t("voice.reject")}
         </Button>
         <IconButton label={t("common.close")} size="sm" onClick={() => useFormat.setState({ last: null })}>
           <X className="size-4" />
@@ -96,7 +97,7 @@ export function FormatResult({ api, noteId }: { api: EditorApi; noteId: string }
         data-testid="format-draft-toggle"
       >
         <ChevronDown className={cn("size-3.5 transition-transform", !openDraft && "-rotate-90")} />
-        {t("voice.rawDraft")}
+        {openDraft ? t("voice.hideSource") : t("voice.showSource")}
       </button>
       {openDraft && (
         <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded-lg bg-ink/[0.04] p-3 font-sans text-[13px] text-ink-2" data-testid="format-draft">

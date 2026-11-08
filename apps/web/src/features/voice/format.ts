@@ -2,14 +2,14 @@ import type { EditorApi } from "@datascratch/web-editor";
 import { TextSelection } from "@tiptap/pm/state";
 import { create } from "zustand";
 import { replaceWithMarkdown, voiceSettings } from "./dictation";
-import { voiceApi } from "./voiceApi";
+import { VOICE_AGENT_ID, VOICE_STYLES, voiceApi, type VoiceStyle } from "./voiceApi";
 
 // D-65 «Оформить»: the selection (or the whole note under its title) goes to /voice/text «format»
 // in the chosen style; the result replaces it as one edit, highlighted like an agent's edit
 // (`agentEdit`, «Принять»), and undoable; the draft before formatting stays at hand.
 
-export const FORMAT_STYLES = ["clean", "structured", "bullets", "minutes", "email"] as const;
-export type FormatStyle = (typeof FORMAT_STYLES)[number];
+export const FORMAT_STYLES = VOICE_STYLES;
+export type FormatStyle = VoiceStyle;
 
 type FormatState = {
   /** The note whose «Оформить» window is open. */
@@ -50,7 +50,7 @@ export async function formatNote(api: EditorApi, noteId: string, style: FormatSt
   replaceWithMarkdown(view, markdown.trim());
   const end = view.state.selection.to;
   const mark = view.state.schema.marks.agentEdit;
-  if (mark && end > from) view.dispatch(view.state.tr.addMark(from, end, mark.create({ agentId: "voice", at: new Date().toISOString() })));
+  if (mark && end > from) view.dispatch(view.state.tr.addMark(from, end, mark.create({ agentId: VOICE_AGENT_ID, at: new Date().toISOString() })));
   useFormat.setState({ last: { noteId, draft, style } });
 }
 

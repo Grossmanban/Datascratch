@@ -517,6 +517,14 @@ final class LibraryUITests: XCTestCase {
         try openNewNoteInNativeEditor(app)
         // Written in, so leaving it keeps the note (an empty new note is dropped).
         app.typeText("Tab note")
+        // Leave the document with light queries first: a query over the whole tree of an open
+        // document timed out (iPhone, run 42495834040).
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            app.buttons["document.close"].firstMatch.tap()
+        } else {
+            app.navigationBars.buttons.firstMatch.tap()
+        }
+        settle(1)
         let switcher = app.descendants(matching: .any)["sidebar.spaceSwitcher"].firstMatch
         // iPhone: choosing a space shows its documents; come back to the sidebar each time.
         func showSidebar() {

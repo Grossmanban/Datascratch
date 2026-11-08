@@ -57,7 +57,7 @@ final class AppSettings {
         hapticsEnabled = defaults.object(forKey: "haptics") as? Bool ?? true
         penPaletteCollapsed = defaults.bool(forKey: "penPaletteCollapsed")
         voiceQuality = VoiceQuality(rawValue: defaults.string(forKey: "voiceQuality") ?? "") ?? .standard
-        voiceProfanity = VoiceProfanity(rawValue: defaults.string(forKey: "voiceProfanity") ?? "") ?? .keep
+        voiceProfanity = VoiceProfanity(rawValue: defaults.string(forKey: "voiceProfanity") ?? "") ?? .soften
         voiceConsentShown = defaults.bool(forKey: "voiceConsentShown")
     }
 

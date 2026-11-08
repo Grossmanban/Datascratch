@@ -20,6 +20,8 @@ private actor GatedVoiceService: VoiceService {
         await withCheckedContinuation { gates[name] = $0 }
     }
 
+    nonisolated func me() async throws -> VoiceAccess { VoiceAccess(enabled: true) }
+
     nonisolated func transcribe(audio: URL, mode: VoiceMode, quality: VoiceQuality) async throws -> VoiceTranscript {
         let name = audio.lastPathComponent
         await wait(name)
@@ -119,8 +121,32 @@ struct DictationQueueTests {
 
     @Test func serverErrorCodes() {
         #expect(VoiceError.from(code: "voice_disabled", status: 403) == .disabled)
-        #expect(VoiceError.from(code: "voice_quota_exceeded", status: 402) == .quota)
-        #expect(VoiceError.from(code: "rate_limited", status: 429) == .quota)
+        #expect(VoiceError.from(code: "voice_quota", status: 429) == .quota)
+        #expect(VoiceError.from(code: "voice_too_long", status: 413) == .tooLong)
+        #expect(VoiceError.from(code: "voice_upstream", status: 502) == .upstream)
+        #expect(VoiceError.from(code: "voice_unavailable", status: 503) == .unavailable)
+        #expect(VoiceError.from(code: "http_503", status: 503) == .unavailable, "an unknown code goes by its status")
         #expect(VoiceError.from(code: "bad_audio", status: 400) == .failed("bad_audio"))
+    }
+
+    /// While the server works on a piece, the screen says which step it is at.
+    @Test func stageFollowsTheEarliestPiece() async {
+        let (queue, service, sink) = make()
+        let piece = queue.begin()
+        #expect(queue.stage == nil, "recording: no server step")
+        queue.heard("x", in: piece)
+        queue.finish(piece, audio: URL(fileURLWithPath: "/tmp/f.m4a"))
+        #expect(queue.stage == .recognising)
+        await service.open("f.m4a")
+        await settle(queue) { !sink.inserted.isEmpty }
+        #expect(queue.stage == nil)
+    }
+
+    @Test func voiceAccessReadsWhatIsLeft() throws {
+        let decode = { (json: String) in try JSONDecoder().decode(VoiceAccess.self, from: Data(json.utf8)) }
+        #expect(try decode(#"{"enabled":true,"minutesLeft":42}"#) == VoiceAccess(enabled: true, minutesLeft: 42))
+        #expect(try decode(#"{"enabled":true,"limitMinutes":300,"usedMinutes":120}"#).minutesLeft == 180)
+        #expect(try decode(#"{"enabled":false}"#) == VoiceAccess(enabled: false))
+        #expect(try decode(#"{"enabled":true,"isAdmin":true}"#).isAdmin)
     }
 }

@@ -371,16 +371,6 @@
         }
       }
     },
-    "Allow the microphone for Datascratch in Settings to dictate.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Чтобы диктовать, разрешите Datascratch доступ к микрофону в Настройках."
-          }
-        }
-      }
-    },
     "Also here: %@": {
       "localizations": {
         "ru": {
@@ -431,6 +421,16 @@
         }
       }
     },
+    "Article": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Статья"
+          }
+        }
+      }
+    },
     "At least 10 characters. A long phrase is easier to remember and harder to guess.": {
       "localizations": {
         "ru": {
@@ -461,12 +461,12 @@
         }
       }
     },
-    "Best is more accurate with names and terms, and takes a little longer.": {
+    "Best is more accurate and tidier, but ten times as expensive.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Лучшее» точнее с именами и терминами, но работает чуть дольше."
+            "value": "Лучшее — точнее и красивее, но в 10 раз дороже"
           }
         }
       }
@@ -1331,26 +1331,6 @@
         }
       }
     },
-    "Dictation": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Диктовка"
-          }
-        }
-      }
-    },
-    "Dictation always keeps your words. Softening applies to text you format.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Диктовка всегда сохраняет ваши слова. Смягчение — только в оформленном тексте."
-          }
-        }
-      }
-    },
     "Dismiss": {
       "localizations": {
         "ru": {
@@ -1991,12 +1971,12 @@
         }
       }
     },
-    "Got It": {
+    "Got It, Turn On": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Понятно"
+            "value": "Понятно, включить"
           }
         }
       }
@@ -2471,12 +2451,12 @@
         }
       }
     },
-    "Keep": {
+    "Keep As Is": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Оставлять"
+            "value": "Оставлять как есть"
           }
         }
       }
@@ -2557,6 +2537,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Выйти из пространства?"
+          }
+        }
+      }
+    },
+    "Lecture Notes": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Конспект"
+          }
+        }
+      }
+    },
+    "Left this month: %lld min": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Осталось в этом месяце: %lld мин"
+          }
+        }
+      }
+    },
+    "Letter": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Письмо"
           }
         }
       }
@@ -2667,6 +2677,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сделать блокнот приватным?"
+          }
+        }
+      }
+    },
+    "Manage access in the web app.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Управлять доступом — в веб-версии"
+          }
+        }
+      }
+    },
+    "Meeting Minutes": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Протокол встречи"
           }
         }
       }
@@ -2951,6 +2981,16 @@
         }
       }
     },
+    "No access to the microphone — allow it in Settings.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа к микрофону — разрешите его в Настройках"
+          }
+        }
+      }
+    },
     "No activity yet": {
       "localizations": {
         "ru": {
@@ -2977,6 +3017,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Приглашений нет"
+          }
+        }
+      }
+    },
+    "No microphone found.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Микрофон не найден"
           }
         }
       }
@@ -3077,6 +3127,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Обычная"
+          }
+        }
+      }
+    },
+    "Not Now": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не сейчас"
           }
         }
       }
@@ -3701,6 +3761,16 @@
         }
       }
     },
+    "Plan": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "План"
+          }
+        }
+      }
+    },
     "Press ⌘K to open the command palette": {
       "localizations": {
         "ru": {
@@ -3737,6 +3807,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Фиолетовый"
+          }
+        }
+      }
+    },
+    "Quality": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Качество"
           }
         }
       }
@@ -3801,12 +3881,12 @@
         }
       }
     },
-    "Recognition": {
+    "Recognising…": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Распознавание"
+            "value": "Распознаю…"
           }
         }
       }
@@ -4846,7 +4926,7 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ненормативная лексика"
+            "value": "Нецензурные слова"
           }
         }
       }
@@ -5091,16 +5171,6 @@
         }
       }
     },
-    "The microphone isn’t available right now.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Микрофон сейчас недоступен."
-          }
-        }
-      }
-    },
     "The note becomes this version again. The current text stays in the history.": {
       "localizations": {
         "ru": {
@@ -5191,6 +5261,36 @@
         }
       }
     },
+    "The recognition service isn’t responding — try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервис распознавания не отвечает — попробуйте ещё раз"
+          }
+        }
+      }
+    },
+    "The recording and its text pass through our server to ElevenLabs and OpenAI only to be recognised and formatted. Nothing is stored, and your notes stay encrypted.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запись и текст проходят через наш сервер к ElevenLabs и OpenAI только для распознавания и оформления. Ничего не хранится, ваши заметки по-прежнему зашифрованы."
+          }
+        }
+      }
+    },
+    "The recording is too long (up to 3 hours).": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запись слишком длинная (до 3 часов)"
+          }
+        }
+      }
+    },
     "The server copy of the key will be deleted. Agents will lose access, and only your devices will be able to read these notes.": {
       "localizations": {
         "ru": {
@@ -5247,16 +5347,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Группы не совпадают. Проверьте сохранённый ключ."
-          }
-        }
-      }
-    },
-    "They aren’t stored there or on our server.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ни там, ни на нашем сервере они не хранятся."
           }
         }
       }
@@ -5421,6 +5511,16 @@
         }
       }
     },
+    "This month’s voice limit is used up.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лимит голоса на этот месяц исчерпан"
+          }
+        }
+      }
+    },
     "This notebook isn’t here": {
       "localizations": {
         "ru": {
@@ -5447,6 +5547,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Неверный ключ восстановления."
+          }
+        }
+      }
+    },
+    "Tidying Up…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Привожу в порядок…"
           }
         }
       }
@@ -5731,12 +5841,52 @@
         }
       }
     },
-    "Voice is turned off on this server.": {
+    "Voice Through Our Server": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Голос выключен на этом сервере."
+            "value": "Голос через наш сервер"
+          }
+        }
+      }
+    },
+    "Voice is on": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос включён"
+          }
+        }
+      }
+    },
+    "Voice is temporarily unavailable.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос временно недоступен"
+          }
+        }
+      }
+    },
+    "Voice isn’t turned on for this account.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос не включён для этого аккаунта"
+          }
+        }
+      }
+    },
+    "Voice isn’t turned on — ask the server’s owner.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос не включён — попросите владельца сервера"
           }
         }
       }
@@ -5787,16 +5937,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Когда с вами поделятся блокнотом или документом, приглашение появится здесь."
-          }
-        }
-      }
-    },
-    "Where Your Voice Goes": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Куда уходит голос"
           }
         }
       }
@@ -5971,16 +6111,6 @@
         }
       }
     },
-    "Your notes stay encrypted. Only what you dictate is sent.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заметки остаются зашифрованными. Отправляется только то, что вы диктуете."
-          }
-        }
-      }
-    },
     "Your password also protects the encryption key. Your recovery key keeps working after a password change.": {
       "localizations": {
         "ru": {
@@ -5997,26 +6127,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пароль служит и для входа, и для шифрования заметок. Он никогда не покидает устройство."
-          }
-        }
-      }
-    },
-    "Your recording and its text go through our server to ElevenLabs and OpenAI to be recognised and tidied up.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Запись и её текст через наш сервер уходят в ElevenLabs и OpenAI — для распознавания и обработки."
-          }
-        }
-      }
-    },
-    "Your recording and its text go through our server to ElevenLabs and OpenAI to be recognised and tidied up. They aren’t stored. Your notes stay encrypted.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Запись и её текст через наш сервер уходят в ElevenLabs и OpenAI — для распознавания и обработки. Они не хранятся. Заметки остаются зашифрованными."
           }
         }
       }
@@ -6047,16 +6157,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ваш токен"
-          }
-        }
-      }
-    },
-    "You’ve used up voice for now. It comes back with the next period.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Лимит голоса пока исчерпан. Он обновится в следующем периоде."
           }
         }
       }

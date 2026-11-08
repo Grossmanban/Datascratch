@@ -54,6 +54,19 @@ final class DictationUITests: XCTestCase {
         app.buttons.allElementsBoundByIndex.prefix(60).map { "\($0.identifier)|\($0.label)" }.joined(separator: ", ")
     }
 
+    /// «Not Now» records nothing and asks again next time.
+    func testNotNowRecordsNothing() throws {
+        let app = launch()
+        let mic = try openNewNote(app)
+        mic.press(forDuration: 0.3)
+        let decline = app.buttons["voice.consent.decline"].firstMatch
+        XCTAssertTrue(decline.waitForExistence(timeout: 5), "no «Not Now» on the first use")
+        decline.tap()
+        XCTAssertTrue(decline.waitForNonExistence(timeout: 5), "the sheet did not close")
+        mic.press(forDuration: 0.3)
+        XCTAssertTrue(app.buttons["voice.consent.accept"].firstMatch.waitForExistence(timeout: 5), "not asked again after «Not Now»")
+    }
+
     /// Hold, speak, let go: the server's cleaned text takes the preview's place in the note.
     func testHoldingTheMicrophoneDictatesIntoTheNote() throws {
         let app = launch()

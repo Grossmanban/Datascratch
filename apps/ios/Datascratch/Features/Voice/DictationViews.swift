@@ -154,6 +154,15 @@ struct DictationPreview: View {
     let text: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// What the server is doing with the earliest piece still out.
+    private var stageText: String? {
+        switch dictation.queue.stage {
+        case .recognising?: String(localized: "Recognising…")
+        case .tidying?: String(localized: "Tidying Up…")
+        default: nil
+        }
+    }
+
     var body: some View {
         if let text {
             HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s2) {
@@ -165,12 +174,20 @@ struct DictationPreview: View {
                 } else {
                     ProgressView().controlSize(.mini)
                 }
-                Text(text.isEmpty ? String(localized: "Listening…") : text)
-                    .font(Theme.Typography.body.italic())
-                    .foregroundStyle(Theme.Palette.textSecondary)
-                    .lineLimit(3)
-                    .truncationMode(.head)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(text.isEmpty ? String(localized: "Listening…") : text)
+                        .font(Theme.Typography.body.italic())
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .lineLimit(3)
+                        .truncationMode(.head)
+                    if let stage = stageText {
+                        Text(stage)
+                            .font(Theme.Typography.caption.weight(.medium))
+                            .foregroundStyle(Theme.Palette.accent)
+                            .accessibilityIdentifier("dictation.stage")
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.vertical, Theme.Space.s2)
             .padding(.horizontal, Theme.Space.s3)
@@ -200,49 +217,50 @@ struct DictationMessage: View {
     }
 }
 
-/// Before the first recording: where the voice goes, plainly.
+/// Before the first recording: where the voice goes, plainly (the web says the same).
 struct VoiceConsentSheet: View {
     let onAccept: () -> Void
+    let onDecline: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s4) {
             Image(systemName: "waveform")
-                .font(.system(size: 34, weight: .semibold))
+                .font(.system(size: 30, weight: .semibold))
                 .foregroundStyle(Theme.Palette.accent)
-                .frame(width: 64, height: 64)
+                .frame(width: 60, height: 60)
                 .background(Theme.Palette.accent.opacity(0.12), in: .rect(cornerRadius: 18))
-            Text("Dictation")
+                .accessibilityHidden(true)
+            Text("Voice Through Our Server")
                 .font(Theme.Typography.h1)
-            VStack(alignment: .leading, spacing: Theme.Space.s3) {
-                point("arrow.up.forward.circle", "Your recording and its text go through our server to ElevenLabs and OpenAI to be recognised and tidied up.")
-                point("trash.circle", "They aren’t stored there or on our server.")
-                point("lock.circle", "Your notes stay encrypted. Only what you dictate is sent.")
-            }
+                .fixedSize(horizontal: false, vertical: true)
+            Text("The recording and its text pass through our server to ElevenLabs and OpenAI only to be recognised and formatted. Nothing is stored, and your notes stay encrypted.")
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
-            Button(action: onAccept) {
-                Text("Got It")
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Space.s2)
+            VStack(spacing: Theme.Space.s2) {
+                Button(action: onAccept) {
+                    Text("Got It, Turn On")
+                        .font(Theme.Typography.body.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Theme.Space.s2)
+                }
+                .buttonStyle(.glassProminent)
+                .accessibilityIdentifier("voice.consent.accept")
+                Button(action: onDecline) {
+                    Text("Not Now")
+                        .font(Theme.Typography.body)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Theme.Space.s2)
+                }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("voice.consent.decline")
             }
-            .buttonStyle(.glassProminent)
-            .accessibilityIdentifier("voice.consent.accept")
         }
         .padding(Theme.Space.s5)
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled()
-    }
-
-    private func point(_ icon: String, _ text: LocalizedStringKey) -> some View {
-        Label {
-            Text(text)
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        } icon: {
-            Image(systemName: icon).foregroundStyle(Theme.Palette.accent)
-        }
     }
 }
 
@@ -253,7 +271,7 @@ struct DictationSheets: ViewModifier {
     func body(content: Content) -> some View {
         content
             .sheet(isPresented: $dictation.showsConsent) {
-                VoiceConsentSheet { dictation.consentAccepted() }
+                VoiceConsentSheet { dictation.consentAccepted() } onDecline: { dictation.consentDeclined() }
             }
             .onChange(of: dictation.queue.notice) { _, notice in
                 if notice != nil { dictation.takeQueueNotice() }

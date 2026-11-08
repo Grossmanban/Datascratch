@@ -20,7 +20,10 @@ protocol DictationTarget: AnyObject {
 final class DictationQueue {
     enum State: Equatable {
         case recording
-        case processing
+        /// The server is recognising the recording («Распознаю…»).
+        case recognising
+        /// The server is tidying the text up («Привожу в порядок…»).
+        case tidying
         /// Done; `notice` when it is the device's text (offline, a server error).
         case ready(String, notice: VoiceError?)
     }
@@ -72,7 +75,7 @@ final class DictationQueue {
     /// The piece was let go: its recording (nil when none could be made) goes to the server.
     func finish(_ id: Int, audio: URL?) {
         guard let i = pieces.firstIndex(where: { $0.id == id }), pieces[i].state == .recording else { return }
-        pieces[i].state = .processing
+        pieces[i].state = .recognising
         let heard = pieces[i].heard
         let service = service
         let (quality, profanity) = options()
@@ -90,6 +93,7 @@ final class DictationQueue {
                     if !transcript.text.isEmpty { text = transcript.text }
                 }
                 try Task.checkCancellation()
+                self?.advance(id, to: .tidying)
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     result = .ready("", notice: nil)
                 } else {
@@ -122,6 +126,17 @@ final class DictationQueue {
         tasks = [:]
         pieces = []
         target?.showDictationPreview(nil)
+    }
+
+    private func advance(_ id: Int, to state: State) {
+        guard let i = pieces.firstIndex(where: { $0.id == id }) else { return }
+        pieces[i].state = state
+    }
+
+    /// What the server is doing with the earliest piece still out (nil while recording).
+    var stage: State? {
+        guard !isRecording else { return nil }
+        return pieces.first { $0.state == .recognising || $0.state == .tidying }?.state
     }
 
     private func complete(_ id: Int, _ state: State) {

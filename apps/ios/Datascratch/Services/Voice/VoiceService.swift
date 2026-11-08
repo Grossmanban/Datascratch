@@ -4,13 +4,13 @@ import Foundation
 // and tidies it up. Audio and text pass through our server to the speech and language providers
 // and are not stored; notes stay encrypted. Contract: api.md «Голос».
 
-/// Better recognition is slower and costs more (Settings → Voice).
+/// «Best» is more accurate and tidier, and costs ten times as much (Settings → Voice).
 nonisolated enum VoiceQuality: String, CaseIterable, Identifiable, Sendable {
     case standard, best
     var id: String { rawValue }
 }
 
-/// Swear words as said, or softened in formatted text (never in a plain dictation).
+/// Swear words softened in formatted text (the default), or kept as said.
 nonisolated enum VoiceProfanity: String, CaseIterable, Identifiable, Sendable {
     case keep, soften
     var id: String { rawValue }
@@ -24,6 +24,17 @@ nonisolated enum VoiceMode: String, Sendable {
 nonisolated enum VoiceStyle: String, CaseIterable, Identifiable, Sendable {
     case document, plan, minutes, article, letter, notes
     var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .document: String(localized: "Document")
+        case .plan: String(localized: "Plan")
+        case .minutes: String(localized: "Meeting Minutes")
+        case .article: String(localized: "Article")
+        case .letter: String(localized: "Letter")
+        case .notes: String(localized: "Lecture Notes")
+        }
+    }
 }
 
 nonisolated enum VoiceTextTask: String, Sendable {
@@ -57,18 +68,27 @@ nonisolated struct VoiceTranscript: Decodable, Equatable, Sendable {
 nonisolated enum VoiceError: Error, Equatable, Sendable {
     /// No network: what the device heard is kept.
     case offline
-    /// Voice is off for this account or server (`voice_disabled`).
+    /// 403 `voice_disabled`: not turned on for this account.
     case disabled
-    /// The account's voice minutes are used up (`voice_quota…`).
+    /// 429 `voice_quota`: this month's minutes are used up.
     case quota
+    /// 413 `voice_too_long`: over 3 hours / 200 MB.
+    case tooLong
+    /// 502 `voice_upstream`: the recognition service did not answer.
+    case upstream
+    /// 503 `voice_unavailable`.
+    case unavailable
     case notSignedIn
     case failed(String)
 
     var message: String {
         switch self {
         case .offline: String(localized: "Recognised on this device — we’ll refine it when you’re online.")
-        case .disabled: String(localized: "Voice is turned off on this server.")
-        case .quota: String(localized: "You’ve used up voice for now. It comes back with the next period.")
+        case .disabled: String(localized: "Voice isn’t turned on for this account.")
+        case .quota: String(localized: "This month’s voice limit is used up.")
+        case .tooLong: String(localized: "The recording is too long (up to 3 hours).")
+        case .upstream: String(localized: "The recognition service isn’t responding — try again.")
+        case .unavailable: String(localized: "Voice is temporarily unavailable.")
         case .notSignedIn: String(localized: "Sign in to dictate with the server’s recognition.")
         case .failed: String(localized: "Couldn’t process the recording. What the device heard is kept.")
         }
@@ -76,15 +96,63 @@ nonisolated enum VoiceError: Error, Equatable, Sendable {
 
     /// Server error codes (api.md «Голос»).
     static func from(code: String, status: Int) -> VoiceError {
-        if code == "voice_disabled" { return .disabled }
-        if code.contains("quota") || status == 429 { return .quota }
-        if status == 401 { return .notSignedIn }
-        return .failed(code)
+        switch code {
+        case "voice_disabled": return .disabled
+        case "voice_quota": return .quota
+        case "voice_too_long": return .tooLong
+        case "voice_upstream": return .upstream
+        case "voice_unavailable": return .unavailable
+        default: break
+        }
+        switch status {
+        case 401: return .notSignedIn
+        case 403: return .disabled
+        case 413: return .tooLong
+        case 429: return .quota
+        case 502: return .upstream
+        case 503: return .unavailable
+        default: return .failed(code)
+        }
+    }
+}
+
+/// `GET /v1/voice/me`: whether this account may use voice, and what is left this month.
+nonisolated struct VoiceAccess: Decodable, Equatable, Sendable {
+    var enabled: Bool
+    /// Minutes left this month; nil without a limit.
+    var minutesLeft: Double?
+    /// The server's owner (access is managed in the web app).
+    var isAdmin: Bool
+
+    init(enabled: Bool, minutesLeft: Double? = nil, isAdmin: Bool = false) {
+        self.enabled = enabled
+        self.minutesLeft = minutesLeft
+        self.isAdmin = isAdmin
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled, minutesLeft, remainingMinutes, limitMinutes, usedMinutes, isAdmin, admin
+    }
+
+    /// Lenient until the contract is in main: `minutesLeft`, or `remainingMinutes`, or the limit
+    /// less what is used.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        if let left = try c.decodeIfPresent(Double.self, forKey: .minutesLeft) ?? c.decodeIfPresent(Double.self, forKey: .remainingMinutes) {
+            minutesLeft = left
+        } else if let limit = try c.decodeIfPresent(Double.self, forKey: .limitMinutes) {
+            minutesLeft = max(0, limit - (try c.decodeIfPresent(Double.self, forKey: .usedMinutes) ?? 0))
+        } else {
+            minutesLeft = nil
+        }
+        isAdmin = try c.decodeIfPresent(Bool.self, forKey: .isAdmin) ?? c.decodeIfPresent(Bool.self, forKey: .admin) ?? false
     }
 }
 
 /// The server side of voice; a fake one runs the UI tests.
 nonisolated protocol VoiceService: Sendable {
+    func me() async throws -> VoiceAccess
     func transcribe(audio: URL, mode: VoiceMode, quality: VoiceQuality) async throws -> VoiceTranscript
     func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> String
 }
@@ -95,6 +163,12 @@ nonisolated struct ServerVoiceService: VoiceService {
     let baseURL: URL
     let accessToken: @Sendable () async throws -> String
     var session: URLSession = .shared
+
+    func me() async throws -> VoiceAccess {
+        var request = try await request("voice/me")
+        request.httpMethod = "GET"
+        return try JSONDecoder().decode(VoiceAccess.self, from: try await send(request))
+    }
 
     func transcribe(audio: URL, mode: VoiceMode, quality: VoiceQuality) async throws -> VoiceTranscript {
         let boundary = "ds-\(UUID().uuidString)"
@@ -175,6 +249,10 @@ nonisolated struct FakeVoiceService: VoiceService {
     static let transcript = "um so this is dictated text"
     static func cleaned(_ text: String) -> String {
         text.replacingOccurrences(of: "um so ", with: "").capitalizedFirst + "."
+    }
+
+    func me() async throws -> VoiceAccess {
+        VoiceAccess(enabled: error != .disabled, minutesLeft: 120)
     }
 
     func transcribe(audio: URL, mode: VoiceMode, quality: VoiceQuality) async throws -> VoiceTranscript {

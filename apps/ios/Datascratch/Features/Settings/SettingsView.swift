@@ -226,32 +226,48 @@ extension SyncCenter {
     }
 }
 
-/// D-65: how dictation is recognised and tidied up.
+/// D-65: how dictation is recognised and tidied up, and whether voice is on for this account
+/// (who may use it is managed in the web app).
 struct VoiceSettings: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
         @Bindable var settings = app.settings
         SettingsPage(title: String(localized: "Voice")) {
-            DSSettingsSection(String(localized: "Recognition"),
-                              footer: String(localized: "Best is more accurate with names and terms, and takes a little longer.")) {
+            if let access = app.voiceAccess {
+                DSSettingsSection(footer: access.isAdmin ? String(localized: "Manage access in the web app.") : nil) {
+                    if access.enabled {
+                        DSSettingsRow(access.minutesLeft.map { left in
+                                          let minutes = Int(left.rounded(.down))
+                                          return String(localized: "Left this month: \(minutes) min")
+                                      } ?? String(localized: "Voice is on"),
+                                      systemImage: "waveform")
+                            .accessibilityIdentifier("settings.voice.status")
+                    } else {
+                        DSSettingsRow(String(localized: "Voice isn’t turned on — ask the server’s owner."), systemImage: "waveform.slash")
+                            .accessibilityIdentifier("settings.voice.status")
+                    }
+                }
+            }
+            DSSettingsSection(String(localized: "Quality")) {
                 choice(String(localized: "Standard"), isOn: settings.voiceQuality == .standard) { settings.voiceQuality = .standard }
-                choice(String(localized: "Best"), isOn: settings.voiceQuality == .best) { settings.voiceQuality = .best }
+                choice(String(localized: "Best"), subtitle: String(localized: "Best is more accurate and tidier, but ten times as expensive."),
+                       isOn: settings.voiceQuality == .best) { settings.voiceQuality = .best }
             }
-            DSSettingsSection(String(localized: "Swear Words"),
-                              footer: String(localized: "Dictation always keeps your words. Softening applies to text you format.")) {
-                choice(String(localized: "Keep"), isOn: settings.voiceProfanity == .keep) { settings.voiceProfanity = .keep }
+            DSSettingsSection(String(localized: "Swear Words")) {
                 choice(String(localized: "Soften When Formatting"), isOn: settings.voiceProfanity == .soften) { settings.voiceProfanity = .soften }
+                choice(String(localized: "Keep As Is"), isOn: settings.voiceProfanity == .keep) { settings.voiceProfanity = .keep }
             }
-            DSSettingsSection(footer: String(localized: "Your recording and its text go through our server to ElevenLabs and OpenAI to be recognised and tidied up. They aren’t stored. Your notes stay encrypted.")) {
-                DSSettingsRow(String(localized: "Where Your Voice Goes"), systemImage: "lock.shield")
+            DSSettingsSection(footer: String(localized: "The recording and its text pass through our server to ElevenLabs and OpenAI only to be recognised and formatted. Nothing is stored, and your notes stay encrypted.")) {
+                DSSettingsRow(String(localized: "Voice Through Our Server"), systemImage: "lock.shield")
             }
         }
+        .task { await app.refreshVoiceAccess() }
     }
 
-    private func choice(_ title: String, isOn: Bool, select: @escaping () -> Void) -> some View {
+    private func choice(_ title: String, subtitle: String? = nil, isOn: Bool, select: @escaping () -> Void) -> some View {
         Button(action: select) {
-            DSSettingsRow(title, accessory: isOn ? .check : .none)
+            DSSettingsRow(title, subtitle: subtitle, accessory: isOn ? .check : .none)
         }
         .buttonStyle(.dsSettingsRow)
         .accessibilityAddTraits(isOn ? .isSelected : [])

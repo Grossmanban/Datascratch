@@ -308,7 +308,8 @@ struct NativeDocumentScreen: View {
             HideKeyboardButton(model: model, isCompact: isCompact)
                 .padding(.leading, isTight ? Theme.Space.s1 : Theme.Space.s3)
             PenPalette(model: model, isCompact: isCompact)
-            DictationButton(dictation: model.dictation, isCompact: isCompact || isTight)
+            // D-65: not offered when voice is off for this account.
+            if !app.isVoiceOff { DictationButton(dictation: model.dictation, isCompact: isCompact || isTight) }
             Button { setPaletteCollapsed(true) } label: {
                 // A clear «fold» glyph (the earlier one drew an empty circle on iPhone).
                 Image(systemName: "chevron.down")
@@ -368,7 +369,7 @@ struct NativeDocumentScreen: View {
                                     // room, the current tool keeps working (Pencil still draws).
                                     HStack(spacing: Theme.Space.s2) {
                                         Spacer(minLength: 0)
-                                        DictationButton(dictation: model.dictation, isCompact: true)
+                                        if !app.isVoiceOff { DictationButton(dictation: model.dictation, isCompact: true) }
                                         HideKeyboardButton(model: model, isCompact: true)
                                         CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
                                             .padding(.trailing, Theme.Space.s4)

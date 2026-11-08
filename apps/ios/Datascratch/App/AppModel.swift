@@ -164,7 +164,21 @@ final class AppModel {
         }
         guard let connection else { return nil }
         let api = connection.api
-        return ServerVoiceService(baseURL: api.baseURL, accessToken: { try await api.accessToken() })
+        // The API client's base is `<server>/v1`.
+        return ServerVoiceService(baseURL: connection.serverURL.appendingPathComponent("v1"), accessToken: { try await api.accessToken() })
+    }
+
+    /// D-65: `GET /v1/voice/me` — nil until read (or on this device only: the microphone stays).
+    private(set) var voiceAccess: VoiceAccess?
+
+    /// Voice is off for this account: the microphone is not offered.
+    var isVoiceOff: Bool { voiceAccess?.enabled == false }
+
+    /// Reads whether voice is on and what is left (at start, on `account_changed` "voice", when
+    /// Settings → Voice opens). A failure keeps what was known.
+    func refreshVoiceAccess() async {
+        guard let service = voiceService else { return }
+        if let access = try? await service.me(), access != voiceAccess { voiceAccess = access }
     }
 
     /// The microphone, or a stand-in that «hears» a fixed phrase in UI tests (no microphone).
@@ -343,6 +357,10 @@ final class AppModel {
     /// D-62: sharing learns which space a notebook is in (roles in a shared space); the
     /// stand-in without a server changes the library itself.
     private func wireSharing() {
+        #if canImport(DSCore)
+        connection?.onVoiceChanged = { [weak self] in Task { await self?.refreshVoiceAccess() } }
+        #endif
+        Task { await refreshVoiceAccess() }
         let library = self.library
         accountSharing.spaceOfNotebook = { [weak library] id in library?.notebook(id)?.spaceId }
         (accountSharing as? LocalAccountSharingService)?.library = library

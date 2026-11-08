@@ -30,6 +30,9 @@ final class DictationController {
     @ObservationIgnored private var piece: Int?
     @ObservationIgnored private var starting: Task<Void, Never>?
     @ObservationIgnored private var messageClear: Task<Void, Never>?
+    /// A dictated piece is at most ten minutes (api.md «Голос»): it goes by itself then.
+    nonisolated static let pieceLimit: Duration = .seconds(600)
+    @ObservationIgnored private var limit: Task<Void, Never>?
     /// Let go (or cancelled) while the microphone was still starting.
     @ObservationIgnored private var endedEarly: Ending?
 
@@ -90,6 +93,7 @@ final class DictationController {
         mode = .idle
         level = 0
         haptic(.rigid)
+        limit?.cancel()
         if starting != nil { endedEarly = .cancel }
         capture?.cancel()
         capture = nil
@@ -114,6 +118,11 @@ final class DictationController {
         showsConsent = false
     }
 
+    /// «Not Now»: nothing recorded; the sheet comes again next time.
+    func consentDeclined() {
+        showsConsent = false
+    }
+
     // MARK: Recording
 
     private func begin() {
@@ -126,6 +135,12 @@ final class DictationController {
         capture.onLevel = { [weak self] level in self?.level = level }
         capture.onHeard = { [weak self] text in self?.queue.heard(text, in: piece) }
         endedEarly = nil
+        limit?.cancel()
+        limit = Task { [weak self] in
+            try? await Task.sleep(for: Self.pieceLimit)
+            guard !Task.isCancelled, let self, self.piece == piece, self.mode != .idle else { return }
+            self.finish()
+        }
         starting = Task { [weak self] in
             do {
                 try await capture.start()
@@ -156,6 +171,7 @@ final class DictationController {
         }
         mode = .idle
         level = 0
+        limit?.cancel()
         haptic(.soft)
         self.capture = nil
         self.piece = nil
@@ -173,9 +189,9 @@ final class DictationController {
         if let piece { queue.cancel(piece) }
         piece = nil
         if (error as? VoiceCaptureError) == .microphoneDenied {
-            show(String(localized: "Allow the microphone for Datascratch in Settings to dictate."))
+            show(String(localized: "No access to the microphone — allow it in Settings."))
         } else {
-            show(String(localized: "The microphone isn’t available right now."))
+            show(String(localized: "No microphone found."))
         }
     }
 

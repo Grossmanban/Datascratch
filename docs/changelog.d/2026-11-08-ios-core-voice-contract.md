@@ -1,1 +1,2 @@
 - DSCore, D-65: типы голосового API по векторам core (`api/bodies.json`, `voice/timestamps.json`), коды ошибок голоса и `account_changed` со значением `voice` — CI DSCore остаётся зелёным, когда векторы придут в main.
+- DSCore, D-65: согласие на голос `settings.voiceConsentAt` в документе аккаунта (`AccountDocument.voiceConsentAt`, `setVoiceConsentAt`) — один раз на все устройства.

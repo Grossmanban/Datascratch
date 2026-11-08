@@ -202,8 +202,10 @@ DSCore
   («мм:сс», с часа «ч:мм:сс») и `Voice.speakerLabel("S2")` = «Собеседник 2» по
   `voice/timestamps.json`; `Voice.agentId` = `voice` (метка `agentEdit` «Голос»). Коды ошибок
   `voice_disabled`, `voice_quota`, `voice_too_long`, `voice_upstream`, `voice_unavailable`;
-  `AccountChange.voice` в `account_changed`. Запросы к серверу (`APIClient`) — когда голос
-  поручат iOS.
+  `AccountChange.voice` в `account_changed`. Запросы к серверу делает приложение (ios-app).
+- Согласие на голос — `AccountDocument.voiceConsentAt` / `setVoiceConsentAt(_:)`
+  (`settings.voiceConsentAt`, ISO; `nil` — ещё не спрашивали или отозвано). Хранится в документе
+  аккаунта, поэтому спрашивается один раз для всех устройств.
 
 ### «Общие со мной»: размещение и «новое» (D-54, D-63)
 

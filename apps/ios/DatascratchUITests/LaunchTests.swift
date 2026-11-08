@@ -752,6 +752,52 @@ final class LibraryUITests: XCTestCase {
         try checkEditorColumn(.portrait)
     }
 
+    /// Build 37: in landscape the keyboard leaves a strip of text. Measures how many lines of
+    /// text are visible above the bars and the keyboard (attached to the result), and checks that
+    /// a selection in that strip gives the format bar's row back to the text.
+    func testLandscapeKeyboardLeavesRoomForText() throws {
+        rotate(.landscapeLeft)
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        let text = editor.textViews.firstMatch.exists ? editor.textViews.firstMatch : editor
+        text.tap()
+        text.typeText("Room\nfor the text in landscape")
+        guard app.keyboards.firstMatch.waitForExistence(timeout: 5) else {
+            throw XCTSkip("no on-screen keyboard (hardware keyboard connected)")
+        }
+        settle(1)
+        // Body text: 17 pt at a 1.22 line height multiple (EditorTheme).
+        let line: CGFloat = 17 * 1.2 * 1.22
+        func visibleLines() -> (height: CGFloat, lines: Double) {
+            let top = editor.frame.minY
+            let bottom = min(editor.frame.maxY, app.keyboards.firstMatch.frame.minY)
+            let h = max(0, bottom - top)
+            return (h, Double((h / line * 10).rounded() / 10))
+        }
+        let typing = visibleLines()
+        let bars = app.keyboards.firstMatch.frame.minY - editor.frame.maxY
+        // The word just typed, selected with a double tap.
+        text.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.12)).doubleTap()
+        settle(1)
+        let selecting = visibleLines()
+        let window = app.windows.firstMatch.frame
+        let report = "\(UIDevice.current.model) \(Int(window.width))×\(Int(window.height)) landscape, keyboard \(Int(app.keyboards.firstMatch.frame.height)) pt: "
+            + "typing \(Int(typing.height)) pt ≈ \(typing.lines) lines (bars \(Int(bars)) pt), "
+            + "selecting \(Int(selecting.height)) pt ≈ \(selecting.lines) lines"
+        print("LANDSCAPE-ROOM " + report)
+        let note = XCTAttachment(string: report)
+        note.name = "landscape-room"
+        note.lifetime = .keepAlways
+        add(note)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "landscape-keyboard-selecting"
+        shot.lifetime = .keepAlways
+        add(shot)
+        XCTAssertGreaterThanOrEqual(selecting.height, typing.height - 1, "a selection took room from the text: \(report)")
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
+    }
+
     func testEditorColumnOnIPadLandscape() throws {
         try checkEditorColumn(.landscapeLeft)
     }

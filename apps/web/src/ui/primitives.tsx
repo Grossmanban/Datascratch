@@ -99,7 +99,14 @@ export function Dialog({
 }) {
   return (
     <UIDialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title={title ?? "Dialog"} hideTitle={!title} description={description} size={wide ? "lg" : "md"} className={className}>
+      {/* Never taller than the screen (a phone, the on-screen keyboard): the window scrolls inside. */}
+      <DialogContent
+        title={title ?? "Dialog"}
+        hideTitle={!title}
+        description={description}
+        size={wide ? "lg" : "md"}
+        className={cn("max-h-[calc(100dvh-24px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain", className)}
+      >
         {children}
       </DialogContent>
     </UIDialog>

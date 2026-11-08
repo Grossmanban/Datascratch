@@ -34,7 +34,7 @@ export function TopBar({ children, actions, className }: { children?: ReactNode;
     <header
       ref={ref}
       className={cn(
-        "sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b bg-canvas/85 px-3 backdrop-blur-xl transition-colors sm:px-4",
+        "sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 pointer-coarse:h-14 border-b bg-canvas/85 px-3 backdrop-blur-xl transition-colors sm:px-4",
         scrolled ? "border-line" : "border-transparent",
         className,
       )}
@@ -52,7 +52,7 @@ export function TopBar({ children, actions, className }: { children?: ReactNode;
         )
       )}
       <div className="flex min-w-0 flex-1 items-center gap-1.5 text-[13.5px] text-ink-2">{children}</div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1 pointer-coarse:gap-0">
         {/* Document, calendar and tasks can take the whole window; remembered per kind of screen. */}
         {focusKind && !isMobile && (
           <IconButton
@@ -71,7 +71,7 @@ export function TopBar({ children, actions, className }: { children?: ReactNode;
             type="button"
             onClick={() => useUi.setState({ tabOverviewOpen: true })}
             aria-label={`${t("tabs.overview")} · ${t("tabs.count", { count: tabCount })}`}
-            className="ml-0.5 flex size-8 items-center justify-center"
+            className="ml-0.5 flex size-8 items-center justify-center pointer-coarse:size-11"
             data-testid="tab-count"
           >
             <span className="flex size-[22px] items-center justify-center rounded-[6px] border-[1.5px] border-ink-2 text-[11px] font-semibold tabular-nums text-ink">

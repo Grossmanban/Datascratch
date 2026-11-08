@@ -163,86 +163,246 @@ struct ModeOption: View {
     }
 }
 
+/// Creating or editing a space (owner, 2026-11-08, D-15): one sheet. A live preview of the
+/// space's chip; for a new one the kind as two large cards — Personal or Shared; the name (the
+/// caret already in it, nothing made without one); its glyph and colour. A shared space goes on
+/// to «Invite People» (which can be closed). «Edit Space» is the same sheet without the kind.
 struct SpaceEditor: View {
     @Environment(SceneModel.self) private var scene
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     let space: Space?
-    /// D-62: «New Shared Space» — made shared on creation, then its people sheet opens.
+    /// Opened as «shared» (an older entry point): the Shared card starts chosen.
     var startsShared = false
 
     @State private var name = ""
-    @State private var icon = "square.stack"
+    @State private var icon = SpaceEditor.letterIcon
     @State private var color: Tint = .blue
+    @State private var isShared = false
     @State private var confirmDelete = false
+    @FocusState private var nameFocused: Bool
+
+    /// An SF Symbol name: the tile then shows the name's first letter (`SpaceTile`).
+    static let letterIcon = "square.stack"
+    static let glyphs = ["🏠", "💼", "🎓", "📚", "🎨", "💡", "🧪", "✈️", "🌱", "🎵", "❤️", "⭐️", "🧩", "🏃", "🍳", "🛠️"]
+
+    private var trimmed: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var canShare: Bool { space == nil && app.accountSharing.isAvailable }
+    /// What the chip in the switcher will look like.
+    private var preview: Space {
+        Space(id: space?.id ?? "preview", name: trimmed.isEmpty ? String(localized: "Space name") : trimmed,
+              icon: icon, color: color, order: 0, createdAt: Date(), sharing: isShared ? .owned : space?.sharing)
+    }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("Space name", text: $name)
-                        .font(Theme.Typography.h3)
-                        .accessibilityIdentifier("space.name")
-                } footer: {
-                    Text(startsShared ? "A space you share with people: everyone you invite sees its notebooks and works in them with you."
-                                      : "Spaces keep contexts apart — for example Personal, Work and Study.")
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.Space.s6) {
+                    section("Preview") { previewChip }
+                    if canShare { kindCards }
+                    nameField
+                    section("Icon") { glyphGrid }
+                    section("Color") { TintPicker(selection: $color) }
+                    deleteSection
                 }
-                Section("Color") { TintPicker(selection: $color) }
-                Section("Icon") { SymbolPicker(selection: $icon, tint: color) }
-                // A shared space is not deleted from here: its people would lose it at once.
-                if let space, !space.isShared, app.library.spaces.count > 1 {
-                    Section {
-                        Button("Delete Space", role: .destructive) { confirmDelete = true }
-                    }
-                    .confirmationDialog("Delete this space?", isPresented: $confirmDelete, titleVisibility: .visible) {
-                        Button("Delete Space and Its Notebooks", role: .destructive) {
-                            app.library.deleteSpace(space.id)
-                            dismiss()
-                        }
-                    } message: {
-                        Text("All notebooks in this space and their notes will be deleted.")
-                    }
-                }
+                .padding(.horizontal, Theme.Space.s5)
+                .padding(.vertical, Theme.Space.s4)
+                .frame(maxWidth: 560)
+                .frame(maxWidth: .infinity)
             }
-            .navigationTitle(space != nil ? LocalizedStringKey("Edit Space") : startsShared ? "New Shared Space" : "New Space")
+            .scrollDismissesKeyboard(.interactively)
+            .background(Theme.Palette.canvas)
+            .navigationTitle(space != nil ? LocalizedStringKey("Space Settings") : "New Space")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(space == nil ? LocalizedStringKey("Create") : "Done") {
-                        let trimmed = name.trimmingCharacters(in: .whitespaces)
-                        if let space {
-                            app.library.updateSpace(space.id) {
-                                $0.name = trimmed
-                                $0.icon = icon
-                                $0.color = color
-                            }
-                        } else {
-                            let created = app.library.createSpace(name: trimmed, icon: icon, color: color)
-                            scene.switchSpace(to: created.id)
-                            if startsShared {
-                                // Shared at once (or, offline, with the first invitation); its
-                                // people sheet opens to invite them.
-                                app.library.flush()
-                                let sharing = app.accountSharing
-                                Task { _ = try? await sharing.makeShared(space: created.id) }
-                                scene.sheet = .spaceMembers(created.id)
-                                return
-                            }
-                        }
-                        dismiss()
-                    }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .accessibilityIdentifier("space.save")
+                    Button(space != nil ? LocalizedStringKey("Save") : isShared ? "Create and Invite" : "Create Space") { save() }
+                        .fontWeight(.semibold)
+                        .disabled(trimmed.isEmpty)
+                        .accessibilityIdentifier("space.save")
                 }
             }
             .onAppear {
-                guard let space else { return }
-                name = space.name
-                icon = space.icon
-                color = space.color
+                if let space {
+                    name = space.name
+                    icon = space.icon
+                    color = space.color
+                } else {
+                    isShared = startsShared && canShare
+                    nameFocused = true
+                }
             }
         }
+        .accessibilityIdentifier("spaceEditor")
+    }
+
+    // MARK: Parts
+
+    /// The chip as the switcher will show it, live.
+    private var previewChip: some View {
+        HStack(spacing: Theme.Space.s3) {
+            SpaceTile(space: preview, size: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(preview.name)
+                    .font(.system(.title3, design: .serif).weight(.semibold))
+                    .foregroundStyle(trimmed.isEmpty ? Theme.Palette.textTertiary : Theme.Palette.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Label(isShared || preview.isShared ? LocalizedStringKey("Shared space") : "Personal space",
+                      systemImage: isShared || preview.isShared ? "person.2" : "lock")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.textSecondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(Theme.Space.s4)
+        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.xl, style: .continuous))
+        .animation(Theme.Motion.snappy, value: [trimmed, icon, color.rawValue, isShared ? "shared" : "personal"])
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("space.preview")
+    }
+
+    private var kindCards: some View {
+        HStack(spacing: Theme.Space.s3) {
+            kindCard(shared: false, title: "Personal", detail: "Only for you. You can share it later.", symbol: "lock")
+            kindCard(shared: true, title: "For Working Together", detail: "Invite people — they will see all notebooks.", symbol: "person.2")
+        }
+    }
+
+    private func kindCard(shared: Bool, title: LocalizedStringKey, detail: LocalizedStringKey, symbol: String) -> some View {
+        let selected = isShared == shared
+        return Button {
+            withAnimation(Theme.Motion.snappy) { isShared = shared }
+            Haptics.selection()
+        } label: {
+            VStack(alignment: .leading, spacing: Theme.Space.s2) {
+                Image(systemName: symbol)
+                    .font(.title2)
+                    .foregroundStyle(selected ? color.foreground : Theme.Palette.textSecondary)
+                Text(title)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                Text(detail)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+            .padding(Theme.Space.s4)
+            .background(selected ? color.background : Theme.Palette.surface,
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous)
+                    .strokeBorder(selected ? color.foreground : Theme.Palette.separator, lineWidth: selected ? 2 : 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier(shared ? "space.kind.shared" : "space.kind.personal")
+    }
+
+    private var nameField: some View {
+        section("Name") {
+            TextField("Name", text: $name, prompt: Text("For example, Work"))
+                .font(Theme.Typography.h3)
+                .focused($nameFocused)
+                .submitLabel(.done)
+                .onSubmit { if !trimmed.isEmpty { save() } }
+                .padding(.horizontal, Theme.Space.s4)
+                .padding(.vertical, Theme.Space.s3)
+                .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous))
+                .accessibilityIdentifier("space.name")
+        }
+    }
+
+    /// The name's first letter, or an emoji.
+    private var glyphGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Space.s2), count: 6), spacing: Theme.Space.s2) {
+            glyphButton(Self.letterIcon) {
+                Text(trimmed.first.map { String($0).uppercased() } ?? "A")
+                    .font(.system(.title3, design: .serif).weight(.semibold))
+            }
+            ForEach(Self.glyphs, id: \.self) { glyph in
+                glyphButton(glyph) { Text(glyph).font(.title3) }
+            }
+        }
+    }
+
+    private func glyphButton(_ value: String, @ViewBuilder label: () -> some View) -> some View {
+        let selected = icon == value || (value == Self.letterIcon && icon.allSatisfy(\.isASCII))
+        return Button {
+            withAnimation(Theme.Motion.snappy) { icon = value }
+            Haptics.selection()
+        } label: {
+            label()
+                .foregroundStyle(selected ? color.foreground : Theme.Palette.textSecondary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(selected ? color.background : Theme.Palette.surface,
+                            in: RoundedRectangle(cornerRadius: Theme.Radius.md, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    @ViewBuilder private var deleteSection: some View {
+        // A shared space is not deleted from here: its people would lose it at once.
+        if let space, !space.isShared, app.library.spaces.count > 1 {
+            Button("Delete Space", role: .destructive) { confirmDelete = true }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Space.s3)
+                .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous))
+                .confirmationDialog("Delete this space?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                    Button("Delete Space and Its Notebooks", role: .destructive) {
+                        app.library.deleteSpace(space.id)
+                        dismiss()
+                    }
+                } message: {
+                    Text("All notebooks in this space and their notes will be deleted.")
+                }
+        }
+    }
+
+    private func section(_ title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s2) {
+            Text(title)
+                .font(Theme.Typography.caption.weight(.semibold))
+                .foregroundStyle(Theme.Palette.textTertiary)
+                .textCase(.uppercase)
+            content()
+        }
+    }
+
+    // MARK: Saving
+
+    private func save() {
+        let name = trimmed
+        guard !name.isEmpty else { return }
+        if let space {
+            app.library.updateSpace(space.id) {
+                $0.name = name
+                $0.icon = icon
+                $0.color = color
+            }
+            dismiss()
+            return
+        }
+        let created = app.library.createSpace(name: name, icon: icon, color: color)
+        scene.switchSpace(to: created.id)
+        scene.sidebar = .allDocuments
+        guard isShared else {
+            dismiss()
+            return
+        }
+        // Shared at once (or, offline, with the first invitation); «Invite People» follows and
+        // can be closed.
+        app.library.flush()
+        let sharing = app.accountSharing
+        Task { _ = try? await sharing.makeShared(space: created.id) }
+        scene.sheet = .inviteToNewSpace(created.id)
     }
 }
 

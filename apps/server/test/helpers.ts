@@ -211,11 +211,11 @@ export class SyncClient {
     return new SyncClient(ws);
   }
 
-  static async user(s: TestServer, u: TestUser): Promise<SyncClient> {
+  static async user(s: TestServer, u: TestUser, protocol = 1): Promise<SyncClient> {
     const c = await SyncClient.connect(s);
     c.send({
       type: 'hello',
-      protocol: 1,
+      protocol,
       auth: { kind: 'user', accessToken: u.session.accessToken },
       deviceId: u.session.deviceId,
       client: { platform: 'web', version: 'test' },

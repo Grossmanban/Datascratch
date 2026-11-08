@@ -1,6 +1,14 @@
 import Foundation
 
 /// Overall sync state for the UI.
+/// Why a document is not syncing (`SyncStatus.waiting`).
+public enum SyncWaitReason: String, Equatable, Sendable {
+    /// Its key is not on this device (yet).
+    case key
+    /// The server does not let this account reach it (yet): `doc_not_found` / `forbidden`.
+    case access
+}
+
 public struct SyncStatus: Equatable, Sendable {
     public var connection: SyncConnectionState
     /// Outgoing messages the engine can send now and that are not acknowledged yet (failed
@@ -19,6 +27,11 @@ public struct SyncStatus: Equatable, Sendable {
     /// another device before `reconcileNotebookKeys`, a note before its `NoteMeta`); sent by
     /// themselves once it is. A calm note, not a spinner: they do not count in `pending`.
     public var held = 0
+    /// Documents that are not syncing and why (D-62): no key on this device yet, or the server
+    /// says this account cannot reach them (yet) — e.g. a space joined a moment ago. They are
+    /// retried by themselves: when a key is learned (`noteKeysLearned`), on `account_changed`
+    /// and on reconnect; the app asks for keys when `setKeysMissingHandler` calls it.
+    public var waiting: [String: SyncWaitReason] = [:]
     /// Not connected and the quick retries are used up (several attempts failed in a row).
     /// Until then a lost or stuck connection counts as syncing, not offline.
     public var connectionTrouble = false
@@ -125,6 +138,14 @@ public actor SyncEngine: SyncClientDelegate {
     /// its key is fetched): not subscribed — nothing is fetched or skipped — until the key is
     /// there (`resumeDocumentsWaitingForKeys`, also after every notebook index update).
     private var waitingForKey: Set<String> = []
+    /// Documents the server refused on subscribe (`doc_not_found` for a document it knew,
+    /// `forbidden`): access may come a moment later (a space joined, a key granted), so they are
+    /// subscribed again on `account_changed`, `noteKeysLearned` and reconnect, not left behind.
+    private var noAccess: Set<String> = []
+    private var accountChangedHandler: (@Sendable (Set<AccountChange>) -> Void)?
+    private var keysMissingHandler: (@Sendable (Set<String>) -> Void)?
+    /// Asks for keys shortly after documents start waiting for one, then a few times more.
+    private var keysMissingTask: Task<Void, Never>?
     /// Documents the person is looking at, most recent first: subscribed ahead of the rest.
     private var focused: [String] = []
     /// Registrations in progress after `doc_not_found` (a document made on this device).
@@ -218,6 +239,8 @@ public actor SyncEngine: SyncClientDelegate {
         retryTask = nil
         keyRecheck?.cancel()
         keyRecheck = nil
+        keysMissingTask?.cancel()
+        keysMissingTask = nil
         await client.stop()
     }
 
@@ -314,6 +337,8 @@ public actor SyncEngine: SyncClientDelegate {
                            failed: (try? store.failedOutbox()) ?? [], connectionTrouble: connectionTrouble)
         s.held = held
         s.unreadable = (try? store.unreadable()) ?? []
+        for docId in waitingForKey { s.waiting[docId] = .key }
+        for docId in noAccess { s.waiting[docId] = .access }
         return s
     }
 
@@ -404,6 +429,58 @@ public actor SyncEngine: SyncClientDelegate {
         deviceRevokedHandler = handler
     }
 
+    /// Called on `account_changed` from the server (D-62), with what changed (never empty: a
+    /// message naming only things this client does not know is dropped).
+    /// The app refreshes invitations, spaces and keys, then calls `noteKeysLearned`. Documents
+    /// refused before are subscribed again by the engine itself.
+    public func setAccountChangedHandler(_ handler: (@Sendable (Set<AccountChange>) -> Void)?) {
+        accountChangedHandler = handler
+    }
+
+    /// Called ~0.2 s after documents start waiting for their key (and again after 2, 10 and
+    /// 30 s while some still wait), with the documents waiting: the app fetches keys right away
+    /// instead of on its next refresh, then calls `noteKeysLearned`.
+    public func setKeysMissingHandler(_ handler: (@Sendable (Set<String>) -> Void)?) {
+        keysMissingHandler = handler
+        if handler != nil, !waitingForKey.isEmpty { scheduleKeysMissing() }
+    }
+
+    /// Keys (or access) were learned: documents that waited for a key and documents the server
+    /// refused are subscribed again, and what was held is sent once they are caught up.
+    public func noteKeysLearned() async {
+        await resumeDocumentsWaitingForKeys()
+        await retryRefusedAccess()
+        await flush()
+    }
+
+    private func retryRefusedAccess() async {
+        guard !noAccess.isEmpty, await client.isConnected else { return }
+        let records = noAccess.compactMap { try? store.document($0) }
+        noAccess.removeAll()
+        publish()
+        try? await subscribe(records)
+    }
+
+    private func scheduleKeysMissing() {
+        guard keysMissingHandler != nil, keysMissingTask == nil else { return }
+        keysMissingTask = Task { [weak self] in
+            for delay in [Duration.milliseconds(200), .seconds(2), .seconds(10), .seconds(30)] {
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled, let self, await self.askForMissingKeys() else { break }
+            }
+            await self?.clearKeysMissingTask()
+        }
+    }
+
+    /// Calls the handler with the documents still waiting; false when none wait.
+    private func askForMissingKeys() -> Bool {
+        guard !waitingForKey.isEmpty, let handler = keysMissingHandler else { return false }
+        handler(waitingForKey)
+        return true
+    }
+
+    private func clearKeysMissingTask() { keysMissingTask = nil }
+
     public func setTraceHandler(_ handler: (@Sendable (SyncTraceEvent) -> Void)?) {
         traceHandler = handler
     }
@@ -482,8 +559,17 @@ public actor SyncEngine: SyncClientDelegate {
             publish()
             return
         }
-        guard let items = try? store.pendingOutbox(limit: Self.maxInFlight * 2) else { return }
-        backlog = items.count == Self.maxInFlight * 2
+        guard let queued = try? store.pendingOutbox(limit: Self.maxInFlight * 2) else { return }
+        backlog = queued.count == Self.maxInFlight * 2
+        // Indexes before notes, each document's messages in order: a note's key travels in its
+        // notebook's index (`NoteMeta`), so a note made with its index entry must not reach the
+        // server — and other devices — ahead of that entry (they would wait for its key).
+        let isNote = Dictionary(Set(queued.map(\.docId)).map { id in (id, (known[id] ?? (try? store.document(id)))?.kind == .note) },
+                                uniquingKeysWith: { a, _ in a })
+        let items = queued.enumerated().sorted {
+            let a = isNote[$0.element.docId] == true ? 1 : 0, b = isNote[$1.element.docId] == true ? 1 : 0
+            return (a, $0.offset) < (b, $1.offset)
+        }.map(\.element)
         // Documents whose registration failed in this pass: their other messages wait.
         var skip: Set<String> = []
         for item in items where !inFlight.contains(item.clientMsgId) && live.contains(item.docId) && !skip.contains(item.docId) {
@@ -555,9 +641,11 @@ public actor SyncEngine: SyncClientDelegate {
             guard (try? keyFor(record)) != nil else {
                 waitingForKey.insert(record.docId)
                 trace(.keyMissing(docId: record.docId))
+                scheduleKeysMissing()
                 continue
             }
             waitingForKey.remove(record.docId)
+            noAccess.remove(record.docId)
             ready.append(record)
         }
         for r in ready { known[r.docId] = r }
@@ -680,6 +768,8 @@ public actor SyncEngine: SyncClientDelegate {
             inFlight.removeAll()
             live.removeAll()
             subscribedAll = false
+            // The next connection subscribes everything again, refused documents included.
+            noAccess.removeAll()
         }
         publish()
     }
@@ -688,6 +778,15 @@ public actor SyncEngine: SyncClientDelegate {
         switch message {
         case .welcome:
             break
+        case .accountChanged(let what):
+            // Only names this client knows count; none left: nothing to do (as the TS client).
+            guard !what.isEmpty else { return }
+            accountChangedHandler?(what)
+            // Access may have come (a space joined, a notebook shared or moved into a space).
+            if !what.isDisjoint(with: [.spaces, .members, .notebooks, .keys]) {
+                await retryRefusedAccess()
+                await resumeDocumentsWaitingForKeys()
+            }
         case .updates(let docId, let snapshot, let items, let upToDate):
             guard receive(docId: docId, snapshot: snapshot, items: items) else { return }
             await resumeAfterIndexUpdate(docId)
@@ -745,7 +844,7 @@ public actor SyncEngine: SyncClientDelegate {
                 catchingUp.remove(ref)
                 await registerMissing(ref)
             } else if code == .forbidden || code == .docNotFound {
-                catchingUp.remove(ref)
+                if catchingUp.remove(ref) != nil || live.remove(ref) != nil { noAccess.insert(ref) }
             }
             publish()
         }
@@ -824,6 +923,7 @@ public actor SyncEngine: SyncClientDelegate {
     /// stays and the resubscription fetches it again.
     private func pauseForKey(_ docId: String) {
         waitingForKey.insert(docId)
+        scheduleKeysMissing()
         live.remove(docId)
         catchingUp.remove(docId)
         publish()

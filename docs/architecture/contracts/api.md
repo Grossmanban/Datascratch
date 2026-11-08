@@ -39,10 +39,10 @@
 
 | Метод | Путь | Тело → ответ |
 | --- | --- | --- |
-| POST | `/notebooks` | `{ notebookId, mode: "private"\|"agent", wrappedKey (notebookKey под masterKey), notebookKey? (только для mode=agent) }` → `Notebook` |
+| POST | `/notebooks` | `{ notebookId, mode: "private"\|"agent"\|"agent_e2e", wrappedKey (notebookKey под masterKey), notebookKey? (только для mode=agent) }` → `Notebook`. `agent_e2e` (D-64, ПРЕДЛОЖЕНО) — без `notebookKey`: сервер ключа не получает |
 | GET | `/notebooks` | `Notebook[]` |
 | GET | `/notebooks/:id/key` | `{ wrappedKey }` |
-| PATCH | `/notebooks/:id/mode` | `{ mode, notebookKey? }` — включение режима «для агентов» передаёт ключ, выключение — удаляет серверную обёртку |
+| PATCH | `/notebooks/:id/mode` | `{ mode, notebookKey? }` — включение режима «для агентов» передаёт ключ, выключение — удаляет серверную обёртку. `agent_e2e` — без ключа; уход из `agent_e2e` удаляет обёртки агентов этого блокнота и ставит `keyRotationPending` (`crypto.md` §12.4); переход `agent` → `agent_e2e` — тоже смена ключа (сервер видел ключ, §8) |
 | DELETE | `/notebooks/:id` | удаляет блокнот и все его документы |
 | POST | `/docs` | `{ docId, kind: "account"\|"notebook"\|"note", notebookId \| null }` → `204`; регистрация до первого `push` |
 | PATCH | `/docs/:id` | `{ notebookId }` → `204` — перенос заметки (`kind = note`) в другой блокнот того же пользователя; повтор с тем же `notebookId` — `204` |
@@ -120,7 +120,7 @@
 | PATCH | `/members/:kind/:id/:userId` | `{ role }` → `204` (только владелец) |
 | DELETE | `/members/:kind/:id/:userId` | `204`. Владелец убирает участника; участник указывает себя — «Выйти». После этого сервер сразу закрывает доступ и ставит `keyRotationPending` |
 | PUT | `/members/:kind/:id/:userId/key` | (только владелец) `{ version, wrappedKey }` → `204` — выдать ключ участнику (`crypto.md` §10.2); `409`, если `version` не текущая |
-| POST | `/members/:kind/:id/rotate` | (только владелец) смена ключа, `crypto.md` §10.3: `{ version, ownerWrappedKey, previousKeyWrap, memberKeys: { userId, wrappedKey }[], notebookKey? }` → `204`. Атомарно; `409`, если `version` ≠ текущая + 1 или `memberKeys` не совпадает ровно с участниками `active` (с ключом текущей версии): лишний (`awaiting_key`) или недостающий — `409`. Участники `awaiting_key` остаются такими и получают ключ новой версии через `PUT …/key` с новой `version` — так аккаунт, созданный после приглашения, не получит ключ без подтверждения владельца. `ownerWrappedKey` — новый ключ под мастер-ключом владельца (блокнот, `ad` с версией) или под ключом его блокнота (заметка, как в `NoteMeta.wrappedKey`). `notebookKey` — только для блокнота в режиме «для агентов» (сервер переоборачивает его своим ключом, `crypto.md` §8) |
+| POST | `/members/:kind/:id/rotate` | (только владелец) смена ключа, `crypto.md` §10.3: `{ version, ownerWrappedKey, previousKeyWrap, memberKeys: { userId, wrappedKey }[], notebookKey?, agentKeys?: { agentId, wrappedKey }[] }` → `204`. Атомарно; `409`, если `version` ≠ текущая + 1 или `memberKeys` не совпадает ровно с участниками `active` (с ключом текущей версии): лишний (`awaiting_key`) или недостающий — `409`. Участники `awaiting_key` остаются такими и получают ключ новой версии через `PUT …/key` с новой `version` — так аккаунт, созданный после приглашения, не получит ключ без подтверждения владельца. `ownerWrappedKey` — новый ключ под мастер-ключом владельца (блокнот, `ad` с версией) или под ключом его блокнота (заметка, как в `NoteMeta.wrappedKey`). `notebookKey` — только для блокнота в режиме «для агентов» (сервер переоборачивает его своим ключом, `crypto.md` §8) |
 | GET | `/members/note/:id/key` | (только владелец) `{ version, ownerWrappedKey, keyChain }` — текущий ключ отдельно расшаренной заметки. При запуске клиент владельца сверяет `NoteMeta.keyVersion` своих расшаренных заметок с `version` и, если в индексе старее, дописывает `NoteMeta` (на случай сбоя между `rotate` и `push`) |
 | POST | `/members/:kind/:id/rotate/done` | (только владелец, `kind = notebook`) все заметки блокнота получили новые ключи → снимает `keyRotationPending`. Для `kind = note` флаг снимает сам `rotate` |
 | GET | `/shared-with-me` | `SharedItem[]` |
@@ -168,7 +168,7 @@
 | GET | `/spaces/:id/notebooks` | `{ notebookId, version, spaceWrappedKey, keyChain, mode }[]` — блокноты пространства и обёртки их ключей ключом пространства (владелец и участники с ключом текущей версии) |
 | PUT | `/spaces/:id/notebooks/:notebookId` | (только владелец) `{ version, spaceWrappedKey }` → `204` — перенести свой личный блокнот в общее пространство (`crypto.md` §11.3); обёртка мастер-ключом удаляется. `409`, если `version` не текущая версия ключа блокнота; `409`, если у блокнота есть свои участники D-54 |
 | POST | `/spaces/:id/notebooks/:notebookId/move-out` | (только владелец) `{ version, ownerWrappedKey, previousKeyWrap, notebookKey? }` → `204` — вынести блокнот в личное пространство со сменой ключа (`crypto.md` §11.3; дальше — шаги 2–3 смены ключа блокнота) |
-| POST | `/spaces/:id/rotate` | (только владелец) `{ version, ownerWrappedKey, previousKeyWrap, memberKeys: { userId, wrappedKey }[], notebooks: { notebookId, version, spaceWrappedKey, previousKeyWrap, notebookKey? }[] }` → `204`. Атомарно; `409`, если версия пространства ≠ текущая + 1, `memberKeys` не совпадает ровно с `active` участниками или `notebooks` — не ровно все блокноты пространства, каждый с версией текущая + 1 |
+| POST | `/spaces/:id/rotate` | (только владелец) `{ version, ownerWrappedKey, previousKeyWrap, memberKeys: { userId, wrappedKey }[], notebooks: { notebookId, version, spaceWrappedKey, previousKeyWrap, notebookKey?, agentKeys?: { agentId, wrappedKey }[] }[] }` → `204`. Атомарно; `409`, если версия пространства ≠ текущая + 1, `memberKeys` не совпадает ровно с `active` участниками или `notebooks` — не ровно все блокноты пространства, каждый с версией текущая + 1 |
 | POST | `/spaces/:id/rotate/done` | (только владелец) все заметки всех блокнотов получили новые ключи → снимает `keyRotationPending` у пространства и его блокнотов |
 | DELETE | `/spaces/:id` | (только владелец) удаляет пространство, все его блокноты и документы |
 
@@ -232,6 +232,35 @@
 | GET | `/agent-tokens/:id/audit` | журнал действий агента |
 
 API для самих агентов (MCP и REST для агентов) описывается в потоке агентов: `docs/architecture/contracts/agents-api.md` (появится на этапе агентов).
+
+## Мост агента — сквозное шифрование для агентов (D-64)
+
+**ПРЕДЛОЖЕНО** (поток agents, 2026-11-08). Блокноты в режиме `agent_e2e` агент читает и правит только через **мост** (`npx datascratch-agent`) на своей машине: мост держит ключ агента (`crypto.md` §12), получает обёртки ключей блокнотов и работает с шифротекстом по протоколу синхронизации. Серверный MCP (`/mcp`) и REST `/v1/agent/*` блокноты `agent_e2e` не отдают.
+
+**Подключение (сопряжение)**
+
+| Метод | Путь | Кто | Тело → ответ |
+| --- | --- | --- | --- |
+| POST | `/agent-pairings` | мост, без входа | `{ publicKey, name, machine, bridgeVersion }` → `{ pairingId, code, pollSecret, expiresAt }`. `code` сервер считает сам из `publicKey` (`crypto.md` §12.2) и хранит для поиска; живёт **10 минут**. Лимит: 10 в час с одного IP. `pollSecret` — 32 случайных байта, только для `claim` |
+| GET | `/agent-pairings/:code` | пользователь | → `{ pairingId, publicKey, name, machine, bridgeVersion, createdAt, expiresAt }` или `404` (нет, истёк, уже подтверждён). Лимит: 10 неудачных поисков в минуту на аккаунт. Клиент **сам пересчитывает** код из `publicKey` и при несовпадении не продолжает |
+| POST | `/agent-pairings/:pairingId/approve` | пользователь | `{ name, permission: "read"\|"read_write", notebookIds, allNotebooks?, wraps: { notebookId, version, wrappedKey }[] }` → `{ agentId }`. Создаёт разрешение вида `bridge` с открытым ключом агента. `wraps` — ровно для перечисленных блокнотов (при `allNotebooks` — для всех `agent_e2e` блокнотов владельца), версия = текущая; иначе `409`. Только блокноты `agent_e2e`, которыми владеет вызывающий (`400`). Подтвердить можно один раз |
+| POST | `/agent-pairings/:pairingId/claim` | мост | `{ pollSecret }` → `202` (ещё ждёт) или `200 { agentId, token, ownerUserId, ownerPublicKey, permission }` — **один раз**, затем подключение удаляется. Мост опрашивает раз в 2 с (лимит 60 в минуту). Отклонение владельцем или истечение — `410` |
+| DELETE | `/agent-pairings/:pairingId` | пользователь | отклонить → `204` |
+
+Токен моста — как статический токен агента (`agents-api.md` §2.1, префикс `dsb_`), привязан к разрешению вида `bridge`; в `GET /agent-tokens` такие разрешения видны с `kind: "bridge"`, `machine`, `bridgeVersion` и `publicKey`.
+
+**Ключи для моста**
+
+| Метод | Путь | Кто | Тело → ответ |
+| --- | --- | --- | --- |
+| GET | `/agent/e2e/notebooks` | мост (токен `dsb_`) | `{ ownerUserId, ownerPublicKey, notebooks: { notebookId, version, wrappedKey, keyChain: string[], permission }[] }` — обёртки текущих версий и цепочки (`crypto.md` §10.3) для блокнотов разрешения |
+| PUT | `/agent-tokens/:id/keys/:notebookId` | владелец | `{ version, wrappedKey }` → `204` — выдать агенту ключ блокнота (добавление блокнота в разрешение, новый блокнот при `allNotebooks`); `409`, если версия не текущая |
+| PATCH | `/agent-tokens/:id` | владелец | `{ notebookIds?, allNotebooks?, permission? }` → `204`; убранный блокнот теряет обёртку агента и получает `keyRotationPending` |
+| DELETE | `/agent-tokens/:id` | владелец | как сейчас; для `bridge` — ещё удаляет обёртки, закрывает соединения моста и ставит `keyRotationPending` его блокнотам (`crypto.md` §12.4) |
+
+**Работа с данными:** мост подключается к синхронизации (`sync-protocol.md` §3, `auth.kind = "agent"`) и видит только документы блокнотов своего разрешения; `push` — при `read_write`. Новые заметки регистрирует `POST /docs` с токеном моста (только в блокнотах разрешения). Вложения: `GET /attachments/:id/chunks/:n` и загрузка новых — тем же токеном, в пределах блокнотов разрешения. Автор правок — `{ kind: "agent", tokenId }` (`Author`). Журнал агента (`GET /agent-tokens/:id/audit`) для моста содержит подключения, подписки и отправленные обновления (без содержимого — его сервер не знает).
+
+**Смена ключа:** `agentKeys` в `POST /members/notebook/:id/rotate` и `POST /spaces/:id/rotate` — ровно неотозванные агенты с ключом этого блокнота (иначе `409`), см. `crypto.md` §12.4. Уведомление `account_changed` со значением `agents` (протокол v2): подключение подтверждено, агент отозван, выдан или сменён ключ агента.
 
 ## Служебное
 

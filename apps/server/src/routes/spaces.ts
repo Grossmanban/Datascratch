@@ -10,7 +10,7 @@ import { fromB64, toB64 } from '../lib/encoding.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { noteKeyCache } from '../plugins/agent-key-cache.js';
 import { memberOf, requireOwnTarget, requireVisibleTarget } from '../services/sharing.js';
-import { accountChanged } from '../services/account-events.js';
+import { accountChanged, type AccountChange } from '../services/account-events.js';
 import { topics } from '../sync/hub.js';
 import { errorResponses, id } from './schemas.js';
 import {
@@ -21,7 +21,6 @@ import {
   sharedSpaceSchema as spaceSchema,
   spaceKeyResponseSchema,
   spaceNotebookSchema,
-  type AccountChange,
 } from '@datascratch/shared/contracts';
 
 type SpaceRow = typeof spaces.$inferSelect;

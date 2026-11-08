@@ -42,6 +42,8 @@ export class Metrics {
   readonly syncUpdates = new Counter('ds_sync_updates_total', 'Document updates stored, by source.');
   readonly syncErrors = new Counter('ds_sync_errors_total', 'Sync errors sent to clients, by code.');
   readonly fetchImage = new Counter('ds_fetch_image_total', 'Image downloads by link (POST /v1/fetch-image), by result.');
+  readonly voice = new Counter('ds_voice_requests_total', 'Voice requests (D-65), by endpoint and result code.');
+  readonly voiceSeconds = new Counter('ds_voice_audio_seconds_total', 'Seconds of audio transcribed (D-65).');
   readonly #gauges: Gauge[] = [];
 
   constructor() {

@@ -55,12 +55,12 @@ const PRESETS = [60, 300, 600, 1200];
 const usd = (n: number) => `$${n < 10 ? n.toFixed(2) : n.toFixed(0)}`;
 
 /**
- * «Кто может пользоваться» (server admin only; `admin` in /voice/me, else the 403 of the list says
+ * «Кто может пользоваться» (server admin only; `isAdmin` in /voice/me, else the 403 of the list says
  * no). Names are encrypted on the server: the email is shown, a name only when the server has one.
  */
 function AdminVoice() {
   const { t } = useTranslation();
-  const isAdmin = useVoiceAccess((s) => s.me?.admin);
+  const isAdmin = useVoiceAccess((s) => s.me?.isAdmin);
   const list = useQuery({
     queryKey: ["admin-voice"],
     queryFn: voiceApi.adminList,

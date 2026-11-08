@@ -16,11 +16,11 @@ export type { VoiceProfanity, VoiceQuality, VoiceStyle, VoiceTurn } from "@datas
 
 /**
  * The server's final shapes (coordinator, 2026-11-08) ahead of core's schemas: `available` (the
- * service is up), `admin` (this account manages voice), per account `customMinutes` (null = the
+ * service is up), `isAdmin` (this account manages voice), per account `customMinutes` (null = the
  * default) and `requests`. Optional here until core carries them.
  */
-export type MyVoice = VoiceMe & { available?: boolean; admin?: boolean };
-export type AdminVoiceRow = AdminVoiceAccount & { admin?: boolean; customMinutes?: number | null; requests?: number };
+export type MyVoice = VoiceMe & { available?: boolean; isAdmin?: boolean };
+export type AdminVoiceRow = AdminVoiceAccount & { isAdmin?: boolean; customMinutes?: number | null; requests?: number };
 export type AdminVoice = Omit<AdminVoiceResponse, "accounts"> & {
   accounts: AdminVoiceRow[];
   totals: AdminVoiceResponse["totals"] & { requests?: number; enabledAccounts?: number };

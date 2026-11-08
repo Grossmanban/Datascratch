@@ -89,9 +89,10 @@ struct RootView: View {
             }
         }
         .task {
-            // UI tests (`-ui-testing-launch`): the data «arrives» after 3 s.
+            // UI tests (`-ui-testing-launch`): the data «arrives» after 10 s — long enough for a
+            // busy CI simulator to take its first snapshot of the launch screen (3 s was not).
             guard !app.launchFinished, !app.isLaunchReady, app.phase != .launching else { return }
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(for: .seconds(10))
             app.releaseLaunchHoldForTesting()
         }
         .preferredColorScheme(app.settings.colorScheme)

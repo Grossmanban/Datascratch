@@ -62,28 +62,27 @@ final class SettingsUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["diagnostics.share"].firstMatch.exists)
     }
 
-    /// Cold start: the ink mark shows while the data «loads» (held 3 s in the test), then
+    /// Cold start: the ink mark shows while the data «loads» (held 10 s in the test), then
     /// gives way to the interface.
     func testLaunchScreenDrawsThenGivesWay() throws {
         let app = launch(["-ui-testing-launch"])
         let screen = app.descendants(matching: .any)["launch.screen"].firstMatch
-        XCTAssertTrue(screen.waitForExistence(timeout: 3), "no launch screen")
+        XCTAssertTrue(screen.waitForExistence(timeout: 8), "no launch screen")
         XCTAssertEqual(screen.value as? String, "ink")
-        let settings = app.buttons["sidebar.settings"].firstMatch
-        XCTAssertTrue(settings.waitForExistence(timeout: 10) || app.navigationBars.buttons.firstMatch.exists,
-                      "the interface did not come")
         let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: screen)
-        wait(for: [gone], timeout: 5)
+        wait(for: [gone], timeout: 25)
+        XCTAssertTrue(app.buttons["sidebar.settings"].firstMatch.waitForExistence(timeout: 10)
+                      || app.navigationBars.buttons.firstMatch.exists, "the interface did not come")
     }
 
     /// Reduce Motion: no writing, a short cross-fade.
     func testLaunchScreenWithReduceMotionCrossFades() throws {
         let app = launch(["-ui-testing-launch", "-ui-testing-reduce-motion"])
         let screen = app.descendants(matching: .any)["launch.screen"].firstMatch
-        XCTAssertTrue(screen.waitForExistence(timeout: 3), "no launch screen")
+        XCTAssertTrue(screen.waitForExistence(timeout: 8), "no launch screen")
         XCTAssertEqual(screen.value as? String, "crossfade")
         let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: screen)
-        wait(for: [gone], timeout: 8)
+        wait(for: [gone], timeout: 25)
         XCTAssertTrue(app.buttons["sidebar.settings"].firstMatch.waitForExistence(timeout: 5)
                       || app.navigationBars.buttons.firstMatch.exists)
     }

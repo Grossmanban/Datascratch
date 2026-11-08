@@ -248,6 +248,19 @@ describe("sync vectors", () => {
     for (const c of v.invalid.server)
       expect(serverMessageSchema.safeParse(c.message).success, c.reason).toBe(false);
   });
+  it("keeps known account changes and tells unknown frame types from broken ones", async () => {
+    const { parseServerFrame } = await import("../src/contracts/index.js");
+    const v = load("sync/messages.json");
+    for (const c of v.accountChanged) {
+      const f = parseServerFrame(JSON.stringify({ type: "account_changed", what: c.what }));
+      expect(
+        f.kind === "message" && f.message.type === "account_changed" && f.message.what,
+      ).toEqual(c.expected);
+    }
+    for (const raw of v.ignoredServerFrames)
+      expect(parseServerFrame(raw).kind, raw).toBe("unknown");
+    for (const raw of v.brokenServerFrames) expect(parseServerFrame(raw).kind, raw).toBe("invalid");
+  });
 });
 
 describe("extra crypto vectors", () => {

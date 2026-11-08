@@ -18,8 +18,5 @@ extension NativeEditorModel: DictationTarget {
         // paragraph it shows nothing.
         editor.replaceWithSuggestion(text + " ", scope: .selection)
     }
-
-    /// `VOICE_AGENT_ID` of the shared contract.
-    nonisolated static let voiceAgentId = EditorCommands.voiceAgentId
 }
 #endif

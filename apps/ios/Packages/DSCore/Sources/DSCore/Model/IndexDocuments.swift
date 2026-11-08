@@ -328,6 +328,18 @@ public final class AccountDocument: Sendable {
         try setSetting("recoveryKeyConfirmed", .bool(value: confirmed), origin: origin)
     }
 
+    /// When the user agreed that voice goes through the server in the clear
+    /// (`settings.voiceConsentAt`, ISO, D-65). Lives in the account document so the
+    /// consent is asked once for all devices; `nil` = not asked yet (or withdrawn).
+    public var voiceConsentAt: Date? {
+        setting("voiceConsentAt")?.stringValue.flatMap(DSDate.parseISO)
+    }
+
+    /// Records (or, with `nil`, withdraws) the voice consent.
+    public func setVoiceConsentAt(_ date: Date?, origin: TransactionOrigin = .local) throws {
+        try setSetting("voiceConsentAt", .optionalString(date.map(DSDate.iso)), origin: origin)
+    }
+
     // MARK: Starred
 
     public func starred() -> [StarredItem] { crdt.arrayValues("starred").compactMap(StarredItem.init(value:)) }

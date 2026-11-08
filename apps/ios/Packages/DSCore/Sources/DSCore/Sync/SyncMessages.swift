@@ -227,6 +227,8 @@ public enum SyncErrorCode: String, Codable, Sendable {
 /// What changed for the account (`account_changed`, D-62).
 public enum AccountChange: String, Codable, Hashable, Sendable, CaseIterable {
     case invitations, spaces, members, keys, notebooks
+    /// Voice access or minutes changed (D-65): re-read `GET /voice/me`.
+    case voice
 }
 
 /// Timing events of `SyncEngine` (`setTraceHandler`), e.g. for `os_signpost` intervals:

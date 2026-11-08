@@ -412,6 +412,10 @@ public enum APIErrorCode: String, Codable, Sendable {
     case badRequest = "bad_request", unauthorized, forbidden, notFound = "not_found", conflict
     case rateLimited = "rate_limited", payloadTooLarge = "payload_too_large", `internal`
     case deviceRevoked = "device_revoked"
+    /// Voice (D-65): turned off for this account; minutes of the month used up; recording longer
+    /// than allowed; the recognition/text service failed; voice not set up on this server.
+    case voiceDisabled = "voice_disabled", voiceQuota = "voice_quota", voiceTooLong = "voice_too_long"
+    case voiceUpstream = "voice_upstream", voiceUnavailable = "voice_unavailable"
 }
 
 extension APIErrorBody.Inner {

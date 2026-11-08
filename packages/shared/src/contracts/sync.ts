@@ -204,7 +204,15 @@ export const errorMessageSchema = z.object({
 export const SYNC_CLOSE_DEVICE_REVOKED = 4410;
 
 /** What `account_changed` says changed (protocol 2); unknown values are dropped. */
-export const ACCOUNT_CHANGES = ["invitations", "spaces", "members", "keys", "notebooks"] as const;
+export const ACCOUNT_CHANGES = [
+  "invitations",
+  "spaces",
+  "members",
+  "keys",
+  "notebooks",
+  /** This account's voice access or quota changed (D-65). */
+  "voice",
+] as const;
 export type AccountChange = (typeof ACCOUNT_CHANGES)[number];
 const isAccountChange = (v: string): v is AccountChange =>
   (ACCOUNT_CHANGES as readonly string[]).includes(v);

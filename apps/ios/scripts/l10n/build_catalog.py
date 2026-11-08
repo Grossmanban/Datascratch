@@ -75,7 +75,7 @@ IGNORE = {
     # D-54: UI-test seed and the comparison's line marks.
     "Shared plans", "Roadmap", "Plan for two", "Ideas", "Only the owner edits this.", "• ", "☑ ", "———", "“", "”",
     # D-65: HTTP headers and the fake voice server of the UI tests.
-    "Authorization", "Content-Type", "POST", "GET", "no response", "um so ", "um so this is dictated text",
+    "Authorization", "Content-Type", "POST", "GET", "S1", "no response", "um so ", "um so this is dictated text",
     # D-62: UI-test seed of a joined shared space.
     "Team", "Team notes", "Kickoff", "Agenda",
     # UI-test seed: a long note (scroll position across full screen).
@@ -86,6 +86,10 @@ IGNORE = {
     "LaunchBackground",
     # Presence: the name sent when an account has no e-mail local part (not shown here).
     "Me",
+    # Diagnostics report (plain English for support), licence names, an asset name.
+    "Datascratch diagnostics", "events (newest first):", " : failedDocumentIds.joined(separator: ",
+    " : unreadableNotebookIds.joined(separator: ", " } ?? ", "GRDB.swift", "ISC", "MIT", "Mermaid",
+    "Yrs (Yjs)", "swift-sodium · libsodium", "LaunchBackground", "not supported",
 }
 
 LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')

@@ -21,12 +21,13 @@ private actor GatedVoiceService: VoiceService {
     }
 
     nonisolated func me() async throws -> VoiceAccess { VoiceAccess(enabled: true) }
+    nonisolated func isAdmin() async -> Bool { false }
 
-    nonisolated func transcribe(audio: URL, mode: VoiceMode, quality: VoiceQuality) async throws -> VoiceTranscript {
+    nonisolated func transcribe(audio: URL, mode: VoiceMode, language: VoiceLanguage) async throws -> VoiceTranscript {
         let name = audio.lastPathComponent
         await wait(name)
         if let error = await error { throw error }
-        return VoiceTranscript(durationSec: 1, turns: [VoiceTurn(text: "server \(name)")])
+        return VoiceTranscript(durationSec: 1, turns: [VoiceTurn(speaker: "S1", start: 0, end: 1, text: "server \(name)")])
     }
 
     nonisolated func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> String {
@@ -142,11 +143,14 @@ struct DictationQueueTests {
         #expect(queue.stage == nil)
     }
 
-    @Test func voiceAccessReadsWhatIsLeft() throws {
-        let decode = { (json: String) in try JSONDecoder().decode(VoiceAccess.self, from: Data(json.utf8)) }
-        #expect(try decode(#"{"enabled":true,"minutesLeft":42}"#) == VoiceAccess(enabled: true, minutesLeft: 42))
-        #expect(try decode(#"{"enabled":true,"limitMinutes":300,"usedMinutes":120}"#).minutesLeft == 180)
-        #expect(try decode(#"{"enabled":false}"#) == VoiceAccess(enabled: false))
-        #expect(try decode(#"{"enabled":true,"isAdmin":true}"#).isAdmin)
+    /// The contract's vectors (test-vectors/vectors/api/bodies.json).
+    @Test func contractVectorsDecode() throws {
+        let me = try JSONDecoder().decode(VoiceAccess.self, from: Data(#"{"enabled":true,"monthlyMinutes":600,"usedMinutes":12.5,"resetsAt":"2026-12-01T00:00:00.000Z"}"#.utf8))
+        #expect(me.enabled && me.minutesLeft == 587)
+        #expect((try? JSONDecoder().decode(VoiceAccess.self, from: Data(#"{"enabled":true,"monthlyMinutes":600,"usedMinutes":0}"#.utf8))) == nil,
+                "resetsAt is required")
+        let transcript = try JSONDecoder().decode(VoiceTranscript.self, from: Data(#"{"durationSec":9,"turns":[{"speaker":"S1","start":0,"end":4.2,"text":"Давай во вторник."},{"speaker":"S2","start":4.5,"end":9,"text":"Лучше в среду."}]}"#.utf8))
+        #expect(transcript.text == "Давай во вторник. Лучше в среду.")
+        #expect(try JSONDecoder().decode(VoiceTranscript.self, from: Data(#"{"durationSec":0,"turns":[]}"#.utf8)).text.isEmpty)
     }
 }

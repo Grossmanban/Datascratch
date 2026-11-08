@@ -89,7 +89,7 @@ final class DictationQueue {
                 }
                 var text = heard
                 if let audio {
-                    let transcript = try await service.transcribe(audio: audio, mode: .dictation, quality: quality)
+                    let transcript = try await service.transcribe(audio: audio, mode: .dictation, language: .forDevice)
                     if !transcript.text.isEmpty { text = transcript.text }
                 }
                 try Task.checkCancellation()

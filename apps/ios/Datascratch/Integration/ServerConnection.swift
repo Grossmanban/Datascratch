@@ -323,6 +323,8 @@ final class ServerConnection: CoreLibraryRemote {
                 case .synced: .synced
                 case .failed(let documents, let reason): .failed(documents: documents, reason: reason)
                 }
+                let failedIds = status.failed.map(\.docId)
+                if sync.failedDocumentIds != failedIds { sync.failedDocumentIds = failedIds }
                 sync.apply(summary: summary, pending: status.pending)
                 let unreadable = Set(status.unreadable.compactMap { $0.notebookId ?? nil })
                 if sync.unreadableNotebookIds != unreadable { sync.unreadableNotebookIds = unreadable }

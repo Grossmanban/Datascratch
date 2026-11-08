@@ -238,7 +238,7 @@ final class LibraryUITests: XCTestCase {
         let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
         if toggle.exists { toggle.tap() }
         // iPhone: from a document, back to its list, then back to the sidebar (one step each).
-        let back = app.navigationBars.buttons.firstMatch
+        let back = app.barBackButton
         for _ in 0..<3 where !(any.waitForExistence(timeout: 2) && best().isHittable) {
             guard back.exists, back.isHittable else { break }
             back.tap()
@@ -390,7 +390,7 @@ final class LibraryUITests: XCTestCase {
         if UIDevice.current.userInterfaceIdiom == .pad, close.waitForExistence(timeout: 3) {
             close.tap()
         } else {
-            app.navigationBars.buttons.firstMatch.tap()
+            app.barBackButton.tap()
         }
         settle(1)
     }
@@ -465,7 +465,7 @@ final class LibraryUITests: XCTestCase {
         XCTAssertEqual(navigated, .completed, "tapping the note link did not open «Target»")
 
         // Back to Links: the literal link to a missing note offers to create it.
-        let back = app.navigationBars.buttons.firstMatch
+        let back = app.barBackButton
         if UIDevice.current.userInterfaceIdiom == .phone, back.exists { back.tap() }
         let links = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Links'")).firstMatch
         if links.waitForExistence(timeout: 3) { links.tap() }
@@ -527,7 +527,7 @@ final class LibraryUITests: XCTestCase {
         if UIDevice.current.userInterfaceIdiom == .pad {
             app.buttons["document.close"].firstMatch.tap()
         } else {
-            app.navigationBars.buttons.firstMatch.tap()
+            app.barBackButton.tap()
         }
         settle(1)
         let switcher = app.descendants(matching: .any)["sidebar.spaceSwitcher"].firstMatch
@@ -535,7 +535,7 @@ final class LibraryUITests: XCTestCase {
         func showSidebar() {
             for _ in 0..<3 where !(switcher.exists && switcher.isHittable) {
                 let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
-                if toggle.exists && toggle.isHittable { toggle.tap() } else if app.navigationBars.buttons.firstMatch.exists { app.navigationBars.buttons.firstMatch.tap() }
+                if toggle.exists && toggle.isHittable { toggle.tap() } else if app.barBackButton.exists { app.barBackButton.tap() }
                 settle(1)
             }
         }
@@ -765,6 +765,54 @@ final class LibraryUITests: XCTestCase {
         try checkEditorColumn(.portrait)
     }
 
+    /// Build 37: in landscape the keyboard leaves a strip of text. Measures how many lines of
+    /// text are visible above the bars and the keyboard (attached to the result), and checks that
+    /// a selection in that strip gives the format bar's row back to the text.
+    func testLandscapeKeyboardLeavesRoomForText() throws {
+        rotate(.landscapeLeft)
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        let editor = app.descendants(matching: .any)["editor"].firstMatch
+        let text = editor.textViews.firstMatch.exists ? editor.textViews.firstMatch : editor
+        text.tap()
+        text.typeText("Room\nfor the text in landscape")
+        guard app.keyboards.firstMatch.waitForExistence(timeout: 5) else {
+            throw XCTSkip("no on-screen keyboard (hardware keyboard connected)")
+        }
+        settle(1)
+        // Body text: 17 pt at a 1.22 line height multiple (EditorTheme).
+        let line: CGFloat = 17 * 1.2 * 1.22
+        func visibleLines() -> (height: CGFloat, lines: Double) {
+            let top = editor.frame.minY
+            let bottom = min(editor.frame.maxY, app.keyboards.firstMatch.frame.minY)
+            let h = max(0, bottom - top)
+            return (h, Double((h / line * 10).rounded() / 10))
+        }
+        let typing = visibleLines()
+        let bars = app.keyboards.firstMatch.frame.minY - editor.frame.maxY
+        // The word just typed, selected with a double tap.
+        text.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.12)).doubleTap()
+        settle(1)
+        let selecting = visibleLines()
+        let window = app.windows.firstMatch.frame
+        let report = "\(UIDevice.current.model) \(Int(window.width))×\(Int(window.height)) landscape, keyboard \(Int(app.keyboards.firstMatch.frame.height)) pt: "
+            + "typing \(Int(typing.height)) pt ≈ \(typing.lines) lines (bars \(Int(bars)) pt), "
+            + "selecting \(Int(selecting.height)) pt ≈ \(selecting.lines) lines"
+        print("LANDSCAPE-ROOM " + report)
+        let note = XCTAttachment(string: report)
+        // The CI log lists attachment names: the measurement is readable there without the bundle.
+        note.name = "landscape-room \(Int(window.width))x\(Int(window.height)) kb\(Int(app.keyboards.firstMatch.frame.height)) "
+            + "typing \(Int(typing.height))pt \(typing.lines)l bars \(Int(bars))pt selecting \(Int(selecting.height))pt \(selecting.lines)l"
+        note.lifetime = .keepAlways
+        add(note)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "landscape-keyboard-selecting"
+        shot.lifetime = .keepAlways
+        add(shot)
+        XCTAssertGreaterThanOrEqual(selecting.height, typing.height - 1, "a selection took room from the text: \(report)")
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
+    }
+
     func testEditorColumnOnIPadLandscape() throws {
         try checkEditorColumn(.landscapeLeft)
     }
@@ -936,7 +984,7 @@ final class LibraryUITests: XCTestCase {
             close.tap()
         } else {
             XCTAssertTrue(app.buttons["document.more"].firstMatch.waitForExistence(timeout: 10), "the document did not open")
-            app.navigationBars.buttons.firstMatch.tap()
+            app.barBackButton.tap()
         }
         settle(1.5)
         XCTAssertTrue(app.navigationBars["All Documents"].firstMatch.waitForExistence(timeout: 3),
@@ -1200,7 +1248,7 @@ final class LibraryUITests: XCTestCase {
         // button is the sidebar button, D-60 — `sidebarElement` below brings the sidebar).
         let allRow = app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch
         for _ in 0..<3 where UIDevice.current.userInterfaceIdiom == .phone && !(allRow.exists && allRow.isHittable) {
-            let back = app.navigationBars.buttons.firstMatch
+            let back = app.barBackButton
             if back.exists { back.tap() }
             settle(1)
         }
@@ -1272,8 +1320,8 @@ final class AppearanceUITests: XCTestCase {
         let settings = app.descendants(matching: .any)["sidebar.settings"].firstMatch
         let card = app.descendants(matching: .any)["document.card"].firstMatch
         // On iPhone the app may open on the document list: go back to the sidebar.
-        if !settings.waitForExistence(timeout: 10), app.navigationBars.buttons.firstMatch.exists {
-            app.navigationBars.buttons.firstMatch.tap()
+        if !settings.waitForExistence(timeout: 10), app.barBackButton.exists {
+            app.barBackButton.tap()
         }
         XCTAssertTrue(settings.waitForExistence(timeout: 5) || card.exists,
                       "main window not shown; buttons: \(LibraryUITests.buttons(app))")
@@ -1293,8 +1341,8 @@ final class AppearanceUITests: XCTestCase {
     func testDocumentWithCover() throws {
         let app = launch(["-ui-testing-cover"])
         let card = app.descendants(matching: .any)["document.card"].firstMatch
-        if !card.waitForExistence(timeout: 10), app.navigationBars.buttons.firstMatch.exists {
-            app.navigationBars.buttons.firstMatch.tap()
+        if !card.waitForExistence(timeout: 10), app.barBackButton.exists {
+            app.barBackButton.tap()
             app.descendants(matching: .any)["sidebar.allDocuments"].firstMatch.tap()
         }
         XCTAssertTrue(card.waitForExistence(timeout: 5), "no document card; buttons: \(LibraryUITests.buttons(app))")

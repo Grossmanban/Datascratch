@@ -281,7 +281,6 @@ struct NativeDocumentScreen: View {
     @Environment(SceneModel.self) private var scene
     @State private var model: NativeEditorModel?
     @State private var failed = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let noteId: String
 
     /// D-54: shared with this account «view only» (the note itself or its notebook).
@@ -292,38 +291,6 @@ struct NativeDocumentScreen: View {
     private func owner(of note: NoteMeta) -> String? {
         app.accountSharing.owner(of: ShareTarget(kind: .note, id: note.id))
             ?? app.accountSharing.owner(of: ShareTarget(kind: .notebook, id: note.notebookId))
-    }
-
-    private func setPaletteCollapsed(_ collapsed: Bool) {
-        withAnimation(reduceMotion ? nil : Theme.Motion.snappy) {
-            app.settings.penPaletteCollapsed = collapsed
-        }
-    }
-
-    /// The palette with its fold button at the trailing end.
-    /// `isTight`: the narrowest column (beside the list on an iPad mini in portrait, 18 pt short
-    /// with the regular margins) — slim margins and spacing, so the row fits.
-    private func paletteRow(_ model: NativeEditorModel, isCompact: Bool, isTight: Bool = false) -> some View {
-        HStack(spacing: isTight ? 2 : isCompact ? Theme.Space.s1 : Theme.Space.s2) {
-            HideKeyboardButton(model: model, isCompact: isCompact)
-                .padding(.leading, isTight ? Theme.Space.s1 : Theme.Space.s3)
-            PenPalette(model: model, isCompact: isCompact)
-            // D-65: not offered when voice is off for this account.
-            if !app.isVoiceOff { DictationButton(dictation: model.dictation, isCompact: isCompact || isTight) }
-            Button { setPaletteCollapsed(true) } label: {
-                // A clear «fold» glyph (the earlier one drew an empty circle on iPhone).
-                Image(systemName: "chevron.down")
-                    .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
-                    .foregroundStyle(Theme.Palette.textSecondary)
-                    .frame(width: isCompact ? 22 : 28, height: isCompact ? 22 : 28)
-            }
-            // A system glass button: a plain button over interactive glass missed taps.
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .accessibilityLabel("Hide Pen Tools")
-            .accessibilityIdentifier("penPalette.collapse")
-            .padding(.trailing, isTight ? Theme.Space.s1 : Theme.Space.s3)
-        }
     }
 
     var body: some View {
@@ -352,44 +319,8 @@ struct NativeDocumentScreen: View {
                         // Inline when it fits the column, else the compact row: it never runs past
                         // the column's edges (iPad split view with three columns).
                         if !isViewOnly(note) {
-                        VStack(spacing: 0) {
-                            // D-65: what is being dictated, and a word about the last piece.
-                            VStack(spacing: Theme.Space.s2) {
-                                DictationPreview(dictation: model.dictation, text: model.dictationPreview)
-                                if let message = model.dictation.message { DictationMessage(text: message) }
-                            }
-                            .padding(.bottom, model.dictationPreview != nil || model.dictation.message != nil ? Theme.Space.s2 : 0)
-                            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictationPreview != nil)
-                            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictation.message)
-                            // While text is being written: marks and block styles above the palette.
-                            FormatBarRow(model: model)
-                            Group {
-                                if app.settings.penPaletteCollapsed {
-                                    // Folded to a button at the trailing edge: the editor gets the
-                                    // room, the current tool keeps working (Pencil still draws).
-                                    HStack(spacing: Theme.Space.s2) {
-                                        Spacer(minLength: 0)
-                                        if !app.isVoiceOff { DictationButton(dictation: model.dictation, isCompact: true) }
-                                        HideKeyboardButton(model: model, isCompact: true)
-                                        CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
-                                            .padding(.trailing, Theme.Space.s4)
-                                    }
-                                    // A thin strip: the folded button takes less height than the palette.
-                                    .padding(.bottom, Theme.Space.s1)
-                                    .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
-                                } else {
-                                    ViewThatFits(in: .horizontal) {
-                                        paletteRow(model, isCompact: false)
-                                        paletteRow(model, isCompact: true)
-                                        paletteRow(model, isCompact: true, isTight: true)
-                                    }
-                                    .padding(.top, Theme.Space.s2)
-                                    .padding(.bottom, Theme.Space.s3)
-                                    .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
+                            EditorBottomBars(model: model,
+                                             isShort: model.isSoftwareKeyboardShown && proxy.size.height < EditorBottomBars.shortHeight)
                         }
                     }
                     // The "/" menu over the format bar and palette too: in a short editor (iPad in
@@ -689,6 +620,102 @@ struct NativeDocumentHeader: View {
         .lineLimit(1)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("document.meta")
+    }
+}
+
+/// The bars under the text: the format bar while text is written, then the pen palette (or its
+/// folded button). When the keyboard leaves little height (landscape on iPhone and iPad mini,
+/// build 37), the text gets more room: no format bar while a range is selected, and a slimmer
+/// palette row.
+struct EditorBottomBars: View {
+    /// Below this height of the document area (the keyboard up), the bars are compact.
+    /// iPhone and iPad mini in landscape with the keyboard are well under it (about 160 and 270
+    /// pt); an iPhone in portrait (about 420 pt) keeps the full palette.
+    static let shortHeight: CGFloat = 360
+
+    @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let model: NativeEditorModel
+    let isShort: Bool
+
+    var body: some View {
+        let _ = model.revision
+        let editingText = model.editor.isEditingText && model.editor.tools.mode == .text
+        let selecting = isShort && editingText && model.editor.formatState.hasSelection
+        VStack(spacing: 0) {
+            // D-65: what is being dictated, and a word about the last piece.
+            VStack(spacing: Theme.Space.s2) {
+                DictationPreview(dictation: model.dictation, text: model.dictationPreview)
+                if let message = model.dictation.message { DictationMessage(text: message) }
+            }
+            .padding(.bottom, model.dictationPreview != nil || model.dictation.message != nil ? Theme.Space.s2 : 0)
+            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictationPreview != nil)
+            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictation.message)
+            // While text is being written: marks and block styles above the palette — not while a
+            // range is selected in a short area (the system's edit menu has Cut, Copy, «Формат»).
+            if !selecting { FormatBarRow(model: model) }
+            Group {
+                if app.settings.penPaletteCollapsed {
+                    // Folded to a button at the trailing edge: the editor gets the
+                    // room, the current tool keeps working (Pencil still draws).
+                    HStack(spacing: Theme.Space.s2) {
+                        Spacer(minLength: 0)
+                        // D-65: not offered when voice is off for this account.
+                        if !app.isVoiceOff { DictationButton(dictation: model.dictation, isCompact: true) }
+                        HideKeyboardButton(model: model, isCompact: true)
+                        CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
+                            .padding(.trailing, Theme.Space.s4)
+                    }
+                    // A thin strip: the folded button takes less height than the palette.
+                    .padding(.bottom, Theme.Space.s1)
+                    .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
+                } else {
+                    ViewThatFits(in: .horizontal) {
+                        paletteRow(isCompact: false)
+                        paletteRow(isCompact: true)
+                        paletteRow(isCompact: true, isTight: true)
+                    }
+                    // Slimmer in a short area: every point there is a line of text.
+                    .padding(.top, isShort ? Theme.Space.s1 : Theme.Space.s2)
+                    .padding(.bottom, isShort ? Theme.Space.s1 : Theme.Space.s3)
+                    .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .animation(reduceMotion ? nil : Theme.Motion.snappy, value: selecting)
+        .animation(reduceMotion ? nil : Theme.Motion.snappy, value: isShort)
+    }
+
+    private func setPaletteCollapsed(_ collapsed: Bool) {
+        withAnimation(reduceMotion ? nil : Theme.Motion.snappy) {
+            app.settings.penPaletteCollapsed = collapsed
+        }
+    }
+
+    /// The palette with its fold button at the trailing end.
+    /// `isTight`: the narrowest column (beside the list on an iPad mini in portrait, 18 pt short
+    /// with the regular margins) — slim margins and spacing, so the row fits.
+    private func paletteRow(isCompact: Bool, isTight: Bool = false) -> some View {
+        HStack(spacing: isTight ? 2 : isCompact ? Theme.Space.s1 : Theme.Space.s2) {
+            HideKeyboardButton(model: model, isCompact: isCompact)
+                .padding(.leading, isTight ? Theme.Space.s1 : Theme.Space.s3)
+            PenPalette(model: model, isCompact: isCompact)
+            if !app.isVoiceOff { DictationButton(dictation: model.dictation, isCompact: isCompact || isTight) }
+            Button { setPaletteCollapsed(true) } label: {
+                // A clear «fold» glyph (the earlier one drew an empty circle on iPhone).
+                Image(systemName: "chevron.down")
+                    .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                    .frame(width: isCompact ? 22 : 28, height: isCompact ? 22 : 28)
+            }
+            // A system glass button: a plain button over interactive glass missed taps.
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Hide Pen Tools")
+            .accessibilityIdentifier("penPalette.collapse")
+            .padding(.trailing, isTight ? Theme.Space.s1 : Theme.Space.s3)
+        }
     }
 }
 

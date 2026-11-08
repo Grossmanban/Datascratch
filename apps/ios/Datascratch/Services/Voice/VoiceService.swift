@@ -48,10 +48,12 @@ nonisolated enum VoiceTextTask: String, Sendable {
 
 /// One speaker's stretch of speech; a dictation is usually a single turn.
 nonisolated struct VoiceTurn: Codable, Equatable, Sendable {
-    var speaker: String?
+    /// "S1", "S2", … in order of first appearance; a dictation is "S1".
+    var speaker: String
+    /// Seconds from the start of the recording.
+    var start: Double
+    var end: Double
     var text: String
-    var start: Double?
-    var end: Double?
 }
 
 nonisolated struct VoiceTranscript: Decodable, Equatable, Sendable {
@@ -116,44 +118,41 @@ nonisolated enum VoiceError: Error, Equatable, Sendable {
     }
 }
 
-/// `GET /v1/voice/me`: whether this account may use voice, and what is left this month.
-nonisolated struct VoiceAccess: Decodable, Equatable, Sendable {
+/// `GET /v1/voice/me`: whether this account may use voice, and its minutes this month (UTC).
+nonisolated struct VoiceAccess: Codable, Equatable, Sendable {
     var enabled: Bool
-    /// Minutes left this month; nil without a limit.
-    var minutesLeft: Double?
-    /// The server's owner (access is managed in the web app).
-    var isAdmin: Bool
+    /// Minutes of recognition per calendar month.
+    var monthlyMinutes: Int
+    var usedMinutes: Double
+    /// Start of the next month (ISO, UTC).
+    var resetsAt: String
 
-    init(enabled: Bool, minutesLeft: Double? = nil, isAdmin: Bool = false) {
+    init(enabled: Bool, monthlyMinutes: Int = 0, usedMinutes: Double = 0, resetsAt: String = "") {
         self.enabled = enabled
-        self.minutesLeft = minutesLeft
-        self.isAdmin = isAdmin
+        self.monthlyMinutes = monthlyMinutes
+        self.usedMinutes = usedMinutes
+        self.resetsAt = resetsAt
     }
 
-    private enum CodingKeys: String, CodingKey {
-        case enabled, minutesLeft, remainingMinutes, limitMinutes, usedMinutes, isAdmin, admin
-    }
+    var minutesLeft: Int { max(0, Int((Double(monthlyMinutes) - usedMinutes).rounded(.down))) }
+}
 
-    /// Lenient until the contract is in main: `minutesLeft`, or `remainingMinutes`, or the limit
-    /// less what is used.
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
-        if let left = try c.decodeIfPresent(Double.self, forKey: .minutesLeft) ?? c.decodeIfPresent(Double.self, forKey: .remainingMinutes) {
-            minutesLeft = left
-        } else if let limit = try c.decodeIfPresent(Double.self, forKey: .limitMinutes) {
-            minutesLeft = max(0, limit - (try c.decodeIfPresent(Double.self, forKey: .usedMinutes) ?? 0))
-        } else {
-            minutesLeft = nil
-        }
-        isAdmin = try c.decodeIfPresent(Bool.self, forKey: .isAdmin) ?? c.decodeIfPresent(Bool.self, forKey: .admin) ?? false
+/// `language` of a transcription: Russian (the server's default) or detected.
+nonisolated enum VoiceLanguage: String, Sendable {
+    case ru, auto
+
+    /// Russian on a Russian device, detected otherwise.
+    static var forDevice: VoiceLanguage {
+        Locale.current.language.languageCode?.identifier == "ru" ? .ru : .auto
     }
 }
 
 /// The server side of voice; a fake one runs the UI tests.
 nonisolated protocol VoiceService: Sendable {
     func me() async throws -> VoiceAccess
-    func transcribe(audio: URL, mode: VoiceMode, quality: VoiceQuality) async throws -> VoiceTranscript
+    /// Whether this account is the server's admin (`GET /v1/admin/voice` answers it, 403 others).
+    func isAdmin() async -> Bool
+    func transcribe(audio: URL, mode: VoiceMode, language: VoiceLanguage) async throws -> VoiceTranscript
     func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> String
 }
 
@@ -170,14 +169,21 @@ nonisolated struct ServerVoiceService: VoiceService {
         return try JSONDecoder().decode(VoiceAccess.self, from: try await send(request))
     }
 
-    func transcribe(audio: URL, mode: VoiceMode, quality: VoiceQuality) async throws -> VoiceTranscript {
+    func isAdmin() async -> Bool {
+        guard var request = try? await request("admin/voice") else { return false }
+        request.httpMethod = "GET"
+        return (try? await send(request)) != nil
+    }
+
+    func transcribe(audio: URL, mode: VoiceMode, language: VoiceLanguage) async throws -> VoiceTranscript {
         let boundary = "ds-\(UUID().uuidString)"
         var body = Data()
         func field(_ name: String, _ value: String) {
             body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".data(using: .utf8)!)
         }
+        // Fields first, then the file (api.md «Голос»).
         field("mode", mode.rawValue)
-        field("quality", quality.rawValue)
+        field("language", language.rawValue)
         let audioData = try Data(contentsOf: audio)
         body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"audio\"; filename=\"\(audio.lastPathComponent)\"\r\nContent-Type: audio/mp4\r\n\r\n".data(using: .utf8)!)
         body.append(audioData)
@@ -252,13 +258,15 @@ nonisolated struct FakeVoiceService: VoiceService {
     }
 
     func me() async throws -> VoiceAccess {
-        VoiceAccess(enabled: error != .disabled, minutesLeft: 120)
+        VoiceAccess(enabled: error != .disabled, monthlyMinutes: 600, usedMinutes: 12.5, resetsAt: "2026-12-01T00:00:00.000Z")
     }
 
-    func transcribe(audio: URL, mode: VoiceMode, quality: VoiceQuality) async throws -> VoiceTranscript {
+    func isAdmin() async -> Bool { false }
+
+    func transcribe(audio: URL, mode: VoiceMode, language: VoiceLanguage) async throws -> VoiceTranscript {
         try await Task.sleep(for: delay)
         if let error { throw error }
-        return VoiceTranscript(durationSec: 2, turns: [VoiceTurn(speaker: nil, text: Self.transcript)])
+        return VoiceTranscript(durationSec: 2, turns: [VoiceTurn(speaker: "S1", start: 0, end: 2, text: Self.transcript)])
     }
 
     func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> String {

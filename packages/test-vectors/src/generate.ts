@@ -11,6 +11,7 @@ import { documentVectors } from "./document.js";
 import { idVectors } from "./ids.js";
 import { sharingVectors } from "./sharing.js";
 import { spaceVectors } from "./spaces.js";
+import { voiceVectors } from "./voice.js";
 import { strokeVectors } from "./strokes.js";
 import { syncVectors } from "./sync.js";
 
@@ -30,6 +31,7 @@ const files: Record<string, unknown> = {
   ...syncVectors(),
   ...sharingVectors(),
   ...spaceVectors(),
+  ...voiceVectors(),
 };
 
 let stale = 0;

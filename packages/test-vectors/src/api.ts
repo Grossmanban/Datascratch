@@ -757,6 +757,129 @@ export function apiVectors() {
           },
         ],
       },
+      voiceTranscribeFields: {
+        valid: [{ mode: "dictation" }, { mode: "conversation", speakers: "2", language: "auto" }],
+        invalid: [
+          { reason: "unknown mode", body: { mode: "podcast" } },
+          { reason: "more than 8 speakers", body: { mode: "conversation", speakers: "9" } },
+          { reason: "unknown language", body: { mode: "dictation", language: "en" } },
+        ],
+      },
+      voiceTranscribeResponse: {
+        valid: [
+          {
+            durationSec: 12.5,
+            turns: [{ speaker: "S1", start: 0, end: 12.5, text: "Купить хлеб." }],
+          },
+          {
+            durationSec: 9,
+            turns: [
+              { speaker: "S1", start: 0, end: 4.2, text: "Давай во вторник." },
+              { speaker: "S2", start: 4.5, end: 9, text: "Лучше в среду." },
+            ],
+          },
+        ],
+        invalid: [
+          {
+            reason: "speaker named like the upstream",
+            body: { durationSec: 1, turns: [{ speaker: "speaker_0", start: 0, end: 1, text: "" }] },
+          },
+          {
+            reason: "end before start",
+            body: { durationSec: 1, turns: [{ speaker: "S1", start: 2, end: 1, text: "" }] },
+          },
+        ],
+      },
+      voiceTextRequest: {
+        valid: [
+          {
+            task: "clean",
+            profanity: "keep",
+            turns: [{ speaker: "S1", start: 0, end: 1, text: "ну э-э привет" }],
+          },
+          {
+            task: "minutes",
+            profanity: "soften",
+            quality: "best",
+            turns: [{ speaker: "S1", start: 0, end: 1, text: "решили" }],
+          },
+          { task: "format", style: "letter", profanity: "keep", text: "черновик письма" },
+          { task: "format", text: "черновик (style document, profanity soften по умолчанию)" },
+          { task: "format", style: "document", text: "черновик" },
+        ],
+        invalid: [
+          {
+            reason: "style without format",
+            body: { task: "clean", style: "plan", text: "черновик" },
+          },
+          { reason: "neither turns nor text", body: { task: "clean", profanity: "keep" } },
+          {
+            reason: "both turns and text",
+            body: {
+              task: "clean",
+              profanity: "keep",
+              text: "x",
+              turns: [{ speaker: "S1", start: 0, end: 1, text: "x" }],
+            },
+          },
+          {
+            reason: "unknown style",
+            body: { task: "format", style: "poem", profanity: "keep", text: "x" },
+          },
+          { reason: "unknown profanity", body: { task: "clean", profanity: "censor", text: "x" } },
+        ],
+      },
+      voiceMe: {
+        valid: [
+          {
+            enabled: true,
+            monthlyMinutes: 600,
+            usedMinutes: 12.5,
+            resetsAt: "2026-12-01T00:00:00.000Z",
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing resetsAt",
+            body: { enabled: true, monthlyMinutes: 600, usedMinutes: 0 },
+          },
+        ],
+      },
+      adminVoiceAccount: {
+        valid: [
+          {
+            userId: vid(4),
+            email: "a@b.co",
+            enabled: false,
+            monthlyMinutes: 0,
+            usedMinutes: 0,
+            resetsAt: "2026-12-01T00:00:00.000Z",
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing userId",
+            body: {
+              email: "a@b.co",
+              enabled: false,
+              monthlyMinutes: 0,
+              usedMinutes: 0,
+              resetsAt: "2026-12-01T00:00:00.000Z",
+            },
+          },
+        ],
+      },
+      putAdminVoiceRequest: {
+        valid: [{ enabled: true, monthlyMinutes: 120 }],
+        invalid: [
+          { reason: "negative minutes", body: { enabled: true, monthlyMinutes: -1 } },
+          { reason: "fractional minutes", body: { enabled: true, monthlyMinutes: 1.5 } },
+        ],
+      },
+      voiceTextResponse: {
+        valid: [{ markdown: "## Коротко\n\nДоговорились на среду.", model: "openai/gpt-5.6-luna" }],
+        invalid: [{ reason: "missing model", body: { markdown: "x" } }],
+      },
       apiError: {
         valid: [
           { error: { code: "conflict", message: "id exists with different content" } },

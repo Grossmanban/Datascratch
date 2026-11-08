@@ -197,7 +197,9 @@ struct SharedRefTests {
     @Test func newUntilOpenedAndCarriedOver() throws {
         let app = AppModel(options: .init(uiTesting: true, signedIn: true))
         let local = try #require(app.accountSharing as? LocalAccountSharingService)
-        let notebook = try #require(app.library.notebooks(in: app.library.activeSpace?.id).first)
+        // `?.` inside `#require` does not compile (Testing's macro): two steps.
+        let notebooks = app.library.notebooks(in: app.library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
         let other = app.library.createNote(in: notebook.id, title: "Other")
         local.seedForTesting(invitedTo: nil, viewOnly: ShareTarget(kind: .notebook, id: notebook.id), owned: nil)
         let core = try #require(app.core)

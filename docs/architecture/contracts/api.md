@@ -230,7 +230,7 @@
 | --- | --- | --- |
 | POST | `/voice/transcribe` | `multipart/form-data`: `audio` — файл (`audio/mp4`/m4a, `audio/webm`, `audio/ogg`, `audio/wav`; до **200 МБ** и до **3 ч**), `mode` = `dictation` \| `conversation`, `speakers?` — подсказка числа говорящих 1–8 (только для разговора), `language?` = `ru` (по умолчанию) \| `auto` → `{ durationSec, turns: [{ speaker: "S1", start, end, text }] }` |
 | POST | `/voice/text` | `{ task: "clean" \| "minutes" \| "format", style?: "document" \| "plan" \| "minutes" \| "article" \| "letter" \| "notes" (только для `format`, по умолчанию `document`), profanity?: "soften" \| "keep" (по умолчанию `soften`), quality?: "standard" \| "best" (по умолчанию `standard`), turns? \| text? }` → `{ markdown, model }` |
-| GET | `/voice/me` | `{ enabled, monthlyMinutes, usedMinutes, resetsAt }` — свой доступ к голосу и квота текущего месяца (UTC) |
+| GET | `/voice/me` | `{ enabled, monthlyMinutes, usedMinutes, resetsAt, isAdmin }` — свой доступ к голосу и квота текущего месяца (UTC); `isAdmin` — администратор ли аккаунт сервера (показывать ли экран `/admin/voice` в вебе, без пробного запроса и `403`) |
 | GET | `/admin/voice` | (только администратор сервера) `{ month: "ГГГГ-ММ", resetsAt, accounts: [{ userId, email, name, enabled, monthlyMinutes, usedMinutes, costUsd }], totals: { usedMinutes, costUsd } }` — все аккаунты сервера и итоги месяца (UTC); `costUsd` — стоимость распознавания и текста за месяц |
 | PUT | `/admin/voice/:userId` | (только администратор сервера) `{ enabled, monthlyMinutes }` → `204` — включить или выключить голос аккаунту и задать месячную квоту минут |
 

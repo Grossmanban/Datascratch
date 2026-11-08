@@ -135,6 +135,8 @@ export const voiceMeSchema = z.object({
   usedMinutes: z.number().nonnegative(),
   /** Start of the next month, UTC. */
   resetsAt: isoDateTimeSchema,
+  /** Whether this account is the server admin (may use `/admin/voice`). */
+  isAdmin: z.boolean(),
 });
 export type VoiceMe = z.infer<typeof voiceMeSchema>;
 

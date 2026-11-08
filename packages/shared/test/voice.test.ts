@@ -125,8 +125,11 @@ describe("voice access (D-65)", () => {
       monthlyMinutes: 600,
       usedMinutes: 12.5,
       resetsAt: "2026-12-01T00:00:00.000Z",
+      isAdmin: false,
     };
     expect(voiceMeSchema.safeParse(me).success).toBe(true);
+    const { isAdmin: _drop, ...withoutAdmin } = me;
+    expect(voiceMeSchema.safeParse(withoutAdmin).success).toBe(false);
     expect(
       adminVoiceResponseSchema.safeParse({
         month: "2026-11",

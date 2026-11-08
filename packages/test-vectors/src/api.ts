@@ -836,12 +836,29 @@ export function apiVectors() {
             monthlyMinutes: 600,
             usedMinutes: 12.5,
             resetsAt: "2026-12-01T00:00:00.000Z",
+            isAdmin: true,
+          },
+          {
+            enabled: false,
+            monthlyMinutes: 0,
+            usedMinutes: 0,
+            resetsAt: "2026-12-01T00:00:00.000Z",
+            isAdmin: false,
           },
         ],
         invalid: [
           {
             reason: "missing resetsAt",
-            body: { enabled: true, monthlyMinutes: 600, usedMinutes: 0 },
+            body: { enabled: true, monthlyMinutes: 600, usedMinutes: 0, isAdmin: false },
+          },
+          {
+            reason: "missing isAdmin",
+            body: {
+              enabled: true,
+              monthlyMinutes: 600,
+              usedMinutes: 0,
+              resetsAt: "2026-12-01T00:00:00.000Z",
+            },
           },
         ],
       },

@@ -59,13 +59,15 @@ case "${1:-}" in
     done
     vars="$vars DS_PROXY_PORT=$(q "${DS_PROXY_PORT:-8480}") DS_NGINX_AUTO=$(q "${DS_NGINX_AUTO:-false}")"
     vars="$vars DS_NGINX_CERTBOT=$(q "${DS_NGINX_CERTBOT:-false}") DS_MEM_PROFILE=$(q "${DS_MEM_PROFILE:-auto}")"
-    if [ -n "${DS_REGISTRY_TOKEN:-}" ]; then
-      # The token travels on stdin, never on a command line or in a log.
-      printf '%s' "$DS_REGISTRY_TOKEN" \
-        | remote "$SUDO env $vars DS_REGISTRY_USER=$(q "${DS_REGISTRY_USER:?}") /opt/datascratch/deploy.sh up $(q "$DS_TAG")"
-    else
-      remote "$SUDO env $vars /opt/datascratch/deploy.sh up $(q "$DS_TAG")" < /dev/null
-    fi
+    [ -n "${DS_REGISTRY_TOKEN:-}" ] && vars="$vars DS_REGISTRY_USER=$(q "${DS_REGISTRY_USER:?}")"
+    # Secrets travel on stdin as KEY=VALUE lines (printf is a shell builtin): never on a command
+    # line or in a log. Voice keys (D-65) that are not set leave the server's .env as it is.
+    {
+      for k in DS_REGISTRY_TOKEN ELEVENLABS_API_KEY OPENROUTER_API_KEY; do
+        [ -n "${!k:-}" ] && printf '%s=%s\n' "$k" "${!k}"
+      done
+      true
+    } | remote "$SUDO env $vars /opt/datascratch/deploy.sh up $(q "$DS_TAG")"
     echo "::endgroup::"
     ;;
   info)

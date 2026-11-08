@@ -220,6 +220,10 @@ jobs:
         env:
           DS_REGISTRY_USER: ${{ github.actor }}
           DS_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Voice (D-65): written to the server's .env over stdin, never printed; unset secrets
+          # leave the server as it is (without keys voice answers 503 and the rest works).
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           infra/deploy/remote.sh deploy
           # Only these keys with plain values may reach $GITHUB_ENV (the server's answer is not trusted);

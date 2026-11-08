@@ -87,6 +87,34 @@ const ConfigSchema = z
     /** Updates covered by a snapshot are kept this long so lagging devices can catch up incrementally. */
     COVERED_UPDATES_KEEP_DAYS: z.coerce.number().int().nonnegative().default(7),
 
+    /**
+     * Voice (D-65): speech to text (ElevenLabs) and text from transcripts (OpenRouter). The keys
+     * live only here (the server's .env); without them voice answers 503 voice_unavailable.
+     */
+    ELEVENLABS_API_KEY: z.string().min(1).optional(),
+    OPENROUTER_API_KEY: z.string().min(1).optional(),
+    /** Accounts with voice: comma-separated user ids or e-mails, `*` for everyone. `ds voice` overrides per account. */
+    DS_VOICE_USERS: z.string().default(''),
+    /** Minutes of audio per account per calendar month (UTC); `ds voice <email> <minutes>` overrides. */
+    VOICE_MONTHLY_MINUTES: z.coerce.number().int().nonnegative().default(600),
+    /** Voice requests (transcribe + text) per account per minute, and transcriptions running at once per account. */
+    VOICE_PER_MINUTE: z.coerce.number().int().positive().default(20),
+    VOICE_CONCURRENCY_PER_USER: z.coerce.number().int().positive().default(2),
+    VOICE_MAX_BYTES: z.coerce.number().int().positive().default(200 * 1024 * 1024),
+    VOICE_MAX_SECONDS: z.coerce.number().int().positive().default(3 * 3600),
+    /** Speech to text: model, and the one used after the first is refused (unknown model). */
+    VOICE_STT_MODEL: z.string().min(1).default('scribe_v2'),
+    VOICE_STT_FALLBACK_MODEL: z.string().min(1).default('scribe_v1'),
+    /** OpenRouter models for `quality` standard and best. */
+    VOICE_TEXT_MODEL_STANDARD: z.string().min(1).default('openai/gpt-5.6-luna'),
+    VOICE_TEXT_MODEL_BEST: z.string().min(1).default('anthropic/claude-sonnet-5.5'),
+    /** Upstream base URLs (tests point them at fakes). */
+    ELEVENLABS_URL: z.string().url().default('https://api.elevenlabs.io'),
+    OPENROUTER_URL: z.string().url().default('https://openrouter.ai/api'),
+    /** A transcription upstream may take this long (a 3-hour recording takes minutes). */
+    VOICE_STT_TIMEOUT_MS: z.coerce.number().int().positive().default(30 * 60_000),
+    VOICE_TEXT_TIMEOUT_MS: z.coerce.number().int().positive().default(5 * 60_000),
+
     JOBS_ENABLED: bool.default(true),
     /** Enables GET /metrics (Prometheus) for requests with `Authorization: Bearer <METRICS_TOKEN>`. */
     METRICS_TOKEN: z.string().min(16).optional(),

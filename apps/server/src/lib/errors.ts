@@ -7,6 +7,10 @@ export type ApiErrorCode =
   | 'rate_limited'
   | 'payload_too_large'
   | 'device_revoked'
+  | 'voice_disabled'
+  | 'voice_quota'
+  | 'voice_upstream'
+  | 'voice_unavailable'
   | 'internal';
 
 const STATUS: Record<ApiErrorCode, number> = {
@@ -18,6 +22,10 @@ const STATUS: Record<ApiErrorCode, number> = {
   payload_too_large: 413,
   rate_limited: 429,
   device_revoked: 401,
+  voice_disabled: 403,
+  voice_quota: 429,
+  voice_upstream: 502,
+  voice_unavailable: 503,
   internal: 500,
 };
 

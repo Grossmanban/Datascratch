@@ -222,6 +222,22 @@
 
 Что перечитывать: `invitations` — `/invitations/incoming` и списки приглашений своих ресурсов; `members` — `/shared-with-me`, `/shared-by-me`, `/members/:kind/:id`; `spaces` — `/spaces` и `SharedItem` пространств; `keys` — обёртки ключей (`SharedItem.wrappedKey`, `/spaces/:id/notebooks`, `/members/note/:id/key`); `notebooks` — `/spaces/:id/notebooks` и `docIds`. Новые документы клиент сразу подписывает (`subscribe`) — переподключаться не нужно: отказ `doc_not_found` сервер не запоминает.
 
+## Голос (D-65)
+
+Поток server, 2026-11-08, по поручению координатора (решение, промпты и схемы — поток core). Сервер — посредник: ключи ElevenLabs и OpenRouter есть только у него, клиент их не видит. **Аудио, расшифровки и тексты сервер не хранит и не пишет в журнал**: аудио идёт к ElevenLabs потоком, без записи на диск; в журнал и метрики попадают только аккаунт, размеры, длительности, модель, стоимость и код ответа.
+
+| Метод | Путь | Тело → ответ |
+| --- | --- | --- |
+| POST | `/voice/transcribe` | `multipart/form-data`: сначала поля `mode` (`dictation` \| `conversation`), `speakers?` (1–8), `language?` (`ru` \| `auto`, по умолчанию `auto`), **затем** файл `audio` (m4a, mp4, webm, ogg, wav; ≤ 200 МБ, ≤ 3 ч). Поля можно передать и в строке запроса. → `{ durationSec, turns: [{ speaker: "S1"…, start, end, text }] }` |
+| POST | `/voice/text` | `{ task: "clean" \| "minutes" \| "format", style?, profanity: "keep" \| "soften", quality?: "standard" \| "best", turns? \| text? }` (ровно одно из `turns` и `text`) → `{ markdown, model }` |
+
+- **Расшифровка.** ElevenLabs `speech-to-text`, модель `scribe_v2`; если ElevenLabs её не принимает — ответ `502 voice_upstream`, и следующие 10 минут сервер берёт `scribe_v1`. `conversation` — с разметкой говорящих (`diarize`, `num_speakers` = `speakers`), `dictation` — без неё. `ru` — `language_code = rus`, `auto` — язык определяет сервис. Слова одного говорящего подряд — одна реплика; `speaker_0` → `S1`, `speaker_1` → `S2`…; у диктовки один говорящий `S1`. Звуковые события не передаются. `durationSec` — длина записи.
+- **Текст.** OpenRouter, модель `quality = standard` — `openai/gpt-5.6-luna`, `best` — `anthropic/claude-sonnet-5.5` (меняются настройкой сервера), `temperature 0.2`, только провайдеры без хранения данных (`provider.data_collection = deny`). Промпты — `packages/shared/src/voice` (поток core). `model` в ответе — модель, которая ответила.
+- **Доступ.** Голос включается для аккаунта: список `DS_VOICE_USERS` на сервере (id или e-mail, `*` — все) или `ds voice <email> on|off` (перекрывает список). Иначе — `403 voice_disabled`.
+- **Минуты.** У аккаунта — минуты расшифровки на календарный месяц (UTC), по умолчанию 600 (`VOICE_MONTHLY_MINUTES`, у аккаунта — `ds voice <email> <минуты>`). Когда минуты кончились — `429 voice_quota` с `retryAfterMs` до начала следующего месяца; запрос, на котором минуты кончаются, ещё выполняется. `/voice/text` минут не тратит.
+- **Частота.** До 20 запросов голоса в минуту на аккаунт (оба вызова вместе) — дальше `429 rate_limited` с `retryAfterMs`; не больше 2 расшифровок одновременно.
+- **Ошибки.** `400` — неверные поля или формат; `403 voice_disabled`; `413 payload_too_large` — файл больше 200 МБ или запись длиннее 3 ч; `429 voice_quota` / `rate_limited`; `502 voice_upstream` — сервис расшифровки или текста ответил ошибкой или не ответил (повторить позже); `503 voice_unavailable` — на сервере нет ключа этого сервиса (остальное работает).
+
 ## Токены агентов (`spec/09-agents-api.md`)
 
 | Метод | Путь | Смысл |

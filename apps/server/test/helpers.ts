@@ -34,6 +34,8 @@ export interface TestServer {
 export async function startServer(
   overrides: Partial<Record<keyof Config, string>> = {},
   plugins: LoadedPlugin[] = [],
+  /** Where the server's log goes (tests that check what is logged). */
+  logDestination?: { write(line: string): void },
 ): Promise<TestServer> {
   const dbName = `ds_t_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
   const admin = new pg.Client({ connectionString: adminUrl() });
@@ -51,7 +53,7 @@ export async function startServer(
     JOBS_ENABLED: 'false',
     ...overrides,
   });
-  const log = createLogger(config.LOG_LEVEL);
+  const log = createLogger(config.LOG_LEVEL, logDestination);
   const database = createDatabase(config.DATABASE_URL, 5);
   const jobs = new InlineQueue(log);
   const ctx = createContext({ config, log, database, storage: new DiskStorage(dir), jobs });

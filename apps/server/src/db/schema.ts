@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   customType,
+  date,
   index,
   integer,
   jsonb,
@@ -61,6 +62,10 @@ export const users = pgTable('users', {
   /** Account X25519 key pair for sharing (D-54, crypto.md §10): public key and the secret under masterKey. */
   boxPublicKey: bytea('box_public_key'),
   boxWrappedSecretKey: bytea('box_wrapped_secret_key'),
+  /** Voice (D-65): null — the server's DS_VOICE_USERS decides; true/false — `ds voice <email> on|off`. */
+  voiceEnabled: boolean('voice_enabled'),
+  /** Voice minutes per calendar month (UTC); null: the server default (VOICE_MONTHLY_MINUTES). */
+  voiceMinutesQuota: integer('voice_minutes_quota'),
   createdAt: created(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
@@ -466,4 +471,22 @@ export const securityEvents = pgTable(
     at: ts('at').notNull().defaultNow(),
   },
   (t) => [index('security_events_user_idx').on(t.userId, t.id)],
+);
+
+/**
+ * Voice usage per account and calendar month (UTC, D-65): seconds of audio transcribed and
+ * requests. Only counts: audio, transcripts and texts are never stored.
+ */
+export const voiceUsage = pgTable(
+  'voice_usage',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** First day of the month, UTC. */
+    month: date('month', { mode: 'string' }).notNull(),
+    seconds: integer('seconds').notNull().default(0),
+    requests: integer('requests').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.month] })],
 );

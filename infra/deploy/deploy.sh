@@ -6,7 +6,9 @@
 #   deploy.sh info         print the mode (key=value) and, behind a proxy, its config snippet
 #
 # Environment for `up`: DS_DOMAIN, DS_SERVER_IMAGE, DS_WEB_IMAGE, DS_POSTGRES_IMAGE (all GHCR);
-# optional DS_REGISTRY_USER + registry token on stdin (GHCR login for the pull only);
+# stdin: KEY=VALUE lines, never on a command line or in a log — DS_REGISTRY_TOKEN (with
+# DS_REGISTRY_USER: GHCR login for the pull only), ELEVENLABS_API_KEY and OPENROUTER_API_KEY
+# (voice, D-65: written to .env; absent ones keep what .env has);
 # DS_DEPLOY_MODE (auto | standalone | behind-proxy), DS_PROXY_PORT (8480), DS_NGINX_AUTO=true
 # (add a site to an existing nginx, with backup and `nginx -t`), DS_NGINX_CERTBOT=true
 # (then run certbot for it), DS_MEM_PROFILE (auto | full | shared);
@@ -42,6 +44,42 @@ write_managed() {
   rm -f "$tmp"
   chmod 600 .env.new
   mv .env.new .env
+}
+
+# Set one secret in .env, outside the managed block (replacing an older value). Never printed.
+set_secret() {
+  local key="$1" value="$2" tmp
+  tmp=$(mktemp)
+  grep -v -E "^$key=" .env > "$tmp" || true
+  printf '%s=%s\n' "$key" "$value" >> "$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" .env
+}
+
+# Secrets from stdin (KEY=VALUE lines); only these keys, only plain token characters.
+REGISTRY_TOKEN=''
+read_stdin_secrets() {
+  [ -t 0 ] && return 0
+  local line key value
+  while IFS= read -r line || [ -n "$line" ]; do
+    key="${line%%=*}"
+    value="${line#*=}"
+    [ -n "$value" ] || continue
+    case "$key" in
+      DS_REGISTRY_TOKEN) REGISTRY_TOKEN="$value" ;;
+      ELEVENLABS_API_KEY | OPENROUTER_API_KEY)
+        if [[ "$value" =~ ^[A-Za-z0-9._:+/=-]+$ ]]; then
+          # Compared in the shell: the value never becomes a process argument.
+          if [ "$(sed -n "s/^$key=//p" .env | tail -1)" != "$value" ]; then
+            set_secret "$key" "$value"
+            log "$key updated in .env"
+          fi
+        else
+          log "WARNING: $key has unexpected characters; ignored"
+        fi
+        ;;
+    esac
+  done
 }
 
 # The managed block for a tag, keeping mode/ports/memory chosen at `up` time.
@@ -158,6 +196,20 @@ server {
 $listen6
     server_name $domain;
     client_max_body_size 64m;
+
+    # A voice recording (D-65): up to 200 MB, streamed to the server without buffering.
+    location = /v1/voice/transcribe {
+        client_max_body_size 210m;
+        proxy_request_buffering off;
+        proxy_pass http://127.0.0.1:$port;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:$port;
@@ -299,9 +351,10 @@ case "${1:-}" in
     export COMPOSE_FILE DS_MODE DS_SITE DS_PORT_HTTP DS_PORT_HTTPS DS_PORT_HTTPS_UDP DS_PROXY_PORT
     choose_memory
 
-    if [ -n "${DS_REGISTRY_USER:-}" ]; then
-      # The short-lived workflow token arrives on stdin; it is used for this pull only.
-      docker login ghcr.io -u "$DS_REGISTRY_USER" --password-stdin > /dev/null
+    read_stdin_secrets
+    if [ -n "${DS_REGISTRY_USER:-}" ] && [ -n "$REGISTRY_TOKEN" ]; then
+      # The short-lived workflow token arrived on stdin; it is used for this pull only.
+      printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$DS_REGISTRY_USER" --password-stdin > /dev/null
     fi
     # Server and web tags are immutable (one per commit): pulled once. The PostgreSQL tag
     # (16-alpine) moves with security releases: pulled every time, the local copy is used

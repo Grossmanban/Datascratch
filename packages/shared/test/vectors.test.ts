@@ -481,3 +481,12 @@ describe("shared space vectors (D-62)", () => {
       ).toThrow();
   });
 });
+
+describe("voice vectors (D-65)", () => {
+  it("formats timestamps and speaker labels", async () => {
+    const { formatVoiceTime, speakerLabel } = await import("../src/index.js");
+    const v = load("voice/timestamps.json");
+    for (const c of v.timestamps) expect(formatVoiceTime(c.sec), String(c.sec)).toBe(c.text);
+    for (const c of v.speakers) expect(speakerLabel(c.id)).toBe(c.label);
+  });
+});

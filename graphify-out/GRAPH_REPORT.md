@@ -1,13 +1,19 @@
 # Graph Report - Datascratch  (2026-11-08)
 
 ## Corpus Check
-- 295 files · ~983,325 words
+- 1052 files · ~983,742 words
 - Verdict: corpus is large enough that graph structure adds value.
+- Unclassified: 40 file(s) not represented in the graph (top: (none) 20, .css 6, .example 4)
 
 ## Summary
 - 22705 nodes · 65501 edges · 473 communities (407 shown, 66 thin omitted)
 - Extraction: 85% EXTRACTED · 15% INFERRED · 0% AMBIGUOUS · INFERRED: 10048 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
+
+## Graph Freshness
+- Built from commit: `4cd31852`
+- Run `git rev-parse HEAD` and compare to check if the graph is stale.
+- Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - mermaid.min.js
@@ -494,18 +500,18 @@
   docs/decisions/0048-isolated-spaces.md → apps/web/src/domain/actions.ts
 - `Сообщение сервера account_changed (версия 2): what[] ≤ 8 из invitations, spaces, members, keys, notebooks` --references--> `SyncClient`  [INFERRED]
   docs/architecture/contracts/sync-protocol.md → packages/shared/src/sync/client.ts
-- `EditorHost.watchAttachmentUpload(attachmentId, onProgress) → unsubscribe (onProgress 0..1 | null)` --references--> `EditorHost`  [INFERRED]
-  docs/spec/04-editor.md → packages/web-editor/src/host.ts
-- `DiagnosticsSnapshot (соединение, сеть, сервер; очередь отправки, ждут ключ, не доставлено; блокноты без ключа; загрузки x из y)` --shares_data_with--> `AttachmentManager`  [INFERRED]
-  docs/spec/10-sync.md → apps/ios/Packages/DSCore/Sources/DSCore/Sync/AttachmentManager.swift
+- `EditorView.onLocalCursorChange — своя каретка в формате веба ({anchor, head}, Y.relativePositionToJSON), не чаще 0,1 с, nil по окончании` --references--> `EditorView`  [INFERRED]
+  docs/spec/04-editor.md → apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift
+- `RemoteCursor / EditorView.setRemoteCursors([RemoteCursor]) / RemoteCursor.parse(client:json:excludingAccount:)` --references--> `EditorView`  [INFERRED]
+  docs/spec/04-editor.md → apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift
 
 ## Import Cycles
 - 2-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs`
-- 3-file cycle: `apps/web/src/data/runtime.ts -> apps/web/src/domain/actions.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/runtime.ts`
 - 3-file cycle: `apps/web/src/data/runtime.ts -> apps/web/src/data/sharedWithMe.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/runtime.ts`
+- 3-file cycle: `apps/web/src/data/runtime.ts -> apps/web/src/domain/actions.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/runtime.ts`
 - 3-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/events.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/events.rs`
-- 4-file cycle: `apps/web/src/data/ownerShares.ts -> apps/web/src/data/runtime.ts -> apps/web/src/domain/actions.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/ownerShares.ts`
 - 4-file cycle: `apps/web/src/data/ownerShares.ts -> apps/web/src/data/runtime.ts -> apps/web/src/data/sharedWithMe.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/ownerShares.ts`
+- 4-file cycle: `apps/web/src/data/ownerShares.ts -> apps/web/src/data/runtime.ts -> apps/web/src/domain/actions.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/ownerShares.ts`
 - 4-file cycle: `apps/web/src/data/runtime.ts -> apps/web/src/data/sharedWithMe.ts -> apps/web/src/domain/actions.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/runtime.ts`
 - 5-file cycle: `apps/web/src/data/ownerShares.ts -> apps/web/src/data/runtime.ts -> apps/web/src/data/sharedWithMe.ts -> apps/web/src/domain/actions.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/ownerShares.ts`
 
@@ -2163,7 +2169,7 @@ Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main
   docs/decisions/0048-isolated-spaces.md · relation: references
 
 ## Knowledge Gaps
-- **1662 isolated node(s):** `.isTrashed`, `.value`, `.intValue`, `.fields`, `folder` (+1657 more)
+- **1662 isolated node(s):** `deadline`, `scheduled`, `.deleteTitle`, `deadline`, `scheduled` (+1657 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 5780 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **66 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -2171,15 +2177,15 @@ Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `DSDateChip`, `cn.ts`, `DSDesign Swift package (iOS 26, Swift 6) — «Тихая бумага» design system tokens + SwiftUI components`, `Foundation`, `scripts/generate.mjs`?**
-  _High betweenness centrality (0.207) - this node is a cross-community bridge._
+  _High betweenness centrality (0.198) - this node is a cross-community bridge._
 - **Are the 370 inferred relationships involving `t()` (e.g. with `accept()` and `ACTION()`) actually correct?**
   _`t()` has 370 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `.isTrashed`, `.value`, `.intValue` to the rest of the system?**
+- **What connects `deadline`, `scheduled`, `.deleteTitle` to the rest of the system?**
   _1662 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
   _Cohesion score 0.0018495602304631883 - nodes in this community are weakly interconnected._
 - **Why does `DSDateChipModel` connect `DSDateChip` to `DSDateChip (2) (2)`, `design-tokens.md`, `InkController (2)`, `DSDateChip (2)`, `Sendable`, `Projection (2)`?**
-  _High betweenness centrality (0.169) - this node is a cross-community bridge._
+  _High betweenness centrality (0.155) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._

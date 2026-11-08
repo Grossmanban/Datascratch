@@ -369,7 +369,12 @@ final class LibraryUITests: XCTestCase {
         }
         let file = app.buttons["insert.file"].firstMatch
         XCTAssertTrue(file.waitForExistence(timeout: 5), "no File entry in Insert; buttons: \(Self.buttons(app))")
+        // A tap while the menu still animates in did nothing and left it open (iPhone, run
+        // 42501461171): tap once it is hittable, and again if the menu is still there.
+        _ = XCTWaiter().wait(for: [expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: file)], timeout: 3)
         file.tap()
+        settle(2)
+        if file.exists && file.isHittable { file.tap() }
         let picker = app.descendants(matching: .any)["files.picker"].firstMatch
         let cancel = app.buttons["Cancel"].firstMatch
         let shown = NSPredicate { _, _ in picker.exists || cancel.exists }

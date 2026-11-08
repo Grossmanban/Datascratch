@@ -183,47 +183,130 @@ public struct VoiceTextResponse: Codable, Hashable, Sendable {
 /// `GET /voice/me`: access and this month's minutes (months by UTC).
 public struct VoiceMe: Codable, Hashable, Sendable {
     public var enabled: Bool
+    /// The server has the keys of both services (recognition and text).
+    public var available: Bool
+    /// Recognition minutes per calendar month (UTC).
     public var monthlyMinutes: Int
     public var usedMinutes: Double
     /// Start of the next month, UTC.
     public var resetsAt: String
+    /// A server admin: may open the voice access screen (`GET /admin/voice`).
+    public var isAdmin: Bool
 
     public var remainingMinutes: Double { max(0, Double(monthlyMinutes) - usedMinutes) }
 
-    enum CodingKeys: String, CodingKey { case enabled, monthlyMinutes, usedMinutes, resetsAt }
+    enum CodingKeys: String, CodingKey { case enabled, available, monthlyMinutes, usedMinutes, resetsAt, isAdmin }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         enabled = try c.decode(Bool.self, forKey: .enabled)
+        available = try c.decode(Bool.self, forKey: .available)
         monthlyMinutes = try c.decode(Int.self, forKey: .monthlyMinutes)
         usedMinutes = try c.decode(Double.self, forKey: .usedMinutes)
         resetsAt = try APIValidation.isoDateTime(c, .resetsAt)
+        isAdmin = try c.decode(Bool.self, forKey: .isAdmin)
         guard monthlyMinutes >= 0, usedMinutes >= 0 else { throw APIValidation.fail(c, .usedMinutes, "negative") }
     }
 }
 
-/// An item of `GET /admin/voice` (server admin only).
-public struct AdminVoiceAccount: Decodable, Hashable, Sendable {
+/// An account row of `GET /admin/voice` and the response of `PUT /admin/voice/:userId` (server admin only).
+public struct AdminVoiceAccount: Codable, Hashable, Sendable {
     public var userId: String
     public var email: String
-    public var voice: VoiceMe
+    /// Display name, if the account has one (the server sends `null` for now).
+    public var name: String?
+    /// The account is a server admin.
+    public var admin: Bool
+    public var enabled: Bool
+    /// Effective monthly minutes: the admin's own value or the default.
+    public var monthlyMinutes: Int
+    /// `false`: the server default for this account; `true`: set by an admin.
+    public var customMinutes: Bool
+    /// This month (UTC).
+    public var usedMinutes: Double
+    /// This month's voice cost (recognition + text), US dollars.
+    public var costUsd: Double
+    /// Voice requests this month (`transcribe` and `text`).
+    public var requests: Int
 
-    enum CodingKeys: String, CodingKey { case userId, email }
+    enum CodingKeys: String, CodingKey {
+        case userId, email, name, admin, enabled, monthlyMinutes, customMinutes, usedMinutes, costUsd, requests
+    }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         userId = try APIValidation.uuid(c, .userId)
         email = try c.decode(String.self, forKey: .email)
-        voice = try VoiceMe(from: decoder)
+        name = try c.decode(String?.self, forKey: .name)
+        admin = try c.decode(Bool.self, forKey: .admin)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        monthlyMinutes = try c.decode(Int.self, forKey: .monthlyMinutes)
+        customMinutes = try c.decode(Bool.self, forKey: .customMinutes)
+        usedMinutes = try c.decode(Double.self, forKey: .usedMinutes)
+        costUsd = try c.decode(Double.self, forKey: .costUsd)
+        requests = try c.decode(Int.self, forKey: .requests)
+        guard monthlyMinutes >= 0, usedMinutes >= 0, costUsd >= 0, requests >= 0 else {
+            throw APIValidation.fail(c, .requests, "negative")
+        }
     }
 }
 
-/// `PUT /admin/voice/:userId`.
-public struct PutAdminVoiceRequest: Codable, Hashable, Sendable {
-    public var enabled: Bool
-    public var monthlyMinutes: Int
+/// `GET /admin/voice`: all accounts and this month's totals (UTC month).
+public struct AdminVoiceResponse: Codable, Hashable, Sendable {
+    public struct Totals: Codable, Hashable, Sendable {
+        public var usedMinutes: Double
+        public var costUsd: Double
+        public var requests: Int
+        public var enabledAccounts: Int
 
-    public init(enabled: Bool, monthlyMinutes: Int) {
+        enum CodingKeys: String, CodingKey { case usedMinutes, costUsd, requests, enabledAccounts }
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            usedMinutes = try c.decode(Double.self, forKey: .usedMinutes)
+            costUsd = try c.decode(Double.self, forKey: .costUsd)
+            requests = try c.decode(Int.self, forKey: .requests)
+            enabledAccounts = try c.decode(Int.self, forKey: .enabledAccounts)
+            guard usedMinutes >= 0, costUsd >= 0, requests >= 0, enabledAccounts >= 0 else {
+                throw APIValidation.fail(c, .requests, "negative")
+            }
+        }
+    }
+
+    /// `YYYY-MM`, UTC.
+    public var month: String
+    public var resetsAt: String
+    public var accounts: [AdminVoiceAccount]
+    public var totals: Totals
+
+    enum CodingKeys: String, CodingKey { case month, resetsAt, accounts, totals }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        month = try c.decode(String.self, forKey: .month)
+        guard month.wholeMatch(of: /\d{4}-\d{2}/) != nil else { throw APIValidation.fail(c, .month, "YYYY-MM") }
+        resetsAt = try APIValidation.isoDateTime(c, .resetsAt)
+        accounts = try c.decode([AdminVoiceAccount].self, forKey: .accounts)
+        totals = try c.decode(Totals.self, forKey: .totals)
+    }
+}
+
+/// `PUT /admin/voice/:userId` → the account row (`AdminVoiceAccount`).
+public struct PutAdminVoiceRequest: Codable, Hashable, Sendable {
+    /// What to do with the account's own monthly minutes.
+    public enum Minutes: Hashable, Sendable {
+        /// Leave them as they are (the field is absent).
+        case keep
+        /// Back to the server default (`null`).
+        case reset
+        /// The account's own minutes, 0…100 000.
+        case set(Int)
+    }
+
+    public var enabled: Bool
+    public var monthlyMinutes: Minutes
+
+    public init(enabled: Bool, monthlyMinutes: Minutes = .keep) {
         self.enabled = enabled
         self.monthlyMinutes = monthlyMinutes
     }
@@ -233,7 +316,24 @@ public struct PutAdminVoiceRequest: Codable, Hashable, Sendable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         enabled = try c.decode(Bool.self, forKey: .enabled)
-        monthlyMinutes = try c.decode(Int.self, forKey: .monthlyMinutes)
-        guard (0...100_000).contains(monthlyMinutes) else { throw APIValidation.fail(c, .monthlyMinutes, "0…100000") }
+        if !c.contains(.monthlyMinutes) {
+            monthlyMinutes = .keep
+        } else if try c.decodeNil(forKey: .monthlyMinutes) {
+            monthlyMinutes = .reset
+        } else {
+            let minutes = try c.decode(Int.self, forKey: .monthlyMinutes)
+            guard (0...100_000).contains(minutes) else { throw APIValidation.fail(c, .monthlyMinutes, "0…100000") }
+            monthlyMinutes = .set(minutes)
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(enabled, forKey: .enabled)
+        switch monthlyMinutes {
+        case .keep: break
+        case .reset: try c.encodeNil(forKey: .monthlyMinutes)
+        case .set(let minutes): try c.encode(minutes, forKey: .monthlyMinutes)
+        }
     }
 }

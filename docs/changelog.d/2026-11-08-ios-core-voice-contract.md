@@ -1,0 +1,1 @@
+- DSCore, D-65: `VoiceMe.available`/`isAdmin`, экран доступа админа — `AdminVoiceResponse` и строка `AdminVoiceAccount` (`admin`, `customMinutes`, минуты, расход, запросы), `PutAdminVoiceRequest.monthlyMinutes` — оставить/по умолчанию/своё (контракт core `36e5ce27`).

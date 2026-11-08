@@ -145,9 +145,9 @@ struct DictationQueueTests {
     /// The contract's vectors (test-vectors/vectors/api/bodies.json).
     @Test func contractVectorsDecode() throws {
         let me = try JSONDecoder().decode(VoiceAccess.self, from: Data(#"{"enabled":true,"monthlyMinutes":600,"usedMinutes":12.5,"resetsAt":"2026-12-01T00:00:00.000Z"}"#.utf8))
-        #expect(me.enabled && me.available && !me.admin && me.minutesLeft == 587, "a server from before available/admin")
-        let full = try JSONDecoder().decode(VoiceAccess.self, from: Data(#"{"enabled":true,"available":false,"monthlyMinutes":600,"usedMinutes":0,"resetsAt":"2026-12-01T00:00:00.000Z","admin":true}"#.utf8))
-        #expect(!full.isUsable && full.admin)
+        #expect(me.enabled && me.available && !me.isAdmin && me.minutesLeft == 587, "a server from before available/isAdmin")
+        let full = try JSONDecoder().decode(VoiceAccess.self, from: Data(#"{"enabled":true,"available":false,"monthlyMinutes":600,"usedMinutes":0,"resetsAt":"2026-12-01T00:00:00.000Z","isAdmin":true}"#.utf8))
+        #expect(!full.isUsable && full.isAdmin)
         #expect((try? JSONDecoder().decode(VoiceAccess.self, from: Data(#"{"enabled":true,"monthlyMinutes":600,"usedMinutes":0}"#.utf8))) == nil,
                 "resetsAt is required")
         let transcript = try JSONDecoder().decode(VoiceTranscript.self, from: Data(#"{"durationSec":9,"turns":[{"speaker":"S1","start":0,"end":4.2,"text":"Давай во вторник."},{"speaker":"S2","start":4.5,"end":9,"text":"Лучше в среду."}]}"#.utf8))

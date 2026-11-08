@@ -131,28 +131,28 @@ nonisolated struct VoiceAccess: Codable, Equatable, Sendable {
     /// Start of the next month (ISO, UTC).
     var resetsAt: String
     /// The server's admin (who may use voice is managed in the web app).
-    var admin: Bool
+    var isAdmin: Bool
 
-    init(enabled: Bool, available: Bool = true, monthlyMinutes: Int = 0, usedMinutes: Double = 0, resetsAt: String = "", admin: Bool = false) {
+    init(enabled: Bool, available: Bool = true, monthlyMinutes: Int = 0, usedMinutes: Double = 0, resetsAt: String = "", isAdmin: Bool = false) {
         self.enabled = enabled
         self.available = available
         self.monthlyMinutes = monthlyMinutes
         self.usedMinutes = usedMinutes
         self.resetsAt = resetsAt
-        self.admin = admin
+        self.isAdmin = isAdmin
     }
 
-    private enum CodingKeys: String, CodingKey { case enabled, available, monthlyMinutes, usedMinutes, resetsAt, admin }
+    private enum CodingKeys: String, CodingKey { case enabled, available, monthlyMinutes, usedMinutes, resetsAt, isAdmin }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         enabled = try c.decode(Bool.self, forKey: .enabled)
-        // A server from before `available` and `admin`: available, not admin.
+        // A server from before `available` and `isAdmin`: available, not admin.
         available = try c.decodeIfPresent(Bool.self, forKey: .available) ?? true
         monthlyMinutes = try c.decode(Int.self, forKey: .monthlyMinutes)
         usedMinutes = try c.decode(Double.self, forKey: .usedMinutes)
         resetsAt = try c.decode(String.self, forKey: .resetsAt)
-        admin = try c.decodeIfPresent(Bool.self, forKey: .admin) ?? false
+        isAdmin = try c.decodeIfPresent(Bool.self, forKey: .isAdmin) ?? false
     }
 
     /// The microphone can be offered.

@@ -252,7 +252,7 @@ struct VoiceSettings: View {
         @Bindable var settings = app.settings
         SettingsPage(title: String(localized: "Voice")) {
             if let access = app.voiceAccess {
-                DSSettingsSection(footer: access.admin ? String(localized: "Manage access in the web app.") : nil) {
+                DSSettingsSection(footer: access.isAdmin ? String(localized: "Manage access in the web app.") : nil) {
                     Group {
                         if !access.enabled {
                             DSSettingsRow(String(localized: "Voice isn’t turned on — ask the server’s owner."), systemImage: "waveform.slash")

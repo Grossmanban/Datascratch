@@ -118,47 +118,54 @@ describe("voice prompts (D-65)", () => {
 
 describe("voice access (D-65)", () => {
   it("parses /voice/me, the admin list and the admin update", async () => {
-    const { voiceMeSchema, adminVoiceResponseSchema, putAdminVoiceRequestSchema, ACCOUNT_CHANGES } =
-      await import("../src/index.js");
+    const {
+      voiceMeSchema,
+      adminVoiceAccountSchema,
+      adminVoiceResponseSchema,
+      putAdminVoiceRequestSchema,
+      DEFAULT_VOICE_MONTHLY_MINUTES,
+      ACCOUNT_CHANGES,
+    } = await import("../src/index.js");
     const me = {
       enabled: true,
+      available: true,
       monthlyMinutes: 600,
       usedMinutes: 12.5,
       resetsAt: "2026-12-01T00:00:00.000Z",
+      isAdmin: false,
     };
     expect(voiceMeSchema.safeParse(me).success).toBe(true);
-    expect(
-      adminVoiceResponseSchema.safeParse({
-        month: "2026-11",
-        resetsAt: "2026-12-01T00:00:00.000Z",
-        accounts: [
-          {
-            userId: "0192f3c4-0000-7000-8000-00000000f101",
-            email: "a@b.co",
-            name: null,
-            enabled: true,
-            monthlyMinutes: 120,
-            usedMinutes: 30,
-            costUsd: 0.21,
-          },
-        ],
-        totals: { usedMinutes: 30, costUsd: 0.21 },
-      }).success,
-    ).toBe(true);
-    expect(
-      adminVoiceResponseSchema.safeParse({
-        month: "11-2026",
-        resetsAt: "2026-12-01T00:00:00.000Z",
-        accounts: [],
-        totals: { usedMinutes: 0, costUsd: 0 },
-      }).success,
-    ).toBe(false);
-    expect(
-      putAdminVoiceRequestSchema.safeParse({ enabled: false, monthlyMinutes: 0 }).success,
-    ).toBe(true);
-    expect(
-      putAdminVoiceRequestSchema.safeParse({ enabled: true, monthlyMinutes: -1 }).success,
-    ).toBe(false);
+    const { isAdmin: _isAdmin, ...withoutAdmin } = me;
+    expect(voiceMeSchema.safeParse(withoutAdmin).success).toBe(false);
+    const account = {
+      userId: "0192f3c4-0000-7000-8000-00000000f101",
+      email: "a@b.co",
+      name: null,
+      admin: false,
+      enabled: true,
+      monthlyMinutes: 120,
+      customMinutes: false,
+      usedMinutes: 30,
+      costUsd: 0.21,
+      requests: 4,
+    };
+    const list = {
+      month: "2026-11",
+      resetsAt: "2026-12-01T00:00:00.000Z",
+      accounts: [account],
+      totals: { usedMinutes: 30, costUsd: 0.21, requests: 4, enabledAccounts: 1 },
+    };
+    expect(adminVoiceResponseSchema.safeParse(list).success).toBe(true);
+    expect(adminVoiceResponseSchema.safeParse({ ...list, month: "11-2026" }).success).toBe(false);
+    expect(adminVoiceAccountSchema.safeParse({ ...account, customMinutes: 120 }).success).toBe(
+      false,
+    );
+    const put = (b: unknown) => putAdminVoiceRequestSchema.safeParse(b).success;
+    expect(put({ enabled: false, monthlyMinutes: 0 })).toBe(true);
+    expect(put({ enabled: true, monthlyMinutes: null })).toBe(true);
+    expect(put({ enabled: true })).toBe(true);
+    expect(put({ enabled: true, monthlyMinutes: -1 })).toBe(false);
+    expect(DEFAULT_VOICE_MONTHLY_MINUTES).toEqual({ admin: 600, others: 120 });
     expect(ACCOUNT_CHANGES).toContain("voice");
   });
 });

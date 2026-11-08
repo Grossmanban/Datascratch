@@ -1,13 +1,19 @@
 # Graph Report - Datascratch  (2026-11-08)
 
 ## Corpus Check
-- 78 files · ~1,028,167 words
+- 1098 files · ~1,028,200 words
 - Verdict: corpus is large enough that graph structure adds value.
+- Unclassified: 40 file(s) not represented in the graph (top: (none) 20, .css 6, .example 4)
 
 ## Summary
 - 24032 nodes · 69806 edges · 485 communities (414 shown, 71 thin omitted)
 - Extraction: 85% EXTRACTED · 15% INFERRED · 0% AMBIGUOUS · INFERRED: 10561 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
+
+## Graph Freshness
+- Built from commit: `2cfdb16a`
+- Run `git rev-parse HEAD` and compare to check if the graph is stale.
+- Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - mermaid.min.js
@@ -2191,7 +2197,7 @@ Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main
   docs/decisions/0048-isolated-spaces.md · relation: references
 
 ## Knowledge Gaps
-- **1842 isolated node(s):** `.moveTitle`, `.space`, `.folded`, `.body`, `.body` (+1837 more)
+- **1842 isolated node(s):** `.commands`, `.eraserRadius`, `block`, `text`, `display` (+1837 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 6178 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **71 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -2199,15 +2205,15 @@ Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `View`, `cn.ts`, `DSLanguage`, `DSDesign Swift package (iOS 26, Swift 6) — «Тихая бумага» design system tokens + SwiftUI components`, `scripts/generate.mjs`?**
-  _High betweenness centrality (0.278) - this node is a cross-community bridge._
+  _High betweenness centrality (0.286) - this node is a cross-community bridge._
 - **Are the 370 inferred relationships involving `t()` (e.g. with `accept()` and `ACTION()`) actually correct?**
   _`t()` has 370 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `.moveTitle`, `.space`, `.folded` to the rest of the system?**
+- **What connects `.commands`, `.eraserRadius`, `block` to the rest of the system?**
   _1842 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
   _Cohesion score 0.0016947345854008496 - nodes in this community are weakly interconnected._
 - **Why does `DSDateChipModel` connect `DSLanguage` to `InkController (2)`, `Sendable`, `design-tokens.md`, `Projection (2) (2)`?**
-  _High betweenness centrality (0.215) - this node is a cross-community bridge._
+  _High betweenness centrality (0.229) - this node is a cross-community bridge._
 - **Are the 401 inferred relationships involving `n()` (e.g. with `_1()` and `_6t()`) actually correct?**
   _`n()` has 401 INFERRED edges - model-reasoned connections that need verification._
 

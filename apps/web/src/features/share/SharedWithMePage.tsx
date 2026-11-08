@@ -44,7 +44,8 @@ export function SharedWithMePage() {
       refs
         .map((r, i) => ({ ref: r, title: titles[i] ?? "" }))
         .filter((x) => !q || x.title.toLowerCase().includes(q))
-        .sort((a, b) => Date.parse(b.ref.addedAt) - Date.parse(a.ref.addedAt)),
+        // As on iOS: by `order` (a new one takes min − 1, so the newest is on top), then the newest first.
+        .sort((a, b) => a.ref.order - b.ref.order || Date.parse(b.ref.addedAt) - Date.parse(a.ref.addedAt)),
     [refs, titles, q],
   );
 

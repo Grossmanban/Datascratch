@@ -20,6 +20,10 @@ concurrency:
   group: ios-app-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # UI suite parts per device family (keep in step with the `ui` job's shard matrix).
+  UI_SHARDS: 3
+
 jobs:
   # D-46: on main, skip the macOS jobs when the same files already passed this workflow
   # (usually the branch tip that was just merged) — the result cannot differ.
@@ -43,18 +47,20 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: .github/scripts/already-tested.sh ios-app.yml apps/ios .github/workflows/ios-app.yml
 
-  build-test:
+  # One machine per device family builds the app and its tests; then unit + smoke tests (the
+  # release gate) and the rest of the UI suite in UI_SHARDS parts run at the same time on separate
+  # machines from those built products (owner, 2026-11-08: one check took ~45 min on one machine).
+  build:
     needs: gate
     if: needs.gate.outputs.skip != 'true'
-    name: Build & test (${{ matrix.family }})
+    name: Build (${{ matrix.family }})
     runs-on: macos-26
-    timeout-minutes: 100
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         family: [iPad, iPhone]
     env:
-      # Release-gate UI tests (D-46): launch + editor + pen palette + signed-out device + Russian UI.
       SMOKE_UI_TESTS: >-
         BareEditorProbeTests
         SessionEndedUITests
@@ -84,6 +90,19 @@ jobs:
           python3 scripts/l10n/build_catalog.py
           git diff --exit-code -- Datascratch/Resources/Localizable.xcstrings
 
+      # Every UI test must run in exactly one place (the smoke set or one shard): a test the shard
+      # list missed would silently stop running.
+      - name: Check the UI shards cover every test
+        run: |
+          listed=$(python3 scripts/ui-test-shard.py --list | wc -l | tr -d ' ')
+          declared=$(cat DatascratchUITests/*.swift | grep -cE '^[[:space:]]+(@[A-Za-z]+[[:space:]]+)*(override[[:space:]]+)?func test[A-Za-z0-9_]*\(\)' || true)
+          echo "UI tests declared: $declared, listed: $listed"
+          [ "$listed" = "$declared" ] || { echo "::error::ui-test-shard.py lists $listed UI tests, the sources declare $declared"; exit 1; }
+          all=$(for s in $(seq 1 "$UI_SHARDS"); do python3 scripts/ui-test-shard.py "$s" "$UI_SHARDS" $SMOKE_UI_TESTS; done | sort)
+          [ -z "$(echo "$all" | uniq -d)" ] || { echo "::error::a UI test is in two shards"; exit 1; }
+          rest=$(python3 scripts/ui-test-shard.py --list $SMOKE_UI_TESTS | sed 's|^|-only-testing:DatascratchUITests/|' | sort)
+          [ "$all" = "$rest" ] || { echo "::error::the shards do not add up to the full suite"; exit 1; }
+
       - name: Install XcodeGen
         run: brew install xcodegen xcbeautify || brew install xcodegen
 
@@ -106,86 +125,23 @@ jobs:
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/build.log | xcbeautify --renderer github-actions || \
           (grep -E "error:" build/build.log | head -50; grep -B30 -A20 "Stack dump:" build/build.log | head -120; tail -40 build/build.log; exit 1)
 
-      - name: Unit tests
-        timeout-minutes: 15
-        run: |
-          set -o pipefail
-          xcodebuild test-without-building \
-            -project Datascratch.xcodeproj -scheme Datascratch \
-            -destination "${{ steps.sim.outputs.destination }}" \
-            -derivedDataPath build/DerivedData \
-            -only-testing:DatascratchTests \
-            -resultBundlePath build/Unit-${{ matrix.family }}.xcresult \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 60 \
-            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
-
-      # D-46: the smoke set is the release gate (the coordinator starts a TestFlight build once it
-      # is green on both devices); the rest of the UI suite runs right after in the same job.
-      # Each UI test is capped at 300 s. A test takes 15–65 s, but the iPad simulator sometimes
-      # stalls before the app is up (build 24: rotating the device 13.5 s instead of 0–3, the
-      # launch 94 s instead of 6–9, the first query 50 s), and at 180 s that killed a passing test.
-      - name: UI tests (smoke — release gate)
-        timeout-minutes: 20
-        run: |
-          set -o pipefail
-          ARGS=()
-          for t in $SMOKE_UI_TESTS; do ARGS+=("-only-testing:DatascratchUITests/$t"); done
-          xcodebuild test-without-building \
-            -project Datascratch.xcodeproj -scheme Datascratch \
-            -destination "${{ steps.sim.outputs.destination }}" \
-            -derivedDataPath build/DerivedData \
-            "${ARGS[@]}" \
-            -resultBundlePath build/UI-smoke-${{ matrix.family }}.xcresult \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
-            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
-
-      - name: UI tests (full)
-        # The full suite outgrew 35 min on the CI iPad mini simulator (2026-11-03: 25–90 s a test;
-        # each test is still
-        # capped at 300 s, so a hang does not hide behind this).
-        timeout-minutes: 55
-        run: |
-          set -o pipefail
-          ARGS=(-only-testing:DatascratchUITests)
-          for t in $SMOKE_UI_TESTS; do ARGS+=("-skip-testing:DatascratchUITests/$t"); done
-          xcodebuild test-without-building \
-            -project Datascratch.xcodeproj -scheme Datascratch \
-            -destination "${{ steps.sim.outputs.destination }}" \
-            -derivedDataPath build/DerivedData \
-            "${ARGS[@]}" \
-            -resultBundlePath build/UI-${{ matrix.family }}.xcresult \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
-            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
-
       - name: Check Russian localization in the app bundle
         run: |
           APP=build/DerivedData/Build/Products/Debug-iphonesimulator/Datascratch.app
           ls "$APP/ru.lproj" && test -n "$(ls "$APP/ru.lproj")" || { echo "::error::ru.lproj missing in the app bundle"; exit 1; }
 
-      - name: Export screenshots
-        if: always()
+      - name: Pack built products
         run: |
-          mkdir -p build/screenshots
-          for r in build/UI-smoke-${{ matrix.family }}.xcresult build/UI-${{ matrix.family }}.xcresult; do
-            [ -d "$r" ] && xcrun xcresulttool export attachments --path "$r" --output-path build/screenshots || true
-          done
+          ls build/DerivedData/Build/Products/*.xctestrun
+          tar -C build/DerivedData/Build -cf build/products.tar Products
+          ls -lh build/products.tar
 
-      - name: Upload screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: screenshots-${{ matrix.family }}
-          path: apps/ios/build/screenshots
-          retention-days: 14
-          if-no-files-found: ignore
-
-      - name: Upload test results
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: xcresult-${{ matrix.family }}
-          path: apps/ios/build/*.xcresult
-          retention-days: 7
+          name: products-${{ matrix.family }}
+          path: apps/ios/build/products.tar
+          retention-days: 1
+          compression-level: 1
 
       - name: Upload build log
         if: failure()
@@ -195,3 +151,202 @@ jobs:
           path: apps/ios/build/build.log
           retention-days: 7
           if-no-files-found: ignore
+
+  # D-46: the smoke set is the release gate (tools/ci/wait-release-gate.sh watches this job; the
+  # coordinator starts a TestFlight build once it is green on both devices).
+  # Each UI test is capped at 300 s. A test takes 15–65 s, but the iPad simulator sometimes
+  # stalls before the app is up (build 24: rotating the device 13.5 s instead of 0–3, the
+  # launch 94 s instead of 6–9, the first query 50 s), and at 180 s that killed a passing test.
+  smoke:
+    needs: build
+    name: Unit & smoke (${{ matrix.family }})
+    runs-on: macos-26
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        family: [iPad, iPhone]
+    env:
+      SMOKE_UI_TESTS: >-
+        BareEditorProbeTests
+        SessionEndedUITests
+        LibraryUITests/testCreateNoteAndWriteTitle
+        LibraryUITests/testSwitchingPenToolsInEditor
+        LibraryUITests/testCollapsingThePenPalette
+        LibraryUITests/testPaletteWorksWithKeyboardOpen
+        LibraryUITests/testHidingTheKeyboard
+        LibraryUITests/testColumnRulesOnIPad
+        AppearanceUITests/testRussianInterface
+    defaults:
+      run:
+        working-directory: apps/ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install xcbeautify
+        run: brew install xcbeautify || true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: products-${{ matrix.family }}
+          path: apps/ios/build
+
+      - name: Unpack built products
+        run: |
+          mkdir -p build/DerivedData/Build
+          tar -C build/DerivedData/Build -xf build/products.tar
+          ls build/DerivedData/Build/Products/*.xctestrun
+
+      - name: Pick simulator
+        id: sim
+        run: echo "destination=$(scripts/ci-destination.sh ${{ matrix.family }})" >> "$GITHUB_OUTPUT"
+
+      - name: Unit tests
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -xctestrun "$(ls build/DerivedData/Build/Products/*.xctestrun | head -1)" \
+            -destination "${{ steps.sim.outputs.destination }}" \
+            -only-testing:DatascratchTests \
+            -resultBundlePath build/Unit-${{ matrix.family }}.xcresult \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 60 \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
+
+      - name: UI tests (smoke — release gate)
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          ARGS=()
+          for t in $SMOKE_UI_TESTS; do ARGS+=("-only-testing:DatascratchUITests/$t"); done
+          xcodebuild test-without-building \
+            -xctestrun "$(ls build/DerivedData/Build/Products/*.xctestrun | head -1)" \
+            -destination "${{ steps.sim.outputs.destination }}" \
+            "${ARGS[@]}" \
+            -resultBundlePath build/UI-smoke-${{ matrix.family }}.xcresult \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
+
+      - name: Export screenshots
+        if: always()
+        run: |
+          mkdir -p build/screenshots
+          r=build/UI-smoke-${{ matrix.family }}.xcresult
+          [ -d "$r" ] && xcrun xcresulttool export attachments --path "$r" --output-path build/screenshots || true
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ matrix.family }}-smoke
+          path: apps/ios/build/screenshots
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult-${{ matrix.family }}-smoke
+          path: apps/ios/build/*.xcresult
+          retention-days: 7
+
+  # The rest of the UI suite, dealt over UI_SHARDS machines per device family
+  # (scripts/ui-test-shard.py; the build job checks that the parts add up to the whole suite).
+  ui:
+    needs: build
+    name: UI tests (${{ matrix.family }} ${{ matrix.shard }}/3)
+    runs-on: macos-26
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        family: [iPad, iPhone]
+        shard: [1, 2, 3]
+    env:
+      SMOKE_UI_TESTS: >-
+        BareEditorProbeTests
+        SessionEndedUITests
+        LibraryUITests/testCreateNoteAndWriteTitle
+        LibraryUITests/testSwitchingPenToolsInEditor
+        LibraryUITests/testCollapsingThePenPalette
+        LibraryUITests/testPaletteWorksWithKeyboardOpen
+        LibraryUITests/testHidingTheKeyboard
+        LibraryUITests/testColumnRulesOnIPad
+        AppearanceUITests/testRussianInterface
+    defaults:
+      run:
+        working-directory: apps/ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install xcbeautify
+        run: brew install xcbeautify || true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: products-${{ matrix.family }}
+          path: apps/ios/build
+
+      - name: Unpack built products
+        run: |
+          mkdir -p build/DerivedData/Build
+          tar -C build/DerivedData/Build -xf build/products.tar
+          ls build/DerivedData/Build/Products/*.xctestrun
+
+      - name: Pick simulator
+        id: sim
+        run: echo "destination=$(scripts/ci-destination.sh ${{ matrix.family }})" >> "$GITHUB_OUTPUT"
+
+      - name: UI tests (part ${{ matrix.shard }}/3)
+        timeout-minutes: 40
+        run: |
+          set -o pipefail
+          ARGS=()
+          while IFS= read -r a; do ARGS+=("$a"); done < <(python3 scripts/ui-test-shard.py ${{ matrix.shard }} "$UI_SHARDS" $SMOKE_UI_TESTS)
+          echo "${#ARGS[@]} UI tests in this part"
+          xcodebuild test-without-building \
+            -xctestrun "$(ls build/DerivedData/Build/Products/*.xctestrun | head -1)" \
+            -destination "${{ steps.sim.outputs.destination }}" \
+            "${ARGS[@]}" \
+            -resultBundlePath build/UI-${{ matrix.family }}-${{ matrix.shard }}.xcresult \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 300 \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
+
+      - name: Export screenshots
+        if: always()
+        run: |
+          mkdir -p build/screenshots
+          r=build/UI-${{ matrix.family }}-${{ matrix.shard }}.xcresult
+          [ -d "$r" ] && xcrun xcresulttool export attachments --path "$r" --output-path build/screenshots || true
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ matrix.family }}-${{ matrix.shard }}
+          path: apps/ios/build/screenshots
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult-${{ matrix.family }}-${{ matrix.shard }}
+          path: apps/ios/build/*.xcresult
+          retention-days: 7

@@ -1,7 +1,7 @@
 // D-54, the member's side: what other accounts share with this one (`GET /shared-with-me`), its keys
 // (wrapped for this account's key pair, crypto.md §10.2), its place in «Общие со мной» and the role.
 import { growingDelay } from "@/lib/growingDelay";
-import { reconcileSharedRefs, sharedItemKeys, type AccountSharedItem, type SharedItem, type ShareTarget } from "@datascratch/shared";
+import { getSharedRefs, putSharedRef, reconcileSharedRefs, sharedItemKeys, type AccountSharedItem, type SharedItem, type ShareTarget } from "@datascratch/shared";
 import { create } from "zustand";
 import { useAuth } from "@/auth/session";
 import { forgetSharedResource } from "@/domain/actions";
@@ -129,7 +129,16 @@ async function apply(list: SharedItem[], userId: string, fromServer: boolean) {
     const st = useWorkspace.getState();
     const spaceId = st.account.spaces.some((s) => s.id === st.activeSpaceId && !s.memberOf) ? st.activeSpaceId : (st.account.spaces.find((s) => !s.memberOf)?.id ?? null);
     if (spaceId) {
-      const { removed } = reconcileSharedRefs(rt.account, list, spaceId);
+      const { added, removed } = reconcileSharedRefs(rt.account, list, spaceId);
+      // «Поделились со мной» lists by `order` (then `addedAt`), the newest on top: as on iOS, a new
+      // record takes order = min − 1 (document-model.md, SharedRef).
+      if (added.length) {
+        const others = getSharedRefs(rt.account).filter((r) => !added.some((a) => a.kind === r.kind && a.id === r.id));
+        let order = Math.min(1, ...others.map((r) => r.order));
+        rt.account.transact(() => {
+          for (const ref of [...added].sort((a, b) => a.addedAt.localeCompare(b.addedAt))) putSharedRef(rt.account, { ...ref, order: --order });
+        });
+      }
       for (const target of removed) {
         if (!leaving.has(keyOf(target))) toast(i18n.t("shared.gone"));
         forgetSharedResource(target);

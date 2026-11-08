@@ -43,6 +43,9 @@ final class ServerConnection: CoreLibraryRemote {
     private(set) var isAccountSynced = false
     /// Called when the account document first caught up in a session (sharing waits for it).
     var onAccountSynced: (() -> Void)?
+    /// D-62: the server's `account_changed` on the sync socket (what changed: invitations,
+    /// spaces, members, keys, notebooks); sharing refreshes at once. DSCore reports it (ios-core).
+    var onAccountChanged: (([String]) -> Void)?
 
     init(serverURL: URL, webHost: String, core: CoreLibrary, sync: SyncCenter, attachmentsDirectory: URL) {
         self.attachmentsDirectory = attachmentsDirectory
@@ -149,6 +152,20 @@ final class ServerConnection: CoreLibraryRemote {
             let presence = self.presence
             if let email = (try? core.store.string(ServerAccountService.emailKey)) ?? nil, !email.isEmpty {
                 presence.me = (PresenceCenter.name(forEmail: email), PresenceCenter.color(for: email), session.userId)
+            }
+            // D-62: the server says what of the account changed (invitations, spaces, members,
+            // keys, notebooks): sharing refreshes it at once, a burst as one.
+            await engine.setAccountChangedHandler { [weak self] what in
+                let names = what.map(\.rawValue)
+                Task { @MainActor in self?.onAccountChanged?(names) }
+            }
+            // Documents left without a key: fetch keys now (notebooks, shared with me, spaces),
+            // not at the next refresh; the engine asks again at 2, 10 and 30 s while they wait.
+            await engine.setKeysMissingHandler { [weak self] _ in
+                Task { @MainActor in
+                    self?.notebookKeysMissing()
+                    self?.onAccountChanged?(["keys"])
+                }
             }
             await engine.setAwarenessHandler { docId, payload, _ in
                 Task { @MainActor in presence.receive(docId, payload) }
@@ -419,7 +436,9 @@ final class ServerConnection: CoreLibraryRemote {
     /// device): fetch them, then let the engine pick their documents up.
     func noteKeysLearned() {
         guard let engine else { return }
-        Task { await engine.resumeDocumentsWaitingForKeys() }
+        // Waiting documents and those the server refused (access granted since) subscribe again,
+        // and what was held goes out.
+        Task { await engine.noteKeysLearned() }
     }
 
     func notebookKeysMissing() {
@@ -596,6 +615,10 @@ final class ServerAccountService: AccountService {
     /// shows «signed out on this device» instead of the welcome screen.
     static let sessionEndedKey = "app.sessionEnded"
 
+    /// Until `restore()` knows whether a session is stored: launch shows its plain background,
+    /// not the welcome screen for a split second (owner, 2026-11-08).
+    private(set) var isRestoring = true
+
     init(connection: ServerConnection) {
         self.connection = connection
         connection.onDeviceRevoked = { [weak self] in await self?.deviceRevoked() }
@@ -624,10 +647,13 @@ final class ServerAccountService: AccountService {
                 account = Account(userId: "", email: email, createdAt: Date())
                 connection.sync.markSessionEnded()
             }
+            isRestoring = false
             return
         }
         let email = (try? connection.core.store.string(Self.emailKey)) ?? ""
         account = Account(userId: session.userId, email: email, createdAt: Date())
+        // Known now: the library shows at once, sync starts behind it.
+        isRestoring = false
         await connection.start(session: session, isNewAccount: false)
     }
 

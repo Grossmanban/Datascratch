@@ -4,6 +4,7 @@ import UIKit
 /// D-54: invitations to this account — who invites, to what, with which role; accept or decline.
 struct InvitationsView: View {
     @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
     @Environment(\.dismiss) private var dismiss
     @State private var working: String?
     @State private var error: String?
@@ -56,7 +57,14 @@ struct InvitationsView: View {
                     try await app.accountSharing.decline(invite)
                 }
                 Haptics.success()
-                if app.accountSharing.incoming.isEmpty { dismiss() }
+                if accept, invite.target.kind == .space {
+                    // A joined space opens at once, its notebooks already in (D-62).
+                    scene.switchSpace(to: invite.target.id)
+                    scene.sidebar = .allDocuments
+                    dismiss()
+                } else if app.accountSharing.incoming.isEmpty {
+                    dismiss()
+                }
             } catch {
                 self.error = error.localizedDescription
             }
@@ -69,6 +77,7 @@ struct InvitationsView: View {
 /// «Decline», or why it is not there — not signed in, or no longer waiting.
 struct InvitationLinkView: View {
     @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
     @Environment(\.dismiss) private var dismiss
     let invitationId: String
     @State private var isLoaded = false
@@ -134,6 +143,10 @@ struct InvitationLinkView: View {
                     try await app.accountSharing.decline(invite)
                 }
                 Haptics.success()
+                if accept, invite.target.kind == .space {
+                    scene.switchSpace(to: invite.target.id)
+                    scene.sidebar = .allDocuments
+                }
                 dismiss()
             } catch {
                 self.error = error.localizedDescription
@@ -184,7 +197,8 @@ private struct InvitationCard: View {
                 Button(action: onAccept) {
                     HStack {
                         if isWorking { ProgressView().controlSize(.small) }
-                        Text("Accept")
+                        // Joining a space takes its key and notebooks first: say what happens.
+                        Text(isWorking && invite.target.kind == .space ? LocalizedStringKey("Connecting to the space…") : "Accept")
                     }
                     .frame(maxWidth: .infinity)
                 }

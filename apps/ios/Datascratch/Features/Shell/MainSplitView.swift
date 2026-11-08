@@ -148,6 +148,8 @@ struct ContentColumn: View {
             CalendarView()
         case .trash:
             TrashView()
+        case .sharedWithMe:
+            SharedWithMeView()
         case let item:
             DocumentCollectionView(source: item)
         }

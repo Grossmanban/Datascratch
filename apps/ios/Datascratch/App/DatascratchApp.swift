@@ -57,6 +57,11 @@ struct RootView: View {
     var body: some View {
         Group {
             switch app.phase {
+            case .launching:
+                // The launch screen's colour, until the stored session is read.
+                Color("LaunchBackground")
+                    .ignoresSafeArea()
+                    .accessibilityIdentifier("launching")
             case .onboarding:
                 OnboardingFlow()
                     .transition(.opacity)

@@ -39,10 +39,31 @@ final class SyncCenter {
         heldSince = count > 0 ? (heldSince ?? now) : nil
     }
 
-    /// Held for a while (a minute): worth a quiet line, never an alarm.
-    func showsHeldHint(now: Date = Date()) -> Bool {
-        guard heldChanges > 0, let since = heldSince else { return false }
-        return now.timeIntervalSince(since) > 60
+    /// What changes waiting for a key mean right now (owner, 2026-11-08: a bare «Изменений
+    /// ждут ключ: N» hung there with nothing to do about it).
+    enum KeyWait: Equatable {
+        case none
+        /// Just now: the key is on its way (a member's key comes from the owner's device).
+        case waiting(changes: Int)
+        /// Longer than `keyPatience`: the device that gives the key is not online.
+        case stuck(changes: Int)
+
+        var isStuck: Bool {
+            if case .stuck = self { true } else { false }
+        }
+    }
+
+    /// How long a key may take before the status says why it does not come.
+    nonisolated static let keyPatience: TimeInterval = 30
+
+    /// A key that comes at once (the usual case) is not worth a line at all.
+    nonisolated static let keyGrace: TimeInterval = 3
+
+    func keyWait(now: Date = Date()) -> KeyWait {
+        guard heldChanges > 0, let since = heldSince else { return .none }
+        let waited = now.timeIntervalSince(since)
+        if waited > Self.keyPatience { return .stuck(changes: heldChanges) }
+        return waited > Self.keyGrace ? .waiting(changes: heldChanges) : .none
     }
     private(set) var serverURL: URL?
 

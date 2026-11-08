@@ -60,20 +60,75 @@ final class SharingUITests: XCTestCase {
         XCTAssertTrue(accept.waitForExistence(timeout: 5),
                       sheetOpen ? "no Accept button in Invitations" : "tapping the row did not open Invitations")
         accept.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["sidebar.sharedPending"].firstMatch.waitForExistence(timeout: 5)
-                      || app.descendants(matching: .any)["sidebar.sharedNotebook"].firstMatch.waitForExistence(timeout: 2),
+        settle(1)
+        openSharedWithMe(app)
+        XCTAssertTrue(app.descendants(matching: .any)["sharedWithMe.pending"].firstMatch.waitForExistence(timeout: 5)
+                      || app.descendants(matching: .any)["sharedWithMe.notebook"].firstMatch.waitForExistence(timeout: 2),
                       "the accepted notebook is not in «Shared with me»")
+    }
+
+    /// D-63 (owner, 2026-11-08): what is shared one by one is in its own section, from the space
+    /// switcher — not in a space's sidebar, All Documents or search.
+    func testSharedWithMeIsItsOwnSection() throws {
+        let app = launch([])
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        XCTAssertTrue(app.navigationBars["All Documents"].firstMatch.waitForExistence(timeout: 5)
+                      || app.descendants(matching: .any)["sidebar.spaceSwitcher"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["sidebar.sharedNotebook"].firstMatch.exists,
+                       "a shared notebook is in the space's sidebar")
+        XCTAssertFalse(app.staticTexts["Roadmap"].firstMatch.exists, "a shared note is in the space's All Documents")
+        openSharedWithMe(app)
+        let notebook = app.descendants(matching: .any)["sharedWithMe.notebook"].firstMatch
+        XCTAssertTrue(notebook.waitForExistence(timeout: 5), "the shared notebook is not in «Shared with me»")
+        XCTAssertTrue(notebook.label.contains("@"), "the row does not say who shared it: \(notebook.label)")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "shared-with-me"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
+    /// The space switcher's «Shared with Me».
+    private func openSharedWithMe(_ app: XCUIApplication) {
+        _ = openSpaceMenu(app)
+        let entry = app.buttons["space.sharedWithMe"].firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 3), "no «Shared with Me» in the space switcher")
+        entry.tap()
+        // The list's own identifier gives way to the column's (`workspace.list`): its title says it.
+        XCTAssertTrue(app.navigationBars["Shared with me"].firstMatch.waitForExistence(timeout: 5),
+                      "«Shared with me» did not open")
+    }
+
+    private func settle(_ seconds: TimeInterval) {
+        _ = XCTWaiter().wait(for: [XCTestExpectation(description: "settle")], timeout: seconds)
+    }
+
+    /// D-62 (owner, 2026-11-08): accepting an invitation to a shared space opens that space —
+    /// its notebooks in the sidebar — not «some time later».
+    func testAcceptingASpaceInvitationOpensTheSpace() throws {
+        let app = launch(["-ui-testing-space-invite"])
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        XCTAssertFalse(app.staticTexts["Team notes"].firstMatch.exists, "the space is open before accepting")
+        let invitations = revealSidebarElement(app, "sidebar.invitations")
+        XCTAssertTrue(invitations.exists, "no Invitations row in the sidebar")
+        invitations.tap()
+        let accept = app.buttons["invitation.accept"].firstMatch
+        if !accept.waitForExistence(timeout: 5), invitations.exists, invitations.isHittable { invitations.tap() }
+        XCTAssertTrue(accept.waitForExistence(timeout: 5), "no Accept button in Invitations")
+        accept.tap()
+        let notebook = revealSidebarElement(app, "sidebar.notebook")
+        XCTAssertTrue(notebook.exists, "no notebook in the sidebar after joining")
+        XCTAssertTrue(app.staticTexts["Team notes"].firstMatch.waitForExistence(timeout: 5),
+                      "the joined space did not open with its notebook")
     }
 
     /// prod 2026-10-28: a shared notebook opened from «Shared with me» lists its notes.
     func testSharedNotebookListsItsNotes() throws {
         let app = launch([])
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
-        let row = revealSidebarElement(app, "sidebar.sharedNotebook")
-        XCTAssertTrue(row.exists, "no shared notebook in the sidebar")
-        // The identifier lands on the row's icon and text: tap the cell holding them.
-        let cell = app.cells.containing(.any, identifier: "sidebar.sharedNotebook").firstMatch
-        (cell.exists ? cell : row).tap()
+        openSharedWithMe(app)
+        let row = app.descendants(matching: .any)["sharedWithMe.notebook"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "no shared notebook in «Shared with me»")
+        row.tap()
         XCTAssertTrue(app.staticTexts["Roadmap"].firstMatch.waitForExistence(timeout: 5),
                       "the shared notebook lists none of its notes")
     }
@@ -82,8 +137,9 @@ final class SharingUITests: XCTestCase {
     func testSharedNotebookShowsTheAgentsBadge() throws {
         let app = launch([])
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
-        let row = revealSidebarElement(app, "sidebar.sharedNotebook")
-        XCTAssertTrue(row.exists, "no shared notebook in the sidebar")
+        openSharedWithMe(app)
+        let row = app.descendants(matching: .any)["sharedWithMe.notebook"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "no shared notebook in «Shared with me»")
         let agents = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "opened this notebook to AI agents")).firstMatch
         XCTAssertTrue(agents.waitForExistence(timeout: 3), "no ✨ on the shared notebook")
     }
@@ -117,6 +173,54 @@ final class SharingUITests: XCTestCase {
         XCTAssertTrue(switcher.exists, "no space switcher")
         switcher.tap()
         return switcher
+    }
+
+    /// One «Create Space» (owner, 2026-11-08; the web's wording): the sheet asks the kind, the name (typed at once,
+    /// nothing made without it), glyph and colour with a live preview. Personal: created and open;
+    /// for working together: «Invite People» follows.
+    func testCreatingASpace() throws {
+        let app = launch([])
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        _ = openSpaceMenu(app)
+        XCTAssertFalse(app.buttons["New Shared Space…"].exists, "two «new space» entries are back")
+        let create = app.buttons["space.create"].firstMatch
+        XCTAssertTrue(create.waitForExistence(timeout: 3), "no «Create Space» in the switcher")
+        create.tap()
+        let save = app.buttons["space.save"].firstMatch
+        XCTAssertTrue(save.waitForExistence(timeout: 5), "the sheet did not open")
+        XCTAssertFalse(save.isEnabled, "a space can be made without a name")
+        XCTAssertTrue(app.buttons["space.kind.personal"].exists && app.buttons["space.kind.shared"].exists, "no kind cards")
+        let name = app.textFields["space.name"].firstMatch
+        XCTAssertTrue(name.waitForExistence(timeout: 3), "no name field")
+        name.tap()
+        name.typeText("Family")
+        XCTAssertTrue(app.descendants(matching: .any)["space.preview"].firstMatch.label.contains("Family"),
+                      "the preview does not follow the name")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "create-space"
+        shot.lifetime = .keepAlways
+        add(shot)
+        save.tap()
+        // iPhone: the new space's list is shown; the switcher is in the sidebar, one step back.
+        let switcher = revealSidebarElement(app, "sidebar.spaceSwitcher")
+        let isFamily = NSPredicate(format: "value CONTAINS 'Family' OR label CONTAINS 'Family'")
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: isFamily, evaluatedWith: switcher)], timeout: 5), .completed,
+                       "the new space is not the open one")
+
+        // For working together: «Invite People» follows.
+        _ = openSpaceMenu(app)
+        app.buttons["space.create"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["space.kind.shared"].firstMatch.waitForExistence(timeout: 5))
+        app.buttons["space.kind.shared"].firstMatch.tap()
+        let name2 = app.textFields["space.name"].firstMatch
+        name2.tap()
+        name2.typeText("Book club")
+        app.buttons["space.save"].firstMatch.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["spaceMembers"].firstMatch.waitForExistence(timeout: 5),
+                      "inviting people did not follow")
+        let skip = app.buttons["space.invite.skip"].firstMatch
+        XCTAssertTrue(skip.exists, "no «Skip» on the invite step")
+        skip.tap()
     }
 
     /// A shared space this account joined is in the switcher; its notebook and note open.

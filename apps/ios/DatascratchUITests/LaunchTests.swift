@@ -908,6 +908,26 @@ final class LibraryUITests: XCTestCase {
     }
 
     /// iPad: closing the document (its tab) leaves the list in place.
+    /// Closing a document returns to the list it was opened from (owner, 2026-11-08: from
+    /// All Documents it landed in the document's notebook).
+    func testClosingReturnsToAllDocuments() throws {
+        let app = launchSignedIn()
+        let card = app.descendants(matching: .any)["document.card"].firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 5), "no document in All Documents")
+        XCTAssertTrue(app.navigationBars["All Documents"].firstMatch.exists, "the app did not start in All Documents")
+        card.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["editor"].firstMatch.waitForExistence(timeout: 10), "the document did not open")
+        let close = app.buttons["document.close"].firstMatch
+        if UIDevice.current.userInterfaceIdiom == .pad, close.waitForExistence(timeout: 3) {
+            close.tap()
+        } else {
+            app.navigationBars.buttons.firstMatch.tap()
+        }
+        settle(1.5)
+        XCTAssertTrue(app.navigationBars["All Documents"].firstMatch.waitForExistence(timeout: 3),
+                      "closing did not return to All Documents; bars: \(app.navigationBars.allElementsBoundByIndex.map(\.identifier))")
+    }
+
     func testClosingTheDocumentOnIPad() throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad only") }
         let app = launchSignedIn()

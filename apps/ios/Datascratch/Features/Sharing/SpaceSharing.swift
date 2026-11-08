@@ -8,6 +8,9 @@ struct SpaceMembersSheet: View {
     @Environment(SceneModel.self) private var scene
     @Environment(\.dismiss) private var dismiss
     let spaceId: String
+    /// Step 2 of creating a space for working together (the web's wording): «Invite People»,
+    /// with Skip and Done.
+    var isNewSpace = false
 
     private var space: Space? { app.library.spaces.first { $0.id == spaceId } }
     private var target: ShareTarget { ShareTarget(kind: .space, id: spaceId) }
@@ -28,7 +31,13 @@ struct SpaceMembersSheet: View {
                             dismiss()
                         }
                     } else {
-                        if !space.isShared {
+                        if isNewSpace {
+                            Section {
+                                Text("Invite people by email — they will see all of the space’s notebooks. You can do this later too.")
+                                    .font(Theme.Typography.callout)
+                                    .foregroundStyle(Theme.Palette.textSecondary)
+                            }
+                        } else if !space.isShared {
                             Section {
                                 Label {
                                     Text("Everyone you invite works in this space with you: they see all of its notebooks, with their history. Notebooks you already share with people of their own stay personal.")
@@ -43,9 +52,15 @@ struct SpaceMembersSheet: View {
                     }
                 }
             }
-            .navigationTitle(space?.isShared == true ? LocalizedStringKey("Space Members") : "Invite to Space")
+            .navigationTitle(isNewSpace ? LocalizedStringKey("Invite People")
+                             : space?.isShared == true ? "Space Members" : "Invite to Space")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                if isNewSpace {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Skip") { dismiss() }.accessibilityIdentifier("space.invite.skip")
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
         }

@@ -448,7 +448,7 @@ struct EncodingVectorTests {
             "voiceTextRequest": { _ = try JSONDecoder().decode(VoiceTextRequest.self, from: $0) },
             "voiceTextResponse": { _ = try JSONDecoder().decode(VoiceTextResponse.self, from: $0) },
             "voiceMe": { _ = try JSONDecoder().decode(VoiceMe.self, from: $0) },
-            "adminVoiceAccount": { _ = try JSONDecoder().decode(AdminVoiceAccount.self, from: $0) },
+            "adminVoiceResponse": { _ = try JSONDecoder().decode(AdminVoiceResponse.self, from: $0) },
             "putAdminVoiceRequest": { _ = try JSONDecoder().decode(PutAdminVoiceRequest.self, from: $0) },
         ]
         for (name, c) in cases {

@@ -65,11 +65,19 @@ export function setSetting(doc: Y.Doc, key: string, value: unknown): void {
   else settings.set(key, value);
 }
 
-/** «Общие со мной» placements (D-54), optionally of one space. */
+/**
+ * «Поделились со мной» entries (D-54, D-63) by `order`, then newer `addedAt` first. `spaceId`
+ * filters by the legacy field only (the section is outside spaces since D-63).
+ */
 export function getSharedRefs(doc: Y.Doc, spaceId?: string): SharedRef[] {
   return readRecords<SharedRef>(accountRoots(doc).shared)
     .filter((r) => spaceId === undefined || r.spaceId === spaceId)
-    .sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    .sort(
+      (a, b) =>
+        a.order - b.order ||
+        (a.addedAt > b.addedAt ? -1 : a.addedAt < b.addedAt ? 1 : 0) ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
 }
 export const getSharedRef = (doc: Y.Doc, kind: SharedRef["kind"], id: string) =>
   readRecord<SharedRef>(accountRoots(doc).shared, sharedRefKey(kind, id));

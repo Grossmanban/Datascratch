@@ -837,7 +837,7 @@ export function apiVectors() {
             monthlyMinutes: 600,
             usedMinutes: 12.5,
             resetsAt: "2026-12-01T00:00:00.000Z",
-            admin: true,
+            isAdmin: true,
           },
           {
             enabled: false,
@@ -845,7 +845,7 @@ export function apiVectors() {
             monthlyMinutes: 120,
             usedMinutes: 0,
             resetsAt: "2026-12-01T00:00:00.000Z",
-            admin: false,
+            isAdmin: false,
           },
         ],
         invalid: [
@@ -856,7 +856,7 @@ export function apiVectors() {
               available: true,
               monthlyMinutes: 600,
               usedMinutes: 0,
-              admin: false,
+              isAdmin: false,
             },
           },
           {
@@ -866,11 +866,11 @@ export function apiVectors() {
               monthlyMinutes: 600,
               usedMinutes: 0,
               resetsAt: "2026-12-01T00:00:00.000Z",
-              admin: false,
+              isAdmin: false,
             },
           },
           {
-            reason: "missing admin",
+            reason: "missing isAdmin",
             body: {
               enabled: true,
               available: true,

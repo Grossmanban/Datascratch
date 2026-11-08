@@ -132,10 +132,10 @@ describe("voice access (D-65)", () => {
       monthlyMinutes: 600,
       usedMinutes: 12.5,
       resetsAt: "2026-12-01T00:00:00.000Z",
-      admin: false,
+      isAdmin: false,
     };
     expect(voiceMeSchema.safeParse(me).success).toBe(true);
-    const { admin: _admin, ...withoutAdmin } = me;
+    const { isAdmin: _isAdmin, ...withoutAdmin } = me;
     expect(voiceMeSchema.safeParse(withoutAdmin).success).toBe(false);
     const account = {
       userId: "0192f3c4-0000-7000-8000-00000000f101",

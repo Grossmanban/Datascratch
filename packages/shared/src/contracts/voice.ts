@@ -138,7 +138,7 @@ export const voiceMeSchema = z.object({
   /** Start of the next month, UTC. */
   resetsAt: isoDateTimeSchema,
   /** A server admin: may open the voice access screen (`GET /admin/voice`). */
-  admin: z.boolean(),
+  isAdmin: z.boolean(),
 });
 export type VoiceMe = z.infer<typeof voiceMeSchema>;
 

@@ -23,7 +23,7 @@ async function audit(page: Page): Promise<Problem[]> {
     const movable = window.scrollX > x0;
     window.scrollTo(x0, window.scrollY);
     if (movable) {
-      const wide = [...document.querySelectorAll("body *")].filter((el) => el.getBoundingClientRect().right > vw + 1).slice(-3);
+      const wide = Array.from(document.querySelectorAll("body *")).filter((el) => el.getBoundingClientRect().right > vw + 1).slice(-3);
       out.push(`page scrolls sideways: ${document.documentElement.scrollWidth} > ${vw} (${wide.map((el) => `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 60)}`).join(" | ")})`);
     }
     const label = (el: Element) =>
@@ -34,7 +34,7 @@ async function audit(page: Page): Promise<Problem[]> {
       return r.width > 0 && r.height > 0 && r.right > 0 && r.left < vw && st.visibility !== "hidden" && st.display !== "none" && Number(st.opacity) > 0.05 && r.bottom > 0 && r.top < vh;
     };
     // Tap targets: the box itself or with its padding/hit area; 44 × 44 is Apple's, 48 Android's minimum.
-    for (const el of document.querySelectorAll("button, a[href], [role=button], [role=menuitem], [role=menuitemcheckbox], [role=tab], input[type=checkbox], [role=switch]")) {
+    for (const el of Array.from(document.querySelectorAll("button, a[href], [role=button], [role=menuitem], [role=menuitemcheckbox], [role=tab], input[type=checkbox], [role=switch]"))) {
       // The pen palette is the editor package's own toolbar (its ⌄ / ⋯ are 32 px — passed to web-editor).
       if (!shown(el) || el.closest("[aria-hidden=true], .ds-prose, .ds-palette, [data-tap-exempt]")) continue;
       // A link inside a sentence is exempt (WCAG 2.5.8 «inline»).
@@ -50,13 +50,13 @@ async function audit(page: Page): Promise<Problem[]> {
       if (Math.min(r.width, r.height) < 44 && !(r.height >= 44 && r.width >= 32)) out.push(`small target ${Math.round(r.width)}×${Math.round(r.height)}: ${label(el)}`);
     }
     // Dialogs, menus and popovers inside the screen.
-    for (const el of document.querySelectorAll("[role=dialog], [role=alertdialog], [role=menu], [role=listbox], [data-radix-popper-content-wrapper] > *")) {
+    for (const el of Array.from(document.querySelectorAll("[role=dialog], [role=alertdialog], [role=menu], [role=listbox], [data-radix-popper-content-wrapper] > *"))) {
       if (!shown(el)) continue;
       const r = el.getBoundingClientRect();
       if (r.left < -1 || r.right > vw + 1 || r.top < -1 || r.bottom > vh + 1) out.push(`off screen ${Math.round(r.left)},${Math.round(r.top)}–${Math.round(r.right)},${Math.round(r.bottom)}: ${label(el)}`);
     }
     // Fields: below 16 px iOS Safari zooms in on focus.
-    for (const el of document.querySelectorAll("input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select")) {
+    for (const el of Array.from(document.querySelectorAll("input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select"))) {
       if (!shown(el)) continue;
       const size = parseFloat(getComputedStyle(el).fontSize);
       if (size < 16) out.push(`field font ${size}px: ${label(el)}`);

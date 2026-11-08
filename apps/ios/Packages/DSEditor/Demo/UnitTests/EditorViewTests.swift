@@ -1011,7 +1011,12 @@ final class EditorViewTests: XCTestCase {
         settle(editor)
         XCTAssertEqual(doc.blocks[1].plainText, "Здравствуй, мир")
         XCTAssertTrue(editor.hasAgentEdits)
-        let banner = try XCTUnwrap(editor.subviews.compactMap { $0 as? AgentEditsBanner }.first)
+        func find(_ v: UIView) -> AgentEditsBanner? {
+            if let b = v as? AgentEditsBanner { return b }
+            for s in v.subviews { if let b = find(s) { return b } }
+            return nil
+        }
+        let banner = try XCTUnwrap(find(editor))
         XCTAssertEqual(banner.editsAuthor, "Голос")
         doc.undo()
         XCTAssertEqual(doc.blocks[1].plainText, "Привет мир", "a suggestion is one undo step")

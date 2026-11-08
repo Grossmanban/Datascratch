@@ -14,6 +14,7 @@ import {
   putFolder,
   putNoteMeta,
   putNotebookRef,
+  putSharedRef,
   putSpace,
   putTagProps,
   setSetting,
@@ -373,6 +374,16 @@ export function documentVectors() {
   setSetting(account, "dailyNotebookId", notebookId);
   setStarred(account, { kind: "note", id: noteId }, true);
   openTab(account, noteId);
+  // «Поделились со мной» (D-54, D-63): one opened on some device, one still new.
+  putSharedRef(account, {
+    kind: "notebook",
+    id: vid(61),
+    spaceId: vid(60),
+    order: 1,
+    addedAt: T,
+    openedAt: "2026-11-08T09:30:00.000Z",
+  });
+  putSharedRef(account, { kind: "note", id: vid(62), spaceId: vid(60), order: 2, addedAt: T });
 
   return {
     "document/note.json": {
@@ -415,7 +426,8 @@ export function documentVectors() {
       expected: notebook.toJSON(),
     },
     "document/account.json": {
-      description: "Reference account document (document-model.md §2).",
+      description:
+        "Reference account document (document-model.md §2). `shared`: «Поделились со мной» entries keyed `<kind>:<id>`; `openedAt` (ISO, D-63) = first open on any device, absent or null = new (shown bold); `spaceId` no longer places the entry (kept for compatibility).",
       update: b64(Y.encodeStateAsUpdate(account)),
       expected: account.toJSON(),
     },

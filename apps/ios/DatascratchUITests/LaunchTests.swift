@@ -916,11 +916,13 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(card.waitForExistence(timeout: 5), "no document in All Documents")
         XCTAssertTrue(app.navigationBars["All Documents"].firstMatch.exists, "the app did not start in All Documents")
         card.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["editor"].firstMatch.waitForExistence(timeout: 10), "the document did not open")
-        let close = app.buttons["document.close"].firstMatch
-        if UIDevice.current.userInterfaceIdiom == .pad, close.waitForExistence(timeout: 3) {
+        // A light query: the whole tree of an open document timed out on iPad (run 42495834040).
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            let close = app.buttons["document.close"].firstMatch
+            XCTAssertTrue(close.waitForExistence(timeout: 10), "the document did not open")
             close.tap()
         } else {
+            XCTAssertTrue(app.buttons["document.more"].firstMatch.waitForExistence(timeout: 10), "the document did not open")
             app.navigationBars.buttons.firstMatch.tap()
         }
         settle(1.5)

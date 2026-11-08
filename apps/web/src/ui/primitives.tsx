@@ -179,14 +179,18 @@ export function DropdownMenu({
   items,
   align = "start",
   side = "bottom",
+  open,
+  onOpenChange,
 }: {
   trigger: ReactNode;
   items: MenuItem[];
   align?: "start" | "end" | "center";
   side?: "bottom" | "top" | "right" | "left";
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   return (
-    <UIDropdownMenu modal={false}>
+    <UIDropdownMenu modal={false} {...(open !== undefined ? { open } : {})} {...(onOpenChange ? { onOpenChange } : {})}>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent align={align} side={side}>
         {renderItems(Drop, items)}

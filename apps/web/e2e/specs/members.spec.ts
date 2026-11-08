@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { expectSynced, newDoc, signUp, uniqueEmail } from "./helpers";
+import { expectSynced, newDoc, signUp, uniqueEmail, openSharedWithMe } from "./helpers";
 
 // D-54: sharing with an account by email — the owner's «Люди» and the invitee's incoming invitations.
 
@@ -154,11 +154,28 @@ test("D-54: the member sees a shared notebook in «Общие со мной», a
   await q.getByTestId("invitation-in").getByTestId("accept-invitation").click();
   await q.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
 
+  // D-63: not in the member's own space — neither its sidebar nor «Все документы» — but counted
+  // as new in the switcher, and listed (bold, with owner · role · date) in «Поделились со мной».
+  await expect(q.getByTestId("shared-row")).toHaveCount(0);
+  await q.getByTestId("sidebar").getByRole("link", { name: /Все документы/ }).click();
+  await expect(q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Совместная заметка" })).toHaveCount(0);
+  await q.getByTestId("space-switcher").click();
+  await expect(q.getByTestId("shared-new-count")).toHaveText("1", { timeout: 30_000 });
+  await q.keyboard.press("Escape");
+  await openSharedWithMe(q);
+  const item = q.getByTestId("shared-item").first();
+  await expect(item).toContainText("только чтение", { timeout: 30_000 });
+  await expect(item).toHaveAttribute("data-new", "true");
+  await expect(item).toContainText("сегодня");
   // The key reaches the member on its own; the notebook shows up under its own name.
   const shared = q.getByTestId("shared-row").filter({ hasText: "Заметки" });
   await expect(shared).toBeVisible({ timeout: 30_000 });
   await expect(shared).not.toHaveAttribute("data-waiting", "", { timeout: 30_000 });
   await shared.click();
+  // Opened once: no longer new.
+  await q.getByTestId("space-switcher").click();
+  await expect(q.getByTestId("shared-new-count")).toHaveCount(0);
+  await q.keyboard.press("Escape");
   const card = q.getByTestId(/^doc-(card|row)$/).filter({ hasText: "Совместная заметка" });
   await expect(card).toBeVisible({ timeout: 20_000 });
   await card.click();
@@ -230,6 +247,7 @@ test("D-54: a shared notebook open to the owner's AI agents shows ✨ to the mem
   await q.getByTestId("invitations-row").click();
   await q.getByTestId("invitation-in").getByTestId("accept-invitation").click();
   await q.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
+  await openSharedWithMe(q);
   const row = q.getByTestId("shared-row").filter({ hasText: "Заметки" });
   await expect(row).not.toHaveAttribute("data-waiting", "", { timeout: 30_000 });
   await expect(row.getByTestId("agents-badge")).toBeVisible();

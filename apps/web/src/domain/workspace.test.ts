@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { initNotebookDoc, notebookMaps } from "./notebook";
-import { folderCounts, notesInSpace, ownNotebookIds, refreshNotebook, refreshStandaloneNote, resetWorkspace, spaceOfNote, useWorkspace, visibleNotes } from "./workspace";
+import { folderCounts, notesInSpace, ownNotebookIds, refreshNotebook, refreshStandaloneNote, resetWorkspace, SHARED_WITH_ME, spaceOfNote, useWorkspace, visibleNotes } from "./workspace";
 import { toYMap } from "./ymap";
 
 function note(id: string, title: string, folderId: string | null = null) {
@@ -38,7 +38,7 @@ describe("workspace snapshot (structural sharing for large lists)", () => {
   });
 });
 
-describe("what a space lists (D-48) includes what is shared into it (D-54)", () => {
+describe("what is shared one by one (D-54) is listed in «Поделились со мной», not in a space (D-63)", () => {
   beforeEach(() => resetWorkspace());
 
   const space = (id: string, order: number) => ({ id, name: id, icon: null, color: null, order, createdAt: "2026-01-01T00:00:00Z" });
@@ -51,9 +51,9 @@ describe("what a space lists (D-48) includes what is shared into it (D-54)", () 
   };
   const ids = (spaceId: string) => visibleNotes(notesInSpace(useWorkspace.getState(), spaceId)).map((n) => n.id).sort();
 
-  it("lists the notes of a notebook shared with this account in the space that shows it, not elsewhere", () => {
-    // prod 2026-11-02: «Все документы» had only own notebooks; a shared notebook's notes were
-    // visible only inside it (iOS had the same bug until build 25).
+  it("lists a shared notebook's notes and a shared note in «Поделились со мной», in no space", () => {
+    // prod 2026-11-02 asked for a shared notebook's notes beyond the notebook itself; since D-63
+    // they live in their own section (its search and lists), whatever the legacy placement says.
     useWorkspace.setState({
       activeSpaceId: "personal",
       account: {
@@ -71,14 +71,15 @@ describe("what a space lists (D-48) includes what is shared into it (D-54)", () 
     notebook("theirs", ["t1", "Капец"], ["t2", "Саня я починил"]);
     refreshStandaloneNote("single", { ...useWorkspace.getState().notes.m1!, id: "single", notebookId: "", title: "Single" });
 
-    expect(ids("personal")).toEqual(["m1", "single", "t1", "t2"]);
+    expect(ids("personal")).toEqual(["m1"]);
     expect(ids("work")).toEqual(["j1"]);
-    expect(spaceOfNote(useWorkspace.getState(), "t1")).toBe("personal");
+    expect(ids(SHARED_WITH_ME)).toEqual(["single", "t1", "t2"]);
+    expect(spaceOfNote(useWorkspace.getState(), "t1")).toBe(SHARED_WITH_ME);
     // Trash and daily notes take only own notebooks: the owner empties a shared notebook's trash.
     expect([...ownNotebookIds(useWorkspace.getState().account, "personal")]).toEqual(["mine"]);
   });
 
-  it("shows a placement whose space was deleted in the first space instead of nowhere", () => {
+  it("shows an item whose legacy placement space was deleted in «Поделились со мной», not nowhere", () => {
     useWorkspace.setState({
       account: {
         ...useWorkspace.getState().account,
@@ -88,7 +89,8 @@ describe("what a space lists (D-48) includes what is shared into it (D-54)", () 
       },
     });
     notebook("theirs", ["t1", "Капец"]);
-    expect(ids("personal")).toEqual(["t1"]);
-    expect(spaceOfNote(useWorkspace.getState(), "t1")).toBe("personal");
+    expect(ids("personal")).toEqual([]);
+    expect(ids(SHARED_WITH_ME)).toEqual(["t1"]);
+    expect(spaceOfNote(useWorkspace.getState(), "t1")).toBe(SHARED_WITH_ME);
   });
 });

@@ -25,7 +25,7 @@ test("the recovery key check can be skipped; settings remind, show the key again
   await page.waitForURL("**/all");
   await expect(page.getByTestId("recovery-dot")).toBeVisible();
 
-  await page.goto("/settings/account");
+  await page.goto("/settings/security");
   await expect(page.getByTestId("recovery-card")).toHaveAttribute("data-state", "unconfirmed");
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
@@ -51,7 +51,7 @@ test("the recovery key check can be skipped; settings remind, show the key again
   const ctx = await browser.newContext();
   const p2 = await ctx.newPage();
   await signIn(p2, email);
-  await p2.goto("/settings/account");
+  await p2.goto("/settings/security");
   const card2 = p2.getByTestId("recovery-card");
   await expect(card2).toHaveAttribute("data-state", "confirmed", { timeout: 15_000 });
   await expect(card2).toHaveAttribute("data-on-device", "false");

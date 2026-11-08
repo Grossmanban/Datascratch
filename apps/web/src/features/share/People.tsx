@@ -1,3 +1,4 @@
+import { runtime } from "@/data/runtime";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, Copy, Mail, UserPlus, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
@@ -84,6 +85,8 @@ export function PeopleSection({ target }: { target: AnyTarget }) {
       toast(t("share.people.invited"));
       setEmail("");
       refresh();
+      // The invitee may accept in a minute: notice it and deliver the key in seconds.
+      runtime().hurry(300_000);
     },
     onError: failed,
   });

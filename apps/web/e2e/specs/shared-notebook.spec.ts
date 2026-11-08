@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { expectSynced, newDoc, signUp, uniqueEmail } from "./helpers";
+import { expectSynced, newDoc, signUp, uniqueEmail, openSharedWithMe } from "./helpers";
 
 // D-54, the member's side of a shared notebook (owner report 2026-10-28): the notes that were
 // already there are listed; a note the member creates stays listed after closing and reloading,
@@ -39,6 +39,7 @@ test("shared notebook: existing notes listed, a member's new note stays, also af
   }
 
   // The member opens the shared notebook: the notes that were there before are listed.
+  await openSharedWithMe(q);
   const shared = q.getByTestId("shared-row").filter({ hasText: "Заметки" });
   await expect(shared).not.toHaveAttribute("data-waiting", "", { timeout: 30_000 });
   await shared.click();
@@ -62,11 +63,12 @@ test("shared notebook: existing notes listed, a member's new note stays, also af
   await shared.click();
   await expect(list.filter({ hasText: "От участника" })).toBeVisible({ timeout: 20_000 });
   await expect(list.filter({ hasText: "Уже была" })).toBeVisible();
-  // «Все документы» of the member lists the shared notebook's notes too, not only inside it
-  // (owner report 2026-11-02: the list took only the member's own notebooks).
-  await q.getByTestId("sidebar").getByRole("link", { name: "Все документы" }).click();
-  await expect(list.filter({ hasText: "Уже была" })).toBeVisible({ timeout: 20_000 });
-  await expect(list.filter({ hasText: "От участника" })).toBeVisible();
+  // D-63: search inside «Поделились со мной» finds the shared notebook's notes (owner report
+  // 2026-11-02 asked for them beyond the notebook itself; they live in this section now).
+  await q.keyboard.press("ControlOrMeta+k");
+  await q.getByTestId("palette-input").fill("Уже была");
+  await expect(q.getByRole("option", { name: /Уже была/ })).toBeVisible({ timeout: 20_000 });
+  await q.keyboard.press("Escape");
   // The owner has it.
   await page.getByRole("dialog").getByRole("button", { name: /Закрыть|Close/ }).click();
   await sidebar.getByRole("link", { name: /Заметки/ }).first().click();

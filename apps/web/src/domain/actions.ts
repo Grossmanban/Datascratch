@@ -4,7 +4,7 @@ import { docsApi, notebooksModeApi } from "@/api/endpoints";
 import { getMasterKey } from "@/auth/session";
 import { cachedNoteKey, notebookKey, rememberNotebookKey, rememberNoteKey, serverNotebookKey, setKeyring } from "@/data/keys";
 import { notebookCreatedInSpace, wrapNewNotebookKey } from "@/data/sharedSpaces";
-import { enqueueOp } from "@/data/ops";
+import { enqueueOp, flushOps } from "@/data/ops";
 import { runtime } from "@/data/runtime";
 import {
   ad,
@@ -114,6 +114,9 @@ export async function createNotebook(input: {
     createdAt: now(),
   };
   if (inShared) {
+    // Members learn of the notebook from the space doc and then ask for its key: the key goes
+    // first (offline it waits in the queue, and members retry until it is there).
+    await flushOps();
     const spaceDoc = await rt.store.pin(input.spaceId);
     spaceMaps(spaceDoc).notebooks.set(id, toYMap(withoutSpace(ref)));
     notebookCreatedInSpace();

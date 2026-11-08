@@ -193,6 +193,15 @@ DSCore
   `AttachmentTransferProgress` с `uploads`/`downloads` (`done`, `total`, `remaining`,
   `bytesDone`, `bytesTotal`, `isActive`); счёт идёт пачками — пачка кончается, когда в этом
   направлении ничего не передаётся.
+### «Общие со мной»: размещение и «новое» (D-54, D-63)
+
+- `account.shared` — корень документа аккаунта (`"<kind>:<id>"` → `SharedRef { kind, id, spaceId,
+  order, addedAt, openedAt? }`; у документов, созданных раньше, корень появляется сам). API
+  `AccountDocument`: `sharedRefs()` (по `order`), `sharedRef(_:id:)`, `putShared`, `removeShared`,
+  `sharedOpenedAt(_:id:)` и `markSharedOpened(_:id:at:)` — пишет только `openedAt` и только в
+  первый раз (`false`, если уже открыт или записи нет), так что «новое» одно на всех устройствах.
+  Записи веба без `openedAt` читаются как новые; запись без вида и id отбрасывается.
+
 ### Общие пространства (D-62, crypto.md §11)
 
 - Ключ пространства между ключами аккаунтов и ключами блокнотов: владелец хранит его под

@@ -4668,10 +4668,10 @@
     "semantic_hash": "a2b193ae4f4df24d897042798847fa67"
   },
   "docs/open-questions.md": {
-    "mtime": 1793885350.6162353,
-    "seen": 1794142545.3263614,
-    "ast_hash": "20dee53763c3879293c076f6496253ad",
-    "semantic_hash": "20dee53763c3879293c076f6496253ad"
+    "mtime": 1794149243.0825026,
+    "seen": 1794149691.4582133,
+    "ast_hash": "2f20d9016d1028a1a2e77efefb2a8534",
+    "semantic_hash": "2f20d9016d1028a1a2e77efefb2a8534"
   },
   "docs/risks.md": {
     "mtime": 1793131795.676247,
@@ -4704,10 +4704,10 @@
     "semantic_hash": "7de253f465da0a90057780f1b151d4db"
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1794148656.1318986,
-    "seen": 1794148823.3955107,
-    "ast_hash": "5778fd87398027f70d345afb03bd0bf9",
-    "semantic_hash": ""
+    "mtime": 1794149233.4834461,
+    "seen": 1794149691.45822,
+    "ast_hash": "bdf476f1c28b266a450863c1bfec9350",
+    "semantic_hash": "bdf476f1c28b266a450863c1bfec9350"
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1794148993.690033,

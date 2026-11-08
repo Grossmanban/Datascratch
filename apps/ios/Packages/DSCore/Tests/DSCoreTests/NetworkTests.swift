@@ -186,8 +186,9 @@ struct StuckFirstFactory: WebSocketFactory {
 @Suite struct SyncHandshakeTests {
     /// Two stuck handshakes: the client drops them after the handshake timeout and reconnects
     /// at once instead of waiting out the backoff, and the status never says offline meanwhile.
-    /// The backoff (60 s) is far beyond the bound (30 s), so the test proves the quick retries
-    /// without depending on how fast a loaded CI simulator is.
+    /// The proof is the states, not the clock: the client never goes into `.waiting` (the 60 s
+    /// backoff). A wall-clock bound of 30 s failed on a loaded CI simulator (42 s, 2026-11-08)
+    /// with no backoff at all.
     @Test func stuckHandshakesAreRetriedQuicklyAndShowAsSyncing() async throws {
         let server = FakeSyncServer()
         var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: "A", clientVersion: "test")
@@ -197,13 +198,17 @@ struct StuckFirstFactory: WebSocketFactory {
         let client = SyncClient(configuration: config, factory: StuckFirstFactory(server: server, stuck: Locked(2))) { .user(accessToken: "t") }
         let engine = SyncEngine(store: try LocalStore.inMemory(), client: client, keyFor: { _ in Data(repeating: 1, count: 32) }, register: nil)
         let seen = Locked<[SyncStatus.Summary]>([])
+        let backedOff = Locked(false)
         let watcher = Task {
-            for await status in await engine.statusUpdates() { seen.withLock { $0.append(status.summary) } }
+            for await status in await engine.statusUpdates() {
+                seen.withLock { $0.append(status.summary) }
+                if case .waiting = status.connection { backedOff.withLock { $0 = true } }
+            }
         }
-        let start = ContinuousClock.now
         await engine.start()
         #expect(try await eventually(timeout: .seconds(30)) { await client.isConnected })
-        #expect(ContinuousClock.now - start < .seconds(30))
+        #expect(!backedOff.withLock { $0 })
+        #expect(await client.consecutiveFailures <= config.quickRetries)
         try await Task.sleep(for: .milliseconds(50))
         watcher.cancel()
         let summaries = seen.withLock { $0 }

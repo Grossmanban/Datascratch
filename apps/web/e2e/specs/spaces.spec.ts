@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { newDoc, signUp, uniqueEmail } from "./helpers";
+import { createSpaceVia, newDoc, signUp, uniqueEmail } from "./helpers";
 
 async function switchSpace(page: Page, name: RegExp | string) {
   // A menu still closing from the last switch swallows the next click.
@@ -23,9 +23,7 @@ test("spaces are isolated (D-48): a starred note and a tab of one space are not 
   await expect(inSidebar).toHaveCount(shown);
 
   // A second space (with its own notebook) becomes the active one: nothing of the first is shown.
-  await page.getByTestId("space-switcher").click();
-  await page.getByRole("menuitem", { name: "Новое пространство" }).click();
-  await expect(page.getByTestId("space-switcher")).toContainText("Новое пространство");
+  await createSpaceVia(page, "Новое пространство");
   await expect(page).toHaveURL(/\/all$/);
   await expect(inSidebar).toHaveCount(0);
   await expect(page.getByText("Здесь пока пусто")).toBeVisible();
@@ -74,9 +72,7 @@ test("spaces are isolated (D-48): a starred note and a tab of one space are not 
 test("spaces with the same name are told apart by their document count", async ({ page }) => {
   await signUp(page, uniqueEmail("spaces-names"));
   await newDoc(page, "Документ", "Текст");
-  await page.getByTestId("space-switcher").click();
-  await page.getByRole("menuitem", { name: "Новое пространство" }).click();
-  await expect(page.getByTestId("space-switcher")).toContainText("Новое пространство");
+  await createSpaceVia(page, "Новое пространство");
 
   // Two spaces with the same name (e.g. migrated from iOS): the switcher shows document counts.
   await expect.poll(() => page.evaluate(() => "__ds" in window)).toBe(true);

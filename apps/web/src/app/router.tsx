@@ -1,3 +1,4 @@
+import { SharedWithMePage } from "@/features/share/SharedWithMePage";
 import { createRootRoute, createRoute, createRouter, Outlet, redirect } from "@tanstack/react-router";
 import { useAuth } from "@/auth/session";
 import { AuthLayout } from "@/features/auth/AuthLayout";
@@ -9,7 +10,7 @@ import { DocPage } from "@/features/doc/DocPage";
 import { AllDocsPage, FolderPage, NotebookPage, StarredPage, TagPage, TrashPage } from "@/features/docs/ListPages";
 import { ConnectPage } from "@/features/connect/ConnectPage";
 import { GuestPage } from "@/features/guest/GuestPage";
-import { SettingsPage, type SettingsSection } from "@/features/settings/SettingsPage";
+import { SETTINGS_SECTIONS, SettingsPage, type SettingsSection } from "@/features/settings/SettingsPage";
 import { AppShell } from "@/features/shell/AppShell";
 import { TasksPage, type TaskView } from "@/features/tasks/TasksPage";
 import { features } from "@/lib/features";
@@ -68,6 +69,7 @@ const folderRoute = createRoute({
   validateSearch: listSearch,
 });
 const tagRoute = createRoute({ getParentRoute: () => appLayout, path: "/tag/$", component: TagPage, validateSearch: listSearch });
+const sharedRoute = createRoute({ getParentRoute: () => appLayout, path: "/shared", component: SharedWithMePage });
 const starredRoute = createRoute({ getParentRoute: () => appLayout, path: "/starred", component: StarredPage, validateSearch: listSearch });
 const trashRoute = createRoute({ getParentRoute: () => appLayout, path: "/trash", component: TrashPage, validateSearch: listSearch });
 const tasksRoute = createRoute({
@@ -118,18 +120,13 @@ const settingsRoute = createRoute({
   component: SettingsPage,
   params: {
     parse: (p) => ({
-      section: (["account", "notebooks", "agents", "appearance"].includes(p.section) ? p.section : "account") as SettingsSection,
+      section: ((SETTINGS_SECTIONS as readonly string[]).includes(p.section) ? p.section : "account") as SettingsSection,
     }),
     stringify: (p) => ({ section: p.section }),
   },
 });
-const settingsIndex = createRoute({
-  getParentRoute: () => appLayout,
-  path: "/settings",
-  beforeLoad: () => {
-    throw redirect({ to: "/settings/$section", params: { section: "account" } });
-  },
-});
+// The section list: on a phone a screen of its own, on a wider window the first section beside it.
+const settingsIndex = createRoute({ getParentRoute: () => appLayout, path: "/settings", component: SettingsPage });
 
 const guestRoute = createRoute({ getParentRoute: () => rootRoute, path: "/s/$shareId", component: GuestPage });
 const connectRoute = createRoute({ getParentRoute: () => rootRoute, path: "/connect", component: ConnectPage });
@@ -143,6 +140,7 @@ const routeTree = rootRoute.addChildren([
     folderRoute,
     tagRoute,
     starredRoute,
+    sharedRoute,
     trashRoute,
     tasksIndex,
     tasksRoute,

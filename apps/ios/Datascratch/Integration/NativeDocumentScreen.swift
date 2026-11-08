@@ -134,7 +134,8 @@ final class NativeEditorModel: ClosingEditor {
     var captionTarget: BlockID?
     /// The photo «Replace…» picks a new image for.
     @ObservationIgnored var replacing: BlockID?
-    /// D-65: what is being dictated and not in the text yet (shown above the bar).
+    /// D-65: what is being dictated and not in the text yet (grey at the caret; the bar shows
+    /// the step).
     var dictationPreview: String?
     /// D-65: this document's microphone.
     @ObservationIgnored lazy var dictation = DictationController(app: app, target: self)

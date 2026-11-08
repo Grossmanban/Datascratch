@@ -4,27 +4,42 @@ import Foundation
 // and tidies it up. Audio and text pass through our server to the speech and language providers
 // and are not stored; notes stay encrypted. Contract: api.md «Голос».
 
+#if canImport(DSCore)
+import DSCore
+
+// The contract's own types (ios-core, `DSCore/Network/VoiceAPI.swift`).
+typealias VoiceQuality = DSCore.VoiceQuality
+typealias VoiceProfanity = DSCore.VoiceProfanity
+typealias VoiceMode = DSCore.VoiceMode
+typealias VoiceStyle = DSCore.VoiceStyle
+typealias VoiceTextTask = DSCore.VoiceTextTask
+typealias VoiceLanguage = DSCore.VoiceLanguage
+typealias VoiceTurn = DSCore.VoiceTurn
+#else
 /// «Best» is more accurate and tidier, and costs ten times as much (Settings → Voice).
-nonisolated enum VoiceQuality: String, CaseIterable, Identifiable, Sendable {
-    case standard, best
-    var id: String { rawValue }
-}
-
+nonisolated enum VoiceQuality: String, Sendable { case standard, best }
 /// Swear words softened in formatted text (the default), or kept as said.
-nonisolated enum VoiceProfanity: String, CaseIterable, Identifiable, Sendable {
-    case keep, soften
-    var id: String { rawValue }
-}
-
-nonisolated enum VoiceMode: String, Sendable {
-    case dictation, conversation
-}
-
+nonisolated enum VoiceProfanity: String, Sendable { case keep, soften }
+nonisolated enum VoiceMode: String, Sendable { case dictation, conversation }
 /// «Format»: what the text should become.
-nonisolated enum VoiceStyle: String, CaseIterable, Identifiable, Sendable {
-    case document, plan, minutes, article, letter, notes
-    var id: String { rawValue }
+nonisolated enum VoiceStyle: String, Sendable { case document, plan, minutes, article, letter, notes }
+/// `clean`: a dictated piece without fillers and false starts; `minutes`: a conversation
+/// (phase 2); `format`: text rewritten in a style.
+nonisolated enum VoiceTextTask: String, Sendable { case clean, minutes, format }
+/// `language` of a transcription: Russian (the server's default) or detected.
+nonisolated enum VoiceLanguage: String, Sendable { case ru, auto }
 
+/// One speaker's stretch of speech; a dictation is a single turn "S1".
+nonisolated struct VoiceTurn: Codable, Equatable, Sendable {
+    var speaker: String
+    /// Seconds from the start of the recording.
+    var start: Double
+    var end: Double
+    var text: String
+}
+#endif
+
+nonisolated extension VoiceStyle {
     var title: String {
         switch self {
         case .document: String(localized: "Document")
@@ -37,23 +52,11 @@ nonisolated enum VoiceStyle: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-nonisolated enum VoiceTextTask: String, Sendable {
-    /// A dictated piece without fillers and false starts, punctuation added.
-    case clean
-    /// Minutes of a conversation (phase 2).
-    case minutes
-    /// Text rewritten in a style.
-    case format
-}
-
-/// One speaker's stretch of speech; a dictation is usually a single turn.
-nonisolated struct VoiceTurn: Codable, Equatable, Sendable {
-    /// "S1", "S2", … in order of first appearance; a dictation is "S1".
-    var speaker: String
-    /// Seconds from the start of the recording.
-    var start: Double
-    var end: Double
-    var text: String
+nonisolated extension VoiceLanguage {
+    /// Russian on a Russian device, detected otherwise.
+    static var forDevice: VoiceLanguage {
+        Locale.current.language.languageCode?.identifier == "ru" ? .ru : .auto
+    }
 }
 
 nonisolated struct VoiceTranscript: Decodable, Equatable, Sendable {
@@ -158,16 +161,6 @@ nonisolated struct VoiceAccess: Codable, Equatable, Sendable {
     /// The microphone can be offered.
     var isUsable: Bool { enabled && available }
     var minutesLeft: Int { max(0, Int((Double(monthlyMinutes) - usedMinutes).rounded(.down))) }
-}
-
-/// `language` of a transcription: Russian (the server's default) or detected.
-nonisolated enum VoiceLanguage: String, Sendable {
-    case ru, auto
-
-    /// Russian on a Russian device, detected otherwise.
-    static var forDevice: VoiceLanguage {
-        Locale.current.language.languageCode?.identifier == "ru" ? .ru : .auto
-    }
 }
 
 /// The server side of voice; a fake one runs the UI tests.

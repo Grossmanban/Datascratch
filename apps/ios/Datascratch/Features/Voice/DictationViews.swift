@@ -60,8 +60,10 @@ struct DictationButton: View {
                 .contentTransition(.symbolEffect(.replace))
         }
         .frame(width: size, height: size)
+        // Always there, faded while recording: glass appearing and going under a held finger
+        // tripped UIKit's focus system on removal.
         .background {
-            if !recording { Circle().fill(.clear).glassEffect(.regular.interactive(), in: .circle) }
+            Circle().fill(.clear).glassEffect(.regular, in: .circle).opacity(recording ? 0 : 1)
         }
         .scaleEffect(dictation.mode == .holding ? 1.12 : 1)
         .offset(x: dictation.mode == .holding ? min(0, drag.width) * 0.3 : 0,
@@ -148,8 +150,8 @@ struct DictationButton: View {
     }
 }
 
-/// What is heard and not in the text yet: grey italic above the bar, with a live dot while the
-/// voice is recorded and a quiet spinner while the server works on it.
+/// The dictation's step above the bar: «Listening…» with a live dot while the voice is recorded,
+/// then the server's step with a quiet spinner. What is heard shows grey at the caret.
 struct DictationPreview: View {
     let dictation: DictationController
     let text: String?
@@ -165,8 +167,9 @@ struct DictationPreview: View {
     }
 
     var body: some View {
-        if let text {
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s2) {
+        // What is heard shows grey at the caret (DSEditor); here, only the step.
+        if text != nil {
+            HStack(spacing: Theme.Space.s2) {
                 if dictation.isRecording {
                     Circle()
                         .fill(Theme.Palette.accent)
@@ -175,24 +178,15 @@ struct DictationPreview: View {
                 } else {
                     ProgressView().controlSize(.mini)
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(text.isEmpty ? String(localized: "Listening…") : text)
-                        .font(Theme.Typography.body.italic())
-                        .foregroundStyle(Theme.Palette.textSecondary)
-                        .lineLimit(3)
-                        .truncationMode(.head)
-                    if let stage = stageText {
-                        Text(stage)
-                            .font(Theme.Typography.caption.weight(.medium))
-                            .foregroundStyle(Theme.Palette.accent)
-                            .accessibilityIdentifier("dictation.stage")
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(stageText ?? String(localized: "Listening…"))
+                    .font(Theme.Typography.footnote.weight(.medium))
+                    .foregroundStyle(stageText == nil ? Theme.Palette.textSecondary : Theme.Palette.accent)
+                    .contentTransition(.opacity)
+                    .accessibilityIdentifier("dictation.stage")
             }
             .padding(.vertical, Theme.Space.s2)
             .padding(.horizontal, Theme.Space.s3)
-            .glassEffect(.regular, in: .rect(cornerRadius: 16))
+            .glassEffect(.regular, in: .capsule)
             .padding(.horizontal, Theme.Space.s3)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .accessibilityElement(children: .combine)

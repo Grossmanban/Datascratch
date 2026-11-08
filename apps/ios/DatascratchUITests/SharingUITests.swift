@@ -274,7 +274,7 @@ final class SharingUITests: XCTestCase {
         if element.waitForExistence(timeout: 5), element.isHittable { return element }
         let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
         if toggle.exists { toggle.tap() }
-        let back = app.navigationBars.buttons.firstMatch
+        let back = app.barBackButton
         if !element.waitForExistence(timeout: 2), back.exists { back.tap() }
         for _ in 0..<4 where !element.exists || !element.isHittable {
             app.swipeUp()

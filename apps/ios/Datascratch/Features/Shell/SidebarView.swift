@@ -629,17 +629,21 @@ struct SyncStatusBadge: View {
         }
     }
 
-    /// Waiting for a key: on its way, or — after a while — whose device has to be online. A key
-    /// for something shared with this account comes from its owner's device; one for this
-    /// account's own notebooks, from its other device.
+    /// Waiting for a key or for access: on its way, or — after a while — what it waits for. A
+    /// key for something shared with this account comes from its owner's device; one for this
+    /// account's own notebooks, from its other device. Access to a joined space comes from the
+    /// server (the owner's side may not be done yet).
     private func keyWaitText(_ wait: SyncCenter.KeyWait) -> LocalizedStringKey {
         switch wait {
         case .none: ""
-        case .waiting(let changes): "Getting the key for \(changes) changes…"
-        case .stuck:
-            app.accountSharing.sharedWithMe.isEmpty
-                ? "The key doesn’t come — open the app on your other device."
-                : "Can’t get the key from the owner — they need to open the app."
+        case .waiting(let awaited):
+            if awaited.keyDocuments > 0 { "Getting keys for \(awaited.keyDocuments) documents…" }
+            else if awaited.changes > 0 { "Getting the key for \(awaited.changes) changes…" }
+            else { "Connecting to \(awaited.accessDocuments) shared documents…" }
+        case .stuck(let awaited):
+            if !awaited.needsKey { "No access to \(awaited.accessDocuments) shared documents yet — check again later." }
+            else if app.accountSharing.sharedWithMe.isEmpty { "The key doesn’t come — open the app on your other device." }
+            else { "Can’t get the key from the owner — they need to open the app." }
         }
     }
 

@@ -587,5 +587,8 @@
   "Only for you. You can share it later.": "Только для вас. Можно сделать общим позже.",
   "Preview": "Так будет",
   "Space Settings": "Настройки пространства",
-  "Spaces": "Пространства"
+  "Spaces": "Пространства",
+  "Getting keys for %lld documents…": "Получаем ключи для документов: %lld…",
+  "Connecting to %lld shared documents…": "Подключаемся к общим документам: %lld…",
+  "No access to %lld shared documents yet — check again later.": "Пока нет доступа к общим документам: %lld — проверьте позже."
 }

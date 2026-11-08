@@ -369,7 +369,12 @@ final class LibraryUITests: XCTestCase {
         }
         let file = app.buttons["insert.file"].firstMatch
         XCTAssertTrue(file.waitForExistence(timeout: 5), "no File entry in Insert; buttons: \(Self.buttons(app))")
+        // A tap while the menu still animates in did nothing and left it open (iPhone, run
+        // 42501461171): tap once it is hittable, and again if the menu is still there.
+        _ = XCTWaiter().wait(for: [expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: file)], timeout: 3)
         file.tap()
+        settle(2)
+        if file.exists && file.isHittable { file.tap() }
         let picker = app.descendants(matching: .any)["files.picker"].firstMatch
         let cancel = app.buttons["Cancel"].firstMatch
         let shown = NSPredicate { _, _ in picker.exists || cancel.exists }
@@ -517,6 +522,14 @@ final class LibraryUITests: XCTestCase {
         try openNewNoteInNativeEditor(app)
         // Written in, so leaving it keeps the note (an empty new note is dropped).
         app.typeText("Tab note")
+        // Leave the document with light queries first: a query over the whole tree of an open
+        // document timed out (iPhone, run 42495834040).
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            app.buttons["document.close"].firstMatch.tap()
+        } else {
+            app.navigationBars.buttons.firstMatch.tap()
+        }
+        settle(1)
         let switcher = app.descendants(matching: .any)["sidebar.spaceSwitcher"].firstMatch
         // iPhone: choosing a space shows its documents; come back to the sidebar each time.
         func showSidebar() {
@@ -916,11 +929,13 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(card.waitForExistence(timeout: 5), "no document in All Documents")
         XCTAssertTrue(app.navigationBars["All Documents"].firstMatch.exists, "the app did not start in All Documents")
         card.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["editor"].firstMatch.waitForExistence(timeout: 10), "the document did not open")
-        let close = app.buttons["document.close"].firstMatch
-        if UIDevice.current.userInterfaceIdiom == .pad, close.waitForExistence(timeout: 3) {
+        // A light query: the whole tree of an open document timed out on iPad (run 42495834040).
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            let close = app.buttons["document.close"].firstMatch
+            XCTAssertTrue(close.waitForExistence(timeout: 10), "the document did not open")
             close.tap()
         } else {
+            XCTAssertTrue(app.buttons["document.more"].firstMatch.waitForExistence(timeout: 10), "the document did not open")
             app.navigationBars.buttons.firstMatch.tap()
         }
         settle(1.5)

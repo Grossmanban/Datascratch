@@ -362,6 +362,18 @@ struct SyncVectorTests {
         for c in invalid["server"]! {
             #expect(SyncFrame.decode(String(decoding: try data(c["message"]!), as: UTF8.self)) == nil, "\(c["reason"]!)")
         }
+        // Protocol 2 (D-62): what a reader keeps of `account_changed`; frames of unknown types
+        // are ignored, broken frames are errors.
+        for c in file["accountChanged"] as? [[String: [String]]] ?? [] {
+            let frame = String(decoding: try data(["type": "account_changed", "what": c["what"]!]), as: UTF8.self)
+            #expect(SyncFrame.decode(frame) == .accountChanged(Set(c["expected"]!.compactMap(AccountChange.init(rawValue:)))), "\(c["what"]!)")
+        }
+        for text in file["ignoredServerFrames"] as? [String] ?? [] {
+            guard case .ignored = SyncFrame.parse(text) else { Issue.record("not ignored: \(text)"); continue }
+        }
+        for text in file["brokenServerFrames"] as? [String] ?? [] {
+            #expect(SyncFrame.parse(text) == .broken, "\(text)")
+        }
     }
 }
 

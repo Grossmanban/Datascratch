@@ -1,10 +1,14 @@
 import { eq } from 'drizzle-orm';
-import type { AccountChange } from '@datascratch/shared/contracts';
+import { ACCOUNT_CHANGES, type AccountChange } from '@datascratch/shared/contracts';
 import type { AppContext } from '../context.js';
 import type { DbOrTx } from '../db/client.js';
 import { members } from '../db/schema.js';
 import { topics } from '../sync/hub.js';
 import { memberTargetCol, type TargetKind } from './sharing.js';
+
+export type { AccountChange };
+/** The order of `what` in a frame. */
+export const SERVER_ACCOUNT_CHANGES: readonly AccountChange[] = ACCOUNT_CHANGES;
 
 /**
  * Tell every device of these accounts what to re-read (sync-protocol.md §6, D-62). Only sent

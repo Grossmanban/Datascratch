@@ -833,45 +833,138 @@ export function apiVectors() {
         valid: [
           {
             enabled: true,
+            available: true,
             monthlyMinutes: 600,
             usedMinutes: 12.5,
             resetsAt: "2026-12-01T00:00:00.000Z",
+            isAdmin: true,
+          },
+          {
+            enabled: false,
+            available: false,
+            monthlyMinutes: 120,
+            usedMinutes: 0,
+            resetsAt: "2026-12-01T00:00:00.000Z",
+            isAdmin: false,
           },
         ],
         invalid: [
           {
             reason: "missing resetsAt",
-            body: { enabled: true, monthlyMinutes: 600, usedMinutes: 0 },
-          },
-        ],
-      },
-      adminVoiceAccount: {
-        valid: [
-          {
-            userId: vid(4),
-            email: "a@b.co",
-            enabled: false,
-            monthlyMinutes: 0,
-            usedMinutes: 0,
-            resetsAt: "2026-12-01T00:00:00.000Z",
-          },
-        ],
-        invalid: [
-          {
-            reason: "missing userId",
             body: {
-              email: "a@b.co",
-              enabled: false,
-              monthlyMinutes: 0,
+              enabled: true,
+              available: true,
+              monthlyMinutes: 600,
+              usedMinutes: 0,
+              isAdmin: false,
+            },
+          },
+          {
+            reason: "missing available",
+            body: {
+              enabled: true,
+              monthlyMinutes: 600,
+              usedMinutes: 0,
+              resetsAt: "2026-12-01T00:00:00.000Z",
+              isAdmin: false,
+            },
+          },
+          {
+            reason: "missing isAdmin",
+            body: {
+              enabled: true,
+              available: true,
+              monthlyMinutes: 600,
               usedMinutes: 0,
               resetsAt: "2026-12-01T00:00:00.000Z",
             },
           },
         ],
       },
-      putAdminVoiceRequest: {
-        valid: [{ enabled: true, monthlyMinutes: 120 }],
+      adminVoiceResponse: {
+        valid: [
+          {
+            month: "2026-11",
+            resetsAt: "2026-12-01T00:00:00.000Z",
+            accounts: [
+              {
+                userId: vid(4),
+                email: "a@b.co",
+                name: null,
+                admin: true,
+                enabled: true,
+                monthlyMinutes: 600,
+                customMinutes: false,
+                usedMinutes: 30.5,
+                costUsd: 0.21,
+                requests: 7,
+              },
+              {
+                userId: vid(5),
+                email: "b@b.co",
+                name: "Анна",
+                admin: false,
+                enabled: false,
+                monthlyMinutes: 0,
+                customMinutes: true,
+                usedMinutes: 0,
+                costUsd: 0,
+                requests: 0,
+              },
+            ],
+            totals: { usedMinutes: 30.5, costUsd: 0.21, requests: 7, enabledAccounts: 1 },
+          },
+        ],
         invalid: [
+          {
+            reason: "month not YYYY-MM",
+            body: {
+              month: "11-2026",
+              resetsAt: "2026-12-01T00:00:00.000Z",
+              accounts: [],
+              totals: { usedMinutes: 0, costUsd: 0, requests: 0, enabledAccounts: 0 },
+            },
+          },
+          {
+            reason: "totals without enabledAccounts",
+            body: {
+              month: "2026-11",
+              resetsAt: "2026-12-01T00:00:00.000Z",
+              accounts: [],
+              totals: { usedMinutes: 0, costUsd: 0, requests: 0 },
+            },
+          },
+          {
+            reason: "account without requests",
+            body: {
+              month: "2026-11",
+              resetsAt: "2026-12-01T00:00:00.000Z",
+              accounts: [
+                {
+                  userId: vid(4),
+                  email: "a@b.co",
+                  name: null,
+                  admin: false,
+                  enabled: true,
+                  monthlyMinutes: 1,
+                  customMinutes: true,
+                  usedMinutes: 0,
+                  costUsd: 0,
+                },
+              ],
+              totals: { usedMinutes: 0, costUsd: 0, requests: 0, enabledAccounts: 1 },
+            },
+          },
+        ],
+      },
+      putAdminVoiceRequest: {
+        valid: [
+          { enabled: true, monthlyMinutes: 120 },
+          { enabled: true, monthlyMinutes: null },
+          { enabled: false },
+        ],
+        invalid: [
+          { reason: "missing enabled", body: { monthlyMinutes: 120 } },
           { reason: "negative minutes", body: { enabled: true, monthlyMinutes: -1 } },
           { reason: "fractional minutes", body: { enabled: true, monthlyMinutes: 1.5 } },
         ],

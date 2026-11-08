@@ -1,4 +1,4 @@
-import type { AccountChange } from '@datascratch/shared/contracts';
+import type { AccountChange } from '../services/account-events.js';
 import type { AuthorRef } from '../db/schema.js';
 
 /**

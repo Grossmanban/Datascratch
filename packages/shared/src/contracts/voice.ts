@@ -127,27 +127,68 @@ export const VOICE_AGENT_ID = "voice";
 
 // --- Access and quota (D-65: managed by the server admin, per account, months by UTC) -------
 
-/** `GET /voice/me`. */
+/** `GET /voice/me`: whether to show the voice button and «N min left». */
 export const voiceMeSchema = z.object({
   enabled: z.boolean(),
+  /** The server has the keys of both services (recognition and text). */
+  available: z.boolean(),
   /** Minutes of recognition per calendar month (UTC). */
   monthlyMinutes: z.number().int().nonnegative(),
   usedMinutes: z.number().nonnegative(),
   /** Start of the next month, UTC. */
   resetsAt: isoDateTimeSchema,
+  /** A server admin: may open the voice access screen (`GET /admin/voice`). */
+  isAdmin: z.boolean(),
 });
 export type VoiceMe = z.infer<typeof voiceMeSchema>;
 
-/** An item of `GET /admin/voice` (server admin only). */
-export const adminVoiceAccountSchema = voiceMeSchema.extend({
+/** An account of `GET /admin/voice` and the response of `PUT /admin/voice/:userId` (server admin only). */
+export const adminVoiceAccountSchema = z.object({
   userId: uuidSchema,
   email: z.string(),
+  /** Display name, if the account has one (the server sends null for now). */
+  name: z.string().nullable(),
+  /** The account is a server admin. */
+  admin: z.boolean(),
+  enabled: z.boolean(),
+  /** Effective monthly minutes: the admin's own value or the default. */
+  monthlyMinutes: z.number().int().nonnegative(),
+  /** false: the server default for this account (admin or not); true: set by an admin. */
+  customMinutes: z.boolean(),
+  /** This month (UTC). */
+  usedMinutes: z.number().nonnegative(),
+  /** What this account's voice cost this month (recognition + text), US dollars. */
+  costUsd: z.number().nonnegative(),
+  /** Voice requests this month (`transcribe` and `text`). */
+  requests: z.number().int().nonnegative(),
 });
 export type AdminVoiceAccount = z.infer<typeof adminVoiceAccountSchema>;
 
-/** `PUT /admin/voice/:userId`. */
+/** `GET /admin/voice`: all accounts and this month's totals (UTC month). */
+export const adminVoiceResponseSchema = z.object({
+  /** "YYYY-MM", UTC. */
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  resetsAt: isoDateTimeSchema,
+  accounts: z.array(adminVoiceAccountSchema),
+  totals: z.object({
+    usedMinutes: z.number().nonnegative(),
+    costUsd: z.number().nonnegative(),
+    requests: z.number().int().nonnegative(),
+    enabledAccounts: z.number().int().nonnegative(),
+  }),
+});
+export type AdminVoiceResponse = z.infer<typeof adminVoiceResponseSchema>;
+
+/** Default monthly minutes (D-65): server admins and other accounts, unless an admin set the account's own. */
+export const DEFAULT_VOICE_MONTHLY_MINUTES = Object.freeze({ admin: 600, others: 120 });
+
+/**
+ * `PUT /admin/voice/:userId` → the account row (`adminVoiceAccountSchema`).
+ * `monthlyMinutes`: a number sets the account's own minutes, `null` returns to the default,
+ * an absent field leaves them as they are.
+ */
 export const putAdminVoiceRequestSchema = z.object({
   enabled: z.boolean(),
-  monthlyMinutes: z.number().int().nonnegative().max(100_000),
+  monthlyMinutes: z.number().int().nonnegative().max(100_000).nullable().optional(),
 });
 export type PutAdminVoiceRequest = z.infer<typeof putAdminVoiceRequestSchema>;

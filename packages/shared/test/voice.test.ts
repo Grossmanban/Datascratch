@@ -84,10 +84,11 @@ describe("voice prompts (D-65)", () => {
 
   it("builds the task prompts with the shared rules", () => {
     const clean = buildVoiceTextPrompt({ task: "clean", profanity: "soften", turns });
-    expect(clean.system).toContain("Ничего не выдумывай");
+    expect(clean.system).toContain("Ничего не выдумывай. Только то, что было сказано.");
+    expect(clean.system).toContain("ЧИСТЫЙ ТЕКСТ");
     expect(clean.system).toContain("(неразборчиво)");
-    expect(clean.system).toContain("смягчай");
-    expect(clean.system).toContain("**Собеседник N:**");
+    expect(clean.system).toContain("Мат и грубость");
+    expect(clean.system).toContain("**Собеседник 1:**");
     expect(clean.user.startsWith("Расшифровка:")).toBe(true);
     const minutes = buildVoiceTextPrompt({ task: "minutes", profanity: "keep", turns });
     for (const section of [
@@ -101,7 +102,7 @@ describe("voice prompts (D-65)", () => {
     ])
       expect(minutes.system).toContain(`## ${section}`);
     expect(minutes.system).toContain("speaker_0");
-    expect(minutes.system).not.toContain("смягчай");
+    expect(minutes.system).not.toContain("Мат и грубость");
     const format = buildVoiceTextPrompt({
       task: "format",
       style: "plan",
@@ -110,35 +111,61 @@ describe("voice prompts (D-65)", () => {
     });
     expect(format.system).toContain("Вид: план");
     expect(buildVoiceTextPrompt({ task: "format", text: "x" }).system).toContain("Вид: документ");
-    expect(buildVoiceTextPrompt({ task: "clean", text: "x" }).system).toContain("смягчай");
+    expect(buildVoiceTextPrompt({ task: "clean", text: "x" }).system).toContain("Мат и грубость");
     expect(format.user).toBe("Черновик:\n\nкупить, позвонить");
   });
 });
 
 describe("voice access (D-65)", () => {
   it("parses /voice/me, the admin list and the admin update", async () => {
-    const { voiceMeSchema, adminVoiceAccountSchema, putAdminVoiceRequestSchema, ACCOUNT_CHANGES } =
-      await import("../src/index.js");
+    const {
+      voiceMeSchema,
+      adminVoiceAccountSchema,
+      adminVoiceResponseSchema,
+      putAdminVoiceRequestSchema,
+      DEFAULT_VOICE_MONTHLY_MINUTES,
+      ACCOUNT_CHANGES,
+    } = await import("../src/index.js");
     const me = {
       enabled: true,
+      available: true,
       monthlyMinutes: 600,
       usedMinutes: 12.5,
       resetsAt: "2026-12-01T00:00:00.000Z",
+      isAdmin: false,
     };
     expect(voiceMeSchema.safeParse(me).success).toBe(true);
-    expect(
-      adminVoiceAccountSchema.safeParse({
-        ...me,
-        userId: "0192f3c4-0000-7000-8000-00000000f101",
-        email: "a@b.co",
-      }).success,
-    ).toBe(true);
-    expect(
-      putAdminVoiceRequestSchema.safeParse({ enabled: false, monthlyMinutes: 0 }).success,
-    ).toBe(true);
-    expect(
-      putAdminVoiceRequestSchema.safeParse({ enabled: true, monthlyMinutes: -1 }).success,
-    ).toBe(false);
+    const { isAdmin: _isAdmin, ...withoutAdmin } = me;
+    expect(voiceMeSchema.safeParse(withoutAdmin).success).toBe(false);
+    const account = {
+      userId: "0192f3c4-0000-7000-8000-00000000f101",
+      email: "a@b.co",
+      name: null,
+      admin: false,
+      enabled: true,
+      monthlyMinutes: 120,
+      customMinutes: false,
+      usedMinutes: 30,
+      costUsd: 0.21,
+      requests: 4,
+    };
+    const list = {
+      month: "2026-11",
+      resetsAt: "2026-12-01T00:00:00.000Z",
+      accounts: [account],
+      totals: { usedMinutes: 30, costUsd: 0.21, requests: 4, enabledAccounts: 1 },
+    };
+    expect(adminVoiceResponseSchema.safeParse(list).success).toBe(true);
+    expect(adminVoiceResponseSchema.safeParse({ ...list, month: "11-2026" }).success).toBe(false);
+    expect(adminVoiceAccountSchema.safeParse({ ...account, customMinutes: 120 }).success).toBe(
+      false,
+    );
+    const put = (b: unknown) => putAdminVoiceRequestSchema.safeParse(b).success;
+    expect(put({ enabled: false, monthlyMinutes: 0 })).toBe(true);
+    expect(put({ enabled: true, monthlyMinutes: null })).toBe(true);
+    expect(put({ enabled: true })).toBe(true);
+    expect(put({ enabled: true, monthlyMinutes: -1 })).toBe(false);
+    expect(DEFAULT_VOICE_MONTHLY_MINUTES).toEqual({ admin: 600, others: 120 });
     expect(ACCOUNT_CHANGES).toContain("voice");
   });
 });

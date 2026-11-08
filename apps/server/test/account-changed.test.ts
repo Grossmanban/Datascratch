@@ -72,7 +72,8 @@ async function join(owner: TestUser, target: { kind: string; id: string }, membe
 const changes = (c: SyncClient) => c.messages.filter((m) => m.type === 'account_changed');
 /** The next `account_changed` that names every one of `what`. */
 const changed = (c: SyncClient, ...what: string[]) =>
-  c.next((m) => m.type === 'account_changed' && what.every((w) => m.what.includes(w)));
+  // `past`: the frame may come before the wait starts (the window starts at the publish).
+  c.next((m) => m.type === 'account_changed' && what.every((w) => m.what.includes(w)), 5000, true);
 /** Let the coalescing window pass and forget what came so far. */
 async function settle(...cs: SyncClient[]) {
   await sleep(400);

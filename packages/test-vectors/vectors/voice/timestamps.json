@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "description": "Voice (D-65): seconds → the «мм:сс» timestamp (from one hour «ч:мм:сс»), seconds rounded down; speaker ids S<n> → «Собеседник <n>».",
+  "timestamps": [
+    {
+      "sec": 0,
+      "text": "00:00"
+    },
+    {
+      "sec": 0.9,
+      "text": "00:00"
+    },
+    {
+      "sec": 5,
+      "text": "00:05"
+    },
+    {
+      "sec": 59.99,
+      "text": "00:59"
+    },
+    {
+      "sec": 60,
+      "text": "01:00"
+    },
+    {
+      "sec": 65.9,
+      "text": "01:05"
+    },
+    {
+      "sec": 599,
+      "text": "09:59"
+    },
+    {
+      "sec": 3599,
+      "text": "59:59"
+    },
+    {
+      "sec": 3600,
+      "text": "1:00:00"
+    },
+    {
+      "sec": 3725.4,
+      "text": "1:02:05"
+    },
+    {
+      "sec": 10800,
+      "text": "3:00:00"
+    }
+  ],
+  "speakers": [
+    {
+      "id": "S1",
+      "label": "Собеседник 1"
+    },
+    {
+      "id": "S2",
+      "label": "Собеседник 2"
+    },
+    {
+      "id": "S8",
+      "label": "Собеседник 8"
+    }
+  ]
+}

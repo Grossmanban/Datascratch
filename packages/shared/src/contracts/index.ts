@@ -4,3 +4,4 @@ export * from "./document.js";
 export * from "./strokes.js";
 export * from "./sync.js";
 export * from "./api.js";
+export * from "./voice.js";

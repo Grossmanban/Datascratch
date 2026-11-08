@@ -27,32 +27,50 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("settings.recoveryKeyReminder")
                 }
-                DSSettingsSection(String(localized: "Access")) {
-                    NavigationLink(value: SettingsRoute.devices) {
-                        DSSettingsRow(String(localized: "Devices"), systemImage: "ipad.and.iphone",
-                                      value: app.access.devices.isEmpty ? nil : "\(app.access.devices.count)", accessory: .chevron)
+                // Grouped like iOS Settings: icons on coloured tiles (owner, D-15).
+                DSSettingsSection {
+                    NavigationLink(value: SettingsRoute.account) {
+                        SettingsTileRow(String(localized: "Account"), systemImage: "person.fill", tint: .blue,
+                                        value: app.accounts.account?.email)
                     }
+                    .accessibilityIdentifier("settings.accountRow")
+                }
+                .buttonStyle(.dsSettingsRow)
+                DSSettingsSection {
+                    NavigationLink(value: SettingsRoute.appearance) {
+                        SettingsTileRow(String(localized: "Appearance"), systemImage: "circle.lefthalf.filled", tint: .indigo,
+                                        value: app.settings.appearance.title)
+                    }
+                    .accessibilityIdentifier("settings.appearance")
+                    NavigationLink(value: SettingsRoute.drawing) {
+                        SettingsTileRow(String(localized: "Pencil & Drawing"), systemImage: "pencil.tip", tint: .orange)
+                    }
+                    .accessibilityIdentifier("settings.drawing")
+                }
+                .buttonStyle(.dsSettingsRow)
+                DSSettingsSection {
+                    NavigationLink(value: SettingsRoute.sync) {
+                        SettingsTileRow(String(localized: "Sync"), systemImage: "arrow.triangle.2.circlepath", tint: .green,
+                                        trailing: AnyView(DSSyncChip(app.sync.dsState)))
+                    }
+                    .accessibilityIdentifier("settings.sync")
+                    NavigationLink(value: SettingsRoute.security) {
+                        SettingsTileRow(String(localized: "Security"), systemImage: "lock.fill", tint: .red,
+                                        badge: app.isRecoveryKeyConfirmed ? nil : String(localized: "Not checked"))
+                    }
+                    .accessibilityIdentifier("settings.security")
                     NavigationLink(value: SettingsRoute.agents) {
-                        DSSettingsRow(String(localized: "Agent Access"), systemImage: "sparkles", accessory: .chevron)
+                        SettingsTileRow(String(localized: "AI Agents"), systemImage: "sparkles", tint: .purple)
                     }
                     .accessibilityIdentifier("settings.agents")
                 }
                 .buttonStyle(.dsSettingsRow)
-                DSSettingsSection(String(localized: "App")) {
-                    NavigationLink(value: SettingsRoute.drawing) {
-                        DSSettingsRow(String(localized: "Pencil & Drawing"), systemImage: "pencil.tip", accessory: .chevron)
-                    }
-                    .accessibilityIdentifier("settings.drawing")
-                    NavigationLink(value: SettingsRoute.appearance) {
-                        DSSettingsRow(String(localized: "Appearance"), systemImage: "circle.lefthalf.filled",
-                                      value: app.settings.appearance.title, accessory: .chevron)
-                    }
-                }
-                .buttonStyle(.dsSettingsRow)
                 DSSettingsSection {
                     NavigationLink(value: SettingsRoute.about) {
-                        DSSettingsRow(String(localized: "About Datascratch"), systemImage: "info.circle", accessory: .chevron)
+                        SettingsTileRow(String(localized: "About Datascratch"), systemImage: "info", tint: .gray,
+                                        value: AboutView.versionLine)
                     }
+                    .accessibilityIdentifier("settings.about")
                 }
                 .buttonStyle(.dsSettingsRow)
             }
@@ -65,6 +83,9 @@ struct SettingsView: View {
                 case .drawing: DrawingSettings()
                 case .appearance: AppearanceSettings()
                 case .about: AboutView()
+                case .sync: SyncSettings()
+                case .security: SecuritySettings()
+                case .diagnostics: DiagnosticsView()
                 case .changePassword: ChangePasswordView()
                 case .securityLog: SecurityLogView()
                 }
@@ -81,6 +102,7 @@ struct SettingsView: View {
 
 enum SettingsRoute: Hashable {
     case account, recoveryKey, devices, agents, drawing, appearance, about, changePassword, securityLog
+    case sync, security, diagnostics
 }
 
 /// A settings screen on the paper (design-system spec): serif title in the scroll, sections as
@@ -144,20 +166,15 @@ struct AccountSettings: View {
                     .accessibilityIdentifier("sync.retry")
                 }
             }
-            DSSettingsSection(String(localized: "Security"),
-                              footer: String(localized: "Your password also protects the encryption key. Your recovery key keeps working after a password change.")) {
-                NavigationLink(value: SettingsRoute.recoveryKey) {
-                    DSSettingsRow(String(localized: "Recovery Key"), systemImage: "key",
-                                  accessory: app.isRecoveryKeyConfirmed ? .chevron : .badgeLink(String(localized: "Not checked"), .warning))
+            DSSettingsSection {
+                NavigationLink(value: SettingsRoute.sync) {
+                    SettingsTileRow(String(localized: "Sync & Diagnostics"), systemImage: "stethoscope", tint: .green)
                 }
-                .accessibilityIdentifier("settings.recoveryKey")
-                NavigationLink(value: SettingsRoute.changePassword) {
-                    DSSettingsRow(String(localized: "Change Password"), systemImage: "lock", accessory: .chevron)
+                NavigationLink(value: SettingsRoute.security) {
+                    SettingsTileRow(String(localized: "Security"), systemImage: "lock.fill", tint: .red,
+                                    badge: app.isRecoveryKeyConfirmed ? nil : String(localized: "Not checked"))
                 }
-                NavigationLink(value: SettingsRoute.securityLog) {
-                    DSSettingsRow(String(localized: "Security Log"), systemImage: "list.bullet.rectangle", accessory: .chevron)
-                }
-                .accessibilityIdentifier("settings.securityLog")
+                .accessibilityIdentifier("settings.accountSecurity")
             }
             .buttonStyle(.dsSettingsRow)
             DSSettingsSection(footer: String(localized: "You will need your password to sign in again.")) {
@@ -655,38 +672,87 @@ extension AppSettings.Appearance {
 }
 
 struct AboutView: View {
-    var body: some View {
+    @Environment(AppModel.self) private var app
+
+    /// «1.4 (212)».
+    static var versionLine: String {
         let info = Bundle.main.infoDictionary ?? [:]
         let version = info["CFBundleShortVersionString"] as? String ?? "—"
         let build = info["CFBundleVersion"] as? String ?? "—"
-        List {
-            Section {
-                VStack(spacing: Theme.Space.s3) {
-                    Image(systemName: "pencil.and.scribble")
-                        .font(.system(size: 48, weight: .light))
-                        .foregroundStyle(Theme.Palette.accent)
-                    Text("Datascratch")
-                        .font(Theme.Typography.h1)
-                    Text("Notes where the pen lives in the text.")
-                        .font(Theme.Typography.callout)
-                        .foregroundStyle(Theme.Palette.textSecondary)
+        return "\(version) (\(build))"
+    }
+
+    var body: some View {
+        SettingsPage(title: String(localized: "About")) {
+            VStack(spacing: DSSpace.s3) {
+                LaunchMarkGlyph()
+                    .frame(width: 72, height: 60)
+                    .accessibilityHidden(true)
+                Text(verbatim: "Datascratch")
+                    .dsFont(.title)
+                    .foregroundStyle(Color.dsPrimary)
+                Text("Notes where the pen lives in the text.")
+                    .dsFont(.callout)
+                    .foregroundStyle(Color.dsSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, DSSpace.s4)
+            DSSettingsSection {
+                DSSettingsRow(String(localized: "Version"), systemImage: "number", value: Self.versionLine)
+                    .accessibilityIdentifier("about.version")
+                DSSettingsRow(String(localized: "Encryption"), systemImage: "lock.shield", value: "XChaCha20-Poly1305 · Argon2id")
+            }
+            DSSettingsSection(String(localized: "Links")) {
+                if let server = app.serverURL {
+                    Link(destination: server) {
+                        SettingsTileRow(String(localized: "Open on the Web"), systemImage: "safari", tint: .blue,
+                                        value: ServerAddress.display(server), accessory: .external)
+                    }
+                    .accessibilityIdentifier("about.web")
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Theme.Space.s4)
-                .listRowBackground(Color.clear)
+                NavigationLink {
+                    LicensesView()
+                } label: {
+                    SettingsTileRow(String(localized: "Open Source Licenses"), systemImage: "doc.text", tint: .gray)
+                }
+                .accessibilityIdentifier("about.licenses")
             }
+            .buttonStyle(.dsSettingsRow)
             #if DEBUG && canImport(DSDesign)
-            Section {
-                NavigationLink("Design System") { DSShowcase() }
+            DSSettingsSection {
+                NavigationLink {
+                    DSShowcase()
+                } label: {
+                    SettingsTileRow(String(localized: "Design System"), systemImage: "swatchpalette", tint: .pink)
+                }
             }
+            .buttonStyle(.dsSettingsRow)
             #endif
-            Section {
-                LabeledContent("Version", value: "\(version) (\(build))")
-                LabeledContent("Encryption", value: "XChaCha20-Poly1305 · Argon2id")
+        }
+    }
+}
+
+/// Third-party code inside the app and its licences.
+struct LicensesView: View {
+    private struct Item: Hashable {
+        let name: String
+        let license: String
+    }
+
+    private let items = [
+        Item(name: "Yrs (Yjs)", license: "MIT"), Item(name: "GRDB.swift", license: "MIT"),
+        Item(name: "swift-sodium · libsodium", license: "ISC"), Item(name: "Mermaid", license: "MIT"),
+    ]
+
+    var body: some View {
+        SettingsPage(title: String(localized: "Open Source Licenses")) {
+            DSSettingsSection {
+                ForEach(items, id: \.self) { item in
+                    DSSettingsRow(item.name, value: item.license)
+                }
             }
         }
-        .navigationTitle("About")
-        .settingsNavigationBar()
     }
 }
 

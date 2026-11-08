@@ -46,7 +46,7 @@ final class SessionEndedUITests: XCTestCase {
         if !signIn.exists {
             let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
             if toggle.exists { toggle.tap() }
-            let back = app.navigationBars.buttons.firstMatch
+            let back = app.barBackButton
             if !signIn.waitForExistence(timeout: 2), back.exists { back.tap() }
         }
         XCTAssertTrue(signIn.waitForExistence(timeout: 5), "no Sign In in the sync badge")

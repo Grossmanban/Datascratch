@@ -39,6 +39,10 @@
       "types": "./dist/sharing/index.d.ts",
       "import": "./dist/sharing/index.js"
     },
+    "./voice": {
+      "types": "./dist/voice/index.d.ts",
+      "import": "./dist/voice/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

@@ -98,12 +98,16 @@ export const ACCOUNT_SETTINGS_KEYS = {
   activeTab: "activeTab",
   /** The user confirmed they saved the current recovery key (reset on rotation). */
   recoveryKeyConfirmed: "recoveryKeyConfirmed",
+  /** When the user agreed that voice goes through the server in the clear (D-65). */
+  voiceConsentAt: "voiceConsentAt",
 } as const;
 
 export interface AccountSettings {
   dailyNotebookId?: Uuid | null;
   activeTab?: Uuid | null;
   recoveryKeyConfirmed?: boolean;
+  /** ISO time of the consent to voice processing on the server (D-65); absent = not asked yet. */
+  voiceConsentAt?: string | null;
   [key: string]: unknown;
 }
 

@@ -984,3 +984,44 @@ describe("connection hygiene and storage failures", () => {
     expect(subscribes).toEqual([1000, 1000, 500]);
   });
 });
+
+describe("protocol 2: account_changed and forward compatibility", () => {
+  it("emits accountChanged with known values only and ignores unknown frame types quietly", async () => {
+    const hub = new MemorySyncHub();
+    const a = makeClient(hub, "dev-a");
+    const errors: SyncClientError[] = [];
+    const seen: string[][] = [];
+    a.client.on("error", (e) => errors.push(e));
+    a.client.on("accountChanged", (what) => seen.push([...what]));
+    a.client.start();
+    await until(() => a.client.status === "online");
+    expect(a.client.protocol).toBe(2);
+    hub.sendRaw(JSON.stringify({ type: "presence", users: [] }));
+    hub.notifyAccountChanged(["keys", "future_thing", "spaces"]);
+    hub.notifyAccountChanged(["future_thing"]);
+    await until(() => seen.length === 1);
+    hub.sendRaw("not json");
+    await until(() => errors.length === 1);
+    expect(seen).toEqual([["keys", "spaces"]]);
+    expect(errors.map((e) => e.message)).toEqual(["invalid server message"]);
+  });
+
+  it("falls back to protocol 1 with an older server, without an error", async () => {
+    const hub = new MemorySyncHub({ maxProtocol: 1 });
+    const a = makeClient(hub, "dev-a");
+    const errors: SyncClientError[] = [];
+    a.client.on("error", (e) => errors.push(e));
+    const doc = new Y.Doc();
+    await a.client.addDoc(DOC, doc);
+    a.client.start();
+    await until(() => a.client.isSynced(DOC));
+    expect(a.client.protocol).toBe(1);
+    expect(errors).toEqual([]);
+    // An older server never sends account_changed to it.
+    let changed = 0;
+    a.client.on("accountChanged", () => changed++);
+    hub.notifyAccountChanged(["keys"]);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(changed).toBe(0);
+  });
+});

@@ -11,6 +11,8 @@ enum SidebarItem: Hashable {
     case notebook(String)
     case folder(String)
     case tag(String)
+    /// D-63: what other accounts share one by one — its own section, outside every space.
+    case sharedWithMe
 }
 
 enum TaskDateField: Hashable {
@@ -36,6 +38,8 @@ enum SceneSheet: Identifiable, Hashable {
     case newSharedSpace
     /// D-62: the people of a space (inviting to a personal space makes it shared).
     case spaceMembers(String)
+    /// Step 2 of creating a space for working together: invite people, or skip.
+    case inviteToNewSpace(String)
     /// D-54: one invitation, opened from its link.
     case invitationLink(String)
     /// A web page inside the app (another server's link, opened on purpose).
@@ -134,10 +138,10 @@ final class SceneModel {
     var columnVisibility: NavigationSplitViewVisibility = .all
     var preferredCompactColumn: NavigationSplitViewColumn = .sidebar {
         didSet {
-            // iPhone: «Back» leaves the document without changing the selection.
+            // iPhone: «Back» leaves the document without changing the selection, to the list it
+            // was opened from.
             if !isPad, oldValue == .detail, preferredCompactColumn != .detail {
                 if let fresh = freshNoteId, selectedNoteId == fresh { leaveFreshNote(fresh) }
-                showContainer(ofNote: selectedNoteId)
             }
         }
     }
@@ -294,7 +298,7 @@ final class SceneModel {
     }
 
     /// Closes the open document's tab (⌘W, × on the tab or in the document bar): the tab next to
-    /// it opens; after the last one, the folder or notebook the document was in.
+    /// it opens; after the last one, the list it was opened from.
     func closeTab() {
         guard let id = selectedNoteId else { return }
         guard Features.tabs, let next = library.closeTab(id) else {
@@ -306,24 +310,17 @@ final class SceneModel {
         open(next)
     }
 
+    /// Closing returns to the list the document was opened from — All Documents, a tag, search,
+    /// Starred, a folder (owner, 2026-11-08; it used to jump to the document's folder). Opening
+    /// never changes the list, so there is nothing to restore.
     func closeDocument() {
         if let id = selectedNoteId { library.recordVersion(ofNote: id) }
-        showContainer(ofNote: selectedNoteId)
         withAnimation(Theme.Motion.smooth) {
             selectedNoteId = nil
             preferredCompactColumn = .content
             // Nothing to show alone any more.
             fullScreen = nil
         }
-    }
-
-    /// Owner's feedback 2026-11-01: «Back» from a document opened in All Documents goes one level
-    /// up — to the folder or notebook that holds it — not back to the whole list. A list chosen on
-    /// purpose (a tag, Starred, Trash, a folder) stays.
-    private func showContainer(ofNote id: String?) {
-        guard sidebar == nil || sidebar == .allDocuments, let id, let note = library.note(id),
-              note.kind == .note, note.trashedAt == nil else { return }
-        sidebar = note.folderId.map(SidebarItem.folder) ?? .notebook(note.notebookId)
     }
 
     /// D-48: another space — its own tabs, its own active tab (restored), its own lists.

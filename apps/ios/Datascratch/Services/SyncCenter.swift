@@ -28,21 +28,65 @@ final class SyncCenter {
     /// Per notebook, what is set aside right now (item count and newest seq): the banner's
     /// dismissal is keyed by it, so only new unreadable items bring it back.
     var unreadableSignatures: [String: String] = [:]
-    /// Changes waiting for a key (a notebook from another device): not a spinner — they go out
-    /// by themselves once the key arrives. Since when, for a calm hint if it lasts.
-    private(set) var heldChanges = 0
-    private(set) var heldSince: Date?
+    /// What is not syncing yet and goes by itself once it can (D-62): changes held for a key,
+    /// documents whose key is not here yet, documents the server does not open to this account
+    /// yet (a space joined a moment ago). Not a spinner. Since when, for a calm hint if it lasts.
+    struct Awaited: Equatable {
+        /// Outgoing changes held for a key.
+        var changes = 0
+        /// Documents waiting for their key on this device.
+        var keyDocuments = 0
+        /// Documents the server does not let this account reach yet.
+        var accessDocuments = 0
 
-    func setHeld(_ count: Int, now: Date = Date()) {
-        guard count != heldChanges else { return }
-        heldChanges = count
-        heldSince = count > 0 ? (heldSince ?? now) : nil
+        var isEmpty: Bool { changes == 0 && keyDocuments == 0 && accessDocuments == 0 }
+        /// Something waits for a key (not only for access).
+        var needsKey: Bool { changes > 0 || keyDocuments > 0 }
     }
 
-    /// Held for a while (a minute): worth a quiet line, never an alarm.
-    func showsHeldHint(now: Date = Date()) -> Bool {
-        guard heldChanges > 0, let since = heldSince else { return false }
-        return now.timeIntervalSince(since) > 60
+    private(set) var awaited = Awaited()
+    private(set) var awaitedSince: Date?
+
+    func setAwaited(_ value: Awaited, now: Date = Date()) {
+        guard value != awaited else { return }
+        awaited = value
+        awaitedSince = value.isEmpty ? nil : (awaitedSince ?? now)
+    }
+
+    /// Only changes held for a key (the engine's `held`), documents unchanged.
+    func setHeld(_ count: Int, now: Date = Date()) {
+        var value = awaited
+        value.changes = count
+        setAwaited(value, now: now)
+    }
+
+    /// What waiting for a key or for access means right now (owner, 2026-11-08: a bare
+    /// «Изменений ждут ключ: N» hung there with nothing to do about it).
+    enum KeyWait: Equatable {
+        case none
+        /// Just now: on its way (a member's key comes from the owner's device; access to a joined
+        /// space follows in a moment).
+        case waiting(Awaited)
+        /// Longer than `keyPatience`: the device that gives the key is not online, or the server
+        /// still does not open the documents.
+        case stuck(Awaited)
+
+        var isStuck: Bool {
+            if case .stuck = self { true } else { false }
+        }
+    }
+
+    /// How long a key may take before the status says why it does not come.
+    nonisolated static let keyPatience: TimeInterval = 30
+
+    /// A key that comes at once (the usual case) is not worth a line at all.
+    nonisolated static let keyGrace: TimeInterval = 3
+
+    func keyWait(now: Date = Date()) -> KeyWait {
+        guard !awaited.isEmpty, let since = awaitedSince else { return .none }
+        let waited = now.timeIntervalSince(since)
+        if waited > Self.keyPatience { return .stuck(awaited) }
+        return waited > Self.keyGrace ? .waiting(awaited) : .none
     }
     private(set) var serverURL: URL?
 

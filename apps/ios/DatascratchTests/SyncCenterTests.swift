@@ -16,6 +16,38 @@ struct SyncCenterTests {
         #expect(sync.transferLine == nil)
     }
 
+    /// Waiting for a key: nothing at first, then «getting the key», then — after the patience —
+    /// stuck (the giving device is offline); gone when the key came.
+    @Test func keyWaitSaysWhatIsAwaited() {
+        let sync = SyncCenter(serverURL: URL(string: "https://example.com"), monitorNetwork: false)
+        let start = Date(timeIntervalSince1970: 1_000)
+        sync.setHeld(2, now: start)
+        #expect(sync.keyWait(now: start.addingTimeInterval(1)) == .none, "a key that comes at once says nothing")
+        #expect(sync.keyWait(now: start.addingTimeInterval(SyncCenter.keyGrace + 1)) == .waiting(.init(changes: 2)))
+        #expect(sync.keyWait(now: start.addingTimeInterval(SyncCenter.keyPatience + 1)) == .stuck(.init(changes: 2)))
+        sync.setHeld(0, now: start.addingTimeInterval(40))
+        #expect(sync.keyWait(now: start.addingTimeInterval(41)) == .none)
+    }
+
+    /// D-62: documents waiting for a key or for access count too; the wait lasts from the first
+    /// thing awaited and ends when nothing is.
+    @Test func waitingDocumentsAreAwaitedToo() {
+        let sync = SyncCenter(serverURL: URL(string: "https://example.com"), monitorNetwork: false)
+        let start = Date(timeIntervalSince1970: 1_000)
+        sync.setAwaited(.init(accessDocuments: 3), now: start)
+        let access = SyncCenter.Awaited(accessDocuments: 3)
+        #expect(!access.needsKey)
+        #expect(sync.keyWait(now: start.addingTimeInterval(SyncCenter.keyGrace + 1)) == .waiting(access))
+        sync.setAwaited(.init(keyDocuments: 1, accessDocuments: 3), now: start.addingTimeInterval(10))
+        #expect(sync.keyWait(now: start.addingTimeInterval(SyncCenter.keyPatience + 1)) == .stuck(.init(keyDocuments: 1, accessDocuments: 3)),
+                "the wait counts from the first thing awaited")
+        sync.setHeld(2, now: start.addingTimeInterval(32))
+        #expect(sync.awaited == .init(changes: 2, keyDocuments: 1, accessDocuments: 3), "held changes keep the documents")
+        sync.setAwaited(.init(), now: start.addingTimeInterval(40))
+        #expect(sync.keyWait(now: start.addingTimeInterval(41)) == .none)
+        #expect(sync.awaitedSince == nil)
+    }
+
     @Test func engineSummaryDrivesThePhase() {
         let sync = SyncCenter(serverURL: URL(string: "https://example.com"), monitorNetwork: false)
         sync.apply(summary: .syncing, pending: 2)

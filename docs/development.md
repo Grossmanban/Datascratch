@@ -104,9 +104,9 @@ uv tool install graphifyy  # поставит команду graphify
 
 ## Проверки iOS и сборки TestFlight (D-46)
 
-- iOS проверяется на машинах macOS GitHub Actions (`ios-app`, `ios-editor`, `ios-core`, `design`). Машин мало, прогон `ios-app` — ~25 минут, сборка `ios-release` — ~30 минут, обработка Apple — 5–30 минут.
+- iOS проверяется на машинах macOS GitHub Actions (`ios-app`, `ios-editor`, `ios-core`, `design`). Машин мало, прогон `ios-app` — сборка (~10 мин), затем одновременно «Unit & smoke» и три части UI-тестов (`UI tests (iPhone|iPad N/3)`, `apps/ios/scripts/ui-test-shard.py`, D-46), сборка `ios-release` — ~30 минут, обработка Apple — 5–30 минут.
 - **Повторов на `main` нет:** шаг `gate` пропускает задачи macOS, если те же файлы уже прошли этот workflow (обычно — ветка, которую только что влили). Скрипт — `.github/scripts/already-tested.sh`.
-- **Ворота сборки — быстрый набор UI-тестов** (шаг «UI tests (smoke — release gate)», список `SMOKE_UI_TESTS` в `ios-app.yml`). Координатор ждёт его так: `tools/ci/wait-release-gate.sh <run id>` — и сразу запускает `ios-release` с `main` (`gh workflow run ios-release.yml --ref main -f ref=<sha> -f build_number=N`). Полный набор идёт следом; если он упал — исправить в следующей сборке и сказать пользователю.
+- **Ворота сборки — быстрый набор UI-тестов** (шаг «UI tests (smoke — release gate)», список `SMOKE_UI_TESTS` в `ios-app.yml`). Координатор ждёт его так: `tools/ci/wait-release-gate.sh <run id>` — и сразу запускает `ios-release` с `main` (`gh workflow run ios-release.yml --ref main -f ref=<sha> -f build_number=N`). Части полного набора идут одновременно с ним; если он упал — исправить в следующей сборке и сказать пользователю.
 - Сборка собирается ровно из проверенного коммита (`-f ref=<sha>`), и этот коммит обязан быть в `main`: секреты подписи лежат в окружении GitHub `release`, доступном только `main` и тегам `ios-v*`; секреты деплоя — в окружении `production` (только `main`). Ветка `main` защищена от перезаписи и удаления.
 - Новый критичный сценарий (то, что уже ломалось у пользователя) — добавить в `SMOKE_UI_TESTS`.
 

@@ -10,7 +10,7 @@ repo=${2:-Grossmanban/Datascratch}
 gate='UI tests (smoke — release gate)'
 while :; do
   json=$(gh run view "$run" -R "$repo" --json status,jobs)
-  states=$(jq -r --arg g "$gate" '[.jobs[] | select(.name | startswith("Build & test")) |
+  states=$(jq -r --arg g "$gate" '[.jobs[] | select((.name | startswith("Unit & smoke")) or (.name | startswith("Build & test"))) |
     ((.steps // []) | map(select(.name == $g)) | .[0] // {}) |
     (if .conclusion == "success" then "ok" elif (.conclusion // "") != "" and .conclusion != "skipped" then "fail" else "wait" end)] | join(" ")' <<<"$json")
   status=$(jq -r .status <<<"$json")

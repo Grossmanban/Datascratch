@@ -38,7 +38,8 @@ final class AppSettings {
     var voiceQuality: VoiceQuality { didSet { defaults.set(voiceQuality.rawValue, forKey: "voiceQuality") } }
     /// D-65: swear words kept as said, or softened in formatted text.
     var voiceProfanity: VoiceProfanity { didSet { defaults.set(voiceProfanity.rawValue, forKey: "voiceProfanity") } }
-    /// D-65: the «where your voice goes» sheet was read on this device.
+    /// D-65: voice consent on this device only (no server), or kept from before it moved to the
+    /// account document (`AppModel.hasVoiceConsent` carries it over once).
     var voiceConsentShown: Bool { didSet { defaults.set(voiceConsentShown, forKey: "voiceConsentShown") } }
     /// D-63, before «opened» lived in the account document (`SharedRef.openedAt`): what this
     /// device had opened. Read once to carry it over (`AppModel.syncSharedRefs`), then cleared.

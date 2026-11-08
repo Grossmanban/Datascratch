@@ -54,7 +54,7 @@ final class DictationController {
     /// The finger is down on the button.
     func press() {
         guard mode == .idle else { return }
-        guard app?.settings.voiceConsentShown == true else {
+        guard app?.hasVoiceConsent() == true else {
             showsConsent = true
             return
         }
@@ -114,7 +114,7 @@ final class DictationController {
     }
 
     func consentAccepted() {
-        app?.settings.voiceConsentShown = true
+        app?.recordVoiceConsent()
         showsConsent = false
     }
 

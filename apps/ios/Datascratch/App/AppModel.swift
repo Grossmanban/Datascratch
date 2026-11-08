@@ -181,6 +181,32 @@ final class AppModel {
         if let access = try? await service.me(), access != voiceAccess { voiceAccess = access }
     }
 
+    /// D-65: the person agreed that voice goes through the server — `settings.voiceConsentAt` of
+    /// the account document, so web and iOS ask once per account (on this device only without a
+    /// server). An earlier answer kept on this device is carried over once.
+    func hasVoiceConsent() -> Bool {
+        #if canImport(DSCore)
+        if accounts.isServerBacked, accounts.account != nil, let core {
+            if core.account.setting("voiceConsentAt")?.stringValue != nil { return true }
+            guard settings.voiceConsentShown else { return false }
+            try? core.account.setSetting("voiceConsentAt", .string(value: DSDate.iso(Date())))
+            settings.voiceConsentShown = false
+            return true
+        }
+        #endif
+        return settings.voiceConsentShown
+    }
+
+    func recordVoiceConsent() {
+        #if canImport(DSCore)
+        if accounts.isServerBacked, accounts.account != nil, let core {
+            try? core.account.setSetting("voiceConsentAt", .string(value: DSDate.iso(Date())))
+            return
+        }
+        #endif
+        settings.voiceConsentShown = true
+    }
+
     /// The server's admin manages who may use voice — in the web app (Settings → Voice says so).
     private(set) var isVoiceAdmin = false
 

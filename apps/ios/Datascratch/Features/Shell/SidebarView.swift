@@ -541,6 +541,12 @@ struct AccountSettingsButton: View {
 
     private var email: String { app.accounts.account?.email ?? "" }
 
+    /// The account's presence colour, the same one other people see on its cursor.
+    private var avatarColor: Color {
+        guard let c = DSRGBA(hex: PresenceCenter.color(for: email.lowercased())) else { return Theme.Palette.accent }
+        return Color(red: c.red, green: c.green, blue: c.blue)
+    }
+
     var body: some View {
         Button {
             scene.sheet = .settings
@@ -548,7 +554,7 @@ struct AccountSettingsButton: View {
             ZStack {
                 if let initial = email.first {
                     Circle()
-                        .fill(Color(hex: PresenceCenter.color(for: email.lowercased())) ?? Theme.Palette.accent)
+                        .fill(avatarColor)
                     Text(String(initial).uppercased())
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white)

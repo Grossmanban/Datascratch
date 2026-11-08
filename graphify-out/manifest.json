@@ -6568,5 +6568,35 @@
     "seen": 1794166069.3649406,
     "ast_hash": "cbbdc33918998c5bfba9c00adb90fc71",
     "semantic_hash": ""
+  },
+  "apps/web/e2e/specs/mobile.spec.ts": {
+    "mtime": 1794166034.0757456,
+    "seen": 1794166119.5160627,
+    "ast_hash": "b9fcf1d264cb64f1e47e3d2b2dabd1e2",
+    "semantic_hash": ""
+  },
+  "apps/web/e2e/screenshots/key-android-note.png": {
+    "mtime": 1794166034.0710301,
+    "seen": 1794166119.518149,
+    "ast_hash": "6b56eeb39b204e8de823bacee296aeb5",
+    "semantic_hash": ""
+  },
+  "apps/web/e2e/screenshots/key-iphone-drawer.png": {
+    "mtime": 1794166034.0757456,
+    "seen": 1794166119.5181527,
+    "ast_hash": "b989f4a26b698e7469091c9bd5e73ab7",
+    "semantic_hash": ""
+  },
+  "apps/web/e2e/screenshots/key-iphone-shared-with-me.png": {
+    "mtime": 1794166034.0757456,
+    "seen": 1794166119.5181563,
+    "ast_hash": "bde0e5d052d4338c78aa290bf9fe8c1c",
+    "semantic_hash": ""
+  },
+  "apps/web/e2e/screenshots/key-iphone-space-dialog.png": {
+    "mtime": 1794166034.0757456,
+    "seen": 1794166119.5181587,
+    "ast_hash": "71f6dc5d89824d9b6f9ad360ce4d6607",
+    "semantic_hash": ""
   }
 }

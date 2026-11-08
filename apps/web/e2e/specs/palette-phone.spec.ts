@@ -41,13 +41,16 @@ for (const width of [360, 390]) {
     expect(box.x).toBeGreaterThanOrEqual(12);
     expect(box.x + box.width).toBeLessThanOrEqual(width - 12);
     // The phone's «Диктовать» stands above the palette in the same corner, not over its ⌄.
+    // (A CI server has no voice keys: `available: false` hides the button altogether.)
     const paletteTop = box.y;
-    await expect
-      .poll(async () => {
-        const m = await page.getByTestId("mic-button").boundingBox();
-        return m ? m.y + m.height <= paletteTop : false;
-      })
-      .toBe(true);
+    if (process.env.E2E_SERVER_URL) await expect(page.getByTestId("mic-button")).toHaveCount(0);
+    else
+      await expect
+        .poll(async () => {
+          const m = await page.getByTestId("mic-button").boundingBox();
+          return m ? m.y + m.height <= paletteTop : false;
+        })
+        .toBe(true);
     // The small buttons look 32 px but take 44 px.
     expect((await page.getByTestId("tool-more").boundingBox())!.width).toBeLessThanOrEqual(34);
     await targetIs44(page, "tool-more");

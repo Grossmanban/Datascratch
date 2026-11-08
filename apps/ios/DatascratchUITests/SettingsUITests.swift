@@ -15,8 +15,8 @@ final class SettingsUITests: XCTestCase {
     /// The sidebar, also on iPhone where the app may open on the document list.
     private func sidebarSettings(_ app: XCUIApplication) -> XCUIElement {
         let settings = app.buttons["sidebar.settings"].firstMatch
-        if !settings.waitForExistence(timeout: 10), app.navigationBars.buttons.firstMatch.exists {
-            app.navigationBars.buttons.firstMatch.tap()
+        if !settings.waitForExistence(timeout: 10), app.barBackButton.exists {
+            app.barBackButton.tap()
         }
         XCTAssertTrue(settings.waitForExistence(timeout: 5), "no settings button; buttons: \(LibraryUITests.buttons(app))")
         return settings
@@ -73,7 +73,7 @@ final class SettingsUITests: XCTestCase {
         let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: screen)
         wait(for: [gone], timeout: 25)
         XCTAssertTrue(app.buttons["sidebar.settings"].firstMatch.waitForExistence(timeout: 10)
-                      || app.navigationBars.buttons.firstMatch.exists, "the interface did not come")
+                      || app.barBackButton.exists, "the interface did not come")
     }
 
     /// Reduce Motion: no writing, a short cross-fade.
@@ -85,6 +85,6 @@ final class SettingsUITests: XCTestCase {
         let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: screen)
         wait(for: [gone], timeout: 25)
         XCTAssertTrue(app.buttons["sidebar.settings"].firstMatch.waitForExistence(timeout: 5)
-                      || app.navigationBars.buttons.firstMatch.exists)
+                      || app.barBackButton.exists)
     }
 }

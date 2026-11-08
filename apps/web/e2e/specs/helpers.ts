@@ -46,7 +46,7 @@ export async function signIn(page: Page, email: string, password = PASSWORD) {
 
 export async function expectSynced(page: Page) {
   await expect(page.getByTestId("sync-status")).toHaveAttribute("data-status", "online", { timeout: 15_000 });
-  await expect(page.getByTestId("sync-status")).not.toHaveAttribute("aria-label", /ждут|ждёт|waiting/, { timeout: 15_000 });
+  await expect(page.getByTestId("sync-status")).not.toHaveAttribute("aria-label", /ждут|ждёт|waiting|Отправля|Uploading/, { timeout: 15_000 });
 }
 
 /** Create a document from the sidebar and type a title and body. */

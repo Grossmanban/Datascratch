@@ -149,6 +149,14 @@ private struct InvitationCard: View {
     let onAccept: () -> Void
     let onDecline: () -> Void
 
+    private var invitesTo: LocalizedStringKey {
+        switch invite.target.kind {
+        case .notebook: "invites you to a notebook"
+        case .note: "invites you to a document"
+        case .space: "invites you to a shared space"
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s3) {
             HStack(alignment: .top, spacing: Theme.Space.s3) {
@@ -158,8 +166,7 @@ private struct InvitationCard: View {
                         .font(Theme.Typography.body.weight(.semibold))
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Text(invite.target.kind == .notebook ? LocalizedStringKey("invites you to a notebook")
-                                                          : "invites you to a document")
+                    Text(invitesTo)
                         .font(Theme.Typography.callout)
                         .foregroundStyle(Theme.Palette.textSecondary)
                     HStack(spacing: Theme.Space.s2) {
@@ -297,6 +304,7 @@ private struct RefreshedLinksSheet: View {
         switch item.target.kind {
         case .notebook: app.library.notebook(item.target.id)?.name ?? String(localized: "Notebook")
         case .note: app.library.note(item.target.id)?.title ?? String(localized: "Document")
+        case .space: app.library.spaces.first { $0.id == item.target.id }?.name ?? String(localized: "Space")
         }
     }
 }

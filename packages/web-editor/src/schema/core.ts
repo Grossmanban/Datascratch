@@ -28,11 +28,17 @@ export function safeHref(value: unknown): string | null {
  * such a document on the first edit: it inserted a new empty title and turned the real one into a
  * paragraph (data bug 2026-10-26). A new empty document still starts with a title (the first
  * alternative).
+ *
+ * The same set of documents is written `(title | block) (block | title)*` because ProseMirror takes
+ * the first alternative as the default block type at each position: with `(title | block)+` every
+ * block after the first defaulted to a title, so Enter at the end of a paragraph (and leaving a code
+ * block, a node selection, …) created an empty title, which the title repair then deleted — Enter
+ * did nothing (bug 2026-11-05). Now only the start of the note defaults to a title.
  */
 export const DocumentNode = Node.create({
   name: "doc",
   topNode: true,
-  content: "(title | block)+",
+  content: "(title | block) (block | title)*",
 });
 
 export const Title = Node.create({

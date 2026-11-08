@@ -1,0 +1,115 @@
+name: symbolicate
+
+# Symbolicates a crash of an iOS build (manual, one-off). Builds since ios-release keeps
+# `dsym-<build>` take their dSYM from there; older ones are rebuilt unsigned from the commit
+# with the release settings, and the binary UUID is compared with the crash report.
+# Paste the report's frames (lines with "Datascratch … + <offset>") into `frames` to get them
+# resolved in the job summary; the dSYM is attached to the run either way.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit of the build (from the release run, or the merge it was built from)"
+        required: true
+      build_number:
+        description: "Build number (finds the kept dSYM; empty = rebuild)"
+        required: false
+      uuid:
+        description: "Binary UUID from the crash report (Binary Images), to compare"
+        required: false
+      frames:
+        description: "Frames from the crash report, pasted as they are (optional)"
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  symbolicate:
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/ios
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - name: Kept dSYM
+        id: kept
+        if: inputs.build_number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD: ${{ inputs.build_number }}
+        run: |
+          mkdir -p build/dSYMs
+          if gh run download --repo "$GITHUB_REPOSITORY" --name "dsym-$BUILD" --dir build/dSYMs 2>/dev/null; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No kept dsym-$BUILD (older than ios-release keeping them, or expired): rebuilding."
+          fi
+      - name: Select Xcode 26 (as ios-release)
+        if: steps.kept.outputs.found != 'true'
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+      - name: Install XcodeGen (pinned, as ios-release)
+        if: steps.kept.outputs.found != 'true'
+        env:
+          XCODEGEN_VERSION: 2.46.0
+          XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
+          echo "$XCODEGEN_SHA256  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
+      - name: Rebuild (unsigned, release settings)
+        if: steps.kept.outputs.found != 'true'
+        env:
+          BUILD: ${{ inputs.build_number || '1' }}
+        run: |
+          set -o pipefail
+          scripts/generate.sh
+          xcodebuild archive \
+            -project Datascratch.xcodeproj -scheme Datascratch -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/Datascratch.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CURRENT_PROJECT_VERSION="$BUILD" | xcbeautify --renderer github-actions
+          rm -rf build/dSYMs && cp -R build/Datascratch.xcarchive/dSYMs build/dSYMs
+      - name: UUID and frames
+        env:
+          WANT_UUID: ${{ inputs.uuid }}
+          FRAMES: ${{ inputs.frames }}
+        run: |
+          DWARF=build/dSYMs/Datascratch.app.dSYM/Contents/Resources/DWARF/Datascratch
+          GOT=$(dwarfdump --uuid "$DWARF" | awk '/arm64/ {print $2}')
+          {
+            echo "## Symbols"
+            echo "dSYM UUID: \`$GOT\`"
+            if [ -n "$WANT_UUID" ]; then
+              want=$(printf '%s' "$WANT_UUID" | tr -d '<>-' | tr '[:lower:]' '[:upper:]')
+              have=$(printf '%s' "$GOT" | tr -d '-')
+              if [ "$want" = "$have" ]; then echo "UUID matches the crash report."; else echo "**UUID does not match the crash report ($WANT_UUID): the frames below are not reliable.**"; fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ -n "$FRAMES" ] || exit 0
+          LOAD=0x100000000
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # "Datascratch +4435404" and "Datascratch 0x… 0x100000000 + 4435404" alike.
+          printf '%s\n' "$FRAMES" | grep 'Datascratch' | while IFS= read -r line; do
+            off=$(printf '%s' "$line" | grep -oE '\+ ?[0-9]+' | tail -1 | tr -d '+ ')
+            [ -n "$off" ] || continue
+            sym=$(atos -o "$DWARF" -arch arm64 -l $LOAD -i "$(printf '0x%x' $((LOAD + off)))" | paste -sd ';' -)
+            printf '%-60s → %s\n' "$(printf '%s' "$line" | cut -c1-60)" "$sym"
+          done | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsym-symbolicate-${{ inputs.build_number || inputs.ref }}
+          path: apps/ios/build/dSYMs
+          retention-days: 14

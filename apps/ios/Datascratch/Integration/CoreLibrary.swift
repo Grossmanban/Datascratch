@@ -122,6 +122,8 @@ final class CoreLibrary: LibraryBackend {
     let secrets: any SecretStore
     private(set) var account: AccountDocument
     private var notebookDocs: [String: NotebookDocument] = [:]
+    /// D-62: documents of shared spaces (this account's and ones it was invited to).
+    private var spaceDocs: [String: SpaceDocument] = [:]
     private var noteDocs: [String: NoteDocument] = [:]
     private var subscriptions: [String: CRDTSubscription] = [:]
     private var remoteSubscriptions: [String: CRDTSubscription] = [:]
@@ -133,6 +135,7 @@ final class CoreLibrary: LibraryBackend {
             guard remote != nil else { return }
             subscriptions.removeAll()
             remote?.documentOpened(account.crdt, notebookId: nil)
+            for doc in spaceDocs.values { remote?.documentOpened(doc.crdt, notebookId: nil) }
             for (id, doc) in notebookDocs { remote?.documentOpened(doc.crdt, notebookId: id) }
             for (id, doc) in noteDocs { remote?.documentOpened(doc.crdt, notebookId: Self.recordNotebook(notebookIdOfNote[id])) }
         }
@@ -246,6 +249,69 @@ final class CoreLibrary: LibraryBackend {
         notebookDocs[id] = doc
         remote?.documentOpened(crdt, notebookId: id)
         return doc
+    }
+
+    /// D-62: the document of a shared space (name, icon, its notebooks), synced with the space
+    /// key. One not synced yet is empty: the space shows under a stand-in name meanwhile.
+    func spaceDocument(_ id: String) throws -> SpaceDocument {
+        if let doc = spaceDocs[id] { return doc }
+        let crdt = try Self.open(.space, docId: id, notebookId: nil, store: store)
+        let doc = SpaceDocument(crdt)
+        attach(crdt, notebookId: nil)
+        spaceDocs[id] = doc
+        remote?.documentOpened(crdt, notebookId: nil)
+        return doc
+    }
+
+    /// A space document DSCore just made (`shareSpace`): this one is kept, and synced.
+    func adopt(_ space: SpaceDocument) {
+        guard spaceDocs[space.spaceId] == nil else { return }
+        attach(space.crdt, notebookId: nil)
+        spaceDocs[space.spaceId] = space
+        remote?.documentOpened(space.crdt, notebookId: nil)
+    }
+
+    /// A notebook DSCore just made in a shared space: this document is kept, and synced.
+    func adopt(_ notebook: NotebookDocument) {
+        guard notebookDocs[notebook.notebookId] == nil else { return }
+        attach(notebook.crdt, notebookId: notebook.notebookId)
+        notebookDocs[notebook.notebookId] = notebook
+        remote?.documentOpened(notebook.crdt, notebookId: notebook.notebookId)
+    }
+
+    /// The shared spaces in the library: this account's (`Space.shared`) and those it joined.
+    var sharedSpaceIds: [String] {
+        account.spaces().filter(\.shared).map(\.id) + account.sharedSpaces().map(\.id)
+    }
+
+    /// The notebook documents of a shared space (key changes, moving out).
+    func notebookDocuments(inSpace id: String) -> [NotebookDocument] {
+        guard let space = try? spaceDocument(id) else { return [] }
+        return space.notebooks().compactMap { try? notebookDocument($0.id) }
+    }
+
+    /// The shared space a notebook is in, if any.
+    func sharedSpace(ofNotebook notebookId: String) -> String? {
+        sharedSpaceIds.first { (try? spaceDocument($0).notebook(id: notebookId)) != nil }
+    }
+
+    /// D-62: a shared space this account no longer has (left, removed, deleted): its documents
+    /// leave this device, with the tabs and starred items that pointed into it.
+    func forgetSpace(_ id: String) {
+        if let space = try? spaceDocument(id) {
+            for ref in space.notebooks() {
+                if let notebook = try? notebookDocument(ref.id) {
+                    for meta in notebook.notes(includeTrashed: true) {
+                        try? account.closeTab(noteId: meta.id)
+                        try? account.unstar(StarredItem(kind: .note, id: meta.id))
+                        forgetDocument(meta.id)
+                    }
+                }
+                try? account.unstar(StarredItem(kind: .notebook, id: ref.id))
+                forgetDocument(ref.id)
+            }
+        }
+        forgetDocument(id)
     }
 
     /// The note's document. Only a note created on this device (`creating`) gets the empty
@@ -496,6 +562,9 @@ final class CoreLibrary: LibraryBackend {
             guard let notebookId = notebookIdOfNote[target.id],
                   let meta = wrappedKeys.meta(noteId: target.id, notebookId: notebookId) else { return nil }
             return try keys.noteKey(meta, notebookId: notebookId)
+        case .space:
+            // A whole space has no guest links (D-62).
+            return nil
         }
     }
 
@@ -533,6 +602,7 @@ final class CoreLibrary: LibraryBackend {
     private func forgetDocument(_ id: String) {
         noteDocs[id] = nil
         notebookDocs[id] = nil
+        spaceDocs[id] = nil
         notebookIdOfNote[id] = nil
         subscriptions[id] = nil
         remoteSubscriptions[id] = nil
@@ -609,9 +679,28 @@ final class CoreLibrary: LibraryBackend {
         snapshot.spaces = account.spaces().map { space in
             Space(id: space.id, name: space.name, icon: space.icon ?? "square.stack",
                   color: space.color.flatMap(Tint.init(rawValue:)) ?? .blue, order: space.order,
-                  createdAt: DSCore.DSDate.parseISO(space.createdAt) ?? Date())
+                  createdAt: DSCore.DSDate.parseISO(space.createdAt) ?? Date(), sharing: space.shared ? .owned : nil)
         }
-        let refs = account.notebooks()
+        // D-62: spaces this account joined, after its own; name and icon from the space document
+        // (a stand-in until it has synced).
+        let lastOrder = snapshot.spaces.map(\.order).max() ?? 0
+        for ref in account.sharedSpaces() {
+            let doc = try? spaceDocument(ref.id)
+            let name = doc?.name ?? ""
+            snapshot.spaces.append(Space(id: ref.id, name: name.isEmpty ? String(localized: "Shared space") : name,
+                                         icon: doc?.icon ?? "person.2", color: doc?.color.flatMap(Tint.init(rawValue:)) ?? .teal,
+                                         order: lastOrder + 1 + ref.order,
+                                         createdAt: DSCore.DSDate.parseISO(ref.addedAt) ?? Date(), sharing: .joined))
+        }
+        // Notebooks of shared spaces are in their space documents, not in the account's.
+        let spaceRefs = snapshot.spaces.filter(\.isShared).flatMap { space in
+            ((try? spaceDocument(space.id).notebooks()) ?? []).map { ref in
+                var ref = ref
+                ref.spaceId = space.id
+                return ref
+            }
+        }
+        let refs = account.notebooks() + spaceRefs
         snapshot.notebooks = refs.map { ref in
             Notebook(id: ref.id, spaceId: ref.spaceId, name: ref.name, icon: ref.icon ?? "book.closed",
                      color: ref.color.flatMap(Tint.init(rawValue:)) ?? .blue, order: ref.order,
@@ -711,12 +800,20 @@ final class CoreLibrary: LibraryBackend {
     private func persistSpaces(_ old: LibrarySnapshot, _ new: LibrarySnapshot) throws {
         guard old.spaces != new.spaces else { return }
         let before = Dictionary(old.spaces.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        for space in new.spaces where before[space.id] != space {
+        // D-62: a space this account joined is the owner's: never written here.
+        for space in new.spaces where before[space.id] != space && !space.isJoined {
             try account.putSpace(DSCore.Space(id: space.id, name: space.name, icon: space.icon, color: space.color.rawValue,
-                                              order: space.order, createdAt: DSCore.DSDate.iso(space.createdAt)))
+                                              order: space.order, createdAt: DSCore.DSDate.iso(space.createdAt),
+                                              shared: space.sharing == .owned))
+            // Members see the name, icon and colour from the space document.
+            if space.sharing == .owned, let previous = before[space.id],
+               previous.name != space.name || previous.icon != space.icon || previous.color != space.color {
+                try spaceDocument(space.id).setMeta(["name": .string(value: space.name), "icon": .string(value: space.icon),
+                                                     "color": .string(value: space.color.rawValue)])
+            }
         }
         let ids = Set(new.spaces.map(\.id))
-        for space in old.spaces where !ids.contains(space.id) {
+        for space in old.spaces where !ids.contains(space.id) && !space.isShared {
             try account.deleteSpace(id: space.id)
         }
         // Agents read the space of a notebook from the notebook document.
@@ -729,9 +826,23 @@ final class CoreLibrary: LibraryBackend {
     private func persistNotebooks(_ old: LibrarySnapshot, _ new: LibrarySnapshot) throws {
         guard old.notebooks != new.notebooks else { return }
         let before = Dictionary(old.notebooks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let sharedSpaces = Set(new.spaces.filter(\.isShared).map(\.id)).union(old.spaces.filter(\.isShared).map(\.id))
+        // D-62: a notebook of a shared space is in the space document. It is created, and moved
+        // in or out, on the server first (`ServerAccountSharingService`); here only its name,
+        // icon, colour, order and mode change.
+        for notebook in new.notebooks where sharedSpaces.contains(notebook.spaceId) && !notebook.isSharedWithMe {
+            guard let previous = before[notebook.id], previous != notebook, previous.spaceId == notebook.spaceId else { continue }
+            if previous.mode != notebook.mode {
+                let key = try keys.notebookKey(notebook.id)
+                remote?.notebookModeChanged(id: notebook.id, mode: notebook.mode, key: notebook.mode == .agent ? key : nil)
+            }
+            try spaceDocument(notebook.spaceId).putNotebook(Self.ref(notebook))
+            try writeNotebookMeta(notebook, in: new)
+        }
         // Notebooks shared with this account are the owner's: never written to this account
         // (D-54); they come and go with `setShared`.
-        for notebook in new.notebooks where before[notebook.id] != notebook && !notebook.isSharedWithMe {
+        for notebook in new.notebooks where before[notebook.id] != notebook && !notebook.isSharedWithMe
+            && !sharedSpaces.contains(notebook.spaceId) && !sharedSpaces.contains(before[notebook.id]?.spaceId ?? "") {
             if before[notebook.id] == nil, try keys.notebookKey(notebook.id) == nil {
                 let (key, wrapped) = try keys.createNotebookKey(notebookId: notebook.id)
                 remote?.notebookCreated(id: notebook.id, mode: notebook.mode, wrappedKey: wrapped, key: key)
@@ -740,15 +851,20 @@ final class CoreLibrary: LibraryBackend {
                 remote?.notebookModeChanged(id: notebook.id, mode: notebook.mode, key: notebook.mode == .agent ? key : nil)
             }
             _ = try notebookDocument(notebook.id)
-            try account.putNotebook(NotebookRef(id: notebook.id, spaceId: notebook.spaceId, name: notebook.name,
-                                                icon: notebook.icon, color: notebook.color.rawValue, order: notebook.order,
-                                                mode: notebook.mode == .agent ? .agent : .private,
-                                                createdAt: DSCore.DSDate.iso(notebook.createdAt)))
+            try account.putNotebook(Self.ref(notebook))
             try writeNotebookMeta(notebook, in: new)
         }
         let ids = Set(new.notebooks.map(\.id))
         for notebook in old.notebooks where !ids.contains(notebook.id) && !notebook.isSharedWithMe {
-            try account.deleteNotebook(id: notebook.id)
+            if sharedSpaces.contains(notebook.spaceId) {
+                // Gone from the snapshot because it left the space (moved out, the space left):
+                // only the owner deletes a notebook of a shared space, from the space document.
+                guard (try? spaceDocument(notebook.spaceId).notebook(id: notebook.id)) != nil,
+                      new.spaces.contains(where: { $0.id == notebook.spaceId && $0.sharing == .owned }) else { continue }
+                try spaceDocument(notebook.spaceId).deleteNotebook(id: notebook.id)
+            } else {
+                try account.deleteNotebook(id: notebook.id)
+            }
             remote?.notebookDeleted(id: notebook.id)
             for note in old.notes where note.notebookId == notebook.id {
                 noteDocs[note.id] = nil
@@ -761,6 +877,13 @@ final class CoreLibrary: LibraryBackend {
             try store.deleteDocument(notebook.id)
             remote?.documentDeleted(notebook.id)
         }
+    }
+
+    private static func ref(_ notebook: Notebook) -> NotebookRef {
+        NotebookRef(id: notebook.id, spaceId: notebook.spaceId, name: notebook.name,
+                    icon: notebook.icon, color: notebook.color.rawValue, order: notebook.order,
+                    mode: notebook.mode == .agent ? .agent : .private,
+                    createdAt: DSCore.DSDate.iso(notebook.createdAt))
     }
 
     /// `meta.name/icon/space` of the notebook document (agents cannot read the account document).

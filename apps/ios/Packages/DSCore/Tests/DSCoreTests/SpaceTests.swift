@@ -117,6 +117,14 @@ import Testing
         #expect(account.notebook(id: nbId)?.spaceId == personal.id && spaceDoc.notebook(id: nbId) == nil)
         #expect(owner.service.keys.spaceOfNotebook(nbId) == nil && owner.service.keys.notebookKeyVersion(nbId) == 3)
         #expect(try await owner.service.notesNeedingNewKeys(in: notebook).isEmpty)
+        // Not shared any more, so not in `/shared-by-me`: the unfinished key change is still found
+        // (an app that stopped before `rotate/done` finishes it on the next start).
+        #expect(!(try await owner.service.api.sharedByMe()).contains { $0.target.id == nbId })
+        #expect(try await owner.service.pendingNotebookRotations() == [nbId])
+        #expect(try await owner.service.resumeNotebookRotation(notebook))
+        #expect(owner.service.keys.notebookKeyVersion(nbId) == 3)
+        #expect(try await owner.service.finishNotebookRotation(notebook))
+        #expect(try await owner.service.pendingNotebookRotations().isEmpty)
         let annaSees = try await anna.service.loadSpaceNotebookKeys(spaceId)
         #expect(!annaSees.contains { $0.notebookId == nbId })
         #expect(try anna.service.keys.notebookKey(nbId) == nbKey2)

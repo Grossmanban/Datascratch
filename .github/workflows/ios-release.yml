@@ -168,6 +168,16 @@ jobs:
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             | xcbeautify --renderer github-actions
 
+      # Crash reports from TestFlight name only offsets: keep the symbols of every build
+      # (uploadSymbols sends them to App Store Connect only). symbolicate.yml reads them.
+      - name: Keep the dSYM
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsym-${{ env.BUILD_NUMBER }}
+          path: apps/ios/build/Datascratch.xcarchive/dSYMs
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Export and upload to TestFlight
         run: |
           set -o pipefail

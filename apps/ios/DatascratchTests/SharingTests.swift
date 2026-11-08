@@ -114,6 +114,47 @@ struct SharingTests {
         #expect(!store.trashed.contains { $0.id == theirs.id })
     }
 
+    /// D-62: a shared space this account joined comes with its name and its notebooks (from the
+    /// space document); one no longer had leaves the library.
+    @Test func joinedSharedSpacesComeWithTheirNotebooks() throws {
+        let core = try CoreLibrary.inMemory()
+        let spaceId = UUIDv7.make()
+        try core.account.putSharedSpace(SharedSpaceRef(id: spaceId, order: 1))
+        let space = try core.spaceDocument(spaceId)
+        try space.initialize(from: DSCore.Space(id: spaceId, name: "Team", icon: "person.2", color: "teal", order: 0, shared: true))
+        let notebookId = UUIDv7.make()
+        try space.putNotebook(NotebookRef(id: notebookId, spaceId: spaceId, name: "Team notes", order: 1))
+
+        let snapshot = core.loadSnapshot()
+        let joined = try #require(snapshot.spaces.first { $0.id == spaceId })
+        #expect(joined.sharing == .joined)
+        #expect(joined.name == "Team")
+        #expect(snapshot.notebooks.contains { $0.id == notebookId && $0.spaceId == spaceId })
+        // Never written as this account's own.
+        #expect(!core.account.spaces().contains { $0.id == spaceId })
+        #expect(!core.account.notebooks().contains { $0.id == notebookId })
+
+        try core.account.removeSharedSpace(id: spaceId)
+        core.forgetSpace(spaceId)
+        let after = core.loadSnapshot()
+        #expect(!after.spaces.contains { $0.id == spaceId })
+        #expect(!after.notebooks.contains { $0.id == notebookId })
+    }
+
+    /// D-62: in a shared space a member's role covers its notebooks and their notes.
+    @Test func aSharedSpaceRoleCoversItsNotebooks() {
+        let sharing = LocalAccountSharingService(webHost: "example.org", demo: true)
+        sharing.spaceOfNotebook = { $0 == "nb" ? "space" : nil }
+        sharing.seedJoinedSpaceForTesting(Datascratch.ShareTarget(kind: .space, id: "space"), role: .viewer)
+        #expect(sharing.role(forNotebook: "nb") == .viewer)
+        #expect(sharing.role(forNote: "n1", notebookId: "nb") == .viewer)
+        #expect(sharing.role(forNotebook: "other") == nil)
+        // ✨ of a notebook of the space comes from the server's list of its notebooks.
+        #expect(!sharing.isOpenToAgents(noteId: "n1", notebookId: "nb"))
+        sharing.seedAgentNotebookForTesting("nb")
+        #expect(sharing.isOpenToAgents(noteId: "n1", notebookId: "nb"))
+    }
+
     @Test func notesSharedOnTheirOwnHaveNoNotebookDocument() throws {
         let core = try CoreLibrary.inMemory()
         #expect(throws: (any Error).self) { _ = try core.notebookDocument(Notebook.sharedNotesId) }

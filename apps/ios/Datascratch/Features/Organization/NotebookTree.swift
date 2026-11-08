@@ -5,6 +5,9 @@ struct NotebookRow: View {
     @Environment(SceneModel.self) private var scene
     let notebook: Notebook
     @State private var isExpanded = true
+    /// D-62: a move into or out of a shared space waits for this confirmation.
+    @State private var pendingMove: Space?
+    @State private var moveError: String?
 
     var body: some View {
         let library = app.library
@@ -28,7 +31,8 @@ struct NotebookRow: View {
         return Label {
             HStack(spacing: Theme.Space.s2) {
                 Text(notebook.name).lineLimit(1)
-                if notebook.mode == .agent {
+                // In a space this account joined, ✨ is the owner's choice (the badge below).
+                if notebook.mode == .agent, space?.isJoined != true {
                     Image(systemName: "sparkles")
                         .font(.caption)
                         .foregroundStyle(Theme.Palette.textTertiary)
@@ -60,11 +64,50 @@ struct NotebookRow: View {
                 sharedMenu
             }
         }
+        .confirmationDialog(moveTitle, isPresented: Binding(get: { pendingMove != nil }, set: { if !$0 { pendingMove = nil } }),
+                            titleVisibility: .visible, presenting: pendingMove) { space in
+            Button(space.isShared ? LocalizedStringKey("Move and Share") : "Move") { move(to: space) }
+        } message: { space in
+            if space.isShared {
+                let name = space.name
+                Text("Everyone in «\(name)» will see this notebook and all of its history.")
+            } else {
+                Text("People of the shared space will no longer see new changes. The notebook gets a new key.")
+            }
+        }
+        .alert("The notebook was not moved", isPresented: Binding(get: { moveError != nil }, set: { if !$0 { moveError = nil } })) {
+            Button("OK", role: .cancel) { moveError = nil }
+        } message: {
+            Text(moveError ?? "")
+        }
     }
 
-    /// D-54: the role this account has when the notebook is shared with it; nil for its own.
+    /// D-54: the role this account has when the notebook is shared with it, on its own or
+    /// through a shared space it joined (D-62); nil for its own.
     private var sharedRole: AccessRole? {
-        app.accountSharing.role(for: ShareTarget(kind: .notebook, id: notebook.id))
+        app.accountSharing.role(forNotebook: notebook.id)
+    }
+
+    private var space: Space? { app.library.spaces.first { $0.id == notebook.spaceId } }
+
+    private var moveTitle: LocalizedStringKey {
+        pendingMove?.isShared == true ? "Move to a shared space?" : "Move out of the shared space?"
+    }
+
+    /// D-62: into or out of a shared space the server takes part (keys); between personal
+    /// spaces it is the library's.
+    private func move(to target: Space) {
+        if scene.sidebar == .notebook(notebook.id) { scene.sidebar = .allDocuments }
+        let id = notebook.id
+        let sharing = app.accountSharing
+        Task {
+            do {
+                try await sharing.moveNotebook(id, toSpace: target.id)
+                Haptics.success()
+            } catch {
+                moveError = error.localizedDescription
+            }
+        }
     }
 
     /// Shared with this account: only the owner renames, moves, deletes it or opens it to agents.
@@ -79,8 +122,12 @@ struct NotebookRow: View {
             }
             Divider()
         }
-        Button("Sharing…", systemImage: "person.2") {
-            scene.sheet = .share(ShareTarget(kind: .notebook, id: notebook.id))
+        if let space, space.isJoined {
+            Button("Space Members…", systemImage: "person.2") { scene.sheet = .spaceMembers(space.id) }
+        } else {
+            Button("Sharing…", systemImage: "person.2") {
+                scene.sheet = .share(ShareTarget(kind: .notebook, id: notebook.id))
+            }
         }
     }
 
@@ -110,14 +157,23 @@ struct NotebookRow: View {
                    systemImage: "star") {
                 library.toggleStar(.notebook, notebook.id)
             }
-            // D-48: the only way between spaces; its starred notes and tabs go with it.
-            let others = library.spaces.filter { $0.id != notebook.spaceId }
+            // D-48: the only way between spaces; its starred notes and tabs go with it. D-62: out
+            // of a shared space only to a personal one; into the owner's shared spaces, with a
+            // warning (members see its history).
+            let inShared = space?.isShared == true
+            let others = library.spaces.filter { other in
+                other.id != notebook.spaceId && !other.isJoined && !(inShared && other.isShared)
+            }
             if !others.isEmpty {
                 Menu("Move to Space…", systemImage: "rectangle.stack") {
-                    ForEach(others) { space in
-                        Button(space.name) {
-                            if scene.sidebar == .notebook(notebook.id) { scene.sidebar = .allDocuments }
-                            library.moveNotebook(notebook.id, toSpace: space.id)
+                    ForEach(others) { other in
+                        Button(other.name, systemImage: other.isShared ? "person.2" : "rectangle.stack") {
+                            if other.isShared || inShared {
+                                pendingMove = other
+                            } else {
+                                if scene.sidebar == .notebook(notebook.id) { scene.sidebar = .allDocuments }
+                                library.moveNotebook(notebook.id, toSpace: other.id)
+                            }
                         }
                     }
                 }

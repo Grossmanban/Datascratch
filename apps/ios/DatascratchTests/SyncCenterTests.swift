@@ -4,6 +4,18 @@ import Testing
 
 @MainActor
 struct SyncCenterTests {
+    /// Photos on their way are counted, uploads first; nothing when nothing moves.
+    @Test func photoTransfersHaveACount() {
+        let sync = SyncCenter(serverURL: URL(string: "https://example.com"), monitorNetwork: false)
+        #expect(sync.transferLine == nil)
+        sync.transfers = .init(sent: 3, toSend: 8, received: 0, toReceive: 2)
+        #expect(sync.transferLine?.text == "Uploading photos: 3 of 8")
+        sync.transfers = .init(sent: 8, toSend: 8, received: 1, toReceive: 2)
+        #expect(sync.transferLine?.text == "Downloading photos: 1 of 2")
+        sync.transfers = .init()
+        #expect(sync.transferLine == nil)
+    }
+
     @Test func engineSummaryDrivesThePhase() {
         let sync = SyncCenter(serverURL: URL(string: "https://example.com"), monitorNetwork: false)
         sync.apply(summary: .syncing, pending: 2)

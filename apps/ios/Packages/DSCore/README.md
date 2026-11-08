@@ -184,7 +184,15 @@ DSCore
   куски на диск по мере расшифровки — `AttachmentError.invalidDownload`, файла не остаётся.
   `wipeLocal()` / `AttachmentManager.wipeLocal(directory:store:)` — все локальные файлы и записи
   вложений («Удалить данные с этого устройства»). `uploadPending(noteKey:)` / `upload` (куски по
-  1 MiB, докачка), `download(...)`, `localURL`, `delete`.
+  1 MiB, докачка), `download(...)`, `localURL`, `delete`. Запросы кусков идут параллельно —
+  не больше `AttachmentManager.parallelRequests` (3) на все вложения сразу: `uploadPending`
+  отправляет все ожидающие вложения вместе, загрузка берёт куски вперёд и пишет их по порядку;
+  принятый сервером кусок записывается сразу, так что после обрыва докачиваются только
+  недостающие. Повторный `upload`/`download` того же вложения присоединяется к идущему.
+  Прогресс для интерфейса («Отправляются фото: 3 из 8»): `progress()` и `progressUpdates()` —
+  `AttachmentTransferProgress` с `uploads`/`downloads` (`done`, `total`, `remaining`,
+  `bytesDone`, `bytesTotal`, `isActive`); счёт идёт пачками — пачка кончается, когда в этом
+  направлении ничего не передаётся.
 ### Общие пространства (D-62, crypto.md §11)
 
 - Ключ пространства между ключами аккаунтов и ключами блокнотов: владелец хранит его под
@@ -197,7 +205,9 @@ DSCore
   (у блокнота со своими участниками D-54 — `409`, остаётся личным), `Space.shared = true`;
   приглашения и выдача ключа — те же `invite`/`grantPendingKeys` с `SharingTarget(kind: .space)`
   и `ownerKey(spaceId:)`; `moveNotebookIntoSpace`, `moveNotebookOutOfSpace` (новый ключ под
-  мастер-ключом, затем `finishNotebookRotation`); смена ключа §11.4: `rotateSpaceKey` (ключ
+  мастер-ключом, затем `finishNotebookRotation`; если приложение остановилось раньше, при запуске
+  `pendingNotebookRotations()` найдёт такой блокнот — в `/shared-by-me` его уже нет — и он идёт в
+  `resumeNotebookRotation` → `finishNotebookRotation`, как общий); смена ключа §11.4: `rotateSpaceKey` (ключ
   пространства и ключи всех блокнотов одним запросом), `resumeSpaceRotation` при запуске (по
   `pendingSinceVersion`, у старого сервера — по заметкам), `finishSpaceRotation`.
 - Владелец и `editor`: `createNotebook(name:in:…)` — блокнот пространства (ключ под ключом

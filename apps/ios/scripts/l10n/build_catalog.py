@@ -21,12 +21,12 @@ RU = pathlib.Path(__file__).with_name("ru.json")
 
 # Swift literal with interpolation -> catalog key
 INTERPOLATIONS = {
+    r"Getting the key for \(changes) changes…": "Getting the key for %lld changes…",
     r"Uploading photos: \(transfers.sent) of \(transfers.toSend)": "Uploading photos: %lld of %lld",
     r"Downloading photos: \(transfers.received) of \(transfers.toReceive)": "Downloading photos: %lld of %lld",
     r"Offline · \(pending) waiting": "Offline · %lld waiting",
     r"Not sent: \(documents)": "Not sent: %lld",
     r"\(count) documents": "%lld documents",
-    r"\(app.sync.heldChanges) changes wait for a key": "%lld changes wait for a key",
     r"Unsent changes on this device: \(unsent). They will be sent after you sign in to this same account.": "Unsent changes on this device: %lld. They will be sent after you sign in to this same account.",
     r"No note called “\(title)”": "No note called “%@”",
     r"Unsent changes kept on this device: \(app.sync.pendingChanges)": "Unsent changes kept on this device: %lld",
@@ -79,6 +79,8 @@ IGNORE = {
     "Long", "Paragraph \\($0) of a long note.",
     # UI-test seed: people in a note (`-ui-testing-presence`).
     "Lena", "Mark",
+    # Asset name of the launch screen's colour.
+    "LaunchBackground",
     # Presence: the name sent when an account has no e-mail local part (not shown here).
     "Me",
     # Diagnostics report (plain English for support), licence names, an asset name.

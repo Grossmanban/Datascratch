@@ -59,9 +59,11 @@ struct RootView: View {
             Group {
                 switch app.phase {
                 case .launching:
-                    // A stored session is being looked up: the launch screen covers it, so the
-                    // welcome screen never flashes.
-                    Theme.Palette.canvas.ignoresSafeArea()
+                    // The launch screen's colour, until the stored session is read; the ink
+                    // launch screen (`LaunchOverlay`) plays over it.
+                    Color("LaunchBackground")
+                        .ignoresSafeArea()
+                        .accessibilityIdentifier("launching")
                 case .onboarding:
                     OnboardingFlow()
                         .transition(.opacity)

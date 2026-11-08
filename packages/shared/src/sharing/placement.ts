@@ -13,10 +13,10 @@ import {
 import { isAcceptableSharedSpace } from "./trust.js";
 
 /**
- * Align `account.shared` with `GET /shared-with-me`: resources new to this
- * account land in `spaceId` (the current space) at the end; placements of
- * resources no longer shared are removed. Returns the removed targets — the
- * app drops their tabs, stars and local data.
+ * Align `account.shared` («Поделились со мной», D-63) with `GET /shared-with-me`: resources
+ * new to this account go to the top (`order` = smallest − 1; `spaceId` = the current space,
+ * legacy only); entries of resources no longer shared are removed. Returns the removed targets
+ * — the app drops their tabs, stars and local data.
  */
 export function reconcileSharedRefs(
   account: Y.Doc,
@@ -29,7 +29,8 @@ export function reconcileSharedRefs(
   const live = new Set(items.map((i) => `${i.target.kind}:${i.target.id}`));
   const added: SharedRef[] = [];
   const removed: ShareTarget[] = [];
-  let order = refs.filter((r) => r.spaceId === spaceId).reduce((m, r) => Math.max(m, r.order), 0);
+  // One section outside spaces (D-63): the newest on top, whatever space it arrived in.
+  let order = refs.reduce((m, r) => Math.min(m, r.order), refs.length ? Infinity : 0);
   account.transact(() => {
     for (const item of items) {
       if (known.has(`${item.target.kind}:${item.target.id}`)) continue;
@@ -37,7 +38,7 @@ export function reconcileSharedRefs(
         kind: item.target.kind,
         id: item.target.id,
         spaceId,
-        order: ++order,
+        order: --order,
         addedAt: now().toISOString(),
       };
       putSharedRef(account, ref);

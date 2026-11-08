@@ -89,6 +89,12 @@ struct SidebarView: View {
         // them (owner, 2026-11-03: a note's name under «Личное», a tag under the footer).
         .scrollEdgeEffectStyle(.hard, for: [.top, .bottom])
         .contentMargins(.bottom, footerHeight, for: .scrollContent)
+        // Pull down: invitations, shared spaces and their keys now, not at the next launch
+        // (D-62, until every server says `account_changed` by itself).
+        .refreshable {
+            app.sync.checkKeys()
+            await app.accountSharing.refresh()
+        }
         .overlay(alignment: .bottom) {
             SidebarFooter()
                 .background(alignment: .bottom) {
@@ -211,12 +217,12 @@ struct SidebarView: View {
         }
     }
 
-    /// D-54: invitations and what other accounts share with this one, in every space.
+    /// D-54: invitations to this account, in every space. What is shared with it is in its own
+    /// section, outside the spaces (D-63, from the space switcher); shared spaces are in the
+    /// switcher too (D-62).
     @ViewBuilder private var sharedSection: some View {
         let sharing = app.accountSharing
-        // Shared spaces are in the space switcher (D-62).
-        let items = sharing.sharedWithMe.filter { $0.target.kind != .space }
-        if !items.isEmpty || !sharing.incoming.isEmpty {
+        if !sharing.incoming.isEmpty {
             Section {
                 if !isCollapsed("shared") {
                     if !sharing.incoming.isEmpty {
@@ -246,46 +252,13 @@ struct SidebarView: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("sidebar.invitations")
                     }
-                    ForEach(items) { item in
-                        sharedRow(item)
-                    }
                 }
             } header: {
-                SidebarSectionHeader(title: "Shared with me", identifier: "shared", isCollapsed: isCollapsed("shared")) {
+                SidebarSectionHeader(title: "Invitations", identifier: "shared", isCollapsed: isCollapsed("shared")) {
                     toggle("shared")
                 }
             }
             .task { await sharing.refresh() }
-        }
-    }
-
-    @ViewBuilder private func sharedRow(_ item: SharedWithMe) -> some View {
-        switch item.target.kind {
-        case .notebook:
-            if let notebook = library.notebook(item.target.id) {
-                NotebookRow(notebook: notebook)
-                    .accessibilityIdentifier("sidebar.sharedNotebook")
-            } else {
-                SharedPendingRow(item: item)
-            }
-        case .note:
-            if let note = library.note(item.target.id) {
-                Button {
-                    scene.open(note.id)
-                } label: {
-                    HStack(spacing: Theme.Space.s2) {
-                        NoteTitleLabel(note: note)
-                        if item.agentsMode { SharedAgentsBadge(kind: .note) }
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("sidebar.sharedNote")
-            } else {
-                SharedPendingRow(item: item)
-            }
-        case .space:
-            // A shared space is in the space switcher, not in «Shared with me» (D-62).
-            EmptyView()
         }
     }
 
@@ -441,7 +414,8 @@ struct SpaceSwitcher: View {
         let personal = library.spaces.filter { !$0.isShared }
         let shared = library.spaces.filter(\.isShared)
         Menu {
-            Section {
+            // The web's order (2026-11-08): spaces, shared ones, «Shared with me»; then the actions.
+            Section("Spaces") {
                 ForEach(personal) { space in spaceButton(space) }
             }
             // D-62: shared spaces, the account's own and those it joined.
@@ -450,22 +424,32 @@ struct SpaceSwitcher: View {
                     ForEach(shared) { space in spaceButton(space) }
                 }
             }
-            Section {
-                Button("New Space…", systemImage: "plus") { scene.sheet = .newSpace }
-                if app.accountSharing.isAvailable {
-                    Button("New Shared Space…", systemImage: "person.2.badge.plus") { scene.sheet = .newSharedSpace }
+            // D-63: what is shared with this account one by one — its own section, outside the
+            // spaces; the number of new ones in a capsule.
+            if !app.sharedItems.isEmpty {
+                Section {
+                    Button {
+                        withAnimation(Theme.Motion.smooth) { scene.show(.sharedWithMe) }
+                    } label: {
+                        Label("Shared with me", systemImage: "person.2")
+                    }
+                    .badge(app.newSharedCount)
+                    .accessibilityIdentifier("space.sharedWithMe")
                 }
             }
-            if let space = library.activeSpace {
-                Section {
-                    if space.isShared {
-                        Button("Space Members…", systemImage: "person.2") { scene.sheet = .spaceMembers(space.id) }
-                    } else if app.accountSharing.isAvailable {
-                        Button("Invite to Space…", systemImage: "person.badge.plus") { scene.sheet = .spaceMembers(space.id) }
-                    }
+            Section {
+                // One entry: personal or shared is chosen in the sheet (owner, 2026-11-08).
+                Button("Create Space", systemImage: "plus") { scene.sheet = .newSpace }
+                    .accessibilityIdentifier("space.create")
+                if let space = library.activeSpace {
                     // A space this account joined is the owner's to rename.
                     if !space.isJoined {
-                        Button("Edit Space…", systemImage: "pencil") { scene.sheet = .editSpace(space.id) }
+                        Button("Space Settings", systemImage: "gearshape") { scene.sheet = .editSpace(space.id) }
+                    }
+                    if space.isShared {
+                        Button("Members…", systemImage: "person.2") { scene.sheet = .spaceMembers(space.id) }
+                    } else if app.accountSharing.isAvailable {
+                        Button("Invite to Space…", systemImage: "person.badge.plus") { scene.sheet = .spaceMembers(space.id) }
                     }
                 }
             }
@@ -474,20 +458,34 @@ struct SpaceSwitcher: View {
                 if let space = library.activeSpace {
                     // A 26 pt tile in the space colour (its emoji or first letter), then its name.
                     SpaceTile(space: space)
+                    // A long name ends neatly on one line; the menu and the help show it whole.
                     Text(space.name)
                         .font(.system(.callout, design: .serif).weight(.semibold))
                         .foregroundStyle(Theme.Palette.textPrimary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: 220, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                     if space.isShared {
                         SpaceMembersAvatars(spaceId: space.id, size: 18)
                     }
+                }
+                // Something new shared with this account (D-63): a dot on the switcher.
+                if app.newSharedCount > 0 {
+                    Circle()
+                        .fill(Theme.Palette.accent)
+                        .frame(width: 7, height: 7)
+                        .accessibilityLabel("New shared with you")
                 }
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Theme.Palette.textTertiary)
             }
         }
+        .onChange(of: app.sharedItems.map(\.id), initial: true) { _, _ in app.syncSharedRefs() }
+        .help(library.activeSpace?.name ?? "")
         .accessibilityLabel("Switch Space")
+        .accessibilityValue(library.activeSpace?.name ?? "")
         .accessibilityIdentifier("sidebar.spaceSwitcher")
     }
 
@@ -625,21 +623,27 @@ struct SyncStatusBadge: View {
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("sync.status")
-                // Changes waiting for a key: a quiet line once it lasts, no spinner.
-                TimelineView(.periodic(from: .now, by: 30)) { context in
-                    if app.sync.showsHeldHint(now: context.date) {
-                        HStack(spacing: Theme.Space.s2) {
-                            Text("\(app.sync.heldChanges) changes wait for a key")
+                // Changes waiting for a key: what is awaited, and from whom once it lasts, with a
+                // way to look again now (D-62; not a bare count that hangs there).
+                TimelineView(.periodic(from: .now, by: 5)) { context in
+                    let wait = app.sync.keyWait(now: context.date)
+                    if wait != .none {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(keyWaitText(wait))
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.warning)
+                                .foregroundStyle(wait.isStuck ? Theme.Palette.warning : Theme.Palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
                                 .accessibilityIdentifier("sync.held")
-                            // Fetches the keys again and sends what they open (they may not come
-                            // by themselves: a note moved elsewhere, a key changed elsewhere).
-                            Button("Check") { app.sync.checkKeys() }
-                                .font(Theme.Typography.caption.weight(.semibold))
-                                .buttonStyle(.borderless)
-                                .tint(Theme.Palette.accent)
-                                .accessibilityIdentifier("sync.checkKeys")
+                            // Fetches the keys again (notebooks, shared spaces) and sends what they
+                            // open: they may not come by themselves.
+                            Button("Check Now") {
+                                app.sync.checkKeys()
+                                Task { await app.accountSharing.refresh() }
+                            }
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .buttonStyle(.borderless)
+                            .tint(Theme.Palette.accent)
+                            .accessibilityIdentifier("sync.checkKeys")
                         }
                     }
                 }
@@ -660,6 +664,20 @@ struct SyncStatusBadge: View {
             Image(systemName: icon)
                 .foregroundStyle(color)
                 .symbolEffect(.pulse, isActive: pulses)
+        }
+    }
+
+    /// Waiting for a key: on its way, or — after a while — whose device has to be online. A key
+    /// for something shared with this account comes from its owner's device; one for this
+    /// account's own notebooks, from its other device.
+    private func keyWaitText(_ wait: SyncCenter.KeyWait) -> LocalizedStringKey {
+        switch wait {
+        case .none: ""
+        case .waiting(let changes): "Getting the key for \(changes) changes…"
+        case .stuck:
+            app.accountSharing.sharedWithMe.isEmpty
+                ? "The key doesn’t come — open the app on your other device."
+                : "Can’t get the key from the owner — they need to open the app."
         }
     }
 

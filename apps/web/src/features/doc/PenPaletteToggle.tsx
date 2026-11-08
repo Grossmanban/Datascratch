@@ -71,7 +71,8 @@ export function PenPaletteToggle({ pen }: { pen: Pen }) {
         className={
           collapsed
             ? "pointer-events-auto relative flex size-11 -translate-y-full items-center justify-center rounded-full border border-line bg-[var(--ds-bg-elevated,#ffffffcc)] text-ink shadow-[0_4px_16px_rgb(40_30_10/0.14)] backdrop-blur-xl transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2"
-            : "pointer-events-auto flex size-8 -translate-y-full items-center justify-center rounded-full border border-line bg-[var(--ds-bg-elevated,#ffffffcc)] text-ink-2 shadow-[0_2px_8px_rgb(40_30_10/0.10)] backdrop-blur-xl transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+            : // 32 px to look at, a 44 px touch target (the ::after reaches 7 px past the 1 px border).
+              "pointer-events-auto relative flex size-8 -translate-y-full after:absolute after:-inset-[7px] after:content-[''] items-center justify-center rounded-full border border-line bg-[var(--ds-bg-elevated,#ffffffcc)] text-ink-2 shadow-[0_2px_8px_rgb(40_30_10/0.10)] backdrop-blur-xl transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
         }
       >
         {collapsed ? (

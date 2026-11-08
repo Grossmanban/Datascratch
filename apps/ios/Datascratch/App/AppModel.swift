@@ -1,3 +1,6 @@
+#if canImport(DSCore)
+import DSCore
+#endif
 import Foundation
 import Observation
 import UIKit
@@ -6,7 +9,7 @@ import UIKit
 @Observable
 final class AppModel {
     enum Phase: Equatable {
-        /// Cold start: a stored session is still being looked up (the launch screen shows).
+        /// The stored session is still being read: the launch screen's plain background.
         case launching
         case onboarding
         case ready
@@ -42,6 +45,103 @@ final class AppModel {
     private(set) var access: any AccessService
     /// D-54: sharing with other accounts by email.
     private(set) var accountSharing: any AccountSharingService
+
+    // MARK: Shared with me (D-63)
+
+    /// Notebooks and documents shared with this account one by one (not through a space): their
+    /// own section, outside every space. In the account document's order (`SharedRef.order`,
+    /// newest first), then by when they were shared.
+    var sharedItems: [SharedWithMe] {
+        _ = sharedRefsRevision
+        return accountSharing.sharedWithMe.filter { $0.target.kind != .space }
+            .sorted { a, b in
+                let (oa, ob) = (sharedOrder(a), sharedOrder(b))
+                if oa != ob { return oa < ob }
+                return (a.addedAt ?? .distantPast) > (b.addedAt ?? .distantPast)
+            }
+    }
+
+    /// Bumped when this device writes «opened» or the records change: the lists read again.
+    private(set) var sharedRefsRevision = 0
+
+    /// Not opened yet on any of this person's devices (the account document's `openedAt`, the
+    /// same on the web).
+    func isNewShared(_ item: SharedWithMe) -> Bool {
+        _ = sharedRefsRevision
+        #if canImport(DSCore)
+        guard let kind = Self.refKind(item), let ref = core?.account.sharedRef(kind, id: item.target.id) else { return false }
+        return ref.isNew
+        #else
+        return false
+        #endif
+    }
+
+    var newSharedCount: Int { sharedItems.filter(isNewShared).count }
+
+    /// Opened: «new» no more, on every device (written once; a later open keeps the first date).
+    func markSharedSeen(_ item: SharedWithMe) {
+        #if canImport(DSCore)
+        guard let kind = Self.refKind(item),
+              (try? core?.account.markSharedOpened(kind, id: item.target.id)) == true else { return }
+        sharedRefsRevision &+= 1
+        #endif
+    }
+
+    /// The account document's records follow what is shared: one for each item that has none
+    /// (new until opened), none for what is gone. What this device had marked seen before the
+    /// records existed (`seenShared`) is carried over once.
+    func syncSharedRefs() {
+        #if canImport(DSCore)
+        guard let account = core?.account else { return }
+        let items = accountSharing.sharedWithMe.filter { $0.target.kind != .space }
+        var changed = false
+        var minOrder = account.sharedRefs().map(\.order).min() ?? 0
+        for item in items.sorted(by: { ($0.addedAt ?? .distantPast) < ($1.addedAt ?? .distantPast) }) {
+            guard let kind = Self.refKind(item), account.sharedRef(kind, id: item.target.id) == nil else { continue }
+            minOrder -= 1
+            let added = item.addedAt.map(DSCore.DSDate.iso) ?? DSCore.DSDate.iso(Date())
+            try? account.putShared(SharedRef(kind: kind, targetId: item.target.id,
+                                             spaceId: (kind == .note ? library.data.spaceId(ofNote: item.target.id)
+                                                       : library.data.spaceId(ofNotebook: item.target.id)) ?? "",
+                                             order: minOrder, addedAt: added))
+            changed = true
+        }
+        let present = Set(items.compactMap { item in Self.refKind(item).map { SharedRef.key($0, item.target.id) } })
+        // Not before the list has come (an empty list at launch is not «nothing is shared»).
+        for ref in account.sharedRefs() where !present.contains(ref.id) && !items.isEmpty {
+            try? account.removeShared(ref.kind, id: ref.targetId)
+            changed = true
+        }
+        if let seen = settings.seenShared {
+            for item in items where seen.contains(item.id) {
+                if let kind = Self.refKind(item) { _ = try? account.markSharedOpened(kind, id: item.target.id) }
+            }
+            settings.seenShared = nil
+            changed = true
+        }
+        if changed { sharedRefsRevision &+= 1 }
+        #endif
+    }
+
+    private func sharedOrder(_ item: SharedWithMe) -> Double {
+        #if canImport(DSCore)
+        guard let kind = Self.refKind(item) else { return .infinity }
+        return core?.account.sharedRef(kind, id: item.target.id)?.order ?? .infinity
+        #else
+        return 0
+        #endif
+    }
+
+    #if canImport(DSCore)
+    private static func refKind(_ item: SharedWithMe) -> SharedRefKind? {
+        switch item.target.kind {
+        case .notebook: .notebook
+        case .note: .note
+        case .space: nil
+        }
+    }
+    #endif
+
     /// D-49: the server this device signs in to — only one the person typed, got in an invite
     /// link, or signed in to earlier on this device. No address is built into the app.
     private(set) var serverURL: URL?
@@ -283,7 +383,10 @@ final class AppModel {
         library.updateSpace(team.id) { $0.sharing = .joined }
         let teamNotes = library.createNotebook(in: team.id, name: "Team notes", icon: "person.2", mode: .private)
         _ = library.createNote(in: teamNotes.id, title: "Kickoff", body: NoteBody(blocks: [.paragraph("Agenda")]))
-        local.seedForTesting(invitationId: Self.invitationForTesting, invitedTo: ShareTarget(kind: .notebook, id: UUIDv7.make()),
+        // `-ui-testing-space-invite`: the invitation is to the space «Team» (accepting opens it).
+        let invitedTo = arguments.contains("-ui-testing-space-invite")
+            ? ShareTarget(kind: .space, id: team.id) : ShareTarget(kind: .notebook, id: UUIDv7.make())
+        local.seedForTesting(invitationId: Self.invitationForTesting, invitedTo: invitedTo,
                              viewOnly: ShareTarget(kind: .notebook, id: shared.id),
                              owned: ShareTarget(kind: .notebook, id: own.id))
         local.seedJoinedSpaceForTesting(ShareTarget(kind: .space, id: team.id), role: .editor)
@@ -338,9 +441,17 @@ final class AppModel {
     func releaseLaunchHoldForTesting() { launchHeldForTesting = false }
 
     var phase: Phase {
-        if pendingRecoveryKey != nil || isSigningUp { return .onboarding }
-        if accounts.isRestoringSession, !signedInForTesting { return .launching }
-        return accounts.account != nil || signedInForTesting ? .ready : .onboarding
+        Self.phase(signingUp: pendingRecoveryKey != nil || isSigningUp,
+                   signedIn: accounts.account != nil || signedInForTesting,
+                   restoring: accounts.isRestoring)
+    }
+
+    /// The welcome screen only once it is known there is no session (owner, 2026-11-08: it
+    /// flashed for a split second at every launch before the library).
+    nonisolated static func phase(signingUp: Bool, signedIn: Bool, restoring: Bool) -> Phase {
+        if signingUp { return .onboarding }
+        if signedIn { return .ready }
+        return restoring ? .launching : .onboarding
     }
 
     /// Called once the user has an account and has confirmed — or chose to skip

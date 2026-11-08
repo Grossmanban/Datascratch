@@ -34,9 +34,13 @@ final class AppSettings {
     var hapticsEnabled: Bool { didSet { defaults.set(hapticsEnabled, forKey: "haptics") } }
     /// The pen palette folded into a small button at the bottom edge.
     var penPaletteCollapsed: Bool { didSet { defaults.set(penPaletteCollapsed, forKey: "penPaletteCollapsed") } }
+    /// D-63, before «opened» lived in the account document (`SharedRef.openedAt`): what this
+    /// device had opened. Read once to carry it over (`AppModel.syncSharedRefs`), then cleared.
+    var seenShared: Set<String>? { didSet { defaults.set(seenShared.map { Array($0).sorted() }, forKey: "seenShared") } }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        seenShared = (defaults.array(forKey: "seenShared") as? [String]).map(Set.init)
         fingerDrawing = defaults.object(forKey: "fingerDrawing") as? Bool
             ?? (UIDevice.current.userInterfaceIdiom == .phone)
         appearance = Appearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system

@@ -85,8 +85,8 @@ struct SharingTests {
     }
 
     /// prod 2026-10-28: a member saw a shared notebook without its notes, and a note they made in
-    /// it left their list once closed — the lists kept only the active space's notebooks.
-    @Test func notesOfASharedNotebookAreListedInEverySpace() throws {
+    /// it left their list once closed. D-63: its notes are its own list's, in no space.
+    @Test func notesOfASharedNotebookAreListedInItsOwnListOnly() throws {
         let store = LibraryStore(persistence: .inMemory)
         store.seedIfEmpty()
         let spaceId = try #require(store.activeSpace?.id)
@@ -95,14 +95,14 @@ struct SharingTests {
         let shared = store.createNotebook(in: Notebook.sharedSpaceId, name: "Team plans", mode: .private)
         let theirs = store.createNote(in: shared.id, title: "Roadmap")
         #expect(store.documents(inNotebook: shared.id).map(\.id) == [theirs.id])
-        #expect(store.documents.contains { $0.id == theirs.id })
-        #expect(store.search("Roadmap").contains { $0.id == theirs.id })
+        #expect(!store.documents.contains { $0.id == theirs.id }, "All Documents of a space shows it")
+        #expect(!store.search("Roadmap").contains { $0.id == theirs.id }, "a space's search finds it")
 
         // A note the member makes stays listed (closing it reads the list again).
         let mine = store.createNote(in: shared.id, title: "My idea")
         #expect(Set(store.documents(inNotebook: shared.id).map(\.id)) == [theirs.id, mine.id])
 
-        // Another space shows them too («Shared with me» is in every space).
+        // The same from any space.
         let other = store.createSpace(name: "Work", icon: "briefcase", color: .blue)
         store.activateSpace(other.id)
         #expect(store.documents(inNotebook: shared.id).count == 2)
@@ -174,3 +174,55 @@ struct SharingTests {
     }
     #endif
 }
+
+/// D-63: the date in «Shared with me» as on the web — «today», «yesterday», else «3 Nov».
+@MainActor
+struct SharedWithMeDateTests {
+    @Test func datesAreRelative() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let now = Date(timeIntervalSince1970: 1_762_600_000) // 8 Nov 2025, 11:06 UTC
+        #expect(SharedWithMeRow.relative(now.addingTimeInterval(-3_600), now: now, calendar: calendar) == "today")
+        #expect(SharedWithMeRow.relative(now.addingTimeInterval(-86_400), now: now, calendar: calendar) == "yesterday")
+        let older = SharedWithMeRow.relative(now.addingTimeInterval(-5 * 86_400), now: now, calendar: calendar)
+        #expect(older != "today" && older != "yesterday" && !older.contains("2025"), "a short date: \(older)")
+    }
+}
+
+#if canImport(DSCore)
+/// D-63: «new» in «Shared with me» is the account document's `SharedRef.openedAt` — the same on
+/// every device and on the web; what this device had seen before is carried over once.
+@MainActor
+struct SharedRefTests {
+    @Test func newUntilOpenedAndCarriedOver() throws {
+        let app = AppModel(options: .init(uiTesting: true, signedIn: true))
+        let local = try #require(app.accountSharing as? LocalAccountSharingService)
+        // `?.` inside `#require` does not compile (Testing's macro): two steps.
+        let notebooks = app.library.notebooks(in: app.library.activeSpace?.id)
+        let notebook = try #require(notebooks.first)
+        let other = app.library.createNote(in: notebook.id, title: "Other")
+        local.seedForTesting(invitedTo: nil, viewOnly: ShareTarget(kind: .notebook, id: notebook.id), owned: nil)
+        let core = try #require(app.core)
+
+        // Seen on this device before the records: carried over, not new.
+        app.settings.seenShared = [notebook.id]
+        app.syncSharedRefs()
+        let item = try #require(app.sharedItems.first)
+        #expect(core.account.sharedRef(.notebook, id: notebook.id) != nil, "no record for what is shared")
+        #expect(!app.isNewShared(item))
+        #expect(app.settings.seenShared == nil, "the local list is gone once carried over")
+
+        // A new one is new until opened; opening writes the date once.
+        local.leaveForTesting()
+        local.seedForTesting(invitedTo: nil, viewOnly: ShareTarget(kind: .note, id: other.id), owned: nil)
+        app.syncSharedRefs()
+        let fresh = try #require(app.sharedItems.first { $0.target.id == other.id })
+        #expect(app.isNewShared(fresh))
+        #expect(app.newSharedCount == 1)
+        app.markSharedSeen(fresh)
+        #expect(!app.isNewShared(fresh))
+        #expect(core.account.sharedOpenedAt(.note, id: other.id) != nil)
+        #expect(core.account.sharedRef(.notebook, id: notebook.id) == nil, "a record of what is gone stays")
+    }
+}
+#endif

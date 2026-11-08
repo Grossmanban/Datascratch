@@ -51,16 +51,6 @@
         }
       }
     },
-    "%lld changes wait for a key": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Изменений ждут ключ: %lld"
-          }
-        }
-      }
-    },
     "%lld d": {
       "localizations": {
         "ru": {
@@ -127,16 +117,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Изменение оказалось слишком большим для сервера."
-          }
-        }
-      }
-    },
-    "A space you share with people: everyone you invite sees its notebooks and works in them with you.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Пространство для работы вместе: все, кого вы пригласите, видят его блокноты и работают в них с вами."
           }
         }
       }
@@ -581,6 +561,16 @@
         }
       }
     },
+    "Can’t get the key from the owner — they need to open the app.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удаётся получить ключ от владельца — он должен открыть приложение."
+          }
+        }
+      }
+    },
     "Can’t reach this server. Check the address and the connection.": {
       "localizations": {
         "ru": {
@@ -921,6 +911,16 @@
         }
       }
     },
+    "Connecting to the space…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключаемся к пространству…"
+          }
+        }
+      }
+    },
     "Connection": {
       "localizations": {
         "ru": {
@@ -1071,6 +1071,16 @@
         }
       }
     },
+    "Create Space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создать пространство"
+          }
+        }
+      }
+    },
     "Create a notebook for work": {
       "localizations": {
         "ru": {
@@ -1087,6 +1097,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Новый аккаунт"
+          }
+        }
+      }
+    },
+    "Create and Invite": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создать и пригласить"
           }
         }
       }
@@ -1521,26 +1541,6 @@
         }
       }
     },
-    "Edit Space": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Пространство"
-          }
-        }
-      }
-    },
-    "Edit Space…": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Изменить пространство…"
-          }
-        }
-      }
-    },
     "Editing now": {
       "localizations": {
         "ru": {
@@ -1851,12 +1851,32 @@
         }
       }
     },
+    "For Working Together": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для совместной работы"
+          }
+        }
+      }
+    },
     "For example, Claude on my Mac": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Например, Claude на моём Mac"
+          }
+        }
+      }
+    },
+    "For example, Work": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Например, Работа"
           }
         }
       }
@@ -1917,6 +1937,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Получит доступ, когда это устройство будет в сети"
+          }
+        }
+      }
+    },
+    "Getting the key for %lld changes…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Получаем ключ для изменений: %lld…"
           }
         }
       }
@@ -2301,6 +2331,36 @@
         }
       }
     },
+    "Invite People": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пригласить людей"
+          }
+        }
+      }
+    },
+    "Invite people by email — they will see all of the space’s notebooks. You can do this later too.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пригласите людей по почте — они увидят все блокноты пространства. Это можно сделать и позже."
+          }
+        }
+      }
+    },
+    "Invite people — they will see all notebooks.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пригласите людей — они увидят все блокноты."
+          }
+        }
+      }
+    },
     "Invite to Space": {
       "localizations": {
         "ru": {
@@ -2601,6 +2661,16 @@
         }
       }
     },
+    "Members…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Участники…"
+          }
+        }
+      }
+    },
     "Mono": {
       "localizations": {
         "ru": {
@@ -2721,6 +2791,16 @@
         }
       }
     },
+    "New": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новое"
+          }
+        }
+      }
+    },
     "New Folder": {
       "localizations": {
         "ru": {
@@ -2771,42 +2851,12 @@
         }
       }
     },
-    "New Shared Space": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Новое общее пространство"
-          }
-        }
-      }
-    },
-    "New Shared Space…": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Новое общее пространство…"
-          }
-        }
-      }
-    },
     "New Space": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Новое пространство"
-          }
-        }
-      }
-    },
-    "New Space…": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Новое пространство…"
           }
         }
       }
@@ -2847,6 +2897,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Новый ключ восстановления"
+          }
+        }
+      }
+    },
+    "New shared with you": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С вами поделились новым"
           }
         }
       }
@@ -3181,6 +3241,16 @@
         }
       }
     },
+    "Nothing here yet": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пока ничего нет"
+          }
+        }
+      }
+    },
     "Nothing open": {
       "localizations": {
         "ru": {
@@ -3287,6 +3357,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "В сети"
+          }
+        }
+      }
+    },
+    "Only for you. You can share it later.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только для вас. Можно сделать общим позже."
           }
         }
       }
@@ -3717,6 +3797,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Нажмите ⌘K, чтобы открыть палитру команд"
+          }
+        }
+      }
+    },
+    "Preview": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Так будет"
           }
         }
       }
@@ -4161,6 +4251,16 @@
         }
       }
     },
+    "Search shared": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск в общих"
+          }
+        }
+      }
+    },
     "Security": {
       "localizations": {
         "ru": {
@@ -4376,7 +4476,7 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Общие со мной"
+            "value": "Поделились со мной"
           }
         }
       }
@@ -4691,6 +4791,16 @@
         }
       }
     },
+    "Space Settings": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки пространства"
+          }
+        }
+      }
+    },
     "Space name": {
       "localizations": {
         "ru": {
@@ -4701,12 +4811,12 @@
         }
       }
     },
-    "Spaces keep contexts apart — for example Personal, Work and Study.": {
+    "Spaces": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Пространства разделяют контексты — например, Личное, Работа и Учёба."
+            "value": "Пространства"
           }
         }
       }
@@ -5037,6 +5147,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ключ сменится — ничего нового человек не прочтёт. То, что он уже видел, отнять невозможно. Гостевые ссылки будут созданы заново — вы получите новые, чтобы разослать."
+          }
+        }
+      }
+    },
+    "The key doesn’t come — open the app on your other device.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удаётся получить ключ — откройте приложение на другом своём устройстве."
           }
         }
       }
@@ -5771,6 +5891,16 @@
         }
       }
     },
+    "When someone shares a document or a notebook with you, it appears here.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Когда кто-то поделится с вами документом или блокнотом, он появится здесь"
+          }
+        }
+      }
+    },
     "When someone shares a notebook or a document with you, it appears here.": {
       "localizations": {
         "ru": {
@@ -6001,6 +6131,16 @@
         }
       }
     },
+    "can edit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "может редактировать"
+          }
+        }
+      }
+    },
     "in “%@”": {
       "localizations": {
         "ru": {
@@ -6051,6 +6191,16 @@
         }
       }
     },
+    "today": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сегодня"
+          }
+        }
+      }
+    },
     "until %@": {
       "localizations": {
         "ru": {
@@ -6067,6 +6217,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "до отзыва"
+          }
+        }
+      }
+    },
+    "view only": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "только чтение"
+          }
+        }
+      }
+    },
+    "yesterday": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "вчера"
           }
         }
       }

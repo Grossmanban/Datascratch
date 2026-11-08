@@ -845,26 +845,60 @@ export function apiVectors() {
           },
         ],
       },
-      adminVoiceAccount: {
+      adminVoiceResponse: {
         valid: [
           {
-            userId: vid(4),
-            email: "a@b.co",
-            enabled: false,
-            monthlyMinutes: 0,
-            usedMinutes: 0,
+            month: "2026-11",
             resetsAt: "2026-12-01T00:00:00.000Z",
+            accounts: [
+              {
+                userId: vid(4),
+                email: "a@b.co",
+                name: "Анна",
+                enabled: true,
+                monthlyMinutes: 120,
+                usedMinutes: 30.5,
+                costUsd: 0.21,
+              },
+              {
+                userId: vid(5),
+                email: "b@b.co",
+                name: null,
+                enabled: false,
+                monthlyMinutes: 0,
+                usedMinutes: 0,
+                costUsd: 0,
+              },
+            ],
+            totals: { usedMinutes: 30.5, costUsd: 0.21 },
           },
         ],
         invalid: [
           {
-            reason: "missing userId",
+            reason: "month not YYYY-MM",
             body: {
-              email: "a@b.co",
-              enabled: false,
-              monthlyMinutes: 0,
-              usedMinutes: 0,
+              month: "11-2026",
               resetsAt: "2026-12-01T00:00:00.000Z",
+              accounts: [],
+              totals: { usedMinutes: 0, costUsd: 0 },
+            },
+          },
+          {
+            reason: "account without costUsd",
+            body: {
+              month: "2026-11",
+              resetsAt: "2026-12-01T00:00:00.000Z",
+              accounts: [
+                {
+                  userId: vid(4),
+                  email: "a@b.co",
+                  name: null,
+                  enabled: true,
+                  monthlyMinutes: 1,
+                  usedMinutes: 0,
+                },
+              ],
+              totals: { usedMinutes: 0, costUsd: 0 },
             },
           },
         ],

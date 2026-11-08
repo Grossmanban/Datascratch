@@ -138,12 +138,35 @@ export const voiceMeSchema = z.object({
 });
 export type VoiceMe = z.infer<typeof voiceMeSchema>;
 
-/** An item of `GET /admin/voice` (server admin only). */
-export const adminVoiceAccountSchema = voiceMeSchema.extend({
+/** An account of `GET /admin/voice` (server admin only; the screen is web only). */
+export const adminVoiceAccountSchema = z.object({
   userId: uuidSchema,
   email: z.string(),
+  /** Display name, if the account has one. */
+  name: z.string().nullable(),
+  enabled: z.boolean(),
+  monthlyMinutes: z.number().int().nonnegative(),
+  usedMinutes: z.number().nonnegative(),
+  /** What this account's voice cost this month (recognition + text), US dollars. */
+  costUsd: z.number().nonnegative(),
 });
 export type AdminVoiceAccount = z.infer<typeof adminVoiceAccountSchema>;
+
+/** `GET /admin/voice`: the accounts and this month's totals (UTC month). */
+export const adminVoiceResponseSchema = z.object({
+  /** "YYYY-MM", UTC. */
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  resetsAt: isoDateTimeSchema,
+  accounts: z.array(adminVoiceAccountSchema),
+  totals: z.object({
+    usedMinutes: z.number().nonnegative(),
+    costUsd: z.number().nonnegative(),
+  }),
+});
+export type AdminVoiceResponse = z.infer<typeof adminVoiceResponseSchema>;
+
+/** Default monthly minutes (D-65): the owner and other accounts; the admin changes them. */
+export const DEFAULT_VOICE_MONTHLY_MINUTES = Object.freeze({ owner: 600, others: 120 });
 
 /** `PUT /admin/voice/:userId`. */
 export const putAdminVoiceRequestSchema = z.object({

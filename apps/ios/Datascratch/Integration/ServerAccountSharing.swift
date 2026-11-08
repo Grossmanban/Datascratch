@@ -25,6 +25,13 @@ final class ServerAccountSharingService: AccountSharingService {
     /// Key changes waiting for the owner's answer about a member (`SharingError.notConfirmed`).
     @ObservationIgnored private var blockedRotations: Set<ShareTarget> = []
     @ObservationIgnored private var isRefreshing = false
+    /// Asked to refresh while one ran: once more right after, never dropped (an invitation
+    /// that came in mid-refresh waited for the next launch).
+    @ObservationIgnored private var refreshAgain = false
+    /// `account_changed` from the server, a burst gathered into one refresh.
+    @ObservationIgnored private var changes: AccountChangeRouter?
+    /// A shared space being joined after its invitation was accepted («Connecting to the space…»).
+    private(set) var joiningSpace: String?
     /// Emails by account id, from owners and members seen (history authors).
     @ObservationIgnored private var names: [String: String] = [:]
     @ObservationIgnored var spaceOfNotebook: (String) -> String? = { _ in nil }
@@ -36,6 +43,17 @@ final class ServerAccountSharingService: AccountSharingService {
         self.recreateLinks = recreateLinks
         // Owner duties wait for the account document (its `trust` record): run them once it is in.
         connection.onAccountSynced = { [weak self] in Task { await self?.refresh() } }
+        changes = AccountChangeRouter { [weak self] refresh in
+            switch refresh {
+            case .invitations: await self?.refreshInvitations()
+            case .everything: await self?.refresh()
+            }
+        }
+        connection.onAccountChanged = { [weak self] what in self?.accountChanged(what) }
+    }
+
+    func accountChanged(_ what: [String]) {
+        changes?.changed(what)
     }
 
     private var accounts: DSCore.AccountService { connection.accounts }
@@ -44,12 +62,28 @@ final class ServerAccountSharingService: AccountSharingService {
     // MARK: Refresh
 
     func refresh() async {
-        guard !isRefreshing, await api.currentSession != nil else { return }
+        if isRefreshing {
+            refreshAgain = true
+            return
+        }
         isRefreshing = true
         defer { isRefreshing = false }
+        guard await api.currentSession != nil else { return }
+        repeat {
+            refreshAgain = false
+            await refreshOnce()
+        } while refreshAgain
+    }
+
+    /// Only the invitations to this account (the server said they changed).
+    func refreshInvitations() async {
         if let invitations = try? await api.incomingInvitations() {
             incoming = invitations.map(Self.incoming)
         }
+    }
+
+    private func refreshOnce() async {
+        await refreshInvitations()
         if let items = try? await accounts.refreshSharedWithMe() {
             apply(items)
             // A shared notebook's new key (after the owner changed it): its documents that
@@ -138,7 +172,7 @@ final class ServerAccountSharingService: AccountSharingService {
         sharedWithMe = items.map { item in
             SharedWithMe(target: Self.target(item.target), ownerEmail: item.owner.email,
                          role: item.role == .viewer ? .viewer : .editor, isReadable: item.wrappedKey != nil,
-                         agentsMode: item.agentsMode == true)
+                         agentsMode: item.agentsMode == true, addedAt: DSDate.parseISO(item.addedAt))
         }
         publishShared()
         placeSpaces(items)
@@ -383,9 +417,29 @@ final class ServerAccountSharingService: AccountSharingService {
             throw ServerAccountService.map(error)
         }
         incoming.removeAll { $0.id == invite.id }
-        if let items = try? await accounts.refreshSharedWithMe() { apply(items) }
-        // A shared space: the keys of its notebooks come with the space key.
-        if invite.target.kind == .space { await refreshSpaces() }
+        if invite.target.kind == .space {
+            joiningSpace = invite.target.id
+            defer { joiningSpace = nil }
+            if let items = try? await accounts.refreshSharedWithMe() { apply(items) }
+            await join(space: invite.target.id)
+        } else if let items = try? await accounts.refreshSharedWithMe() {
+            apply(items)
+        }
+    }
+
+    /// Right after accepting (owner, 2026-11-08: the space's notebooks came «some time later»):
+    /// the space key and its notebooks' keys now, the space document first in line, and back once
+    /// its notebooks are here (or after a few seconds — an empty space has none to wait for).
+    private func join(space spaceId: String) async {
+        await refreshSpaces()
+        connection.focus(spaceId)
+        let core = connection.core
+        for _ in 0..<24 where core.notebookDocuments(inSpace: spaceId).isEmpty {
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        // Notebooks that arrived with the space document: their keys too.
+        await refreshSpaces()
+        core.reload()
     }
 
     func decline(_ invite: IncomingInvite) async throws {

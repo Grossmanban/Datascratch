@@ -169,8 +169,8 @@ export function syncVectors() {
       invalid,
       accountChanged: [
         {
-          what: ["invitations", "spaces", "members", "keys", "notebooks"],
-          expected: ["invitations", "spaces", "members", "keys", "notebooks"],
+          what: ["invitations", "spaces", "members", "keys", "notebooks", "voice"],
+          expected: ["invitations", "spaces", "members", "keys", "notebooks", "voice"],
         },
         { what: ["keys", "future_thing", "keys", "spaces"], expected: ["keys", "spaces"] },
         { what: ["future_thing"], expected: [] },

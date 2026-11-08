@@ -69,6 +69,7 @@ test("every section in light and dark, readable, reached by the list and the key
   await expect(page.getByRole("radio", { name: "Как в системе" })).toHaveAttribute("aria-checked", "true");
   // ⌘, opens the settings from anywhere.
   await page.goto("/all");
+  await expect(page.getByTestId(/^doc-(card|row)$/).first()).toBeVisible();
   await page.keyboard.press("ControlOrMeta+Comma");
   await expect(page).toHaveURL(/\/settings$/);
 });

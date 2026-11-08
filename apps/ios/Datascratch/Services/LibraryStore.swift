@@ -180,8 +180,8 @@ final class LibraryStore {
         return result
     }
 
-    /// Visible (not trashed, ordinary) notes of the active space, and of what is shared with this
-    /// account (shown in every space, D-54).
+    /// Visible (not trashed, ordinary) notes of the active space. What other accounts share one by
+    /// one is not in any space (D-63: its own section, «Shared with me»).
     var documents: [NoteMeta] {
         let ids = activeNotebookIds
         return data.notes.filter { ids.contains($0.notebookId) && !$0.isTrashed && $0.kind != .inbox }
@@ -199,32 +199,36 @@ final class LibraryStore {
         data.notes.reduce(0) { $0 + ($1.notebookId == id && !$1.isTrashed && $1.kind != .inbox ? 1 : 0) }
     }
 
+    /// Visible notes of any notebook, a shared one too (opened from «Shared with me»).
+    private var visibleNotes: [NoteMeta] {
+        data.notes.filter { !$0.isTrashed && $0.kind != .inbox }.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
     func documents(inNotebook id: String) -> [NoteMeta] {
-        documents.filter { $0.notebookId == id && $0.folderId == nil }
+        visibleNotes.filter { $0.notebookId == id && $0.folderId == nil }
     }
 
     /// The folder's own documents, like a notebook's root: notes of its subfolders are reached
     /// through the folder strip. Listing them here too showed one note in two folders (owner's
     /// feedback 2026-11-01: «deleting it removes it from both folders, I made only one»).
     func documents(inFolder id: String) -> [NoteMeta] {
-        documents.filter { $0.folderId == id }
+        visibleNotes.filter { $0.folderId == id }
     }
 
     /// Documents of the folder and all its subfolders (the count on a folder card).
     func documents(inFolderTree id: String) -> [NoteMeta] {
         let subtree = folderSubtree(id)
-        return documents.filter { $0.folderId.map { subtree.contains($0) } ?? false }
+        return visibleNotes.filter { $0.folderId.map { subtree.contains($0) } ?? false }
     }
 
     func documents(tagged tag: String) -> [NoteMeta] {
         documents.filter { note in note.tags.contains { $0 == tag || $0.hasPrefix(tag + "/") } }
     }
 
-    /// Notebooks whose notes the active space shows (D-48: this space's only), plus those shared
-    /// with this account: «Shared with me» is in every space (D-54). Without them the notes of a
-    /// shared notebook were listed nowhere, and a note made in it left the list once closed
-    /// (prod 2026-10-28).
-    var activeNotebookIds: Set<String> { ownNotebookIds.union(sharedWithMeNotebookIds) }
+    /// Notebooks whose notes the active space shows: this space's only (D-48). Those shared with
+    /// this account one by one are in «Shared with me», outside every space (D-63); their lists
+    /// read their notes directly (`documents(inNotebook:)`), so a note made in one stays listed.
+    var activeNotebookIds: Set<String> { ownNotebookIds }
 
     /// The active space's own notebooks.
     var ownNotebookIds: Set<String> { Set(notebooks(in: activeSpace?.id).map(\.id)) }

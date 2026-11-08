@@ -29,6 +29,7 @@ import {
   noteKeysFromMeta,
   ownerNotebookKeys,
   putNoteMeta,
+  putSharedRef,
   reconcileSharedRefs,
   repairSharedNoteMeta,
   parseShareLink,
@@ -781,7 +782,7 @@ describe("http client", () => {
 });
 
 describe("shared placement", () => {
-  it("adds new shared resources to the current space and removes gone ones", () => {
+  it("puts new shared resources on top and removes gone ones (D-63)", () => {
     const account = new Y.Doc();
     const SPACE = "0192f3c4-0000-7000-8000-00000000d001";
     const item = (id: string): SharedItem => ({
@@ -795,9 +796,39 @@ describe("shared placement", () => {
       addedAt: T,
     });
     expect(reconcileSharedRefs(account, [item(NB), item(NOTE1)], SPACE).added).toHaveLength(2);
-    expect(getSharedRefs(account, SPACE).map((r) => r.id)).toEqual([NB, NOTE1]);
-    const r = reconcileSharedRefs(account, [item(NOTE1)], SPACE);
+    // D-63: every new one goes on top (order = smallest − 1), whatever space it arrived in.
+    expect(getSharedRefs(account).map((r) => [r.id, r.order])).toEqual([
+      [NOTE1, -2],
+      [NB, -1],
+    ]);
+    const OTHER_SPACE = "0192f3c4-0000-7000-8000-00000000d002";
+    reconcileSharedRefs(account, [item(NB), item(NOTE1), item(NOTE2)], OTHER_SPACE);
+    expect(getSharedRefs(account).map((r) => r.id)).toEqual([NOTE2, NOTE1, NB]);
+    const r = reconcileSharedRefs(account, [item(NOTE1), item(NOTE2)], SPACE);
     expect(r).toEqual({ added: [], removed: [{ kind: "notebook", id: NB }] });
+    // Equal order (two devices added at once): the newer addedAt comes first.
+    putSharedRef(account, {
+      kind: "note",
+      id: NB,
+      spaceId: SPACE,
+      order: -10,
+      addedAt: "2026-11-08T10:00:00.000Z",
+    });
+    putSharedRef(account, {
+      kind: "note",
+      id: NOTE1,
+      spaceId: SPACE,
+      order: -10,
+      addedAt: "2026-11-08T11:00:00.000Z",
+    });
+    expect(
+      getSharedRefs(account)
+        .slice(0, 2)
+        .map((r) => [r.kind, r.id]),
+    ).toEqual([
+      ["note", NOTE1],
+      ["note", NB],
+    ]);
   });
 });
 

@@ -69,6 +69,8 @@ nonisolated struct SharedWithMe: Identifiable, Hashable, Sendable {
     var isReadable: Bool
     /// The owner opened it to their AI agents (✨, D-54): shown only; the member cannot change it.
     var agentsMode = false
+    /// When it was shared with this account (D-63: «who · role · date»).
+    var addedAt: Date? = nil
 }
 
 /// D-54: a member whose access opens only once the owner confirms. Someone registered after the
@@ -107,10 +109,15 @@ protocol AccountSharingService: AnyObject {
     var sharedWithMe: [SharedWithMe] { get }
     var confirmations: [AccessConfirmation] { get }
     var refreshedLinks: [RefreshedLinks] { get }
+    /// D-62: the shared space being joined right after its invitation was accepted.
+    var joiningSpace: String? { get }
 
     /// Invitations, «shared with me», keys to give and key changes to finish (on start, when
     /// back online, when the sidebar appears).
     func refresh() async
+    /// D-62: the server said something of the account changed (`account_changed` on the sync
+    /// socket: invitations, spaces, members, keys, notebooks): refreshed at once, a burst as one.
+    func accountChanged(_ what: [String])
     func people(of target: ShareTarget) async throws -> SharePeople
     func invite(_ email: String, role: AccessRole, to target: ShareTarget) async throws -> PendingInvite
     func setRole(_ role: AccessRole, of member: ShareMember, in target: ShareTarget) async throws
@@ -218,6 +225,10 @@ final class LocalAccountSharingService: AccountSharingService {
 
     func refresh() async {}
 
+    func accountChanged(_ what: [String]) {}
+
+    var joiningSpace: String? { nil }
+
     func people(of target: ShareTarget) async throws -> SharePeople { people[target] ?? SharePeople() }
 
     func invite(_ email: String, role: AccessRole, to target: ShareTarget) async throws -> PendingInvite {
@@ -283,6 +294,11 @@ final class LocalAccountSharingService: AccountSharingService {
     /// Tests: the owner opened this notebook of a joined space to agents (✨).
     func seedAgentNotebookForTesting(_ notebookId: String) {
         agentNotebooksInSpaces.insert(notebookId)
+    }
+
+    /// Tests: nothing is shared with this account any more.
+    func leaveForTesting() {
+        sharedWithMe = []
     }
 
     /// UI tests: a shared space `space` (in the library already) this account joined as

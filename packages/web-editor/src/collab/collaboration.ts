@@ -42,6 +42,15 @@ function presenceColor(color: unknown): string {
   return typeof color === "string" && /^#[0-9a-f]{3,8}$/i.test(color) ? color : "#2E5BDB";
 }
 
+/**
+ * Sets the caret's name and colour in the local awareness `user`, keeping whatever else the app put
+ * there (`kind`, `account` — peers on the same account are the user's own devices, not shown).
+ */
+export function setAwarenessUser(awareness: Awareness, user: { name: string; color: string }): void {
+  const prev = (awareness.getLocalState()?.user ?? {}) as Record<string, unknown>;
+  awareness.setLocalStateField("user", { ...prev, name: user.name, color: user.color });
+}
+
 function cursorBuilder(user: { name?: string; color?: string }): HTMLElement {
   const caret = document.createElement("span");
   caret.className = "ds-collab-caret";
@@ -70,7 +79,7 @@ export const Collaboration = Extension.create<CollaborationOptions>({
     if (!doc) throw new Error("Collaboration: a Y.Doc is required");
     const plugins = [ySyncPlugin(doc.getXmlFragment("content")), yUndoPlugin({ undoManager })];
     if (awareness) {
-      if (user) awareness.setLocalStateField("user", user);
+      if (user) setAwarenessUser(awareness, user);
       plugins.push(createCursorPlugin(awareness));
     }
     return plugins;
@@ -96,6 +105,6 @@ export function setEditorAwareness(editor: Editor, awareness: Awareness | null, 
   if (editor.isDestroyed) return;
   editor.unregisterPlugin(yCursorPluginKey);
   if (!awareness) return;
-  if (user) awareness.setLocalStateField("user", user);
+  if (user) setAwarenessUser(awareness, user);
   editor.registerPlugin(createCursorPlugin(awareness));
 }

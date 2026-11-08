@@ -11,6 +11,12 @@ export const ORIGIN_REMOTE = REMOTE_ORIGIN;
 export const ORIGIN_LOAD = Symbol("load");
 /** Edits saved to localStorage as the page closed, applied on the next load (flushUnsaved). */
 const ORIGIN_TAIL = Symbol("unsaved-tail");
+/**
+ * The whole saved tail sent again to SyncClient after a reload (see applyTail). Not an edit: it is
+ * neither saved nor reported to listeners — the runtime would otherwise bump the note's updatedAt
+ * and lists would re-sort under the user (e2e move.spec moved the wrong note, 2026-11-05).
+ */
+const ORIGIN_TAIL_RESEND = Symbol("unsaved-tail-resend");
 
 export const TAIL_PREFIX = "ds.unsaved.";
 const tailKey = (dbName: string, docId: string) => `${TAIL_PREFIX}${dbName}.${docId}`;
@@ -245,8 +251,8 @@ export class DocStore {
     // Applying emits only what this doc lacked; what had reached IndexedDB but never the sync
     // outbox would stay unsent. So the whole tail goes to the update listeners again, and SyncClient
     // queues it (updates are idempotent). The listeners here — docStore's and SyncClient's — read
-    // only the update and its origin.
-    doc.emit("update", [update, ORIGIN_TAIL, doc, null as unknown as Y.Transaction]);
+    // only the update and its origin; docStore ignores this resend (nothing new for the device).
+    doc.emit("update", [update, ORIGIN_TAIL_RESEND, doc, null as unknown as Y.Transaction]);
   }
 
   /** Docs of this account with a tail saved as a page closed (applied when they are loaded). */
@@ -325,7 +331,7 @@ export class DocStore {
     }
     if (rows.length > COMPACT_LOCAL_AFTER) void this.compactLocal(docId, doc, rows.map((r) => r.id!));
     doc.on("update", (update: Uint8Array, origin: unknown) => {
-      if (origin === ORIGIN_LOAD) return;
+      if (origin === ORIGIN_LOAD || origin === ORIGIN_TAIL_RESEND) return;
       this.persistUpdate(docId, update);
       if (origin !== ORIGIN_REMOTE) this.noteSessionEdit(docId, update);
       this.emit(docId, origin);

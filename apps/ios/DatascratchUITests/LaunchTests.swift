@@ -237,8 +237,12 @@ final class LibraryUITests: XCTestCase {
         if any.waitForExistence(timeout: 3), best().isHittable { return best() }
         let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
         if toggle.exists { toggle.tap() }
+        // iPhone: from a document, back to its list, then back to the sidebar (one step each).
         let back = app.navigationBars.buttons.firstMatch
-        if !any.waitForExistence(timeout: 3), back.exists { back.tap() }
+        for _ in 0..<3 where !(any.waitForExistence(timeout: 2) && best().isHittable) {
+            guard back.exists, back.isHittable else { break }
+            back.tap()
+        }
         _ = any.waitForExistence(timeout: 5)
         return best()
     }
@@ -424,7 +428,7 @@ final class LibraryUITests: XCTestCase {
         hide.tap()
         settle(1)
         XCTAssertFalse(app.keyboards.firstMatch.exists, "the keyboard is still up")
-        let gone = NSPredicate(format: "isHittable == false")
+        let gone = NSPredicate(format: "exists == false OR isHittable == false")
         let offered = XCTWaiter().wait(for: [expectation(for: gone, evaluatedWith: app.buttons["editor.hideKeyboard"].firstMatch)], timeout: 3)
         XCTAssertEqual(offered, .completed, "Hide Keyboard is still offered; format bar shown: \(app.descendants(matching: .any)["formatBar"].firstMatch.exists)")
         XCTAssertEqual(palette.frame.minX, x, accuracy: 1, "the palette moved when the button went")
@@ -950,8 +954,12 @@ final class LibraryUITests: XCTestCase {
         let footer = app.descendants(matching: .any)["sidebar.footer"].firstMatch
         XCTAssertTrue(trash.exists && footer.exists, "no Trash or footer")
         // Scroll the sidebar to its end: the last row must stop above the footer.
-        trash.swipeUp()
-        trash.swipeUp()
+        // Swipe the list, not the row: a row being scrolled can drop out of the query mid-swipe.
+        let sidebarList = app.collectionViews.containing(.any, identifier: "sidebar.trash").firstMatch
+        for _ in 0..<2 {
+            (sidebarList.exists ? sidebarList : trash).swipeUp()
+            settle(0.5)
+        }
         settle(1)
         XCTAssertLessThanOrEqual(trash.frame.maxY, footer.frame.minY + 1, "Trash is under the footer")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -1049,9 +1057,35 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
         field.typeText("Баги")
         let found = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Баги'")).firstMatch
-        XCTAssertTrue(found.waitForExistence(timeout: 5), "the document is not in the results")
+        XCTAssertTrue(found.waitForExistence(timeout: 5),
+                      "the document is not in the results; field: \(field.value ?? "nil"); results: \(Self.buttons(app))")
         XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Open Trash'")).firstMatch.exists,
                        "a command that does not match is still listed")
+    }
+
+    /// Who else is in the note: in the document's bar beside «…», never over the text (owner,
+    /// build 35); a tap lists the people.
+    func testPresenceIsInTheDocumentBar() throws {
+        let app = launchSignedIn(["-ui-testing-presence"])
+        try openNewNoteInNativeEditor(app)
+        let presence = app.buttons["document.presence"].firstMatch
+        XCTAssertTrue(presence.waitForExistence(timeout: 5), "no avatars; buttons: \(Self.buttons(app))")
+        let more = app.buttons["document.more"].firstMatch
+        XCTAssertTrue(more.exists, "no «…» button")
+        XCTAssertEqual(presence.frame.midY, more.frame.midY, accuracy: 6, "the avatars are not in the bar with «…»")
+        XCTAssertLessThan(presence.frame.maxX, more.frame.minX + 1, "the avatars are not left of «…»")
+
+        presence.tap()
+        let list = app.descendants(matching: .any)["presence.list"].firstMatch
+        XCTAssertTrue(list.waitForExistence(timeout: 3), "a tap lists nobody")
+        let people = app.descendants(matching: .any).matching(identifier: "presence.person")
+        XCTAssertEqual(people.count, 2, "not everyone is listed")
+        let lena = people.matching(NSPredicate(format: "label CONTAINS 'Lena' AND label CONTAINS 'Editing now'")).firstMatch
+        XCTAssertTrue(lena.exists, "no name or «Editing now»: \(people.allElementsBoundByIndex.map(\.label))")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "presence"
+        shot.lifetime = .keepAlways
+        add(shot)
     }
 
     func testCommandPaletteOpensTasks() throws {

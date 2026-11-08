@@ -5,3 +5,4 @@ export * from "./document/index.js";
 export * from "./strokes/index.js";
 export * from "./sync/index.js";
 export * from "./sharing/index.js";
+export * from "./voice/prompts.js";

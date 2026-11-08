@@ -1233,6 +1233,202 @@
         }
       ]
     },
+    "voiceTranscribeFields": {
+      "valid": [
+        {
+          "mode": "dictation"
+        },
+        {
+          "mode": "conversation",
+          "speakers": "2",
+          "language": "auto"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "unknown mode",
+          "body": {
+            "mode": "podcast"
+          }
+        },
+        {
+          "reason": "more than 8 speakers",
+          "body": {
+            "mode": "conversation",
+            "speakers": "9"
+          }
+        },
+        {
+          "reason": "unknown language",
+          "body": {
+            "mode": "dictation",
+            "language": "en"
+          }
+        }
+      ]
+    },
+    "voiceTranscribeResponse": {
+      "valid": [
+        {
+          "durationSec": 12.5,
+          "turns": [
+            {
+              "speaker": "S1",
+              "start": 0,
+              "end": 12.5,
+              "text": "Купить хлеб."
+            }
+          ]
+        },
+        {
+          "durationSec": 9,
+          "turns": [
+            {
+              "speaker": "S1",
+              "start": 0,
+              "end": 4.2,
+              "text": "Давай во вторник."
+            },
+            {
+              "speaker": "S2",
+              "start": 4.5,
+              "end": 9,
+              "text": "Лучше в среду."
+            }
+          ]
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "speaker named like the upstream",
+          "body": {
+            "durationSec": 1,
+            "turns": [
+              {
+                "speaker": "speaker_0",
+                "start": 0,
+                "end": 1,
+                "text": ""
+              }
+            ]
+          }
+        },
+        {
+          "reason": "end before start",
+          "body": {
+            "durationSec": 1,
+            "turns": [
+              {
+                "speaker": "S1",
+                "start": 2,
+                "end": 1,
+                "text": ""
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "voiceTextRequest": {
+      "valid": [
+        {
+          "task": "clean",
+          "profanity": "keep",
+          "turns": [
+            {
+              "speaker": "S1",
+              "start": 0,
+              "end": 1,
+              "text": "ну э-э привет"
+            }
+          ]
+        },
+        {
+          "task": "minutes",
+          "profanity": "soften",
+          "quality": "best",
+          "turns": [
+            {
+              "speaker": "S1",
+              "start": 0,
+              "end": 1,
+              "text": "решили"
+            }
+          ]
+        },
+        {
+          "task": "format",
+          "style": "letter",
+          "profanity": "keep",
+          "text": "черновик письма"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "format without style",
+          "body": {
+            "task": "format",
+            "profanity": "keep",
+            "text": "черновик"
+          }
+        },
+        {
+          "reason": "neither turns nor text",
+          "body": {
+            "task": "clean",
+            "profanity": "keep"
+          }
+        },
+        {
+          "reason": "both turns and text",
+          "body": {
+            "task": "clean",
+            "profanity": "keep",
+            "text": "x",
+            "turns": [
+              {
+                "speaker": "S1",
+                "start": 0,
+                "end": 1,
+                "text": "x"
+              }
+            ]
+          }
+        },
+        {
+          "reason": "unknown style",
+          "body": {
+            "task": "format",
+            "style": "poem",
+            "profanity": "keep",
+            "text": "x"
+          }
+        },
+        {
+          "reason": "profanity missing",
+          "body": {
+            "task": "clean",
+            "text": "x"
+          }
+        }
+      ]
+    },
+    "voiceTextResponse": {
+      "valid": [
+        {
+          "markdown": "## Коротко\n\nДоговорились на среду.",
+          "model": "openai/gpt-5.6-luna"
+        }
+      ],
+      "invalid": [
+        {
+          "reason": "missing model",
+          "body": {
+            "markdown": "x"
+          }
+        }
+      ]
+    },
     "apiError": {
       "valid": [
         {

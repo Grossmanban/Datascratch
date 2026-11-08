@@ -10,6 +10,7 @@ export default defineConfig({
     "strokes/index": "src/strokes/index.ts",
     "sync/index": "src/sync/index.ts",
     "sharing/index": "src/sharing/index.ts",
+    "voice/index": "src/voice/index.ts",
   },
   format: ["esm"],
   target: "es2022",

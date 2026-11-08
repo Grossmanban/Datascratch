@@ -1,3 +1,4 @@
+import { useFormat } from "@/features/voice/format";
 import type { useNavigate } from "@tanstack/react-router";
 import type { TFunction } from "i18next";
 import {
@@ -16,6 +17,7 @@ import {
   Trash2,
   Undo2,
   Layers,
+  Wand2,
 } from "lucide-react";
 import {
   createFolder,
@@ -227,7 +229,11 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
     !shared && { label: t("docs.share"), icon: <Share2 className="size-3.5" />, onSelect: () => useUi.setState({ shareFor: { kind: "note", id: noteId } }) },
     { label: t("docs.history"), icon: <History className="size-3.5" />, onSelect: () => useUi.setState({ historyFor: noteId }) },
     ...(opts.inDoc && canEdit
-      ? [{ label: `${t("style.cover")}…`, icon: <ImageIcon className="size-3.5" />, onSelect: () => useUi.setState({ coverFor: noteId }) }]
+      ? [
+          { label: `${t("style.cover")}…`, icon: <ImageIcon className="size-3.5" />, onSelect: () => useUi.setState({ coverFor: noteId }) },
+          // D-65: the selection, or the whole note, tidied in a chosen style.
+          { label: `${t("voice.format")}…`, icon: <Wand2 className="size-3.5" />, onSelect: () => useFormat.setState({ openFor: noteId, error: null }) },
+        ]
       : []),
     inIndex && {
       kind: "sub",

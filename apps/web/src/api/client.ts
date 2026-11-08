@@ -124,13 +124,15 @@ export async function timedFetch(url: string, init: RequestInit = {}, opts: { re
 
 async function fetchOnce(method: string, path: string, opts: RequestOptions, accessToken?: string): Promise<Response> {
   const headers: Record<string, string> = {};
-  if (opts.body !== undefined && !(opts.body instanceof Uint8Array)) headers["content-type"] = "application/json";
+  // FormData (multipart, e.g. voice audio) sets its own content type with the boundary.
+  const form = typeof FormData !== "undefined" && opts.body instanceof FormData;
+  if (opts.body !== undefined && !(opts.body instanceof Uint8Array) && !form) headers["content-type"] = "application/json";
   if (opts.body instanceof Uint8Array) headers["content-type"] = "application/octet-stream";
   if (accessToken) headers.authorization = `Bearer ${accessToken}`;
   const controller = new AbortController();
   const onAbort = () => controller.abort(opts.signal?.reason);
   opts.signal?.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(() => controller.abort(new TimeoutError()), opts.timeoutMs ?? (opts.body instanceof Uint8Array ? UPLOAD_TIMEOUT_MS : RESPONSE_TIMEOUT_MS));
+  const timer = setTimeout(() => controller.abort(new TimeoutError()), opts.timeoutMs ?? (opts.body instanceof Uint8Array || form ? UPLOAD_TIMEOUT_MS : RESPONSE_TIMEOUT_MS));
   try {
     return await fetch(`${apiBase()}${path}`, {
       method,
@@ -138,7 +140,7 @@ async function fetchOnce(method: string, path: string, opts: RequestOptions, acc
       body:
         opts.body === undefined
           ? undefined
-          : opts.body instanceof Uint8Array
+          : opts.body instanceof Uint8Array || form
             ? (opts.body as BodyInit)
             : JSON.stringify(opts.body),
       signal: controller.signal,

@@ -577,6 +577,44 @@ function accountChanged(userIds, what) {
 /** The owner and every member of a notebook, note or space. */
 const peopleOf = (target) => [ownerOf(target), ...membersOf(target).keys()];
 
+// D-65 «Голос» (api.md «Голос»): stand-ins for the speech and text services. Each take is a
+// numbered phrase, so e2e can tell takes apart; nothing is kept but the counter.
+const voice = { takes: 0, fail: null };
+route("POST", "/__mock/voice", (_q, res, { body }) => {
+  if ("fail" in body) voice.fail = body.fail;
+  if (body.reset) voice.takes = 0;
+  json(res, 204);
+});
+route("POST", "/v1/voice/transcribe", (req, res, { auth, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  if (voice.fail) return err(res, voice.fail.status, voice.fail.code ?? "internal", "voice failure (mock)");
+  if (!String(req.headers["content-type"] ?? "").startsWith("multipart/form-data")) {
+    console.warn("[mock] voice: not multipart", req.headers["content-type"]);
+    return err(res, 400, "bad_request", "multipart expected");
+  }
+  if (!Buffer.isBuffer(body) || body.length < 500 || !body.includes("name=\"audio\"")) {
+    console.warn("[mock] voice: no audio", Buffer.isBuffer(body) ? body.length : typeof body);
+    return err(res, 400, "bad_request", "audio expected");
+  }
+  voice.takes += 1;
+  json(res, 200, { durationSec: 2.5, turns: [{ speaker: null, text: `фраза номер ${voice.takes} эээ сказанная вслух`, start: 0, end: 2.5 }] });
+});
+route("POST", "/v1/voice/text", (_q, res, { auth, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  if (voice.fail) return err(res, voice.fail.status, voice.fail.code ?? "internal", "voice failure (mock)");
+  const text = String(body.text ?? (body.turns ?? []).map((t) => t.text).join("\n\n"));
+  if (body.task === "clean") {
+    // Fillers go, the first letter is a capital, a full stop at the end.
+    const t = text.replace(/\s*эээ\s*/g, " ").trim();
+    return json(res, 200, { markdown: `${t.charAt(0).toUpperCase()}${t.slice(1)}.` });
+  }
+  if (body.task === "format") {
+    const lines = text.split(/(?<=[.!?])\s+|\n+/).map((l) => l.trim()).filter(Boolean);
+    return json(res, 200, { markdown: `## Оформлено (${body.style ?? "clean"})\n\n${lines.map((l) => `- ${l}`).join("\n")}` });
+  }
+  json(res, 200, { markdown: `## Протокол\n\n${text}` });
+});
+
 route("POST", "/v1/invitations", (_q, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const target = body.target;

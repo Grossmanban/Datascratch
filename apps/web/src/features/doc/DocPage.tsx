@@ -1,3 +1,6 @@
+import { FormatDialog, FormatResult } from "@/features/voice/FormatDialog";
+import { useIsMobile } from "@/hooks/useMedia";
+import { MicButton } from "@/features/voice/MicButton";
 import { markSharedOpened } from "@/data/sharedOpened";
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
@@ -89,6 +92,7 @@ function DocScreen({ noteId }: { noteId: string }) {
   const contentReady = useNoteContentReady(noteId, doc);
   const edits = useRef(0);
   const [editorApi, setEditorApi] = useState<EditorApi | null>(null);
+  const isMobile = useIsMobile();
   const paletteCollapsed = useUi((s) => s.penPaletteCollapsed);
 
   const accountId = useAuth((s) => s.userId) ?? "";
@@ -175,6 +179,8 @@ function DocScreen({ noteId }: { noteId: string }) {
             >
               <Star className={cn("size-4", starred && "fill-current")} />
             </IconButton>
+            {/* D-65 «Диктовать»: in the bar on a computer, a floating button on a phone. */}
+            {editable && editorApi && !isMobile && <MicButton api={editorApi} />}
             {editable && editorApi && <InsertPicture api={editorApi} noteId={noteId} />}
             {doc && meta && <StylePopover doc={doc} style={meta.style} disabled={!editable} />}
             {!shared && !viewer && (
@@ -267,10 +273,21 @@ function DocScreen({ noteId }: { noteId: string }) {
               <IconPicker icon={note.icon} disabled={!editable} onPick={(icon) => updateNote(noteId, { icon })} />
             </div>
           }
-          footer={<Backlinks noteId={noteId} />}
+          footer={
+            <>
+              {editorApi && <FormatResult api={editorApi} noteId={noteId} />}
+              <Backlinks noteId={noteId} />
+            </>
+          }
         />
       )}
       {editable && editorApi && <PenPaletteToggle pen={editorApi.pen} />}
+      {editable && editorApi && <FormatDialog api={editorApi} noteId={noteId} />}
+      {editable && editorApi && isMobile && (
+        <div className="fixed bottom-[calc(108px+env(safe-area-inset-bottom))] right-[calc(16px+env(safe-area-inset-right))] z-30">
+          <MicButton api={editorApi} floating />
+        </div>
+      )}
     </div>
   );
 }

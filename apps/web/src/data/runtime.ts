@@ -4,11 +4,12 @@ import { deviceId } from "@/auth/deviceKey";
 import { getSession, refreshSession, wipeRevokedDevice } from "@/auth/session";
 import { accountBoxKeys } from "./sharing";
 import { maintainShares } from "./ownerShares";
+import { queryClient } from "./queryClient";
 import { isReadOnlyDoc, refreshShared, sharedResourceOf, useShared } from "./sharedWithMe";
 import { APP_VERSION, syncUrl } from "@/config";
 import { notebookMaps, syncNotebookMetaCopy } from "@/domain/notebook";
 import { sodiumReady } from "@/lib/shared";
-import { refreshAccount, refreshNotebook, refreshSpaceDoc, refreshStandaloneNote, resetWorkspace, useWorkspace } from "@/domain/workspace";
+import { refreshAccount, refreshNotebook, refreshSpaceDoc, refreshStandaloneNote, resetWorkspace, spaceRoleOfDoc, useWorkspace } from "@/domain/workspace";
 import { uiStatus, useSyncStatus } from "@/sync/engine";
 import { uploadPending } from "./attachments";
 import { accountDb } from "./db";
@@ -100,8 +101,8 @@ export class AccountRuntime {
       // A shared document that no key opens may simply have a newer key (the owner changed it):
       // pause it, re-read «Общие со мной», then keyAvailable.
       keyMaybeStale: (docId) => {
-        if (!sharedResourceOf(docId)) return false;
-        void refreshShared();
+        if (!sharedResourceOf(docId) && !spaceRoleOfDoc(useWorkspace.getState(), docId)) return false;
+        this.refreshKeysSoon();
         return true;
       },
       // Notes sync in stored mode: no Y.Doc unless open (10 000 notes stay on disk, not in memory).
@@ -120,6 +121,7 @@ export class AccountRuntime {
     this.cleanups.push(
       this.client.on("status", () => this.updateStatus()),
       this.client.on("synced", (docId) => {
+        this.unknownAttempts.delete(docId);
         if (docId === this.accountDocId) useWorkspace.setState({ accountSynced: true });
         // A notebook index caught up: its meta copy can be checked now (copyNotebookNames).
         if (this.store.rowKind(docId) === "notebook") this.copyNotebookNames();
@@ -146,8 +148,12 @@ export class AccountRuntime {
           this.updateStatus();
         }
         // A document the server does not know never becomes «synced»: it must not keep the spinner.
+        // It may only be not yet registered (another member's new note) or not yet ours (access on
+        // its way): it is asked for again, sooner after a key or access refresh (keysChanged).
         if (e.code === "doc_not_found" && e.docId && e.ref === e.docId) {
           this.unknownOnServer.add(e.docId);
+          this.retryUnknown(e.docId);
+          this.refreshKeysSoon();
           this.updateStatus();
         }
         // A push the server refused (`ref` is its clientMsgId): the change has not reached the server.
@@ -177,10 +183,16 @@ export class AccountRuntime {
         void this.reattach(docId);
         void uploadPending();
       }),
+      // `account_changed` (D-62): the core SyncClient passes it on as "accountChanged" once it knows it.
+      // Protocol 2 `account_changed` (D-62): re-read invitations, spaces, members and keys now.
+      this.client.on("accountChanged", (what) => this.accountChanged([...what])),
       this.client.on("keyMissing", (docId) => {
         this.waitingForKey.add(docId);
         this.updateStatus();
         this.resumeKeyed(); // the index may have arrived between keyFor and the pause
+        // The key may simply not be here yet (a shared space's new notebook, a member just let in):
+        // ask now rather than on the next poll.
+        this.refreshKeysSoon();
       }),
       this.store.onChange((docId, origin) => {
         // A notebook index changed: a paused note may have its key now.
@@ -254,6 +266,11 @@ export class AccountRuntime {
     this.observedStandalone.clear();
     for (const c of this.observedSpaces.values()) c();
     this.observedSpaces.clear();
+    for (const t of this.unknownTimers.values()) clearTimeout(t);
+    this.unknownTimers.clear();
+    if (this.keysTimer) clearTimeout(this.keysTimer);
+    if (this.changedTimer) clearTimeout(this.changedTimer);
+    if (this.hurryTimer) clearInterval(this.hurryTimer);
     for (const t of this.touchTimers.values()) clearTimeout(t);
     if (this.pendingTimer) clearInterval(this.pendingTimer);
     this.cleanups = [];
@@ -309,6 +326,101 @@ export class AccountRuntime {
   private waitingForKey = new Set<string>();
   private longWaiting = new Set<string>();
   private resuming = false;
+  private keysTimer: ReturnType<typeof setTimeout> | null = null;
+  private unknownTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private unknownAttempts = new Map<string, number>();
+
+  /**
+   * Re-read what is shared with this account and the owner's upkeep, soon (debounced): a key or an
+   * access this device lacks may have just been given. Then keysChanged runs.
+   */
+  refreshKeysSoon() {
+    if (this.keysTimer) return;
+    this.keysTimer = setTimeout(() => {
+      this.keysTimer = null;
+      void Promise.all([refreshShared(), maintainShares()]).finally(() => this.keysChanged());
+    }, 300);
+  }
+
+  /**
+   * Keys or access changed (a refresh of «Общие со мной», shared spaces or the owner's upkeep):
+   * paused documents resume, and documents the server did not know are asked for again — a note
+   * that would not open opens on its own, no sign-out needed.
+   */
+  keysChanged() {
+    if (this.waitingForKey.size) this.resumeKeyed();
+    for (const docId of [...this.unknownOnServer]) this.retryUnknown(docId, true);
+  }
+
+  private changedWhat = new Set<string>();
+  private changedTimer: ReturnType<typeof setTimeout> | null = null;
+  private hurryTimer: ReturnType<typeof setInterval> | null = null;
+  private hurryUntil = 0;
+
+  /**
+   * The server says something about this account changed elsewhere (`account_changed`, D-62):
+   * invitations, spaces, members, keys or notebooks. Gathered for 300 ms, then re-read at once —
+   * the two-minute poll stays as a safety net.
+   */
+  accountChanged(what: readonly string[]) {
+    for (const w of what) this.changedWhat.add(w);
+    if (this.changedTimer) return;
+    this.changedTimer = setTimeout(() => {
+      this.changedTimer = null;
+      const seen = [...this.changedWhat];
+      this.changedWhat.clear();
+      if (!seen.length || seen.includes("invitations")) void queryClient.invalidateQueries({ queryKey: ["incoming-invitations"] });
+      if (seen.some((w) => w !== "invitations")) {
+        void queryClient.invalidateQueries({ queryKey: ["members"] });
+        void queryClient.invalidateQueries({ queryKey: ["invitations"] });
+        this.refreshKeysSoon();
+      }
+    }, 300);
+  }
+
+  /**
+   * Look every 3 s for a while (an invitation just sent or accepted): the other side's step — an
+   * acceptance to deliver a key to, a key to open — shows up in seconds even without the server's
+   * `account_changed`.
+   */
+  hurry(ms = 180_000) {
+    this.hurryUntil = Math.max(this.hurryUntil, Date.now() + ms);
+    if (this.hurryTimer) return;
+    this.hurryTimer = setInterval(() => {
+      if (Date.now() > this.hurryUntil) {
+        clearInterval(this.hurryTimer!);
+        this.hurryTimer = null;
+        return;
+      }
+      if (document.visibilityState === "hidden") return;
+      void queryClient.invalidateQueries({ queryKey: ["incoming-invitations"] });
+      this.refreshKeysSoon();
+    }, 3_000);
+  }
+
+  /** Ask the server again for a document it did not know, with a growing delay (or now). */
+  private retryUnknown(docId: string, now = false) {
+    const pending = this.unknownTimers.get(docId);
+    if (pending && !now) return;
+    if (pending) clearTimeout(pending);
+    const attempt = this.unknownAttempts.get(docId) ?? 0;
+    const delays = [1_500, 4_000, 10_000, 30_000, 60_000, 120_000];
+    this.unknownTimers.set(
+      docId,
+      setTimeout(
+        () => {
+          this.unknownTimers.delete(docId);
+          if (!this.unknownOnServer.has(docId) || !this.attached.has(docId)) return;
+          this.unknownAttempts.set(docId, attempt + 1);
+          this.unknownOnServer.delete(docId);
+          this.updateStatus();
+          // Another doc_not_found puts it back and schedules the next try; success just syncs.
+          void this.client.resubscribe(docId).catch(() => undefined);
+        },
+        now ? 0 : delays[Math.min(attempt, delays.length - 1)],
+      ),
+    );
+  }
 
   /** Paused documents whose key is known now resume (SyncClient.keyAvailable). */
   private resumeKeyed() {
@@ -654,6 +766,10 @@ export class AccountRuntime {
       const handler = () => {
         refreshSpaceDoc(id, doc);
         void this.syncNotebookDocs();
+        // A member just made a notebook here: its key comes with the server's list — ask now.
+        const st = useWorkspace.getState();
+        const listed = st.spaceAccess[id]?.notebookIds;
+        if (listed && st.spaceDocs[id]?.notebooks.some((n) => !listed.includes(n.id))) this.refreshKeysSoon();
       };
       doc.on("afterTransaction", handler);
       this.observedSpaces.set(id, () => doc.off("afterTransaction", handler));

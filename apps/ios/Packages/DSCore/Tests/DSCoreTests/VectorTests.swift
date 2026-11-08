@@ -334,6 +334,15 @@ struct DocumentVectorTests {
         for n in acc.notebooks() { #expect(jsonEqual(YValue.object(entries: n.fields).jsonObject, (expected["notebooks"] as! [String: Any])[n.id])) }
         #expect(acc.starred() == [StarredItem(kind: .note, id: "0192f3c4-0000-7000-8000-000000000001")])
         #expect(acc.tabs() == ["0192f3c4-0000-7000-8000-000000000001"])
+        // `shared` (D-54) with `openedAt` (D-63): the raw map and the records, which re-encode
+        // to the same fields.
+        if let shared = expected["shared"] as? [String: Any] {
+            #expect(jsonEqual(acc.crdt.mapValue("shared")?.jsonObject ?? [String: Any](), shared))
+            #expect(acc.sharedRefs().count == shared.count)
+            for r in acc.sharedRefs() { #expect(jsonEqual(YValue.object(entries: r.fields).jsonObject, shared[r.id]), "\(r.id)") }
+            let opened = acc.sharedRefs().filter { !$0.isNew }.map(\.kind)
+            #expect(opened == [.notebook])
+        }
     }
 }
 

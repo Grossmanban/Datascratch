@@ -260,6 +260,38 @@ public final class AccountDocument: Sendable {
         try crdt.transact(origin: origin) { $0.delete("notebooks", key: id) }
     }
 
+    // MARK: Shared with me (D-54, D-63)
+
+    /// Notebooks and notes shared with this account, in order.
+    public func sharedRefs() -> [SharedRef] {
+        crdt.records("shared", as: SharedRef.self).sorted { ($0.order, $0.id) < ($1.order, $1.id) }
+    }
+
+    public func sharedRef(_ kind: SharedRefKind, id: String) -> SharedRef? {
+        crdt.record("shared", id: SharedRef.key(kind, id), as: SharedRef.self)
+    }
+
+    public func putShared(_ ref: SharedRef, origin: TransactionOrigin = .local) throws {
+        try crdt.transact(origin: origin) { $0.put("shared", ref) }
+    }
+
+    public func removeShared(_ kind: SharedRefKind, id: String, origin: TransactionOrigin = .local) throws {
+        try crdt.transact(origin: origin) { $0.delete("shared", key: SharedRef.key(kind, id)) }
+    }
+
+    /// When this person first opened it (any device), nil while «new».
+    public func sharedOpenedAt(_ kind: SharedRefKind, id: String) -> String? { sharedRef(kind, id: id)?.openedAt }
+
+    /// Marks it opened, once: a later open keeps the first date (only the field is written, so
+    /// two devices opening it at once agree on a date and nothing else is overwritten).
+    /// Returns false when there is no record or it was opened before.
+    @discardableResult
+    public func markSharedOpened(_ kind: SharedRefKind, id: String, at date: Date = Date(), origin: TransactionOrigin = .local) throws -> Bool {
+        guard let ref = sharedRef(kind, id: id), ref.openedAt == nil else { return false }
+        try crdt.transact(origin: origin) { $0.update("shared", id: ref.id, ["openedAt": .string(value: DSDate.iso(date))]) }
+        return true
+    }
+
     // MARK: Shared spaces (D-62)
 
     /// Shared spaces this account is a member of — placement in the switcher only.

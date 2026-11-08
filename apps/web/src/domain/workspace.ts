@@ -124,7 +124,7 @@ function applyAccountView(patch: Partial<Pick<WorkspaceState, "ownAccount" | "sp
   let activeSpaceId = st.activeSpaceId;
   // A member's shared space (D-62) joins the view only once its access is read: until then it is
   // still the active one if this account has it placed.
-  const known = (id: string) => account.spaces.some((s) => s.id === id) || st.ownAccount.sharedSpaces.some((r) => r.spaceId === id && !st.spaceAccess[id]);
+  const known = (id: string) => id === SHARED_WITH_ME || account.spaces.some((s) => s.id === id) || st.ownAccount.sharedSpaces.some((r) => r.spaceId === id && !st.spaceAccess[id]);
   if (st.ready && (!activeSpaceId || !known(activeSpaceId))) activeSpaceId = account.spaces[0]?.id ?? null;
   useWorkspace.setState({ ...patch, account, activeSpaceId });
 }
@@ -264,11 +264,15 @@ export function activeSpace(st: WorkspaceState): SpaceEntry | undefined {
 type SpaceAccount = Pick<AccountSnapshot, "notebooks" | "shared" | "spaces">;
 
 /**
- * The space whose «Общие со мной» shows a shared notebook or note (D-54): its placement, or the
- * first space once that space is gone (a deleted space must not hide what is shared).
+ * «Поделились со мной» (D-63): notebooks and notes shared with this account one by one (D-54) live
+ * in their own section, outside every space — a pseudo-space with this id. Tabs, starred, search
+ * and «Все документы» follow it like any space (D-48), so no space shows them.
  */
-export function sharedRefSpace(account: Pick<AccountSnapshot, "spaces">, ref: SharedRef): string | null {
-  return account.spaces.some((s) => s.id === ref.spaceId) ? ref.spaceId : (account.spaces[0]?.id ?? null);
+export const SHARED_WITH_ME = "shared-with-me";
+
+/** Where a shared notebook or note is shown: always «Поделились со мной» (D-63; `ref.spaceId` is legacy). */
+export function sharedRefSpace(_account: Pick<AccountSnapshot, "spaces">, _ref: SharedRef): string | null {
+  return SHARED_WITH_ME;
 }
 
 /** The space a notebook belongs to (D-48: membership is derived from the notebook). */

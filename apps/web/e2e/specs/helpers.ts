@@ -63,3 +63,30 @@ export async function newDoc(page: Page, title: string, body?: string) {
     await page.keyboard.type(body);
   }
 }
+
+/**
+ * «Создать пространство» from the switcher (spec/05): type, name, optionally an icon. A shared one
+ * stops at «Пригласить людей» (the window stays open); a personal one closes it.
+ */
+export async function createSpaceVia(page: Page, name: string, opts: { shared?: boolean; icon?: string } = {}) {
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await page.getByTestId("space-switcher").click();
+  await page.getByTestId("space-create").click();
+  const dialog = page.getByTestId("space-dialog");
+  await expect(dialog).toBeVisible();
+  if (opts.shared) await page.getByTestId("space-kind-shared").click();
+  await page.getByTestId("space-name").fill(name);
+  if (opts.icon) await page.getByTestId("space-icons").getByRole("radio", { name: opts.icon }).click();
+  await page.getByTestId("space-submit").click();
+  if (opts.shared) await expect(page.getByTestId("space-invite-step")).toBeVisible({ timeout: 20_000 });
+  else await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId("space-switcher")).toContainText(name);
+}
+
+/** «Поделились со мной» (D-63) from the space switcher: its own section, outside every space. */
+export async function openSharedWithMe(page: Page) {
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await page.getByTestId("space-switcher").click();
+  await page.getByTestId("shared-with-me-option").click();
+  await expect(page.getByTestId("shared-with-me")).toBeVisible();
+}

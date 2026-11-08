@@ -24,6 +24,8 @@ public enum DocKind: String, Codable, Sendable, CaseIterable {
                 RootDef(name: "trust", kind: .map),
                 // Shared spaces this account is a member of: placement only (D-62).
                 RootDef(name: "sharedSpaces", kind: .map),
+                // Notebooks and notes shared with this account (`SharedRef`, D-54/D-63).
+                RootDef(name: "shared", kind: .map),
             ]
         case .notebook:
             return [

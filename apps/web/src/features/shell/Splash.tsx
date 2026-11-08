@@ -2,20 +2,16 @@ import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { abandonRestore } from "@/auth/session";
+import { BOOT_TARGET, bootReady } from "@/app/boot";
+import { MARK_INK } from "@/app/brandMark";
 
-export function Logo({ size = 40 }: { size?: number }) {
+/** The Datascratch mark; `bootTarget` makes it where the launch animation lands. */
+export function Logo({ size = 40, bootTarget }: { size?: number; bootTarget?: boolean }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden>
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden {...(bootTarget ? BOOT_TARGET : {})}>
       <rect width="64" height="64" rx="16" fill="var(--ds-bg-surface)" />
       <rect x="0.5" y="0.5" width="63" height="63" rx="15.5" fill="none" stroke="var(--ds-line-separator)" />
-      <path
-        d="M18 44c6-2 10-14 16-20s10-4 8 2-10 14-4 16 10-8 12-10"
-        fill="none"
-        stroke="var(--ds-accent)"
-        strokeWidth="4.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d={MARK_INK} fill="var(--ds-accent)" />
     </svg>
   );
 }
@@ -27,14 +23,17 @@ export function Splash() {
   const { t } = useTranslation();
   const [slow, setSlow] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => setSlow(true), SLOW_MS);
+    const timer = setTimeout(() => {
+      setSlow(true);
+      // A slow session check: the boot screen gives way to this calm notice.
+      bootReady();
+    }, SLOW_MS);
     return () => clearTimeout(timer);
   }, []);
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 bg-canvas px-6 text-center" data-testid="splash">
-      <motion.div initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, delay: 0.15 }}>
-        <Logo size={56} />
-      </motion.div>
+      {/* Under the boot screen until the hand-off: the mark lands here, so no fade of its own. */}
+      <Logo size={56} bootTarget />
       {slow && (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex max-w-[340px] flex-col items-center gap-3" role="alert" data-testid="splash-slow">
           <p className="text-[15px] font-semibold text-ink">{t("app.slowTitle")}</p>

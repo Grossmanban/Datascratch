@@ -52,6 +52,7 @@ import {
   notebookCounts,
   noteTitle,
   setActiveSpace,
+  SHARED_WITH_ME,
   notesInSpace,
   spaceNotebooks,
   starredInSpace,
@@ -75,7 +76,6 @@ import { unreadableMenuState, useUnreadable } from "@/features/docs/UnreadableNo
 import { SyncIndicator } from "./SyncIndicator";
 import { InvitationsRow } from "@/features/share/Invitations";
 import {
-  createSharedSpaceInteractive,
   deleteSharedSpace,
   inviteToSpace,
   moveNotebookIntoSharedSpace,
@@ -83,7 +83,7 @@ import {
   SpaceAvatars,
 } from "@/features/spaces/SharedSpaces";
 import { SharedRow, useSharedRefs } from "@/features/share/SharedWithMe";
-import { createSpaceInteractive } from "./spaces";
+import { SpaceSwitcher, spaceGlyph } from "@/features/spaces/SpaceSwitcher";
 import { iconGlyph, withIcon } from "@/lib/glyph";
 import { features } from "@/lib/features";
 
@@ -122,6 +122,8 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   const notebooks = useWorkspace((s) => s.account.notebooks);
   const spaceId = useWorkspace((s) => s.activeSpaceId);
   const nbs = useMemo(() => notebooks.filter((n) => n.spaceId === spaceId), [notebooks, spaceId]);
+  const inShared = spaceId === SHARED_WITH_ME;
+  const sharedCount = useWorkspace((s) => s.account.shared.length);
   const recoveryUnconfirmed = useRecoveryUnconfirmed();
   const todayCount = useLiveQuery(
     async () => {
@@ -174,6 +176,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
         )}
       </div>
 
+      {!inShared && (
       <div className="px-3 pb-2">
         <div className="flex h-8 w-full items-stretch rounded-md bg-surface text-[13.5px] shadow-[0_1px_2px_rgb(40_30_10/0.06)] ring-1 ring-line transition hover:ring-ink/15">
           <button
@@ -208,9 +211,21 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
           )}
         </div>
       </div>
+      )}
 
       <InvitationsRow />
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 pb-4">
+        {inShared ? (
+          <>
+            {/* D-63: what was shared one by one lives here, outside every space. */}
+            <div className="flex flex-col gap-px">
+              <NavLink to="/shared" icon={<Users className="size-4" />} label={t("sharedWithMe.title")} count={sharedCount} />
+            </div>
+            <StarredSection />
+            <SharedSection />
+          </>
+        ) : (
+        <>
         <div className="flex flex-col gap-px">
           <NavLink to="/all" icon={<Layers className="size-4" />} label={t("nav.allDocs")} count={allCount} />
           {features.tasks && (
@@ -248,32 +263,46 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
           )}
         </Section>
 
-        <SharedSection />
-
         <TagsSection />
+        </>
+        )}
+
+        <div className="mt-3.5 flex flex-col gap-px">
+          <NavLink to="/trash" icon={<Trash2 className="size-4" />} label={t("nav.trash")} />
+        </div>
       </nav>
 
+      {/* Settings: a large target of its own, away from the trash (spec/10). */}
       <div className="flex items-center gap-1 border-t border-line px-2 py-2">
-        <NavLink to="/trash" icon={<Trash2 className="size-4" />} label={t("nav.trash")} compact />
-        <NavLink
-          to="/settings/account"
-          match="/settings"
-          icon={
-            <span className="relative">
-              <Settings className="size-4" />
-              {/* Gentle reminder while the recovery key is not confirmed (spec/07). */}
-              {recoveryUnconfirmed && (
-                <span className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-[var(--ds-warning)]" data-testid="recovery-dot" />
-              )}
-            </span>
-          }
-          label={recoveryUnconfirmed ? `${t("nav.settings")} · ${t("settings.recoveryTitle")}` : t("nav.settings")}
-          compact
-        />
-        <div className="flex-1" />
+        <SettingsLink reminder={recoveryUnconfirmed} />
         <SyncIndicator compact />
       </div>
     </div>
+  );
+}
+
+function SettingsLink({ reminder }: { reminder: boolean }) {
+  const { t } = useTranslation();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const active = pathname.startsWith("/settings");
+  return (
+    <Link
+      to="/settings"
+      aria-label={reminder ? `${t("nav.settings")} · ${t("settings.recoveryTitle")}` : undefined}
+      aria-current={active ? "page" : undefined}
+      data-testid="settings-link"
+      className={cn(
+        "flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 text-[14.5px] transition-colors focus-visible:focus-ring",
+        active ? "bg-ink/[0.07] font-medium text-ink" : "text-ink-2 hover:bg-ink/[0.04] hover:text-ink",
+      )}
+    >
+      <span className={cn("relative shrink-0", active ? "text-ink" : "text-ink-3")}>
+        <Settings className="size-[18px]" />
+        {/* Gentle reminder while the recovery key is not confirmed (spec/07). */}
+        {reminder && <span className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-[var(--ds-warning)]" data-testid="recovery-dot" />}
+      </span>
+      <span className="truncate">{t("nav.settings")}</span>
+    </Link>
   );
 }
 
@@ -355,100 +384,13 @@ function Section({ id, title, action, children }: { id: string; title: string; a
   );
 }
 
-/** Emoji of a space (or a stand-in for an iOS SF Symbol), else its first letter. */
-function spaceGlyph(space: { icon: string | null; name: string } | undefined): string {
-  return iconGlyph(space?.icon) || space?.name?.[0]?.toUpperCase() || "✦";
-}
-
-function SpaceSwitcher() {
-  const { t } = useTranslation();
-  const spaces = useWorkspace((s) => s.account.spaces);
-  const current = useWorkspace(activeSpace);
-  const [renaming, setRenaming] = useState(false);
-  // Spaces with the same name (e.g. after a migration) are told apart by their document count.
-  const sameName = new Set(spaces.filter((s, i) => spaces.some((o, j) => j !== i && o.name === s.name)).map((s) => s.id));
-  const spaceItem = (s: (typeof spaces)[number]): MenuItem => ({
-    label: (
-      <span className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="truncate">
-          {sameName.has(s.id) ? `${s.name} · ${t("docs.count", { count: visibleNotes(notesInSpace(useWorkspace.getState(), s.id)).length })}` : s.name || "…"}
-        </span>
-        {s.shared && <SpaceAvatars spaceId={s.id} size={16} />}
-      </span>
-    ),
-    icon: <SpaceTile icon={spaceGlyph(s)} tint={tintName(s.color)} size={18} />,
-    checked: s.id === current?.id,
-    onSelect: () => setActiveSpace(s.id),
-  });
-  const personal = spaces.filter((s) => !s.shared);
-  const sharedSpaces = spaces.filter((s) => s.shared);
-  // D-62: what can be done with the current space depends on whose it is and the role in it.
-  const currentItems: MenuItem[] = !current
-    ? []
-    : current.memberOf
-      ? [{ label: t("spaces.members"), icon: <Users className="size-3.5" />, onSelect: () => useUi.setState({ spaceMembersFor: current.id }) }]
-      : [
-          current.shared
-            ? { label: t("spaces.members"), icon: <Users className="size-3.5" />, onSelect: () => useUi.setState({ spaceMembersFor: current.id }) }
-            : { label: t("spaces.invite"), icon: <UserPlus className="size-3.5" />, onSelect: () => void inviteToSpace(t, current.id) },
-          { label: t("common.rename"), icon: <Pencil className="size-3.5" />, onSelect: () => setRenaming(true) },
-          {
-            label: t("common.delete"),
-            icon: <Trash2 className="size-3.5" />,
-            danger: true,
-            disabled: personal.length <= 1 && !current.shared,
-            onSelect: () => {
-              if (current.shared) void deleteSharedSpace(t, current.id);
-              else if (!deleteSpace(current.id)) toast(t("space.deleteNotEmpty"));
-            },
-          },
-        ];
-  const items: MenuItem[] = [
-    { kind: "label", label: t("nav.spaces") },
-    ...personal.map(spaceItem),
-    ...(sharedSpaces.length ? [{ kind: "label" as const, label: t("spaces.shared") }, ...sharedSpaces.map(spaceItem)] : []),
-    { kind: "separator" },
-    { label: t("nav.newSpace"), icon: <Plus className="size-3.5" />, onSelect: () => void createSpaceInteractive(t) },
-    { label: t("spaces.newShared"), icon: <Users className="size-3.5" />, onSelect: () => void createSharedSpaceInteractive(t) },
-    ...(currentItems.length ? [{ kind: "separator" as const }, ...currentItems] : []),
-  ];
-  if (renaming && current)
-    return (
-      <div className="w-40">
-        <InlineRename
-          value={current.name}
-          onDone={(v) => {
-            if (v) updateSpace(current.id, { name: v });
-            setRenaming(false);
-          }}
-        />
-      </div>
-    );
-  return (
-    <DropdownMenu
-      items={items}
-      trigger={
-        <button
-          className="flex h-8 min-w-0 max-w-[170px] items-center gap-2 rounded-md px-1.5 text-[14px] font-semibold text-ink hover:bg-ink/5"
-          data-testid="space-switcher"
-        >
-          <SpaceTile icon={spaceGlyph(current)} tint={tintName(current?.color)} />
-          <span className="truncate">{current?.name || "…"}</span>
-          <ChevronDown className="size-3.5 shrink-0 text-ink-3" />
-        </button>
-      }
-    />
-  );
-}
-
-/** «Общие со мной» (D-54): what other accounts share with this one, placed in this space. */
+/** «Поделились со мной» (D-63): the shared notebooks and notes themselves, in its own sidebar. */
 function SharedSection() {
   const { t } = useTranslation();
-  const spaceId = useWorkspace((s) => s.activeSpaceId);
-  const refs = useSharedRefs(spaceId);
+  const refs = useSharedRefs(SHARED_WITH_ME);
   if (!refs.length) return null;
   return (
-    <Section id="shared" title={t("shared.title")}>
+    <Section id="shared" title={t("sharedWithMe.items")}>
       <MoreList testId="shared" rows={refs.map((r) => ({ key: `${r.kind}:${r.id}`, node: <SharedRow shared={r} /> }))} />
     </Section>
   );

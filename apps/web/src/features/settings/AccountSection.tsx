@@ -19,23 +19,30 @@ export function AccountSection() {
   const { t } = useTranslation();
   const email = useAuth((s) => s.email);
   const pending = useSyncStatus((s) => s.pending);
-  const [pwOpen, setPwOpen] = useState(false);
   const [delOpen, setDelOpen] = useState(false);
+  const initial = (email ?? "?").trim().charAt(0).toUpperCase() || "?";
 
   return (
     <>
       <Card>
-        <Row label={t("settings.email")}>
-          <span className="text-[14px] text-ink-2" data-testid="account-email">
-            {email}
-          </span>
-        </Row>
-        <Row label={t("settings.changePassword")}>
-          <Button size="sm" icon={<KeyRound className="size-3.5" />} onClick={() => setPwOpen(true)}>
-            {t("settings.changePassword")}
-          </Button>
-        </Row>
-        <Row label={t("settings.signOut")} hint={pending ? t("sync.pending", { count: pending }) : undefined}>
+        <div className="flex items-center gap-4">
+          <div
+            className="flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--ds-tint-blue-bg)] font-display text-[20px] font-semibold text-[var(--ds-tint-blue-fg)]"
+            aria-hidden
+          >
+            {initial}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[12.5px] text-ink-2">{t("prefs.account.signedInAs")}</div>
+            <div className="truncate text-[16px] font-medium text-ink" data-testid="account-email">
+              {email}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card title={t("prefs.account.session")}>
+        <Row label={t("settings.signOut")} hint={pending ? t("sync.pending", { count: pending }) : t("settings.signOutText")}>
           <Button
             size="sm"
             icon={<LogOut className="size-3.5" />}
@@ -58,20 +65,39 @@ export function AccountSection() {
         </Row>
       </Card>
 
-      <RecoveryKeyCard />
-
-      <DevicesCard />
-
       <Card title={t("settings.storage")} description={t("settings.storageText")} action={<HardDrive className="size-5 text-ink-3" />} />
 
-      <Card title={t("settings.deleteAccount")} description={t("settings.deleteAccountText")}>
+      {/* Kept apart from everything else, at the very end (spec/10). */}
+      <Card title={t("prefs.account.dangerZone")} description={t("settings.deleteAccountText")} tone="danger" testId="danger-zone">
         <Button variant="danger" size="sm" icon={<Trash2 className="size-3.5" />} onClick={() => setDelOpen(true)}>
           {t("settings.deleteAccount")}
         </Button>
       </Card>
 
-      <ChangePasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
       <DeleteAccountDialog open={delOpen} onOpenChange={setDelOpen} />
+    </>
+  );
+}
+
+/** «Безопасность и устройства»: password, recovery key, devices and the security log. */
+export function SecuritySection() {
+  const { t } = useTranslation();
+  const [pwOpen, setPwOpen] = useState(false);
+  return (
+    <>
+      <Card title={t("auth.password")}>
+        <Row label={t("settings.changePassword")} hint={t("settings.passwordOthersWiped")}>
+          <Button size="sm" icon={<KeyRound className="size-3.5" />} onClick={() => setPwOpen(true)}>
+            {t("settings.changePassword")}
+          </Button>
+        </Row>
+      </Card>
+
+      <RecoveryKeyCard />
+
+      <DevicesCard />
+
+      <ChangePasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
     </>
   );
 }
@@ -96,7 +122,7 @@ function RecoveryKeyCard() {
     <>
       <section
         className={cn(
-          "rounded-lg border p-5",
+          "rounded-xl border p-5 shadow-card sm:p-6",
           unconfirmed ? "border-[color-mix(in_srgb,var(--ds-warning)_35%,transparent)] bg-[var(--ds-tint-yellow-bg)]" : "border-line bg-surface",
         )}
         data-testid="recovery-card"

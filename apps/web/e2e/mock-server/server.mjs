@@ -1,4 +1,4 @@
-// In-memory stand-in for apps/server implementing contracts api.md + sync-protocol.md (v1).
+// In-memory stand-in for apps/server implementing contracts api.md + sync-protocol.md (v1 and v2 with account_changed).
 // Used by Playwright e2e and local development until the real server is available.
 // Not a reference implementation: no persistence, no hashing, no rate limits.
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -284,6 +284,7 @@ route("POST", "/v1/notebooks", (_q, res, { auth, body }) => {
   if (existing) return existing.userId === ownerId ? json(res, 200, pubNotebook(existing)) : err(res, 409, "conflict");
   const nb = { id: body.notebookId, userId: ownerId, mode: body.mode, createdAt: nowIso(), wrappedKey: body.wrappedKey, serverKey: body.notebookKey ?? null, spaceId: space?.id ?? null };
   db.notebooks.set(nb.id, nb);
+  if (space) accountChanged(peopleOf({ kind: "space", id: space.id }), ["notebooks"]);
   json(res, 200, pubNotebook(nb));
 });
 const pubNotebook = (n) => ({ id: n.id, mode: n.mode, createdAt: n.createdAt, wrappedKey: n.wrappedKey, spaceId: n.spaceId ?? null });
@@ -480,6 +481,7 @@ route("PUT", "/v1/spaces/:id/notebooks/:notebookId", (_q, res, { auth, params, b
   if (body.version !== (n.keyVersion ?? 1)) return err(res, 409, "conflict", "version");
   if (membersOf({ kind: "notebook", id: n.id }).size) return err(res, 409, "conflict", "the notebook has its own members");
   Object.assign(n, { spaceId: sp.id, wrappedKey: body.spaceWrappedKey });
+  accountChanged(peopleOf({ kind: "space", id: sp.id }), ["notebooks"]);
   json(res, 204);
 });
 route("POST", "/v1/spaces/:id/notebooks/:notebookId/move-out", (_q, res, { auth, params, body }) => {
@@ -511,6 +513,7 @@ route("POST", "/v1/spaces/:id/rotate", (_q, res, { auth, params, body }) => {
     if (b.notebookKey) n.serverKey = b.notebookKey;
   }
   for (const [userId, m] of members) if (given.has(userId)) Object.assign(m, { wrappedKey: given.get(userId), keyVersion: body.version, status: "active" });
+  accountChanged(given.keys(), ["keys"]);
   json(res, 204);
 });
 route("POST", "/v1/spaces/:id/rotate/done", (_q, res, { auth, params }) => {
@@ -566,6 +569,14 @@ route("GET", "/v1/users/:userId/public-key", (_q, res, { auth, params }) => {
   json(res, 200, { userId: u.userId, publicKey: u.boxKey.publicKey });
 });
 
+/** Protocol 2 `account_changed` to these accounts' sockets (sync-protocol.md §4). */
+function accountChanged(userIds, what) {
+  const to = new Set([...userIds].filter(Boolean));
+  for (const o of clients) if (o.welcomed && o.protocol >= 2 && to.has(o.userId)) o.ws.send(JSON.stringify({ type: "account_changed", what }));
+}
+/** The owner and every member of a notebook, note or space. */
+const peopleOf = (target) => [ownerOf(target), ...membersOf(target).keys()];
+
 route("POST", "/v1/invitations", (_q, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const target = body.target;
@@ -590,6 +601,7 @@ route("POST", "/v1/invitations", (_q, res, { auth, body }) => {
     expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
     userExisted: db.users.has(email),
   });
+  accountChanged([db.users.get(email)?.userId], ["invitations"]);
   json(res, 204);
 });
 route("GET", "/v1/invitations", (req, res, { auth }) => {
@@ -623,6 +635,7 @@ route("POST", "/v1/invitations/:id/accept", (_q, res, { auth, params }) => {
   i.status = "accepted";
   const m = { userId: auth.userId, email: auth.user.email, role: i.role, status: "awaiting_key", joinedAt: nowIso(), accountCreatedAfterInvite: !i.userExisted, wrappedKey: null, keyVersion: 1 };
   membersOf(i.target).set(auth.userId, m);
+  accountChanged([ownerOf(i.target)], ["invitations", "members"]);
   json(res, 200, sharedItemFor(i.target, m));
 });
 route("POST", "/v1/invitations/:id/decline", (_q, res, { auth, params }) => {
@@ -630,6 +643,7 @@ route("POST", "/v1/invitations/:id/decline", (_q, res, { auth, params }) => {
   const i = db.invitations.get(params.id);
   if (!i || i.email !== auth.user.email) return err(res, 404, "not_found");
   i.status = "declined";
+  accountChanged([i.from.userId], ["invitations"]);
   json(res, 204);
 });
 const pubMember = ({ wrappedKey: _k, keyVersion: _v, ...m }) => m;
@@ -648,6 +662,7 @@ route("PATCH", "/v1/members/:kind/:id/:userId", (_q, res, { auth, params, body }
   const m = membersOf(target).get(params.userId);
   if (!m) return err(res, 404, "not_found");
   m.role = body.role;
+  accountChanged([params.userId], ["members"]);
   json(res, 204);
 });
 route("DELETE", "/v1/members/:kind/:id/:userId", (_q, res, { auth, params }) => {
@@ -656,6 +671,7 @@ route("DELETE", "/v1/members/:kind/:id/:userId", (_q, res, { auth, params }) => 
   if (!target) return err(res, 404, "not_found");
   if (ownerOf(target) !== auth.userId && params.userId !== auth.userId) return err(res, 403, "forbidden");
   if (!membersOf(target).delete(params.userId)) return err(res, 404, "not_found");
+  accountChanged([params.userId, ...peopleOf(target)], ["members", "spaces"]);
   const { r } = resourceKey(target);
   if (r) {
     if (!r.keyRotationPending) r.pendingSinceVersion = r.keyVersion ?? 1;
@@ -671,6 +687,7 @@ route("PUT", "/v1/members/:kind/:id/:userId/key", (_q, res, { auth, params, body
   if (!m) return err(res, 404, "not_found");
   if (body.version !== resourceKey(target).version) return err(res, 409, "conflict", "stale key version");
   Object.assign(m, { wrappedKey: body.wrappedKey, keyVersion: body.version, status: "active" });
+  accountChanged([params.userId], ["keys"]);
   json(res, 204);
 });
 route("POST", "/v1/members/:kind/:id/rotate", (_q, res, { auth, params, body }) => {
@@ -692,6 +709,7 @@ route("POST", "/v1/members/:kind/:id/rotate", (_q, res, { auth, params, body }) 
     r.keyRotationPending = false;
   }
   for (const [userId, m] of members) if (given.has(userId)) Object.assign(m, { wrappedKey: given.get(userId), keyVersion: body.version, status: "active" });
+  accountChanged(given.keys(), ["keys"]);
   json(res, 204);
 });
 route("POST", "/v1/members/:kind/:id/rotate/done", (_q, res, { auth, params }) => {
@@ -872,7 +890,7 @@ const clients = new Set();
 const wss = new WebSocketServer({ server, path: "/v1/sync" });
 
 wss.on("connection", (ws) => {
-  const c = { ws, welcomed: false, userId: null, shareId: null, permission: null, deviceId: null, deviceSession: null, subs: new Set() };
+  const c = { ws, welcomed: false, userId: null, shareId: null, permission: null, deviceId: null, deviceSession: null, protocol: 1, subs: new Set() };
   clients.add(c);
   const send = (m) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(m));
   // D-54: a member reaches the documents of what is shared with them (the index and notes of a
@@ -893,7 +911,8 @@ wss.on("connection", (ws) => {
     }
     if (!c.welcomed) {
       if (m.type !== "hello") return send({ type: "error", code: "unauthorized", message: "hello first" });
-      if (m.protocol !== 1) return send({ type: "error", code: "protocol_mismatch", message: "protocol 1 only" });
+      if (m.protocol !== 1 && m.protocol !== 2) return send({ type: "error", code: "protocol_mismatch", message: "protocols 1-2" });
+      c.protocol = m.protocol;
       if (m.auth?.kind === "user") {
         const s = db.sessions.get(m.auth.accessToken);
         if (s && db.revoked.has(s.deviceId)) {
@@ -912,7 +931,7 @@ wss.on("connection", (ws) => {
       } else return send({ type: "error", code: "unauthorized", message: "no auth" });
       c.deviceId = m.deviceId;
       c.welcomed = true;
-      return send({ type: "welcome", userId: c.userId, serverTime: nowIso(), protocol: 1 });
+      return send({ type: "welcome", userId: c.userId, serverTime: nowIso(), protocol: c.protocol });
     }
     switch (m.type) {
       case "subscribe":

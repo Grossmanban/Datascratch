@@ -6492,9 +6492,9 @@
     "semantic_hash": "5241e98d3303d0f123dab65b9e81e84e"
   },
   "apps/web/e2e/specs/mobile.spec.ts": {
-    "mtime": 1794151466.5554037,
-    "seen": 1794151824.935394,
-    "ast_hash": "456c3bd442dcca2c5163ea170015f846",
+    "mtime": 1794153418.4220378,
+    "seen": 1794153455.8634496,
+    "ast_hash": "1e17b66dbb8b5a3288faeb9aef673fc3",
     "semantic_hash": ""
   },
   "apps/web/e2e/screenshots/key-android-note.png": {

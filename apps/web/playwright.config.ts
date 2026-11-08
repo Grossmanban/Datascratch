@@ -24,7 +24,9 @@ const iphone = { ...devices["iPhone 15"], ...(process.env.E2E_PHONE_CHROMIUM ? {
 const phones = process.env.E2E_NO_PHONES
   ? []
   : [
-      { name: "iphone", use: iphone, testMatch: PHONE },
+      // The launch timing (launch.spec) is measured on the Android project: in CI WebKit draws
+      // without a GPU and its timings say nothing about an iPhone.
+      { name: "iphone", use: iphone, testMatch: /mobile\.spec\.ts$/ },
       // The smallest common Android screen (360 × 800), with Pixel 7 touch and user agent.
       { name: "android", use: { ...devices["Pixel 7"], viewport: { width: 360, height: 800 } }, testMatch: PHONE },
     ];

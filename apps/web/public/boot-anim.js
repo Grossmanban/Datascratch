@@ -165,7 +165,8 @@
     if (root) {
       // The app settles from a hair larger: on a phone that must not make the page scroll sideways.
       var html = document.documentElement;
-      html.style.overflowX = "clip";
+      // «hidden», not «clip»: Safari still lets the page move sideways with clip on the root.
+      html.style.overflowX = "hidden";
       var zoom = root.animate([{ transform: "scale(1.025)" }, { transform: "none" }], { duration: flight, easing: SNAP });
       var unclip = function () {
         html.style.overflowX = "";

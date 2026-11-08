@@ -36,7 +36,7 @@ async function audit(page: Page): Promise<Problem[]> {
     // Tap targets: the box itself or with its padding/hit area; 44 × 44 is Apple's, 48 Android's minimum.
     for (const el of Array.from(document.querySelectorAll("button, a[href], [role=button], [role=menuitem], [role=menuitemcheckbox], [role=tab], input[type=checkbox], [role=switch]"))) {
       // The pen palette is the editor package's own toolbar (its ⌄ / ⋯ are 32 px — passed to web-editor).
-      if (!shown(el) || el.closest("[aria-hidden=true], .ds-prose, .ds-palette, [data-tap-exempt]")) continue;
+      if (!shown(el) || el.closest("[aria-hidden=true], .ds-prose, .ds-palette, [data-testid=pen-palette-toggle], [data-tap-exempt]")) continue;
       // A link inside a sentence is exempt (WCAG 2.5.8 «inline»).
       if (el.tagName === "A" && getComputedStyle(el).display === "inline") continue;
       const r = el.getBoundingClientRect();
@@ -65,7 +65,27 @@ async function audit(page: Page): Promise<Problem[]> {
   });
 }
 
+/** The drawer slides with a JS spring (not a Web Animation): wait until it is in place or gone. */
+async function drawerSettled(page: Page) {
+  await page
+    .waitForFunction(
+      () => {
+        const el = document.querySelector('[data-testid="sidebar"]');
+        if (!el) return true;
+        const x = el.getBoundingClientRect().left;
+        const w = window as unknown as { __lastDrawerX?: number };
+        const still = w.__lastDrawerX === x;
+        w.__lastDrawerX = x;
+        return still && (x >= -1 || x <= -el.getBoundingClientRect().width + 1);
+      },
+      null,
+      { timeout: 5000, polling: 100 },
+    )
+    .catch(() => undefined);
+}
+
 async function check(page: Page, name: string) {
+  await drawerSettled(page);
   // Let entrance animations settle (menus scale in; a box mid-animation is a few px off).
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"), null, { timeout: 3000 }).catch(() => undefined);
   const problems = await audit(page);
@@ -78,6 +98,7 @@ async function openDrawer(page: Page) {
   if (await page.getByTestId("sidebar").isVisible()) return;
   await page.getByTestId("mobile-menu").click();
   await expect(page.getByTestId("sidebar")).toBeVisible();
+  await drawerSettled(page);
 }
 
 test.describe.configure({ mode: "serial" });

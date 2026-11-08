@@ -1,0 +1,1 @@
+- DSCore, D-63: «Общие со мной» в документе аккаунта (`account.shared`, `SharedRef`) с отметкой первого открытия `openedAt` — «новое» одинаково на всех устройствах; API `AccountDocument.sharedRefs()` / `putShared` / `removeShared` / `markSharedOpened` / `sharedOpenedAt`.

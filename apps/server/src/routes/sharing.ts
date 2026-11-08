@@ -39,6 +39,7 @@ import {
   type TargetKind,
   type TargetRow,
 } from '../services/sharing.js';
+import { accountChanged, audienceOf, membershipWhat } from '../services/account-events.js';
 import { topics } from '../sync/hub.js';
 import { shareDocIds } from './shares.js';
 import { errorResponses, id } from './schemas.js';
@@ -220,7 +221,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       async (req, reply) => {
         const p = await requireUser(ctx, req);
         const b = req.body;
-        await db.transaction(async (tx) => {
+        const inviteeId = await db.transaction(async (tx) => {
           const t = await requireOwnTarget(tx, p.userId, b.target, true);
           refuseInsideSpace(t);
           const [me] = await tx
@@ -292,7 +293,10 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
               expiresAt,
             });
           }
+          return invitee?.id ?? null;
         });
+        // Only the invitee's own devices hear of it: the owner learns nothing about the account.
+        accountChanged(ctx, [p.userId, inviteeId], ['invitations']);
         return reply.code(204).send(null);
       },
     );
@@ -347,8 +351,10 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           .where(
             and(eq(invitations.id, req.params.id), eq(invitations.ownerId, p.userId), eq(invitations.status, 'pending')),
           )
-          .returning({ id: invitations.id });
+          .returning({ id: invitations.id, email: invitations.email });
         if (gone.length === 0) throw notFound('invitation not found');
+        const [invitee] = await db.select({ id: users.id }).from(users).where(eq(users.email, gone[0]!.email));
+        accountChanged(ctx, [p.userId, invitee?.id], ['invitations']);
         return reply.code(204).send(null);
       },
     );
@@ -448,6 +454,8 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           return { member: created ?? (await memberOf(tx, t, p.userId))!, target: t };
         });
         accessChanged(p.userId);
+        accountChanged(ctx, [p.userId, target.ownerId], ['invitations']);
+        accountChanged(ctx, await audienceOf(db, target), membershipWhat(target.kind));
         return sharedItem(member, target);
       },
     );
@@ -465,13 +473,15 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req, reply) => {
         const p = await requireUser(ctx, req);
-        await db.transaction(async (tx) => {
+        const ownerId = await db.transaction(async (tx) => {
           const { inv } = await incoming(tx, p.userId, req.params.id, true);
           await tx
             .update(invitations)
             .set({ status: 'declined', respondedAt: new Date() })
             .where(eq(invitations.id, inv.id));
+          return inv.ownerId;
         });
+        accountChanged(ctx, [p.userId, ownerId], ['invitations']);
         return reply.code(204).send(null);
       },
     );
@@ -536,6 +546,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           .returning({ id: members.id });
         if (rows.length === 0) throw notFound('member not found');
         accessChanged(req.params.userId);
+        accountChanged(ctx, await audienceOf(db, t), membershipWhat(t.kind));
         // A member's agents work with the member's role (D-54): their cached keys go with it.
         await forgetAgentKeys(db, t);
         return reply.code(204).send(null);
@@ -567,6 +578,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         // Access closes at once (agents of the member too: RLS checks membership on every
         // call, and their cached keys go); the key rotation is flagged by the members_gone trigger.
         accessChanged(req.params.userId);
+        accountChanged(ctx, [req.params.userId, ...(await audienceOf(db, t!))], membershipWhat(t!.kind));
         await forgetAgentKeys(db, t!);
         return reply.code(204).send(null);
       },
@@ -585,7 +597,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req, reply) => {
         const p = await requireUser(ctx, req);
-        await db.transaction(async (tx) => {
+        const target = await db.transaction(async (tx) => {
           const t = await requireOwnTarget(tx, p.userId, req.params, true);
           refuseInsideSpace(t);
           if (req.body.version !== t.keyVersion) throw conflict('key version is not current');
@@ -595,9 +607,13 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             .where(and(eq(memberTargetCol(t.kind), t.id), eq(members.userId, req.params.userId)))
             .returning({ id: members.id });
           if (rows.length === 0) throw notFound('member not found');
+          return t;
         });
         // Giving the key is also the owner's confirmation of an account created after the invitation.
         accessChanged(req.params.userId);
+        // The member gets the key (and its documents); the others see its status turn active.
+        accountChanged(ctx, [req.params.userId], ['keys']);
+        accountChanged(ctx, await audienceOf(db, target), membershipWhat(target.kind));
         return reply.code(204).send(null);
       },
     );
@@ -627,7 +643,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           b.notebookKey && req.params.kind === 'notebook'
             ? Buffer.from(await ctx.keys.wrapNotebookKey(req.params.id, fromB64(b.notebookKey)))
             : null;
-        await db.transaction(async (tx) => {
+        const rotated = await db.transaction(async (tx) => {
           // One transaction under the target's row lock: of two concurrent rotations only one passes.
           const t = await requireOwnTarget(tx, p.userId, req.params, true);
           refuseInsideSpace(t);
@@ -674,7 +690,9 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
               })
               .where(eq(docs.id, t.id));
           }
+          return t;
         });
+        accountChanged(ctx, await audienceOf(db, rotated), ['keys']);
         // Keys decrypted for agents must not outlive the old key (crypto.md §8).
         if (req.params.kind === 'notebook') noteKeyCache.forgetNotebooks([req.params.id]);
         else noteKeyCache.forgetNotes([req.params.id]);
@@ -704,6 +722,7 @@ export function sharingRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           .update(notebooks)
           .set({ keyRotationPending: false, pendingSinceVersion: null })
           .where(eq(notebooks.id, t.id));
+        accountChanged(ctx, await audienceOf(db, t), ['keys']);
         // The notes now have new keys in the index: agents re-read them.
         noteKeyCache.forgetNotebooks([t.id]);
         return reply.code(204).send(null);

@@ -10,9 +10,10 @@ import { fromB64, safeEqual, toB64 } from '../lib/encoding.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { docAccess } from '../services/access.js';
 import type { UserPrincipal } from '../services/principal.js';
+import { accountChanged } from '../services/account-events.js';
 import { memberOf } from '../services/sharing.js';
 import { sharedNotebookIds } from './sharing.js';
-import { authorSchema, notebookKeyResponseSchema } from '@datascratch/shared/contracts';
+import { authorSchema, notebookKeyResponseSchema, type AccountChange } from '@datascratch/shared/contracts';
 import { AD, open } from '../lib/sodium.js';
 import { noteKeyCache } from '../plugins/agent-key-cache.js';
 import { topics } from '../sync/hub.js';
@@ -71,10 +72,15 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       return nb;
     }
 
-    /** Open sync connections of a space's members re-check access (a notebook came or went, D-62). */
-    async function notifySpaceMembers(spaceId: string) {
+    /**
+     * Open sync connections of a space's members re-check access (a notebook came or went, D-62);
+     * the owner's and members' devices hear what to re-read.
+     */
+    async function notifySpaceMembers(spaceId: string, what: AccountChange[] = ['notebooks']) {
       const ms = await db.select({ userId: members.userId }).from(members).where(eq(members.spaceId, spaceId));
       for (const m of ms) ctx.hub.publish(topics.user(m.userId), { type: 'access_changed' });
+      const [sp] = await db.select({ userId: spaces.userId }).from(spaces).where(eq(spaces.id, spaceId));
+      accountChanged(ctx, [sp?.userId, ...ms.map((m) => m.userId)], what);
     }
 
     /** The membership that opens somebody else's notebook: its own (D-54) or its shared space's (D-62). */
@@ -325,7 +331,7 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       },
       async (req, reply) => {
         const p = await requireUser(ctx, req);
-        await ownNotebook(p.userId, req.params.id);
+        const { spaceId } = await ownNotebook(p.userId, req.params.id);
         const nbId = req.params.id;
         const gone = await db.transaction(async (tx) => {
           const docRows = await tx
@@ -343,6 +349,7 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           return ids;
         });
         for (const d of gone) ctx.hub.publish(topics.doc(d), { type: 'doc_deleted', docId: d });
+        if (spaceId) await notifySpaceMembers(spaceId);
         noteKeyCache.forgetNotebooks([nbId]);
         await ctx.jobs.enqueue(CLEANUP_JOB, {});
         return reply.code(204).send(null);
@@ -373,6 +380,8 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           await db.insert(docs).values({ id: docId, userId: p.userId, kind: 'space', notebookId: null }).onConflictDoNothing();
           const [ex] = await db.select().from(docs).where(eq(docs.id, docId));
           if (!ex || ex.kind !== 'space' || ex.userId !== p.userId) throw conflict('document exists');
+          // Members list the space document among the space's documents.
+          await notifySpaceMembers(docId, ['spaces']);
           return reply.code(204).send(null);
         }
         if (kind === 'account') {

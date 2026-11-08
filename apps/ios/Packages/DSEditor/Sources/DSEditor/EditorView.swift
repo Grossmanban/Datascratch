@@ -804,6 +804,7 @@ public final class EditorView: UIView {
         ink.refreshIfNeeded()
         applyKeyboardInset()
         if remoteCursorLayer.frame != inkOver.frame { remoteCursorLayer.frame = inkOver.frame }
+        if dictationLabel != nil { positionDictationPreview() }
         if !remoteCursors.isEmpty { layoutRemoteCursors() }
     }
 
@@ -1635,10 +1636,106 @@ public final class EditorView: UIView {
             mode = nil
         }
         if let mode, agentBanner.mode != mode { agentBanner.mode = mode }
+        agentBanner.editsAuthor = onlyVoiceEdits ? "Голос" : nil
         let visible = mode != nil
         guard visible != agentBannerVisible else { return }
         agentBannerVisible = visible
         setNeedsLayout()
+    }
+
+    /// Every unaccepted edit came from voice (D-65): the banner names it.
+    private var onlyVoiceEdits: Bool {
+        var any = false
+        for p in projection.paragraphs {
+            for el in p.inline {
+                guard let v = el.marks[MarkName.agentEdit] else { continue }
+                guard case .object(let o) = v, o["agentId"]?.stringValue == EditorCommands.voiceAgentId else { return false }
+                any = true
+            }
+        }
+        return any
+    }
+
+    // MARK: - Voice (D-65)
+
+    /// Dictation in progress: grey italic text at the caret (`spec/04-editor.md`, «Голос»). Not
+    /// in the document, the sync or undo; nil removes it. It follows the caret.
+    public func setDictationPreview(_ text: String?) {
+        let text = text.flatMap { $0.isEmpty ? nil : $0 }
+        dictationPreview = text
+        guard let text else {
+            dictationLabel?.removeFromSuperview()
+            dictationLabel = nil
+            return
+        }
+        let label = dictationLabel ?? {
+            let l = UILabel()
+            l.isUserInteractionEnabled = false
+            l.numberOfLines = 0
+            l.lineBreakMode = .byWordWrapping
+            l.accessibilityIdentifier = "editor.dictationPreview"
+            // Under the ink overlay, which `textViewDidLayout` keeps last: reordering there each
+            // layout would lay the text view out again.
+            textView.insertSubview(l, belowSubview: inkOver)
+            dictationLabel = l
+            return l
+        }()
+        let font = theme.bodyFont.fontDescriptor.withSymbolicTraits(.traitItalic).map { UIFont(descriptor: $0, size: 0) } ?? theme.bodyFont
+        label.attributedText = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: EditorTheme.secondaryText])
+        positionDictationPreview()
+    }
+
+    /// The text the dictation preview shows (nil when there is none).
+    public private(set) var dictationPreview: String?
+    private var dictationLabel: UILabel?
+
+    private func positionDictationPreview() {
+        guard let label = dictationLabel, let range = textView.selectedTextRange else { return }
+        let caret = textView.caretRect(for: range.start)
+        guard !caret.isNull, !caret.isInfinite else { return }
+        let right = textView.bounds.width - textView.textContainerInset.right
+        let width = max(80, right - caret.maxX - 2)
+        let size = label.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        let frame = CGRect(x: caret.maxX + 2, y: caret.minY + (caret.height - theme.bodyFont.lineHeight) / 2,
+                           width: min(width, size.width), height: size.height)
+        if label.frame != frame { label.frame = frame }
+    }
+
+    /// Dictated Markdown at the caret, over the selection, as one undo step; text without a line
+    /// break goes into the current paragraph. The caret ends after it; the preview goes.
+    public func insertDictation(_ markdown: String) {
+        guard !model.isReadOnly else { return }
+        setDictationPreview(nil)
+        let range = selectionRange
+        let resolver = attachmentResolver
+        keepingScroll {
+            select(commands.insertMarkdown(markdown, replacing: range,
+                                           resolveNoteLink: resolver.map { r in { r.noteId(forLinkLabel: $0) } }))
+        }
+        notifyStateChange()
+    }
+
+    /// The selection as Markdown (agents' dialect), nil without a selection.
+    public var selectedMarkdown: String? {
+        let r = selectionRange
+        return commands.markdown(in: r)
+    }
+
+    /// The note's body (after the title) as Markdown in the agents' dialect.
+    public var documentMarkdown: String { commands.documentMarkdown }
+
+    /// A voice suggestion replaces the selection or the note's body: the new text carries the
+    /// `agentEdit` mark (D-10, «Принять» / undo on the banner, author «Голос»); one undo step.
+    public func replaceWithSuggestion(_ markdown: String, scope: EditorCommands.SuggestionScope) {
+        guard !model.isReadOnly else { return }
+        setDictationPreview(nil)
+        let range = selectionRange
+        let resolver = attachmentResolver
+        keepingScroll {
+            select(commands.replaceWithSuggestion(markdown, scope: scope, selection: range,
+                                                  resolveNoteLink: resolver.map { r in { r.noteId(forLinkLabel: $0) } }))
+        }
+        notifyStateChange()
     }
 
     // MARK: - Hiding the keyboard
@@ -2236,6 +2333,7 @@ extension EditorView: UITextViewDelegate {
         // longer scrolls to it by itself.
         scrollCaretIntoView()
         updateSlashMenu()
+        positionDictationPreview()
         notifyStateChange()
     }
 

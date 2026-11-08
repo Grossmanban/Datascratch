@@ -971,6 +971,52 @@ final class EditorViewTests: XCTestCase {
         XCTAssertGreaterThan(editor.textView.contentInset.bottom, 0, "the held-back keyboard inset is applied after the finger lifts")
     }
 
+    // MARK: - Voice (D-65)
+
+    /// The dictation preview is grey text at the caret, never in the document or undo; dictation
+    /// lands at the caret as one undo step; a suggestion is a voice agent edit on the banner.
+    func testDictationPreviewInsertAndSuggestion() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Голос"), .paragraph("Привет")])
+        let editor = host(doc, width: 700, height: 600)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        let end = flatRange(editor, of: "Привет").upperBound
+        editor.textView.selectedRange = NSRange(location: end, length: 0)
+        settle(editor)
+        let before = doc.blocks
+        editor.setDictationPreview(" мир")
+        settle(editor)
+        let preview = try XCTUnwrap(editor.textView.subviews.compactMap { $0 as? UILabel }.first { $0.accessibilityIdentifier == "editor.dictationPreview" })
+        let caret = editor.textView.caretRect(for: try XCTUnwrap(editor.textView.selectedTextRange).end)
+        XCTAssertEqual(preview.frame.minX, caret.maxX, accuracy: 4, "at the caret")
+        XCTAssertEqual(preview.frame.midY, caret.midY, accuracy: 12)
+        XCTAssertEqual(doc.blocks, before, "the preview is not in the document")
+        XCTAssertFalse(doc.canUndo)
+        editor.setDictationPreview(nil)
+        XCTAssertNil(preview.superview)
+
+        editor.setDictationPreview(" мир")
+        editor.insertDictation(" мир")
+        settle(editor)
+        XCTAssertNil(editor.dictationPreview, "inserting ends the preview")
+        XCTAssertEqual(doc.blocks[1].plainText, "Привет мир")
+        XCTAssertEqual(editor.textView.selectedRange.location, end + " мир".utf16.count, "the caret after it")
+        XCTAssertEqual(editor.documentMarkdown, "Привет мир\n")
+
+        let all = flatRange(editor, of: "Привет мир")
+        editor.textView.selectedRange = NSRange(location: all.lowerBound, length: all.count)
+        XCTAssertEqual(editor.selectedMarkdown, "Привет мир\n")
+        editor.replaceWithSuggestion("Здравствуй, **мир**", scope: .selection)
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(doc.blocks[1].plainText, "Здравствуй, мир")
+        XCTAssertTrue(editor.hasAgentEdits)
+        let banner = try XCTUnwrap(editor.subviews.compactMap { $0 as? AgentEditsBanner }.first)
+        XCTAssertEqual(banner.editsAuthor, "Голос")
+        doc.undo()
+        XCTAssertEqual(doc.blocks[1].plainText, "Привет мир", "a suggestion is one undo step")
+    }
+
     // MARK: - Selection and edge autoscroll (build 37 feedback)
 
     /// A selection made with a finger stays where the person left it: lifting the finger (and the

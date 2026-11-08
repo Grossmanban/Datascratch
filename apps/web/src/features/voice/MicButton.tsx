@@ -4,7 +4,15 @@ import { Loader2, Mic, ShieldCheck, Square } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, cn, Dialog, Tooltip } from "@/ui";
-import { acceptVoiceConsent, cancelDictation, currentLevel, declineVoiceConsent, startDictation, stopDictation, useDictation } from "./dictation";
+import {
+  acceptVoiceConsent,
+  cancelDictation,
+  currentLevel,
+  declineVoiceConsent,
+  startDictation,
+  stopDictation,
+  useDictation,
+} from "./dictation";
 
 /** Held this long, the button is push-to-talk (released → sent); a shorter press toggles. */
 const HOLD_MS = 350;
@@ -31,7 +39,11 @@ function Wave({ active }: { active: boolean }) {
   return (
     <span className="flex h-4 items-center gap-[2px]" aria-hidden>
       {[0, 1, 2, 3, 4].map((i) => (
-        <span key={i} ref={(el) => void (bars.current[i] = el)} className="h-4 w-[3px] origin-center scale-y-[0.18] rounded-full bg-current transition-transform duration-75" />
+        <span
+          key={i}
+          ref={(el) => void (bars.current[i] = el)}
+          className="h-4 w-[3px] origin-center scale-y-[0.18] rounded-full bg-current transition-transform duration-75"
+        />
       ))}
     </span>
   );
@@ -56,7 +68,12 @@ export function MicButton({ api, floating = false }: { api: EditorApi; floating?
   // ⌥M toggles from anywhere in the note; Esc cancels while there is something to cancel.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.altKey && !e.metaKey && !e.ctrlKey && (e.code === "KeyM" || e.key.toLowerCase() === "m")) {
+      if (
+        e.altKey &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        (e.code === "KeyM" || e.key.toLowerCase() === "m")
+      ) {
         if (useVoiceAccess.getState().me?.enabled === false) return;
         e.preventDefault();
         if (useDictation.getState().phase === "listening") void stopDictation(api);
@@ -95,7 +112,11 @@ export function MicButton({ api, floating = false }: { api: EditorApi; floating?
     if (performance.now() - pressedAt.current >= HOLD_MS) void stopDictation(api);
   }
 
-  const label = listening ? t("voice.listening") : pending ? t("voice.working") : t("voice.dictate");
+  const label = listening
+    ? t("voice.listening")
+    : pending
+      ? t("voice.working")
+      : t("voice.dictate");
   const hint = t("voice.hint");
 
   const button = (
@@ -125,13 +146,19 @@ export function MicButton({ api, floating = false }: { api: EditorApi; floating?
           : "h-8 min-w-8 px-2 text-ink-2 hover:bg-ink/5 hover:text-ink",
         floating && !listening && "bg-surface text-ink ring-1 ring-line",
         off && "cursor-not-allowed opacity-45",
-        listening && "bg-[var(--ds-accent)] text-white shadow-[0_0_0_6px_color-mix(in_srgb,var(--ds-accent)_22%,transparent),0_0_24px_color-mix(in_srgb,var(--ds-accent)_45%,transparent)]",
+        listening &&
+          "bg-[var(--ds-accent)] text-white shadow-[0_0_0_6px_color-mix(in_srgb,var(--ds-accent)_22%,transparent),0_0_24px_color-mix(in_srgb,var(--ds-accent)_45%,transparent)]",
       )}
     >
       {listening ? (
         <>
           <Wave active />
-          {floating && <Square className="absolute -bottom-0.5 -right-0.5 size-4 rounded-full bg-white p-0.5 text-[var(--ds-accent)]" fill="currentColor" />}
+          {floating && (
+            <Square
+              className="absolute -bottom-0.5 -right-0.5 size-4 rounded-full bg-white p-0.5 text-[var(--ds-accent)]"
+              fill="currentColor"
+            />
+          )}
         </>
       ) : pending ? (
         <Loader2 className={cn("animate-spin", floating ? "size-6" : "size-4")} />
@@ -144,16 +171,25 @@ export function MicButton({ api, floating = false }: { api: EditorApi; floating?
   if (gone) return null;
   return (
     // The status floats under the button: nothing in the bar moves while the finger is on it.
-    <div className={cn("relative flex items-center", floating && "flex-col-reverse gap-2")} data-testid="mic">
-      {floating && !off ? button : <Tooltip content={off ? t("voice.off") : `${t("voice.dictate")} · ⌥M — ${hint}`}>{button}</Tooltip>}
+    <div className="relative flex items-center" data-testid="mic">
+      {floating && !off ? (
+        button
+      ) : (
+        <Tooltip content={off ? t("voice.off") : `${t("voice.dictate")} · ⌥M — ${hint}`}>
+          {button}
+        </Tooltip>
+      )}
       {(phase !== "idle" || error) && (
         <span
           role="status"
           aria-live="polite"
           className={cn(
-            "whitespace-nowrap text-[12.5px] font-medium",
-            "rounded-full bg-surface/95 px-3 py-1 shadow-card ring-1 ring-line",
-            !floating && "absolute right-0 top-[calc(100%+6px)] z-30",
+            "text-[12.5px] font-medium",
+            "bg-surface/95 px-3 py-1 shadow-card ring-1 ring-line",
+            // On a phone it stands above the round button, right-aligned, and wraps within the screen.
+            floating
+              ? "absolute bottom-[calc(100%+8px)] right-0 w-max max-w-[calc(100vw-32px)] rounded-2xl text-right"
+              : "absolute right-0 top-[calc(100%+6px)] z-30 whitespace-nowrap rounded-full",
             error && phase === "idle" ? "text-danger" : "text-ink-2",
           )}
           data-testid="mic-status"
@@ -178,7 +214,11 @@ export function VoiceConsentDialog() {
   const open = useDictation((s) => s.consentOpen);
   const [busy, setBusy] = useState(false);
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && declineVoiceConsent()} title={t("voice.consentTitle")}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => !o && declineVoiceConsent()}
+      title={t("voice.consentTitle")}
+    >
       <div className="flex flex-col gap-4" data-testid="voice-consent">
         <div className="flex gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--ds-accent)_10%,transparent)] text-[var(--ds-accent)]">
@@ -187,7 +227,12 @@ export function VoiceConsentDialog() {
           <p className="text-[14px] leading-relaxed text-ink-2">{t("voice.consentText")}</p>
         </div>
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={declineVoiceConsent} data-testid="voice-consent-decline">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={declineVoiceConsent}
+            data-testid="voice-consent-decline"
+          >
             {t("voice.consentLater")}
           </Button>
           <Button

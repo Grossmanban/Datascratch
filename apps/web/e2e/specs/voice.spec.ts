@@ -9,17 +9,38 @@ const MOCK = "http://localhost:8787";
 /** A fake microphone; with `deny` the browser refuses it as when permission is denied. */
 async function fakeMic(page: Page, deny = false) {
   await page.addInitScript((denied) => {
-    const md = navigator.mediaDevices ?? ((navigator as unknown as { mediaDevices: MediaDevices }).mediaDevices = {} as MediaDevices);
-    md.getUserMedia = async () => {
+    const md =
+      navigator.mediaDevices ??
+      ((navigator as unknown as { mediaDevices: MediaDevices }).mediaDevices = {} as MediaDevices);
+    const fake = async () => {
       if (denied) throw new DOMException("Permission denied", "NotAllowedError");
-      const ctx = new AudioContext();
-      const osc = ctx.createOscillator();
-      osc.frequency.value = 220;
-      const dst = ctx.createMediaStreamDestination();
-      osc.connect(dst);
-      osc.start();
-      return dst.stream;
+      try {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        osc.frequency.value = 220;
+        const dst = ctx.createMediaStreamDestination();
+        osc.connect(dst);
+        osc.start();
+        return dst.stream;
+      } catch {
+        // No WebAudio stream here: a silent stream (the recorder stand-in below needs nothing more).
+        return typeof MediaStream !== "undefined"
+          ? new MediaStream()
+          : ({ getTracks: () => [] } as unknown as MediaStream);
+      }
     };
+    // WebKit keeps getUserMedia on the prototype: a plain assignment may not take, so define it on both.
+    for (const target of [md, Object.getPrototypeOf(md)]) {
+      try {
+        Object.defineProperty(target, "getUserMedia", {
+          value: fake,
+          configurable: true,
+          writable: true,
+        });
+      } catch {
+        // Not configurable here: the other target carries it.
+      }
+    }
     // Playwright's Linux WebKit is built without MediaRecorder (Safari on iOS 14.3+ has it): a
     // stand-in with the same surface hands out mp4-typed chunks as Safari does.
     if (typeof MediaRecorder === "undefined") {
@@ -32,7 +53,9 @@ async function fakeMic(page: Page, deny = false) {
         private timer = 0;
         constructor(readonly stream: MediaStream) {}
         private chunk() {
-          this.ondataavailable?.({ data: new Blob([new Uint8Array(2048)], { type: this.mimeType }) });
+          this.ondataavailable?.({
+            data: new Blob([new Uint8Array(2048)], { type: this.mimeType }),
+          });
         }
         start(slice = 250) {
           this.state = "recording";
@@ -69,7 +92,9 @@ async function tapTake(p: Page, ms = 1200) {
 
 test.describe.configure({ mode: "serial" });
 
-test("dictation: consent once, tap and hold, takes in order, Esc cancels, errors are plain", async ({ page }) => {
+test("dictation: consent once, tap and hold, takes in order, Esc cancels, errors are plain", async ({
+  page,
+}) => {
   test.skip(!!process.env.E2E_SERVER_URL, "mock server only (voice providers stand-in)");
   test.setTimeout(120_000);
   await fakeMic(page);
@@ -120,7 +145,10 @@ test("dictation: consent once, tap and hold, takes in order, Esc cancels, errors
   // A plain message when the service says no.
   await voiceMock(page, { fail: { status: 429, code: "voice_quota" } });
   await tapTake(page);
-  await expect(page.getByTestId("mic-status")).toContainText("Лимит голоса на этот месяц исчерпан", { timeout: 15_000 });
+  await expect(page.getByTestId("mic-status")).toContainText(
+    "Лимит голоса на этот месяц исчерпан",
+    { timeout: 15_000 },
+  );
   await voiceMock(page, { fail: null });
 
   // Consent is remembered (account settings): no window after a reload.
@@ -138,11 +166,15 @@ test("dictation: a denied microphone says how to allow it", async ({ page }) => 
   await newDoc(page, "Без микрофона", "Текст");
   await page.getByTestId("mic-button").click();
   await page.getByTestId("voice-consent-accept").click();
-  await expect(page.getByTestId("mic-status")).toContainText("Нет доступа к микрофону", { timeout: 10_000 });
+  await expect(page.getByTestId("mic-status")).toContainText("Нет доступа к микрофону", {
+    timeout: 10_000,
+  });
   await expect(page.getByTestId("mic-button")).toHaveAttribute("data-phase", "idle");
 });
 
-test("«Оформить»: a style, the note tidied as a highlighted edit, the draft folded below, undo", async ({ page }) => {
+test("«Оформить»: a style, the note tidied as a highlighted edit, the draft folded below, undo", async ({
+  page,
+}) => {
   test.skip(!!process.env.E2E_SERVER_URL, "mock server only");
   await signUp(page, uniqueEmail("voice-format"));
   await newDoc(page, "Черновик", "первое предложение. второе предложение.");
@@ -160,7 +192,9 @@ test("«Оформить»: a style, the note tidied as a highlighted edit, the 
   await expect(body(page).locator('.ds-agent-edit[data-agent-id="voice"]').first()).toBeVisible();
   // The original text from the banner; «Отклонить» brings it back.
   await page.getByTestId("format-draft-toggle").click();
-  await expect(page.getByTestId("format-draft")).toContainText("первое предложение. второе предложение.");
+  await expect(page.getByTestId("format-draft")).toContainText(
+    "первое предложение. второе предложение.",
+  );
   await page.getByTestId("format-undo").click();
   await expect(body(page)).toContainText("первое предложение. второе предложение.");
   await expect(body(page).locator("h2")).toHaveCount(0);
@@ -174,7 +208,8 @@ test("settings → «Голос»: quality and profanity are kept", async ({ pag
   await expect(page.getByTestId("voice-left")).toContainText(
     process.env.E2E_SERVER_URL ? "Голос временно недоступен" : "Осталось в этом месяце: 120 мин",
   );
-  const opt = (name: string) => page.getByRole("radio", { name }).or(page.getByRole("button", { name })).first();
+  const opt = (name: string) =>
+    page.getByRole("radio", { name }).or(page.getByRole("button", { name })).first();
   await opt("Лучшее").click();
   await opt("Оставлять как есть").click();
   await page.reload();
@@ -184,7 +219,10 @@ test("settings → «Голос»: quality and profanity are kept", async ({ pag
   await expect(page.getByTestId("admin-voice")).toHaveCount(0);
 });
 
-test("the server admin turns voice on for an account: its button comes alive without a reload", async ({ page, browser }) => {
+test("the server admin turns voice on for an account: its button comes alive without a reload", async ({
+  page,
+  browser,
+}) => {
   test.skip(!!process.env.E2E_SERVER_URL, "mock server only (who is admin is a server setting)");
   test.setTimeout(120_000);
   const member = uniqueEmail("novoice");

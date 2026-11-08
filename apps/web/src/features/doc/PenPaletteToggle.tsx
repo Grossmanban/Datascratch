@@ -69,19 +69,24 @@ export function PenPaletteToggle({ pen, above }: { pen: Pen; above?: ReactNode }
     if (!hasAbove) return;
     const measure = () => {
       const w = wrap.current?.getBoundingClientRect();
-      const pal = collapsed ? null : document.querySelector(".ds-palette")?.getBoundingClientRect();
+      const pal = collapsed
+        ? null
+        : document.querySelector(".ds-palette [role=toolbar]")?.getBoundingClientRect();
       // The floating mic is 56 px wide, right-aligned with the button.
       const inColumn = w && pal && pal.width > 0 && pal.right > w.right - 64 && pal.top < w.top;
       setGap(inColumn ? Math.max(12, Math.round(w.top - pal.top) + 12) : 12);
     };
     measure();
-    const ro = new ResizeObserver(measure);
-    const pal = document.querySelector(".ds-palette");
-    if (pal) ro.observe(pal);
+    // Both stick to the bottom but at offsets that change as the note scrolls, and the palette may
+    // mount after this: measure on scroll and resize, and twice a second (two rects, no re-render
+    // unless the gap changes).
+    const timer = window.setInterval(measure, 400);
     window.addEventListener("resize", measure);
+    document.addEventListener("scroll", measure, { capture: true, passive: true });
     return () => {
-      ro.disconnect();
+      window.clearInterval(timer);
       window.removeEventListener("resize", measure);
+      document.removeEventListener("scroll", measure, { capture: true });
     };
   }, [hasAbove, collapsed, lift]);
   const Icon = (settings.tool && TOOL_ICONS[settings.tool]) || Type;

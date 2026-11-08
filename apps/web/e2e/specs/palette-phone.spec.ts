@@ -40,6 +40,14 @@ for (const width of [360, 390]) {
     const box = (await palette.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(12);
     expect(box.x + box.width).toBeLessThanOrEqual(width - 12);
+    // The phone's «Диктовать» stands above the palette in the same corner, not over its ⌄.
+    const paletteTop = box.y;
+    await expect
+      .poll(async () => {
+        const m = await page.getByTestId("mic-button").boundingBox();
+        return m ? m.y + m.height <= paletteTop : false;
+      })
+      .toBe(true);
     // The small buttons look 32 px but take 44 px.
     expect((await page.getByTestId("tool-more").boundingBox())!.width).toBeLessThanOrEqual(34);
     await targetIs44(page, "tool-more");

@@ -6330,9 +6330,9 @@
     "semantic_hash": ""
   },
   "apps/web/public/boot-anim.js": {
-    "mtime": 1794155332.3896015,
-    "seen": 1794155698.7573183,
-    "ast_hash": "8baa2d1c74e22d67771d7557a8a63b71",
+    "mtime": 1794157476.2307007,
+    "seen": 1794157845.4430532,
+    "ast_hash": "2caeb1756673e52364de008a4df4648d",
     "semantic_hash": ""
   },
   "apps/web/src/app/boot.ts": {
@@ -6492,9 +6492,9 @@
     "semantic_hash": "5241e98d3303d0f123dab65b9e81e84e"
   },
   "apps/web/e2e/specs/mobile.spec.ts": {
-    "mtime": 1794155332.3900454,
-    "seen": 1794155698.7572603,
-    "ast_hash": "58bbd6d59cd417ca0e683193b5ef10dd",
+    "mtime": 1794157476.2312822,
+    "seen": 1794157845.442971,
+    "ast_hash": "b9fcf1d264cb64f1e47e3d2b2dabd1e2",
     "semantic_hash": ""
   },
   "apps/web/e2e/screenshots/key-android-note.png": {

@@ -1,10 +1,23 @@
-// Messages of the WebSocket sync protocol (sync-protocol.md, v1).
+// Messages of the WebSocket sync protocol (sync-protocol.md, versions 1–2).
 // The server and every client validate incoming frames with these schemas.
 import { z } from "zod";
 import { authorSchema, deviceRevokedReasonSchema } from "./api.js";
 import { base64UrlSchema, uuidSchema } from "./common.js";
 
-export const SYNC_PROTOCOL_VERSION = 1;
+/**
+ * Protocol versions (sync-protocol.md §2). A client says the newest it speaks in `hello`; the
+ * server answers `welcome` with the version it will use (≤ the client's). Version 2 adds the
+ * `account_changed` message. Clients ignore unknown message types (§4), so a newer server never
+ * breaks an older client.
+ */
+export const SYNC_PROTOCOL_MIN = 1;
+export const SYNC_PROTOCOL_LATEST = 2;
+/**
+ * The baseline version every server accepts (1). Kept for servers that compare `hello.protocol`
+ * with it; new code uses SYNC_PROTOCOL_MIN / SYNC_PROTOCOL_LATEST.
+ */
+export const SYNC_PROTOCOL_VERSION = SYNC_PROTOCOL_MIN;
+const protocolSchema = z.number().int().min(SYNC_PROTOCOL_MIN).max(SYNC_PROTOCOL_LATEST);
 export const SYNC_PATH = "/v1/sync";
 /** WebSocket ping interval. */
 export const SYNC_PING_INTERVAL_MS = 25_000;
@@ -38,7 +51,7 @@ export type ClientPlatform = (typeof CLIENT_PLATFORMS)[number];
 
 export const helloMessageSchema = z.object({
   type: z.literal("hello"),
-  protocol: z.literal(SYNC_PROTOCOL_VERSION),
+  protocol: protocolSchema,
   auth: syncAuthSchema,
   deviceId: deviceIdSchema,
   client: z.object({ platform: z.enum(CLIENT_PLATFORMS), version: z.string().min(1) }),
@@ -111,7 +124,7 @@ export const welcomeMessageSchema = z.object({
   /** null for guests. */
   userId: uuidSchema.nullable(),
   serverTime: z.string(),
-  protocol: z.literal(SYNC_PROTOCOL_VERSION),
+  protocol: protocolSchema,
 });
 
 /** Server-stamped author (D-54); optional so older servers still parse. */
@@ -190,6 +203,24 @@ export const errorMessageSchema = z.object({
  */
 export const SYNC_CLOSE_DEVICE_REVOKED = 4410;
 
+/** What `account_changed` says changed (protocol 2); unknown values are dropped. */
+export const ACCOUNT_CHANGES = ["invitations", "spaces", "members", "keys", "notebooks"] as const;
+export type AccountChange = (typeof ACCOUNT_CHANGES)[number];
+const isAccountChange = (v: string): v is AccountChange =>
+  (ACCOUNT_CHANGES as readonly string[]).includes(v);
+
+/**
+ * Protocol 2: shared state of the account changed (invitations, members, key wraps, space
+ * notebooks, a rotation) — refresh it now instead of polling (sync-protocol.md §4).
+ */
+export const accountChangedMessageSchema = z.object({
+  type: z.literal("account_changed"),
+  what: z
+    .array(z.string())
+    .max(8)
+    .transform((w) => [...new Set(w.filter(isAccountChange))]),
+});
+
 export const serverMessageSchema = z.discriminatedUnion("type", [
   welcomeMessageSchema,
   updatesMessageSchema,
@@ -197,7 +228,19 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
   ackMessageSchema,
   serverAwarenessMessageSchema,
   errorMessageSchema,
+  accountChangedMessageSchema,
 ]);
+
+/** Message types this version knows; a frame of another `type` is ignored by clients. */
+export const SERVER_MESSAGE_TYPES = [
+  "welcome",
+  "updates",
+  "update",
+  "ack",
+  "awareness",
+  "error",
+  "account_changed",
+] as const;
 
 export type WelcomeMessage = z.infer<typeof welcomeMessageSchema>;
 export type UpdatesMessage = z.infer<typeof updatesMessageSchema>;
@@ -205,11 +248,35 @@ export type UpdateMessage = z.infer<typeof updateMessageSchema>;
 export type AckMessage = z.infer<typeof ackMessageSchema>;
 export type ServerAwarenessMessage = z.infer<typeof serverAwarenessMessageSchema>;
 export type ErrorMessage = z.infer<typeof errorMessageSchema>;
+export type AccountChangedMessage = z.infer<typeof accountChangedMessageSchema>;
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 
 /** Parse a text frame received from the server; returns null for invalid JSON or schema. */
 export function parseServerMessage(raw: string): ServerMessage | null {
   return parseFrame(raw, serverMessageSchema);
+}
+
+/**
+ * Parse a server frame, telling a message of an unknown `type` (from a newer server: ignore it)
+ * from a broken one (invalid JSON, no `type`, or a known type that fails its schema: an error).
+ */
+export function parseServerFrame(
+  raw: string,
+):
+  | { kind: "message"; message: ServerMessage }
+  | { kind: "unknown"; type: string }
+  | { kind: "invalid" } {
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    return { kind: "invalid" };
+  }
+  const type = (json as { type?: unknown } | null)?.type;
+  if (typeof type !== "string") return { kind: "invalid" };
+  if (!(SERVER_MESSAGE_TYPES as readonly string[]).includes(type)) return { kind: "unknown", type };
+  const result = serverMessageSchema.safeParse(json);
+  return result.success ? { kind: "message", message: result.data } : { kind: "invalid" };
 }
 
 /** Parse a text frame received from a client; returns null for invalid JSON or schema. */

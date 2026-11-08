@@ -11,8 +11,10 @@ import {
   SNAPSHOT_THRESHOLD_BYTES,
   SNAPSHOT_THRESHOLD_UPDATES,
   SYNC_CLOSE_DEVICE_REVOKED,
-  SYNC_PROTOCOL_VERSION,
-  parseServerMessage,
+  parseServerFrame,
+  SYNC_PROTOCOL_LATEST,
+  SYNC_PROTOCOL_MIN,
+  type AccountChange,
   type ClientMessage,
   type ClientPlatform,
   type ServerMessage,
@@ -180,6 +182,11 @@ interface Listeners {
    */
   deviceRevoked: (reason: DeviceRevokedReason) => void;
   /**
+   * Protocol 2 (`account_changed`): shared state of the account changed on the server —
+   * refresh invitations, spaces, members, keys or space notebooks now instead of polling.
+   */
+  accountChanged: (what: Set<AccountChange>) => void;
+  /**
    * Outbox storage failed (`ok: false`, e.g. quota exceeded — show «хранилище
    * заполнено») or works again (`ok: true`). Edits are kept in memory meanwhile.
    */
@@ -258,6 +265,7 @@ export class SyncClient {
   private readonly listeners: { [K in keyof Listeners]: Set<Listeners[K]> } = {
     status: new Set(),
     deviceRevoked: new Set(),
+    accountChanged: new Set(),
     synced: new Set(),
     error: new Set(),
     awareness: new Set(),
@@ -278,6 +286,9 @@ export class SyncClient {
   private readonly sentWaiters = new Map<string, (() => void)[]>();
   private socket: WebSocketLike | null = null;
   private _status: SyncStatus = "idle";
+  /** Version sent in `hello`; lowered once per mismatch with an older server. */
+  private helloProtocol: number = SYNC_PROTOCOL_LATEST;
+  private _protocol: number | null = null;
   private welcomed = false;
   private attempt = 0;
   private authFailures = 0;
@@ -439,6 +450,11 @@ export class SyncClient {
       entry.doc = null;
       entry.detach = () => {};
     });
+  }
+
+  /** Protocol version of the current connection (from `welcome`); null before it. */
+  get protocol(): number | null {
+    return this._protocol;
   }
 
   isLive(docId: string): boolean {
@@ -699,11 +715,14 @@ export class SyncClient {
     socket.onmessage = (ev) => {
       if (socket !== this.socket) return;
       const raw = typeof ev.data === "string" ? ev.data : String(ev.data);
-      const msg = parseServerMessage(raw);
-      if (!msg) {
+      const frame = parseServerFrame(raw);
+      // A message type from a newer server is not an error (sync-protocol.md §4).
+      if (frame.kind === "unknown") return;
+      if (frame.kind === "invalid") {
         this.emitError({ code: "internal", message: "invalid server message" });
         return;
       }
+      const msg = frame.message;
       void this.serial(() => this.handle(msg));
     };
     socket.onclose = (ev) => {
@@ -748,7 +767,7 @@ export class SyncClient {
     if (socket !== this.socket) return;
     this.send({
       type: "hello",
-      protocol: SYNC_PROTOCOL_VERSION,
+      protocol: this.helloProtocol,
       auth,
       deviceId: this.opts.deviceId,
       client: this.opts.client,
@@ -919,6 +938,7 @@ export class SyncClient {
     switch (msg.type) {
       case "welcome": {
         this.welcomed = true;
+        this._protocol = msg.protocol;
         this.authFailures = 0;
         this.setStatus("online");
         // Reset the backoff only once the connection proved stable: a server
@@ -1038,9 +1058,24 @@ export class SyncClient {
         }
         return;
       }
+      case "account_changed": {
+        const what = new Set(msg.what);
+        if (what.size) for (const fn of this.listeners.accountChanged) fn(what);
+        return;
+      }
       case "error":
         if (msg.code === "device_revoked") {
           this.revoke(msg.reason ?? "user");
+          return;
+        }
+        if (
+          msg.code === "protocol_mismatch" &&
+          !this.welcomed &&
+          this.helloProtocol > SYNC_PROTOCOL_MIN
+        ) {
+          // An older server: say the previous version on the next connection (not an error).
+          this.helloProtocol--;
+          this.socket?.close(1000, "protocol fallback");
           return;
         }
         await this.handleError(msg.code, msg.message, msg.ref, msg.retryAfterMs);

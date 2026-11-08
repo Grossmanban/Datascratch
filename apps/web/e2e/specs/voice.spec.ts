@@ -142,7 +142,7 @@ test("settings → «Голос»: quality and profanity are kept", async ({ pag
   await signUp(page, uniqueEmail("voice-settings"));
   await page.goto("/settings/voice");
   await expect(page.getByTestId("settings-voice")).toBeVisible();
-  await expect(page.getByTestId("voice-left")).toContainText("Осталось в этом месяце: 600 мин");
+  await expect(page.getByTestId("voice-left")).toContainText("Осталось в этом месяце: 120 мин");
   const opt = (name: string) => page.getByRole("radio", { name }).or(page.getByRole("button", { name })).first();
   await opt("Лучшее").click();
   await opt("Оставлять как есть").click();

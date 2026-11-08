@@ -583,8 +583,15 @@ const peopleOf = (target) => [ownerOf(target), ...membersOf(target).keys()];
 const voice = { takes: 0, fail: null, access: new Map() };
 const voiceOf = (user) => {
   if (!voice.access.has(user.userId))
-    voice.access.set(user.userId, { enabled: !user.email.startsWith("novoice"), monthlyMinutes: 600, usedMinutes: 0 });
+    voice.access.set(user.userId, { enabled: !user.email.startsWith("novoice"), customMinutes: null, usedMinutes: 0, costUsd: 0, requests: 0 });
   return voice.access.get(user.userId);
+};
+const isVoiceAdmin = (user) => user.email.startsWith("voiceadmin");
+/** The default monthly minutes (DEFAULT_VOICE_MONTHLY_MINUTES: 600 for the owner, 120 for others). */
+const voiceLimit = (user, a) => a.customMinutes ?? (isVoiceAdmin(user) ? 600 : 120);
+const voiceView = (user) => {
+  const a = voiceOf(user);
+  return { enabled: a.enabled, monthlyMinutes: voiceLimit(user, a), usedMinutes: a.usedMinutes, resetsAt: nextMonth() };
 };
 const nextMonth = () => {
   const d = new Date();
@@ -593,7 +600,7 @@ const nextMonth = () => {
 const voiceGate = (auth, res) => {
   const a = voiceOf(auth.user);
   if (!a.enabled) return err(res, 403, "voice_disabled", "voice is off for this account"), false;
-  if (a.usedMinutes >= a.monthlyMinutes) return err(res, 429, "voice_quota", "monthly voice quota used"), false;
+  if (a.usedMinutes >= voiceLimit(auth.user, a)) return err(res, 429, "voice_quota", "monthly voice quota used"), false;
   return true;
 };
 route("POST", "/__mock/voice", (_q, res, { body }) => {
@@ -603,19 +610,33 @@ route("POST", "/__mock/voice", (_q, res, { body }) => {
 });
 route("GET", "/v1/voice/me", (_q, res, { auth }) => {
   if (!auth) return err(res, 401, "unauthorized");
-  json(res, 200, { ...voiceOf(auth.user), resetsAt: nextMonth() });
+  json(res, 200, { ...voiceView(auth.user), available: true, admin: isVoiceAdmin(auth.user) });
 });
 route("GET", "/v1/admin/voice", (_q, res, { auth }) => {
   if (!auth) return err(res, 401, "unauthorized");
-  if (!auth.user.email.startsWith("voiceadmin")) return err(res, 403, "forbidden");
-  json(res, 200, [...db.users.values()].map((u) => ({ userId: u.userId, email: u.email, ...voiceOf(u), resetsAt: nextMonth() })));
+  if (!isVoiceAdmin(auth.user)) return err(res, 403, "forbidden");
+  const accounts = [...db.users.values()].map((u) => {
+    const a = voiceOf(u);
+    return { userId: u.userId, email: u.email, name: null, admin: isVoiceAdmin(u), ...voiceView(u), customMinutes: a.customMinutes, costUsd: a.costUsd, requests: a.requests };
+  });
+  const sum = (k) => accounts.reduce((n, a) => n + a[k], 0);
+  const d = new Date();
+  json(res, 200, {
+    month: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
+    resetsAt: nextMonth(),
+    accounts,
+    totals: { usedMinutes: sum("usedMinutes"), costUsd: sum("costUsd"), requests: sum("requests"), enabledAccounts: accounts.filter((a) => a.enabled).length },
+  });
 });
 route("PUT", "/v1/admin/voice/:userId", (_q, res, { auth, params, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
-  if (!auth.user.email.startsWith("voiceadmin")) return err(res, 403, "forbidden");
+  if (!isVoiceAdmin(auth.user)) return err(res, 403, "forbidden");
   const u = userById(params.userId);
   if (!u) return err(res, 404, "not_found");
-  Object.assign(voiceOf(u), { enabled: !!body.enabled, monthlyMinutes: Number(body.monthlyMinutes) || 0 });
+  const a = voiceOf(u);
+  a.enabled = !!body.enabled;
+  // monthlyMinutes: a number — the account's own limit; null — back to the default; absent — unchanged.
+  if ("monthlyMinutes" in body) a.customMinutes = body.monthlyMinutes == null ? null : Number(body.monthlyMinutes);
   accountChanged([u.userId], ["voice"]);
   json(res, 204);
 });
@@ -626,7 +647,11 @@ route("POST", "/v1/voice/transcribe", (req, res, { auth, body }) => {
   if (!String(req.headers["content-type"] ?? "").startsWith("multipart/form-data")) return err(res, 400, "bad_request", "multipart expected");
   if (!Buffer.isBuffer(body) || body.length < 500 || !body.includes('name="audio"')) return err(res, 400, "bad_request", "audio expected");
   voice.takes += 1;
-  voiceOf(auth.user).usedMinutes += 2.5 / 60;
+  Object.assign(voiceOf(auth.user), {
+    usedMinutes: voiceOf(auth.user).usedMinutes + 2.5 / 60,
+    costUsd: voiceOf(auth.user).costUsd + 0.01,
+    requests: voiceOf(auth.user).requests + 1,
+  });
   json(res, 200, { durationSec: 2.5, turns: [{ speaker: "S1", text: `фраза номер ${voice.takes} эээ сказанная вслух`, start: 0, end: 2.5 }] });
 });
 route("POST", "/v1/voice/text", (_q, res, { auth, body }) => {

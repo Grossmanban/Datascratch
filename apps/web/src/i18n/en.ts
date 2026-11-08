@@ -324,8 +324,9 @@ const en: Loose<Messages> = {
     admin: {
       title: "Who can use it",
       hint: "Voice is turned on per account, each with its own monthly limit in minutes.",
-      total: "This month: {{minutes}} min",
-      used: "used {{used}} of {{limit}} min",
+      total: "This month: {{minutes}} min · {{cost}}",
+      used: "used {{used}} of {{limit}} min · {{cost}}",
+      defaultHint: "Empty — the default limit",
       limit: "Monthly limit, min",
       min: "min",
       on: "Voice on",

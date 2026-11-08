@@ -50,6 +50,8 @@ export function MicButton({ api, floating = false }: { api: EditorApi; floating?
   const listening = phase === "listening";
   // D-65: the server admin turns voice on per account; off — the button stays, greyed, and says so.
   const off = useVoiceAccess((s) => s.loaded && !!s.me && !s.me.enabled);
+  // The voice service is down for everyone: no button at all (settings say so).
+  const gone = useVoiceAccess((s) => s.me?.available === false);
 
   // ⌥M toggles from anywhere in the note; Esc cancels while there is something to cancel.
   useEffect(() => {
@@ -139,6 +141,7 @@ export function MicButton({ api, floating = false }: { api: EditorApi; floating?
     </button>
   );
 
+  if (gone) return null;
   return (
     // The status floats under the button: nothing in the bar moves while the finger is on it.
     <div className={cn("relative flex items-center", floating && "flex-col-reverse gap-2")} data-testid="mic">

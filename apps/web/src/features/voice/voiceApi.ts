@@ -1,6 +1,6 @@
 import type {
   AdminVoiceAccount,
-  PutAdminVoiceRequest,
+  AdminVoiceResponse,
   VoiceMe,
   VoiceMode,
   VoiceTextRequest,
@@ -13,6 +13,19 @@ import { request } from "@/api/client";
 // D-65 «Голос» (api.md «Голос», `@datascratch/shared/voice`).
 
 export type { VoiceProfanity, VoiceQuality, VoiceStyle, VoiceTurn } from "@datascratch/shared/voice";
+
+/**
+ * The server's final shapes (coordinator, 2026-11-08) ahead of core's schemas: `available` (the
+ * service is up), `admin` (this account manages voice), per account `customMinutes` (null = the
+ * default) and `requests`. Optional here until core carries them.
+ */
+export type MyVoice = VoiceMe & { available?: boolean; admin?: boolean };
+export type AdminVoiceRow = AdminVoiceAccount & { admin?: boolean; customMinutes?: number | null; requests?: number };
+export type AdminVoice = Omit<AdminVoiceResponse, "accounts"> & {
+  accounts: AdminVoiceRow[];
+  totals: AdminVoiceResponse["totals"] & { requests?: number; enabledAccounts?: number };
+};
+export type AdminVoicePut = { enabled: boolean; monthlyMinutes?: number | null };
 export { DEFAULT_VOICE_STYLE, VOICE_AGENT_ID, VOICE_STYLES } from "@datascratch/shared/voice";
 
 export const voiceApi = {
@@ -29,10 +42,11 @@ export const voiceApi = {
     return request<VoiceTextResponse>("POST", "/voice/text", { body: req, signal, timeoutMs: 180_000 });
   },
   /** This account's access and what is left this month. */
-  me: () => request<VoiceMe>("GET", "/voice/me"),
-  /** Server admin only (others get 403): every account's access and use. */
-  adminList: () => request<AdminVoiceAccount[]>("GET", "/admin/voice"),
-  adminPut: (userId: string, body: PutAdminVoiceRequest) => request<void>("PUT", `/admin/voice/${userId}`, { body }),
+  me: () => request<MyVoice>("GET", "/voice/me"),
+  /** Server admin only (others get 403): every account's access and use, and the month's totals. */
+  adminList: () => request<AdminVoice>("GET", "/admin/voice"),
+  /** `monthlyMinutes: null` puts the account back on the default limit. */
+  adminPut: (userId: string, body: AdminVoicePut) => request<void>("PUT", `/admin/voice/${userId}`, { body }),
 };
 
 /** The spoken words as one plain text, speakers kept apart by paragraphs. */

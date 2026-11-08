@@ -787,7 +787,9 @@ final class LibraryUITests: XCTestCase {
             + "selecting \(Int(selecting.height)) pt ≈ \(selecting.lines) lines"
         print("LANDSCAPE-ROOM " + report)
         let note = XCTAttachment(string: report)
-        note.name = "landscape-room"
+        // The CI log lists attachment names: the measurement is readable there without the bundle.
+        note.name = "landscape-room \(Int(window.width))x\(Int(window.height)) kb\(Int(app.keyboards.firstMatch.frame.height)) "
+            + "typing \(Int(typing.height))pt \(typing.lines)l bars \(Int(bars))pt selecting \(Int(selecting.height))pt \(selecting.lines)l"
         note.lifetime = .keepAlways
         add(note)
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

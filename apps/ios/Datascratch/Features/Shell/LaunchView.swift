@@ -38,12 +38,10 @@ struct LaunchOverlay: View {
     private var reduceMotion: Bool { systemReduceMotion || forceReduceMotion }
 
     var body: some View {
+        // The accessibility element is the UIKit view itself (`InkLaunchView`): SwiftUI's
+        // modifiers on a representable did not reach UI tests (no "launch.screen").
         InkMarkRepresentable(isReady: isReady, reduceMotion: reduceMotion, onHandoff: onHandoff, onFinished: onFinished)
             .ignoresSafeArea()
-            .accessibilityElement()
-            .accessibilityLabel(Text(verbatim: "Datascratch"))
-            .accessibilityValue(Text(verbatim: reduceMotion ? "crossfade" : "ink"))
-            .accessibilityIdentifier("launch.screen")
     }
 }
 
@@ -55,6 +53,11 @@ private struct InkMarkRepresentable: UIViewRepresentable {
 
     func makeUIView(context: Context) -> InkLaunchView {
         let view = InkLaunchView(reduceMotion: reduceMotion)
+        view.isAccessibilityElement = true
+        view.accessibilityIdentifier = "launch.screen"
+        view.accessibilityLabel = "Datascratch"
+        view.accessibilityValue = reduceMotion ? "crossfade" : "ink"
+        view.accessibilityTraits = .image
         view.onHandoff = onHandoff
         view.onFinished = onFinished
         return view

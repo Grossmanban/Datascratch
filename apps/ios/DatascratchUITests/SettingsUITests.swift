@@ -28,8 +28,9 @@ final class SettingsUITests: XCTestCase {
         let app = launch()
         let settings = sidebarSettings(app)
         XCTAssertTrue(settings.isHittable)
-        XCTAssertGreaterThanOrEqual(settings.frame.width, 44, "frame \(settings.frame)")
-        XCTAssertGreaterThanOrEqual(settings.frame.height, 44, "frame \(settings.frame)")
+        // 44 pt, read back as 43.99999999999997 on iPad: compared to the nearest hundredth.
+        XCTAssertGreaterThanOrEqual(settings.frame.width, 43.99, "frame \(settings.frame)")
+        XCTAssertGreaterThanOrEqual(settings.frame.height, 43.99, "frame \(settings.frame)")
         let trash = app.descendants(matching: .any)["sidebar.trash"].firstMatch
         if trash.waitForExistence(timeout: 3) {
             let t = trash.frame, s = settings.frame

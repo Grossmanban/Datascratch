@@ -1010,7 +1010,7 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(doc.blocks.count, 3 + lines)
         XCTAssertEqual(doc.blocks.last?.plainText, "П")
         let typed = try XCTUnwrap(editor.geometry.placement(at: editor.textView.textStorage.length - 1))
-        XCTAssertEqual(typed.origin.y + typed.size.height / 2, tap.y, accuracy: editor.emptyParagraphPitch, "the text is where the tap was")
+        XCTAssertEqual(typed.origin.y - typed.fontSize * 0.35, tap.y, accuracy: editor.emptyParagraphPitch, "the text is where the tap was")
         editor.ink.invalidateLayout()
         editor.ink.refresh()
         let drawnAfter = try XCTUnwrap(editor.ink.resolved[stroke]?.first?.first?.location)

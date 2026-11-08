@@ -4,9 +4,11 @@ import {
   boolean,
   check,
   customType,
+  date,
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -466,4 +468,41 @@ export const securityEvents = pgTable(
     at: ts('at').notNull().defaultNow(),
   },
   (t) => [index('security_events_user_idx').on(t.userId, t.id)],
+);
+
+/**
+ * Who may use voice (D-65), set by a server admin (DS_ADMIN_EMAILS) in the app or with `ds voice`.
+ * No row: on for admins, off for everyone else. `monthlyMinutes` null: the server default
+ * (VOICE_ADMIN_MONTHLY_MINUTES for admins, VOICE_MONTHLY_MINUTES for the others).
+ */
+export const voiceAccess = pgTable('voice_access', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  enabled: boolean('enabled').notNull(),
+  monthlyMinutes: integer('monthly_minutes'),
+  createdAt: created(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  /** The admin who changed it last (null: the DS_VOICE_USERS seed or `ds voice`). */
+  updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+});
+
+/**
+ * Voice usage per account and calendar month (UTC, D-65): seconds of audio transcribed and
+ * requests. Only counts: audio, transcripts and texts are never stored.
+ */
+export const voiceUsage = pgTable(
+  'voice_usage',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** First day of the month, UTC. */
+    month: date('month', { mode: 'string' }).notNull(),
+    seconds: integer('seconds').notNull().default(0),
+    requests: integer('requests').notNull().default(0),
+    /** What it cost, USD: text from OpenRouter's answer, speech to text estimated from VOICE_STT_USD_PER_HOUR. */
+    costUsd: numeric('cost_usd', { precision: 12, scale: 6, mode: 'number' }).notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.month] })],
 );

@@ -13,7 +13,13 @@
 	encode zstd gzip
 
 	# No request body is larger than an attachment chunk (~1 MiB); sync frames are not bodies.
-	request_body {
+	# A voice recording (D-65) is the exception: up to 200 MB, streamed through to the server.
+	@voiceUpload path /v1/voice/transcribe
+	request_body @voiceUpload {
+		max_size 210MB
+	}
+	@notVoiceUpload not path /v1/voice/transcribe
+	request_body @notVoiceUpload {
 		max_size 16MB
 	}
 

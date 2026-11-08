@@ -9,7 +9,7 @@ import { accessFor, docAccess, loadDocs, loadMemberships } from '../services/acc
 import type { CatchUpItem } from '../services/documents.js';
 import type { GuestPrincipal, UserPrincipal } from '../services/principal.js';
 import { publicAuthor } from '../lib/author.js';
-import { ACCOUNT_CHANGES, type AccountChange } from '@datascratch/shared/contracts';
+import { SERVER_ACCOUNT_CHANGES, type AccountChange } from '../services/account-events.js';
 import { topics, type HubMessage } from './hub.js';
 import {
   ClientMessage,
@@ -387,7 +387,7 @@ export class SyncConnection {
     if (this.#accountTimer || this.#accountWhat.size === 0) return;
     this.#accountTimer = setTimeout(() => {
       this.#accountTimer = null;
-      const list = ACCOUNT_CHANGES.filter((w) => this.#accountWhat.has(w));
+      const list = SERVER_ACCOUNT_CHANGES.filter((w) => this.#accountWhat.has(w));
       this.#accountWhat.clear();
       if (!this.#closed && list.length > 0) this.#send({ type: 'account_changed', what: list });
     }, ACCOUNT_CHANGED_WINDOW_MS);

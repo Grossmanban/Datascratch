@@ -36,6 +36,7 @@
     "@datascratch/agents": "workspace:^",
     "@datascratch/shared": "workspace:^",
     "@fastify/cors": "^11.3.1",
+    "@fastify/multipart": "^9.4.0",
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/swagger": "^9.9.2",
     "@fastify/websocket": "^11.3.4",
@@ -49,6 +50,7 @@
     "pg": "^8.23.1",
     "pg-boss": "^12.38.0",
     "pino": "^10.4.0",
+    "undici": "^7",
     "yjs": "^13.6.33",
     "zod": "^4.6.7"
   },

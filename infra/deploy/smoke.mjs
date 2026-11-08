@@ -120,6 +120,18 @@ try {
     const csp = r.headers.get('content-security-policy') ?? '';
     if (!csp.startsWith("default-src 'none'") || csp.includes("default-src 'self'")) throw new Error(`CSP: ${csp}`);
   });
+  await retry('voice API', async () => {
+    // D-65: the routes are there and closed without a token (whether keys are set or not).
+    const r = await fetch(`${base}/v1/voice/text`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ task: 'clean', profanity: 'keep', text: 'smoke' }),
+    });
+    const j = await r.json().catch(() => null);
+    if (r.status !== 401 || j?.error?.code !== 'unauthorized') throw new Error(`status ${r.status}`);
+    return 'answers 401 without a token';
+  });
+
   await retry('shared spaces API', async () => {
     // D-62: the routes are there (an older server answers 404) and closed without a token.
     const r = await fetch(`${base}/v1/spaces`);

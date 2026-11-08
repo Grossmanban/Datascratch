@@ -100,7 +100,8 @@ final class DictationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["dictation.cancel"].firstMatch.exists, "no Cancel while hands free")
         settle(1)
         XCTAssertFalse(value(app).contains("dictated"), "the piece went in before «Stop»")
-        stop.tap()
+        // The button that locked is under the finger's last place: tap where it is now.
+        stop.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(waitForText(app, containing: "This is dictated text."),
                       "the hands-free piece is not in the note after «Stop»; text: \(value(app))")
     }

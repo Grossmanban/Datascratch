@@ -643,14 +643,6 @@ struct EditorBottomBars: View {
         let editingText = model.editor.isEditingText && model.editor.tools.mode == .text
         let selecting = isShort && editingText && model.editor.formatState.hasSelection
         VStack(spacing: 0) {
-            // D-65: what is being dictated, and a word about the last piece.
-            VStack(spacing: Theme.Space.s2) {
-                DictationPreview(dictation: model.dictation, text: model.dictationPreview)
-                if let message = model.dictation.message { DictationMessage(text: message) }
-            }
-            .padding(.bottom, model.dictationPreview != nil || model.dictation.message != nil ? Theme.Space.s2 : 0)
-            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictationPreview != nil)
-            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictation.message)
             // While text is being written: marks and block styles above the palette — not while a
             // range is selected in a short area (the system's edit menu has Cut, Copy, «Формат»).
             if !selecting { FormatBarRow(model: model) }
@@ -660,8 +652,6 @@ struct EditorBottomBars: View {
                     // room, the current tool keeps working (Pencil still draws).
                     HStack(spacing: Theme.Space.s2) {
                         Spacer(minLength: 0)
-                        // D-65: not offered when voice is off for this account.
-                        if !app.isVoiceOff { DictationButton(dictation: model.dictation, isCompact: true) }
                         HideKeyboardButton(model: model, isCompact: true)
                         CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
                             .padding(.trailing, Theme.Space.s4)
@@ -683,6 +673,25 @@ struct EditorBottomBars: View {
             }
             .frame(maxWidth: .infinity)
         }
+        // D-65: the microphone floats above the bars' trailing end, clear of the palette row (in
+        // the row it made the narrow columns overflow, and «Cancel» beside it switched the row's
+        // layout under the finger). Not offered when voice is off for this account.
+        // What is being dictated and a word about the last piece sit above it, so the button
+        // stays put under the finger while the preview grows.
+        .overlay(alignment: .top) {
+            VStack(alignment: .trailing, spacing: Theme.Space.s2) {
+                DictationPreview(dictation: model.dictation, text: model.dictationPreview)
+                if let message = model.dictation.message { DictationMessage(text: message) }
+                if !app.isVoiceOff {
+                    DictationButton(dictation: model.dictation, isCompact: isShort)
+                        .padding(.trailing, Theme.Space.s4)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .alignmentGuide(.top) { $0[.bottom] + Theme.Space.s2 }
+            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictationPreview != nil)
+            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictation.message)
+        }
         .animation(reduceMotion ? nil : Theme.Motion.snappy, value: selecting)
         .animation(reduceMotion ? nil : Theme.Motion.snappy, value: isShort)
     }
@@ -701,7 +710,6 @@ struct EditorBottomBars: View {
             HideKeyboardButton(model: model, isCompact: isCompact)
                 .padding(.leading, isTight ? Theme.Space.s1 : Theme.Space.s3)
             PenPalette(model: model, isCompact: isCompact)
-            if !app.isVoiceOff { DictationButton(dictation: model.dictation, isCompact: isCompact || isTight) }
             Button { setPaletteCollapsed(true) } label: {
                 // A clear «fold» glyph (the earlier one drew an empty circle on iPhone).
                 Image(systemName: "chevron.down")

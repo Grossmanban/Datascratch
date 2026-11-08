@@ -85,7 +85,8 @@ struct DictationButton: View {
     }
 
     private var holdGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
+        // Global: the button moves a little with the finger (offset), which must not change the drag.
+        DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onChanged { value in
                 switch dictation.mode {
                 case .idle:

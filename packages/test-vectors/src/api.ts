@@ -804,11 +804,13 @@ export function apiVectors() {
             turns: [{ speaker: "S1", start: 0, end: 1, text: "решили" }],
           },
           { task: "format", style: "letter", profanity: "keep", text: "черновик письма" },
+          { task: "format", text: "черновик (style document, profanity soften по умолчанию)" },
+          { task: "format", style: "document", text: "черновик" },
         ],
         invalid: [
           {
-            reason: "format without style",
-            body: { task: "format", profanity: "keep", text: "черновик" },
+            reason: "style without format",
+            body: { task: "clean", style: "plan", text: "черновик" },
           },
           { reason: "neither turns nor text", body: { task: "clean", profanity: "keep" } },
           {
@@ -824,7 +826,54 @@ export function apiVectors() {
             reason: "unknown style",
             body: { task: "format", style: "poem", profanity: "keep", text: "x" },
           },
-          { reason: "profanity missing", body: { task: "clean", text: "x" } },
+          { reason: "unknown profanity", body: { task: "clean", profanity: "censor", text: "x" } },
+        ],
+      },
+      voiceMe: {
+        valid: [
+          {
+            enabled: true,
+            monthlyMinutes: 600,
+            usedMinutes: 12.5,
+            resetsAt: "2026-12-01T00:00:00.000Z",
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing resetsAt",
+            body: { enabled: true, monthlyMinutes: 600, usedMinutes: 0 },
+          },
+        ],
+      },
+      adminVoiceAccount: {
+        valid: [
+          {
+            userId: vid(4),
+            email: "a@b.co",
+            enabled: false,
+            monthlyMinutes: 0,
+            usedMinutes: 0,
+            resetsAt: "2026-12-01T00:00:00.000Z",
+          },
+        ],
+        invalid: [
+          {
+            reason: "missing userId",
+            body: {
+              email: "a@b.co",
+              enabled: false,
+              monthlyMinutes: 0,
+              usedMinutes: 0,
+              resetsAt: "2026-12-01T00:00:00.000Z",
+            },
+          },
+        ],
+      },
+      putAdminVoiceRequest: {
+        valid: [{ enabled: true, monthlyMinutes: 120 }],
+        invalid: [
+          { reason: "negative minutes", body: { enabled: true, monthlyMinutes: -1 } },
+          { reason: "fractional minutes", body: { enabled: true, monthlyMinutes: 1.5 } },
         ],
       },
       voiceTextResponse: {

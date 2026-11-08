@@ -1,5 +1,6 @@
 // Prompts of the text AI for voice (D-65): the server builds them from a `POST /voice/text`
 // request and sends them to the configured model. Russian, because the notes are.
+import { DEFAULT_VOICE_STYLE } from "../contracts/voice.js";
 import type {
   VoiceProfanity,
   VoiceStyle,
@@ -81,6 +82,8 @@ const TASKS: Record<VoiceTextTask, string> = {
 };
 
 const STYLES: Record<VoiceStyle, string> = {
+  document:
+    "Вид: документ — заголовок по сути, разделы с подзаголовками там, где тем несколько; списки, таблицы и задачи там, где они помогают читать.",
   plan: "Вид: план — цели, шаги по порядку (нумерованный список или задачи), сроки и ответственные, если они есть в тексте.",
   minutes:
     "Вид: протокол встречи — участники и тема (если названы), решения, задачи «- [ ] кто — что — срок», открытые вопросы.",
@@ -104,10 +107,10 @@ export function buildVoiceTextPrompt(
   const parts = [
     "Ты помогаешь вести заметки: обрабатываешь расшифровки речи и черновики пользователя.",
     VOICE_RULES,
-    PROFANITY[req.profanity],
+    PROFANITY[req.profanity ?? "soften"],
     TASKS[req.task],
   ];
-  if (req.task === "format" && req.style) parts.push(STYLES[req.style]);
+  if (req.task === "format") parts.push(STYLES[req.style ?? DEFAULT_VOICE_STYLE]);
   parts.push(MARKDOWN);
   const input = req.turns ? turnsToTranscript(req.turns, options) : (req.text ?? "");
   const label = req.turns ? "Расшифровка" : "Черновик";

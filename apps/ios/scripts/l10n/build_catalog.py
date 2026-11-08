@@ -83,6 +83,10 @@ IGNORE = {
     "LaunchBackground",
     # Presence: the name sent when an account has no e-mail local part (not shown here).
     "Me",
+    # Diagnostics report (plain English for support), licence names, an asset name.
+    "Datascratch diagnostics", "events (newest first):", " : failedDocumentIds.joined(separator: ",
+    " : unreadableNotebookIds.joined(separator: ", " } ?? ", "GRDB.swift", "ISC", "MIT", "Mermaid",
+    "Yrs (Yjs)", "swift-sodium · libsodium", "LaunchBackground", "not supported",
 }
 
 LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')

@@ -62,6 +62,33 @@ final class EditorTextView: UITextView {
         super.scrollRectToVisible(rect, animated: animated)
     }
 
+    /// Paces UIKit's edge autoscroll while a selection handle or the caret is dragged
+    /// (`EditorView.pacedAutoscroll`): the new vertical offset for a move `from` → `to`, the same
+    /// value when the move is not an autoscroll (a pan, deceleration, the editor's own scrolls).
+    var paceAutoscroll: ((_ from: CGFloat, _ to: CGFloat) -> CGFloat)?
+
+    override var contentOffset: CGPoint {
+        get { super.contentOffset }
+        set {
+            var p = newValue
+            if let pace = paceAutoscroll, p.y != super.contentOffset.y { p.y = pace(super.contentOffset.y, p.y) }
+            super.contentOffset = p
+        }
+    }
+
+    override func setContentOffset(_ offset: CGPoint, animated: Bool) {
+        if let pace = paceAutoscroll, offset.y != super.contentOffset.y {
+            let y = pace(super.contentOffset.y, offset.y)
+            if y != offset.y {
+                // One paced step, never an animation: stacked animated scrolls under a dragged
+                // handle redrew the selection on every step (build 37).
+                super.contentOffset = CGPoint(x: offset.x, y: y)
+                return
+            }
+        }
+        super.setContentOffset(offset, animated: animated)
+    }
+
     /// Every change of the scroll position, including those made through `bounds` (tests).
     var onScrollPositionChange: ((_ from: CGFloat, _ to: CGFloat) -> Void)?
 

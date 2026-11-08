@@ -55,22 +55,48 @@ struct RootView: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        Group {
-            switch app.phase {
-            case .launching:
-                // The launch screen's colour, until the stored session is read.
-                Color("LaunchBackground")
-                    .ignoresSafeArea()
-                    .accessibilityIdentifier("launching")
-            case .onboarding:
-                OnboardingFlow()
-                    .transition(.opacity)
-            case .ready:
-                MainWindow()
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+        ZStack {
+            Group {
+                switch app.phase {
+                case .launching:
+                    // The launch screen's colour, until the stored session is read; the ink
+                    // launch screen (`LaunchOverlay`) plays over it.
+                    Color("LaunchBackground")
+                        .ignoresSafeArea()
+                        .accessibilityIdentifier("launching")
+                case .onboarding:
+                    OnboardingFlow()
+                        .transition(.opacity)
+                case .ready:
+                    MainWindow()
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
+            }
+            .animation(Theme.Motion.smooth, value: app.phase)
+            // Built under the launch screen and shown as the mark moves into place.
+            .opacity(app.launchHandedOff ? 1 : 0)
+            .scaleEffect(app.launchHandedOff ? 1 : 1.025)
+            .allowsHitTesting(app.launchHandedOff)
+            if !app.launchFinished {
+                LaunchOverlay(isReady: app.isLaunchReady, forceReduceMotion: app.reduceMotionForTesting) {
+                    let reduce = UIAccessibility.isReduceMotionEnabled || app.reduceMotionForTesting
+                    withAnimation(reduce ? .easeOut(duration: LaunchTiming.crossFade) : .easeOut(duration: LaunchTiming.handoff)) {
+                        app.launchHandedOff = true
+                    }
+                } onFinished: {
+                    withAnimation(.easeOut(duration: LaunchTiming.crossFade)) { app.launchFinished = true }
+                }
+                .transition(.opacity)
+                .zIndex(1)
             }
         }
-        .animation(Theme.Motion.smooth, value: app.phase)
+        .task {
+            // UI tests (`-ui-testing-launch`): the data «arrives» after 10 s — long enough for a
+            // busy CI simulator to take its first snapshot of the launch screen (3 s was not).
+            guard !app.launchFinished, !app.isLaunchReady, app.phase != .launching else { return }
+            try? await Task.sleep(for: .seconds(10))
+            app.releaseLaunchHoldForTesting()
+        }
         .preferredColorScheme(app.settings.colorScheme)
         .tint(Theme.Palette.accent)
         .onAppear { app.settings.applyAppearanceToWindows() }

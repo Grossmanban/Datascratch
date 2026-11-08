@@ -75,6 +75,24 @@ export const getSharedRef = (doc: Y.Doc, kind: SharedRef["kind"], id: string) =>
   readRecord<SharedRef>(accountRoots(doc).shared, sharedRefKey(kind, id));
 export const putSharedRef = (doc: Y.Doc, ref: SharedRef) =>
   void writeRecord(accountRoots(doc).shared, sharedRefKey(ref.kind, ref.id), ref);
+/**
+ * Mark a shared item opened (D-63, «new» until then). Writes only the first time — later opens on
+ * any device change nothing, so the account document does not grow with every open.
+ * Returns true when it wrote.
+ */
+export function markSharedRefOpened(
+  doc: Y.Doc,
+  kind: SharedRef["kind"],
+  id: string,
+  at: Date = new Date(),
+): boolean {
+  const ref = getSharedRef(doc, kind, id);
+  if (!ref || ref.openedAt) return false;
+  writeRecord(accountRoots(doc).shared, sharedRefKey(kind, id), { openedAt: at.toISOString() });
+  return true;
+}
+/** Not opened on any device yet (D-63: shown bold). */
+export const isSharedRefNew = (ref: Pick<SharedRef, "openedAt">) => !ref.openedAt;
 export const deleteSharedRef = (doc: Y.Doc, kind: SharedRef["kind"], id: string) =>
   accountRoots(doc).shared.delete(sharedRefKey(kind, id));
 

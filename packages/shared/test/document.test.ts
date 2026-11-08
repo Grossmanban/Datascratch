@@ -667,3 +667,45 @@ describe("note indexer", () => {
     expect(batches).toEqual([["a", "b"], ["c"]]);
   });
 });
+
+describe("shared items opened (D-63)", () => {
+  it("records the first open once and reads entries of older clients as new", async () => {
+    const { putSharedRef, getSharedRef, markSharedRefOpened, isSharedRefNew, createAccountDoc } =
+      await import("../src/index.js");
+    const account = createAccountDoc();
+    const id = "0192f3c4-0000-7000-8000-00000000e301";
+    const spaceId = "0192f3c4-0000-7000-8000-00000000e302";
+    // An older client writes the entry without openedAt.
+    putSharedRef(account, {
+      kind: "note",
+      id,
+      spaceId,
+      order: 1,
+      addedAt: "2026-11-08T09:00:00.000Z",
+    });
+    expect(isSharedRefNew(getSharedRef(account, "note", id)!)).toBe(true);
+    expect(markSharedRefOpened(account, "note", id, new Date("2026-11-08T10:00:00.000Z"))).toBe(
+      true,
+    );
+    expect(markSharedRefOpened(account, "note", id, new Date("2026-11-08T11:00:00.000Z"))).toBe(
+      false,
+    );
+    const ref = getSharedRef(account, "note", id)!;
+    expect(ref.openedAt).toBe("2026-11-08T10:00:00.000Z");
+    expect(isSharedRefNew(ref)).toBe(false);
+    expect(markSharedRefOpened(account, "notebook", id)).toBe(false);
+
+    // Two devices open it concurrently: one value wins (LWW), the entry stays opened.
+    const { applyUpdate, encodeStateAsUpdate, Doc } = await import("yjs");
+    const a = createAccountDoc();
+    putSharedRef(a, { kind: "note", id, spaceId, order: 1, addedAt: "2026-11-08T09:00:00.000Z" });
+    const b = new Doc();
+    applyUpdate(b, encodeStateAsUpdate(a));
+    markSharedRefOpened(a, "note", id, new Date("2026-11-08T10:00:00.000Z"));
+    markSharedRefOpened(b, "note", id, new Date("2026-11-08T10:00:01.000Z"));
+    applyUpdate(a, encodeStateAsUpdate(b));
+    applyUpdate(b, encodeStateAsUpdate(a));
+    expect(getSharedRef(a, "note", id)!.openedAt).toBe(getSharedRef(b, "note", id)!.openedAt);
+    expect(getSharedRef(a, "note", id)!.order).toBe(1);
+  });
+});

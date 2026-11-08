@@ -564,5 +564,10 @@
   "invites you to a shared space": "приглашает вас в общее пространство",
   "shared": "общий",
   "until %@": "до %@",
-  "until revoked": "до отзыва"
+  "until revoked": "до отзыва",
+  "In this note": "В заметке",
+  "Editing now": "Редактирует сейчас",
+  "Photos": "Фото",
+  "Uploading photos: %lld of %lld": "Отправляются фото: %lld из %lld",
+  "Downloading photos: %lld of %lld": "Загружаются фото: %lld из %lld"
 }

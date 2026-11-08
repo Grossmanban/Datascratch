@@ -24,6 +24,8 @@ final class ServerConnection: CoreLibraryRemote {
     /// Who else has a note open (presence over the sync socket, never stored).
     let presence = PresenceCenter()
     private var statusTask: Task<Void, Never>?
+    /// Follows photo and file transfers for the sync status line.
+    private var transferTask: Task<Void, Never>?
     /// `POST /notebooks` in flight; notebook and note documents are registered after it.
     private var notebookCreation: [String: Task<Void, Never>] = [:]
     /// Encrypted attachments (cover images) in the same directory as `CoverImages`.
@@ -146,7 +148,7 @@ final class ServerConnection: CoreLibraryRemote {
             core.remote = self
             let presence = self.presence
             if let email = (try? core.store.string(ServerAccountService.emailKey)) ?? nil, !email.isEmpty {
-                presence.me = (PresenceCenter.name(forEmail: email), PresenceCenter.color(for: email))
+                presence.me = (PresenceCenter.name(forEmail: email), PresenceCenter.color(for: email), session.userId)
             }
             await engine.setAwarenessHandler { docId, payload, _ in
                 Task { @MainActor in presence.receive(docId, payload) }
@@ -157,6 +159,7 @@ final class ServerConnection: CoreLibraryRemote {
             await engine.start()
             await repairKeys(changes, engine: engine)
             observeStatus(engine)
+            observeTransfers()
             sync.onRetry = { Task { await engine.retryFailed() } }
             sync.onCheckKeys = { [weak self] in self?.notebookKeysMissing() }
             // With the engine running, removing duplicates reaches the server too.
@@ -215,6 +218,8 @@ final class ServerConnection: CoreLibraryRemote {
         accounts.useTrustRecord(nil)
         isAccountSynced = false
         statusTask?.cancel()
+        transferTask?.cancel()
+        sync.transfers = .init()
         sync.onRetry = nil
         sync.onCheckKeys = nil
         await engine?.stop()
@@ -262,6 +267,18 @@ final class ServerConnection: CoreLibraryRemote {
 
     private func noteKey(_ noteId: String) -> Data? {
         try? core.shareKey(for: ShareTarget(kind: .note, id: noteId))
+    }
+
+    private func observeTransfers() {
+        transferTask?.cancel()
+        guard let attachments else { return }
+        transferTask = Task { [sync] in
+            for await p in await attachments.progressUpdates() {
+                let next = SyncCenter.Transfers(sent: p.uploads.done, toSend: p.uploads.total,
+                                                received: p.downloads.done, toReceive: p.downloads.total)
+                if sync.transfers != next { sync.transfers = next }
+            }
+        }
     }
 
     private func observeStatus(_ engine: SyncEngine) {

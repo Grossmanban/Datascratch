@@ -188,6 +188,90 @@ public final class CoreEditorDocument: EditorDocument {
         return TextPosition(block: block, offset: offset + Int(r.index))
     }
 
+    public func resolveCursor(_ position: Data) -> TextPosition? {
+        // "The end of a nested text or element" (Yjs `{ type }`, assoc ≥ 0): Yrs resolves it to
+        // index 0, so it is resolved as the node's start and moved to its end here.
+        let atEnd = RelativePositionCodec.nestedTypeStart(of: position)
+        guard let resolved = try? note.crdt.resolve(relativePositions: [atEnd ?? position]).first, var r = resolved else { return nil }
+        if atEnd != nil, !r.deleted, let node = try? note.crdt.xmlNode(at: r.path) {
+            switch node {
+            case .text(let chunks): r.index = UInt32(chunks.reduce(0) { $0 + ($1.embed == nil ? $1.text.utf16.count : 1) })
+            case .element(_, _, let children): r.index = UInt32(children.count)
+            }
+        }
+        let snapshot = current()
+        // Inside an element: a textblock (an empty paragraph, between inline nodes) or a container
+        // (the root, a list, a quote: `index` is a child).
+        if let id = snapshot.byPath[r.path], let node = snapshot.nodes[id] {
+            if node.isTextblock {
+                return TextPosition(block: id, offset: inlineLength(at: r.path, children: Int(r.index)))
+            }
+            return Self.caret(inChildren: node.children, at: Int(r.index))
+        }
+        if r.path.isEmpty {
+            // The root itself (between top-level blocks), or a garbage-collected position.
+            guard !r.deleted || r.index > 0 else { return nil }
+            return Self.caret(inChildren: snapshot.blocks, at: Int(r.index))
+        }
+        // Inside a text node of a textblock (a character, or the end of the text).
+        let blockPath = Array(r.path.dropLast())
+        guard let block = snapshot.byPath[blockPath], let textIndex = r.path.last else { return nil }
+        return TextPosition(block: block, offset: inlineLength(at: blockPath, children: Int(textIndex)) + Int(r.index))
+    }
+
+    public func cursorPosition(block: BlockID, offset: Int) -> Data? {
+        guard let path = current().paths[block], let children = try? note.crdt.xmlChildren(at: path) else { return nil }
+        // y-prosemirror: a character inside a text, the text itself (assoc 0) at its end, the
+        // element itself when it has no children. Yrs creates node positions only with assoc -1,
+        // so their assoc is set to the web's 0 afterwards.
+        func node(_ nodePath: [UInt32]) -> Data? {
+            (try? note.crdt.relativePosition(at: nodePath, index: 0, assoc: -1)).flatMap { RelativePositionCodec.settingAssoc($0, 0) }
+        }
+        var remaining = max(0, offset)
+        for (i, child) in children.enumerated() {
+            switch child {
+            case .text(let chunks):
+                let length = chunks.reduce(0) { $0 + ($1.embed == nil ? $1.text.utf16.count : 1) }
+                if remaining < length { return try? note.crdt.relativePosition(at: path + [UInt32(i)], index: UInt32(remaining)) }
+                if remaining == length { return node(path + [UInt32(i)]) }
+                remaining -= length
+            case .element:
+                if remaining == 0 { return try? note.crdt.relativePosition(at: path, index: UInt32(i)) }
+                remaining -= 1
+            }
+        }
+        return node(path)
+    }
+
+    /// Editor length of the first `count` children (text runs and inline nodes) of the element at `path`.
+    private func inlineLength(at path: [UInt32], children count: Int) -> Int {
+        guard let children = try? note.crdt.xmlChildren(at: path) else { return 0 }
+        return children.prefix(count).reduce(0) { sum, child in
+            switch child {
+            case .text(let chunks): sum + chunks.reduce(0) { $0 + ($1.embed == nil ? $1.text.utf16.count : 1) }
+            case .element: sum + 1
+            }
+        }
+    }
+
+    /// A caret before child `index` of a container: the start of its first textblock, or the end
+    /// of the last textblock before it when `index` is past the end.
+    static func caret(inChildren children: [BlockNode], at index: Int) -> TextPosition? {
+        func first(_ b: BlockNode) -> TextPosition? {
+            if b.isTextblock { return TextPosition(block: b.id, offset: 0) }
+            for c in b.children { if let p = first(c) { return p } }
+            return nil
+        }
+        func last(_ b: BlockNode) -> TextPosition? {
+            if b.isTextblock { return TextPosition(block: b.id, offset: b.textLength) }
+            for c in b.children.reversed() { if let p = last(c) { return p } }
+            return nil
+        }
+        for child in children.dropFirst(max(0, index)) { if let p = first(child) { return p } }
+        for child in children.prefix(max(0, index)).reversed() { if let p = last(child) { return p } }
+        return nil
+    }
+
     // MARK: Strokes
 
     public var strokes: [DSInk.Stroke] {

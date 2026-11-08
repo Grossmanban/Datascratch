@@ -46,6 +46,25 @@ final class SyncCenter {
     }
     private(set) var serverURL: URL?
 
+    /// Photos and files on their way, counted per batch (DSCore: a batch is what goes together,
+    /// e.g. photos pasted at once; zero again when nothing moves).
+    struct Transfers: Equatable {
+        var sent = 0, toSend = 0, received = 0, toReceive = 0
+    }
+    var transfers = Transfers()
+
+    /// «Uploading photos: 3 of 8» instead of a bare «Syncing…» while photos move (owner,
+    /// build 36); uploads first, they are this person's own.
+    var transferLine: (icon: String, text: String)? {
+        if transfers.sent < transfers.toSend {
+            return ("arrow.up.circle", String(localized: "Uploading photos: \(transfers.sent) of \(transfers.toSend)"))
+        }
+        if transfers.received < transfers.toReceive {
+            return ("arrow.down.circle", String(localized: "Downloading photos: \(transfers.received) of \(transfers.toReceive)"))
+        }
+        return nil
+    }
+
     @ObservationIgnored private var monitor: NWPathMonitor?
 
     /// D-49: signing in on another server (only while signed out).

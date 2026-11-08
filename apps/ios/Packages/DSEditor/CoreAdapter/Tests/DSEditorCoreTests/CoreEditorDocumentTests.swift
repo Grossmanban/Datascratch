@@ -85,3 +85,96 @@ func makeCoreDoc(_ text: String = "Hello brave new world") throws -> (CoreEditor
         token.cancel()
     }
 }
+
+/// Co-authors' carets over the real Yjs document (`spec/04-editor.md`, «Каретки соавторов»):
+/// every kind of position y-prosemirror sends maps to a place in the text.
+@MainActor
+@Suite struct RemoteCursorCoreTests {
+    @Test func characterPositionFollowsLocalEdits() throws {
+        let (doc, b) = try makeCoreDoc()
+        // y-prosemirror inside text: the character at the caret (`createRelativePositionFromTypeIndex(text, 6)`).
+        let pos = try doc.note.crdt.relativePosition(at: [1, 0], index: 6)
+        #expect(doc.resolveCursor(pos) == TextPosition(block: b, offset: 6))
+        doc.insertText("Oh, ", marks: .empty, block: b, at: 0)
+        #expect(doc.resolveCursor(pos) == TextPosition(block: b, offset: 10), "insertion before moves the caret")
+        doc.insertText("!", marks: .empty, block: b, at: doc.textLength(of: b))
+        #expect(doc.resolveCursor(pos) == TextPosition(block: b, offset: 10), "insertion after does not")
+        // The character under the caret deleted: the caret stays where it was (unlike a stroke anchor).
+        doc.deleteText(block: b, range: 10..<11)
+        #expect(doc.resolveAnchor(pos) == nil)
+        #expect(doc.resolveCursor(pos) == TextPosition(block: b, offset: 10))
+    }
+
+    @Test func endOfTextEmptyBlockAndBetweenBlocks() throws {
+        let (doc, b) = try makeCoreDoc("abc")
+        // The end of a text, as Yjs encodes it for y-prosemirror: the text node itself with assoc 0
+        // (Yrs only produces the assoc -1 form, so the last byte is flipped).
+        var end = try doc.note.crdt.relativePosition(at: [1, 0], index: 0, assoc: -1)
+        try #require(end.first == 2 && end.last == 0x41, "a type position")
+        end[end.count - 1] = 0
+        #expect(doc.resolveCursor(end) == TextPosition(block: b, offset: 3))
+        doc.insertText("de", marks: .empty, block: b, at: 3)
+        #expect(doc.resolveCursor(end) == TextPosition(block: b, offset: 5), "typing at the end keeps the caret at the end")
+        // An empty paragraph: the paragraph element itself (Yrs gives that position for assoc -1).
+        let empty = BlockNode.paragraph()
+        doc.insertBlock(empty, parent: nil, at: 2)
+        let inEmpty = try doc.note.crdt.relativePosition(at: [2], index: 0, assoc: -1)
+        #expect(doc.resolveCursor(inEmpty) == TextPosition(block: empty.id, offset: 0))
+        // Between top-level blocks (the root fragment): before child 2 is the start of the empty paragraph.
+        let between = try doc.note.crdt.relativePosition(at: [], index: 2)
+        #expect(doc.resolveCursor(between) == TextPosition(block: empty.id, offset: 0))
+        #expect(doc.resolveCursor(Data([9, 9])) == nil, "undecodable")
+    }
+
+    @Test func awarenessJSONResolvesThroughTheModel() throws {
+        let (doc, b) = try makeCoreDoc("Hello brave new world")
+        let encoded = try doc.note.crdt.relativePosition(at: [1, 0], index: 6)
+        let (item, _) = try #require(RelativePositionCodec.decode(encoded))
+        let json = """
+        {"user":{"name":"Анна","color":"#D2453B"},"cursor":{"anchor":{"item":{"client":\(item.client),"clock":\(item.clock)},"assoc":0},"head":{"tname":"content","assoc":0}}}
+        """
+        let c = try #require(RemoteCursor.parse(client: 3, json: json))
+        let p = Projection.build(doc.blocks)
+        let r = try #require(c.resolve(in: doc, projection: p))
+        #expect(r.anchor == p.offset(block: b, offset: 6))
+        #expect(r.head == p.offset(block: b, offset: 21), "the end of the note (the root, assoc 0)")
+    }
+}
+
+/// Compatibility with the web (`Fixtures/web-cursors.json`, made by `make-web-cursors.mjs` with
+/// y-prosemirror itself): the web's carets land where the web put them, and this device's carets
+/// are encoded exactly as the web encodes the same places.
+@MainActor
+@Suite struct WebCursorFixtureTests {
+    @Test func webCaretsResolveAndOurCaretsMatchTheWeb() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/web-cursors.json")
+        let fixture = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let update = try #require((fixture["update"] as? String).flatMap { Data(base64Encoded: $0) })
+        let cases = try #require(fixture["cases"] as? [[String: Any]])
+        let note = NoteDocument(noteId: UUIDv7.generate())
+        try note.crdt.applyUpdate(update)
+        let doc = CoreEditorDocument(note: note)
+        #expect(doc.blocks.count == 4)
+        let p = Projection.build(doc.blocks)
+        for c in cases {
+            let name = c["name"] as? String ?? "?"
+            let json = try #require(c["state"] as? String)
+            func place(_ key: String) throws -> (block: BlockID, offset: Int) {
+                let o = try #require(c[key] as? [String: Any])
+                return (doc.blocks[try #require(o["block"] as? Int)].id, try #require(o["offset"] as? Int))
+            }
+            let (ab, ao) = try place("anchor"), (hb, ho) = try place("head")
+            // The web's caret, read here.
+            let cursor = try #require(RemoteCursor.parse(client: 1, json: json, excludingAccount: "acc-ios"), "\(name)")
+            let r = try #require(cursor.resolve(in: doc, projection: p), "\(name)")
+            #expect(r.anchor == p.offset(block: ab, offset: ao), "\(name): anchor")
+            #expect(r.head == p.offset(block: hb, offset: ho), "\(name): head")
+            #expect(RemoteCursor.parse(client: 1, json: json, excludingAccount: "acc-web") == nil, "own account")
+            // This device's caret at the same places: the same bytes the web sends.
+            let state = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+            let web = try #require(state["cursor"] as? [String: Any])
+            #expect(doc.cursorPosition(block: ab, offset: ao) == web["anchor"].flatMap(RelativePositionCodec.encode(json:)), "\(name): our anchor")
+            #expect(doc.cursorPosition(block: hb, offset: ho) == web["head"].flatMap(RelativePositionCodec.encode(json:)), "\(name): our head")
+        }
+    }
+}

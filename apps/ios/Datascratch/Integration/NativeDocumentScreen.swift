@@ -54,6 +54,10 @@ final class NativeEditorModel: ClosingEditor {
             DispatchQueue.main.async { self?.changed() }
         }
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
+        // This device's caret goes to the others with its presence state (nil: editing ended).
+        editor.onLocalCursorChange = { [weak app] json in
+            DispatchQueue.main.async { app?.presence?.setLocalCursor(json, in: noteId) }
+        }
         // «Link» on the format bar: the screen asks for the address.
         editor.onLinkRequest = { [weak self] in self?.isAskingForLink = true }
         // The "/" block menu: the screen shows it at the caret (spec/04).
@@ -329,14 +333,6 @@ struct NativeDocumentScreen: View {
                         NativeEditorRepresentable(editor: model.editor)
                             .accessibilityIdentifier("editor")
                             .modifier(MediaPickers(model: model))
-                            // Who else is in the note right now: small avatars, top right.
-                            .overlay(alignment: .topTrailing) {
-                                if let presence = app.connection?.presence {
-                                    PresenceAvatars(peers: presence.peers[noteId] ?? [])
-                                        .padding(.top, Theme.Space.s3)
-                                        .padding(.trailing, Theme.Space.s4)
-                                }
-                            }
                     }
                     // The column's width, never the editor's own: next to the list on an iPad mini
                     // in portrait it ran 18 pt past the screen edge.
@@ -409,6 +405,12 @@ struct NativeDocumentScreen: View {
                 .onChange(of: app.settings.fingerDrawing) { _, _ in
                     model.editor.tools.allowsFingerDrawing = app.settings.fingerDrawingEffective
                 }
+                // Co-authors' carets in the text, never this person's own other devices.
+                .onChange(of: app.presence?.states[noteId] ?? [:], initial: true) { _, states in
+                    let mine = app.presence?.me?.account
+                    let cursors = states.compactMap { RemoteCursor.parse(client: $0.key, json: $0.value, excludingAccount: mine) }
+                    model.editor.setRemoteCursors(cursors.sorted { $0.id < $1.id })
+                }
                 .toolbar { NativeEditorToolbar(model: model, note: note) }
                 .modifier(LinkPrompt(model: model))
                 .coverPickers()
@@ -424,11 +426,11 @@ struct NativeDocumentScreen: View {
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .onAppear {
             load()
-            app.connection?.presence.join(noteId)
+            app.presence?.join(noteId)
         }
         .onDisappear {
             app.library.recordVersion(ofNote: noteId)
-            app.connection?.presence.leave(noteId)
+            app.presence?.leave(noteId)
         }
     }
 
@@ -465,6 +467,13 @@ struct NativeEditorToolbar: ToolbarContent {
 
     /// D-54 «view only»: nothing that edits (insert, style, cover, undo, move, trash).
     private var isViewOnly: Bool { model.isViewOnly }
+    /// Who else is in the note (presence), for the bar.
+    private var peopleHere: [PresencePeer] { app.presence?.people(in: note.id) ?? [] }
+    /// The iPhone bar has no room for the avatars and Share both (they pushed «…» into the
+    /// system's overflow): with people here, Share goes into «…».
+    private var shareInMenu: Bool {
+        isNarrowColumn || (UIDevice.current.userInterfaceIdiom == .phone && !peopleHere.isEmpty)
+    }
     /// Shared with this account: the owner moves it; a note shared on its own has no notebook here.
     private var isShared: Bool { app.accountSharing.role(forNote: note.id, notebookId: note.notebookId) != nil }
 
@@ -530,18 +539,28 @@ struct NativeEditorToolbar: ToolbarContent {
                 .accessibilityIdentifier("editor.insert")
                 }
 
+                if !shareInMenu {
                 Button {
                     scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .accessibilityLabel("Share")
+                }
+            }
+
+            // Who else is in the note right now: in the bar, never over the text (owner, build
+            // 35: a circle over the cover read as stuck there, and said nothing of who it was).
+            PresenceAvatars(peers: peopleHere) { peer in
+                model.editor.scrollToRemoteCursor(peer.id)
             }
 
             Menu {
                 if isNarrowColumn {
                     Button("Find in Note", systemImage: "magnifyingglass") { model.editor.showFind() }
                     if !isViewOnly { Menu("Insert", systemImage: "plus.circle") { insertItems } }
+                }
+                if shareInMenu {
                     Button("Share", systemImage: "square.and.arrow.up") {
                         scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
                     }
@@ -695,8 +714,9 @@ struct HideKeyboardButton: View {
             button
         } else {
             // The slot keeps its size (nothing moves under the finger) but holds no button: an
-            // invisible disabled one still counted as offered on iPad (run 40331980802).
-            button.hidden().disabled(true)
+            // invisible disabled one still counted as offered on iPad (run 40331980802), and a
+            // hidden one stayed in the accessibility tree as hittable (iPhone, run 42036579509).
+            button.hidden().disabled(true).accessibilityHidden(true)
         }
     }
 }
@@ -1005,38 +1025,101 @@ struct ViewOnlyBanner: View {
     }
 }
 
-/// The people in the note with you: overlapping initials in their colours, at most three and
-/// «+N»; nothing when you are alone. Quiet by design (owner: «elegant, unobtrusive»).
+/// The people in the note with you, in the document's bar: overlapping initials in their colours
+/// (two and «+N» on the iPhone, three on the iPad); a tap lists them. Nothing when you are alone,
+/// and never your own other devices (`PresenceCenter`). Quiet by design (owner: «elegant,
+/// unobtrusive»).
 struct PresenceAvatars: View {
     let peers: [PresencePeer]
+    /// A person in the list was tapped: the text scrolls to their caret.
+    var onSelect: (PresencePeer) -> Void = { _ in }
+    @State private var isListShown = false
     private var names: String { peers.map(\.name).joined(separator: ", ") }
+    private var shown: Int { UIDevice.current.userInterfaceIdiom == .pad ? 3 : 2 }
+    private var side: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 24 : 22 }
 
     var body: some View {
         if !peers.isEmpty {
-            HStack(spacing: -6) {
-                ForEach(peers.prefix(3)) { peer in
-                    Text(peer.initial)
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .frame(width: 24, height: 24)
-                        .background(Circle().fill(Color(hex: peer.color) ?? Theme.Palette.accent))
-                        .overlay(Circle().strokeBorder(Theme.Palette.canvas, lineWidth: 2))
-                }
-                if peers.count > 3 {
-                    Text("+\(peers.count - 3)")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.Palette.textSecondary)
-                        .frame(width: 24, height: 24)
-                        .background(Circle().fill(Theme.Palette.surface))
-                        .overlay(Circle().strokeBorder(Theme.Palette.canvas, lineWidth: 2))
+            Button { isListShown = true } label: {
+                HStack(spacing: -6) {
+                    ForEach(peers.prefix(shown)) { peer in
+                        PresenceInitial(peer: peer, size: side)
+                    }
+                    if peers.count > shown {
+                        Text("+\(peers.count - shown)")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                            .frame(width: side, height: side)
+                            .background(Circle().fill(Theme.Palette.surface))
+                            .overlay(Circle().strokeBorder(Theme.Palette.canvas, lineWidth: 2))
+                    }
                 }
             }
-            .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .topTrailing)))
+            .popover(isPresented: $isListShown) {
+                PresenceList(peers: peers) { peer in
+                    isListShown = false
+                    onSelect(peer)
+                }
+                .presentationCompactAdaptation(.popover)
+            }
+            .transition(.opacity.combined(with: .scale(scale: 0.8)))
             .animation(Theme.Motion.snappy, value: peers)
-            .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text("Also here: \(names)"))
             .accessibilityIdentifier("document.presence")
         }
+    }
+}
+
+/// A person's initial in their colour.
+private struct PresenceInitial: View {
+    let peer: PresencePeer
+    let size: CGFloat
+
+    var body: some View {
+        Text(peer.initial)
+            .font(.system(size: size * 0.46, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(Circle().fill(Color(hex: peer.color) ?? Theme.Palette.accent))
+            .overlay(Circle().strokeBorder(Theme.Palette.canvas, lineWidth: 2))
+    }
+}
+
+/// Who is in the note: name, colour, «editing now».
+private struct PresenceList: View {
+    let peers: [PresencePeer]
+    let onSelect: (PresencePeer) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s3) {
+            Text("In this note")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.textTertiary)
+            ForEach(peers) { peer in
+                Button { onSelect(peer) } label: {
+                HStack(spacing: Theme.Space.s3) {
+                    PresenceInitial(peer: peer, size: 28)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(peer.name)
+                            .foregroundStyle(Theme.Palette.textPrimary)
+                            .lineLimit(1)
+                        Text("Editing now")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                    }
+                }
+                .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("presence.person")
+            }
+        }
+        .padding(Theme.Space.s4)
+        .frame(minWidth: 200, alignment: .leading)
+        // A container: its id must not cover the rows' own.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("presence.list")
     }
 }
 

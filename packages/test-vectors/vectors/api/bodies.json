@@ -1427,17 +1427,19 @@
       "valid": [
         {
           "enabled": true,
+          "available": true,
           "monthlyMinutes": 600,
           "usedMinutes": 12.5,
           "resetsAt": "2026-12-01T00:00:00.000Z",
-          "isAdmin": true
+          "admin": true
         },
         {
           "enabled": false,
-          "monthlyMinutes": 0,
+          "available": false,
+          "monthlyMinutes": 120,
           "usedMinutes": 0,
           "resetsAt": "2026-12-01T00:00:00.000Z",
-          "isAdmin": false
+          "admin": false
         }
       ],
       "invalid": [
@@ -1445,15 +1447,27 @@
           "reason": "missing resetsAt",
           "body": {
             "enabled": true,
+            "available": true,
             "monthlyMinutes": 600,
             "usedMinutes": 0,
-            "isAdmin": false
+            "admin": false
           }
         },
         {
-          "reason": "missing isAdmin",
+          "reason": "missing available",
           "body": {
             "enabled": true,
+            "monthlyMinutes": 600,
+            "usedMinutes": 0,
+            "resetsAt": "2026-12-01T00:00:00.000Z",
+            "admin": false
+          }
+        },
+        {
+          "reason": "missing admin",
+          "body": {
+            "enabled": true,
+            "available": true,
             "monthlyMinutes": 600,
             "usedMinutes": 0,
             "resetsAt": "2026-12-01T00:00:00.000Z"
@@ -1470,25 +1484,33 @@
             {
               "userId": "0192f3c4-0000-7000-8000-000000000004",
               "email": "a@b.co",
-              "name": "Анна",
+              "name": null,
+              "admin": true,
               "enabled": true,
-              "monthlyMinutes": 120,
+              "monthlyMinutes": 600,
+              "customMinutes": false,
               "usedMinutes": 30.5,
-              "costUsd": 0.21
+              "costUsd": 0.21,
+              "requests": 7
             },
             {
               "userId": "0192f3c4-0000-7000-8000-000000000005",
               "email": "b@b.co",
-              "name": null,
+              "name": "Анна",
+              "admin": false,
               "enabled": false,
               "monthlyMinutes": 0,
+              "customMinutes": true,
               "usedMinutes": 0,
-              "costUsd": 0
+              "costUsd": 0,
+              "requests": 0
             }
           ],
           "totals": {
             "usedMinutes": 30.5,
-            "costUsd": 0.21
+            "costUsd": 0.21,
+            "requests": 7,
+            "enabledAccounts": 1
           }
         }
       ],
@@ -1501,12 +1523,27 @@
             "accounts": [],
             "totals": {
               "usedMinutes": 0,
-              "costUsd": 0
+              "costUsd": 0,
+              "requests": 0,
+              "enabledAccounts": 0
             }
           }
         },
         {
-          "reason": "account without costUsd",
+          "reason": "totals without enabledAccounts",
+          "body": {
+            "month": "2026-11",
+            "resetsAt": "2026-12-01T00:00:00.000Z",
+            "accounts": [],
+            "totals": {
+              "usedMinutes": 0,
+              "costUsd": 0,
+              "requests": 0
+            }
+          }
+        },
+        {
+          "reason": "account without requests",
           "body": {
             "month": "2026-11",
             "resetsAt": "2026-12-01T00:00:00.000Z",
@@ -1515,14 +1552,19 @@
                 "userId": "0192f3c4-0000-7000-8000-000000000004",
                 "email": "a@b.co",
                 "name": null,
+                "admin": false,
                 "enabled": true,
                 "monthlyMinutes": 1,
-                "usedMinutes": 0
+                "customMinutes": true,
+                "usedMinutes": 0,
+                "costUsd": 0
               }
             ],
             "totals": {
               "usedMinutes": 0,
-              "costUsd": 0
+              "costUsd": 0,
+              "requests": 0,
+              "enabledAccounts": 1
             }
           }
         }
@@ -1533,9 +1575,22 @@
         {
           "enabled": true,
           "monthlyMinutes": 120
+        },
+        {
+          "enabled": true,
+          "monthlyMinutes": null
+        },
+        {
+          "enabled": false
         }
       ],
       "invalid": [
+        {
+          "reason": "missing enabled",
+          "body": {
+            "monthlyMinutes": 120
+          }
+        },
         {
           "reason": "negative minutes",
           "body": {

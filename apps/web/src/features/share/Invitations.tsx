@@ -1,3 +1,4 @@
+import { runtime } from "@/data/runtime";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Mail } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -56,6 +57,8 @@ export function InvitationsDialog() {
     onSuccess: (item) => {
       toast(item.wrappedKey ? t("invitations.accepted") : t("invitations.acceptedWaiting"));
       done();
+      // Keys, the space and its notebooks follow at once; until the owner's key arrives, look every 3 s.
+      runtime().hurry(120_000);
     },
     onError: failed,
   });

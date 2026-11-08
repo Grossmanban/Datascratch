@@ -58,7 +58,7 @@ describe('handshake', () => {
     const c = await SyncClient.connect(s);
     c.send({
       type: 'hello',
-      protocol: 2,
+      protocol: 3,
       auth: { kind: 'user', accessToken: u.session.accessToken },
       deviceId: 'x',
       client: { platform: 'ios', version: '1' },

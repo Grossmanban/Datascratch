@@ -10,6 +10,7 @@ import { fromB64, toB64 } from '../lib/encoding.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { noteKeyCache } from '../plugins/agent-key-cache.js';
 import { memberOf, requireOwnTarget, requireVisibleTarget } from '../services/sharing.js';
+import { accountChanged } from '../services/account-events.js';
 import { topics } from '../sync/hub.js';
 import { errorResponses, id } from './schemas.js';
 import {
@@ -20,6 +21,7 @@ import {
   sharedSpaceSchema as spaceSchema,
   spaceKeyResponseSchema,
   spaceNotebookSchema,
+  type AccountChange,
 } from '@datascratch/shared/contracts';
 
 type SpaceRow = typeof spaces.$inferSelect;
@@ -46,10 +48,15 @@ export function spaceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
     const spaceParams = z.object({ id: id() });
     const spaceNotebookParams = z.object({ id: id(), notebookId: id() });
 
-    /** Open sync connections of the space's members re-check access. */
-    async function notifyMembers(db0: DbOrTx, spaceId: string) {
+    /**
+     * Open sync connections of the space's members re-check access; the owner's and members'
+     * devices hear what to re-read (D-62).
+     */
+    async function notifyMembers(db0: DbOrTx, spaceId: string, what: AccountChange[]) {
       const ms = await db0.select({ userId: members.userId }).from(members).where(eq(members.spaceId, spaceId));
       for (const m of ms) ctx.hub.publish(topics.user(m.userId), { type: 'access_changed' });
+      const [sp] = await db0.select({ userId: spaces.userId }).from(spaces).where(eq(spaces.id, spaceId));
+      accountChanged(ctx, [sp?.userId, ...ms.map((m) => m.userId)], what);
     }
 
     const ownSpace = (tx: DbOrTx, userId: string, spaceId: string, lock = false) =>
@@ -74,6 +81,7 @@ export function spaceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           .onConflictDoNothing()
           .returning();
         if (!created) throw conflict('space exists');
+        accountChanged(ctx, [p.userId], ['spaces']);
         return dto(created);
       },
     );
@@ -207,7 +215,7 @@ export function spaceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             .set({ spaceId, wrappedKey: fromB64(req.body.spaceWrappedKey) })
             .where(eq(notebooks.id, notebookId));
         });
-        await notifyMembers(db, spaceId);
+        await notifyMembers(db, spaceId, ['notebooks', 'keys']);
         return reply.code(204).send(null);
       },
     );
@@ -257,7 +265,7 @@ export function spaceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             .where(eq(notebooks.id, notebookId));
         });
         // The space's members lose it at once (open connections too); agents re-read its keys.
-        await notifyMembers(db, spaceId);
+        await notifyMembers(db, spaceId, ['notebooks']);
         noteKeyCache.forgetNotebooks([notebookId]);
         return reply.code(204).send(null);
       },
@@ -344,6 +352,7 @@ export function spaceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           }
           return nbs.map((n) => n.id);
         });
+        await notifyMembers(db, spaceId, ['spaces', 'keys']);
         // Keys decrypted for agents must not outlive the old keys (crypto.md §8).
         noteKeyCache.forgetNotebooks(notebookIds);
         return reply.code(204).send(null);
@@ -374,6 +383,7 @@ export function spaceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             .returning({ id: notebooks.id });
           return rows.map((r) => r.id);
         });
+        await notifyMembers(db, spaceId, ['spaces', 'keys']);
         noteKeyCache.forgetNotebooks(ids);
         return reply.code(204).send(null);
       },
@@ -416,6 +426,7 @@ export function spaceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         });
         for (const d of gone) ctx.hub.publish(topics.doc(d), { type: 'doc_deleted', docId: d });
         for (const u of memberIds) ctx.hub.publish(topics.user(u), { type: 'access_changed' });
+        accountChanged(ctx, [p.userId, ...memberIds], ['spaces', 'members', 'notebooks']);
         noteKeyCache.forgetNotebooks(notebookIds);
         await ctx.jobs.enqueue(CLEANUP_JOB, {});
         return reply.code(204).send(null);

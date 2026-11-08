@@ -2,7 +2,7 @@ name: web
 
 on:
   push:
-    branches: [main, "claude/web-app"]
+    branches: [main, "claude/web-app", "claude/design-system"]
     paths:
       - "apps/web/**"
       - ".github/workflows/web.yml"

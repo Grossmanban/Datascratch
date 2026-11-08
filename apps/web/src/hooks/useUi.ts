@@ -18,6 +18,8 @@ type UiState = {
   shareFor: { kind: "note" | "notebook"; id: string } | null;
   /** «Участники пространства» of a shared space (D-62). */
   spaceMembersFor: string | null;
+  /** «Создать пространство» / «Настройки пространства» (one window). */
+  spaceDialog: import("@/features/spaces/SpaceDialog").SpaceDialogState;
   /** Incoming invitations dialog (D-54); a string highlights that invitation (/invite/:id). */
   invitationsOpen: boolean | string;
   /** Bumped when keys of a shared resource changed (D-54): views holding a key or a link re-read them. */
@@ -44,6 +46,7 @@ export const useUi = create<UiState>(() => ({
   tabOverviewOpen: false,
   shareFor: null,
   spaceMembersFor: null,
+  spaceDialog: null,
   invitationsOpen: false,
   keysChangedAt: 0,
   historyFor: null,

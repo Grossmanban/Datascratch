@@ -334,6 +334,15 @@ struct DocumentVectorTests {
         for n in acc.notebooks() { #expect(jsonEqual(YValue.object(entries: n.fields).jsonObject, (expected["notebooks"] as! [String: Any])[n.id])) }
         #expect(acc.starred() == [StarredItem(kind: .note, id: "0192f3c4-0000-7000-8000-000000000001")])
         #expect(acc.tabs() == ["0192f3c4-0000-7000-8000-000000000001"])
+        // `shared` (D-54) with `openedAt` (D-63): the raw map and the records, which re-encode
+        // to the same fields.
+        if let shared = expected["shared"] as? [String: Any] {
+            #expect(jsonEqual(acc.crdt.mapValue("shared")?.jsonObject ?? [String: Any](), shared))
+            #expect(acc.sharedRefs().count == shared.count)
+            for r in acc.sharedRefs() { #expect(jsonEqual(YValue.object(entries: r.fields).jsonObject, shared[r.id]), "\(r.id)") }
+            let opened = acc.sharedRefs().filter { !$0.isNew }.map(\.kind)
+            #expect(opened == [.notebook])
+        }
     }
 }
 
@@ -361,6 +370,18 @@ struct SyncVectorTests {
         }
         for c in invalid["server"]! {
             #expect(SyncFrame.decode(String(decoding: try data(c["message"]!), as: UTF8.self)) == nil, "\(c["reason"]!)")
+        }
+        // Protocol 2 (D-62): what a reader keeps of `account_changed`; frames of unknown types
+        // are ignored, broken frames are errors.
+        for c in file["accountChanged"] as? [[String: [String]]] ?? [] {
+            let frame = String(decoding: try data(["type": "account_changed", "what": c["what"]!]), as: UTF8.self)
+            #expect(SyncFrame.decode(frame) == .accountChanged(Set(c["expected"]!.compactMap(AccountChange.init(rawValue:)))), "\(c["what"]!)")
+        }
+        for text in file["ignoredServerFrames"] as? [String] ?? [] {
+            guard case .ignored = SyncFrame.parse(text) else { Issue.record("not ignored: \(text)"); continue }
+        }
+        for text in file["brokenServerFrames"] as? [String] ?? [] {
+            #expect(SyncFrame.parse(text) == .broken, "\(text)")
         }
     }
 }

@@ -22,7 +22,8 @@ function staleSurfaces(page: Page, theme: "light" | "dark") {
     probe.remove();
     const out: string[] = [];
     for (const el of Array.from(document.querySelectorAll<HTMLElement>("body *"))) {
-      if (el.closest("img,svg,[data-testid=doc-cover],.ds-swatch,.ds-palette-tool,canvas")) continue;
+      // [data-theme-sample]: a picture of one theme on purpose (the theme picker's previews).
+      if (el.closest("img,svg,[data-testid=doc-cover],.ds-swatch,.ds-palette-tool,canvas,[data-theme-sample]")) continue;
       const r = el.getBoundingClientRect();
       if (r.width * r.height < 4000 || r.bottom < 0 || r.top > innerHeight) continue;
       const bg = getComputedStyle(el).backgroundColor;

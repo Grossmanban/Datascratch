@@ -92,6 +92,8 @@ public enum SyncClientError: Error, Equatable {
     case server(SyncErrorCode, String)
     /// D-53: `device_revoked` frame or close 4410.
     case deviceRevoked(DeviceRevocationReason)
+    /// The server does not speak this protocol version: connect again one version lower.
+    case protocolFallback
 }
 
 /// Receives connection events. Called on the client's actor; implementations should be quick.
@@ -155,6 +157,10 @@ public actor SyncClient {
     private var notBefore: ContinuousClock.Instant?
     /// Connection attempts that failed in a row (0 once connected).
     public private(set) var consecutiveFailures = 0
+    /// Version said in the next `hello` (§2): the newest, lowered once per `protocol_mismatch`.
+    private var helloVersion = SyncProtocol.latest
+    /// Version of the current (last) connection, from `welcome`; `account_changed` needs 2.
+    public private(set) var protocolVersion: Int?
 
     public init(configuration: Configuration, factory: any WebSocketFactory = URLSessionWebSocketFactory(),
                 auth: @escaping @Sendable () async throws -> SyncAuth) {
@@ -235,6 +241,11 @@ public actor SyncClient {
             var welcomedAt: ContinuousClock.Instant?
             do {
                 try await connectOnce { welcomedAt = .now }
+            } catch SyncClientError.protocolFallback {
+                // Not a failure: an older server; the next hello says one version lower.
+                connection?.close()
+                connection = nil
+                continue
             } catch let SyncClientError.server(code, message) where code == .protocolMismatch {
                 await setState(.stopped(reason: message))
                 return
@@ -300,19 +311,28 @@ public actor SyncClient {
         }
         defer { watchdog.cancel() }
         let hello = ClientMessage.hello(auth: try await auth(), deviceId: configuration.deviceId,
-                                        client: ClientInfo(platform: "ios", version: configuration.clientVersion))
+                                        client: ClientInfo(platform: "ios", version: configuration.clientVersion),
+                                        protocolVersion: helloVersion)
         try await conn.send(try SyncFrame.encode(hello))
 
         // Until `welcome` nothing else is accepted (§3).
         guard let first = SyncFrame.decode(try await receive(conn)) else { throw SyncClientError.closed }
         watchdog.cancel()
         switch first {
-        case .welcome(let userId, _):
+        case .welcome(let userId, _, let version):
+            // The server speaks at most what we said; keep it for the next connections.
+            let negotiated = min(version, helloVersion)
+            protocolVersion = negotiated
+            helloVersion = negotiated
             welcomed()
             await setState(.connected(userId: userId))
             await delegate?.syncClientDidConnect(self, userId: userId)
         case .error(let code, let message, _, let retryAfterMs, let reason):
             if code == .deviceRevoked { throw SyncClientError.deviceRevoked(reason ?? .user) }
+            if code == .protocolMismatch, helloVersion > SyncProtocol.min {
+                helloVersion -= 1
+                throw SyncClientError.protocolFallback
+            }
             rateLimited(code, retryAfterMs)
             throw SyncClientError.server(code, message)
         default:

@@ -69,6 +69,8 @@
     function (e) {
       var t = e.target;
       if (!t || t === window || window.__dsMounted) return;
+      // The launch animation is optional: without it the app still opens (src/app/boot.ts).
+      if (t.hasAttribute && t.hasAttribute("data-ds-optional")) return;
       if (t.tagName === "SCRIPT" || (t.tagName === "LINK" && /preload/.test(t.rel || ""))) fail();
     },
     true,

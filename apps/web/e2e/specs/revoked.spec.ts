@@ -31,7 +31,7 @@ test("D-53: a device disconnected from another one wipes all its data (unsent ch
   const other = await browser.newContext();
   const q = await other.newPage();
   await signIn(q, email);
-  await q.goto("/settings/account");
+  await q.goto("/settings/security");
   await endOtherSession(q);
 
   // The server says device_revoked (socket 4410): everything of the account is gone from here.
@@ -103,7 +103,7 @@ test("signing out with unsent changes warns, keeps them, and sends them after si
 
 test("D-53: password change and recovery warn that other devices are disconnected and their data deleted", async ({ page, browser }) => {
   await signUp(page, uniqueEmail("d53-warnings"));
-  await page.goto("/settings/account");
+  await page.goto("/settings/security");
   await page.getByRole("button", { name: "Сменить пароль" }).first().click();
   await expect(page.getByTestId("password-others-wiped")).toContainText("Другие устройства будут отключены, данные на них удалены");
   await page.keyboard.press("Escape");

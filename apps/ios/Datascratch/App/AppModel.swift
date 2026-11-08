@@ -147,6 +147,30 @@ final class AppModel {
     private(set) var serverURL: URL?
     private static let serverKey = "account.serverURL"
     @ObservationIgnored private let isUITesting: Bool
+
+    /// D-65: the server's voice (recognition and clean-up), a fake one in UI tests
+    /// (`-ui-testing-voice-error offline|disabled|quota`); nil on this device only.
+    var voiceService: (any VoiceService)? {
+        if isUITesting {
+            let error = UserDefaults.standard.string(forKey: "ui-testing-voice-error").flatMap { code -> VoiceError? in
+                switch code {
+                case "offline": .offline
+                case "disabled": .disabled
+                case "quota": .quota
+                default: nil
+                }
+            }
+            return FakeVoiceService(error: error)
+        }
+        guard let connection else { return nil }
+        let api = connection.api
+        return ServerVoiceService(baseURL: api.baseURL, accessToken: { try await api.accessToken() })
+    }
+
+    /// The microphone, or a stand-in that «hears» a fixed phrase in UI tests (no microphone).
+    func makeVoiceCapture() -> any VoiceCapture {
+        isUITesting ? FakeVoiceCapture() : MicrophoneCapture()
+    }
     let webHost: String
     let covers: CoverImages
 

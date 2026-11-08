@@ -47,6 +47,10 @@ struct SettingsView: View {
                         DSSettingsRow(String(localized: "Appearance"), systemImage: "circle.lefthalf.filled",
                                       value: app.settings.appearance.title, accessory: .chevron)
                     }
+                    NavigationLink(value: SettingsRoute.voice) {
+                        DSSettingsRow(String(localized: "Voice"), systemImage: "waveform", accessory: .chevron)
+                    }
+                    .accessibilityIdentifier("settings.voice")
                 }
                 .buttonStyle(.dsSettingsRow)
                 DSSettingsSection {
@@ -64,6 +68,7 @@ struct SettingsView: View {
                 case .agents: AgentTokensSettings()
                 case .drawing: DrawingSettings()
                 case .appearance: AppearanceSettings()
+                case .voice: VoiceSettings()
                 case .about: AboutView()
                 case .changePassword: ChangePasswordView()
                 case .securityLog: SecurityLogView()
@@ -80,7 +85,7 @@ struct SettingsView: View {
 }
 
 enum SettingsRoute: Hashable {
-    case account, recoveryKey, devices, agents, drawing, appearance, about, changePassword, securityLog
+    case account, recoveryKey, devices, agents, drawing, appearance, voice, about, changePassword, securityLog
 }
 
 /// A settings screen on the paper (design-system spec): serif title in the scroll, sections as
@@ -218,6 +223,38 @@ extension SyncCenter {
         case .notSent(let documents, _): .error(String(localized: "Not sent: \(documents)"))
         case .sessionEnded: .error(String(localized: "Signed out"))
         }
+    }
+}
+
+/// D-65: how dictation is recognised and tidied up.
+struct VoiceSettings: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        @Bindable var settings = app.settings
+        SettingsPage(title: String(localized: "Voice")) {
+            DSSettingsSection(String(localized: "Recognition"),
+                              footer: String(localized: "Best is more accurate with names and terms, and takes a little longer.")) {
+                choice(String(localized: "Standard"), isOn: settings.voiceQuality == .standard) { settings.voiceQuality = .standard }
+                choice(String(localized: "Best"), isOn: settings.voiceQuality == .best) { settings.voiceQuality = .best }
+            }
+            DSSettingsSection(String(localized: "Swear Words"),
+                              footer: String(localized: "Dictation always keeps your words. Softening applies to text you format.")) {
+                choice(String(localized: "Keep"), isOn: settings.voiceProfanity == .keep) { settings.voiceProfanity = .keep }
+                choice(String(localized: "Soften When Formatting"), isOn: settings.voiceProfanity == .soften) { settings.voiceProfanity = .soften }
+            }
+            DSSettingsSection(footer: String(localized: "Your recording and its text go through our server to ElevenLabs and OpenAI to be recognised and tidied up. They aren’t stored. Your notes stay encrypted.")) {
+                DSSettingsRow(String(localized: "Where Your Voice Goes"), systemImage: "lock.shield")
+            }
+        }
+    }
+
+    private func choice(_ title: String, isOn: Bool, select: @escaping () -> Void) -> some View {
+        Button(action: select) {
+            DSSettingsRow(title, accessory: isOn ? .check : .none)
+        }
+        .buttonStyle(.dsSettingsRow)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 

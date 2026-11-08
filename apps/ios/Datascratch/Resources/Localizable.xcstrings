@@ -371,6 +371,16 @@
         }
       }
     },
+    "Allow the microphone for Datascratch in Settings to dictate.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чтобы диктовать, разрешите Datascratch доступ к микрофону в Настройках."
+          }
+        }
+      }
+    },
     "Also here: %@": {
       "localizations": {
         "ru": {
@@ -437,6 +447,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не меньше 10 символов. Перешифровывается только обёртка ключа, заметки остаются как есть. Другие устройства будут отключены, данные на них удалены."
+          }
+        }
+      }
+    },
+    "Best": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лучшее"
+          }
+        }
+      }
+    },
+    "Best is more accurate with names and terms, and takes a little longer.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Лучшее» точнее с именами и терминами, но работает чуть дольше."
           }
         }
       }
@@ -517,6 +547,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Отмена"
+          }
+        }
+      }
+    },
+    "Cancel Dictation": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить диктовку"
           }
         }
       }
@@ -931,6 +971,16 @@
         }
       }
     },
+    "Couldn’t process the recording. What the device heard is kept.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось обработать запись. Оставили то, что распознало устройство."
+          }
+        }
+      }
+    },
     "Cover": {
       "localizations": {
         "ru": {
@@ -1267,6 +1317,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Диаграмма"
+          }
+        }
+      }
+    },
+    "Dictate": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Диктовать"
+          }
+        }
+      }
+    },
+    "Dictation": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Диктовка"
+          }
+        }
+      }
+    },
+    "Dictation always keeps your words. Softening applies to text you format.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Диктовка всегда сохраняет ваши слова. Смягчение — только в оформленном тексте."
           }
         }
       }
@@ -1911,6 +1991,16 @@
         }
       }
     },
+    "Got It": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Понятно"
+          }
+        }
+      }
+    },
     "Gray": {
       "localizations": {
         "ru": {
@@ -2057,6 +2147,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "История недоступна"
+          }
+        }
+      }
+    },
+    "Hold to dictate. Swipe up to keep recording hands free, swipe left to cancel.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удерживайте, чтобы диктовать. Смахните вверх — запись без рук, влево — отмена."
           }
         }
       }
@@ -2371,6 +2471,16 @@
         }
       }
     },
+    "Keep": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оставлять"
+          }
+        }
+      }
+    },
     "Key checked": {
       "localizations": {
         "ru": {
@@ -2517,6 +2627,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Список"
+          }
+        }
+      }
+    },
+    "Listening…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Слушаю…"
           }
         }
       }
@@ -3671,6 +3791,26 @@
         }
       }
     },
+    "Recognised on this device — we’ll refine it when you’re online.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Распознано на устройстве — уточним, когда появится сеть."
+          }
+        }
+      }
+    },
+    "Recognition": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Распознавание"
+          }
+        }
+      }
+    },
     "Recover access": {
       "localizations": {
         "ru": {
@@ -4401,6 +4541,16 @@
         }
       }
     },
+    "Sign in to dictate with the server’s recognition.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войдите, чтобы диктовать с распознаванием на сервере."
+          }
+        }
+      }
+    },
     "Sign in with your email and password.": {
       "localizations": {
         "ru": {
@@ -4467,6 +4617,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пропустить проверку?"
+          }
+        }
+      }
+    },
+    "Slide to cancel": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Влево — отмена"
+          }
+        }
+      }
+    },
+    "Soften When Formatting": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Смягчать в оформленном"
           }
         }
       }
@@ -4561,6 +4731,16 @@
         }
       }
     },
+    "Standard": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычное"
+          }
+        }
+      }
+    },
     "Star": {
       "localizations": {
         "ru": {
@@ -4621,6 +4801,16 @@
         }
       }
     },
+    "Stop Dictation": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Остановить диктовку"
+          }
+        }
+      }
+    },
     "Strikethrough": {
       "localizations": {
         "ru": {
@@ -4647,6 +4837,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Стиль…"
+          }
+        }
+      }
+    },
+    "Swear Words": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ненормативная лексика"
           }
         }
       }
@@ -4891,6 +5091,16 @@
         }
       }
     },
+    "The microphone isn’t available right now.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Микрофон сейчас недоступен."
+          }
+        }
+      }
+    },
     "The note becomes this version again. The current text stays in the history.": {
       "localizations": {
         "ru": {
@@ -5037,6 +5247,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Группы не совпадают. Проверьте сохранённый ключ."
+          }
+        }
+      }
+    },
+    "They aren’t stored there or on our server.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ни там, ни на нашем сервере они не хранятся."
           }
         }
       }
@@ -5501,6 +5721,26 @@
         }
       }
     },
+    "Voice": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос"
+          }
+        }
+      }
+    },
+    "Voice is turned off on this server.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос выключен на этом сервере."
+          }
+        }
+      }
+    },
     "Welcome back": {
       "localizations": {
         "ru": {
@@ -5547,6 +5787,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Когда с вами поделятся блокнотом или документом, приглашение появится здесь."
+          }
+        }
+      }
+    },
+    "Where Your Voice Goes": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Куда уходит голос"
           }
         }
       }
@@ -5721,6 +5971,16 @@
         }
       }
     },
+    "Your notes stay encrypted. Only what you dictate is sent.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заметки остаются зашифрованными. Отправляется только то, что вы диктуете."
+          }
+        }
+      }
+    },
     "Your password also protects the encryption key. Your recovery key keeps working after a password change.": {
       "localizations": {
         "ru": {
@@ -5737,6 +5997,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пароль служит и для входа, и для шифрования заметок. Он никогда не покидает устройство."
+          }
+        }
+      }
+    },
+    "Your recording and its text go through our server to ElevenLabs and OpenAI to be recognised and tidied up.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запись и её текст через наш сервер уходят в ElevenLabs и OpenAI — для распознавания и обработки."
+          }
+        }
+      }
+    },
+    "Your recording and its text go through our server to ElevenLabs and OpenAI to be recognised and tidied up. They aren’t stored. Your notes stay encrypted.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запись и её текст через наш сервер уходят в ElevenLabs и OpenAI — для распознавания и обработки. Они не хранятся. Заметки остаются зашифрованными."
           }
         }
       }
@@ -5767,6 +6047,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ваш токен"
+          }
+        }
+      }
+    },
+    "You’ve used up voice for now. It comes back with the next period.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лимит голоса пока исчерпан. Он обновится в следующем периоде."
           }
         }
       }

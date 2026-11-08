@@ -73,6 +73,8 @@ IGNORE = {
     "Личное", "Работа", "Заметки",
     # D-54: UI-test seed and the comparison's line marks.
     "Shared plans", "Roadmap", "Plan for two", "Ideas", "Only the owner edits this.", "• ", "☑ ", "———", "“", "”",
+    # D-65: HTTP headers and the fake voice server of the UI tests.
+    "Authorization", "Content-Type", "POST", "no response", "um so ", "um so this is dictated text",
     # D-62: UI-test seed of a joined shared space.
     "Team", "Team notes", "Kickoff", "Agenda",
     # UI-test seed: a long note (scroll position across full screen).

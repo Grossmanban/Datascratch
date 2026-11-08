@@ -134,6 +134,10 @@ final class NativeEditorModel: ClosingEditor {
     var captionTarget: BlockID?
     /// The photo «Replace…» picks a new image for.
     @ObservationIgnored var replacing: BlockID?
+    /// D-65: what is being dictated and not in the text yet (shown above the bar).
+    var dictationPreview: String?
+    /// D-65: this document's microphone.
+    @ObservationIgnored lazy var dictation = DictationController(app: app, target: self)
     /// A file for the share sheet / Quick Look.
     var sharing: URL?
     var previewing: URL?
@@ -304,6 +308,7 @@ struct NativeDocumentScreen: View {
             HideKeyboardButton(model: model, isCompact: isCompact)
                 .padding(.leading, isTight ? Theme.Space.s1 : Theme.Space.s3)
             PenPalette(model: model, isCompact: isCompact)
+            DictationButton(dictation: model.dictation, isCompact: isCompact || isTight)
             Button { setPaletteCollapsed(true) } label: {
                 // A clear «fold» glyph (the earlier one drew an empty circle on iPhone).
                 Image(systemName: "chevron.down")
@@ -347,6 +352,14 @@ struct NativeDocumentScreen: View {
                         // the column's edges (iPad split view with three columns).
                         if !isViewOnly(note) {
                         VStack(spacing: 0) {
+                            // D-65: what is being dictated, and a word about the last piece.
+                            VStack(spacing: Theme.Space.s2) {
+                                DictationPreview(dictation: model.dictation, text: model.dictationPreview)
+                                if let message = model.dictation.message { DictationMessage(text: message) }
+                            }
+                            .padding(.bottom, model.dictationPreview != nil || model.dictation.message != nil ? Theme.Space.s2 : 0)
+                            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictationPreview != nil)
+                            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictation.message)
                             // While text is being written: marks and block styles above the palette.
                             FormatBarRow(model: model)
                             Group {
@@ -355,6 +368,7 @@ struct NativeDocumentScreen: View {
                                     // room, the current tool keeps working (Pencil still draws).
                                     HStack(spacing: Theme.Space.s2) {
                                         Spacer(minLength: 0)
+                                        DictationButton(dictation: model.dictation, isCompact: true)
                                         HideKeyboardButton(model: model, isCompact: true)
                                         CollapsedPenButton(model: model) { setPaletteCollapsed(false) }
                                             .padding(.trailing, Theme.Space.s4)
@@ -413,6 +427,7 @@ struct NativeDocumentScreen: View {
                 }
                 .toolbar { NativeEditorToolbar(model: model, note: note) }
                 .modifier(LinkPrompt(model: model))
+                .modifier(DictationSheets(dictation: model.dictation))
                 .coverPickers()
             } else if failed {
                 // Opening the document failed: fall back to the stand-in editor.
@@ -429,6 +444,7 @@ struct NativeDocumentScreen: View {
             app.presence?.join(noteId)
         }
         .onDisappear {
+            model?.dictation.leave()
             app.library.recordVersion(ofNote: noteId)
             app.presence?.leave(noteId)
         }

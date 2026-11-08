@@ -34,6 +34,12 @@ final class AppSettings {
     var hapticsEnabled: Bool { didSet { defaults.set(hapticsEnabled, forKey: "haptics") } }
     /// The pen palette folded into a small button at the bottom edge.
     var penPaletteCollapsed: Bool { didSet { defaults.set(penPaletteCollapsed, forKey: "penPaletteCollapsed") } }
+    /// D-65: dictation sent with the better (slower) recognition.
+    var voiceQuality: VoiceQuality { didSet { defaults.set(voiceQuality.rawValue, forKey: "voiceQuality") } }
+    /// D-65: swear words kept as said, or softened in formatted text.
+    var voiceProfanity: VoiceProfanity { didSet { defaults.set(voiceProfanity.rawValue, forKey: "voiceProfanity") } }
+    /// D-65: the «where your voice goes» sheet was read on this device.
+    var voiceConsentShown: Bool { didSet { defaults.set(voiceConsentShown, forKey: "voiceConsentShown") } }
     /// D-63, before «opened» lived in the account document (`SharedRef.openedAt`): what this
     /// device had opened. Read once to carry it over (`AppModel.syncSharedRefs`), then cleared.
     var seenShared: Set<String>? { didSet { defaults.set(seenShared.map { Array($0).sorted() }, forKey: "seenShared") } }
@@ -50,6 +56,9 @@ final class AppSettings {
         libraryLayout = LibraryLayout(rawValue: defaults.string(forKey: "libraryLayout") ?? "") ?? .list
         hapticsEnabled = defaults.object(forKey: "haptics") as? Bool ?? true
         penPaletteCollapsed = defaults.bool(forKey: "penPaletteCollapsed")
+        voiceQuality = VoiceQuality(rawValue: defaults.string(forKey: "voiceQuality") ?? "") ?? .standard
+        voiceProfanity = VoiceProfanity(rawValue: defaults.string(forKey: "voiceProfanity") ?? "") ?? .keep
+        voiceConsentShown = defaults.bool(forKey: "voiceConsentShown")
     }
 
     var interfaceStyle: UIUserInterfaceStyle {

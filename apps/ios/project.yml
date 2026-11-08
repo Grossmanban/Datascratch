@@ -64,6 +64,9 @@ targets:
           - com.datascratch.app.openNote
         NSCameraUsageDescription: Datascratch uses the camera to add photos to your notes.
         NSPhotoLibraryUsageDescription: Datascratch uses your photo library to add images and covers to your notes.
+        # D-65 dictation: the microphone, and the device's own recognition for the live preview.
+        NSMicrophoneUsageDescription: Datascratch uses the microphone when you hold the microphone button to dictate into a note.
+        NSSpeechRecognitionUsageDescription: Datascratch shows what you say as you dictate, recognised on this device.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.datascratch.app

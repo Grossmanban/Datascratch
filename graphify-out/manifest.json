@@ -984,10 +984,10 @@
     "semantic_hash": "b94b2bdac92ca48dff93f0062e8f0b7a"
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1794148499.337124,
-    "seen": 1794148823.3932512,
-    "ast_hash": "475e4b005420f3cb96a5c136efd9af68",
-    "semantic_hash": "475e4b005420f3cb96a5c136efd9af68"
+    "mtime": 1794168910.477332,
+    "seen": 1794169084.9466662,
+    "ast_hash": "aa357cdc8217958743d008b96cf4464e",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
     "mtime": 1793011608.2055936,
@@ -1002,10 +1002,10 @@
     "semantic_hash": "8423617bbd72c9528dd5cb0d586e510e"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/AgentEditsBanner.swift": {
-    "mtime": 1793005247.0234547,
-    "seen": 1794142545.3251379,
-    "ast_hash": "6e8d0fe14401882676cc26ca99f3bc7f",
-    "semantic_hash": "6e8d0fe14401882676cc26ca99f3bc7f"
+    "mtime": 1794168801.645214,
+    "seen": 1794169084.9467614,
+    "ast_hash": "672fa70afce159ba248ecfa3b50470cd",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/Attachments.swift": {
     "mtime": 1793885350.576235,
@@ -1050,10 +1050,10 @@
     "semantic_hash": "ff372fbbcd56eb444ba92f26be7bdadc"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1794148584.604381,
-    "seen": 1794148823.3932827,
-    "ast_hash": "91ca57097210da1f49c681aa1f6578b1",
-    "semantic_hash": "91ca57097210da1f49c681aa1f6578b1"
+    "mtime": 1794168810.9266205,
+    "seen": 1794169084.9471438,
+    "ast_hash": "8870b5e44ae2e24b6441a99b08a171fd",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormatMenu.swift": {
     "mtime": 1793011531.6864011,
@@ -1388,19 +1388,19 @@
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1794166069.3653302,
-    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1794166069.3653321,
-    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948578.3941054,
     "seen": 1794166069.3653338,
-    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
@@ -2630,7 +2630,7 @@
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792967462.0829601,
     "seen": 1794166069.3660028,
-    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "infra/deploy/docker-compose.yml": {
@@ -4704,10 +4704,10 @@
     "semantic_hash": "e25a390587360f376c89853a7227840b"
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1794149233.4834461,
-    "seen": 1794149691.45822,
-    "ast_hash": "bdf476f1c28b266a450863c1bfec9350",
-    "semantic_hash": "bdf476f1c28b266a450863c1bfec9350"
+    "mtime": 1794168933.3807418,
+    "seen": 1794169084.9804854,
+    "ast_hash": "1db5e71086c1fceed43b564db2f26046",
+    "semantic_hash": ""
   },
   "docs/spec/05-organization-design.md": {
     "mtime": 1794166034.0830302,
@@ -4988,7 +4988,7 @@
   "apps/server/drizzle/0003_agent_move_note.sql": {
     "mtime": 1793084705.3194864,
     "seen": 1794166069.3653357,
-    "ast_hash": "dc7975f711d91ebab97fb9b5b28fc1d1",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0003_snapshot.json": {
@@ -5462,7 +5462,7 @@
   "apps/server/drizzle/0004_storage_quota.sql": {
     "mtime": 1793131795.6564867,
     "seen": 1794166069.3653374,
-    "ast_hash": "21621440da5d8eb9298c5822ed5892f8",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/meta/0004_snapshot.json": {
@@ -5912,19 +5912,19 @@
   "apps/server/drizzle/0005_device_revoked_reason.sql": {
     "mtime": 1793131795.6564867,
     "seen": 1794166069.365339,
-    "ast_hash": "bf8befdc979b04a047a8b41a5fecaad2",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0006_sharing.sql": {
     "mtime": 1793131795.6564867,
     "seen": 1794166069.365341,
-    "ast_hash": "31990867a10a28e773e24842d832c13c",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0007_rotation_since.sql": {
     "mtime": 1793131795.6564867,
     "seen": 1794166069.365343,
-    "ast_hash": "ff5b757438f90d1e336d63485e0b0208",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "docs/decisions/0056-app-links-custom-scheme.md": {
@@ -5990,7 +5990,7 @@
   "apps/server/drizzle/0008_agents_shared_notebooks.sql": {
     "mtime": 1793885350.5842352,
     "seen": 1794166069.3653452,
-    "ast_hash": "ce38ed0cf53dc88a3a88809fe9f74f00",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/test/agents-shared-plugin.test.ts": {
@@ -6026,7 +6026,7 @@
   "apps/server/drizzle/0009_agents_all_notebooks.sql": {
     "mtime": 1793885350.5842352,
     "seen": 1794166069.3653479,
-    "ast_hash": "514dd065b0f2022aae2bce77da06a692",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "docs/decisions/0058-pen-frames-anchor-to-enclosed-lines.md": {
@@ -6266,13 +6266,13 @@
   "apps/server/drizzle/0010_audit_hardening.sql": {
     "mtime": 1793885350.5842352,
     "seen": 1794166069.3653498,
-    "ast_hash": "4b31b7e470e3e14d807fc196165e136e",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0011_shared_spaces.sql": {
     "mtime": 1793885350.5842352,
     "seen": 1794166069.3653517,
-    "ast_hash": "61242e6afcdc2b369ee0cdef7c119ad6",
+    "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/web/e2e/specs/enter.spec.ts": {
@@ -6597,6 +6597,24 @@
     "mtime": 1794166034.0757456,
     "seen": 1794166119.5181587,
     "ast_hash": "71f6dc5d89824d9b6f9ad360ce4d6607",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSEditor/Sources/DSEditorModel/EditorCommands+Markdown.swift": {
+    "mtime": 1794168884.4591923,
+    "seen": 1794169084.947997,
+    "ast_hash": "9ae02cb87e20be17dd4cf4e1465a8638",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSEditor/Sources/DSEditorModel/MarkdownExport.swift": {
+    "mtime": 1794168957.5772219,
+    "seen": 1794169084.9483266,
+    "ast_hash": "cbcad58614fc057eb4564ea9ad0e1bba",
+    "semantic_hash": ""
+  },
+  "apps/ios/Packages/DSEditor/Tests/DSEditorModelTests/MarkdownExportTests.swift": {
+    "mtime": 1794168896.7951508,
+    "seen": 1794169084.9494734,
+    "ast_hash": "920a26922045a8dcd9fb3d8bad3fd76d",
     "semantic_hash": ""
   }
 }

@@ -171,8 +171,8 @@ final class AppModel {
     /// D-65: `GET /v1/voice/me` — nil until read (or on this device only: the microphone stays).
     private(set) var voiceAccess: VoiceAccess?
 
-    /// Voice is off for this account: the microphone is not offered.
-    var isVoiceOff: Bool { voiceAccess?.enabled == false }
+    /// Voice is off for this account, or the server cannot serve it: the microphone is not offered.
+    var isVoiceOff: Bool { voiceAccess.map { !$0.isUsable } ?? false }
 
     /// Reads whether voice is on and what is left (at start, on `account_changed` "voice", when
     /// Settings → Voice opens). A failure keeps what was known.
@@ -205,15 +205,6 @@ final class AppModel {
         }
         #endif
         settings.voiceConsentShown = true
-    }
-
-    /// The server's admin manages who may use voice — in the web app (Settings → Voice says so).
-    private(set) var isVoiceAdmin = false
-
-    func refreshVoiceAdmin() async {
-        guard let service = voiceService else { return }
-        let admin = await service.isAdmin()
-        if admin != isVoiceAdmin { isVoiceAdmin = admin }
     }
 
     /// The microphone, or a stand-in that «hears» a fixed phrase in UI tests (no microphone).

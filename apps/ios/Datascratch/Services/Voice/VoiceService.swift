@@ -118,22 +118,45 @@ nonisolated enum VoiceError: Error, Equatable, Sendable {
     }
 }
 
-/// `GET /v1/voice/me`: whether this account may use voice, and its minutes this month (UTC).
+/// `GET /v1/voice/me`: whether this account may use voice, whether the server can serve it, and
+/// the account's minutes this month (UTC).
 nonisolated struct VoiceAccess: Codable, Equatable, Sendable {
+    /// Turned on for this account by the server's admin.
     var enabled: Bool
+    /// The server has its voice keys (false: «temporarily unavailable»).
+    var available: Bool
     /// Minutes of recognition per calendar month.
     var monthlyMinutes: Int
     var usedMinutes: Double
     /// Start of the next month (ISO, UTC).
     var resetsAt: String
+    /// The server's admin (who may use voice is managed in the web app).
+    var admin: Bool
 
-    init(enabled: Bool, monthlyMinutes: Int = 0, usedMinutes: Double = 0, resetsAt: String = "") {
+    init(enabled: Bool, available: Bool = true, monthlyMinutes: Int = 0, usedMinutes: Double = 0, resetsAt: String = "", admin: Bool = false) {
         self.enabled = enabled
+        self.available = available
         self.monthlyMinutes = monthlyMinutes
         self.usedMinutes = usedMinutes
         self.resetsAt = resetsAt
+        self.admin = admin
     }
 
+    private enum CodingKeys: String, CodingKey { case enabled, available, monthlyMinutes, usedMinutes, resetsAt, admin }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        // A server from before `available` and `admin`: available, not admin.
+        available = try c.decodeIfPresent(Bool.self, forKey: .available) ?? true
+        monthlyMinutes = try c.decode(Int.self, forKey: .monthlyMinutes)
+        usedMinutes = try c.decode(Double.self, forKey: .usedMinutes)
+        resetsAt = try c.decode(String.self, forKey: .resetsAt)
+        admin = try c.decodeIfPresent(Bool.self, forKey: .admin) ?? false
+    }
+
+    /// The microphone can be offered.
+    var isUsable: Bool { enabled && available }
     var minutesLeft: Int { max(0, Int((Double(monthlyMinutes) - usedMinutes).rounded(.down))) }
 }
 
@@ -150,8 +173,6 @@ nonisolated enum VoiceLanguage: String, Sendable {
 /// The server side of voice; a fake one runs the UI tests.
 nonisolated protocol VoiceService: Sendable {
     func me() async throws -> VoiceAccess
-    /// Whether this account is the server's admin (`GET /v1/admin/voice` answers it, 403 others).
-    func isAdmin() async -> Bool
     func transcribe(audio: URL, mode: VoiceMode, language: VoiceLanguage) async throws -> VoiceTranscript
     func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> String
 }
@@ -167,12 +188,6 @@ nonisolated struct ServerVoiceService: VoiceService {
         var request = try await request("voice/me")
         request.httpMethod = "GET"
         return try JSONDecoder().decode(VoiceAccess.self, from: try await send(request))
-    }
-
-    func isAdmin() async -> Bool {
-        guard var request = try? await request("admin/voice") else { return false }
-        request.httpMethod = "GET"
-        return (try? await send(request)) != nil
     }
 
     func transcribe(audio: URL, mode: VoiceMode, language: VoiceLanguage) async throws -> VoiceTranscript {
@@ -258,10 +273,9 @@ nonisolated struct FakeVoiceService: VoiceService {
     }
 
     func me() async throws -> VoiceAccess {
-        VoiceAccess(enabled: error != .disabled, monthlyMinutes: 600, usedMinutes: 12.5, resetsAt: "2026-12-01T00:00:00.000Z")
+        VoiceAccess(enabled: error != .disabled, available: error != .unavailable, monthlyMinutes: 600, usedMinutes: 12.5,
+                    resetsAt: "2026-12-01T00:00:00.000Z")
     }
-
-    func isAdmin() async -> Bool { false }
 
     func transcribe(audio: URL, mode: VoiceMode, language: VoiceLanguage) async throws -> VoiceTranscript {
         try await Task.sleep(for: delay)

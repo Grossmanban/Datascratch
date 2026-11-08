@@ -252,15 +252,18 @@ struct VoiceSettings: View {
         @Bindable var settings = app.settings
         SettingsPage(title: String(localized: "Voice")) {
             if let access = app.voiceAccess {
-                DSSettingsSection(footer: app.isVoiceAdmin ? String(localized: "Manage access in the web app.") : nil) {
-                    if access.enabled {
-                        let minutes = access.minutesLeft
-                        DSSettingsRow(String(localized: "Left this month: \(minutes) min"), systemImage: "waveform")
-                            .accessibilityIdentifier("settings.voice.status")
-                    } else {
-                        DSSettingsRow(String(localized: "Voice isn’t turned on — ask the server’s owner."), systemImage: "waveform.slash")
-                            .accessibilityIdentifier("settings.voice.status")
+                DSSettingsSection(footer: access.admin ? String(localized: "Manage access in the web app.") : nil) {
+                    Group {
+                        if !access.enabled {
+                            DSSettingsRow(String(localized: "Voice isn’t turned on — ask the server’s owner."), systemImage: "waveform.slash")
+                        } else if !access.available {
+                            DSSettingsRow(String(localized: "Voice is temporarily unavailable."), systemImage: "waveform.slash")
+                        } else {
+                            let minutes = access.minutesLeft
+                            DSSettingsRow(String(localized: "Left this month: \(minutes) min"), systemImage: "waveform")
+                        }
                     }
+                    .accessibilityIdentifier("settings.voice.status")
                 }
             }
             DSSettingsSection(String(localized: "Quality")) {
@@ -276,10 +279,7 @@ struct VoiceSettings: View {
                 DSSettingsRow(String(localized: "Voice Through Our Server"), systemImage: "lock.shield")
             }
         }
-        .task {
-            await app.refreshVoiceAccess()
-            await app.refreshVoiceAdmin()
-        }
+        .task { await app.refreshVoiceAccess() }
     }
 
     private func choice(_ title: String, subtitle: String? = nil, isOn: Bool, select: @escaping () -> Void) -> some View {

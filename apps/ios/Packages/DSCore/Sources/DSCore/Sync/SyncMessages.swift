@@ -257,7 +257,7 @@ public enum ServerMessage: Codable, Hashable, Sendable {
     case error(code: SyncErrorCode, message: String, ref: String?, retryAfterMs: Int? = nil, reason: DeviceRevocationReason? = nil)
     /// Something about this account changed on the server (D-62): an invitation came, a space
     /// or its members or keys changed, a notebook was shared or moved. The app refreshes what
-    /// is named; values this client does not know are dropped, an empty set means «something».
+    /// is named; values this client does not know are dropped (the set can end up empty).
     case accountChanged(Set<AccountChange>)
 
     enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref, retryAfterMs, reason, author, what }

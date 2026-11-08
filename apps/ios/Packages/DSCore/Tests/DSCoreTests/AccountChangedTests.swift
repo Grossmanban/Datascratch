@@ -41,6 +41,8 @@ import Foundation
         #expect(try await eventually { await b.client.isConnected })
         let hellos = await server.helloCount()
         await server.sendRaw(#"{"type":"something_new","what":"?"}"#, to: "B")
+        // Only names this client does not know: nothing reaches the app.
+        await server.sendRaw(#"{"type":"account_changed","what":["future_thing"]}"#, to: "B")
         await server.send(.accountChanged([.invitations]), to: "B")
         #expect(try await eventually { seen.withLock { $0 } == [[.invitations]] })
         #expect(await b.client.isConnected)

@@ -429,7 +429,8 @@ public actor SyncEngine: SyncClientDelegate {
         deviceRevokedHandler = handler
     }
 
-    /// Called on `account_changed` from the server (D-62), with what changed (empty: something).
+    /// Called on `account_changed` from the server (D-62), with what changed (never empty: a
+    /// message naming only things this client does not know is dropped).
     /// The app refreshes invitations, spaces and keys, then calls `noteKeysLearned`. Documents
     /// refused before are subscribed again by the engine itself.
     public func setAccountChangedHandler(_ handler: (@Sendable (Set<AccountChange>) -> Void)?) {
@@ -778,9 +779,11 @@ public actor SyncEngine: SyncClientDelegate {
         case .welcome:
             break
         case .accountChanged(let what):
+            // Only names this client knows count; none left: nothing to do (as the TS client).
+            guard !what.isEmpty else { return }
             accountChangedHandler?(what)
             // Access may have come (a space joined, a notebook shared or moved into a space).
-            if what.isEmpty || !what.isDisjoint(with: [.spaces, .members, .notebooks, .keys]) {
+            if !what.isDisjoint(with: [.spaces, .members, .notebooks, .keys]) {
                 await retryRefusedAccess()
                 await resumeDocumentsWaitingForKeys()
             }

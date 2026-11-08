@@ -11,6 +11,7 @@ import type { AppContext } from '../context.js';
 import { users, voiceAccess, voiceUsage } from '../db/schema.js';
 import { ApiError } from '../lib/errors.js';
 import { accountChanged } from '../services/account-events.js';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
 
 const listOf = (v: string) =>
   v
@@ -57,7 +58,19 @@ export class VoiceService {
   /** When the configured speech-to-text model was refused: the fallback is used for a while. */
   #sttModelRefusedAt = 0;
 
-  constructor(private readonly ctx: AppContext) {}
+  /** fetch for the voice upstreams: through DS_VOICE_PROXY when it is set, else direct. */
+  readonly #fetch: typeof fetch;
+
+  constructor(private readonly ctx: AppContext) {
+    const proxy = ctx.config.DS_VOICE_PROXY;
+    if (proxy) {
+      const dispatcher = new ProxyAgent(proxy);
+      this.#fetch = ((url: string | URL, init?: RequestInit) =>
+        undiciFetch(url, { ...(init as object), dispatcher } as Parameters<typeof undiciFetch>[1])) as unknown as typeof fetch;
+    } else {
+      this.#fetch = fetch;
+    }
+  }
 
   get #config() {
     return this.ctx.config;
@@ -260,7 +273,7 @@ export class VoiceService {
     const signal = AbortSignal.timeout(this.#config.VOICE_STT_TIMEOUT_MS);
     let res: Response;
     try {
-      res = await fetch(new URL('/v1/speech-to-text', this.#config.ELEVENLABS_URL), {
+      res = await this.#fetch(new URL('/v1/speech-to-text', this.#config.ELEVENLABS_URL), {
         method: 'POST',
         headers: { 'xi-api-key': key, 'content-type': `multipart/form-data; boundary=${boundary}`, accept: 'application/json' },
         body: Readable.toWeb(Readable.from(body())) as unknown as RequestInit['body'],
@@ -295,7 +308,7 @@ export class VoiceService {
     const model = quality === 'best' ? this.#config.VOICE_TEXT_MODEL_BEST : this.#config.VOICE_TEXT_MODEL_STANDARD;
     let res: Response;
     try {
-      res = await fetch(new URL('v1/chat/completions', withSlash(this.#config.OPENROUTER_URL)), {
+      res = await this.#fetch(new URL('v1/chat/completions', withSlash(this.#config.OPENROUTER_URL)), {
         method: 'POST',
         headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
         body: JSON.stringify({

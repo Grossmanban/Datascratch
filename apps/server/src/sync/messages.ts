@@ -25,9 +25,7 @@ export type SyncErrorCode =
 
 /** Server → client messages (sync-protocol.md §4). */
 export type ServerMessage =
-  | Exclude<SharedServerMessage, { type: 'error' } | { type: 'account_changed' }>
-  // The server may name changes the shared list does not have yet (`voice`, D-65).
-  | { type: 'account_changed'; what: string[] }
+  | Exclude<SharedServerMessage, { type: 'error' }>
   | { type: 'error'; code: SyncErrorCode; message: string; ref?: string; retryAfterMs?: number; reason?: string };
 
 export const PROTOCOL_VERSION = SYNC_PROTOCOL_VERSION;

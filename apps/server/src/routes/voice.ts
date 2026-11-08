@@ -40,8 +40,8 @@ const VoiceMe = z.object({
   usedMinutes: z.number().nonnegative(),
   /** Start of the next month (UTC): the minutes reset then. */
   resetsAt: z.string(),
-  /** A server admin: may open the voice access screen (GET /admin/voice). */
-  admin: z.boolean(),
+  /** A server admin: may open the voice access screen (GET /admin/voice, web only). */
+  isAdmin: z.boolean(),
 });
 
 const AdminAccount = z.object({
@@ -140,7 +140,7 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           monthlyMinutes: st.monthlyMinutes,
           usedMinutes: minutes(st.usedSec),
           resetsAt: resetsAt(),
-          admin: st.admin,
+          isAdmin: st.admin,
         };
       },
     );
@@ -232,7 +232,7 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
               bytes += chunk.length;
               yield chunk;
             }
-            if (stream.truncated) throw new ApiError('payload_too_large', 'the recording is larger than 200 MB');
+            if (stream.truncated) throw new ApiError('voice_too_long', 'the recording is larger than 200 MB');
           }
           let result;
           try {
@@ -245,7 +245,7 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
               language: params.data.language,
             });
           } catch (err) {
-            if (stream.truncated) throw new ApiError('payload_too_large', 'the recording is larger than 200 MB');
+            if (stream.truncated) throw new ApiError('voice_too_long', 'the recording is larger than 200 MB');
             throw err;
           } finally {
             fields.bytes = bytes;

@@ -2,6 +2,7 @@
 // over it. The server proxies both (the keys stay on the server); audio and text pass through
 // it in memory and are not stored or logged.
 import { z } from "zod";
+import { isoDateTimeSchema, uuidSchema } from "./common.js";
 
 export const VOICE_MODES = ["dictation", "conversation"] as const;
 export type VoiceMode = (typeof VOICE_MODES)[number];
@@ -60,9 +61,9 @@ export type VoiceTranscribeResponse = z.infer<typeof voiceTranscribeResponseSche
 
 export const VOICE_TEXT_TASKS = ["clean", "minutes", "format"] as const;
 export type VoiceTextTask = (typeof VOICE_TEXT_TASKS)[number];
-export const VOICE_STYLES = ["plan", "minutes", "article", "letter", "notes"] as const;
+export const VOICE_STYLES = ["document", "plan", "minutes", "article", "letter", "notes"] as const;
 export type VoiceStyle = (typeof VOICE_STYLES)[number];
-export const VOICE_PROFANITY = ["keep", "soften"] as const;
+export const VOICE_PROFANITY = ["soften", "keep"] as const;
 export type VoiceProfanity = (typeof VOICE_PROFANITY)[number];
 export const VOICE_QUALITY = ["standard", "best"] as const;
 export type VoiceQuality = (typeof VOICE_QUALITY)[number];
@@ -73,13 +74,13 @@ export const MAX_VOICE_TURNS = 20_000;
 
 /**
  * `POST /voice/text`: exactly one of `turns` (a transcript) or `text` (a draft or a note).
- * `format` needs `style`.
+ * `style` is for `format` only (default `document`); `profanity` defaults to `soften`.
  */
 export const voiceTextRequestSchema = z
   .object({
     task: z.enum(VOICE_TEXT_TASKS),
     style: z.enum(VOICE_STYLES).optional(),
-    profanity: z.enum(VOICE_PROFANITY),
+    profanity: z.enum(VOICE_PROFANITY).default("soften"),
     quality: z.enum(VOICE_QUALITY).default("standard"),
     turns: z.array(voiceTurnSchema).min(1).max(MAX_VOICE_TURNS).optional(),
     text: z.string().min(1).max(MAX_VOICE_TEXT_CHARS).optional(),
@@ -88,8 +89,8 @@ export const voiceTextRequestSchema = z
     message: "exactly one of turns or text",
     path: ["text"],
   })
-  .refine((b) => b.task !== "format" || b.style !== undefined, {
-    message: "format needs a style",
+  .refine((b) => b.task === "format" || b.style === undefined, {
+    message: "style is for format only",
     path: ["style"],
   })
   .refine(
@@ -114,3 +115,62 @@ export const DEFAULT_VOICE_TEXT_MODELS: Readonly<Record<VoiceQuality, string>> =
   standard: "openai/gpt-5.6-luna",
   best: "anthropic/claude-sonnet-5.5",
 });
+
+/** The default `style` of `format`. */
+export const DEFAULT_VOICE_STYLE: VoiceStyle = "document";
+
+/**
+ * Author of text written by voice (D-65): the result is highlighted with the `agentEdit` mark
+ * (D-10) with this `agentId`; clients label it «Голос».
+ */
+export const VOICE_AGENT_ID = "voice";
+
+// --- Access and quota (D-65: managed by the server admin, per account, months by UTC) -------
+
+/** `GET /voice/me`. */
+export const voiceMeSchema = z.object({
+  enabled: z.boolean(),
+  /** Minutes of recognition per calendar month (UTC). */
+  monthlyMinutes: z.number().int().nonnegative(),
+  usedMinutes: z.number().nonnegative(),
+  /** Start of the next month, UTC. */
+  resetsAt: isoDateTimeSchema,
+});
+export type VoiceMe = z.infer<typeof voiceMeSchema>;
+
+/** An account of `GET /admin/voice` (server admin only; the screen is web only). */
+export const adminVoiceAccountSchema = z.object({
+  userId: uuidSchema,
+  email: z.string(),
+  /** Display name, if the account has one. */
+  name: z.string().nullable(),
+  enabled: z.boolean(),
+  monthlyMinutes: z.number().int().nonnegative(),
+  usedMinutes: z.number().nonnegative(),
+  /** What this account's voice cost this month (recognition + text), US dollars. */
+  costUsd: z.number().nonnegative(),
+});
+export type AdminVoiceAccount = z.infer<typeof adminVoiceAccountSchema>;
+
+/** `GET /admin/voice`: the accounts and this month's totals (UTC month). */
+export const adminVoiceResponseSchema = z.object({
+  /** "YYYY-MM", UTC. */
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  resetsAt: isoDateTimeSchema,
+  accounts: z.array(adminVoiceAccountSchema),
+  totals: z.object({
+    usedMinutes: z.number().nonnegative(),
+    costUsd: z.number().nonnegative(),
+  }),
+});
+export type AdminVoiceResponse = z.infer<typeof adminVoiceResponseSchema>;
+
+/** Default monthly minutes (D-65): the owner and other accounts; the admin changes them. */
+export const DEFAULT_VOICE_MONTHLY_MINUTES = Object.freeze({ owner: 600, others: 120 });
+
+/** `PUT /admin/voice/:userId`. */
+export const putAdminVoiceRequestSchema = z.object({
+  enabled: z.boolean(),
+  monthlyMinutes: z.number().int().nonnegative().max(100_000),
+});
+export type PutAdminVoiceRequest = z.infer<typeof putAdminVoiceRequestSchema>;

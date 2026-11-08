@@ -226,6 +226,8 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           # Server admins (e-mails, comma-separated): they manage voice access in the app.
           DS_ADMIN_EMAILS: ${{ secrets.DS_ADMIN_EMAILS }}
+          # Outbound proxy for the voice services only (the server is in Russia); never printed.
+          DS_VOICE_PROXY: ${{ secrets.DS_VOICE_PROXY }}
         run: |
           infra/deploy/remote.sh deploy
           # Only these keys with plain values may reach $GITHUB_ENV (the server's answer is not trusted);

@@ -116,6 +116,11 @@ const ConfigSchema = z
     /** OpenRouter models for `quality` standard and best. */
     VOICE_TEXT_MODEL_STANDARD: z.string().min(1).default('openai/gpt-5.6-luna'),
     VOICE_TEXT_MODEL_BEST: z.string().min(1).default('anthropic/claude-sonnet-5.5'),
+    /**
+     * Outbound proxy for the voice upstreams only (HTTP CONNECT, `http(s)://user:pass@host:port`):
+     * the server is in Russia (D-65). TLS stays end to end; the proxy sees only the host. Never logged.
+     */
+    DS_VOICE_PROXY: z.string().url().optional(),
     /** Upstream base URLs (tests point them at fakes). */
     ELEVENLABS_URL: z.string().url().default('https://api.elevenlabs.io'),
     OPENROUTER_URL: z.string().url().default('https://openrouter.ai/api'),

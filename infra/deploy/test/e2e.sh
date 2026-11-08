@@ -100,14 +100,15 @@ step "address: the secret wins; without it the server keeps its domain (no setti
 
 step "second deploy (idempotent bootstrap, secrets kept; voice keys from GitHub secrets land in .env, never in the log)"
 DS_HOST_MODE=fresh DS_TAG=e2e2 ELEVENLABS_API_KEY=el-e2e-key-1234 OPENROUTER_API_KEY=sk-or-v1-e2e5678 \
-  DS_ADMIN_EMAILS='owner@example.com, second@example.com' \
+  DS_ADMIN_EMAILS='owner@example.com, second@example.com' DS_VOICE_PROXY='http://voice:p%40ss@proxy.example:3128' \
   "$DEPLOY_DIR/remote.sh" deploy 2>&1 | tee "$WORK/second-deploy.log"
 node "$DEPLOY_DIR/smoke.mjs" https://localhost 120
 [ "$(secrets_hash)" = "$first" ] || { echo "secrets changed on redeploy" >&2; exit 1; }
 vps grep -qx 'ELEVENLABS_API_KEY=el-e2e-key-1234' /opt/datascratch/.env
 vps grep -qx 'OPENROUTER_API_KEY=sk-or-v1-e2e5678' /opt/datascratch/.env
 vps grep -qx 'DS_ADMIN_EMAILS=owner@example.com, second@example.com' /opt/datascratch/.env
-if grep -qE 'el-e2e-key-1234|sk-or-v1-e2e5678' "$WORK/second-deploy.log"; then echo "a voice key leaked into the deploy log" >&2; exit 1; fi
+vps grep -qx 'DS_VOICE_PROXY=http://voice:p%40ss@proxy.example:3128' /opt/datascratch/.env
+if grep -qE 'el-e2e-key-1234|sk-or-v1-e2e5678|p%40ss' "$WORK/second-deploy.log"; then echo "a voice key or the proxy leaked into the deploy log" >&2; exit 1; fi
 vps sh -c 'test "$(stat -c %a /opt/datascratch/.env)" = 600'
 # The server container got them.
 vps sh -c 'cd /opt/datascratch && docker compose exec -T server node -e "process.exit(process.env.ELEVENLABS_API_KEY && process.env.OPENROUTER_API_KEY ? 0 : 1)"'

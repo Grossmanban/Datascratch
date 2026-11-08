@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { connect as netConnect, type AddressInfo } from 'node:net';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { voiceAccess, voiceUsage } from '../src/db/schema.js';
@@ -264,8 +264,9 @@ describe('voice: text', () => {
     expect((await text(u, { task: 'clean', profanity: 'keep' })).status).toBe(400);
     expect((await text(u, { task: 'clean', profanity: 'keep', text: 'a', turns: [{ speaker: 'S1', start: 0, end: 1, text: 'b' }] })).status).toBe(400);
     expect((await text(u, { task: 'poem', profanity: 'keep', text: 'a' })).status).toBe(400);
-    // `format` needs a style (shared contract).
-    expect((await text(u, { task: 'format', profanity: 'keep', text: 'a' })).status).toBe(400);
+    // `style` is for `format` only (shared contract); without it `format` uses `document`.
+    expect((await text(u, { task: 'clean', style: 'notes', profanity: 'keep', text: 'a' })).status).toBe(400);
+    expect((await text(u, { task: 'format', text: 'a' })).status).toBe(200);
   });
 
   it('a failing model is 502 voice_upstream', async () => {
@@ -403,7 +404,7 @@ describe('voice: what an account sees, and the admin screen', () => {
   it('GET /voice/me: on or off, minutes and when they reset', async () => {
     const u = await signup(s, undefined, address());
     const off = await api(s, 'GET', '/voice/me', { token: u.session.accessToken });
-    expect(off.body).toMatchObject({ enabled: false, available: true, monthlyMinutes: 120, usedMinutes: 0, admin: false });
+    expect(off.body).toMatchObject({ enabled: false, available: true, monthlyMinutes: 120, usedMinutes: 0, isAdmin: false });
     expect(new Date(off.body.resetsAt).getUTCDate()).toBe(1);
     await setAccess(u, true);
     await transcribe(u, { mode: 'conversation' });
@@ -413,7 +414,7 @@ describe('voice: what an account sees, and the admin screen', () => {
     expect((await api(s, 'GET', '/voice/me', { token: owner.session.accessToken })).body).toMatchObject({
       enabled: true,
       monthlyMinutes: 600,
-      admin: true,
+      isAdmin: true,
     });
   });
 
@@ -476,3 +477,49 @@ function getAdmin(): Promise<TestUser> {
   adminUser ??= signup(s, 'owner@example.com', address());
   return adminUser;
 }
+
+describe('voice: outbound proxy (DS_VOICE_PROXY)', () => {
+  it('sends both upstream calls through the CONNECT proxy, with its credentials; nothing else goes there', async () => {
+    const tunnels: { target: string; auth: string | undefined }[] = [];
+    const proxy = createServer((_req, res) => res.writeHead(405).end());
+    proxy.on('connect', (req, client, head) => {
+      tunnels.push({ target: req.url ?? '', auth: req.headers['proxy-authorization'] });
+      const [host, port] = (req.url ?? '').split(':');
+      const up = netConnect(Number(port), host!, () => {
+        client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+        up.write(head);
+        up.pipe(client);
+        client.pipe(up);
+      });
+      up.on('error', () => client.destroy());
+      client.on('error', () => up.destroy());
+    });
+    await new Promise<void>((r) => proxy.listen(0, '127.0.0.1', r));
+    const proxyPort = (proxy.address() as AddressInfo).port;
+    const viaProxy = await startServer({
+      ELEVENLABS_API_KEY: 'k',
+      OPENROUTER_API_KEY: 'k',
+      ELEVENLABS_URL: stt.url,
+      OPENROUTER_URL: `${llm.url}/api`,
+      DS_VOICE_PROXY: `http://voice:pa55@127.0.0.1:${proxyPort}`,
+    });
+    try {
+      const u = await voiceUser(viaProxy);
+      const t = await transcribe(u, { mode: 'conversation' }, undefined, undefined, viaProxy);
+      expect(t.status).toBe(200);
+      expect((await json(t)).turns).toHaveLength(3);
+      const x = await text(u, { task: 'clean', profanity: 'keep', text: 'a' }, viaProxy);
+      expect(x.status).toBe(200);
+      const sttHost = new URL(stt.url).host;
+      const llmHost = new URL(llm.url).host;
+      expect(tunnels.map((t) => t.target).sort()).toEqual([sttHost, llmHost].sort());
+      for (const t of tunnels) expect(t.auth).toBe(`Basic ${Buffer.from('voice:pa55').toString('base64')}`);
+      // Other requests of the server (its own API) never touch the proxy.
+      expect((await api(viaProxy, 'GET', '/voice/me', { token: u.session.accessToken })).status).toBe(200);
+      expect(tunnels).toHaveLength(2);
+    } finally {
+      await viaProxy.close();
+      await new Promise<void>((r) => proxy.close(() => r()));
+    }
+  });
+});

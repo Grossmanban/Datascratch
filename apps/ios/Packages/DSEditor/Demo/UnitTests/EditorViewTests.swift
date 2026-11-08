@@ -971,6 +971,108 @@ final class EditorViewTests: XCTestCase {
         XCTAssertGreaterThan(editor.textView.contentInset.bottom, 0, "the held-back keyboard inset is applied after the finger lifts")
     }
 
+    // MARK: - Selection and edge autoscroll (build 37 feedback)
+
+    /// A selection made with a finger stays where the person left it: lifting the finger (and the
+    /// held-back keyboard inset applied then) does not scroll to the far end of the range.
+    func testLiftingAfterATouchSelectionDoesNotScroll() throws {
+        let editor = host(longDoc(), width: 700, height: 600)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        editor.textView.setContentOffset(CGPoint(x: 0, y: 500), animated: false)
+        settle(editor)
+        let before = editor.textView.contentOffset.y
+        // The start handle dragged up: the range now ends far below the screen.
+        editor.touchObserver.setTouchingForTesting(true)
+        let start = flatRange(editor, of: "Строка 20 ").lowerBound
+        editor.textView.selectedRange = NSRange(location: start, length: 700)
+        editor.textViewDidChangeSelection(editor.textView)
+        postKeyboard(UIResponder.keyboardDidChangeFrameNotification, top: 380, in: window)
+        drainMainQueue()
+        editor.touchObserver.setTouchingForTesting(false)
+        for _ in 0..<4 { drainMainQueue() }
+        // UIKit reports the selection once more after the lift.
+        editor.textViewDidChangeSelection(editor.textView)
+        editor.scrollCaretIntoView()
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.contentOffset.y, before, accuracy: 2, "the text stays put after the lift")
+        XCTAssertTrue(editor.selectionMadeByTouch)
+        // Extending it with the keyboard follows the moving end again.
+        editor.touchObserver.setTouchingForTesting(true)
+        editor.touchObserver.setTouchingForTesting(false)
+        Thread.sleep(forTimeInterval: EditorView.touchSelectionGrace + 0.1)
+        editor.textView.selectedRange = NSRange(location: start, length: 701)
+        editor.textViewDidChangeSelection(editor.textView)
+        XCTAssertFalse(editor.selectionMadeByTouch)
+    }
+
+    /// UIKit's edge autoscroll under a dragged handle is paced: slow at the start of the edge band,
+    /// at most `autoscrollMaxSpeed` past the edge — never a jump of a screen.
+    func testEdgeAutoscrollIsPacedByTheFingersDepth() throws {
+        let editor = host(longDoc(), width: 700, height: 600)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        editor.textView.setContentOffset(CGPoint(x: 0, y: 200), animated: false)
+        settle(editor)
+        let tv = editor.textView
+        func windowPoint(visibleY: CGFloat) -> CGPoint {
+            let visible = tv.bounds.inset(by: tv.adjustedContentInset)
+            return tv.convert(CGPoint(x: tv.bounds.midX, y: visible.minY + visibleY), to: nil)
+        }
+        func step(fingerAt point: CGPoint?, animated: Bool = false) -> CGFloat {
+            if let point { editor.touchObserver.setTouchingForTesting(true, at: point) }
+            let from = tv.contentOffset.y
+            Thread.sleep(forTimeInterval: 0.06)
+            tv.setContentOffset(CGPoint(x: 0, y: from + 2000), animated: animated)
+            let moved = tv.contentOffset.y - from
+            if point != nil { editor.touchObserver.setTouchingForTesting(false) }
+            tv.setContentOffset(CGPoint(x: 0, y: from), animated: false)
+            return moved
+        }
+        let visibleHeight = tv.bounds.inset(by: tv.adjustedContentInset).height
+        let maxStep = EditorView.autoscrollMaxSpeed / 20 + 0.5
+        let minStep = EditorView.autoscrollMinSpeed / 20 + 0.5
+        let mid = step(fingerAt: windowPoint(visibleY: visibleHeight / 2))
+        XCTAssertGreaterThan(mid, 0)
+        XCTAssertLessThanOrEqual(mid, minStep, "outside the edge band: a crawl")
+        // UIKit's animated scroll requests become one paced step too.
+        let deep = step(fingerAt: windowPoint(visibleY: visibleHeight + 20), animated: true)
+        XCTAssertGreaterThan(deep, mid, "deeper is faster")
+        XCTAssertLessThanOrEqual(deep, maxStep, "past the edge: at most the top speed")
+        // Up as well.
+        editor.touchObserver.setTouchingForTesting(true, at: windowPoint(visibleY: -10))
+        let from = tv.contentOffset.y
+        tv.setContentOffset(CGPoint(x: 0, y: from - 2000), animated: false)
+        XCTAssertGreaterThanOrEqual(tv.contentOffset.y, from - maxStep)
+        editor.touchObserver.setTouchingForTesting(false)
+        // Not an autoscroll: the editor's own and programmatic scrolls are untouched.
+        XCTAssertGreaterThan(step(fingerAt: nil), 1000)
+    }
+
+    /// Landscape with the keyboard leaves a strip of text: the edge band shrinks with it, so a
+    /// finger in the middle of the strip does not autoscroll at speed.
+    func testLandscapeKeyboardStripKeepsAShortEdgeBand() throws {
+        let editor = host(longDoc(), width: 1000, height: 420)
+        window.makeKey()
+        XCTAssertTrue(editor.textView.becomeFirstResponder())
+        postKeyboard(UIResponder.keyboardDidChangeFrameNotification, top: 200, in: window)
+        drainMainQueue()
+        drainMainQueue()
+        settle(editor)
+        let tv = editor.textView
+        tv.setContentOffset(CGPoint(x: 0, y: 300), animated: false)
+        let visible = tv.bounds.inset(by: tv.adjustedContentInset)
+        XCTAssertLessThan(visible.height, 260, "the keyboard covers the bottom: \(visible)")
+        // Outside a fifth of the strip, though a fixed 56 pt band would have taken it.
+        let finger = tv.convert(CGPoint(x: tv.bounds.midX, y: visible.maxY - 50), to: nil)
+        editor.touchObserver.setTouchingForTesting(true, at: finger)
+        let from = tv.contentOffset.y
+        tv.setContentOffset(CGPoint(x: 0, y: from + 2000), animated: false)
+        XCTAssertLessThanOrEqual(tv.contentOffset.y - from, EditorView.autoscrollMinSpeed / 20 + 0.5)
+        editor.touchObserver.setTouchingForTesting(false)
+    }
+
     // MARK: - Block rendering (build 16 feedback)
 
     static let clippedFormulas = [

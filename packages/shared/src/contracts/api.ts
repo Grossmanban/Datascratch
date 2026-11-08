@@ -33,6 +33,12 @@ export const API_ERROR_CODES = [
   "payload_too_large",
   "internal",
   "device_revoked",
+  // Voice (D-65, api.md «Голос»).
+  "voice_disabled",
+  "voice_quota",
+  "voice_too_long",
+  "voice_upstream",
+  "voice_unavailable",
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
@@ -783,6 +789,11 @@ export const API_ROUTES = {
   listAgentTokens: { method: "GET", path: "/agent-tokens" },
   deleteAgentToken: { method: "DELETE", path: "/agent-tokens/:id" },
   agentTokenAudit: { method: "GET", path: "/agent-tokens/:id/audit" },
+  voiceTranscribe: { method: "POST", path: "/voice/transcribe" },
+  voiceText: { method: "POST", path: "/voice/text" },
+  voiceMe: { method: "GET", path: "/voice/me" },
+  adminVoiceList: { method: "GET", path: "/admin/voice" },
+  adminVoicePut: { method: "PUT", path: "/admin/voice/:userId" },
   health: { method: "GET", path: "/health" },
   openapi: { method: "GET", path: "/openapi.json" },
 } as const;

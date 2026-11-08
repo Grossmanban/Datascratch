@@ -301,6 +301,11 @@ public final class EditorView: UIView {
         textView.addGestureRecognizer(hover)
         textView.addGestureRecognizer(touchObserver)
         // Work held back while a finger was on the text: the keyboard inset, late block heights.
+        touchObserver.onLiftNow = { [weak self] in
+            guard let self else { return }
+            self.offsetAtLift = self.textView.contentOffset.y
+            self.scrollDriftSinceLift = 0
+        }
         touchObserver.onLift = { [weak self] in
             self?.applyKeyboardInset()
             self?.flushPendingAtomRelayout()
@@ -314,6 +319,7 @@ public final class EditorView: UIView {
         textView.editorTap = tap
         textView.tapTargetAt = { [weak self] point in self?.hasTapTarget(at: point) ?? false }
         textView.allowsSystemScroll = { [weak self] in self?.userIsInteracting ?? true }
+        textView.paceAutoscroll = { [weak self] from, to in self?.pacedAutoscroll(from: from, to: to) ?? to }
         textView.textDropDelegate = self
         textView.textDragDelegate = self
         textView.richPaste = { [weak self] in self?.pasteRich() ?? false }
@@ -639,6 +645,10 @@ public final class EditorView: UIView {
     /// runs then, and scrolling on top of it made the selection run away (build 14).
     func scrollCaretIntoView() {
         guard textView.isFirstResponder, !userIsInteracting, let caret = caretLineFrame() else { return }
+        // A range the person selected with a finger is where they left it: scrolling to its end
+        // after the lift moved the text away under them (dragging the start handle sent the note
+        // to the far end of the selection, build 37).
+        if textView.selectedRange.length > 0, selectionMadeByTouch { return }
         let margin = max(8, theme.bodyFont.lineHeight)
         var visible = textView.bounds.inset(by: textView.adjustedContentInset)
         visible.size.height -= overlayInsets.bottom
@@ -663,6 +673,64 @@ public final class EditorView: UIView {
 
     /// The person has a finger (or pencil) on the text view: no programmatic scrolling then.
     var userIsInteracting: Bool { userIsScrolling }
+
+    /// The current selection is a range made with a finger (handles, a long press, a double tap)
+    /// and not moved since by the keyboard.
+    private(set) var selectionMadeByTouch = false
+    private var lastSelectionRange = NSRange(location: 0, length: 0)
+    /// A selection change this soon after the last finger lifted still belongs to that touch.
+    static let touchSelectionGrace: CFTimeInterval = 0.5
+
+    private func noteSelectionSource() {
+        let r = textView.selectedRange
+        let byTouch = touchObserver.touching || CACurrentMediaTime() - touchObserver.liftedAt < Self.touchSelectionGrace
+        if r.length == 0 {
+            selectionMadeByTouch = false
+        } else if byTouch {
+            selectionMadeByTouch = true
+        } else if r != lastSelectionRange {
+            // Extended with the keyboard (⇧ arrows): its moving end is followed again.
+            selectionMadeByTouch = false
+        }
+        lastSelectionRange = r
+    }
+
+    // MARK: - Edge autoscroll
+
+    /// Slowest and fastest edge autoscroll, points per second (Apple Notes-like: a slow crawl at
+    /// the start of the edge band, faster only with the finger deep in it or past the edge).
+    static let autoscrollMinSpeed: CGFloat = 80
+    static let autoscrollMaxSpeed: CGFloat = 700
+    /// The edge band's height: at most this, and at most a fifth of the visible text (landscape
+    /// with the keyboard leaves little height; a fixed band covered most of it).
+    static let autoscrollBand: CGFloat = 56
+    private var lastAutoscrollTime: CFTimeInterval = 0
+    private var offsetAtLift: CGFloat = 0
+    /// How far the text moved by itself since the last finger lifted, not counting a flick's
+    /// deceleration (UI tests: the text must stay put after a selection, build 37).
+    public private(set) var scrollDriftSinceLift: CGFloat = 0
+
+    /// UIKit scrolls the text while a selection handle or the caret is dragged to an edge; it
+    /// jumped by whole screens at a time (build 37). The move is paced: its speed follows how deep
+    /// the finger is in the edge band (squared, so it starts gently), measured against the area
+    /// the person actually sees (above the keyboard and the host's palette).
+    func pacedAutoscroll(from: CGFloat, to: CGFloat) -> CGFloat {
+        guard touchObserver.touching, !textView.isDragging, !textView.isDecelerating, !penDown,
+              let finger = touchObserver.lastWindowLocation, textView.window != nil else { return to }
+        let now = CACurrentMediaTime()
+        let dt = min(max(now - lastAutoscrollTime, 1.0 / 120), 1.0 / 20)
+        lastAutoscrollTime = now
+        let y = textView.convert(finger, from: nil).y
+        var visible = textView.bounds.inset(by: textView.adjustedContentInset)
+        visible.origin.y += overlayInsets.top
+        visible.size.height -= overlayInsets.top + overlayInsets.bottom
+        let band = max(1, min(Self.autoscrollBand, visible.height / 5))
+        let depth = to > from ? (y - (visible.maxY - band)) / band : ((visible.minY + band) - y) / band
+        let f = min(1, max(0, depth))
+        let speed = Self.autoscrollMinSpeed + (Self.autoscrollMaxSpeed - Self.autoscrollMinSpeed) * f * f
+        let step = speed * CGFloat(dt)
+        return from + max(-step, min(step, to - from))
+    }
 
     /// A structural edit at the caret (Return, joining paragraphs, a paste) re-renders paragraphs and
     /// moves the selection; UIKit then scrolled on its own — often far past the keyboard. The scroll
@@ -2118,6 +2186,11 @@ extension EditorView: UITextViewDelegate {
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
         tapTargetElementsDirty = true
+        if touchObserver.touching {
+            scrollDriftSinceLift = 0
+        } else if !scrollView.isDecelerating {
+            scrollDriftSinceLift = max(scrollDriftSinceLift, abs(scrollView.contentOffset.y - offsetAtLift))
+        }
         if !remoteCaretFrames.isEmpty { updateRemoteCursorMarks() }
         onScroll?(scrollView.contentOffset.y + scrollView.adjustedContentInset.top)
     }
@@ -2154,8 +2227,11 @@ extension EditorView: UITextViewDelegate {
             }
         }
         caretWasInTitle = inTitle && tv.isFirstResponder
-        // Typing attributes are left alone while text is marked (dictation, input methods).
-        if tv.markedTextRange == nil { updateTypingAttributes() }
+        noteSelectionSource()
+        // Typing attributes are left alone while text is marked (dictation, input methods), and
+        // for a range: they only matter at a caret, and resetting them under a dragged handle
+        // redrew the selection.
+        if tv.markedTextRange == nil, tv.selectedRange.length == 0 { updateTypingAttributes() }
         // The caret moved without a finger (keyboard arrows, a programmatic selection): UIKit no
         // longer scrolls to it by itself.
         scrollCaretIntoView()
@@ -2370,8 +2446,14 @@ extension EditorView {
 /// recognizing anything or delaying touches.
 final class TouchObserver: UIGestureRecognizer, UIGestureRecognizerDelegate {
     private(set) var touching = false
+    /// When the last finger lifted (`CACurrentMediaTime`).
+    private(set) var liftedAt: CFTimeInterval = -.infinity
+    /// Where the latest touch is, in window coordinates (nil when no finger is down).
+    private(set) var lastWindowLocation: CGPoint?
     /// Called (on the next turn) whenever the last touch ends.
     var onLift: (() -> Void)?
+    /// Called right as the last touch ends, before anything reacts to it.
+    var onLiftNow: (() -> Void)?
     private var count = 0
 
     init() {
@@ -2383,14 +2465,24 @@ final class TouchObserver: UIGestureRecognizer, UIGestureRecognizerDelegate {
     }
 
     /// Tests: as if a finger were down.
-    func setTouchingForTesting(_ value: Bool) {
+    func setTouchingForTesting(_ value: Bool, at windowLocation: CGPoint? = nil) {
         touching = value
-        if !value { finish() }
+        lastWindowLocation = value ? windowLocation : nil
+        if !value {
+            liftedAt = CACurrentMediaTime()
+            onLiftNow?()
+            finish()
+        }
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
         count += touches.count
         touching = true
+        lastWindowLocation = touches.first?.location(in: nil)
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        lastWindowLocation = touches.first?.location(in: nil)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) { lift(touches.count) }
@@ -2400,6 +2492,9 @@ final class TouchObserver: UIGestureRecognizer, UIGestureRecognizerDelegate {
         count = max(0, count - n)
         guard count == 0 else { return }
         touching = false
+        lastWindowLocation = nil
+        liftedAt = CACurrentMediaTime()
+        onLiftNow?()
         // Never recognizes: fails once the touches are over, so it never blocks others.
         state = .failed
         finish()
@@ -2414,6 +2509,7 @@ final class TouchObserver: UIGestureRecognizer, UIGestureRecognizerDelegate {
         super.reset()
         count = 0
         touching = false
+        lastWindowLocation = nil
     }
 
     func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }

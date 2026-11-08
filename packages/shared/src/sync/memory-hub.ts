@@ -5,7 +5,8 @@ import {
   MAX_SNAPSHOT_BYTES,
   MAX_UPDATE_BYTES,
   SYNC_CLOSE_DEVICE_REVOKED,
-  SYNC_PROTOCOL_VERSION,
+  SYNC_PROTOCOL_LATEST,
+  SYNC_PROTOCOL_MIN,
   base64UrlDecodedLength,
   parseClientMessage,
   type DeviceRevokedReason,
@@ -36,6 +37,8 @@ export interface MemorySyncHubOptions {
    * §5, default); false = only when older updates were compacted away.
    */
   preferSnapshot?: boolean;
+  /** Newest protocol version this hub speaks (default SYNC_PROTOCOL_LATEST; 1 = an older server). */
+  maxProtocol?: number;
 }
 
 interface HubDoc {
@@ -46,17 +49,20 @@ interface HubDoc {
 
 interface Connection {
   send: (msg: ServerMessage) => void;
+  sendText: (raw: string) => void;
   close: (code?: number, reason?: string) => void;
   principal: HubPrincipal | null;
   deviceId: string | null;
   subscriptions: Set<string>;
+  /** Version agreed in `welcome`. */
+  protocol: number;
 }
 
 export class MemorySyncHub {
   readonly docs = new Map<string, HubDoc>();
   private readonly connections = new Set<Connection>();
   private readonly revoked = new Map<string, DeviceRevokedReason>();
-  private readonly opts: Required<Omit<MemorySyncHubOptions, "authenticate">> &
+  private readonly opts: Required<Omit<MemorySyncHubOptions, "authenticate" | "maxProtocol">> &
     MemorySyncHubOptions;
 
   constructor(options: MemorySyncHubOptions = {}) {
@@ -81,10 +87,12 @@ export class MemorySyncHub {
   ): { receive(raw: string): void; disconnect(): void } {
     const conn: Connection = {
       send: (msg) => send(JSON.stringify(msg)),
+      sendText: send,
       close,
       principal: null,
       deviceId: null,
       subscriptions: new Set(),
+      protocol: SYNC_PROTOCOL_MIN,
     };
     this.connections.add(conn);
     return {
@@ -116,6 +124,23 @@ export class MemorySyncHub {
     conn.send({ type: "error", code: "device_revoked", message: "device revoked", reason });
     this.connections.delete(conn);
     conn.close(SYNC_CLOSE_DEVICE_REVOKED, reason);
+  }
+
+  /**
+   * Tell connected clients that shared state of an account changed (protocol 2,
+   * `account_changed`); clients on protocol 1 get nothing. `userId` null = every user.
+   */
+  notifyAccountChanged(what: string[], userId: string | null = null): void {
+    for (const c of this.connections) {
+      if (!c.principal || c.protocol < 2) continue;
+      if (userId !== null && c.principal.userId !== userId) continue;
+      c.send({ type: "account_changed", what } as ServerMessage);
+    }
+  }
+
+  /** Send any frame (tests of forward compatibility). */
+  sendRaw(raw: string): void {
+    for (const c of this.connections) c.sendText(raw);
   }
 
   get connectionCount(): number {
@@ -179,10 +204,19 @@ export class MemorySyncHub {
   }
 
   private receive(conn: Connection, raw: string): void {
-    const msg = parseClientMessage(raw);
+    const max = this.opts.maxProtocol ?? SYNC_PROTOCOL_LATEST;
+    const peek = safeJson(raw) as { type?: unknown; protocol?: unknown } | null;
+    const tooNew =
+      peek?.type === "hello" && typeof peek.protocol === "number" && peek.protocol > max;
+    const msg = tooNew ? null : parseClientMessage(raw);
     if (!msg) {
-      const hello = safeJson(raw) as { type?: unknown; protocol?: unknown } | null;
-      if (hello?.type === "hello" && hello.protocol !== SYNC_PROTOCOL_VERSION) {
+      const hello = peek;
+      if (
+        hello?.type === "hello" &&
+        (typeof hello.protocol !== "number" ||
+          hello.protocol < SYNC_PROTOCOL_MIN ||
+          hello.protocol > max)
+      ) {
         this.error(
           conn,
           "protocol_mismatch",
@@ -214,11 +248,12 @@ export class MemorySyncHub {
       }
       conn.principal = principal;
       conn.deviceId = msg.deviceId;
+      conn.protocol = Math.min(msg.protocol, max);
       conn.send({
         type: "welcome",
         userId: principal.userId,
         serverTime: new Date(this.opts.now()).toISOString(),
-        protocol: SYNC_PROTOCOL_VERSION,
+        protocol: conn.protocol,
       });
       return;
     }

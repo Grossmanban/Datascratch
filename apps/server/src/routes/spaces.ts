@@ -21,7 +21,7 @@ import {
   sharedSpaceSchema as spaceSchema,
   spaceKeyResponseSchema,
   spaceNotebookSchema,
-  type AccountChangedWhat,
+  type AccountChange,
 } from '@datascratch/shared/contracts';
 
 type SpaceRow = typeof spaces.$inferSelect;
@@ -52,7 +52,7 @@ export function spaceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
      * Open sync connections of the space's members re-check access; the owner's and members'
      * devices hear what to re-read (D-62).
      */
-    async function notifyMembers(db0: DbOrTx, spaceId: string, what: AccountChangedWhat[]) {
+    async function notifyMembers(db0: DbOrTx, spaceId: string, what: AccountChange[]) {
       const ms = await db0.select({ userId: members.userId }).from(members).where(eq(members.spaceId, spaceId));
       for (const m of ms) ctx.hub.publish(topics.user(m.userId), { type: 'access_changed' });
       const [sp] = await db0.select({ userId: spaces.userId }).from(spaces).where(eq(spaces.id, spaceId));

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Sync protocol v1 frames (sync-protocol.md). Every `valid` message must parse; every `invalid` one must be rejected. Unknown extra fields are ignored by readers.",
+  "description": "Sync protocol frames, versions 1–2 (sync-protocol.md). Every `valid` message must parse; every `invalid` one must be rejected. Unknown extra fields are ignored by readers. `accountChanged`: the `what` a reader keeps (unknown values dropped, duplicates removed, order kept). `ignoredServerFrames`: frames of an unknown `type` — a client ignores them without an error; `brokenServerFrames` are errors.",
   "valid": {
     "client": [
       {
@@ -80,6 +80,23 @@
         "userId": null,
         "serverTime": "2026-10-25T12:00:00.000Z",
         "protocol": 1
+      },
+      {
+        "type": "welcome",
+        "userId": "0192f3c4-0000-7000-8000-00000000000a",
+        "serverTime": "2026-11-08T12:00:00.000Z",
+        "protocol": 2
+      },
+      {
+        "type": "account_changed",
+        "what": [
+          "invitations",
+          "keys"
+        ]
+      },
+      {
+        "type": "account_changed",
+        "what": []
       },
       {
         "type": "updates",
@@ -215,10 +232,26 @@
         }
       },
       {
-        "reason": "wrong protocol",
+        "reason": "protocol newer than 2",
         "message": {
           "type": "hello",
           "protocol": 3,
+          "auth": {
+            "kind": "user",
+            "accessToken": "at-123"
+          },
+          "deviceId": "dev-1",
+          "client": {
+            "platform": "ios",
+            "version": "1.0.0"
+          }
+        }
+      },
+      {
+        "reason": "protocol 0",
+        "message": {
+          "type": "hello",
+          "protocol": 0,
           "auth": {
             "kind": "user",
             "accessToken": "at-123"
@@ -4342,6 +4375,36 @@
         }
       },
       {
+        "reason": "account_changed without what",
+        "message": {
+          "type": "account_changed"
+        }
+      },
+      {
+        "reason": "account_changed with more than 8 entries",
+        "message": {
+          "type": "account_changed",
+          "what": [
+            "keys",
+            "keys",
+            "keys",
+            "keys",
+            "keys",
+            "keys",
+            "keys",
+            "keys",
+            "keys"
+          ]
+        }
+      },
+      {
+        "reason": "account_changed what is not a list",
+        "message": {
+          "type": "account_changed",
+          "what": "keys"
+        }
+      },
+      {
         "reason": "unknown author kind",
         "message": {
           "type": "update",
@@ -4374,5 +4437,51 @@
         }
       }
     ]
-  }
+  },
+  "accountChanged": [
+    {
+      "what": [
+        "invitations",
+        "spaces",
+        "members",
+        "keys",
+        "notebooks"
+      ],
+      "expected": [
+        "invitations",
+        "spaces",
+        "members",
+        "keys",
+        "notebooks"
+      ]
+    },
+    {
+      "what": [
+        "keys",
+        "future_thing",
+        "keys",
+        "spaces"
+      ],
+      "expected": [
+        "keys",
+        "spaces"
+      ]
+    },
+    {
+      "what": [
+        "future_thing"
+      ],
+      "expected": []
+    }
+  ],
+  "ignoredServerFrames": [
+    "{\"type\":\"presence\",\"users\":[]}",
+    "{\"type\":\"account_changed_v3\",\"what\":[\"keys\"]}"
+  ],
+  "brokenServerFrames": [
+    "not json",
+    "{\"what\":[\"keys\"]}",
+    "{\"type\":42}",
+    "{\"type\":\"update\",\"docId\":\"nope\"}"
+  ]
 }

@@ -35,6 +35,9 @@ export function syncVectors() {
     server: [
       { type: "welcome", userId: vid(10), serverTime: "2026-10-25T12:00:00.000Z", protocol: 1 },
       { type: "welcome", userId: null, serverTime: "2026-10-25T12:00:00.000Z", protocol: 1 },
+      { type: "welcome", userId: vid(10), serverTime: "2026-11-08T12:00:00.000Z", protocol: 2 },
+      { type: "account_changed", what: ["invitations", "keys"] },
+      { type: "account_changed", what: [] },
       {
         type: "updates",
         docId: doc,
@@ -81,7 +84,8 @@ export function syncVectors() {
   const invalid = {
     client: [
       { reason: "unknown type", message: { type: "bogus" } },
-      { reason: "wrong protocol", message: { ...valid.client[0], protocol: 3 } },
+      { reason: "protocol newer than 2", message: { ...valid.client[0], protocol: 3 } },
+      { reason: "protocol 0", message: { ...valid.client[0], protocol: 0 } },
       {
         reason: "unknown platform",
         message: { ...valid.client[0], client: { platform: "android", version: "1" } },
@@ -127,6 +131,15 @@ export function syncVectors() {
         message: { type: "update", docId: doc, seq: 0, payload: P, deviceId: "d" },
       },
       { reason: "unknown error code", message: { type: "error", code: "teapot", message: "" } },
+      { reason: "account_changed without what", message: { type: "account_changed" } },
+      {
+        reason: "account_changed with more than 8 entries",
+        message: { type: "account_changed", what: Array.from({ length: 9 }, () => "keys") },
+      },
+      {
+        reason: "account_changed what is not a list",
+        message: { type: "account_changed", what: "keys" },
+      },
       {
         reason: "unknown author kind",
         message: {
@@ -151,9 +164,27 @@ export function syncVectors() {
   return {
     "sync/messages.json": {
       description:
-        "Sync protocol v1 frames (sync-protocol.md). Every `valid` message must parse; every `invalid` one must be rejected. Unknown extra fields are ignored by readers.",
+        "Sync protocol frames, versions 1–2 (sync-protocol.md). Every `valid` message must parse; every `invalid` one must be rejected. Unknown extra fields are ignored by readers. `accountChanged`: the `what` a reader keeps (unknown values dropped, duplicates removed, order kept). `ignoredServerFrames`: frames of an unknown `type` — a client ignores them without an error; `brokenServerFrames` are errors.",
       valid,
       invalid,
+      accountChanged: [
+        {
+          what: ["invitations", "spaces", "members", "keys", "notebooks"],
+          expected: ["invitations", "spaces", "members", "keys", "notebooks"],
+        },
+        { what: ["keys", "future_thing", "keys", "spaces"], expected: ["keys", "spaces"] },
+        { what: ["future_thing"], expected: [] },
+      ],
+      ignoredServerFrames: [
+        '{"type":"presence","users":[]}',
+        '{"type":"account_changed_v3","what":["keys"]}',
+      ],
+      brokenServerFrames: [
+        "not json",
+        '{"what":["keys"]}',
+        '{"type":42}',
+        '{"type":"update","docId":"nope"}',
+      ],
     },
   };
 }

@@ -9,17 +9,14 @@ import { accessFor, docAccess, loadDocs, loadMemberships } from '../services/acc
 import type { CatchUpItem } from '../services/documents.js';
 import type { GuestPrincipal, UserPrincipal } from '../services/principal.js';
 import { publicAuthor } from '../lib/author.js';
-import {
-  ACCOUNT_CHANGED_WHAT,
-  type AccountChangedWhat,
-  type SyncProtocolVersion,
-} from '@datascratch/shared/contracts';
+import { ACCOUNT_CHANGES, type AccountChange } from '@datascratch/shared/contracts';
 import { topics, type HubMessage } from './hub.js';
 import {
   ClientMessage,
   CloseCode,
   ACCOUNT_CHANGED_SINCE,
-  PROTOCOL_VERSIONS,
+  PROTOCOL_LATEST,
+  PROTOCOL_MIN,
   b64Size,
   type ServerMessage,
   type SyncErrorCode,
@@ -53,6 +50,8 @@ interface Subscription {
 }
 
 const HELLO_TIMEOUT_MS = 10_000;
+const isSupported = (v: unknown) =>
+  typeof v === 'number' && Number.isInteger(v) && v >= PROTOCOL_MIN && v <= PROTOCOL_LATEST;
 /** Account changes within this window reach a client as one `account_changed` (D-62). */
 export const ACCOUNT_CHANGED_WINDOW_MS = 250;
 /** Largest frame accepted before `hello` succeeds (a hello is well under 4 KB). */
@@ -111,7 +110,7 @@ export class SyncConnection {
   /** Protocol version of the client's hello. */
   #protocol = 1;
   /** `account_changed` reasons waiting for the coalescing window (D-62). */
-  readonly #accountWhat = new Set<AccountChangedWhat>();
+  readonly #accountWhat = new Set<AccountChange>();
   #accountTimer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -259,9 +258,9 @@ export class SyncConnection {
       return;
     }
     const r = raw as { type?: unknown; protocol?: unknown } | null;
-    if (r && typeof r === 'object' && r.type === 'hello' && !PROTOCOL_VERSIONS.includes(r.protocol as number)) {
+    if (r && typeof r === 'object' && r.type === 'hello' && !isSupported(r.protocol)) {
       clearTimeout(this.#helloTimer);
-      return this.#fail('protocol_mismatch', `protocol ${PROTOCOL_VERSIONS.join(' or ')} required`, CloseCode.protocol);
+      return this.#fail('protocol_mismatch', `protocol ${PROTOCOL_MIN}..${PROTOCOL_LATEST} required`, CloseCode.protocol);
     }
     const parsed = ClientMessage.safeParse(raw);
     if (!parsed.success && !this.#principal) {
@@ -325,7 +324,8 @@ export class SyncConnection {
 
   async #hello(msg: Extract<ClientMessage, { type: 'hello' }>) {
     clearTimeout(this.#helloTimer);
-    this.#protocol = msg.protocol;
+    // The version this connection speaks (sync-protocol.md §2): the client's, at most ours.
+    this.#protocol = Math.min(msg.protocol, PROTOCOL_LATEST);
     let p: SyncPrincipal | null;
     if (msg.auth.kind === 'user') {
       try {
@@ -372,7 +372,7 @@ export class SyncConnection {
       type: 'welcome',
       userId: p.kind === 'user' ? p.userId : null,
       serverTime: new Date().toISOString(),
-      protocol: this.#protocol as SyncProtocolVersion,
+      protocol: this.#protocol,
     });
   }
 
@@ -381,13 +381,13 @@ export class SyncConnection {
    * ACCOUNT_CHANGED_WINDOW_MS are sent as one message; v1 clients would show an unknown frame as
    * a sync error, so they get nothing (they keep polling).
    */
-  #accountChanged(what: readonly AccountChangedWhat[]) {
+  #accountChanged(what: readonly AccountChange[]) {
     if (this.#protocol < ACCOUNT_CHANGED_SINCE || this.#closed) return;
     for (const w of what) this.#accountWhat.add(w);
     if (this.#accountTimer || this.#accountWhat.size === 0) return;
     this.#accountTimer = setTimeout(() => {
       this.#accountTimer = null;
-      const list = ACCOUNT_CHANGED_WHAT.filter((w) => this.#accountWhat.has(w));
+      const list = ACCOUNT_CHANGES.filter((w) => this.#accountWhat.has(w));
       this.#accountWhat.clear();
       if (!this.#closed && list.length > 0) this.#send({ type: 'account_changed', what: list });
     }, ACCOUNT_CHANGED_WINDOW_MS);

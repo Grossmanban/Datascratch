@@ -13,7 +13,7 @@ import type { UserPrincipal } from '../services/principal.js';
 import { accountChanged } from '../services/account-events.js';
 import { memberOf } from '../services/sharing.js';
 import { sharedNotebookIds } from './sharing.js';
-import { authorSchema, notebookKeyResponseSchema, type AccountChangedWhat } from '@datascratch/shared/contracts';
+import { authorSchema, notebookKeyResponseSchema, type AccountChange } from '@datascratch/shared/contracts';
 import { AD, open } from '../lib/sodium.js';
 import { noteKeyCache } from '../plugins/agent-key-cache.js';
 import { topics } from '../sync/hub.js';
@@ -76,7 +76,7 @@ export function notebookRoutes(ctx: AppContext): FastifyPluginAsyncZod {
      * Open sync connections of a space's members re-check access (a notebook came or went, D-62);
      * the owner's and members' devices hear what to re-read.
      */
-    async function notifySpaceMembers(spaceId: string, what: AccountChangedWhat[] = ['notebooks']) {
+    async function notifySpaceMembers(spaceId: string, what: AccountChange[] = ['notebooks']) {
       const ms = await db.select({ userId: members.userId }).from(members).where(eq(members.spaceId, spaceId));
       for (const m of ms) ctx.hub.publish(topics.user(m.userId), { type: 'access_changed' });
       const [sp] = await db.select({ userId: spaces.userId }).from(spaces).where(eq(spaces.id, spaceId));

@@ -1,4 +1,4 @@
-import type { AccountChangedWhat } from '@datascratch/shared/contracts';
+import type { AccountChange } from '@datascratch/shared/contracts';
 import type { AuthorRef } from '../db/schema.js';
 
 /**
@@ -28,7 +28,7 @@ export type HubMessage =
   | { type: 'doc_deleted'; docId: string }
   | { type: 'doc_moved'; docId: string }
   | { type: 'access_changed' }
-  | { type: 'account_changed'; what: AccountChangedWhat[] };
+  | { type: 'account_changed'; what: AccountChange[] };
 
 export type HubListener = (msg: HubMessage) => void;
 

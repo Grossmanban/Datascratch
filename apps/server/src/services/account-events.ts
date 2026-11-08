@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import type { AccountChangedWhat } from '@datascratch/shared/contracts';
+import type { AccountChange } from '@datascratch/shared/contracts';
 import type { AppContext } from '../context.js';
 import type { DbOrTx } from '../db/client.js';
 import { members } from '../db/schema.js';
@@ -13,7 +13,7 @@ import { memberTargetCol, type TargetKind } from './sharing.js';
 export function accountChanged(
   ctx: AppContext,
   userIds: Iterable<string | null | undefined>,
-  what: AccountChangedWhat[],
+  what: AccountChange[],
 ): void {
   for (const u of new Set(userIds)) if (u) ctx.hub.publish(topics.user(u), { type: 'account_changed', what });
 }
@@ -25,5 +25,5 @@ export async function audienceOf(db: DbOrTx, t: { kind: TargetKind; id: string; 
 }
 
 /** What a membership change of a target is about for its accounts. */
-export const membershipWhat = (kind: TargetKind): AccountChangedWhat[] =>
+export const membershipWhat = (kind: TargetKind): AccountChange[] =>
   kind === 'space' ? ['members', 'spaces'] : ['members'];

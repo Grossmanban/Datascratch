@@ -617,7 +617,7 @@ route("GET", "/v1/admin/voice", (_q, res, { auth }) => {
   if (!isVoiceAdmin(auth.user)) return err(res, 403, "forbidden");
   const accounts = [...db.users.values()].map((u) => {
     const a = voiceOf(u);
-    return { userId: u.userId, email: u.email, name: null, isAdmin: isVoiceAdmin(u), ...voiceView(u), customMinutes: a.customMinutes, costUsd: a.costUsd, requests: a.requests };
+    return { userId: u.userId, email: u.email, name: null, admin: isVoiceAdmin(u), ...voiceView(u), customMinutes: a.customMinutes != null, costUsd: a.costUsd, requests: a.requests };
   });
   const sum = (k) => accounts.reduce((n, a) => n + a[k], 0);
   const d = new Date();
@@ -638,7 +638,7 @@ route("PUT", "/v1/admin/voice/:userId", (_q, res, { auth, params, body }) => {
   // monthlyMinutes: a number — the account's own limit; null — back to the default; absent — unchanged.
   if ("monthlyMinutes" in body) a.customMinutes = body.monthlyMinutes == null ? null : Number(body.monthlyMinutes);
   accountChanged([u.userId], ["voice"]);
-  json(res, 200, { userId: u.userId, email: u.email, name: null, isAdmin: isVoiceAdmin(u), ...voiceView(u), customMinutes: a.customMinutes, costUsd: a.costUsd, requests: a.requests });
+  json(res, 200, { userId: u.userId, email: u.email, name: null, admin: isVoiceAdmin(u), ...voiceView(u), customMinutes: a.customMinutes != null, costUsd: a.costUsd, requests: a.requests });
 });
 route("POST", "/v1/voice/transcribe", (req, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");

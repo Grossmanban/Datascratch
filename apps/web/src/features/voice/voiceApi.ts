@@ -1,6 +1,7 @@
 import type {
   AdminVoiceAccount,
   AdminVoiceResponse,
+  PutAdminVoiceRequest,
   VoiceMe,
   VoiceMode,
   VoiceTextRequest,
@@ -14,19 +15,11 @@ import { request } from "@/api/client";
 
 export type { VoiceProfanity, VoiceQuality, VoiceStyle, VoiceTurn } from "@datascratch/shared/voice";
 
-/**
- * The server's final shapes (coordinator, 2026-11-08) ahead of core's schemas: `available` (the
- * service is up), `isAdmin` (this account manages voice), per account `customMinutes` (null = the
- * default) and `requests`. Optional here until core carries them.
- */
-export type MyVoice = VoiceMe & { available?: boolean; isAdmin?: boolean };
-export type AdminVoiceRow = AdminVoiceAccount & { isAdmin?: boolean; customMinutes?: number | null; requests?: number };
-export type AdminVoice = Omit<AdminVoiceResponse, "accounts"> & {
-  accounts: AdminVoiceRow[];
-  totals: AdminVoiceResponse["totals"] & { requests?: number; enabledAccounts?: number };
-};
-export type AdminVoicePut = { enabled: boolean; monthlyMinutes?: number | null };
-export { DEFAULT_VOICE_STYLE, VOICE_AGENT_ID, VOICE_STYLES } from "@datascratch/shared/voice";
+export type MyVoice = VoiceMe;
+export type AdminVoiceRow = AdminVoiceAccount;
+export type AdminVoice = AdminVoiceResponse;
+export type AdminVoicePut = PutAdminVoiceRequest;
+export { DEFAULT_VOICE_MONTHLY_MINUTES, DEFAULT_VOICE_STYLE, VOICE_AGENT_ID, VOICE_STYLES } from "@datascratch/shared/voice";
 
 export const voiceApi = {
   /** Audio → words (the server passes it to the speech service and keeps nothing). */
@@ -46,7 +39,7 @@ export const voiceApi = {
   /** Server admin only (others get 403): every account's access and use, and the month's totals. */
   adminList: () => request<AdminVoice>("GET", "/admin/voice"),
   /** `monthlyMinutes: null` puts the account back on the default limit. */
-  adminPut: (userId: string, body: AdminVoicePut) => request<void>("PUT", `/admin/voice/${userId}`, { body }),
+  adminPut: (userId: string, body: AdminVoicePut) => request<AdminVoiceRow>("PUT", `/admin/voice/${userId}`, { body }),
 };
 
 /** The spoken words as one plain text, speakers kept apart by paragraphs. */

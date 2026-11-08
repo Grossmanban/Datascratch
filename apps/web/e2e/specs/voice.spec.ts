@@ -20,6 +20,34 @@ async function fakeMic(page: Page, deny = false) {
       osc.start();
       return dst.stream;
     };
+    // Playwright's Linux WebKit is built without MediaRecorder (Safari on iOS 14.3+ has it): a
+    // stand-in with the same surface hands out mp4-typed chunks as Safari does.
+    if (typeof MediaRecorder === "undefined") {
+      class FakeRecorder {
+        static isTypeSupported = (t: string) => t.startsWith("audio/mp4");
+        state: "inactive" | "recording" = "inactive";
+        mimeType = "audio/mp4";
+        ondataavailable: ((e: { data: Blob }) => void) | null = null;
+        onstop: (() => void) | null = null;
+        private timer = 0;
+        constructor(readonly stream: MediaStream) {}
+        private chunk() {
+          this.ondataavailable?.({ data: new Blob([new Uint8Array(2048)], { type: this.mimeType }) });
+        }
+        start(slice = 250) {
+          this.state = "recording";
+          this.timer = window.setInterval(() => this.chunk(), slice);
+        }
+        stop() {
+          if (this.state === "inactive") return;
+          window.clearInterval(this.timer);
+          this.state = "inactive";
+          this.chunk();
+          setTimeout(() => this.onstop?.(), 0);
+        }
+      }
+      (window as unknown as { MediaRecorder: unknown }).MediaRecorder = FakeRecorder;
+    }
   }, deny);
 }
 
@@ -142,7 +170,10 @@ test("settings → «Голос»: quality and profanity are kept", async ({ pag
   await signUp(page, uniqueEmail("voice-settings"));
   await page.goto("/settings/voice");
   await expect(page.getByTestId("settings-voice")).toBeVisible();
-  await expect(page.getByTestId("voice-left")).toContainText("Осталось в этом месяце: 120 мин");
+  // The mock has the voice services; a CI server has no keys for them (`available: false`).
+  await expect(page.getByTestId("voice-left")).toContainText(
+    process.env.E2E_SERVER_URL ? "Голос временно недоступен" : "Осталось в этом месяце: 120 мин",
+  );
   const opt = (name: string) => page.getByRole("radio", { name }).or(page.getByRole("button", { name })).first();
   await opt("Лучшее").click();
   await opt("Оставлять как есть").click();

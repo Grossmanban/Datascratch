@@ -6,7 +6,7 @@ import { setSetting } from "@/domain/actions";
 import { useWorkspace } from "@/domain/workspace";
 import { minutesLeft, useVoiceAccess } from "@/features/voice/access";
 import { VOICE_SETTINGS } from "@/features/voice/dictation";
-import { voiceApi, type AdminVoiceRow } from "@/features/voice/voiceApi";
+import { DEFAULT_VOICE_MONTHLY_MINUTES, voiceApi, type AdminVoicePut, type AdminVoiceRow } from "@/features/voice/voiceApi";
 import { colorFor } from "@/data/presence";
 import { SegmentedControl, Switch, toast } from "@/ui";
 import { Card, Row } from "./SettingsPage";
@@ -89,11 +89,12 @@ function AdminVoice() {
 function AdminRow({ account }: { account: AdminVoiceRow }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  // Empty = the default limit (customMinutes null); a number = this account's own.
-  const custom = account.customMinutes === undefined ? account.monthlyMinutes : account.customMinutes;
+  // Empty = the default limit; a number = this account's own (customMinutes).
+  const custom = account.customMinutes ? account.monthlyMinutes : null;
+  const fallback = account.admin ? DEFAULT_VOICE_MONTHLY_MINUTES.admin : DEFAULT_VOICE_MONTHLY_MINUTES.others;
   const [limit, setLimit] = useState(custom == null ? "" : String(custom));
   const save = useMutation({
-    mutationFn: (body: { enabled: boolean; monthlyMinutes?: number | null }) => voiceApi.adminPut(account.userId, body),
+    mutationFn: (body: AdminVoicePut) => voiceApi.adminPut(account.userId, body),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["admin-voice"] }),
     onError: () => toast(t("voice.admin.failed"), { tone: "danger" }),
   });
@@ -127,7 +128,7 @@ function AdminRow({ account }: { account: AdminVoiceRow }) {
           step={60}
           list="voice-presets"
           value={limit}
-          placeholder={String(account.monthlyMinutes)}
+          placeholder={String(fallback)}
           title={t("voice.admin.defaultHint")}
           onChange={(e) => setLimit(e.target.value)}
           onBlur={(e) => commitLimit(e.target.value)}

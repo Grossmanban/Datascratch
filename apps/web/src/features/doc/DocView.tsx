@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import type { Awareness } from "y-protocols/awareness";
 import type * as Y from "yjs";
-import { DatascratchEditor, type EditorApi, type EditorHost } from "@/editor";
+import { DatascratchEditor, type EditorApi, type EditorHost, type SelectionAction } from "@/editor";
 import type { NoteBackdrop } from "@/lib/shared";
 import { backdropCss } from "@/lib/tokens";
 import { cn } from "@/ui";
@@ -25,6 +25,7 @@ export function DocView({
   onEditor,
   createdByAgent = null,
   onAcknowledgeAgentCreated,
+  selectionActions,
 }: {
   doc: Y.Doc;
   backdrop: NoteBackdrop;
@@ -41,6 +42,8 @@ export function DocView({
   /** D-45: the «Создано агентом» strip (editor), cleared by «Понятно». */
   createdByAgent?: { agentId: string; agentName: string; at: string } | null;
   onAcknowledgeAgentCreated?: () => void;
+  /** Extra buttons at the end of the selection's formatting toolbar. */
+  selectionActions?: SelectionAction[];
 }) {
   const hasBackdrop = !!backdrop;
   const bg = useMemo(
@@ -55,17 +58,31 @@ export function DocView({
   return (
     // The editor stretches to the bottom of the page so its pen palette (sticky to the editor's
     // bottom) rests at the bottom of the screen even for a short note.
-    <div className="relative flex min-h-full flex-col" style={bg ? { background: bg } : undefined} data-testid="doc-view">
+    <div
+      className="relative flex min-h-full flex-col"
+      style={bg ? { background: bg } : undefined}
+      data-testid="doc-view"
+    >
       {cover && !hasBackdrop && <div className="px-3 pt-1 sm:px-6">{cover}</div>}
-      <div className={cn("mx-auto flex w-full flex-1 flex-col", hasBackdrop ? "max-w-[1100px] px-3 pb-10 pt-10 sm:px-8 sm:pt-16" : "pb-6")}>
+      <div
+        className={cn(
+          "mx-auto flex w-full flex-1 flex-col",
+          hasBackdrop ? "max-w-[1100px] px-3 pb-10 pt-10 sm:px-8 sm:pt-16" : "pb-6",
+        )}
+      >
         <article
           className={cn(
             "mx-auto flex w-full flex-1 flex-col",
-            hasBackdrop && "overflow-hidden rounded-2xl bg-surface shadow-[0_2px_8px_rgb(40_30_10/0.06),0_30px_80px_rgb(40_30_10/0.14)]",
+            hasBackdrop &&
+              "overflow-hidden rounded-2xl bg-surface shadow-[0_2px_8px_rgb(40_30_10/0.06),0_30px_80px_rgb(40_30_10/0.14)]",
           )}
         >
           {cover && hasBackdrop && cover}
-          {header && <div className="mx-auto w-full max-w-[var(--ds-doc-header-width,720px)] px-6 sm:px-8">{header}</div>}
+          {header && (
+            <div className="mx-auto w-full max-w-[var(--ds-doc-header-width,720px)] px-6 sm:px-8">
+              {header}
+            </div>
+          )}
           <DatascratchEditor
             doc={doc}
             editable={editable}
@@ -79,8 +96,11 @@ export function DocView({
             onReady={onEditor}
             createdByAgent={createdByAgent}
             onAcknowledgeAgentCreated={onAcknowledgeAgentCreated}
+            selectionActions={selectionActions}
           />
-          {footer && <div className="mx-auto w-full max-w-[720px] px-6 pb-16 sm:px-8">{footer}</div>}
+          {footer && (
+            <div className="mx-auto w-full max-w-[720px] px-6 pb-16 sm:px-8">{footer}</div>
+          )}
         </article>
       </div>
     </div>

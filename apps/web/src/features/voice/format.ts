@@ -14,13 +14,21 @@ export type FormatStyle = VoiceStyle;
 type FormatState = {
   /** The note whose «Оформить» window is open. */
   openFor: string | null;
+  /** Opened from the selection's toolbar: that range (the window takes the focus, not the text). */
+  range: { from: number; to: number } | null;
   busy: boolean;
   /** The last formatting in this note: its draft, to look at or bring back. */
   last: { noteId: string; draft: string; style: FormatStyle } | null;
   error: string | null;
 };
 
-export const useFormat = create<FormatState>(() => ({ openFor: null, busy: false, last: null, error: null }));
+export const useFormat = create<FormatState>(() => ({
+  openFor: null,
+  range: null,
+  busy: false,
+  last: null,
+  error: null,
+}));
 
 /** The range «Оформить» works on: the selection, or everything after the title. */
 export function formatRange(api: EditorApi): { from: number; to: number } | null {
@@ -33,24 +41,39 @@ export function formatRange(api: EditorApi): { from: number; to: number } | null
   return end > start ? { from: start, to: end } : null;
 }
 
-export async function formatNote(api: EditorApi, noteId: string, style: FormatStyle, signal?: AbortSignal): Promise<void> {
-  const range = formatRange(api);
+export async function formatNote(
+  api: EditorApi,
+  noteId: string,
+  style: FormatStyle,
+  signal?: AbortSignal,
+): Promise<void> {
+  const range = useFormat.getState().range ?? formatRange(api);
   if (!range) return;
   const { view } = api.editor;
   const draft = view.state.doc.textBetween(range.from, range.to, "\n\n", " ").trim();
   if (!draft) return;
   const { quality, profanity } = voiceSettings();
-  const { markdown } = await voiceApi.text({ task: "format", style, text: draft, quality, profanity }, signal);
+  const { markdown } = await voiceApi.text(
+    { task: "format", style, text: draft, quality, profanity },
+    signal,
+  );
   if (signal?.aborted || !markdown.trim()) return;
   // The note may have changed meanwhile: the same range, clamped to what is there now.
   const size = view.state.doc.content.size;
   const from = Math.min(range.from, size);
   const to = Math.min(Math.max(range.to, from), size);
   view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to)));
-  replaceWithMarkdown(view, markdown.trim());
+  replaceWithMarkdown(view, markdown.trim(), { closed: true });
   const end = view.state.selection.to;
   const mark = view.state.schema.marks.agentEdit;
-  if (mark && end > from) view.dispatch(view.state.tr.addMark(from, end, mark.create({ agentId: VOICE_AGENT_ID, at: new Date().toISOString() })));
+  if (mark && end > from)
+    view.dispatch(
+      view.state.tr.addMark(
+        from,
+        end,
+        mark.create({ agentId: VOICE_AGENT_ID, at: new Date().toISOString() }),
+      ),
+    );
   useFormat.setState({ last: { noteId, draft, style } });
 }
 

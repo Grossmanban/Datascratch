@@ -200,6 +200,26 @@ test("«Оформить»: a style, the note tidied as a highlighted edit, the 
   await expect(body(page).locator("h2")).toHaveCount(0);
 });
 
+test("«Оформить» on a selection: from the formatting toolbar, only the selected text", async ({ page }) => {
+  test.skip(!!process.env.E2E_SERVER_URL, "mock server only");
+  await signUp(page, uniqueEmail("voice-selection"));
+  await newDoc(page, "Выделение", "первое предложение. второе предложение.");
+  // A word selected: its toolbar ends with «Оформить».
+  await body(page).getByText("первое предложение. второе предложение.").dblclick({ position: { x: 8, y: 8 } });
+  const toolbar = page.getByRole("toolbar", { name: "Форматирование" });
+  await toolbar.getByRole("button", { name: "Оформить" }).click();
+  await expect(page.getByTestId("format-dialog")).toBeVisible();
+  await page.getByTestId("format-run").click();
+  await expect(page.getByTestId("format-dialog")).toHaveCount(0, { timeout: 15_000 });
+  // Only the selected word was replaced: the rest of the sentence is untouched.
+  await expect(body(page).locator("h2")).toContainText("Оформлено (document)");
+  // (The mock lists the draft's sentences: the selection was the one word «первое».)
+  await expect(body(page).locator("li")).toHaveCount(1);
+  // («Принять» is the editor's chip on an agent's edit.)
+  await expect(body(page).locator("li")).toHaveText(/^первое(Принять)?$/);
+  await expect(body(page)).toContainText("предложение. второе предложение.");
+});
+
 test("settings → «Голос»: quality and profanity are kept", async ({ page }) => {
   await signUp(page, uniqueEmail("voice-settings"));
   await page.goto("/settings/voice");

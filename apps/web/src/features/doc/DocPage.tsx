@@ -1,6 +1,8 @@
 import { FormatDialog, FormatResult } from "@/features/voice/FormatDialog";
 import { useIsMobile } from "@/hooks/useMedia";
 import { MicButton } from "@/features/voice/MicButton";
+import { useVoiceAccess } from "@/features/voice/access";
+import { useFormat } from "@/features/voice/format";
 import { markSharedOpened } from "@/data/sharedOpened";
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
@@ -14,6 +16,7 @@ import {
   Smile,
   Star,
   Undo2,
+  Wand2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -67,7 +70,7 @@ import { defaultNoteTitle, hasBody, isNoteEmpty, setNoteMeta } from "@/domain/no
 import i18n from "@/i18n";
 import { Backlinks } from "./Backlinks";
 import { CoverImage, coverError, removeCover, setCoverImage } from "./Cover";
-import { readTitle, type EditorApi } from "@/editor";
+import { readTitle, type EditorApi, type SelectionAction } from "@/editor";
 import { ownerEditorHost, uploadNoteFile } from "@/editor/hosts";
 import { DocView } from "./DocView";
 import { PenPaletteToggle } from "./PenPaletteToggle";
@@ -165,6 +168,23 @@ function DocScreen({ noteId }: { noteId: string }) {
   const readOnlyNewer = (meta?.formatVersion ?? 1) > FORMAT_VERSION;
   const trashed = !!note.trashedAt;
   const editable = !readOnlyNewer && !trashed && !viewer;
+  // «Оформить» on a selection (D-65): only when voice is on for this account.
+  const voiceOn = useVoiceAccess((s) => !!s.me?.enabled && s.me.available !== false);
+  const selectionActions = useMemo<SelectionAction[] | undefined>(
+    () =>
+      editable && voiceOn
+        ? [
+            {
+              id: "voice-format",
+              label: t("voice.format"),
+              icon: <Wand2 className="size-4" />,
+              onSelect: ({ from, to }) =>
+                useFormat.setState({ openFor: noteId, range: { from, to }, error: null }),
+            },
+          ]
+        : undefined,
+    [editable, voiceOn, noteId, t],
+  );
 
   // spec/04 «Название новой заметки»: the editor names an empty title (host.defaultTitle) on Enter,
   // when the caret leaves it and on blur; on close a note with text gets it too, and a note created
@@ -319,6 +339,7 @@ function DocScreen({ noteId }: { noteId: string }) {
           showPalette={!paletteCollapsed}
           createdByAgent={agentCreatedOf(note)}
           onAcknowledgeAgentCreated={editable ? () => acknowledgeAgentCreated(noteId) : undefined}
+          selectionActions={selectionActions}
           onEditor={(api) => {
             setEditorApi(api);
             if (editable && isFreshNote(noteId)) api.focusTitle();

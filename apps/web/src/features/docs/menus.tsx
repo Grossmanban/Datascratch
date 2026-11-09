@@ -235,7 +235,7 @@ export function noteMenuItems(noteId: string, t: TFunction, nav: Nav, opts: { in
           // D-65: the selection, or the whole note, tidied in a chosen style.
           ...(useVoiceAccess.getState().me?.enabled === false
             ? []
-            : [{ label: `${t("voice.format")}…`, icon: <Wand2 className="size-3.5" />, onSelect: () => useFormat.setState({ openFor: noteId, error: null }) }]),
+            : [{ label: `${t("voice.format")}…`, icon: <Wand2 className="size-3.5" />, onSelect: () => useFormat.setState({ openFor: noteId, range: null, error: null }) }]),
         ]
       : []),
     inIndex && {

@@ -631,8 +631,9 @@ export class SyncClient {
   }
 
   /**
-   * Upload a snapshot now (e.g. when leaving a document after many own edits,
-   * for version history). Returns false when the document is not caught up yet
+   * Upload a snapshot now, for version history (sync-protocol.md §5): on leaving,
+   * closing or backgrounding after own edits, every 10 minutes of editing, and
+   * before applying a suggestion or a voice insert. Returns false when the document is not caught up yet
    * or a snapshot is already in flight.
    */
   async requestSnapshot(docId: string): Promise<boolean> {

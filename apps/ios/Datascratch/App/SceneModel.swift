@@ -45,6 +45,8 @@ enum SceneSheet: Identifiable, Hashable {
     /// A web page inside the app (another server's link, opened on purpose).
     case webPage(URL)
     case taskDate(noteId: String, blockId: String, field: TaskDateField)
+    /// D-65: where the voice goes, before the first recording on this device.
+    case voiceConsent
 
     var id: Self { self }
 }

@@ -19,8 +19,9 @@ final class DictationController {
     private(set) var mode: Mode = .idle
     /// 0…1 for the wave.
     private(set) var level: Float = 0
-    /// «Where your voice goes», before the first recording on this device.
-    var showsConsent = false
+    /// «Where your voice goes», before the first recording on this device: the scene shows it
+    /// (a sheet on the document screen tripped iPad's focus system when views went away).
+    @ObservationIgnored var askForConsent: (() -> Void)?
     /// A calm line under the button (offline, quota, microphone off); cleared after a while.
     private(set) var message: String?
 
@@ -55,7 +56,7 @@ final class DictationController {
     func press() {
         guard mode == .idle else { return }
         guard app?.hasVoiceConsent() == true else {
-            showsConsent = true
+            askForConsent?()
             return
         }
         mode = .holding
@@ -111,16 +112,6 @@ final class DictationController {
     func close() {
         cancel()
         queue.cancelAll()
-    }
-
-    func consentAccepted() {
-        app?.recordVoiceConsent()
-        showsConsent = false
-    }
-
-    /// «Not Now»: nothing recorded; the sheet comes again next time.
-    func consentDeclined() {
-        showsConsent = false
     }
 
     // MARK: Recording

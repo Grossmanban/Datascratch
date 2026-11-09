@@ -259,14 +259,16 @@ struct VoiceConsentSheet: View {
     }
 }
 
-/// The consent sheet and the queue's notices for a document's microphone.
+/// The queue's notices for a document's microphone, and where the consent sheet comes from: the
+/// scene's sheet, not one on the document screen.
 struct DictationSheets: ViewModifier {
-    @Bindable var dictation: DictationController
+    @Environment(SceneModel.self) private var scene
+    let dictation: DictationController
 
     func body(content: Content) -> some View {
         content
-            .sheet(isPresented: $dictation.showsConsent) {
-                VoiceConsentSheet { dictation.consentAccepted() } onDecline: { dictation.consentDeclined() }
+            .onAppear {
+                dictation.askForConsent = { [weak scene] in scene?.sheet = .voiceConsent }
             }
             .onChange(of: dictation.queue.notice) { _, notice in
                 if notice != nil { dictation.takeQueueNotice() }

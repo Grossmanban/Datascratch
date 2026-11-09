@@ -564,6 +564,8 @@ const en: Loose<Messages> = {
   history: {
     title: "Version history",
     empty: "No saved versions yet. Versions appear as you work on the document.",
+    currentVersion: "Current version",
+    currentHint: "Versions appear as you edit — every 10 minutes, when you leave the document and before formatting",
     current: "Current",
     restore: "Restore this version",
     restored: "Version restored",

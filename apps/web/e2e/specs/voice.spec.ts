@@ -190,6 +190,16 @@ test("«Оформить»: a style, the note tidied as a highlighted edit, the 
   await expect(body(page).locator("li")).toHaveCount(2);
   // Highlighted like an agent's edit, authored by voice.
   await expect(body(page).locator('.ds-agent-edit[data-agent-id="voice"]').first()).toBeVisible();
+  // History has the note as it was before «Оформить» (a version taken just before it).
+  await page.getByRole("button", { name: "Ещё", exact: true }).click();
+  await page.getByRole("menuitem", { name: "История версий" }).click();
+  const versions = page.getByRole("dialog").getByRole("listitem");
+  await expect(versions.first()).toBeVisible({ timeout: 20_000 });
+  await versions.first().getByRole("button").click();
+  await expect(page.getByRole("dialog").locator(".ds-prose")).toContainText("первое предложение. второе предложение.");
+  await expect(page.getByRole("dialog").locator(".ds-prose h2")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   // The original text from the banner; «Отклонить» brings it back.
   await page.getByTestId("format-draft-toggle").click();
   await expect(page.getByTestId("format-draft")).toContainText(

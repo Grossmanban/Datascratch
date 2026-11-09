@@ -1,6 +1,7 @@
 import type { EditorApi } from "@datascratch/web-editor";
 import { TextSelection } from "@tiptap/pm/state";
 import { create } from "zustand";
+import { snapshots } from "@/features/doc/snapshots";
 import { replaceWithMarkdown, voiceSettings } from "./dictation";
 import { VOICE_AGENT_ID, VOICE_STYLES, voiceApi, type VoiceStyle } from "./voiceApi";
 
@@ -53,10 +54,13 @@ export async function formatNote(
   const draft = view.state.doc.textBetween(range.from, range.to, "\n\n", " ").trim();
   if (!draft) return;
   const { quality, profanity } = voiceSettings();
+  // A version of the note before it, uploading while the text is being formatted.
+  const before = snapshots.before(noteId);
   const { markdown } = await voiceApi.text(
     { task: "format", style, text: draft, quality, profanity },
     signal,
   );
+  await before;
   if (signal?.aborted || !markdown.trim()) return;
   // The note may have changed meanwhile: the same range, clamped to what is there now.
   const size = view.state.doc.content.size;

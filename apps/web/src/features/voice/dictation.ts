@@ -6,6 +6,7 @@ import { setSetting } from "@/domain/actions";
 import { useWorkspace } from "@/domain/workspace";
 import { MicFailure, Recording, type MicError } from "./recorder";
 import { turnsText, voiceApi, type VoiceProfanity, type VoiceQuality } from "./voiceApi";
+import { activeNote, snapshots } from "@/features/doc/snapshots";
 import { refreshVoiceMe } from "./access";
 
 // D-65 dictation (spec/04 «Голос»): hold the button (or press Space / ⌥M to start and stop),
@@ -13,9 +14,17 @@ import { refreshVoiceMe } from "./access";
 // tidy text is inserted at the caret. Several takes in a row are processed in order; Esc cancels.
 
 /** Account settings (document `account`, synced): the same keys on iOS. */
-export const VOICE_SETTINGS = { consent: "voiceConsentAt", quality: "voiceQuality", profanity: "voiceProfanity" } as const;
+export const VOICE_SETTINGS = {
+  consent: "voiceConsentAt",
+  quality: "voiceQuality",
+  profanity: "voiceProfanity",
+} as const;
 
-export function voiceSettings(): { quality: VoiceQuality; profanity: VoiceProfanity; consented: boolean } {
+export function voiceSettings(): {
+  quality: VoiceQuality;
+  profanity: VoiceProfanity;
+  consented: boolean;
+} {
   const s = useWorkspace.getState().account.settings;
   return {
     quality: s[VOICE_SETTINGS.quality] === "best" ? "best" : "standard",
@@ -24,7 +33,16 @@ export function voiceSettings(): { quality: VoiceQuality; profanity: VoiceProfan
   };
 }
 
-export type DictationError = MicError | "offline" | "too-short" | "server" | "quota" | "too-long" | "disabled" | "upstream" | "unavailable";
+export type DictationError =
+  | MicError
+  | "offline"
+  | "too-short"
+  | "server"
+  | "quota"
+  | "too-long"
+  | "disabled"
+  | "upstream"
+  | "unavailable";
 
 /** One dictation take is cut off at 10 minutes (api.md «Голос»: the client stops it itself). */
 export const MAX_TAKE_SEC = 600;
@@ -39,7 +57,12 @@ type State = {
   consentOpen: boolean;
 };
 
-export const useDictation = create<State>(() => ({ phase: "idle", pending: 0, error: null, consentOpen: false }));
+export const useDictation = create<State>(() => ({
+  phase: "idle",
+  pending: 0,
+  error: null,
+  consentOpen: false,
+}));
 
 let recording: Recording | null = null;
 let starting: Promise<void> | null = null;
@@ -120,7 +143,14 @@ async function processTake(api: EditorApi, audio: Blob, signal: AbortSignal) {
     const heard = await voiceApi.transcribe(audio, "dictation", signal);
     const raw = turnsText(heard.turns);
     if (!raw) return;
-    const { markdown } = await voiceApi.text({ task: "clean", text: raw, quality, profanity }, signal);
+    // A version of the note before the insert (snapshots.ts), uploading while the words are tidied.
+    const noteId = activeNote();
+    const before = noteId ? snapshots.before(noteId) : null;
+    const { markdown } = await voiceApi.text(
+      { task: "clean", text: raw, quality, profanity },
+      signal,
+    );
+    await before;
     if (signal.aborted) return;
     insertAtCaret(api, markdown.trim() || raw);
   } catch (e) {
@@ -171,9 +201,15 @@ export function insertAtCaret(api: EditorApi, markdown: string) {
   const { view } = api.editor;
   const { $from } = view.state.selection;
   // Mid-paragraph text joins with a space; a fresh line takes it as is.
-  const lead = $from.parent.isTextblock && $from.parentOffset > 0 && !/\s$/.test($from.parent.textBetween(0, $from.parentOffset)) ? " " : "";
+  const lead =
+    $from.parent.isTextblock &&
+    $from.parentOffset > 0 &&
+    !/\s$/.test($from.parent.textBetween(0, $from.parentOffset))
+      ? " "
+      : "";
   view.focus();
-  if (!/\n/.test(markdown)) return void view.dispatch(view.state.tr.insertText(lead + markdown).scrollIntoView());
+  if (!/\n/.test(markdown))
+    return void view.dispatch(view.state.tr.insertText(lead + markdown).scrollIntoView());
   replaceWithMarkdown(view, markdown);
 }
 

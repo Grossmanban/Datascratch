@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router";
-import { Activity, Bot, ChevronLeft, ChevronRight, Info, NotebookTabs, Palette, ShieldCheck, UserRound } from "lucide-react";
+import { Activity, Bot, Mic, ChevronLeft, ChevronRight, Info, NotebookTabs, Palette, ShieldCheck, UserRound } from "lucide-react";
 import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { TopBar } from "@/features/shell/PageHeader";
@@ -10,8 +10,9 @@ import { AgentsSection } from "./AgentsSection";
 import { AppearanceSection } from "./AppearanceSection";
 import { DiagnosticsSection } from "./DiagnosticsSection";
 import { NotebooksSection } from "./NotebooksSection";
+import { VoiceSection } from "./VoiceSection";
 
-export const SETTINGS_SECTIONS = ["account", "appearance", "sync", "security", "agents", "notebooks", "about"] as const;
+export const SETTINGS_SECTIONS = ["account", "appearance", "sync", "security", "voice", "agents", "notebooks", "about"] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 /** Icon and its tint (design-system tint tokens), as in the iOS settings. */
@@ -20,6 +21,7 @@ const META: Record<SettingsSection, { icon: ReactNode; tint: string }> = {
   appearance: { icon: <Palette />, tint: "purple" },
   sync: { icon: <Activity />, tint: "green" },
   security: { icon: <ShieldCheck />, tint: "orange" },
+  voice: { icon: <Mic />, tint: "red" },
   agents: { icon: <Bot />, tint: "indigo" },
   notebooks: { icon: <NotebookTabs />, tint: "teal" },
   about: { icon: <Info />, tint: "gray" },
@@ -68,6 +70,7 @@ export function SettingsPage() {
               {shown === "appearance" && <AppearanceSection />}
               {shown === "sync" && <DiagnosticsSection />}
               {shown === "security" && <SecuritySection />}
+              {shown === "voice" && <VoiceSection />}
               {shown === "agents" && <AgentsSection />}
               {shown === "notebooks" && <NotebooksSection />}
               {shown === "about" && <AboutSection />}

@@ -90,7 +90,12 @@ async function check(page: Page, name: string) {
   await drawerSettled(page);
   // Let entrance animations settle (menus scale in; a box mid-animation is a few px off).
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"), null, { timeout: 3000 }).catch(() => undefined);
-  const problems = await audit(page);
+  let problems = await audit(page);
+  // Motion's springs run in JS (not in getAnimations()): a box still settling is measured again.
+  if (problems.length) {
+    await page.waitForTimeout(500);
+    problems = await audit(page);
+  }
   mkdirSync(SHOTS, { recursive: true });
   await page.screenshot({ path: `${SHOTS}/${test.info().project.name}-${name}.png` });
   expect.soft(problems, `${name} on ${test.info().project.name}`).toEqual([]);

@@ -1,6 +1,15 @@
-import { ChevronDown, Eraser, Highlighter, Lasso, PenLine, Pencil, Type, type LucideIcon } from "lucide-react";
+import {
+  ChevronDown,
+  Eraser,
+  Highlighter,
+  Lasso,
+  PenLine,
+  Pencil,
+  Type,
+  type LucideIcon,
+} from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { EditorApi } from "@/editor";
 import { togglePenPalette, useUi } from "@/hooks/useUi";
@@ -18,13 +27,16 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
 };
 
 /** `ink.blue` → the theme's colour variable (as the editor resolves tokens). */
-const tokenColor = (token: string) => (token.startsWith("#") ? token : `var(--ds-${token.replace(/\./g, "-")}, currentColor)`);
+const tokenColor = (token: string) =>
+  token.startsWith("#") ? token : `var(--ds-${token.replace(/\./g, "-")}, currentColor)`;
 
 /**
  * The pen palette folds into a round button at the edge of the page showing the current tool and
  * colour (as on iOS); tapping it unfolds the palette. While unfolded, the same corner button folds it.
+ * `above` (the phone's «Диктовать») stands in the same corner column: right above the button, or
+ * above the unfolded palette when that reaches the corner, so nothing there covers anything else.
  */
-export function PenPaletteToggle({ pen }: { pen: Pen }) {
+export function PenPaletteToggle({ pen, above }: { pen: Pen; above?: ReactNode }) {
   const { t } = useTranslation();
   const collapsed = useUi((s) => s.penPaletteCollapsed);
   const [settings, setSettings] = useState<Settings>(() => pen.getSettings());
@@ -49,43 +61,95 @@ export function PenPaletteToggle({ pen }: { pen: Pen }) {
       window.removeEventListener("resize", measure);
     };
   }, [collapsed]);
+  // The column above the button: 12 px up, or past the top of a palette that reaches the corner.
+  const wrap = useRef<HTMLDivElement>(null);
+  const [gap, setGap] = useState(12);
+  const hasAbove = above != null;
+  useLayoutEffect(() => {
+    if (!hasAbove) return;
+    const measure = () => {
+      const w = wrap.current?.getBoundingClientRect();
+      const pal = collapsed
+        ? null
+        : document.querySelector(".ds-palette [role=toolbar]")?.getBoundingClientRect();
+      // The floating mic is 56 px wide, right-aligned with the button.
+      const inColumn = w && pal && pal.width > 0 && pal.right > w.right - 64 && pal.top < w.top;
+      setGap(inColumn ? Math.max(12, Math.round(w.top - pal.top) + 12) : 12);
+    };
+    measure();
+    // Both stick to the bottom but at offsets that change as the note scrolls, and the palette may
+    // mount after this: measure on scroll and resize, and twice a second (two rects, no re-render
+    // unless the gap changes).
+    const timer = window.setInterval(measure, 400);
+    window.addEventListener("resize", measure);
+    document.addEventListener("scroll", measure, { capture: true, passive: true });
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("resize", measure);
+      document.removeEventListener("scroll", measure, { capture: true });
+    };
+  }, [hasAbove, collapsed, lift]);
   const Icon = (settings.tool && TOOL_ICONS[settings.tool]) || Type;
   const toolName = settings.tool ? t(`pen.tool.${settings.tool}`) : t("pen.tool.text");
   const label = collapsed ? t("pen.showPalette", { tool: toolName }) : t("pen.hidePalette");
   return (
     <div className="pointer-events-none sticky bottom-4 z-30 flex h-0 justify-end overflow-visible px-4 sm:px-6">
-      <motion.button
-        ref={ref}
-        key={collapsed ? "collapsed" : "open"}
+      <div
+        ref={wrap}
+        className="relative flex -translate-y-full self-start"
         style={lift ? { marginTop: -lift } : undefined}
-        type="button"
-        initial={{ opacity: 0, scale: 0.85 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ type: "spring", stiffness: 500, damping: 32 }}
-        onClick={togglePenPalette}
-        aria-label={label}
-        aria-expanded={!collapsed}
-        title={label}
-        data-testid="pen-palette-toggle"
-        data-state={collapsed ? "collapsed" : "open"}
-        className={
-          collapsed
-            ? "pointer-events-auto relative flex size-11 -translate-y-full items-center justify-center rounded-full border border-line bg-[var(--ds-bg-elevated,#ffffffcc)] text-ink shadow-[0_4px_16px_rgb(40_30_10/0.14)] backdrop-blur-xl transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2"
-            : // 32 px to look at, a 44 px touch target (the ::after reaches 7 px past the 1 px border).
-              "pointer-events-auto relative flex size-8 -translate-y-full after:absolute after:-inset-[7px] after:content-[''] items-center justify-center rounded-full border border-line bg-[var(--ds-bg-elevated,#ffffffcc)] text-ink-2 shadow-[0_2px_8px_rgb(40_30_10/0.10)] backdrop-blur-xl transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
-        }
       >
-        {collapsed ? (
-          <>
-            <Icon className="size-5" style={{ color: settings.tool && settings.tool !== "eraser" && settings.tool !== "lasso" ? tokenColor(settings.color) : undefined }} />
-            {settings.tool && settings.tool !== "eraser" && settings.tool !== "lasso" && (
-              <span className="absolute bottom-1.5 right-1.5 size-2.5 rounded-full ring-2 ring-[var(--ds-bg-surface,#fff)]" style={{ background: tokenColor(settings.color) }} />
-            )}
-          </>
-        ) : (
-          <ChevronDown className="size-4" />
+        {above && (
+          <div
+            className="pointer-events-auto absolute right-0"
+            style={{ bottom: `calc(100% + ${gap}px)` }}
+          >
+            {above}
+          </div>
         )}
-      </motion.button>
+        <motion.button
+          ref={ref}
+          key={collapsed ? "collapsed" : "open"}
+          type="button"
+          initial={{ opacity: 0, scale: 0.85 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "spring", stiffness: 500, damping: 32 }}
+          onClick={togglePenPalette}
+          aria-label={label}
+          aria-expanded={!collapsed}
+          title={label}
+          data-testid="pen-palette-toggle"
+          data-state={collapsed ? "collapsed" : "open"}
+          className={
+            collapsed
+              ? "pointer-events-auto relative flex size-11 items-center justify-center rounded-full border border-line bg-[var(--ds-bg-elevated,#ffffffcc)] text-ink shadow-[0_4px_16px_rgb(40_30_10/0.14)] backdrop-blur-xl transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2"
+              : // 32 px to look at, a 44 px touch target (the ::after reaches 7 px past the 1 px border).
+                "pointer-events-auto relative flex size-8 after:absolute after:-inset-[7px] after:content-[''] items-center justify-center rounded-full border border-line bg-[var(--ds-bg-elevated,#ffffffcc)] text-ink-2 shadow-[0_2px_8px_rgb(40_30_10/0.10)] backdrop-blur-xl transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+          }
+        >
+          {collapsed ? (
+            <>
+              <Icon
+                className="size-5"
+                style={{
+                  color:
+                    settings.tool && settings.tool !== "eraser" && settings.tool !== "lasso"
+                      ? tokenColor(settings.color)
+                      : undefined,
+                }}
+              />
+              {settings.tool && settings.tool !== "eraser" && settings.tool !== "lasso" && (
+                <span
+                  className="absolute bottom-1.5 right-1.5 size-2.5 rounded-full ring-2 ring-[var(--ds-bg-surface,#fff)]"
+                  style={{ background: tokenColor(settings.color) }}
+                />
+              )}
+            </>
+          ) : (
+            <ChevronDown className="size-4" />
+          )}
+        </motion.button>
+      </div>
     </div>
   );
 }

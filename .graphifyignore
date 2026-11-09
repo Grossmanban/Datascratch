@@ -9,3 +9,6 @@ docs/changelog.d/
 **/*.xcassets/
 apps/ios/Packages/DSDesign/Sources/DSDesign/Resources/SampleCovers/
 packages/ui/src/stories/assets/
+
+# Phone e2e screenshots (spec/05): pictures for people, not graph content.
+apps/web/e2e/screenshots/

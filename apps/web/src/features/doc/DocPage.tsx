@@ -1,7 +1,21 @@
+import { FormatDialog, FormatResult } from "@/features/voice/FormatDialog";
+import { useIsMobile } from "@/hooks/useMedia";
+import { MicButton } from "@/features/voice/MicButton";
 import { markSharedOpened } from "@/data/sharedOpened";
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ChevronRight, Eye, FileQuestion, ImagePlus, MoreHorizontal, Share2, Smile, Star, Undo2, X } from "lucide-react";
+import {
+  ChevronRight,
+  Eye,
+  FileQuestion,
+  ImagePlus,
+  MoreHorizontal,
+  Share2,
+  Smile,
+  Star,
+  Undo2,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/session";
@@ -10,8 +24,26 @@ import { runtime } from "@/data/runtime";
 import { sharedResourceOf, useShared } from "@/data/sharedWithMe";
 import { AgentsBadge } from "@/features/share/SharedWithMe";
 import { OpenInApp } from "@/features/share/OpenInApp";
-import { acknowledgeAgentCreated, agentCreatedOf, deleteNoteForever, openTab, restoreNote, setTitleOf, toggleStar, updateNote } from "@/domain/actions";
-import { findNotebook, spaceRoleOfDoc, folderPath, isStarred, noteTitle, setActiveSpace, spaceOfNote, useWorkspace } from "@/domain/workspace";
+import {
+  acknowledgeAgentCreated,
+  agentCreatedOf,
+  deleteNoteForever,
+  openTab,
+  restoreNote,
+  setTitleOf,
+  toggleStar,
+  updateNote,
+} from "@/domain/actions";
+import {
+  findNotebook,
+  spaceRoleOfDoc,
+  folderPath,
+  isStarred,
+  noteTitle,
+  setActiveSpace,
+  spaceOfNote,
+  useWorkspace,
+} from "@/domain/workspace";
 import { closeDocTab, noteMenuItems } from "@/features/docs/menus";
 import { isFreshNote } from "@/lib/freshNotes";
 import { rememberNotebook } from "@/lib/lastNotebook";
@@ -20,7 +52,17 @@ import { useNoteContentReady, useNoteDoc, useNoteMeta } from "@/hooks/useNoteDoc
 import { useUi } from "@/hooks/useUi";
 import { FORMAT_VERSION } from "@/lib/shared";
 import { EMOJI_CHOICES } from "@/lib/tokens";
-import { Button, cn, DropdownMenu, EmptyState, IconButton, Popover, Spinner, toast, Tooltip } from "@/ui";
+import {
+  Button,
+  cn,
+  DropdownMenu,
+  EmptyState,
+  IconButton,
+  Popover,
+  Spinner,
+  toast,
+  Tooltip,
+} from "@/ui";
 import { defaultNoteTitle, hasBody, isNoteEmpty, setNoteMeta } from "@/domain/note";
 import i18n from "@/i18n";
 import { Backlinks } from "./Backlinks";
@@ -52,7 +94,8 @@ export function DocPage() {
     markSharedOpened("notebook", note.notebookId);
     // «Новый документ» elsewhere goes to the notebook last opened or created in (spec/05).
     // Only an own notebook: a shared one is not where new notes of this account should go.
-    if (useWorkspace.getState().account.notebooks.some((n) => n.id === note.notebookId)) rememberNotebook(space, note.notebookId);
+    if (useWorkspace.getState().account.notebooks.some((n) => n.id === note.notebookId))
+      rememberNotebook(space, note.notebookId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId, !!note]);
 
@@ -89,18 +132,21 @@ function DocScreen({ noteId }: { noteId: string }) {
   const contentReady = useNoteContentReady(noteId, doc);
   const edits = useRef(0);
   const [editorApi, setEditorApi] = useState<EditorApi | null>(null);
+  const isMobile = useIsMobile();
   const paletteCollapsed = useUi((s) => s.penPaletteCollapsed);
 
   const accountId = useAuth((s) => s.userId) ?? "";
   const user = useMemo(
-    () => ({ name: email.split("@")[0] || "Me", color: colorFor(email), kind: "user" as const, ...(accountId ? { account: accountId } : {}) }),
+    () => ({
+      name: email.split("@")[0] || "Me",
+      color: colorFor(email),
+      kind: "user" as const,
+      ...(accountId ? { account: accountId } : {}),
+    }),
     [email, accountId],
   );
-  const { awareness, others } = usePresence(
-    noteId,
-    doc,
-    user,
-    (update) => runtime().sendAwareness(noteId, update),
+  const { awareness, others } = usePresence(noteId, doc, user, (update) =>
+    runtime().sendAwareness(noteId, update),
   );
 
   // Count local edits; upload a version snapshot when leaving a document we changed a lot.
@@ -123,13 +169,15 @@ function DocScreen({ noteId }: { noteId: string }) {
   // spec/04 «Название новой заметки»: the editor names an empty title (host.defaultTitle) on Enter,
   // when the caret leaves it and on blur; on close a note with text gets it too, and a note created
   // here that is still empty (nothing but, at most, its default title) is not kept.
-  const titleFor = () => defaultNoteTitle(useWorkspace.getState().notes[noteId]?.createdAt ?? new Date(), i18n.language);
+  const titleFor = () =>
+    defaultNoteTitle(useWorkspace.getState().notes[noteId]?.createdAt ?? new Date(), i18n.language);
   useEffect(() => {
     if (!doc || !editable) return;
     return () => {
       const title = readTitle(doc).trim();
       if (!hasBody(doc)) {
-        if (isFreshNote(noteId) && (!title || title === titleFor()) && isNoteEmpty(doc, title)) void deleteNoteForever(noteId);
+        if (isFreshNote(noteId) && (!title || title === titleFor()) && isNoteEmpty(doc, title))
+          void deleteNoteForever(noteId);
         return;
       }
       // The editor is gone by now (fillEmptyTitleIfNeeded needs it): write the same name into the
@@ -145,7 +193,10 @@ function DocScreen({ noteId }: { noteId: string }) {
 
   const host = useMemo(() => ownerEditorHost(noteId, navigate), [noteId, navigate]);
   const userId = useAuth((s) => s.userId) ?? "";
-  const editorUser = useMemo(() => ({ id: userId, name: user.name, color: user.color, kind: "user" as const }), [userId, user]);
+  const editorUser = useMemo(
+    () => ({ id: userId, name: user.name, color: user.color, kind: "user" as const }),
+    [userId, user],
+  );
 
   return (
     <div className="scrollbar-thin h-full overflow-y-auto" data-testid="doc-page">
@@ -175,10 +226,16 @@ function DocScreen({ noteId }: { noteId: string }) {
             >
               <Star className={cn("size-4", starred && "fill-current")} />
             </IconButton>
+            {/* D-65 «Диктовать»: in the bar on a computer, a floating button on a phone. */}
+            {editable && editorApi && !isMobile && <MicButton api={editorApi} />}
             {editable && editorApi && <InsertPicture api={editorApi} noteId={noteId} />}
             {doc && meta && <StylePopover doc={doc} style={meta.style} disabled={!editable} />}
             {!shared && !viewer && (
-              <IconButton label={t("docs.share")} onClick={() => useUi.setState({ shareFor: { kind: "note", id: noteId } })} data-testid="share-button">
+              <IconButton
+                label={t("docs.share")}
+                onClick={() => useUi.setState({ shareFor: { kind: "note", id: noteId } })}
+                data-testid="share-button"
+              >
                 <Share2 className="size-4" />
               </IconButton>
             )}
@@ -191,7 +248,11 @@ function DocScreen({ noteId }: { noteId: string }) {
                 </IconButton>
               }
             />
-            <IconButton label={`${features.tabs ? t("docs.closeTab") : t("common.close")} (⌥W)`} onClick={() => closeDocTab(noteId, navigate)} data-testid="close-tab">
+            <IconButton
+              label={`${features.tabs ? t("docs.closeTab") : t("common.close")} (⌥W)`}
+              onClick={() => closeDocTab(noteId, navigate)}
+              data-testid="close-tab"
+            >
               <X className="size-4" />
             </IconButton>
           </>
@@ -200,20 +261,30 @@ function DocScreen({ noteId }: { noteId: string }) {
         {/* On a phone the title is right below; the bar keeps its room for the buttons. */}
         <nav className="flex min-w-0 items-center gap-1 max-sm:hidden">
           {nb && (
-            <Link to="/notebook/$notebookId" params={{ notebookId: nb.id }} className="hidden shrink-0 hover:text-ink sm:inline">
+            <Link
+              to="/notebook/$notebookId"
+              params={{ notebookId: nb.id }}
+              className="hidden shrink-0 hover:text-ink sm:inline"
+            >
               {withIcon(nb.icon, nb.name)}
             </Link>
           )}
           {path.map((f) => (
             <span key={f.id} className="hidden items-center gap-1 sm:flex">
               <ChevronRight className="size-3 text-ink-3" />
-              <Link to="/folder/$folderId" params={{ folderId: f.id }} className="truncate hover:text-ink">
+              <Link
+                to="/folder/$folderId"
+                params={{ folderId: f.id }}
+                className="truncate hover:text-ink"
+              >
                 {f.name}
               </Link>
             </span>
           ))}
           <ChevronRight className="hidden size-3 text-ink-3 sm:block" />
-          <span className="truncate font-medium text-ink">{noteTitle(note, t("app.untitled"))}</span>
+          <span className="truncate font-medium text-ink">
+            {noteTitle(note, t("app.untitled"))}
+          </span>
         </nav>
       </TopBar>
 
@@ -221,7 +292,11 @@ function DocScreen({ noteId }: { noteId: string }) {
         <div className="mx-auto mt-2 flex max-w-[720px] items-center gap-3 rounded-lg bg-[var(--ds-tint-yellow-bg)] px-4 py-2.5 text-[13.5px] text-ink">
           <span className="flex-1">{trashed ? t("docs.trashed") : t("docs.readOnlyNewer")}</span>
           {trashed && (
-            <Button size="sm" icon={<Undo2 className="size-3.5" />} onClick={() => restoreNote(noteId)}>
+            <Button
+              size="sm"
+              icon={<Undo2 className="size-3.5" />}
+              onClick={() => restoreNote(noteId)}
+            >
               {t("docs.restore")}
             </Button>
           )}
@@ -264,18 +339,41 @@ function DocScreen({ noteId }: { noteId: string }) {
           }
           header={
             <div className="group/hdr flex items-end gap-1">
-              <IconPicker icon={note.icon} disabled={!editable} onPick={(icon) => updateNote(noteId, { icon })} />
+              <IconPicker
+                icon={note.icon}
+                disabled={!editable}
+                onPick={(icon) => updateNote(noteId, { icon })}
+              />
             </div>
           }
-          footer={<Backlinks noteId={noteId} />}
+          footer={
+            <>
+              {editorApi && <FormatResult api={editorApi} noteId={noteId} />}
+              <Backlinks noteId={noteId} />
+            </>
+          }
         />
       )}
-      {editable && editorApi && <PenPaletteToggle pen={editorApi.pen} />}
+      {editable && editorApi && (
+        <PenPaletteToggle
+          pen={editorApi.pen}
+          above={isMobile ? <MicButton api={editorApi} floating /> : undefined}
+        />
+      )}
+      {editable && editorApi && <FormatDialog api={editorApi} noteId={noteId} />}
     </div>
   );
 }
 
-function IconPicker({ icon, onPick, disabled }: { icon: string | null; onPick: (icon: string | null) => void; disabled?: boolean }) {
+function IconPicker({
+  icon,
+  onPick,
+  disabled,
+}: {
+  icon: string | null;
+  onPick: (icon: string | null) => void;
+  disabled?: boolean;
+}) {
   const { t } = useTranslation();
   if (disabled && !icon) return <div className="h-6" />;
   return (
@@ -283,7 +381,11 @@ function IconPicker({ icon, onPick, disabled }: { icon: string | null; onPick: (
       <Popover
         trigger={
           icon ? (
-            <button className="text-[54px] leading-none transition hover:scale-105" aria-label={t("style.icon")} disabled={disabled}>
+            <button
+              className="text-[54px] leading-none transition hover:scale-105"
+              aria-label={t("style.icon")}
+              disabled={disabled}
+            >
               {iconGlyph(icon) || "·"}
             </button>
           ) : (
@@ -295,13 +397,20 @@ function IconPicker({ icon, onPick, disabled }: { icon: string | null; onPick: (
       >
         <div className="grid grid-cols-8 gap-1">
           {EMOJI_CHOICES.map((e) => (
-            <button key={e} onClick={() => onPick(e)} className="flex size-8 items-center justify-center rounded-md text-[18px] hover:bg-ink/5">
+            <button
+              key={e}
+              onClick={() => onPick(e)}
+              className="flex size-8 items-center justify-center rounded-md text-[18px] hover:bg-ink/5"
+            >
               {e}
             </button>
           ))}
         </div>
         {icon && (
-          <button className="mt-2 w-full rounded-md py-1.5 text-[12.5px] text-ink-2 hover:bg-ink/5" onClick={() => onPick(null)}>
+          <button
+            className="mt-2 w-full rounded-md py-1.5 text-[12.5px] text-ink-2 hover:bg-ink/5"
+            onClick={() => onPick(null)}
+          >
             {t("common.clear")}
           </button>
         )}
@@ -325,7 +434,9 @@ function InsertPicture({ api, noteId }: { api: EditorApi; noteId: string }) {
   const insert = async (files: File[]) => {
     const done: { attachmentId: string; alt: string }[] = [];
     for (const [i, file] of files.entries()) {
-      const a = await uploadNoteFile(noteId, file, (part) => setProgress((i + part) / files.length));
+      const a = await uploadNoteFile(noteId, file, (part) =>
+        setProgress((i + part) / files.length),
+      );
       done.push({ attachmentId: a.attachmentId, alt: file.name });
     }
     const ed = api.editor;
@@ -335,18 +446,31 @@ function InsertPicture({ api, noteId }: { api: EditorApi; noteId: string }) {
     const at = inTitle || !ed.isFocused ? ed.state.doc.content.size : to;
     ed.chain()
       .focus()
-      .insertContentAt(at, done.map((d) => ({ type: "image", attrs: d })))
+      .insertContentAt(
+        at,
+        done.map((d) => ({ type: "image", attrs: d })),
+      )
       .run();
   };
   return (
     <>
       <IconButton
-        label={progress === null ? t("docs.insertPicture") : `${t("docs.insertPicture")} · ${Math.round(progress * 100)}%`}
+        label={
+          progress === null
+            ? t("docs.insertPicture")
+            : `${t("docs.insertPicture")} · ${Math.round(progress * 100)}%`
+        }
         onClick={() => (editorPick ? editorPick.call(api) : input.current?.click())}
         disabled={progress !== null}
         data-testid="insert-picture"
       >
-        {progress === null ? <ImagePlus className="size-4" /> : <span className="text-[11px] font-semibold tabular-nums">{Math.round(progress * 100)}%</span>}
+        {progress === null ? (
+          <ImagePlus className="size-4" />
+        ) : (
+          <span className="text-[11px] font-semibold tabular-nums">
+            {Math.round(progress * 100)}%
+          </span>
+        )}
       </IconButton>
       <input
         ref={input}
@@ -360,11 +484,14 @@ function InsertPicture({ api, noteId }: { api: EditorApi; noteId: string }) {
           if (!files.length) return;
           setProgress(0);
           void insert(files)
-            .catch((err) => toast(t("docs.insertPictureFailed", { reason: (err as Error).message }), { tone: "danger" }))
+            .catch((err) =>
+              toast(t("docs.insertPictureFailed", { reason: (err as Error).message }), {
+                tone: "danger",
+              }),
+            )
             .finally(() => setProgress(null));
         }}
       />
     </>
   );
 }
-

@@ -94,7 +94,10 @@ extension EditorCommands {
                              resolveNoteLink: ((String) -> String?)?) -> TextPosition? {
         switch scope {
         case .selection:
-            return insertMarkdown(markdown, replacing: selection, marks: mark, resolveNoteLink: resolveNoteLink)
+            // The step stays open for the title (`replaceWithSuggestion` ends it).
+            let blocks = Self.dictationBlocks(markdown, resolveNoteLink: resolveNoteLink).map { Self.adding(mark, to: $0) }
+            guard !blocks.isEmpty else { return nil }
+            return insertFragment(blocks, replacing: selection, endStep: false)
         case .document:
             let blocks = MarkdownImport.blocks(markdown, options: .init(resolveNoteLink: resolveNoteLink)).blocks
                 .map { Self.adding(mark, to: $0) }

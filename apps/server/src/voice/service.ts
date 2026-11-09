@@ -405,3 +405,4 @@ export function groupTurns(r: SttResponse): { durationSec: number; turns: VoiceT
   const duration = typeof r.audio_duration_secs === 'number' ? r.audio_duration_secs : maxEnd;
   return { durationSec: Math.round(duration * 1000) / 1000, turns: turns.filter((t) => t.text.length > 0) };
 }
+

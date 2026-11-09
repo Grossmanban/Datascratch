@@ -147,6 +147,70 @@ final class AppModel {
     private(set) var serverURL: URL?
     private static let serverKey = "account.serverURL"
     @ObservationIgnored private let isUITesting: Bool
+
+    /// D-65: the server's voice (recognition and clean-up), a fake one in UI tests
+    /// (`-ui-testing-voice-error offline|disabled|quota`); nil on this device only.
+    var voiceService: (any VoiceService)? {
+        if isUITesting {
+            let error = UserDefaults.standard.string(forKey: "ui-testing-voice-error").flatMap { code -> VoiceError? in
+                switch code {
+                case "offline": .offline
+                case "disabled": .disabled
+                case "quota": .quota
+                default: nil
+                }
+            }
+            return FakeVoiceService(error: error)
+        }
+        guard let connection else { return nil }
+        let api = connection.api
+        // The API client's base is `<server>/v1`.
+        return ServerVoiceService(baseURL: connection.serverURL.appendingPathComponent("v1"), accessToken: { try await api.accessToken() })
+    }
+
+    /// D-65: `GET /v1/voice/me` — nil until read (or on this device only: the microphone stays).
+    private(set) var voiceAccess: VoiceAccess?
+
+    /// Voice is off for this account, or the server cannot serve it: the microphone is not offered.
+    var isVoiceOff: Bool { voiceAccess.map { !$0.isUsable } ?? false }
+
+    /// Reads whether voice is on and what is left (at start, on `account_changed` "voice", when
+    /// Settings → Voice opens). A failure keeps what was known.
+    func refreshVoiceAccess() async {
+        guard let service = voiceService else { return }
+        if let access = try? await service.me(), access != voiceAccess { voiceAccess = access }
+    }
+
+    /// D-65: the person agreed that voice goes through the server — `settings.voiceConsentAt` of
+    /// the account document, so web and iOS ask once per account (on this device only without a
+    /// server). An earlier answer kept on this device is carried over once.
+    func hasVoiceConsent() -> Bool {
+        #if canImport(DSCore)
+        if accounts.isServerBacked, accounts.account != nil, let core {
+            if core.account.setting("voiceConsentAt")?.stringValue != nil { return true }
+            guard settings.voiceConsentShown else { return false }
+            try? core.account.setSetting("voiceConsentAt", .string(value: DSDate.iso(Date())))
+            settings.voiceConsentShown = false
+            return true
+        }
+        #endif
+        return settings.voiceConsentShown
+    }
+
+    func recordVoiceConsent() {
+        #if canImport(DSCore)
+        if accounts.isServerBacked, accounts.account != nil, let core {
+            try? core.account.setSetting("voiceConsentAt", .string(value: DSDate.iso(Date())))
+            return
+        }
+        #endif
+        settings.voiceConsentShown = true
+    }
+
+    /// The microphone, or a stand-in that «hears» a fixed phrase in UI tests (no microphone).
+    func makeVoiceCapture() -> any VoiceCapture {
+        isUITesting ? FakeVoiceCapture() : MicrophoneCapture()
+    }
     let webHost: String
     let covers: CoverImages
 
@@ -335,6 +399,10 @@ final class AppModel {
     /// D-62: sharing learns which space a notebook is in (roles in a shared space); the
     /// stand-in without a server changes the library itself.
     private func wireSharing() {
+        #if canImport(DSCore)
+        connection?.onVoiceChanged = { [weak self] in Task { await self?.refreshVoiceAccess() } }
+        #endif
+        Task { await refreshVoiceAccess() }
         let library = self.library
         accountSharing.spaceOfNotebook = { [weak library] id in library?.notebook(id)?.spaceId }
         (accountSharing as? LocalAccountSharingService)?.library = library

@@ -11,5 +11,6 @@ export {
   type EditorHost,
   type EditorUser,
   type NoteSummary,
+  type SelectionAction,
   type UploadedAttachment,
 } from "@datascratch/web-editor";

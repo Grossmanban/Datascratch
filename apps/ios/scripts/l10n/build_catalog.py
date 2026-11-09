@@ -21,6 +21,7 @@ RU = pathlib.Path(__file__).with_name("ru.json")
 
 # Swift literal with interpolation -> catalog key
 INTERPOLATIONS = {
+    r"Left this month: \(minutes) min": "Left this month: %lld min",
     r"Getting the key for \(changes) changes…": "Getting the key for %lld changes…",
     r"Uploading photos: \(transfers.sent) of \(transfers.toSend)": "Uploading photos: %lld of %lld",
     r"Downloading photos: \(transfers.received) of \(transfers.toReceive)": "Downloading photos: %lld of %lld",
@@ -73,6 +74,8 @@ IGNORE = {
     "Личное", "Работа", "Заметки",
     # D-54: UI-test seed and the comparison's line marks.
     "Shared plans", "Roadmap", "Plan for two", "Ideas", "Only the owner edits this.", "• ", "☑ ", "———", "“", "”",
+    # D-65: HTTP headers and the fake voice server of the UI tests.
+    "Authorization", "Content-Type", "POST", "GET", "S1", "no response", "um so ", "um so this is dictated text",
     # D-62: UI-test seed of a joined shared space.
     "Team", "Team notes", "Kickoff", "Agenda",
     # UI-test seed: a long note (scroll position across full screen).

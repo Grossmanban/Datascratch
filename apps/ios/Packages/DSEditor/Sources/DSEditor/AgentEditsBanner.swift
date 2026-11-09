@@ -18,6 +18,11 @@ final class AgentEditsBanner: UIView {
         didSet { applyMode() }
     }
 
+    /// Who made the edits when it is one known author (voice, D-65): «Правки: Голос».
+    var editsAuthor: String? {
+        didSet { if editsAuthor != oldValue { applyMode() } }
+    }
+
     var onAcceptAll: (() -> Void)?
     /// "Понятно" on a note an agent created.
     var onAcknowledge: (() -> Void)?
@@ -72,7 +77,7 @@ final class AgentEditsBanner: UIView {
     private func applyMode() {
         switch mode {
         case .edits:
-            label.text = "Правки агента"
+            label.text = editsAuthor.map { "Правки: \($0)" } ?? "Правки агента"
             acceptButton.configuration?.title = "Принять все"
             acceptButton.accessibilityIdentifier = "agentEdits.acceptAll"
             historyButton.isHidden = onShowHistory == nil

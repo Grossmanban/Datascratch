@@ -10,7 +10,8 @@ import { alignPaper, clearPaper, PaperSnap } from "./paper";
 import type { EditorHost, HostRef } from "./host";
 import { readNoteMeta, readTitle, setNoteCover, SUPPORTED_FORMAT_VERSION, useNoteMeta } from "./meta";
 import { PenLayer, type PenSettings } from "./pen/PenLayer";
-import { acceptAll, blocksWithAgentEdits } from "./schema/agentReview";
+import { acceptAll, agentEditAuthors, blocksWithAgentEdits } from "./schema/agentReview";
+import { VOICE_AGENT_ID } from "./schema/core";
 import { guardSchema } from "./schema/unknown";
 import { TASK_MENU_EVENT, type TaskMenuRequest } from "./schema/tasks";
 import { fillEmptyTitleIfNeeded, focusTitle } from "./schema/title";
@@ -20,7 +21,7 @@ import { markdownToHtml } from "./paste/markdown";
 import { DOMParser as PMDOMParser, type Slice } from "@tiptap/pm/model";
 import type { NoteStyle, StrokeAuthor } from "@datascratch/shared/contracts";
 import { filterBlocks, type BlockItem } from "./ui/blockItems";
-import { BubbleToolbar } from "./ui/BubbleToolbar";
+import { BubbleToolbar, type SelectionAction } from "./ui/BubbleToolbar";
 import { BlockLift } from "./ui/blockLift";
 import { DragHandle } from "./ui/DragHandle";
 import { PenPalette } from "./ui/PenPalette";
@@ -73,6 +74,11 @@ export interface DatascratchEditorProps {
    */
   createdByAgent?: { agentId: string; agentName: string; at: string } | null;
   onAcknowledgeAgentCreated?: () => void;
+  /**
+   * Extra actions in the floating toolbar over a text selection, after the formatting ones (e.g. the
+   * app's «Оформить», D-65). Each gets the selection when pressed; leave an action out to hide it.
+   */
+  selectionActions?: SelectionAction[];
   /** Plain-text title, after each change (the app copies it into NoteMeta.title). */
   onTitleChange?: (title: string) => void;
   onReady?: (api: EditorApi) => void;
@@ -118,6 +124,8 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
   const [schemaGen, setSchemaGen] = useState(0);
   const [taskMenu, setTaskMenu] = useState<TaskMenuRequest | null>(null);
   const [agentBlocks, setAgentBlocks] = useState(0);
+  // Every pending edit is from voice: the banner says «Правки: Голос» (as on iOS).
+  const [agentVoiceOnly, setAgentVoiceOnly] = useState(false);
   const slashStore = useMemo(() => createSuggestionStore<BlockItem>(), []);
   const linkStore = useMemo(() => createSuggestionStore<LinkItem>(), []);
   const awarenessRef = useRef(awareness);
@@ -305,7 +313,12 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
     let frame = 0;
     const count = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => !editor.isDestroyed && setAgentBlocks(blocksWithAgentEdits(editor.state.doc).length));
+      frame = requestAnimationFrame(() => {
+        if (editor.isDestroyed) return;
+        setAgentBlocks(blocksWithAgentEdits(editor.state.doc).length);
+        const authors = agentEditAuthors(editor.state.doc);
+        setAgentVoiceOnly(authors.size > 0 && [...authors].every((a) => a === VOICE_AGENT_ID));
+      });
     };
     count();
     editor.on("update", count);
@@ -401,7 +414,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
         <div className="ds-agent-banner" role="status">
           <span className="ds-agent-banner-dot" aria-hidden="true" />
           <span className="ds-agent-banner-text">
-            Правки агента · {agentBlocks} {plural(agentBlocks, "блок", "блока", "блоков")}
+            {agentVoiceOnly ? "Правки: Голос" : "Правки агента"} · {agentBlocks} {plural(agentBlocks, "блок", "блока", "блоков")}
           </span>
           <button
             type="button"
@@ -419,7 +432,7 @@ export function DatascratchEditor(props: DatascratchEditorProps) {
         <div ref={mountRef} className="ds-editor-mount" />
         {api && <DragHandle editor={api.editor} root={rootRef.current!} />}
       </div>
-      {api && <BubbleToolbar editor={api.editor} />}
+      {api && <BubbleToolbar editor={api.editor} actions={props.selectionActions} />}
       <SlashMenu store={slashStore} />
       <NoteLinkMenu store={linkStore} />
       {api && taskMenu && <TaskMenu editor={api.editor} request={taskMenu} host={host.current} dates={taskDates} onClose={() => setTaskMenu(null)} />}

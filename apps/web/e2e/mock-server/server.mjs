@@ -577,6 +577,100 @@ function accountChanged(userIds, what) {
 /** The owner and every member of a notebook, note or space. */
 const peopleOf = (target) => [ownerOf(target), ...membersOf(target).keys()];
 
+// D-65 «Голос» (api.md «Голос»): stand-ins for the speech and text services. Each take is a
+// numbered phrase, so e2e can tell takes apart. Access per account: on by default (600 min/month),
+// off for emails starting with «novoice»; accounts starting with «voiceadmin» are server admins.
+const voice = { takes: 0, fail: null, access: new Map() };
+const voiceOf = (user) => {
+  if (!voice.access.has(user.userId))
+    voice.access.set(user.userId, { enabled: !user.email.startsWith("novoice"), customMinutes: null, usedMinutes: 0, costUsd: 0, requests: 0 });
+  return voice.access.get(user.userId);
+};
+const isVoiceAdmin = (user) => user.email.startsWith("voiceadmin");
+/** The default monthly minutes (DEFAULT_VOICE_MONTHLY_MINUTES: 600 for the owner, 120 for others). */
+const voiceLimit = (user, a) => a.customMinutes ?? (isVoiceAdmin(user) ? 600 : 120);
+const voiceView = (user) => {
+  const a = voiceOf(user);
+  return { enabled: a.enabled, monthlyMinutes: voiceLimit(user, a), usedMinutes: a.usedMinutes, resetsAt: nextMonth() };
+};
+const nextMonth = () => {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString();
+};
+const voiceGate = (auth, res) => {
+  const a = voiceOf(auth.user);
+  if (!a.enabled) return err(res, 403, "voice_disabled", "voice is off for this account"), false;
+  if (a.usedMinutes >= voiceLimit(auth.user, a)) return err(res, 429, "voice_quota", "monthly voice quota used"), false;
+  return true;
+};
+route("POST", "/__mock/voice", (_q, res, { body }) => {
+  if ("fail" in body) voice.fail = body.fail;
+  if (body.reset) voice.takes = 0;
+  json(res, 204);
+});
+route("GET", "/v1/voice/me", (_q, res, { auth }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  json(res, 200, { ...voiceView(auth.user), available: true, isAdmin: isVoiceAdmin(auth.user) });
+});
+route("GET", "/v1/admin/voice", (_q, res, { auth }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  if (!isVoiceAdmin(auth.user)) return err(res, 403, "forbidden");
+  const accounts = [...db.users.values()].map((u) => {
+    const a = voiceOf(u);
+    return { userId: u.userId, email: u.email, name: null, admin: isVoiceAdmin(u), ...voiceView(u), customMinutes: a.customMinutes != null, costUsd: a.costUsd, requests: a.requests };
+  });
+  const sum = (k) => accounts.reduce((n, a) => n + a[k], 0);
+  const d = new Date();
+  json(res, 200, {
+    month: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
+    resetsAt: nextMonth(),
+    accounts,
+    totals: { usedMinutes: sum("usedMinutes"), costUsd: sum("costUsd"), requests: sum("requests"), enabledAccounts: accounts.filter((a) => a.enabled).length },
+  });
+});
+route("PUT", "/v1/admin/voice/:userId", (_q, res, { auth, params, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  if (!isVoiceAdmin(auth.user)) return err(res, 403, "forbidden");
+  const u = userById(params.userId);
+  if (!u) return err(res, 404, "not_found");
+  const a = voiceOf(u);
+  a.enabled = !!body.enabled;
+  // monthlyMinutes: a number — the account's own limit; null — back to the default; absent — unchanged.
+  if ("monthlyMinutes" in body) a.customMinutes = body.monthlyMinutes == null ? null : Number(body.monthlyMinutes);
+  accountChanged([u.userId], ["voice"]);
+  json(res, 200, { userId: u.userId, email: u.email, name: null, admin: isVoiceAdmin(u), ...voiceView(u), customMinutes: a.customMinutes != null, costUsd: a.costUsd, requests: a.requests });
+});
+route("POST", "/v1/voice/transcribe", (req, res, { auth, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  if (voice.fail) return err(res, voice.fail.status, voice.fail.code ?? "internal", "voice failure (mock)");
+  if (!voiceGate(auth, res)) return;
+  if (!String(req.headers["content-type"] ?? "").startsWith("multipart/form-data")) return err(res, 400, "bad_request", "multipart expected");
+  if (!Buffer.isBuffer(body) || body.length < 500 || !body.includes('name="audio"')) return err(res, 400, "bad_request", "audio expected");
+  voice.takes += 1;
+  Object.assign(voiceOf(auth.user), {
+    usedMinutes: voiceOf(auth.user).usedMinutes + 2.5 / 60,
+    costUsd: voiceOf(auth.user).costUsd + 0.01,
+    requests: voiceOf(auth.user).requests + 1,
+  });
+  json(res, 200, { durationSec: 2.5, turns: [{ speaker: "S1", text: `фраза номер ${voice.takes} эээ сказанная вслух`, start: 0, end: 2.5 }] });
+});
+route("POST", "/v1/voice/text", (_q, res, { auth, body }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  if (voice.fail) return err(res, voice.fail.status, voice.fail.code ?? "internal", "voice failure (mock)");
+  if (!voiceGate(auth, res)) return;
+  const text = String(body.text ?? (body.turns ?? []).map((t) => t.text).join("\n\n"));
+  if (body.task === "clean") {
+    // Fillers go, the first letter is a capital, a full stop at the end.
+    const t = text.replace(/\s*эээ\s*/g, " ").trim();
+    return json(res, 200, { markdown: `${t.charAt(0).toUpperCase()}${t.slice(1)}.`, model: "mock/luna" });
+  }
+  if (body.task === "format") {
+    const lines = text.split(/(?<=[.!?])\s+|\n+/).map((l) => l.trim()).filter(Boolean);
+    return json(res, 200, { markdown: `## Оформлено (${body.style ?? "document"})\n\n${lines.map((l) => `- ${l}`).join("\n")}`, model: "mock/luna" });
+  }
+  json(res, 200, { markdown: `## Протокол\n\n${text}`, model: "mock/luna" });
+});
+
 route("POST", "/v1/invitations", (_q, res, { auth, body }) => {
   if (!auth) return err(res, 401, "unauthorized");
   const target = body.target;

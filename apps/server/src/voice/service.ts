@@ -406,20 +406,3 @@ export function groupTurns(r: SttResponse): { durationSec: number; turns: VoiceT
   return { durationSec: Math.round(duration * 1000) / 1000, turns: turns.filter((t) => t.text.length > 0) };
 }
 
-/** Longest `title` of POST /voice/text (D-65). */
-export const VOICE_TITLE_MAX = 80;
-
-/**
- * The model's heading as the note's title (D-65): when the answer begins with a level-1 heading
- * (`# …`, after blank lines), it becomes `title` (trimmed, at most 80 characters, without a
- * trailing full stop) and leaves the Markdown. Anything else — `##`, a `#` further down — stays.
- */
-export function splitTitle(markdown: string): { title?: string; markdown: string } {
-  const m = /^\s*#[ \t]+([^\n]*)(?:\n|$)/.exec(markdown);
-  if (!m) return { markdown };
-  const clean = (s: string) => s.trim().replace(/\s+#+$/, '').trim().replace(/\.+$/, '').trim();
-  let title = clean(m[1]!);
-  if ([...title].length > VOICE_TITLE_MAX) title = clean([...title].slice(0, VOICE_TITLE_MAX).join(''));
-  const rest = markdown.slice(m[0].length).replace(/^\s*\n/, '');
-  return title ? { title, markdown: rest } : { markdown };
-}

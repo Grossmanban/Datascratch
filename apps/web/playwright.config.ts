@@ -19,14 +19,14 @@ const BOTH_MODES = /(spaces|layout|a11y|theme)\.spec\.ts$/;
 const desktop = { ...devices["Desktop Chrome"], viewport: { width: 1360, height: 860 } };
 // spec/05 «Веб на телефоне»: the key scenarios on an iPhone (WebKit) and an Android phone
 // (Chromium). E2E_PHONE_CHROMIUM=1 runs «iphone» in Chromium where WebKit is not installed.
-const PHONE = /(mobile|launch)\.spec\.ts$/;
+const PHONE = /(mobile|launch|voice)\.spec\.ts$/;
 const iphone = { ...devices["iPhone 15"], ...(process.env.E2E_PHONE_CHROMIUM ? { browserName: "chromium" as const } : {}) };
 const phones = process.env.E2E_NO_PHONES
   ? []
   : [
       // The launch timing (launch.spec) is measured on the Android project: in CI WebKit draws
       // without a GPU and its timings say nothing about an iPhone.
-      { name: "iphone", use: iphone, testMatch: /mobile\.spec\.ts$/ },
+      { name: "iphone", use: iphone, testMatch: /(mobile|voice)\.spec\.ts$/ },
       // The smallest common Android screen (360 × 800), with Pixel 7 touch and user agent.
       { name: "android", use: { ...devices["Pixel 7"], viewport: { width: 360, height: 800 } }, testMatch: PHONE },
     ];

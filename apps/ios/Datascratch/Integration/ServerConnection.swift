@@ -46,6 +46,8 @@ final class ServerConnection: CoreLibraryRemote {
     /// D-62: the server's `account_changed` on the sync socket (what changed: invitations,
     /// spaces, members, keys, notebooks); sharing refreshes at once. DSCore reports it (ios-core).
     var onAccountChanged: (([String]) -> Void)?
+    /// D-65: `account_changed` "voice" — voice turned on or off, or the limit changed.
+    var onVoiceChanged: (() -> Void)?
 
     init(serverURL: URL, webHost: String, core: CoreLibrary, sync: SyncCenter, attachmentsDirectory: URL) {
         self.attachmentsDirectory = attachmentsDirectory
@@ -157,7 +159,12 @@ final class ServerConnection: CoreLibraryRemote {
             // keys, notebooks): sharing refreshes it at once, a burst as one.
             await engine.setAccountChangedHandler { [weak self] what in
                 let names = what.map(\.rawValue)
-                Task { @MainActor in self?.onAccountChanged?(names) }
+                Task { @MainActor in
+                    if names.contains("voice") { self?.onVoiceChanged?() }
+                    // Voice alone changes nothing of sharing.
+                    let rest = names.filter { $0 != "voice" }
+                    if !rest.isEmpty || names.isEmpty { self?.onAccountChanged?(rest) }
+                }
             }
             // Documents left without a key: fetch keys now (notebooks, shared with me, spaces),
             // not at the next refresh; the engine asks again at 2, 10 and 30 s while they wait.

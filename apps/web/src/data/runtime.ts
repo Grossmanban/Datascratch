@@ -231,6 +231,7 @@ export class AccountRuntime {
     void this.reconcileNotebooks();
     // D-54: this account's key pair exists (created once, crypto.md §10.1); offline it waits. Then
     // the owner's upkeep of what it shares (keys for members, key changes, guest links).
+    void import("@/features/voice/access").then((m) => m.refreshVoiceMe());
     void accountBoxKeys()
       .then(() => Promise.all([maintainShares(), refreshShared()]))
       .catch((e) => console.warn("[ds] account key pair not ready:", (e as Error).message));
@@ -370,7 +371,9 @@ export class AccountRuntime {
       const seen = [...this.changedWhat];
       this.changedWhat.clear();
       if (!seen.length || seen.includes("invitations")) void queryClient.invalidateQueries({ queryKey: ["incoming-invitations"] });
-      if (seen.some((w) => w !== "invitations")) {
+      // D-65: the admin switched voice or its quota for this account.
+      if (!seen.length || seen.includes("voice")) void import("@/features/voice/access").then((m) => m.refreshVoiceMe());
+      if (seen.some((w) => w !== "invitations" && w !== "voice")) {
         void queryClient.invalidateQueries({ queryKey: ["members"] });
         void queryClient.invalidateQueries({ queryKey: ["invitations"] });
         this.refreshKeysSoon();

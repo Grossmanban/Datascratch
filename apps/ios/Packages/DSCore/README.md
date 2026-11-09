@@ -197,8 +197,9 @@ DSCore
 
 - `VoiceTranscribeFields` (поля multipart `POST /voice/transcribe`, `formFields`), `VoiceTurn`,
   `VoiceTranscribeResponse`, `VoiceTextRequest` (ровно одно из `turns`/`text`, `style` только для
-  `format`, `profanity` по умолчанию `soften`), `VoiceTextResponse`, `VoiceMe`, `AdminVoiceAccount`,
-  `PutAdminVoiceRequest` — строгий разбор по векторам `api/bodies.json`; `Voice.timestamp(_:)`
+  `format`, `profanity` по умолчанию `soften`), `VoiceTextResponse`, `VoiceMe` (`available`, `isAdmin`),
+  `AdminVoiceResponse` / `AdminVoiceAccount` (`admin`, `customMinutes`, расход за месяц),
+  `PutAdminVoiceRequest` (`monthlyMinutes`: `.keep` — поле не шлётся, `.reset` — `null`, `.set(n)`) — строгий разбор по векторам `api/bodies.json`; `Voice.timestamp(_:)`
   («мм:сс», с часа «ч:мм:сс») и `Voice.speakerLabel("S2")` = «Собеседник 2» по
   `voice/timestamps.json`; `Voice.agentId` = `voice` (метка `agentEdit` «Голос»). Коды ошибок
   `voice_disabled`, `voice_quota`, `voice_too_long`, `voice_upstream`, `voice_unavailable`;

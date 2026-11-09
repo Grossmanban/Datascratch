@@ -279,7 +279,10 @@ public final class EditorView: UIView {
         inkInput.onMoved = { [weak self] c, p in
             guard let self else { return }
             self.ink.penMoved(c, predicted: p)
-            if let last = c.last { self.showContactIndicator(at: last.location) }
+            if let last = c.last {
+                self.showContactIndicator(at: last.location)
+                self.growDrawingRoom(near: last.location)
+            }
         }
         inkInput.onEnded = { [weak self] cancelled in
             guard let self else { return }
@@ -520,8 +523,29 @@ public final class EditorView: UIView {
         // available (`strokes.md` §4: a Pencil has been used, or finger drawing is on).
         // The window's height, not the editor's: the editor shrinks for the keyboard and the format
         // bar, and a bottom inset following it changed the content size on every keyboard change.
-        let room = drawingAvailable ? max(160, window?.bounds.height ?? bounds.height) : 160
-        let inset = UIEdgeInsets(top: 32 + headerHeight + agentBannerSpace, left: side, bottom: room, right: side)
+        // Text mode (build 37, owner): a modest third of the screen, as in Notes — a whole screen
+        // of empty paper looked bare. Drawing (a pen tool, with drawing available): a screen, and
+        // another one each time the pen nears the bottom (`growDrawingRoom`).
+        let screen = window?.bounds.height ?? bounds.height
+        let drawing = drawingAvailable && tools.mode.capturesPen
+        let room = drawing ? max(160, screen) + extraDrawingRoom : max(160, (screen / 3).rounded())
+        var inset = UIEdgeInsets(top: 32 + headerHeight + agentBannerSpace, left: side, bottom: room, right: side)
+        // Less room only once it does not pull the text from under the person (scrolled to the
+        // very bottom, a shrinking inset would move the content): kept until they scroll up.
+        let shrink = textView.textContainerInset.bottom - room
+        if shrink > 0.5, textView.contentSize.height > 0 {
+            // The largest offset the smaller content allows: past it, the content would move.
+            let newMax = max(-textView.adjustedContentInset.top,
+                             textView.contentSize.height - shrink + textView.adjustedContentInset.bottom - textView.bounds.height)
+            if textView.contentOffset.y > newMax + 1 {
+                inset.bottom = textView.textContainerInset.bottom
+                roomShrinkPending = true
+            } else {
+                roomShrinkPending = false
+            }
+        } else {
+            roomShrinkPending = false
+        }
         if textView.textContainerInset != inset {
             let grownTop = inset.top - textView.textContainerInset.top
             textView.textContainerInset = inset
@@ -666,6 +690,8 @@ public final class EditorView: UIView {
     /// The caret's line in text view content coordinates, from the layout (`caretRect` is wrong in
     /// an empty paragraph).
     func caretLineFrame() -> CGRect? {
+        // A tap below the text: the waiting caret's line is the one to keep in view.
+        if let tail = pendingTail { return tail.caret.frame }
         let r = textView.selectedRange
         if let line = geometry.lineFrame(at: r.location + r.length) { return line }
         return textView.selectedTextRange.map { textView.caretRect(for: $0.end) }
@@ -777,6 +803,7 @@ public final class EditorView: UIView {
 
     private func textViewDidLayout() {
         tapTargetElementsDirty = true
+        if roomShrinkPending, !userIsInteracting { setNeedsLayout() }
         let size = CGSize(width: max(textView.contentSize.width, textView.bounds.width),
                           height: max(textView.contentSize.height, textView.bounds.height) + 400)
         let frame = CGRect(origin: CGPoint(x: 0, y: -200), size: size)
@@ -804,6 +831,7 @@ public final class EditorView: UIView {
         ink.refreshIfNeeded()
         applyKeyboardInset()
         if remoteCursorLayer.frame != inkOver.frame { remoteCursorLayer.frame = inkOver.frame }
+        if dictationLabel != nil { positionDictationPreview() }
         if !remoteCursors.isEmpty { layoutRemoteCursors() }
     }
 
@@ -1520,6 +1548,22 @@ public final class EditorView: UIView {
 
     /// The pen is on the glass (the ink recognizer is tracking a touch).
     private var penDown = false
+
+    /// Room added below the text while drawing near its bottom (screens).
+    private(set) var extraDrawingRoom: CGFloat = 0
+    /// A smaller bottom room waits until the person scrolls away from the very bottom.
+    private var roomShrinkPending = false
+    static let maxExtraDrawingRoomScreens: CGFloat = 20
+
+    /// The pen nears the end of the paper: another screen of room below (applied after the touch).
+    func growDrawingRoom(near point: CGPoint) {
+        let screen = window?.bounds.height ?? bounds.height
+        guard screen > 0, textView.contentSize.height > 0,
+              point.y > textView.contentSize.height - screen * 0.25,
+              extraDrawingRoom < screen * Self.maxExtraDrawingRoomScreens else { return }
+        extraDrawingRoom += screen
+        DispatchQueue.main.async { [weak self] in self?.setNeedsLayout() }
+    }
     /// Centre of the tool indicator circle in text view content coordinates, nil when hidden.
     private(set) var indicatorCenter: CGPoint?
 
@@ -1635,10 +1679,106 @@ public final class EditorView: UIView {
             mode = nil
         }
         if let mode, agentBanner.mode != mode { agentBanner.mode = mode }
+        agentBanner.editsAuthor = onlyVoiceEdits ? "Голос" : nil
         let visible = mode != nil
         guard visible != agentBannerVisible else { return }
         agentBannerVisible = visible
         setNeedsLayout()
+    }
+
+    /// Every unaccepted edit came from voice (D-65): the banner names it.
+    private var onlyVoiceEdits: Bool {
+        var any = false
+        for p in projection.paragraphs {
+            for el in p.inline {
+                guard let v = el.marks[MarkName.agentEdit] else { continue }
+                guard case .object(let o) = v, o["agentId"]?.stringValue == EditorCommands.voiceAgentId else { return false }
+                any = true
+            }
+        }
+        return any
+    }
+
+    // MARK: - Voice (D-65)
+
+    /// Dictation in progress: grey italic text at the caret (`spec/04-editor.md`, «Голос»). Not
+    /// in the document, the sync or undo; nil removes it. It follows the caret.
+    public func setDictationPreview(_ text: String?) {
+        let text = text.flatMap { $0.isEmpty ? nil : $0 }
+        dictationPreview = text
+        guard let text else {
+            dictationLabel?.removeFromSuperview()
+            dictationLabel = nil
+            return
+        }
+        let label = dictationLabel ?? {
+            let l = UILabel()
+            l.isUserInteractionEnabled = false
+            l.numberOfLines = 0
+            l.lineBreakMode = .byWordWrapping
+            l.accessibilityIdentifier = "editor.dictationPreview"
+            // Under the ink overlay, which `textViewDidLayout` keeps last: reordering there each
+            // layout would lay the text view out again.
+            textView.insertSubview(l, belowSubview: inkOver)
+            dictationLabel = l
+            return l
+        }()
+        let font = theme.bodyFont.fontDescriptor.withSymbolicTraits(.traitItalic).map { UIFont(descriptor: $0, size: 0) } ?? theme.bodyFont
+        label.attributedText = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: EditorTheme.secondaryText])
+        positionDictationPreview()
+    }
+
+    /// The text the dictation preview shows (nil when there is none).
+    public private(set) var dictationPreview: String?
+    private var dictationLabel: UILabel?
+
+    private func positionDictationPreview() {
+        guard let label = dictationLabel, let range = textView.selectedTextRange else { return }
+        let caret = textView.caretRect(for: range.start)
+        guard !caret.isNull, !caret.isInfinite else { return }
+        let right = textView.bounds.width - textView.textContainerInset.right
+        let width = max(80, right - caret.maxX - 2)
+        let size = label.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        let frame = CGRect(x: caret.maxX + 2, y: caret.minY + (caret.height - theme.bodyFont.lineHeight) / 2,
+                           width: min(width, size.width), height: size.height)
+        if label.frame != frame { label.frame = frame }
+    }
+
+    /// Dictated Markdown at the caret, over the selection, as one undo step; text without a line
+    /// break goes into the current paragraph. The caret ends after it; the preview goes.
+    public func insertDictation(_ markdown: String) {
+        guard !model.isReadOnly else { return }
+        setDictationPreview(nil)
+        let range = selectionRange
+        let resolver = attachmentResolver
+        keepingScroll {
+            select(commands.insertMarkdown(markdown, replacing: range,
+                                           resolveNoteLink: resolver.map { r in { r.noteId(forLinkLabel: $0) } }))
+        }
+        notifyStateChange()
+    }
+
+    /// The selection as Markdown (agents' dialect), nil without a selection.
+    public var selectedMarkdown: String? {
+        let r = selectionRange
+        return commands.markdown(in: r)
+    }
+
+    /// The note's body (after the title) as Markdown in the agents' dialect.
+    public var documentMarkdown: String { commands.documentMarkdown }
+
+    /// A voice suggestion replaces the selection or the note's body: the new text carries the
+    /// `agentEdit` mark (D-10, «Принять» / undo on the banner, author «Голос»); one undo step.
+    public func replaceWithSuggestion(_ markdown: String, scope: EditorCommands.SuggestionScope) {
+        guard !model.isReadOnly else { return }
+        setDictationPreview(nil)
+        let range = selectionRange
+        let resolver = attachmentResolver
+        keepingScroll {
+            select(commands.replaceWithSuggestion(markdown, scope: scope, selection: range,
+                                                  resolveNoteLink: resolver.map { r in { r.noteId(forLinkLabel: $0) } }))
+        }
+        notifyStateChange()
     }
 
     // MARK: - Hiding the keyboard
@@ -1676,7 +1816,7 @@ public final class EditorView: UIView {
         noteLink(at: point) != nil || (!model.isReadOnly && taskCheckbox(at: point) != nil)
             || (taskDatesEnabled && !model.isReadOnly && taskDateChip(at: point) != nil)
             || (onImageTap != nil && image(at: point) != nil) || (onFileTap != nil && file(at: point) != nil)
-            || diagram(at: point) != nil
+            || diagram(at: point) != nil || belowTextLines(at: point) != nil
     }
 
     /// The task date chip under a point (text view coordinates): its item, whether it is the
@@ -1953,6 +2093,10 @@ public final class EditorView: UIView {
             }
             return
         }
+        if let lines = belowTextLines(at: point) {
+            beginPendingTail(lines: lines)
+            return
+        }
         if startParagraphBelowEnd(at: point) { return }
         guard let box = taskCheckbox(at: g.location(in: textView)) else { return }
         commands.toggleTask(box.item)
@@ -1962,6 +2106,80 @@ public final class EditorView: UIView {
             DSHaptics.taskComplete()
             animateCheck(in: box.rect)
         }
+    }
+
+    // MARK: - Tap below the text
+
+    /// A tap below the text (`spec/04-editor.md`, «Касание под текстом»): the caret waits on the
+    /// tapped line; the empty paragraphs up to it are made only with the first character typed
+    /// (`appendParagraphs`), so a tap that types nothing leaves nothing behind.
+    struct PendingTail {
+        var lines: Int
+        var endOffset: Int
+        var caret: UIView
+        var tint: UIColor
+    }
+
+    private(set) var pendingTail: PendingTail?
+
+    /// Line pitch of an empty body paragraph (line height plus paragraph spacing).
+    var emptyParagraphPitch: CGFloat {
+        (theme.bodyFont.lineHeight * EditorTheme.bodyLineHeightMultiple).rounded() + 10
+    }
+
+    /// How many new paragraphs a tap at `point` (text view coordinates) stands for: nil above the
+    /// end of the text or within half a line of it, and outside text mode.
+    func belowTextLines(at point: CGPoint) -> Int? {
+        guard !model.isReadOnly, tools.mode == .text, let lastStart = projection.starts.last,
+              let frame = geometry.paragraphFrame(at: lastStart) else { return nil }
+        let column = textView.bounds.width - textView.textContainerInset.left - textView.textContainerInset.right
+        guard point.x >= textView.textContainerInset.left - 24,
+              point.x <= textView.textContainerInset.left + column + 24 else { return nil }
+        let gap = point.y - frame.maxY
+        let pitch = emptyParagraphPitch
+        guard gap > pitch * 0.6 else { return nil }
+        return max(1, min(500, Int((gap / pitch).rounded(.down)) + (gap.truncatingRemainder(dividingBy: pitch) > pitch * 0.3 ? 1 : 0)))
+    }
+
+    /// Shows the waiting caret on the tapped line (the system caret is hidden meanwhile).
+    func beginPendingTail(lines: Int) {
+        cancelPendingTail()
+        guard let lastStart = projection.starts.last, let frame = geometry.paragraphFrame(at: lastStart) else { return }
+        if !textView.isFirstResponder { textView.becomeFirstResponder() }
+        let end = textView.textStorage.length
+        selectOffset(end)
+        let pitch = emptyParagraphPitch
+        let height = theme.bodyFont.lineHeight
+        let caret = UIView(frame: CGRect(x: textView.textContainerInset.left, y: frame.maxY + 10 + CGFloat(lines - 1) * pitch,
+                                         width: 2, height: height))
+        caret.backgroundColor = EditorTheme.accent
+        caret.layer.cornerRadius = 1
+        caret.isUserInteractionEnabled = false
+        caret.accessibilityIdentifier = "editor.pendingCaret"
+        textView.insertSubview(caret, belowSubview: inkOver)
+        if !UIAccessibility.isReduceMotionEnabled {
+            let blink = CABasicAnimation(keyPath: "opacity")
+            blink.fromValue = 1
+            blink.toValue = 0
+            blink.duration = 0.5
+            blink.autoreverses = true
+            blink.repeatCount = .infinity
+            blink.beginTime = CACurrentMediaTime() + 0.5
+            caret.layer.add(blink, forKey: "blink")
+        }
+        pendingTail = PendingTail(lines: lines, endOffset: end, caret: caret, tint: textView.tintColor)
+        textView.tintColor = .clear
+        // The keyboard comes up over the bottom: the waiting line stays in view.
+        DispatchQueue.main.async { [weak self] in self?.scrollCaretIntoView() }
+        notifyStateChange()
+    }
+
+    /// The waiting caret goes (another tap, the caret moved, editing ended, backspace).
+    func cancelPendingTail() {
+        guard let tail = pendingTail else { return }
+        pendingTail = nil
+        tail.caret.removeFromSuperview()
+        textView.tintColor = tail.tint
     }
 
     /// A tap below a note that ends with a picture, code, a table, a list or a quote: an empty
@@ -2064,6 +2282,20 @@ extension EditorView: UITextViewDelegate {
     public func textView(_ tv: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
         if suppressDelegate { return true }
         if model.isReadOnly { return false }
+        if let tail = pendingTail {
+            cancelPendingTail()
+            // Backspace drops the waiting lines: nothing was written, nothing stays.
+            if text.isEmpty { return false }
+            if range.location == tail.endOffset, range.length == 0 {
+                let marks = (pendingMarks ?? .empty).setting(MarkName.agentEdit, nil)
+                let typed = text == "\n" ? "" : text.replacingOccurrences(of: "\u{FFFC}", with: "")
+                let caret = commands.appendParagraphs(tail.lines + (text == "\n" ? 1 : 0), typing: typed, marks: marks)
+                select(caret)
+                scrollCaretIntoView()
+                notifyStateChange()
+                return false
+            }
+        }
         let p = projection
         guard !p.paragraphs.isEmpty else { return true }
         let lo = range.location, hi = range.location + range.length
@@ -2208,6 +2440,7 @@ extension EditorView: UITextViewDelegate {
         notifyStateChange()
     }
     public func textViewDidEndEditing(_ textView: UITextView) {
+        cancelPendingTail()
         dismissSlashMenu()
         localCursorEnded()
         notifyStateChange()
@@ -2216,6 +2449,7 @@ extension EditorView: UITextViewDelegate {
     public func textViewDidChangeSelection(_ tv: UITextView) {
         localCursorChanged()
         if suppressDelegate { return }
+        if let tail = pendingTail, tv.selectedRange != NSRange(location: tail.endOffset, length: 0) { cancelPendingTail() }
         pendingMarks = nil
         // The caret left an empty title: it gets the default name.
         let inTitle = caretIsInTitle(tv.selectedRange.location)
@@ -2236,6 +2470,7 @@ extension EditorView: UITextViewDelegate {
         // longer scrolls to it by itself.
         scrollCaretIntoView()
         updateSlashMenu()
+        positionDictationPreview()
         notifyStateChange()
     }
 

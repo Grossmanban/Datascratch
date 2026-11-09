@@ -134,6 +134,20 @@ final class NativeEditorModel: ClosingEditor {
     var captionTarget: BlockID?
     /// The photo «Replace…» picks a new image for.
     @ObservationIgnored var replacing: BlockID?
+    /// D-65: what is being dictated and not in the text yet (grey at the caret; the bar shows
+    /// the step).
+    var dictationPreview: String?
+    /// D-65: this document's microphone.
+    @ObservationIgnored lazy var dictation = DictationController(app: app, target: self)
+    /// D-65: «Format» for this document.
+    @ObservationIgnored lazy var formatter: VoiceFormatter = {
+        let settings = app?.settings
+        let formatter = VoiceFormatter(service: app?.voiceService) {
+            (settings?.voiceQuality ?? .standard, settings?.voiceProfanity ?? .keep)
+        }
+        formatter.target = self
+        return formatter
+    }()
     /// A file for the share sheet / Quick Look.
     var sharing: URL?
     var previewing: URL?
@@ -211,6 +225,7 @@ final class NativeEditorModel: ClosingEditor {
 
     private func changed() {
         revision &+= 1
+        formatter.documentChanged()
         // Title, tags and tasks of the list views follow the document (debounced).
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
@@ -355,6 +370,7 @@ struct NativeDocumentScreen: View {
                 }
                 .toolbar { NativeEditorToolbar(model: model, note: note) }
                 .modifier(LinkPrompt(model: model))
+                .modifier(DictationSheets(dictation: model.dictation))
                 .coverPickers()
             } else if failed {
                 // Opening the document failed: fall back to the stand-in editor.
@@ -371,6 +387,7 @@ struct NativeDocumentScreen: View {
             app.presence?.join(noteId)
         }
         .onDisappear {
+            model?.dictation.leave()
             app.library.recordVersion(ofNote: noteId)
             app.presence?.leave(noteId)
         }
@@ -510,6 +527,11 @@ struct NativeEditorToolbar: ToolbarContent {
                 }
                 if !isViewOnly {
                     Button("Style…", systemImage: "textformat") { scene.sheet = .documentStyle(noteId: note.id) }
+                    if model.canFormat {
+                        // D-65: the selection, else the whole note.
+                        Button("Format…", systemImage: "wand.and.sparkles") { model.askHowToFormat(scene: scene) }
+                            .accessibilityIdentifier("document.format")
+                    }
                     Menu("Cover", systemImage: "photo") { CoverMenuItems(note: note) }
                 }
                 Button(note.folderId == nil ? LocalizedStringKey("Show in Notebook") : "Show in Folder",
@@ -628,6 +650,7 @@ struct EditorBottomBars: View {
     static let shortHeight: CGFloat = 360
 
     @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let model: NativeEditorModel
     let isShort: Bool
@@ -666,6 +689,30 @@ struct EditorBottomBars: View {
                 }
             }
             .frame(maxWidth: .infinity)
+        }
+        // D-65: the microphone floats above the bars' trailing end, clear of the palette row (in
+        // the row it made the narrow columns overflow, and «Cancel» beside it switched the row's
+        // layout under the finger). Not offered when voice is off for this account.
+        // What is being dictated and a word about the last piece sit above it, so the button
+        // stays put under the finger while the preview grows.
+        .overlay(alignment: .top) {
+            VStack(alignment: .trailing, spacing: Theme.Space.s2) {
+                FormatStatus(formatter: model.formatter) {
+                    scene.sheet = .voiceOriginal(noteId: model.noteId)
+                }
+                DictationPreview(dictation: model.dictation, text: model.dictationPreview)
+                if let message = model.dictation.message { DictationMessage(text: message) }
+                if !app.isVoiceOff {
+                    DictationButton(dictation: model.dictation, isCompact: isShort)
+                        .padding(.trailing, Theme.Space.s4)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .alignmentGuide(.top) { $0[.bottom] + Theme.Space.s2 }
+            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictationPreview != nil)
+            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictation.message)
+            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.formatter.phase)
+            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.formatter.message)
         }
         .animation(reduceMotion ? nil : Theme.Motion.snappy, value: selecting)
         .animation(reduceMotion ? nil : Theme.Motion.snappy, value: isShort)
@@ -752,6 +799,7 @@ struct HideKeyboardButton: View {
 /// headings, with the current ones lit. Shown only while text is being written; scrolls sideways
 /// when the column is narrower than the bar.
 struct FormatBarRow: View {
+    @Environment(SceneModel.self) private var scene
     let model: NativeEditorModel
 
     var body: some View {
@@ -803,6 +851,14 @@ struct FormatBarRow: View {
             item("heading2", "2.square", String(localized: "Heading 2"), state.block == .heading2, .heading2),
             item("heading3", "3.square", String(localized: "Heading 3"), state.block == .heading3, .heading3),
         ]
+        // D-65: «Format» for exactly the selected text, last, when voice is on.
+        if state.hasSelection, model.canFormat {
+            elements += [
+                .separator(id: "voice"),
+                .item(DSFormatBarItem(id: "format", systemImage: "wand.and.sparkles", label: String(localized: "Format"),
+                                      isActive: false) { model.askHowToFormat(scene: scene) }),
+            ]
+        }
         return elements
     }
 }

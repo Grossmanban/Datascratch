@@ -1,6 +1,6 @@
 // Prompts of the text AI for voice (D-65): the server builds them from a `POST /voice/text`
 // request and sends them to the configured model. Russian, because the notes are.
-import { DEFAULT_VOICE_STYLE } from "../contracts/voice.js";
+import { DEFAULT_VOICE_STYLE, MAX_VOICE_TITLE_CHARS } from "../contracts/voice.js";
 import type {
   VoiceProfanity,
   VoiceStyle,
@@ -82,18 +82,24 @@ const TASKS: Record<VoiceTextTask, string> = {
   format: `Задача: ОФОРМИТЬ. Из черновика сделай документ выбранного вида: заголовки, списки, таблицы и задачи там, где они помогают читать. Сохрани всё содержание черновика; можно переставлять и группировать, нельзя добавлять новое.`,
 };
 
+/** For `format` and `minutes` (D-65): the title line the server cuts out (`splitVoiceTitle`). */
+export const VOICE_TITLE_RULE =
+  "Первой строкой выведи `# Название` — короткое (до 8 слов) название документа по содержанию, без кавычек и точки; дальше — сам документ без повторения названия.";
+
+/** Tasks whose answer starts with the suggested title. */
+export const VOICE_TITLE_TASKS: readonly VoiceTextTask[] = Object.freeze(["format", "minutes"]);
+
 /** Only when the transcript carries «[мм:сс]» (phase 2). */
 const KEEP_TIMESTAMPS =
   "Метки времени «[мм:сс]» в начале реплик сохраняй в начале соответствующих абзацев.";
 
 const STYLES: Record<VoiceStyle, string> = {
   document:
-    "Вид: документ — заголовок по сути, разделы с подзаголовками там, где тем несколько; списки, таблицы и задачи там, где они помогают читать.",
+    "Вид: документ — разделы с подзаголовками там, где тем несколько; списки, таблицы и задачи там, где они помогают читать.",
   plan: "Вид: план — цели, шаги по порядку (нумерованный список или задачи), сроки и ответственные, если они есть в тексте.",
   minutes:
     "Вид: протокол встречи — участники и тема (если названы), решения, задачи «- [ ] кто — что — срок», открытые вопросы.",
-  article:
-    "Вид: статья — заголовок, короткое вступление, разделы с подзаголовками, связный текст абзацами.",
+  article: "Вид: статья — короткое вступление, разделы с подзаголовками, связный текст абзацами.",
   letter:
     "Вид: письмо — обращение, суть по абзацам, просьба или итог, подпись (только если имя есть в тексте).",
   notes: "Вид: конспект — тезисы по темам, короткие пункты, ключевые термины жирным.",
@@ -112,8 +118,47 @@ export function buildVoiceTextPrompt(
   const parts = [voiceRules(req.profanity ?? "soften"), TASKS[req.task]];
   if (options.timestamps && req.turns) parts.push(KEEP_TIMESTAMPS);
   if (req.task === "format") parts.push(STYLES[req.style ?? DEFAULT_VOICE_STYLE]);
+  if (VOICE_TITLE_TASKS.includes(req.task)) parts.push(VOICE_TITLE_RULE);
   parts.push(MARKDOWN);
   const input = req.turns ? turnsToTranscript(req.turns, options) : (req.text ?? "");
   const label = req.turns ? "Расшифровка" : "Черновик";
   return { system: parts.join("\n\n"), user: `${label}:\n\n${input}` };
+}
+
+/**
+ * The model's answer → `{ title?, markdown }` of `POST /voice/text` (D-65): when the first
+ * non-empty line is a level-1 heading «# …», it becomes the title (quotes, trailing full stops
+ * and closing «#» removed, at most `MAX_VOICE_TITLE_CHARS`) and leaves the markdown together
+ * with the blank lines after it. An empty «#» line is dropped without a title; no such line
+ * means no title and the answer unchanged (apart from surrounding whitespace).
+ */
+export function splitVoiceTitle(answer: string): { title?: string; markdown: string } {
+  const text = answer.replace(/\r\n?/g, "\n").trim();
+  const nl = text.indexOf("\n");
+  const first = nl < 0 ? text : text.slice(0, nl);
+  const m = /^#[ \t]+(.*?)[ \t]*#*[ \t]*$/.exec(first);
+  if (!m) return { markdown: text };
+  const markdown = nl < 0 ? "" : text.slice(nl + 1).trim();
+  const title = cleanTitle(m[1] ?? "");
+  return title ? { title, markdown } : { markdown };
+}
+
+const QUOTES = /^[«"„“'`]+|[»"“”'`]+$/g;
+
+function cleanTitle(raw: string): string {
+  let t = raw.trim();
+  for (let prev = ""; prev !== t;) {
+    prev = t;
+    t = t
+      .replace(QUOTES, "")
+      .replace(/\.+$/, "")
+      .replace(/^\*\*(.*)\*\*$/, "$1")
+      .trim();
+  }
+  if (t.length > MAX_VOICE_TITLE_CHARS) {
+    const cut = t.slice(0, MAX_VOICE_TITLE_CHARS);
+    const space = cut.lastIndexOf(" ");
+    t = (space > MAX_VOICE_TITLE_CHARS / 2 ? cut.slice(0, space) : cut).replace(/[\s.,;:—-]+$/, "");
+  }
+  return t;
 }

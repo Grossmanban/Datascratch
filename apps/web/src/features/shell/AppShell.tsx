@@ -1,3 +1,4 @@
+import { VoiceConsentDialog } from "@/features/voice/MicButton";
 import { SpaceMembersDialog } from "@/features/spaces/SharedSpaces";
 import { SpaceDialog } from "@/features/spaces/SpaceDialog";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
@@ -202,6 +203,7 @@ export function AppShell() {
       <InvitationsDialog />
       <SpaceMembersDialog />
       <SpaceDialog />
+      <VoiceConsentDialog />
       <HistoryDialog />
       <CoverDialog />
       <NewNotebookDialog />

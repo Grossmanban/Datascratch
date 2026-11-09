@@ -3,7 +3,18 @@ import SwiftUI
 /// Resolves a `SceneSheet` into its view.
 struct SceneSheetView: View {
     @Environment(AppModel.self) private var app
+    @Environment(SceneModel.self) private var scene
+    @Environment(\.dismiss) private var dismiss
     let sheet: SceneSheet
+
+    /// The open note's «Format» (only the native editor has one).
+    private func voiceFormatter(for noteId: String) -> VoiceFormatter? {
+        #if canImport(DSEditor) && canImport(DSEditorCore) && canImport(DSCore) && canImport(DSDesign)
+        (scene.editor(for: noteId) as? NativeEditorModel)?.formatter
+        #else
+        nil
+        #endif
+    }
 
     var body: some View {
         let library = app.library
@@ -52,6 +63,25 @@ struct SceneSheetView: View {
                 .ignoresSafeArea()
         case .taskDate(let noteId, let blockId, let field):
             TaskDateSheet(noteId: noteId, blockId: blockId, field: field)
+        case .voiceConsent:
+            // «Not Now» records nothing; the sheet comes again on the next hold.
+            VoiceConsentSheet {
+                app.recordVoiceConsent()
+                dismiss()
+            } onDecline: {
+                dismiss()
+            }
+        case .voiceFormat(let noteId):
+            if let formatter = voiceFormatter(for: noteId) {
+                VoiceFormatSheet(appliesToSelection: formatter.appliesToSelection) { style in
+                    formatter.format(style: style)
+                    dismiss()
+                }
+            }
+        case .voiceOriginal(let noteId):
+            if let formatter = voiceFormatter(for: noteId) {
+                VoiceOriginalSheet(formatter: formatter)
+            }
         }
     }
 }

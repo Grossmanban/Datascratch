@@ -52,6 +52,8 @@ export async function expectSynced(page: Page) {
 /** Create a document from the sidebar and type a title and body. */
 export async function newDoc(page: Page, title: string, body?: string) {
   const before = page.url();
+  // On a phone «Новый документ» is in the drawer.
+  if (!(await page.getByTestId("new-doc").isVisible()) && (await page.getByTestId("mobile-menu").isVisible())) await page.getByTestId("mobile-menu").click();
   await page.getByTestId("new-doc").click();
   // From an open document the URL already matches «/doc/»: wait for the new one.
   await page.waitForURL((url) => url.pathname.startsWith("/doc/") && url.href !== before);

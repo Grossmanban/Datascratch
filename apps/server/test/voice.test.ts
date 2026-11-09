@@ -3,7 +3,7 @@ import { connect as netConnect, type AddressInfo } from 'node:net';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { voiceAccess, voiceUsage } from '../src/db/schema.js';
-import { groupTurns, splitTitle, VoiceService } from '../src/voice/service.js';
+import { groupTurns, VoiceService } from '../src/voice/service.js';
 import { SyncClient, api, rnd, signup, startServer, type TestServer, type TestUser } from './helpers.js';
 
 // D-65: voice through the server (api.md «Голос»); ElevenLabs and OpenRouter are fakes here.
@@ -525,7 +525,7 @@ describe('voice: outbound proxy (DS_VOICE_PROXY)', () => {
 });
 
 describe('voice: title from the model (D-65)', () => {
-  it('format and minutes: a first `# …` line becomes the title; clean keeps everything', async () => {
+  it('format and minutes: a first `# …` line becomes the title (shared splitVoiceTitle); clean keeps everything', async () => {
     const u = await voiceUser();
     llmReply = () => ({
       status: 200,
@@ -539,16 +539,13 @@ describe('voice: title from the model (D-65)', () => {
     expect(c.body).toEqual({ markdown: '# План на неделю.\n\n## Понедельник\n\n- купить хлеб', model: 'm' });
   });
 
-  it('splitTitle: none, deeper headings and `#` further down are untouched; long titles are cut', () => {
-    expect(splitTitle('Просто текст\n# Не заголовок')).toEqual({ markdown: 'Просто текст\n# Не заголовок' });
-    expect(splitTitle('## Раздел\n\nтекст')).toEqual({ markdown: '## Раздел\n\nтекст' });
-    expect(splitTitle('#хэштег в начале')).toEqual({ markdown: '#хэштег в начале' });
-    expect(splitTitle('\n\n# Итоги встречи ##\nтекст')).toEqual({ title: 'Итоги встречи', markdown: 'текст' });
-    expect(splitTitle('# Только заголовок')).toEqual({ title: 'Только заголовок', markdown: '' });
-    expect(splitTitle('# \n\nтекст')).toEqual({ markdown: '# \n\nтекст' });
-    const long = splitTitle(`# ${'Слово '.repeat(30)}\n\nтекст`);
-    expect([...long.title!].length).toBeLessThanOrEqual(80);
-    expect(long.title).toBe(long.title!.trim());
-    expect(long.markdown).toBe('текст');
+  it('no first `# …` line: no title, and a `#` heading further down stays in the Markdown', async () => {
+    const u = await voiceUser();
+    llmReply = () => ({
+      status: 200,
+      json: { model: 'm', choices: [{ message: { content: 'Вступление.\n\n# Раздел\n\nтекст' } }] },
+    });
+    const r = await text(u, { task: 'format', text: 'a' });
+    expect(r.body).toEqual({ markdown: 'Вступление.\n\n# Раздел\n\nтекст', model: 'm' });
   });
 });

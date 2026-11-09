@@ -33,6 +33,11 @@ final class DictationUITests: XCTestCase {
         app.textViews.firstMatch
     }
 
+    /// The editor's own text view (the one `testNewNoteTitleLikeAppleNotes` types into).
+    private func editorText(_ app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["editor"].firstMatch.textViews.firstMatch
+    }
+
     private func value(_ app: XCUIApplication) -> String {
         (text(app).value as? String) ?? ""
     }
@@ -131,15 +136,10 @@ final class DictationUITests: XCTestCase {
     func testFormattingAnUntitledNoteGivesItATitle() throws {
         let app = launch()
         _ = try openNewNote(app)
-        // Return in the empty title moves to the body; the body takes the keyboard a moment later.
-        app.typeText("\n")
-        settle(1)
-        // On iPhone the keyboard can let go here; a tap low in the note puts the caret in the body.
-        if !app.keyboards.firstMatch.exists {
-            text(app).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).tap()
-            _ = app.keyboards.firstMatch.waitForExistence(timeout: 3)
-        }
-        app.typeText("milk and bread")
+        // As in `testNewNoteTitleLikeAppleNotes`: the title has the keyboard; Return fills it with
+        // the automatic «Note <date>» and moves to the body.
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the new note's title did not get the caret")
+        editorText(app).typeText("\nmilk and bread")
         XCTAssertTrue(waitForText(app, containing: "milk and bread", timeout: 5), "the body was not typed; text: \(value(app))")
         format(app)
         XCTAssertTrue(waitForText(app, containing: "Formatted by Voice", timeout: 5), "no title from the model; text: \(value(app))")
@@ -153,9 +153,8 @@ final class DictationUITests: XCTestCase {
     func testFormattingOffersANewTitleForANamedNote() throws {
         let app = launch()
         _ = try openNewNote(app)
-        app.typeText("Groceries\n")
-        settle(1)
-        app.typeText("milk and bread")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the new note's title did not get the caret")
+        editorText(app).typeText("Groceries\nmilk and bread")
         XCTAssertTrue(waitForText(app, containing: "milk and bread", timeout: 5), "the note was not typed; text: \(value(app))")
         format(app)
         let offer = app.descendants(matching: .any)["voice.format.title"].firstMatch

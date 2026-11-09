@@ -275,3 +275,170 @@ struct DictationSheets: ViewModifier {
             }
     }
 }
+
+/// D-65 «How to Format?»: the way the text should read; Document first.
+struct VoiceFormatSheet: View {
+    let appliesToSelection: Bool
+    let onPick: (VoiceStyle) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private let styles: [VoiceStyle] = [.document, .plan, .minutes, .article, .letter, .notes]
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(styles, id: \.self) { style in
+                        Button { onPick(style) } label: {
+                            HStack(spacing: Theme.Space.s3) {
+                                Image(systemName: style.systemImage)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(Theme.Palette.accent)
+                                    .frame(width: 32, height: 32)
+                                    .background(Theme.Palette.accent.opacity(0.12), in: .rect(cornerRadius: 9))
+                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(style.title)
+                                        .font(Theme.Typography.body.weight(.medium))
+                                        .foregroundStyle(Theme.Palette.textPrimary)
+                                    Text(style.detail)
+                                        .font(Theme.Typography.footnote)
+                                        .foregroundStyle(Theme.Palette.textSecondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .contentShape(.rect)
+                        }
+                        .accessibilityIdentifier("voice.format.\(style.rawValue)")
+                    }
+                } footer: {
+                    Text(appliesToSelection
+                         ? LocalizedStringKey("Only the selected text is formatted. The result is highlighted until you accept it.")
+                         : LocalizedStringKey("The whole note is formatted. The result is highlighted until you accept it."))
+                }
+            }
+            .navigationTitle("How to Format?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+nonisolated extension VoiceStyle {
+    var systemImage: String {
+        switch self {
+        case .document: "doc.text"
+        case .plan: "list.bullet.indent"
+        case .minutes: "person.2"
+        case .article: "newspaper"
+        case .letter: "envelope"
+        case .notes: "book"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .document: String(localized: "Headings, paragraphs and lists")
+        case .plan: String(localized: "Steps and points to do")
+        case .minutes: String(localized: "Who said what, decisions, next steps")
+        case .article: String(localized: "A connected text for readers")
+        case .letter: String(localized: "Greeting, body, sign-off")
+        case .notes: String(localized: "Key ideas, short and structured")
+        }
+    }
+}
+
+/// What «Format» replaced, as it was (Markdown), with «Reject» to put it back.
+struct VoiceOriginalSheet: View {
+    let formatter: VoiceFormatter
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(formatter.original ?? "")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Theme.Space.s5)
+                    .accessibilityIdentifier("voice.original.text")
+            }
+            .navigationTitle("Original Text")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+                if formatter.phase == .done {
+                    ToolbarItem(placement: .bottomBar) {
+                        Button("Reject Formatting", role: .destructive) {
+                            formatter.reject()
+                            dismiss()
+                        }
+                        .accessibilityIdentifier("voice.original.reject")
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+/// «Tidying Up…» while the server formats, then «Formatted — edit highlighted» with «Show
+/// Original» and «Reject» until the person types again; a calm line when it did not work.
+struct FormatStatus: View {
+    let formatter: VoiceFormatter
+    let showOriginal: () -> Void
+
+    var body: some View {
+        switch formatter.phase {
+        case .working:
+            HStack(spacing: Theme.Space.s2) {
+                ProgressView().controlSize(.mini)
+                Text("Tidying Up…")
+                    .font(Theme.Typography.footnote.weight(.medium))
+                    .foregroundStyle(Theme.Palette.accent)
+            }
+            .padding(.vertical, Theme.Space.s2)
+            .padding(.horizontal, Theme.Space.s3)
+            .glassEffect(.regular, in: .capsule)
+            .padding(.horizontal, Theme.Space.s3)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("voice.format.working")
+        case .done:
+            VStack(alignment: .leading, spacing: Theme.Space.s2) {
+                Label("Formatted — edit highlighted", systemImage: "wand.and.sparkles")
+                    .font(Theme.Typography.footnote.weight(.medium))
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                HStack(spacing: Theme.Space.s2) {
+                    Button("Show Original", action: showOriginal)
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("voice.format.original")
+                    Button("Reject") { formatter.reject() }
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("voice.format.reject")
+                }
+                .font(Theme.Typography.footnote)
+            }
+            .padding(Theme.Space.s3)
+            .glassEffect(.regular, in: .rect(cornerRadius: 18))
+            .padding(.horizontal, Theme.Space.s3)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("voice.format.done")
+        case .idle:
+            if let message = formatter.message {
+                DictationMessage(text: message)
+            }
+        }
+    }
+}

@@ -47,6 +47,10 @@ enum SceneSheet: Identifiable, Hashable {
     case taskDate(noteId: String, blockId: String, field: TaskDateField)
     /// D-65: where the voice goes, before the first recording on this device.
     case voiceConsent
+    /// D-65: «How to Format?» for an open note.
+    case voiceFormat(noteId: String)
+    /// D-65: what «Format» replaced in an open note.
+    case voiceOriginal(noteId: String)
 
     var id: Self { self }
 }
@@ -193,6 +197,36 @@ final class SceneModel {
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
+    /// iPad: the open note's text holds the keyboard focus. Taking the document screen away in the
+    /// same pass trips UIFocusSystem — its focus update, run after the next commit, makes SwiftUI
+    /// render the removal mid-update (`_focusEnvironmentWillDisappear`, SIGABRT; iPad CI,
+    /// 2026-11-09). So the text lets go first and the screen changes once that update is through.
+    /// Changes asked for meanwhile run after it, in order.
+    @ObservationIgnored private var leaving: Task<Void, Never>?
+    @ObservationIgnored private var leavingCount = 0
+    @ObservationIgnored private var insideLeave = false
+
+    private func afterTextLetsGo(_ change: @escaping () -> Void) {
+        if insideLeave { return change() }
+        let letGo = isPad && selectedNoteId != nil
+            && UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                               to: nil, from: nil, for: nil)
+        guard letGo || leaving != nil else { return change() }
+        let previous = leaving
+        leavingCount += 1
+        let number = leavingCount
+        leaving = Task { [weak self] in
+            await previous?.value
+            // The focus update runs after the next commit; a few frames are plenty.
+            if letGo { try? await Task.sleep(for: .milliseconds(120)) }
+            guard let self else { return }
+            self.insideLeave = true
+            change()
+            self.insideLeave = false
+            if self.leavingCount == number { self.leaving = nil }
+        }
+    }
+
     var library: LibraryStore { app.library }
 
     /// Notebook + folder where "New note" puts a note, based on what is selected.
@@ -274,9 +308,14 @@ final class SceneModel {
     }
 
     func open(_ noteId: String) {
+        guard selectedNoteId != nil, selectedNoteId != noteId else { return openNow(noteId) }
+        afterTextLetsGo { [weak self] in self?.openNow(noteId) }
+    }
+
+    private func openNow(_ noteId: String) {
         // D-48: a document of another space (an old link) opens in its own space.
         if let space = library.data.spaceId(ofNote: noteId), space != library.activeSpace?.id {
-            switchSpace(to: space, restoringTab: false)
+            switchSpaceNow(to: space, restoringTab: false)
         }
         withAnimation(Theme.Motion.snappy) {
             selectedNoteId = noteId
@@ -302,20 +341,28 @@ final class SceneModel {
     /// Closes the open document's tab (⌘W, × on the tab or in the document bar): the tab next to
     /// it opens; after the last one, the list it was opened from.
     func closeTab() {
+        afterTextLetsGo { [weak self] in self?.closeTabNow() }
+    }
+
+    private func closeTabNow() {
         guard let id = selectedNoteId else { return }
         guard Features.tabs, let next = library.closeTab(id) else {
-            closeDocument()
+            closeDocumentNow()
             if Features.tabs { library.closeTab(id) }
             return
         }
         library.recordVersion(ofNote: id)
-        open(next)
+        openNow(next)
     }
 
     /// Closing returns to the list the document was opened from — All Documents, a tag, search,
     /// Starred, a folder (owner, 2026-11-08; it used to jump to the document's folder). Opening
     /// never changes the list, so there is nothing to restore.
     func closeDocument() {
+        afterTextLetsGo { [weak self] in self?.closeDocumentNow() }
+    }
+
+    private func closeDocumentNow() {
         if let id = selectedNoteId { library.recordVersion(ofNote: id) }
         withAnimation(Theme.Motion.smooth) {
             selectedNoteId = nil
@@ -327,6 +374,11 @@ final class SceneModel {
 
     /// D-48: another space — its own tabs, its own active tab (restored), its own lists.
     func switchSpace(to id: String, restoringTab: Bool = true) {
+        guard id != library.activeSpace?.id else { return }
+        afterTextLetsGo { [weak self] in self?.switchSpaceNow(to: id, restoringTab: restoringTab) }
+    }
+
+    private func switchSpaceNow(to id: String, restoringTab: Bool) {
         guard id != library.activeSpace?.id else { return }
         library.activateSpace(id)
         withAnimation(Theme.Motion.snappy) {

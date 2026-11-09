@@ -8,6 +8,9 @@ struct DictationButton: View {
     var isCompact = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var drag: CGSize = .zero
+    /// A finger is on the button. Unlike `onEnded`, it also goes back when the system cancels the
+    /// drag; a stale `drag` would then swallow the first «Stop».
+    @GestureState private var touching = false
 
     /// How far up locks hands free, how far left cancels.
     private let lockDistance: CGFloat = 70
@@ -76,6 +79,15 @@ struct DictationButton: View {
         }
         .contentShape(Circle())
         .gesture(holdGesture)
+        .onChange(of: touching) { _, now in
+            // After `onEnded` (when it comes), so a drag that ended normally is judged as before;
+            // a cancelled hold sends its piece as a lifted finger would.
+            guard !now else { return }
+            Task { @MainActor in
+                drag = .zero
+                if dictation.mode == .holding { dictation.release() }
+            }
+        }
         .accessibilityElement()
         .accessibilityLabel(dictation.mode == .locked ? Text("Stop Dictation") : Text("Dictate"))
         .accessibilityHint("Hold to dictate. Swipe up to keep recording hands free, swipe left to cancel.")
@@ -105,6 +117,7 @@ struct DictationButton: View {
                     break
                 }
             }
+            .updating($touching) { _, touching, _ in touching = true }
             .onEnded { value in
                 let wasTap = abs(value.translation.width) < 8 && abs(value.translation.height) < 8
                 switch dictation.mode {

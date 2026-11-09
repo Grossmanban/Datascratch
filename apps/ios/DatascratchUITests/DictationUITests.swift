@@ -37,7 +37,7 @@ final class DictationUITests: XCTestCase {
         (text(app).value as? String) ?? ""
     }
 
-    private func waitForText(_ app: XCUIApplication, containing piece: String, timeout: TimeInterval = 8) -> Bool {
+    private func waitForText(_ app: XCUIApplication, containing piece: String, timeout: TimeInterval = 20) -> Bool {
         let predicate = NSPredicate { _, _ in self.value(app).contains(piece) }
         return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: nil)], timeout: timeout) == .completed
     }

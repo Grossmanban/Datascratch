@@ -427,7 +427,7 @@ final class EditorViewTests: XCTestCase {
         defer { EditorView.pencilSeen = pencilSeen }
         let editor = host(InMemoryEditorDocument(blocks: [.title("T"), .paragraph("Hello")]))
         if editor.tools.allowsFingerDrawing { return }
-        XCTAssertEqual(editor.textView.textContainerInset.bottom, 160, "no drawing yet: only the usual end room")
+        XCTAssertEqual(editor.textView.textContainerInset.bottom, max(160, (900 / 3).rounded()), "no drawing yet: a third of the screen")
     }
 
     func testStrokePartlyFarFromTextIsWhollyFreeDrawing() {
@@ -969,6 +969,108 @@ final class EditorViewTests: XCTestCase {
         drainMainQueue()
         settle(editor)
         XCTAssertGreaterThan(editor.textView.contentInset.bottom, 0, "the held-back keyboard inset is applied after the finger lifts")
+    }
+
+    // MARK: - Tap below the text, room below it (build 37 feedback)
+
+    /// A tap below the text: the caret waits on the tapped line, nothing is added to the note until
+    /// the first character; then the empty paragraphs up to it and the character are one undo step,
+    /// and a drawing below the text does not move.
+    func testTapBelowTheTextWaitsForTheFirstCharacter() throws {
+        let last = BlockNode.paragraph("Конец")
+        let doc = InMemoryEditorDocument(blocks: [.title("Т"), .paragraph("Текст"), last])
+        let editor = host(doc, width: 700, height: 900)
+        window.makeKey()
+        // A free drawing below the text (anchored to the last paragraph).
+        let end = try XCTUnwrap(editor.geometry.placement(at: flatRange(editor, of: "Конец").lowerBound))
+        let drawingY = end.origin.y + 160
+        penStroke(editor, line(from: CGPoint(x: 80, y: drawingY), to: CGPoint(x: 300, y: drawingY + 40)))
+        editor.tools.mode = .text
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(doc.strokes.count, 1)
+        let stroke = doc.strokes[0].id
+        let drawnBefore = try XCTUnwrap(editor.ink.resolved[stroke]?.first?.first?.location)
+
+        // Below the drawing.
+        let tap = CGPoint(x: editor.textView.textContainerInset.left + 20, y: drawingY + 140)
+        let lines = try XCTUnwrap(editor.belowTextLines(at: tap))
+        XCTAssertGreaterThan(lines, 4)
+        XCTAssertTrue(editor.hasTapTarget(at: tap), "the system does not take this tap for the end of the text")
+        editor.beginPendingTail(lines: lines)
+        settle(editor)
+        let caret = try XCTUnwrap(editor.pendingTail?.caret)
+        XCTAssertEqual(caret.frame.midY, tap.y, accuracy: editor.emptyParagraphPitch, "the caret waits on the tapped line")
+        XCTAssertEqual(doc.blocks.count, 3, "nothing is added before typing")
+
+        let range = NSRange(location: editor.textView.textStorage.length, length: 0)
+        XCTAssertFalse(editor.textView(editor.textView, shouldChangeTextIn: range, replacementText: "П"))
+        settle(editor)
+        XCTAssertNil(editor.pendingTail)
+        XCTAssertEqual(doc.blocks.count, 3 + lines)
+        XCTAssertEqual(doc.blocks.last?.plainText, "П")
+        let typed = try XCTUnwrap(editor.geometry.placement(at: editor.textView.textStorage.length - 1))
+        XCTAssertEqual(typed.origin.y - typed.fontSize * 0.35, tap.y, accuracy: editor.emptyParagraphPitch, "the text is where the tap was")
+        editor.ink.invalidateLayout()
+        editor.ink.refresh()
+        let drawnAfter = try XCTUnwrap(editor.ink.resolved[stroke]?.first?.first?.location)
+        XCTAssertEqual(drawnAfter.y, drawnBefore.y, accuracy: 1, "the drawing stays where it was")
+        doc.undo()
+        XCTAssertEqual(doc.blocks.map(\.plainText), ["Т", "Текст", "Конец"], "the lines and the character are one undo step")
+    }
+
+    /// A tap below the text that types nothing leaves nothing behind.
+    func testTapBelowTheTextWithoutTypingAddsNothing() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Т"), .paragraph("Текст")])
+        let editor = host(doc, width: 700, height: 900)
+        window.makeKey()
+        editor.tools.mode = .text
+        drainMainQueue()
+        settle(editor)
+        let end = try XCTUnwrap(editor.geometry.placement(at: flatRange(editor, of: "Текст").lowerBound))
+        let lines = try XCTUnwrap(editor.belowTextLines(at: CGPoint(x: 120, y: end.origin.y + 200)))
+        editor.beginPendingTail(lines: lines)
+        XCTAssertNotNil(editor.pendingTail)
+        // The caret moves elsewhere: the waiting line goes.
+        editor.textView.selectedRange = NSRange(location: 2, length: 0)
+        editor.textViewDidChangeSelection(editor.textView)
+        XCTAssertNil(editor.pendingTail)
+        editor.beginPendingTail(lines: lines)
+        // Backspace: dropped as well.
+        let range = NSRange(location: editor.textView.textStorage.length - 1, length: 1)
+        XCTAssertFalse(editor.textView(editor.textView, shouldChangeTextIn: range, replacementText: ""))
+        XCTAssertNil(editor.pendingTail)
+        XCTAssertEqual(doc.blocks.map(\.plainText), ["Т", "Текст"])
+        XCTAssertNil(editor.belowTextLines(at: CGPoint(x: 120, y: end.origin.y + 4)), "a tap on the last line is a normal tap")
+    }
+
+    /// Text mode: a third of the screen below the text; a pen tool: a screen, and more as the pen
+    /// nears the bottom.
+    func testRoomBelowTheTextFollowsTheTool() {
+        let pencilSeen = EditorView.pencilSeen
+        EditorView.pencilSeen = true
+        defer {
+            EditorView.pencilSeen = pencilSeen
+            if !pencilSeen { UserDefaults.standard.removeObject(forKey: "ds.pencilSeen") }
+        }
+        let editor = host(InMemoryEditorDocument(blocks: [.title("Т"), .paragraph("Текст")]), width: 700, height: 900)
+        editor.tools.mode = .text
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.textContainerInset.bottom, 300, accuracy: 1, "text mode: a third of the screen")
+        editor.tools.mode = .pen
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.textContainerInset.bottom, 900, accuracy: 1, "drawing: a screen")
+        editor.growDrawingRoom(near: CGPoint(x: 100, y: editor.textView.contentSize.height - 20))
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.textContainerInset.bottom, 1800, accuracy: 1, "the pen near the bottom: another screen")
+        editor.textView.setContentOffset(CGPoint(x: 0, y: -editor.textView.adjustedContentInset.top), animated: false)
+        editor.tools.mode = .text
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.textView.textContainerInset.bottom, 300, accuracy: 1, "back to text: a third again")
     }
 
     // MARK: - Voice (D-65)

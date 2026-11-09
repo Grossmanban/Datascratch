@@ -177,3 +177,29 @@ extension EditorCommands {
         return f.string(from: date)
     }
 }
+
+extension EditorCommands {
+    /// A tap below the text, then typing (`spec/04-editor.md`, «Касание под текстом»): `count`
+    /// empty paragraphs at the end of the note, `text` typed into the last of them, one undo step.
+    /// Blocks before them do not move, so drawings anchored below the last paragraph stay put.
+    /// - Returns: the caret after the typed text.
+    @discardableResult
+    public func appendParagraphs(_ count: Int, typing text: String, marks: MarkSet = .empty) -> TextPosition? {
+        guard !document.isReadOnly, count > 0 else { return nil }
+        var caret: TextPosition?
+        document.stopCapturing()
+        document.transact {
+            var last: BlockNode?
+            for _ in 0..<count {
+                let p = BlockNode.paragraph()
+                document.insertBlock(p, parent: nil, at: document.blocks.count)
+                last = p
+            }
+            guard let last else { return }
+            if !text.isEmpty { document.insertText(text, marks: marks, block: last.id, at: 0) }
+            caret = TextPosition(block: last.id, offset: text.utf16.count)
+        }
+        document.stopCapturing()
+        return caret
+    }
+}

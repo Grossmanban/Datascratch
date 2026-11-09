@@ -1,7 +1,10 @@
 import type { EditorApi } from "@datascratch/web-editor";
 import { TextSelection } from "@tiptap/pm/state";
 import { create } from "zustand";
+import { defaultNoteTitle } from "@/domain/note";
+import { useWorkspace } from "@/domain/workspace";
 import { snapshots } from "@/features/doc/snapshots";
+import i18n from "@/i18n";
 import { replaceWithMarkdown, voiceSettings } from "./dictation";
 import { VOICE_AGENT_ID, VOICE_STYLES, voiceApi, type VoiceStyle } from "./voiceApi";
 
@@ -19,7 +22,7 @@ type FormatState = {
   range: { from: number; to: number } | null;
   busy: boolean;
   /** The last formatting in this note: its draft, to look at or bring back. */
-  last: { noteId: string; draft: string; style: FormatStyle } | null;
+  last: { noteId: string; draft: string; style: FormatStyle; title?: string | null } | null;
   error: string | null;
 };
 
@@ -56,7 +59,7 @@ export async function formatNote(
   const { quality, profanity } = voiceSettings();
   // A version of the note before it, uploading while the text is being formatted.
   const before = snapshots.before(noteId);
-  const { markdown } = await voiceApi.text(
+  const { markdown, title } = await voiceApi.text(
     { task: "format", style, text: draft, quality, profanity },
     signal,
   );
@@ -78,7 +81,29 @@ export async function formatNote(
         mark.create({ agentId: VOICE_AGENT_ID, at: new Date().toISOString() }),
       ),
     );
-  useFormat.setState({ last: { noteId, draft, style } });
+  // The suggested title: an empty one — or the automatic «Заметка <дата>» a new note gets — is set
+  // in the same edit («Отклонить» brings the old one back); a title of the note's own stays, and the
+  // banner offers «Заменить».
+  let suggested: string | null = null;
+  const head = view.state.doc.firstChild;
+  if (title && head?.type.name === "title") {
+    const own = head.textContent.trim();
+    const createdAt = useWorkspace.getState().notes[noteId]?.createdAt;
+    const automatic = !!createdAt && own === defaultNoteTitle(createdAt, i18n.language);
+    if (!own || automatic) view.dispatch(view.state.tr.insertText(title, 1, 1 + head.content.size));
+    else if (own !== title) suggested = title;
+  }
+  useFormat.setState({ last: { noteId, draft, style, title: suggested } });
+}
+
+/** «Заменить»: the suggested title in place of the note's own (its own undo step). */
+export function applySuggestedTitle(api: EditorApi) {
+  const last = useFormat.getState().last;
+  const { view } = api.editor;
+  const head = view.state.doc.firstChild;
+  if (!last?.title || head?.type.name !== "title") return;
+  view.dispatch(view.state.tr.insertText(last.title, 1, 1 + head.content.size));
+  useFormat.setState({ last: { ...last, title: null } });
 }
 
 /** «Отменить»: the formatting goes, the draft is back (the editor's own undo of that edit). */

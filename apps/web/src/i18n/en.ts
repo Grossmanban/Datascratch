@@ -308,6 +308,8 @@ const en: Loose<Messages> = {
     formatTitle: "How to format?",
     formatDone: "Formatted — the edit is highlighted",
     reject: "Reject",
+    titleSuggested: "Title: “{{title}}”",
+    replaceTitle: "Replace",
     showSource: "Show the original text",
     hideSource: "Hide the original text",
     styles: { document: "Document", plan: "Plan", minutes: "Meeting minutes", article: "Article", letter: "Letter", notes: "Notes" },

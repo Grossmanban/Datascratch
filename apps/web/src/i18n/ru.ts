@@ -304,6 +304,8 @@ const ru = {
     formatTitle: "Как оформить?",
     formatDone: "Оформлено — правка подсвечена",
     reject: "Отклонить",
+    titleSuggested: "Название: «{{title}}»",
+    replaceTitle: "Заменить",
     showSource: "Показать исходный текст",
     hideSource: "Скрыть исходный текст",
     styles: { document: "Документ", plan: "План", minutes: "Протокол встречи", article: "Статья", letter: "Письмо", notes: "Конспект" },

@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, cn, Dialog, IconButton } from "@/ui";
 import { errorOf } from "./dictation";
-import { FORMAT_STYLES, formatNote, undoFormat, useFormat, type FormatStyle } from "./format";
+import { applySuggestedTitle, FORMAT_STYLES, formatNote, undoFormat, useFormat, type FormatStyle } from "./format";
 import { DEFAULT_VOICE_STYLE } from "./voiceApi";
 
 /** «Как оформить?»: a style, then the note (or the selection) is tidied as one highlighted edit. */
@@ -120,6 +120,15 @@ export function FormatResult({ api, noteId }: { api: EditorApi; noteId: string }
           <X className="size-4" />
         </IconButton>
       </div>
+      {last.title && (
+        // The note already has a title: the suggested one only on a tap.
+        <div className="mt-2 flex items-center gap-2 text-ink-2" data-testid="format-title">
+          <span className="min-w-0 flex-1 truncate">{t("voice.titleSuggested", { title: last.title })}</span>
+          <Button type="button" variant="secondary" size="sm" onClick={() => applySuggestedTitle(api)} data-testid="format-title-replace">
+            {t("voice.replaceTitle")}
+          </Button>
+        </div>
+      )}
       <button
         type="button"
         onClick={() => setOpenDraft((o) => !o)}

@@ -190,6 +190,10 @@ test("«Оформить»: a style, the note tidied as a highlighted edit, the 
   await expect(body(page).locator("li")).toHaveCount(2);
   // Highlighted like an agent's edit, authored by voice.
   await expect(body(page).locator('.ds-agent-edit[data-agent-id="voice"]').first()).toBeVisible();
+  // The note has a title: the suggested one is offered, not put in without a tap.
+  const title = page.locator(".ds-prose .ds-title");
+  await expect(title).toHaveText("Черновик");
+  await expect(page.getByTestId("format-title")).toContainText("Название: «Название от ИИ»");
   // History has the note as it was before «Оформить» (a version taken just before it).
   await page.getByRole("button", { name: "Ещё", exact: true }).click();
   await page.getByRole("menuitem", { name: "История версий" }).click();
@@ -208,6 +212,43 @@ test("«Оформить»: a style, the note tidied as a highlighted edit, the 
   await page.getByTestId("format-undo").click();
   await expect(body(page)).toContainText("первое предложение. второе предложение.");
   await expect(body(page).locator("h2")).toHaveCount(0);
+});
+
+test("«Оформить»: an untitled note gets the suggested title in the same edit; its own title only on «Заменить»", async ({
+  page,
+}) => {
+  test.skip(!!process.env.E2E_SERVER_URL, "mock server only");
+  await signUp(page, uniqueEmail("voice-title"));
+  // No title typed: empty, or the automatic «Заметка <дата>» (which counts as no title).
+  await newDoc(page, "", "первое предложение. второе предложение.");
+  const title = page.locator(".ds-prose .ds-title");
+  await expect(title).toHaveText(/^(Заметка .+)?$/);
+  const automatic = (await title.textContent())!;
+  const format = async () => {
+    await page.getByRole("button", { name: "Ещё", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Оформить…" }).click();
+    await page.getByTestId("format-run").click();
+    await expect(page.getByTestId("format-dialog")).toHaveCount(0, { timeout: 15_000 });
+  };
+  await format();
+  await expect(title).toHaveText("Название от ИИ");
+  await expect(page.getByTestId("format-title")).toHaveCount(0);
+  // «Отклонить» takes back the formatting and the title with it.
+  await page.getByTestId("format-undo").click();
+  await expect(title).toHaveText(automatic);
+  await expect(body(page).locator("h2")).toHaveCount(0);
+
+  // With a title of its own: untouched until «Заменить».
+  await title.click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Shift+Home");
+  await page.keyboard.type("Мой заголовок");
+  await expect(title).toHaveText("Мой заголовок");
+  await format();
+  await expect(title).toHaveText("Мой заголовок");
+  await page.getByTestId("format-title-replace").click();
+  await expect(title).toHaveText("Название от ИИ");
+  await expect(page.getByTestId("format-title")).toHaveCount(0);
 });
 
 test("«Оформить» on a selection: from the formatting toolbar, only the selected text", async ({ page }) => {

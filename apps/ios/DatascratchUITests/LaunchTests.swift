@@ -14,9 +14,13 @@ final class OnboardingUITests: XCTestCase {
         app.secureTextFields["signUp.password"].typeText("correct horse battery")
         app.secureTextFields["signUp.repeat"].tap()
         app.secureTextFields["signUp.repeat"].typeText("correct horse battery")
-        app.buttons["signUp.submit"].tap()
+        let submit = app.buttons["signUp.submit"]
+        submit.tap()
 
         let grid = app.descendants(matching: .any)["recoveryKey.grid"].firstMatch
+        // A tap while the keyboard is still settling can miss; the button is disabled while the
+        // account is made, so a second tap only lands if the first did nothing.
+        if !grid.waitForExistence(timeout: 10), submit.exists, submit.isEnabled, submit.isHittable { submit.tap() }
         XCTAssertTrue(grid.waitForExistence(timeout: 30), "recovery key not shown; buttons: \(LibraryUITests.buttons(app))")
         let formatted = grid.label
         XCTAssertTrue(formatted.hasPrefix("DS1-"), "label: \(formatted)")

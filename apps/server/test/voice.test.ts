@@ -242,7 +242,7 @@ describe('voice: text', () => {
     const turns = [{ speaker: 'S1', start: 0, end: 2, text: MARK }];
     const best = await text(u, { task: 'minutes', profanity: 'soften', quality: 'best', turns });
     expect(best.status).toBe(200);
-    expect(best.body).toEqual({ markdown: `# Итоги\n\n${MARK}`, model: 'anthropic/claude-sonnet-5.5' });
+    expect(best.body).toEqual({ title: 'Итоги', markdown: MARK, model: 'anthropic/claude-sonnet-5.5' });
     const std = await text(u, { task: 'clean', profanity: 'keep', text: `${MARK} эээ ну` });
     expect(std.body.model).toBe('openai/gpt-5.6-luna');
 
@@ -521,5 +521,31 @@ describe('voice: outbound proxy (DS_VOICE_PROXY)', () => {
       await viaProxy.close();
       await new Promise<void>((r) => proxy.close(() => r()));
     }
+  });
+});
+
+describe('voice: title from the model (D-65)', () => {
+  it('format and minutes: a first `# …` line becomes the title (shared splitVoiceTitle); clean keeps everything', async () => {
+    const u = await voiceUser();
+    llmReply = () => ({
+      status: 200,
+      json: { model: 'm', choices: [{ message: { content: '# План на неделю.\n\n## Понедельник\n\n- купить хлеб' } }] },
+    });
+    const r = await text(u, { task: 'format', text: 'a' });
+    expect(r.body).toEqual({ title: 'План на неделю', markdown: '## Понедельник\n\n- купить хлеб', model: 'm' });
+    const m = await text(u, { task: 'minutes', text: 'a' });
+    expect(m.body.title).toBe('План на неделю');
+    const c = await text(u, { task: 'clean', text: 'a' });
+    expect(c.body).toEqual({ markdown: '# План на неделю.\n\n## Понедельник\n\n- купить хлеб', model: 'm' });
+  });
+
+  it('no first `# …` line: no title, and a `#` heading further down stays in the Markdown', async () => {
+    const u = await voiceUser();
+    llmReply = () => ({
+      status: 200,
+      json: { model: 'm', choices: [{ message: { content: 'Вступление.\n\n# Раздел\n\nтекст' } }] },
+    });
+    const r = await text(u, { task: 'format', text: 'a' });
+    expect(r.body).toEqual({ markdown: 'Вступление.\n\n# Раздел\n\nтекст', model: 'm' });
   });
 });

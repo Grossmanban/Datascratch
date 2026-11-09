@@ -47,3 +47,27 @@ test("history: authors, changes against the previous version, restore", async ({
   await expect(page.locator(".ds-prose")).not.toContainText("вторая правка");
   await expect(page.locator(".ds-prose")).toContainText("Первая версия этого текста");
 });
+
+test("history: never looks broken when empty; one short edit and leaving make a version", async ({ page }) => {
+  await signUp(page, uniqueEmail("history-empty"));
+  await newDoc(page, "Короткая", "Одно слово");
+  await expectSynced(page);
+  const url = page.url();
+  // Nothing saved yet: the current version and when versions appear.
+  await openHistory(page);
+  await expect(page.getByTestId("history-current")).toHaveText("Текущая версия");
+  await expect(page.getByTestId("history-empty")).toContainText(
+    "Версии появляются при правках — каждые 10 минут, при уходе из документа и перед оформлением",
+  );
+  await page.keyboard.press("Escape");
+  // A few edits (far fewer than 30), then leaving: a version (spec/06).
+  await page.locator(".ds-prose p").last().click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" ещё");
+  await expectSynced(page);
+  await leaveForSnapshot(page);
+  await page.goto(url);
+  await openHistory(page);
+  await expect(page.getByRole("dialog").getByTestId("version-authors")).toHaveCount(1, { timeout: 20_000 });
+});
+

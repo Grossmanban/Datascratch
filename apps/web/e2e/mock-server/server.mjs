@@ -666,7 +666,8 @@ route("POST", "/v1/voice/text", (_q, res, { auth, body }) => {
   }
   if (body.task === "format") {
     const lines = text.split(/(?<=[.!?])\s+|\n+/).map((l) => l.trim()).filter(Boolean);
-    return json(res, 200, { markdown: `## Оформлено (${body.style ?? "document"})\n\n${lines.map((l) => `- ${l}`).join("\n")}`, model: "mock/luna" });
+    // D-65: the suggested title (the model's «# …» line, cut out by the server).
+    return json(res, 200, { markdown: `## Оформлено (${body.style ?? "document"})\n\n${lines.map((l) => `- ${l}`).join("\n")}`, model: "mock/luna", title: "Название от ИИ" });
   }
   json(res, 200, { markdown: `## Протокол\n\n${text}`, model: "mock/luna" });
 });

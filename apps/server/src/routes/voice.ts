@@ -4,6 +4,7 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
   MAX_VOICE_DURATION_SEC,
+  splitVoiceTitle,
   VOICE_AUDIO_MIME,
   voiceTextRequestSchema,
   voiceTextResponseSchema,
@@ -304,7 +305,10 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           fields.outChars = r.markdown.length;
           await voice.addUsage(p.userId, 0, r.cost ?? 0);
           record('text', userId, started, fields);
-          return { markdown: r.markdown, model: r.model };
+          // `format` and `minutes` start with the note's title (core's prompts): it goes apart.
+          const out = b.task === 'clean' ? { markdown: r.markdown } : splitVoiceTitle(r.markdown);
+          if (out.title) fields.title = true;
+          return { ...out, model: r.model };
         } catch (err) {
           record('text', userId, started, fields, err);
           throw err;

@@ -106,6 +106,57 @@ final class DictationUITests: XCTestCase {
                       "the hands-free piece is not in the note after «Stop»; text: \(value(app))")
     }
 
+    /// «Format…» from the document's menu, the voice's way accepted on the first use, «Document».
+    private func format(_ app: XCUIApplication) {
+        let style = app.buttons["voice.format.document"].firstMatch
+        for _ in 0..<2 where !style.exists {
+            app.buttons["document.more"].firstMatch.tap()
+            let item = app.buttons["document.format"].firstMatch
+            XCTAssertTrue(item.waitForExistence(timeout: 5), "no «Format…» in the menu; buttons: \(buttons(app))")
+            item.tap()
+            let accept = app.buttons["voice.consent.accept"].firstMatch
+            if accept.waitForExistence(timeout: 3) {
+                accept.tap()
+                _ = accept.waitForNonExistence(timeout: 5)
+            }
+            _ = style.waitForExistence(timeout: 5)
+        }
+        XCTAssertTrue(style.exists, "no «How to Format?»; buttons: \(buttons(app))")
+        style.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["voice.format.done"].firstMatch.waitForExistence(timeout: 20),
+                      "no «Formatted» card; buttons: \(buttons(app))")
+    }
+
+    /// A note without a title takes the model's title with the text; «Reject» takes both back.
+    func testFormattingAnUntitledNoteGivesItATitle() throws {
+        let app = launch()
+        _ = try openNewNote(app)
+        app.typeText("\nmilk and bread")
+        XCTAssertTrue(waitForText(app, containing: "milk and bread", timeout: 5), "the body was not typed; text: \(value(app))")
+        format(app)
+        XCTAssertTrue(waitForText(app, containing: "Formatted by Voice", timeout: 5), "no title from the model; text: \(value(app))")
+        XCTAssertFalse(app.descendants(matching: .any)["voice.format.title"].firstMatch.exists, "offered a title that is already in")
+        app.buttons["voice.format.reject"].firstMatch.tap()
+        XCTAssertTrue(waitForText(app, containing: "milk and bread", timeout: 5), "the text did not come back; text: \(value(app))")
+        XCTAssertFalse(value(app).contains("Formatted by Voice"), "the title stayed after «Reject»; text: \(value(app))")
+    }
+
+    /// A title of the note's own stays; the model's is offered, and «Replace» puts it in.
+    func testFormattingOffersANewTitleForANamedNote() throws {
+        let app = launch()
+        _ = try openNewNote(app)
+        app.typeText("Groceries\nmilk and bread")
+        XCTAssertTrue(waitForText(app, containing: "milk and bread", timeout: 5), "the note was not typed; text: \(value(app))")
+        format(app)
+        let offer = app.descendants(matching: .any)["voice.format.title"].firstMatch
+        XCTAssertTrue(offer.waitForExistence(timeout: 5), "the model's title is not offered; buttons: \(buttons(app))")
+        XCTAssertTrue(value(app).contains("Groceries"), "the note's own title was replaced; text: \(value(app))")
+        app.buttons["voice.format.titleReplace"].firstMatch.tap()
+        XCTAssertTrue(waitForText(app, containing: "Formatted by Voice", timeout: 5), "«Replace» did not set the title; text: \(value(app))")
+        XCTAssertFalse(value(app).contains("Groceries"), "the old title is still there; text: \(value(app))")
+        XCTAssertTrue(offer.waitForNonExistence(timeout: 3), "the offer stayed after «Replace»")
+    }
+
     private func settle(_ seconds: TimeInterval) {
         RunLoop.current.run(until: Date().addingTimeInterval(seconds))
     }

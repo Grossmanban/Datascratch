@@ -16,7 +16,10 @@ private final class NoteSink: FormatTarget {
     private var undo: [(body: String, title: String, suggestion: Bool)] = []
 
     var selectedMarkdown: String? { selection }
+    /// The body only: DSEditor's Markdown leaves the title out.
     var documentMarkdown: String { body }
+    /// The editor reports every change, as `NativeEditorModel` does.
+    var changed: (() -> Void)?
 
     func replaceWithFormatted(_ markdown: String, selection: Bool, title: String?) {
         replaced.append((markdown, selection))
@@ -29,6 +32,7 @@ private final class NoteSink: FormatTarget {
     func replaceTitle(_ title: String) {
         undo.append((body, noteTitle, hasSuggestion))
         noteTitle = title
+        changed?()
     }
 
     func undoFormatting() {
@@ -58,6 +62,7 @@ struct VoiceFormatterTests {
         let formatter = VoiceFormatter(service: service) { (.standard, .keep) }
         let sink = NoteSink()
         formatter.target = sink
+        sink.changed = { [weak formatter] in formatter?.documentChanged() }
         return (formatter, sink)
     }
 

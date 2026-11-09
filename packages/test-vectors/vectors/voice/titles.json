@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "description": "Voice (D-65): the model's answer → the suggested title (first non-empty line «# …», quotes, bold, closing # and trailing full stops removed, ≤ 80 chars at a word boundary) and the markdown without it; no «# » first line — no title.",
+  "cases": [
+    {
+      "answer": "# План переезда\n\n## Шаги\n\n1. Коробки",
+      "title": "План переезда",
+      "markdown": "## Шаги\n\n1. Коробки"
+    },
+    {
+      "answer": "\n# «Встреча по бюджету».\r\nТекст",
+      "title": "Встреча по бюджету",
+      "markdown": "Текст"
+    },
+    {
+      "answer": "# **Итоги** #\nx",
+      "title": "Итоги",
+      "markdown": "x"
+    },
+    {
+      "answer": "## Коротко\nx",
+      "markdown": "## Коротко\nx"
+    },
+    {
+      "answer": "Текст\n# Не первая строка",
+      "markdown": "Текст\n# Не первая строка"
+    },
+    {
+      "answer": "#   \nтекст",
+      "markdown": "текст"
+    },
+    {
+      "answer": "# Одна строка",
+      "title": "Одна строка",
+      "markdown": ""
+    },
+    {
+      "answer": "# слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово слово \nx",
+      "title": "слово слово слово слово слово слово слово слово слово слово слово слово слово",
+      "markdown": "x"
+    }
+  ]
+}

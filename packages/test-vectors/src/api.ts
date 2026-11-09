@@ -970,8 +970,23 @@ export function apiVectors() {
         ],
       },
       voiceTextResponse: {
-        valid: [{ markdown: "## Коротко\n\nДоговорились на среду.", model: "openai/gpt-5.6-luna" }],
-        invalid: [{ reason: "missing model", body: { markdown: "x" } }],
+        valid: [
+          { markdown: "## Коротко\n\nДоговорились на среду.", model: "openai/gpt-5.6-luna" },
+          {
+            markdown: "## Решения\n\n- Встречаемся в среду",
+            model: "openai/gpt-5.6-luna",
+            title: "Встреча по переезду",
+          },
+        ],
+        invalid: [
+          { reason: "missing model", body: { markdown: "x" } },
+          { reason: "title with a full stop", body: { markdown: "x", model: "m", title: "План." } },
+          { reason: "empty title", body: { markdown: "x", model: "m", title: "" } },
+          {
+            reason: "title over 80 chars",
+            body: { markdown: "x", model: "m", title: "я".repeat(81) },
+          },
+        ],
       },
       apiError: {
         valid: [

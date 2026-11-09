@@ -99,11 +99,24 @@ export const voiceTextRequestSchema = z
   );
 export type VoiceTextRequest = z.input<typeof voiceTextRequestSchema>;
 
+/** The longest suggested title (D-65). */
+export const MAX_VOICE_TITLE_CHARS = 80;
+
 export const voiceTextResponseSchema = z.object({
   /** Datascratch Markdown (the dialect agents import, agents-api.md §4). */
   markdown: z.string(),
   /** The model that wrote it (OpenRouter id), for the note's history. */
   model: z.string().min(1),
+  /**
+   * The suggested title of the document (`format`, `minutes`): the model's first «# …» line,
+   * cut out of `markdown` (`splitVoiceTitle`). Absent when the model gave none.
+   */
+  title: z
+    .string()
+    .min(1)
+    .max(MAX_VOICE_TITLE_CHARS)
+    .refine((t) => t === t.trim() && !t.endsWith("."), "trimmed, no full stop at the end")
+    .optional(),
 });
 export type VoiceTextResponse = z.infer<typeof voiceTextResponseSchema>;
 

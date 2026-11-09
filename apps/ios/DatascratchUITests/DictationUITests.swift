@@ -134,6 +134,11 @@ final class DictationUITests: XCTestCase {
         // Return in the empty title moves to the body; the body takes the keyboard a moment later.
         app.typeText("\n")
         settle(1)
+        // On iPhone the keyboard can let go here; a tap low in the note puts the caret in the body.
+        if !app.keyboards.firstMatch.exists {
+            text(app).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).tap()
+            _ = app.keyboards.firstMatch.waitForExistence(timeout: 3)
+        }
         app.typeText("milk and bread")
         XCTAssertTrue(waitForText(app, containing: "milk and bread", timeout: 5), "the body was not typed; text: \(value(app))")
         format(app)

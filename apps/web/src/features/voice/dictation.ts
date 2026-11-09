@@ -1,4 +1,5 @@
 import type { EditorApi } from "@datascratch/web-editor";
+import { Slice } from "@tiptap/pm/model";
 import { create } from "zustand";
 import { ApiError, NetworkError } from "@/api/client";
 import { setSetting } from "@/domain/actions";
@@ -179,10 +180,13 @@ export function insertAtCaret(api: EditorApi, markdown: string) {
 type View = EditorApi["editor"]["view"];
 
 /** Replaces the selection with Markdown, parsed by the editor's clipboard text parser. */
-export function replaceWithMarkdown(view: View, markdown: string) {
+export function replaceWithMarkdown(view: View, markdown: string, opts: { closed?: boolean } = {}) {
   const $from = view.state.selection.$from;
   let slice = view.someProp("clipboardTextParser", (f) => f(markdown, $from, false, view)) ?? null;
   if (!slice) return void view.pasteText(markdown);
   slice = view.someProp("transformPasted", (f) => f(slice!, view, false)) ?? slice;
+  // Closed: the blocks stand on their own (the paragraph around a selection is split, not joined
+  // into the first or last of them) — what «Оформить» on part of a paragraph wants.
+  if (opts.closed && slice.content.firstChild?.isBlock) slice = new Slice(slice.content, 0, 0);
   view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView());
 }

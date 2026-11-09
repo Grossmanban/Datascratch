@@ -27,6 +27,8 @@ struct DatascratchApp: App {
         .commands { AppCommands() }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { app.library.flush() }
+            // Version history (sync-protocol §5): every open note with edits, before suspension.
+            if phase == .background { app.snapshotOnBackground() }
             if phase == .active {
                 app.settings.applyAppearanceToWindows()
                 app.refreshRecoveryKeyState()

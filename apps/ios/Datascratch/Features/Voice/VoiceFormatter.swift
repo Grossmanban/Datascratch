@@ -60,6 +60,8 @@ final class VoiceFormatter {
     /// The title «Replace» put in: «Reject» takes it back too (its own undo step first).
     @ObservationIgnored private var replacedTitle: String?
     @ObservationIgnored private var task: Task<Void, Never>?
+    /// Right before the formatted text goes in (a version snapshot, sync-protocol §5).
+    @ObservationIgnored var beforeChange: (() async -> Void)?
     @ObservationIgnored private var messageClear: Task<Void, Never>?
 
     init(service: (any VoiceService)?, options: @escaping () -> (quality: VoiceQuality, profanity: VoiceProfanity)) {
@@ -97,6 +99,10 @@ final class VoiceFormatter {
                 result = .failure(error)
             }
             guard let self, !Task.isCancelled else { return }
+            if case .success = result, let beforeChange = self.beforeChange {
+                await beforeChange()
+                guard !Task.isCancelled else { return }
+            }
             self.task = nil
             switch result {
             case .success(let reply): self.finish(reply, source: source, selection: selection != nil)

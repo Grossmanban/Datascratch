@@ -78,6 +78,17 @@ struct VoiceFormatterTests {
         #expect(formatter.original == "milk and bread")
     }
 
+    /// A version snapshot comes first: the history keeps the note as it was before formatting.
+    @Test func snapshotBeforeTheFormattedTextGoesIn() async {
+        let (formatter, sink) = make()
+        var replacedAtSnapshot: [Int] = []
+        formatter.beforeChange = { replacedAtSnapshot.append(sink.replaced.count) }
+        formatter.format(style: .document)
+        await settle { formatter.phase != .working }
+        #expect(replacedAtSnapshot == [0])
+        #expect(sink.replaced.count == 1)
+    }
+
     /// With a selection only it goes, and only it is replaced.
     @Test func formatsTheSelection() async {
         let (formatter, sink) = make()

@@ -533,6 +533,30 @@ final class ServerConnection: CoreLibraryRemote {
     }
 }
 
+// MARK: - Version snapshots (sync-protocol §5)
+
+extension ServerConnection {
+    /// The note went off screen (closed, another note, another space): a snapshot if it has edits
+    /// since the last one. The document stays open and syncing (`close` is for a real close).
+    func snapshotOnLeave(noteId: String) {
+        guard let engine else { return }
+        Task { await engine.snapshotOnLeave(docId: noteId) }
+    }
+
+    /// The app went to the background: every open document with edits, in one go.
+    func snapshotOnBackground() {
+        guard let engine else { return }
+        Task { await engine.snapshotOnLeave() }
+    }
+
+    /// Right before a voice suggestion («Format») or a dictated piece goes in, so the version
+    /// history has the note as it was.
+    func snapshotBeforeChange(noteId: String, reason: SnapshotReason) async {
+        guard let engine else { return }
+        _ = await engine.snapshotNow(docId: noteId, reason: reason)
+    }
+}
+
 // MARK: - History (D-54: who changed what, compare, restore)
 
 extension ServerConnection: NoteHistorySource {

@@ -63,7 +63,7 @@ struct DictationButton: View {
         // Always there, faded while recording: glass appearing and going under a held finger
         // tripped UIKit's focus system on removal.
         .background {
-            Circle().fill(.clear).glassEffect(.regular, in: .circle).opacity(recording ? 0 : 1)
+            Circle().fill(Theme.Palette.surface).shadow(color: .black.opacity(0.12), radius: 6, y: 2).opacity(recording ? 0 : 1)
         }
         .scaleEffect(dictation.mode == .holding ? 1.12 : 1)
         .offset(x: dictation.mode == .holding ? min(0, drag.width) * 0.3 : 0,

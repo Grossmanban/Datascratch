@@ -206,6 +206,12 @@ export const TextColor = Mark.create({
   },
 });
 
+/** The author shown for an `agentEdit` mark: text from voice (D-65, `agentId: "voice"`) is «Голос». */
+export const VOICE_AGENT_ID = "voice";
+export function agentEditLabel(agentId: unknown): string {
+  return agentId === VOICE_AGENT_ID ? "Голос" : "Изменено агентом";
+}
+
 /** `agentEdit` — highlights text written by an AI agent until the user accepts it (D-10). */
 export const AgentEdit = Mark.create({
   name: "agentEdit",
@@ -219,7 +225,7 @@ export const AgentEdit = Mark.create({
   parseHTML: () => [{ tag: "span[data-agent-id]" }],
   renderHTML: ({ mark }) => [
     "span",
-    { class: "ds-agent-edit", "data-agent-id": mark.attrs.agentId, "data-agent-at": mark.attrs.at, title: "Изменено агентом" },
+    { class: "ds-agent-edit", "data-agent-id": mark.attrs.agentId, "data-agent-at": mark.attrs.at, title: agentEditLabel(mark.attrs.agentId) },
     0,
   ],
   addCommands() {

@@ -23,6 +23,16 @@ export function blocksWithAgentEdits(doc: PMNode): { pos: number; node: PMNode }
   return out;
 }
 
+/** The distinct `agentId`s of the pending agent edits in the document. */
+export function agentEditAuthors(doc: PMNode): Set<string | null> {
+  const out = new Set<string | null>();
+  doc.descendants((node) => {
+    for (const m of node.marks) if (m.type.name === "agentEdit") out.add((m.attrs.agentId as string | null) ?? null);
+    return true;
+  });
+  return out;
+}
+
 /** Removes the `agentEdit` mark from one textblock (accept a single block). */
 export function acceptBlock(state: EditorState, pos: number): Transaction | null {
   const node = state.doc.nodeAt(pos);

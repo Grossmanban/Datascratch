@@ -138,7 +138,11 @@ final class NativeEditorModel: ClosingEditor {
     /// the step).
     var dictationPreview: String?
     /// D-65: this document's microphone.
-    @ObservationIgnored lazy var dictation = DictationController(app: app, target: self)
+    @ObservationIgnored lazy var dictation: DictationController = {
+        let dictation = DictationController(app: app, target: self)
+        dictation.snapshotBeforeInsert(noteId: noteId)
+        return dictation
+    }()
     /// D-65: «Format» for this document.
     @ObservationIgnored lazy var formatter: VoiceFormatter = {
         let settings = app?.settings
@@ -146,6 +150,8 @@ final class NativeEditorModel: ClosingEditor {
             (settings?.voiceQuality ?? .standard, settings?.voiceProfanity ?? .keep)
         }
         formatter.target = self
+        let noteId = noteId
+        formatter.beforeChange = { [weak app = self.app] in await app?.snapshotBeforeChange(noteId: noteId, .suggestion) }
         return formatter
     }()
     /// A file for the share sheet / Quick Look.
@@ -389,6 +395,8 @@ struct NativeDocumentScreen: View {
         .onDisappear {
             model?.dictation.leave()
             app.library.recordVersion(ofNote: noteId)
+            // Version history (sync-protocol §5): a snapshot when the note goes off screen.
+            app.snapshotOnLeave(noteId: noteId)
             app.presence?.leave(noteId)
         }
     }

@@ -28,8 +28,9 @@ struct VersionHistoryView: View {
                     ContentUnavailableView("History isn’t available", systemImage: "exclamationmark.triangle",
                                            description: Text(error))
                 } else if versions.isEmpty {
-                    ContentUnavailableView("No versions yet", systemImage: "clock",
-                                           description: Text("Versions are saved as you edit."))
+                    // Only the note as it is now: say when earlier versions start to appear.
+                    ContentUnavailableView("Current Version", systemImage: "clock",
+                                           description: Text("Versions appear as you edit — every 10 minutes, when you leave the document and before formatting."))
                 }
             }
             .navigationTitle("Version History")

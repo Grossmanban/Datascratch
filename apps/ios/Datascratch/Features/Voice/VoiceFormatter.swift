@@ -8,10 +8,20 @@ protocol FormatTarget: AnyObject {
     var selectedMarkdown: String? { get }
     /// The note's body (after the title) as Markdown.
     var documentMarkdown: String { get }
+    /// The note's title as it is now.
+    var noteTitle: String { get }
+    /// No title of the note's own: empty, or the automatic «Note <date>» a new note gets (as on
+    /// the web: otherwise the model's title would almost never land on a fresh dictated note).
+    var isUntitled: Bool { get }
+    /// The editor can put a title in (DSEditor's title API; until then no title is set or offered).
+    var canSetTitle: Bool { get }
     /// The note has an edit marked for review (the formatted text until it is accepted).
     var hasSuggestion: Bool { get }
-    /// Replaces the selection, or the note's body, with a highlighted suggestion (one undo step).
-    func replaceWithFormatted(_ markdown: String, selection: Bool)
+    /// Replaces the selection, or the note's body, with a highlighted suggestion and, given one,
+    /// the title too — one undo step.
+    func replaceWithFormatted(_ markdown: String, selection: Bool, title: String?)
+    /// «Replace»: the suggested title in place of the note's own (its own undo step).
+    func replaceTitle(_ title: String)
     /// Takes the last change back.
     func undoFormatting()
 }
@@ -35,6 +45,8 @@ final class VoiceFormatter {
     private(set) var message: String?
     /// What the formatted text replaced (Markdown), for «Show Original».
     private(set) var original: String?
+    /// The model's title for a note with a title of its own: offered, put in only on «Replace».
+    private(set) var suggestedTitle: String?
     /// What «Format» works on if it starts now.
     var appliesToSelection: Bool { target?.selectedMarkdown != nil }
 
@@ -45,7 +57,11 @@ final class VoiceFormatter {
     @ObservationIgnored private let options: () -> (quality: VoiceQuality, profanity: VoiceProfanity)
     /// The note right after the formatted text went in: «Reject» undoes only while it is so.
     @ObservationIgnored private var after: String?
+    /// The title «Replace» put in: «Reject» takes it back too (its own undo step first).
+    @ObservationIgnored private var replacedTitle: String?
     @ObservationIgnored private var task: Task<Void, Never>?
+    /// Right before the formatted text goes in (a version snapshot, sync-protocol §5).
+    @ObservationIgnored var beforeChange: (() async -> Void)?
     @ObservationIgnored private var messageClear: Task<Void, Never>?
 
     init(service: (any VoiceService)?, options: @escaping () -> (quality: VoiceQuality, profanity: VoiceProfanity)) {
@@ -75,7 +91,7 @@ final class VoiceFormatter {
         phase = .working
         let (quality, profanity) = options()
         task = Task { [weak self] in
-            let result: Result<String, Error>
+            let result: Result<VoiceText, Error>
             do {
                 result = .success(try await service.text(task: .format, style: style, profanity: profanity,
                                                          quality: quality, text: source))
@@ -83,9 +99,13 @@ final class VoiceFormatter {
                 result = .failure(error)
             }
             guard let self, !Task.isCancelled else { return }
+            if case .success = result, let beforeChange = self.beforeChange {
+                await beforeChange()
+                guard !Task.isCancelled else { return }
+            }
             self.task = nil
             switch result {
-            case .success(let text): self.finish(text, source: source, selection: selection != nil)
+            case .success(let reply): self.finish(reply, source: source, selection: selection != nil)
             case .failure(let error):
                 self.phase = .idle
                 self.show((error as? VoiceError ?? .failed(String(describing: error))).formatMessage)
@@ -93,7 +113,7 @@ final class VoiceFormatter {
         }
     }
 
-    private func finish(_ text: String, source: String, selection: Bool) {
+    private func finish(_ reply: VoiceText, source: String, selection: Bool) {
         phase = .idle
         guard let target else { return }
         // The text changed while the server worked: the result would land on something else.
@@ -102,13 +122,18 @@ final class VoiceFormatter {
             show(String(localized: "The text changed while it was being formatted — nothing was replaced."))
             return
         }
-        let formatted = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let formatted = reply.markdown.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !formatted.isEmpty else {
             show(VoiceError.failed("empty").formatMessage)
             return
         }
-        target.replaceWithFormatted(formatted, selection: selection)
+        // The model's title: an untitled note takes it in the same edit; a title of the note's
+        // own stays, and the card offers the new one.
+        let title = target.canSetTitle ? reply.title.flatMap { $0 == target.noteTitle ? nil : $0 } : nil
+        let titleNow = title != nil && target.isUntitled
+        target.replaceWithFormatted(formatted, selection: selection, title: titleNow ? title : nil)
         original = source
+        suggestedTitle = titleNow ? nil : title
         after = target.documentMarkdown
         phase = .done
     }
@@ -126,7 +151,16 @@ final class VoiceFormatter {
         guard phase == .done, let target, target.hasSuggestion, target.documentMarkdown == after else { return }
         // Not again from `documentChanged` while the undo lands.
         phase = .idle
+        if let replacedTitle, target.noteTitle == replacedTitle { target.undoFormatting() }
         target.undoFormatting()
+    }
+
+    /// «Replace»: the offered title in place of the note's own.
+    func replaceTitle() {
+        guard phase == .done, let title = suggestedTitle, let target else { return }
+        target.replaceTitle(title)
+        replacedTitle = title
+        suggestedTitle = nil
     }
 
     /// The bar goes; the formatted text stays as it is.
@@ -134,6 +168,8 @@ final class VoiceFormatter {
         if phase == .done { phase = .idle }
         original = nil
         after = nil
+        suggestedTitle = nil
+        replacedTitle = nil
     }
 
     /// The document closes: a result still on its way is dropped.

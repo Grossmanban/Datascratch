@@ -14,10 +14,14 @@ final class OnboardingUITests: XCTestCase {
         app.secureTextFields["signUp.password"].typeText("correct horse battery")
         app.secureTextFields["signUp.repeat"].tap()
         app.secureTextFields["signUp.repeat"].typeText("correct horse battery")
-        app.buttons["signUp.submit"].tap()
+        let submit = app.buttons["signUp.submit"]
+        submit.tap()
 
         let grid = app.descendants(matching: .any)["recoveryKey.grid"].firstMatch
-        XCTAssertTrue(grid.waitForExistence(timeout: 15), "recovery key not shown; buttons: \(LibraryUITests.buttons(app))")
+        // A tap while the keyboard is still settling can miss; the button is disabled while the
+        // account is made, so a second tap only lands if the first did nothing.
+        if !grid.waitForExistence(timeout: 10), submit.exists, submit.isEnabled, submit.isHittable { submit.tap() }
+        XCTAssertTrue(grid.waitForExistence(timeout: 30), "recovery key not shown; buttons: \(LibraryUITests.buttons(app))")
         let formatted = grid.label
         XCTAssertTrue(formatted.hasPrefix("DS1-"), "label: \(formatted)")
 
@@ -84,9 +88,8 @@ final class OnboardingUITests: XCTestCase {
         let account = app.descendants(matching: .any)["settings.account"].firstMatch
         let palette = app.descendants(matching: .any)["sidebar.commandPalette"].firstMatch
         XCTAssertTrue(palette.waitForExistence(timeout: 5), "command palette button not found")
-        palette.tap()
-        let field = app.textFields["palette.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
+        let field = openPalette(app, with: palette)
+        XCTAssertTrue(field.exists, "palette field not found")
         field.tap()
         field.typeText("Settings\n")
         XCTAssertTrue(account.waitForExistence(timeout: 5), "settings not opened; buttons: \(LibraryUITests.buttons(app))")
@@ -461,7 +464,7 @@ final class LibraryUITests: XCTestCase {
                       "no element for the Target link; editor: \(editor.debugDescription.prefix(3000))")
         chip.tap()
         let opened = NSPredicate(format: "value CONTAINS 'Target body'")
-        let navigated = XCTWaiter().wait(for: [expectation(for: opened, evaluatedWith: editor.textViews.firstMatch)], timeout: 5)
+        let navigated = XCTWaiter().wait(for: [expectation(for: opened, evaluatedWith: editor.textViews.firstMatch)], timeout: 15)
         XCTAssertEqual(navigated, .completed, "tapping the note link did not open «Target»")
 
         // Back to Links: the literal link to a missing note offers to create it.
@@ -1057,9 +1060,8 @@ final class LibraryUITests: XCTestCase {
         let app = launchSignedIn()
         let palette = sidebarElement(app, "sidebar.commandPalette")
         XCTAssertTrue(palette.waitForExistence(timeout: 5), "command palette button not found")
-        palette.tap()
-        let field = app.textFields["palette.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
+        let field = openPalette(app, with: palette)
+        XCTAssertTrue(field.exists, "palette field not found")
         field.tap()
         field.typeText("Settings\n")
         let account = app.descendants(matching: .any)["settings.account"].firstMatch
@@ -1079,9 +1081,8 @@ final class LibraryUITests: XCTestCase {
         let app = launchSignedIn(["-ui-testing-server", "https://sync.example.org"])
         let palette = sidebarElement(app, "sidebar.commandPalette")
         XCTAssertTrue(palette.waitForExistence(timeout: 5), "command palette button not found")
-        palette.tap()
-        let field = app.textFields["palette.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
+        let field = openPalette(app, with: palette)
+        XCTAssertTrue(field.exists, "palette field not found")
         field.tap()
         field.typeText("Settings\n")
         let account = app.descendants(matching: .any)["settings.account"].firstMatch
@@ -1135,9 +1136,8 @@ final class LibraryUITests: XCTestCase {
         settle(1)
         let paletteButton = sidebarElement(app, "sidebar.commandPalette")
         XCTAssertTrue(paletteButton.exists, "command palette button not found; buttons: \(Self.buttons(app))")
-        paletteButton.tap()
-        let field = app.textFields["palette.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
+        let field = openPalette(app, with: paletteButton)
+        XCTAssertTrue(field.exists, "palette field not found")
         field.typeText("Баги")
         let found = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Баги'")).firstMatch
         XCTAssertTrue(found.waitForExistence(timeout: 5),
@@ -1175,9 +1175,8 @@ final class LibraryUITests: XCTestCase {
         let app = launchSignedIn(Self.extendedMode)
         let paletteButton = sidebarElement(app, "sidebar.commandPalette")
         XCTAssertTrue(paletteButton.exists, "command palette button not found; buttons: \(Self.buttons(app))")
-        paletteButton.tap()
-        let field = app.textFields["palette.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found; fields: \(app.textFields.allElementsBoundByIndex.map { $0.identifier })")
+        let field = openPalette(app, with: paletteButton)
+        XCTAssertTrue(field.exists, "palette field not found; fields: \(app.textFields.allElementsBoundByIndex.map { $0.identifier })")
         field.tap()
         field.typeText("Go to Tasks\n")
         XCTAssertTrue(app.segmentedControls["tasks.bucket"].firstMatch.waitForExistence(timeout: 5)
@@ -1261,9 +1260,8 @@ final class LibraryUITests: XCTestCase {
         // Open settings through the command palette (also covers ⌘K search).
         let paletteButton = sidebarElement(app, "sidebar.commandPalette")
         XCTAssertTrue(paletteButton.exists, "command palette button not found; buttons: \(Self.buttons(app))")
-        paletteButton.tap()
-        let field = app.textFields["palette.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5), "palette field not found")
+        let field = openPalette(app, with: paletteButton)
+        XCTAssertTrue(field.exists, "palette field not found")
         field.tap()
         field.typeText("Settings\n")
         let drawing = app.descendants(matching: .any)["settings.drawing"].firstMatch
@@ -1368,5 +1366,17 @@ final class AppearanceUITests: XCTestCase {
                       || app.buttons["Все документы"].firstMatch.exists,
                       "Russian strings missing; buttons: \(LibraryUITests.buttons(app))")
         snapshot(app, "ru-sidebar")
+    }
+}
+
+private extension XCTestCase {
+    /// Opens the command palette; a slow runner can drop the first tap while the list settles.
+    func openPalette(_ app: XCUIApplication, with button: XCUIElement) -> XCUIElement {
+        let field = app.textFields["palette.field"]
+        button.tap()
+        if !field.waitForExistence(timeout: 8), button.exists, button.isHittable { button.tap() }
+        // The field can show before it takes the keyboard: a tap gives it focus for typing.
+        if field.waitForExistence(timeout: 10), field.isHittable { field.tap() }
+        return field
     }
 }

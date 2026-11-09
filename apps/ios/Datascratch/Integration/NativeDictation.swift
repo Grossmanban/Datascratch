@@ -27,9 +27,25 @@ extension NativeEditorModel: FormatTarget {
     var documentMarkdown: String { editor.documentMarkdown }
     var hasSuggestion: Bool { editor.hasAgentEdits }
 
-    func replaceWithFormatted(_ markdown: String, selection: Bool) {
+    // The model's title (api.md «Голос» `title`): set with the body in one step for an untitled
+    // note, or offered and set on its own («Заменить»).
+    var noteTitle: String { editor.title }
+    var isUntitled: Bool {
+        let title = noteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return true }
+        guard let note = app?.library.note(noteId) else { return false }
+        return title == Self.defaultTitle(created: note.createdAt)
+    }
+    var canSetTitle: Bool { !isViewOnly }
+
+    func replaceWithFormatted(_ markdown: String, selection: Bool, title: String?) {
         guard !isViewOnly else { return }
-        editor.replaceWithSuggestion(markdown, scope: selection ? .selection : .document)
+        editor.replaceWithSuggestion(markdown, scope: selection ? .selection : .document, title: title)
+    }
+
+    func replaceTitle(_ title: String) {
+        guard !isViewOnly else { return }
+        editor.setTitle(title)
     }
 
     func undoFormatting() {

@@ -167,7 +167,14 @@ nonisolated struct VoiceAccess: Codable, Equatable, Sendable {
 nonisolated protocol VoiceService: Sendable {
     func me() async throws -> VoiceAccess
     func transcribe(audio: URL, mode: VoiceMode, language: VoiceLanguage) async throws -> VoiceTranscript
-    func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> String
+    func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> VoiceText
+}
+
+/// `/voice/text`'s answer: the Markdown and, for `format` and `minutes`, the model's title for the
+/// note (api.md «Голос»: the server cuts the first `# …` line out of the Markdown into `title`).
+nonisolated struct VoiceText: Equatable, Sendable {
+    var markdown: String
+    var title: String?
 }
 
 /// `POST /v1/voice/transcribe` and `POST /v1/voice/text` with this account's access token.
@@ -203,7 +210,7 @@ nonisolated struct ServerVoiceService: VoiceService {
         return try JSONDecoder().decode(VoiceTranscript.self, from: try await send(request))
     }
 
-    func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> String {
+    func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> VoiceText {
         struct Body: Encodable {
             var task: String
             var style: String?
@@ -211,13 +218,15 @@ nonisolated struct ServerVoiceService: VoiceService {
             var quality: String
             var text: String
         }
-        struct Reply: Decodable { var markdown: String }
+        struct Reply: Decodable { var markdown: String; var title: String? }
         var request = try await request("voice/text")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(Body(task: task.rawValue, style: style?.rawValue, profanity: profanity.rawValue,
                                                          quality: quality.rawValue, text: text))
         request.timeoutInterval = 90
-        return try JSONDecoder().decode(Reply.self, from: try await send(request)).markdown
+        let reply = try JSONDecoder().decode(Reply.self, from: try await send(request))
+        let title = reply.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return VoiceText(markdown: reply.markdown, title: title?.isEmpty == false ? title : nil)
     }
 
     private func request(_ path: String) async throws -> URLRequest {
@@ -261,6 +270,8 @@ nonisolated struct FakeVoiceService: VoiceService {
     var delay: Duration = .milliseconds(300)
 
     static let transcript = "um so this is dictated text"
+    /// The title the fake model gives a formatted note.
+    static let title = "Formatted by Voice"
     static func cleaned(_ text: String) -> String {
         text.replacingOccurrences(of: "um so ", with: "").capitalizedFirst + "."
     }
@@ -276,12 +287,13 @@ nonisolated struct FakeVoiceService: VoiceService {
         return VoiceTranscript(durationSec: 2, turns: [VoiceTurn(speaker: "S1", start: 0, end: 2, text: Self.transcript)])
     }
 
-    func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> String {
+    func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> VoiceText {
         try await Task.sleep(for: delay)
         if let error { throw error }
         switch task {
-        case .clean: return Self.cleaned(text)
-        case .format, .minutes: return "## \(style?.rawValue.capitalizedFirst ?? "Notes")\n\n\(text)"
+        case .clean: return VoiceText(markdown: Self.cleaned(text))
+        case .format, .minutes:
+            return VoiceText(markdown: "## \(style?.rawValue.capitalizedFirst ?? "Notes")\n\n\(text)", title: Self.title)
         }
     }
 }

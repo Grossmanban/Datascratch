@@ -29,8 +29,8 @@ private actor GatedVoiceService: VoiceService {
         return VoiceTranscript(durationSec: 1, turns: [VoiceTurn(speaker: "S1", start: 0, end: 1, text: "server \(name)")])
     }
 
-    nonisolated func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> String {
-        text.capitalizedFirst
+    nonisolated func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> VoiceText {
+        VoiceText(markdown: text.capitalizedFirst)
     }
 }
 
@@ -54,6 +54,19 @@ struct DictationQueueTests {
 
     private func settle(_ queue: DictationQueue, until done: @escaping () -> Bool) async {
         for _ in 0..<200 where !done() { try? await Task.sleep(for: .milliseconds(10)) }
+    }
+
+    /// A version snapshot comes first: the note in the history is the one before the piece.
+    @Test func snapshotBeforeThePieceGoesIn() async {
+        let (queue, service, sink) = make()
+        var insertedAtSnapshot: [Int] = []
+        queue.beforeInsert = { insertedAtSnapshot.append(sink.inserted.count) }
+        let piece = queue.begin()
+        queue.heard("one", in: piece)
+        queue.finish(piece, audio: URL(fileURLWithPath: "/tmp/s.m4a"))
+        await service.open("s.m4a")
+        await settle(queue) { sink.inserted.count == 1 }
+        #expect(insertedAtSnapshot == [0])
     }
 
     /// Pieces go in in the order they were spoken, even when the second comes back first; the

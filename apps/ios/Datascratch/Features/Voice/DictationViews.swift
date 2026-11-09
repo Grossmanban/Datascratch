@@ -8,6 +8,9 @@ struct DictationButton: View {
     var isCompact = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var drag: CGSize = .zero
+    /// A finger is on the button. Unlike `onEnded`, it also goes back when the system cancels the
+    /// drag; a stale `drag` would then swallow the first «Stop».
+    @GestureState private var touching = false
 
     /// How far up locks hands free, how far left cancels.
     private let lockDistance: CGFloat = 70
@@ -76,6 +79,15 @@ struct DictationButton: View {
         }
         .contentShape(Circle())
         .gesture(holdGesture)
+        .onChange(of: touching) { _, now in
+            // After `onEnded` (when it comes), so a drag that ended normally is judged as before;
+            // a cancelled hold sends its piece as a lifted finger would.
+            guard !now else { return }
+            Task { @MainActor in
+                drag = .zero
+                if dictation.mode == .holding { dictation.release() }
+            }
+        }
         .accessibilityElement()
         .accessibilityLabel(dictation.mode == .locked ? Text("Stop Dictation") : Text("Dictate"))
         .accessibilityHint("Hold to dictate. Swipe up to keep recording hands free, swipe left to cancel.")
@@ -105,6 +117,7 @@ struct DictationButton: View {
                     break
                 }
             }
+            .updating($touching) { _, touching, _ in touching = true }
             .onEnded { value in
                 let wasTap = abs(value.translation.width) < 8 && abs(value.translation.height) < 8
                 switch dictation.mode {
@@ -419,6 +432,23 @@ struct FormatStatus: View {
                 Label("Formatted — edit highlighted", systemImage: "wand.and.sparkles")
                     .font(Theme.Typography.footnote.weight(.medium))
                     .foregroundStyle(Theme.Palette.textPrimary)
+                if let title = formatter.suggestedTitle {
+                    // The note has a title of its own: the model's one only on a tap.
+                    HStack(spacing: Theme.Space.s2) {
+                        Text("Title: «\(title)»")
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("voice.format.title")
+                        Button("Replace") { formatter.replaceTitle() }
+                            .buttonStyle(.glass)
+                            .font(Theme.Typography.footnote)
+                            .accessibilityIdentifier("voice.format.titleReplace")
+                    }
+                    .transition(.opacity)
+                }
                 HStack(spacing: Theme.Space.s2) {
                     Button("Show Original", action: showOriginal)
                         .buttonStyle(.glass)
@@ -434,6 +464,7 @@ struct FormatStatus: View {
             .padding(.horizontal, Theme.Space.s3)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .accessibilityElement(children: .contain)
+            .animation(Theme.Motion.snappy, value: formatter.suggestedTitle)
             .accessibilityIdentifier("voice.format.done")
         case .idle:
             if let message = formatter.message {

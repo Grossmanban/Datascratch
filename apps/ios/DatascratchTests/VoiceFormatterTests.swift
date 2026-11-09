@@ -9,33 +9,50 @@ private final class NoteSink: FormatTarget {
     var selection: String?
     var hasSuggestion = false
     var replaced: [(String, Bool)] = []
-    private var before: String?
+    var noteTitle = ""
+    var isUntitled: Bool { noteTitle.isEmpty || noteTitle == "Note Nov 9, 2026" }
+    var canSetTitle = true
+    /// Undo steps: what the body, title and suggestion flag were before each.
+    private var undo: [(body: String, title: String, suggestion: Bool)] = []
 
     var selectedMarkdown: String? { selection }
+    /// The body only: DSEditor's Markdown leaves the title out.
     var documentMarkdown: String { body }
+    /// The editor reports every change, as `NativeEditorModel` does.
+    var changed: (() -> Void)?
 
-    func replaceWithFormatted(_ markdown: String, selection: Bool) {
+    func replaceWithFormatted(_ markdown: String, selection: Bool, title: String?) {
         replaced.append((markdown, selection))
-        before = body
+        undo.append((body, noteTitle, hasSuggestion))
         body = markdown
+        if let title { noteTitle = title }
         hasSuggestion = true
     }
 
+    func replaceTitle(_ title: String) {
+        undo.append((body, noteTitle, hasSuggestion))
+        noteTitle = title
+        changed?()
+    }
+
     func undoFormatting() {
-        if let before { body = before }
-        hasSuggestion = false
+        guard let last = undo.popLast() else { return }
+        body = last.body
+        noteTitle = last.title
+        hasSuggestion = last.suggestion
     }
 }
 
 private nonisolated struct StyleEcho: VoiceService {
     var error: VoiceError?
+    var title: String?
     func me() async throws -> VoiceAccess { VoiceAccess(enabled: true) }
     func transcribe(audio: URL, mode: VoiceMode, language: VoiceLanguage) async throws -> VoiceTranscript {
         VoiceTranscript(durationSec: 0, turns: [])
     }
-    func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> String {
+    func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> VoiceText {
         if let error { throw error }
-        return "## \(style?.rawValue ?? "-") (\(task.rawValue))\n\n\(text)"
+        return VoiceText(markdown: "## \(style?.rawValue ?? "-") (\(task.rawValue))\n\n\(text)", title: title)
     }
 }
 
@@ -45,6 +62,7 @@ struct VoiceFormatterTests {
         let formatter = VoiceFormatter(service: service) { (.standard, .keep) }
         let sink = NoteSink()
         formatter.target = sink
+        sink.changed = { [weak formatter] in formatter?.documentChanged() }
         return (formatter, sink)
     }
 
@@ -63,6 +81,17 @@ struct VoiceFormatterTests {
         #expect(sink.replaced.first?.1 == false)
         #expect(formatter.phase == .done)
         #expect(formatter.original == "milk and bread")
+    }
+
+    /// A version snapshot comes first: the history keeps the note as it was before formatting.
+    @Test func snapshotBeforeTheFormattedTextGoesIn() async {
+        let (formatter, sink) = make()
+        var replacedAtSnapshot: [Int] = []
+        formatter.beforeChange = { replacedAtSnapshot.append(sink.replaced.count) }
+        formatter.format(style: .document)
+        await settle { formatter.phase != .working }
+        #expect(replacedAtSnapshot == [0])
+        #expect(sink.replaced.count == 1)
     }
 
     /// With a selection only it goes, and only it is replaced.
@@ -85,6 +114,55 @@ struct VoiceFormatterTests {
         #expect(sink.body == "milk and bread")
         #expect(formatter.phase == .idle)
         #expect(formatter.original == nil)
+    }
+
+    /// An untitled note — empty, or the automatic «Note <date>» — takes the model's title in the
+    /// same edit, and «Reject» brings back the old one with the text.
+    @Test(arguments: ["", "Note Nov 9, 2026"])
+    func untitledNoteTakesTheTitle(_ title: String) async {
+        let (formatter, sink) = make(StyleEcho(title: "Shopping"))
+        sink.noteTitle = title
+        formatter.format(style: .document)
+        await settle { formatter.phase != .working }
+        #expect(sink.noteTitle == "Shopping")
+        #expect(formatter.suggestedTitle == nil, "nothing to offer: it is in")
+        formatter.reject()
+        #expect(sink.noteTitle == title)
+        #expect(sink.body == "milk and bread")
+    }
+
+    /// A title of the note's own stays; the model's is offered, and «Replace» puts it in.
+    /// «Reject» afterwards takes back both.
+    @Test func ownTitleIsOffered() async {
+        let (formatter, sink) = make(StyleEcho(title: "Shopping"))
+        sink.noteTitle = "Groceries"
+        formatter.format(style: .document)
+        await settle { formatter.phase != .working }
+        #expect(sink.noteTitle == "Groceries")
+        #expect(formatter.suggestedTitle == "Shopping")
+        formatter.replaceTitle()
+        #expect(sink.noteTitle == "Shopping")
+        #expect(formatter.suggestedTitle == nil)
+        #expect(formatter.phase == .done, "«Reject» is still there")
+        formatter.reject()
+        #expect(sink.noteTitle == "Groceries")
+        #expect(sink.body == "milk and bread")
+    }
+
+    /// The same title as now, or an editor without a title API: nothing is set or offered.
+    @Test func noTitleChangeWhenNotNeededOrPossible() async {
+        let (formatter, sink) = make(StyleEcho(title: "Groceries"))
+        sink.noteTitle = "Groceries"
+        formatter.format(style: .document)
+        await settle { formatter.phase != .working }
+        #expect(formatter.suggestedTitle == nil)
+
+        let (other, plain) = make(StyleEcho(title: "Shopping"))
+        plain.canSetTitle = false
+        other.format(style: .document)
+        await settle { other.phase != .working }
+        #expect(plain.noteTitle == "")
+        #expect(other.suggestedTitle == nil)
     }
 
     /// Typing after the result: the bar goes, and «Reject» would not undo the person's typing.

@@ -48,6 +48,11 @@ final class DictationController {
         queue.target = target
     }
 
+    /// The note the pieces go into: a version snapshot before each (sync-protocol §5).
+    func snapshotBeforeInsert(noteId: String) {
+        queue.beforeInsert = { [weak app] in await app?.snapshotBeforeChange(noteId: noteId, .voiceInsert) }
+    }
+
     var isRecording: Bool { mode != .idle }
 
     // MARK: Gestures

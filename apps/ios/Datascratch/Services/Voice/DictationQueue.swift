@@ -40,6 +40,8 @@ final class DictationQueue {
     var notice: VoiceError?
 
     weak var target: DictationTarget?
+    /// Right before a piece with text goes in (a version snapshot, sync-protocol §5).
+    var beforeInsert: (() async -> Void)?
     /// nil: this device only (no server) — what the device heard is the text.
     private let service: (any VoiceService)?
     private let options: () -> (quality: VoiceQuality, profanity: VoiceProfanity)
@@ -97,7 +99,7 @@ final class DictationQueue {
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     result = .ready("", notice: nil)
                 } else {
-                    let cleaned = try await service.text(task: .clean, style: nil, profanity: profanity, quality: quality, text: text)
+                    let cleaned = try await service.text(task: .clean, style: nil, profanity: profanity, quality: quality, text: text).markdown
                     result = .ready(cleaned, notice: nil)
                 }
             } catch is CancellationError {
@@ -108,6 +110,10 @@ final class DictationQueue {
                 result = .ready(heard, notice: .failed(String(describing: error)))
             }
             if let audio { try? FileManager.default.removeItem(at: audio) }
+            if case .ready(let text, _) = result, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                await self?.beforeInsert?()
+                guard !Task.isCancelled else { return }
+            }
             self?.complete(id, result)
         }
     }

@@ -1,17 +1,17 @@
-# Graph Report - Datascratch  (2026-11-08)
+# Graph Report - Datascratch  (2026-11-09)
 
 ## Corpus Check
-- 1106 files · ~1,049,361 words
+- 1106 files · ~1,049,374 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 40 file(s) not represented in the graph (top: (none) 20, .css 6, .example 4)
 
 ## Summary
-- 24400 nodes · 70802 edges · 525 communities (441 shown, 84 thin omitted)
+- 24400 nodes · 70804 edges · 525 communities (441 shown, 84 thin omitted)
 - Extraction: 85% EXTRACTED · 15% INFERRED · 0% AMBIGUOUS · INFERRED: 10576 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `447a3e5f`
+- Built from commit: `6b4654ee`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -675,7 +675,7 @@ Nodes (22): APIClient, .currentSession, .isSignedIn, HTTPTransport, SecretSessio
 
 ### Community 27 - "EditorCommands"
 Cohesion: 0.05
-Nodes (21): BlockKind, blockquote, bulletList, callout, codeBlock, heading, orderedList, paragraph (+13 more)
+Nodes (22): BlockKind, blockquote, bulletList, callout, codeBlock, heading, orderedList, paragraph (+14 more)
 
 ### Community 28 - "Datascratch web client (apps/web)"
 Cohesion: 0.03
@@ -855,7 +855,7 @@ Nodes (18): .shape, lines, Item, MarkdownBlockParser, MarkdownImport, MarkdownIn
 
 ### Community 72 - "BlockNode (2)"
 Cohesion: 0.05
-Nodes (29): .blockId, .text, BlockNode, .isTextblock, .plainText, .textLength, InlineAtom, .plainText (+21 more)
+Nodes (30): .blockId, .text, BlockNode, .isTextblock, .plainText, .textLength, InlineAtom, .plainText (+22 more)
 
 ### Community 73 - "DSRGBA"
 Cohesion: 0.02
@@ -1102,8 +1102,8 @@ Cohesion: 0.07
 Nodes (40): D-02. Отдельной десктоп-версии нет, на компьютере — веб, Последствия, Решение, D-03. Платформы: нативные iPhone и iPad + полноценный веб, Full-featured web client (TypeScript), Контекст, Последствия, Решение (+32 more)
 
 ### Community 136 - "SecurityAuditTests (2)"
-Cohesion: 0.05
-Nodes (19): WebCursorFixtureTests, CalloutInfo, ListMarker, bullet, ordered, task, ParagraphContext, ProjectedParagraph (+11 more)
+Cohesion: 0.08
+Nodes (8): WebCursorFixtureTests, ItemID, RelativePositionCodec, RemoteCursor, user, AnchorVectorTests, .available, RemoteCursorTests
 
 ### Community 137 - "Компоненты"
 Cohesion: 0.05
@@ -1131,7 +1131,7 @@ Nodes (15): check_text_range(), decoding(), diff_update(), merge_updates(), mism
 
 ### Community 143 - "JSONValue"
 Cohesion: 0.03
-Nodes (33): .body, AttributedRenderer, MarksBox, .hash, ParagraphDecoration, .taskState, BlockLayoutFragment, .calloutGeometry (+25 more)
+Nodes (41): .body, AttributedRenderer, MarksBox, .hash, ParagraphDecoration, .taskState, BlockLayoutFragment, .calloutGeometry (+33 more)
 
 ### Community 144 - "scripts/generate.mjs"
 Cohesion: 0.09
@@ -1306,8 +1306,8 @@ Cohesion: 0.07
 Nodes (33): description, devDependencies, @datascratch/shared@workspace:*, eslint@^9.39.0, libsodium-wrappers-sumo@^0.8.2, prosemirror-model@^1.25.0, tsx@^4.20.0, @types/node@^22.10.0 (+25 more)
 
 ### Community 188 - "DocumentStyle"
-Cohesion: 0.06
-Nodes (25): DemoImages, DemoModel, .fileURL, .style, DemoView, .body, .content, .editorAndPalette (+17 more)
+Cohesion: 0.05
+Nodes (26): DemoImages, DemoModel, .fileURL, .style, DemoView, .body, .content, .editorAndPalette (+18 more)
 
 ### Community 189 - "0013-collaboration-sharing.md"
 Cohesion: 0.08
@@ -2346,7 +2346,7 @@ Nodes (3): d8r(), f8r(), uTe()
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `cn.ts`, `Foundation`, `scripts/generate.mjs`, `DSDesign Swift package (iOS 26, Swift 6) — «Тихая бумага» design system tokens + SwiftUI components`, `DSDateChip`?**
-  _High betweenness centrality (0.288) - this node is a cross-community bridge._
+  _High betweenness centrality (0.279) - this node is a cross-community bridge._
 - **Are the 370 inferred relationships involving `t()` (e.g. with `accept()` and `ACTION()`) actually correct?**
   _`t()` has 370 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `RFC-9562`, `.body`, `.body` to the rest of the system?**
@@ -2354,7 +2354,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
   _Cohesion score 0.0016227750942896845 - nodes in this community are weakly interconnected._
 - **Why does `DSDateChipModel` connect `DSDateChip` to `Equatable`, `JSONValue`, `DSDateChip (2)`, `Sendable`, `Tone`, `design-tokens.md`?**
-  _High betweenness centrality (0.239) - this node is a cross-community bridge._
+  _High betweenness centrality (0.218) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._

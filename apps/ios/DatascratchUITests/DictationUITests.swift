@@ -131,7 +131,10 @@ final class DictationUITests: XCTestCase {
     func testFormattingAnUntitledNoteGivesItATitle() throws {
         let app = launch()
         _ = try openNewNote(app)
-        app.typeText("\nmilk and bread")
+        // Return in the empty title moves to the body; the body takes the keyboard a moment later.
+        app.typeText("\n")
+        settle(1)
+        app.typeText("milk and bread")
         XCTAssertTrue(waitForText(app, containing: "milk and bread", timeout: 5), "the body was not typed; text: \(value(app))")
         format(app)
         XCTAssertTrue(waitForText(app, containing: "Formatted by Voice", timeout: 5), "no title from the model; text: \(value(app))")
@@ -145,7 +148,9 @@ final class DictationUITests: XCTestCase {
     func testFormattingOffersANewTitleForANamedNote() throws {
         let app = launch()
         _ = try openNewNote(app)
-        app.typeText("Groceries\nmilk and bread")
+        app.typeText("Groceries\n")
+        settle(1)
+        app.typeText("milk and bread")
         XCTAssertTrue(waitForText(app, containing: "milk and bread", timeout: 5), "the note was not typed; text: \(value(app))")
         format(app)
         let offer = app.descendants(matching: .any)["voice.format.title"].firstMatch

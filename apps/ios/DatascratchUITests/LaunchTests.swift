@@ -754,15 +754,6 @@ final class LibraryUITests: XCTestCase {
             + " palette=\(app.descendants(matching: .any)["penPalette"].firstMatch.value as? String ?? "?")"
     }
 
-    /// Opens the command palette; a slow runner can drop the first tap while the list settles.
-    private func openPalette(_ app: XCUIApplication, with button: XCUIElement) -> XCUIElement {
-        let field = app.textFields["palette.field"]
-        button.tap()
-        if !field.waitForExistence(timeout: 8), button.exists, button.isHittable { button.tap() }
-        _ = field.waitForExistence(timeout: 10)
-        return field
-    }
-
     private func settle(_ seconds: TimeInterval = 0.6) {
         RunLoop.current.run(until: Date().addingTimeInterval(seconds))
     }
@@ -1371,5 +1362,16 @@ final class AppearanceUITests: XCTestCase {
                       || app.buttons["Все документы"].firstMatch.exists,
                       "Russian strings missing; buttons: \(LibraryUITests.buttons(app))")
         snapshot(app, "ru-sidebar")
+    }
+}
+
+private extension XCTestCase {
+    /// Opens the command palette; a slow runner can drop the first tap while the list settles.
+    func openPalette(_ app: XCUIApplication, with button: XCUIElement) -> XCUIElement {
+        let field = app.textFields["palette.field"]
+        button.tap()
+        if !field.waitForExistence(timeout: 8), button.exists, button.isHittable { button.tap() }
+        _ = field.waitForExistence(timeout: 10)
+        return field
     }
 }

@@ -1191,6 +1191,16 @@
         }
       }
     },
+    "Current Version": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текущая версия"
+          }
+        }
+      }
+    },
     "Current password": {
       "localizations": {
         "ru": {
@@ -3317,16 +3327,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Токенов пока нет."
-          }
-        }
-      }
-    },
-    "No versions yet": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Версий пока нет"
           }
         }
       }
@@ -6341,12 +6341,12 @@
         }
       }
     },
-    "Versions are saved as you edit.": {
+    "Versions appear as you edit — every 10 minutes, when you leave the document and before formatting.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Версии сохраняются по мере правки."
+            "value": "Версии появляются при правках — каждые 10 минут, при уходе из документа и перед оформлением."
           }
         }
       }

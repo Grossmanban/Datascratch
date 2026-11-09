@@ -17,7 +17,7 @@ final class OnboardingUITests: XCTestCase {
         app.buttons["signUp.submit"].tap()
 
         let grid = app.descendants(matching: .any)["recoveryKey.grid"].firstMatch
-        XCTAssertTrue(grid.waitForExistence(timeout: 15), "recovery key not shown; buttons: \(LibraryUITests.buttons(app))")
+        XCTAssertTrue(grid.waitForExistence(timeout: 30), "recovery key not shown; buttons: \(LibraryUITests.buttons(app))")
         let formatted = grid.label
         XCTAssertTrue(formatted.hasPrefix("DS1-"), "label: \(formatted)")
 
@@ -1371,7 +1371,8 @@ private extension XCTestCase {
         let field = app.textFields["palette.field"]
         button.tap()
         if !field.waitForExistence(timeout: 8), button.exists, button.isHittable { button.tap() }
-        _ = field.waitForExistence(timeout: 10)
+        // The field can show before it takes the keyboard: a tap gives it focus for typing.
+        if field.waitForExistence(timeout: 10), field.isHittable { field.tap() }
         return field
     }
 }

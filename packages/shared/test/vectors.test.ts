@@ -489,4 +489,14 @@ describe("voice vectors (D-65)", () => {
     for (const c of v.timestamps) expect(formatVoiceTime(c.sec), String(c.sec)).toBe(c.text);
     for (const c of v.speakers) expect(speakerLabel(c.id)).toBe(c.label);
   });
+
+  it("cuts the suggested title out of the answer", async () => {
+    const { splitVoiceTitle } = await import("../src/index.js");
+    const v = load("voice/titles.json");
+    expect(v.cases.length).toBeGreaterThan(5);
+    for (const c of v.cases) {
+      const { answer, ...expected } = c;
+      expect(splitVoiceTitle(answer), JSON.stringify(answer)).toEqual(expected);
+    }
+  });
 });

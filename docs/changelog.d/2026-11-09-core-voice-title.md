@@ -1,0 +1,1 @@
+- **Голос (D-65), название документа:** `POST /v1/voice/text` для `format` и `minutes` возвращает `title` — короткое название по содержанию (до 80 символов, без точки). Подсказка модели (`VOICE_TITLE_RULE`) просит строку `# Название` первой; `splitVoiceTitle` из `@datascratch/shared/voice` вырезает её из ответа; векторы `voice/titles.json`, `api.md`, D-65.

@@ -115,6 +115,19 @@ extension EditorCommands {
         }
     }
 
+    /// The text of the note's title paragraph ("" without one).
+    public var title: String {
+        document.blocks.first(where: { $0.type == NodeType.title })?.plainText ?? ""
+    }
+
+    /// Sets the note's title («Заменить название»): one line, its own undo step.
+    public func setTitle(_ text: String) {
+        guard !document.isReadOnly else { return }
+        document.stopCapturing()
+        document.transact { replaceTitle(text, marks: .empty) }
+        document.stopCapturing()
+    }
+
     /// The note's title becomes `text` (one line; a note without a title gets one at the top).
     private func replaceTitle(_ text: String, marks: MarkSet) {
         let line = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }

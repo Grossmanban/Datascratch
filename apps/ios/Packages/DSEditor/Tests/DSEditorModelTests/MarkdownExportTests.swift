@@ -179,6 +179,26 @@ struct MarkdownExportTests {
         #expect(doc.blocks.map(\.plainText) == ["Заметка", "Первый абзац", "раз\nдва", "Конец"])
     }
 
+    /// The title reads and sets as one line, its own undo step; a note without one gets one.
+    @Test func titleReadsAndSets() {
+        let (doc, cmd) = doc()
+        #expect(cmd.title == "Заметка")
+        let p = Projection.build(doc.blocks)
+        cmd.insertMarkdown(" да", replacing: (p.starts[4] + 5)..<(p.starts[4] + 5))
+        cmd.setTitle("Новое\nназвание")
+        #expect(cmd.title == "Новое название")
+        #expect(doc.blocks[0].inline?.first?.marks.isEmpty == true)
+        doc.undo()
+        #expect(cmd.title == "Заметка")
+        #expect(doc.blocks.last?.plainText == "Конец да", "setTitle is its own undo step")
+        let bare = InMemoryEditorDocument(blocks: [.paragraph("Текст")])
+        let c = EditorCommands(document: bare)
+        #expect(c.title == "")
+        c.setTitle("Есть")
+        #expect(bare.blocks.map(\.type) == [NodeType.title, NodeType.paragraph])
+        #expect(c.title == "Есть")
+    }
+
     /// «Оформить» with a title: the body and the title in one undo step, both marked.
     @Test func suggestionReplacesTheTitleToo() {
         let (doc, cmd) = doc()

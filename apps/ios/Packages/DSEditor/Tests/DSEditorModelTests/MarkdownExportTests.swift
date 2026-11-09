@@ -178,4 +178,41 @@ struct MarkdownExportTests {
         doc.undo()
         #expect(doc.blocks.map(\.plainText) == ["Заметка", "Первый абзац", "раз\nдва", "Конец"])
     }
+
+    /// The title reads and sets as one line, its own undo step; a note without one gets one.
+    @Test func titleReadsAndSets() {
+        let (doc, cmd) = doc()
+        #expect(cmd.title == "Заметка")
+        let p = Projection.build(doc.blocks)
+        cmd.insertMarkdown(" да", replacing: (p.starts[4] + 5)..<(p.starts[4] + 5))
+        cmd.setTitle("Новое\nназвание")
+        #expect(cmd.title == "Новое название")
+        #expect(doc.blocks[0].inline?.first?.marks.isEmpty == true)
+        doc.undo()
+        #expect(cmd.title == "Заметка")
+        #expect(doc.blocks.last?.plainText == "Конец да", "setTitle is its own undo step")
+        let bare = InMemoryEditorDocument(blocks: [.paragraph("Текст")])
+        let c = EditorCommands(document: bare)
+        #expect(c.title == "")
+        c.setTitle("Есть")
+        #expect(bare.blocks.map(\.type) == [NodeType.title, NodeType.paragraph])
+        #expect(c.title == "Есть")
+    }
+
+    /// «Оформить» with a title: the body and the title in one undo step, both marked.
+    @Test func suggestionReplacesTheTitleToo() {
+        let (doc, cmd) = doc()
+        cmd.replaceWithSuggestion("Новый текст", scope: .document, selection: 0..<0, title: "План\nзапуска")
+        #expect(doc.blocks.map(\.plainText) == ["План запуска", "Новый текст"])
+        #expect(doc.blocks[0].type == NodeType.title)
+        #expect(doc.blocks[0].inline?.first?.marks[MarkName.agentEdit] != nil)
+        doc.undo()
+        #expect(doc.blocks.map(\.plainText) == ["Заметка", "Первый абзац", "раз\nдва", "Конец"], "one undo restores body and title")
+        // Over a selection as well.
+        let p = Projection.build(doc.blocks)
+        cmd.replaceWithSuggestion("Второй", scope: .selection, selection: p.starts[1]..<(p.starts[1] + "Первый".utf16.count), title: "Итог")
+        #expect(doc.blocks.map(\.plainText) == ["Итог", "Второй абзац", "раз\nдва", "Конец"])
+        doc.undo()
+        #expect(doc.blocks.map(\.plainText) == ["Заметка", "Первый абзац", "раз\nдва", "Конец"])
+    }
 }

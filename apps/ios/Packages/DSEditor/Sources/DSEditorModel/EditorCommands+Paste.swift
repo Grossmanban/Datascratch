@@ -9,6 +9,11 @@ extension EditorCommands {
     /// - Returns: the caret after the inserted content.
     @discardableResult
     public func insertFragment(_ blocks: [BlockNode], replacing range: Range<Int>) -> TextPosition? {
+        insertFragment(blocks, replacing: range, endStep: true)
+    }
+
+    /// `endStep: false` leaves the undo step open for an edit that belongs to it (a suggestion's title).
+    func insertFragment(_ blocks: [BlockNode], replacing range: Range<Int>, endStep: Bool) -> TextPosition? {
         guard !document.isReadOnly else { return nil }
         let p = projection
         guard !p.paragraphs.isEmpty, !blocks.isEmpty else { return nil }
@@ -79,7 +84,7 @@ extension EditorCommands {
                 deleteBlockPruning(c.block)
             }
         }
-        document.stopCapturing()
+        if endStep { document.stopCapturing() }
         return caret
     }
 

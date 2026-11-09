@@ -674,25 +674,6 @@ struct EditorBottomBars: View {
             }
             .frame(maxWidth: .infinity)
         }
-        // D-65: the microphone floats above the bars' trailing end, clear of the palette row (in
-        // the row it made the narrow columns overflow, and «Cancel» beside it switched the row's
-        // layout under the finger). Not offered when voice is off for this account.
-        // What is being dictated and a word about the last piece sit above it, so the button
-        // stays put under the finger while the preview grows.
-        .overlay(alignment: .top) {
-            VStack(alignment: .trailing, spacing: Theme.Space.s2) {
-                DictationPreview(dictation: model.dictation, text: model.dictationPreview)
-                if let message = model.dictation.message { DictationMessage(text: message) }
-                if !app.isVoiceOff {
-                    DictationButton(dictation: model.dictation, isCompact: isShort)
-                        .padding(.trailing, Theme.Space.s4)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .alignmentGuide(.top) { $0[.bottom] + Theme.Space.s2 }
-            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictationPreview != nil)
-            .animation(reduceMotion ? nil : Theme.Motion.snappy, value: model.dictation.message)
-        }
         .animation(reduceMotion ? nil : Theme.Motion.snappy, value: selecting)
         .animation(reduceMotion ? nil : Theme.Motion.snappy, value: isShort)
     }

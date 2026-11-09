@@ -1,5 +1,5 @@
 import type { Editor } from "@tiptap/core";
-import { safeHref } from "../schema/core";
+import { safeHref, VOICE_AGENT_ID } from "../schema/core";
 import { useEffect, useState } from "react";
 import { NodeSelection } from "@tiptap/pm/state";
 import { ColorPanel, FormatToolbar, LinkPanel, type FormatElement } from "@datascratch/ui";
@@ -18,10 +18,19 @@ function selectionRect(editor: Editor): DOMRect | null {
   return new DOMRect(left, Math.min(a.top, b.top), Math.max(1, right - left), Math.max(a.bottom, b.bottom) - Math.min(a.top, b.top));
 }
 
+/** An extra action on a text selection, shown after the formatting buttons (DatascratchEditorProps.selectionActions). */
+export interface SelectionAction {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  /** The selection when pressed: document positions and its plain text (blocks separated by "\n"). */
+  onSelect: (selection: { from: number; to: number; text: string }) => void;
+}
+
 type Panel = null | "color" | "link" | "turn";
 
 /** Floating formatting toolbar over a text selection. */
-export function BubbleToolbar({ editor }: { editor: Editor }) {
+export function BubbleToolbar({ editor, actions = [] }: { editor: Editor; actions?: SelectionAction[] }) {
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [, force] = useState(0);
@@ -80,7 +89,20 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
     item("link", "Ссылка", <Link2 />, editor.isActive("link") || panel === "link", () => togglePanel("link"), "mod+k"),
     item("color", "Цвет и выделение", <Highlighter />, panel === "color", () => togglePanel("color")),
   ];
-  if (editor.isActive("agentEdit")) items.push("separator", item("accept", "Принять правку агента", <Check />, false, () => c().acceptAgentEdits().run()));
+  if (editor.isActive("agentEdit")) {
+    const voice = editor.getAttributes("agentEdit").agentId === VOICE_AGENT_ID;
+    items.push("separator", item("accept", voice ? "Принять правку: Голос" : "Принять правку агента", <Check />, false, () => c().acceptAgentEdits().run()));
+  }
+  if (actions.length) {
+    items.push("separator");
+    for (const a of actions)
+      items.push(
+        item(`action-${a.id}`, a.label, a.icon, false, () => {
+          const { from, to } = editor.state.selection;
+          a.onSelect({ from, to, text: editor.state.doc.textBetween(from, to, "\n", " ") });
+        }),
+      );
+  }
 
   const textColor = (editor.getAttributes("textColor").color as string | undefined)?.match(/^tint\.(\w+)\.fg$/)?.[1] ?? null;
   const highlight = (editor.getAttributes("highlight").color as string | undefined)?.replace(/^highlight\./, "") ?? null;

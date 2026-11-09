@@ -1,4 +1,6 @@
 export { DatascratchEditor, type DatascratchEditorProps, type EditorApi, type EditorUser } from "./Editor";
+export type { SelectionAction } from "./ui/BubbleToolbar";
+export { agentEditLabel, VOICE_AGENT_ID } from "./schema/core";
 export type { EditorHost, NoteSummary, UploadedAttachment } from "./host";
 export { buildExtensions, createHeadlessEditor } from "./editorCore";
 export { createSchemaExtensions, CONTRACT_MARKS, CONTRACT_NODES } from "./schema";

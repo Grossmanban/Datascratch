@@ -3,6 +3,7 @@ import SwiftUI
 /// Resolves a `SceneSheet` into its view.
 struct SceneSheetView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
     let sheet: SceneSheet
 
     var body: some View {
@@ -52,6 +53,14 @@ struct SceneSheetView: View {
                 .ignoresSafeArea()
         case .taskDate(let noteId, let blockId, let field):
             TaskDateSheet(noteId: noteId, blockId: blockId, field: field)
+        case .voiceConsent:
+            // «Not Now» records nothing; the sheet comes again on the next hold.
+            VoiceConsentSheet {
+                app.recordVoiceConsent()
+                dismiss()
+            } onDecline: {
+                dismiss()
+            }
         }
     }
 }

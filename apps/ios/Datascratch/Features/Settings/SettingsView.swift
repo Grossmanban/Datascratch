@@ -46,6 +46,10 @@ struct SettingsView: View {
                         SettingsTileRow(String(localized: "Pencil & Drawing"), systemImage: "pencil.tip", tint: .orange)
                     }
                     .accessibilityIdentifier("settings.drawing")
+                    NavigationLink(value: SettingsRoute.voice) {
+                        SettingsTileRow(String(localized: "Voice"), systemImage: "waveform", tint: .pink)
+                    }
+                    .accessibilityIdentifier("settings.voice")
                 }
                 .buttonStyle(.dsSettingsRow)
                 DSSettingsSection {
@@ -82,6 +86,7 @@ struct SettingsView: View {
                 case .agents: AgentTokensSettings()
                 case .drawing: DrawingSettings()
                 case .appearance: AppearanceSettings()
+                case .voice: VoiceSettings()
                 case .about: AboutView()
                 case .sync: SyncSettings()
                 case .security: SecuritySettings()
@@ -101,7 +106,7 @@ struct SettingsView: View {
 }
 
 enum SettingsRoute: Hashable {
-    case account, recoveryKey, devices, agents, drawing, appearance, about, changePassword, securityLog
+    case account, recoveryKey, devices, agents, drawing, appearance, voice, about, changePassword, securityLog
     case sync, security, diagnostics
 }
 
@@ -235,6 +240,54 @@ extension SyncCenter {
         case .notSent(let documents, _): .error(String(localized: "Not sent: \(documents)"))
         case .sessionEnded: .error(String(localized: "Signed out"))
         }
+    }
+}
+
+/// D-65: how dictation is recognised and tidied up, and whether voice is on for this account
+/// (who may use it is managed in the web app).
+struct VoiceSettings: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        @Bindable var settings = app.settings
+        SettingsPage(title: String(localized: "Voice")) {
+            if let access = app.voiceAccess {
+                DSSettingsSection(footer: access.isAdmin ? String(localized: "Manage access in the web app.") : nil) {
+                    Group {
+                        if !access.enabled {
+                            DSSettingsRow(String(localized: "Voice isn’t turned on — ask the server’s owner."), systemImage: "waveform.slash")
+                        } else if !access.available {
+                            DSSettingsRow(String(localized: "Voice is temporarily unavailable."), systemImage: "waveform.slash")
+                        } else {
+                            let minutes = access.minutesLeft
+                            DSSettingsRow(String(localized: "Left this month: \(minutes) min"), systemImage: "waveform")
+                        }
+                    }
+                    .accessibilityIdentifier("settings.voice.status")
+                }
+            }
+            DSSettingsSection(String(localized: "Quality")) {
+                choice(String(localized: "Standard"), isOn: settings.voiceQuality == .standard) { settings.voiceQuality = .standard }
+                choice(String(localized: "Best"), subtitle: String(localized: "Best is more accurate and tidier, but ten times as expensive."),
+                       isOn: settings.voiceQuality == .best) { settings.voiceQuality = .best }
+            }
+            DSSettingsSection(String(localized: "Swear Words")) {
+                choice(String(localized: "Soften When Formatting"), isOn: settings.voiceProfanity == .soften) { settings.voiceProfanity = .soften }
+                choice(String(localized: "Keep As Is"), isOn: settings.voiceProfanity == .keep) { settings.voiceProfanity = .keep }
+            }
+            DSSettingsSection(footer: String(localized: "The recording and its text pass through our server to ElevenLabs and OpenAI only to be recognised and formatted. Nothing is stored, and your notes stay encrypted.")) {
+                DSSettingsRow(String(localized: "Voice Through Our Server"), systemImage: "lock.shield")
+            }
+        }
+        .task { await app.refreshVoiceAccess() }
+    }
+
+    private func choice(_ title: String, subtitle: String? = nil, isOn: Bool, select: @escaping () -> Void) -> some View {
+        Button(action: select) {
+            DSSettingsRow(title, subtitle: subtitle, accessory: isOn ? .check : .none)
+        }
+        .buttonStyle(.dsSettingsRow)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 

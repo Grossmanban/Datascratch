@@ -102,6 +102,8 @@ public actor SyncEngine: SyncClientDelegate {
     private let retiredKeysFor: (@Sendable (DocumentRecord) -> [Data])?
     private let isKeyCanonical: (@Sendable (DocumentRecord) -> Bool)?
     private let register: Registrar?
+    /// Time for the snapshot policy (tests move it).
+    private let clock: @Sendable () -> Date
     private var awarenessHandler: AwarenessHandler?
 
     private struct OpenDoc {
@@ -174,8 +176,10 @@ public actor SyncEngine: SyncClientDelegate {
     ///   with a wrong key must never publish one.
     public init(store: LocalStore, client: SyncClient, keyFor: @escaping KeyLookup, register: Registrar?,
                 retiredKeysFor: (@Sendable (DocumentRecord) -> [Data])? = nil,
-                isKeyCanonical: (@Sendable (DocumentRecord) -> Bool)? = nil) {
+                isKeyCanonical: (@Sendable (DocumentRecord) -> Bool)? = nil,
+                clock: @escaping @Sendable () -> Date = { Date() }) {
         self.store = store
+        self.clock = clock
         self.client = client
         self.keyFor = keyFor
         self.register = register
@@ -291,7 +295,9 @@ public actor SyncEngine: SyncClientDelegate {
         if !wasRunning { await start() }
         var completed = false
         while ContinuousClock.now < deadline, !Task.isCancelled {
-            if await client.isConnected, subscribedAll, catchingUp.isEmpty, inFlight.isEmpty,
+            // `registering`: a document made offline is between `doc_not_found` and its new
+            // subscription — neither catching up nor live, but not sent yet (CI, 2026-11-09).
+            if await client.isConnected, subscribedAll, catchingUp.isEmpty, registering.isEmpty, inFlight.isEmpty,
                (try? store.pendingOutbox(limit: Self.maxInFlight * 2))?.contains(where: { live.contains($0.docId) }) == false {
                 completed = true
                 break
@@ -369,31 +375,83 @@ public actor SyncEngine: SyncClientDelegate {
         try doc.applyUpdates(try store.updates(docId: doc.docId), origin: .storage)
         let store = self.store
         let docId = doc.docId
+        let clock = self.clock
         let sub = doc.observeUpdates { [weak self] update, origin in
             guard origin.isOutgoing else { return }
             // Synchronous: the update is durable before the transaction returns.
-            try? store.appendLocalUpdate(docId: docId, update: update, origin: origin)
-            Task { await self?.flush() }
+            try? store.appendLocalUpdate(docId: docId, update: update, origin: origin, now: clock())
+            Task { await self?.afterLocalEdit(docId) }
         }
         open[doc.docId] = OpenDoc(doc: doc, subscription: sub)
         if await client.isConnected { try? await subscribe([record]) }
         await flush()
     }
 
-    /// Stops applying remote updates to `docId` in memory (it stays tracked in the store).
-    /// Uploads a snapshot first when ≥ 30 local edits were made since the last one: snapshots
-    /// are the versions of the history (sync-protocol.md §5, spec/06).
+    /// **A real close**: stops applying remote updates to `docId` in memory and drops it from
+    /// the open documents (it stays tracked in the store and synced there). For a note the user
+    /// merely leaves while it stays open in the app, call `snapshotOnLeave(docId:)` instead.
+    /// Closing snapshots it first when the policy says so (at least one local
+    /// edit, the last snapshot ≥ 2 min old): snapshots are the versions of the history
+    /// (`SnapshotPolicy`, spec/06).
     ///
     /// The document is detached before anything is awaited, so an `open` of the same document
     /// that runs meanwhile gets a fresh instance from the store, which already holds every edit
     /// of the closed one (the observer stores them synchronously).
-    public func close(docId: String, now: Date = Date()) async {
+    public func close(docId: String, now: Date? = nil) async {
         guard let closing = open.removeValue(forKey: docId) else { return }
         closing.subscription.cancel()
-        if let record = try? store.document(docId), record.localEditsSinceSnapshot >= LocalStore.snapshotOnCloseEdits {
+        let now = now ?? clock()
+        if let record = try? store.document(docId), SnapshotPolicy.onLeave(record, now: now) {
             await snapshot(docId: docId, now: now, detached: closing.doc)
         }
     }
+
+    /// **Leaving a note on screen — use this, not `close`.** The app keeps every note document
+    /// open in the engine (the library opens them all), so leaving one must not stop its sync:
+    /// this only makes the snapshot that leaving calls for (`SnapshotPolicy.onLeave`: at least
+    /// one local edit, this device's last snapshot ≥ 2 min old). The document stays open,
+    /// subscribed and live. With `docId` nil — the app goes to the background — every open
+    /// document with local edits since its last snapshot is checked (one query, not one read
+    /// per document).
+    public func snapshotOnLeave(docId: String? = nil, now: Date? = nil) async {
+        let now = now ?? clock()
+        let records: [DocumentRecord]
+        if let docId {
+            records = (try? store.document(docId)).flatMap { $0 }.map { [$0] } ?? []
+        } else {
+            records = ((try? store.documentsWithLocalEdits()) ?? []).filter { open[$0.docId] != nil }
+        }
+        for record in records where SnapshotPolicy.onLeave(record, now: now) {
+            await snapshot(docId: record.docId, now: now)
+        }
+    }
+
+    /// A version to roll back to, made now: call **before** applying a suggestion (voice
+    /// «Оформить», `agentEdit` replaceWithSuggestion) or a voice insert, so the snapshot holds
+    /// the state before it. Skipped only when this device's last snapshot already holds the
+    /// current state. Returns whether a snapshot was queued.
+    @discardableResult
+    public func snapshotNow(docId: String, reason: SnapshotReason, now: Date? = nil) async -> Bool {
+        guard let record = try? store.document(docId), SnapshotPolicy.beforeChange(record) else { return false }
+        return await snapshot(docId: docId, now: now ?? clock(), force: true)
+    }
+
+    /// After a local edit: send it, and snapshot after 10 minutes of editing. The policy is
+    /// read from the store at most every `editingCheckInterval` per document: bulk edits
+    /// (hundreds in a row) must not cost a read each.
+    private func afterLocalEdit(_ docId: String) async {
+        await flush()
+        let now = clock()
+        if let last = editingChecked[docId], now.timeIntervalSince(last) < Self.editingCheckInterval { return }
+        editingChecked[docId] = now
+        if let record = try? store.document(docId), SnapshotPolicy.whileEditing(record, now: now) {
+            await snapshot(docId: docId, now: now)
+        }
+    }
+
+    /// How often the 10-minute editing rule is checked for one document.
+    static let editingCheckInterval: TimeInterval = 5
+    private var editingChecked: [String: Date] = [:]
 
     public func isOpen(_ docId: String) -> Bool { open[docId] != nil }
 
@@ -700,22 +758,24 @@ public actor SyncEngine: SyncClientDelegate {
         await snapshot(docId: docId, now: now)
     }
 
-    /// Builds, stores and sends a snapshot of `docId` (unless one is already queued).
+    /// Builds, stores and sends a snapshot of `docId` (unless one is already queued; `force`
+    /// adds one anyway — a version of this very state is wanted).
     ///
     /// An open document (or one being closed, `detached`) is snapshotted from memory after the
     /// orphaned-stroke pass. Any other document is never loaded: its stored updates are merged
     /// as they are. Orphans only appear through edits, and the next open-and-close of the note
     /// runs the pass (strokes.md §4.2 sets no deadline tighter than that).
-    private func snapshot(docId: String, now: Date, detached: CRDTDocument? = nil) async {
+    @discardableResult
+    private func snapshot(docId: String, now: Date, detached: CRDTDocument? = nil, force: Bool = false) async -> Bool {
         guard let record = try? store.document(docId),
-              (try? store.pendingOutbox(docId: docId))?.contains(where: { $0.kind == .snapshot }) != true else { return }
+              force || (try? store.pendingOutbox(docId: docId))?.contains(where: { $0.kind == .snapshot }) != true else { return false }
         do {
             guard let doc = open[docId]?.doc ?? detached else {
                 let state = try CRDTUpdates.merge(try store.updates(docId: docId))
                 _ = try store.enqueueSnapshot(docId: docId, state: state, baseSeq: record.lastSeq, now: now)
                 try store.compact(docId: docId, now: now)
                 await flush()
-                return
+                return true
             }
             if record.kind == .note {
                 let note = NoteDocument(doc)
@@ -732,8 +792,10 @@ public actor SyncEngine: SyncClientDelegate {
             _ = try store.enqueueSnapshot(docId: docId, state: try doc.encodeStateAsUpdate(), baseSeq: record.lastSeq, now: now)
             try store.compact(docId: docId, now: now)
             await flush()
+            return true
         } catch {
             // Try again after the next ack.
+            return false
         }
     }
 

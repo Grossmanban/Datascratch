@@ -1387,21 +1387,21 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792932020.6857393,
-    "seen": 1794215239.437356,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.3778696,
+    "ast_hash": "24098989e922515ff0fa0aac07aa956f",
+    "semantic_hash": "24098989e922515ff0fa0aac07aa956f"
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792932020.6857393,
-    "seen": 1794215239.4373577,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.3778722,
+    "ast_hash": "c7d07d0fa3375e1d52e0812d449c1ee9",
+    "semantic_hash": "c7d07d0fa3375e1d52e0812d449c1ee9"
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792948008.1153855,
-    "seen": 1794215239.437359,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.3778737,
+    "ast_hash": "a66fd1a5c043c1420b26f520d2b23c56",
+    "semantic_hash": "a66fd1a5c043c1420b26f520d2b23c56"
   },
   "apps/server/drizzle/meta/0000_snapshot.json": {
     "mtime": 1792932020.6857393,
@@ -2629,9 +2629,9 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1793018122.935858,
-    "seen": 1794215239.4379234,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.3785787,
+    "ast_hash": "c9f780dd0f9b83af1132086b539b65c4",
+    "semantic_hash": "c9f780dd0f9b83af1132086b539b65c4"
   },
   "infra/deploy/docker-compose.yml": {
     "mtime": 1793739821.6651084,
@@ -3265,9 +3265,9 @@
   },
   "packages/shared/src/sync/client.ts": {
     "mtime": 1794215247.7045743,
-    "seen": 1794215346.625975,
+    "seen": 1794215484.378807,
     "ast_hash": "10b7b75894131a79f8d64e639bfdd65b",
-    "semantic_hash": ""
+    "semantic_hash": "10b7b75894131a79f8d64e639bfdd65b"
   },
   "packages/shared/src/sync/index.ts": {
     "mtime": 1792929262.1554523,
@@ -4333,9 +4333,9 @@
   },
   "docs/architecture/contracts/sync-protocol.md": {
     "mtime": 1794215181.1125374,
-    "seen": 1794215346.6322937,
+    "seen": 1794215484.379173,
     "ast_hash": "cf269ce206bc7f652de783ba3f89c7d5",
-    "semantic_hash": ""
+    "semantic_hash": "cf269ce206bc7f652de783ba3f89c7d5"
   },
   "docs/architecture/data-model.md": {
     "mtime": 1794214845.3802662,
@@ -4987,9 +4987,9 @@
   },
   "apps/server/drizzle/0003_agent_move_note.sql": {
     "mtime": 1793029252.1373274,
-    "seen": 1794215239.4373612,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.3778758,
+    "ast_hash": "dc7975f711d91ebab97fb9b5b28fc1d1",
+    "semantic_hash": "dc7975f711d91ebab97fb9b5b28fc1d1"
   },
   "apps/server/drizzle/meta/0003_snapshot.json": {
     "mtime": 1793029252.13769,
@@ -5461,9 +5461,9 @@
   },
   "apps/server/drizzle/0004_storage_quota.sql": {
     "mtime": 1793121301.6137478,
-    "seen": 1794215239.4373627,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.3778777,
+    "ast_hash": "21621440da5d8eb9298c5822ed5892f8",
+    "semantic_hash": "21621440da5d8eb9298c5822ed5892f8"
   },
   "apps/server/drizzle/meta/0004_snapshot.json": {
     "mtime": 1793121301.6137478,
@@ -5911,21 +5911,21 @@
   },
   "apps/server/drizzle/0005_device_revoked_reason.sql": {
     "mtime": 1793124272.2778578,
-    "seen": 1794215239.4373648,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.3778799,
+    "ast_hash": "bf8befdc979b04a047a8b41a5fecaad2",
+    "semantic_hash": "bf8befdc979b04a047a8b41a5fecaad2"
   },
   "apps/server/drizzle/0006_sharing.sql": {
     "mtime": 1793149387.086221,
-    "seen": 1794215239.4373667,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.3778815,
+    "ast_hash": "31990867a10a28e773e24842d832c13c",
+    "semantic_hash": "31990867a10a28e773e24842d832c13c"
   },
   "apps/server/drizzle/0007_rotation_since.sql": {
     "mtime": 1793149387.086221,
-    "seen": 1794215239.4373686,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.3778834,
+    "ast_hash": "ff5b757438f90d1e336d63485e0b0208",
+    "semantic_hash": "ff5b757438f90d1e336d63485e0b0208"
   },
   "docs/decisions/0056-app-links-custom-scheme.md": {
     "mtime": 1793739821.0131083,
@@ -5989,9 +5989,9 @@
   },
   "apps/server/drizzle/0008_agents_shared_notebooks.sql": {
     "mtime": 1793739820.9811084,
-    "seen": 1794215239.4373705,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.377885,
+    "ast_hash": "ce38ed0cf53dc88a3a88809fe9f74f00",
+    "semantic_hash": "ce38ed0cf53dc88a3a88809fe9f74f00"
   },
   "apps/server/test/agents-shared-plugin.test.ts": {
     "mtime": 1793739820.9931083,
@@ -6025,9 +6025,9 @@
   },
   "apps/server/drizzle/0009_agents_all_notebooks.sql": {
     "mtime": 1793739820.9811084,
-    "seen": 1794215239.4373727,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.377887,
+    "ast_hash": "514dd065b0f2022aae2bce77da06a692",
+    "semantic_hash": "514dd065b0f2022aae2bce77da06a692"
   },
   "docs/decisions/0058-pen-frames-anchor-to-enclosed-lines.md": {
     "mtime": 1793739821.0131083,
@@ -6265,15 +6265,15 @@
   },
   "apps/server/drizzle/0010_audit_hardening.sql": {
     "mtime": 1793739820.9811084,
-    "seen": 1794215239.4373744,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.3778887,
+    "ast_hash": "4b31b7e470e3e14d807fc196165e136e",
+    "semantic_hash": "4b31b7e470e3e14d807fc196165e136e"
   },
   "apps/server/drizzle/0011_shared_spaces.sql": {
     "mtime": 1793782472.3974676,
-    "seen": 1794215239.437391,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.3778908,
+    "ast_hash": "61242e6afcdc2b369ee0cdef7c119ad6",
+    "semantic_hash": "61242e6afcdc2b369ee0cdef7c119ad6"
   },
   "apps/web/e2e/specs/enter.spec.ts": {
     "mtime": 1794139928.9776556,
@@ -6631,9 +6631,9 @@
   },
   "apps/server/drizzle/0012_voice.sql": {
     "mtime": 1794214845.3722663,
-    "seen": 1794215239.4373946,
-    "ast_hash": "",
-    "semantic_hash": ""
+    "seen": 1794215484.3778934,
+    "ast_hash": "3efd6e9e2ce4d7657fefef2a667d93d2",
+    "semantic_hash": "3efd6e9e2ce4d7657fefef2a667d93d2"
   },
   "apps/server/drizzle/meta/0012_snapshot.json": {
     "mtime": 1794214845.3722663,

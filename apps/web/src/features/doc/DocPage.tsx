@@ -3,6 +3,7 @@ import { useIsMobile } from "@/hooks/useMedia";
 import { MicButton } from "@/features/voice/MicButton";
 import { useVoiceAccess } from "@/features/voice/access";
 import { useFormat } from "@/features/voice/format";
+import { activeNote, setActiveNote, snapshots } from "./snapshots";
 import { markSharedOpened } from "@/data/sharedOpened";
 import { useShallow } from "zustand/react/shallow";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
@@ -133,7 +134,6 @@ function DocScreen({ noteId }: { noteId: string }) {
   const doc = useNoteDoc(noteId);
   const meta = useNoteMeta(doc);
   const contentReady = useNoteContentReady(noteId, doc);
-  const edits = useRef(0);
   const [editorApi, setEditorApi] = useState<EditorApi | null>(null);
   const isMobile = useIsMobile();
   const paletteCollapsed = useUi((s) => s.penPaletteCollapsed);
@@ -152,16 +152,27 @@ function DocScreen({ noteId }: { noteId: string }) {
     runtime().sendAwareness(noteId, update),
   );
 
-  // Count local edits; upload a version snapshot when leaving a document we changed a lot.
+  // Versions (snapshots.ts): own edits count; a version while editing, on leaving the note or
+  // hiding the page.
   useEffect(() => {
     if (!doc) return;
+    setActiveNote(noteId);
     const onUpdate = (_u: Uint8Array, origin: unknown) => {
-      if (typeof origin === "object" && origin !== null) edits.current++;
+      if (typeof origin === "object" && origin !== null) {
+        snapshots.edited(noteId);
+      }
     };
+    const onHidden = () => document.visibilityState === "hidden" && void snapshots.left(noteId);
+    const onPageHide = () => void snapshots.left(noteId);
     doc.on("update", onUpdate);
+    document.addEventListener("visibilitychange", onHidden);
+    window.addEventListener("pagehide", onPageHide);
     return () => {
       doc.off("update", onUpdate);
-      if (edits.current >= 30) runtime().requestSnapshot(noteId);
+      document.removeEventListener("visibilitychange", onHidden);
+      window.removeEventListener("pagehide", onPageHide);
+      if (activeNote() === noteId) setActiveNote(null);
+      void snapshots.left(noteId);
     };
   }, [doc, noteId]);
 

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   API_ERROR_CODES,
   buildVoiceTextPrompt,
+  splitVoiceTitle,
+  voiceTextResponseSchema,
+  VOICE_TITLE_RULE,
   formatVoiceTime,
   speakerLabel,
   turnsToTranscript,
@@ -113,6 +116,37 @@ describe("voice prompts (D-65)", () => {
     expect(buildVoiceTextPrompt({ task: "format", text: "x" }).system).toContain("Вид: документ");
     expect(buildVoiceTextPrompt({ task: "clean", text: "x" }).system).toContain("Мат и грубость");
     expect(format.user).toBe("Черновик:\n\nкупить, позвонить");
+    expect(format.system).toContain(VOICE_TITLE_RULE);
+    expect(minutes.system).toContain(VOICE_TITLE_RULE);
+    expect(clean.system).not.toContain("Первой строкой");
+    expect(VOICE_TITLE_RULE).toContain("до 8 слов");
+  });
+
+  it("cuts the suggested title out of the answer", () => {
+    expect(splitVoiceTitle("# План переезда\n\n## Шаги\n\n1. Коробки")).toEqual({
+      title: "План переезда",
+      markdown: "## Шаги\n\n1. Коробки",
+    });
+    expect(splitVoiceTitle("\n# «Встреча по бюджету».\r\nТекст")).toEqual({
+      title: "Встреча по бюджету",
+      markdown: "Текст",
+    });
+    expect(splitVoiceTitle("# **Итоги** #\nx").title).toBe("Итоги");
+    expect(splitVoiceTitle("## Коротко\nx")).toEqual({ markdown: "## Коротко\nx" });
+    expect(splitVoiceTitle("Текст\n# Не первая строка")).toEqual({
+      markdown: "Текст\n# Не первая строка",
+    });
+    expect(splitVoiceTitle("#   \nтекст")).toEqual({ markdown: "текст" });
+    expect(splitVoiceTitle("# Одна строка")).toEqual({ title: "Одна строка", markdown: "" });
+    const long = splitVoiceTitle(`# ${"слово ".repeat(30)}\nx`).title!;
+    expect(long.length).toBeLessThanOrEqual(80);
+    expect(long.endsWith(" ")).toBe(false);
+    const ok = (b: unknown) => voiceTextResponseSchema.safeParse(b).success;
+    expect(ok({ markdown: "x", model: "m", title: "План" })).toBe(true);
+    expect(ok({ markdown: "x", model: "m" })).toBe(true);
+    expect(ok({ markdown: "x", model: "m", title: "План." })).toBe(false);
+    expect(ok({ markdown: "x", model: "m", title: "" })).toBe(false);
+    expect(ok({ markdown: "x", model: "m", title: "я".repeat(81) })).toBe(false);
   });
 });
 

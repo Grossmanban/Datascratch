@@ -236,14 +236,17 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
 @Suite(.serialized) struct SyncTests {
     let key = DSCrypto.newKey()
 
-    func device(_ name: String, server: FakeSyncServer) throws -> SyncEngine {
+    func device(_ name: String, server: FakeSyncServer, clock: TestClock? = nil) throws -> SyncEngine {
         let store = try LocalStore.inMemory()
         var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: name, clientVersion: "test")
         config.minBackoff = .milliseconds(10)
         config.maxBackoff = .milliseconds(50)
         let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
         let key = self.key
-        return SyncEngine(store: store, client: client, keyFor: { _ in key }, register: { record in await server.register(record.docId) })
+        let now: @Sendable () -> Date
+        if let clock { now = { clock.now } } else { now = { Date() } }
+        return SyncEngine(store: store, client: client, keyFor: { _ in key }, register: { record in await server.register(record.docId) },
+                          clock: now)
     }
 
     @Test func messagesRoundTripAsContractJSON() throws {
@@ -360,34 +363,105 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         await b.stop()
     }
 
-    @Test func snapshotOnCloseAfter30LocalEdits() async throws {
+    /// spec/06 rule 1: leaving a document with at least one edit makes a version — a short
+    /// dictation too (the owner's «Нет версий», 2026-11-09) — but not twice within 2 minutes.
+    @Test func shortEditThenLeavingMakesAVersion() async throws {
         let server = FakeSyncServer()
-        let a = try device("A", server: server)
+        let clock = TestClock()
+        let a = try device("A", server: server, clock: clock)
         await a.start()
-        let few = NoteDocument(noteId: EntityID.make())
-        let many = NoteDocument(noteId: EntityID.make())
-        for note in [few, many] {
-            try await a.open(note.crdt, notebookId: "nb")
-            try note.initialize(title: "t")
-        }
-        for i in 0..<28 { try few.insertText("\(i)", at: 0, inBlock: [1]) } // 29 edits with initialize
-        for i in 0..<29 { try many.insertText("\(i)", at: 0, inBlock: [1]) } // 30 edits
+        let note = NoteDocument(noteId: EntityID.make())
+        let untouched = NoteDocument(noteId: EntityID.make())
+        try await a.open(note.crdt, notebookId: "nb")
+        try await a.open(untouched.crdt, notebookId: "nb")
+        try note.initialize(title: "Диктовка")
+        try note.insertText("Купить молоко", at: 0, inBlock: [1])
         #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
-        #expect(try a.store.document(many.noteId)?.localEditsSinceSnapshot == 30)
 
-        await a.close(docId: few.noteId)
-        await a.close(docId: many.noteId)
-        #expect(try await eventually {
-            let snap = await server.snapshots[many.noteId]
-            return snap != nil && (try? a.store.outboxCount()) == 0
-        })
-        #expect(await server.snapshots[few.noteId] == nil)
-        #expect(try a.store.document(many.noteId)?.localEditsSinceSnapshot == 0)
-        // The snapshot is the full state, readable with the note key.
-        let snap = try #require(await server.snapshots[many.noteId])
-        let restored = NoteDocument(noteId: many.noteId)
-        try restored.crdt.applyUpdate(try DSCrypto.open(snap.payload, key: key, ad: CryptoAD.doc(many.noteId)))
-        #expect(try restored.block(at: [1])?.text == (try many.block(at: [1])?.text))
+        await a.close(docId: note.noteId)
+        await a.close(docId: untouched.noteId)
+        #expect(try await eventually { await server.snapshots[note.noteId] != nil && (try? a.store.outboxCount()) == 0 })
+        #expect(await server.snapshots[untouched.noteId] == nil)
+        let record = try #require(try a.store.document(note.noteId))
+        #expect(record.localEditsSinceSnapshot == 0 && record.lastSnapshotAt == clock.now)
+        // The version is the full state, readable with the note key.
+        let snap = try #require(await server.snapshots[note.noteId])
+        let restored = NoteDocument(noteId: note.noteId)
+        try restored.crdt.applyUpdate(try DSCrypto.open(snap.payload, key: key, ad: CryptoAD.doc(note.noteId)))
+        #expect(try restored.block(at: [1])?.text == "Купить молоко")
+
+        // Back a minute later, one more word, leave again: too soon for another version.
+        clock.advance(60)
+        let again = NoteDocument(noteId: note.noteId)
+        try await a.open(again.crdt, notebookId: "nb")
+        try again.insertText(" и хлеб", at: 13, inBlock: [1])
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        await a.close(docId: note.noteId)
+        #expect(await server.snapshotsReceived(note.noteId) == 1)
+        // Two minutes after the version: the background (leaving without closing) makes one.
+        try await a.open(again.crdt, notebookId: "nb")
+        clock.advance(SnapshotPolicy.leaveInterval)
+        await a.snapshotOnLeave()
+        #expect(try await eventually { await server.snapshotsReceived(note.noteId) == 2 })
+        await a.stop()
+    }
+
+    /// spec/06 rule 2: while editing, a version once the first edit after the last one is 10 min old.
+    @Test func longEditingMakesAVersionEveryTenMinutes() async throws {
+        let server = FakeSyncServer()
+        let clock = TestClock()
+        let a = try device("A", server: server, clock: clock)
+        await a.start()
+        let note = NoteDocument(noteId: EntityID.make())
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "t")
+        clock.advance(SnapshotPolicy.editingInterval - 1)
+        try note.insertText("a", at: 0, inBlock: [1])
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        #expect(await server.snapshots[note.noteId] == nil)
+        clock.advance(1)
+        try note.insertText("b", at: 0, inBlock: [1])
+        #expect(try await eventually { await server.snapshotsReceived(note.noteId) == 1 })
+        // The clock starts again at the next edit, not at the version.
+        clock.advance(SnapshotPolicy.editingInterval)
+        try note.insertText("c", at: 0, inBlock: [1])
+        clock.advance(SnapshotPolicy.editingInterval - 1)
+        try note.insertText("d", at: 0, inBlock: [1])
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        #expect(await server.snapshotsReceived(note.noteId) == 1)
+        await a.stop()
+    }
+
+    /// spec/06 rule 3: before a suggestion replaces the text, a version of the state before it,
+    /// even right after another version; with nothing changed since a version, none.
+    @Test func snapshotBeforeSuggestionHoldsTheStateBefore() async throws {
+        let server = FakeSyncServer()
+        let clock = TestClock()
+        let a = try device("A", server: server, clock: clock)
+        await a.start()
+        let note = NoteDocument(noteId: EntityID.make())
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "t")
+        try note.insertText("сырой текст диктовки", at: 0, inBlock: [1])
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+
+        #expect(await a.snapshotNow(docId: note.noteId, reason: .beforeSuggestion))
+        // The suggestion is applied after the call returns.
+        let block = try #require(try note.block(at: [1]))
+        try note.deleteText(range: 0..<block.text.count, inBlock: [1])
+        try note.insertText("Оформленный текст", at: 0, inBlock: [1])
+        #expect(try await eventually { await server.snapshotsReceived(note.noteId) == 1 && (try? a.store.outboxCount()) == 0 })
+        let snap = try #require(await server.snapshots[note.noteId])
+        let before = NoteDocument(noteId: note.noteId)
+        try before.crdt.applyUpdate(try DSCrypto.open(snap.payload, key: key, ad: CryptoAD.doc(note.noteId)))
+        #expect(try before.block(at: [1])?.text == "сырой текст диктовки")
+
+        // A voice insert right away: a new version (the suggestion is an edit since), no wait.
+        #expect(await a.snapshotNow(docId: note.noteId, reason: .beforeVoiceInsert))
+        #expect(try await eventually { await server.snapshotsReceived(note.noteId) == 2 })
+        // Nothing changed since that version: no third one.
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        #expect(await !a.snapshotNow(docId: note.noteId, reason: .beforeSuggestion))
         await a.stop()
     }
 
@@ -395,7 +469,9 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
     /// writing all the time: the new instance is live and nothing is lost.
     @Test func reopenWhileClosingUnderContinuousWrites() async throws {
         let server = FakeSyncServer()
-        let a = try device("A", server: server)
+        let clock = TestClock()
+        let edits = 30
+        let a = try device("A", server: server, clock: clock)
         let b = try device("B", server: server)
         await a.start()
         await b.start()
@@ -420,7 +496,9 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         let rounds = 5
         await server.setSnapshotDelay(.milliseconds(50))
         for _ in 0..<rounds {
-            for _ in 0..<LocalStore.snapshotOnCloseEdits { try current.insertText("a", at: 0, inBlock: [1]) }
+            // Each round leaves the note more than 2 minutes after the previous version.
+            clock.advance(SnapshotPolicy.leaveInterval)
+            for _ in 0..<edits { try current.insertText("a", at: 0, inBlock: [1]) }
             // Edits (and the previous snapshot) acknowledged: the close uploads its snapshot itself.
             #expect(try await eventually(timeout: wait) { (try? a.store.outboxCount()) == 0 })
             let before = await server.snapshotsReceived(docId)
@@ -439,7 +517,7 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
             let text = (try? note.block(at: [1])?.text) ?? ""
             return (text.filter { $0 == "a" }.count, text.filter { $0 == "b" }.count)
         }
-        let expected = (rounds * LocalStore.snapshotOnCloseEdits, writes)
+        let expected = (rounds * edits, writes)
         #expect(try await eventually(timeout: wait) { counts(current) == expected && counts(remote) == expected })
         await a.stop()
         await b.stop()
@@ -660,4 +738,12 @@ final class StubTransport: HTTPTransport, @unchecked Sendable {
         let body = try #require(transport.requests.withLock { $0.last?.httpBody })
         #expect(String(decoding: body, as: UTF8.self).contains(#""notebookId":null"#))
     }
+}
+
+/// A clock the snapshot policy reads; tests move it.
+final class TestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = Date(timeIntervalSince1970: 1_762_675_200)
+    var now: Date { lock.withLock { current } }
+    func advance(_ seconds: TimeInterval) { lock.withLock { current += seconds } }
 }

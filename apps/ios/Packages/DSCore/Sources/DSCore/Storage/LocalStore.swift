@@ -191,6 +191,14 @@ public final class LocalStore: Sendable {
                 t.primaryKey(["docId", "seq"])
             }
         }
+        m.registerMigration("v8-snapshot-times") { db in
+            // Versions after short edits too (spec/06, 2026-11-09): when this device last made a
+            // snapshot, and when the first local edit after it was made.
+            try db.alter(table: "documents") { t in
+                t.add(column: "lastSnapshotAt", .datetime)
+                t.add(column: "firstEditSinceSnapshotAt", .datetime)
+            }
+        }
         return m
     }
 }
@@ -211,6 +219,10 @@ public struct DocumentRecord: Codable, FetchableRecord, PersistableRecord, Hasha
     public var bytesSinceSnapshot: Int
     /// Local edits (outgoing updates) since the last snapshot this device made.
     public var localEditsSinceSnapshot: Int
+    /// When this device last queued a snapshot of the document.
+    public var lastSnapshotAt: Date?
+    /// When the first local edit after that snapshot was made (nil: none yet).
+    public var firstEditSinceSnapshotAt: Date?
     /// Registered on the server (`POST /v1/docs`).
     public var registered: Bool
     public var createdAt: Date
@@ -225,6 +237,8 @@ public struct DocumentRecord: Codable, FetchableRecord, PersistableRecord, Hasha
         updatesSinceSnapshot = 0
         bytesSinceSnapshot = 0
         localEditsSinceSnapshot = 0
+        lastSnapshotAt = nil
+        firstEditSinceSnapshotAt = nil
         registered = false
         createdAt = now
         updatedAt = now
@@ -305,10 +319,49 @@ public struct OutboxItem: Codable, FetchableRecord, MutablePersistableRecord, Ha
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
 
-/// Snapshot thresholds (sync-protocol.md §5).
+/// When snapshots — the versions of the history — are made (spec/06, sync-protocol.md §5).
 public enum SnapshotPolicy {
+    /// Size thresholds: compaction.
     public static let maxUpdates = 500
     public static let maxBytes = 1_000_000
+    /// Leaving a document (close, switch, background) snapshots it when it has at least one
+    /// local edit and the last snapshot of this device is at least this old.
+    public static let leaveInterval: TimeInterval = 2 * 60
+    /// While editing: a snapshot once the first edit after the last one is this old.
+    public static let editingInterval: TimeInterval = 10 * 60
+
+    /// Rule 1 (leaving).
+    public static func onLeave(_ doc: DocumentRecord, now: Date) -> Bool {
+        guard doc.localEditsSinceSnapshot > 0 else { return false }
+        guard let last = doc.lastSnapshotAt else { return true }
+        return now.timeIntervalSince(last) >= leaveInterval
+    }
+
+    /// Rule 2 (while editing).
+    public static func whileEditing(_ doc: DocumentRecord, now: Date) -> Bool {
+        guard doc.localEditsSinceSnapshot > 0, let first = doc.firstEditSinceSnapshotAt else { return false }
+        return now.timeIntervalSince(first) >= editingInterval
+    }
+
+    /// Rule 3 (before a suggestion or a voice insert): skipped only when a snapshot of this
+    /// device already holds the current state (nothing arrived or was edited since).
+    public static func beforeChange(_ doc: DocumentRecord) -> Bool {
+        doc.lastSnapshotAt == nil || doc.localEditsSinceSnapshot > 0 || doc.updatesSinceSnapshot > 0
+    }
+}
+
+/// Why a snapshot is made (logs and tests; the protocol does not carry it).
+public enum SnapshotReason: String, Sendable, Hashable {
+    /// > 500 updates or > 1 MB since the last snapshot.
+    case size
+    /// Leaving the document (close, switch, background).
+    case leave
+    /// Every 10 minutes of editing.
+    case editing
+    /// Before applying a suggestion (voice «Оформить», `agentEdit` replaceWithSuggestion).
+    case beforeSuggestion
+    /// Before a voice insert.
+    case beforeVoiceInsert
 }
 
 extension LocalStore {
@@ -357,8 +410,11 @@ extension LocalStore {
             var item = OutboxItem(id: nil, docId: docId, clientMsgId: clientMsgId, kind: .push, payload: update,
                                   baseSeq: nil, attempts: 0, lastError: nil, createdAt: now)
             try item.insert(db)
-            try db.execute(sql: "UPDATE documents SET updatedAt = ?, localEditsSinceSnapshot = localEditsSinceSnapshot + 1 WHERE docId = ?",
-                           arguments: [now, docId])
+            try db.execute(sql: """
+                UPDATE documents SET updatedAt = ?, localEditsSinceSnapshot = localEditsSinceSnapshot + 1,
+                    firstEditSinceSnapshotAt = COALESCE(firstEditSinceSnapshotAt, ?)
+                WHERE docId = ?
+                """, arguments: [now, now, docId])
         }
     }
 
@@ -503,9 +559,6 @@ extension LocalStore {
         try db.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM outbox") ?? 0 } + (try unsentNotebookIds().count)
     }
 
-    /// Local edits needed to snapshot a document when it is closed (sync-protocol.md §5).
-    public static let snapshotOnCloseEdits = 30
-
     /// Whether a snapshot should be uploaded (sync-protocol.md §5).
     public func needsSnapshot(docId: String) throws -> Bool {
         guard let doc = try document(docId) else { return false }
@@ -516,7 +569,10 @@ extension LocalStore {
 
     public func enqueueSnapshot(docId: String, state: Data, baseSeq: Int64, now: Date = Date()) throws -> OutboxItem {
         try db.write { db in
-            try db.execute(sql: "UPDATE documents SET localEditsSinceSnapshot = 0 WHERE docId = ?", arguments: [docId])
+            try db.execute(sql: """
+                UPDATE documents SET localEditsSinceSnapshot = 0, lastSnapshotAt = ?, firstEditSinceSnapshotAt = NULL
+                WHERE docId = ?
+                """, arguments: [now, docId])
             var item = OutboxItem(id: nil, docId: docId, clientMsgId: EntityID.make(now: now), kind: .snapshot, payload: state,
                                   baseSeq: baseSeq, attempts: 0, lastError: nil, createdAt: now)
             try item.insert(db)

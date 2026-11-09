@@ -1124,6 +1124,31 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(doc.blocks[1].plainText, "Привет мир", "a suggestion is one undo step")
     }
 
+    /// The title through the editor: read, set (its own undo step), and replaced with a
+    /// suggestion in the same undo step as the body.
+    func testTitleReadSetAndSuggestion() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Заметка 9 нояб."), .paragraph("черновик")])
+        let editor = host(doc, width: 700, height: 600)
+        window.makeKey()
+        XCTAssertEqual(editor.title, "Заметка 9 нояб.")
+        editor.setTitle("План")
+        settle(editor)
+        XCTAssertEqual(editor.title, "План")
+        XCTAssertEqual(editor.textView.textStorage.string.components(separatedBy: "\n").first, "План")
+        doc.undo()
+        XCTAssertEqual(editor.title, "Заметка 9 нояб.", "setTitle is one undo step")
+
+        editor.replaceWithSuggestion("## Итог\n\nЧистый текст", scope: .document, title: "Итоги встречи")
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(editor.title, "Итоги встречи")
+        XCTAssertEqual(doc.blocks.map(\.plainText), ["Итоги встречи", "Итог", "Чистый текст"])
+        XCTAssertTrue(editor.hasAgentEdits)
+        doc.undo()
+        settle(editor)
+        XCTAssertEqual(doc.blocks.map(\.plainText), ["Заметка 9 нояб.", "черновик"], "one undo brings back the title and the body")
+    }
+
     // MARK: - Selection and edge autoscroll (build 37 feedback)
 
     /// A selection made with a finger stays where the person left it: lifting the finger (and the

@@ -343,9 +343,11 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         for i in 0...SnapshotPolicy.maxUpdates {
             try nb.putFolder(Folder(id: "f\(i % 10)", parentId: nil, name: "F\(i)", order: Double(i)))
         }
-        // Every edit acknowledged (the server's last seq) and the snapshot stored.
+        // Every edit acknowledged (the server's last seq) and the snapshot stored. A generous
+        // wait: 501 edits on a loaded CI simulator take seconds (CI #148: past 9 s); the test is
+        // about the threshold, not speed.
         let edits = Int64(SnapshotPolicy.maxUpdates + 1)
-        #expect(try await eventually {
+        #expect(try await eventually(timeout: .seconds(30)) {
             let lastSeq = await server.nextSeq[docId] ?? 0
             let snap = await server.snapshots[docId]
             return lastSeq == edits && snap != nil && (try? a.store.outboxCount()) == 0
@@ -449,7 +451,8 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         try note.insertText("a", at: 0, inBlock: [1])
         #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
         #expect(await server.snapshots[note.noteId] == nil)
-        clock.advance(1)
+        // The rule is checked at most every few seconds per document (bulk edits).
+        clock.advance(SyncEngine.editingCheckInterval)
         try note.insertText("b", at: 0, inBlock: [1])
         #expect(try await eventually { await server.snapshotsReceived(note.noteId) == 1 })
         // The clock starts again at the next edit, not at the version.

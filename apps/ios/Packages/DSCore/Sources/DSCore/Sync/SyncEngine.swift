@@ -436,14 +436,22 @@ public actor SyncEngine: SyncClientDelegate {
         return await snapshot(docId: docId, now: now ?? clock(), force: true)
     }
 
-    /// After a local edit: send it, and snapshot after 10 minutes of editing.
+    /// After a local edit: send it, and snapshot after 10 minutes of editing. The policy is
+    /// read from the store at most every `editingCheckInterval` per document: bulk edits
+    /// (hundreds in a row) must not cost a read each.
     private func afterLocalEdit(_ docId: String) async {
         await flush()
         let now = clock()
+        if let last = editingChecked[docId], now.timeIntervalSince(last) < Self.editingCheckInterval { return }
+        editingChecked[docId] = now
         if let record = try? store.document(docId), SnapshotPolicy.whileEditing(record, now: now) {
             await snapshot(docId: docId, now: now)
         }
     }
+
+    /// How often the 10-minute editing rule is checked for one document.
+    static let editingCheckInterval: TimeInterval = 5
+    private var editingChecked: [String: Date] = [:]
 
     public func isOpen(_ docId: String) -> Bool { open[docId] != nil }
 

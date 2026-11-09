@@ -27,7 +27,7 @@ private final class NoteSink: FormatTarget {
     }
 }
 
-private struct StyleEcho: VoiceService {
+private nonisolated struct StyleEcho: VoiceService {
     var error: VoiceError?
     func me() async throws -> VoiceAccess { VoiceAccess(enabled: true) }
     func transcribe(audio: URL, mode: VoiceMode, language: VoiceLanguage) async throws -> VoiceTranscript {

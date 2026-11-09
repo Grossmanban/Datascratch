@@ -8,7 +8,7 @@ struct SceneSheetView: View {
     let sheet: SceneSheet
 
     /// The open note's «Format» (only the native editor has one).
-    private func formatter(_ noteId: String) -> VoiceFormatter? {
+    private func voiceFormatter(for noteId: String) -> VoiceFormatter? {
         #if canImport(DSEditor) && canImport(DSEditorCore) && canImport(DSCore) && canImport(DSDesign)
         (scene.editor(for: noteId) as? NativeEditorModel)?.formatter
         #else
@@ -72,14 +72,14 @@ struct SceneSheetView: View {
                 dismiss()
             }
         case .voiceFormat(let noteId):
-            if let formatter = formatter(noteId) {
+            if let formatter = voiceFormatter(for: noteId) {
                 VoiceFormatSheet(appliesToSelection: formatter.appliesToSelection) { style in
                     formatter.format(style: style)
                     dismiss()
                 }
             }
         case .voiceOriginal(let noteId):
-            if let formatter = formatter(noteId) {
+            if let formatter = voiceFormatter(for: noteId) {
                 VoiceOriginalSheet(formatter: formatter)
             }
         }

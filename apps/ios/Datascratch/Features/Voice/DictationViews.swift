@@ -313,8 +313,8 @@ struct VoiceFormatSheet: View {
                     }
                 } footer: {
                     Text(appliesToSelection
-                         ? "Only the selected text is formatted. The result is highlighted until you accept it."
-                         : "The whole note is formatted. The result is highlighted until you accept it.")
+                         ? LocalizedStringKey("Only the selected text is formatted. The result is highlighted until you accept it.")
+                         : LocalizedStringKey("The whole note is formatted. The result is highlighted until you accept it."))
                 }
             }
             .navigationTitle("How to Format?")

@@ -360,7 +360,6 @@ struct NativeDocumentScreen: View {
                 }
                 .toolbar { NativeEditorToolbar(model: model, note: note) }
                 .modifier(LinkPrompt(model: model))
-                .modifier(DictationSheets(dictation: model.dictation))
                 .coverPickers()
             } else if failed {
                 // Opening the document failed: fall back to the stand-in editor.
@@ -377,7 +376,6 @@ struct NativeDocumentScreen: View {
             app.presence?.join(noteId)
         }
         .onDisappear {
-            model?.dictation.leave()
             app.library.recordVersion(ofNote: noteId)
             app.presence?.leave(noteId)
         }

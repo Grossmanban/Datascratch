@@ -19,4 +19,33 @@ extension NativeEditorModel: DictationTarget {
         editor.replaceWithSuggestion(text + " ", scope: .selection)
     }
 }
+
+/// D-65 «Оформить»: the selection or the note's body as Markdown, and the formatted text back as
+/// a suggestion marked for review (`agentEdit`, author «Голос»).
+extension NativeEditorModel: FormatTarget {
+    var selectedMarkdown: String? { editor.selectedMarkdown }
+    var documentMarkdown: String { editor.documentMarkdown }
+    var hasSuggestion: Bool { editor.hasAgentEdits }
+
+    func replaceWithFormatted(_ markdown: String, selection: Bool) {
+        guard !isViewOnly else { return }
+        editor.replaceWithSuggestion(markdown, scope: selection ? .selection : .document)
+    }
+
+    func undoFormatting() {
+        editor.undo()
+    }
+
+    /// «Format» is offered: the note can be edited and the server's voice is on for this account.
+    var canFormat: Bool {
+        guard let app, !isViewOnly else { return false }
+        return app.voiceService != nil && !app.isVoiceOff
+    }
+
+    /// «Format…»: where the text goes first (once), then «How to Format?».
+    func askHowToFormat(scene: SceneModel) {
+        guard canFormat, let app else { return }
+        scene.sheet = app.hasVoiceConsent() ? .voiceFormat(noteId: noteId) : .voiceConsent
+    }
+}
 #endif

@@ -47,6 +47,10 @@ enum SceneSheet: Identifiable, Hashable {
     case taskDate(noteId: String, blockId: String, field: TaskDateField)
     /// D-65: where the voice goes, before the first recording on this device.
     case voiceConsent
+    /// D-65: «How to Format?» for an open note.
+    case voiceFormat(noteId: String)
+    /// D-65: what «Format» replaced in an open note.
+    case voiceOriginal(noteId: String)
 
     var id: Self { self }
 }

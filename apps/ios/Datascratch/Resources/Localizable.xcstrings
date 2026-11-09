@@ -121,6 +121,16 @@
         }
       }
     },
+    "A connected text for readers": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Связный текст для читателей"
+          }
+        }
+      }
+    },
     "AI Agents": {
       "localizations": {
         "ru": {
@@ -1051,6 +1061,16 @@
         }
       }
     },
+    "Couldn’t format the text — try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не получилось оформить текст — попробуйте ещё раз."
+          }
+        }
+      }
+    },
     "Couldn’t process the recording. What the device heard is kept.": {
       "localizations": {
         "ru": {
@@ -1951,6 +1971,36 @@
         }
       }
     },
+    "Format": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оформить"
+          }
+        }
+      }
+    },
+    "Formatted — edit highlighted": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оформлено — правка подсвечена"
+          }
+        }
+      }
+    },
+    "Format…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оформить…"
+          }
+        }
+      }
+    },
     "Formula": {
       "localizations": {
         "ru": {
@@ -2091,6 +2141,16 @@
         }
       }
     },
+    "Greeting, body, sign-off": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обращение, суть, подпись"
+          }
+        }
+      }
+    },
     "Grid": {
       "localizations": {
         "ru": {
@@ -2171,6 +2231,16 @@
         }
       }
     },
+    "Headings, paragraphs and lists": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заголовки, абзацы и списки"
+          }
+        }
+      }
+    },
     "Hidden while the screen is recorded or shared": {
       "localizations": {
         "ru": {
@@ -2227,6 +2297,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Удерживайте, чтобы диктовать. Смахните вверх — запись без рук, влево — отмена."
+          }
+        }
+      }
+    },
+    "How to Format?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как оформить?"
           }
         }
       }
@@ -2557,6 +2637,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ключ проверен"
+          }
+        }
+      }
+    },
+    "Key ideas, short and structured": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Главные мысли — коротко и по пунктам"
           }
         }
       }
@@ -3111,6 +3201,16 @@
         }
       }
     },
+    "No connection — formatting needs the server.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет сети — для оформления нужен сервер."
+          }
+        }
+      }
+    },
     "No documents yet": {
       "localizations": {
         "ru": {
@@ -3451,6 +3551,16 @@
         }
       }
     },
+    "Nothing to format yet.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пока нечего оформлять."
+          }
+        }
+      }
+    },
     "Nothing went wrong": {
       "localizations": {
         "ru": {
@@ -3557,6 +3667,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Доступом и гостевыми ссылками управляет только владелец."
+          }
+        }
+      }
+    },
+    "Only the selected text is formatted. The result is highlighted until you accept it.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оформится только выделенный текст. Результат подсвечен, пока вы его не примете."
           }
         }
       }
@@ -3687,6 +3807,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Оранжевый"
+          }
+        }
+      }
+    },
+    "Original Text": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Исходный текст"
           }
         }
       }
@@ -4137,6 +4267,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Повторить"
+          }
+        }
+      }
+    },
+    "Reject": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отклонить"
+          }
+        }
+      }
+    },
+    "Reject Formatting": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отклонить оформление"
           }
         }
       }
@@ -4751,6 +4901,16 @@
         }
       }
     },
+    "Show Original": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать исходный текст"
+          }
+        }
+      }
+    },
     "Show Pen Tools": {
       "localizations": {
         "ru": {
@@ -4847,6 +5007,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Войдите, чтобы диктовать с распознаванием на сервере."
+          }
+        }
+      }
+    },
+    "Sign in to format text on the server.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войдите, чтобы оформлять текст на сервере."
           }
         }
       }
@@ -5131,6 +5301,16 @@
         }
       }
     },
+    "Steps and points to do": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Шаги и пункты к выполнению"
+          }
+        }
+      }
+    },
     "Stop Dictation": {
       "localizations": {
         "ru": {
@@ -5411,6 +5591,16 @@
         }
       }
     },
+    "The formatting service isn’t responding — try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервис оформления не отвечает — попробуйте ещё раз."
+          }
+        }
+      }
+    },
     "The key changes, so they can’t read anything new. What they have already seen can’t be taken back. Guest links are made anew — you’ll get the new ones to send.": {
       "localizations": {
         "ru": {
@@ -5647,6 +5837,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сеанс завершён с другого устройства или в настройках аккаунта. Заметки остаются на этом устройстве; изменения, сделанные здесь, синхронизируются, как только вы снова войдёте."
+          }
+        }
+      }
+    },
+    "The text changed while it was being formatted — nothing was replaced.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текст изменился, пока шло оформление, — ничего не заменено."
+          }
+        }
+      }
+    },
+    "The text is too long to format.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текст слишком длинный для оформления."
+          }
+        }
+      }
+    },
+    "The whole note is formatted. The result is highlighted until you accept it.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оформится вся заметка. Результат подсвечен, пока вы его не примете."
           }
         }
       }
@@ -6277,6 +6497,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Когда с вами поделятся блокнотом или документом, приглашение появится здесь."
+          }
+        }
+      }
+    },
+    "Who said what, decisions, next steps": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кто что сказал, решения, дальнейшие шаги"
           }
         }
       }

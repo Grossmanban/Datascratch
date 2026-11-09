@@ -406,6 +406,34 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         await a.stop()
     }
 
+    /// The app keeps every note open in the engine: leaving one makes its version but keeps it
+    /// live — edits from another device still arrive.
+    @Test func leavingANoteKeepsItSyncing() async throws {
+        let server = FakeSyncServer()
+        let clock = TestClock()
+        let a = try device("A", server: server, clock: clock)
+        let b = try device("B", server: server)
+        await a.start()
+        await b.start()
+        let note = NoteDocument(noteId: EntityID.make())
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "t")
+        try note.insertText("с телефона", at: 0, inBlock: [1])
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+
+        await a.snapshotOnLeave(docId: note.noteId)
+        #expect(try await eventually { await server.snapshotsReceived(note.noteId) == 1 })
+        #expect(await a.isOpen(note.noteId))
+
+        let remote = NoteDocument(noteId: note.noteId)
+        try await b.open(remote.crdt, notebookId: "nb")
+        #expect(try await eventually { (try? remote.block(at: [1])?.text) == "с телефона" })
+        try remote.insertText("с Mac ", at: 0, inBlock: [1])
+        #expect(try await eventually { (try? note.block(at: [1])?.text) == "с Mac с телефона" })
+        await a.stop()
+        await b.stop()
+    }
+
     /// spec/06 rule 2: while editing, a version once the first edit after the last one is 10 min old.
     @Test func longEditingMakesAVersionEveryTenMinutes() async throws {
         let server = FakeSyncServer()

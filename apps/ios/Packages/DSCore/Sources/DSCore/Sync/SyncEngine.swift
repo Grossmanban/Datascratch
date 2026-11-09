@@ -385,8 +385,10 @@ public actor SyncEngine: SyncClientDelegate {
         await flush()
     }
 
-    /// Stops applying remote updates to `docId` in memory (it stays tracked in the store).
-    /// Leaving the document snapshots it first when the policy says so (at least one local
+    /// **A real close**: stops applying remote updates to `docId` in memory and drops it from
+    /// the open documents (it stays tracked in the store and synced there). For a note the user
+    /// merely leaves while it stays open in the app, call `snapshotOnLeave(docId:)` instead.
+    /// Closing snapshots it first when the policy says so (at least one local
     /// edit, the last snapshot ≥ 2 min old): snapshots are the versions of the history
     /// (`SnapshotPolicy`, spec/06).
     ///
@@ -402,13 +404,23 @@ public actor SyncEngine: SyncClientDelegate {
         }
     }
 
-    /// Leaving without closing — the app goes to the background: every open document (or
-    /// `docId`) gets the snapshot that leaving it would make.
+    /// **Leaving a note on screen — use this, not `close`.** The app keeps every note document
+    /// open in the engine (the library opens them all), so leaving one must not stop its sync:
+    /// this only makes the snapshot that leaving calls for (`SnapshotPolicy.onLeave`: at least
+    /// one local edit, this device's last snapshot ≥ 2 min old). The document stays open,
+    /// subscribed and live. With `docId` nil — the app goes to the background — every open
+    /// document with local edits since its last snapshot is checked (one query, not one read
+    /// per document).
     public func snapshotOnLeave(docId: String? = nil, now: Date? = nil) async {
         let now = now ?? clock()
-        for id in docId.map({ [$0] }) ?? Array(open.keys) {
-            guard let record = try? store.document(id), SnapshotPolicy.onLeave(record, now: now) else { continue }
-            await snapshot(docId: id, now: now)
+        let records: [DocumentRecord]
+        if let docId {
+            records = (try? store.document(docId)).flatMap { $0 }.map { [$0] } ?? []
+        } else {
+            records = ((try? store.documentsWithLocalEdits()) ?? []).filter { open[$0.docId] != nil }
+        }
+        for record in records where SnapshotPolicy.onLeave(record, now: now) {
+            await snapshot(docId: record.docId, now: now)
         }
     }
 

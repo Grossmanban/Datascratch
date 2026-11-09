@@ -559,6 +559,11 @@ extension LocalStore {
         try db.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM outbox") ?? 0 } + (try unsentNotebookIds().count)
     }
 
+    /// Documents with local edits since this device's last snapshot (the leave rule, spec/06).
+    public func documentsWithLocalEdits() throws -> [DocumentRecord] {
+        try db.read { try DocumentRecord.fetchAll($0, sql: "SELECT * FROM documents WHERE localEditsSinceSnapshot > 0") }
+    }
+
     /// Whether a snapshot should be uploaded (sync-protocol.md §5).
     public func needsSnapshot(docId: String) throws -> Bool {
         guard let doc = try document(docId) else { return false }

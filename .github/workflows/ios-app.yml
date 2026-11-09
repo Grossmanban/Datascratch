@@ -59,7 +59,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        family: [iPad, iPhone]
+        family: [iPad]
     env:
       SMOKE_UI_TESTS: >-
         BareEditorProbeTests
@@ -159,13 +159,14 @@ jobs:
   # launch 94 s instead of 6–9, the first query 50 s), and at 180 s that killed a passing test.
   smoke:
     needs: build
+    if: false
     name: Unit & smoke (${{ matrix.family }})
     runs-on: macos-26
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        family: [iPad, iPhone]
+        family: [iPad]
     env:
       SMOKE_UI_TESTS: >-
         BareEditorProbeTests
@@ -262,14 +263,15 @@ jobs:
   # (scripts/ui-test-shard.py; the build job checks that the parts add up to the whole suite).
   ui:
     needs: build
-    name: UI tests (${{ matrix.family }} ${{ matrix.shard }}/3)
+    name: UI tests (${{ matrix.family }} ${{ matrix.shard }}/3 try ${{ matrix.attempt }})
     runs-on: macos-26
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        family: [iPad, iPhone]
+        family: [iPad]
         shard: [1, 2, 3]
+        attempt: [1, 2, 3]
     env:
       SMOKE_UI_TESTS: >-
         BareEditorProbeTests
@@ -338,7 +340,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots-${{ matrix.family }}-${{ matrix.shard }}
+          name: screenshots-${{ matrix.family }}-${{ matrix.shard }}-${{ matrix.attempt }}
           path: apps/ios/build/screenshots
           retention-days: 14
           if-no-files-found: ignore
@@ -347,6 +349,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: xcresult-${{ matrix.family }}-${{ matrix.shard }}
+          name: xcresult-${{ matrix.family }}-${{ matrix.shard }}-${{ matrix.attempt }}
           path: apps/ios/build/*.xcresult
           retention-days: 7

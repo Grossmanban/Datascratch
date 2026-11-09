@@ -295,7 +295,9 @@ public actor SyncEngine: SyncClientDelegate {
         if !wasRunning { await start() }
         var completed = false
         while ContinuousClock.now < deadline, !Task.isCancelled {
-            if await client.isConnected, subscribedAll, catchingUp.isEmpty, inFlight.isEmpty,
+            // `registering`: a document made offline is between `doc_not_found` and its new
+            // subscription — neither catching up nor live, but not sent yet (CI, 2026-11-09).
+            if await client.isConnected, subscribedAll, catchingUp.isEmpty, registering.isEmpty, inFlight.isEmpty,
                (try? store.pendingOutbox(limit: Self.maxInFlight * 2))?.contains(where: { live.contains($0.docId) }) == false {
                 completed = true
                 break

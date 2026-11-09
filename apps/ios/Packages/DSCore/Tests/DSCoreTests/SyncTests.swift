@@ -236,7 +236,7 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
 @Suite(.serialized) struct SyncTests {
     let key = DSCrypto.newKey()
 
-    func device(_ name: String, server: FakeSyncServer, clock: TestClock? = nil) throws -> SyncEngine {
+    func device(_ name: String, server: FakeSyncServer, clock: TestClock? = nil, registerDelay: Duration = .zero) throws -> SyncEngine {
         let store = try LocalStore.inMemory()
         var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: name, clientVersion: "test")
         config.minBackoff = .milliseconds(10)
@@ -245,8 +245,10 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         let key = self.key
         let now: @Sendable () -> Date
         if let clock { now = { clock.now } } else { now = { Date() } }
-        return SyncEngine(store: store, client: client, keyFor: { _ in key }, register: { record in await server.register(record.docId) },
-                          clock: now)
+        return SyncEngine(store: store, client: client, keyFor: { _ in key }, register: { record in
+            if registerDelay > .zero { try await Task.sleep(for: registerDelay) }
+            await server.register(record.docId)
+        }, clock: now)
     }
 
     @Test func messagesRoundTripAsContractJSON() throws {
@@ -585,6 +587,22 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         let cut = await b.syncOnce(deadline: .now + .milliseconds(300))
         #expect(cut == .init(completed: false, pending: 1))
         #expect(ContinuousClock.now - start < .seconds(3))
+    }
+
+    /// A note made offline is registered after `doc_not_found`; while that request runs the
+    /// note is neither catching up nor live. The pass is not done until it is sent (CI failure
+    /// of syncOnceCatchesUpSendsAndDisconnects, 2026-11-09: «completed» with the note unsent).
+    @Test func syncOnceWaitsForASlowRegistration() async throws {
+        let server = FakeSyncServer()
+        let b = try device("B", server: server, registerDelay: .milliseconds(300))
+        let offline = NoteDocument(noteId: EntityID.make())
+        try offline.initialize(title: "Offline")
+        try b.store.ensureDocument(docId: offline.noteId, kind: .note, notebookId: "nb")
+        try b.store.appendLocalUpdate(docId: offline.noteId, update: try offline.crdt.encodeStateAsUpdate(), origin: .local)
+
+        let result = await b.syncOnce(deadline: .now + .seconds(10))
+        #expect(result == .init(completed: true, pending: 0))
+        #expect(await server.docs[offline.noteId]?.isEmpty == false)
     }
 
     /// A refused registration fails only that document's messages (shown in `status.failed`);

@@ -14,7 +14,7 @@ import { requireUser } from '../auth/guard.js';
 import type { AppContext } from '../context.js';
 import { users } from '../db/schema.js';
 import { ApiError, badRequest, forbidden, notFound } from '../lib/errors.js';
-import { resetsAt, VoiceService, voiceUnavailable, type VoiceStatus } from '../voice/service.js';
+import { resetsAt, splitTitle, VOICE_TITLE_MAX, VoiceService, voiceUnavailable, type VoiceStatus } from '../voice/service.js';
 import { errorResponses, id } from './schemas.js';
 
 /** Audio types by file extension, for clients that send `application/octet-stream`. */
@@ -28,6 +28,9 @@ const BY_EXTENSION: Record<string, string> = {
   wav: 'audio/wav',
 };
 const AUDIO_MIME = new Set<string>([...VOICE_AUDIO_MIME, 'audio/aac', 'application/ogg', 'audio/opus', 'audio/vnd.wave']);
+
+/** The shared response plus `title` (D-65) until the shared schema has it. */
+const TextResponse = voiceTextResponseSchema.extend({ title: z.string().min(1).max(VOICE_TITLE_MAX).optional() });
 
 const minutes = (sec: number) => Math.round((sec / 60) * 10) / 10;
 const usd = (v: number) => Math.round(v * 1e4) / 1e4;
@@ -278,7 +281,7 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           tags: ['voice'],
           security,
           body: voiceTextRequestSchema,
-          response: { 200: voiceTextResponseSchema, ...errorResponses },
+          response: { 200: TextResponse, ...errorResponses },
         },
       },
       async (req) => {
@@ -304,7 +307,10 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           fields.outChars = r.markdown.length;
           await voice.addUsage(p.userId, 0, r.cost ?? 0);
           record('text', userId, started, fields);
-          return { markdown: r.markdown, model: r.model };
+          // `format` and `minutes` start with the note's title (core's prompts): it goes apart.
+          const out = b.task === 'clean' ? { markdown: r.markdown } : splitTitle(r.markdown);
+          if (out.title) fields.title = true;
+          return { ...out, model: r.model };
         } catch (err) {
           record('text', userId, started, fields, err);
           throw err;

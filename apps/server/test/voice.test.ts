@@ -3,7 +3,7 @@ import { connect as netConnect, type AddressInfo } from 'node:net';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { voiceAccess, voiceUsage } from '../src/db/schema.js';
-import { groupTurns, VoiceService } from '../src/voice/service.js';
+import { groupTurns, splitTitle, VoiceService } from '../src/voice/service.js';
 import { SyncClient, api, rnd, signup, startServer, type TestServer, type TestUser } from './helpers.js';
 
 // D-65: voice through the server (api.md «Голос»); ElevenLabs and OpenRouter are fakes here.
@@ -242,7 +242,7 @@ describe('voice: text', () => {
     const turns = [{ speaker: 'S1', start: 0, end: 2, text: MARK }];
     const best = await text(u, { task: 'minutes', profanity: 'soften', quality: 'best', turns });
     expect(best.status).toBe(200);
-    expect(best.body).toEqual({ markdown: `# Итоги\n\n${MARK}`, model: 'anthropic/claude-sonnet-5.5' });
+    expect(best.body).toEqual({ title: 'Итоги', markdown: MARK, model: 'anthropic/claude-sonnet-5.5' });
     const std = await text(u, { task: 'clean', profanity: 'keep', text: `${MARK} эээ ну` });
     expect(std.body.model).toBe('openai/gpt-5.6-luna');
 
@@ -521,5 +521,34 @@ describe('voice: outbound proxy (DS_VOICE_PROXY)', () => {
       await viaProxy.close();
       await new Promise<void>((r) => proxy.close(() => r()));
     }
+  });
+});
+
+describe('voice: title from the model (D-65)', () => {
+  it('format and minutes: a first `# …` line becomes the title; clean keeps everything', async () => {
+    const u = await voiceUser();
+    llmReply = () => ({
+      status: 200,
+      json: { model: 'm', choices: [{ message: { content: '# План на неделю.\n\n## Понедельник\n\n- купить хлеб' } }] },
+    });
+    const r = await text(u, { task: 'format', text: 'a' });
+    expect(r.body).toEqual({ title: 'План на неделю', markdown: '## Понедельник\n\n- купить хлеб', model: 'm' });
+    const m = await text(u, { task: 'minutes', text: 'a' });
+    expect(m.body.title).toBe('План на неделю');
+    const c = await text(u, { task: 'clean', text: 'a' });
+    expect(c.body).toEqual({ markdown: '# План на неделю.\n\n## Понедельник\n\n- купить хлеб', model: 'm' });
+  });
+
+  it('splitTitle: none, deeper headings and `#` further down are untouched; long titles are cut', () => {
+    expect(splitTitle('Просто текст\n# Не заголовок')).toEqual({ markdown: 'Просто текст\n# Не заголовок' });
+    expect(splitTitle('## Раздел\n\nтекст')).toEqual({ markdown: '## Раздел\n\nтекст' });
+    expect(splitTitle('#хэштег в начале')).toEqual({ markdown: '#хэштег в начале' });
+    expect(splitTitle('\n\n# Итоги встречи ##\nтекст')).toEqual({ title: 'Итоги встречи', markdown: 'текст' });
+    expect(splitTitle('# Только заголовок')).toEqual({ title: 'Только заголовок', markdown: '' });
+    expect(splitTitle('# \n\nтекст')).toEqual({ markdown: '# \n\nтекст' });
+    const long = splitTitle(`# ${'Слово '.repeat(30)}\n\nтекст`);
+    expect([...long.title!].length).toBeLessThanOrEqual(80);
+    expect(long.title).toBe(long.title!.trim());
+    expect(long.markdown).toBe('текст');
   });
 });

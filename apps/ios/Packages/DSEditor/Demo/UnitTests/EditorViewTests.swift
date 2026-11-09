@@ -1024,6 +1024,9 @@ final class EditorViewTests: XCTestCase {
         let doc = InMemoryEditorDocument(blocks: [.title("Т"), .paragraph("Текст")])
         let editor = host(doc, width: 700, height: 900)
         window.makeKey()
+        editor.tools.mode = .text
+        drainMainQueue()
+        settle(editor)
         let end = try XCTUnwrap(editor.geometry.placement(at: flatRange(editor, of: "Текст").lowerBound))
         let lines = try XCTUnwrap(editor.belowTextLines(at: CGPoint(x: 120, y: end.origin.y + 200)))
         editor.beginPendingTail(lines: lines)
@@ -1051,6 +1054,9 @@ final class EditorViewTests: XCTestCase {
             if !pencilSeen { UserDefaults.standard.removeObject(forKey: "ds.pencilSeen") }
         }
         let editor = host(InMemoryEditorDocument(blocks: [.title("Т"), .paragraph("Текст")]), width: 700, height: 900)
+        editor.tools.mode = .text
+        drainMainQueue()
+        settle(editor)
         XCTAssertEqual(editor.textView.textContainerInset.bottom, 300, accuracy: 1, "text mode: a third of the screen")
         editor.tools.mode = .pen
         drainMainQueue()
@@ -1060,7 +1066,7 @@ final class EditorViewTests: XCTestCase {
         drainMainQueue()
         settle(editor)
         XCTAssertEqual(editor.textView.textContainerInset.bottom, 1800, accuracy: 1, "the pen near the bottom: another screen")
-        editor.textView.setContentOffset(.zero, animated: false)
+        editor.textView.setContentOffset(CGPoint(x: 0, y: -editor.textView.adjustedContentInset.top), animated: false)
         editor.tools.mode = .text
         drainMainQueue()
         settle(editor)

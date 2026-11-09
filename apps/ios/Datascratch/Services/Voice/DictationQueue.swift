@@ -97,7 +97,7 @@ final class DictationQueue {
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     result = .ready("", notice: nil)
                 } else {
-                    let cleaned = try await service.text(task: .clean, style: nil, profanity: profanity, quality: quality, text: text)
+                    let cleaned = try await service.text(task: .clean, style: nil, profanity: profanity, quality: quality, text: text).markdown
                     result = .ready(cleaned, notice: nil)
                 }
             } catch is CancellationError {

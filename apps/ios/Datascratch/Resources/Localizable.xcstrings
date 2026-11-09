@@ -4421,6 +4421,16 @@
         }
       }
     },
+    "Replace": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заменить"
+          }
+        }
+      }
+    },
     "Replace…": {
       "localizations": {
         "ru": {
@@ -6107,6 +6117,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Привожу в порядок…"
+          }
+        }
+      }
+    },
+    "Title: «%@»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Название: «%@»"
           }
         }
       }

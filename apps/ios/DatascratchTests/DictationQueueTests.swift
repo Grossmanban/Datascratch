@@ -29,8 +29,8 @@ private actor GatedVoiceService: VoiceService {
         return VoiceTranscript(durationSec: 1, turns: [VoiceTurn(speaker: "S1", start: 0, end: 1, text: "server \(name)")])
     }
 
-    nonisolated func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> String {
-        text.capitalizedFirst
+    nonisolated func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> VoiceText {
+        VoiceText(markdown: text.capitalizedFirst)
     }
 }
 

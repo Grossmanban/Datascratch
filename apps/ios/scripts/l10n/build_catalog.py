@@ -59,6 +59,7 @@ INTERPOLATIONS = {
     r"Opens when \(item.ownerEmail)’s device is online": "Opens when %@’s device is online",
     r"View only · \(owner) can edit": "View only · %@ can edit",
     r"Also here: \(names)": "Also here: %@",
+    r"Title: «\(title)»": "Title: «%@»",
     r"Shared space · \(owner)": "Shared space · %@",
     r"Everyone in «\(name)» will see this notebook and all of its history.": "Everyone in «%@» will see this notebook and all of its history.",
     r"From the link you opened: \(server). Continue only if you trust this server.": "From the link you opened: %@. Continue only if you trust this server.",

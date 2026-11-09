@@ -697,5 +697,7 @@
   "Format…": "Оформить…",
   "Format": "Оформить",
   "Current Version": "Текущая версия",
-  "Versions appear as you edit — every 10 minutes, when you leave the document and before formatting.": "Версии появляются при правках — каждые 10 минут, при уходе из документа и перед оформлением."
+  "Versions appear as you edit — every 10 minutes, when you leave the document and before formatting.": "Версии появляются при правках — каждые 10 минут, при уходе из документа и перед оформлением.",
+  "Title: «%@»": "Название: «%@»",
+  "Replace": "Заменить"
 }

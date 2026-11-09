@@ -432,6 +432,23 @@ struct FormatStatus: View {
                 Label("Formatted — edit highlighted", systemImage: "wand.and.sparkles")
                     .font(Theme.Typography.footnote.weight(.medium))
                     .foregroundStyle(Theme.Palette.textPrimary)
+                if let title = formatter.suggestedTitle {
+                    // The note has a title of its own: the model's one only on a tap.
+                    HStack(spacing: Theme.Space.s2) {
+                        Text("Title: «\(title)»")
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("voice.format.title")
+                        Button("Replace") { formatter.replaceTitle() }
+                            .buttonStyle(.glass)
+                            .font(Theme.Typography.footnote)
+                            .accessibilityIdentifier("voice.format.titleReplace")
+                    }
+                    .transition(.opacity)
+                }
                 HStack(spacing: Theme.Space.s2) {
                     Button("Show Original", action: showOriginal)
                         .buttonStyle(.glass)
@@ -447,6 +464,7 @@ struct FormatStatus: View {
             .padding(.horizontal, Theme.Space.s3)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .accessibilityElement(children: .contain)
+            .animation(Theme.Motion.snappy, value: formatter.suggestedTitle)
             .accessibilityIdentifier("voice.format.done")
         case .idle:
             if let message = formatter.message {

@@ -1769,13 +1769,13 @@ public final class EditorView: UIView {
 
     /// A voice suggestion replaces the selection or the note's body: the new text carries the
     /// `agentEdit` mark (D-10, «Принять» / undo on the banner, author «Голос»); one undo step.
-    public func replaceWithSuggestion(_ markdown: String, scope: EditorCommands.SuggestionScope) {
+    public func replaceWithSuggestion(_ markdown: String, scope: EditorCommands.SuggestionScope, title: String? = nil) {
         guard !model.isReadOnly else { return }
         setDictationPreview(nil)
         let range = selectionRange
         let resolver = attachmentResolver
         keepingScroll {
-            select(commands.replaceWithSuggestion(markdown, scope: scope, selection: range,
+            select(commands.replaceWithSuggestion(markdown, scope: scope, selection: range, title: title,
                                                   resolveNoteLink: resolver.map { r in { r.noteId(forLinkLabel: $0) } }))
         }
         notifyStateChange()

@@ -70,13 +70,28 @@ extension EditorCommands {
 
     /// Replaces the selection, or the note's body (the title stays), with a suggestion: the new
     /// text carries the `agentEdit` mark (D-10) until the person accepts it; one undo step.
+    /// A `title` replaces the note's title in the same step, marked the same way («Оформить»), so
+    /// undo or «Отклонить» brings the old title back with the body.
     @discardableResult
     public func replaceWithSuggestion(_ markdown: String, scope: SuggestionScope, selection: Range<Int>,
+                                      title: String? = nil,
                                       agentId: String = EditorCommands.voiceAgentId, at date: Date = Date(),
                                       resolveNoteLink: ((String) -> String?)? = nil) -> TextPosition? {
         guard !document.isReadOnly else { return nil }
         let mark = MarkSet([MarkName.agentEdit: .object(["agentId": .string(agentId),
                                                           "at": .string(Self.isoDate(date))])])
+        // The body first (its offsets are taken before the title changes), then the title with no
+        // capture stop in between: one undo step.
+        let caret = replaceBody(markdown, scope: scope, selection: selection, mark: mark, resolveNoteLink: resolveNoteLink)
+        if let title, caret != nil {
+            document.transact { replaceTitle(title, marks: mark) }
+        }
+        document.stopCapturing()
+        return caret
+    }
+
+    private func replaceBody(_ markdown: String, scope: SuggestionScope, selection: Range<Int>, mark: MarkSet,
+                             resolveNoteLink: ((String) -> String?)?) -> TextPosition? {
         switch scope {
         case .selection:
             return insertMarkdown(markdown, replacing: selection, marks: mark, resolveNoteLink: resolveNoteLink)
@@ -96,9 +111,22 @@ extension EditorCommands {
                     caret = Self.lastTextPosition(in: last, document: document)
                 }
             }
-            document.stopCapturing()
             return caret
         }
+    }
+
+    /// The note's title becomes `text` (one line; a note without a title gets one at the top).
+    private func replaceTitle(_ text: String, marks: MarkSet) {
+        let line = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }.joined(separator: " ")
+        guard let title = document.blocks.first(where: { $0.type == NodeType.title }) else {
+            guard !line.isEmpty else { return }
+            document.insertBlock(Self.adding(marks, to: .title(line)), parent: nil, at: 0)
+            return
+        }
+        let length = document.textLength(of: title.id)
+        if length > 0 { document.deleteText(block: title.id, range: 0..<length) }
+        if !line.isEmpty { document.insertText(line, marks: marks, block: title.id, at: 0) }
     }
 
     // MARK: - Helpers

@@ -615,10 +615,11 @@ describe('voice: long recordings and long texts (timeouts, parts)', () => {
     llmReply = () => ({ status: 429, json: {} });
     await text(u, { task: 'clean', text: 'a' });
     const lines = logLines.map((l) => JSON.parse(l)).filter((l) => l.voice);
-    expect(lines.map((l) => [l.stage, l.upstreamStatus])).toEqual([
-      ['elevenlabs', 503],
-      ['openrouter', 429],
+    expect(lines.map((l) => [l.stage, l.upstreamStatus, l.errorKind, l.model])).toEqual([
+      ['elevenlabs', 503, 'http', 'scribe_v2'],
+      ['openrouter', 429, 'http', 'openai/gpt-5.6-luna'],
     ]);
+    for (const l of lines) expect(l.upstreamMs).toEqual(expect.any(Number));
   });
 
   it('clean of a long text runs in parts and joins them in order; every call asks for 32k tokens', async () => {
@@ -662,5 +663,17 @@ describe('voice: long recordings and long texts (timeouts, parts)', () => {
     for (const p of parts) expect(p.text!.length).toBeLessThanOrEqual(100);
     expect(parts.map((p) => p.text).join('').replace(/\s/g, '')).toBe(long.replace(/\s/g, ''));
     expect(splitForClean({ task: 'clean', profanity: 'keep', text: 'коротко' }, 100)).toHaveLength(1);
+  });
+});
+
+describe('voice: reasoning effort', () => {
+  it('clean and format ask for low reasoning; minutes keep the model default', async () => {
+    const u = await voiceUser();
+    llm.seen.length = 0;
+    await text(u, { task: 'clean', text: 'a' });
+    await text(u, { task: 'format', text: 'a' });
+    await text(u, { task: 'minutes', text: 'a' });
+    const bodies = llm.seen.map((x) => JSON.parse(x.body.toString()));
+    expect(bodies.map((b) => b.reasoning)).toEqual([{ effort: 'low' }, { effort: 'low' }, undefined]);
   });
 });

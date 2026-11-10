@@ -289,7 +289,7 @@ export class VoiceService {
       if ((res.status === 400 || res.status === 404 || res.status === 422) && /model/i.test(detail) && model === this.#config.VOICE_STT_MODEL) {
         this.#sttModelRefusedAt = Date.now();
       }
-      throw Object.assign(voiceUpstream(), { upstreamStatus: res.status, stage: 'elevenlabs' });
+      throw Object.assign(voiceUpstream(), { upstreamStatus: res.status, stage: 'elevenlabs', upstream: 'elevenlabs', errorKind: 'http' });
     }
     let json: SttResponse | null;
     try {
@@ -298,7 +298,7 @@ export class VoiceService {
       throw upstreamFailure(err, 'elevenlabs', res.status);
     }
     if (!json || !Array.isArray(json.words)) {
-      throw Object.assign(voiceUpstream('unexpected answer from the voice service'), { upstreamStatus: res.status, stage: 'elevenlabs' });
+      throw Object.assign(voiceUpstream('unexpected answer from the voice service'), { upstreamStatus: res.status, stage: 'elevenlabs', upstream: 'elevenlabs', errorKind: 'bad_answer' });
     }
     return { ...groupTurns(json), model };
   }
@@ -355,6 +355,10 @@ export class VoiceService {
           temperature: 0.2,
           // A cleaned long dictation is long too (10 minutes ≈ 10–15k tokens).
           max_tokens: this.#config.VOICE_TEXT_MAX_TOKENS,
+          // Clean-up and formatting need little thinking: less reasoning answers much sooner.
+          ...(input.task !== 'minutes' && this.#config.VOICE_TEXT_REASONING_EFFORT !== 'default'
+            ? { reasoning: { effort: this.#config.VOICE_TEXT_REASONING_EFFORT } }
+            : {}),
           usage: { include: true },
           // Providers that keep or train on prompts are not used.
           provider: { data_collection: 'deny' },
@@ -366,7 +370,7 @@ export class VoiceService {
     }
     if (!res.ok) {
       await res.body?.cancel().catch(() => {});
-      throw Object.assign(voiceUpstream(), { upstreamStatus: res.status, stage: 'openrouter' });
+      throw Object.assign(voiceUpstream(), { upstreamStatus: res.status, stage: 'openrouter', upstream: 'openrouter', errorKind: 'http' });
     }
     let json: ChatResponse | null;
     try {
@@ -376,7 +380,7 @@ export class VoiceService {
     }
     const markdown = json?.choices?.[0]?.message?.content;
     if (typeof markdown !== 'string') {
-      throw Object.assign(voiceUpstream('unexpected answer from the text service'), { upstreamStatus: res.status, stage: 'openrouter' });
+      throw Object.assign(voiceUpstream('unexpected answer from the text service'), { upstreamStatus: res.status, stage: 'openrouter', upstream: 'openrouter', errorKind: 'bad_answer' });
     }
     return { markdown, model: typeof json?.model === 'string' ? json.model : model, cost: typeof json?.usage?.cost === 'number' ? json.usage.cost : null };
   }
@@ -435,9 +439,11 @@ function upstreamFailure(err: unknown, stage: VoiceStage, upstreamStatus?: numbe
   const timeout =
     err instanceof Error &&
     (err.name === 'TimeoutError' || err.name === 'AbortError' || /timeout/i.test(String((err as { cause?: { code?: string } }).cause?.code ?? '')));
+  const kind = timeout ? 'timeout' : upstreamStatus ? 'bad_answer' : 'network';
   return Object.assign(voiceUpstream(timeout ? 'the voice service did not answer in time' : 'the voice service cannot be reached'), {
     stage: timeout ? ('timeout' as const) : stage,
     upstream: stage,
+    errorKind: kind,
     ...(upstreamStatus ? { upstreamStatus } : {}),
   });
 }

@@ -116,7 +116,7 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
       const code = err ? (err instanceof ApiError ? err.code : 'internal') : 'ok';
       ctx.metrics.voice.inc({ endpoint, code });
       // Where it failed and what the upstream said (its status only), so the cause shows without content.
-      const e = err as { upstreamStatus?: number; stage?: string } | undefined;
+      const e = err as { upstreamStatus?: number; stage?: string; errorKind?: string } | undefined;
       ctx.log.info(
         {
           voice: endpoint,
@@ -125,6 +125,7 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           ms: Date.now() - started,
           ...fields,
           ...(e?.stage ? { stage: e.stage } : {}),
+          ...(e?.errorKind ? { errorKind: e.errorKind } : {}),
           ...(e?.upstreamStatus ? { upstreamStatus: e.upstreamStatus } : {}),
         },
         'voice request',
@@ -252,6 +253,8 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             if (stream.truncated) throw new ApiError('voice_too_long', 'the recording is larger than 200 MB');
           }
           let result;
+          const sttStarted = Date.now();
+          fields.model = voice.sttModel();
           try {
             result = await voice.transcribe({
               audio: audio(),
@@ -267,6 +270,7 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             throw err;
           } finally {
             fields.bytes = bytes;
+            fields.upstreamMs = Date.now() - sttStarted;
           }
           fields.model = result.model;
           fields.durationSec = result.durationSec;
@@ -313,10 +317,15 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           userId = p.userId;
           if (!ctx.config.OPENROUTER_API_KEY) throw voiceUnavailable();
           await voice.admit(p.userId, { needsMinutes: false });
+          // Known before the call, so a failure says which model it was.
+          fields.model = b.quality === 'best' ? ctx.config.VOICE_TEXT_MODEL_BEST : ctx.config.VOICE_TEXT_MODEL_STANDARD;
+          const textStarted = Date.now();
           const r = await voice.text(
             { task: b.task, style: b.style, profanity: b.profanity, turns: b.turns, text: b.text },
             b.quality,
-          );
+          ).finally(() => {
+            fields.upstreamMs = Date.now() - textStarted;
+          });
           fields.model = r.model;
           if (r.cost !== null) fields.cost = r.cost;
           fields.outChars = r.markdown.length;

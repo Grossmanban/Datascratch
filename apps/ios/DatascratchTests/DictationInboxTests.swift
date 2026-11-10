@@ -7,12 +7,14 @@ private nonisolated final class ScriptedVoice: VoiceService, @unchecked Sendable
     private let lock = NSLock()
     private var failsLeft: Int
     private var cleanFails: Bool
+    private var cleanError: VoiceError
     private var delay: Duration
     private(set) var transcribeCalls = 0
 
-    init(transcribeFails: Int = 0, cleanFails: Bool = false, delay: Duration = .zero) {
+    init(transcribeFails: Int = 0, cleanFails: Bool = false, cleanError: VoiceError = .upstream, delay: Duration = .zero) {
         failsLeft = transcribeFails
         self.cleanFails = cleanFails
+        self.cleanError = cleanError
         self.delay = delay
     }
 
@@ -34,7 +36,7 @@ private nonisolated final class ScriptedVoice: VoiceService, @unchecked Sendable
     }
 
     func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> VoiceText {
-        if lock.withLock({ cleanFails }) { throw VoiceError.upstream }
+        if lock.withLock({ cleanFails }) { throw lock.withLock { cleanError } }
         return VoiceText(markdown: text.replacingOccurrences(of: "um ", with: "").capitalizedFirst + ".")
     }
 }
@@ -115,6 +117,22 @@ struct DictationInboxTests {
         #expect(note.inserted == ["um the long piece"])
         #expect(queue.notice == .untidied("voice_upstream"))
         #expect(inbox.items.isEmpty)
+    }
+
+    /// The owner's case (build 45): tidying a 1–2 minute piece took longer than the phone waited.
+    /// A timeout on the tidy step keeps the transcript, and the wait is above the server's.
+    @Test func tidyingTimeoutKeepsTheTranscript() async throws {
+        let service = ScriptedVoice(cleanFails: true, cleanError: .timeout)
+        let inbox = inbox(service)
+        let note = NoteText()
+        let queue = queue(inbox, service, note)
+        let piece = queue.begin()
+        queue.finish(piece, audio: try recording())
+        await settle { !note.inserted.isEmpty }
+        #expect(note.inserted == ["um the long piece"])
+        #expect(queue.notice == .untidied("timeout"))
+        #expect(inbox.items.isEmpty)
+        #expect(ServerVoiceService.textTimeout >= 20 * 60)
     }
 
     /// The records outlive the app: a new inbox over the same folder has them.

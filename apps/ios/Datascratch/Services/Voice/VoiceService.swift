@@ -250,7 +250,9 @@ nonisolated struct ServerVoiceService: VoiceService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(Body(task: task.rawValue, style: style?.rawValue, profanity: profanity.rawValue,
                                                          quality: quality.rawValue, text: text))
-        request.timeoutInterval = 90
+        // The server lets the model write for up to 20 minutes and is silent meanwhile (an idle
+        // timeout): the phone must not give up first (build 45 dropped a 1–2 min dictation at 90 s).
+        request.timeoutInterval = Self.textTimeout
         let reply = try decode(Reply.self, from: try await send(request))
         let title = reply.title?.trimmingCharacters(in: .whitespacesAndNewlines)
         return VoiceText(markdown: reply.markdown, title: title?.isEmpty == false ? title : nil)
@@ -259,6 +261,8 @@ nonisolated struct ServerVoiceService: VoiceService {
     /// How long `/voice/transcribe` may take: a five-minute piece over a slow connection plus the
     /// provider's recognition.
     static let transcribeTimeout: TimeInterval = 15 * 60
+    /// How long `/voice/text` may take: above the server's 20 minutes for the text step.
+    static let textTimeout: TimeInterval = 21 * 60
 
     private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         do { return try JSONDecoder().decode(type, from: data) } catch { throw VoiceError.failed("bad_response") }

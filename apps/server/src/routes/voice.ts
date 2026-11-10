@@ -115,9 +115,18 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
     function record(endpoint: string, userId: string | null, started: number, fields: Record<string, unknown>, err?: unknown) {
       const code = err ? (err instanceof ApiError ? err.code : 'internal') : 'ok';
       ctx.metrics.voice.inc({ endpoint, code });
-      const upstreamStatus = (err as { upstreamStatus?: number } | undefined)?.upstreamStatus;
+      // Where it failed and what the upstream said (its status only), so the cause shows without content.
+      const e = err as { upstreamStatus?: number; stage?: string } | undefined;
       ctx.log.info(
-        { voice: endpoint, userId, code, ms: Date.now() - started, ...fields, ...(upstreamStatus ? { upstreamStatus } : {}) },
+        {
+          voice: endpoint,
+          userId,
+          code,
+          ms: Date.now() - started,
+          ...fields,
+          ...(e?.stage ? { stage: e.stage } : {}),
+          ...(e?.upstreamStatus ? { upstreamStatus: e.upstreamStatus } : {}),
+        },
         'voice request',
       );
     }
@@ -227,11 +236,18 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           fields.mode = params.data.mode;
 
           let bytes = 0;
+          let uploadBroke = false;
           const stream = part.file;
           async function* audio() {
-            for await (const chunk of stream as AsyncIterable<Buffer>) {
-              bytes += chunk.length;
-              yield chunk;
+            try {
+              for await (const chunk of stream as AsyncIterable<Buffer>) {
+                bytes += chunk.length;
+                yield chunk;
+              }
+            } catch (err) {
+              // The client's upload broke off (a phone losing its connection): not the upstream's fault.
+              uploadBroke = true;
+              throw err;
             }
             if (stream.truncated) throw new ApiError('voice_too_long', 'the recording is larger than 200 MB');
           }
@@ -246,7 +262,8 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
               language: params.data.language,
             });
           } catch (err) {
-            if (stream.truncated) throw new ApiError('voice_too_long', 'the recording is larger than 200 MB');
+            if (stream.truncated) throw Object.assign(new ApiError('voice_too_long', 'the recording is larger than 200 MB'), { stage: 'upload' });
+            if (uploadBroke) throw Object.assign(new ApiError('bad_request', 'the upload was interrupted, send the recording again'), { stage: 'upload' });
             throw err;
           } finally {
             fields.bytes = bytes;
@@ -303,6 +320,7 @@ export function voiceRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           fields.model = r.model;
           if (r.cost !== null) fields.cost = r.cost;
           fields.outChars = r.markdown.length;
+          if (r.parts > 1) fields.parts = r.parts;
           await voice.addUsage(p.userId, 0, r.cost ?? 0);
           record('text', userId, started, fields);
           // `format` and `minutes` start with the note's title (core's prompts): it goes apart.

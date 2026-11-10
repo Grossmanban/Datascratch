@@ -201,6 +201,7 @@ $listen6
     # A voice recording (D-65): up to 200 MB, streamed to the server without buffering.
     location = /v1/voice/transcribe {
         client_max_body_size 210m;
+        client_body_timeout 20m;
         proxy_request_buffering off;
         proxy_pass http://127.0.0.1:$port;
         proxy_http_version 1.1;

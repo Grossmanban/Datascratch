@@ -55,6 +55,11 @@ final class DictationUITests: XCTestCase {
         XCTAssertTrue(accept.waitForNonExistence(timeout: 5), "the sheet did not close")
     }
 
+    private func voiceElements(_ app: XCUIApplication) -> String {
+        app.descendants(matching: .any).matching(NSPredicate(format: "identifier CONTAINS 'voice'"))
+            .allElementsBoundByIndex.prefix(40).map { "\($0.identifier)|\($0.label)" }.joined(separator: ", ")
+    }
+
     private func buttons(_ app: XCUIApplication) -> String {
         app.buttons.allElementsBoundByIndex.prefix(60).map { "\($0.identifier)|\($0.label)" }.joined(separator: ", ")
     }
@@ -165,7 +170,7 @@ final class DictationUITests: XCTestCase {
         XCTAssertTrue(voice.waitForExistence(timeout: 5), "no Voice in Settings")
         voice.tap()
         XCTAssertTrue(app.descendants(matching: .any)["voice.pending"].firstMatch.waitForExistence(timeout: 10),
-                      "the kept recording is gone after a restart; buttons: \(buttons(app))")
+                      "the kept recording is gone after a restart; voice elements: \(voiceElements(app))")
     }
 
     /// «Format…» from the document's menu, the voice's way accepted on the first use, «Document».

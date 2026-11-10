@@ -275,7 +275,7 @@ struct VoiceSettings: View {
                             .padding(.vertical, Theme.Space.s1)
                     }
                 }
-                .accessibilityIdentifier("settings.voice.pending")
+                // No identifier here: a container's would replace each card's own `voice.pending`.
             }
             DSSettingsSection(String(localized: "Quality")) {
                 choice(String(localized: "Standard"), isOn: settings.voiceQuality == .standard) { settings.voiceQuality = .standard }

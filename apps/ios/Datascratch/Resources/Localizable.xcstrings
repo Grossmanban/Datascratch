@@ -1061,22 +1061,22 @@
         }
       }
     },
-    "Couldn’t format the text — try again.": {
+    "Couldn’t format the text (%@) — try again.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Не получилось оформить текст — попробуйте ещё раз."
+            "value": "Не получилось оформить текст (%@) — попробуйте ещё раз."
           }
         }
       }
     },
-    "Couldn’t process the recording. What the device heard is kept.": {
+    "Couldn’t process the recording (%@).": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Не удалось обработать запись. Оставили то, что распознало устройство."
+            "value": "Не получилось обработать запись (%@)."
           }
         }
       }
@@ -1321,6 +1321,16 @@
         }
       }
     },
+    "Delete Recording": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить запись"
+          }
+        }
+      }
+    },
     "Delete Space": {
       "localizations": {
         "ru": {
@@ -1367,6 +1377,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Удалить всё с этого устройства?"
+          }
+        }
+      }
+    },
+    "Delete this recording?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить эту запись?"
           }
         }
       }
@@ -2441,6 +2461,16 @@
         }
       }
     },
+    "Inserted as heard — tidying it up failed (%@).": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вставлено как есть — привести в порядок не получилось (%@)."
+          }
+        }
+      }
+    },
     "Invitation": {
       "localizations": {
         "ru": {
@@ -2637,6 +2667,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Оставлять как есть"
+          }
+        }
+      }
+    },
+    "Kept on this device until their text is in the note. They are tried again by themselves.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Хранятся на устройстве, пока их текст не окажется в заметке. Распознавание повторяется само."
           }
         }
       }
@@ -3387,6 +3427,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не доставлено"
+          }
+        }
+      }
+    },
+    "Not recognised (%@) — the recording is kept on this device.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не распознано (%@) — запись сохранена на устройстве."
+          }
+        }
+      }
+    },
+    "Not recognised · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запись не распознана · %@"
           }
         }
       }
@@ -4221,12 +4281,42 @@
         }
       }
     },
+    "Recognised · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Распознано · %@"
+          }
+        }
+      }
+    },
     "Recognising…": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Распознаю…"
+          }
+        }
+      }
+    },
+    "Recognising… · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Распознаю… · %@"
+          }
+        }
+      }
+    },
+    "Recordings Not in a Note Yet": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Записи, ещё не вставленные в заметку"
           }
         }
       }
@@ -4547,6 +4637,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сохранить"
+          }
+        }
+      }
+    },
+    "Save Audio": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить аудио"
           }
         }
       }
@@ -5761,6 +5861,16 @@
         }
       }
     },
+    "The recording is kept on this device (%@).": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запись сохранена на устройстве (%@)."
+          }
+        }
+      }
+    },
     "The recording is too long (up to 3 hours).": {
       "localizations": {
         "ru": {
@@ -5837,6 +5947,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сервер прислал небезопасные параметры входа. Ничего не отправлено — проверьте адрес сервера."
+          }
+        }
+      }
+    },
+    "The server took too long to answer — the recording is kept.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер слишком долго не отвечал — запись сохранена."
           }
         }
       }
@@ -6487,6 +6607,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Что делает синхронизация и что недавно пошло не так. В отчёте нет текста заметок, имён и ключей."
+          }
+        }
+      }
+    },
+    "What was said in it is not in the note and can’t be brought back.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сказанного в ней нет в заметке, и вернуть его будет нельзя."
           }
         }
       }

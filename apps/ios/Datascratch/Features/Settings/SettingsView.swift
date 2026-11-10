@@ -266,6 +266,17 @@ struct VoiceSettings: View {
                     .accessibilityIdentifier("settings.voice.status")
                 }
             }
+            // D-65: recordings not in a note yet (any note, also one closed or gone) — never lost.
+            if !app.dictationInbox.items.isEmpty {
+                DSSettingsSection(String(localized: "Recordings Not in a Note Yet"),
+                                  footer: String(localized: "Kept on this device until their text is in the note. They are tried again by themselves.")) {
+                    ForEach(app.dictationInbox.items) { item in
+                        PendingDictationCard(inbox: app.dictationInbox, item: item, canInsert: false)
+                            .padding(.vertical, Theme.Space.s1)
+                    }
+                }
+                .accessibilityIdentifier("settings.voice.pending")
+            }
             DSSettingsSection(String(localized: "Quality")) {
                 choice(String(localized: "Standard"), isOn: settings.voiceQuality == .standard) { settings.voiceQuality = .standard }
                 choice(String(localized: "Best"), subtitle: String(localized: "Best is more accurate and tidier, but ten times as expensive."),

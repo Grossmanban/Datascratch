@@ -60,6 +60,15 @@ INTERPOLATIONS = {
     r"View only · \(owner) can edit": "View only · %@ can edit",
     r"Also here: \(names)": "Also here: %@",
     r"Title: «\(title)»": "Title: «%@»",
+    # D-65: kept recordings
+    r"Not recognised (\(code)) — the recording is kept on this device.": "Not recognised (%@) — the recording is kept on this device.",
+    r"Inserted as heard — tidying it up failed (\(code)).": "Inserted as heard — tidying it up failed (%@).",
+    r"Couldn’t process the recording (\(code)).": "Couldn’t process the recording (%@).",
+    r"Couldn’t format the text (\(code)) — try again.": "Couldn’t format the text (%@) — try again.",
+    r"Recognised · \(Self.length(item.duration))": "Recognised · %@",
+    r"Recognising… · \(length)": "Recognising… · %@",
+    r"Not recognised · \(length)": "Not recognised · %@",
+    r"The recording is kept on this device (\(code)).": "The recording is kept on this device (%@).",
     r"Shared space · \(owner)": "Shared space · %@",
     r"Everyone in «\(name)» will see this notebook and all of its history.": "Everyone in «%@» will see this notebook and all of its history.",
     r"From the link you opened: \(server). Continue only if you trust this server.": "From the link you opened: %@. Continue only if you trust this server.",
@@ -76,7 +85,7 @@ IGNORE = {
     # D-54: UI-test seed and the comparison's line marks.
     "Shared plans", "Roadmap", "Plan for two", "Ideas", "Only the owner edits this.", "• ", "☑ ", "———", "“", "”",
     # D-65: HTTP headers and the fake voice server of the UI tests.
-    "Authorization", "Content-Type", "POST", "GET", "S1", "no response", "um so ", "um so this is dictated text", "Formatted by Voice",
+    "Authorization", "Content-Type", "POST", "GET", "S1", "no response", "um so ", "um so this is dictated text", "Formatted by Voice", "Dictation",
     # D-62: UI-test seed of a joined shared space.
     "Team", "Team notes", "Kickoff", "Agenda",
     # UI-test seed: a long note (scroll position across full screen).

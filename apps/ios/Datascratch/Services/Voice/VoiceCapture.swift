@@ -13,6 +13,9 @@ protocol VoiceCapture: AnyObject {
     func start() async throws
     /// Stops and returns the recording (nil when nothing usable was recorded).
     func stop() async -> URL?
+    /// Returns the recording so far and goes on recording into a new one, without a gap (a long
+    /// dictation in pieces); the device's recognition starts over for the next piece.
+    func split() async -> URL?
     func cancel()
 }
 
@@ -58,6 +61,16 @@ final class MicrophoneCapture: VoiceCapture {
 
         let format = engine.inputNode.outputFormat(forBus: 0)
         guard format.sampleRate > 0 else { throw VoiceCaptureError.unavailable }
+        try openFile(format: format)
+        await startRecognition(inputFormat: format)
+
+        engine.inputNode.installTap(onBus: 0, bufferSize: 2048, format: format,
+                                    block: Self.tap { [weak self] buffer, rms in self?.take(buffer, rms: rms) })
+        engine.prepare()
+        try engine.start()
+    }
+
+    private func openFile(format: AVAudioFormat) throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("dictation-\(UUID().uuidString).m4a")
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
@@ -67,12 +80,18 @@ final class MicrophoneCapture: VoiceCapture {
         ]
         file = try AVAudioFile(forWriting: url, settings: settings, commonFormat: format.commonFormat, interleaved: format.isInterleaved)
         self.url = url
-        await startRecognition(inputFormat: format)
+    }
 
-        engine.inputNode.installTap(onBus: 0, bufferSize: 2048, format: format,
-                                    block: Self.tap { [weak self] buffer, rms in self?.take(buffer, rms: rms) })
-        engine.prepare()
-        try engine.start()
+    func split() async -> URL? {
+        let done = url
+        let format = engine.inputNode.outputFormat(forBus: 0)
+        // The next buffer goes to the new file; the old one is closed (released) and complete.
+        file = nil
+        url = nil
+        try? openFile(format: format)
+        finalText = ""
+        guard let done, let size = try? done.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > 0 else { return nil }
+        return done
     }
 
     private func take(_ buffer: AVAudioPCMBuffer, rms: Float) {
@@ -228,6 +247,12 @@ final class FakeVoiceCapture: VoiceCapture {
     func stop() async -> URL? {
         ticker?.cancel()
         onLevel?(0)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("fake-\(UUID().uuidString).m4a")
+        try? Data([0, 1, 2, 3]).write(to: url)
+        return url
+    }
+
+    func split() async -> URL? {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("fake-\(UUID().uuidString).m4a")
         try? Data([0, 1, 2, 3]).write(to: url)
         return url

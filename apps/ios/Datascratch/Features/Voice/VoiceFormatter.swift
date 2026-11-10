@@ -198,7 +198,7 @@ nonisolated extension VoiceError {
         case .notSignedIn: String(localized: "Sign in to format text on the server.")
         case .tooLong: String(localized: "The text is too long to format.")
         case .upstream: String(localized: "The formatting service isn’t responding — try again.")
-        case .failed: String(localized: "Couldn’t format the text — try again.")
+        case .failed, .untidied, .timeout: String(localized: "Couldn’t format the text (\(code)) — try again.")
         case .disabled, .quota, .unavailable: message
         }
     }

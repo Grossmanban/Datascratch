@@ -708,6 +708,7 @@ struct EditorBottomBars: View {
                 FormatStatus(formatter: model.formatter) {
                     scene.sheet = .voiceOriginal(noteId: model.noteId)
                 }
+                PendingDictationCards(inbox: app.dictationInbox, noteId: model.noteId)
                 DictationPreview(dictation: model.dictation, text: model.dictationPreview)
                 if let message = model.dictation.message { DictationMessage(text: message) }
                 if !app.isVoiceOff {

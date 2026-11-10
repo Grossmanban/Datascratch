@@ -111,6 +111,63 @@ final class DictationUITests: XCTestCase {
                       "the hands-free piece is not in the note after «Stop»; text: \(value(app))")
     }
 
+    /// The owner's bug (build 45): recognition failed and the long piece was gone. Now the note
+    /// shows the kept recording with its cause, and «Retry» puts its text in.
+    func testFailedRecognitionKeepsTheRecordingAndRetryPutsItIn() throws {
+        // The first try and the three automatic retries fail; «Retry» gets through.
+        let app = launch(["-ui-testing-voice-transcribe-fails", "4"])
+        let mic = try openNewNote(app)
+        acceptConsent(app, mic: mic)
+        mic.press(forDuration: 1.5)
+        let card = app.descendants(matching: .any)["voice.pending"].firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 15), "no card for the recording that failed; buttons: \(buttons(app))")
+        XCTAssertFalse(value(app).contains("dictated"), "nothing should be in the text yet; text: \(value(app))")
+        let code = app.descendants(matching: .any)["voice.pending.code"].firstMatch
+        XCTAssertTrue(code.waitForExistence(timeout: 10), "the cause is not shown")
+        XCTAssertTrue(code.label.contains("voice_upstream"), "cause: \(code.label)")
+        let retry = app.buttons["voice.pending.retry"].firstMatch
+        for _ in 0..<8 where !value(app).contains("This is dictated text.") {
+            if retry.exists, retry.isEnabled, retry.isHittable { retry.tap() }
+            settle(1.5)
+        }
+        XCTAssertTrue(waitForText(app, containing: "This is dictated text.", timeout: 10),
+                      "«Retry» did not put the text in; text: \(value(app))")
+        XCTAssertTrue(card.waitForNonExistence(timeout: 5), "the card stayed after the text went in")
+    }
+
+    /// Tidying up failed: the transcript goes in as heard instead of nothing.
+    func testFailedTidyingInsertsTheTranscriptAsHeard() throws {
+        let app = launch(["-ui-testing-voice-clean-fails", "YES"])
+        let mic = try openNewNote(app)
+        acceptConsent(app, mic: mic)
+        mic.press(forDuration: 1.5)
+        XCTAssertTrue(waitForText(app, containing: "um so this is dictated text"),
+                      "the transcript did not go in as heard; text: \(value(app))")
+    }
+
+    /// A recording not recognised is still there after the app is closed and opened again.
+    func testKeptRecordingSurvivesARestart() throws {
+        var app = launch(["-ui-testing-voice-transcribe-fails", "100"])
+        let mic = try openNewNote(app)
+        acceptConsent(app, mic: mic)
+        mic.press(forDuration: 1.5)
+        XCTAssertTrue(app.descendants(matching: .any)["voice.pending"].firstMatch.waitForExistence(timeout: 15),
+                      "no card for the recording that failed")
+        app.terminate()
+
+        app = launch(["-ui-testing-keep-dictations", "-ui-testing-voice-transcribe-fails", "100"])
+        let settings = app.buttons["sidebar.settings"].firstMatch
+        // iPhone may open on the document list: back to the sidebar.
+        if !settings.waitForExistence(timeout: 10), app.barBackButton.exists { app.barBackButton.tap() }
+        XCTAssertTrue(settings.waitForExistence(timeout: 5), "no settings button; buttons: \(buttons(app))")
+        settings.tap()
+        let voice = app.descendants(matching: .any)["settings.voice"].firstMatch
+        XCTAssertTrue(voice.waitForExistence(timeout: 5), "no Voice in Settings")
+        voice.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["voice.pending"].firstMatch.waitForExistence(timeout: 10),
+                      "the kept recording is gone after a restart; buttons: \(buttons(app))")
+    }
+
     /// «Format…» from the document's menu, the voice's way accepted on the first use, «Document».
     private func format(_ app: XCUIApplication) {
         let style = app.buttons["voice.format.document"].firstMatch

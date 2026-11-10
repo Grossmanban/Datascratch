@@ -160,13 +160,31 @@ final class AppModel {
                 default: nil
                 }
             }
-            return FakeVoiceService(error: error)
+            let defaults = UserDefaults.standard
+            return FakeVoiceService(error: error, transcribeFails: defaults.integer(forKey: "ui-testing-voice-transcribe-fails"),
+                                    cleanFails: defaults.bool(forKey: "ui-testing-voice-clean-fails"))
         }
         guard let connection else { return nil }
         let api = connection.api
         // The API client's base is `<server>/v1`.
         return ServerVoiceService(baseURL: connection.serverURL.appendingPathComponent("v1"), accessToken: { try await api.accessToken() })
     }
+
+    /// D-65: recorded pieces kept on the device until their text is in the note (never lost).
+    @ObservationIgnored lazy var dictationInbox: DictationInbox = {
+        let args = ProcessInfo.processInfo.arguments
+        let directory = self.isUITesting ? DictationInbox.temporary(keep: args.contains("-ui-testing-keep-dictations"))
+                                    : DictationInbox.appSupport()
+        let settings = self.settings
+        let inbox = DictationInbox(directory: directory, service: { [weak self] in self?.voiceService }) {
+            (settings.voiceQuality, settings.voiceProfanity)
+        }
+        if self.isUITesting { inbox.backoff = [.seconds(1), .seconds(1), .seconds(1)] }
+        inbox.log = { [weak sync = self.sync] code in sync?.record(code) }
+        // Recordings not recognised yet go again when the network comes back.
+        self.sync.onBackOnlineForVoice = { [weak inbox] in inbox?.retryAll() }
+        return inbox
+    }()
 
     /// D-65: `GET /v1/voice/me` — nil until read (or on this device only: the microphone stays).
     private(set) var voiceAccess: VoiceAccess?

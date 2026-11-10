@@ -171,7 +171,7 @@ describe('voice: transcribe', () => {
     expect(call.headers['xi-api-key']).toBe('el-test-key');
     const { fields, file } = parseMultipart(call);
     expect(fields).toEqual({
-      model_id: 'scribe_v2',
+      model_id: 'scribe_v3',
       diarize: 'true',
       tag_audio_events: 'false',
       timestamps_granularity: 'word',
@@ -219,14 +219,14 @@ describe('voice: transcribe', () => {
     expect(stt.seen).toHaveLength(1);
   });
 
-  it('a speech-to-text model the service refuses: 502, then the fallback model', async () => {
+  it('a speech-to-text model the service refuses: 502, then the fallback model (v3 → v2)', async () => {
     const other = await startServer(
       { ELEVENLABS_API_KEY: 'k', OPENROUTER_API_KEY: 'k', ELEVENLABS_URL: stt.url },
     );
     try {
       const u = await voiceUser(other);
       sttReply = (x) =>
-        parseMultipart(x).fields.model_id === 'scribe_v2'
+        parseMultipart(x).fields.model_id === 'scribe_v3'
           ? { status: 422, json: { detail: { message: 'invalid model_id' } } }
           : { status: 200, json: conversation };
       const first = await transcribe(u, { mode: 'conversation' }, undefined, undefined, other);
@@ -234,7 +234,7 @@ describe('voice: transcribe', () => {
       expect((await json(first)).error.code).toBe('voice_upstream');
       const second = await transcribe(u, { mode: 'conversation' }, undefined, undefined, other);
       expect(second.status).toBe(200);
-      expect(parseMultipart(stt.seen.at(-1)!).fields.model_id).toBe('scribe_v1');
+      expect(parseMultipart(stt.seen.at(-1)!).fields.model_id).toBe('scribe_v2');
     } finally {
       await other.close();
     }
@@ -363,7 +363,7 @@ describe('voice: privacy', () => {
     const u = await voiceUser();
     logLines.length = 0;
     await transcribe(u, { mode: 'conversation' });
-    sttReply = () => ({ status: 500, json: { detail: MARK } });
+    sttReply = () => ({ status: 422, json: { detail: MARK } });
     await transcribe(u, { mode: 'dictation' });
     await text(u, { task: 'clean', profanity: 'keep', text: MARK });
     llmReply = () => ({ status: 400, json: { error: MARK } });
@@ -380,9 +380,9 @@ describe('voice: privacy', () => {
       ['text', 'ok'],
       ['text', 'voice_upstream'],
     ]);
-    expect(lines[0]).toMatchObject({ userId: u.userId, durationSec: 61.5, model: 'scribe_v2', bytes: expect.any(Number) });
+    expect(lines[0]).toMatchObject({ userId: u.userId, durationSec: 61.5, model: 'scribe_v3', bytes: expect.any(Number) });
     expect(lines[2]).toMatchObject({ model: 'openai/gpt-5.6-luna', cost: 0.0042, chars: MARK.length });
-    expect(lines[1].upstreamStatus).toBe(500);
+    expect(lines[1].upstreamStatus).toBe(422);
   });
 });
 
@@ -616,7 +616,7 @@ describe('voice: long recordings and long texts (timeouts, parts)', () => {
     await text(u, { task: 'clean', text: 'a' });
     const lines = logLines.map((l) => JSON.parse(l)).filter((l) => l.voice);
     expect(lines.map((l) => [l.stage, l.upstreamStatus, l.errorKind, l.model])).toEqual([
-      ['elevenlabs', 503, 'http', 'scribe_v2'],
+      ['elevenlabs', 503, 'http', 'scribe_v3'],
       ['openrouter', 429, 'http', 'openai/gpt-5.6-luna'],
     ]);
     for (const l of lines) expect(l.upstreamMs).toEqual(expect.any(Number));
@@ -675,5 +675,51 @@ describe('voice: reasoning effort', () => {
     await text(u, { task: 'minutes', text: 'a' });
     const bodies = llm.seen.map((x) => JSON.parse(x.body.toString()));
     expect(bodies.map((b) => b.reasoning)).toEqual([{ effort: 'low' }, { effort: 'low' }, undefined]);
+  });
+});
+
+describe('voice: Scribe v3 (D-65, 2026-11-10)', () => {
+  it('v3 answers as v2 did: words with type, speaker_id, start and end group into turns', () => {
+    // The shape of a Scribe v3 answer (spacing and punctuation as separate tokens, logprob kept).
+    const v3 = {
+      language_code: 'rus',
+      language_probability: 0.99,
+      text: 'Мама, ты где? Я дома. А папа?',
+      audio_duration_secs: 4.2,
+      words: [
+        { text: 'Мама,', start: 0.0, end: 0.5, type: 'word', speaker_id: 'speaker_0', logprob: -0.1 },
+        { text: ' ', start: 0.5, end: 0.55, type: 'spacing', speaker_id: 'speaker_0', logprob: 0 },
+        { text: 'ты', start: 0.55, end: 0.7, type: 'word', speaker_id: 'speaker_0', logprob: -0.2 },
+        { text: ' ', start: 0.7, end: 0.75, type: 'spacing', speaker_id: 'speaker_0', logprob: 0 },
+        { text: 'где?', start: 0.75, end: 1.1, type: 'word', speaker_id: 'speaker_0', logprob: -0.1 },
+        { text: 'Я', start: 1.6, end: 1.7, type: 'word', speaker_id: 'speaker_1', logprob: -0.1 },
+        { text: ' ', start: 1.7, end: 1.75, type: 'spacing', speaker_id: 'speaker_1', logprob: 0 },
+        { text: 'дома.', start: 1.75, end: 2.2, type: 'word', speaker_id: 'speaker_1', logprob: -0.1 },
+        { text: 'А', start: 3.0, end: 3.1, type: 'word', speaker_id: 'speaker_2', logprob: -0.3 },
+        { text: ' ', start: 3.1, end: 3.15, type: 'spacing', speaker_id: 'speaker_2', logprob: 0 },
+        { text: 'папа?', start: 3.15, end: 3.6, type: 'word', speaker_id: 'speaker_2', logprob: -0.2 },
+      ],
+    };
+    expect(groupTurns(v3)).toEqual({
+      durationSec: 4.2,
+      turns: [
+        { speaker: 'S1', start: 0, end: 1.1, text: 'Мама, ты где?' },
+        { speaker: 'S2', start: 1.6, end: 2.2, text: 'Я дома.' },
+        { speaker: 'S3', start: 3, end: 3.6, text: 'А папа?' },
+      ],
+    });
+  });
+
+  it('v3 failing (5xx) also switches to v2 for a while', async () => {
+    const other = await startServer({ ELEVENLABS_API_KEY: 'k', ELEVENLABS_URL: stt.url });
+    try {
+      const u = await voiceUser(other);
+      sttReply = (x) => (parseMultipart(x).fields.model_id === 'scribe_v3' ? { status: 503, json: {} } : { status: 200, json: conversation });
+      expect((await transcribe(u, { mode: 'dictation' }, undefined, undefined, other)).status).toBe(502);
+      expect((await transcribe(u, { mode: 'dictation' }, undefined, undefined, other)).status).toBe(200);
+      expect(parseMultipart(stt.seen.at(-1)!).fields.model_id).toBe('scribe_v2');
+    } finally {
+      await other.close();
+    }
   });
 });

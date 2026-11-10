@@ -110,9 +110,12 @@ const ConfigSchema = z
     VOICE_CONCURRENCY_PER_USER: z.coerce.number().int().positive().default(2),
     VOICE_MAX_BYTES: z.coerce.number().int().positive().default(200 * 1024 * 1024),
     VOICE_MAX_SECONDS: z.coerce.number().int().positive().default(3 * 3600),
-    /** Speech to text: model, and the one used after the first is refused (unknown model). */
-    VOICE_STT_MODEL: z.string().min(1).default('scribe_v2'),
-    VOICE_STT_FALLBACK_MODEL: z.string().min(1).default('scribe_v1'),
+    /**
+     * Speech to text: model, and the one used for 10 minutes after the first is refused or its
+     * service fails (D-65: Scribe v3 since 2026-11-10, v2 as the fallback).
+     */
+    VOICE_STT_MODEL: z.string().min(1).default('scribe_v3'),
+    VOICE_STT_FALLBACK_MODEL: z.string().min(1).default('scribe_v2'),
     /** OpenRouter models for `quality` standard and best. */
     VOICE_TEXT_MODEL_STANDARD: z.string().min(1).default('openai/gpt-5.6-luna'),
     VOICE_TEXT_MODEL_BEST: z.string().min(1).default('anthropic/claude-sonnet-5.5'),

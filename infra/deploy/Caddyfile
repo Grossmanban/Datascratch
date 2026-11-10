@@ -45,6 +45,17 @@
 		respond 404
 	}
 
+	# A long recording (D-65): its upload and its recognition may each take many minutes.
+	handle @voiceUpload {
+		reverse_proxy server:8080 {
+			transport http {
+				read_timeout 20m
+				write_timeout 20m
+				response_header_timeout 20m
+			}
+		}
+	}
+
 	handle @api {
 		reverse_proxy server:8080
 	}

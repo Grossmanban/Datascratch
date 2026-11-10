@@ -3,7 +3,8 @@ import { connect as netConnect, type AddressInfo } from 'node:net';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { voiceAccess, voiceUsage } from '../src/db/schema.js';
-import { groupTurns, VoiceService } from '../src/voice/service.js';
+import { groupTurns, splitForClean, voiceDispatcherTimeouts, VoiceService } from '../src/voice/service.js';
+import { loadConfig } from '../src/config.js';
 import { SyncClient, api, rnd, signup, startServer, type TestServer, type TestUser } from './helpers.js';
 
 // D-65: voice through the server (api.md «Голос»); ElevenLabs and OpenRouter are fakes here.
@@ -15,7 +16,7 @@ interface Seen {
 }
 
 /** A fake upstream: records every request and answers with `reply`. */
-async function fake(reply: (seen: Seen) => { status: number; json: unknown }) {
+async function fake(reply: (seen: Seen) => { status: number; json: unknown; delayMs?: number }) {
   const seen: Seen[] = [];
   const server: Server = createServer((req, res) => {
     const chunks: Buffer[] = [];
@@ -24,8 +25,13 @@ async function fake(reply: (seen: Seen) => { status: number; json: unknown }) {
       const s = { path: req.url ?? '', headers: req.headers, body: Buffer.concat(chunks) };
       seen.push(s);
       const r = reply(s);
-      res.writeHead(r.status, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(r.json));
+      const send = () => {
+        if (res.destroyed) return;
+        res.writeHead(r.status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(r.json));
+      };
+      if (r.delayMs) setTimeout(send, r.delayMs);
+      else send();
     });
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -67,8 +73,8 @@ const conversation = {
 
 let stt: Awaited<ReturnType<typeof fake>>;
 let llm: Awaited<ReturnType<typeof fake>>;
-let sttReply: (s: Seen) => { status: number; json: unknown };
-let llmReply: (s: Seen) => { status: number; json: unknown };
+let sttReply: (s: Seen) => { status: number; json: unknown; delayMs?: number };
+let llmReply: (s: Seen) => { status: number; json: unknown; delayMs?: number };
 let s: TestServer;
 const logLines: string[] = [];
 let accounts = 0;
@@ -547,5 +553,127 @@ describe('voice: title from the model (D-65)', () => {
     });
     const r = await text(u, { task: 'format', text: 'a' });
     expect(r.body).toEqual({ markdown: 'Вступление.\n\n# Раздел\n\nтекст', model: 'm' });
+  });
+});
+
+describe('voice: long recordings and long texts (timeouts, parts)', () => {
+  it('undici limits are longer than our own timeouts (at least 15 minutes by default)', () => {
+    const c = loadConfig({ DATABASE_URL: 'postgres://x', DS_JWT_SECRET: 'A'.repeat(43), DS_KMS_KEY: 'A'.repeat(43) });
+    const t = voiceDispatcherTimeouts(c);
+    expect(c.VOICE_STT_TIMEOUT_MS).toBeGreaterThanOrEqual(15 * 60_000);
+    expect(c.VOICE_TEXT_TIMEOUT_MS).toBeGreaterThanOrEqual(15 * 60_000);
+    expect(t.headersTimeout).toBeGreaterThan(c.VOICE_STT_TIMEOUT_MS);
+    expect(t.bodyTimeout).toBeGreaterThan(c.VOICE_TEXT_TIMEOUT_MS);
+    expect(c.VOICE_TEXT_MAX_TOKENS).toBe(32_000);
+  });
+
+  it('a slow recognition and a slow model still answer; past our own timeout it is a 502 with stage timeout', async () => {
+    const slowLog: string[] = [];
+    const slow = await startServer(
+      {
+        LOG_LEVEL: 'info',
+        ELEVENLABS_API_KEY: 'k',
+        OPENROUTER_API_KEY: 'k',
+        ELEVENLABS_URL: stt.url,
+        OPENROUTER_URL: `${llm.url}/api`,
+        VOICE_STT_TIMEOUT_MS: '1500',
+        VOICE_TEXT_TIMEOUT_MS: '1500',
+      },
+      [],
+      { write: (line) => void slowLog.push(line) },
+    );
+    try {
+      const u = await voiceUser(slow);
+      sttReply = () => ({ status: 200, json: conversation, delayMs: 700 });
+      expect((await transcribe(u, { mode: 'conversation' }, undefined, undefined, slow)).status).toBe(200);
+      const base = llmReply;
+      llmReply = (x) => ({ ...base(x), delayMs: 700 });
+      expect((await text(u, { task: 'clean', text: 'a' }, slow)).status).toBe(200);
+
+      sttReply = () => ({ status: 200, json: conversation, delayMs: 3000 });
+      const late = await transcribe(u, { mode: 'conversation' }, undefined, undefined, slow);
+      expect(late.status).toBe(502);
+      expect((await json(late)).error.code).toBe('voice_upstream');
+      llmReply = (x) => ({ ...base(x), delayMs: 3000 });
+      expect((await text(u, { task: 'clean', text: 'a' }, slow)).status).toBe(502);
+      const lines = slowLog.map((l) => JSON.parse(l)).filter((l) => l.voice && l.code !== 'ok');
+      expect(lines.map((l) => [l.voice, l.stage])).toEqual([
+        ['transcribe', 'timeout'],
+        ['text', 'timeout'],
+      ]);
+      expect(lines[0].ms).toBeGreaterThanOrEqual(1400);
+    } finally {
+      await slow.close();
+    }
+  });
+
+  it('upstream errors are logged with their stage and status', async () => {
+    const u = await voiceUser();
+    logLines.length = 0;
+    sttReply = () => ({ status: 503, json: {} });
+    await transcribe(u, { mode: 'dictation' });
+    llmReply = () => ({ status: 429, json: {} });
+    await text(u, { task: 'clean', text: 'a' });
+    const lines = logLines.map((l) => JSON.parse(l)).filter((l) => l.voice);
+    expect(lines.map((l) => [l.stage, l.upstreamStatus, l.errorKind, l.model])).toEqual([
+      ['elevenlabs', 503, 'http', 'scribe_v2'],
+      ['openrouter', 429, 'http', 'openai/gpt-5.6-luna'],
+    ]);
+    for (const l of lines) expect(l.upstreamMs).toEqual(expect.any(Number));
+  });
+
+  it('clean of a long text runs in parts and joins them in order; every call asks for 32k tokens', async () => {
+    const parted = await startServer({
+      OPENROUTER_API_KEY: 'k',
+      OPENROUTER_URL: `${llm.url}/api`,
+      VOICE_TEXT_CHUNK_CHARS: '60',
+    });
+    try {
+      const u = await voiceUser(parted);
+      llm.seen.length = 0;
+      // Each part comes back as its own text; the slower first part must still come first.
+      llmReply = (x) => {
+        const body = JSON.parse(x.body.toString());
+        const input = String(body.messages[1].content);
+        const n = /Абзац (\d)/.exec(input)?.[1] ?? '?';
+        return { status: 200, json: { model: 'm', choices: [{ message: { content: `Часть ${n}` } }], usage: { cost: 0.001 } }, delayMs: n === '1' ? 300 : 0 };
+      };
+      const paragraphs = [1, 2, 3].map((n) => `Абзац ${n}: ${'слово '.repeat(8)}`.trim());
+      const r = await text(u, { task: 'clean', text: paragraphs.join('\n\n') }, parted);
+      expect(r.status).toBe(200);
+      expect(r.body.markdown).toBe('Часть 1\n\nЧасть 2\n\nЧасть 3');
+      expect(llm.seen).toHaveLength(3);
+      for (const x of llm.seen) expect(JSON.parse(x.body.toString()).max_tokens).toBe(32_000);
+      // Other tasks see the whole text at once.
+      llm.seen.length = 0;
+      await text(u, { task: 'minutes', text: paragraphs.join('\n\n') }, parted);
+      expect(llm.seen).toHaveLength(1);
+    } finally {
+      await parted.close();
+    }
+  });
+
+  it('splitForClean: by turns or paragraphs, never losing text, each part within the limit', () => {
+    const turns = Array.from({ length: 10 }, (_, i) => ({ speaker: i % 2 ? 'S2' : 'S1', start: i, end: i + 1, text: 'х'.repeat(30) }));
+    const byTurns = splitForClean({ task: 'clean', profanity: 'keep', turns }, 100);
+    expect(byTurns.flatMap((p) => p.turns!)).toEqual(turns);
+    for (const p of byTurns) expect(p.turns!.reduce((n, t) => n + t.text.length + 1, 0)).toBeLessThanOrEqual(100);
+    const long = 'Первое предложение. ' + 'а'.repeat(250);
+    const parts = splitForClean({ task: 'clean', profanity: 'keep', text: long }, 100);
+    for (const p of parts) expect(p.text!.length).toBeLessThanOrEqual(100);
+    expect(parts.map((p) => p.text).join('').replace(/\s/g, '')).toBe(long.replace(/\s/g, ''));
+    expect(splitForClean({ task: 'clean', profanity: 'keep', text: 'коротко' }, 100)).toHaveLength(1);
+  });
+});
+
+describe('voice: reasoning effort', () => {
+  it('clean and format ask for low reasoning; minutes keep the model default', async () => {
+    const u = await voiceUser();
+    llm.seen.length = 0;
+    await text(u, { task: 'clean', text: 'a' });
+    await text(u, { task: 'format', text: 'a' });
+    await text(u, { task: 'minutes', text: 'a' });
+    const bodies = llm.seen.map((x) => JSON.parse(x.body.toString()));
+    expect(bodies.map((b) => b.reasoning)).toEqual([{ effort: 'low' }, { effort: 'low' }, undefined]);
   });
 });

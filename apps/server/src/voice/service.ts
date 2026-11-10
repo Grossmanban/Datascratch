@@ -11,7 +11,7 @@ import type { AppContext } from '../context.js';
 import { users, voiceAccess, voiceUsage } from '../db/schema.js';
 import { ApiError } from '../lib/errors.js';
 import { accountChanged } from '../services/account-events.js';
-import { ProxyAgent, fetch as undiciFetch } from 'undici';
+import { Agent, ProxyAgent, fetch as undiciFetch, type Dispatcher } from 'undici';
 
 const listOf = (v: string) =>
   v
@@ -63,13 +63,12 @@ export class VoiceService {
 
   constructor(private readonly ctx: AppContext) {
     const proxy = ctx.config.DS_VOICE_PROXY;
-    if (proxy) {
-      const dispatcher = new ProxyAgent(proxy);
-      this.#fetch = ((url: string | URL, init?: RequestInit) =>
-        undiciFetch(url, { ...(init as object), dispatcher } as Parameters<typeof undiciFetch>[1])) as unknown as typeof fetch;
-    } else {
-      this.#fetch = fetch;
-    }
+    // undici's own limits (5 min for headers and between body chunks) would cut a long upload
+    // or a long generation short: ours are the AbortSignal timeouts of each call (D-65).
+    const timeouts = voiceDispatcherTimeouts(ctx.config);
+    const dispatcher: Dispatcher = proxy ? new ProxyAgent({ uri: proxy, ...timeouts }) : new Agent(timeouts);
+    this.#fetch = ((url: string | URL, init?: RequestInit) =>
+      undiciFetch(url, { ...(init as object), dispatcher } as Parameters<typeof undiciFetch>[1])) as unknown as typeof fetch;
   }
 
   get #config() {
@@ -282,7 +281,7 @@ export class VoiceService {
         signal,
       } as RequestInit & { duplex: 'half' });
     } catch (err) {
-      throw upstreamFailure(err);
+      throw upstreamFailure(err, 'elevenlabs');
     }
     if (!res.ok) {
       // The upstream's answer is never logged (it may quote the request); only its status is.
@@ -290,22 +289,58 @@ export class VoiceService {
       if ((res.status === 400 || res.status === 404 || res.status === 422) && /model/i.test(detail) && model === this.#config.VOICE_STT_MODEL) {
         this.#sttModelRefusedAt = Date.now();
       }
-      throw Object.assign(voiceUpstream(), { upstreamStatus: res.status });
+      throw Object.assign(voiceUpstream(), { upstreamStatus: res.status, stage: 'elevenlabs', upstream: 'elevenlabs', errorKind: 'http' });
     }
-    const json = (await res.json().catch(() => null)) as SttResponse | null;
-    if (!json || !Array.isArray(json.words)) throw Object.assign(voiceUpstream('unexpected answer from the voice service'), { upstreamStatus: res.status });
+    let json: SttResponse | null;
+    try {
+      json = (await res.json()) as SttResponse | null;
+    } catch (err) {
+      throw upstreamFailure(err, 'elevenlabs', res.status);
+    }
+    if (!json || !Array.isArray(json.words)) {
+      throw Object.assign(voiceUpstream('unexpected answer from the voice service'), { upstreamStatus: res.status, stage: 'elevenlabs', upstream: 'elevenlabs', errorKind: 'bad_answer' });
+    }
     return { ...groupTurns(json), model };
   }
 
   // ------------------------------------------------------------------ text
 
+  /**
+   * The text model's answer. `clean` of a long input runs in parts (whole turns or paragraphs of
+   * at most VOICE_TEXT_CHUNK_CHARS), up to 3 at a time, joined in order: each part answers sooner
+   * and stays well under the output limit. Other tasks need the whole text at once.
+   */
   async text(
     input: Pick<VoiceTextRequest, 'task' | 'style' | 'profanity' | 'turns' | 'text'>,
     quality: VoiceQuality,
+  ): Promise<{ markdown: string; model: string; cost: number | null; parts: number }> {
+    if (!this.#config.OPENROUTER_API_KEY) throw voiceUnavailable();
+    const parts = input.task === 'clean' ? splitForClean(input, this.#config.VOICE_TEXT_CHUNK_CHARS) : [input];
+    const results = new Array<{ markdown: string; model: string; cost: number | null }>(parts.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < parts.length) {
+        const k = next++;
+        results[k] = await this.#textOnce(parts[k]!, quality);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(3, parts.length) }, worker));
+    const costs = results.map((r) => r.cost);
+    return {
+      markdown: results.map((r) => r.markdown.trim()).filter(Boolean).join('\n\n'),
+      model: results[0]!.model,
+      cost: costs.every((c) => c === null) ? null : costs.reduce<number>((n, c) => n + (c ?? 0), 0),
+      parts: parts.length,
+    };
+  }
+
+  async #textOnce(
+    input: Pick<VoiceTextRequest, 'task' | 'style' | 'profanity' | 'turns' | 'text'>,
+    quality: VoiceQuality,
   ): Promise<{ markdown: string; model: string; cost: number | null }> {
-    const key = this.#config.OPENROUTER_API_KEY;
-    if (!key) throw voiceUnavailable();
+    const key = this.#config.OPENROUTER_API_KEY!;
     const model = quality === 'best' ? this.#config.VOICE_TEXT_MODEL_BEST : this.#config.VOICE_TEXT_MODEL_STANDARD;
+    const prompt = buildVoiceTextPrompt(input);
     let res: Response;
     try {
       res = await this.#fetch(new URL('v1/chat/completions', withSlash(this.#config.OPENROUTER_URL)), {
@@ -313,14 +348,17 @@ export class VoiceService {
         headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
         body: JSON.stringify({
           model,
-          messages: (() => {
-            const prompt = buildVoiceTextPrompt(input);
-            return [
-              { role: 'system', content: prompt.system },
-              { role: 'user', content: prompt.user },
-            ];
-          })(),
+          messages: [
+            { role: 'system', content: prompt.system },
+            { role: 'user', content: prompt.user },
+          ],
           temperature: 0.2,
+          // A cleaned long dictation is long too (10 minutes ≈ 10–15k tokens).
+          max_tokens: this.#config.VOICE_TEXT_MAX_TOKENS,
+          // Clean-up and formatting need little thinking: less reasoning answers much sooner.
+          ...(input.task !== 'minutes' && this.#config.VOICE_TEXT_REASONING_EFFORT !== 'default'
+            ? { reasoning: { effort: this.#config.VOICE_TEXT_REASONING_EFFORT } }
+            : {}),
           usage: { include: true },
           // Providers that keep or train on prompts are not used.
           provider: { data_collection: 'deny' },
@@ -328,24 +366,86 @@ export class VoiceService {
         signal: AbortSignal.timeout(this.#config.VOICE_TEXT_TIMEOUT_MS),
       });
     } catch (err) {
-      throw upstreamFailure(err);
+      throw upstreamFailure(err, 'openrouter');
     }
     if (!res.ok) {
       await res.body?.cancel().catch(() => {});
-      throw Object.assign(voiceUpstream(), { upstreamStatus: res.status });
+      throw Object.assign(voiceUpstream(), { upstreamStatus: res.status, stage: 'openrouter', upstream: 'openrouter', errorKind: 'http' });
     }
-    const json = (await res.json().catch(() => null)) as ChatResponse | null;
+    let json: ChatResponse | null;
+    try {
+      json = (await res.json()) as ChatResponse | null;
+    } catch (err) {
+      throw upstreamFailure(err, 'openrouter', res.status);
+    }
     const markdown = json?.choices?.[0]?.message?.content;
-    if (typeof markdown !== 'string') throw Object.assign(voiceUpstream('unexpected answer from the text service'), { upstreamStatus: res.status });
+    if (typeof markdown !== 'string') {
+      throw Object.assign(voiceUpstream('unexpected answer from the text service'), { upstreamStatus: res.status, stage: 'openrouter', upstream: 'openrouter', errorKind: 'bad_answer' });
+    }
     return { markdown, model: typeof json?.model === 'string' ? json.model : model, cost: typeof json?.usage?.cost === 'number' ? json.usage.cost : null };
   }
 }
 
+/** undici limits for the voice upstreams: longer than any of our own call timeouts. */
+export function voiceDispatcherTimeouts(c: { VOICE_STT_TIMEOUT_MS: number; VOICE_TEXT_TIMEOUT_MS: number }) {
+  const ms = Math.max(c.VOICE_STT_TIMEOUT_MS, c.VOICE_TEXT_TIMEOUT_MS) + 60_000;
+  return { headersTimeout: ms, bodyTimeout: ms };
+}
+
+type TextInput = Pick<VoiceTextRequest, 'task' | 'style' | 'profanity' | 'turns' | 'text'>;
+
+/** Split a long `clean` input into parts of at most `max` characters, by turns or paragraphs. */
+export function splitForClean(input: TextInput, max: number): TextInput[] {
+  const groups = <T>(items: T[], size: (x: T) => number): T[][] => {
+    const out: T[][] = [];
+    let cur: T[] = [];
+    let n = 0;
+    for (const it of items) {
+      const s = size(it);
+      if (cur.length > 0 && n + s > max) {
+        out.push(cur);
+        cur = [];
+        n = 0;
+      }
+      cur.push(it);
+      n += s;
+    }
+    if (cur.length > 0) out.push(cur);
+    return out;
+  };
+  if (input.turns) {
+    const total = input.turns.reduce((n, t) => n + t.text.length, 0);
+    if (total <= max) return [input];
+    return groups(input.turns, (t) => t.text.length + 1).map((turns) => ({ ...input, turns }));
+  }
+  const text = input.text ?? '';
+  if (text.length <= max) return [input];
+  // Paragraphs, then lines, then sentences; a single over-long piece is cut at the limit.
+  const pieces = text
+    .split(/\n{2,}/)
+    .flatMap((p) => (p.length <= max ? [p] : p.split(/\n/)))
+    .flatMap((p) => (p.length <= max ? [p] : p.split(/(?<=[.!?…])\s+/)))
+    .flatMap((p) => (p.length <= max ? [p] : (p.match(new RegExp(`[\\s\\S]{1,${max}}`, 'g')) ?? [])))
+    .filter((p) => p.trim().length > 0);
+  return groups(pieces, (p) => p.length + 2).map((ps) => ({ ...input, text: ps.join('\n\n') }));
+}
+
 const withSlash = (u: string) => (u.endsWith('/') ? u : `${u}/`);
 
-function upstreamFailure(err: unknown): ApiError {
-  const timeout = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
-  return voiceUpstream(timeout ? 'the voice service did not answer in time' : 'the voice service cannot be reached');
+/** Where a voice request failed, for the log (never with content). */
+export type VoiceStage = 'upload' | 'elevenlabs' | 'openrouter' | 'timeout';
+
+function upstreamFailure(err: unknown, stage: VoiceStage, upstreamStatus?: number): ApiError {
+  const timeout =
+    err instanceof Error &&
+    (err.name === 'TimeoutError' || err.name === 'AbortError' || /timeout/i.test(String((err as { cause?: { code?: string } }).cause?.code ?? '')));
+  const kind = timeout ? 'timeout' : upstreamStatus ? 'bad_answer' : 'network';
+  return Object.assign(voiceUpstream(timeout ? 'the voice service did not answer in time' : 'the voice service cannot be reached'), {
+    stage: timeout ? ('timeout' as const) : stage,
+    upstream: stage,
+    errorKind: kind,
+    ...(upstreamStatus ? { upstreamStatus } : {}),
+  });
 }
 
 interface SttWord {

@@ -126,7 +126,13 @@ const ConfigSchema = z
     OPENROUTER_URL: z.string().url().default('https://openrouter.ai/api'),
     /** A transcription upstream may take this long (a 3-hour recording takes minutes). */
     VOICE_STT_TIMEOUT_MS: z.coerce.number().int().positive().default(30 * 60_000),
-    VOICE_TEXT_TIMEOUT_MS: z.coerce.number().int().positive().default(5 * 60_000),
+    VOICE_TEXT_TIMEOUT_MS: z.coerce.number().int().positive().default(20 * 60_000),
+    /** Longest answer of the text model (a cleaned 10-minute dictation is 10–15k tokens). */
+    VOICE_TEXT_MAX_TOKENS: z.coerce.number().int().positive().default(32_000),
+    /** OpenRouter `reasoning.effort` for clean and format (minutes keep the model's default); `default`: not sent. */
+    VOICE_TEXT_REASONING_EFFORT: z.enum(['minimal', 'low', 'medium', 'high', 'default']).default('low'),
+    /** `clean` of a longer input runs in parts of at most this many characters, joined in order. */
+    VOICE_TEXT_CHUNK_CHARS: z.coerce.number().int().positive().default(24_000),
 
     JOBS_ENABLED: bool.default(true),
     /** Enables GET /metrics (Prometheus) for requests with `Authorization: Bearer <METRICS_TOKEN>`. */

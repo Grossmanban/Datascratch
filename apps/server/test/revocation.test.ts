@@ -131,7 +131,11 @@ describe('not a revocation', () => {
       // The refresh works and the device keeps going.
       const r = await api(t, 'POST', '/auth/refresh', { body: { refreshToken: u.session.refreshToken } });
       expect(r.status).toBe(200);
-      expect((await api(t, 'GET', '/me', { token: r.body.accessToken })).status).toBe(200);
+      // The new pair keeps working (its access token lives only a second here, so check the
+      // refresh token, which does not depend on that).
+      expect(typeof r.body.accessToken).toBe('string');
+      const again = await api(t, 'POST', '/auth/refresh', { body: { refreshToken: r.body.refreshToken } });
+      expect(again.status).toBe(200);
     } finally {
       await t.close();
     }

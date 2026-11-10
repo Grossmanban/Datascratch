@@ -286,7 +286,9 @@ export class VoiceService {
     if (!res.ok) {
       // The upstream's answer is never logged (it may quote the request); only its status is.
       const detail = await res.text().catch(() => '');
-      if ((res.status === 400 || res.status === 404 || res.status === 422) && /model/i.test(detail) && model === this.#config.VOICE_STT_MODEL) {
+      // The main model refused (unknown model) or failing (5xx): the fallback for a while.
+      const refused = (res.status === 400 || res.status === 404 || res.status === 422) && /model/i.test(detail);
+      if ((refused || res.status >= 500) && model === this.#config.VOICE_STT_MODEL) {
         this.#sttModelRefusedAt = Date.now();
       }
       throw Object.assign(voiceUpstream(), { upstreamStatus: res.status, stage: 'elevenlabs', upstream: 'elevenlabs', errorKind: 'http' });

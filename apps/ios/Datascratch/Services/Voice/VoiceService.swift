@@ -84,7 +84,31 @@ nonisolated enum VoiceError: Error, Equatable, Sendable {
     /// 503 `voice_unavailable`.
     case unavailable
     case notSignedIn
+    /// The server took longer than the request may wait (a long recording, a slow provider).
+    case timeout
+    /// `/voice/text clean` failed: the transcript went in as heard (the code says why).
+    case untidied(String)
     case failed(String)
+
+    /// The cause as a code, shown with the message and in Diagnostics (`voice.<code>`).
+    var code: String {
+        switch self {
+        case .offline: "network"
+        case .disabled: "voice_disabled"
+        case .quota: "voice_quota"
+        case .tooLong: "voice_too_long"
+        case .upstream: "voice_upstream"
+        case .unavailable: "voice_unavailable"
+        case .notSignedIn: "not_signed_in"
+        case .timeout: "timeout"
+        case .untidied(let code), .failed(let code): code
+        }
+    }
+
+    /// A recording that could not be recognised: it is kept on the device, with the cause.
+    var keptMessage: String {
+        String(localized: "Not recognised (\(code)) — the recording is kept on this device.")
+    }
 
     var message: String {
         switch self {
@@ -95,7 +119,9 @@ nonisolated enum VoiceError: Error, Equatable, Sendable {
         case .upstream: String(localized: "The recognition service isn’t responding — try again.")
         case .unavailable: String(localized: "Voice is temporarily unavailable.")
         case .notSignedIn: String(localized: "Sign in to dictate with the server’s recognition.")
-        case .failed: String(localized: "Couldn’t process the recording. What the device heard is kept.")
+        case .timeout: String(localized: "The server took too long to answer — the recording is kept.")
+        case .untidied(let code): String(localized: "Inserted as heard — tidying it up failed (\(code)).")
+        case .failed(let code): String(localized: "Couldn’t process the recording (\(code)).")
         }
     }
 
@@ -187,7 +213,7 @@ nonisolated struct ServerVoiceService: VoiceService {
     func me() async throws -> VoiceAccess {
         var request = try await request("voice/me")
         request.httpMethod = "GET"
-        return try JSONDecoder().decode(VoiceAccess.self, from: try await send(request))
+        return try decode(VoiceAccess.self, from: try await send(request))
     }
 
     func transcribe(audio: URL, mode: VoiceMode, language: VoiceLanguage) async throws -> VoiceTranscript {
@@ -206,8 +232,9 @@ nonisolated struct ServerVoiceService: VoiceService {
         var request = try await request("voice/transcribe")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
-        request.timeoutInterval = 120
-        return try JSONDecoder().decode(VoiceTranscript.self, from: try await send(request))
+        // A long piece: the upload and the provider's recognition both take time (≥ 15 min).
+        request.timeoutInterval = Self.transcribeTimeout
+        return try decode(VoiceTranscript.self, from: try await send(request))
     }
 
     func text(task: VoiceTextTask, style: VoiceStyle?, profanity: VoiceProfanity, quality: VoiceQuality, text: String) async throws -> VoiceText {
@@ -223,10 +250,22 @@ nonisolated struct ServerVoiceService: VoiceService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(Body(task: task.rawValue, style: style?.rawValue, profanity: profanity.rawValue,
                                                          quality: quality.rawValue, text: text))
-        request.timeoutInterval = 90
-        let reply = try JSONDecoder().decode(Reply.self, from: try await send(request))
+        // The server lets the model write for up to 20 minutes and is silent meanwhile (an idle
+        // timeout): the phone must not give up first (build 45 dropped a 1–2 min dictation at 90 s).
+        request.timeoutInterval = Self.textTimeout
+        let reply = try decode(Reply.self, from: try await send(request))
         let title = reply.title?.trimmingCharacters(in: .whitespacesAndNewlines)
         return VoiceText(markdown: reply.markdown, title: title?.isEmpty == false ? title : nil)
+    }
+
+    /// How long `/voice/transcribe` may take: a five-minute piece over a slow connection plus the
+    /// provider's recognition.
+    static let transcribeTimeout: TimeInterval = 15 * 60
+    /// How long `/voice/text` may take: above the server's 20 minutes for the text step.
+    static let textTimeout: TimeInterval = 21 * 60
+
+    private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        do { return try JSONDecoder().decode(type, from: data) } catch { throw VoiceError.failed("bad_response") }
     }
 
     private func request(_ path: String) async throws -> URLRequest {
@@ -243,12 +282,18 @@ nonisolated struct ServerVoiceService: VoiceService {
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
+        } catch let error as URLError where error.code == .timedOut {
+            throw VoiceError.timeout
         } catch let error as URLError where Self.offlineCodes.contains(error.code) {
             throw VoiceError.offline
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
         } catch is CancellationError {
             throw CancellationError()
+        } catch let error as URLError {
+            throw VoiceError.failed("url_\(error.code.rawValue)")
         } catch {
-            throw VoiceError.failed(String(describing: error))
+            throw VoiceError.failed("client")
         }
         guard let http = response as? HTTPURLResponse else { throw VoiceError.failed("no response") }
         guard (200..<300).contains(http.statusCode) else {
@@ -260,7 +305,7 @@ nonisolated struct ServerVoiceService: VoiceService {
     }
 
     static let offlineCodes: Set<URLError.Code> = [.notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,
-                                                  .cannotFindHost, .timedOut, .dataNotAllowed, .internationalRoamingOff]
+                                                  .cannotFindHost, .dataNotAllowed, .internationalRoamingOff]
 }
 
 /// UI tests (`-ui-testing`): a fixed transcript and a visible «cleaned» marker, or an error from
@@ -268,6 +313,12 @@ nonisolated struct ServerVoiceService: VoiceService {
 nonisolated struct FakeVoiceService: VoiceService {
     var error: VoiceError?
     var delay: Duration = .milliseconds(300)
+    /// `-ui-testing-voice-transcribe-fails <n>`: the first n recognitions fail (voice_upstream).
+    var transcribeFails = 0
+    /// `-ui-testing-voice-clean-fails`: tidying up fails (voice_upstream).
+    var cleanFails = false
+    /// Calls so far, shared by every copy (the app makes a service per use).
+    static let calls = FakeCalls()
 
     static let transcript = "um so this is dictated text"
     /// The title the fake model gives a formatted note.
@@ -284,6 +335,7 @@ nonisolated struct FakeVoiceService: VoiceService {
     func transcribe(audio: URL, mode: VoiceMode, language: VoiceLanguage) async throws -> VoiceTranscript {
         try await Task.sleep(for: delay)
         if let error { throw error }
+        if Self.calls.next() <= transcribeFails { throw VoiceError.upstream }
         return VoiceTranscript(durationSec: 2, turns: [VoiceTurn(speaker: "S1", start: 0, end: 2, text: Self.transcript)])
     }
 
@@ -291,11 +343,20 @@ nonisolated struct FakeVoiceService: VoiceService {
         try await Task.sleep(for: delay)
         if let error { throw error }
         switch task {
-        case .clean: return VoiceText(markdown: Self.cleaned(text))
+        case .clean:
+            if cleanFails { throw VoiceError.upstream }
+            return VoiceText(markdown: Self.cleaned(text))
         case .format, .minutes:
             return VoiceText(markdown: "## \(style?.rawValue.capitalizedFirst ?? "Notes")\n\n\(text)", title: Self.title)
         }
     }
+}
+
+/// The fake's count of recognitions (UI tests).
+nonisolated final class FakeCalls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func next() -> Int { lock.withLock { count += 1; return count } }
 }
 
 nonisolated extension String {

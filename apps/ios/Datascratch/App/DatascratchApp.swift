@@ -32,6 +32,8 @@ struct DatascratchApp: App {
             if phase == .active {
                 app.settings.applyAppearanceToWindows()
                 app.refreshRecoveryKeyState()
+                // D-65: recordings left unrecognised (a restart, a lost connection) go again.
+                app.dictationInbox.retryAll()
             }
             // iOS drops the sync socket while the app is suspended, and a socket that looks alive
             // may no longer deliver: coming back checks it and replaces a dead one at once

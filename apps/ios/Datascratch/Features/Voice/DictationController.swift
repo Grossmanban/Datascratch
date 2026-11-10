@@ -31,8 +31,9 @@ final class DictationController {
     @ObservationIgnored private var piece: Int?
     @ObservationIgnored private var starting: Task<Void, Never>?
     @ObservationIgnored private var messageClear: Task<Void, Never>?
-    /// A dictated piece is at most ten minutes (api.md «Голос»): it goes by itself then.
-    nonisolated static let pieceLimit: Duration = .seconds(600)
+    /// A long dictation goes in pieces of five minutes: each is sent while recording goes on
+    /// (no gap), so a long stretch is never one big upload, and nothing is cut off.
+    nonisolated static let pieceLimit: Duration = .seconds(300)
     @ObservationIgnored private var limit: Task<Void, Never>?
     /// Let go (or cancelled) while the microphone was still starting.
     @ObservationIgnored private var endedEarly: Ending?
@@ -48,9 +49,19 @@ final class DictationController {
         queue.target = target
     }
 
-    /// The note the pieces go into: a version snapshot before each (sync-protocol §5).
+    /// The note the pieces go into: a version snapshot before each (sync-protocol §5), and its
+    /// recordings kept in the inbox until their text is in.
     func snapshotBeforeInsert(noteId: String) {
         queue.beforeInsert = { [weak app] in await app?.snapshotBeforeChange(noteId: noteId, .voiceInsert) }
+        queue.noteId = noteId
+        queue.inbox = app?.dictationInbox
+        // A piece recognised by a retry goes in at the caret while the note is open.
+        app?.dictationInbox.attach(noteId: noteId) { [weak self] text in
+            guard let self, let target = self.queue.target else { return false }
+            await self.queue.beforeInsert?()
+            target.insertDictation(text)
+            return true
+        }
     }
 
     var isRecording: Bool { mode != .idle }
@@ -117,6 +128,7 @@ final class DictationController {
     func close() {
         cancel()
         queue.cancelAll()
+        if let noteId = queue.noteId { app?.dictationInbox.detach(noteId: noteId) }
     }
 
     // MARK: Recording
@@ -131,12 +143,7 @@ final class DictationController {
         capture.onLevel = { [weak self] level in self?.level = level }
         capture.onHeard = { [weak self] text in self?.queue.heard(text, in: piece) }
         endedEarly = nil
-        limit?.cancel()
-        limit = Task { [weak self] in
-            try? await Task.sleep(for: Self.pieceLimit)
-            guard !Task.isCancelled, let self, self.piece == piece, self.mode != .idle else { return }
-            self.finish()
-        }
+        scheduleRollOver(for: piece)
         starting = Task { [weak self] in
             do {
                 try await capture.start()
@@ -152,6 +159,31 @@ final class DictationController {
             case nil: break
             }
             self.endedEarly = nil
+        }
+    }
+
+    /// Every five minutes while recording: the piece goes, recording goes on into the next.
+    private func scheduleRollOver(for piece: Int) {
+        limit?.cancel()
+        limit = Task { [weak self] in
+            try? await Task.sleep(for: Self.pieceLimit)
+            guard !Task.isCancelled, let self, self.piece == piece, self.mode != .idle else { return }
+            self.rollOver()
+        }
+    }
+
+    private func rollOver() {
+        guard let capture, let piece, starting == nil else { return }
+        let next = queue.begin()
+        self.piece = next
+        capture.onHeard = { [weak self] text in self?.queue.heard(text, in: next) }
+        scheduleRollOver(for: next)
+        // The queue, not the controller: the recording must reach the inbox even if the
+        // document goes away meanwhile.
+        let queue = queue
+        Task {
+            let audio = await capture.split()
+            queue.finish(piece, audio: audio)
         }
     }
 
@@ -171,9 +203,12 @@ final class DictationController {
         haptic(.soft)
         self.capture = nil
         self.piece = nil
-        Task { [weak self] in
+        // The queue, not the controller: the recording must reach the inbox even if the
+        // document goes away meanwhile (leaving the note while speaking).
+        let queue = queue
+        Task {
             let audio = await capture.stop()
-            self?.queue.finish(piece, audio: audio)
+            queue.finish(piece, audio: audio)
         }
     }
 
@@ -205,7 +240,7 @@ final class DictationController {
     func takeQueueNotice() {
         guard let notice = queue.notice else { return }
         queue.notice = nil
-        show(notice.message)
+        show(queue.noticeIsKept ? notice.keptMessage : notice.message)
     }
 
     private func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {

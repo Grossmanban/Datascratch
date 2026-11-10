@@ -103,7 +103,7 @@ public final class EditorView: UIView {
     /// Tells the host about a change on the next main-queue turn, coalesced. Never during UIKit's
     /// touch dispatch: a host that re-renders its interface synchronously (SwiftUI state) while a
     /// touch is still being delivered crashed UIKit's gesture environment.
-    private func notifyStateChange() {
+    func notifyStateChange() {
         guard !stateChangePending else { return }
         stateChangePending = true
         DispatchQueue.main.async { [weak self] in
@@ -155,7 +155,7 @@ public final class EditorView: UIView {
     let textView = EditorTextView(frame: .zero, textContainer: nil)
     private let paper = PaperView()
     private let inkUnder = InkCanvas()
-    private let inkOver = InkCanvas()
+    let inkOver = InkCanvas()
     private let hoverLayer = CAShapeLayer()
     private let fragmentProvider = FragmentProvider()
     let factory: AttachmentFactory
@@ -833,6 +833,7 @@ public final class EditorView: UIView {
         if remoteCursorLayer.frame != inkOver.frame { remoteCursorLayer.frame = inkOver.frame }
         if dictationLabel != nil { positionDictationPreview() }
         if !remoteCursors.isEmpty { layoutRemoteCursors() }
+        if !dictationPlaceholders.isEmpty { layoutDictationPlaceholders() }
     }
 
     // MARK: - Document → view
@@ -867,6 +868,7 @@ public final class EditorView: UIView {
             }
         }
         updateAgentBanner()
+        scheduleDictationPlaceholderLayout()
         if !remoteCursors.isEmpty, !remoteCursorResolveScheduled {
             // After the text view has laid the change out.
             remoteCursorResolveScheduled = true
@@ -1064,7 +1066,7 @@ public final class EditorView: UIView {
         updateTypingAttributes()
     }
 
-    private var selectionRange: Range<Int> {
+    var selectionRange: Range<Int> {
         let r = textView.selectedRange
         return r.location..<(r.location + r.length)
     }
@@ -1548,6 +1550,13 @@ public final class EditorView: UIView {
 
     /// The pen is on the glass (the ink recognizer is tracking a touch).
     private var penDown = false
+
+    /// Dictation placeholders in the text, by id (`DictationPlaceholders.swift`).
+    var dictationPlaceholders: [String: DictationPlaceholderView] = [:]
+    var dictationPlaceholderLayoutScheduled = false
+    /// A tap on a placeholder whose recording was not recognised (D-65): the host offers to
+    /// retry or discard it.
+    public var onDictationPlaceholderTap: ((_ id: String) -> Void)?
 
     /// Room added below the text while drawing near its bottom (screens).
     private(set) var extraDrawingRoom: CGFloat = 0

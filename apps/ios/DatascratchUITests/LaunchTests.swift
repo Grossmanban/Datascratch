@@ -358,6 +358,39 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
     }
 
+    /// Build 48: «Развернуть» on a table opens it full screen (ios-editor's viewer, every cell
+    /// whole) and × brings the note back.
+    func testTableOpensFullScreenAndCloses() throws {
+        let app = launchSignedIn()
+        try openNewNoteInNativeEditor(app)
+        app.typeText("Table note\n")
+        let insert = app.buttons["editor.insert"].firstMatch
+        if insert.waitForExistence(timeout: 3) {
+            insert.tap()
+        } else {
+            app.buttons["document.more"].firstMatch.tap()
+            app.buttons["Insert"].firstMatch.tap()
+        }
+        let table = app.buttons["Table"].firstMatch
+        XCTAssertTrue(table.waitForExistence(timeout: 5), "no Table entry in Insert; buttons: \(Self.buttons(app))")
+        _ = XCTWaiter().wait(for: [expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: table)], timeout: 3)
+        table.tap()
+        let expand = app.buttons["table.expand"].firstMatch
+        XCTAssertTrue(expand.waitForExistence(timeout: 10), "no «Развернуть» on the table; buttons: \(Self.buttons(app))")
+        if !expand.isHittable { app.swipeUp(velocity: .slow) }
+        expand.tap()
+        let viewer = app.descendants(matching: .any)["tableViewer"].firstMatch
+        XCTAssertTrue(viewer.waitForExistence(timeout: 10), "the table did not open full screen")
+        XCTAssertTrue(app.descendants(matching: .any)["tableViewer.cell.0.0"].firstMatch.waitForExistence(timeout: 5),
+                      "no cells in the full-screen table")
+        let close = app.buttons["tableViewer.close"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 3), "no × on the full-screen table")
+        close.tap()
+        XCTAssertTrue(viewer.waitForNonExistence(timeout: 10), "× did not close the full-screen table")
+        XCTAssertTrue(app.descendants(matching: .any)["editor"].firstMatch.exists, "not back in the note")
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 2), "app is gone")
+    }
+
     /// «Insert → File» opens the Files picker (it never opened: two file importers on one screen).
     func testAttachFileOpensFilesPicker() throws {
         let app = launchSignedIn()

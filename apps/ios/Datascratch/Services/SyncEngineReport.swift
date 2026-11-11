@@ -13,7 +13,7 @@ nonisolated struct SyncEngineReport: Sendable, Equatable {
 
     nonisolated struct Event: Sendable, Equatable, Identifiable {
         var at: Date
-        /// `connected`, `disconnected`, `connectionLost`, `serverError`, `failed`, `pushTrimmed`.
+        /// `connected`, `disconnected`, `connectionLost`, `serverError`, `failed`, `pushTrimmed`, `resume`, `unanswered`.
         var kind: String
         var docId: String?
         var detail: String

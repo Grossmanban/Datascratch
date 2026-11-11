@@ -231,8 +231,13 @@ final class DictationUITests: XCTestCase {
             _ = style.waitForExistence(timeout: 5)
         }
         XCTAssertTrue(style.exists, "no «How to Format?»; buttons: \(buttons(app))")
+        // A tap while the sheet still slides in did nothing and left it open (iPhone, run
+        // 43013246765): tap once it is hittable, and again if the sheet is still there.
+        _ = waitUntil(5) { style.isHittable }
         style.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["voice.format.done"].firstMatch.waitForExistence(timeout: 20),
+        let done = app.descendants(matching: .any)["voice.format.done"].firstMatch
+        if !done.waitForExistence(timeout: 3), style.exists, style.isHittable { style.tap() }
+        XCTAssertTrue(done.waitForExistence(timeout: 20),
                       "no «Formatted» card; buttons: \(buttons(app))")
     }
 

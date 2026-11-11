@@ -323,6 +323,9 @@ struct DiagnosticsView: View {
         case "connected": "checkmark.circle"
         case "disconnected", "connectionLost": "wifi.exclamationmark"
         case "serverError", "failed": "exclamationmark.triangle"
+        // Protocol 3 (build 48): the catch-up after a reconnect, and a server that went quiet.
+        case "resume": "arrow.triangle.2.circlepath"
+        case "unanswered": "hourglass"
         default: "info.circle"
         }
     }

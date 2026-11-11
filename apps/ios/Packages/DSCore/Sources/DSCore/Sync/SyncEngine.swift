@@ -192,6 +192,48 @@ public actor SyncEngine: SyncClientDelegate {
     /// Counts connections (`syncClientDidConnect`): work started for an older one stops.
     private var connectionGeneration = 0
 
+    // MARK: Unanswered work
+
+    /// A connection that stays up but answers nothing (pongs come, acks and catch-ups do not —
+    /// a server stuck on a database lock): after this long with work outstanding and nothing
+    /// sent or answered, the connection is replaced, which resubscribes and resends. ios-app's
+    /// real-server CI once saw a queue that never drained with no warning anywhere (2026-11-11).
+    private let answerTimeout: Duration
+    /// Last progress on this connection: a send that completed, or an answer (ack, catch-up
+    /// frame, error about our request, `resumed`). A slow upload or a long catch-up keeps it fresh.
+    private var lastProgress = ContinuousClock.now
+    private var watchdog: Task<Void, Never>?
+
+    private func progressed() { lastProgress = .now }
+
+    /// Something waits for the server: messages sent and not acknowledged, documents subscribed
+    /// and not caught up.
+    private var awaitingServer: Bool { !inFlight.isEmpty || !catchingUp.isEmpty }
+
+    private func startWatchdog(_ generation: Int) {
+        watchdog?.cancel()
+        progressed()
+        let period = max(answerTimeout / 4, .milliseconds(20))
+        watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: period)
+                guard let self, await self.checkAnswers(generation) else { return }
+            }
+        }
+    }
+
+    /// False once this connection is gone (the watchdog ends).
+    private func checkAnswers(_ generation: Int) async -> Bool {
+        guard generation == connectionGeneration else { return false }
+        guard awaitingServer, ContinuousClock.now - lastProgress > answerTimeout else { return true }
+        let what = "\(inFlight.count) unacknowledged, \(catchingUp.count) not caught up"
+        log(.unanswered, "no answer from the server for \(answerTimeout): \(what) — reconnecting")
+        lastError = "unanswered: \(what)"
+        lastErrorAt = Date()
+        await client.reconnectNow()
+        return false
+    }
+
     // MARK: Protocol 3 state (§3.1)
 
     /// No `resumed` this long after `resume`: subscribe everything as in version 1.
@@ -231,10 +273,12 @@ public actor SyncEngine: SyncClientDelegate {
                 retiredKeysFor: (@Sendable (DocumentRecord) -> [Data])? = nil,
                 isKeyCanonical: (@Sendable (DocumentRecord) -> Bool)? = nil,
                 clock: @escaping @Sendable () -> Date = { Date() },
-                resumeTimeout: Duration = .seconds(20)) {
+                resumeTimeout: Duration = .seconds(20),
+                answerTimeout: Duration = .seconds(30)) {
         self.store = store
         self.clock = clock
         self.resumeTimeout = resumeTimeout
+        self.answerTimeout = answerTimeout
         self.client = client
         self.keyFor = keyFor
         self.register = register
@@ -863,6 +907,7 @@ public actor SyncEngine: SyncClientDelegate {
                     log(.failed, docId: item.docId, "\(item.kind.rawValue) of \(sealed.count) B over the \(limit) B limit")
                     continue
                 }
+                if !awaitingServer { progressed() }
                 inFlight.insert(item.clientMsgId)
                 do {
                     switch item.kind {
@@ -871,6 +916,7 @@ public actor SyncEngine: SyncClientDelegate {
                     case .snapshot:
                         try await client.send(.snapshot(docId: item.docId, clientMsgId: item.clientMsgId, baseSeq: item.baseSeq ?? 0, payload: sealed))
                     }
+                    progressed()
                 } catch {
                     // The connection failed under the send (closed, reset, not connected): not a
                     // delivery attempt. Counting these moved a note's edits to «failed» after five
@@ -964,12 +1010,14 @@ public actor SyncEngine: SyncClientDelegate {
             while frame.count < room, let next = subscribeQueue.first, (priority(next) < 100) == urgent {
                 frame.append(subscribeQueue.removeFirst())
             }
+            if !awaitingServer { progressed() }
             for r in frame {
                 queued.remove(r.docId)
                 catchingUp.insert(r.docId)
             }
             do {
                 try await client.send(.subscribe(docs: frame.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }))
+                progressed()
             } catch {
                 // Not connected any more: the next connection subscribes everything again.
                 for r in frame { catchingUp.remove(r.docId) }
@@ -1088,6 +1136,7 @@ public actor SyncEngine: SyncClientDelegate {
         connectionGeneration += 1
         let generation = connectionGeneration
         endResume()
+        startWatchdog(generation)
         if await client.protocolVersion ?? 0 >= SyncProtocol.resume, await client.isUserConnection {
             // Protocol 3: what changed since the stored cursor, instead of subscribing everything.
             // The queue waits for the answer (documents are not live before it).
@@ -1252,6 +1301,8 @@ public actor SyncEngine: SyncClientDelegate {
         if case .connected = state {} else {
             connectionGeneration += 1
             endResume()
+            watchdog?.cancel()
+            watchdog = nil
             inFlight.removeAll()
             catchingUp.removeAll()
             subscribeQueue.removeAll()
@@ -1269,6 +1320,7 @@ public actor SyncEngine: SyncClientDelegate {
         case .welcome:
             break
         case .resumed(let reset, let cursor, let docs, let removed):
+            progressed()
             await handleResumed(reset: reset, cursor: cursor, docs: docs, removed: removed)
         case .accountChanged(let what):
             // Only names this client knows count; none left: nothing to do (as the TS client).
@@ -1280,6 +1332,7 @@ public actor SyncEngine: SyncClientDelegate {
                 await resumeDocumentsWaitingForKeys()
             }
         case .updates(let docId, let snapshot, let items, let upToDate):
+            progressed()
             guard receive(docId: docId, snapshot: snapshot, items: items) else { return }
             await resumeAfterIndexUpdate(docId)
             if upToDate {
@@ -1312,6 +1365,7 @@ public actor SyncEngine: SyncClientDelegate {
             if live.contains(docId) { await finishRekey(docId: docId) }
             await snapshotIfNeeded(docId: docId)
         case .ack(let docId, let clientMsgId, let seq):
+            progressed()
             inFlight.remove(clientMsgId)
             try? store.acknowledge(clientMsgId: clientMsgId, seq: seq)
             // A burst of acks updates the status every few acks and when the window empties,
@@ -1330,6 +1384,7 @@ public actor SyncEngine: SyncClientDelegate {
                   let plain = try? DSCrypto.open(payload, key: key, ad: CryptoAD.awareness(docId)) else { return }
             awarenessHandler?(docId, plain, deviceId)
         case .error(let code, let message, let ref, let retryAfterMs, _):
+            if ref != nil { progressed() }
             lastError = code.rawValue
             lastErrorAt = Date()
             let refDoc = ref.flatMap { r in (try? store.outboxItem(clientMsgId: r))?.docId ?? (known[r] != nil ? r : nil) }

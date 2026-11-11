@@ -9,6 +9,7 @@ import Testing
     let key = DSCrypto.newKey()
 
     func device(_ name: String, server: FakeSyncServer, keyFor: (@Sendable (DocumentRecord) -> Data?)? = nil,
+                answerTimeout: Duration = .seconds(30),
                 configure: (inout SyncClient.Configuration) -> Void = { _ in }) throws -> SyncEngine {
         let store = try LocalStore.inMemory()
         var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: name, clientVersion: "test")
@@ -18,7 +19,7 @@ import Testing
         let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
         let key = self.key
         return SyncEngine(store: store, client: client, keyFor: keyFor ?? { _ in key },
-                          register: { record in await server.register(record.docId) })
+                          register: { record in await server.register(record.docId) }, answerTimeout: answerTimeout)
     }
 
     /// A library the server already has: `count` empty notes known to the device.
@@ -158,6 +159,60 @@ import Testing
         #expect(try await eventually { (try? note.block(at: [1])?.text) == (try? remote.block(at: [1])?.text) })
         await a.stop()
         await writer.stop()
+    }
+
+    /// A server that stays connected but answers nothing — a push taken and never acknowledged,
+    /// pongs still coming (ios-app's real-server CI: a queue that never drained, no warning
+    /// anywhere, 2026-11-11). After a while without any answer the connection is replaced: the
+    /// push goes again and is acknowledged.
+    @Test(arguments: [true, false])
+    func aServerThatAnswersNothingIsReconnected(pushStuck: Bool) async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server, answerTimeout: .milliseconds(400))
+        await a.start()
+        let note = NoteDocument(noteId: EntityID.make())
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "t")
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        let hellos = await server.helloCount()
+        if pushStuck {
+            await server.setSwallow(pushes: 1)
+            try note.insertText("правка", at: 0, inBlock: [1])
+        } else {
+            // A subscription never answered (a note tracked after the connection came up).
+            await server.setSwallow(subscribes: 1)
+            let other = NoteDocument(noteId: EntityID.make())
+            await server.register(other.noteId)
+            try a.store.ensureDocument(docId: other.noteId, kind: .note, notebookId: "nb")
+            try await a.track(docId: other.noteId, kind: .note, notebookId: "nb")
+            try other.initialize(title: "другая")
+            try a.store.appendLocalUpdate(docId: other.noteId, update: try other.crdt.encodeStateAsUpdate(), origin: .local)
+            await a.flush()
+        }
+        #expect(try await eventually(timeout: .seconds(10)) { (try? a.store.outboxCount()) == 0 })
+        #expect(await server.helloCount() > hellos)
+        #expect(await a.diagnostics().events.contains { $0.kind == .unanswered })
+        await a.stop()
+    }
+
+    /// A slow upload is progress, not silence: no reconnect while sends keep completing.
+    @Test func slowButAnsweringWorkIsNotReconnected() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server, answerTimeout: .milliseconds(400))
+        await a.start()
+        let note = NoteDocument(noteId: EntityID.make())
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "t")
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        let hellos = await server.helloCount()
+        // Two seconds of edits, each acknowledged.
+        for i in 0..<100 {
+            try note.insertText("\(i % 10)", at: 0, inBlock: [1])
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        #expect(await server.helloCount() == hellos)
+        await a.stop()
     }
 
     /// Suspect (c): a note changed elsewhere (an agent) shows its title from the index long

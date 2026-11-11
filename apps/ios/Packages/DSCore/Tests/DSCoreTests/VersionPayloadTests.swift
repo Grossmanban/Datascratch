@@ -21,8 +21,9 @@ private struct CannedTransport: HTTPTransport {
     private func client(_ body: String, status: Int = 200) throws -> APIClient {
         let sessions = SecretSessionStore(store: InMemorySecretStore())
         let session = try JSONDecoder().decode(AuthSession.self, from: Data("""
-        {"userId":"u","deviceId":"d","accessToken":"a","refreshToken":"r","accessExpiresAt":"2999-01-01T00:00:00Z",
-         "wrappedMasterKeyPassword":"AQID","accountDocId":"acc"}
+        {"userId":"0192f3c4-0000-7000-8000-00000000000a","deviceId":"d","accessToken":"a","refreshToken":"r",
+         "accessExpiresAt":"2999-01-01T00:00:00.000Z","wrappedMasterKeyPassword":"AQID",
+         "accountDocId":"0192f3c4-0000-7000-8000-00000000000b"}
         """.utf8))
         try sessions.save(session)
         return APIClient(baseURL: URL(string: "https://example.com")!, transport: CannedTransport(body: body, status: status),

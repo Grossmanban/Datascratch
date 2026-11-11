@@ -169,6 +169,14 @@ actor FakeSyncServer {
     func setResumeMode(_ m: ResumeMode) { resumeMode = m }
     /// Cursors the clients sent in `resume`, in order.
     var resumeCursors: [String?] = []
+    /// A server stuck on its database: this many pushes (or subscribe frames) are taken and
+    /// never answered, the connection staying up (pongs still come).
+    var swallowPushes = 0
+    var swallowSubscribes = 0
+    func setSwallow(pushes: Int = 0, subscribes: Int = 0) {
+        swallowPushes = pushes
+        swallowSubscribes = subscribes
+    }
     /// An older server: pushes over this are refused with `payload_too_large` (nil: 16 MiB).
     var maxPushBytes: Int?
     func setMaxPushBytes(_ n: Int?) { maxPushBytes = n }
@@ -209,6 +217,10 @@ actor FakeSyncServer {
             conns[c.id]?.deviceId = deviceId
             c.deliver(.welcome(userId: "0192f3c4-0000-7000-8000-00000000000a", serverTime: DSDate.iso(Date()), protocolVersion: version))
         case .subscribe(let entries):
+            if swallowSubscribes > 0 {
+                swallowSubscribes -= 1
+                return
+            }
             for e in entries {
                 subscribedOrder.append(e.docId)
                 if subscribeDelayPerDoc > .zero {
@@ -261,6 +273,10 @@ actor FakeSyncServer {
             pushedWithoutSubscription = pushedWithoutSubscription || !(conns[c.id]?.subs.contains(docId) ?? false)
             guard registered.contains(docId) else {
                 c.deliver(.error(code: .docNotFound, message: "register first", ref: clientMsgId))
+                return
+            }
+            if swallowPushes > 0 {
+                swallowPushes -= 1
                 return
             }
             if let maxPushBytes, payload.count > maxPushBytes {

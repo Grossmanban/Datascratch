@@ -517,6 +517,32 @@ final class LibraryUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["library.folderStrip"].firstMatch.exists, "a strip without subfolders")
     }
 
+    /// Owner, build 46: a starred folder showed nowhere. Now it is in the sidebar's Starred (with
+    /// its notebook under the name) and a tap opens it.
+    func testStarredFolderShowsAndOpens() throws {
+        let app = launchSignedIn(["-ui-testing-folders"])
+        let projects = app.buttons["folderCard.Projects"].firstMatch
+        XCTAssertTrue(projects.waitForExistence(timeout: 5), "no Projects card; buttons: \(Self.buttons(app))")
+        projects.press(forDuration: 1.2)
+        let star = app.buttons["Add to Starred"].firstMatch
+        XCTAssertTrue(star.waitForExistence(timeout: 3), "no «Add to Starred» in the folder's menu")
+        star.tap()
+        settle(1)
+        let starred = app.descendants(matching: .any)["sidebar.starredFolder"].firstMatch
+        // iPad: show the sidebar if it is hidden (before any back button); iPhone: back to it.
+        for _ in 0..<3 where !(starred.exists && starred.isHittable) {
+            let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
+            if toggle.exists && toggle.isHittable { toggle.tap() } else if app.barBackButton.exists { app.barBackButton.tap() }
+            settle(1)
+        }
+        XCTAssertTrue(starred.waitForExistence(timeout: 5), "the starred folder is not in Starred; buttons: \(Self.buttons(app))")
+        XCTAssertTrue(starred.label.contains("Projects"), "the starred row is not Projects: \(starred.label)")
+        starred.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["library.breadcrumb"].firstMatch.waitForExistence(timeout: 5),
+                      "a tap on the starred folder did not open it")
+        XCTAssertTrue(app.buttons["folderCard.Drafts"].firstMatch.waitForExistence(timeout: 3), "not the Projects folder's list")
+    }
+
     /// D-48: spaces are isolated — the starred note of «Personal» is not shown in «Work» and comes
     /// back with «Personal» (tabs per space: `CoreLibraryTests`; the sidebar no longer lists tabs).
     func testSpacesKeepTheirStarredAndTabs() throws {

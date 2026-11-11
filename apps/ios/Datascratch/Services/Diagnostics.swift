@@ -13,6 +13,8 @@ nonisolated struct DiagnosticEvent: Identifiable, Equatable, Sendable {
     let code: String
     /// The document it is about (an id, never a title).
     let documentId: String?
+    /// What exactly failed (method, path, status, decoding error) — never note content.
+    var detail: String?
 
     static func == (l: DiagnosticEvent, r: DiagnosticEvent) -> Bool {
         l.date == r.date && l.code == r.code && l.documentId == r.documentId
@@ -139,7 +141,7 @@ nonisolated struct DiagnosticsSnapshot: Sendable {
         ]
         if events.isEmpty { lines.append("-") }
         for e in events {
-            lines.append("\(iso.string(from: e.date)) \(e.code)\(e.documentId.map { " doc=\($0)" } ?? "")")
+            lines.append("\(iso.string(from: e.date)) \(e.code)\(e.documentId.map { " doc=\($0)" } ?? "")\(e.detail.map { " — \($0)" } ?? "")")
         }
         return lines.joined(separator: "\n") + "\n"
     }

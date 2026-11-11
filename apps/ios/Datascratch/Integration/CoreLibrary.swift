@@ -20,6 +20,13 @@ protocol CoreLibraryRemote: AnyObject {
     /// Note keys (`NoteMeta.wrappedKey`) arrived with a notebook index: documents that waited
     /// for them can be subscribed.
     func noteKeysLearned()
+    /// A notebook index says these notes changed elsewhere (an agent wrote them): their bodies
+    /// come ahead of the rest, newest first, without opening them.
+    func prefetch(_ noteIds: [String])
+}
+
+extension CoreLibraryRemote {
+    func prefetch(_ noteIds: [String]) {}
 }
 
 /// A note's key fields of `NoteMeta` (wrapped key, key version and chain, D-54) by note id,
@@ -128,6 +135,8 @@ final class CoreLibrary: LibraryBackend {
     private var subscriptions: [String: CRDTSubscription] = [:]
     private var remoteSubscriptions: [String: CRDTSubscription] = [:]
     private var reloadTask: Task<Void, Never>?
+    /// The notes' `updatedAt` at the last remote reload: what an index change made newer.
+    private var noteDatesSeen: [String: Date]?
     let wrappedKeys = WrappedKeyIndex()
     /// While set, the sync engine stores and sends document updates (instead of `observe`).
     weak var remote: (any CoreLibraryRemote)? {
@@ -350,9 +359,23 @@ final class CoreLibrary: LibraryBackend {
         reloadTask = Task {
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
-            onExternalChange?(loadSnapshot())
+            let snapshot = loadSnapshot()
+            onExternalChange?(snapshot)
             if !notebooksWithoutKey.isEmpty { remote?.notebookKeysMissing() }
+            prefetchChanged(snapshot.notes)
         }
+    }
+
+    /// Notes an index change made newer (or new), not open here: fetched ahead, newest first.
+    private func prefetchChanged(_ notes: [NoteMeta]) {
+        let now = Dictionary(notes.map { ($0.id, $0.updatedAt) }, uniquingKeysWith: { a, _ in a })
+        defer { noteDatesSeen = now }
+        guard let seen = noteDatesSeen else { return }
+        let changed = notes.filter { note in
+            !note.isTrashed && noteDocs[note.id] == nil && (seen[note.id].map { note.updatedAt > $0 } ?? true)
+        }
+        guard !changed.isEmpty else { return }
+        remote?.prefetch(changed.sorted { $0.updatedAt > $1.updatedAt }.prefix(50).map(\.id))
     }
 
     /// Switches to the account document of a server account (after sign-in / sign-up).

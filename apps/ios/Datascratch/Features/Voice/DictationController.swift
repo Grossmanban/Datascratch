@@ -55,11 +55,13 @@ final class DictationController {
         queue.beforeInsert = { [weak app] in await app?.snapshotBeforeChange(noteId: noteId, .voiceInsert) }
         queue.noteId = noteId
         queue.inbox = app?.dictationInbox
-        // A piece recognised by a retry goes in at the caret while the note is open.
-        app?.dictationInbox.attach(noteId: noteId) { [weak self] text in
+        // A piece recognised by a retry goes in at its placeholder (else at the caret) while the
+        // note is open.
+        app?.dictationInbox.attach(noteId: noteId) { [weak self] id, text in
             guard let self, let target = self.queue.target else { return false }
             await self.queue.beforeInsert?()
-            target.insertDictation(text)
+            let piece = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !target.replaceDictation(id, with: piece) { target.insertDictation(piece) }
             return true
         }
     }

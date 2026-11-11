@@ -195,6 +195,29 @@ nonisolated struct NoteVersion: Codable, Identifiable, Hashable, Sendable {
     var body: NoteBody
 }
 
+/// One starred thing as the sidebar and the Starred list show it.
+nonisolated enum StarredEntry: Identifiable, Hashable, Sendable {
+    case note(NoteMeta)
+    case folder(Folder)
+    case notebook(Notebook)
+
+    var id: String {
+        switch self {
+        case .note(let note): "note:\(note.id)"
+        case .folder(let folder): "folder:\(folder.id)"
+        case .notebook(let notebook): "notebook:\(notebook.id)"
+        }
+    }
+
+    var ref: StarRef {
+        switch self {
+        case .note(let note): StarRef(kind: .note, id: note.id)
+        case .folder(let folder): StarRef(kind: .folder, id: folder.id)
+        case .notebook(let notebook): StarRef(kind: .notebook, id: notebook.id)
+        }
+    }
+}
+
 nonisolated struct StarRef: Codable, Hashable, Sendable {
     nonisolated enum Kind: String, Codable, Sendable { case note, folder, notebook }
     var kind: Kind

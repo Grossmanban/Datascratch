@@ -8,6 +8,21 @@ protocol DictationTarget: AnyObject {
     func showDictationPreview(_ text: String?)
     /// A finished piece at the caret, as one undo step.
     func insertDictation(_ text: String)
+    /// D-65: a kept recording's placeholder in the text — at `anchor` (JSON of DSEditor's
+    /// `DictationAnchor`; nil, or a place that is gone: at the caret), «Recognising… 0:42», or
+    /// failed with a code. Already there: only its state changes. Returns its place to keep with
+    /// the recording, nil when there is none (view only, no editor).
+    func placeDictation(_ id: String, at anchor: Data?, seconds: Int, failed code: String?) -> Data?
+    /// The recognised text takes the placeholder's place (one undo step); false without one.
+    func replaceDictation(_ id: String, with text: String) -> Bool
+    /// The recording is gone: so is its placeholder.
+    func removeDictationPlace(_ id: String)
+}
+
+extension DictationTarget {
+    func placeDictation(_ id: String, at anchor: Data?, seconds: Int, failed code: String?) -> Data? { nil }
+    func replaceDictation(_ id: String, with text: String) -> Bool { false }
+    func removeDictationPlace(_ id: String) {}
 }
 
 /// D-65: dictation in pieces. Each hold (or hands-free stretch) is a piece: while it is spoken the
@@ -37,6 +52,8 @@ final class DictationQueue {
         var started = Date()
         /// Its record in `DictationInbox` once the recording is kept there.
         var recordId: String?
+        /// Its placeholder is in the text: the preview no longer shows it.
+        var placed = false
     }
 
     private(set) var pieces: [Piece] = []
@@ -94,6 +111,13 @@ final class DictationQueue {
            let record = inbox.keep(audio: audio, noteId: noteId, heard: heard,
                                    duration: Date().timeIntervalSince(pieces[i].started)) {
             pieces[i].recordId = record.id
+            // Its place in the text, where it was said: the text goes there, whatever the person
+            // does meanwhile, also after a retry or once the note is opened again.
+            if let anchor = target?.placeDictation(record.id, at: nil, seconds: Int(record.duration.rounded()), failed: nil) {
+                inbox.setAnchor(record.id, anchor)
+                pieces[i].placed = true
+            }
+            showPreview()
             recognise(id, record: record.id, in: inbox)
             return
         }
@@ -161,6 +185,10 @@ final class DictationQueue {
             } catch {
                 inbox.end(record)
                 inbox.failed(record, error)
+                if let item = inbox.item(record) {
+                    _ = self?.target?.placeDictation(record, at: item.anchor, seconds: Int(item.duration.rounded()),
+                                                     failed: item.lastError ?? "client")
+                }
                 self?.complete(id, .ready("", notice: (error as? VoiceError) ?? .failed("client")))
                 return
             }
@@ -225,9 +253,13 @@ final class DictationQueue {
                 if trimmed.isEmpty {
                     // Nothing was said: the recording goes. Recognition failed: it stays, with its
                     // card in the note and its retries.
-                    if notice == nil { inbox?.remove(record) }
+                    if notice == nil {
+                        target?.removeDictationPlace(record)
+                        inbox?.remove(record)
+                    }
                 } else if let target {
-                    target.insertDictation(trimmed)
+                    // At its placeholder; without one (or its place is gone) at the caret.
+                    if !target.replaceDictation(record, with: trimmed) { target.insertDictation(trimmed) }
                     // In the text: the recording is no longer needed.
                     inbox?.remove(record)
                 } else {
@@ -245,9 +277,9 @@ final class DictationQueue {
 
     /// Everything heard and not in the text yet, in order.
     var previewText: String? {
-        let text = pieces.map(\.heard).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
+        let text = pieces.filter { !$0.placed }.map(\.heard).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
         if !text.isEmpty { return text }
-        return pieces.isEmpty ? nil : ""
+        return pieces.contains(where: { !$0.placed }) ? "" : nil
     }
 
     private func showPreview() {

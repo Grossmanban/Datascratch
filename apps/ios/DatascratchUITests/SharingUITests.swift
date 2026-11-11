@@ -31,7 +31,13 @@ final class SharingUITests: XCTestCase {
     func testOwnerInvitesByEmail() throws {
         let app = launch(["-ui-testing-open-own"])
         let share = app.buttons["Share"].firstMatch
-        XCTAssertTrue(share.waitForExistence(timeout: 10), "no Share button")
+        // iPhone: Share is in «…» (the bar holds Insert, presence, «…» and Close).
+        if !share.waitForExistence(timeout: 10) {
+            let more = app.buttons["document.more"].firstMatch
+            XCTAssertTrue(more.waitForExistence(timeout: 5), "no Share button and no «…»")
+            more.tap()
+        }
+        XCTAssertTrue(share.waitForExistence(timeout: 5), "no Share button")
         share.tap()
         let email = app.textFields["share.email"].firstMatch
         XCTAssertTrue(email.waitForExistence(timeout: 5), "no email field in Share")

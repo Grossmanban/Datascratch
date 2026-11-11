@@ -44,8 +44,23 @@ private nonisolated final class ScriptedVoice: VoiceService, @unchecked Sendable
 @MainActor
 private final class NoteText: DictationTarget {
     var inserted: [String] = []
+    /// Placeholders in the text: record id → «recognising» or «failed:<code>».
+    var places: [String: String] = [:]
+    /// Pieces that went in at their placeholder.
+    var replaced: [String] = []
     func showDictationPreview(_ text: String?) {}
     func insertDictation(_ text: String) { inserted.append(text) }
+    func placeDictation(_ id: String, at anchor: Data?, seconds: Int, failed code: String?) -> Data? {
+        places[id] = code.map { "failed:\($0)" } ?? "recognising"
+        return Data("place-\(id)".utf8)
+    }
+    func replaceDictation(_ id: String, with text: String) -> Bool {
+        guard places.removeValue(forKey: id) != nil else { return false }
+        inserted.append(text)
+        replaced.append(id)
+        return true
+    }
+    func removeDictationPlace(_ id: String) { places[id] = nil }
 }
 
 @MainActor
@@ -98,11 +113,38 @@ struct DictationInboxTests {
         #expect(!queue.isBusy, "pieces after it are not held up")
 
         service.set(transcribeFails: 0)
-        inbox.attach(noteId: "note-1") { text in note.inserted.append(text); return true }
+        inbox.attach(noteId: "note-1") { _, text in note.inserted.append(text); return true }
         inbox.retry(item.id)
         await settle { inbox.items.isEmpty }
         #expect(note.inserted == ["The long piece."])
         #expect(!FileManager.default.fileExists(atPath: inbox.audioURL(item.id).path), "in the note: the recording goes")
+    }
+
+    /// Where it was said: a placeholder from the moment it is let go, kept with the recording;
+    /// a failure shows there with its code, and the retried text takes its place.
+    @Test func placeholderStandsWhereItWasSaid() async throws {
+        let service = ScriptedVoice(transcribeFails: 1)
+        let inbox = inbox(service)
+        inbox.backoff = []
+        let note = NoteText()
+        let queue = queue(inbox, service, note)
+        let piece = queue.begin()
+        queue.finish(piece, audio: try recording())
+        let id = try #require(inbox.items.first?.id)
+        #expect(note.places[id] == "recognising")
+        #expect(inbox.items.first?.anchor == Data("place-\(id)".utf8), "the place is kept with the recording")
+        #expect(queue.previewText == nil, "the placeholder, not the preview, shows the piece")
+        await settle { note.places[id]?.hasPrefix("failed") == true }
+        #expect(note.places[id] == "failed:voice_upstream")
+
+        inbox.attach(noteId: "note-1") { id, text in
+            if !note.replaceDictation(id, with: text) { note.insertDictation(text) }
+            return true
+        }
+        inbox.retry(id)
+        await settle { inbox.items.isEmpty }
+        #expect(note.replaced == [id])
+        #expect(note.inserted == ["The long piece."])
     }
 
     /// Tidying failed: the transcript goes in as heard, with a word about it — not nothing.
@@ -179,7 +221,7 @@ struct DictationInboxTests {
         let service = ScriptedVoice(transcribeFails: 2)
         let inbox = inbox(service)
         let note = NoteText()
-        inbox.attach(noteId: "note-1") { text in note.inserted.append(text); return true }
+        inbox.attach(noteId: "note-1") { _, text in note.inserted.append(text); return true }
         let queue = queue(inbox, service, note)
         let piece = queue.begin()
         queue.finish(piece, audio: try recording())

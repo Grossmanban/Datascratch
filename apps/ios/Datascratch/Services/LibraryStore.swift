@@ -242,6 +242,39 @@ final class LibraryStore {
         return data.notes.filter { ids.contains($0.notebookId) }
     }
 
+    /// Everything starred in the active space — notes, folders and notebooks — in the order they
+    /// were starred (as on the web: `${kind}:${id}`). Gone or trashed ones drop out.
+    var starredItems: [StarredEntry] {
+        let ids = activeNotebookIds
+        return data.starred.compactMap { ref -> StarredEntry? in
+            switch ref.kind {
+            case .note:
+                guard let note = note(ref.id), !note.isTrashed, ids.contains(note.notebookId) else { return nil }
+                return .note(note)
+            case .folder:
+                guard let folder = folder(ref.id), ids.contains(folder.notebookId) else { return nil }
+                return .folder(folder)
+            case .notebook:
+                guard let notebook = notebook(ref.id), ids.contains(notebook.id) else { return nil }
+                return .notebook(notebook)
+            }
+        }
+    }
+
+    /// «Notebook › Parent › …» above a folder, for its row among the starred.
+    func path(ofFolder folder: Folder) -> String {
+        var names: [String] = []
+        var seen: Set<String> = [folder.id]
+        var next = folder.parentId.flatMap { self.folder($0) }
+        while let parent = next, !seen.contains(parent.id) {
+            seen.insert(parent.id)
+            names.insert(parent.name, at: 0)
+            next = parent.parentId.flatMap { self.folder($0) }
+        }
+        if let notebook = notebook(folder.notebookId) { names.insert(notebook.name, at: 0) }
+        return names.joined(separator: " › ")
+    }
+
     var starredNotes: [NoteMeta] {
         let ids = activeNotebookIds
         return data.starred.filter { $0.kind == .note }.compactMap { ref in note(ref.id) }

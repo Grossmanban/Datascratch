@@ -105,11 +105,12 @@ final class SyncCenter {
     /// Documents whose changes could not be delivered (ids, from the sync engine).
     var failedDocumentIds: [String] = []
 
-    func record(_ code: String, documentId: String? = nil, at date: Date = Date()) {
+    func record(_ code: String, documentId: String? = nil, detail: String? = nil, at date: Date = Date()) {
         // The same problem reported again and again (each status update) is one entry.
         if let last = recentEvents.first, last.code == code, last.documentId == documentId,
            date.timeIntervalSince(last.date) < 60 { return }
-        recentEvents.insert(DiagnosticEvent(date: date, code: code, documentId: documentId), at: 0)
+        recentEvents.insert(DiagnosticEvent(date: date, code: code, documentId: documentId,
+                                            detail: detail.map { String($0.prefix(400)) }), at: 0)
         if recentEvents.count > Self.maxEvents { recentEvents.removeLast(recentEvents.count - Self.maxEvents) }
     }
 
@@ -204,12 +205,36 @@ final class SyncCenter {
         phase = .syncing
     }
 
+    // MARK: Engine (build 46: «синхронизация» forever, 565 waiting)
+
+    /// The engine's own report for Diagnostics → Sync (nil without a server).
+    @ObservationIgnored var loadEngineReport: (() async -> SyncEngineReport?)?
+    /// «Отправить снова»: everything waiting or refused goes again.
+    @ObservationIgnored var sendAgain: (() async -> Void)?
+    /// Something has waited long enough to say «Syncing» (DSCore `activityUpdates`: after ~3 s,
+    /// at least 1.5 s, without flicker). Without it, short work shows nothing.
+    private(set) var isActivityVisible = false
+    @ObservationIgnored private var lastSummary: (summary: Summary, pending: Int)?
+
+    func setActivity(_ visible: Bool) {
+        guard isActivityVisible != visible else { return }
+        isActivityVisible = visible
+        if let last = lastSummary { apply(summary: last.summary, pending: last.pending) }
+    }
+
     /// Summary reported by the sync engine (`SyncStatus.summary`).
     func apply(summary: Summary, pending: Int) {
         guard !isSessionEnded else { return }
+        lastSummary = (summary, pending)
         pendingChanges = pending
         switch summary {
         case .offline: phase = .offline(pending: pending)
+        case .syncing where !isActivityVisible:
+            // Work that has not waited long: the last state stays (no blinking «Syncing»).
+            switch phase {
+            case .syncing, .offline: phase = .upToDate(Date())
+            default: break
+            }
         case .syncing: phase = .syncing
         case .synced:
             if case .upToDate = phase { break }

@@ -33,6 +33,29 @@ public enum APIError: Error, Equatable, Sendable {
         if case .server(_, let code, _) = self { return code }
         return nil
     }
+
+    /// For Diagnostics and logs: the method, path, status and what failed (never note content).
+    public var detail: String {
+        switch self {
+        case .server(let status, let code, let message): "HTTP \(status) \(code): \(message)"
+        case .notAuthenticated: "not signed in"
+        case .invalidResponse(let message): "invalid response: \(message)"
+        case .transport(let message): "transport: \(message)"
+        }
+    }
+}
+
+/// Plain words instead of «DSCore.APIError error 2» (the app shows its own, translated ones).
+extension APIError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .server(let status, _, let message) where status >= 500: "The server had a problem (\(status)). \(message)"
+        case .server(_, _, let message): message
+        case .notAuthenticated: "You are signed out. Sign in again."
+        case .invalidResponse: "The server’s answer could not be read."
+        case .transport: "No connection to the server."
+        }
+    }
 }
 
 /// `Session` (api.md «Аутентификация»).

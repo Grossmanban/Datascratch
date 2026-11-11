@@ -66,6 +66,7 @@ INTERPOLATIONS = {
     r"Couldn’t process the recording (\(code)).": "Couldn’t process the recording (%@).",
     r"Couldn’t format the text (\(code)) — try again.": "Couldn’t format the text (%@) — try again.",
     r"Recognised · \(Self.length(item.duration))": "Recognised · %@",
+    r"Oldest: \(Self.age($0))": "Oldest: %@",
     r"Recognising… · \(length)": "Recognising… · %@",
     r"Not recognised · \(length)": "Not recognised · %@",
     r"The recording is kept on this device (\(code)).": "The recording is kept on this device (%@).",
@@ -100,6 +101,8 @@ IGNORE = {
     "Datascratch diagnostics", "events (newest first):", " : failedDocumentIds.joined(separator: ",
     " : unreadableNotebookIds.joined(separator: ", " } ?? ", "GRDB.swift", "ISC", "MIT", "Mermaid",
     "Yrs (Yjs)", "swift-sodium · libsodium", "LaunchBackground", "not supported",
+    # Diagnostics → Sync engine lines of the report.
+    "sync.events (newest first):",
 }
 
 LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')

@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-11-11)
 
 ## Corpus Check
-- 1146 files · ~1,125,195 words
+- 1146 files · ~1,125,225 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 40 file(s) not represented in the graph (top: (none) 20, .css 6, .example 4)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f0c4074f`
+- Built from commit: `1588c63e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -2154,17 +2154,17 @@ Cohesion: 1.00
 Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main.tsx, Root mount element #root
 
 ## Ambiguous Edges - Review These
-- `12-craft-features.md` → `Связи: [[ ]], бэклинки, теги; граф — не в MVP`  [AMBIGUOUS]
-  docs/spec/04-editor.md · relation: references
 - `0030-server-database-postgresql.md` → `Shared for the whole account: app settings, account, keys, devices, agent grants`  [AMBIGUOUS]
   docs/decisions/0048-isolated-spaces.md · relation: references
+- `12-craft-features.md` → `Связи: [[ ]], бэклинки, теги; граф — не в MVP`  [AMBIGUOUS]
+  docs/spec/04-editor.md · relation: references
 - `Shared with me (participant side)` → `SharedWithMePage — «Поделились со мной» (D-63)`  [AMBIGUOUS]
   apps/web/README.md · relation: conceptually_related_to
 - `Лимиты payload: обновление 16 MiB (до 2026-11-11 — 2 MiB), снимок 16 MiB (декодированные байты)` → `Лимиты синхронизации (2 МБ, 16 МБ, 100 сообщ./с, retryAfterMs)`  [AMBIGUOUS]
   docs/spec/06-data-server.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **2032 isolated node(s):** `protocol2`, `resumeWithCursor`, `resumeWithoutCursor`, `.body`, `.body` (+2027 more)
+- **2032 isolated node(s):** `protocol2`, `resumeWithCursor`, `resumeWithoutCursor`, `chevron`, `external` (+2027 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 6481 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **107 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -2172,7 +2172,7 @@ Nodes (3): Web editor showcase page (index.html), Module entry script /demo/main
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `cn.ts`, `DSDesign Swift package (iOS 26, Swift 6) — «Тихая бумага» design system tokens + SwiftUI components`, `tokens.test.mjs`, `DSDateChip (2)`, `Foundation`?**
-  _High betweenness centrality (0.262) - this node is a cross-community bridge._
+  _High betweenness centrality (0.261) - this node is a cross-community bridge._
 - **Are the 370 inferred relationships involving `t()` (e.g. with `accept()` and `ACTION()`) actually correct?**
   _`t()` has 370 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `protocol2`, `resumeWithCursor`, `resumeWithoutCursor` to the rest of the system?**
@@ -2180,12 +2180,12 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
   _Cohesion score 0.001617817799266313 - nodes in this community are weakly interconnected._
 - **Why does `DSDateChipModel` connect `DSDateChip (2)` to `MarkSet`, `SyncDiagnostics`, `Sendable`, `design-tokens.md`?**
-  _High betweenness centrality (0.210) - this node is a cross-community bridge._
+  _High betweenness centrality (0.197) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
 
-- **What is the exact relationship between `12-craft-features.md` and `Связи: [[ ]], бэклинки, теги; граф — не в MVP`?**
-  _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
 - **What is the exact relationship between `0030-server-database-postgresql.md` and `Shared for the whole account: app settings, account, keys, devices, agent grants`?**
+  _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
+- **What is the exact relationship between `12-craft-features.md` and `Связи: [[ ]], бэклинки, теги; граф — не в MVP`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._

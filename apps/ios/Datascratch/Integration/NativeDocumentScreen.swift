@@ -54,6 +54,13 @@ final class NativeEditorModel: ClosingEditor {
             DispatchQueue.main.async { self?.changed() }
         }
         editor.onOpenNote = { [weak app] id in app?.pendingRoute = .note(id) }
+        // D-65: a recording that was not recognised — its card, with «Retry» (a second tap hides it).
+        editor.onDictationPlaceholderTap = { [weak self] id in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.tappedDictation = self.tappedDictation == id ? nil : id
+            }
+        }
         // This device's caret goes to the others with its presence state (nil: editing ended).
         editor.onLocalCursorChange = { [weak app] json in
             DispatchQueue.main.async { app?.presence?.setLocalCursor(json, in: noteId) }
@@ -137,6 +144,10 @@ final class NativeEditorModel: ClosingEditor {
     /// D-65: what is being dictated and not in the text yet (grey at the caret; the bar shows
     /// the step).
     var dictationPreview: String?
+    /// D-65: kept recordings' placeholders in this editor's text, by record id.
+    var dictationPlaces: [String: DictationPlaceholderState] = [:]
+    /// The failed placeholder tapped: its card («Retry», «Save Audio», «Delete») shows.
+    var tappedDictation: String?
     /// D-65: this document's microphone.
     @ObservationIgnored lazy var dictation: DictationController = {
         let dictation = DictationController(app: app, target: self)
@@ -377,6 +388,9 @@ struct NativeDocumentScreen: View {
                 .toolbar { NativeEditorToolbar(model: model, note: note) }
                 .modifier(LinkPrompt(model: model))
                 .modifier(DictationSheets(dictation: model.dictation))
+                // D-65: the kept recordings' placeholders in the text follow the inbox.
+                .onChange(of: app.dictationInbox.items, initial: true) { model.syncDictationPlaces(with: app.dictationInbox) }
+                .onChange(of: app.dictationInbox.working) { model.syncDictationPlaces(with: app.dictationInbox) }
                 .coverPickers()
             } else if failed {
                 // Opening the document failed: fall back to the stand-in editor.
@@ -394,6 +408,7 @@ struct NativeDocumentScreen: View {
         }
         .onDisappear {
             model?.dictation.leave()
+            model?.keepDictationPlaces(in: app.dictationInbox)
             app.library.recordVersion(ofNote: noteId)
             // Version history (sync-protocol §5): a snapshot when the note goes off screen.
             app.snapshotOnLeave(noteId: noteId)
@@ -429,8 +444,14 @@ struct NativeEditorToolbar: ToolbarContent {
     @Environment(SceneModel.self) private var scene
     @Environment(\.openWindow) private var openWindow
     @Environment(\.isNarrowDocumentColumn) private var isNarrowColumn
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let model: NativeEditorModel
     let note: NoteMeta
+
+    /// iPhone (any width, SE and mini too) or a narrow column: the bar holds only Insert, who is
+    /// here, «…» and Close. More items made iOS 26 fold the bar's end into its own overflow pill,
+    /// and «…» then opened only on the second tap (owner, build 46).
+    private var isCompactBar: Bool { isNarrowColumn || sizeClass == .compact }
 
     /// D-54 «view only»: nothing that edits (insert, style, cover, undo, move, trash).
     private var isViewOnly: Bool { model.isViewOnly }
@@ -438,9 +459,7 @@ struct NativeEditorToolbar: ToolbarContent {
     private var peopleHere: [PresencePeer] { app.presence?.people(in: note.id) ?? [] }
     /// The iPhone bar has no room for the avatars and Share both (they pushed «…» into the
     /// system's overflow): with people here, Share goes into «…».
-    private var shareInMenu: Bool {
-        isNarrowColumn || (UIDevice.current.userInterfaceIdiom == .phone && !peopleHere.isEmpty)
-    }
+    private var shareInMenu: Bool { isCompactBar }
     /// Shared with this account: the owner moves it; a note shared on its own has no notebook here.
     private var isShared: Bool { app.accountSharing.role(forNote: note.id, notebookId: note.notebookId) != nil }
 
@@ -475,7 +494,7 @@ struct NativeEditorToolbar: ToolbarContent {
         // the list's).
         ToolbarItemGroup(placement: .topBarTrailing) {
             let _ = model.revision
-            if !isViewOnly {
+            if !isViewOnly, !isCompactBar {
             Button { model.editor.undo() } label: { Image(systemName: "arrow.uturn.backward") }
                 .disabled(!model.editor.canUndo)
                 .accessibilityLabel("Undo")
@@ -494,10 +513,12 @@ struct NativeEditorToolbar: ToolbarContent {
             // A narrow column (next to the list on an iPad mini in portrait): Insert and Share go
             // into «…» so the bar fits the column (D-60).
             if !isNarrowColumn {
+                if !isCompactBar {
                 Button { model.editor.showFind() } label: { Image(systemName: "magnifyingglass") }
                     .accessibilityLabel("Find in Note")
                     .accessibilityIdentifier("document.find")
                     .keyboardShortcut("f", modifiers: .command)
+                }
                 if !isViewOnly {
                 Menu { insertItems } label: {
                     Image(systemName: "plus.circle")
@@ -523,10 +544,20 @@ struct NativeEditorToolbar: ToolbarContent {
             }
 
             Menu {
-                if isNarrowColumn {
-                    Button("Find in Note", systemImage: "magnifyingglass") { model.editor.showFind() }
-                    if !isViewOnly { Menu("Insert", systemImage: "plus.circle") { insertItems } }
+                if isCompactBar, !isViewOnly {
+                    // Undo and Redo leave the iPhone bar: here, and with the keyboard's own.
+                    ControlGroup {
+                        Button("Undo", systemImage: "arrow.uturn.backward") { model.editor.undo() }
+                            .disabled(!model.editor.canUndo)
+                        Button("Redo", systemImage: "arrow.uturn.forward") { model.editor.redo() }
+                            .disabled(!model.editor.canRedo)
+                    }
                 }
+                if isCompactBar {
+                    Button("Find in Note", systemImage: "magnifyingglass") { model.editor.showFind() }
+                        .accessibilityIdentifier("document.find")
+                }
+                if isNarrowColumn, !isViewOnly { Menu("Insert", systemImage: "plus.circle") { insertItems } }
                 if shareInMenu {
                     Button("Share", systemImage: "square.and.arrow.up") {
                         scene.sheet = .share(ShareTarget(kind: .note, id: note.id))
@@ -708,7 +739,10 @@ struct EditorBottomBars: View {
                 FormatStatus(formatter: model.formatter) {
                     scene.sheet = .voiceOriginal(noteId: model.noteId)
                 }
-                PendingDictationCards(inbox: app.dictationInbox, noteId: model.noteId)
+                PendingDictationCards(inbox: app.dictationInbox, noteId: model.noteId,
+                                      placed: Set(model.dictationPlaces.keys), tapped: model.tappedDictation) {
+                    model.tappedDictation = nil
+                }
                 DictationPreview(dictation: model.dictation, text: model.dictationPreview)
                 if let message = model.dictation.message { DictationMessage(text: message) }
                 if !app.isVoiceOff {

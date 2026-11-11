@@ -16,8 +16,25 @@ export interface Database {
   close(): Promise<void>;
 }
 
-export function createDatabase(url: string, max = 10): Database {
-  const pool = new pg.Pool({ connectionString: url, max });
+/**
+ * Limits on every connection of the pool, so that no request can wait on the database forever:
+ * a statement, a wait for a lock, a transaction left open by the application (milliseconds, 0: off).
+ */
+export interface DbTimeouts {
+  statementMs: number;
+  lockMs: number;
+  idleInTransactionMs: number;
+}
+
+export const DEFAULT_DB_TIMEOUTS: DbTimeouts = { statementMs: 120_000, lockMs: 30_000, idleInTransactionMs: 120_000 };
+
+export function createDatabase(url: string, max = 10, timeouts: DbTimeouts = DEFAULT_DB_TIMEOUTS): Database {
+  const options = [
+    `-c statement_timeout=${timeouts.statementMs}`,
+    `-c lock_timeout=${timeouts.lockMs}`,
+    `-c idle_in_transaction_session_timeout=${timeouts.idleInTransactionMs}`,
+  ].join(' ');
+  const pool = new pg.Pool({ connectionString: url, max, options });
   const db = drizzle(pool, { schema });
   return { pool, db, close: () => pool.end() };
 }
@@ -28,6 +45,8 @@ export async function runMigrations(pool: pg.Pool): Promise<void> {
   // Serialize concurrent migrators (several test workers or a restart loop).
   const client = await pool.connect();
   try {
+    // Migrations may legitimately run long (indexes on big tables): no limits on this session.
+    await client.query('SET statement_timeout = 0; SET lock_timeout = 0; SET idle_in_transaction_session_timeout = 0');
     await client.query('SELECT pg_advisory_lock(724100001)');
     await migrate(drizzle(client, { schema }), { migrationsFolder });
     // Roles are cluster-wide and not part of a dump: make sure the agent role and
@@ -38,6 +57,8 @@ export async function runMigrations(pool: pg.Pool): Promise<void> {
     await client.query('GRANT ds_agent TO CURRENT_USER');
   } finally {
     await client.query('SELECT pg_advisory_unlock(724100001)').catch(() => undefined);
+    // Back to the pool's limits before the connection serves requests.
+    await client.query('RESET statement_timeout; RESET lock_timeout; RESET idle_in_transaction_session_timeout').catch(() => undefined);
     client.release();
   }
 }

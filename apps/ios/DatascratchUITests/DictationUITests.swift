@@ -114,30 +114,55 @@ final class DictationUITests: XCTestCase {
         stop.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(waitForText(app, containing: "This is dictated text."),
                       "the hands-free piece is not in the note after «Stop»; text: \(value(app))")
+        // The microphone is idle again before the test ends: terminating the app while it was
+        // still winding down failed on CI («Failed to terminate»).
+        XCTAssertTrue(stop.waitForNonExistence(timeout: 5), "still hands free after «Stop»")
+        XCTAssertTrue(mic.waitForExistence(timeout: 5), "no microphone after «Stop»")
+        settle(1)
     }
 
-    /// The owner's bug (build 45): recognition failed and the long piece was gone. Now the note
-    /// shows the kept recording with its cause, and «Retry» puts its text in.
+    /// The recording's placeholder in the text (DSEditor draws it, D-65).
+    private func placeholder(_ app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'editor.dictationPlaceholder.'")).firstMatch
+    }
+
+    /// The owner's bug (build 45): recognition failed and the long piece was gone. Now the
+    /// recording's placeholder stays where it was said, «Not recognised»; a tap on it shows the
+    /// card with the cause, and «Retry» puts the text in its place.
     func testFailedRecognitionKeepsTheRecordingAndRetryPutsItIn() throws {
         // The first try and the three automatic retries fail; «Retry» gets through.
         let app = launch(["-ui-testing-voice-transcribe-fails", "4"])
         let mic = try openNewNote(app)
         acceptConsent(app, mic: mic)
         mic.press(forDuration: 1.5)
-        let card = app.descendants(matching: .any)["voice.pending"].firstMatch
-        XCTAssertTrue(card.waitForExistence(timeout: 15), "no card for the recording that failed; buttons: \(buttons(app))")
+        let chip = placeholder(app)
+        XCTAssertTrue(chip.waitForExistence(timeout: 15), "no placeholder in the text for the recording; voice elements: \(voiceElements(app))")
         XCTAssertFalse(value(app).contains("dictated"), "nothing should be in the text yet; text: \(value(app))")
-        let code = app.descendants(matching: .any)["voice.pending.code"].firstMatch
-        XCTAssertTrue(code.waitForExistence(timeout: 10), "the cause is not shown")
-        XCTAssertTrue(code.label.contains("voice_upstream"), "cause: \(code.label)")
+        let card = app.descendants(matching: .any)["voice.pending"].firstMatch
+        XCTAssertFalse(card.exists, "the note is open: the placeholder, not the card, stands for the recording")
+        // The automatic retries (a second apart here) end failed: then the tap shows the card.
+        for _ in 0..<40 where !(chip.exists && chip.label.contains("не распознана")) { settle(0.5) }
+        XCTAssertTrue(chip.label.contains("не распознана"), "the placeholder did not show the failure: \(chip.label)")
         let retry = app.buttons["voice.pending.retry"].firstMatch
-        for _ in 0..<8 where !value(app).contains("This is dictated text.") {
-            if retry.exists, retry.isEnabled, retry.isHittable { retry.tap() }
+        for _ in 0..<5 where !retry.exists {
+            if chip.label.contains("не распознана") { chip.tap() }
+            _ = retry.waitForExistence(timeout: 3)
+        }
+        XCTAssertTrue(retry.exists, "a tap on the failed placeholder did not show «Retry»; voice elements: \(voiceElements(app))")
+        let code = app.descendants(matching: .any)["voice.pending.code"].firstMatch
+        XCTAssertTrue(code.exists && code.label.contains("voice_upstream"), "the cause is not shown: \(code.exists ? code.label : "none")")
+        for _ in 0..<6 where !value(app).contains("This is dictated text.") {
+            if retry.exists, retry.isEnabled, retry.isHittable {
+                retry.tap()
+            } else if chip.exists, chip.label.contains("не распознана") {
+                chip.tap()
+            }
             settle(1.5)
         }
         XCTAssertTrue(waitForText(app, containing: "This is dictated text.", timeout: 10),
                       "«Retry» did not put the text in; text: \(value(app))")
-        XCTAssertTrue(card.waitForNonExistence(timeout: 5), "the card stayed after the text went in")
+        XCTAssertTrue(chip.waitForNonExistence(timeout: 5), "the placeholder stayed after the text went in")
+        XCTAssertFalse(card.exists, "the card stayed after the text went in")
     }
 
     /// Tidying up failed: the transcript goes in as heard instead of nothing.
@@ -156,8 +181,9 @@ final class DictationUITests: XCTestCase {
         let mic = try openNewNote(app)
         acceptConsent(app, mic: mic)
         mic.press(forDuration: 1.5)
-        XCTAssertTrue(app.descendants(matching: .any)["voice.pending"].firstMatch.waitForExistence(timeout: 15),
-                      "no card for the recording that failed")
+        XCTAssertTrue(placeholder(app).waitForExistence(timeout: 15), "no placeholder for the recording")
+        // Kept on disk before it is sent: the restart can come at once.
+        settle(2)
         app.terminate()
 
         app = launch(["-ui-testing-keep-dictations", "-ui-testing-voice-transcribe-fails", "100"])
@@ -173,18 +199,34 @@ final class DictationUITests: XCTestCase {
                       "the kept recording is gone after a restart; voice elements: \(voiceElements(app))")
     }
 
+    /// The title (empty: Return gives it the automatic «Note <date>») and «milk and bread» in the
+    /// body. As in `testNewNoteTitleLikeAppleNotes`, in one call; the body's keystrokes were
+    /// sometimes lost while the caret moved out of the title (iPhone), so they go once more then.
+    private func typeNote(_ app: XCUIApplication, title: String) {
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the new note's title did not get the caret")
+        editorText(app).typeText(title + "\nmilk and bread")
+        if !waitForText(app, containing: "milk and bread", timeout: 5) {
+            editorText(app).typeText("milk and bread")
+        }
+        XCTAssertTrue(waitForText(app, containing: "milk and bread", timeout: 5), "the body was not typed; text: \(value(app))")
+    }
+
     /// «Format…» from the document's menu, the voice's way accepted on the first use, «Document».
     private func format(_ app: XCUIApplication) {
         let style = app.buttons["voice.format.document"].firstMatch
+        let accept = app.buttons["voice.consent.accept"].firstMatch
         for _ in 0..<2 where !style.exists {
+            // A closing sheet still in the tree made the menu's query time out (iPad).
+            if accept.exists { _ = accept.waitForNonExistence(timeout: 10) }
             app.buttons["document.more"].firstMatch.tap()
             let item = app.buttons["document.format"].firstMatch
             XCTAssertTrue(item.waitForExistence(timeout: 5), "no «Format…» in the menu; buttons: \(buttons(app))")
             item.tap()
-            let accept = app.buttons["voice.consent.accept"].firstMatch
             if accept.waitForExistence(timeout: 3) {
                 accept.tap()
-                _ = accept.waitForNonExistence(timeout: 5)
+                XCTAssertTrue(accept.waitForNonExistence(timeout: 10), "the «where your voice goes» sheet did not close")
+                // Its dismissal finishes before the next sheet is looked for.
+                settle(1)
             }
             _ = style.waitForExistence(timeout: 5)
         }
@@ -200,9 +242,7 @@ final class DictationUITests: XCTestCase {
         _ = try openNewNote(app)
         // As in `testNewNoteTitleLikeAppleNotes`: the title has the keyboard; Return fills it with
         // the automatic «Note <date>» and moves to the body.
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the new note's title did not get the caret")
-        editorText(app).typeText("\nmilk and bread")
-        XCTAssertTrue(waitForText(app, containing: "milk and bread", timeout: 5), "the body was not typed; text: \(value(app))")
+        typeNote(app, title: "")
         format(app)
         XCTAssertTrue(waitForText(app, containing: "Formatted by Voice", timeout: 5), "no title from the model; text: \(value(app))")
         XCTAssertFalse(app.descendants(matching: .any)["voice.format.title"].firstMatch.exists, "offered a title that is already in")
@@ -215,17 +255,29 @@ final class DictationUITests: XCTestCase {
     func testFormattingOffersANewTitleForANamedNote() throws {
         let app = launch()
         _ = try openNewNote(app)
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the new note's title did not get the caret")
-        editorText(app).typeText("Groceries\nmilk and bread")
-        XCTAssertTrue(waitForText(app, containing: "milk and bread", timeout: 5), "the note was not typed; text: \(value(app))")
+        typeNote(app, title: "Groceries")
         format(app)
         let offer = app.descendants(matching: .any)["voice.format.title"].firstMatch
         XCTAssertTrue(offer.waitForExistence(timeout: 5), "the model's title is not offered; buttons: \(buttons(app))")
         XCTAssertTrue(value(app).contains("Groceries"), "the note's own title was replaced; text: \(value(app))")
         app.buttons["voice.format.titleReplace"].firstMatch.tap()
-        XCTAssertTrue(waitForText(app, containing: "Formatted by Voice", timeout: 5), "«Replace» did not set the title; text: \(value(app))")
-        XCTAssertFalse(value(app).contains("Groceries"), "the old title is still there; text: \(value(app))")
+        // The title is in once the text holds the new one and not the old (polled often: the
+        // expectation's one-second polling missed a value that was already there, iPhone).
+        let replaced = waitUntil(10) {
+            let text = self.value(app)
+            return text.contains("Formatted by Voice") && !text.contains("Groceries")
+        }
+        XCTAssertTrue(replaced, "«Replace» did not set the title; text: \(value(app))")
         XCTAssertTrue(offer.waitForNonExistence(timeout: 3), "the offer stayed after «Replace»")
+    }
+
+    private func waitUntil(_ timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
+        let end = Date().addingTimeInterval(timeout)
+        while Date() < end {
+            if condition() { return true }
+            settle(0.25)
+        }
+        return condition()
     }
 
     private func settle(_ seconds: TimeInterval) {

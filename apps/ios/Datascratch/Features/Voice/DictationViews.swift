@@ -480,16 +480,22 @@ struct FormatStatus: View {
 struct PendingDictationCards: View {
     let inbox: DictationInbox
     let noteId: String
+    /// Recordings with a placeholder in the text: their card shows only once it is tapped.
+    var placed: Set<String> = []
+    var tapped: String?
+    var onClose: () -> Void = {}
 
     var body: some View {
         // The first try of a piece being dictated shows in the bar, not here.
         let items = inbox.items(for: noteId).filter {
-            $0.attempts > 0 || $0.text != nil || !inbox.working.contains($0.id)
+            ($0.attempts > 0 || $0.text != nil || !inbox.working.contains($0.id))
+                && (!placed.contains($0.id) || $0.id == tapped)
         }
         if !items.isEmpty {
             VStack(alignment: .trailing, spacing: Theme.Space.s2) {
                 ForEach(items) { item in
-                    PendingDictationCard(inbox: inbox, item: item, canInsert: true)
+                    PendingDictationCard(inbox: inbox, item: item, canInsert: true,
+                                         onClose: item.id == tapped ? onClose : nil)
                 }
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -502,6 +508,8 @@ struct PendingDictationCard: View {
     let item: PendingDictation
     /// The note is open: a recognised piece can go in at the caret.
     let canInsert: Bool
+    /// Opened from its placeholder in the text: it can be closed again.
+    var onClose: (() -> Void)?
     @State private var confirmingDelete = false
 
     private var isWorking: Bool { inbox.working.contains(item.id) }
@@ -535,6 +543,17 @@ struct PendingDictationCard: View {
                         .font(Theme.Typography.footnote.weight(.medium))
                         .foregroundStyle(Theme.Palette.textPrimary)
                         .accessibilityIdentifier("voice.pending.title")
+                    if let onClose {
+                        Spacer(minLength: Theme.Space.s2)
+                        Button(action: onClose) {
+                            Image(systemName: "xmark")
+                                .font(Theme.Typography.caption.weight(.semibold))
+                                .foregroundStyle(Theme.Palette.textSecondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Close")
+                        .accessibilityIdentifier("voice.pending.close")
+                    }
                 }
                 if let code = item.lastError, !isWorking {
                     Text("The recording is kept on this device (\(code)).")

@@ -21,6 +21,9 @@ nonisolated struct PendingDictation: Codable, Identifiable, Equatable, Sendable 
     var attempts = 0
     /// The last failure's code (`voice_upstream`, `voice_too_long`, `timeout`, `network`, …).
     var lastError: String?
+    /// Its place in the note's text (DSEditor's `DictationAnchor`, JSON): the placeholder stands
+    /// there while it is recognised, also after the note is opened again, and the text goes there.
+    var anchor: Data?
 }
 
 /// D-65: every recorded piece goes here before it goes to the server, and leaves only once its
@@ -40,8 +43,9 @@ final class DictationInbox {
     @ObservationIgnored private let options: () -> (quality: VoiceQuality, profanity: VoiceProfanity)
     /// A diagnostics event (`voice.<code>`).
     @ObservationIgnored var log: (String) -> Void = { _ in }
-    /// Open notes taking a retried piece's text: note id → put it in (false: it could not go in).
-    @ObservationIgnored private var sinks: [String: (String) async -> Bool] = [:]
+    /// Open notes taking a retried piece's text: note id → put it in, by record id and text (false:
+    /// it could not go in).
+    @ObservationIgnored private var sinks: [String: (_ id: String, _ text: String) async -> Bool] = [:]
     @ObservationIgnored private var retries: [String: Task<Void, Never>] = [:]
     /// Pauses before the automatic retries.
     @ObservationIgnored var backoff: [Duration] = [.seconds(10), .seconds(60), .seconds(300)]
@@ -93,6 +97,13 @@ final class DictationInbox {
         items.append(item)
         save(item)
         return item
+    }
+
+    /// Where its placeholder stands in the note now.
+    func setAnchor(_ id: String, _ anchor: Data?) {
+        guard var item = self.item(id), item.anchor != anchor else { return }
+        item.anchor = anchor
+        update(item)
     }
 
     func update(_ item: PendingDictation) {
@@ -233,8 +244,8 @@ final class DictationInbox {
 
     // MARK: Into the note
 
-    /// The note is open and takes recognised pieces (at the caret).
-    func attach(noteId: String, insert: @escaping (String) async -> Bool) {
+    /// The note is open and takes recognised pieces (at their placeholder, else at the caret).
+    func attach(noteId: String, insert: @escaping (_ id: String, _ text: String) async -> Bool) {
         sinks[noteId] = insert
     }
 
@@ -252,7 +263,7 @@ final class DictationInbox {
         }
         working.insert(id)
         Task { [weak self] in
-            let done = await sink(text)
+            let done = await sink(id, text)
             guard let self else { return }
             self.working.remove(id)
             if done { self.remove(id) }

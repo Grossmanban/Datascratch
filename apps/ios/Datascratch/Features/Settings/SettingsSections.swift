@@ -176,6 +176,9 @@ struct SecuritySettings: View {
 struct DiagnosticsView: View {
     @Environment(AppModel.self) private var app
     @State private var copied = false
+    /// The sync engine's own report (build 46), refreshed while the screen is open.
+    @State private var engineReport: SyncEngineReport?
+    @State private var isSendingAgain = false
 
     private static let time: DateFormatter = {
         let f = DateFormatter()
@@ -204,6 +207,53 @@ struct DiagnosticsView: View {
                 DSSettingsRow(String(localized: "Not delivered"), systemImage: "exclamationmark.arrow.triangle.2.circlepath",
                               value: "\(snapshot.notSentDocuments)")
             }
+            if let engine = engineReport {
+                DSSettingsSection(String(localized: "Sync Engine"),
+                                  footer: String(localized: "Connections that keep growing on a steady network mean the connection keeps dropping.")) {
+                    DSSettingsRow(String(localized: "Connection"), systemImage: "bolt.horizontal", value: engine.connection)
+                        .accessibilityIdentifier("diagnostics.engine.connection")
+                    DSSettingsRow(String(localized: "Connections opened"), systemImage: "arrow.triangle.2.circlepath",
+                                  value: "\(engine.connectionsOpened)")
+                    DSSettingsRow(String(localized: "Waiting to be sent"),
+                                  subtitle: engine.oldestPendingAge().map { String(localized: "Oldest: \(Self.age($0))") },
+                                  systemImage: "tray.and.arrow.up", value: "\(engine.pending.reduce(0) { $0 + $1.count })")
+                        .accessibilityIdentifier("diagnostics.engine.pending")
+                    DSSettingsRow(String(localized: "Sent, not confirmed"), systemImage: "paperplane", value: "\(engine.inFlight)")
+                    DSSettingsRow(String(localized: "Catching up"), systemImage: "arrow.down.circle",
+                                  value: "\(engine.catchingUp) · \(engine.queuedSubscriptions) · \(engine.live)")
+                    DSSettingsRow(String(localized: "Refused by the server"), systemImage: "xmark.octagon", value: "\(engine.failed)")
+                    DSSettingsRow(String(localized: "Set aside (unreadable)"), systemImage: "exclamationmark.lock",
+                                  value: "\(engine.unreadable) · \(engine.quarantined)")
+                    if let error = engine.lastError {
+                        DSSettingsRow(String(localized: "Last error"), subtitle: engine.lastErrorAt.map { Self.time.string(from: $0) },
+                                      systemImage: "exclamationmark.triangle", value: error)
+                    }
+                    Button {
+                        isSendingAgain = true
+                        Task {
+                            await app.sync.sendAgain?()
+                            engineReport = await app.sync.loadEngineReport?()
+                            isSendingAgain = false
+                        }
+                    } label: {
+                        SettingsTileRow(String(localized: "Send Again"), systemImage: "arrow.up.circle", tint: .orange, accessory: .none)
+                    }
+                    .buttonStyle(.dsSettingsRow)
+                    .disabled(isSendingAgain)
+                    .accessibilityIdentifier("diagnostics.sendAgain")
+                }
+                DSSettingsSection(String(localized: "Sync Log")) {
+                    if engine.events.isEmpty {
+                        DSSettingsRow(String(localized: "No events yet"), systemImage: "list.bullet")
+                    } else {
+                        ForEach(engine.events.reversed().prefix(30)) { event in
+                            DSSettingsRow(event.kind, subtitle: "\(Self.time.string(from: event.at))\(event.detail.isEmpty ? "" : " · \(event.detail)")",
+                                          systemImage: Self.symbol(event.kind))
+                                .accessibilityIdentifier("diagnostics.engine.event")
+                        }
+                    }
+                }
+            }
             DSSettingsSection(String(localized: "Keys and Uploads")) {
                 DSSettingsRow(String(localized: "Notebooks without a key"), systemImage: "lock.trianglebadge.exclamationmark",
                               value: "\(snapshot.unreadableNotebookIds.count)")
@@ -221,7 +271,7 @@ struct DiagnosticsView: View {
                 } else {
                     ForEach(snapshot.events.prefix(20)) { event in
                         DSSettingsRow(DiagnosticCode.explanation(event.code),
-                                      subtitle: "\(Self.time.string(from: event.date)) · \(event.code)",
+                                      subtitle: "\(Self.time.string(from: event.date)) · \(event.code)\(event.detail.map { " · \($0)" } ?? "")",
                                       systemImage: "clock")
                             .accessibilityIdentifier("diagnostics.event")
                     }
@@ -233,19 +283,47 @@ struct DiagnosticsView: View {
                 }
                 .accessibilityIdentifier("diagnostics.check")
                 Button {
-                    UIPasteboard.general.string = snapshot.report()
+                    UIPasteboard.general.string = report(snapshot)
                     copied = true
                 } label: {
                     SettingsTileRow(copied ? String(localized: "Copied") : String(localized: "Copy Report"),
                                     systemImage: copied ? "checkmark" : "doc.on.doc", tint: .blue, accessory: .none)
                 }
                 .accessibilityIdentifier("diagnostics.copy")
-                ShareLink(item: snapshot.report(), subject: Text(verbatim: "Datascratch diagnostics")) {
+                ShareLink(item: report(snapshot), subject: Text(verbatim: "Datascratch diagnostics")) {
                     SettingsTileRow(String(localized: "Share Report"), systemImage: "square.and.arrow.up", tint: .indigo, accessory: .none)
                 }
                 .accessibilityIdentifier("diagnostics.share")
             }
             .buttonStyle(.dsSettingsRow)
+        }
+        .task {
+            // While the screen is open: the engine's numbers move (waiting, catching up).
+            while !Task.isCancelled {
+                engineReport = await app.sync.loadEngineReport?()
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+
+    private func report(_ snapshot: DiagnosticsSnapshot) -> String {
+        guard let engine = engineReport else { return snapshot.report() }
+        return snapshot.report() + "\n" + engine.lines().joined(separator: "\n") + "\n"
+    }
+
+    static func age(_ seconds: TimeInterval) -> String {
+        let s = Int(seconds)
+        if s < 60 { return "\(s) s" }
+        if s < 3600 { return "\(s / 60) min" }
+        return "\(s / 3600) h \(s % 3600 / 60) min"
+    }
+
+    static func symbol(_ kind: String) -> String {
+        switch kind {
+        case "connected": "checkmark.circle"
+        case "disconnected", "connectionLost": "wifi.exclamationmark"
+        case "serverError", "failed": "exclamationmark.triangle"
+        default: "info.circle"
         }
     }
 }

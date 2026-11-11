@@ -24,6 +24,7 @@ final class ServerConnection: CoreLibraryRemote {
     /// Who else has a note open (presence over the sync socket, never stored).
     let presence = PresenceCenter()
     private var statusTask: Task<Void, Never>?
+    private var activityTask: Task<Void, Never>?
     /// Follows photo and file transfers for the sync status line.
     private var transferTask: Task<Void, Never>?
     /// `POST /notebooks` in flight; notebook and note documents are registered after it.
@@ -242,6 +243,10 @@ final class ServerConnection: CoreLibraryRemote {
         accounts.useTrustRecord(nil)
         isAccountSynced = false
         statusTask?.cancel()
+        activityTask?.cancel()
+        sync.setActivity(false)
+        sync.loadEngineReport = nil
+        sync.sendAgain = nil
         transferTask?.cancel()
         sync.transfers = .init()
         sync.onRetry = nil
@@ -306,6 +311,16 @@ final class ServerConnection: CoreLibraryRemote {
     }
 
     private func observeStatus(_ engine: SyncEngine) {
+        // «Syncing» only for work that has waited (DSCore: after ~3 s, at least 1.5 s, no flicker).
+        activityTask?.cancel()
+        activityTask = Task { [sync] in
+            for await visible in engine.activityUpdates() { sync.setActivity(visible) }
+        }
+        sync.loadEngineReport = { [weak engine] in
+            guard let engine else { return nil }
+            return Self.report(await engine.diagnostics())
+        }
+        sync.sendAgain = { [weak engine] in await engine?.retryAll() }
         statusTask?.cancel()
         statusTask = Task { [weak self, sync] in
             var catching = false, caughtUp = false
@@ -341,6 +356,31 @@ final class ServerConnection: CoreLibraryRemote {
                                       accessDocuments: reasons.filter { $0 == .access }.count))
             }
         }
+    }
+
+    /// DSCore's diagnostics in the app's own terms (codes, counts, ids, times).
+    nonisolated static func report(_ d: SyncDiagnostics) -> SyncEngineReport {
+        let connection: String = switch d.connection {
+        case .disconnected: "disconnected"
+        case .connecting: "connecting"
+        case .connected: "connected"
+        case .waiting(let retryIn): "waiting (retry in \(retryIn.components.seconds) s)"
+        case .stopped(let reason): "stopped: \(reason)"
+        default: String(describing: d.connection)
+        }
+        return SyncEngineReport(
+            connection: connection, connectionsOpened: d.connectionsOpened, consecutiveFailures: d.consecutiveFailures,
+            protocolVersion: d.protocolVersion, lastError: d.lastError, lastErrorAt: d.lastErrorAt,
+            pending: d.pending.map { .init(docId: $0.docId, count: $0.count, oldest: $0.oldest, lastError: $0.lastError) },
+            inFlight: d.inFlight, catchingUp: d.catchingUp, queuedSubscriptions: d.queuedSubscriptions, live: d.live,
+            failed: d.failed.count, unreadable: d.unreadable.count, quarantined: d.quarantined, waiting: d.waiting.count,
+            events: d.events.map { .init(at: $0.at, kind: $0.kind.rawValue, docId: $0.docId, detail: $0.detail) })
+    }
+
+    /// Notes an index says changed elsewhere: their bodies first (DSCore `prefetch`).
+    func prefetch(_ noteIds: [String]) {
+        guard let engine, !noteIds.isEmpty else { return }
+        Task { await engine.prefetch(noteIds) }
     }
 
     // MARK: CoreLibraryRemote

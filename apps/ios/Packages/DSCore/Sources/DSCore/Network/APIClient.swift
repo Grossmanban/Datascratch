@@ -223,9 +223,17 @@ public actor APIClient {
 
     /// Encrypted state at `seq` (open with `CryptoAD.doc(docId)`).
     public func version(docId: String, seq: Int64) async throws -> Data {
-        struct R: Decodable { var payload: Base64URLData }
-        let r: R = try await call("GET", "/docs/\(seg(docId))/versions/\(seq)")
-        return r.payload.data
+        struct R: Decodable { var payload: String }
+        let path = try "/docs/\(seg(docId))/versions/\(seq)"
+        let r: R = try await call("GET", path)
+        if let data = Base64URL.decode(r.payload) { return data }
+        // Not canonical base64url (padding, `+` `/`, line breaks from something in between):
+        // still the same bytes — read them, and say so in the logs.
+        let standard = r.payload.filter { !$0.isWhitespace }
+            .replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        let padded = standard.padding(toLength: (standard.count + 3) / 4 * 4, withPad: "=", startingAt: 0)
+        if let data = Data(base64Encoded: padded) { return data }
+        throw APIError.invalidResponse("GET \(path): payload is not base64 (\(r.payload.count) chars, ends \(r.payload.suffix(8)))")
     }
 
     // MARK: Attachments
@@ -457,7 +465,7 @@ public actor APIClient {
         do {
             return try JSONDecoder().decode(R.self, from: data)
         } catch {
-            throw APIError.invalidResponse("\(method) \(path): \(error)")
+            throw APIError.invalidResponse("\(method) \(path): \(error) [\(Self.describe(data))]")
         }
     }
 
@@ -471,6 +479,14 @@ public actor APIClient {
     private func send<B: Encodable>(_ method: String, _ path: String, body: B?, auth: Bool = true, idempotent: Bool? = nil) async throws -> Data {
         let encoded = try body.map { try JSONEncoder().encode($0) }
         return try await raw(method, path, body: encoded, contentType: encoded == nil ? nil : "application/json", auth: auth, idempotent: idempotent)
+    }
+
+    /// A body that could not be decoded, for the error: its size and how it starts (a proxy's
+    /// HTML page, a truncated or empty body). Payloads are encrypted, so nothing private shows.
+    static func describe(_ data: Data) -> String {
+        let start = String(decoding: data.prefix(80), as: UTF8.self)
+            .replacingOccurrences(of: "\n", with: " ")
+        return "\(data.count) bytes: \(start)"
     }
 
     /// Delay before retry `n` (1-based): base · 2ⁿ⁻¹ ± 30 %.

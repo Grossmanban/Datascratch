@@ -101,6 +101,10 @@ it('the shared client compacts with snapshots the server accepts and serves', as
     await sleep(30);
   }
   expect(versions.length).toBeGreaterThan(0);
+  // Every edit acknowledged before this device goes away (under CI load the last pushes may
+  // still be in flight when the first version appears; a stopped client keeps them only locally).
+  for (let t = 0; t < 250 && (await storage.listOutbox()).length > 0; t++) await sleep(20);
+  expect(await storage.listOutbox()).toEqual([]);
   await client.stop();
 
   const fresh = new Y.Doc();

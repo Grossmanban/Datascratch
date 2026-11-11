@@ -661,6 +661,16 @@
         }
       }
     },
+    "Catching up": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Догоняет"
+          }
+        }
+      }
+    },
     "Change Password": {
       "localizations": {
         "ru": {
@@ -981,6 +991,26 @@
         }
       }
     },
+    "Connections opened": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Соединений открыто"
+          }
+        }
+      }
+    },
+    "Connections that keep growing on a steady network mean the connection keeps dropping.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Если при стабильной сети число соединений всё растёт — соединение рвётся."
+          }
+        }
+      }
+    },
     "Continue": {
       "localizations": {
         "ru": {
@@ -1067,6 +1097,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не получилось оформить текст (%@) — попробуйте ещё раз."
+          }
+        }
+      }
+    },
+    "Couldn’t open this version": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось открыть версию"
           }
         }
       }
@@ -2581,12 +2621,32 @@
         }
       }
     },
+    "It could not be decrypted on this device.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На этом устройстве не удалось расшифровать."
+          }
+        }
+      }
+    },
     "It disappears from this device. To get it back, the owner invites you again.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Он исчезнет с этого устройства. Чтобы вернуть доступ, владелец должен пригласить вас снова."
+          }
+        }
+      }
+    },
+    "It is no longer on the server.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На сервере этого уже нет."
           }
         }
       }
@@ -2707,6 +2767,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ключи и загрузки"
+          }
+        }
+      }
+    },
+    "Last error": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последняя ошибка"
           }
         }
       }
@@ -3251,6 +3321,16 @@
         }
       }
     },
+    "No connection to the server — try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет связи с сервером — попробуйте ещё раз."
+          }
+        }
+      }
+    },
     "No connection — formatting needs the server.": {
       "localizations": {
         "ru": {
@@ -3267,6 +3347,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Документов пока нет"
+          }
+        }
+      }
+    },
+    "No events yet": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Событий пока нет"
           }
         }
       }
@@ -3667,6 +3757,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Офлайн · ждут отправки: %lld"
+          }
+        }
+      }
+    },
+    "Oldest: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Самое старое: %@"
           }
         }
       }
@@ -4361,6 +4461,16 @@
         }
       }
     },
+    "Refused by the server": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отклонено сервером"
+          }
+        }
+      }
+    },
     "Reject": {
       "localizations": {
         "ru": {
@@ -4781,6 +4891,16 @@
         }
       }
     },
+    "Send Again": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправить снова"
+          }
+        }
+      }
+    },
     "Send First": {
       "localizations": {
         "ru": {
@@ -4797,6 +4917,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Отправляем изменения…"
+          }
+        }
+      }
+    },
+    "Sent, not confirmed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправлено, без подтверждения"
           }
         }
       }
@@ -4827,6 +4957,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Задать новый пароль"
+          }
+        }
+      }
+    },
+    "Set aside (unreadable)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отложено (не читается)"
           }
         }
       }
@@ -5511,6 +5651,26 @@
         }
       }
     },
+    "Sync Engine": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Синхронизация"
+          }
+        }
+      }
+    },
+    "Sync Log": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Журнал синхронизации"
+          }
+        }
+      }
+    },
     "Sync could not start; it is retried on the next connection.": {
       "localizations": {
         "ru": {
@@ -5921,6 +6081,16 @@
         }
       }
     },
+    "The server had a problem — try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибка на сервере — попробуйте ещё раз."
+          }
+        }
+      }
+    },
     "The server refused changes: this account may have lost access to the notebook.": {
       "localizations": {
         "ru": {
@@ -5961,6 +6131,16 @@
         }
       }
     },
+    "The server’s answer could not be read — try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прочитать ответ сервера — попробуйте ещё раз."
+          }
+        }
+      }
+    },
     "The session was ended from another device or in your account settings. Your notes stay on this device; changes made here will sync once you sign in again.": {
       "localizations": {
         "ru": {
@@ -5987,6 +6167,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Текст слишком длинный для оформления."
+          }
+        }
+      }
+    },
+    "The version before could not be opened: this one is shown on its own.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предыдущую версию открыть не удалось — эта показана без сравнения."
           }
         }
       }
@@ -6581,6 +6771,16 @@
         }
       }
     },
+    "Waiting to be sent": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ждёт отправки"
+          }
+        }
+      }
+    },
     "Welcome back": {
       "localizations": {
         "ru": {
@@ -6781,12 +6981,32 @@
         }
       }
     },
+    "You are signed out. Sign in again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вы вышли из аккаунта. Войдите снова."
+          }
+        }
+      }
+    },
     "You can change this later in the notebook menu.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Это можно изменить позже в меню блокнота."
+          }
+        }
+      }
+    },
+    "You don’t have access to it.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У вас нет к этому доступа."
           }
         }
       }

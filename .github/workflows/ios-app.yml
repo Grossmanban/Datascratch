@@ -47,6 +47,89 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: .github/scripts/already-tested.sh ios-app.yml apps/ios .github/workflows/ios-app.yml
 
+  # Build 46: a version did not open on the owner's server («DSCore.APIError error 2»). The real
+  # server behind the production Caddy front door (its compression on), and DSCore over URLSession
+  # against it: versions made the app's way, also one over 1 MB, in a private and an agent-mode
+  # notebook — every listed version must open.
+  real-server:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
+    name: Real server (versions)
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: PostgreSQL and Caddy
+        run: |
+          brew install postgresql@16 caddy
+          PG="$(brew --prefix postgresql@16)/bin"
+          "$PG/initdb" -D "$RUNNER_TEMP/pg" -U ds --auth=trust > /dev/null
+          "$PG/pg_ctl" -D "$RUNNER_TEMP/pg" -o "-p 5432 -k $RUNNER_TEMP" -l "$RUNNER_TEMP/pg.log" start
+          "$PG/createdb" -h 127.0.0.1 -U ds datascratch
+
+      - name: Build the server
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter "@datascratch/server..." run build
+
+      - name: Start the server behind Caddy
+        run: |
+          key() { node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"; }
+          export DATABASE_URL=postgres://ds@127.0.0.1:5432/datascratch HOST=127.0.0.1 PORT=8080 \
+            PUBLIC_URL=http://127.0.0.1:8480 STORAGE_DIR="$RUNNER_TEMP/files" \
+            DS_JWT_SECRET="$(key)" DS_KMS_KEY="$(key)"
+          (cd apps/server && nohup node dist/index.js > "$RUNNER_TEMP/server.log" 2>&1 &)
+          # The production front door as deployed, pointed at this machine's server.
+          sed 's/server:8080/127.0.0.1:8080/g' infra/deploy/Caddyfile > "$RUNNER_TEMP/Caddyfile"
+          DS_SITE=http://:8480 caddy start --config "$RUNNER_TEMP/Caddyfile" --adapter caddyfile
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8480/v1/health && break; sleep 2; done
+          curl -fsS http://127.0.0.1:8480/v1/health
+
+      - name: Pick an iPad simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)["devices"]
+          for r in sorted((r for r in data if "iOS-26" in r), reverse=True):
+              for d in data[r]:
+                  if d["name"].startswith("iPad"):
+                      print(d["udid"]); sys.exit(0)
+          sys.exit("no iPad simulator with iOS 26")
+          ')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: DSCore against the real server
+        working-directory: apps/ios/Packages/DSCore
+        run: |
+          set -o pipefail
+          TEST_RUNNER_DS_REAL_SERVER=http://127.0.0.1:8480 xcodebuild test \
+            -scheme DSCore \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -only-testing:DSCoreTests/RealServerVersionTests \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee realserver.log | grep -E "error:|Issue|✔|✘|passed|failed|\*\* " || true
+          grep -q "\*\* TEST SUCCEEDED \*\*" realserver.log
+          grep -q "everyVersionOpens" realserver.log
+
+      - name: Server log
+        if: always()
+        run: tail -n 200 "$RUNNER_TEMP/server.log" || true
+
   # One machine per device family builds the app and its tests; then unit + smoke tests (the
   # release gate) and the rest of the UI suite in UI_SHARDS parts run at the same time on separate
   # machines from those built products (owner, 2026-11-08: one check took ~45 min on one machine).

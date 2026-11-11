@@ -1,7 +1,7 @@
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
-import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
 import {
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
@@ -135,6 +135,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
   app.addHook('onResponse', async (req, reply) => {
     ctx.metrics.httpRequests.inc({ method: req.method, status: `${Math.floor(reply.statusCode / 100)}xx` });
   });
+  watchStalls(app as unknown as FastifyInstance);
   const { pool } = ctx.database;
   ctx.metrics.gauge('ds_db_pool_total', 'PostgreSQL pool connections.', () => pool.totalCount);
   ctx.metrics.gauge('ds_db_pool_idle', 'Idle PostgreSQL pool connections.', () => pool.idleCount);
@@ -183,4 +184,65 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
   }
 
   return app as unknown as FastifyInstance;
+}
+
+/** Requests that may legitimately run long (sync socket, voice, MCP streams) are not watched. */
+const LONG_RUNNING = /^\/(v1\/sync|v1\/voice\/|mcp)/;
+export const STALL_WARN_MS = 30_000;
+
+/**
+ * Diagnostics for a request that never finishes (ios-app real-server CI, 2026-11-11: a sign-up
+ * logged "incoming request" and nothing else). Logs, without any content: how far it got — its
+ * body (bytes received of content-length, complete or not) or the handler — when the client gives
+ * up (`request aborted`) or when it is still running after STALL_WARN_MS (`request stalled`).
+ */
+function watchStalls(app: FastifyInstance) {
+  type Watch = { start: number; stage: 'body' | 'handler'; bytes: number; done: boolean; timer?: NodeJS.Timeout };
+  const watches = new WeakMap<object, Watch>();
+  const facts = (req: FastifyRequest, w: Watch) => ({
+    method: req.method,
+    url: req.routeOptions.url ?? req.url.split('?')[0],
+    elapsedMs: Date.now() - w.start,
+    stage: w.stage,
+    contentLength: req.headers['content-length'] ? Number(req.headers['content-length']) : null,
+    bodyBytes: w.bytes,
+    bodyComplete: w.done,
+  });
+  app.addHook('onRequest', async (req) => {
+    if (LONG_RUNNING.test(req.url)) return;
+    const w: Watch = { start: Date.now(), stage: 'body', bytes: 0, done: false };
+    w.timer = setTimeout(() => req.log.warn(facts(req, w), 'request stalled'), STALL_WARN_MS);
+    w.timer.unref();
+    watches.set(req, w);
+  });
+  app.addHook('preParsing', async (req, _reply, payload) => {
+    const w = watches.get(req);
+    if (!w) return payload;
+    payload.on('data', (chunk: Buffer) => {
+      w.bytes += chunk.length;
+    });
+    payload.on('end', () => {
+      w.done = true;
+    });
+    return payload;
+  });
+  app.addHook('preHandler', async (req) => {
+    const w = watches.get(req);
+    if (w) {
+      w.stage = 'handler';
+      w.done = true;
+    }
+  });
+  const stop = (req: FastifyRequest) => {
+    const w = watches.get(req);
+    if (w?.timer) clearTimeout(w.timer);
+    return w;
+  };
+  app.addHook('onResponse', async (req) => {
+    stop(req);
+  });
+  app.addHook('onRequestAbort', async (req) => {
+    const w = stop(req);
+    if (w) req.log.warn(facts(req, w), 'request aborted');
+  });
 }

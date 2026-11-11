@@ -57,4 +57,24 @@ struct DiagnosticsTests {
         #expect(InkLaunchView.width(at: 0) > 0.2)
         #expect(InkLaunchView.width(at: 1) < InkLaunchView.width(at: 0.5))
     }
+
+    /// Diagnostics → Sync (build 46: 565 waiting, «синхронизация» forever): the engine's numbers
+    /// and its log go into the report, newest event first, with no note text.
+    @Test func engineReportLines() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let report = SyncEngineReport(
+            connection: "connected", connectionsOpened: 7, consecutiveFailures: 0, protocolVersion: 2,
+            lastError: "payload_too_large", lastErrorAt: now,
+            pending: [.init(docId: "doc-1", count: 565, oldest: now.addingTimeInterval(-90), lastError: nil)],
+            inFlight: 3, catchingUp: 1, queuedSubscriptions: 2, live: 40, failed: 4, unreadable: 0, quarantined: 0, waiting: 1,
+            events: [.init(at: now.addingTimeInterval(-60), kind: "connected", docId: nil, detail: ""),
+                     .init(at: now, kind: "serverError", docId: "doc-1", detail: "payload_too_large")])
+        let lines = report.lines(now: now)
+        #expect(lines.contains("sync.connections_opened: 7"))
+        #expect(lines.contains { $0.hasPrefix("sync.pending: 565 in 1 documents, oldest 90 s") })
+        #expect(lines.contains("sync.failed_documents: 4"))
+        let events = lines.drop { $0 != "sync.events (newest first):" }.dropFirst()
+        #expect(events.first?.contains("serverError doc=doc-1 — payload_too_large") == true, "\(Array(events))")
+        #expect(report.oldestPendingAge(now: now) == 90)
+    }
 }

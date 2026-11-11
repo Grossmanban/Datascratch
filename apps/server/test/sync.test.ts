@@ -231,6 +231,32 @@ describe('snapshots, compaction and history', () => {
     for (const x of [a, b, c]) x.close();
   });
 
+  it('relays a stored snapshot to the other subscribed devices, not back to the sender', async () => {
+    const noteId = await createNote(s, u, notebookId);
+    const a = await SyncClient.user(s, u);
+    const b = await SyncClient.user(s, u);
+    await a.subscribe(noteId);
+    for (let i = 0; i < 3; i++) await a.push(noteId, rnd(10));
+    await b.subscribe(noteId, 3);
+    const snap = b64(rnd(200));
+    a.send({ type: 'snapshot', docId: noteId, clientMsgId: 'snap-live', baseSeq: 3, payload: snap });
+    expect(await a.next((m) => m.clientMsgId === 'snap-live')).toMatchObject({ type: 'ack', seq: 3 });
+    expect(await b.next((m) => m.type === 'updates' && m.snapshot)).toEqual({
+      type: 'updates',
+      docId: noteId,
+      snapshot: { seq: 3, payload: snap },
+      items: [],
+      upToDate: true,
+    });
+    // A second snapshot at the same baseSeq (another big change) is relayed as well.
+    const snap2 = b64(rnd(200));
+    a.send({ type: 'snapshot', docId: noteId, clientMsgId: 'snap-live-2', baseSeq: 3, payload: snap2 });
+    expect((await b.next((m) => m.type === 'updates' && m.snapshot)).snapshot).toEqual({ seq: 3, payload: snap2 });
+    await a.next((m) => m.clientMsgId === 'snap-live-2', 5000, true);
+    expect(a.messages.some((m) => m.type === 'updates' && m.snapshot)).toBe(false);
+    for (const x of [a, b]) x.close();
+  });
+
   // sync-protocol §5: a client behind the newest snapshot gets that snapshot and only the
   // updates after it, even when the updates in between are still stored. A client that
   // cannot read some of those updates (sealed with a wrong key) heals from the snapshot.

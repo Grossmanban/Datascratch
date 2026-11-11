@@ -110,3 +110,39 @@ it('the shared client compacts with snapshots the server accepts and serves', as
   await until(() => fresh.getText('t').toString() === doc.getText('t').toString());
   await c2.client.stop();
 });
+
+// A change over the update limit (2 MiB) travels as a snapshot (sync-protocol §5); a device
+// already subscribed gets it at once, without reconnecting. A second big change right after
+// (the same baseSeq, nothing pushed in between) arrives too.
+it('a change too big for an update reaches a subscribed device as a snapshot', async () => {
+  const { notebookId } = await createNotebook(s, u);
+  const noteId = await createNote(s, u, notebookId);
+  const key = rnd(32);
+  const second = await api(s, 'POST', '/auth/login', {
+    body: { email: u.email, loginKey: u.loginKey, deviceName: 'B' },
+  });
+  const a = device(u.session, key);
+  const b = device(second.body, key);
+  const docA = new Y.Doc();
+  const docB = new Y.Doc();
+  a.client.start();
+  b.client.start();
+  await a.client.addDoc(noteId, docA);
+  await b.client.addDoc(noteId, docB);
+  docA.getText('t').insert(0, 'start ');
+  await until(() => docB.getText('t').toString() === 'start ');
+
+  const big = () => Buffer.from(rnd(Math.ceil((3 * 1024 * 1024 * 3) / 4))).toString('base64');
+  const first = big();
+  docA.getText('t').insert(docA.getText('t').length, first);
+  await a.client.flush();
+  await until(() => docB.getText('t').length === docA.getText('t').length, 20_000);
+  expect(docB.getText('t').toString()).toBe(docA.getText('t').toString());
+
+  const more = big();
+  docA.getText('t').insert(0, more);
+  await a.client.flush();
+  await until(() => docB.getText('t').length === docA.getText('t').length, 20_000);
+  expect(docB.getText('t').toString()).toBe(docA.getText('t').toString());
+  for (const x of [a, b]) await x.client.stop();
+}, 60_000);

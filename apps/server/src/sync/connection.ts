@@ -35,7 +35,11 @@ const item = (x: CatchUpItem) => ({
 
 type Pending =
   | { kind: 'update'; seq: number; payload: string; deviceId: string; author: AuthorRef | null }
-  | { kind: 'ack'; seq: number; clientMsgId: string };
+  | { kind: 'ack'; seq: number; clientMsgId: string }
+  /** Relayed as a one-part `updates` frame, outside the seq order (a snapshot covers every seq up to its own). */
+  | { kind: 'snapshot'; seq: number; payload: string };
+/** What travels in seq order. */
+type Ordered = Exclude<Pending, { kind: 'snapshot' }>;
 
 interface Subscription {
   unsubscribe: () => void;
@@ -45,7 +49,7 @@ interface Subscription {
   /** Highest seq delivered (as update or ack) to the client; delivery is gap-free up to here. */
   sent: number;
   /** Entries that arrived ahead of `sent + 1`, keyed by seq. */
-  pending: Map<number, Pending>;
+  pending: Map<number, Ordered>;
   filling: boolean;
 }
 
@@ -661,6 +665,10 @@ export class SyncConnection {
       }
       return;
     }
+    if (m.type === 'snapshot') {
+      if (m.origin !== this.id) this.#enqueue(docId, sub, { kind: 'snapshot', seq: m.seq, payload: m.payload });
+      return;
+    }
     // Our own pushes are represented by their ack entry (see #push), never echoed.
     if (m.type !== 'update' || m.origin === this.id) return;
     this.#enqueue(docId, sub, { kind: 'update', seq: m.seq, payload: m.payload, deviceId: m.deviceId, author: m.author });
@@ -668,7 +676,15 @@ export class SyncConnection {
 
   #enqueue(docId: string, sub: Subscription, e: Pending) {
     if (!sub.live) {
+      // While catching up only the newest snapshot is kept: it contains the older ones.
+      if (e.kind === 'snapshot') sub.buffer = sub.buffer.filter((b) => b.kind !== 'snapshot');
       sub.buffer.push(e);
+      return;
+    }
+    if (e.kind === 'snapshot') {
+      // A snapshot holds the whole document, so it needs no place in the seq order: the client
+      // applies it and keeps lastSeq = max(lastSeq, seq); updates still to come apply on top.
+      this.#send({ type: 'updates', docId, snapshot: { seq: e.seq, payload: e.payload }, items: [], upToDate: true });
       return;
     }
     if (e.seq <= sub.sent) {
@@ -680,7 +696,7 @@ export class SyncConnection {
     this.#drain(docId, sub);
   }
 
-  #emit(docId: string, e: Pending) {
+  #emit(docId: string, e: Ordered) {
     if (e.kind === 'ack') this.#send({ type: 'ack', docId, clientMsgId: e.clientMsgId, seq: e.seq });
     else
       this.#send({
@@ -777,6 +793,9 @@ export class SyncConnection {
         deviceId: this.#deviceId(),
       });
       this.#send({ type: 'ack', docId, clientMsgId, seq: baseSeq });
+      // Devices subscribed now get it at once: a change too big for an update travels only in
+      // a snapshot, and catch-up would not resend it to a device already at baseSeq.
+      this.ctx.hub.publish(topics.doc(docId), { type: 'snapshot', docId, seq: baseSeq, payload, origin: this.id });
       if (r.newest) await this.ctx.jobs.enqueue(COMPACT_JOB, { docId }, { singletonKey: docId, startAfterSec: 30 });
     } catch (err) {
       if (err instanceof ApiError && err.code === 'bad_request') {

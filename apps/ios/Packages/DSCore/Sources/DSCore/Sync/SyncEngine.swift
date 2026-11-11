@@ -178,6 +178,15 @@ public actor SyncEngine: SyncClientDelegate {
     private var retryTask: Task<Void, Never>?
     /// The last error the sync met: a server error code, or a connection failure (Diagnostics).
     private var lastError: String?
+    /// Diagnostics → Sync events: the last `maxEvents` things worth knowing (connections, server
+    /// refusals with their document, failures, trimmed pushes). Build 46 logged nothing.
+    private var events: [SyncEvent] = []
+    static let maxEvents = 200
+
+    private func log(_ kind: SyncEvent.Kind, docId: String? = nil, _ detail: String = "") {
+        events.append(SyncEvent(at: Date(), kind: kind, docId: docId, detail: detail))
+        if events.count > Self.maxEvents { events.removeFirst(events.count - Self.maxEvents) }
+    }
     /// Since when documents have been catching up without a break (`SyncStatus.catchingUpSince`).
     private var catchingUpSince: Date?
     /// Counts connections (`syncClientDidConnect`): work started for an older one stops.
@@ -391,7 +400,8 @@ public actor SyncEngine: SyncClientDelegate {
             catchingUp: catchingUp.count, queuedSubscriptions: subscribeQueue.count, live: live.count,
             failed: status.failed, unreadable: status.unreadable,
             quarantined: ((try? store.quarantined()) ?? []).count,
-            waiting: status.waiting)
+            waiting: status.waiting,
+            events: events)
     }
 
     /// «Отправить снова»: failed messages go back into the queue, set-aside remote items are
@@ -451,10 +461,23 @@ public actor SyncEngine: SyncClientDelegate {
     public func open(_ doc: CRDTDocument, notebookId: String?) async throws {
         if open[doc.docId] != nil { return }
         let record = try store.ensureDocument(docId: doc.docId, kind: doc.kind, notebookId: notebookId)
+        let stored = try store.updates(docId: doc.docId)
         if doc.stateVector().count > 1 {
-            try store.appendLocalUpdate(docId: doc.docId, update: try doc.encodeStateAsUpdate(), origin: .system)
+            // Only what the store does not have yet (a document made before opening). The app
+            // loads notes from this very store before opening them: storing that content again
+            // queued the whole state of every note at every launch — 565 messages on the
+            // owner's phone, and «payload_too_large» for big notes (build 46).
+            let missing: Data
+            if stored.isEmpty {
+                missing = try doc.encodeStateAsUpdate()
+            } else {
+                missing = try doc.encodeStateAsUpdate(since: CRDTUpdates.stateVector(of: CRDTUpdates.merge(stored)))
+            }
+            if CRDTUpdates.insertsContent(missing) {
+                try store.appendLocalUpdate(docId: doc.docId, update: missing, origin: .system)
+            }
         }
-        try doc.applyUpdates(try store.updates(docId: doc.docId), origin: .storage)
+        try doc.applyUpdates(stored, origin: .storage)
         let store = self.store
         let docId = doc.docId
         let clock = self.clock
@@ -771,16 +794,35 @@ public actor SyncEngine: SyncClientDelegate {
                         if Self.isPermanent(error) {
                             refused.insert(item.docId)
                             try? store.failOutbox(docId: item.docId, reason: "register: \(Self.describe(error))")
+                            log(.failed, docId: item.docId, "register: \(Self.describe(error))")
                         } else {
                             scheduleRetry()
                         }
                         continue
                     }
                 }
-                let sealed = try DSCrypto.seal(item.payload, key: key, ad: CryptoAD.doc(item.docId))
+                var payload = item.payload
+                if item.kind == .push, payload.count > Self.trimPushesOver {
+                    // A big push is usually a whole state (older builds queued one per note per
+                    // launch): send only what the server lacks, or nothing.
+                    switch trimmed(item) {
+                    case .redundant:
+                        try store.dropRedundantPush(clientMsgId: item.clientMsgId)
+                        log(.pushTrimmed, docId: item.docId, "\(item.payload.count) B already on the server: not sent")
+                        continue
+                    case .smaller(let less):
+                        try store.replaceQueuedPayload(clientMsgId: item.clientMsgId, with: less)
+                        log(.pushTrimmed, docId: item.docId, "\(item.payload.count) B → \(less.count) B")
+                        payload = less
+                    case .asIs:
+                        break
+                    }
+                }
+                let sealed = try DSCrypto.seal(payload, key: key, ad: CryptoAD.doc(item.docId))
                 let limit = item.kind == .push ? SyncProtocol.maxUpdateBytes : SyncProtocol.maxSnapshotBytes
                 guard sealed.count <= limit else {
                     try store.markFailed(clientMsgId: item.clientMsgId, error: "payload_too_large (local)", permanent: true)
+                    log(.failed, docId: item.docId, "\(item.kind.rawValue) of \(sealed.count) B over the \(limit) B limit")
                     continue
                 }
                 inFlight.insert(item.clientMsgId)
@@ -799,15 +841,38 @@ public actor SyncEngine: SyncClientDelegate {
                     inFlight.remove(item.clientMsgId)
                     lastError = "connection: \(Self.describe(error))"
                     lastErrorAt = Date()
+                    log(.connectionLost, docId: item.docId, "while sending: \(Self.describe(error))")
                     break
                 }
             } catch {
                 inFlight.remove(item.clientMsgId)
                 try? store.markFailed(clientMsgId: item.clientMsgId, error: Self.describe(error))
+                log(.failed, docId: item.docId, Self.describe(error))
             }
         }
         publish()
     }
+
+    /// Pushes bigger than this are checked against what the server has before sending.
+    static let trimPushesOver = 32 * 1024
+
+    private enum Trim { case redundant, smaller(Data), asIs }
+
+    /// What of a queued push the server does not have yet (its acknowledged and remote updates).
+    private func trimmed(_ item: OutboxItem) -> Trim {
+        guard let known = try? store.serverStateVector(docId: item.docId),
+              let rest = try? CRDTUpdates.diff(item.payload, stateVector: known) else { return .asIs }
+        if !CRDTUpdates.insertsContent(rest) {
+            // Deletions travel in every update's delete set; a push that inserts nothing new
+            // still may delete. Keep it when its delete set is what it is about (small pushes
+            // never get here).
+            return Self.deletesOnly(item.payload) ? .asIs : .redundant
+        }
+        return rest.count < item.payload.count ? .smaller(rest) : .asIs
+    }
+
+    /// Whether an update inserts nothing and only deletes.
+    private static func deletesOnly(_ update: Data) -> Bool { !CRDTUpdates.insertsContent(update) }
 
     /// Subscribes documents whose key is known, all at once and without registering them first:
     /// most were made on other devices and exist on the server, and a `POST /docs` per document
@@ -973,6 +1038,7 @@ public actor SyncEngine: SyncClientDelegate {
         live.removeAll()
         subscribedAll = false
         trace(.connected)
+        log(.connected, "protocol \(await client.protocolVersion.map(String.init) ?? "?")")
         // Returns at once: the client reads no frame until this returns, and subscribing a
         // library writes thousands of entries — on a slow uplink seconds in which nothing that
         // arrived (catch-ups, acks, pongs) was handled (owner, build 46). The subscription runs
@@ -991,6 +1057,7 @@ public actor SyncEngine: SyncClientDelegate {
     }
 
     public func syncClient(_ client: SyncClient, didChangeState state: SyncConnectionState) async {
+        if case .connected = connection, state != connection { log(.disconnected, "\(state)") }
         connection = state
         if case .revoked(let reason) = state, !revocationReported {
             // Nothing more is sent: the client never reconnects; retries stop here.
@@ -1072,9 +1139,11 @@ public actor SyncEngine: SyncClientDelegate {
             guard open[docId] != nil, let record = try? store.document(docId), let key = try? keyFor(record),
                   let plain = try? DSCrypto.open(payload, key: key, ad: CryptoAD.awareness(docId)) else { return }
             awarenessHandler?(docId, plain, deviceId)
-        case .error(let code, _, let ref, let retryAfterMs, _):
+        case .error(let code, let message, let ref, let retryAfterMs, _):
             lastError = code.rawValue
             lastErrorAt = Date()
+            let refDoc = ref.flatMap { r in (try? store.outboxItem(clientMsgId: r))?.docId ?? (known[r] != nil ? r : nil) }
+            log(.serverError, docId: refDoc, "\(code.rawValue): \(message)")
             guard let ref else { return }
             if inFlight.contains(ref) {
                 inFlight.remove(ref)

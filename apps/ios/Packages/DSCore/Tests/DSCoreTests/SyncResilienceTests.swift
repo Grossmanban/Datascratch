@@ -159,6 +159,70 @@ import Testing
         await phone.stop()
     }
 
+    /// The app loads notes from the store and then opens them in the engine. Build 46 stored
+    /// that content again as a local update: the whole state of every note queued at every
+    /// launch (565 messages on the owner's phone). Reopening queues nothing now.
+    @Test func openingANoteLoadedFromTheStoreQueuesNothing() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        await a.start()
+        let note = NoteDocument(noteId: EntityID.make())
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "t")
+        try note.insertText("текст", at: 0, inBlock: [1])
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        let sent = await server.received.count
+        await a.close(docId: note.noteId)
+
+        // As CoreLibrary does: load from the store, then hand it to the engine.
+        let loaded = NoteDocument(noteId: note.noteId)
+        try loaded.crdt.applyUpdates(try a.store.updates(docId: note.noteId), origin: .storage)
+        try await a.open(loaded.crdt, notebookId: "nb")
+        #expect(try a.store.outboxCount() == 0)
+        try await Task.sleep(for: .milliseconds(50))
+        let pushes = await server.received.dropFirst(sent).filter { if case .push = $0 { return true } else { return false } }
+        #expect(pushes.isEmpty)
+        // A note made before opening still goes out.
+        let fresh = NoteDocument(noteId: EntityID.make())
+        try fresh.initialize(title: "до открытия")
+        try await a.open(fresh.crdt, notebookId: "nb")
+        #expect(try await eventually { await server.docs[fresh.noteId]?.isEmpty == false })
+        await a.stop()
+    }
+
+    /// Whole-state pushes queued by build 46 (one per note per launch; over 2 MiB for big notes,
+    /// which failed at once): the server has all of it, so they leave the queue unsent. A big
+    /// push with new content still goes, trimmed to what the server lacks.
+    @Test func bigPushesAreTrimmedToWhatTheServerLacks() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        await a.start()
+        let note = NoteDocument(noteId: EntityID.make())
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "ТЗ")
+        let big = String(repeating: "Доработка по ТЗ, пункт за пунктом. ", count: 2_000)
+        try note.insertText(big, at: 0, inBlock: [1])
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        let onServer = await server.docs[note.noteId]?.count ?? 0
+        await a.stop()
+
+        // What build 46 left in the queue: the whole state again, twice.
+        let whole = try note.crdt.encodeStateAsUpdate()
+        #expect(whole.count > SyncEngine.trimPushesOver)
+        try a.store.appendLocalUpdate(docId: note.noteId, update: whole, origin: .system)
+        try a.store.appendLocalUpdate(docId: note.noteId, update: whole, origin: .system)
+        await a.start()
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        #expect(await server.docs[note.noteId]?.count == onServer)
+        #expect(await a.diagnostics().events.filter { $0.kind == .pushTrimmed && $0.docId == note.noteId }.count == 2)
+
+        // New big content: sent.
+        let more = String(repeating: "Новый раздел. ", count: 4_000)
+        try note.insertText(more, at: 0, inBlock: [1])
+        #expect(try await eventually { (await server.docs[note.noteId]?.count ?? 0) == onServer + 1 })
+        await a.stop()
+    }
+
     /// Messages that «failed» only because the connection broke under them (build 46 counted
     /// those as delivery attempts) go back into the queue; refusals by the server stay failed.
     @Test func connectionFailuresAreRequeuedServerRefusalsStay() throws {
@@ -190,6 +254,7 @@ import Testing
         #expect(d.pending.map(\.docId) == [held])
         #expect((d.oldestPendingAge() ?? 0) >= 59)
         #expect(d.waiting[held] == .key)
+        #expect(d.events.contains { $0.kind == .connected })
         await a.stop()
     }
 }

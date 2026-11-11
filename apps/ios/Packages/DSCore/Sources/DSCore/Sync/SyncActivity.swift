@@ -33,11 +33,32 @@ public struct SyncDiagnostics: Sendable, Equatable {
     public var quarantined: Int
     /// Documents not syncing yet and why (no key, no access).
     public var waiting: [String: SyncWaitReason]
+    /// The last events, oldest first (connections, server refusals per document, failures).
+    public var events: [SyncEvent] = []
 
     /// How long the oldest message has waited (nil: nothing to send).
     public func oldestPendingAge(now: Date = Date()) -> TimeInterval? {
         pending.map(\.oldest).min().map { now.timeIntervalSince($0) }
     }
+}
+
+/// One line of Diagnostics → Sync events.
+public struct SyncEvent: Sendable, Equatable {
+    public enum Kind: String, Sendable {
+        case connected, disconnected
+        /// The connection broke under a send (the message stays queued).
+        case connectionLost
+        /// The server answered `error` (code and message; the document when known).
+        case serverError
+        /// A message was refused for good (moved to failed).
+        case failed
+        /// A big push was cut to what the server lacks, or dropped as already there.
+        case pushTrimmed
+    }
+    public var at: Date
+    public var kind: Kind
+    public var docId: String?
+    public var detail: String
 }
 
 /// When to show «синхронизация» (owner, build 46: it was shown all the time and flickered).

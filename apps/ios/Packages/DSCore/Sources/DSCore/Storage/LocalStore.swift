@@ -206,6 +206,13 @@ public final class LocalStore: Sendable {
             // Only server answers count now; messages failed by the connection go back.
             try LocalStore.requeueConnectionFailures(db)
         }
+        m.registerMigration("v10-requeue-oversized-pushes") { db in
+            // Build 46 queued the whole state of every note at each launch (`open` stored the
+            // content loaded from this store as a new local update); for big, much-edited notes
+            // that was over 2 MiB and failed at once as «payload_too_large (local)». The send
+            // loop now trims big pushes to what the server lacks: give them another go.
+            try db.execute(sql: "UPDATE outbox SET failed = 0, attempts = 0 WHERE failed AND lastError = 'payload_too_large (local)' AND kind = 'push'")
+        }
         return m
     }
 }
@@ -496,6 +503,34 @@ extension LocalStore {
         }
     }
 
+    /// State vector of what the server is known to have of `docId`: the stored updates that
+    /// carry a server `seq` (remote ones, acknowledged own ones, snapshots). Nil when none.
+    public func serverStateVector(docId: String) throws -> Data? {
+        let rows = try db.read { db in
+            try Data.fetchAll(db, sql: "SELECT data FROM docUpdates WHERE docId = ? AND seq IS NOT NULL ORDER BY id", arguments: [docId])
+        }
+        guard !rows.isEmpty else { return nil }
+        return try CRDTUpdates.stateVector(of: rows.count == 1 ? rows[0] : CRDTUpdates.merge(rows))
+    }
+
+    /// Replaces the payload of a queued message (and of its stored update) — a big push trimmed
+    /// to what the server lacks.
+    public func replaceQueuedPayload(clientMsgId: String, with payload: Data) throws {
+        try db.write { db in
+            try db.execute(sql: "UPDATE outbox SET payload = ? WHERE clientMsgId = ?", arguments: [payload, clientMsgId])
+            try db.execute(sql: "UPDATE docUpdates SET data = ? WHERE clientMsgId = ? AND seq IS NULL", arguments: [payload, clientMsgId])
+        }
+    }
+
+    /// Drops a queued push the server already has in full: the message leaves the queue and its
+    /// stored update stays as local content (it is not attributed to any server `seq`).
+    public func dropRedundantPush(clientMsgId: String) throws {
+        try db.write { db in
+            try db.execute(sql: "DELETE FROM outbox WHERE clientMsgId = ?", arguments: [clientMsgId])
+            try db.execute(sql: "UPDATE docUpdates SET clientMsgId = NULL WHERE clientMsgId = ? AND seq IS NULL", arguments: [clientMsgId])
+        }
+    }
+
     /// Merges the stored updates of a document into one row (local compaction; does not change
     /// what the server has).
     public func compact(docId: String, now: Date = Date()) throws {
@@ -610,6 +645,11 @@ extension LocalStore {
             if let docId { request = request.filter(Column("docId") == docId) }
             return try request.fetchAll(db)
         }
+    }
+
+    /// The queued message with this id (failed ones included).
+    public func outboxItem(clientMsgId: String) throws -> OutboxItem? {
+        try db.read { try OutboxItem.filter(Column("clientMsgId") == clientMsgId).fetchOne($0) }
     }
 
     /// Whether `docId` has messages still to be sent (failed ones not included).

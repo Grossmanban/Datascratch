@@ -154,16 +154,19 @@ struct SidebarView: View {
                 if !isCollapsed("starred") {
                     // Notes, folders and notebooks, in the order they were starred (as on the web).
                     ForEach(starred.rows) { item in
-                        Button {
+                        Group {
                             switch item {
-                            case .note(let note): scene.open(note.id)
-                            case .folder(let folder): scene.show(.folder(folder.id))
-                            case .notebook(let notebook): scene.show(.notebook(notebook.id))
+                            case .note(let note):
+                                Button { scene.open(note.id) } label: { StarredEntryLabel(item: item) }
+                                    .buttonStyle(.plain)
+                            // A folder or notebook is a place in the list's selection, as in the
+                            // tree below: on iPhone that is what moves on to its documents.
+                            case .folder(let folder):
+                                StarredEntryLabel(item: item).tag(SidebarItem.folder(folder.id))
+                            case .notebook(let notebook):
+                                StarredEntryLabel(item: item).tag(SidebarItem.notebook(notebook.id))
                             }
-                        } label: {
-                            StarredEntryLabel(item: item)
                         }
-                        .buttonStyle(.plain)
                         .accessibilityIdentifier(starredIdentifier(item))
                         .contextMenu {
                             Button("Remove from Starred", systemImage: "star.slash") {

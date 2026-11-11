@@ -15,8 +15,13 @@ import Testing
 struct RealServerVersionTests {
     let server = URL(string: ProcessInfo.processInfo.environment["DS_REAL_SERVER"] ?? "http://127.0.0.1:8480")!
 
-    @Test(arguments: [NotebookMode.private, NotebookMode.agent])
-    func everyVersionOpens(mode: NotebookMode) async throws {
+    /// One after the other: two sign-ups at once once left one of them hanging on the server
+    /// (CI, 2026-11-11 — reported to the server side).
+    @Test func everyVersionOpens() async throws {
+        for mode in [NotebookMode.private, NotebookMode.agent] { try await check(mode) }
+    }
+
+    private func check(_ mode: NotebookMode) async throws {
         let api = APIClient(baseURL: server, sessionStore: SecretSessionStore(store: InMemorySecretStore()))
         let keys = KeyRing(store: InMemorySecretStore())
         let store = try LocalStore.inMemory()

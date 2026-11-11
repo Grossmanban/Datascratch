@@ -361,6 +361,8 @@ final class LibraryUITests: XCTestCase {
     /// Build 48: «Развернуть» on a table opens it full screen (ios-editor's viewer, every cell
     /// whole) and × brings the note back.
     func testTableOpensFullScreenAndCloses() throws {
+        // «Развернуть» is offered in a compact width only (iPhone): a regular width shows the table whole.
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "no full-screen table in a regular width")
         let app = launchSignedIn()
         try openNewNoteInNativeEditor(app)
         app.typeText("Table note\n")

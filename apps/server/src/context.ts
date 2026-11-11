@@ -4,6 +4,7 @@ import type { Config } from './config.js';
 import type { Database } from './db/client.js';
 import type { JobQueue } from './jobs/queue.js';
 import { fromB64 } from './lib/encoding.js';
+import { ChangeLog } from './services/change-log.js';
 import { DocumentService } from './services/documents.js';
 import { ImageFetcher } from './services/image-fetch.js';
 import { KeyService } from './services/keys.js';
@@ -21,6 +22,8 @@ export interface AppContext {
   jobs: JobQueue;
   tokens: TokenSigner;
   documents: DocumentService;
+  /** Change-log positions for sync protocol 3 (`resume`). */
+  changes: ChangeLog;
   keys: KeyService;
   metrics: Metrics;
   imageFetcher: ImageFetcher;
@@ -36,9 +39,11 @@ export function createContext(opts: {
 }): AppContext {
   const { config } = opts;
   const hub = opts.hub ?? new MemoryBroadcaster();
+  const changes = new ChangeLog(opts.database.db);
   return {
     ...opts,
     hub,
+    changes,
     tokens: new TokenSigner(fromB64(config.DS_JWT_SECRET), config.ACCESS_TOKEN_TTL_SEC),
     documents: new DocumentService(
       hub,
@@ -49,6 +54,7 @@ export function createContext(opts: {
         coveredUpdatesKeepDays: config.COVERED_UPDATES_KEEP_DAYS,
       },
       config.USER_STORAGE_QUOTA_BYTES,
+      changes,
     ),
     keys: new KeyService(fromB64(config.DS_KMS_KEY)),
     metrics: new Metrics(),

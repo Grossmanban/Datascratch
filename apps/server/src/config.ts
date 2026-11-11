@@ -76,6 +76,8 @@ const ConfigSchema = z
      * as a `push` with its own seq, so catch-up and live delivery need no special case.
      */
     SYNC_UPDATE_MAX_BYTES: z.coerce.number().int().positive().default(16 * 1024 * 1024),
+    /** Protocol 3: an account with more readable documents gets `resumed { reset }` (subscribes as in v1). */
+    SYNC_ACCOUNT_SUB_MAX_DOCS: z.coerce.number().int().positive().default(20000),
     SYNC_SNAPSHOT_MAX_BYTES: z.coerce.number().int().positive().default(16 * 1024 * 1024),
     SYNC_AWARENESS_MAX_BYTES: z.coerce.number().int().positive().default(64 * 1024),
     /** Messages per second allowed per WebSocket connection (token bucket, burst = 5x). */

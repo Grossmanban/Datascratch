@@ -11,10 +11,14 @@ import type { GuestPrincipal, UserPrincipal } from '../services/principal.js';
 import { publicAuthor } from '../lib/author.js';
 import { SERVER_ACCOUNT_CHANGES, type AccountChange } from '../services/account-events.js';
 import { topics, type HubMessage } from './hub.js';
+import { formatCursor, parseCursor } from '../services/change-log.js';
+import { RESUME_KEEP_DAYS, changesSince, readableDocs, syncUserDocs } from '../services/resume.js';
 import {
   ClientMessage,
   CloseCode,
   ACCOUNT_CHANGED_SINCE,
+  MAX_RESUME_DOCS,
+  RESUME_SINCE,
   PROTOCOL_LATEST,
   PROTOCOL_MIN,
   b64Size,
@@ -113,6 +117,8 @@ export class SyncConnection {
   #expiryTimer: NodeJS.Timeout | null = null;
   /** Protocol version of the client's hello. */
   #protocol = 1;
+  /** `resume` was answered on this connection (once per connection). */
+  #resumed = false;
   /** `account_changed` reasons waiting for the coalescing window (D-62). */
   readonly #accountWhat = new Set<AccountChange>();
   #accountTimer: NodeJS.Timeout | null = null;
@@ -305,6 +311,8 @@ export class SyncConnection {
           return await this.#snapshot(msg.docId, msg.clientMsgId, msg.baseSeq, msg.payload);
         case 'awareness':
           return await this.#awareness(msg.docId, msg.payload);
+        case 'resume':
+          return await this.#resume(msg.cursor);
         default:
           // A message of a newer protocol this server does not speak yet (e.g. `resume`, v3):
           // a plain bad_request without ref, and the client falls back (sync-protocol §3.1).
@@ -476,6 +484,64 @@ export class SyncConnection {
     sub.unsubscribe = this.ctx.hub.subscribe(topics.doc(docId), (m) => this.#onDocEvent(docId, sub, m));
     this.#subs.set(docId, sub);
     return sub;
+  }
+
+  /**
+   * Protocol 3 (sync-protocol.md §3.1): what changed for the account since `cursor`, and a
+   * subscription to every document the account can read. Order matters for "no gaps": the
+   * account's access is recorded first (positions below the new cursor), then the documents are
+   * subscribed live, then the new cursor (watermark) is taken, then the lists are read.
+   */
+  async #resume(cursor: string | null) {
+    const p = this.#principal!;
+    if (p.kind !== 'user' || this.#protocol < RESUME_SINCE || this.#resumed) {
+      throw new SyncError('bad_request', p.kind !== 'user' ? 'resume is for accounts' : 'resume is not available here');
+    }
+    this.#resumed = true;
+    const db = this.ctx.database.db;
+    const changes = this.ctx.changes;
+    const readable = await changes.scope(async () => {
+      const r = await readableDocs(db, p.userId);
+      await syncUserDocs(db, changes, p.userId, r);
+      return r;
+    });
+    const nowSec = Math.floor(Date.now() / 1000);
+    const parsed = cursor ? parseCursor(cursor) : null;
+    const usable =
+      parsed !== null &&
+      parsed.epoch === changes.epoch &&
+      parsed.pos <= changes.last &&
+      parsed.issuedAtSec <= nowSec + 300 &&
+      parsed.issuedAtSec >= nowSec - RESUME_KEEP_DAYS * 86_400 &&
+      readable.size <= this.ctx.config.SYNC_ACCOUNT_SUB_MAX_DOCS;
+    const reset = () => {
+      const next = formatCursor({ epoch: changes.epoch, pos: changes.watermark(), issuedAtSec: nowSec });
+      this.#send({ type: 'resumed', reset: true, cursor: next, docs: [], removed: [] });
+    };
+    if (!usable) return reset();
+    // The account subscription: live from each document's current seq (already subscribed ones
+    // keep their subscription).
+    const added: string[] = [];
+    for (const d of readable.values()) {
+      this.#access.set(d.docId, d.write);
+      if (this.#subs.has(d.docId)) continue;
+      const sub = this.#newSub(d.docId, d.lastSeq);
+      sub.live = true;
+      added.push(d.docId);
+    }
+    const watermark = changes.watermark();
+    const list = await changesSince(db, p.userId, parsed.pos, readable);
+    if (list.docs.length > MAX_RESUME_DOCS || list.removed.length > MAX_RESUME_DOCS) {
+      for (const id of added) this.#unsubscribe(id);
+      return reset();
+    }
+    this.#send({
+      type: 'resumed',
+      reset: false,
+      cursor: formatCursor({ epoch: changes.epoch, pos: watermark, issuedAtSec: nowSec }),
+      docs: list.docs,
+      removed: list.removed,
+    });
   }
 
   #goLive(docId: string, sub: Subscription) {

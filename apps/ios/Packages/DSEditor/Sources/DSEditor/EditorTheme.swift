@@ -30,6 +30,8 @@ public struct EditorTheme: Sendable {
     public static let codeBackground = DSTintToken.gray.value.bg.uiColor
     public static let chipBackground = DSTintToken.gray.value.bg.uiColor
     /// Agent edits (D-10): a quiet bar in the left margin of each paragraph with unaccepted edits.
+    /// Something went wrong (a recording that was not recognised).
+    public static let error = DSTintToken.red.value.fg.uiColor
     public static let agentEdit = DSTintToken.green.value.fg.uiColor.withAlphaComponent(0.55)
     public static let selectionTint = DSColorToken.accent.value.uiColor
 

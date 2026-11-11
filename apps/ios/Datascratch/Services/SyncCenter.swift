@@ -243,6 +243,8 @@ final class SyncCenter {
 
     /// Called when connectivity returns (the sync engine reconnects at once).
     @ObservationIgnored var onBackOnline: (() -> Void)?
+    /// D-65: the dictation inbox's retries (kept apart from the connection's own hook).
+    @ObservationIgnored var onBackOnlineForVoice: (() -> Void)?
 
     func markFailed(_ message: String) {
         // The message is an error description (free text): only the fact is recorded.
@@ -254,7 +256,10 @@ final class SyncCenter {
         let cameBack = online && !isOnline
         if !online, isOnline, !isLocalOnly { record("network.offline") }
         isOnline = online
-        if cameBack { onBackOnline?() }
+        if cameBack {
+            onBackOnline?()
+            onBackOnlineForVoice?()
+        }
         refreshPhase()
     }
 

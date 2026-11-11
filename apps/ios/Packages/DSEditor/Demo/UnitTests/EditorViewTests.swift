@@ -1149,6 +1149,169 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(doc.blocks.map(\.plainText), ["Заметка 9 нояб.", "черновик"], "one undo brings back the title and the body")
     }
 
+    // MARK: - Dictation placeholders (D-65)
+
+    /// A placeholder stands at the caret, shows the recording's length, follows the text around
+    /// it and is not in the document, the undo or the sync.
+    func testDictationPlaceholderStandsAtTheCaretAndFollowsTheText() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Голос"), .paragraph("Купить хлеб")])
+        let editor = host(doc, width: 700, height: 600)
+        window.makeKey()
+        let end = flatRange(editor, of: "Купить хлеб").upperBound
+        editor.textView.selectedRange = NSRange(location: end, length: 0)
+        let before = doc.blocks
+        let anchor = try XCTUnwrap(editor.insertDictationPlaceholder(id: "r1"))
+        settle(editor)
+        XCTAssertEqual(anchor.block, doc.blocks[1].id)
+        XCTAssertEqual(anchor.offset, "Купить хлеб".utf16.count)
+        let chip = try XCTUnwrap(editor.dictationPlaceholders["r1"])
+        XCTAssertEqual(chip.accessibilityLabel, "Распознаю… 0:00")
+        editor.updateDictationPlaceholder(id: "r1", state: .recognising(seconds: 42))
+        XCTAssertEqual(chip.accessibilityLabel, "Распознаю… 0:42")
+        XCTAssertEqual(doc.blocks, before, "not in the document")
+        XCTAssertFalse(doc.canUndo)
+        let x0 = chip.frame.minX
+        let caret = try XCTUnwrap(editor.dictationCaret(at: end))
+        XCTAssertEqual(x0, caret.x - 10, accuracy: 1, "under the place")
+        XCTAssertGreaterThanOrEqual(chip.frame.minY, caret.line.maxY - 1, "below its line, not over it")
+        // Text typed before it moves it; the host's anchor stays good.
+        doc.transact { doc.insertText("Срочно: ", marks: .empty, block: doc.blocks[1].id, at: 0) }
+        drainMainQueue()
+        settle(editor)
+        XCTAssertGreaterThan(chip.frame.minX, x0, "the chip follows its text")
+        XCTAssertEqual(editor.dictationPlaceholderAnchor(id: "r1")?.offset, "Срочно: Купить хлеб".utf16.count)
+        editor.removeDictationPlaceholder(id: "r1")
+        XCTAssertNil(chip.superview)
+        XCTAssertTrue(editor.dictationPlaceholderIDs.isEmpty)
+    }
+
+    /// The chip never covers text: its paragraph keeps room under it (display only), the text
+    /// to the right of the place and the paragraphs below stay clear of it, and ink anchored to
+    /// words below only moves down — and back when the room closes.
+    func testDictationPlaceholderTakesRoomInsteadOfCoveringText() throws {
+        let duration = DictationGapAnimator.duration
+        DictationGapAnimator.duration = 0
+        defer { DictationGapAnimator.duration = duration }
+        let doc = InMemoryEditorDocument(blocks: [.title("Голос"), .paragraph("Купить хлеб и молоко к ужину"), .paragraph("Позвонить маме вечером")])
+        let editor = host(doc, width: 700, height: 600)
+        window.makeKey()
+        // Ink on a word of the paragraph below.
+        let word = flatRange(editor, of: "маме")
+        let glyph = try XCTUnwrap(editor.geometry.placement(at: word.lowerBound))
+        penStroke(editor, line(from: CGPoint(x: glyph.origin.x, y: glyph.origin.y - 4), to: CGPoint(x: glyph.origin.x + 40, y: glyph.origin.y - 4)))
+        editor.tools.mode = .text
+        drainMainQueue()
+        settle(editor)
+        let stroke = try XCTUnwrap(doc.strokes.first?.id)
+        let inkBefore = try XCTUnwrap(editor.ink.resolved[stroke]?.first?.map(\.location))
+        let blocksBefore = doc.blocks
+        let canUndoBefore = doc.canUndo
+
+        let place = flatRange(editor, of: "Купить").upperBound
+        editor.textView.selectedRange = NSRange(location: place, length: 0)
+        editor.insertDictationPlaceholder(id: "room")
+        drainMainQueue()
+        settle(editor)
+        let chip = try XCTUnwrap(editor.dictationPlaceholders["room"])
+        XCTAssertFalse(chip.isHidden)
+        let first = flatRange(editor, of: "Купить хлеб и молоко к ужину")
+        let second = flatRange(editor, of: "Позвонить маме вечером")
+        for frame in editor.geometry.segmentFrames(first) + editor.geometry.segmentFrames(second) {
+            XCTAssertFalse(frame.insetBy(dx: 0, dy: 1).intersects(chip.frame), "the chip \(chip.frame) covers text at \(frame)")
+        }
+        XCTAssertEqual(doc.blocks, blocksBefore, "the room is not in the document")
+        XCTAssertEqual(doc.canUndo, canUndoBefore, "nor in undo")
+        editor.ink.invalidateLayout()
+        editor.ink.refresh()
+        let inkWith = try XCTUnwrap(editor.ink.resolved[stroke]?.first?.map(\.location))
+        let shift = inkWith[0].y - inkBefore[0].y
+        XCTAssertGreaterThan(shift, DictationPlaceholderView.height - 1, "the ink moves down with its word")
+        for (a, b) in zip(inkBefore, inkWith) {
+            XCTAssertEqual(b.x, a.x, accuracy: 0.5, "ink moves only vertically")
+            XCTAssertEqual(b.y - a.y, shift, accuracy: 0.5)
+        }
+
+        editor.removeDictationPlaceholder(id: "room")
+        drainMainQueue()
+        settle(editor)
+        editor.ink.invalidateLayout()
+        editor.ink.refresh()
+        let inkAfter = try XCTUnwrap(editor.ink.resolved[stroke]?.first?.map(\.location))
+        for (a, b) in zip(inkBefore, inkAfter) {
+            XCTAssertEqual(b.y, a.y, accuracy: 0.5, "the room closes: the ink is back")
+        }
+        XCTAssertEqual(doc.blocks, blocksBefore)
+    }
+
+    /// The recognised text takes the placeholder's place as one voice edit (one undo step); the
+    /// person's caret elsewhere stays with its text.
+    func testReplacingTheDictationPlaceholder() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Голос"), .paragraph("Купить хлеб"), .paragraph("Позвонить маме")])
+        let editor = host(doc, width: 700, height: 600)
+        window.makeKey()
+        let place = flatRange(editor, of: "Купить").upperBound
+        editor.textView.selectedRange = NSRange(location: place, length: 0)
+        editor.insertDictationPlaceholder(id: "r2")
+        // The person goes on writing elsewhere.
+        let elsewhere = flatRange(editor, of: "Позвонить").upperBound
+        editor.textView.selectedRange = NSRange(location: elsewhere, length: 0)
+        XCTAssertTrue(editor.replaceDictationPlaceholder(id: "r2", markdown: " молоко и"))
+        drainMainQueue()
+        settle(editor)
+        XCTAssertEqual(doc.blocks[1].plainText, "Купить молоко и хлеб")
+        XCTAssertTrue(editor.hasAgentEdits, "highlighted as a voice edit")
+        XCTAssertNil(editor.dictationPlaceholders["r2"])
+        XCTAssertEqual(editor.textView.selectedRange.location, elsewhere + " молоко и".utf16.count, "the caret stays with its text")
+        doc.undo()
+        XCTAssertEqual(doc.blocks[1].plainText, "Купить хлеб", "one undo step")
+        XCTAssertFalse(editor.replaceDictationPlaceholder(id: "r2", markdown: "x"), "it is gone")
+    }
+
+    /// A failed recording: «Запись не распознана», a tap reaches the host; while recognising a tap
+    /// does nothing.
+    func testFailedDictationPlaceholderIsTappable() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Голос"), .paragraph("Текст")])
+        let editor = host(doc, width: 700, height: 600)
+        var tapped: [String] = []
+        editor.onDictationPlaceholderTap = { tapped.append($0) }
+        editor.insertDictationPlaceholder(id: "r3")
+        let chip = try XCTUnwrap(editor.dictationPlaceholders["r3"])
+        chip.tapped()
+        XCTAssertEqual(tapped, [])
+        editor.updateDictationPlaceholder(id: "r3", state: .failed(code: "asr_failed"))
+        XCTAssertEqual(chip.accessibilityLabel, "Запись не распознана")
+        XCTAssertTrue(chip.accessibilityTraits.contains(.button))
+        chip.tapped()
+        XCTAssertEqual(tapped, ["r3"])
+        // A tap on the text there goes to the editor's recognizer, which hands it over too.
+        settle(editor)
+        XCTAssertFalse(chip.isHidden)
+        XCTAssertEqual(editor.failedDictationPlaceholder(at: CGPoint(x: chip.frame.midX, y: chip.frame.midY)), "r3")
+        XCTAssertTrue(editor.hasTapTarget(at: CGPoint(x: chip.frame.midX, y: chip.frame.midY)))
+    }
+
+    /// The note is closed and opened again before recognition ends: the kept anchor puts the
+    /// placeholder back at its place, or reports it lost when its paragraph is gone.
+    func testDictationPlaceholderIsRestoredAfterReopening() throws {
+        let doc = InMemoryEditorDocument(blocks: [.title("Голос"), .paragraph("Купить хлеб"), .paragraph("Ещё")])
+        var editor = host(doc, width: 700, height: 600)
+        editor.textView.selectedRange = NSRange(location: flatRange(editor, of: "Купить").upperBound, length: 0)
+        let kept = try XCTUnwrap(editor.insertDictationPlaceholder(id: "r4"))
+        let data = try JSONEncoder().encode(kept)
+        editor.removeFromSuperview()
+        doc.transact { doc.insertText("Срочно: ", marks: .empty, block: doc.blocks[1].id, at: 0) }
+        editor = host(doc, width: 700, height: 600)
+        let anchor = try JSONDecoder().decode(DictationAnchor.self, from: data)
+        let restored = try XCTUnwrap(editor.insertDictationPlaceholder(id: "r4", at: anchor))
+        XCTAssertEqual(restored.offset, "Срочно: Купить".utf16.count)
+        XCTAssertTrue(editor.replaceDictationPlaceholder(id: "r4", markdown: " молоко"))
+        XCTAssertEqual(doc.blocks[1].plainText, "Срочно: Купить молоко хлеб")
+        let other = DictationAnchor.at(TextPosition(block: doc.blocks[2].id, offset: 1), in: doc)
+        doc.transact { doc.deleteBlock(doc.blocks[2].id) }
+        XCTAssertNil(editor.insertDictationPlaceholder(id: "r5", at: other), "anchor lost: the host falls back to the caret")
+        XCTAssertNil(editor.dictationPlaceholders["r5"])
+    }
+
     // MARK: - Selection and edge autoscroll (build 37 feedback)
 
     /// A selection made with a finger stays where the person left it: lifting the finger (and the

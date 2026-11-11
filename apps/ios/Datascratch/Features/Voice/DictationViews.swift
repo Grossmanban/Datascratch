@@ -473,3 +473,112 @@ struct FormatStatus: View {
         }
     }
 }
+
+/// D-65: a recording of this note not in the text yet — «Not recognised · 2:41 · Retry · Save
+/// Audio · Delete», or «Recognised · Insert» when a retry got it while the note was closed. The
+/// recording stays on the device until its text is in.
+struct PendingDictationCards: View {
+    let inbox: DictationInbox
+    let noteId: String
+
+    var body: some View {
+        // The first try of a piece being dictated shows in the bar, not here.
+        let items = inbox.items(for: noteId).filter {
+            $0.attempts > 0 || $0.text != nil || !inbox.working.contains($0.id)
+        }
+        if !items.isEmpty {
+            VStack(alignment: .trailing, spacing: Theme.Space.s2) {
+                ForEach(items) { item in
+                    PendingDictationCard(inbox: inbox, item: item, canInsert: true)
+                }
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+}
+
+struct PendingDictationCard: View {
+    let inbox: DictationInbox
+    let item: PendingDictation
+    /// The note is open: a recognised piece can go in at the caret.
+    let canInsert: Bool
+    @State private var confirmingDelete = false
+
+    private var isWorking: Bool { inbox.working.contains(item.id) }
+
+    static func length(_ seconds: Double) -> String {
+        let s = max(0, Int(seconds.rounded()))
+        return String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s2) {
+            if item.text != nil {
+                Label("Recognised · \(Self.length(item.duration))", systemImage: "waveform")
+                    .font(Theme.Typography.footnote.weight(.medium))
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                    .accessibilityIdentifier("voice.pending.title")
+                if let text = item.text {
+                    // Readable (and copyable) wherever the card is, also with the note gone.
+                    Text(text)
+                        .font(Theme.Typography.footnote)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .lineLimit(4)
+                        .textSelection(.enabled)
+                }
+            } else {
+                HStack(spacing: Theme.Space.s2) {
+                    if isWorking { ProgressView().controlSize(.mini) }
+                    let length = Self.length(item.duration)
+                    Label(isWorking ? LocalizedStringKey("Recognising… · \(length)") : LocalizedStringKey("Not recognised · \(length)"),
+                          systemImage: isWorking ? "waveform" : "exclamationmark.triangle")
+                        .font(Theme.Typography.footnote.weight(.medium))
+                        .foregroundStyle(Theme.Palette.textPrimary)
+                        .accessibilityIdentifier("voice.pending.title")
+                }
+                if let code = item.lastError, !isWorking {
+                    Text("The recording is kept on this device (\(code)).")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                        .accessibilityIdentifier("voice.pending.code")
+                }
+            }
+            HStack(spacing: Theme.Space.s2) {
+                if item.text != nil {
+                    if canInsert {
+                        Button("Insert") { inbox.deliver(item.id) }
+                            .buttonStyle(.glass)
+                            .disabled(isWorking)
+                            .accessibilityIdentifier("voice.pending.insert")
+                    }
+                } else {
+                    Button("Retry") { inbox.retry(item.id) }
+                        .buttonStyle(.glass)
+                        .disabled(isWorking)
+                        .accessibilityIdentifier("voice.pending.retry")
+                }
+                ShareLink(item: inbox.audioURL(item.id)) {
+                    Text("Save Audio")
+                }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("voice.pending.save")
+                Button("Delete", role: .destructive) { confirmingDelete = true }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("voice.pending.delete")
+            }
+            .font(Theme.Typography.footnote)
+        }
+        .padding(Theme.Space.s3)
+        .glassEffect(.regular, in: .rect(cornerRadius: 18))
+        .padding(.horizontal, Theme.Space.s3)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voice.pending")
+        .animation(Theme.Motion.snappy, value: isWorking)
+        .confirmationDialog("Delete this recording?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete Recording", role: .destructive) { inbox.remove(item.id) }
+                .accessibilityIdentifier("voice.pending.deleteConfirm")
+        } message: {
+            Text("What was said in it is not in the note and can’t be brought back.")
+        }
+    }
+}

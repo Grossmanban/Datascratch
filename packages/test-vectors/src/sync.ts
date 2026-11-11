@@ -3,6 +3,61 @@ import { vid } from "./util.js";
 const doc = vid(1);
 const P = "AQIDBA";
 
+/** Protocol 3 (sync-protocol.md §3.1): `resume` / `resumed`, kept apart from the 1–2 file. */
+function resumeVectors() {
+  const hello3 = {
+    type: "hello",
+    protocol: 3,
+    auth: { kind: "user", accessToken: "at-123" },
+    deviceId: "dev-1",
+    client: { platform: "web", version: "1.2.0" },
+  };
+  const resumed = { type: "resumed", reset: false, cursor: "c1.4250", docs: [], removed: [] };
+  return {
+    description:
+      "Sync protocol 3 (sync-protocol.md §3.1): `resume { cursor }` and its answer `resumed`. Every `valid` frame must parse, every `invalid` one must be rejected. A reset lists no documents; `docs` and `removed` hold at most 1000 entries; cursors are opaque strings of 1–256 characters.",
+    valid: {
+      client: [hello3, { type: "resume", cursor: null }, { type: "resume", cursor: "c1.4242" }],
+      server: [
+        { type: "welcome", userId: vid(10), serverTime: "2026-11-11T12:00:00.000Z", protocol: 3 },
+        { type: "resumed", reset: true, cursor: "c1.4242", docs: [], removed: [] },
+        {
+          ...resumed,
+          docs: [
+            { docId: doc, seq: 48 },
+            { docId: vid(2), seq: 0 },
+          ],
+          removed: [vid(3)],
+        },
+        resumed,
+      ],
+    },
+    invalid: {
+      client: [
+        { reason: "empty cursor", message: { type: "resume", cursor: "" } },
+        { reason: "cursor too long", message: { type: "resume", cursor: "c".repeat(257) } },
+        { reason: "no cursor field", message: { type: "resume" } },
+      ],
+      server: [
+        {
+          reason: "a reset with documents",
+          message: { ...resumed, reset: true, docs: [{ docId: doc, seq: 1 }] },
+        },
+        { reason: "no cursor", message: { ...resumed, cursor: undefined } },
+        { reason: "negative seq", message: { ...resumed, docs: [{ docId: doc, seq: -1 }] } },
+        { reason: "removed is not a uuid", message: { ...resumed, removed: ["x"] } },
+        {
+          reason: "too many documents",
+          message: {
+            ...resumed,
+            docs: Array.from({ length: 1001 }, () => ({ docId: doc, seq: 1 })),
+          },
+        },
+      ],
+    },
+  };
+}
+
 export function syncVectors() {
   const valid = {
     client: [
@@ -84,7 +139,7 @@ export function syncVectors() {
   const invalid = {
     client: [
       { reason: "unknown type", message: { type: "bogus" } },
-      { reason: "protocol newer than 2", message: { ...valid.client[0], protocol: 3 } },
+      { reason: "protocol newer than 3", message: { ...valid.client[0], protocol: 4 } },
       { reason: "protocol 0", message: { ...valid.client[0], protocol: 0 } },
       {
         reason: "unknown platform",
@@ -162,6 +217,7 @@ export function syncVectors() {
     ],
   };
   return {
+    "sync/resume.json": resumeVectors(),
     "sync/messages.json": {
       description:
         "Sync protocol frames, versions 1–2 (sync-protocol.md). Every `valid` message must parse; every `invalid` one must be rejected. Unknown extra fields are ignored by readers. `accountChanged`: the `what` a reader keeps (unknown values dropped, duplicates removed, order kept). `ignoredServerFrames`: frames of an unknown `type` — a client ignores them without an error; `brokenServerFrames` are errors.",

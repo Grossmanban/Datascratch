@@ -103,7 +103,7 @@ public final class EditorView: UIView {
     /// Tells the host about a change on the next main-queue turn, coalesced. Never during UIKit's
     /// touch dispatch: a host that re-renders its interface synchronously (SwiftUI state) while a
     /// touch is still being delivered crashed UIKit's gesture environment.
-    private func notifyStateChange() {
+    func notifyStateChange() {
         guard !stateChangePending else { return }
         stateChangePending = true
         DispatchQueue.main.async { [weak self] in
@@ -155,7 +155,7 @@ public final class EditorView: UIView {
     let textView = EditorTextView(frame: .zero, textContainer: nil)
     private let paper = PaperView()
     private let inkUnder = InkCanvas()
-    private let inkOver = InkCanvas()
+    let inkOver = InkCanvas()
     private let hoverLayer = CAShapeLayer()
     private let fragmentProvider = FragmentProvider()
     let factory: AttachmentFactory
@@ -164,7 +164,7 @@ public final class EditorView: UIView {
     var geometry: TextGeometry!
     var ink: InkController!
     private var observation: ObservationToken?
-    private var suppressDelegate = false
+    var suppressDelegate = false
     private var pendingMarks: MarkSet?
     private var pendingShortcut: (offset: Int, char: String)?
     private var lastContainerWidth: CGFloat = 0
@@ -833,6 +833,7 @@ public final class EditorView: UIView {
         if remoteCursorLayer.frame != inkOver.frame { remoteCursorLayer.frame = inkOver.frame }
         if dictationLabel != nil { positionDictationPreview() }
         if !remoteCursors.isEmpty { layoutRemoteCursors() }
+        if !dictationPlaceholders.isEmpty || !dictationGaps.current.isEmpty { layoutDictationPlaceholders() }
     }
 
     // MARK: - Document → view
@@ -867,6 +868,7 @@ public final class EditorView: UIView {
             }
         }
         updateAgentBanner()
+        scheduleDictationPlaceholderLayout()
         if !remoteCursors.isEmpty, !remoteCursorResolveScheduled {
             // After the text view has laid the change out.
             remoteCursorResolveScheduled = true
@@ -885,7 +887,7 @@ public final class EditorView: UIView {
     }
 
     private var inkRefreshScheduled = false
-    private func setNeedsInkRefresh() {
+    func setNeedsInkRefresh() {
         guard !inkRefreshScheduled else { return }
         inkRefreshScheduled = true
         DispatchQueue.main.async { [weak self] in
@@ -1064,7 +1066,7 @@ public final class EditorView: UIView {
         updateTypingAttributes()
     }
 
-    private var selectionRange: Range<Int> {
+    var selectionRange: Range<Int> {
         let r = textView.selectedRange
         return r.location..<(r.location + r.length)
     }
@@ -1549,6 +1551,19 @@ public final class EditorView: UIView {
     /// The pen is on the glass (the ink recognizer is tracking a touch).
     private var penDown = false
 
+    /// Dictation placeholders in the text, by id (`DictationPlaceholders.swift`).
+    var dictationPlaceholders: [String: DictationPlaceholderView] = [:]
+    var dictationPlaceholderLayoutScheduled = false
+    /// The room each paragraph keeps under it for its placeholders (display only).
+    lazy var dictationGaps: DictationGapAnimator = {
+        let a = DictationGapAnimator()
+        a.onTick = { [weak self] in self?.applyDictationGaps() }
+        return a
+    }()
+    /// A tap on a placeholder whose recording was not recognised (D-65): the host offers to
+    /// retry or discard it.
+    public var onDictationPlaceholderTap: ((_ id: String) -> Void)?
+
     /// Room added below the text while drawing near its bottom (screens).
     private(set) var extraDrawingRoom: CGFloat = 0
     /// A smaller bottom room waits until the person scrolls away from the very bottom.
@@ -1823,7 +1838,7 @@ public final class EditorView: UIView {
     /// Whether a single tap at `point` acts on something (a note link, a task box or date chip):
     /// the text view's own taps (caret placement) do not begin there.
     func hasTapTarget(at point: CGPoint) -> Bool {
-        noteLink(at: point) != nil || (!model.isReadOnly && taskCheckbox(at: point) != nil)
+        failedDictationPlaceholder(at: point) != nil || noteLink(at: point) != nil || (!model.isReadOnly && taskCheckbox(at: point) != nil)
             || (taskDatesEnabled && !model.isReadOnly && taskDateChip(at: point) != nil)
             || (onImageTap != nil && image(at: point) != nil) || (onFileTap != nil && file(at: point) != nil)
             || diagram(at: point) != nil || belowTextLines(at: point) != nil
@@ -2059,6 +2074,11 @@ public final class EditorView: UIView {
 
     @objc private func tapped(_ g: UITapGestureRecognizer) {
         let point = g.location(in: textView)
+        if let id = failedDictationPlaceholder(at: point) {
+            DSHaptics.selection()
+            onDictationPlaceholderTap?(id)
+            return
+        }
         EditorDiagnostics.log("tap at \(Int(point.x)),\(Int(point.y)): link \(noteLink(at: point) != nil), date chip \(taskDateChip(at: point) != nil)")
         if let link = noteLink(at: point) {
             DSHaptics.selection()

@@ -2,11 +2,13 @@
 // the executable reference for sync-protocol.md and the fake server for tests
 // of every client (shared, web). Not for production.
 import {
+  MAX_RESUME_DOCS,
   MAX_SNAPSHOT_BYTES,
   MAX_UPDATE_BYTES,
   SYNC_CLOSE_DEVICE_REVOKED,
   SYNC_PROTOCOL_LATEST,
   SYNC_PROTOCOL_MIN,
+  SYNC_PROTOCOL_RESUME,
   base64UrlDecodedLength,
   parseClientMessage,
   type DeviceRevokedReason,
@@ -39,10 +41,14 @@ export interface MemorySyncHubOptions {
   preferSnapshot?: boolean;
   /** Newest protocol version this hub speaks (default SYNC_PROTOCOL_LATEST; 1 = an older server). */
   maxProtocol?: number;
+  /** false: a broken server that says 3 but never answers `resume` (client fallback tests). */
+  answerResume?: boolean;
 }
 
 interface HubDoc {
   seq: number;
+  /** Account change position of the last stored update (or grant), for `resume`. */
+  changedAt: number;
   items: UpdateItem[];
   snapshot: { seq: number; payload: string } | null;
 }
@@ -54,6 +60,8 @@ interface Connection {
   principal: HubPrincipal | null;
   deviceId: string | null;
   subscriptions: Set<string>;
+  /** Protocol 3: after a `resume` that was not a reset, every readable document is subscribed. */
+  account: boolean;
   /** Version agreed in `welcome`. */
   protocol: number;
 }
@@ -62,7 +70,15 @@ export class MemorySyncHub {
   readonly docs = new Map<string, HubDoc>();
   private readonly connections = new Set<Connection>();
   private readonly revoked = new Map<string, DeviceRevokedReason>();
-  private readonly opts: Required<Omit<MemorySyncHubOptions, "authenticate" | "maxProtocol">> &
+  /** Cursors of another hub (a server with another database) are unknown here. */
+  private readonly epoch = Math.random().toString(36).slice(2, 10);
+  /** Account change log position (one log for the whole hub; every change takes the next). */
+  private changePos = 0;
+  /** Deleted documents, for `resumed.removed`. */
+  private readonly tombstones: { docId: string; at: number }[] = [];
+  private readonly opts: Required<
+    Omit<MemorySyncHubOptions, "authenticate" | "maxProtocol" | "answerResume">
+  > &
     MemorySyncHubOptions;
 
   constructor(options: MemorySyncHubOptions = {}) {
@@ -77,7 +93,47 @@ export class MemorySyncHub {
 
   /** Register a document (the equivalent of `POST /v1/docs`). */
   registerDoc(docId: string): void {
-    if (!this.docs.has(docId)) this.docs.set(docId, { seq: 0, items: [], snapshot: null });
+    if (!this.docs.has(docId))
+      this.docs.set(docId, { seq: 0, changedAt: 0, items: [], snapshot: null });
+  }
+
+  /**
+   * A document became readable for an account (a share, a space membership): a later `resume`
+   * lists it even if its content is older than the cursor (sync-protocol.md §3.1).
+   */
+  grantDoc(docId: string): void {
+    this.registerDoc(docId);
+    this.docs.get(docId)!.changedAt = ++this.changePos;
+  }
+
+  /** Delete a document: subscribers get `doc_not_found`, a later `resume` lists it in `removed`. */
+  deleteDoc(docId: string): void {
+    if (!this.docs.delete(docId)) return;
+    this.tombstones.push({ docId, at: ++this.changePos });
+    for (const c of this.connections) {
+      if (this.subscribed(c, docId) || c.account) {
+        c.subscriptions.delete(docId);
+        this.error(c, "doc_not_found", `document ${docId} was deleted`, docId);
+      }
+    }
+  }
+
+  /** The next cursor: everything up to here is in the log (single-threaded, so always safe). */
+  private cursor(): string {
+    return `${this.epoch}.${this.changePos}`;
+  }
+
+  /** Position of a cursor of this hub; null when unknown (another hub, garbage, future). */
+  private cursorPos(cursor: string | null): number | null {
+    const m = cursor ? /^([a-z0-9]+)\.(\d+)$/.exec(cursor) : null;
+    if (!m || m[1] !== this.epoch) return null;
+    const pos = Number(m[2]);
+    return pos <= this.changePos ? pos : null;
+  }
+
+  private subscribed(conn: Connection, docId: string): boolean {
+    if (conn.subscriptions.has(docId)) return true;
+    return conn.account && this.docs.has(docId) && (conn.principal?.canRead(docId) ?? false);
   }
 
   /** Attach a transport. `send` delivers a text frame to the client. */
@@ -92,6 +148,7 @@ export class MemorySyncHub {
       principal: null,
       deviceId: null,
       subscriptions: new Set(),
+      account: false,
       protocol: SYNC_PROTOCOL_MIN,
     };
     this.connections.add(conn);
@@ -278,6 +335,41 @@ export class MemorySyncHub {
       case "unsubscribe":
         for (const id of msg.docIds) conn.subscriptions.delete(id);
         return;
+      case "resume": {
+        if (this.opts.answerResume === false) return;
+        if (conn.protocol < SYNC_PROTOCOL_RESUME || p.userId === null || conn.account) {
+          this.error(conn, "bad_request", "resume needs protocol 3, a user and is sent once");
+          return;
+        }
+        const pos = this.cursorPos(msg.cursor);
+        const cursor = this.cursor();
+        const reset: ServerMessage = {
+          type: "resumed",
+          reset: true,
+          cursor,
+          docs: [],
+          removed: [],
+        };
+        if (pos === null) {
+          conn.send(reset);
+          return;
+        }
+        const docs: { docId: string; seq: number }[] = [];
+        for (const [docId, d] of this.docs) {
+          if (d.changedAt > pos && p.canRead(docId)) docs.push({ docId, seq: d.seq });
+        }
+        const removed = [
+          ...new Set(this.tombstones.filter((t) => t.at > pos).map((t) => t.docId)),
+        ].filter((id) => !this.docs.has(id));
+        if (docs.length > MAX_RESUME_DOCS || removed.length > MAX_RESUME_DOCS) {
+          conn.send(reset);
+          return;
+        }
+        // Live updates of every readable document from here on (before listing: no gap).
+        conn.account = true;
+        conn.send({ type: "resumed", reset: false, cursor, docs, removed });
+        return;
+      }
       case "push":
       case "snapshot": {
         if (!p.canWrite(msg.docId)) {
@@ -301,9 +393,10 @@ export class MemorySyncHub {
             ...(userId ? { author: { kind: "user" as const, userId } } : {}),
           };
           d.items.push(item);
+          d.changedAt = ++this.changePos;
           conn.send({ type: "ack", docId: msg.docId, clientMsgId: msg.clientMsgId, seq: item.seq });
           for (const other of this.connections) {
-            if (other !== conn && other.subscriptions.has(msg.docId)) {
+            if (other !== conn && this.subscribed(other, msg.docId)) {
               other.send({ type: "update", docId: msg.docId, ...item });
             }
           }
@@ -324,9 +417,9 @@ export class MemorySyncHub {
         return;
       }
       case "awareness":
-        if (!conn.subscriptions.has(msg.docId)) return;
+        if (!this.subscribed(conn, msg.docId)) return;
         for (const other of this.connections) {
-          if (other !== conn && other.subscriptions.has(msg.docId)) {
+          if (other !== conn && this.subscribed(other, msg.docId)) {
             other.send({
               type: "awareness",
               docId: msg.docId,

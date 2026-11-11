@@ -83,6 +83,30 @@ import Testing
         await writer.stop()
     }
 
+    /// Its own edit comes back in `docs` (the server logged it), with `lastSeq` ≥ its seq: no
+    /// subscription for it.
+    @Test func anOwnEditCausesNoSubscription() async throws {
+        let server = FakeSyncServer()
+        let writer = try device("W", server: server)
+        await writer.start()
+        let all = try await notes(5, by: writer)
+        let phone = try device("phone", server: server)
+        try knows(phone, all)
+        let first = try await syncUntilCursorStored(phone)
+        let mine = NoteDocument(noteId: all[2].noteId)
+        try mine.crdt.applyUpdates(try phone.store.updates(docId: mine.noteId), origin: .storage)
+        try await phone.open(mine.crdt, notebookId: "nb")
+        try mine.insertText("с телефона", at: 0, inBlock: [1])
+        #expect(try await eventually { (try? phone.store.outboxCount()) == 0 })
+        await phone.stop()
+
+        let mark = await server.subscribedOrder.count
+        _ = try await syncUntilCursorStored(phone, previous: first)
+        #expect(await server.subscribedSince(mark).isEmpty)
+        await phone.stop()
+        await writer.stop()
+    }
+
     /// A document without its key during a resume is not covered by the stored cursor: once the
     /// key is there, the next resume subscribes it even though nothing changed after the cursor.
     @Test func aDocumentPausedWithoutAKeyIsNotCovered() async throws {

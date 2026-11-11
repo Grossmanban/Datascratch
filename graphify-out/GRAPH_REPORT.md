@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-11-11)
 
 ## Corpus Check
-- 1137 files · ~1,090,407 words
+- 1137 files · ~1,090,399 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 40 file(s) not represented in the graph (top: (none) 20, .css 6, .example 4)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `cca008ca`
+- Built from commit: `50c2da5e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -565,11 +565,11 @@
 
 ## Import Cycles
 - 2-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs`
-- 3-file cycle: `apps/web/src/data/runtime.ts -> apps/web/src/domain/actions.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/runtime.ts`
 - 3-file cycle: `apps/web/src/data/runtime.ts -> apps/web/src/data/sharedWithMe.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/runtime.ts`
+- 3-file cycle: `apps/web/src/data/runtime.ts -> apps/web/src/domain/actions.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/runtime.ts`
 - 3-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/events.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/events.rs`
-- 4-file cycle: `apps/web/src/data/ownerShares.ts -> apps/web/src/data/runtime.ts -> apps/web/src/domain/actions.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/ownerShares.ts`
 - 4-file cycle: `apps/web/src/data/ownerShares.ts -> apps/web/src/data/runtime.ts -> apps/web/src/data/sharedWithMe.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/ownerShares.ts`
+- 4-file cycle: `apps/web/src/data/ownerShares.ts -> apps/web/src/data/runtime.ts -> apps/web/src/domain/actions.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/ownerShares.ts`
 - 4-file cycle: `apps/web/src/data/runtime.ts -> apps/web/src/data/sharedWithMe.ts -> apps/web/src/domain/actions.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/runtime.ts`
 - 5-file cycle: `apps/web/src/data/ownerShares.ts -> apps/web/src/data/runtime.ts -> apps/web/src/data/sharedWithMe.ts -> apps/web/src/domain/actions.ts -> apps/web/src/data/sharedSpaces.ts -> apps/web/src/data/ownerShares.ts`
 
@@ -2340,10 +2340,10 @@ Cohesion: 0.67
 Nodes (3): GH_REPO, GH_TOKEN, env
 
 ## Ambiguous Edges - Review These
-- `0030-server-database-postgresql.md` → `Shared for the whole account: app settings, account, keys, devices, agent grants`  [AMBIGUOUS]
-  docs/decisions/0048-isolated-spaces.md · relation: references
 - `12-craft-features.md` → `Связи: [[ ]], бэклинки, теги; граф — не в MVP`  [AMBIGUOUS]
   docs/spec/04-editor.md · relation: references
+- `0030-server-database-postgresql.md` → `Shared for the whole account: app settings, account, keys, devices, agent grants`  [AMBIGUOUS]
+  docs/decisions/0048-isolated-spaces.md · relation: references
 - `Shared with me (participant side)` → `SharedWithMePage — «Поделились со мной» (D-63)`  [AMBIGUOUS]
   apps/web/README.md · relation: conceptually_related_to
 
@@ -2356,7 +2356,7 @@ Nodes (3): GH_REPO, GH_TOKEN, env
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `cn.ts`, `DSDateChip`, `SwiftUI`, `tokens.test.mjs`, `DSDesign Swift package (iOS 26, Swift 6) — «Тихая бумага» design system tokens + SwiftUI components`?**
-  _High betweenness centrality (0.283) - this node is a cross-community bridge._
+  _High betweenness centrality (0.258) - this node is a cross-community bridge._
 - **Are the 370 inferred relationships involving `t()` (e.g. with `accept()` and `ACTION()`) actually correct?**
   _`t()` has 370 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `.fileURL`, `.style`, `.attributes` to the rest of the system?**
@@ -2364,12 +2364,12 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
   _Cohesion score 0.0016397576770989409 - nodes in this community are weakly interconnected._
 - **Why does `DSDateChipModel` connect `DSDateChip` to `ResolvedInkPoint`, `String (2) (2)`, `design-tokens.md`, `BlockLayoutFragment`?**
-  _High betweenness centrality (0.237) - this node is a cross-community bridge._
+  _High betweenness centrality (0.203) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
 
-- **What is the exact relationship between `0030-server-database-postgresql.md` and `Shared for the whole account: app settings, account, keys, devices, agent grants`?**
-  _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
 - **What is the exact relationship between `12-craft-features.md` and `Связи: [[ ]], бэклинки, теги; граф — не в MVP`?**
+  _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
+- **What is the exact relationship between `0030-server-database-postgresql.md` and `Shared for the whole account: app settings, account, keys, devices, agent grants`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._

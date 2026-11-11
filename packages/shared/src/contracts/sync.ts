@@ -1,4 +1,4 @@
-// Messages of the WebSocket sync protocol (sync-protocol.md, versions 1–2).
+// Messages of the WebSocket sync protocol (sync-protocol.md, versions 1–3).
 // The server and every client validate incoming frames with these schemas.
 import { z } from "zod";
 import { authorSchema, deviceRevokedReasonSchema } from "./api.js";
@@ -7,11 +7,13 @@ import { base64UrlSchema, uuidSchema } from "./common.js";
 /**
  * Protocol versions (sync-protocol.md §2). A client says the newest it speaks in `hello`; the
  * server answers `welcome` with the version it will use (≤ the client's). Version 2 adds the
- * `account_changed` message. Clients ignore unknown message types (§4), so a newer server never
- * breaks an older client.
+ * `account_changed` message, version 3 `resume` / `resumed` (§3.1). Clients ignore unknown
+ * message types (§4), so a newer server never breaks an older client.
  */
 export const SYNC_PROTOCOL_MIN = 1;
-export const SYNC_PROTOCOL_LATEST = 2;
+export const SYNC_PROTOCOL_LATEST = 3;
+/** The first version with `resume` / `resumed` (sync-protocol.md §3.1). */
+export const SYNC_PROTOCOL_RESUME = 3;
 /**
  * The baseline version every server accepts (1). Kept for servers that compare `hello.protocol`
  * with it; new code uses SYNC_PROTOCOL_MIN / SYNC_PROTOCOL_LATEST.
@@ -23,7 +25,12 @@ export const SYNC_PATH = "/v1/sync";
 export const SYNC_PING_INTERVAL_MS = 25_000;
 
 /** Decoded payload limits (sync-protocol.md §7). */
-export const MAX_UPDATE_BYTES = 2 * 1024 * 1024;
+/**
+ * An update may be as large as a snapshot (2026-11-11, was 2 MiB): a big change (a pasted book,
+ * an import) goes as a regular `push` and gets its own seq, so catch-up and relay need no special
+ * case. A client still answers `payload_too_large` from an older server with a snapshot.
+ */
+export const MAX_UPDATE_BYTES = 16 * 1024 * 1024;
 export const MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024;
 
 /** A client compacts a document once either threshold is exceeded (sync-protocol.md §5). */
@@ -71,6 +78,21 @@ export const subscribeMessageSchema = z.object({
     }),
 });
 
+/** Longest account cursor (opaque, set by the server). */
+export const MAX_RESUME_CURSOR_CHARS = 256;
+/** At most this many entries in `resumed.docs` and in `resumed.removed`; more → `reset`. */
+export const MAX_RESUME_DOCS = 1000;
+const resumeCursorSchema = z.string().min(1).max(MAX_RESUME_CURSOR_CHARS);
+
+/**
+ * Protocol 3, user connections only (sync-protocol.md §3.1): instead of subscribing every
+ * document again, ask what changed in the account since `cursor` (null: no cursor yet).
+ */
+export const resumeMessageSchema = z.object({
+  type: z.literal("resume"),
+  cursor: resumeCursorSchema.nullable(),
+});
+
 export const unsubscribeMessageSchema = z.object({
   type: z.literal("unsubscribe"),
   docIds: z.array(uuidSchema).min(1),
@@ -105,6 +127,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   pushMessageSchema,
   snapshotMessageSchema,
   clientAwarenessMessageSchema,
+  resumeMessageSchema,
 ]);
 
 export type HelloMessage = z.infer<typeof helloMessageSchema>;
@@ -113,6 +136,7 @@ export type UnsubscribeMessage = z.infer<typeof unsubscribeMessageSchema>;
 export type PushMessage = z.infer<typeof pushMessageSchema>;
 export type SnapshotMessage = z.infer<typeof snapshotMessageSchema>;
 export type ClientAwarenessMessage = z.infer<typeof clientAwarenessMessageSchema>;
+export type ResumeMessage = z.infer<typeof resumeMessageSchema>;
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
 // ---------------------------------------------------------------------------
@@ -229,6 +253,25 @@ export const accountChangedMessageSchema = z.object({
     .transform((w) => [...new Set(w.filter(isAccountChange))]),
 });
 
+/**
+ * Protocol 3: the answer to `resume` (sync-protocol.md §3.1). `reset: false` — the account
+ * subscription is on, `docs` changed (or became accessible) after the cursor, with their latest
+ * seq; `removed` were deleted or lost access. `reset: true` — the cursor is unknown, invalid or
+ * too old: subscribe every document as in version 1 (`docs` and `removed` are empty). `cursor`
+ * replaces the client's once it has caught up.
+ */
+export const resumedMessageSchema = z
+  .object({
+    type: z.literal("resumed"),
+    reset: z.boolean(),
+    cursor: resumeCursorSchema,
+    docs: z.array(z.object({ docId: uuidSchema, seq: sinceSchema })).max(MAX_RESUME_DOCS),
+    removed: z.array(uuidSchema).max(MAX_RESUME_DOCS),
+  })
+  .refine((m) => !m.reset || (m.docs.length === 0 && m.removed.length === 0), {
+    message: "a reset lists no documents",
+  });
+
 export const serverMessageSchema = z.discriminatedUnion("type", [
   welcomeMessageSchema,
   updatesMessageSchema,
@@ -237,6 +280,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
   serverAwarenessMessageSchema,
   errorMessageSchema,
   accountChangedMessageSchema,
+  resumedMessageSchema,
 ]);
 
 /** Message types this version knows; a frame of another `type` is ignored by clients. */
@@ -248,6 +292,7 @@ export const SERVER_MESSAGE_TYPES = [
   "awareness",
   "error",
   "account_changed",
+  "resumed",
 ] as const;
 
 export type WelcomeMessage = z.infer<typeof welcomeMessageSchema>;
@@ -257,6 +302,7 @@ export type AckMessage = z.infer<typeof ackMessageSchema>;
 export type ServerAwarenessMessage = z.infer<typeof serverAwarenessMessageSchema>;
 export type ErrorMessage = z.infer<typeof errorMessageSchema>;
 export type AccountChangedMessage = z.infer<typeof accountChangedMessageSchema>;
+export type ResumedMessage = z.infer<typeof resumedMessageSchema>;
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 
 /** Parse a text frame received from the server; returns null for invalid JSON or schema. */

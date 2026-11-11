@@ -110,7 +110,14 @@ export type AttachmentRow = {
 };
 
 /** SyncClient cursor per document (@datascratch/shared/sync DocSyncState). */
-export type SyncDocRow = { docId: string; lastSeq: number; updatesSinceSnapshot: number; bytesSinceSnapshot: number };
+export type SyncDocRow = {
+  docId: string;
+  lastSeq: number;
+  updatesSinceSnapshot: number;
+  bytesSinceSnapshot: number;
+  /** Protocol 3: epoch of the account cursor that covers this document (sync-protocol.md §3.1). */
+  covered?: string | null;
+};
 
 /** SyncClient outbox item, ordered by `seq` (insertion order = sending order). */
 export type SyncOutboxRow = {

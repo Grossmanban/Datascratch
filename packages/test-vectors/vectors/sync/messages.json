@@ -232,10 +232,10 @@
         }
       },
       {
-        "reason": "protocol newer than 2",
+        "reason": "protocol newer than 3",
         "message": {
           "type": "hello",
-          "protocol": 3,
+          "protocol": 4,
           "auth": {
             "kind": "user",
             "accessToken": "at-123"

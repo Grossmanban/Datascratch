@@ -31,7 +31,11 @@ export type ServerMessage =
 export const PROTOCOL_VERSION = SYNC_PROTOCOL_VERSION;
 /** Versions accepted in `hello` (sync-protocol.md §2); v2 adds `account_changed`. */
 export const PROTOCOL_MIN = SYNC_PROTOCOL_MIN;
-export const PROTOCOL_LATEST = SYNC_PROTOCOL_LATEST;
+/**
+ * Pinned at 2 until the server implements `resume` (v3, sync-protocol §3.1): shared moves
+ * SYNC_PROTOCOL_LATEST ahead of the server; it rises to it together with the implementation.
+ */
+export const PROTOCOL_LATEST: number = Math.min(SYNC_PROTOCOL_LATEST, 2);
 /** The first version that receives `account_changed` (sync-protocol.md §6). */
 export const ACCOUNT_CHANGED_SINCE = 2;
 

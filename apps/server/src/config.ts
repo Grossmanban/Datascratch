@@ -29,6 +29,10 @@ const ConfigSchema = z
 
     DATABASE_URL: z.string().min(1),
     DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
+    /** Per connection (ms, 0: off): no request waits on the database forever (see db/client.ts). */
+    DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(120_000),
+    DB_LOCK_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30_000),
+    DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(120_000),
     /** Run migrations automatically on startup. */
     DB_MIGRATE_ON_START: bool.default(true),
 

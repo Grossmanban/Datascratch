@@ -15,7 +15,11 @@ async function main() {
   const log = createLogger(config.LOG_LEVEL);
   log.info({ version: VERSION }, 'starting datascratch server');
 
-  const database = createDatabase(config.DATABASE_URL, config.DATABASE_POOL_MAX);
+  const database = createDatabase(config.DATABASE_URL, config.DATABASE_POOL_MAX, {
+    statementMs: config.DB_STATEMENT_TIMEOUT_MS,
+    lockMs: config.DB_LOCK_TIMEOUT_MS,
+    idleInTransactionMs: config.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS,
+  });
   if (config.DB_MIGRATE_ON_START) {
     await runMigrations(database.pool);
     log.info('database migrations applied');

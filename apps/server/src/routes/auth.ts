@@ -127,9 +127,11 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
         const b = req.body;
         const loginKey = fromB64(b.loginKey);
         const wrappedPw = fromB64(b.wrappedMasterKeyPassword);
-        const [existing] = await db.select().from(users).where(eq(users.id, b.userId));
-        if (existing) {
-          // Retried signup (lost response): same account and same secrets → new session.
+        // Retried signup (lost response, or the same request sent twice at once): same account
+        // and same secrets → a new session for it, not a conflict.
+        const retried = async () => {
+          const [existing] = await db.select().from(users).where(eq(users.id, b.userId));
+          if (!existing) return null;
           const same =
             existing.email === b.email &&
             existing.accountDocId === b.accountDocId &&
@@ -137,7 +139,9 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             (await verifySecret(existing.loginHash, loginKey));
           if (!same) throw conflict(SIGNUP_CONFLICT);
           return createSession(ctx, db, existing, b.deviceName ?? 'Unknown device');
-        }
+        };
+        const again = await retried();
+        if (again) return again;
         if (ctx.config.DS_SIGNUP === 'closed') throw forbidden('signup is closed on this server');
         if (ctx.config.DS_SIGNUP === 'invite' && !inviteOk(b.inviteCode)) {
           throw forbidden('a valid invite code is required');
@@ -146,7 +150,8 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           hashSecret(loginKey),
           hashSecret(fromB64(b.recoveryLoginKey)),
         ]);
-        return db.transaction(async (tx) => {
+        const lostRace = Symbol('lost race');
+        const created = await db.transaction(async (tx) => {
           const cap = ctx.config.DS_SIGNUP === 'open' ? ctx.config.DS_SIGNUP_DAILY_LIMIT : 0;
           if (cap > 0) {
             // One sign-up at a time while counting, so parallel requests cannot pass the cap together.
@@ -173,7 +178,8 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
             .onConflictDoNothing()
             .returning();
           const user = inserted[0];
-          if (!user) throw conflict(SIGNUP_CONFLICT);
+          // The same id was created meanwhile (a parallel copy of this request committed first).
+          if (!user) return lostRace;
           const doc = await tx
             .insert(docs)
             .values({ id: b.accountDocId, userId: user.id, kind: 'account', notebookId: null })
@@ -182,6 +188,10 @@ export function authRoutes(ctx: AppContext): FastifyPluginAsyncZod {
           if (doc.length === 0) throw conflict(SIGNUP_CONFLICT);
           return createSession(ctx, tx, user, b.deviceName ?? 'Unknown device');
         });
+        if (created !== lostRace) return created;
+        const winner = await retried();
+        if (!winner) throw conflict(SIGNUP_CONFLICT);
+        return winner;
       },
     );
 

@@ -75,7 +75,8 @@ struct VersionHistoryView: View {
             versions = try await app.noteHistory.versions(of: noteId, notebookId: notebookId)
             if selected == nil { selected = versions.first }
         } catch {
-            self.error = error.localizedDescription
+            app.sync.record("history.list.\(error.diagnosticCode)", documentId: noteId, detail: error.diagnosticDetail)
+            self.error = error.readableMessage
         }
     }
 
@@ -125,6 +126,8 @@ private struct VersionDetail: View {
     @State private var lines: [TextDiff.Line] = []
     @State private var isLoading = true
     @State private var error: String?
+    /// The version opened, the one before it did not: shown on its own.
+    @State private var compareFailed = false
     @State private var confirmRestore = false
     @State private var isRestoring = false
 
@@ -135,8 +138,26 @@ private struct VersionDetail: View {
                 if isLoading {
                     ProgressView().frame(maxWidth: .infinity)
                 } else if let error {
-                    Text(error).foregroundStyle(Theme.Palette.danger)
+                    // One version that does not open leaves the others: back to the list, or again.
+                    VStack(alignment: .leading, spacing: Theme.Space.s2) {
+                        Label("Couldn’t open this version", systemImage: "exclamationmark.triangle")
+                            .font(Theme.Typography.callout.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.danger)
+                        Text(error)
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                        Button("Retry") { Task { await load() } }
+                            .buttonStyle(.glass)
+                            .accessibilityIdentifier("history.retry")
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("history.versionFailed")
                 } else {
+                    if compareFailed {
+                        Text("The version before could not be opened: this one is shown on its own.")
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Palette.textTertiary)
+                    }
                     DiffText(lines: lines)
                 }
             }
@@ -188,14 +209,26 @@ private struct VersionDetail: View {
 
     private func load() async {
         isLoading = true
+        error = nil
+        compareFailed = false
         defer { isLoading = false }
         do {
             let current = try await app.noteHistory.body(of: noteId, notebookId: notebookId, at: version)
             var before = NoteBody(blocks: [])
-            if let previous { before = try await app.noteHistory.body(of: noteId, notebookId: notebookId, at: previous) }
+            if let previous {
+                do {
+                    before = try await app.noteHistory.body(of: noteId, notebookId: notebookId, at: previous)
+                } catch {
+                    app.sync.record("history.version.\(error.diagnosticCode)", documentId: noteId,
+                                    detail: "seq \(previous.id): \(error.diagnosticDetail)")
+                    compareFailed = true
+                }
+            }
             lines = TextDiff.compare(TextDiff.lines(of: before), TextDiff.lines(of: current))
         } catch {
-            self.error = error.localizedDescription
+            app.sync.record("history.version.\(error.diagnosticCode)", documentId: noteId,
+                            detail: "seq \(version.id): \(error.diagnosticDetail)")
+            self.error = error.readableMessage
         }
     }
 
@@ -207,7 +240,9 @@ private struct VersionDetail: View {
                 Haptics.success()
                 onRestored()
             } catch {
-                self.error = error.localizedDescription
+                app.sync.record("history.restore.\(error.diagnosticCode)", documentId: noteId,
+                                detail: "seq \(version.id): \(error.diagnosticDetail)")
+                self.error = error.readableMessage
             }
             isRestoring = false
         }

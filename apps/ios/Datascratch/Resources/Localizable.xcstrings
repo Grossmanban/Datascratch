@@ -1071,6 +1071,16 @@
         }
       }
     },
+    "Couldn’t open this version": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось открыть версию"
+          }
+        }
+      }
+    },
     "Couldn’t process the recording (%@).": {
       "localizations": {
         "ru": {
@@ -2581,12 +2591,32 @@
         }
       }
     },
+    "It could not be decrypted on this device.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На этом устройстве не удалось расшифровать."
+          }
+        }
+      }
+    },
     "It disappears from this device. To get it back, the owner invites you again.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Он исчезнет с этого устройства. Чтобы вернуть доступ, владелец должен пригласить вас снова."
+          }
+        }
+      }
+    },
+    "It is no longer on the server.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На сервере этого уже нет."
           }
         }
       }
@@ -3247,6 +3277,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Действий пока нет"
+          }
+        }
+      }
+    },
+    "No connection to the server — try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет связи с сервером — попробуйте ещё раз."
           }
         }
       }
@@ -5921,6 +5961,16 @@
         }
       }
     },
+    "The server had a problem — try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибка на сервере — попробуйте ещё раз."
+          }
+        }
+      }
+    },
     "The server refused changes: this account may have lost access to the notebook.": {
       "localizations": {
         "ru": {
@@ -5961,6 +6011,16 @@
         }
       }
     },
+    "The server’s answer could not be read — try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прочитать ответ сервера — попробуйте ещё раз."
+          }
+        }
+      }
+    },
     "The session was ended from another device or in your account settings. Your notes stay on this device; changes made here will sync once you sign in again.": {
       "localizations": {
         "ru": {
@@ -5987,6 +6047,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Текст слишком длинный для оформления."
+          }
+        }
+      }
+    },
+    "The version before could not be opened: this one is shown on its own.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предыдущую версию открыть не удалось — эта показана без сравнения."
           }
         }
       }
@@ -6781,12 +6851,32 @@
         }
       }
     },
+    "You are signed out. Sign in again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вы вышли из аккаунта. Войдите снова."
+          }
+        }
+      }
+    },
     "You can change this later in the notebook menu.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Это можно изменить позже в меню блокнота."
+          }
+        }
+      }
+    },
+    "You don’t have access to it.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У вас нет к этому доступа."
           }
         }
       }

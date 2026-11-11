@@ -105,11 +105,12 @@ final class SyncCenter {
     /// Documents whose changes could not be delivered (ids, from the sync engine).
     var failedDocumentIds: [String] = []
 
-    func record(_ code: String, documentId: String? = nil, at date: Date = Date()) {
+    func record(_ code: String, documentId: String? = nil, detail: String? = nil, at date: Date = Date()) {
         // The same problem reported again and again (each status update) is one entry.
         if let last = recentEvents.first, last.code == code, last.documentId == documentId,
            date.timeIntervalSince(last.date) < 60 { return }
-        recentEvents.insert(DiagnosticEvent(date: date, code: code, documentId: documentId), at: 0)
+        recentEvents.insert(DiagnosticEvent(date: date, code: code, documentId: documentId,
+                                            detail: detail.map { String($0.prefix(400)) }), at: 0)
         if recentEvents.count > Self.maxEvents { recentEvents.removeLast(recentEvents.count - Self.maxEvents) }
     }
 

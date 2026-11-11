@@ -1,6 +1,6 @@
 import Foundation
 
-// Messages of the WebSocket sync protocol (sync-protocol.md, versions 1–2; mirrors
+// Messages of the WebSocket sync protocol (sync-protocol.md, versions 1–3; mirrors
 // packages/shared/src/contracts/sync.ts). Text frames, one JSON object each, `type` field.
 // Binary payloads are base64url without padding.
 
@@ -8,20 +8,28 @@ public enum SyncProtocol {
     /// Versions this client speaks (§2). It says `latest` in `hello`; the server answers in
     /// `welcome` with the version of the connection (≤ the client's). A server that does not
     /// know `latest` answers `protocol_mismatch`, and the client tries once more one lower.
-    /// Version 2 adds `account_changed`.
+    /// Version 2 adds `account_changed`; version 3 adds `resume` / `resumed` (§3.1).
     public static let min = 1
-    public static let latest = 2
+    public static let latest = 3
+    /// First version with `resume` (§3.1).
+    public static let resume = 3
     public static let version = latest
     public static let supported = min...latest
     public static let path = "/v1/sync"
     public static let pingInterval: Duration = .seconds(25)
-    /// Decoded payload limits (§7).
-    public static let maxUpdateBytes = 2 * 1024 * 1024
+    /// Decoded payload limits (§7). An update may be as big as a snapshot since 2026-11-11 (a big
+    /// change is an ordinary `push` with its own `seq`); an older server that still refuses it
+    /// with `payload_too_large` gets it as a snapshot instead (§5).
+    public static let maxUpdateBytes = 16 * 1024 * 1024
     /// The server's limit (sync-protocol.md §7: 16 MiB, decoded bytes). It was 50 MiB here: a
     /// snapshot between the two was sent and refused instead of failing at once.
     public static let maxSnapshotBytes = 16 * 1024 * 1024
     /// Documents in one `subscribe` (§2): more go in several messages.
     public static let maxSubscribeDocs = 1000
+    /// Entries in `resumed.docs` and in `resumed.removed` (§3.1, `MAX_RESUME_DOCS`).
+    public static let maxResumeDocs = 1000
+    /// Length of an account cursor (§3.1): an opaque string of the server.
+    public static let cursorLength = 1...256
 }
 
 public enum SyncAuth: Codable, Hashable, Sendable {
@@ -106,6 +114,13 @@ enum SyncValidation {
         return s
     }
 
+    /// An account cursor (§3.1): opaque, 1–256 characters (UTF-16 code units, as in TS).
+    static func cursor<K: CodingKey>(_ c: KeyedDecodingContainer<K>, _ k: K) throws -> String {
+        let s = try c.decode(String.self, forKey: k)
+        guard SyncProtocol.cursorLength.contains(s.utf16.count) else { throw DecodingError.dataCorruptedError(forKey: k, in: c, debugDescription: "cursor: 1–256 characters") }
+        return s
+    }
+
     static func positive<K: CodingKey>(_ c: KeyedDecodingContainer<K>, _ k: K) throws -> Int64 {
         let v = try c.decode(Int64.self, forKey: k)
         guard v > 0 else { throw DecodingError.dataCorruptedError(forKey: k, in: c, debugDescription: "expected seq > 0") }
@@ -134,8 +149,10 @@ public enum ClientMessage: Codable, Hashable, Sendable {
     case push(docId: String, clientMsgId: String, payload: Data)
     case snapshot(docId: String, clientMsgId: String, baseSeq: Int64, payload: Data)
     case awareness(docId: String, payload: Data)
+    /// Version 3, users only (§3.1): what changed in the account after `cursor` (nil: none yet).
+    case resume(cursor: String?)
 
-    enum CodingKeys: String, CodingKey { case type, protocolVersion = "protocol", auth, deviceId, client, docs, docIds, docId, clientMsgId, payload, baseSeq }
+    enum CodingKeys: String, CodingKey { case type, protocolVersion = "protocol", auth, deviceId, client, docs, docIds, docId, clientMsgId, payload, baseSeq, cursor }
 
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -167,6 +184,9 @@ public enum ClientMessage: Codable, Hashable, Sendable {
             try c.encode("awareness", forKey: .type)
             try c.encode(docId, forKey: .docId)
             try c.encode(Base64URL.encode(payload), forKey: .payload)
+        case .resume(let cursor):
+            try c.encode("resume", forKey: .type)
+            try c.encode(cursor, forKey: .cursor)
         }
     }
 
@@ -174,6 +194,10 @@ public enum ClientMessage: Codable, Hashable, Sendable {
         typealias V = SyncValidation
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(String.self, forKey: .type) {
+        case "resume":
+            // The field is required; null means «no cursor yet».
+            guard c.contains(.cursor) else { throw DecodingError.keyNotFound(CodingKeys.cursor, .init(codingPath: c.codingPath, debugDescription: "cursor")) }
+            self = .resume(cursor: try c.decodeNil(forKey: .cursor) ? nil : try V.cursor(c, .cursor))
         case "hello":
             let version = try c.decode(Int.self, forKey: .protocolVersion)
             guard SyncProtocol.supported.contains(version) else {
@@ -248,6 +272,26 @@ public enum SyncTraceEvent: Sendable, Equatable {
     case keyMissing(docId: String)
 }
 
+/// One entry of `resumed.docs`: a document changed after the cursor and its last `seq` (0: no
+/// updates yet).
+public struct ResumedDoc: Codable, Hashable, Sendable {
+    public var docId: String
+    public var seq: Int64
+
+    public init(docId: String, seq: Int64) {
+        self.docId = docId
+        self.seq = seq
+    }
+
+    enum CodingKeys: String, CodingKey { case docId, seq }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        docId = try SyncValidation.uuid(c, .docId)
+        seq = try SyncValidation.nonNegative(c, .seq)
+    }
+}
+
 /// Server → client (§4).
 public enum ServerMessage: Codable, Hashable, Sendable {
     /// `protocolVersion`: the version of this connection (§2).
@@ -263,8 +307,13 @@ public enum ServerMessage: Codable, Hashable, Sendable {
     /// or its members or keys changed, a notebook was shared or moved. The app refreshes what
     /// is named; values this client does not know are dropped (the set can end up empty).
     case accountChanged(Set<AccountChange>)
+    /// Version 3 (§3.1): the answer to `resume`. `reset`: the cursor was not taken — subscribe
+    /// everything as in version 1 (both lists are empty then). Otherwise the connection is
+    /// subscribed to every readable document; `docs` changed after the cursor (with their last
+    /// `seq`), `removed` were deleted or became unreadable.
+    case resumed(reset: Bool, cursor: String, docs: [ResumedDoc], removed: [String])
 
-    enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref, retryAfterMs, reason, author, what }
+    enum CodingKeys: String, CodingKey { case type, userId, serverTime, protocolVersion = "protocol", docId, snapshot, items, upToDate, seq, payload, deviceId, clientMsgId, code, message, ref, retryAfterMs, reason, author, what, reset, cursor, docs, removed }
     struct Item: Encodable { var seq: Int64; var payload: String; var deviceId: String; var author: UpdateAuthor? }
     struct Snap: Encodable { var seq: Int64; var payload: String }
 
@@ -312,6 +361,19 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             let names = try c.decode([String].self, forKey: .what)
             guard names.count <= 8 else { throw DecodingError.dataCorruptedError(forKey: .what, in: c, debugDescription: "what: at most 8") }
             self = .accountChanged(Set(names.compactMap(AccountChange.init(rawValue:))))
+        case "resumed":
+            let reset = try c.decode(Bool.self, forKey: .reset)
+            let cursor = try V.cursor(c, .cursor)
+            let docs = try c.decode([ResumedDoc].self, forKey: .docs)
+            let removed = try c.decode([String].self, forKey: .removed)
+            guard docs.count <= SyncProtocol.maxResumeDocs, removed.count <= SyncProtocol.maxResumeDocs else {
+                throw DecodingError.dataCorruptedError(forKey: .docs, in: c, debugDescription: "at most \(SyncProtocol.maxResumeDocs) documents")
+            }
+            guard removed.allSatisfy(EntityID.isValid) else { throw DecodingError.dataCorruptedError(forKey: .removed, in: c, debugDescription: "removed: UUIDs") }
+            guard !reset || (docs.isEmpty && removed.isEmpty) else {
+                throw DecodingError.dataCorruptedError(forKey: .reset, in: c, debugDescription: "a reset lists no documents")
+            }
+            self = .resumed(reset: reset, cursor: cursor, docs: docs, removed: removed)
         case let t: throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown type \(t)")
         }
     }
@@ -354,6 +416,12 @@ public enum ServerMessage: Codable, Hashable, Sendable {
             try c.encodeIfPresent(ref, forKey: .ref)
             try c.encodeIfPresent(retryAfterMs, forKey: .retryAfterMs)
             try c.encodeIfPresent(reason, forKey: .reason)
+        case .resumed(let reset, let cursor, let docs, let removed):
+            try c.encode("resumed", forKey: .type)
+            try c.encode(reset, forKey: .reset)
+            try c.encode(cursor, forKey: .cursor)
+            try c.encode(docs, forKey: .docs)
+            try c.encode(removed, forKey: .removed)
         case .accountChanged(let what):
             try c.encode("account_changed", forKey: .type)
             try c.encode(what.map(\.rawValue).sorted(), forKey: .what)
@@ -361,7 +429,7 @@ public enum ServerMessage: Codable, Hashable, Sendable {
     }
 
     /// Types of server messages this client knows (frames of others are ignored, §4).
-    static let knownTypes: Set<String> = ["welcome", "updates", "update", "ack", "awareness", "error", "account_changed"]
+    static let knownTypes: Set<String> = ["welcome", "updates", "update", "ack", "awareness", "error", "account_changed", "resumed"]
 
     public static func == (a: ServerMessage, b: ServerMessage) -> Bool {
         (try? JSONEncoder.sync.encode(a)) == (try? JSONEncoder.sync.encode(b))

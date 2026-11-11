@@ -213,6 +213,11 @@ public final class LocalStore: Sendable {
             // loop now trims big pushes to what the server lacks: give them another go.
             try db.execute(sql: "UPDATE outbox SET failed = 0, attempts = 0 WHERE failed AND lastError = 'payload_too_large (local)' AND kind = 'push'")
         }
+        m.registerMigration("v11-resume-covered") { db in
+            // Sync protocol 3 (sync-protocol.md §3.1): the cursor epoch under which this document
+            // is known to have every change up to the stored account cursor.
+            try db.alter(table: "documents") { t in t.add(column: "covered", .text) }
+        }
         return m
     }
 }
@@ -237,6 +242,9 @@ public struct DocumentRecord: Codable, FetchableRecord, PersistableRecord, Hasha
     public var lastSnapshotAt: Date?
     /// When the first local edit after that snapshot was made (nil: none yet).
     public var firstEditSinceSnapshotAt: Date?
+    /// Protocol 3 (§3.1): the epoch of the account cursor that covers this document — every
+    /// change of it up to the stored cursor is here. Nil: not covered, subscribed on resume.
+    public var covered: String?
     /// Registered on the server (`POST /v1/docs`).
     public var registered: Bool
     public var createdAt: Date
@@ -253,6 +261,7 @@ public struct DocumentRecord: Codable, FetchableRecord, PersistableRecord, Hasha
         localEditsSinceSnapshot = 0
         lastSnapshotAt = nil
         firstEditSinceSnapshotAt = nil
+        covered = nil
         registered = false
         createdAt = now
         updatedAt = now
@@ -306,6 +315,18 @@ public struct UnreadableSync: Hashable, Sendable {
     public var lastSeq: Int64
     public var deviceIds: [String]
     public var reason: String
+}
+
+/// Protocol 3 (§3.1): the stored account cursor and the epoch it belongs to (a random label of
+/// this client, new at every `reset`).
+public struct ResumeState: Codable, Hashable, Sendable {
+    public var cursor: String
+    public var epoch: String
+
+    public init(cursor: String, epoch: String) {
+        self.cursor = cursor
+        self.epoch = epoch
+    }
 }
 
 /// Messages of one document still to be sent (Diagnostics → Sync).
@@ -453,6 +474,61 @@ extension LocalStore {
                                     now: Date = Date()) throws -> [(seq: Int64, data: Data)] {
         try db.write { db in
             guard var doc = try DocumentRecord.fetchOne(db, key: docId) else { return [] }
+            return try Self.append(db, &doc, items: items, quarantine: quarantine, now: now)
+        }
+    }
+
+    /// Protocol 3 (§3.1): a live update of a document whose catch-up is still on its way (the
+    /// account subscription delivers it first). Stored and applied, but `lastSeq` does not
+    /// move — a drop before the catch-up answer must not leave a hole — and it is not taken as
+    /// known to the server (no `seq` on the row): the catch-up brings it again, harmlessly.
+    public func storeEarlyRemoteUpdates(docId: String, items: [(seq: Int64, data: Data)], now: Date = Date()) throws -> [(seq: Int64, data: Data)] {
+        try db.write { db in
+            guard try DocumentRecord.fetchOne(db, key: docId) != nil else { return [] }
+            for item in items {
+                var stored = StoredUpdate(id: nil, docId: docId, data: item.data, seq: nil, clientMsgId: nil, origin: "remote", createdAt: now)
+                try stored.insert(db)
+            }
+            return items
+        }
+    }
+
+    // MARK: Resume (protocol 3)
+
+    /// The stored account cursor and its epoch (§3.1); nil before the first `resume` commits.
+    public func resumeState() throws -> ResumeState? {
+        try value(Self.resumeKey).flatMap { try? JSONDecoder().decode(ResumeState.self, from: $0) }
+    }
+
+    /// Stores the cursor after the documents' coverage: `covered` = `epoch` for `coveredIds`, nil
+    /// for every other document — in one transaction with the cursor, so a crash cannot leave
+    /// a cursor that claims more than the documents have.
+    public func commitResume(_ state: ResumeState, coveredIds: Set<String>) throws {
+        try db.write { db in
+            try db.execute(sql: "UPDATE documents SET covered = NULL")
+            let ids = Array(coveredIds)
+            for start in stride(from: 0, to: ids.count, by: 500) {
+                let chunk = Array(ids[start..<min(start + 500, ids.count)])
+                try DocumentRecord.filter(chunk.contains(Column("docId"))).updateAll(db, Column("covered").set(to: state.epoch))
+            }
+            try db.execute(sql: "INSERT INTO kv(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                           arguments: [Self.resumeKey, try JSONEncoder().encode(state)])
+        }
+    }
+
+    /// A document caught up after the cursor was stored on this connection: covered by it.
+    public func setCovered(docId: String, epoch: String?) throws {
+        try db.write { try $0.execute(sql: "UPDATE documents SET covered = ? WHERE docId = ?", arguments: [epoch, docId]) }
+    }
+
+    /// Forgets the cursor (a later `resume` starts from nothing: `reset`).
+    public func clearResumeState() throws { try setValue(nil, for: Self.resumeKey) }
+
+    static let resumeKey = "sync.resume"
+
+    static func append(_ db: Database, _ doc: inout DocumentRecord, items: [(seq: Int64, data: Data)], quarantine: [QuarantinedItem],
+                       now: Date) throws -> [(seq: Int64, data: Data)] {
+            let docId = doc.docId
             let from = doc.lastSeq
             for q in quarantine where q.seq > from {
                 try db.execute(sql: """
@@ -472,7 +548,6 @@ extension LocalStore {
             doc.updatedAt = now
             try doc.update(db)
             return added
-        }
     }
 
     /// Replaces the stored history by a server snapshot (`updates` with `snapshot`).
@@ -480,7 +555,15 @@ extension LocalStore {
     @discardableResult
     public func applyRemoteSnapshot(docId: String, seq: Int64, state: Data, now: Date = Date()) throws -> Bool {
         try db.write { db in
-            guard var doc = try DocumentRecord.fetchOne(db, key: docId), seq > doc.lastSeq else { return false }
+            guard var doc = try DocumentRecord.fetchOne(db, key: docId) else { return false }
+            guard seq > doc.lastSeq else {
+                // A snapshot forwarded to a live subscription (sync-protocol §5, 2026-11-11): its
+                // `baseSeq` is behind us, but it may carry a big change sent as a snapshot. Kept
+                // and applied as an update; nothing is replaced.
+                var stored = StoredUpdate(id: nil, docId: docId, data: state, seq: seq, clientMsgId: nil, origin: "remote", createdAt: now)
+                try stored.insert(db)
+                return true
+            }
             // The snapshot contains everything up to `seq`; unacknowledged local updates and
             // later ones stay.
             try db.execute(sql: "DELETE FROM docUpdates WHERE docId = ? AND seq IS NOT NULL AND seq <= ?", arguments: [docId, seq])

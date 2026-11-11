@@ -46,6 +46,8 @@ public struct SyncDiagnostics: Sendable, Equatable {
 public struct SyncEvent: Sendable, Equatable {
     public enum Kind: String, Sendable {
         case connected, disconnected
+        /// Protocol 3: `resume` sent, its answer, the cursor stored (§3.1).
+        case resume
         /// The connection broke under a send (the message stays queued).
         case connectionLost
         /// The server answered `error` (code and message; the document when known).

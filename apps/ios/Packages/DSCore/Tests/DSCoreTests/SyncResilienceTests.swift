@@ -296,22 +296,50 @@ import Testing
         await a.stop()
     }
 
-    /// (3) A new change over the 2 MiB update limit (a huge paste) is not left failed: it goes
-    /// as a snapshot (≤ 16 MiB) and a fresh device gets it.
-    @Test func aChangeOverTheUpdateLimitGoesAsASnapshot() async throws {
+    /// (3) A big change (a huge paste, 3 MiB) is an ordinary push since protocol 3's limits
+    /// (16 MiB, §5): it gets its own seq and a fresh device catches up from it.
+    @Test func aBigChangeIsAnOrdinaryPush() async throws {
         let server = FakeSyncServer()
         let a = try device("A", server: server)
         await a.start()
         let note = try await noteOnServer(a, server, text: "начало")
-        let huge = String(repeating: "x", count: SyncProtocol.maxUpdateBytes + 100_000)
+        let before = await server.docs[note.noteId]?.count ?? 0
+        let huge = String(repeating: "x", count: 3 * 1024 * 1024)
+        try note.insertText(huge, at: 0, inBlock: [1])
+        #expect(try await eventually(timeout: .seconds(20)) { (try? a.store.outboxCount()) == 0 })
+        #expect(await server.docs[note.noteId]?.count == before + 1)
+        #expect(await server.snapshots[note.noteId] == nil)
+        let onServer = try await fetched(note.noteId, from: server)
+        #expect(try onServer.block(at: [1])?.text == huge + "начало")
+        await a.stop()
+    }
+
+    /// (3') A server that still refuses updates over 2 MiB (`payload_too_large`): the change goes
+    /// as a snapshot instead, never left failed; the server forwards the snapshot, so a device
+    /// that is online gets it at once, and a fresh one catches up from it.
+    @Test func anOlderServerGetsABigChangeAsASnapshot() async throws {
+        let server = FakeSyncServer()
+        await server.setMaxPushBytes(2 * 1024 * 1024 + 64)
+        let a = try device("A", server: server)
+        let b = try device("B", server: server)
+        await a.start()
+        let note = try await noteOnServer(a, server, text: "начало")
+        await b.start()
+        let watching = NoteDocument(noteId: note.noteId)
+        try await b.open(watching.crdt, notebookId: "nb")
+        #expect(try await eventually { (try? watching.block(at: [1])?.text) == "начало" })
+
+        let huge = String(repeating: "x", count: 2 * 1024 * 1024 + 100_000)
         try note.insertText(huge, at: 0, inBlock: [1])
         #expect(try await eventually(timeout: .seconds(20)) {
             await server.snapshots[note.noteId] != nil && (try? a.store.outboxCount()) == 0
         })
         #expect(try a.store.failedOutbox().isEmpty)
+        #expect(try await eventually(timeout: .seconds(20)) { (try? watching.block(at: [1])?.text) == huge + "начало" })
         let onServer = try await fetched(note.noteId, from: server)
         #expect(try onServer.block(at: [1])?.text == huge + "начало")
         await a.stop()
+        await b.stop()
     }
 
     /// (4) The owner's phone: a note made offline («Баги дс») and 565 whole-state pushes of
@@ -337,7 +365,12 @@ import Testing
 
         let before = await server.received.count
         await a.start()
-        #expect(try await eventually(timeout: .seconds(10)) { (try? a.store.outboxCount()) == 0 })
+        let drained = try await eventually(timeout: .seconds(10)) { (try? a.store.outboxCount()) == 0 }
+        if !drained {
+            let d = await a.diagnostics()
+            print("DEBUG565 outbox=\((try? a.store.outboxCount()) ?? -1) live=\(d.live) catching=\(d.catchingUp) queued=\(d.queuedSubscriptions) cursors=\(await server.resumeCursors) events=\(d.events.suffix(8).map { "\($0.kind) \($0.detail)" })")
+        }
+        #expect(drained)
         let after = await server.received.dropFirst(before)
         let ids = Set(notes.map(\.noteId))
         let pseudo = after.filter { if case .push(let id, _, _) = $0 { return ids.contains(id) } else { return false } }

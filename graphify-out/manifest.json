@@ -984,9 +984,9 @@
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1794360358.8494117,
-    "seen": 1794360430.2331035,
-    "ast_hash": "0d4ea60e6030e71fd8ab2ad79145986c",
+    "mtime": 1794370361.3151865,
+    "seen": 1794370421.3318346,
+    "ast_hash": "d7ff35cb92ca0a87d3204db257f3e192",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
@@ -1050,9 +1050,9 @@
     "semantic_hash": "b3734456d6a945b93d0701da69b341a6"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1794360358.846539,
-    "seen": 1794360430.233157,
-    "ast_hash": "06b5ab1af40381f227301a218b13abcc",
+    "mtime": 1794370333.0911283,
+    "seen": 1794370421.3318594,
+    "ast_hash": "44ffb68125cad2f13e61fa8b61d74bd4",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormatMenu.swift": {
@@ -4704,9 +4704,9 @@
     "semantic_hash": "e25a390587360f376c89853a7227840b"
   },
   "docs/spec/04-editor.md": {
-    "mtime": 1794368242.976397,
-    "seen": 1794368278.7837913,
-    "ast_hash": "2c4d58c388a6795b744f2594d02a8587",
+    "mtime": 1794370384.912491,
+    "seen": 1794370421.3334944,
+    "ast_hash": "08a3f61a74945f6b70939b4f19f918d0",
     "semantic_hash": ""
   },
   "docs/spec/05-organization-design.md": {
@@ -6846,9 +6846,9 @@
     "semantic_hash": "32e70e2bb98aa1109bc85fd4db7b569b"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/DictationPlaceholders.swift": {
-    "mtime": 1794360358.8470669,
-    "seen": 1794360430.2331424,
-    "ast_hash": "ef3e811d38d44cf6593b81c5de3445ae",
+    "mtime": 1794370325.945403,
+    "seen": 1794370421.331853,
+    "ast_hash": "25c1c6e78b450ff19c1b86eca1b6be19",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditorModel/DictationAnchor.swift": {

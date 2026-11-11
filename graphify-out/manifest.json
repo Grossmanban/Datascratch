@@ -402,10 +402,10 @@
     "semantic_hash": "5ca587891fe826a861c5ccaf480bd744"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/CRDT/CRDTDocument.swift": {
-    "mtime": 1794148398.2109349,
-    "seen": 1794344323.7711272,
-    "ast_hash": "5c199b7ff69f41c79aae92fc8a7f5e93",
-    "semantic_hash": "5c199b7ff69f41c79aae92fc8a7f5e93"
+    "mtime": 1794397208.7450662,
+    "seen": 1794397511.1962192,
+    "ast_hash": "ec381da04505f490057b69d04b4d1a37",
+    "semantic_hash": "ec381da04505f490057b69d04b4d1a37"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/CRDT/CRDTTransaction.swift": {
     "mtime": 1792933803.223194,
@@ -498,10 +498,10 @@
     "semantic_hash": "04ad7be4c0c8c0a55b29155bd0d77a6a"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Storage/LocalStore.swift": {
-    "mtime": 1794338599.7711105,
-    "seen": 1794344323.7711723,
-    "ast_hash": "2b9558c585582b899f0440c08bd6bdfc",
-    "semantic_hash": "2b9558c585582b899f0440c08bd6bdfc"
+    "mtime": 1794397208.745515,
+    "seen": 1794397511.196346,
+    "ast_hash": "f3f362cd6b278a97a47f54c654390a63",
+    "semantic_hash": "f3f362cd6b278a97a47f54c654390a63"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Sync/AccountService.swift": {
     "mtime": 1793782463.1906,
@@ -516,22 +516,22 @@
     "semantic_hash": "06f76f4cabddb37bb7e878aabf7bd51a"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Sync/SyncClient.swift": {
-    "mtime": 1794148398.2161734,
-    "seen": 1794344323.7711813,
-    "ast_hash": "96f4b537f602072f67165e66b29790a5",
-    "semantic_hash": "96f4b537f602072f67165e66b29790a5"
+    "mtime": 1794397208.7466388,
+    "seen": 1794397511.1963606,
+    "ast_hash": "258db03b92070c1a693cf7a759247bad",
+    "semantic_hash": "258db03b92070c1a693cf7a759247bad"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Sync/SyncEngine.swift": {
-    "mtime": 1794338599.7751005,
-    "seen": 1794344323.771183,
-    "ast_hash": "f3a87b8dd1b2ee5196cfb71ff6dd6591",
-    "semantic_hash": "f3a87b8dd1b2ee5196cfb71ff6dd6591"
+    "mtime": 1794397208.7466388,
+    "seen": 1794397511.1963634,
+    "ast_hash": "fb9c31e4d7f46ffe91eb0db8dd96de60",
+    "semantic_hash": "fb9c31e4d7f46ffe91eb0db8dd96de60"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Sync/SyncMessages.swift": {
-    "mtime": 1794172169.1952567,
-    "seen": 1794344323.7711847,
-    "ast_hash": "cc1c3f826ac7cf4407f5170c70b23f0b",
-    "semantic_hash": "cc1c3f826ac7cf4407f5170c70b23f0b"
+    "mtime": 1794397208.7466388,
+    "seen": 1794397511.1963654,
+    "ast_hash": "836e35e9699fbd837945f36a2d870925",
+    "semantic_hash": "836e35e9699fbd837945f36a2d870925"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Util/Base64URL.swift": {
     "mtime": 1792941191.9300768,
@@ -594,10 +594,10 @@
     "semantic_hash": "401d96812120f3bd30ed3e9db44b7917"
   },
   "apps/ios/Packages/DSCore/Tests/DSCoreTests/SyncTests.swift": {
-    "mtime": 1794338599.7751005,
-    "seen": 1794344323.7712355,
-    "ast_hash": "6a2919a62a6f55bdd48a05560750de1c",
-    "semantic_hash": "6a2919a62a6f55bdd48a05560750de1c"
+    "mtime": 1794397208.7484715,
+    "seen": 1794397511.1964505,
+    "ast_hash": "0077f5633f661f8a858bb2340914ad71",
+    "semantic_hash": "0077f5633f661f8a858bb2340914ad71"
   },
   "apps/ios/Packages/DSCore/Tests/DSCoreTests/VectorTests.swift": {
     "mtime": 1794215845.4236703,
@@ -1387,19 +1387,19 @@
   },
   "apps/server/drizzle/0000_init.sql": {
     "mtime": 1792930021.2139332,
-    "seen": 1794388985.180876,
+    "seen": 1794398126.7241433,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0001_rls_and_triggers.sql": {
     "mtime": 1792930021.2139332,
-    "seen": 1794388985.1808805,
+    "seen": 1794398126.724147,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0002_security_events.sql": {
     "mtime": 1792943412.7222087,
-    "seen": 1794388985.1808841,
+    "seen": 1794398126.7241488,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -1662,10 +1662,10 @@
     "semantic_hash": "e28e9059bf797083f4238e4c19075163"
   },
   "apps/server/src/sync/connection.ts": {
-    "mtime": 1794386408.1595085,
-    "seen": 1794386938.8177485,
-    "ast_hash": "3bc2e645da8a41b288645738b62f66a0",
-    "semantic_hash": "3bc2e645da8a41b288645738b62f66a0"
+    "mtime": 1794397030.9447453,
+    "seen": 1794397511.1970954,
+    "ast_hash": "2ab0faaf08bcd6b6a705ccc103372f3c",
+    "semantic_hash": "2ab0faaf08bcd6b6a705ccc103372f3c"
   },
   "apps/server/src/sync/hub.ts": {
     "mtime": 1794384902.704787,
@@ -1710,10 +1710,10 @@
     "semantic_hash": "e4f9c6cb028fca1ff504003859aac28c"
   },
   "apps/server/test/compat.test.ts": {
-    "mtime": 1794385533.5343175,
-    "seen": 1794385770.8259425,
-    "ast_hash": "b7c596d9a104f99a916d3a5237e254f8",
-    "semantic_hash": "b7c596d9a104f99a916d3a5237e254f8"
+    "mtime": 1794398066.0755086,
+    "seen": 1794398126.7243428,
+    "ast_hash": "945796841a756b48b97c1ad1844db160",
+    "semantic_hash": ""
   },
   "apps/server/test/global-setup.ts": {
     "mtime": 1792928566.626571,
@@ -2629,7 +2629,7 @@
   },
   "infra/deploy/docker-compose.edge.yml": {
     "mtime": 1792951191.6720402,
-    "seen": 1794388985.1819217,
+    "seen": 1794398126.72483,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -4224,10 +4224,10 @@
     "semantic_hash": "317855e29c661691ad9aaeff65c0fa79"
   },
   "apps/ios/Packages/DSCore/README.md": {
-    "mtime": 1794338599.7711105,
-    "seen": 1794344323.7725892,
-    "ast_hash": "b60cf15e186ea9a09324cac05fbfbbfc",
-    "semantic_hash": "b60cf15e186ea9a09324cac05fbfbbfc"
+    "mtime": 1794397208.7450662,
+    "seen": 1794397511.1989198,
+    "ast_hash": "c61c2a562428711af1939d75cb1c6a00",
+    "semantic_hash": "c61c2a562428711af1939d75cb1c6a00"
   },
   "apps/ios/Packages/DSDesign/README.md": {
     "mtime": 1793089823.9263802,
@@ -4278,10 +4278,10 @@
     "semantic_hash": "732d553485d69e47690678cc4c398206"
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1794387044.174007,
-    "seen": 1794387307.3846936,
-    "ast_hash": "47aa77560a8599e1991b4cd42d75e251",
-    "semantic_hash": "47aa77560a8599e1991b4cd42d75e251"
+    "mtime": 1794397208.749515,
+    "seen": 1794397511.1989222,
+    "ast_hash": "8c0d519deb88c2f997c15e74542d460f",
+    "semantic_hash": "8c0d519deb88c2f997c15e74542d460f"
   },
   "docs/README.md": {
     "mtime": 1792930851.1460934,
@@ -4740,10 +4740,10 @@
     "semantic_hash": "cbfa368a33bd7ab18e4f21a8e85847d2"
   },
   "docs/spec/10-sync.md": {
-    "mtime": 1794338599.79065,
-    "seen": 1794344323.7727377,
-    "ast_hash": "522d0b8f5230d008a4ecb33f87759b1c",
-    "semantic_hash": "522d0b8f5230d008a4ecb33f87759b1c"
+    "mtime": 1794397208.752329,
+    "seen": 1794397511.1989245,
+    "ast_hash": "3c8fccdc564e29bc527e8679298d4f06",
+    "semantic_hash": "3c8fccdc564e29bc527e8679298d4f06"
   },
   "docs/spec/11-nfr.md": {
     "mtime": 1793018582.9852955,
@@ -4987,7 +4987,7 @@
   },
   "apps/server/drizzle/0003_agent_move_note.sql": {
     "mtime": 1793089823.93909,
-    "seen": 1794388985.1808877,
+    "seen": 1794398126.7241516,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -5461,7 +5461,7 @@
   },
   "apps/server/drizzle/0004_storage_quota.sql": {
     "mtime": 1793109492.887963,
-    "seen": 1794388985.1808906,
+    "seen": 1794398126.7241535,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -5911,19 +5911,19 @@
   },
   "apps/server/drizzle/0005_device_revoked_reason.sql": {
     "mtime": 1793121434.097183,
-    "seen": 1794388985.1808932,
+    "seen": 1794398126.7241554,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0006_sharing.sql": {
     "mtime": 1793125756.7974398,
-    "seen": 1794388985.1808963,
+    "seen": 1794398126.7241578,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0007_rotation_since.sql": {
     "mtime": 1793127830.5095632,
-    "seen": 1794388985.1808994,
+    "seen": 1794398126.7241597,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -5989,7 +5989,7 @@
   },
   "apps/server/drizzle/0008_agents_shared_notebooks.sql": {
     "mtime": 1793191561.0065098,
-    "seen": 1794388985.1809034,
+    "seen": 1794398126.7241619,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -6025,7 +6025,7 @@
   },
   "apps/server/drizzle/0009_agents_all_notebooks.sql": {
     "mtime": 1793739696.3941407,
-    "seen": 1794388985.180906,
+    "seen": 1794398126.7241638,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -6216,10 +6216,10 @@
     "semantic_hash": "161fe989c25d56a7725264b2919c41ff"
   },
   "apps/ios/Packages/DSCore/Tests/DSCoreTests/AttachmentTransferTests.swift": {
-    "mtime": 1794139818.028337,
-    "seen": 1794344323.7712042,
-    "ast_hash": "d48dc06f0d5467e73407969d84593521",
-    "semantic_hash": "d48dc06f0d5467e73407969d84593521"
+    "mtime": 1794397208.7466388,
+    "seen": 1794397511.1963997,
+    "ast_hash": "95a75baa489879d65d08a594ad1461f9",
+    "semantic_hash": "95a75baa489879d65d08a594ad1461f9"
   },
   "apps/ios/Packages/DSCore/Tests/DSCoreTests/CRDTConcurrencyTests.swift": {
     "mtime": 1794139818.028337,
@@ -6265,13 +6265,13 @@
   },
   "apps/server/drizzle/0010_audit_hardening.sql": {
     "mtime": 1793739696.3941407,
-    "seen": 1794388985.1809092,
+    "seen": 1794398126.724166,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/drizzle/0011_shared_spaces.sql": {
     "mtime": 1793739868.4181368,
-    "seen": 1794388985.1809118,
+    "seen": 1794398126.7241676,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -6618,10 +6618,10 @@
     "semantic_hash": "ad460f19a21595400654d7676d803e74"
   },
   "apps/ios/Packages/DSCore/Sources/DSCore/Network/VoiceAPI.swift": {
-    "mtime": 1794215845.4236703,
-    "seen": 1794344323.77117,
-    "ast_hash": "d61af2e208ab93b003f497e5d76d88c2",
-    "semantic_hash": "d61af2e208ab93b003f497e5d76d88c2"
+    "mtime": 1794397208.7450662,
+    "seen": 1794397511.1963408,
+    "ast_hash": "ae6a7866672b721f157734271a6c9350",
+    "semantic_hash": "ae6a7866672b721f157734271a6c9350"
   },
   "apps/ios/Packages/DSCore/Tests/DSCoreTests/VoiceConsentTests.swift": {
     "mtime": 1794215845.4236703,
@@ -6631,7 +6631,7 @@
   },
   "apps/server/drizzle/0012_voice.sql": {
     "mtime": 1794169452.8542047,
-    "seen": 1794388985.1809149,
+    "seen": 1794398126.7241702,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -6895,14 +6895,26 @@
   },
   "apps/server/drizzle/0013_resume.sql": {
     "mtime": 1794386341.369935,
-    "seen": 1794388985.1809177,
+    "seen": 1794398126.7241724,
     "ast_hash": "",
     "semantic_hash": ""
   },
   "apps/server/test/signup-race.test.ts": {
-    "mtime": 1794388888.3447278,
-    "seen": 1794388985.1812353,
-    "ast_hash": "3d2587ab406aef0bc348d5c3e458397f",
-    "semantic_hash": "3d2587ab406aef0bc348d5c3e458397f"
+    "mtime": 1794397101.1622477,
+    "seen": 1794397511.19716,
+    "ast_hash": "e6dd0f784c1caf8433c9a2109979b6e4",
+    "semantic_hash": "e6dd0f784c1caf8433c9a2109979b6e4"
+  },
+  "apps/ios/Packages/DSCore/Sources/DSCore/Sync/SyncActivity.swift": {
+    "mtime": 1794397208.745515,
+    "seen": 1794397511.196358,
+    "ast_hash": "655a2c34e97de5635cd1a343455f70da",
+    "semantic_hash": "655a2c34e97de5635cd1a343455f70da"
+  },
+  "apps/ios/Packages/DSCore/Tests/DSCoreTests/SyncResilienceTests.swift": {
+    "mtime": 1794397208.7484715,
+    "seen": 1794397511.196448,
+    "ast_hash": "02e21ddcf293c9284ff097eea5112729",
+    "semantic_hash": "02e21ddcf293c9284ff097eea5112729"
   }
 }

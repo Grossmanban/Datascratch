@@ -58,6 +58,10 @@ interface Subscription {
 }
 
 const HELLO_TIMEOUT_MS = 10_000;
+/** Diagnostics: how often to look, and when one message or an unanswered push counts as stuck. */
+const DIAG_CHECK_MS = 5_000;
+export const SLOW_MESSAGE_MS = 10_000;
+export const UNANSWERED_PUSH_MS = 15_000;
 const isSupported = (v: unknown) =>
   typeof v === 'number' && Number.isInteger(v) && v >= PROTOCOL_MIN && v <= PROTOCOL_LATEST;
 /** Account changes within this window reach a client as one `account_changed` (D-62). */
@@ -119,6 +123,23 @@ export class SyncConnection {
   #protocol = 1;
   /** `resume` was answered on this connection (once per connection). */
   #resumed = false;
+  /**
+   * Diagnostics (ios-app CI, 2026-11-11: pushes on an open socket were never acknowledged and the
+   * log said nothing): message counts by type each way, the message being handled and since when,
+   * pushes not yet answered. Types, counts and times only — never ids of content or payloads.
+   */
+  readonly #diag = {
+    opened: Date.now(),
+    in: {} as Record<string, number>,
+    out: {} as Record<string, number>,
+    busyType: null as string | null,
+    busySince: 0,
+    slowWarned: false,
+    unanswered: new Map<string, number>(),
+    unansweredWarned: false,
+    closeCode: 0,
+    timer: null as NodeJS.Timeout | null,
+  };
   /** `account_changed` reasons waiting for the coalescing window (D-62). */
   readonly #accountWhat = new Set<AccountChange>();
   #accountTimer: NodeJS.Timeout | null = null;
@@ -148,9 +169,15 @@ export class SyncConnection {
         socket.pause();
       }
       this.#queue = this.#queue
-        .then(() => this.#handle(text))
+        .then(() => {
+          this.#diag.busySince = Date.now();
+          this.#diag.busyType = null;
+          return this.#handle(text);
+        })
         .catch((err) => this.#internal(err))
         .finally(() => {
+          this.#diag.busySince = 0;
+          this.#diag.slowWarned = false;
           this.#queued -= 1;
           if (this.#paused && this.#queued <= QUEUE_RESUME_AT && !this.#closed) {
             this.#paused = false;
@@ -158,8 +185,45 @@ export class SyncConnection {
           }
         });
     });
-    socket.on('close', () => this.#cleanup());
+    socket.on('close', (code: number) => {
+      this.#diag.closeCode = code;
+      this.#cleanup();
+    });
     socket.on('error', () => this.#cleanup());
+    this.#diag.timer = setInterval(() => this.#watch(), DIAG_CHECK_MS);
+    this.#diag.timer.unref();
+  }
+
+  /** Warn once when one message takes long to handle or pushes stay unanswered (diagnostics). */
+  #watch() {
+    const d = this.#diag;
+    const now = Date.now();
+    if (d.busySince && !d.slowWarned && now - d.busySince > SLOW_MESSAGE_MS) {
+      d.slowWarned = true;
+      this.ctx.log.warn(
+        { conn: this.id, type: d.busyType, ms: now - d.busySince, queued: this.#queued, protocol: this.#protocol },
+        'sync message slow',
+      );
+    }
+    if (!d.unansweredWarned && d.unanswered.size > 0) {
+      const oldest = Math.min(...d.unanswered.values());
+      if (now - oldest > UNANSWERED_PUSH_MS) {
+        d.unansweredWarned = true;
+        this.ctx.log.warn(
+          {
+            conn: this.id,
+            unanswered: d.unanswered.size,
+            oldestMs: now - oldest,
+            busyType: d.busySince ? d.busyType : null,
+            queued: this.#queued,
+            protocol: this.#protocol,
+            in: d.in,
+            out: d.out,
+          },
+          'sync pushes unanswered',
+        );
+      }
+    }
   }
 
   get principal() {
@@ -184,6 +248,22 @@ export class SyncConnection {
     if (this.#closed) return;
     this.#closed = true;
     clearTimeout(this.#helloTimer);
+    if (this.#diag.timer) clearInterval(this.#diag.timer);
+    const d = this.#diag;
+    this.ctx.log.info(
+      {
+        conn: this.id,
+        kind: this.#principal?.kind ?? null,
+        protocol: this.#protocol,
+        durationMs: Date.now() - d.opened,
+        closeCode: d.closeCode,
+        in: d.in,
+        out: d.out,
+        unanswered: d.unanswered.size,
+        subscribed: this.#subs.size,
+      },
+      'sync connection closed',
+    );
     if (this.#expiryTimer) clearTimeout(this.#expiryTimer);
     if (this.#accountTimer) clearTimeout(this.#accountTimer);
     for (const s of this.#subs.values()) s.unsubscribe();
@@ -193,6 +273,9 @@ export class SyncConnection {
   }
 
   #send(msg: ServerMessage) {
+    this.#diag.out[msg.type] = (this.#diag.out[msg.type] ?? 0) + 1;
+    if (msg.type === 'ack') this.#diag.unanswered.delete(msg.clientMsgId);
+    else if (msg.type === 'error' && msg.ref) this.#diag.unanswered.delete(msg.ref);
     if (msg.type === 'error') this.ctx.metrics.syncErrors.inc({ code: msg.code });
     if (this.#closed || this.socket.readyState !== this.socket.OPEN) return;
     if (this.socket.bufferedAmount > MAX_BUFFERED_BYTES) {
@@ -290,6 +373,9 @@ export class SyncConnection {
     }
     const msg = parsed.data;
     this.ctx.metrics.syncMessages.inc({ type: msg.type });
+    this.#diag.in[msg.type] = (this.#diag.in[msg.type] ?? 0) + 1;
+    this.#diag.busyType = msg.type;
+    if (msg.type === 'push' || msg.type === 'snapshot') this.#diag.unanswered.set(msg.clientMsgId, Date.now());
     if (!this.#principal) {
       if (msg.type !== 'hello') return this.#fail('unauthorized', 'hello expected', CloseCode.unauthorized);
       return this.#hello(msg);

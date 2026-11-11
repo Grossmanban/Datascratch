@@ -1,7 +1,7 @@
 import net from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDatabase } from '../src/db/client.js';
-import { KDF, api, b64, newId, rnd, signup, sleep, startServer, type TestServer } from './helpers.js';
+import { KDF, SyncClient, api, b64, createNote, createNotebook, newId, rnd, signup, sleep, startServer, type TestServer } from './helpers.js';
 
 // Parallel sign-ups (ios-app real-server CI, 2026-11-11): none may hang or fail because of another.
 let s: TestServer;
@@ -99,6 +99,37 @@ describe('requests that never finish (diagnostics)', () => {
       }
       expect(found).toMatchObject({ url: '/v1/auth/signup', stage: 'body', contentLength: 500, bodyBytes: part.length, bodyComplete: false });
       expect(lines.join('')).not.toContain('secret-part');
+    } finally {
+      await logged.close();
+    }
+  });
+});
+
+describe('sync connection diagnostics', () => {
+  it('a closed sync connection logs one summary: message counts by type each way, nothing else', async () => {
+    const lines: string[] = [];
+    const logged = await startServer({ LOG_LEVEL: 'info' }, [], { write: (l: string) => void lines.push(l) });
+    try {
+      const u = await signup(logged, undefined, '10.72.0.1');
+      const { notebookId } = await createNotebook(logged, u);
+      const noteId = await createNote(logged, u, notebookId);
+      const c = await SyncClient.user(logged, u);
+      await c.subscribe(noteId);
+      await c.push(noteId, rnd(10));
+      c.close();
+      let found: any;
+      for (let i = 0; i < 50 && !found; i++) {
+        await sleep(40);
+        found = lines.map((l) => JSON.parse(l)).find((l) => l.msg === 'sync connection closed');
+      }
+      expect(found).toMatchObject({
+        kind: 'user',
+        protocol: 1,
+        in: { hello: 1, subscribe: 1, push: 1 },
+        out: { welcome: 1, updates: 1, ack: 1 },
+        unanswered: 0,
+      });
+      expect(JSON.stringify(found)).not.toContain(noteId);
     } finally {
       await logged.close();
     }

@@ -305,6 +305,11 @@ export class SyncConnection {
           return await this.#snapshot(msg.docId, msg.clientMsgId, msg.baseSeq, msg.payload);
         case 'awareness':
           return await this.#awareness(msg.docId, msg.payload);
+        default:
+          // A message of a newer protocol this server does not speak yet (e.g. `resume`, v3):
+          // a plain bad_request without ref, and the client falls back (sync-protocol §3.1).
+          this.#send({ type: 'error', code: 'bad_request', message: 'unsupported message' });
+          return;
       }
     } catch (err) {
       if (err instanceof SyncError) {

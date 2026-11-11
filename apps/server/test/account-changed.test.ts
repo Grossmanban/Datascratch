@@ -98,7 +98,7 @@ describe('account_changed', () => {
     const v3 = await SyncClient.connect(s);
     v3.send({
       type: 'hello',
-      protocol: 3,
+      protocol: 4,
       auth: { kind: 'user', accessToken: member.session.accessToken },
       deviceId: member.session.deviceId,
       client: { platform: 'web', version: 'test' },

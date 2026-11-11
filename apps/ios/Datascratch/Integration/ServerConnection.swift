@@ -366,6 +366,7 @@ final class ServerConnection: CoreLibraryRemote {
         case .connected: "connected"
         case .waiting(let retryIn): "waiting (retry in \(retryIn.components.seconds) s)"
         case .stopped(let reason): "stopped: \(reason)"
+        default: String(describing: d.connection)
         }
         return SyncEngineReport(
             connection: connection, connectionsOpened: d.connectionsOpened, consecutiveFailures: d.consecutiveFailures,

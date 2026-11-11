@@ -177,7 +177,7 @@ struct DiagnosticsView: View {
     @Environment(AppModel.self) private var app
     @State private var copied = false
     /// The sync engine's own report (build 46), refreshed while the screen is open.
-    @State private var engine: SyncEngineReport?
+    @State private var engineReport: SyncEngineReport?
     @State private var isSendingAgain = false
 
     private static let time: DateFormatter = {
@@ -207,7 +207,7 @@ struct DiagnosticsView: View {
                 DSSettingsRow(String(localized: "Not delivered"), systemImage: "exclamationmark.arrow.triangle.2.circlepath",
                               value: "\(snapshot.notSentDocuments)")
             }
-            if let engine {
+            if let engine = engineReport {
                 DSSettingsSection(String(localized: "Sync Engine"),
                                   footer: String(localized: "Connections that keep growing on a steady network mean the connection keeps dropping.")) {
                     DSSettingsRow(String(localized: "Connection"), systemImage: "bolt.horizontal", value: engine.connection)
@@ -232,7 +232,7 @@ struct DiagnosticsView: View {
                         isSendingAgain = true
                         Task {
                             await app.sync.sendAgain?()
-                            engine = await app.sync.loadEngineReport?()
+                            engineReport = await app.sync.loadEngineReport?()
                             isSendingAgain = false
                         }
                     } label: {
@@ -300,14 +300,14 @@ struct DiagnosticsView: View {
         .task {
             // While the screen is open: the engine's numbers move (waiting, catching up).
             while !Task.isCancelled {
-                engine = await app.sync.loadEngineReport?()
+                engineReport = await app.sync.loadEngineReport?()
                 try? await Task.sleep(for: .seconds(2))
             }
         }
     }
 
     private func report(_ snapshot: DiagnosticsSnapshot) -> String {
-        guard let engine else { return snapshot.report() }
+        guard let engine = engineReport else { return snapshot.report() }
         return snapshot.report() + "\n" + engine.lines().joined(separator: "\n") + "\n"
     }
 

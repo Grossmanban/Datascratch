@@ -1,7 +1,7 @@
 # Graph Report - Datascratch  (2026-11-11)
 
 ## Corpus Check
-- 1150 files · ~1,124,124 words
+- 1150 files · ~1,124,214 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 40 file(s) not represented in the graph (top: (none) 20, .css 6, .example 4)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `cdaf9b99`
+- Built from commit: `5d31f445`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -489,12 +489,12 @@
   docs/decisions/0048-isolated-spaces.md → apps/web/src/domain/actions.ts
 - `backup-status: last-run.json и last-success.json, BACKUP_STATUS_DIR только на чтение` --references--> `BACKUP_STATUS_DIR`  [INFERRED]
   docs/spec/06-data-server.md → infra/deploy/docker-compose.yml
-- `No reruns on main: Linux gate step skips macOS jobs when the same tracked files already passed the workflow (already-tested.sh)` --references--> `gate`  [INFERRED]
-  docs/decisions/0046-faster-ios-ci.md → .github/workflows/design.yml
-- `No reruns on main: Linux gate step skips macOS jobs when the same tracked files already passed the workflow (already-tested.sh)` --references--> `gate`  [INFERRED]
-  docs/decisions/0046-faster-ios-ci.md → .github/workflows/ios-app.yml
-- `No reruns on main: Linux gate step skips macOS jobs when the same tracked files already passed the workflow (already-tested.sh)` --references--> `gate`  [INFERRED]
-  docs/decisions/0046-faster-ios-ci.md → .github/workflows/ios-core.yml
+- `2026-11-11 сервер: протокол 3 — resume/resumed, авто-подписка на документы аккаунта, журнал позиций в памяти, таблица user_docs (миграция 0013)` --references--> `ChangeLog`  [INFERRED]
+  docs/CHANGELOG.md → apps/server/src/services/change-log.ts
+- `iOS, голос: сказанное не теряется — очередь записей, карточка «Запись не распознана», повтор, сырой текст, куски по 5 мин` --references--> `PendingDictationCard`  [INFERRED]
+  docs/CHANGELOG.md → apps/ios/Datascratch/Features/Voice/DictationViews.swift
+- `Голос: карточка нераспознанной записи на месте в тексте (нужен API DSEditor)` --references--> `PendingDictationCard`  [INFERRED]
+  docs/open-questions.md → apps/ios/Datascratch/Features/Voice/DictationViews.swift
 
 ## Import Cycles
 - 2-file cycle: `apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/xml.rs -> apps/ios/Packages/DSCore/yrs-ffi/src/lib.rs`
@@ -2140,7 +2140,7 @@ Nodes (4): AccessClaims, GuestClaims, subkey(), TokenSigner
   docs/CHANGELOG.md · relation: implements
 
 ## Knowledge Gaps
-- **1969 isolated node(s):** `.body`, `launching`, `onboarding`, `ready`, `.presence` (+1964 more)
+- **1969 isolated node(s):** `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_KEY_FILE`, `DEPLOY_KNOWN_HOSTS_FILE`, `DS_DOMAIN` (+1964 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 6405 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **63 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -2148,15 +2148,15 @@ Nodes (4): AccessClaims, GuestClaims, subkey(), TokenSigner
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `DSDateChip`, `cn.ts`, `scripts/generate.mjs (2)`, `DSDesign Swift package (iOS 26, Swift 6) — «Тихая бумага» design system tokens + SwiftUI components`, `Foundation`?**
-  _High betweenness centrality (0.250) - this node is a cross-community bridge._
+  _High betweenness centrality (0.237) - this node is a cross-community bridge._
 - **Are the 370 inferred relationships involving `t()` (e.g. with `accept()` and `ACTION()`) actually correct?**
   _`t()` has 370 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `.body`, `launching`, `onboarding` to the rest of the system?**
+- **What connects `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_KEY_FILE` to the rest of the system?**
   _1969 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
   _Cohesion score 0.0016338748158474144 - nodes in this community are weakly interconnected._
 - **Why does `DSDateChipModel` connect `DSDateChip` to `DSDateChip (2)`, `SyncClient`, `design-tokens.md`, `BlockLayoutFragment`, `Sendable`?**
-  _High betweenness centrality (0.185) - this node is a cross-community bridge._
+  _High betweenness centrality (0.188) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._

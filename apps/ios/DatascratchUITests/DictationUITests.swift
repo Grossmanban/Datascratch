@@ -261,9 +261,23 @@ final class DictationUITests: XCTestCase {
         XCTAssertTrue(offer.waitForExistence(timeout: 5), "the model's title is not offered; buttons: \(buttons(app))")
         XCTAssertTrue(value(app).contains("Groceries"), "the note's own title was replaced; text: \(value(app))")
         app.buttons["voice.format.titleReplace"].firstMatch.tap()
-        XCTAssertTrue(waitForText(app, containing: "Formatted by Voice", timeout: 5), "«Replace» did not set the title; text: \(value(app))")
-        XCTAssertFalse(value(app).contains("Groceries"), "the old title is still there; text: \(value(app))")
+        // The title is in once the text holds the new one and not the old (polled often: the
+        // expectation's one-second polling missed a value that was already there, iPhone).
+        let replaced = waitUntil(10) {
+            let text = self.value(app)
+            return text.contains("Formatted by Voice") && !text.contains("Groceries")
+        }
+        XCTAssertTrue(replaced, "«Replace» did not set the title; text: \(value(app))")
         XCTAssertTrue(offer.waitForNonExistence(timeout: 3), "the offer stayed after «Replace»")
+    }
+
+    private func waitUntil(_ timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
+        let end = Date().addingTimeInterval(timeout)
+        while Date() < end {
+            if condition() { return true }
+            settle(0.25)
+        }
+        return condition()
     }
 
     private func settle(_ seconds: TimeInterval) {

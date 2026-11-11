@@ -608,6 +608,23 @@ route("POST", "/__mock/voice", (_q, res, { body }) => {
   if (body.reset) voice.takes = 0;
   json(res, 204);
 });
+// GET /v1/admin/backup (api.md «Администрирование»): server admins only; /__mock/backup sets it.
+const hoursAgo = (h) => new Date(Date.now() - h * 3_600_000).toISOString();
+const backupStates = {
+  ok: () => ({ available: true, lastRun: { finishedAt: hoursAgo(5), ok: true, error: null }, lastSuccess: { finishedAt: hoursAgo(5), dbBytes: 9 * 1024 * 1024, filesBytes: 3 * 1024 * 1024, count: 14 }, ageHours: 5, stale: false }),
+  failed: () => ({ available: true, lastRun: { finishedAt: hoursAgo(2), ok: false, error: "db" }, lastSuccess: { finishedAt: hoursAgo(50), dbBytes: 9 * 1024 * 1024, filesBytes: null, count: 13 }, ageHours: 50, stale: true }),
+  unavailable: () => ({ available: false, lastRun: null, lastSuccess: null, ageHours: null, stale: false }),
+};
+let backupState = "ok";
+route("POST", "/__mock/backup", (_q, res, { body }) => {
+  backupState = body.state ?? "ok";
+  json(res, 204);
+});
+route("GET", "/v1/admin/backup", (_q, res, { auth }) => {
+  if (!auth) return err(res, 401, "unauthorized");
+  if (!isVoiceAdmin(auth.user)) return err(res, 403, "forbidden");
+  json(res, 200, backupStates[backupState]());
+});
 route("GET", "/v1/voice/me", (_q, res, { auth }) => {
   if (!auth) return err(res, 401, "unauthorized");
   json(res, 200, { ...voiceView(auth.user), available: true, isAdmin: isVoiceAdmin(auth.user) });

@@ -141,9 +141,8 @@ final class DictationUITests: XCTestCase {
         let card = app.descendants(matching: .any)["voice.pending"].firstMatch
         XCTAssertFalse(card.exists, "the note is open: the placeholder, not the card, stands for the recording")
         // The automatic retries (a second apart here) end failed: then the tap shows the card.
-        let failed = NSPredicate(format: "label CONTAINS 'не распознана'")
-        expectation(for: failed, evaluatedWith: chip)
-        waitForExpectations(timeout: 20)
+        for _ in 0..<40 where !(chip.exists && chip.label.contains("не распознана")) { settle(0.5) }
+        XCTAssertTrue(chip.label.contains("не распознана"), "the placeholder did not show the failure: \(chip.label)")
         let retry = app.buttons["voice.pending.retry"].firstMatch
         for _ in 0..<5 where !retry.exists {
             if chip.label.contains("не распознана") { chip.tap() }

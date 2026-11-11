@@ -246,7 +246,7 @@ describe('snapshots, compaction and history', () => {
       docId: noteId,
       snapshot: { seq: 3, payload: snap },
       items: [],
-      upToDate: true,
+      upToDate: false,
     });
     // A second snapshot at the same baseSeq (another big change) is relayed as well.
     const snap2 = b64(rnd(200));

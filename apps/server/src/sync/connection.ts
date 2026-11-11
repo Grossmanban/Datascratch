@@ -689,7 +689,8 @@ export class SyncConnection {
     if (e.kind === 'snapshot') {
       // A snapshot holds the whole document, so it needs no place in the seq order: the client
       // applies it and keeps lastSeq = max(lastSeq, seq); updates still to come apply on top.
-      this.#send({ type: 'updates', docId, snapshot: { seq: e.seq, payload: e.payload }, items: [], upToDate: true });
+      // upToDate: false — only the last page of a `subscribe` answer says a document is caught up.
+      this.#send({ type: 'updates', docId, snapshot: { seq: e.seq, payload: e.payload }, items: [], upToDate: false });
       return;
     }
     if (e.seq <= sub.sent) {

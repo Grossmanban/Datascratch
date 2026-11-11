@@ -50,8 +50,14 @@ struct SyncCenterTests {
 
     @Test func engineSummaryDrivesThePhase() {
         let sync = SyncCenter(serverURL: URL(string: "https://example.com"), monitorNetwork: false)
+        // Short work shows no «Syncing» (build 46: it flickered and never went away)…
         sync.apply(summary: .syncing, pending: 2)
+        guard case .upToDate = sync.phase else { Issue.record("short work showed «Syncing»: \(sync.phase)"); return }
+        // …only once the engine says it has waited long enough.
+        sync.setActivity(true)
         #expect(sync.phase == .syncing)
+        sync.setActivity(false)
+        guard case .upToDate = sync.phase else { Issue.record("«Syncing» stayed: \(sync.phase)"); return }
         sync.apply(summary: .failed(documents: 3, reason: "403"), pending: 0)
         #expect(sync.phase == .notSent(documents: 3, reason: "403"))
         sync.apply(summary: .synced, pending: 0)

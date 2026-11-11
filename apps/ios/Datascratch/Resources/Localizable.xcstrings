@@ -661,6 +661,16 @@
         }
       }
     },
+    "Catching up": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Догоняет"
+          }
+        }
+      }
+    },
     "Change Password": {
       "localizations": {
         "ru": {
@@ -977,6 +987,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Соединение"
+          }
+        }
+      }
+    },
+    "Connections opened": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Соединений открыто"
+          }
+        }
+      }
+    },
+    "Connections that keep growing on a steady network mean the connection keeps dropping.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Если при стабильной сети число соединений всё растёт — соединение рвётся."
           }
         }
       }
@@ -2741,6 +2771,16 @@
         }
       }
     },
+    "Last error": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последняя ошибка"
+          }
+        }
+      }
+    },
     "Last used %@": {
       "localizations": {
         "ru": {
@@ -3311,6 +3351,16 @@
         }
       }
     },
+    "No events yet": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Событий пока нет"
+          }
+        }
+      }
+    },
     "No invitations": {
       "localizations": {
         "ru": {
@@ -3707,6 +3757,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Офлайн · ждут отправки: %lld"
+          }
+        }
+      }
+    },
+    "Oldest: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Самое старое: %@"
           }
         }
       }
@@ -4401,6 +4461,16 @@
         }
       }
     },
+    "Refused by the server": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отклонено сервером"
+          }
+        }
+      }
+    },
     "Reject": {
       "localizations": {
         "ru": {
@@ -4821,6 +4891,16 @@
         }
       }
     },
+    "Send Again": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправить снова"
+          }
+        }
+      }
+    },
     "Send First": {
       "localizations": {
         "ru": {
@@ -4837,6 +4917,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Отправляем изменения…"
+          }
+        }
+      }
+    },
+    "Sent, not confirmed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправлено, без подтверждения"
           }
         }
       }
@@ -4867,6 +4957,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Задать новый пароль"
+          }
+        }
+      }
+    },
+    "Set aside (unreadable)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отложено (не читается)"
           }
         }
       }
@@ -5547,6 +5647,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Синхронизация и диагностика"
+          }
+        }
+      }
+    },
+    "Sync Engine": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Синхронизация"
+          }
+        }
+      }
+    },
+    "Sync Log": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Журнал синхронизации"
           }
         }
       }
@@ -6647,6 +6767,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ждут ключ"
+          }
+        }
+      }
+    },
+    "Waiting to be sent": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ждёт отправки"
           }
         }
       }

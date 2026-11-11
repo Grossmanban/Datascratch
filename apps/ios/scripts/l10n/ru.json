@@ -721,5 +721,18 @@
   "You are signed out. Sign in again.": "Вы вышли из аккаунта. Войдите снова.",
   "The server’s answer could not be read — try again.": "Не удалось прочитать ответ сервера — попробуйте ещё раз.",
   "No connection to the server — try again.": "Нет связи с сервером — попробуйте ещё раз.",
-  "It could not be decrypted on this device.": "На этом устройстве не удалось расшифровать."
+  "It could not be decrypted on this device.": "На этом устройстве не удалось расшифровать.",
+  "Sync Engine": "Синхронизация",
+  "Connections that keep growing on a steady network mean the connection keeps dropping.": "Если при стабильной сети число соединений всё растёт — соединение рвётся.",
+  "Connections opened": "Соединений открыто",
+  "Waiting to be sent": "Ждёт отправки",
+  "Sent, not confirmed": "Отправлено, без подтверждения",
+  "Catching up": "Догоняет",
+  "Refused by the server": "Отклонено сервером",
+  "Set aside (unreadable)": "Отложено (не читается)",
+  "Last error": "Последняя ошибка",
+  "Send Again": "Отправить снова",
+  "Sync Log": "Журнал синхронизации",
+  "No events yet": "Событий пока нет",
+  "Oldest: %@": "Самое старое: %@"
 }

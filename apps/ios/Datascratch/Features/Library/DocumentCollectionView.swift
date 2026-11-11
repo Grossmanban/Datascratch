@@ -195,7 +195,7 @@ struct DocumentCollectionView: View {
     static var searchInList: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
     /// The Starred list: its folders and notebooks.
-    private var starredPlaces: [StarredItem] {
+    private var starredPlaces: [StarredEntry] {
         guard source == .starred else { return [] }
         return library.starredItems.filter { if case .note = $0 { false } else { true } }
     }
@@ -698,7 +698,7 @@ struct UnreadableNotice: View {
 struct StarredPlacesStrip: View {
     @Environment(AppModel.self) private var app
     @Environment(SceneModel.self) private var scene
-    let items: [StarredItem]
+    let items: [StarredEntry]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -711,7 +711,7 @@ struct StarredPlacesStrip: View {
                     }
                 } label: {
                     HStack(spacing: Theme.Space.s3) {
-                        StarredItemLabel(item: item)
+                        StarredEntryLabel(item: item)
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(Theme.Palette.textPrimary)
                         Spacer(minLength: Theme.Space.s2)

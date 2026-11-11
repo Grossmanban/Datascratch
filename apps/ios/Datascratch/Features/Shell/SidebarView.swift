@@ -149,7 +149,7 @@ struct SidebarView: View {
     @ViewBuilder private var starredSection: some View {
         let items = library.starredItems
         if !items.isEmpty {
-            let starred: (rows: [StarredItem], hidden: Int) = SidebarLimit.visible(items, showAll: showingAll.contains("starred"))
+            let starred: (rows: [StarredEntry], hidden: Int) = SidebarLimit.visible(items, showAll: showingAll.contains("starred"))
             Section {
                 if !isCollapsed("starred") {
                     // Notes, folders and notebooks, in the order they were starred (as on the web).
@@ -161,7 +161,7 @@ struct SidebarView: View {
                             case .notebook(let notebook): scene.show(.notebook(notebook.id))
                             }
                         } label: {
-                            StarredItemLabel(item: item)
+                            StarredEntryLabel(item: item)
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier(starredIdentifier(item))
@@ -181,7 +181,7 @@ struct SidebarView: View {
         }
     }
 
-    private func starredIdentifier(_ item: StarredItem) -> String {
+    private func starredIdentifier(_ item: StarredEntry) -> String {
         switch item {
         case .note: "sidebar.starredNote"
         case .folder: "sidebar.starredFolder"
@@ -323,9 +323,9 @@ struct SidebarView: View {
 }
 
 /// A starred note, folder (with «Notebook › …» under its name) or notebook.
-struct StarredItemLabel: View {
+struct StarredEntryLabel: View {
     @Environment(AppModel.self) private var app
-    let item: StarredItem
+    let item: StarredEntry
 
     var body: some View {
         switch item {

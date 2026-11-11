@@ -196,7 +196,7 @@ nonisolated struct NoteVersion: Codable, Identifiable, Hashable, Sendable {
 }
 
 /// One starred thing as the sidebar and the Starred list show it.
-nonisolated enum StarredItem: Identifiable, Hashable, Sendable {
+nonisolated enum StarredEntry: Identifiable, Hashable, Sendable {
     case note(NoteMeta)
     case folder(Folder)
     case notebook(Notebook)

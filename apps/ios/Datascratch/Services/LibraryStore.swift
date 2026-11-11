@@ -244,9 +244,9 @@ final class LibraryStore {
 
     /// Everything starred in the active space — notes, folders and notebooks — in the order they
     /// were starred (as on the web: `${kind}:${id}`). Gone or trashed ones drop out.
-    var starredItems: [StarredItem] {
+    var starredItems: [StarredEntry] {
         let ids = activeNotebookIds
-        return data.starred.compactMap { ref -> StarredItem? in
+        return data.starred.compactMap { ref -> StarredEntry? in
             switch ref.kind {
             case .note:
                 guard let note = note(ref.id), !note.isTrashed, ids.contains(note.notebookId) else { return nil }

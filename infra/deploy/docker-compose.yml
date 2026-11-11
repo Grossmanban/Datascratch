@@ -55,6 +55,7 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-datascratch}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-datascratch}
       STORAGE_DIR: /data/files
+      BACKUP_STATUS_DIR: /backup-status
       PORT: 8080
       PUBLIC_URL: https://${DS_DOMAIN:-localhost}
       APP_URL: https://${DS_DOMAIN:-localhost}
@@ -71,6 +72,8 @@ services:
         condition: service_healthy
     volumes:
       - files:/data/files
+      # Backup status for the admin screen (written by backup.sh; read-only here, spec/06).
+      - ./backup-status:/backup-status:ro
 
   # The web app + Caddy. Fixed name: an existing reverse proxy on the shared `edge`
   # network reaches it as datascratch-web:80 (mode "edge", docker-compose.edge.yml).

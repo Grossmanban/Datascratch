@@ -107,6 +107,8 @@ const ConfigSchema = z
     OPENROUTER_API_KEY: z.string().min(1).optional(),
     /** Server admins (comma-separated e-mails): they manage who has voice, in the app (GET/PUT /v1/admin/voice). */
     DS_ADMIN_EMAILS: z.string().default(''),
+    /** Where infra/backup.sh leaves the backup status (mounted read-only; empty: not shown). */
+    BACKUP_STATUS_DIR: z.string().default(''),
     /**
      * Seed at startup (comma-separated user ids or e-mails): listed accounts without a voice setting
      * get voice on. Afterwards the admin decides (an admin's choice is never overwritten).

@@ -132,6 +132,14 @@ try {
     return 'answers 401 without a token';
   });
 
+  await retry('backup status API', async () => {
+    // The admin screen's backup card (spec/06): the route is there and closed without a token.
+    const r = await fetch(`${base}/v1/admin/backup`);
+    const j = await r.json().catch(() => null);
+    if (r.status !== 401 || j?.error?.code !== 'unauthorized') throw new Error(`status ${r.status}`);
+    return 'answers 401 without a token';
+  });
+
   await retry('shared spaces API', async () => {
     // D-62: the routes are there (an older server answers 404) and closed without a token.
     const r = await fetch(`${base}/v1/spaces`);

@@ -31,12 +31,15 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-datascratch}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-datascratch}
       STORAGE_DIR: /data/files
+      BACKUP_STATUS_DIR: /backup-status
       PORT: 8080
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - files:/data/files
+      # Backup status for the admin screen (written by backup.sh; read-only here, spec/06).
+      - ./backup-status:/backup-status:ro
     ports:
       # Without Caddy the server is reachable on this port; with Caddy keep 127.0.0.1.
       - "${SERVER_BIND:-127.0.0.1}:${SERVER_PORT:-8080}:8080"

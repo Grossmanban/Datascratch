@@ -529,10 +529,10 @@ final class LibraryUITests: XCTestCase {
         star.tap()
         settle(1)
         let starred = app.descendants(matching: .any)["sidebar.starredFolder"].firstMatch
-        // iPhone: back to the sidebar; iPad: show it if it is hidden.
+        // iPad: show the sidebar if it is hidden (before any back button); iPhone: back to it.
         for _ in 0..<3 where !(starred.exists && starred.isHittable) {
             let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'sidebar' AND NOT (label CONTAINS[c] 'hide')")).firstMatch
-            if app.barBackButton.exists { app.barBackButton.tap() } else if toggle.exists && toggle.isHittable { toggle.tap() }
+            if toggle.exists && toggle.isHittable { toggle.tap() } else if app.barBackButton.exists { app.barBackButton.tap() }
             settle(1)
         }
         XCTAssertTrue(starred.waitForExistence(timeout: 5), "the starred folder is not in Starred; buttons: \(Self.buttons(app))")

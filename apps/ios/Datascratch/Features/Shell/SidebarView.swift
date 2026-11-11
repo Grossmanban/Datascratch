@@ -167,6 +167,9 @@ struct SidebarView: View {
                                 StarredEntryLabel(item: item).tag(SidebarItem.notebook(notebook.id))
                             }
                         }
+                        // One element with the name (and path) as its label: the identifier on
+                        // the row's children found the folder icon instead (iPhone CI).
+                        .accessibilityElement(children: .combine)
                         .accessibilityIdentifier(starredIdentifier(item))
                         .contextMenu {
                             Button("Remove from Starred", systemImage: "star.slash") {

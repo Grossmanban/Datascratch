@@ -74,18 +74,23 @@ import Testing
     @Test func aNewNoteGetsOutThroughAReconnectStorm() async throws {
         let server = FakeSyncServer()
         let b = try device("B", server: server)
-        _ = try await library(600, on: b, server: server)
+        // A full catch-up takes at least 1500 × 1 ms — longer than the 600 ms between drops on
+        // any machine — while the note needs a handful of frames; 250 ms windows were too tight
+        // for those on a loaded CI simulator (CI #158, #160).
+        _ = try await library(1500, on: b, server: server)
         await server.setSubscribeDelayPerDoc(.milliseconds(1))
         await b.start()
-        let storm = dropper(server, deviceId: "B", every: .milliseconds(250))
+        let storm = dropper(server, deviceId: "B", every: .milliseconds(600))
         defer { storm.cancel() }
         let note = NoteDocument(noteId: EntityID.make())
         try await b.open(note.crdt, notebookId: "nb")
         try note.initialize(title: "Баги дс")
         try note.insertText("продиктовано", at: 0, inBlock: [1])
-        let ok = try await eventually(timeout: .seconds(10)) {
+        let ok = try await eventually(timeout: .seconds(20)) {
             await server.docs[note.noteId].map { $0.count >= 2 } == true
         }
+        // The storm really kept the full catch-up from finishing.
+        #expect(await b.status().catchingUp > 0 || !ok)
         if !ok {
             let order = await server.subscribedOrder
             let received = await server.received

@@ -170,13 +170,26 @@ public struct VoiceTextResponse: Codable, Hashable, Sendable {
     public var markdown: String
     /// The model that wrote it, for the note's history.
     public var model: String
+    /// The suggested title of the document (`format`, `minutes`): the model's first «# …» line,
+    /// cut out of `markdown`. Absent when the model gave none.
+    public var title: String?
 
-    enum CodingKeys: String, CodingKey { case markdown, model }
+    /// Longest `title` (`MAX_VOICE_TITLE_CHARS`, UTF-16 code units as in the TS contract).
+    public static let maxTitleChars = 80
+
+    enum CodingKeys: String, CodingKey { case markdown, model, title }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         markdown = try c.decode(String.self, forKey: .markdown)
         model = try APIValidation.string(c, .model)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        if let title {
+            guard !title.isEmpty, title.utf16.count <= Self.maxTitleChars else { throw APIValidation.fail(c, .title, "1…80 chars") }
+            guard title == title.trimmingCharacters(in: .whitespacesAndNewlines), !title.hasSuffix(".") else {
+                throw APIValidation.fail(c, .title, "trimmed, no full stop at the end")
+            }
+        }
     }
 }
 

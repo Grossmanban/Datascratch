@@ -39,6 +39,8 @@ actor FakeSyncServer {
         }
 
         func sendPing() async throws {
+            let delay = await server.pongDelay
+            if delay > .zero { try await Task.sleep(for: delay) }
             while dead.withLock({ $0 }) {
                 if closed.withLock({ $0 }) { throw SyncClientError.closed }
                 try await Task.sleep(for: .milliseconds(20))
@@ -79,6 +81,15 @@ actor FakeSyncServer {
     var snapshotDelay: Duration?
 
     func setSnapshotDelay(_ d: Duration?) { snapshotDelay = d }
+    /// A slow link: each document of a `subscribe` takes this long to answer.
+    var subscribeDelayPerDoc: Duration = .zero
+    func setSubscribeDelayPerDoc(_ d: Duration) { subscribeDelayPerDoc = d }
+    /// Pongs come back this late (stuck behind data on a slow link).
+    var pongDelay: Duration = .zero
+    func setPongDelay(_ d: Duration) { pongDelay = d }
+    /// Documents named in `subscribe` frames, in order (every connection).
+    var subscribedOrder: [String] = []
+    func subscribeCount(_ docId: String) -> Int { subscribedOrder.filter { $0 == docId }.count }
 
     func snapshotsReceived(_ docId: String) -> Int {
         received.filter { if case .snapshot(let id, _, _, _) = $0 { return id == docId } else { return false } }.count
@@ -158,6 +169,12 @@ actor FakeSyncServer {
             c.deliver(.welcome(userId: "0192f3c4-0000-7000-8000-00000000000a", serverTime: DSDate.iso(Date()), protocolVersion: version))
         case .subscribe(let entries):
             for e in entries {
+                subscribedOrder.append(e.docId)
+                if subscribeDelayPerDoc > .zero {
+                    try? await Task.sleep(for: subscribeDelayPerDoc)
+                    // The link dropped meanwhile: the rest of this frame is lost.
+                    if c.closed.withLock({ $0 }) { return }
+                }
                 guard registered.contains(e.docId) else {
                     c.deliver(.error(code: .docNotFound, message: "unknown doc", ref: e.docId))
                     continue

@@ -35,6 +35,11 @@ public struct SyncStatus: Equatable, Sendable {
     /// Not connected and the quick retries are used up (several attempts failed in a row).
     /// Until then a lost or stuck connection counts as syncing, not offline.
     public var connectionTrouble = false
+    /// When the oldest message still to be sent was made (nil: none). For a truthful
+    /// indicator (`SyncActivityGate`): something waiting for seconds, not every keystroke.
+    public var oldestPendingAt: Date?
+    /// Since when documents have been catching up without a break (nil: none is).
+    public var catchingUpSince: Date?
 
     public init(connection: SyncConnectionState, pending: Int, catchingUp: Int, failed: [FailedSync] = [], connectionTrouble: Bool = false) {
         self.connection = connection
@@ -123,6 +128,19 @@ public actor SyncEngine: SyncClientDelegate {
     /// The last pass left queued messages unsent (in-flight cap); an ack starts another pass.
     private var backlog = false
     private var catchingUp: Set<String> = []
+    /// Documents waiting for their `subscribe` frame on this connection, in priority order. A
+    /// window of them is subscribed at a time (`subscribeWindow`): a library of thousands
+    /// does not go out in one burst, so what is urgent — documents with unsent edits, the open
+    /// note, `prefetch` hints — can still go first after the burst started, and a slow link
+    /// is not flooded (pongs behind thousands of catch-up frames looked like a dead connection).
+    private var subscribeQueue: [DocumentRecord] = []
+    private var queued: Set<String> = []
+    /// At most this many documents catching up at once on one connection.
+    static let subscribeWindow = 200
+    /// `prefetch` hints: document → order (lower first).
+    private var prefetchOrder: [String: Int] = [:]
+    /// Documents with unsent messages when the queue was last sorted.
+    private var unsent: Set<String> = []
     /// Documents subscribed on the current connection whose catch-up finished (`upToDate`).
     /// Pushes go only to these: otherwise `lastSeq = max(ack)` could skip others' updates.
     private var live: Set<String> = []
@@ -158,6 +176,13 @@ public actor SyncEngine: SyncClientDelegate {
     private var traceHandler: (@Sendable (SyncTraceEvent) -> Void)?
     /// Retry of temporary failures (registration, server errors) with exponential backoff.
     private var retryTask: Task<Void, Never>?
+    /// The last error the sync met: a server error code, or a connection failure (Diagnostics).
+    private var lastError: String?
+    /// Since when documents have been catching up without a break (`SyncStatus.catchingUpSince`).
+    private var catchingUpSince: Date?
+    /// Counts connections (`syncClientDidConnect`): work started for an older one stops.
+    private var connectionGeneration = 0
+    private var lastErrorAt: Date?
     private var retryDelay: Duration?
     var minRetryDelay: Duration = .seconds(1)
     static let maxRetryDelay: Duration = .seconds(60)
@@ -201,7 +226,7 @@ public actor SyncEngine: SyncClientDelegate {
         try? store.resetLastSeq(docId: docId)
         known[docId] = nil
         live.remove(docId)
-        catchingUp.remove(docId)
+        forgetSubscription(docId)
         if await client.isConnected, let record = try? store.document(docId) { try? await subscribe([record]) }
         publish()
     }
@@ -215,7 +240,7 @@ public actor SyncEngine: SyncClientDelegate {
         for id in ids where (try? store.releaseQuarantine(docId: id)) == true {
             known[id] = nil
             live.remove(id)
-            catchingUp.remove(id)
+            forgetSubscription(id)
             if let record = try? store.document(id) { records.append(record) }
         }
         if !records.isEmpty, await client.isConnected { try? await subscribe(records) }
@@ -269,7 +294,7 @@ public actor SyncEngine: SyncClientDelegate {
         guard await client.isConnected else { return }
         var temporary = false
         if let records = try? store.documents() {
-            let waiting = records.filter { !live.contains($0.docId) && !catchingUp.contains($0.docId) && !refused.contains($0.docId) }
+            let waiting = records.filter { !live.contains($0.docId) && !isSubscribing($0.docId) && !refused.contains($0.docId) }
             temporary = (try? await subscribe(waiting)) == false
         }
         await flush()
@@ -297,7 +322,7 @@ public actor SyncEngine: SyncClientDelegate {
         while ContinuousClock.now < deadline, !Task.isCancelled {
             // `registering`: a document made offline is between `doc_not_found` and its new
             // subscription — neither catching up nor live, but not sent yet (CI, 2026-11-09).
-            if await client.isConnected, subscribedAll, catchingUp.isEmpty, registering.isEmpty, inFlight.isEmpty,
+            if await client.isConnected, subscribedAll, catchingUp.isEmpty, subscribeQueue.isEmpty, registering.isEmpty, inFlight.isEmpty,
                (try? store.pendingOutbox(limit: Self.maxInFlight * 2))?.contains(where: { live.contains($0.docId) }) == false {
                 completed = true
                 break
@@ -327,6 +352,56 @@ public actor SyncEngine: SyncClientDelegate {
     /// Current status (the same value `statusUpdates()` yields).
     public func status() -> SyncStatus { currentStatus() }
 
+    /// Whether «синхронизация» shows (`SyncActivityGate`: only after 3 s of waiting work, no
+    /// flicker), current value first, then each change. For the app's sync indicator.
+    public nonisolated func activityUpdates(gate initial: SyncActivityGate = SyncActivityGate()) -> AsyncStream<Bool> {
+        AsyncStream { continuation in
+            let task = Task { [weak self] in
+                var gate = initial
+                var last: Bool?
+                while !Task.isCancelled, let self {
+                    let now = Date()
+                    let visible = gate.update(await self.status(), now: now)
+                    if visible != last {
+                        continuation.yield(visible)
+                        last = visible
+                    }
+                    // Wake at the gate's next change, and at least twice a second for new work.
+                    let wake = min(gate.nextChange(after: now) ?? now.addingTimeInterval(0.5), now.addingTimeInterval(0.5))
+                    try? await Task.sleep(for: .seconds(max(0.05, wake.timeIntervalSince(now))))
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Diagnostics → Sync: what the engine is doing and what is stuck, for the person and for
+    /// a bug report.
+    public func diagnostics() async -> SyncDiagnostics {
+        let status = currentStatus()
+        return SyncDiagnostics(
+            connection: connection,
+            connectionsOpened: await client.connectionsOpened,
+            consecutiveFailures: await client.consecutiveFailures,
+            protocolVersion: await client.protocolVersion,
+            lastError: lastError, lastErrorAt: lastErrorAt,
+            pending: (try? store.pendingOutboxSummary()) ?? [],
+            inFlight: inFlight.count,
+            catchingUp: catchingUp.count, queuedSubscriptions: subscribeQueue.count, live: live.count,
+            failed: status.failed, unreadable: status.unreadable,
+            quarantined: ((try? store.quarantined()) ?? []).count,
+            waiting: status.waiting)
+    }
+
+    /// «Отправить снова»: failed messages go back into the queue, set-aside remote items are
+    /// fetched again, a pending reconnect is not waited for and a dead connection is replaced.
+    public func retryAll() async {
+        await client.checkConnection()
+        await retryUnreadable()
+        await retryFailed()
+    }
+
     private func currentStatus() -> SyncStatus {
         // Messages of documents without a key cannot be sent: they are held, not pending.
         var pending = 0
@@ -339,10 +414,17 @@ public actor SyncEngine: SyncClientDelegate {
                 pending += count
             }
         }
-        var s = SyncStatus(connection: connection, pending: pending, catchingUp: catchingUp.count,
+        var s = SyncStatus(connection: connection, pending: pending, catchingUp: catchingUp.count + subscribeQueue.count,
                            failed: (try? store.failedOutbox()) ?? [], connectionTrouble: connectionTrouble)
         s.held = held
         s.unreadable = (try? store.unreadable()) ?? []
+        s.oldestPendingAt = pending > 0 ? (try? store.oldestPendingAt()) ?? nil : nil
+        if catchingUp.isEmpty && subscribeQueue.isEmpty {
+            catchingUpSince = nil
+        } else if catchingUpSince == nil {
+            catchingUpSince = Date()
+        }
+        s.catchingUpSince = catchingUpSince
         for docId in waitingForKey { s.waiting[docId] = .key }
         for docId in noAccess { s.waiting[docId] = .access }
         return s
@@ -455,6 +537,20 @@ public actor SyncEngine: SyncClientDelegate {
 
     public func isOpen(_ docId: String) -> Bool { open[docId] != nil }
 
+    /// Fetches these documents ahead of the rest of the library — the notebook index says they
+    /// changed elsewhere (an agent wrote a note): their bodies arrive without opening them,
+    /// newest first (the order given). Documents already caught up on this connection have
+    /// their latest content and are left alone; the hint lasts until each has caught up.
+    public func prefetch(_ docIds: [String]) async {
+        for (i, id) in docIds.enumerated() where prefetchOrder[id] == nil { prefetchOrder[id] = prefetchOrder.count + i }
+        guard await client.isConnected else { return }
+        let records = docIds.compactMap { id -> DocumentRecord? in
+            guard !live.contains(id), !isSubscribing(id) else { return nil }
+            return try? store.document(id)
+        }
+        if !records.isEmpty { try? await subscribe(records) }
+    }
+
     /// Deletes a document locally: stops syncing it and removes it, its queue and its index
     /// entries from the store (e.g. a local document replaced at sign-in).
     public func deleteDocument(_ docId: String) throws {
@@ -462,7 +558,8 @@ public actor SyncEngine: SyncClientDelegate {
         open.removeValue(forKey: docId)?.subscription.cancel()
         known[docId] = nil
         live.remove(docId)
-        catchingUp.remove(docId)
+        forgetSubscription(docId)
+        prefetchOrder[docId] = nil
         try store.deleteDocument(docId)
         publish()
     }
@@ -475,7 +572,7 @@ public actor SyncEngine: SyncClientDelegate {
         focused.removeAll { $0 == docId }
         focused.insert(docId, at: 0)
         if focused.count > 8 { focused.removeLast() }
-        guard !live.contains(docId), !catchingUp.contains(docId), await client.isConnected,
+        guard !live.contains(docId), !isSubscribing(docId), await client.isConnected,
               let record = try? store.document(docId) else { return }
         try? await subscribe([record])
     }
@@ -547,13 +644,31 @@ public actor SyncEngine: SyncClientDelegate {
 
     /// Account, notebook indexes and focused documents first (the list and the open note),
     /// then the rest.
+    /// Subscription order: account, indexes, the open notes, documents with unsent edits (a
+    /// note made on this device must not wait behind the whole library — owner, build 46),
+    /// `prefetch` hints, then the rest. Below 100 a document is urgent and goes in a frame of
+    /// its own, ahead of the notes.
     private func priority(_ record: DocumentRecord) -> Int {
-        if let i = focused.firstIndex(of: record.docId) { return 2 + i }
+        if let i = focused.firstIndex(of: record.docId) { return 2 + min(i, 40) }
         switch record.kind {
         case .account: return 0
         case .notebook, .space: return 1
-        case .note: return 100
+        case .note:
+            if unsent.contains(record.docId) { return 50 }
+            if prefetchOrder[record.docId] != nil { return 60 }
+            return 100
         }
+    }
+
+    /// Queue order: priority, then `prefetch` order, then the most recently changed first
+    /// (newest ids last were subscribed last before: the newest note waited the longest).
+    private func comesFirst(_ a: DocumentRecord, _ b: DocumentRecord) -> Bool {
+        let pa = priority(a), pb = priority(b)
+        if pa != pb { return pa < pb }
+        let fa = prefetchOrder[a.docId] ?? .max, fb = prefetchOrder[b.docId] ?? .max
+        if fa != fb { return fa < fb }
+        if a.updatedAt != b.updatedAt { return a.updatedAt > b.updatedAt }
+        return a.docId > b.docId
     }
 
     // MARK: Failed messages
@@ -564,7 +679,7 @@ public actor SyncEngine: SyncClientDelegate {
         try? store.retryFailed(docId: docId)
         if let docId { refused.remove(docId) } else { refused.removeAll() }
         if await client.isConnected, let records = try? store.documents() {
-            let waiting = records.filter { !live.contains($0.docId) && !catchingUp.contains($0.docId) && (docId == nil || $0.docId == docId) }
+            let waiting = records.filter { !live.contains($0.docId) && !isSubscribing($0.docId) && (docId == nil || $0.docId == docId) }
             try? await subscribe(waiting)
         }
         await flush()
@@ -617,7 +732,12 @@ public actor SyncEngine: SyncClientDelegate {
             publish()
             return
         }
-        guard let queued = try? store.pendingOutbox(limit: Self.maxInFlight * 2) else { return }
+        // Only documents that can be sent now: a page of the oldest messages overall could be
+        // filled by one document that cannot (no key, refused, still catching up) and block
+        // every other (owner, build 46: a note made on the phone never left it).
+        guard let counts = try? store.pendingOutboxCounts() else { return }
+        let sendable = Set(counts.keys).intersection(live)
+        guard let queued = try? store.pendingOutbox(docIds: sendable, limit: Self.maxInFlight * 2) else { return }
         backlog = queued.count == Self.maxInFlight * 2
         // Indexes before notes, each document's messages in order: a note's key travels in its
         // notebook's index (`NoteMeta`), so a note made with its index entry must not reach the
@@ -664,15 +784,23 @@ public actor SyncEngine: SyncClientDelegate {
                     continue
                 }
                 inFlight.insert(item.clientMsgId)
-                switch item.kind {
-                case .push:
-                    try await client.send(.push(docId: item.docId, clientMsgId: item.clientMsgId, payload: sealed))
-                case .snapshot:
-                    try await client.send(.snapshot(docId: item.docId, clientMsgId: item.clientMsgId, baseSeq: item.baseSeq ?? 0, payload: sealed))
+                do {
+                    switch item.kind {
+                    case .push:
+                        try await client.send(.push(docId: item.docId, clientMsgId: item.clientMsgId, payload: sealed))
+                    case .snapshot:
+                        try await client.send(.snapshot(docId: item.docId, clientMsgId: item.clientMsgId, baseSeq: item.baseSeq ?? 0, payload: sealed))
+                    }
+                } catch {
+                    // The connection failed under the send (closed, reset, not connected): not a
+                    // delivery attempt. Counting these moved a note's edits to «failed» after five
+                    // drops on flaky 4G, never to be retried by themselves (owner, build 46). The
+                    // message stays queued for the next connection.
+                    inFlight.remove(item.clientMsgId)
+                    lastError = "connection: \(Self.describe(error))"
+                    lastErrorAt = Date()
+                    break
                 }
-            } catch SyncClientError.notConnected {
-                inFlight.remove(item.clientMsgId)
-                break
             } catch {
                 inFlight.remove(item.clientMsgId)
                 try? store.markFailed(clientMsgId: item.clientMsgId, error: Self.describe(error))
@@ -707,21 +835,57 @@ public actor SyncEngine: SyncClientDelegate {
             ready.append(record)
         }
         for r in ready { known[r.docId] = r }
-        ready.sort { (priority($0), $0.docId) < (priority($1), $1.docId) }
         guard !ready.isEmpty else { return true }
-        for r in ready { catchingUp.insert(r.docId) }
-        // What the list and the open note need goes in a frame of its own, ahead of the notes.
-        let urgentCount = ready.prefix { priority($0) < 100 }.count
-        var frames: [[DocumentRecord]] = urgentCount > 0 && urgentCount < ready.count ? [Array(ready[..<urgentCount])] : []
-        let rest = urgentCount > 0 && urgentCount < ready.count ? Array(ready[urgentCount...]) : ready
-        frames += stride(from: 0, to: rest.count, by: min(100, SyncProtocol.maxSubscribeDocs)).map { Array(rest[$0..<min($0 + 100, rest.count)]) }
-        for frame in frames {
-            try await client.send(.subscribe(docs: frame.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }))
-            trace(.subscribed(docIds: frame.map(\.docId)))
-        }
+        unsent = Set(((try? store.pendingOutboxCounts()) ?? [:]).keys)
+        let ids = Set(ready.map(\.docId))
+        subscribeQueue.removeAll { ids.contains($0.docId) }
+        subscribeQueue += ready
+        queued.formUnion(ids)
+        subscribeQueue.sort(by: comesFirst)
+        try await pumpSubscriptions()
         publish()
         return true
     }
+
+    /// Sends `subscribe` frames from the queue while fewer than `subscribeWindow` documents
+    /// are catching up. Urgent documents (priority below 100) go in frames of their own.
+    private func pumpSubscriptions() async throws {
+        while !subscribeQueue.isEmpty, catchingUp.count < Self.subscribeWindow {
+            let urgent = priority(subscribeQueue[0]) < 100
+            let room = min(100, SyncProtocol.maxSubscribeDocs, Self.subscribeWindow - catchingUp.count)
+            var frame: [DocumentRecord] = []
+            while frame.count < room, let next = subscribeQueue.first, (priority(next) < 100) == urgent {
+                frame.append(subscribeQueue.removeFirst())
+            }
+            for r in frame {
+                queued.remove(r.docId)
+                catchingUp.insert(r.docId)
+            }
+            do {
+                try await client.send(.subscribe(docs: frame.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }))
+            } catch {
+                // Not connected any more: the next connection subscribes everything again.
+                for r in frame { catchingUp.remove(r.docId) }
+                throw error
+            }
+            trace(.subscribed(docIds: frame.map(\.docId)))
+        }
+    }
+
+    /// The window has room again (a document caught up or was refused).
+    private func subscriptionFinished(_ docId: String) async {
+        prefetchOrder[docId] = nil
+        if !subscribeQueue.isEmpty, await client.isConnected { try? await pumpSubscriptions() }
+    }
+
+    /// Out of the queue and the window (it will be subscribed again, or not at all).
+    private func forgetSubscription(_ docId: String) {
+        catchingUp.remove(docId)
+        if queued.remove(docId) != nil { subscribeQueue.removeAll { $0.docId == docId } }
+    }
+
+    /// Queued for, or in, its catch-up on this connection.
+    private func isSubscribing(_ docId: String) -> Bool { catchingUp.contains(docId) || queued.contains(docId) }
 
     /// `doc_not_found` for the subscription of a document never registered from here: the
     /// server does not have it (made on this device). Registers it, then subscribes again. A
@@ -804,12 +968,24 @@ public actor SyncEngine: SyncClientDelegate {
     public func syncClientDidConnect(_ client: SyncClient, userId: String?) async {
         inFlight.removeAll()
         catchingUp.removeAll()
+        subscribeQueue.removeAll()
+        queued.removeAll()
         live.removeAll()
         subscribedAll = false
         trace(.connected)
-        if let records = try? store.documents() {
-            try? await subscribe(records)
-        }
+        // Returns at once: the client reads no frame until this returns, and subscribing a
+        // library writes thousands of entries — on a slow uplink seconds in which nothing that
+        // arrived (catch-ups, acks, pongs) was handled (owner, build 46). The subscription runs
+        // beside the receive loop; a newer connection makes it stop.
+        connectionGeneration += 1
+        let generation = connectionGeneration
+        Task { await self.subscribeAfterConnect(generation) }
+    }
+
+    private func subscribeAfterConnect(_ generation: Int) async {
+        guard generation == connectionGeneration, let records = try? store.documents() else { return }
+        try? await subscribe(records)
+        guard generation == connectionGeneration else { return }
         subscribedAll = true
         await flush()
     }
@@ -827,7 +1003,11 @@ public actor SyncEngine: SyncClientDelegate {
         }
         connectionTrouble = await client.consecutiveFailures > client.configuration.quickRetries
         if case .connected = state {} else {
+            connectionGeneration += 1
             inFlight.removeAll()
+            catchingUp.removeAll()
+            subscribeQueue.removeAll()
+            queued.removeAll()
             live.removeAll()
             subscribedAll = false
             // The next connection subscribes everything again, refused documents included.
@@ -855,6 +1035,7 @@ public actor SyncEngine: SyncClientDelegate {
             if upToDate {
                 catchingUp.remove(docId)
                 live.insert(docId)
+                await subscriptionFinished(docId)
                 // The server has it: no `POST /docs` needed before pushing.
                 if known[docId]?.registered == false || (try? store.document(docId))?.registered == false {
                     try? store.setRegistered(docId)
@@ -862,7 +1043,9 @@ public actor SyncEngine: SyncClientDelegate {
                 }
                 trace(.caughtUp(docId: docId))
                 publish()
-                await flush()
+                // Thousands of documents catch up after a reconnect: only those with something
+                // to send start a send pass.
+                if (try? store.hasPendingOutbox(docId: docId)) == true { await flush() }
                 await finishRekey(docId: docId)
                 await snapshotIfNeeded(docId: docId)
             }
@@ -890,6 +1073,8 @@ public actor SyncEngine: SyncClientDelegate {
                   let plain = try? DSCrypto.open(payload, key: key, ad: CryptoAD.awareness(docId)) else { return }
             awarenessHandler?(docId, plain, deviceId)
         case .error(let code, _, let ref, let retryAfterMs, _):
+            lastError = code.rawValue
+            lastErrorAt = Date()
             guard let ref else { return }
             if inFlight.contains(ref) {
                 inFlight.remove(ref)
@@ -904,9 +1089,13 @@ public actor SyncEngine: SyncClientDelegate {
                 }
             } else if code == .docNotFound, catchingUp.contains(ref), (try? store.document(ref))?.registered == false {
                 catchingUp.remove(ref)
+                await subscriptionFinished(ref)
                 await registerMissing(ref)
             } else if code == .forbidden || code == .docNotFound {
-                if catchingUp.remove(ref) != nil || live.remove(ref) != nil { noAccess.insert(ref) }
+                if catchingUp.remove(ref) != nil || live.remove(ref) != nil {
+                    noAccess.insert(ref)
+                    await subscriptionFinished(ref)
+                }
             }
             publish()
         }
@@ -987,7 +1176,7 @@ public actor SyncEngine: SyncClientDelegate {
         waitingForKey.insert(docId)
         scheduleKeysMissing()
         live.remove(docId)
-        catchingUp.remove(docId)
+        forgetSubscription(docId)
         publish()
     }
 

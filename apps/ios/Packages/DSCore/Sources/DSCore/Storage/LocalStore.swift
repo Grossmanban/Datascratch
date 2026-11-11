@@ -199,6 +199,13 @@ public final class LocalStore: Sendable {
                 t.add(column: "firstEditSinceSnapshotAt", .datetime)
             }
         }
+        m.registerMigration("v9-requeue-connection-failures") { db in
+            // Until 2026-11-11 a send that hit a closing connection counted as a failed delivery;
+            // five drops on flaky 4G moved a document's edits to «failed», never retried by
+            // themselves (owner, build 46: a note made on the phone never reached the server).
+            // Only server answers count now; messages failed by the connection go back.
+            try LocalStore.requeueConnectionFailures(db)
+        }
         return m
     }
 }
@@ -292,6 +299,16 @@ public struct UnreadableSync: Hashable, Sendable {
     public var lastSeq: Int64
     public var deviceIds: [String]
     public var reason: String
+}
+
+/// Messages of one document still to be sent (Diagnostics → Sync).
+public struct PendingSync: Hashable, Sendable {
+    public var docId: String
+    public var count: Int
+    /// When the oldest of them was made: how long it has waited.
+    public var oldest: Date
+    /// Last error met while sending them, if any (a server code).
+    public var lastError: String?
 }
 
 /// Messages of one document that could not be delivered.
@@ -593,6 +610,64 @@ extension LocalStore {
             if let docId { request = request.filter(Column("docId") == docId) }
             return try request.fetchAll(db)
         }
+    }
+
+    /// Whether `docId` has messages still to be sent (failed ones not included).
+    public func hasPendingOutbox(docId: String) throws -> Bool {
+        try db.read { try Bool.fetchOne($0, sql: "SELECT EXISTS(SELECT 1 FROM outbox WHERE docId = ? AND NOT failed)", arguments: [docId]) ?? false }
+    }
+
+    /// Queued messages of these documents only, oldest first: the send loop asks for the
+    /// documents it can send now, so one that cannot (no key, still catching up, refused) never
+    /// fills the page and blocks the rest (owner, build 46).
+    public func pendingOutbox(docIds: Set<String>, limit: Int) throws -> [OutboxItem] {
+        guard !docIds.isEmpty else { return [] }
+        return try db.read { db in
+            var items: [OutboxItem] = []
+            // SQLite caps bound parameters; documents with a queue are few, but chunk anyway.
+            let ids = Array(docIds)
+            for start in stride(from: 0, to: ids.count, by: 500) {
+                let chunk = Array(ids[start..<min(start + 500, ids.count)])
+                items += try OutboxItem.filter(Column("failed") == false && chunk.contains(Column("docId")))
+                    .order(Column("id")).limit(limit).fetchAll(db)
+            }
+            return Array(items.sorted { ($0.id ?? 0) < ($1.id ?? 0) }.prefix(limit))
+        }
+    }
+
+    /// Messages still to be sent per document, with the age of the oldest (Diagnostics), oldest
+    /// first.
+    public func pendingOutboxSummary() throws -> [PendingSync] {
+        try db.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT docId, COUNT(*) AS n, MIN(createdAt) AS oldest,
+                    (SELECT lastError FROM outbox AS o2 WHERE o2.docId = outbox.docId AND NOT o2.failed AND o2.lastError IS NOT NULL ORDER BY id DESC LIMIT 1) AS err
+                FROM outbox WHERE NOT failed GROUP BY docId ORDER BY MIN(id)
+                """).map { PendingSync(docId: $0["docId"], count: $0["n"], oldest: $0["oldest"], lastError: $0["err"]) }
+        }
+    }
+
+    /// When the oldest message still to be sent was made (nil: none).
+    public func oldestPendingAt() throws -> Date? {
+        try db.read { try Date.fetchOne($0, sql: "SELECT MIN(createdAt) FROM outbox WHERE NOT failed") }
+    }
+
+    /// Puts back messages that «failed» only because the connection broke under them (before
+    /// 2026-11-11 those counted as delivery attempts). Returns how many.
+    @discardableResult
+    public func requeueConnectionFailures() throws -> Int {
+        try db.write { db in
+            try Self.requeueConnectionFailures(db)
+            return db.changesCount
+        }
+    }
+
+    static func requeueConnectionFailures(_ db: Database) throws {
+        try db.execute(sql: """
+            UPDATE outbox SET failed = 0, attempts = 0
+            WHERE failed AND (lastError = 'closed' OR lastError = 'notConnected' OR lastError LIKE 'connection:%'
+                OR lastError LIKE '%NSURLErrorDomain%' OR lastError LIKE '%NSPOSIXErrorDomain%' OR lastError LIKE '%URLError%')
+            """)
     }
 
     /// Messages still to be sent (failed ones not included), per document.

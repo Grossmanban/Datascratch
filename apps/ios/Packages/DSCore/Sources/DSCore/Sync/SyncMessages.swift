@@ -17,7 +17,9 @@ public enum SyncProtocol {
     public static let pingInterval: Duration = .seconds(25)
     /// Decoded payload limits (§7).
     public static let maxUpdateBytes = 2 * 1024 * 1024
-    public static let maxSnapshotBytes = 50 * 1024 * 1024
+    /// The server's limit (sync-protocol.md §7: 16 MiB, decoded bytes). It was 50 MiB here: a
+    /// snapshot between the two was sent and refused instead of failing at once.
+    public static let maxSnapshotBytes = 16 * 1024 * 1024
     /// Documents in one `subscribe` (§2): more go in several messages.
     public static let maxSubscribeDocs = 1000
 }

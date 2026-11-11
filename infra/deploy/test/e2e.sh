@@ -42,11 +42,8 @@ docker image inspect ds-e2e-vps > /dev/null 2>&1 || docker build -q -t ds-e2e-vp
 ssh-keygen -q -t ed25519 -N '' -f "$WORK/key" -C ds-deploy-e2e
 # Host network: the "VPS" publishes 80/443 exactly like a real server would.
 mkdir -p "$WORK/caddy-sites"
-# The "VPS" drives this host's Docker, so the server container's bind mount of the backup
-# status resolves on this host: the same path is shared with the "VPS".
 docker run -d --name "$VPS" --network host -v /var/run/docker.sock:/var/run/docker.sock \
   -v "$WORK/caddy-sites:/etc/sinhron/caddy-sites" \
-  -v /opt/datascratch/backup-status:/opt/datascratch/backup-status \
   ds-e2e-vps /usr/sbin/sshd -D -e -p "$SSH_PORT" > /dev/null
 if [ -n "${E2E_APT_PROXY:-}" ]; then
   # Sandboxes without direct internet: let apt inside the "VPS" use a proxy.
@@ -133,9 +130,12 @@ grep -q 'ds key' "$WORK/ds-stderr" # reminder until the key is marked as saved
 dump="$(echo "$out" | grep -o '/opt/datascratch/backups/db-[0-9TZ]*\.dump' | head -1)"
 [ -n "$dump" ] && echo "$out" | grep -qE 'db-[0-9TZ]+\.dump  [0-9.]+[KMG]?B' && echo "$out" | grep -q 'files-'
 vps /opt/datascratch/ds backups | grep -q "$(basename "$dump" .dump | sed 's/^db-//')"
-# Backup status for the admin screen: written by the backup, readable (read-only) by the server.
+# Backup status for the admin screen: written by the backup; the server has it mounted read-only.
+# (The "VPS" drives this host's Docker, so the server's bind mount resolves on this host, not in
+# the "VPS": reading the files is covered by the server's tests.)
 vps grep -q '"ok":true' /opt/datascratch/backup-status/last-run.json
-docker exec datascratch-server-1 cat /backup-status/last-success.json | grep -qE '"dbBytes":[1-9][0-9]*,"filesBytes":[0-9]+,"count":[1-9]'
+vps grep -qE '"dbBytes":[1-9][0-9]*,"filesBytes":[0-9]+,"count":[1-9]' /opt/datascratch/backup-status/last-success.json
+docker exec datascratch-server-1 test -d /backup-status
 if docker exec datascratch-server-1 sh -c 'echo x > /backup-status/probe' 2> /dev/null; then echo "backup status is writable by the server" >&2; exit 1; fi
 vps env RESTORE_YES=1 /opt/datascratch/ds restore "$(basename "$dump")"
 vps sh -c 'ls /opt/datascratch/backups/pre-restore-*.dump' > /dev/null

@@ -28,10 +28,11 @@ mkdir -p "$DIR"
 # read-only): last-run.json after every run, last-success.json after a good one. Times, sizes
 # and the failed step only — no paths, no host.
 STATUS="$(pwd)/backup-status"
-mkdir -p "$STATUS"
+mkdir -p "$STATUS" 2> /dev/null || true
 STEP=start
-write_status() { # <file> <json>
-  printf '%s\n' "$2" > "$STATUS/$1.part" && chmod 644 "$STATUS/$1.part" && mv "$STATUS/$1.part" "$STATUS/$1"
+write_status() { # <file> <json> — best effort: the status never fails a backup
+  { printf '%s\n' "$2" > "$STATUS/$1.part" && chmod 644 "$STATUS/$1.part" && mv "$STATUS/$1.part" "$STATUS/$1"; } 2> /dev/null ||
+    echo "warning: backup status not written ($STATUS/$1 not writable)" >&2
 }
 on_error() {
   write_status last-run.json "{\"finishedAt\":\"$(date -u +%FT%TZ)\",\"ok\":false,\"error\":\"$STEP\"}" || true

@@ -74,7 +74,7 @@ describe('GET /admin/backup', () => {
 
 describe('infra/backup.sh writes the status', () => {
   /** backup.sh in a scratch directory, with a fake `docker` that "dumps" a few bytes (or fails). */
-  async function runBackup(failAt?: 'pg_dump') {
+  async function runBackup(failAt?: 'pg_dump', statusBlocked = false) {
     const work = await mkdtemp(join(tmpdir(), 'ds-backup-sh-'));
     const bin = join(work, 'bin');
     await run('mkdir', ['-p', bin]);
@@ -91,6 +91,9 @@ esac
 `,
     );
     await chmod(join(bin, 'docker'), 0o755);
+    // Unwritable status (e.g. created by Docker as root for the bind mount): a file where the
+    // directory should be blocks even root.
+    if (statusBlocked) await writeFile(join(work, 'backup-status'), 'not a directory');
     const res = await run('bash', [join(work, 'backup.sh')], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } }).then(
       (r) => ({ code: 0, ...r }),
       (e: { code: number; stdout: string; stderr: string }) => e,
@@ -107,6 +110,13 @@ esac
     expect(res.stderr).not.toContain('command not found');
     expect(last).toEqual({ finishedAt: expect.stringMatching(/Z$/), ok: true, error: null });
     expect(success).toEqual({ finishedAt: last.finishedAt, dbBytes: 15, filesBytes: 8, count: 1 });
+  });
+
+  it('an unwritable status never fails the backup itself', async () => {
+    const { res } = await runBackup(undefined, true);
+    expect(res.code).toBe(0);
+    expect(res.stderr).toContain('backup status not written');
+    expect(res.stdout).toContain('done');
   });
 
   it('a failed dump: last-run says which step, no last-success', async () => {

@@ -2432,4 +2432,78 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(widths[1], TableBlockView.maxColumnWidth, "a long column stops at the maximum")
         XCTAssertTrue(widths[2] > TableBlockView.minColumnWidth && widths[2] < TableBlockView.maxColumnWidth)
     }
+
+    /// Waits, running the main run loop, until `condition` holds (presentations animate).
+    func spin(timeout: TimeInterval = 10, until condition: () -> Bool) -> Bool {
+        let end = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < end { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+        return condition()
+    }
+
+    /// Owner, 2026-11-11 (iPhone): a table was read by scrolling each cell. «Развернуть» opens it
+    /// full screen: every cell whole (wrapped), the header row sticks to the top, it turns to
+    /// landscape, × closes it and a tap on a cell puts the caret there. The note is not changed.
+    func testTableOpensFullScreenWithEveryCellWhole() throws {
+        let table = EditorCommands.table(rows: 30, columns: 3, header: ["Ключ", "Описание", "Где"])
+        let doc = InMemoryEditorDocument(blocks: [.title("T"), .paragraph("До"), table, .paragraph("После")])
+        let long = String(repeating: "Очень длинное описание ячейки, ", count: 8) + "конец."
+        EditorCommands(document: doc).setTableCell(table.id, row: 1, column: 1, text: long)
+        let editor = host(doc, width: 390, height: 844)
+        window.makeKeyAndVisible()
+        let before = doc.blocks
+        let view = try XCTUnwrap(editor.factory.tableView(for: table.id), "the table has its view")
+        view.layoutIfNeeded()
+        XCTAssertEqual(view.expandButton.isHidden, view.traitCollection.horizontalSizeClass != .compact,
+                       "«Развернуть» shows on a phone's width")
+        let cells = view.subviews.flatMap { $0.subviews.flatMap(\.subviews) }.filter { $0 is UITextField }
+        for c in cells {
+            XCTAssertFalse(view.expandButton.frame.intersects(c.convert(c.bounds, to: view)), "the button covers no cell")
+        }
+
+        view.expandButton.sendActions(for: .touchUpInside)
+        let root = try XCTUnwrap(window.rootViewController)
+        XCTAssertTrue(spin { root.presentedViewController is TableViewerController && root.presentedViewController?.isBeingPresented == false })
+        let viewer = try XCTUnwrap(root.presentedViewController as? TableViewerController)
+        XCTAssertEqual(viewer.modalPresentationStyle, .fullScreen, "its own screen, the note behind it")
+        XCTAssertTrue(viewer.supportedInterfaceOrientations.contains(.landscapeLeft), "it turns to landscape")
+        XCTAssertEqual(EditorFullScreen.supportedInterfaceOrientations(for: window), viewer.supportedInterfaceOrientations)
+        viewer.view.layoutIfNeeded()
+
+        let label = try XCTUnwrap(viewer.label(row: 1, column: 1))
+        XCTAssertEqual(label.text, long, "the whole text, not cut")
+        XCTAssertEqual(label.numberOfLines, 0)
+        let needed = label.sizeThatFits(CGSize(width: label.bounds.width, height: .greatestFiniteMagnitude)).height
+        XCTAssertGreaterThanOrEqual(label.bounds.height + 1, needed, "the cell is as tall as its wrapped text")
+        XCTAssertGreaterThan(label.bounds.height, label.font.lineHeight * 2.5, "it wraps onto several lines")
+        let neighbour = try XCTUnwrap(viewer.label(row: 1, column: 0))
+        XCTAssertEqual(neighbour.superview!.frame.height, label.superview!.frame.height, accuracy: 0.5, "a row is as tall as its tallest cell")
+
+        // Scrolled down: the header row stays at the top of the screen; the first column is not
+        // a header column, so it scrolls away.
+        let scroller = viewer.scroller
+        XCTAssertGreaterThan(scroller.contentSize.height, scroller.bounds.height, "30 rows are taller than the screen")
+        scroller.contentOffset = CGPoint(x: scroller.contentOffset.x, y: 400)
+        viewer.updateSticky()
+        XCTAssertFalse(viewer.stickyRow.isHidden, "the header row sticks")
+        XCTAssertEqual(viewer.stickyRow.frame.minY, 400, accuracy: 1, "at the top of what is on screen")
+        XCTAssertTrue(viewer.stickyColumn.isHidden, "no header column, nothing sticks on the left")
+        scroller.contentOffset = CGPoint(x: scroller.contentOffset.x, y: -scroller.contentInset.top)
+        viewer.updateSticky()
+        XCTAssertTrue(viewer.stickyRow.isHidden, "at the top the grid shows its own header")
+
+        // Pinch zoom: the table zooms as one surface.
+        XCTAssertGreaterThan(scroller.maximumZoomScale, 1)
+        XCTAssertTrue(viewer.viewForZooming(in: scroller) === viewer.zoomView)
+
+        viewer.closeButton.sendActions(for: .touchUpInside)
+        XCTAssertTrue(spin { root.presentedViewController == nil }, "× closes it")
+        XCTAssertEqual(doc.blocks, before, "reading the table changes nothing")
+
+        // A tap on a cell: the viewer closes and the caret is in that cell.
+        let again = try XCTUnwrap(editor.openTable(table.id) as? TableViewerController)
+        XCTAssertTrue(spin { again.isBeingPresented == false && root.presentedViewController === again })
+        again.select(row: 2, column: 0)
+        XCTAssertTrue(spin { root.presentedViewController == nil && view.field(row: 2, column: 0)?.isFirstResponder == true },
+                      "the caret is in the tapped cell")
+    }
 }

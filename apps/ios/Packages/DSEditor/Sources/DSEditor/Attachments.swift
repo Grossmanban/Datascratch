@@ -92,6 +92,11 @@ final class AttachmentFactory {
     var onTableCellEdit: ((BlockID, Int, Int, String) -> Void)?
     /// Add a row (true) or a column (false) to a table.
     var onTableStructure: ((BlockID, Bool) -> Void)?
+    /// Open a table on the whole screen (its «Развернуть» button or menu item).
+    var onTableExpand: ((BlockID) -> Void)?
+
+    /// The live view of a table block.
+    func tableView(for block: BlockID) -> TableBlockView? { viewCache[block] as? TableBlockView }
 
     init(theme: EditorTheme) { self.theme = theme }
 
@@ -614,7 +619,7 @@ final class PageCardView: BlockContentView {
 }
 
 /// Table with editable cells (plain text per cell) and buttons to add a row or a column.
-final class TableBlockView: BlockContentView, UITextFieldDelegate {
+final class TableBlockView: BlockContentView, UITextFieldDelegate, UIContextMenuInteractionDelegate {
     static let rowHeight: CGFloat = 38
     static let controlsHeight: CGFloat = 28
 
@@ -650,6 +655,8 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
     static let maxColumnWidth: CGFloat = 360
     private let addRow = UIButton(type: .system)
     private let addColumn = UIButton(type: .system)
+    /// Opens the table full screen; on a phone (compact width), at the right of the row under it.
+    let expandButton = UIButton(type: .system)
     weak var factory: AttachmentFactory?
 
     override func configure(node: BlockNode, resolver: EditorAttachmentResolver?, theme: EditorTheme) {
@@ -677,6 +684,24 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
             }
             addRow.addAction(UIAction { [weak self] _ in self?.structure(addRow: true) }, for: .touchUpInside)
             addColumn.addAction(UIAction { [weak self] _ in self?.structure(addRow: false) }, for: .touchUpInside)
+            var config = UIButton.Configuration.plain()
+            config.image = UIImage(systemName: "arrow.up.left.and.arrow.down.right",
+                                   withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .medium))
+            config.title = "Развернуть"
+            config.imagePadding = 5
+            config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 2)
+            config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { a in
+                var a = a
+                a.font = .systemFont(ofSize: 13, weight: .medium)
+                return a
+            }
+            expandButton.configuration = config
+            expandButton.tintColor = EditorTheme.secondaryText
+            expandButton.accessibilityLabel = "Развернуть таблицу"
+            expandButton.accessibilityIdentifier = "table.expand"
+            expandButton.addAction(UIAction { [weak self] _ in self?.expand() }, for: .touchUpInside)
+            addSubview(expandButton)
+            addInteraction(UIContextMenuInteraction(delegate: self))
         }
         for (r, row) in Self.rows(node).enumerated() {
             var line: [UITextField] = []
@@ -744,6 +769,44 @@ final class TableBlockView: BlockContentView, UITextFieldDelegate {
         let readOnly = factory?.isReadOnly ?? false
         addRow.isHidden = readOnly
         addColumn.isHidden = readOnly
+        // Not over the cells (D-15: nothing covers the person's text): the row under the table,
+        // where the add buttons are, at its right edge. Wider screens keep it in the menu.
+        expandButton.isHidden = traitCollection.horizontalSizeClass != .compact
+        let w = min(120, bounds.width / 2)
+        expandButton.frame = CGRect(x: bounds.width - w, y: gridHeight, width: w, height: Self.controlsHeight)
+        expandButton.contentHorizontalAlignment = .trailing
+    }
+
+    func expand() {
+        guard let node else { return }
+        fields.flatMap { $0 }.forEach { $0.resignFirstResponder() }
+        factory?.onTableExpand?(node.id)
+    }
+
+    /// The text field of a cell (the caret goes there from the full-screen view).
+    func field(row: Int, column: Int) -> UITextField? {
+        fields.indices.contains(row) && fields[row].indices.contains(column) ? fields[row][column] : nil
+    }
+
+    /// The table's menu (a long press on it): open full screen; add a row or a column.
+    func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
+        // A cell being edited keeps its own text menu.
+        if fields.flatMap({ $0 }).contains(where: { $0.isFirstResponder && $0.frame.contains($0.superview?.convert(location, from: self) ?? .zero) }) {
+            return nil
+        }
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            guard let self else { return nil }
+            var items: [UIMenuElement] = [
+                UIAction(title: "Развернуть", image: UIImage(systemName: "arrow.up.left.and.arrow.down.right")) { [weak self] _ in self?.expand() },
+            ]
+            if !(self.factory?.isReadOnly ?? false) {
+                items.append(UIMenu(options: .displayInline, children: [
+                    UIAction(title: "Добавить строку", image: UIImage(systemName: "plus")) { [weak self] _ in self?.structure(addRow: true) },
+                    UIAction(title: "Добавить столбец", image: UIImage(systemName: "plus")) { [weak self] _ in self?.structure(addRow: false) },
+                ]))
+            }
+            return UIMenu(children: items)
+        }
     }
 
     func readOnlyChanged() {

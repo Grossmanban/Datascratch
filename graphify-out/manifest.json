@@ -1674,10 +1674,10 @@
     "semantic_hash": "633a7066756e54016ad7a5a4650961f8"
   },
   "apps/server/src/sync/messages.ts": {
-    "mtime": 1794142810.362224,
-    "seen": 1794383566.67346,
-    "ast_hash": "dabb9816bba4e8153bf2a536dce39a45",
-    "semantic_hash": "dabb9816bba4e8153bf2a536dce39a45"
+    "mtime": 1794384949.2886028,
+    "seen": 1794385066.1028075,
+    "ast_hash": "2dab5ce595cfafe1713f210dbb2bed55",
+    "semantic_hash": ""
   },
   "apps/server/src/sync/server.ts": {
     "mtime": 1793121301.6217477,

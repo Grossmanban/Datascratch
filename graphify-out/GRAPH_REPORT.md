@@ -1,17 +1,17 @@
 # Graph Report - Datascratch  (2026-11-11)
 
 ## Corpus Check
-- 1138 files · ~1,102,066 words
+- 1138 files · ~1,102,108 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 40 file(s) not represented in the graph (top: (none) 20, .css 6, .example 4)
 
 ## Summary
-- 24985 nodes · 72779 edges · 475 communities (422 shown, 53 thin omitted)
+- 24985 nodes · 72778 edges · 475 communities (422 shown, 53 thin omitted)
 - Extraction: 85% EXTRACTED · 15% INFERRED · 0% AMBIGUOUS · INFERRED: 10744 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1fff74fd`
+- Built from commit: `19829e3b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -2219,7 +2219,7 @@ Nodes (3): GH_REPO, GH_TOKEN, env
 ## Ambiguous Edges - Review These
 - `0030-server-database-postgresql.md` → `Shared for the whole account: app settings, account, keys, devices, agent grants`  [AMBIGUOUS]
   docs/decisions/0048-isolated-spaces.md · relation: references
-- `Shared with me (participant side)` → `SharedWithMePage — «Поделились со мной» (D-63)`  [AMBIGUOUS]
+- `SharedWithMePage — «Поделились со мной» (D-63)` → `Shared with me (participant side)`  [AMBIGUOUS]
   apps/web/README.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
@@ -2231,7 +2231,7 @@ Nodes (3): GH_REPO, GH_TOKEN, env
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Чип даты (одинаково на iOS и в вебе): «Сегодня/Завтра/Вчера», день недели на 2–6 дней вперёд, иначе короткая дата; цвета danger/warning/accent/text.tertiary` connect `design-tokens.md` to `@datascratch/ui — веб-компоненты «Тихая бумага»`, `DSDateChip`, `tokens.test.mjs`, `cn.ts`?**
-  _High betweenness centrality (0.306) - this node is a cross-community bridge._
+  _High betweenness centrality (0.305) - this node is a cross-community bridge._
 - **Are the 370 inferred relationships involving `t()` (e.g. with `accept()` and `ACTION()`) actually correct?**
   _`t()` has 370 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `.body`, `launching`, `onboarding` to the rest of the system?**
@@ -2239,12 +2239,12 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `mermaid.min.js` be split into smaller, more focused modules?**
   _Cohesion score 0.0016571590403366104 - nodes in this community are weakly interconnected._
 - **Why does `DSDateChipModel` connect `DSDateChip` to `design-tokens.md`, `m4n`, `BlockLayoutFragment`, `VoiceStyle`?**
-  _High betweenness centrality (0.237) - this node is a cross-community bridge._
+  _High betweenness centrality (0.234) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
 
 - **What is the exact relationship between `0030-server-database-postgresql.md` and `Shared for the whole account: app settings, account, keys, devices, agent grants`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
-- **What is the exact relationship between `Shared with me (participant side)` and `SharedWithMePage — «Поделились со мной» (D-63)`?**
+- **What is the exact relationship between `SharedWithMePage — «Поделились со мной» (D-63)` and `Shared with me (participant side)`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._

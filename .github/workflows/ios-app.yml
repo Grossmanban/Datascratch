@@ -395,6 +395,20 @@ jobs:
         id: sim
         run: echo "destination=$(scripts/ci-destination.sh ${{ matrix.family }})" >> "$GITHUB_OUTPUT"
 
+      # The first launch on a cold simulator can outlast XCUITest's launch timeout (iPad 3/3, run
+      # 43050676387: the part's first test failed to launch in all four attempts). Boot it and
+      # launch the app once before the tests; a failure here is not one of the suite's.
+      - name: Warm up the simulator
+        timeout-minutes: 10
+        run: |
+          UDID=$(echo "${{ steps.sim.outputs.destination }}" | sed 's/.*id=//')
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b || true
+          xcrun simctl install "$UDID" build/DerivedData/Build/Products/Debug-iphonesimulator/Datascratch.app || true
+          xcrun simctl launch "$UDID" com.datascratch.app -ui-testing || true
+          sleep 20
+          xcrun simctl terminate "$UDID" com.datascratch.app || true
+
       - name: UI tests (part ${{ matrix.shard }}/3)
         timeout-minutes: 40
         run: |

@@ -41,6 +41,8 @@ export interface MemorySyncHubOptions {
   preferSnapshot?: boolean;
   /** Newest protocol version this hub speaks (default SYNC_PROTOCOL_LATEST; 1 = an older server). */
   maxProtocol?: number;
+  /** Decoded update limit (default MAX_UPDATE_BYTES; 2 MiB = an older server). */
+  maxUpdateBytes?: number;
   /** false: a broken server that says 3 but never answers `resume` (client fallback tests). */
   answerResume?: boolean;
 }
@@ -77,7 +79,7 @@ export class MemorySyncHub {
   /** Deleted documents, for `resumed.removed`. */
   private readonly tombstones: { docId: string; at: number }[] = [];
   private readonly opts: Required<
-    Omit<MemorySyncHubOptions, "authenticate" | "maxProtocol" | "answerResume">
+    Omit<MemorySyncHubOptions, "authenticate" | "maxProtocol" | "answerResume" | "maxUpdateBytes">
   > &
     MemorySyncHubOptions;
 
@@ -376,7 +378,8 @@ export class MemorySyncHub {
           this.error(conn, "forbidden", "read-only access", msg.clientMsgId);
           return;
         }
-        const limit = msg.type === "push" ? MAX_UPDATE_BYTES : MAX_SNAPSHOT_BYTES;
+        const limit =
+          msg.type === "push" ? (this.opts.maxUpdateBytes ?? MAX_UPDATE_BYTES) : MAX_SNAPSHOT_BYTES;
         if (base64UrlDecodedLength(msg.payload.length) > limit) {
           this.error(conn, "payload_too_large", "payload too large", msg.clientMsgId);
           return;

@@ -1,5 +1,15 @@
-import type { DocSyncState, OutboxItem, SyncStorage } from "@datascratch/shared";
-import type { AccountDB } from "./db";
+import type { DocSyncState, OutboxItem, ResumeState, SyncStorage } from "@datascratch/shared";
+import type { AccountDB, SyncDocRow } from "./db";
+
+/** kv key of the account cursor of sync protocol 3 (sync-protocol.md §3.1). */
+const RESUME_KEY = "sync.resume";
+
+const toState = (r: SyncDocRow): DocSyncState => ({
+  lastSeq: r.lastSeq,
+  updatesSinceSnapshot: r.updatesSinceSnapshot,
+  bytesSinceSnapshot: r.bytesSinceSnapshot,
+  ...(r.covered !== undefined ? { covered: r.covered } : {}),
+});
 
 /**
  * SyncStorage on IndexedDB (Dexie) for SyncClient. Batch reads/writes run in one transaction,
@@ -10,7 +20,7 @@ export class DexieSyncStorage implements SyncStorage {
 
   async getDocState(docId: string): Promise<DocSyncState | null> {
     const r = await this.db.syncDocs.get(docId);
-    return r ? { lastSeq: r.lastSeq, updatesSinceSnapshot: r.updatesSinceSnapshot, bytesSinceSnapshot: r.bytesSinceSnapshot } : null;
+    return r ? toState(r) : null;
   }
 
   async setDocState(docId: string, state: DocSyncState): Promise<void> {
@@ -21,7 +31,7 @@ export class DexieSyncStorage implements SyncStorage {
     const rows = await this.db.syncDocs.bulkGet(docIds);
     const out = new Map<string, DocSyncState>();
     rows.forEach((r, i) => {
-      if (r) out.set(docIds[i]!, { lastSeq: r.lastSeq, updatesSinceSnapshot: r.updatesSinceSnapshot, bytesSinceSnapshot: r.bytesSinceSnapshot });
+      if (r) out.set(docIds[i]!, toState(r));
     });
     return out;
   }
@@ -41,6 +51,18 @@ export class DexieSyncStorage implements SyncStorage {
 
   async removeOutbox(clientMsgId: string): Promise<void> {
     await this.db.syncOutbox.where("clientMsgId").equals(clientMsgId).delete();
+  }
+
+  /** Protocol 3: the stored account cursor (resume instead of subscribing every note). */
+  async getResumeState(): Promise<ResumeState | null> {
+    const row = await this.db.kv.get(RESUME_KEY);
+    const v = row?.value as Partial<ResumeState> | undefined;
+    return v && typeof v.cursor === "string" && typeof v.epoch === "string" ? { cursor: v.cursor, epoch: v.epoch } : null;
+  }
+
+  async setResumeState(state: ResumeState | null): Promise<void> {
+    if (state) await this.db.kv.put({ key: RESUME_KEY, value: { ...state } });
+    else await this.db.kv.delete(RESUME_KEY);
   }
 
   count(): Promise<number> {

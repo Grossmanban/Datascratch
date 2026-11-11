@@ -348,8 +348,31 @@ struct DocumentVectorTests {
 
 @Suite(.enabled(if: Vectors.available, "packages/test-vectors not present yet"))
 struct SyncVectorTests {
+    /// Protocol 3 (§3.1): `resume` / `resumed`, same checks as the other messages.
+    @Test(.enabled(if: FileManager.default.fileExists(atPath: Vectors.root.appendingPathComponent("sync/resume.json").path)))
+    func resume() throws {
+        try checkMessages(try Vectors.json("sync/resume.json"))
+    }
+
     @Test func messages() throws {
         let file = try Vectors.json("sync/messages.json")
+        try checkMessages(file)
+        func data(_ o: Any) throws -> Data { try JSONSerialization.data(withJSONObject: o, options: [.sortedKeys]) }
+        // Protocol 2 (D-62): what a reader keeps of `account_changed`; frames of unknown types
+        // are ignored, broken frames are errors.
+        for c in file["accountChanged"] as? [[String: [String]]] ?? [] {
+            let frame = String(decoding: try data(["type": "account_changed", "what": c["what"]!]), as: UTF8.self)
+            #expect(SyncFrame.decode(frame) == .accountChanged(Set(c["expected"]!.compactMap(AccountChange.init(rawValue:)))), "\(c["what"]!)")
+        }
+        for text in file["ignoredServerFrames"] as? [String] ?? [] {
+            guard case .ignored = SyncFrame.parse(text) else { Issue.record("not ignored: \(text)"); continue }
+        }
+        for text in file["brokenServerFrames"] as? [String] ?? [] {
+            #expect(SyncFrame.parse(text) == .broken, "\(text)")
+        }
+    }
+
+    func checkMessages(_ file: [String: Any]) throws {
         let valid = file["valid"] as! [String: [[String: Any]]]
         let invalid = file["invalid"] as! [String: [[String: Any]]]
         func data(_ o: Any) throws -> Data { try JSONSerialization.data(withJSONObject: o, options: [.sortedKeys]) }
@@ -370,18 +393,6 @@ struct SyncVectorTests {
         }
         for c in invalid["server"]! {
             #expect(SyncFrame.decode(String(decoding: try data(c["message"]!), as: UTF8.self)) == nil, "\(c["reason"]!)")
-        }
-        // Protocol 2 (D-62): what a reader keeps of `account_changed`; frames of unknown types
-        // are ignored, broken frames are errors.
-        for c in file["accountChanged"] as? [[String: [String]]] ?? [] {
-            let frame = String(decoding: try data(["type": "account_changed", "what": c["what"]!]), as: UTF8.self)
-            #expect(SyncFrame.decode(frame) == .accountChanged(Set(c["expected"]!.compactMap(AccountChange.init(rawValue:)))), "\(c["what"]!)")
-        }
-        for text in file["ignoredServerFrames"] as? [String] ?? [] {
-            guard case .ignored = SyncFrame.parse(text) else { Issue.record("not ignored: \(text)"); continue }
-        }
-        for text in file["brokenServerFrames"] as? [String] ?? [] {
-            #expect(SyncFrame.parse(text) == .broken, "\(text)")
         }
     }
 }

@@ -159,6 +159,9 @@ public actor SyncClient {
     public private(set) var consecutiveFailures = 0
     /// Connections that reached `welcome` since the client was made (Diagnostics).
     public private(set) var connectionsOpened = 0
+    /// The current (or last) connection authenticated as a user, not a guest: only users
+    /// `resume` (protocol 3, §3.1).
+    public private(set) var isUserConnection = false
     /// Last frame received on the current connection: proof of life when a pong is late.
     private var lastFrameAt: ContinuousClock.Instant?
     /// Version said in the next `hello` (§2): the newest, lowered once per `protocol_mismatch`.
@@ -314,7 +317,9 @@ public actor SyncClient {
             conn.close()
         }
         defer { watchdog.cancel() }
-        let hello = ClientMessage.hello(auth: try await auth(), deviceId: configuration.deviceId,
+        let credentials = try await auth()
+        if case .user = credentials { isUserConnection = true } else { isUserConnection = false }
+        let hello = ClientMessage.hello(auth: credentials, deviceId: configuration.deviceId,
                                         client: ClientInfo(platform: "ios", version: configuration.clientVersion),
                                         protocolVersion: helloVersion)
         try await conn.send(try SyncFrame.encode(hello))

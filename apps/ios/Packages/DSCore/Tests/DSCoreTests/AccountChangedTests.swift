@@ -159,29 +159,33 @@ import Foundation
         await a.stop()
     }
 
-    /// Protocol 2 with an older server: `protocol_mismatch` on hello 2, the client says 1 next
-    /// and connects; not shown as a failure.
-    @Test func olderServerGetsProtocolOne() async throws {
+    /// Older servers: `protocol_mismatch` on each hello the server does not know; the client
+    /// steps down one version at a time and connects; not shown as a failure.
+    @Test(arguments: [(1, [3, 2, 1]), (2, [3, 2])])
+    func olderServerGetsAnOlderProtocol(max: Int, hellos: [Int]) async throws {
         let server = FakeSyncServer()
-        await server.setMaxProtocol(1)
+        await server.setMaxProtocol(max)
         let key = DSCrypto.newKey()
         let b = device("B", server: server) { _ in key }
         await b.start()
         #expect(try await eventually { await b.client.isConnected })
-        #expect(await server.helloVersions.prefix(2) == [2, 1])
-        #expect(await b.client.protocolVersion == 1)
+        #expect(await Array(server.helloVersions.prefix(hellos.count)) == hellos)
+        #expect(await b.client.protocolVersion == max)
         #expect(await b.client.consecutiveFailures == 0)
+        // A server below version 3 gets no `resume`.
+        #expect(await server.resumeCursors.isEmpty)
         await b.stop()
     }
 
-    @Test func currentServerSpeaksProtocolTwo() async throws {
+    @Test func currentServerSpeaksProtocolThree() async throws {
         let server = FakeSyncServer()
         let key = DSCrypto.newKey()
         let b = device("B", server: server) { _ in key }
         await b.start()
         #expect(try await eventually { await b.client.isConnected })
-        #expect(await server.helloVersions == [2])
-        #expect(await b.client.protocolVersion == 2)
+        #expect(await server.helloVersions == [SyncProtocol.latest])
+        #expect(await b.client.protocolVersion == 3)
+        #expect(try await eventually { await server.resumeCursors == [nil] })
         await b.stop()
     }
 }

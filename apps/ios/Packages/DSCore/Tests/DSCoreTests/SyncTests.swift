@@ -63,7 +63,7 @@ actor FakeSyncServer {
     var snapshots: [String: (seq: Int64, payload: Data)] = [:]
     var registered: Set<String> = []
     var nextSeq: [String: Int64] = [:]
-    var conns: [UUID: (conn: Conn, deviceId: String?, subs: Set<String>)] = [:]
+    var conns: [UUID: (conn: Conn, deviceId: String?, subs: Set<String>, accountSub: Bool)] = [:]
     var accepting = true
     /// The next `hello` is answered with `rate_limited` and this `retryAfterMs`.
     var rateLimitNextHello: Int?
@@ -98,7 +98,7 @@ actor FakeSyncServer {
     func connect() throws -> Conn {
         guard accepting else { throw SyncClientError.closed }
         let c = Conn(server: self)
-        conns[c.id] = (c, nil, [])
+        conns[c.id] = (c, nil, [], false)
         return c
     }
 
@@ -109,7 +109,10 @@ actor FakeSyncServer {
         if !v { for c in conns.values { c.conn.close() } }
     }
 
-    func register(_ docId: String) { registered.insert(docId) }
+    func register(_ docId: String) {
+        registered.insert(docId)
+        logChange(docId)
+    }
 
     /// The connections of `deviceId` die silently (no close, no error): the server keeps them.
     func killSilently(deviceId: String) {
@@ -132,8 +135,16 @@ actor FakeSyncServer {
 
     /// Documents a device may not reach (yet): its subscriptions get `doc_not_found`.
     var denied: [String: Set<String>] = [:]
-    func deny(_ docId: String, to deviceId: String) { denied[deviceId, default: []].insert(docId) }
-    func allow(_ docId: String, to deviceId: String) { denied[deviceId]?.remove(docId) }
+    func deny(_ docId: String, to deviceId: String) {
+        denied[deviceId, default: []].insert(docId)
+        position += 1
+        removedAt[docId] = position
+    }
+    func allow(_ docId: String, to deviceId: String) {
+        denied[deviceId]?.remove(docId)
+        // Access granted: a change in the log (sync-protocol §3.1, `granted_pos`).
+        logChange(docId)
+    }
 
     /// Sends `message` (or raw `text`) to every connection of `deviceId`.
     func send(_ message: ServerMessage, to deviceId: String) {
@@ -145,6 +156,44 @@ actor FakeSyncServer {
     }
 
     func subscribers(_ docId: String) -> Int { conns.values.filter { $0.subs.contains(docId) }.count }
+
+    // MARK: Protocol 3 (§3.1)
+
+    /// Change log: one position per change (an update, a document appearing or becoming
+    /// readable); removals of access are logged too.
+    var position: Int64 = 0
+    var changedAt: [String: Int64] = [:]
+    var removedAt: [String: Int64] = [:]
+    enum ResumeMode { case normal, silent, reset, refuse }
+    var resumeMode = ResumeMode.normal
+    func setResumeMode(_ m: ResumeMode) { resumeMode = m }
+    /// Cursors the clients sent in `resume`, in order.
+    var resumeCursors: [String?] = []
+    /// A server stuck on its database: this many pushes (or subscribe frames) are taken and
+    /// never answered, the connection staying up (pongs still come).
+    var swallowPushes = 0
+    var swallowSubscribes = 0
+    func setSwallow(pushes: Int = 0, subscribes: Int = 0) {
+        swallowPushes = pushes
+        swallowSubscribes = subscribes
+    }
+    /// An older server: pushes over this are refused with `payload_too_large` (nil: 16 MiB).
+    var maxPushBytes: Int?
+    func setMaxPushBytes(_ n: Int?) { maxPushBytes = n }
+    /// Entries of `subscribe` frames received after `mark` (see `subscribedOrder`).
+    func subscribedSince(_ mark: Int) -> [String] { Array(subscribedOrder.dropFirst(mark)) }
+
+    private func logChange(_ docId: String) {
+        position += 1
+        changedAt[docId] = position
+    }
+
+    /// Whether this connection receives live frames of `docId`.
+    private func follows(_ entry: (conn: Conn, deviceId: String?, subs: Set<String>, accountSub: Bool), _ docId: String) -> Bool {
+        if entry.subs.contains(docId) { return true }
+        guard entry.accountSub, registered.contains(docId) else { return false }
+        return !(entry.deviceId.map { denied[$0]?.contains(docId) == true } ?? false)
+    }
 
     func handle(_ text: String, from c: Conn) async {
         guard let msg = try? JSONDecoder().decode(ClientMessage.self, from: Data(text.utf8)) else { return }
@@ -168,6 +217,10 @@ actor FakeSyncServer {
             conns[c.id]?.deviceId = deviceId
             c.deliver(.welcome(userId: "0192f3c4-0000-7000-8000-00000000000a", serverTime: DSDate.iso(Date()), protocolVersion: version))
         case .subscribe(let entries):
+            if swallowSubscribes > 0 {
+                swallowSubscribes -= 1
+                return
+            }
             for e in entries {
                 subscribedOrder.append(e.docId)
                 if subscribeDelayPerDoc > .zero {
@@ -195,26 +248,60 @@ actor FakeSyncServer {
             }
         case .unsubscribe(let ids):
             for id in ids { conns[c.id]?.subs.remove(id) }
+        case .resume(let cursor):
+            resumeCursors.append(cursor)
+            switch resumeMode {
+            case .silent: return
+            case .refuse:
+                c.deliver(.error(code: .badRequest, message: "resume is for users", ref: nil))
+                return
+            case .normal, .reset: break
+            }
+            let device = conns[c.id]?.deviceId
+            guard resumeMode == .normal, let cursor, cursor.hasPrefix("f."), let from = Int64(cursor.dropFirst(2)), from <= position else {
+                c.deliver(.resumed(reset: true, cursor: "f.\(position)", docs: [], removed: []))
+                return
+            }
+            // The account subscription first, then the list (no hole between them).
+            conns[c.id]?.accountSub = true
+            let deniedHere = device.map { denied[$0] ?? [] } ?? []
+            let docs = changedAt.filter { $0.value > from && registered.contains($0.key) && !deniedHere.contains($0.key) }
+                .map { ResumedDoc(docId: $0.key, seq: nextSeq[$0.key] ?? 0) }.sorted { $0.docId < $1.docId }
+            let removed = removedAt.filter { $0.value > from && deniedHere.contains($0.key) }.map(\.key).sorted()
+            c.deliver(.resumed(reset: false, cursor: "f.\(position)", docs: docs, removed: removed))
         case .push(let docId, let clientMsgId, let payload):
             pushedWithoutSubscription = pushedWithoutSubscription || !(conns[c.id]?.subs.contains(docId) ?? false)
             guard registered.contains(docId) else {
                 c.deliver(.error(code: .docNotFound, message: "register first", ref: clientMsgId))
                 return
             }
+            if swallowPushes > 0 {
+                swallowPushes -= 1
+                return
+            }
+            if let maxPushBytes, payload.count > maxPushBytes {
+                c.deliver(.error(code: .payloadTooLarge, message: "update too large", ref: clientMsgId))
+                return
+            }
             let seq = (nextSeq[docId] ?? 0) + 1
+            logChange(docId)
             nextSeq[docId] = seq
             let device = conns[c.id]?.deviceId ?? "?"
             docs[docId, default: []].append(Stored(seq: seq, payload: payload, deviceId: device))
             c.deliver(.ack(docId: docId, clientMsgId: clientMsgId, seq: seq))
-            for other in conns.values where other.conn.id != c.id && other.subs.contains(docId) {
+            for other in conns.values where other.conn.id != c.id && follows(other, docId) {
                 other.conn.deliver(.update(docId: docId, item: UpdateItem(seq: seq, payload: payload, deviceId: device)))
             }
         case .snapshot(let docId, let clientMsgId, let baseSeq, let payload):
             snapshots[docId] = (baseSeq, payload)
             docs[docId] = docs[docId, default: []].filter { $0.seq > baseSeq }
             c.deliver(.ack(docId: docId, clientMsgId: clientMsgId, seq: baseSeq))
+            // Forwarded at once to the other subscribed connections (§5, 2026-11-11).
+            for other in conns.values where other.conn.id != c.id && follows(other, docId) {
+                other.conn.deliver(.updates(docId: docId, snapshot: (baseSeq, payload), items: [], upToDate: false))
+            }
         case .awareness(let docId, let payload):
-            for other in conns.values where other.conn.id != c.id && other.subs.contains(docId) {
+            for other in conns.values where other.conn.id != c.id && follows(other, docId) {
                 other.conn.deliver(.awareness(docId: docId, payload: payload, deviceId: conns[c.id]?.deviceId ?? "?"))
             }
         }
@@ -275,7 +362,7 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         #expect(text == #"{"clientMsgId":"m","docId":"0192f3c4-0000-7000-8000-000000000001","payload":"-_8","type":"push"}"#)
         #expect(try JSONDecoder().decode(ClientMessage.self, from: Data(text.utf8)) == push)
         let hello = try SyncFrame.encode(.hello(auth: .guest(shareId: doc, guestToken: "g"), deviceId: "dev", client: ClientInfo(version: "1")))
-        #expect(hello.contains(#""protocol":2"#) && hello.contains(#""kind":"guest""#) && hello.contains(#""platform":"ios""#))
+        #expect(hello.contains(#""protocol":3"#) && hello.contains(#""kind":"guest""#) && hello.contains(#""platform":"ios""#))
 
         let updates = SyncFrame.decode(#"{"type":"updates","docId":"0192f3c4-0000-7000-8000-000000000001","snapshot":null,"items":[{"seq":3,"payload":"AQ","deviceId":"x"}],"upToDate":true}"#)
         #expect(updates == .updates(docId: doc, snapshot: nil, items: [UpdateItem(seq: 3, payload: Data([1]), deviceId: "x")], upToDate: true))

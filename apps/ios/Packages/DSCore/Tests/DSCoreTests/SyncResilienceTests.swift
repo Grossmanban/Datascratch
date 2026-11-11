@@ -9,6 +9,7 @@ import Testing
     let key = DSCrypto.newKey()
 
     func device(_ name: String, server: FakeSyncServer, keyFor: (@Sendable (DocumentRecord) -> Data?)? = nil,
+                answerTimeout: Duration = .seconds(30),
                 configure: (inout SyncClient.Configuration) -> Void = { _ in }) throws -> SyncEngine {
         let store = try LocalStore.inMemory()
         var config = SyncClient.Configuration(url: URL(string: "wss://example.com/v1/sync")!, deviceId: name, clientVersion: "test")
@@ -18,7 +19,7 @@ import Testing
         let client = SyncClient(configuration: config, factory: FakeFactory(server: server)) { .user(accessToken: "t") }
         let key = self.key
         return SyncEngine(store: store, client: client, keyFor: keyFor ?? { _ in key },
-                          register: { record in await server.register(record.docId) })
+                          register: { record in await server.register(record.docId) }, answerTimeout: answerTimeout)
     }
 
     /// A library the server already has: `count` empty notes known to the device.
@@ -67,30 +68,59 @@ import Testing
         await a.stop()
     }
 
+    enum StormStart: Sendable {
+        /// Protocol 2: every connection subscribes the whole library.
+        case protocol2
+        /// Protocol 3, the library synced once before (a stored cursor): a connection asks only
+        /// what changed.
+        case resumeWithCursor
+        /// Protocol 3 before the first complete sync: every `resume` is a `reset`, one round
+        /// trip more than protocol 2 before anything is subscribed (the contract holds the
+        /// queue until `resumed`).
+        case resumeWithoutCursor
+    }
+
+    /// Library and storm: a full catch-up takes at least 1500 × 1 ms — longer than any window
+    /// between drops, on any machine — while the note needs a handful of frames. The windows are
+    /// wide enough for those on a loaded CI simulator (250 ms was not, CI #157/#158).
+    static let stormLibrary = 1500
+    static func stormWindow(_ start: StormStart) -> Duration {
+        start == .resumeWithoutCursor ? .milliseconds(800) : .milliseconds(600)
+    }
+
     /// Suspect (b): drops every few hundred ms on a slow link, with a library big enough that a
     /// full catch-up never finishes between drops. The note made on the phone was the newest
     /// document, so it was subscribed last — never, under the storm. Documents with something to
     /// send go first now.
-    @Test func aNewNoteGetsOutThroughAReconnectStorm() async throws {
+    @Test(arguments: [StormStart.protocol2, .resumeWithCursor, .resumeWithoutCursor])
+    func aNewNoteGetsOutThroughAReconnectStorm(start: StormStart) async throws {
         let server = FakeSyncServer()
+        if start == .protocol2 { await server.setMaxProtocol(2) }
         let b = try device("B", server: server)
-        _ = try await library(600, on: b, server: server)
+        _ = try await library(Self.stormLibrary, on: b, server: server)
+        if start == .resumeWithCursor {
+            await b.start()
+            #expect(try await eventually(timeout: .seconds(10)) { (try? b.store.resumeState()) != nil })
+        }
         await server.setSubscribeDelayPerDoc(.milliseconds(1))
         await b.start()
-        let storm = dropper(server, deviceId: "B", every: .milliseconds(250))
+        let storm = dropper(server, deviceId: "B", every: Self.stormWindow(start))
         defer { storm.cancel() }
         let note = NoteDocument(noteId: EntityID.make())
         try await b.open(note.crdt, notebookId: "nb")
         try note.initialize(title: "Баги дс")
         try note.insertText("продиктовано", at: 0, inBlock: [1])
-        let ok = try await eventually(timeout: .seconds(10)) {
+        let ok = try await eventually(timeout: .seconds(20)) {
             await server.docs[note.noteId].map { $0.count >= 2 } == true
         }
+        // Without a cursor the storm really kept the full catch-up from finishing (with one,
+        // resume makes the library live at once: nothing to catch up — the point of protocol 3).
+        if start != .resumeWithCursor { #expect(await b.status().catchingUp > 0 || !ok) }
         if !ok {
             let order = await server.subscribedOrder
             let received = await server.received
             let pushes = received.filter { if case .push(let id, _, _) = $0 { return id == note.noteId } else { return false } }.count
-            print("DEBUG hellos=\(await server.helloCount()) subs-of-note=\(order.filter { $0 == note.noteId }.count) total-subs=\(order.count) pushes=\(pushes) registered=\(await server.registered.contains(note.noteId)) docs=\(await server.docs[note.noteId]?.count ?? -1) outbox=\((try? b.store.outboxCount()) ?? -1) status=\(await b.status())")
+            print("DEBUG \(start) hellos=\(await server.helloCount()) subs-of-note=\(order.filter { $0 == note.noteId }.count) total-subs=\(order.count) pushes=\(pushes) registered=\(await server.registered.contains(note.noteId)) docs=\(await server.docs[note.noteId]?.count ?? -1) outbox=\((try? b.store.outboxCount()) ?? -1) status=\(await b.status())")
         }
         #expect(ok)
         storm.cancel()
@@ -103,8 +133,10 @@ import Testing
     @Test func aLatePongWhileFramesArriveKeepsTheConnection() async throws {
         let server = FakeSyncServer()
         let a = try device("A", server: server, configure: {
-            $0.pingInterval = .milliseconds(40)
-            $0.pongTimeout = .milliseconds(30)
+            // Margins a loaded CI simulator keeps (40/30 ms did not, CI #161): a frame within
+            // the last 350 ms proves the connection alive; in production it is 35 s.
+            $0.pingInterval = .milliseconds(200)
+            $0.pongTimeout = .milliseconds(150)
         })
         let writer = try device("W", server: server)
         await a.start()
@@ -115,10 +147,10 @@ import Testing
         let remote = NoteDocument(noteId: note.noteId)
         try await writer.open(remote.crdt, notebookId: "nb")
         #expect(try await eventually { (try? remote.title()) == "busy" })
-        await server.setPongDelay(.milliseconds(200))
+        await server.setPongDelay(.seconds(1))
         let hellos = await server.helloCount()
-        // Frames every 10 ms for over a second: many pings, every pong late.
-        for i in 0..<100 {
+        // Frames every 10 ms for two seconds: several pings, every pong late.
+        for i in 0..<200 {
             try remote.insertText("\(i % 10)", at: 0, inBlock: [1])
             try await Task.sleep(for: .milliseconds(10))
         }
@@ -127,6 +159,60 @@ import Testing
         #expect(try await eventually { (try? note.block(at: [1])?.text) == (try? remote.block(at: [1])?.text) })
         await a.stop()
         await writer.stop()
+    }
+
+    /// A server that stays connected but answers nothing — a push taken and never acknowledged,
+    /// pongs still coming (ios-app's real-server CI: a queue that never drained, no warning
+    /// anywhere, 2026-11-11). After a while without any answer the connection is replaced: the
+    /// push goes again and is acknowledged.
+    @Test(arguments: [true, false])
+    func aServerThatAnswersNothingIsReconnected(pushStuck: Bool) async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server, answerTimeout: .milliseconds(400))
+        await a.start()
+        let note = NoteDocument(noteId: EntityID.make())
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "t")
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        let hellos = await server.helloCount()
+        if pushStuck {
+            await server.setSwallow(pushes: 1)
+            try note.insertText("правка", at: 0, inBlock: [1])
+        } else {
+            // A subscription never answered (a note tracked after the connection came up).
+            await server.setSwallow(subscribes: 1)
+            let other = NoteDocument(noteId: EntityID.make())
+            await server.register(other.noteId)
+            try a.store.ensureDocument(docId: other.noteId, kind: .note, notebookId: "nb")
+            try await a.track(docId: other.noteId, kind: .note, notebookId: "nb")
+            try other.initialize(title: "другая")
+            try a.store.appendLocalUpdate(docId: other.noteId, update: try other.crdt.encodeStateAsUpdate(), origin: .local)
+            await a.flush()
+        }
+        #expect(try await eventually(timeout: .seconds(10)) { (try? a.store.outboxCount()) == 0 })
+        #expect(await server.helloCount() > hellos)
+        #expect(await a.diagnostics().events.contains { $0.kind == .unanswered })
+        await a.stop()
+    }
+
+    /// A slow upload is progress, not silence: no reconnect while sends keep completing.
+    @Test func slowButAnsweringWorkIsNotReconnected() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server, answerTimeout: .milliseconds(400))
+        await a.start()
+        let note = NoteDocument(noteId: EntityID.make())
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "t")
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        let hellos = await server.helloCount()
+        // Two seconds of edits, each acknowledged.
+        for i in 0..<100 {
+            try note.insertText("\(i % 10)", at: 0, inBlock: [1])
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        #expect(await server.helloCount() == hellos)
+        await a.stop()
     }
 
     /// Suspect (c): a note changed elsewhere (an agent) shows its title from the index long
@@ -296,22 +382,50 @@ import Testing
         await a.stop()
     }
 
-    /// (3) A new change over the 2 MiB update limit (a huge paste) is not left failed: it goes
-    /// as a snapshot (≤ 16 MiB) and a fresh device gets it.
-    @Test func aChangeOverTheUpdateLimitGoesAsASnapshot() async throws {
+    /// (3) A big change (a huge paste, 3 MiB) is an ordinary push since protocol 3's limits
+    /// (16 MiB, §5): it gets its own seq and a fresh device catches up from it.
+    @Test func aBigChangeIsAnOrdinaryPush() async throws {
         let server = FakeSyncServer()
         let a = try device("A", server: server)
         await a.start()
         let note = try await noteOnServer(a, server, text: "начало")
-        let huge = String(repeating: "x", count: SyncProtocol.maxUpdateBytes + 100_000)
+        let before = await server.docs[note.noteId]?.count ?? 0
+        let huge = String(repeating: "x", count: 3 * 1024 * 1024)
+        try note.insertText(huge, at: 0, inBlock: [1])
+        #expect(try await eventually(timeout: .seconds(20)) { (try? a.store.outboxCount()) == 0 })
+        #expect(await server.docs[note.noteId]?.count == before + 1)
+        #expect(await server.snapshots[note.noteId] == nil)
+        let onServer = try await fetched(note.noteId, from: server)
+        #expect(try onServer.block(at: [1])?.text == huge + "начало")
+        await a.stop()
+    }
+
+    /// (3') A server that still refuses updates over 2 MiB (`payload_too_large`): the change goes
+    /// as a snapshot instead, never left failed; the server forwards the snapshot, so a device
+    /// that is online gets it at once, and a fresh one catches up from it.
+    @Test func anOlderServerGetsABigChangeAsASnapshot() async throws {
+        let server = FakeSyncServer()
+        await server.setMaxPushBytes(2 * 1024 * 1024 + 64)
+        let a = try device("A", server: server)
+        let b = try device("B", server: server)
+        await a.start()
+        let note = try await noteOnServer(a, server, text: "начало")
+        await b.start()
+        let watching = NoteDocument(noteId: note.noteId)
+        try await b.open(watching.crdt, notebookId: "nb")
+        #expect(try await eventually { (try? watching.block(at: [1])?.text) == "начало" })
+
+        let huge = String(repeating: "x", count: 2 * 1024 * 1024 + 100_000)
         try note.insertText(huge, at: 0, inBlock: [1])
         #expect(try await eventually(timeout: .seconds(20)) {
             await server.snapshots[note.noteId] != nil && (try? a.store.outboxCount()) == 0
         })
         #expect(try a.store.failedOutbox().isEmpty)
+        #expect(try await eventually(timeout: .seconds(20)) { (try? watching.block(at: [1])?.text) == huge + "начало" })
         let onServer = try await fetched(note.noteId, from: server)
         #expect(try onServer.block(at: [1])?.text == huge + "начало")
         await a.stop()
+        await b.stop()
     }
 
     /// (4) The owner's phone: a note made offline («Баги дс») and 565 whole-state pushes of
@@ -337,7 +451,12 @@ import Testing
 
         let before = await server.received.count
         await a.start()
-        #expect(try await eventually(timeout: .seconds(10)) { (try? a.store.outboxCount()) == 0 })
+        let drained = try await eventually(timeout: .seconds(10)) { (try? a.store.outboxCount()) == 0 }
+        if !drained {
+            let d = await a.diagnostics()
+            print("DEBUG565 outbox=\((try? a.store.outboxCount()) ?? -1) live=\(d.live) catching=\(d.catchingUp) queued=\(d.queuedSubscriptions) cursors=\(await server.resumeCursors) events=\(d.events.suffix(8).map { "\($0.kind) \($0.detail)" })")
+        }
+        #expect(drained)
         let after = await server.received.dropFirst(before)
         let ids = Set(notes.map(\.noteId))
         let pseudo = after.filter { if case .push(let id, _, _) = $0 { return ids.contains(id) } else { return false } }

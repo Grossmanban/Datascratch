@@ -191,6 +191,67 @@ public actor SyncEngine: SyncClientDelegate {
     private var catchingUpSince: Date?
     /// Counts connections (`syncClientDidConnect`): work started for an older one stops.
     private var connectionGeneration = 0
+
+    // MARK: Unanswered work
+
+    /// A connection that stays up but answers nothing (pongs come, acks and catch-ups do not —
+    /// a server stuck on a database lock): after this long with work outstanding and nothing
+    /// sent or answered, the connection is replaced, which resubscribes and resends. ios-app's
+    /// real-server CI once saw a queue that never drained with no warning anywhere (2026-11-11).
+    private let answerTimeout: Duration
+    /// Last progress on this connection: a send that completed, or an answer (ack, catch-up
+    /// frame, error about our request, `resumed`). A slow upload or a long catch-up keeps it fresh.
+    private var lastProgress = ContinuousClock.now
+    private var watchdog: Task<Void, Never>?
+
+    private func progressed() { lastProgress = .now }
+
+    /// Something waits for the server: messages sent and not acknowledged, documents subscribed
+    /// and not caught up.
+    private var awaitingServer: Bool { !inFlight.isEmpty || !catchingUp.isEmpty }
+
+    private func startWatchdog(_ generation: Int) {
+        watchdog?.cancel()
+        progressed()
+        let period = max(answerTimeout / 4, .milliseconds(20))
+        watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: period)
+                guard let self, await self.checkAnswers(generation) else { return }
+            }
+        }
+    }
+
+    /// False once this connection is gone (the watchdog ends).
+    private func checkAnswers(_ generation: Int) async -> Bool {
+        guard generation == connectionGeneration else { return false }
+        guard awaitingServer, ContinuousClock.now - lastProgress > answerTimeout else { return true }
+        let what = "\(inFlight.count) unacknowledged, \(catchingUp.count) not caught up"
+        log(.unanswered, "no answer from the server for \(answerTimeout): \(what) — reconnecting")
+        lastError = "unanswered: \(what)"
+        lastErrorAt = Date()
+        await client.reconnectNow()
+        return false
+    }
+
+    // MARK: Protocol 3 state (§3.1)
+
+    /// No `resumed` this long after `resume`: subscribe everything as in version 1.
+    private let resumeTimeout: Duration
+    /// `resume` sent on this connection, `resumed` not received yet.
+    private var resumeWaiting = false
+    private var resumeTimer: Task<Void, Never>?
+    /// `resumed` with `reset: false` on this connection: every readable document is subscribed
+    /// (live updates come without `subscribe`).
+    private var accountSubscribed = false
+    /// The cursor of this connection, stored once every document it waited for has caught up.
+    private struct ResumeSession {
+        var cursor: String
+        var epoch: String
+        var outstanding: Set<String>
+        var committed = false
+    }
+    private var session: ResumeSession?
     private var lastErrorAt: Date?
     private var retryDelay: Duration?
     var minRetryDelay: Duration = .seconds(1)
@@ -211,9 +272,13 @@ public actor SyncEngine: SyncClientDelegate {
     public init(store: LocalStore, client: SyncClient, keyFor: @escaping KeyLookup, register: Registrar?,
                 retiredKeysFor: (@Sendable (DocumentRecord) -> [Data])? = nil,
                 isKeyCanonical: (@Sendable (DocumentRecord) -> Bool)? = nil,
-                clock: @escaping @Sendable () -> Date = { Date() }) {
+                clock: @escaping @Sendable () -> Date = { Date() },
+                resumeTimeout: Duration = .seconds(20),
+                answerTimeout: Duration = .seconds(30)) {
         self.store = store
         self.clock = clock
+        self.resumeTimeout = resumeTimeout
+        self.answerTimeout = answerTimeout
         self.client = client
         self.keyFor = keyFor
         self.register = register
@@ -773,6 +838,9 @@ public actor SyncEngine: SyncClientDelegate {
         }.map(\.element)
         // Documents whose registration failed in this pass: their other messages wait.
         var skip: Set<String> = []
+        // Messages that left the queue without being sent (redundant, or carried by a snapshot):
+        // no ack will start the next pass for them.
+        var settledWithoutSending = 0
         for item in items where !inFlight.contains(item.clientMsgId) && live.contains(item.docId) && !skip.contains(item.docId) {
             guard inFlight.count < Self.maxInFlight else {
                 backlog = true
@@ -809,6 +877,7 @@ public actor SyncEngine: SyncClientDelegate {
                     switch trimmed(item) {
                     case .redundant:
                         try store.dropRedundantPush(clientMsgId: item.clientMsgId)
+                        settledWithoutSending += 1
                         log(.pushTrimmed, docId: item.docId, "\(item.payload.count) B already on the server: not sent")
                         continue
                     case .smaller(let less):
@@ -829,6 +898,7 @@ public actor SyncEngine: SyncClientDelegate {
                         // Never left failed: only a document over the snapshot limit is.
                         if await snapshot(docId: item.docId, now: Date(), force: true) {
                             try store.dropRedundantPush(clientMsgId: item.clientMsgId)
+                            settledWithoutSending += 1
                             log(.pushTrimmed, docId: item.docId, "\(sealed.count) B over the update limit: sent as a snapshot")
                             continue
                         }
@@ -837,6 +907,7 @@ public actor SyncEngine: SyncClientDelegate {
                     log(.failed, docId: item.docId, "\(item.kind.rawValue) of \(sealed.count) B over the \(limit) B limit")
                     continue
                 }
+                if !awaitingServer { progressed() }
                 inFlight.insert(item.clientMsgId)
                 do {
                     switch item.kind {
@@ -845,6 +916,7 @@ public actor SyncEngine: SyncClientDelegate {
                     case .snapshot:
                         try await client.send(.snapshot(docId: item.docId, clientMsgId: item.clientMsgId, baseSeq: item.baseSeq ?? 0, payload: sealed))
                     }
+                    progressed()
                 } catch {
                     // The connection failed under the send (closed, reset, not connected): not a
                     // delivery attempt. Counting these moved a note's edits to «failed» after five
@@ -862,6 +934,9 @@ public actor SyncEngine: SyncClientDelegate {
                 log(.failed, docId: item.docId, Self.describe(error))
             }
         }
+        // A page that only settled messages (the 565 whole states of build 46, all live at once
+        // after a resume) would wait for an ack that never comes: take the next page now.
+        if backlog, settledWithoutSending > 0 { flushAgain = true }
         publish()
     }
 
@@ -935,12 +1010,14 @@ public actor SyncEngine: SyncClientDelegate {
             while frame.count < room, let next = subscribeQueue.first, (priority(next) < 100) == urgent {
                 frame.append(subscribeQueue.removeFirst())
             }
+            if !awaitingServer { progressed() }
             for r in frame {
                 queued.remove(r.docId)
                 catchingUp.insert(r.docId)
             }
             do {
                 try await client.send(.subscribe(docs: frame.map { SubscribeEntry(docId: $0.docId, since: $0.lastSeq) }))
+                progressed()
             } catch {
                 // Not connected any more: the next connection subscribes everything again.
                 for r in frame { catchingUp.remove(r.docId) }
@@ -1058,7 +1135,146 @@ public actor SyncEngine: SyncClientDelegate {
         // beside the receive loop; a newer connection makes it stop.
         connectionGeneration += 1
         let generation = connectionGeneration
+        endResume()
+        startWatchdog(generation)
+        if await client.protocolVersion ?? 0 >= SyncProtocol.resume, await client.isUserConnection {
+            // Protocol 3: what changed since the stored cursor, instead of subscribing everything.
+            // The queue waits for the answer (documents are not live before it).
+            resumeWaiting = true
+            let cursor = (try? store.resumeState())?.cursor
+            let timeout = resumeTimeout
+            resumeTimer = Task { [weak self] in
+                try? await Task.sleep(for: timeout)
+                guard !Task.isCancelled else { return }
+                await self?.resumeTimedOut(generation)
+            }
+            log(.resume, cursor.map { "cursor \($0)" } ?? "no cursor yet")
+            do {
+                try await client.send(.resume(cursor: cursor))
+            } catch {
+                endResume()
+            }
+            return
+        }
         Task { await self.subscribeAfterConnect(generation) }
+    }
+
+    private func endResume() {
+        resumeTimer?.cancel()
+        resumeTimer = nil
+        resumeWaiting = false
+        accountSubscribed = false
+        session = nil
+    }
+
+    /// No `resumed` in time (or `bad_request` for it): everything as in version 1, the cursor
+    /// left alone.
+    private func resumeTimedOut(_ generation: Int) async {
+        guard generation == connectionGeneration, resumeWaiting else { return }
+        resumeWaiting = false
+        resumeTimer = nil
+        log(.resume, "no answer: subscribing everything")
+        await subscribeAfterConnect(generation)
+    }
+
+    /// `resumed` (§3.1).
+    private func handleResumed(reset: Bool, cursor: String, docs: [ResumedDoc], removed: [String]) async {
+        guard resumeWaiting else { return }
+        resumeWaiting = false
+        resumeTimer?.cancel()
+        resumeTimer = nil
+        let generation = connectionGeneration
+        guard let records = try? store.documents() else { return }
+        let previous = try? store.resumeState()
+        if reset || previous == nil {
+            // Unknown or old cursor: everything as in version 1, under a new epoch (the old
+            // coverage means nothing now).
+            log(.resume, reset ? "reset: subscribing everything" : "first resume: subscribing everything")
+            let syncable = records.filter { !refused.contains($0.docId) && (try? keyFor($0)) != nil }
+            session = ResumeSession(cursor: cursor, epoch: EntityID.make(), outstanding: Set(syncable.map(\.docId)))
+            // Beside the receive loop, as after `welcome`: this runs while frames are read.
+            Task {
+                await self.subscribeAfterConnect(generation)
+                await self.maybeCommitResume()
+            }
+            return
+        }
+        let epoch = previous!.epoch
+        accountSubscribed = true
+        let listed = Dictionary(docs.map { ($0.docId, $0.seq) }, uniquingKeysWith: max)
+        let gone = Set(removed)
+        var behind: [DocumentRecord] = []
+        var caughtUp = 0
+        for record in records where !refused.contains(record.docId) {
+            if gone.contains(record.docId) {
+                // As `error doc_not_found` with `ref` = docId.
+                live.remove(record.docId)
+                forgetSubscription(record.docId)
+                noAccess.insert(record.docId)
+                log(.serverError, docId: record.docId, "removed after the cursor")
+                continue
+            }
+            guard (try? keyFor(record)) != nil else {
+                // Paused without a key: neither subscribed nor covered (subscribed when the key
+                // comes, `resumeDocumentsWaitingForKeys`).
+                waitingForKey.insert(record.docId)
+                continue
+            }
+            let isBehind = listed[record.docId].map { record.lastSeq < $0 } ?? (record.covered != epoch)
+            if isBehind {
+                behind.append(record)
+            } else {
+                known[record.docId] = record
+                live.insert(record.docId)
+                caughtUp += 1
+            }
+        }
+        if !waitingForKey.isEmpty { scheduleKeysMissing() }
+        session = ResumeSession(cursor: cursor, epoch: epoch, outstanding: Set(behind.map(\.docId)))
+        log(.resume, "\(docs.count) changed, \(removed.count) removed: subscribing \(behind.count), \(caughtUp) already caught up")
+        publish()
+        // Beside the receive loop: subscribing writes frames, and catch-ups must be read meanwhile.
+        Task { await self.finishResume(generation, subscribing: behind) }
+    }
+
+    private func finishResume(_ generation: Int, subscribing behind: [DocumentRecord]) async {
+        guard generation == connectionGeneration else { return }
+        // The queue goes as soon as the documents already caught up are known.
+        await flush()
+        try? await subscribe(behind)
+        guard generation == connectionGeneration else { return }
+        subscribedAll = true
+        publish()
+        await flush()
+        await maybeCommitResume()
+    }
+
+    /// A document of this connection's resume caught up (or was refused): the cursor may be
+    /// stored once none is left.
+    private func resumeProgress(_ docId: String, caughtUp: Bool) async {
+        guard var s = session else { return }
+        if s.outstanding.remove(docId) != nil { session = s }
+        if s.committed, caughtUp, !waitingForKey.contains(docId) {
+            // Caught up after the cursor was stored: covered by it from now on.
+            try? store.setCovered(docId: docId, epoch: s.epoch)
+        }
+        await maybeCommitResume()
+    }
+
+    /// Stores the connection's cursor once everything it waited for has caught up: documents
+    /// caught up on this connection (and not waiting for a key) are covered by its epoch, the
+    /// others are not (§3.1).
+    private func maybeCommitResume() async {
+        guard var s = session, !s.committed, s.outstanding.isEmpty, await client.isConnected else { return }
+        let covered = live.subtracting(waitingForKey)
+        do {
+            try store.commitResume(ResumeState(cursor: s.cursor, epoch: s.epoch), coveredIds: covered)
+            s.committed = true
+            session = s
+            log(.resume, "cursor stored, \(covered.count) documents covered")
+        } catch {
+            // Not stored: the next resume asks from the old cursor again (harmless).
+        }
     }
 
     private func subscribeAfterConnect(_ generation: Int) async {
@@ -1084,6 +1300,9 @@ public actor SyncEngine: SyncClientDelegate {
         connectionTrouble = await client.consecutiveFailures > client.configuration.quickRetries
         if case .connected = state {} else {
             connectionGeneration += 1
+            endResume()
+            watchdog?.cancel()
+            watchdog = nil
             inFlight.removeAll()
             catchingUp.removeAll()
             subscribeQueue.removeAll()
@@ -1100,6 +1319,9 @@ public actor SyncEngine: SyncClientDelegate {
         switch message {
         case .welcome:
             break
+        case .resumed(let reset, let cursor, let docs, let removed):
+            progressed()
+            await handleResumed(reset: reset, cursor: cursor, docs: docs, removed: removed)
         case .accountChanged(let what):
             // Only names this client knows count; none left: nothing to do (as the TS client).
             guard !what.isEmpty else { return }
@@ -1110,12 +1332,14 @@ public actor SyncEngine: SyncClientDelegate {
                 await resumeDocumentsWaitingForKeys()
             }
         case .updates(let docId, let snapshot, let items, let upToDate):
+            progressed()
             guard receive(docId: docId, snapshot: snapshot, items: items) else { return }
             await resumeAfterIndexUpdate(docId)
             if upToDate {
                 catchingUp.remove(docId)
                 live.insert(docId)
                 await subscriptionFinished(docId)
+                await resumeProgress(docId, caughtUp: true)
                 // The server has it: no `POST /docs` needed before pushing.
                 if known[docId]?.registered == false || (try? store.document(docId))?.registered == false {
                     try? store.setRegistered(docId)
@@ -1130,11 +1354,18 @@ public actor SyncEngine: SyncClientDelegate {
                 await snapshotIfNeeded(docId: docId)
             }
         case .update(let docId, let item):
+            if accountSubscribed, !live.contains(docId) {
+                // The account subscription delivers it before the document's catch-up: applied,
+                // but `lastSeq` does not move (§3.1) — the catch-up brings it again.
+                receiveEarly(docId: docId, item: item)
+                return
+            }
             guard receive(docId: docId, snapshot: nil, items: [item]) else { return }
             await resumeAfterIndexUpdate(docId)
             if live.contains(docId) { await finishRekey(docId: docId) }
             await snapshotIfNeeded(docId: docId)
         case .ack(let docId, let clientMsgId, let seq):
+            progressed()
             inFlight.remove(clientMsgId)
             try? store.acknowledge(clientMsgId: clientMsgId, seq: seq)
             // A burst of acks updates the status every few acks and when the window empties,
@@ -1153,31 +1384,51 @@ public actor SyncEngine: SyncClientDelegate {
                   let plain = try? DSCrypto.open(payload, key: key, ad: CryptoAD.awareness(docId)) else { return }
             awarenessHandler?(docId, plain, deviceId)
         case .error(let code, let message, let ref, let retryAfterMs, _):
+            if ref != nil { progressed() }
             lastError = code.rawValue
             lastErrorAt = Date()
             let refDoc = ref.flatMap { r in (try? store.outboxItem(clientMsgId: r))?.docId ?? (known[r] != nil ? r : nil) }
             log(.serverError, docId: refDoc, "\(code.rawValue): \(message)")
+            if ref == nil, code == .badRequest, resumeWaiting {
+                // The server refused `resume`: start as in version 1, without a cursor.
+                await resumeTimedOut(connectionGeneration)
+                return
+            }
             guard let ref else { return }
             if inFlight.contains(ref) {
                 inFlight.remove(ref)
+                let item = try? store.outboxItem(clientMsgId: ref)
+                if code == .payloadTooLarge, let item, item.kind == .push {
+                    // A server that still holds the 2 MiB update limit (§5, §7): the change goes
+                    // as a snapshot of the whole document; the push leaves the queue only once
+                    // that snapshot is queued.
+                    if await snapshot(docId: item.docId, now: Date(), force: true) {
+                        try? store.dropRedundantPush(clientMsgId: ref)
+                        log(.pushTrimmed, docId: item.docId, "refused as too large by the server: sent as a snapshot")
+                        publish()
+                        return
+                    }
+                }
                 // Refusals fail at once; doc_not_found (re-registered below) and server
                 // trouble are retried up to LocalStore.maxSendAttempts.
                 let permanent = [.forbidden, .payloadTooLarge, .badRequest, .protocolMismatch].contains(code)
                 if code != .rateLimited { try? store.markFailed(clientMsgId: ref, error: code.rawValue, permanent: permanent) }
                 if !permanent { scheduleRetry(atLeast: retryAfterMs.map { .milliseconds($0) }) }
-                if code == .docNotFound, let item = try? store.pendingOutbox().first(where: { $0.clientMsgId == ref }) {
+                if code == .docNotFound, let item {
                     // Registration was lost: register again on the next flush.
                     try? store.setRegistered(item.docId, false)
                 }
             } else if code == .docNotFound, catchingUp.contains(ref), (try? store.document(ref))?.registered == false {
                 catchingUp.remove(ref)
                 await subscriptionFinished(ref)
+                await resumeProgress(ref, caughtUp: false)
                 await registerMissing(ref)
             } else if code == .forbidden || code == .docNotFound {
                 if catchingUp.remove(ref) != nil || live.remove(ref) != nil {
                     noAccess.insert(ref)
                     await subscriptionFinished(ref)
                 }
+                await resumeProgress(ref, caughtUp: false)
             }
             publish()
         }
@@ -1249,6 +1500,17 @@ public actor SyncEngine: SyncClientDelegate {
             publish()
         }
         return true
+    }
+
+    /// A live update that came before the document caught up (§3.1): stored and applied without
+    /// moving `lastSeq`; one that cannot be read is left to the catch-up.
+    private func receiveEarly(docId: String, item: UpdateItem) {
+        guard let record = known[docId] ?? (try? store.document(docId)), !waitingForKey.contains(docId),
+              let key = try? keyFor(record),
+              let plain = try? DSCrypto.open(item.payload, key: key, ad: CryptoAD.doc(docId)),
+              (try? CRDTUpdates.stateVector(of: plain)) != nil,
+              let stored = try? store.storeEarlyRemoteUpdates(docId: docId, items: [(item.seq, plain)]), !stored.isEmpty else { return }
+        try? open[docId]?.doc.applyUpdate(plain, origin: .remote)
     }
 
     /// Stops following a document whose key went missing (e.g. a moved note before the target

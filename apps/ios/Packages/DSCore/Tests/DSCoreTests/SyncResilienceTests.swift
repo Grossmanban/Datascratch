@@ -75,8 +75,16 @@ import Testing
         case resumeWithCursor
         /// Protocol 3 before the first complete sync: every `resume` is a `reset`, one round
         /// trip more than protocol 2 before anything is subscribed (the contract holds the
-        /// queue until `resumed`), so the drops are twice as far apart.
+        /// queue until `resumed`).
         case resumeWithoutCursor
+    }
+
+    /// Library and storm: a full catch-up takes at least 1500 × 1 ms — longer than any window
+    /// between drops, on any machine — while the note needs a handful of frames. The windows are
+    /// wide enough for those on a loaded CI simulator (250 ms was not, CI #157/#158).
+    static let stormLibrary = 1500
+    static func stormWindow(_ start: StormStart) -> Duration {
+        start == .resumeWithoutCursor ? .milliseconds(800) : .milliseconds(600)
     }
 
     /// Suspect (b): drops every few hundred ms on a slow link, with a library big enough that a
@@ -88,22 +96,25 @@ import Testing
         let server = FakeSyncServer()
         if start == .protocol2 { await server.setMaxProtocol(2) }
         let b = try device("B", server: server)
-        _ = try await library(600, on: b, server: server)
+        _ = try await library(Self.stormLibrary, on: b, server: server)
         if start == .resumeWithCursor {
             await b.start()
             #expect(try await eventually(timeout: .seconds(10)) { (try? b.store.resumeState()) != nil })
         }
         await server.setSubscribeDelayPerDoc(.milliseconds(1))
         await b.start()
-        let storm = dropper(server, deviceId: "B", every: .milliseconds(start == .resumeWithoutCursor ? 500 : 250))
+        let storm = dropper(server, deviceId: "B", every: Self.stormWindow(start))
         defer { storm.cancel() }
         let note = NoteDocument(noteId: EntityID.make())
         try await b.open(note.crdt, notebookId: "nb")
         try note.initialize(title: "Баги дс")
         try note.insertText("продиктовано", at: 0, inBlock: [1])
-        let ok = try await eventually(timeout: .seconds(10)) {
+        let ok = try await eventually(timeout: .seconds(20)) {
             await server.docs[note.noteId].map { $0.count >= 2 } == true
         }
+        // Without a cursor the storm really kept the full catch-up from finishing (with one,
+        // resume makes the library live at once: nothing to catch up — the point of protocol 3).
+        if start != .resumeWithCursor { #expect(await b.status().catchingUp > 0 || !ok) }
         if !ok {
             let order = await server.subscribedOrder
             let received = await server.received

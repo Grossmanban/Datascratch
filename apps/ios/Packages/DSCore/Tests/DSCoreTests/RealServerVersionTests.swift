@@ -25,7 +25,7 @@ struct RealServerVersionTests {
                                                password: "correct horse battery staple")
         let notebook = try await accounts.createNotebook(name: "Для ИИ Личное", spaceId: EntityID.make(), mode: mode,
                                                          order: 0, in: signup.account)
-        let note = try accounts.createNote(in: notebook, title: "Plan")
+        let note = try await accounts.createNote(in: notebook, title: "Plan")
         let noteId = note.noteId
         let meta = try #require(notebook.note(id: noteId))
         let noteKey = try keys.noteKey(noteId: noteId, wrappedKey: meta.wrappedKey, notebookId: notebook.notebookId)

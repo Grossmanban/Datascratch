@@ -29,6 +29,9 @@ final class DictationPlaceholderView: UIView {
         self.anchor = anchor
         self.state = state
         super.init(frame: .zero)
+        // Taps come through the editor's own recognizer (`EditorView.tapped`): the text view's
+        // gestures would take them from a recognizer here.
+        isUserInteractionEnabled = false
         layer.cornerRadius = Self.height / 2
         layer.cornerCurve = .continuous
         icon.contentMode = .scaleAspectFit
@@ -39,7 +42,6 @@ final class DictationPlaceholderView: UIView {
         addSubview(label)
         isAccessibilityElement = true
         accessibilityIdentifier = "editor.dictationPlaceholder.\(id)"
-        addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
         apply(state)
     }
 
@@ -56,7 +58,6 @@ final class DictationPlaceholderView: UIView {
             icon.tintColor = EditorTheme.accent
             backgroundColor = EditorTheme.accent.withAlphaComponent(0.10)
             accessibilityTraits = [.updatesFrequently]
-            isUserInteractionEnabled = false
             pulse(true)
         case .failed:
             label.text = "Запись не распознана"
@@ -66,7 +67,6 @@ final class DictationPlaceholderView: UIView {
             backgroundColor = EditorTheme.error.withAlphaComponent(0.10)
             accessibilityTraits = [.button]
             accessibilityHint = "Показать варианты"
-            isUserInteractionEnabled = true
             pulse(false)
         }
         accessibilityLabel = label.text
@@ -99,8 +99,15 @@ final class DictationPlaceholderView: UIView {
         label.frame = CGRect(x: x, y: 0, width: max(0, bounds.width - x - 10), height: bounds.height)
     }
 
+    /// The host's callback when a failed placeholder is tapped (VoiceOver activates it too).
     @objc func tapped() {
         if case .failed = state { onTap?(id) }
+    }
+
+    override func accessibilityActivate() -> Bool {
+        guard case .failed = state else { return false }
+        tapped()
+        return true
     }
 }
 
@@ -130,6 +137,7 @@ extension EditorView {
         view.onTap = { [weak self] id in self?.onDictationPlaceholderTap?(id) }
         textView.insertSubview(view, belowSubview: inkOver)
         dictationPlaceholders[id] = view
+        textView.layoutIfNeeded()
         layoutDictationPlaceholders()
         return place
     }
@@ -193,13 +201,24 @@ extension EditorView {
         }
     }
 
-    /// The caret's x at a flat offset; at the very end of the text the layout has no fragment
-    /// there, so the text view's caret is used.
-    func dictationCaretX(at offset: Int) -> CGFloat? {
-        if let x = geometry.caretX(at: offset) { return x }
+    /// The caret's x and its line at a flat offset, from the layout; where the layout has no
+    /// fragment (the very end of the text, a part not laid out yet) the text view's caret.
+    func dictationCaret(at offset: Int) -> (x: CGFloat, line: CGRect)? {
+        if let line = geometry.lineFrame(at: offset), let x = geometry.caretX(at: offset) { return (x, line) }
         guard let pos = textView.position(from: textView.beginningOfDocument, offset: offset) else { return nil }
         let r = textView.caretRect(for: pos)
-        return r.isNull || r.isInfinite ? nil : r.minX
+        guard !r.isNull, !r.isInfinite, r.height > 0 else { return nil }
+        let left = textView.textContainerInset.left
+        return (r.minX, CGRect(x: left, y: r.minY, width: max(1, textView.bounds.width - left - textView.textContainerInset.right), height: r.height))
+    }
+
+    /// The failed placeholder under a point (text view coordinates): its tap goes to the host.
+    func failedDictationPlaceholder(at point: CGPoint) -> String? {
+        for view in dictationPlaceholders.values where !view.isHidden {
+            guard case .failed = view.state, view.frame.insetBy(dx: -6, dy: -6).contains(point) else { continue }
+            return view.id
+        }
+        return nil
     }
 
     /// Each chip at its place: just after the caret position on its line, or at the start of the
@@ -211,7 +230,7 @@ extension EditorView {
         for view in dictationPlaceholders.values {
             guard let p = view.anchor.resolve(in: model),
                   let at = projection.offset(block: p.block, offset: p.offset),
-                  let line = geometry.lineFrame(at: at) else {
+                  let (caretX, line) = dictationCaret(at: at) else {
                 view.isHidden = true
                 continue
             }
@@ -221,7 +240,7 @@ extension EditorView {
             view.isHidden = false
             let size = view.sizeThatFits(.zero)
             let lineHeight = min(line.height, theme.bodyFont.lineHeight * 1.6)
-            var x = (dictationCaretX(at: at) ?? line.minX) + DictationPlaceholderView.gap
+            var x = caretX + DictationPlaceholderView.gap
             var y = line.minY + (lineHeight - size.height) / 2
             if x + size.width > right {
                 x = left

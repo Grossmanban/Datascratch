@@ -960,10 +960,10 @@
     "semantic_hash": "2f2d6996c54ee380eea1550693856715"
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoModel.swift": {
-    "mtime": 1794354464.894939,
-    "seen": 1794354841.2635605,
-    "ast_hash": "0c4ad923d6b3ea6c3e654fa44f83182d",
-    "semantic_hash": "0c4ad923d6b3ea6c3e654fa44f83182d"
+    "mtime": 1794357413.1436496,
+    "seen": 1794357464.6578946,
+    "ast_hash": "cfc0c669cd6774179c71bf1c485ac23b",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/Sources/DemoView.swift": {
     "mtime": 1794148584.5559342,
@@ -978,16 +978,16 @@
     "semantic_hash": "a0f80305c431ac4070e7ebc1b3465b42"
   },
   "apps/ios/Packages/DSEditor/Demo/UITests/EditorDemoUITests.swift": {
-    "mtime": 1794354464.8952694,
-    "seen": 1794354841.2635655,
-    "ast_hash": "9dcf001f7c0871282316c5a189b79974",
-    "semantic_hash": "9dcf001f7c0871282316c5a189b79974"
+    "mtime": 1794357413.1444533,
+    "seen": 1794357464.6579,
+    "ast_hash": "387b5db601734f1e66c6cf30900c8ff0",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1794354446.6748703,
-    "seen": 1794354841.2635677,
-    "ast_hash": "be8dd16e8e6c9d2e61982b3b312e5b53",
-    "semantic_hash": "be8dd16e8e6c9d2e61982b3b312e5b53"
+    "mtime": 1794357413.1430018,
+    "seen": 1794357464.657902,
+    "ast_hash": "6dc936ed63e7f8d7a49e229c333ea17a",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
     "mtime": 1793011608.2055936,
@@ -6846,10 +6846,10 @@
     "semantic_hash": "32e70e2bb98aa1109bc85fd4db7b569b"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/DictationPlaceholders.swift": {
-    "mtime": 1794354446.646938,
-    "seen": 1794354841.2635815,
-    "ast_hash": "898d010890e66cf2cec68a702ca0768f",
-    "semantic_hash": "898d010890e66cf2cec68a702ca0768f"
+    "mtime": 1794357413.1408432,
+    "seen": 1794357464.657916,
+    "ast_hash": "e63b83c026eeb1a27b2798d5fa74cb35",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditorModel/DictationAnchor.swift": {
     "mtime": 1794354500.743317,

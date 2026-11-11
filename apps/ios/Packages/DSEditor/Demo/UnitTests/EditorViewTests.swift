@@ -1171,7 +1171,7 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(doc.blocks, before, "not in the document")
         XCTAssertFalse(doc.canUndo)
         let x0 = chip.frame.minX
-        let caret = try XCTUnwrap(editor.dictationCaretX(at: end))
+        let caret = try XCTUnwrap(editor.dictationCaret(at: end)?.x)
         XCTAssertEqual(x0, caret + DictationPlaceholderView.gap, accuracy: 1, "just after the place")
         // Text typed before it moves it; the host's anchor stays good.
         doc.transact { doc.insertText("Срочно: ", marks: .empty, block: doc.blocks[1].id, at: 0) }
@@ -1224,6 +1224,11 @@ final class EditorViewTests: XCTestCase {
         XCTAssertTrue(chip.accessibilityTraits.contains(.button))
         chip.tapped()
         XCTAssertEqual(tapped, ["r3"])
+        // A tap on the text there goes to the editor's recognizer, which hands it over too.
+        settle(editor)
+        XCTAssertFalse(chip.isHidden)
+        XCTAssertEqual(editor.failedDictationPlaceholder(at: CGPoint(x: chip.frame.midX, y: chip.frame.midY)), "r3")
+        XCTAssertTrue(editor.hasTapTarget(at: CGPoint(x: chip.frame.midX, y: chip.frame.midY)))
     }
 
     /// The note is closed and opened again before recognition ends: the kept anchor puts the

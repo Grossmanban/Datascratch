@@ -1832,7 +1832,7 @@ public final class EditorView: UIView {
     /// Whether a single tap at `point` acts on something (a note link, a task box or date chip):
     /// the text view's own taps (caret placement) do not begin there.
     func hasTapTarget(at point: CGPoint) -> Bool {
-        noteLink(at: point) != nil || (!model.isReadOnly && taskCheckbox(at: point) != nil)
+        failedDictationPlaceholder(at: point) != nil || noteLink(at: point) != nil || (!model.isReadOnly && taskCheckbox(at: point) != nil)
             || (taskDatesEnabled && !model.isReadOnly && taskDateChip(at: point) != nil)
             || (onImageTap != nil && image(at: point) != nil) || (onFileTap != nil && file(at: point) != nil)
             || diagram(at: point) != nil || belowTextLines(at: point) != nil
@@ -2068,6 +2068,11 @@ public final class EditorView: UIView {
 
     @objc private func tapped(_ g: UITapGestureRecognizer) {
         let point = g.location(in: textView)
+        if let id = failedDictationPlaceholder(at: point) {
+            DSHaptics.selection()
+            onDictationPlaceholderTap?(id)
+            return
+        }
         EditorDiagnostics.log("tap at \(Int(point.x)),\(Int(point.y)): link \(noteLink(at: point) != nil), date chip \(taskDateChip(at: point) != nil)")
         if let link = noteLink(at: point) {
             DSHaptics.selection()

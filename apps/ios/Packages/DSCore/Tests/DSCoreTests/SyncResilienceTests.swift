@@ -108,8 +108,10 @@ import Testing
     @Test func aLatePongWhileFramesArriveKeepsTheConnection() async throws {
         let server = FakeSyncServer()
         let a = try device("A", server: server, configure: {
-            $0.pingInterval = .milliseconds(40)
-            $0.pongTimeout = .milliseconds(30)
+            // Margins a loaded CI simulator keeps (40/30 ms did not, CI #161): a frame within
+            // the last 350 ms proves the connection alive; in production it is 35 s.
+            $0.pingInterval = .milliseconds(200)
+            $0.pongTimeout = .milliseconds(150)
         })
         let writer = try device("W", server: server)
         await a.start()
@@ -120,10 +122,10 @@ import Testing
         let remote = NoteDocument(noteId: note.noteId)
         try await writer.open(remote.crdt, notebookId: "nb")
         #expect(try await eventually { (try? remote.title()) == "busy" })
-        await server.setPongDelay(.milliseconds(200))
+        await server.setPongDelay(.seconds(1))
         let hellos = await server.helloCount()
-        // Frames every 10 ms for over a second: many pings, every pong late.
-        for i in 0..<100 {
+        // Frames every 10 ms for two seconds: several pings, every pong late.
+        for i in 0..<200 {
             try remote.insertText("\(i % 10)", at: 0, inBlock: [1])
             try await Task.sleep(for: .milliseconds(10))
         }

@@ -984,9 +984,9 @@
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/UnitTests/EditorViewTests.swift": {
-    "mtime": 1794357413.1430018,
-    "seen": 1794357464.657902,
-    "ast_hash": "6dc936ed63e7f8d7a49e229c333ea17a",
+    "mtime": 1794360358.8494117,
+    "seen": 1794360430.2331035,
+    "ast_hash": "0d4ea60e6030e71fd8ab2ad79145986c",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Demo/project.yml": {
@@ -1050,10 +1050,10 @@
     "semantic_hash": "b3734456d6a945b93d0701da69b341a6"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/EditorView.swift": {
-    "mtime": 1794354415.8429046,
-    "seen": 1794354841.2635868,
-    "ast_hash": "cef2be13980fd668146bb9b73e5fd1e9",
-    "semantic_hash": "cef2be13980fd668146bb9b73e5fd1e9"
+    "mtime": 1794360358.846539,
+    "seen": 1794360430.233157,
+    "ast_hash": "06b5ab1af40381f227301a218b13abcc",
+    "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/FormatMenu.swift": {
     "mtime": 1793011531.6864011,
@@ -6846,9 +6846,9 @@
     "semantic_hash": "32e70e2bb98aa1109bc85fd4db7b569b"
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditor/DictationPlaceholders.swift": {
-    "mtime": 1794357413.1408432,
-    "seen": 1794357464.657916,
-    "ast_hash": "e63b83c026eeb1a27b2798d5fa74cb35",
+    "mtime": 1794360358.8470669,
+    "seen": 1794360430.2331424,
+    "ast_hash": "ef3e811d38d44cf6593b81c5de3445ae",
     "semantic_hash": ""
   },
   "apps/ios/Packages/DSEditor/Sources/DSEditorModel/DictationAnchor.swift": {

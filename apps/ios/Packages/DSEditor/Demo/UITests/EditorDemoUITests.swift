@@ -55,7 +55,12 @@ final class EditorDemoUITests: XCTestCase {
         expectation(for: failed, evaluatedWith: chip)
         waitForExpectations(timeout: 20)
         chip.tap()
-        XCTAssertTrue(app.staticTexts["Повторить запись demo"].waitForExistence(timeout: 5), "the tap reaches the host")
+        // The demo answers the tap as the app does after a retry: the text takes the place.
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: chip)
+        waitForExpectations(timeout: 10)
+        let editor = app.textViews["editor.text"]
+        XCTAssertTrue((editor.value as? String ?? "").contains("распознано повторно"), "the tap reaches the host")
         XCTAssertEqual(app.state, .runningForeground)
     }
 

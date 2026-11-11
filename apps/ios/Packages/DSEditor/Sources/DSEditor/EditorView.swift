@@ -164,7 +164,7 @@ public final class EditorView: UIView {
     var geometry: TextGeometry!
     var ink: InkController!
     private var observation: ObservationToken?
-    private var suppressDelegate = false
+    var suppressDelegate = false
     private var pendingMarks: MarkSet?
     private var pendingShortcut: (offset: Int, char: String)?
     private var lastContainerWidth: CGFloat = 0
@@ -833,7 +833,7 @@ public final class EditorView: UIView {
         if remoteCursorLayer.frame != inkOver.frame { remoteCursorLayer.frame = inkOver.frame }
         if dictationLabel != nil { positionDictationPreview() }
         if !remoteCursors.isEmpty { layoutRemoteCursors() }
-        if !dictationPlaceholders.isEmpty { layoutDictationPlaceholders() }
+        if !dictationPlaceholders.isEmpty || !dictationGaps.current.isEmpty { layoutDictationPlaceholders() }
     }
 
     // MARK: - Document → view
@@ -887,7 +887,7 @@ public final class EditorView: UIView {
     }
 
     private var inkRefreshScheduled = false
-    private func setNeedsInkRefresh() {
+    func setNeedsInkRefresh() {
         guard !inkRefreshScheduled else { return }
         inkRefreshScheduled = true
         DispatchQueue.main.async { [weak self] in
@@ -1554,6 +1554,12 @@ public final class EditorView: UIView {
     /// Dictation placeholders in the text, by id (`DictationPlaceholders.swift`).
     var dictationPlaceholders: [String: DictationPlaceholderView] = [:]
     var dictationPlaceholderLayoutScheduled = false
+    /// The room each paragraph keeps under it for its placeholders (display only).
+    lazy var dictationGaps: DictationGapAnimator = {
+        let a = DictationGapAnimator()
+        a.onTick = { [weak self] in self?.applyDictationGaps() }
+        return a
+    }()
     /// A tap on a placeholder whose recording was not recognised (D-65): the host offers to
     /// retry or discard it.
     public var onDictationPlaceholderTap: ((_ id: String) -> Void)?

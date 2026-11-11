@@ -187,17 +187,21 @@ extension EditorView {
     public func removeDictationPlaceholder(id: String) {
         guard let view = dictationPlaceholders.removeValue(forKey: id) else { return }
         view.removeFromSuperview()
+        // Its room closes.
+        layoutDictationPlaceholders()
     }
 
     /// After a change of the document: the anchors are resolved again once it is laid out.
     func scheduleDictationPlaceholderLayout() {
-        guard !dictationPlaceholders.isEmpty, !dictationPlaceholderLayoutScheduled else { return }
+        guard !dictationPlaceholders.isEmpty || !dictationGaps.current.isEmpty, !dictationPlaceholderLayoutScheduled else { return }
         dictationPlaceholderLayoutScheduled = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.dictationPlaceholderLayoutScheduled = false
             self.textView.layoutIfNeeded()
             self.layoutDictationPlaceholders()
+            // A paragraph the renderer drew again gets its room back.
+            self.applyDictationGaps()
         }
     }
 
@@ -221,16 +225,15 @@ extension EditorView {
         return nil
     }
 
-    /// Each chip at its place: just after the caret position on its line, or at the start of the
-    /// next line when the line has no room for it. Hidden while its paragraph is gone.
+    /// Each paragraph that holds placeholders keeps room under it for them — a display-only
+    /// paragraph spacing in the rendered text (`dictationGaps`), never in the document, the
+    /// sync or undo — so a chip never covers text. The chips sit in that room under their
+    /// anchor's x; the room opens and closes smoothly (at once with Reduce Motion).
     func layoutDictationPlaceholders() {
         guard geometry != nil else { return }
-        let left = textView.textContainerInset.left
-        let right = textView.bounds.width - textView.textContainerInset.right
+        var targets: [BlockID: CGFloat] = [:]
         for view in dictationPlaceholders.values {
-            guard let p = view.anchor.resolve(in: model),
-                  let at = projection.offset(block: p.block, offset: p.offset),
-                  let (caretX, line) = dictationCaret(at: at) else {
+            guard let p = view.anchor.resolve(in: model), projection.indexByBlock[p.block] != nil else {
                 view.isHidden = true
                 continue
             }
@@ -238,17 +241,133 @@ extension EditorView {
             view.anchor.block = p.block
             view.anchor.offset = p.offset
             view.isHidden = false
-            let size = view.sizeThatFits(.zero)
-            let lineHeight = min(line.height, theme.bodyFont.lineHeight * 1.6)
-            var x = caretX + DictationPlaceholderView.gap
-            var y = line.minY + (lineHeight - size.height) / 2
-            if x + size.width > right {
-                x = left
-                y = line.minY + lineHeight + 2
-            }
-            let frame = CGRect(x: x, y: y, width: min(size.width, right - left), height: size.height).integral
-            if view.frame != frame { view.frame = frame }
+            targets[p.block, default: Self.dictationRoomPadding] += DictationPlaceholderView.height + Self.dictationRowGap
         }
+        dictationGaps.set(targets, animated: !UIAccessibility.isReduceMotionEnabled && window != nil)
+        positionDictationChips()
+    }
+
+    static let dictationRoomPadding: CGFloat = 6
+    static let dictationRowGap: CGFloat = 6
+    static let dictationGapKey = NSAttributedString.Key("ds.dictationGap")
+
+    /// The chips in their paragraph's room, one row each, under the anchor's x.
+    func positionDictationChips() {
+        guard geometry != nil else { return }
+        let left = textView.textContainerInset.left
+        let right = textView.bounds.width - textView.textContainerInset.right
+        var row: [BlockID: Int] = [:]
+        for view in dictationPlaceholders.values.sorted(by: { $0.id < $1.id }) where !view.isHidden {
+            let block = view.anchor.block
+            guard let i = projection.indexByBlock[block],
+                  let at = projection.offset(block: block, offset: view.anchor.offset),
+                  let caret = dictationCaret(at: at),
+                  let last = dictationCaret(at: projection.starts[i] + projection.paragraphs[i].length) else { continue }
+            let k = row[block, default: 0]
+            row[block] = k + 1
+            let size = view.sizeThatFits(.zero)
+            let width = min(size.width, right - left)
+            let x = max(left, min(caret.x - 10, right - width))
+            let y = last.line.maxY + Self.dictationRoomPadding / 2 + CGFloat(k) * (DictationPlaceholderView.height + Self.dictationRowGap)
+            let frame = CGRect(x: x, y: y, width: width, height: size.height).integral
+            if view.frame != frame { view.frame = frame }
+            // Fades in as its room opens.
+            let target = dictationGaps.target[block] ?? 0
+            view.alpha = target > 0 ? min(1, (dictationGaps.current[block] ?? 0) / target) : 1
+        }
+    }
+
+    /// Writes the current room of each paragraph into the rendered text as extra paragraph
+    /// spacing (marked, so a paragraph the renderer drew again gets it back and a closed room
+    /// gives back exactly what it took). Only attributes change: offsets, ink anchors and the
+    /// document stay as they are; ink below moves down with the text.
+    func applyDictationGaps() {
+        let storage = textView.textStorage
+        var blocks = Set(dictationGaps.current.keys)
+        storage.enumerateAttribute(Self.dictationGapKey, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard value != nil, let pos = projection.textPosition(at: range.location) else { return }
+            blocks.insert(pos.block)
+        }
+        var changed = false
+        for block in blocks {
+            guard let i = projection.indexByBlock[block] else { continue }
+            let start = projection.starts[i]
+            let end = min(storage.length, start + projection.paragraphs[i].length + 1)
+            guard start < storage.length, end > start else { continue }
+            let want = dictationGaps.current[block] ?? 0
+            let had = (storage.attribute(Self.dictationGapKey, at: start, effectiveRange: nil) as? CGFloat) ?? 0
+            guard abs(want - had) > 0.25 else { continue }
+            let range = NSRange(location: start, length: end - start)
+            suppressDelegate = true
+            storage.beginEditing()
+            storage.enumerateAttribute(.paragraphStyle, in: range) { value, r, _ in
+                let style = ((value as? NSParagraphStyle) ?? .default).mutableCopy() as! NSMutableParagraphStyle
+                style.paragraphSpacing = max(0, style.paragraphSpacing - had + want)
+                storage.addAttribute(.paragraphStyle, value: style, range: r)
+            }
+            if want > 0 {
+                storage.addAttribute(Self.dictationGapKey, value: want, range: range)
+            } else {
+                storage.removeAttribute(Self.dictationGapKey, range: range)
+            }
+            storage.endEditing()
+            suppressDelegate = false
+            changed = true
+        }
+        guard changed else { positionDictationChips(); return }
+        textView.layoutIfNeeded()
+        ink.invalidateLayout()
+        setNeedsInkRefresh()
+        positionDictationChips()
+    }
+}
+
+/// The room under paragraphs for dictation placeholders, opening and closing over a short ease.
+@MainActor
+final class DictationGapAnimator: NSObject {
+    private(set) var current: [BlockID: CGFloat] = [:]
+    private(set) var target: [BlockID: CGFloat] = [:]
+    private var from: [BlockID: CGFloat] = [:]
+    private var start: CFTimeInterval = 0
+    private var link: CADisplayLink?
+    var onTick: (() -> Void)?
+    /// Seconds to open or close (tests set 0).
+    static var duration: CFTimeInterval = 0.22
+
+    func set(_ targets: [BlockID: CGFloat], animated: Bool) {
+        guard targets != target else { return }
+        target = targets
+        from = current
+        if !animated || Self.duration <= 0 {
+            link?.invalidate()
+            link = nil
+            current = targets
+            // Not inside the layout pass that asked for it.
+            DispatchQueue.main.async { [weak self] in self?.onTick?() }
+            return
+        }
+        start = CACurrentMediaTime()
+        if link == nil {
+            let l = CADisplayLink(target: self, selector: #selector(tick))
+            l.add(to: .main, forMode: .common)
+            link = l
+        }
+    }
+
+    @objc private func tick() {
+        let p = min(1, (CACurrentMediaTime() - start) / Self.duration)
+        let e = CGFloat(1 - pow(1 - p, 3))
+        var next: [BlockID: CGFloat] = [:]
+        for key in Set(from.keys).union(target.keys) {
+            let v = (from[key] ?? 0) + ((target[key] ?? 0) - (from[key] ?? 0)) * e
+            if v > 0.25 { next[key] = v }
+        }
+        current = p >= 1 ? target : next
+        if p >= 1 {
+            link?.invalidate()
+            link = nil
+        }
+        onTick?()
     }
 }
 #endif

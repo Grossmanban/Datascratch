@@ -1171,8 +1171,9 @@ final class EditorViewTests: XCTestCase {
         XCTAssertEqual(doc.blocks, before, "not in the document")
         XCTAssertFalse(doc.canUndo)
         let x0 = chip.frame.minX
-        let caret = try XCTUnwrap(editor.dictationCaret(at: end)?.x)
-        XCTAssertEqual(x0, caret + DictationPlaceholderView.gap, accuracy: 1, "just after the place")
+        let caret = try XCTUnwrap(editor.dictationCaret(at: end))
+        XCTAssertEqual(x0, caret.x - 10, accuracy: 1, "under the place")
+        XCTAssertGreaterThanOrEqual(chip.frame.minY, caret.line.maxY - 1, "below its line, not over it")
         // Text typed before it moves it; the host's anchor stays good.
         doc.transact { doc.insertText("Срочно: ", marks: .empty, block: doc.blocks[1].id, at: 0) }
         drainMainQueue()
@@ -1182,6 +1183,64 @@ final class EditorViewTests: XCTestCase {
         editor.removeDictationPlaceholder(id: "r1")
         XCTAssertNil(chip.superview)
         XCTAssertTrue(editor.dictationPlaceholderIDs.isEmpty)
+    }
+
+    /// The chip never covers text: its paragraph keeps room under it (display only), the text
+    /// to the right of the place and the paragraphs below stay clear of it, and ink anchored to
+    /// words below only moves down — and back when the room closes.
+    func testDictationPlaceholderTakesRoomInsteadOfCoveringText() throws {
+        let duration = DictationGapAnimator.duration
+        DictationGapAnimator.duration = 0
+        defer { DictationGapAnimator.duration = duration }
+        let doc = InMemoryEditorDocument(blocks: [.title("Голос"), .paragraph("Купить хлеб и молоко к ужину"), .paragraph("Позвонить маме вечером")])
+        let editor = host(doc, width: 700, height: 600)
+        window.makeKey()
+        // Ink on a word of the paragraph below.
+        let word = flatRange(editor, of: "маме")
+        let glyph = try XCTUnwrap(editor.geometry.placement(at: word.lowerBound))
+        penStroke(editor, line(from: CGPoint(x: glyph.origin.x, y: glyph.origin.y - 4), to: CGPoint(x: glyph.origin.x + 40, y: glyph.origin.y - 4)))
+        editor.tools.mode = .text
+        drainMainQueue()
+        settle(editor)
+        let stroke = try XCTUnwrap(doc.strokes.first?.id)
+        let inkBefore = try XCTUnwrap(editor.ink.resolved[stroke]?.first?.map(\.location))
+        let blocksBefore = doc.blocks
+        let canUndoBefore = doc.canUndo
+
+        let place = flatRange(editor, of: "Купить").upperBound
+        editor.textView.selectedRange = NSRange(location: place, length: 0)
+        editor.insertDictationPlaceholder(id: "room")
+        drainMainQueue()
+        settle(editor)
+        let chip = try XCTUnwrap(editor.dictationPlaceholders["room"])
+        XCTAssertFalse(chip.isHidden)
+        let first = flatRange(editor, of: "Купить хлеб и молоко к ужину")
+        let second = flatRange(editor, of: "Позвонить маме вечером")
+        for frame in editor.geometry.segmentFrames(first) + editor.geometry.segmentFrames(second) {
+            XCTAssertFalse(frame.insetBy(dx: 0, dy: 1).intersects(chip.frame), "the chip \(chip.frame) covers text at \(frame)")
+        }
+        XCTAssertEqual(doc.blocks, blocksBefore, "the room is not in the document")
+        XCTAssertEqual(doc.canUndo, canUndoBefore, "nor in undo")
+        editor.ink.invalidateLayout()
+        editor.ink.refresh()
+        let inkWith = try XCTUnwrap(editor.ink.resolved[stroke]?.first?.map(\.location))
+        let shift = inkWith[0].y - inkBefore[0].y
+        XCTAssertGreaterThan(shift, DictationPlaceholderView.height - 1, "the ink moves down with its word")
+        for (a, b) in zip(inkBefore, inkWith) {
+            XCTAssertEqual(b.x, a.x, accuracy: 0.5, "ink moves only vertically")
+            XCTAssertEqual(b.y - a.y, shift, accuracy: 0.5)
+        }
+
+        editor.removeDictationPlaceholder(id: "room")
+        drainMainQueue()
+        settle(editor)
+        editor.ink.invalidateLayout()
+        editor.ink.refresh()
+        let inkAfter = try XCTUnwrap(editor.ink.resolved[stroke]?.first?.map(\.location))
+        for (a, b) in zip(inkBefore, inkAfter) {
+            XCTAssertEqual(b.y, a.y, accuracy: 0.5, "the room closes: the ink is back")
+        }
+        XCTAssertEqual(doc.blocks, blocksBefore)
     }
 
     /// The recognised text takes the placeholder's place as one voice edit (one undo step); the

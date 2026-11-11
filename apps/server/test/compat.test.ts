@@ -111,7 +111,8 @@ it('the shared client compacts with snapshots the server accepts and serves', as
   await c2.client.stop();
 });
 
-// A change over the update limit (2 MiB) travels as a snapshot (sync-protocol §5); a device
+// A change over the client's update limit (2 MiB in clients before 2026-11-11) travels as a
+// snapshot (sync-protocol §5); a device
 // already subscribed gets it at once, without reconnecting. A second big change right after
 // (the same baseSeq, nothing pushed in between) arrives too.
 it('a change too big for an update reaches a subscribed device as a snapshot', async () => {

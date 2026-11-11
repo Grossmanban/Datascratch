@@ -36,7 +36,7 @@
 | D-28 | Процесс разработки | Облако + Mac, сборка iOS в CI; XcodeGen | РЕШЕНО | `0028-dev-workflow.md` |
 | D-29 | Graphify | Порядок работы, чтобы граф был всегда актуален | РЕШЕНО, детали ПРЕДЛОЖЕНО | `0029-graphify-workflow.md` |
 | D-30 | БД сервера | PostgreSQL | РЕШЕНО | `0030-server-database-postgresql.md` |
-| D-31 | CRDT | Yjs / Yrs | РЕШЕНО | `0031-crdt-yjs.md` |
+| D-31 | CRDT | Yjs / Yrs (поправка 2026-11-11: обновление до 16 MiB, большая правка — обычным `push`) | РЕШЕНО | `0031-crdt-yjs.md` |
 | D-32 | Минимальная iOS | iOS/iPadOS 26+ | РЕШЕНО | `0032-min-ios-version.md` |
 | D-33 | Bundle ID | com.datascratch.app | РЕШЕНО | `0033-bundle-id.md` |
 | D-34 | Вход | Email + пароль, ключ восстановления | РЕШЕНО | `0034-auth-email-password.md` |

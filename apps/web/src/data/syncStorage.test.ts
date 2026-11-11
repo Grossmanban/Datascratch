@@ -18,4 +18,18 @@ describe("DexieSyncStorage", () => {
     expect((await s.listOutbox()).map((i) => i.clientMsgId)).toEqual(["m1", "m3"]);
     db.close();
   });
+
+  it("keeps the protocol 3 account cursor and the documents' coverage", async () => {
+    const db = new AccountDB(`test-${Math.random()}`);
+    const s = new DexieSyncStorage(db);
+    expect(await s.getResumeState()).toBeNull();
+    await s.setResumeState({ cursor: "c1.42", epoch: "e1" });
+    expect(await s.getResumeState()).toEqual({ cursor: "c1.42", epoch: "e1" });
+    await s.setDocStates([["a", { lastSeq: 3, updatesSinceSnapshot: 0, bytesSinceSnapshot: 0, covered: "e1" }]]);
+    expect((await s.getDocState("a"))?.covered).toBe("e1");
+    expect((await s.getDocStates(["a"])).get("a")?.covered).toBe("e1");
+    await s.setResumeState(null);
+    expect(await s.getResumeState()).toBeNull();
+    db.close();
+  });
 });

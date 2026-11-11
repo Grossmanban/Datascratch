@@ -573,6 +573,31 @@ func eventually(timeout: Duration = .seconds(5), _ condition: () async throws ->
         await b.stop()
     }
 
+    /// The server forwards a snapshot to the other live subscriptions (sync-protocol §5): a
+    /// change over the 2 MiB update limit travels that way. The device online has `lastSeq` ≥ its
+    /// `baseSeq` and still applies it — it used to drop it, and the change never arrived there.
+    @Test func aForwardedSnapshotBehindLastSeqIsApplied() async throws {
+        let server = FakeSyncServer()
+        let a = try device("A", server: server)
+        await a.start()
+        let note = NoteDocument(noteId: EntityID.make())
+        try await a.open(note.crdt, notebookId: "nb")
+        try note.initialize(title: "t")
+        try note.insertText("начало", at: 0, inBlock: [1])
+        #expect(try await eventually { (try? a.store.outboxCount()) == 0 })
+        let baseSeq = try #require(try a.store.document(note.noteId)?.lastSeq)
+
+        // Another device's whole note with a big change, as a snapshot on that baseSeq.
+        let other = NoteDocument(noteId: note.noteId)
+        try other.crdt.applyUpdates(try a.store.updates(docId: note.noteId), origin: .storage)
+        try other.insertText("большая вставка ", at: 0, inBlock: [1])
+        let sealed = try DSCrypto.seal(try other.crdt.encodeStateAsUpdate(), key: key, ad: CryptoAD.doc(note.noteId))
+        await server.send(.updates(docId: note.noteId, snapshot: (baseSeq, sealed), items: [], upToDate: false), to: "A")
+        #expect(try await eventually { (try? note.block(at: [1])?.text) == "большая вставка начало" })
+        #expect(try a.store.document(note.noteId)?.lastSeq == baseSeq)
+        await a.stop()
+    }
+
     /// Background refresh: one pass catches up, sends the outbox and disconnects; without a
     /// server it gives up at the deadline and keeps the edit queued.
     @Test func syncOnceCatchesUpSendsAndDisconnects() async throws {

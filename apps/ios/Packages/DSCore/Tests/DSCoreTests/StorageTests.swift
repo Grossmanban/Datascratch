@@ -45,8 +45,11 @@ import GRDB
         #expect(try store.updates(docId: "d") == [Data([1]), Data([2]), Data([3])])
         #expect(try !store.needsSnapshot(docId: "d"))
 
-        // An older snapshot is ignored; a newer one replaces what it covers.
-        #expect(try !store.applyRemoteSnapshot(docId: "d", seq: 2, state: Data([8])))
+        // An older snapshot (forwarded to a live subscription, sync-protocol §5) is kept as an
+        // update and replaces nothing; a newer one replaces what it covers.
+        #expect(try store.applyRemoteSnapshot(docId: "d", seq: 2, state: Data([8])))
+        #expect(try store.updates(docId: "d") == [Data([1]), Data([2]), Data([3]), Data([8])])
+        #expect(try store.document("d")?.lastSeq == 3)
         #expect(try store.applyRemoteSnapshot(docId: "d", seq: 4, state: Data([9])))
         #expect(try store.updates(docId: "d") == [Data([9])])
         #expect(try store.document("d")?.snapshotSeq == 4)

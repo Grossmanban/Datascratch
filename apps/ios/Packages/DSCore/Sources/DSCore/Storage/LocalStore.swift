@@ -480,7 +480,16 @@ extension LocalStore {
     @discardableResult
     public func applyRemoteSnapshot(docId: String, seq: Int64, state: Data, now: Date = Date()) throws -> Bool {
         try db.write { db in
-            guard var doc = try DocumentRecord.fetchOne(db, key: docId), seq > doc.lastSeq else { return false }
+            guard var doc = try DocumentRecord.fetchOne(db, key: docId) else { return false }
+            guard seq > doc.lastSeq else {
+                // A snapshot the server forwards to a live subscription (sync-protocol §5,
+                // 2026-11-11): its `baseSeq` is behind us, but it may carry a big change sent as a
+                // snapshot (over the 2 MiB update limit). Kept and applied as an update; nothing is
+                // replaced. Dropping it lost the change for devices online.
+                var stored = StoredUpdate(id: nil, docId: docId, data: state, seq: seq, clientMsgId: nil, origin: "remote", createdAt: now)
+                try stored.insert(db)
+                return true
+            }
             // The snapshot contains everything up to `seq`; unacknowledged local updates and
             // later ones stay.
             try db.execute(sql: "DELETE FROM docUpdates WHERE docId = ? AND seq IS NOT NULL AND seq <= ?", arguments: [docId, seq])

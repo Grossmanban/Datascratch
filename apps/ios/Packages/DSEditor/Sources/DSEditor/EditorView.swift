@@ -358,6 +358,7 @@ public final class EditorView: UIView {
         factory.onTableCellEdit = { [weak self] table, row, column, text in
             self?.commands.setTableCell(table, row: row, column: column, text: text)
         }
+        factory.onTableExpand = { [weak self] table in self?.openTable(table) }
         factory.onTableStructure = { [weak self] table, addRow in
             guard let self else { return }
             if addRow { self.commands.addTableRow(table) } else { self.commands.addTableColumn(table) }
@@ -1464,6 +1465,31 @@ public final class EditorView: UIView {
         factory.mermaidViews.first { _, view in
             view.window != nil && view.renderedImage != nil && view.convert(view.bounds, to: textView).contains(point)
         }?.view.renderedImage
+    }
+
+    /// A table on the whole screen, to read it (spec/04, «Таблица на весь экран»): every cell
+    /// whole, both ways scrolling, pinch zoom, sticky header row, landscape. A tap on a cell closes
+    /// it and puts the caret there (not in a read-only note). Returns the viewer (nil: not a table,
+    /// or no window to present from).
+    @discardableResult
+    public func openTable(_ block: BlockID) -> UIViewController? {
+        guard let node = model.block(block), node.type == NodeType.table else { return nil }
+        var top = window?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        guard let top else { return nil }
+        let viewer = TableViewerController(node: node, theme: factory.theme)
+        if !model.isReadOnly {
+            viewer.onSelectCell = { [weak self] row, column in self?.focusTableCell(block, row: row, column: column) }
+        }
+        top.present(viewer, animated: true)
+        return viewer
+    }
+
+    /// Puts the caret in a table cell and shows it.
+    func focusTableCell(_ block: BlockID, row: Int, column: Int) {
+        guard let field = factory.tableView(for: block)?.field(row: row, column: column) else { return }
+        field.becomeFirstResponder()
+        textView.scrollRectToVisible(field.convert(field.bounds, to: textView).insetBy(dx: 0, dy: -24), animated: !UIAccessibility.isReduceMotionEnabled)
     }
 
     /// A diagram on the whole screen, zoomable.

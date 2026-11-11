@@ -60,6 +60,33 @@ final class EditorDemoUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground)
     }
 
+    /// A table full screen (owner, 2026-11-11, iPhone): a long cell is read whole, wrapped, and ×
+    /// closes the view. Opened by the demo (`-tableViewer`): a touch in the demo's text falls over
+    /// under XCUITest (D-53); the «Развернуть» button is unit-tested
+    /// (EditorViewTests.testTableOpensFullScreenWithEveryCellWhole) and tapped by ios-app's UI tests.
+    @MainActor
+    func testTableFullScreen() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-tableViewer"]
+        app.launch()
+        let viewer = app.scrollViews["tableViewer"]
+        XCTAssertTrue(viewer.waitForExistence(timeout: 15), "the table opens full screen")
+        let cell = app.staticTexts["tableViewer.cell.1.1"]
+        XCTAssertTrue(cell.waitForExistence(timeout: 5))
+        XCTAssertTrue(cell.label.hasSuffix("или в нём что-то меняют."), "the whole text, not cut: \(cell.label)")
+        XCTAssertGreaterThan(cell.frame.height, 40, "the long cell wraps onto several lines: \(cell.frame)")
+        XCTAssertLessThanOrEqual(cell.frame.width, 320, "a column no wider than its limit")
+        XCTAssertTrue(app.staticTexts["tableViewer.cell.0.0"].exists, "the header row is there")
+        let close = app.buttons["tableViewer.close"]
+        XCTAssertTrue(close.exists)
+        close.tap()
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: viewer)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.textViews["editor.text"].exists, "back in the note")
+        XCTAssertEqual(app.state, .runningForeground)
+    }
+
     @MainActor
     func testTypingGoesToDocument() throws {
         let app = XCUIApplication()

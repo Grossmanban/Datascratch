@@ -33,6 +33,8 @@ final class DemoModel {
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
     private let images = DemoImages()
 
+    static let longTableCell = "Слой чернил над текстом: штрихи привязаны к словам и едут вместе с ними, когда текст перекладывается на другую ширину или в нём что-то меняют."
+
     static var fileURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("demo.dsnote.json")
     }
@@ -71,6 +73,16 @@ final class DemoModel {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
                     self.editor.updateDictationPlaceholder(id: "demo", state: .failed(code: "asr_failed"))
                 }
+            }
+        }
+        if args.contains("-tableViewer") {
+            // The first table full screen, with a long cell (EditorDemoUITests.testTableFullScreen).
+            // Opened from here: a touch in the demo's text hits its known UI-test crash (D-53);
+            // the «Развернуть» button is unit-tested and tapped by ios-app's UI tests.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                guard let self, let table = doc.blocks.first(where: { $0.type == NodeType.table }) else { return }
+                EditorCommands(document: doc).setTableCell(table.id, row: 1, column: 1, text: Self.longTableCell)
+                self.editor.openTable(table.id)
             }
         }
         // Next turn: lines are also logged from inside touch handling.

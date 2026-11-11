@@ -995,7 +995,7 @@ describe("protocol 2: account_changed and forward compatibility", () => {
     a.client.on("accountChanged", (what) => seen.push([...what]));
     a.client.start();
     await until(() => a.client.status === "online");
-    expect(a.client.protocol).toBe(2);
+    expect(a.client.protocol).toBe(3);
     hub.sendRaw(JSON.stringify({ type: "presence", users: [] }));
     hub.notifyAccountChanged(["keys", "future_thing", "spaces"]);
     hub.notifyAccountChanged(["future_thing"]);
@@ -1023,5 +1023,204 @@ describe("protocol 2: account_changed and forward compatibility", () => {
     hub.notifyAccountChanged(["keys"]);
     await new Promise((r) => setTimeout(r, 30));
     expect(changed).toBe(0);
+  });
+});
+
+describe("protocol 3: resume from the account cursor", () => {
+  const D1 = "0192f3c4-0000-7000-8000-0000000003d1";
+  const D2 = "0192f3c4-0000-7000-8000-0000000003d2";
+  const D3 = "0192f3c4-0000-7000-8000-0000000003d3";
+
+  /** The hub's factory, recording what the client sends. */
+  function recorded(hub: MemorySyncHub) {
+    const sent: { type: string; docs?: { docId: string; since: number }[]; cursor?: unknown }[] =
+      [];
+    const factory = hub.socketFactory();
+    const createSocket = (url: string) => {
+      const socket = factory(url);
+      const send = socket.send.bind(socket);
+      socket.send = (data: string) => {
+        sent.push(JSON.parse(data));
+        send(data);
+      };
+      return socket;
+    };
+    const subscribed = () =>
+      sent.filter((m) => m.type === "subscribe").flatMap((m) => m.docs!.map((d) => d.docId));
+    return { sent, createSocket, subscribed };
+  }
+
+  async function writer(hub: MemorySyncHub, docId: string, value: string): Promise<void> {
+    const b = makeClient(hub, `dev-b-${Math.random()}`);
+    const doc = new Y.Doc();
+    await b.client.addDoc(docId, doc);
+    b.client.start();
+    await until(() => b.client.isSynced(docId));
+    doc.getText("t").insert(text(doc).length, value);
+    await b.client.whenSent(docId);
+    await b.client.stop();
+  }
+
+  async function threeDocs(hub: MemorySyncHub, storage = new MemorySyncStorage()) {
+    const rec = recorded(hub);
+    const a = makeClient(hub, "dev-a", { storage, createSocket: rec.createSocket });
+    const docs = [new Y.Doc(), new Y.Doc(), new Y.Doc()];
+    await a.client.addDocs([D1, D2, D3].map((docId, i) => ({ docId, doc: docs[i]! })));
+    return { ...a, docs, rec };
+  }
+
+  it("subscribes only the documents changed since the cursor; the rest stay live", async () => {
+    const hub = new MemorySyncHub();
+    const a = await threeDocs(hub);
+    a.client.start();
+    await until(() => [D1, D2, D3].every((d) => a.client.isSynced(d)));
+    // The first start has no cursor: a reset, everything is subscribed, then the cursor is kept.
+    expect(a.rec.sent.find((m) => m.type === "resume")?.cursor).toBeNull();
+    await until(async () => (await a.storage.getResumeState()) !== null);
+    expect(a.rec.subscribed().sort()).toEqual([D1, D2, D3]);
+
+    await a.client.stop();
+    await writer(hub, D2, "b2");
+    a.rec.sent.length = 0;
+    a.client.start();
+    await until(() => text(a.docs[1]!) === "b2" && a.client.isSynced(D1));
+    expect(a.rec.sent.find((m) => m.type === "resume")?.cursor).toEqual(expect.any(String));
+    // Only the changed document was subscribed; the others are synced at once.
+    expect(a.rec.subscribed()).toEqual([D2]);
+    expect([D1, D2, D3].every((d) => a.client.isSynced(d))).toBe(true);
+    // Unsubscribed documents still get live updates (account subscription).
+    await writer(hub, D3, "b3");
+    await until(() => text(a.docs[2]!) === "b3");
+    expect(a.rec.subscribed()).toEqual([D2]);
+
+    // A device that wrote itself: its own edit is listed, but it is caught up — nothing subscribed.
+    await until(async () => (await a.storage.getResumeState()) !== null);
+    a.docs[0]!.getText("t").insert(0, "a1");
+    await a.client.whenSent(D1);
+    await a.client.stop();
+    const before = (await a.storage.getResumeState())!.cursor;
+    a.rec.sent.length = 0;
+    a.client.start();
+    // The new cursor is stored once the connection is caught up.
+    await until(async () => (await a.storage.getResumeState())!.cursor !== before);
+    expect(a.rec.sent.some((m) => m.type === "resume")).toBe(true);
+    expect(a.rec.subscribed()).toEqual([]);
+  });
+
+  it("falls back to subscribing everything when the server does not know the cursor", async () => {
+    const storage = new MemorySyncStorage();
+    const first = new MemorySyncHub();
+    const a = await threeDocs(first, storage);
+    a.client.start();
+    await until(async () => (await storage.getResumeState()) !== null);
+    await a.client.stop();
+    // Another server (another database): the cursor is unknown there → reset.
+    const hub = new MemorySyncHub();
+    await writer(hub, D1, "x");
+    const b = await threeDocs(hub, storage);
+    b.client.start();
+    await until(() => [D1, D2, D3].every((d) => b.client.isSynced(d)));
+    expect(text(b.docs[0]!)).toBe("x");
+    expect(b.rec.subscribed().sort()).toEqual([D1, D2, D3]);
+    await until(async () => (await storage.getResumeState()) !== null);
+  });
+
+  it("never stores a cursor over a gap: a document not caught up is subscribed next time", async () => {
+    const hub = new MemorySyncHub();
+    const storage = new MemorySyncStorage();
+    let haveKey3 = true;
+    const keyFor = (docId: string) => (docId === D3 && !haveKey3 ? null : key);
+    const rec = recorded(hub);
+    const a = makeClient(hub, "dev-a", { storage, keyFor, createSocket: rec.createSocket });
+    const docs = [new Y.Doc(), new Y.Doc(), new Y.Doc()];
+    await a.client.addDocs([D1, D2, D3].map((docId, i) => ({ docId, doc: docs[i]! })));
+    a.client.start();
+    await until(async () => (await storage.getResumeState()) !== null);
+    const firstCursor = (await storage.getResumeState())!.cursor;
+
+    // D3 changes while its key is missing: it pauses, so it must lose its coverage.
+    haveKey3 = false;
+    await writer(hub, D3, "secret");
+    await until(() => a.client.isPaused(D3));
+    hub.dropAll();
+    await until(async () => (await storage.getResumeState())!.cursor !== firstCursor);
+    expect((await storage.getDocState(D3))?.covered ?? null).toBeNull();
+
+    // Next connection: D3 is not listed (no change since) but not covered → subscribed.
+    rec.sent.length = 0;
+    haveKey3 = true;
+    await a.client.keyAvailable(D3);
+    hub.dropAll();
+    await until(() => text(docs[2]!) === "secret");
+    expect(rec.subscribed()).toContain(D3);
+    expect(rec.subscribed()).not.toContain(D1);
+  });
+
+  it("reports documents deleted while offline as doc_not_found", async () => {
+    const hub = new MemorySyncHub();
+    const a = await threeDocs(hub);
+    const errors: SyncClientError[] = [];
+    a.client.on("error", (e) => errors.push(e));
+    a.client.start();
+    await until(async () => (await a.storage.getResumeState()) !== null);
+    await a.client.stop();
+    hub.deleteDoc(D2);
+    a.client.start();
+    await until(() => errors.some((e) => e.code === "doc_not_found" && e.docId === D2));
+    expect(a.client.isSynced(D1)).toBe(true);
+  });
+
+  it("lists documents shared after the cursor even when their content is older", async () => {
+    const hub = new MemorySyncHub();
+    await writer(hub, D3, "old");
+    const storage = new MemorySyncStorage();
+    const rec = recorded(hub);
+    const a = makeClient(hub, "dev-a", { storage, createSocket: rec.createSocket });
+    const d1 = new Y.Doc();
+    await a.client.addDoc(D1, d1);
+    a.client.start();
+    await until(async () => (await storage.getResumeState()) !== null);
+    await a.client.stop();
+    hub.grantDoc(D3);
+    rec.sent.length = 0;
+    const d3 = new Y.Doc();
+    await a.client.addDoc(D3, d3);
+    a.client.start();
+    await until(() => text(d3) === "old");
+    expect(rec.subscribed()).toEqual([D3]);
+  });
+
+  it("subscribes everything when a server says 3 but does not answer resume", async () => {
+    const hub = new MemorySyncHub({ answerResume: false });
+    const a = makeClient(hub, "dev-a", { resumeTimeoutMs: 30 });
+    const doc = new Y.Doc();
+    await a.client.addDoc(D1, doc);
+    a.client.start();
+    await until(() => a.client.isSynced(D1));
+    expect(await a.storage.getResumeState()).toBeNull();
+  });
+
+  it("guests and older servers do not resume", async () => {
+    const hub = new MemorySyncHub({ maxProtocol: 2 });
+    const rec = recorded(hub);
+    const a = makeClient(hub, "dev-a", { createSocket: rec.createSocket });
+    await a.client.addDoc(D1, new Y.Doc());
+    a.client.start();
+    await until(() => a.client.isSynced(D1));
+    expect(rec.sent.some((m) => m.type === "resume")).toBe(false);
+    const guestHub = new MemorySyncHub();
+    const g = recorded(guestHub);
+    const guest = makeClient(guestHub, "guest:x", {
+      createSocket: g.createSocket,
+      auth: () => ({
+        kind: "guest",
+        shareId: "0192f3c4-0000-7000-8000-00000000aaaa",
+        guestToken: "t",
+      }),
+    });
+    await guest.client.addDoc(D1, new Y.Doc());
+    guest.client.start();
+    await until(() => guest.client.isSynced(D1));
+    expect(g.sent.some((m) => m.type === "resume")).toBe(false);
   });
 });

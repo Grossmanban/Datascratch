@@ -23,6 +23,17 @@ export interface DocSyncState {
   /** Updates since the last snapshot (own + remote), for the compaction thresholds. */
   updatesSinceSnapshot: number;
   bytesSinceSnapshot: number;
+  /**
+   * Protocol 3 (sync-protocol.md §3.1): the `epoch` of the stored account cursor under which this
+   * document is known to be caught up. Any other value (or none) — subscribe it from `lastSeq`.
+   */
+  covered?: string | null;
+}
+
+/** The account cursor of protocol 3 and the epoch the documents' `covered` refers to. */
+export interface ResumeState {
+  cursor: string;
+  epoch: string;
 }
 
 export interface SyncStorage {
@@ -37,6 +48,12 @@ export interface SyncStorage {
   getDocStates?(docIds: string[]): Promise<Map<string, DocSyncState>>;
   /** Optional batch write (one transaction); the client falls back to setDocState. */
   setDocStates?(entries: [string, DocSyncState][]): Promise<void>;
+  /**
+   * Optional (protocol 3): the stored account cursor. A storage without both methods never
+   * resumes — the client subscribes every document on each connection, as in version 1.
+   */
+  getResumeState?(): Promise<ResumeState | null>;
+  setResumeState?(state: ResumeState | null): Promise<void>;
 }
 
 export const EMPTY_DOC_STATE: DocSyncState = Object.freeze({
@@ -49,6 +66,14 @@ export const EMPTY_DOC_STATE: DocSyncState = Object.freeze({
 export class MemorySyncStorage implements SyncStorage {
   private readonly docs = new Map<string, DocSyncState>();
   private readonly outbox: OutboxItem[] = [];
+  private resume: ResumeState | null = null;
+
+  async getResumeState(): Promise<ResumeState | null> {
+    return this.resume ? { ...this.resume } : null;
+  }
+  async setResumeState(state: ResumeState | null): Promise<void> {
+    this.resume = state ? { ...state } : null;
+  }
 
   async getDocState(docId: string): Promise<DocSyncState | null> {
     const s = this.docs.get(docId);

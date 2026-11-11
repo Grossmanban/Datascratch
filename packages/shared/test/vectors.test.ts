@@ -248,6 +248,15 @@ describe("sync vectors", () => {
     for (const c of v.invalid.server)
       expect(serverMessageSchema.safeParse(c.message).success, c.reason).toBe(false);
   });
+  it("protocol 3: resume / resumed frames", () => {
+    const v = load("sync/resume.json");
+    for (const m of v.valid.client) expect(clientMessageSchema.safeParse(m).success).toBe(true);
+    for (const m of v.valid.server) expect(serverMessageSchema.safeParse(m).success).toBe(true);
+    for (const c of v.invalid.client)
+      expect(clientMessageSchema.safeParse(c.message).success, c.reason).toBe(false);
+    for (const c of v.invalid.server)
+      expect(serverMessageSchema.safeParse(c.message).success, c.reason).toBe(false);
+  });
   it("keeps known account changes and tells unknown frame types from broken ones", async () => {
     const { parseServerFrame } = await import("../src/contracts/index.js");
     const v = load("sync/messages.json");

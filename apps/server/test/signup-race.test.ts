@@ -1,6 +1,7 @@
+import net from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDatabase } from '../src/db/client.js';
-import { KDF, api, b64, newId, rnd, signup, startServer, type TestServer } from './helpers.js';
+import { KDF, api, b64, newId, rnd, signup, sleep, startServer, type TestServer } from './helpers.js';
 
 // Parallel sign-ups (ios-app real-server CI, 2026-11-11): none may hang or fail because of another.
 let s: TestServer;
@@ -73,6 +74,33 @@ describe('database limits', () => {
       await holder.query('ROLLBACK');
       holder.release();
       await short.close();
+    }
+  });
+});
+
+describe('requests that never finish (diagnostics)', () => {
+  it('a body that never fully arrives is logged when the client gives up: stage, bytes, no content', async () => {
+    const lines: string[] = [];
+    const logged = await startServer({ LOG_LEVEL: 'info' }, [], { write: (l: string) => void lines.push(l) });
+    try {
+      const { port } = new URL(logged.url);
+      const sock = net.connect(Number(port), '127.0.0.1');
+      await new Promise<void>((r) => sock.once('connect', () => r()));
+      const part = '{"email":"secret-part@example.com"';
+      sock.write(
+        `POST /v1/auth/signup HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: 500\r\n\r\n${part}`,
+      );
+      await sleep(300);
+      sock.destroy();
+      let found: any;
+      for (let i = 0; i < 50 && !found; i++) {
+        await sleep(40);
+        found = lines.map((l) => JSON.parse(l)).find((l) => l.msg === 'request aborted');
+      }
+      expect(found).toMatchObject({ url: '/v1/auth/signup', stage: 'body', contentLength: 500, bodyBytes: part.length, bodyComplete: false });
+      expect(lines.join('')).not.toContain('secret-part');
+    } finally {
+      await logged.close();
     }
   });
 });
